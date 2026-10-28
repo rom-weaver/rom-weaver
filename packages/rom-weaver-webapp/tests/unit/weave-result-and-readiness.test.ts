@@ -189,6 +189,8 @@ describe("weave result parsing", () => {
       },
     });
     expect(plain?.warnings).toEqual([]);
+    expect(plain?.weave.recordsCheats).toBeUndefined();
+    expect(parsed?.weave.recordsCheats).toBe(true);
   });
 });
 

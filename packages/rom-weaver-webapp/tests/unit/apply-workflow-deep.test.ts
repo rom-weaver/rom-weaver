@@ -31,7 +31,11 @@ vi.mock("../../src/lib/apply/patch-apply-service.ts", () => ({
   toPublicOutput: mocks.toPublicOutput,
 }));
 
-import { retainUncompressedWorkerOutputs, runApplyWorkflow } from "../../src/lib/apply/workflow.ts";
+import {
+  finishingMayChangeBytes,
+  retainUncompressedWorkerOutputs,
+  runApplyWorkflow,
+} from "../../src/lib/apply/workflow.ts";
 
 const sourceRef = (fileName: string, size: number) => ({ fileName, size, source: `/work/${fileName}` });
 const patchFile = (fileName: string, size = 4) => ({
@@ -78,6 +82,73 @@ beforeEach(() => {
     size: file.size || file.fileSize || 0,
   }));
   mocks.createPatchFileFromPublicOutput.mockImplementation(async (output: unknown) => output);
+});
+
+describe("runApplyWorkflow final-output checksum", () => {
+  const applyWithChecksum = async (checksum?: string) => {
+    const inputAsset = asset();
+    const first = parsedPatch();
+    const last = parsedPatch();
+    const runtime = makeRuntime();
+    mocks.resolvePatchTargets.mockResolvedValue([inputAsset, inputAsset]);
+    mocks.buildSessionOutputFiles.mockResolvedValue({ files: [runtime.output] });
+    await runApplyWorkflow(
+      {
+        inputs: sourceRef("game.bin", 20),
+        options: { output: { outputName: "result" } },
+        parsedPatches: [first, last],
+        patchOptions: [
+          { validateOutputChecksum: "11111111" },
+          { outputChecks: "size=30", validateOutputChecksum: checksum },
+        ],
+        patches: [sourceRef("first.ips", 4), sourceRef("last.ips", 4)],
+        preparedInputAssets: [inputAsset],
+        preparedPatchFiles: [patchFile("first.ips"), patchFile("last.ips")],
+      } as never,
+      runtime as never,
+    );
+    return runtime;
+  };
+
+  it.each([
+    ["deadbeef", "crc32=deadbeef"],
+    [" 0xDEADBEEF ", "crc32=deadbeef"],
+    ["0123456789abcdef0123456789abcdef", "md5=0123456789abcdef0123456789abcdef"],
+    ["0123456789abcdef0123456789abcdef01234567", "sha1=0123456789abcdef0123456789abcdef01234567"],
+  ])("merges the final patch's %s checksum into its output checks as %s", async (checksum, token) => {
+    const runtime = await applyWithChecksum(checksum);
+    expect(runtime.patch.applyPatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          patchOutputChecks: ["", `size=30,${token}`],
+        }),
+      }),
+    );
+  });
+
+  it.each([undefined, "", " "])(
+    "omits a cleared final checksum (%s) despite earlier patch checks",
+    async (checksum) => {
+      const runtime = await applyWithChecksum(checksum);
+      const options = runtime.patch.applyPatch.mock.calls[0]?.[0]?.options;
+      expect(options.patchOutputChecks).toEqual(["", "size=30"]);
+      expect(options.validateWithOutputChecksums).toBeUndefined();
+    },
+  );
+
+  it("keeps every declared algorithm and skips tokens the step already declares", async () => {
+    const runtime = await applyWithChecksum("crc32=deadbeef,sha1=0123456789abcdef0123456789abcdef01234567,size=30");
+    expect(runtime.patch.applyPatch.mock.calls[0]?.[0]?.options.patchOutputChecks).toEqual([
+      "",
+      "size=30,crc32=deadbeef,sha1=0123456789abcdef0123456789abcdef01234567",
+    ]);
+  });
+
+  it.each(["0x", "bad", "zzzzzzzz"])("rejects malformed final-output checksum %s", async (checksum) => {
+    await expect(applyWithChecksum(checksum)).rejects.toThrow(
+      "Output checksum must be a CRC32, MD5, or SHA-1 hex digest",
+    );
+  });
 });
 
 describe("runApplyWorkflow validation and preparation", () => {
@@ -532,5 +603,82 @@ describe("runApplyWorkflow recovery and multi-asset paths", () => {
     expect(runtime.patch.applyPatch.mock.calls[0]?.[0]).toMatchObject({
       options: expect.objectContaining({ outputName: expectedName }),
     });
+  });
+});
+
+describe("finishingMayChangeBytes", () => {
+  const n64Variant = { applyCompatibility: { n64ByteOrder: "big-endian" }, checksums: { crc32: "1" } };
+  const plainVariant = { checksums: { crc32: "1" } };
+  const may = (
+    overrides: Record<string, unknown> = {},
+    patchOptions: Record<string, unknown>[] = [{}],
+    options: Record<string, unknown> = {},
+  ) => finishingMayChangeBytes({ ...asset(), ...overrides } as never, [0], patchOptions as never, options as never);
+
+  it("is false for a plain rom with nothing that finishes it", () => {
+    expect(may({ checksumVariants: [plainVariant] })).toBe(false);
+    expect(may({}, [{ n64ByteOrder: "keep", resolvedN64ByteOrder: "keep" }])).toBe(false);
+  });
+
+  it.each([
+    ["disc asset", { discGroupId: "disc" }, [{}], {}],
+    ["non-rom asset", { kind: "patch" }, [{}], {}],
+    ["addHeader", {}, [{}], { compatibility: { addHeader: true } }],
+    ["removeHeader", {}, [{}], { compatibility: { removeHeader: true } }],
+    ["fixChecksum", {}, [{}], { compatibility: { fixChecksum: true } }],
+    ["output.header non-auto", {}, [{}], { output: { header: "keep" } }],
+    ["strip patch header", {}, [{ header: "strip" }], {}],
+    ["asset variant with compatibility", { checksumVariants: [n64Variant] }, [{}], {}],
+    [
+      "file-level precomputed variant",
+      { file: { ...patchFile("game.bin"), checksumVariants: [n64Variant] } },
+      [{}],
+      {},
+    ],
+    ["n64ByteOrder", {}, [{ n64ByteOrder: "big-endian" }], {}],
+    ["resolvedN64ByteOrder", {}, [{ resolvedN64ByteOrder: "byte-swapped" }], {}],
+  ])("is true for %s", (_name, overrides, patchOptions, options) => {
+    expect(may(overrides, patchOptions, options)).toBe(true);
+  });
+
+  it("is false for output.header auto and plain file-level variants", () => {
+    expect(may({}, [{}], { output: { header: "auto" } })).toBe(false);
+    expect(may({ file: { ...patchFile("game.bin"), checksumVariants: [plainVariant] } })).toBe(false);
+  });
+});
+
+describe("runApplyWorkflow declared final output check on a re-prepared N64 input", () => {
+  it("does not merge the declared token when the file carries an N64 variant but the asset has none", async () => {
+    const runtime = makeRuntime();
+    runtime.vfs.stat.mockResolvedValue(null);
+    const input = asset("input", "game.v64", 20);
+    const reprepared = {
+      ...asset("reprepared", "game.v64", 20),
+      file: {
+        ...patchFile("game.v64", 20),
+        checksumVariants: [{ applyCompatibility: { n64ByteOrder: "big-endian" }, checksums: { crc32: "1" } }],
+      },
+    };
+    mocks.prepareInputAssets.mockResolvedValue([reprepared]);
+    mocks.prepareInput.mockResolvedValue(patchFile("fix.ips", 3));
+    mocks.parsePatchForApply.mockResolvedValue(parsedPatch());
+    mocks.resolvePatchTargets.mockResolvedValue([reprepared]);
+    mocks.buildSessionOutputFiles.mockResolvedValue({ files: [runtime.output] });
+
+    await runApplyWorkflow(
+      {
+        inputs: sourceRef("game.v64", 20),
+        options: { output: { outputName: "result" } },
+        patchOptions: [{ validateOutputChecksum: "deadbeef" }],
+        patches: sourceRef("fix.ips", 3),
+        preparedInputAssets: [input],
+        preparedPatchFiles: [patchFile("fix.ips", 3)],
+      } as never,
+      runtime as never,
+    );
+
+    expect(mocks.prepareInputAssets).toHaveBeenCalled();
+    const options = runtime.patch.applyPatch.mock.calls[0]?.[0]?.options;
+    expect(JSON.stringify(options.patchOutputChecks ?? [])).not.toContain("deadbeef");
   });
 });

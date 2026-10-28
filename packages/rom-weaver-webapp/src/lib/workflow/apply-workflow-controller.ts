@@ -1066,6 +1066,13 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       const intermediateOutputs: PublicOutput[] = [];
       const modifiedSources: SourceRef[] = [];
       const applyInput = this.createPatchInput((progress) => this.emitApplyWorkerProgress(progress));
+      // The final-output check describes the finished (header/N64/repair-finalised) result. This
+      // intermediate forces header "keep", a finishing mode the check cannot be compared under, so the
+      // workflow would skip it anyway; clearing it here states that and keeps headered ROMs combinable.
+      applyInput.patchOptions = applyInput.patchOptions?.map((option) => ({
+        ...option,
+        validateOutputChecksum: undefined,
+      }));
       applyInput.options = {
         ...applyInput.options,
         retainUncompressedOutput: undefined,

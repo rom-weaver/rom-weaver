@@ -72,6 +72,8 @@ type ParsedWeaveOutput = {
 
 type ParsedWeave = {
   checkStates?: ParsedWeaveCheckState[];
+  /** The weave records cheat selections that this app does not apply; `output.checks` may describe cheated bytes. */
+  recordsCheats?: boolean;
   version: number;
   /** v2 shared patch input rule. v1 weaves omit this and preserve automatic inference. */
   patchBasis?: "auto" | "base" | "previous";

@@ -10,6 +10,7 @@ import type {
   ParsedWeaveParseResult,
   ParsedWeaveSourceRef,
 } from "../../types/weave.ts";
+import { createLogger } from "../logging.ts";
 import { getPathBaseName } from "../path-utils.ts";
 import { readsWeaveRootRom } from "./weave-targets.ts";
 
@@ -97,13 +98,19 @@ type WeaveChainEndpointChecks = {
  * alone; the lane checks stay per-step verification. `weave_apply.rs`
  * (`resolve_selected_weave_output_check`) makes the same distinction.
  */
+const logger = createLogger("weave-session-model");
+
 const weaveChainEndpointChecks = (weave: ParsedWeave): WeaveChainEndpointChecks => {
   const first = weave.patches[0];
   const last = weave.patches.at(-1);
   const rom = weave.rom?.checks;
   const firstReadsRom = !!first && readsWeaveRootRom(first, weave.rom?.member);
   const input = (firstReadsRom && first.inputChecks) || rom;
-  const weaveOutput = weave.output?.checks;
+  // Cheats are not applied here, so a weave-level output check (which describes the cheated bytes) cannot match.
+  if (weave.recordsCheats && weave.output?.checks) {
+    logger.debug("skipping weave output checks: the weave records cheats this app does not apply");
+  }
+  const weaveOutput = weave.recordsCheats ? undefined : weave.output?.checks;
   const output = last?.target ? weaveOutput : last?.outputChecks || weaveOutput;
   return { ...(input ? { input } : {}), ...(output ? { output } : {}) };
 };
