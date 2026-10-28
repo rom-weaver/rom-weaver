@@ -16,6 +16,7 @@ import {
 import { buildSessionOutputFiles } from "../../lib/output/output-build-service.ts";
 import { requireOutputName, withOutputExtension } from "../../lib/output/output-name-validation.ts";
 import { reportProgress } from "../../lib/progress/progress-reporting.ts";
+import { createLogger } from "../logging.ts";
 import { getNamedSourcePath } from "../../storage/shared/binary/source-file-utils.ts";
 import { copyRuntimeOutputToPath } from "../../storage/vfs/runtime-output.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
@@ -521,11 +522,34 @@ const parseDeclaredOutputChecks = (declared: string) =>
       return `${algorithm}=${checksum}`;
     });
 
-const getPatchOutputChecks = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) => {
+// The CLI judges a weave's output.checks on the FINISHED output (header re-added, N64 order restored,
+// checksum repaired) and ignores them for discs. The per-step path sees the normalised last step, so the
+// declared final check joins it only when finishing cannot change those bytes; otherwise it is skipped
+// (a correct apply must never be rejected). Disc assets are skipped like the CLI skips disc inputs.
+const logger = createLogger("apply-workflow");
+
+const finishingMayChangeBytes = (
+  asset: InputAsset,
+  patchIndices: number[],
+  patchOptions: PatchInput["patchOptions"],
+  options: ApplyPatchOptions,
+) =>
+  !!asset.discGroupId ||
+  asset.kind !== "rom" ||
+  !!(options.compatibility?.addHeader || options.compatibility?.fixChecksum || options.compatibility?.removeHeader) ||
+  (!!options.output?.header && options.output.header !== "auto") ||
+  patchIndices.some((patchIndex) => patchOptions?.[patchIndex]?.header === "strip") ||
+  !!asset.checksumVariants?.some((variant) => Object.values(variant.applyCompatibility || {}).some(Boolean));
+
+const getPatchOutputChecks = (
+  patchIndices: number[],
+  patchOptions: PatchInput["patchOptions"],
+  finalCheckApplies: boolean,
+) => {
   const checks = getPatchChecks(patchIndices, patchOptions, "outputChecks");
   const lastIndex = patchIndices.at(-1);
   const declared = patchOptions?.[lastIndex ?? -1]?.validateOutputChecksum?.trim();
-  if (!declared) return checks;
+  if (!(declared && finalCheckApplies)) return checks;
   const merged = patchIndices.map((patchIndex) => patchOptions?.[patchIndex]?.outputChecks || "");
   const own = merged.at(-1) ?? "";
   const ownTokens = own.toLowerCase().split(/[\s,]+/);
@@ -581,7 +605,12 @@ const applyPatchesToAsset = async ({
   const patchInputs = getPatchInputs(patchIndices, patchOptions, asset, bareMemberRule);
   const patchTargets = getPatchTargets(patchIndices, patchOptions, asset, bareMemberRule);
   const patchInputChecks = getPatchChecks(patchIndices, patchOptions, "inputChecks");
-  const patchOutputChecks = getPatchOutputChecks(patchIndices, patchOptions);
+  const finalCheckApplies = !finishingMayChangeBytes(asset, patchIndices, patchOptions, options);
+  if (!finalCheckApplies && patchOptions?.[patchIndices.at(-1) ?? -1]?.validateOutputChecksum?.trim())
+    logger.debug("weave final-output check skipped: finishing may change the output bytes", {
+      asset: asset.fileName,
+    });
+  const patchOutputChecks = getPatchOutputChecks(patchIndices, patchOptions, finalCheckApplies);
   const selectedPatches = getSelectedPatchInputs(assetPatches, patches, patchFiles);
   const patchNames = selectedPatches.map((entry) => entry.patchFileName).filter(Boolean);
   const patchLabel = patchNames.length

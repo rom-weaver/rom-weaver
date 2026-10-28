@@ -286,6 +286,64 @@ test("weave checks after a switched-off optional patch are not enforced; switche
   }
 });
 
+test("a drawer output check on the chain output stands down when an earlier patch is switched off", async () => {
+  const romFile = new File([new Uint8Array(64)], "game.bin", { type: "application/octet-stream" });
+  const weaveArchive = await buildZip(
+    [
+      {
+        file: new File(
+          [
+            JSON.stringify({
+              output: { name: "drawer-output" },
+              patches: [
+                { name: "First", optional: true, path: "first.ips" },
+                { name: "Second", path: "second.ips" },
+              ],
+              rom: { path: "game.bin" },
+              version: 1,
+            }),
+          ],
+          "rom-weaver-weave.json",
+          { type: "application/json" },
+        ),
+        fileName: "rom-weaver-weave.json",
+      },
+      { file: romFile, fileName: "game.bin" },
+      { file: createIpsPatch("first.ips", 0, 1), fileName: "first.ips" },
+      { file: createIpsPatch("second.ips", 10, 2), fileName: "second.ips" },
+    ],
+    "drawer-output.zip",
+  );
+  mountStrict([weaveArchive]);
+  await expect.poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 }).toEqual([false, true]);
+  getPatchToggles()[0]?.click();
+  await expect.poll(() => getPatchToggles()[0]?.checked, { timeout: 30000 }).toBe(true);
+  await waitForApplyButtonEnabled();
+  document.querySelectorAll("#rom-weaver-list-patch-stack .cks-head")[1]?.click();
+  const addCheck = await vi.waitFor(() => {
+    const element = document.getElementById("rom-weaver-patch-output-add-check-1");
+    if (!element) throw new Error("output add-check missing");
+    return element;
+  });
+  addCheck.value = "crc32";
+  addCheck.dispatchEvent(new Event("change", { bubbles: true }));
+  const crcInput = await vi.waitFor(() => {
+    const element = document.getElementById("rom-weaver-patch-output-crc32-1");
+    if (!element) throw new Error("output crc32 input missing");
+    return element;
+  });
+  setFormControlValue(crcInput, "f9f31dcf");
+  crcInput.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+  getPatchToggles()[0]?.click();
+  await expect.poll(() => getPatchToggles()[0]?.checked, { timeout: 30000 }).toBe(false);
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+});
+
 test("imported weave whose optional patch is off applies without touching the toggle", async () => {
   // The off patch does not match the ROM (wrong-input BPS), so its preflight verdict is a
   // checksum mismatch. That verdict belongs to a patch that never runs and must not block Apply.
@@ -439,11 +497,11 @@ const SAMPLE_PATCHES = [
   ipsFile("world-to-weaver.ips", [...IPS_HEADER, 0, 0, 0xaf, 0, 5, 0x05, 0x01, 0x16, 0x05, 0x12, ...IPS_EOF]),
 ];
 
-const buildSampleWeave = async ({ outputName = "rom-weaver.nes", patches } = {}) => {
+const buildSampleWeave = async ({ outputName = "rom-weaver.nes", outputChecks, patches } = {}) => {
   const weaveFile = new File(
     [
       JSON.stringify({
-        output: { name: outputName },
+        output: { ...(outputChecks ? { checks: outputChecks } : {}), name: outputName },
         patches: patches || [
           { basis: "base", name: "Hello to ROM", path: "hello-to-rom.ips" },
           { basis: "base", name: "World to WEAVER", path: "world-to-weaver.ips" },
@@ -505,6 +563,30 @@ test("sample weave applies on its matching ROM under strict validation", async (
   } finally {
     applySpy.mockRestore();
   }
+});
+
+// The shipped sample declares output.checks of the finished headered woven ROM (first-sample-assets.mjs).
+test("sample weave with the shipped headered output.checks applies under strict validation", async () => {
+  const [weaveArchive, romFile] = await Promise.all([
+    buildSampleWeave({
+      outputChecks: {
+        checksums: {
+          crc32: "abfab88e",
+          md5: "fe0d2d115770f4edb7543b3f03ba58ae",
+          sha1: "844b844c845dc99aa4f13a83b6c9cf639684ae8a",
+        },
+      },
+    }),
+    loadFixtureFile(SAMPLE_ROM),
+  ]);
+  mountStrict([weaveArchive, romFile]);
+  await expect
+    .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+    .toEqual(["hello-to-rom.ips", "world-to-weaver.ips"]);
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  const outcome = await waitForApplyOutcome();
+  expect(outcome?.kind, outcome && "errorText" in outcome ? outcome.errorText : "").toBe("download");
 });
 
 test("sample weave rejects a wrong ROM until the override is checked", async () => {
@@ -601,6 +683,33 @@ test.each(["deadbeef", "2cccfa33"])("v1 IPS weave enforces final-output CRC32 %s
     expect(download.name).toBe("audit.bin");
     expect(new TextDecoder().decode(await download.blob.arrayBuffer())).toBe("OXIGINAL-ROM\n");
     expect(await sha256Hex(download.blob)).toBe("43b1cc171d0b795e224072752effd13400f6392d0fab8d0793373cce4b4f46fb");
+  } finally {
+    capture.restore();
+  }
+});
+
+test("a root-lane {rom: true} target still enforces the final-output CRC32", async () => {
+  const romFile = new File(["ORIGINAL-ROM\n"], "game.bin");
+  const weaveArchive = await buildFinalCheckWeave({
+    files: [createIpsPatch("change.ips", 1, 0x58)],
+    outputChecks: { checksums: { crc32: "deadbeef" } },
+    patches: [{ name: "Core", path: "change.ips", target: { rom: true } }],
+  });
+  const capture = await mountWeaveWithCapture(
+    (files) =>
+      createElement(ApplyPatchForm, {
+        defaultSettings: { output: { compression: "none" }, validation: { requireInputChecksumMatch: true } },
+        pageDrop: { files, id: 1 },
+      }),
+    [romFile, weaveArchive],
+  );
+  try {
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    const outcome = await waitForApplyOutcome();
+    expect(outcome?.kind).toBe("error");
+    expect(outcome?.errorText).toContain("deadbeef");
+    expect(capture.getDownloads()).toEqual([]);
   } finally {
     capture.restore();
   }

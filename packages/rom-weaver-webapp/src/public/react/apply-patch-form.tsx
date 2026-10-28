@@ -611,14 +611,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // that result), stood down otherwise. Runs through the same per-patch option
   // path as user edits; the carrier index is found by value so reorders and
   // clears stay aligned.
-  // Every declared algorithm is enforced. A chain with a `target` lane applies per lane/track asset, so
-  // the reassembled output's checks have no single asset to meet (the CLI skips them for discs too).
+  // Every declared algorithm is seeded. The workflow skips the check for disc assets (as the CLI does) and
+  // whenever finishing could change the last step's bytes.
   const weaveOutputChecks = activeWeaveSession?.chainEndpointChecks.output?.checksums;
-  const weaveOutputChecksum = activeWeaveSession?.entries.some((entry) => entry.target)
-    ? ""
-    : Object.entries(weaveOutputChecks || {})
-        .map(([algorithm, digest]) => `${algorithm}=${digest}`)
-        .join(",");
+  const weaveOutputChecksum = Object.entries(weaveOutputChecks || {})
+    .map(([algorithm, digest]) => `${algorithm}=${digest}`)
+    .join(",");
   useEffect(() => {
     if (!weaveOutputChecksum || weaveChainStatus === null) return;
     const desired = weaveChainStatus === "full" ? weaveOutputChecksum : "";
@@ -1253,6 +1251,25 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         })),
       );
       for (const [index, option] of runOptions.entries()) Object.assign(option, gatedChecks[index]);
+      // The final-output value (drawer or seeded) is a chain-output check too: it stands down with the
+      // same chain-prefix gate on weave entries, as the CLI skips non-prefix output checks.
+      const finalGate = gateWeaveChainChecks(
+        runOptions.map((option, index) => ({
+          ...option,
+          enabled: enabled[index] ?? true,
+          authoredInputChecks: false,
+          inputChecks: undefined,
+          outputChecks: "x",
+        })),
+      );
+      for (const [index, option] of runOptions.entries()) {
+        if (
+          option.validateOutputChecksum &&
+          weaveMetaRef.current.has(patchIds[index] || "") &&
+          !finalGate[index]?.outputChecks
+        )
+          option.validateOutputChecksum = "";
+      }
       const dependencyError = validatePatchDependencies(
         runOptions.map((option, index) => ({
           id: option.id || `patch-${index + 1}`,
