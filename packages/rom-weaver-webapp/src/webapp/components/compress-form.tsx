@@ -26,6 +26,7 @@ import {
   useUiLocalizer,
 } from "../../public/react/settings-context.tsx";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
+import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import {
   compressFiles,
   type CompressSource,
@@ -39,7 +40,18 @@ type CompressFormProps = { pageDrop?: PageFileDrop | null; onSessionChange?: (ac
 type CompressionFormat = Awaited<ReturnType<typeof getCompressFormats>>[number];
 type InputInfo = { files: File[]; formats: CompressionFormat[]; source: CompressSource | null };
 const logger = createLogger("compress-form");
-const loadBrowserRuntime = async () => (await import("../../platform/browser/workflow-runtime.ts")).browserRuntime;
+let browserRuntimeLoad: Promise<WorkflowRuntime> | undefined;
+// Staging probes the input twice (source and formats), so share one dynamic import instead of paying for two.
+const loadBrowserRuntime = (): Promise<WorkflowRuntime> => {
+  browserRuntimeLoad ??= import("../../platform/browser/workflow-runtime.ts").then(
+    (module) => module.browserRuntime,
+    (cause: unknown) => {
+      browserRuntimeLoad = undefined;
+      throw cause;
+    },
+  );
+  return browserRuntimeLoad;
+};
 
 const disposeOutput = (output: PublicOutput | null) => {
   void output?.dispose().catch((cause: unknown) => logger.warn("Output cleanup failed", { cause }));
