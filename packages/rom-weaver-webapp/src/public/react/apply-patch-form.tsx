@@ -617,7 +617,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // path as user edits; the carrier index is found by value so reorders and
   // clears stay aligned.
   // Every declared algorithm is seeded. The workflow skips the check for disc assets (as the CLI does) and
-  // whenever finishing could change the last step's bytes.
+  // compares it with the finished output whenever finishing could change the last step's bytes.
   const weaveOutputChecks = activeWeaveSession?.chainEndpointChecks.output?.checksums;
   const weaveOutputChecksum = Object.entries(weaveOutputChecks || {})
     .map(([algorithm, digest]) => `${algorithm}=${digest}`)

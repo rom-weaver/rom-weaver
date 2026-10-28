@@ -506,10 +506,7 @@ const getPatchChecks = (
   return checks.some(Boolean) ? checks : undefined;
 };
 
-// The declared final-output check (digest tokens such as "crc32=deadbeef,sha1=...", or a bare digest)
-// joins the last step's own output checks. That keeps it on the per-step path: judged in the
-// normalised layout (header stripped, N64 big-endian) and skipped when validation is not strict,
-// exactly like every other per-step check.
+// The declared final-output check: digest tokens such as "crc32=deadbeef,sha1=...", or a bare digest.
 const parseDeclaredOutputChecks = (declared: string) =>
   declared
     .toLowerCase()
@@ -523,10 +520,6 @@ const parseDeclaredOutputChecks = (declared: string) =>
       return `${algorithm}=${checksum}`;
     });
 
-// The CLI judges a weave's output.checks on the FINISHED output (header re-added, N64 order restored,
-// checksum repaired) and ignores them for discs. The per-step path sees the normalised last step, so the
-// declared final check joins it only when finishing cannot change those bytes; otherwise it is skipped
-// (a correct apply must never be rejected). A user cheat placed before the last patch likewise. Disc assets are skipped like the CLI skips disc inputs.
 const logger = createLogger("apply-workflow");
 
 const finishingMayChangeBytes = (
@@ -534,13 +527,7 @@ const finishingMayChangeBytes = (
   patchIndices: number[],
   patchOptions: PatchInput["patchOptions"],
   options: ApplyPatchOptions,
-  selectedCheatPositions?: number[],
 ) =>
-  !!asset.discGroupId ||
-  // A cheat is baked in before the step at its position, so one ahead of the last patch changes the
-  // last step's bytes; one after it runs past the check.
-  !!selectedCheatPositions?.some((position) => position < patchIndices.length) ||
-  asset.kind !== "rom" ||
   !!(options.compatibility?.addHeader || options.compatibility?.fixChecksum || options.compatibility?.removeHeader) ||
   (!!options.output?.header && options.output.header !== "auto") ||
   patchIndices.some((patchIndex) => patchOptions?.[patchIndex]?.header === "strip") ||
@@ -554,21 +541,55 @@ const finishingMayChangeBytes = (
     asset.checksumVariants?.length ? asset.checksumVariants : getPatchFilePrecomputedChecksumVariants(asset.file)
   )?.some((variant) => Object.values(variant.applyCompatibility || {}).some(Boolean));
 
+// The CLI judges a weave's output.checks on the FINISHED output (header re-added, N64 order restored,
+// checksum repaired) and ignores them for discs. When finishing cannot change the last step's bytes the
+// declared check joins that step's own output checks ("step"); otherwise the engine compares the finished
+// output like the CLI's --expect-out ("finished"). User cheats are not part of the declared output: one
+// ahead of the last patch changes the last step's bytes, and any cheat changes the finished bytes, so the
+// check is skipped then; a cheat after the last patch runs past the per-step check.
+const getFinalCheckPlacement = (
+  asset: InputAsset,
+  patchIndices: number[],
+  patchOptions: PatchInput["patchOptions"],
+  options: ApplyPatchOptions,
+  hasCheats: boolean,
+  selectedCheatPositions?: number[],
+): "finished" | "skip" | "step" => {
+  if (asset.discGroupId || asset.kind !== "rom") return "skip";
+  if (finishingMayChangeBytes(asset, patchIndices, patchOptions, options)) return hasCheats ? "skip" : "finished";
+  return selectedCheatPositions?.some((position) => position < patchIndices.length) ? "skip" : "step";
+};
+
 const getPatchOutputChecks = (
   patchIndices: number[],
   patchOptions: PatchInput["patchOptions"],
-  finalCheckApplies: boolean,
+  declaredChecks: string[] | undefined,
 ) => {
   const checks = getPatchChecks(patchIndices, patchOptions, "outputChecks");
-  const lastIndex = patchIndices.at(-1);
-  const declared = patchOptions?.[lastIndex ?? -1]?.validateOutputChecksum?.trim();
-  if (!(declared && finalCheckApplies)) return checks;
+  if (!declaredChecks?.length) return checks;
   const merged = patchIndices.map((patchIndex) => patchOptions?.[patchIndex]?.outputChecks || "");
   const own = merged.at(-1) ?? "";
   const ownTokens = own.toLowerCase().split(/[\s,]+/);
-  const added = parseDeclaredOutputChecks(declared).filter((token) => !ownTokens.includes(token));
+  const added = declaredChecks.filter((token) => !ownTokens.includes(token));
   merged[merged.length - 1] = [own, ...added].filter(Boolean).join(",");
   return merged;
+};
+
+// The engine enforces --expect-out even when checksum validation is ignored, so only strict runs pass
+// it; that keeps non-strict mode and "Apply anyway" bypassing this check like every per-step check.
+// --expect-out takes digests only, and the CLI does not compare a size in output.checks either. A token
+// the last patch already declares in its own outputChecks (a weave seeds the final check from them when
+// present) stays that step's normalised-layout check and is not re-judged on the finished output.
+const getFinishedOutputChecks = (
+  declaredChecks: string[],
+  patchIndices: number[],
+  patchOptions: PatchInput["patchOptions"],
+  options: ApplyPatchOptions,
+) => {
+  if (options.validation?.requireInputChecksumMatch !== true) return undefined;
+  const ownTokens = (patchOptions?.[patchIndices.at(-1) ?? -1]?.outputChecks || "").toLowerCase().split(/[\s,]+/);
+  const checks = declaredChecks.filter((token) => !(/^(min[-_])?size=/.test(token) || ownTokens.includes(token)));
+  return checks.length ? checks : undefined;
 };
 
 const canReuseWorkerOutputPath = (output: PublicOutputWithApplySummary) =>
@@ -618,18 +639,23 @@ const applyPatchesToAsset = async ({
   const patchInputs = getPatchInputs(patchIndices, patchOptions, asset, bareMemberRule);
   const patchTargets = getPatchTargets(patchIndices, patchOptions, asset, bareMemberRule);
   const patchInputChecks = getPatchChecks(patchIndices, patchOptions, "inputChecks");
-  const finalCheckApplies = !finishingMayChangeBytes(
-    asset,
+  const declaredOutputChecksum = patchOptions?.[patchIndices.at(-1) ?? -1]?.validateOutputChecksum?.trim();
+  const finalCheckPlacement = declaredOutputChecksum
+    ? getFinalCheckPlacement(asset, patchIndices, patchOptions, options, !!cheatRecords?.length, selectedCheatPositions)
+    : "skip";
+  if (declaredOutputChecksum)
+    logger.debug("weave final-output check placement", { asset: asset.fileName, placement: finalCheckPlacement });
+  const declaredOutputChecks =
+    declaredOutputChecksum && finalCheckPlacement !== "skip" ? parseDeclaredOutputChecks(declaredOutputChecksum) : [];
+  const patchOutputChecks = getPatchOutputChecks(
     patchIndices,
     patchOptions,
-    options,
-    selectedCheatPositions,
+    finalCheckPlacement === "step" ? declaredOutputChecks : undefined,
   );
-  if (!finalCheckApplies && patchOptions?.[patchIndices.at(-1) ?? -1]?.validateOutputChecksum?.trim())
-    logger.debug("weave final-output check skipped: finishing may change the output bytes", {
-      asset: asset.fileName,
-    });
-  const patchOutputChecks = getPatchOutputChecks(patchIndices, patchOptions, finalCheckApplies);
+  const finishedOutputChecks =
+    finalCheckPlacement === "finished"
+      ? getFinishedOutputChecks(declaredOutputChecks, patchIndices, patchOptions, options)
+      : undefined;
   const selectedPatches = getSelectedPatchInputs(assetPatches, patches, patchFiles);
   const patchNames = selectedPatches.map((entry) => entry.patchFileName).filter(Boolean);
   const patchLabel = patchNames.length
@@ -662,6 +688,7 @@ const applyPatchesToAsset = async ({
       ...(patchTargets ? { patchTargets } : {}),
       ...(patchInputChecks ? { patchInputChecks } : {}),
       ...(patchOutputChecks ? { patchOutputChecks } : {}),
+      ...(finishedOutputChecks ? { validateWithOutputChecksums: finishedOutputChecks } : {}),
     },
     patches: selectedPatches,
     signal: options.signal,
@@ -960,7 +987,7 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
 };
 
 export {
-  finishingMayChangeBytes,
+  getFinalCheckPlacement,
   getPatchHeaderModes,
   getPatchN64ByteOrders,
   retainUncompressedWorkerOutputs,

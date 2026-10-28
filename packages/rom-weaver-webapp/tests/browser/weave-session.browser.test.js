@@ -590,6 +590,44 @@ test("sample weave with the shipped headered output.checks applies under strict 
   expect(outcome?.kind, outcome && "errorText" in outcome ? outcome.errorText : "").toBe("download");
 });
 
+// The header is stripped for the patches and re-added on output, so the check MUST see the finished
+// headered ROM (abfab88e), not the headerless last step.
+test.each([true, false])(
+  "sample weave with a wrong headered output CRC32 is rejected only under strict validation (strict %s)",
+  async (strict) => {
+    const [weaveArchive, romFile] = await Promise.all([
+      buildSampleWeave({ outputChecks: { checksums: { crc32: "deadbeef" } } }),
+      loadFixtureFile(SAMPLE_ROM),
+    ]);
+    const capture = captureDownloads();
+    try {
+      mount(
+        createElement(ApplyPatchForm, {
+          defaultSettings: { output: { compression: "none" }, validation: { requireInputChecksumMatch: strict } },
+          pageDrop: { files: [weaveArchive, romFile], id: 1 },
+        }),
+      );
+      await expect
+        .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+        .toEqual(["hello-to-rom.ips", "world-to-weaver.ips"]);
+      await waitForApplyButtonEnabled();
+      await clickApplyButton();
+      const outcome = await waitForApplyOutcome();
+      if (!strict) {
+        expect(outcome).toEqual({ kind: "download" });
+        await expect.poll(() => capture.getDownloads().length).toBe(1);
+        expect(await sha256Hex(capture.getDownloads()[0].blob)).toBe(SAMPLE_WOVEN_SHA256);
+        return;
+      }
+      expect(outcome?.kind).toBe("error");
+      expect(outcome?.errorText).toContain("checksum mismatch for crc32; expected deadbeef, actual abfab88e");
+      expect(capture.getDownloads()).toEqual([]);
+    } finally {
+      capture.restore();
+    }
+  },
+);
+
 test("sample weave rejects a wrong ROM until the override is checked", async () => {
   const [weaveArchive, romFile] = await Promise.all([buildSampleWeave(), loadWrongSampleRom()]);
   const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
@@ -923,20 +961,48 @@ test("every declared weave output algorithm is enforced, not just one", async ()
   }
 });
 
-test("a weave output check declared only in output.checks accepts a byte-swapped N64 dump", async () => {
+// The patch applies to the big-endian body and the output returns to the dump's byte-swapped order;
+// output.checks describe that finished output, as the CLI judges them.
+const buildByteSwappedOutputCheckWeave = async (outputChecks) => {
   const body = withBytes(noiseBytes(1024 * 1024, 0x64), 0, [0x80, 0x37, 0x12, 0x40]);
   const records = [[0x100, 0xf2]];
   const patches = [new File([createIps(records)], "first.ips")];
+  const finished = byteSwap16(applyRecords(body, records));
   const weaveArchive = await buildWeaveArchive(
     {
-      output: { checks: await fileChecks(applyRecords(body, records)), name: "transform-output" },
+      output: {
+        checks: await outputChecks({ finished, normalized: applyRecords(body, records) }),
+        name: "transform-output",
+      },
       patches: [{ path: patches[0].name }],
       rom: { checks: await fileChecks(body), name: "game.v64" },
       version: 1,
     },
     patches,
   );
-  await applyWeaveAndReadOutput([weaveArchive, new File([byteSwap16(body)], "game.v64")]);
+  return { files: [weaveArchive, new File([byteSwap16(body)], "game.v64")], finished };
+};
+
+test("a weave output check declared only in output.checks accepts a byte-swapped N64 dump", async () => {
+  const { files, finished } = await buildByteSwappedOutputCheckWeave(({ finished }) => fileChecks(finished));
+  const { output } = await applyWeaveAndReadOutput(files);
+  expect(hex(output)).toBe(hex(finished));
+});
+
+test.each([
+  ["a wrong CRC32", async () => ({ checksums: { crc32: "deadbeef" } })],
+  ["the big-endian last step's digests", ({ normalized }) => fileChecks(normalized)],
+])("a byte-swapped N64 dump's finished output is rejected for %s", async (_name, outputChecks) => {
+  const { files, finished } = await buildByteSwappedOutputCheckWeave(outputChecks);
+  const finishedCrc32 = (await fileChecks(finished)).checksums.crc32;
+  mountStrict(files);
+  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("transform-output");
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  const outcome = await waitForApplyOutcome();
+  expect(outcome?.kind).toBe("error");
+  expect(outcome?.errorText).toContain(`checksum mismatch for crc32; expected `);
+  expect(outcome?.errorText).toContain(`actual ${finishedCrc32}`);
 });
 
 test("a disc-level weave output check is not compared with a single track", async () => {

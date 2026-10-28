@@ -32,7 +32,7 @@ vi.mock("../../src/lib/apply/patch-apply-service.ts", () => ({
 }));
 
 import {
-  finishingMayChangeBytes,
+  getFinalCheckPlacement,
   retainUncompressedWorkerOutputs,
   runApplyWorkflow,
 } from "../../src/lib/apply/workflow.ts";
@@ -606,23 +606,37 @@ describe("runApplyWorkflow recovery and multi-asset paths", () => {
   });
 });
 
-describe("finishingMayChangeBytes", () => {
+describe("getFinalCheckPlacement", () => {
   const n64Variant = { applyCompatibility: { n64ByteOrder: "big-endian" }, checksums: { crc32: "1" } };
   const plainVariant = { checksums: { crc32: "1" } };
-  const may = (
+  const place = (
     overrides: Record<string, unknown> = {},
     patchOptions: Record<string, unknown>[] = [{}],
     options: Record<string, unknown> = {},
-  ) => finishingMayChangeBytes({ ...asset(), ...overrides } as never, [0], patchOptions as never, options as never);
+    hasCheats = false,
+  ) =>
+    getFinalCheckPlacement(
+      { ...asset(), ...overrides } as never,
+      [0],
+      patchOptions as never,
+      options as never,
+      hasCheats,
+    );
 
-  it("is false for a plain rom with nothing that finishes it", () => {
-    expect(may({ checksumVariants: [plainVariant] })).toBe(false);
-    expect(may({}, [{ n64ByteOrder: "keep", resolvedN64ByteOrder: "keep" }])).toBe(false);
+  it("is step for a plain rom with nothing that finishes it", () => {
+    expect(place({ checksumVariants: [plainVariant] })).toBe("step");
+    expect(place({}, [{ n64ByteOrder: "keep", resolvedN64ByteOrder: "keep" }])).toBe("step");
   });
 
   it.each([
-    ["disc asset", { discGroupId: "disc" }, [{}], {}],
-    ["non-rom asset", { kind: "patch" }, [{}], {}],
+    ["disc asset", { discGroupId: "disc" }],
+    ["non-rom asset", { kind: "track" }],
+    ["disc asset that finishing would change", { discGroupId: "disc", checksumVariants: [n64Variant] }],
+  ])("is skip for a %s", (_name, overrides) => {
+    expect(place(overrides)).toBe("skip");
+  });
+
+  it.each([
     ["addHeader", {}, [{}], { compatibility: { addHeader: true } }],
     ["removeHeader", {}, [{}], { compatibility: { removeHeader: true } }],
     ["fixChecksum", {}, [{}], { compatibility: { fixChecksum: true } }],
@@ -637,22 +651,108 @@ describe("finishingMayChangeBytes", () => {
     ],
     ["n64ByteOrder", {}, [{ n64ByteOrder: "big-endian" }], {}],
     ["resolvedN64ByteOrder", {}, [{ resolvedN64ByteOrder: "byte-swapped" }], {}],
-  ])("is true for %s", (_name, overrides, patchOptions, options) => {
-    expect(may(overrides, patchOptions, options)).toBe(true);
+  ])("is finished for %s, and skip once a cheat is selected", (_name, overrides, patchOptions, options) => {
+    expect(place(overrides, patchOptions, options)).toBe("finished");
+    expect(place(overrides, patchOptions, options, true)).toBe("skip");
   });
 
-  it("is true only for a cheat positioned before the last selected patch", () => {
+  it("is skip only for a cheat positioned before the last selected patch when nothing finishes", () => {
     const withCheats = (patchIndices: number[], positions: number[]) =>
-      finishingMayChangeBytes(asset() as never, patchIndices, [{}, {}] as never, {} as never, positions);
-    expect(withCheats([0, 1], [0])).toBe(true);
-    expect(withCheats([0, 1], [1])).toBe(true);
-    expect(withCheats([0, 1], [2])).toBe(false);
-    expect(withCheats([0, 1], [])).toBe(false);
+      getFinalCheckPlacement(asset() as never, patchIndices, [{}, {}] as never, {} as never, true, positions);
+    expect(withCheats([0, 1], [0])).toBe("skip");
+    expect(withCheats([0, 1], [1])).toBe("skip");
+    expect(withCheats([0, 1], [2])).toBe("step");
+    expect(withCheats([0, 1], [])).toBe("step");
   });
 
-  it("is false for output.header auto and plain file-level variants", () => {
-    expect(may({}, [{}], { output: { header: "auto" } })).toBe(false);
-    expect(may({ file: { ...patchFile("game.bin"), checksumVariants: [plainVariant] } })).toBe(false);
+  it("is step for output.header auto and plain file-level variants", () => {
+    expect(place({}, [{}], { output: { header: "auto" } })).toBe("step");
+    expect(place({ file: { ...patchFile("game.bin"), checksumVariants: [plainVariant] } })).toBe("step");
+  });
+});
+
+describe("runApplyWorkflow declared final output check when finishing changes the bytes", () => {
+  const headerVariant = { applyCompatibility: { removeHeader: true }, checksums: { crc32: "1" } };
+  const n64Variant = { applyCompatibility: { n64ByteOrder: "byte-swapped" }, checksums: { crc32: "1" } };
+  const applyFinishing = async ({
+    checksum = "deadbeef",
+    cheats = false,
+    ownOutputChecks = "size=30",
+    strict = true,
+    variant = headerVariant,
+  }: {
+    checksum?: string;
+    cheats?: boolean;
+    ownOutputChecks?: string;
+    strict?: boolean;
+    variant?: Record<string, unknown>;
+  } = {}) => {
+    const inputAsset = { ...asset("asset-1", "game.nes", 20), checksumVariants: [variant] };
+    const runtime = makeRuntime();
+    mocks.resolvePatchTargets.mockResolvedValue([inputAsset]);
+    mocks.buildSessionOutputFiles.mockResolvedValue({ files: [runtime.output] });
+    await runApplyWorkflow(
+      {
+        ...(cheats ? { cheatPositions: [1], cheatRecords: [{ code: "AAAA-AAAA" }] } : {}),
+        inputs: sourceRef("game.nes", 20),
+        options: { output: { outputName: "result" }, validation: { requireInputChecksumMatch: strict } },
+        parsedPatches: [parsedPatch()],
+        patchOptions: [{ outputChecks: ownOutputChecks, validateOutputChecksum: checksum }],
+        patches: [sourceRef("fix.ips", 4)],
+        preparedInputAssets: [inputAsset],
+        preparedPatchFiles: [patchFile("fix.ips")],
+      } as never,
+      runtime as never,
+    );
+    return runtime.patch.applyPatch.mock.calls[0]?.[0]?.options;
+  };
+
+  it.each([
+    ["headered", headerVariant],
+    ["byte-swapped N64", n64Variant],
+  ])("checks the finished %s output, not the normalised last step", async (_name, variant) => {
+    const options = await applyFinishing({ variant });
+    expect(options.validateWithOutputChecksums).toEqual(["crc32=deadbeef"]);
+    expect(options.patchOutputChecks).toEqual(["size=30"]);
+  });
+
+  it("passes every declared digest and drops size tokens --expect-out rejects", async () => {
+    const options = await applyFinishing({
+      checksum: "crc32=deadbeef,sha1=0123456789abcdef0123456789abcdef01234567,size=30,min-size=4",
+    });
+    expect(options.validateWithOutputChecksums).toEqual([
+      "crc32=deadbeef",
+      "sha1=0123456789abcdef0123456789abcdef01234567",
+    ]);
+  });
+
+  it("leaves tokens the last patch declares in its own outputChecks to that step", async () => {
+    const options = await applyFinishing({
+      checksum: "crc32=deadbeef,sha1=0123456789abcdef0123456789abcdef01234567",
+      ownOutputChecks: "size=30,crc32=deadbeef",
+    });
+    expect(options.validateWithOutputChecksums).toEqual(["sha1=0123456789abcdef0123456789abcdef01234567"]);
+    expect(options.patchOutputChecks).toEqual(["size=30,crc32=deadbeef"]);
+    const ownOnly = await applyFinishing({ ownOutputChecks: "crc32=deadbeef" });
+    expect(ownOnly.validateWithOutputChecksums).toBeUndefined();
+  });
+
+  it("does not check the finished output when validation is not strict (non-strict or Apply anyway)", async () => {
+    const options = await applyFinishing({ strict: false });
+    expect(options.validateWithOutputChecksums).toBeUndefined();
+    expect(options.patchOutputChecks).toEqual(["size=30"]);
+  });
+
+  it("does not check the finished output when a user cheat is baked in", async () => {
+    const options = await applyFinishing({ cheats: true });
+    expect(options.validateWithOutputChecksums).toBeUndefined();
+    expect(options.patchOutputChecks).toEqual(["size=30"]);
+  });
+
+  it("rejects a malformed declared checksum", async () => {
+    await expect(applyFinishing({ checksum: "zzzzzzzz" })).rejects.toThrow(
+      "Output checksum must be a CRC32, MD5, or SHA-1 hex digest",
+    );
   });
 });
 
