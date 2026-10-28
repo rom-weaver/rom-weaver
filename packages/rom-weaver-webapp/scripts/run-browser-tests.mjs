@@ -25,6 +25,10 @@ const TEST_DIR = path.join(ROOT_DIR, "tests", "browser");
 const CONFIG_PATH = path.join(ROOT_DIR, "vitest.browser.config.mjs");
 const VITEST_BIN = path.join(ROOT_DIR, "node_modules", ".bin", "vitest");
 const TEST_FILE_SUFFIX = ".browser.test.js";
+// Vite's dependency-optimizer cache, shared by every Vitest process. Concurrent
+// cold starts race on renaming its `deps` dir, which corrupts the cache for
+// every later process (even serial retries) until it is removed.
+const VITEST_CACHE_DIR = path.join(ROOT_DIR, "node_modules", ".vite", "vitest");
 const COVERAGE_ROOT = path.resolve(ROOT_DIR, "..", "..", "dist", "coverage", "react-browser");
 // Vitest's summary line ("  Tests  1 failed | 9 passed (10)"), not the
 // "⎯ Failed Tests 2 ⎯" section banner - hence the line-start + digit anchors.
@@ -243,11 +247,20 @@ export const main = async () => {
     process.stdout.write(`  ${status}  ${name}  -  ${summarizeOutput(result.output)}\n`);
   };
 
-  await runPool(files, vitestArgs, concurrency, recordResult);
+  // Run the smallest file alone so the optimizer cache is warm before the pool
+  // starts concurrent Vitest processes against it. The optimizer scans every
+  // test file whichever one runs, so a small file warms it just as well.
+  const fileSize = (file) => fs.statSync(file, { throwIfNoEntry: false })?.size ?? 0;
+  const warmupFile = files.reduce((smallest, file) => (fileSize(file) < fileSize(smallest) ? file : smallest));
+  const pooledFiles = files.filter((file) => file !== warmupFile);
+  recordResult(warmupFile, await runFile(warmupFile, vitestArgs));
+  await runPool(pooledFiles, vitestArgs, concurrency, recordResult);
 
   // Retry failures once, serially with no neighbours, to absorb contention flakes.
   const initialFailures = files.filter((file) => results.get(file)?.code !== 0);
   if (initialFailures.length) {
+    // A cache corrupted by the pool would fail every retry too; rebuild it.
+    fs.rmSync(VITEST_CACHE_DIR, { force: true, recursive: true });
     process.stdout.write(`\nRetrying ${initialFailures.length} failed file(s) in isolation…\n`);
     for (const file of initialFailures) {
       process.stdout.write(`\n──── initial ${path.basename(file)} failure ────\n`);
