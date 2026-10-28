@@ -12,9 +12,10 @@ import type { WorkflowOptions, WorkflowWarning } from "../../types/workflow-cont
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { CreateWorkflowOptions, ProgressEvent, TrimInput } from "../../types/workflow-runtime-types.ts";
 import { getCompressionOutputExtension, isCompressionFormat } from "../compression/container-format-registry.ts";
+import { reidentifyAssetWhenLoaded } from "./apply-input-checksums.ts";
 import { RomWeaverError } from "../errors.ts";
 import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
-import { getPrimaryInputAsset, isChecksummableInputAsset } from "../input/input-assets.ts";
+import { getPrimaryInputAsset, type InputAsset, isChecksummableInputAsset } from "../input/input-assets.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { sanitizeTypedOutputName } from "../path-utils.ts";
 import { wrapPublicOutput } from "../output/index.ts";
@@ -30,7 +31,9 @@ import {
   getInputAssetChecksums,
   getPatchFilePrecomputedChecksumMs,
   getPatchFilePrecomputedChecksums,
+  getPatchFilePrecomputedChecksumVariants,
   getPatchFilePrecomputedIdentification,
+  getPatchFilePrecomputedIdentifyRetry,
   getPatchFilePrecomputedRomType,
 } from "./staged-source-checksums.ts";
 
@@ -130,6 +133,8 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
   private outputExtension = "";
   private outputName = "";
   private manualOutputName = false;
+  /** Set once a run started for the current input, so a late identification leaves the name alone. */
+  private outputLocked = false;
   private inputStage?: StagedSource<TSource>;
 
   constructor(
@@ -167,6 +172,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       if (first === undefined) throw new RomWeaverError("INVALID_INPUT", "No trim source was provided");
       try {
         await this.releaseInputStage();
+        this.outputLocked = false;
         await this.runtime.preload?.preloadCapability?.("compression", () => undefined, {
           threads: this.settings.workers?.threads,
         });
@@ -223,6 +229,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       if (stage.state.status !== "ready" || !stage.state.selectedCandidateId)
         throw new RomWeaverError("AMBIGUOUS_SELECTION", "Trim source requires candidate selection");
       this.getOutputCompression();
+      this.outputLocked = true;
       const outputName = this.normalizeOutputName(this.outputName);
       if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
       const result = await runTrimWorkflow(this.createTrimInput(stage), this.runtime);
@@ -298,9 +305,12 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       const precomputed = getPatchFilePrecomputedChecksums(asset.file);
       if (precomputed) {
         asset.checksums = precomputed;
+        asset.checksumVariants = getPatchFilePrecomputedChecksumVariants(asset.file);
         asset.identification = getPatchFilePrecomputedIdentification(asset.file);
         asset.romType = getPatchFilePrecomputedRomType(asset.file);
         asset.checksumTimeMs = getPatchFilePrecomputedChecksumMs(asset.file) ?? 0;
+        const precomputedRetry = getPatchFilePrecomputedIdentifyRetry(asset.file);
+        if (precomputedRetry) this.reidentifyWhenLoaded(stage, asset, precomputedRetry);
         continue;
       }
       const checksumStartedAt = Date.now();
@@ -316,9 +326,11 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
         workflow: "trim",
       });
       asset.checksums = checksumResult.checksums;
+      asset.checksumVariants = checksumResult.variants;
       asset.identification = checksumResult.identification;
       asset.romType = checksumResult.romType;
       asset.checksumTimeMs = Date.now() - checksumStartedAt;
+      if (checksumResult.identifyRetry) this.reidentifyWhenLoaded(stage, asset, checksumResult.identifyRetry);
     }
     const primaryAsset = getPrimaryInputAsset(assets);
     const primaryChecksums = getInputAssetChecksums(primaryAsset);
@@ -327,6 +339,27 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
     stage.state.checksumTimeMs = primaryAsset?.checksumTimeMs;
     stage.state.identification = cloneIdentification(primaryAsset?.identification);
     stage.state.romType = cloneRomType(primaryAsset?.romType);
+  }
+
+  /**
+   * Upgrade a timed-out (`unavailable`) identification once the pack finishes loading. A late result
+   * never touches a typed output name or a run that started, and is dropped if the input was replaced.
+   */
+  private reidentifyWhenLoaded(stage: StagedSource<TSource>, asset: InputAsset, retry: Promise<boolean>) {
+    reidentifyAssetWhenLoaded({
+      asset,
+      isCurrent: () => !this.disposed && this.inputStage === stage,
+      onIdentified: () => {
+        if (getPrimaryInputAsset(stage.preparedInputAssets || []) === asset) {
+          stage.state.identification = cloneIdentification(asset.identification);
+        }
+        if (!(this.manualOutputName || this.outputLocked || this.isBusy())) {
+          this.outputName = this.buildAutomaticOutputName();
+        }
+        this.emitChange();
+      },
+      retry,
+    });
   }
 
   /** Dry-run the trim plan so an unsupported input is flagged at staging, before any confirm or run. */
