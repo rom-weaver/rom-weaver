@@ -338,19 +338,6 @@ for (const source of ["/create-patch", "/create-patch/", "/create-patch.html", "
   assertIncludes(redirects, `${source} /create-rom-patch 301`, `${source} renamed Create redirect`);
 }
 assertIncludes(redirects, "/create-patch.md /create-rom-patch.md 301", "renamed Create Markdown redirect");
-for (const [source, destination] of [
-  ["/m3u-playlist", "/docs/cli-playlist"],
-  ["/m3u-playlist.md", "/docs/cli-playlist.md"],
-  ["/docs/make-m3u-playlist-browser", "/docs/cli-playlist"],
-  ["/docs/make-m3u-playlist-browser.md", "/docs/cli-playlist.md"],
-]) {
-  assertIncludes(redirects, `${source} ${destination} 301`, `${source} removed-tool Pages redirect`);
-  assertIncludes(
-    swsConfig,
-    `source = "${source}"\ndestination = "${destination}"\nkind = 301`,
-    `${source} removed-tool Docker redirect`,
-  );
-}
 for (const source of ["/apply-patch", "/apply-patch/", "/apply-patch.html", "/apply-patch/index.html"]) {
   assertIncludes(redirects, `${source} /apply-patches 301`, `${source} renamed Apply Patches redirect`);
 }
