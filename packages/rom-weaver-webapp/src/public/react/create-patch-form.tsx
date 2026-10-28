@@ -410,6 +410,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
   useInputSelectionHandler("creator", selectFile, props.active !== false);
   const [internalOriginal, setInternalOriginal] = useState<BinarySource | null>(props.defaultOriginal || null);
   const [internalModified, setInternalModified] = useState<BinarySource | null>(props.defaultModified || null);
+  const [sourceGroups, setSourceGroups] = useState<ReadonlyMap<BinarySource, File[]>>(() => new Map());
   const [internalSettings, setInternalSettings] = useState<CreatePatchFormSettings>(() =>
     mergeSettingsWithOutput(providerSettings, props.defaultSettings),
   );
@@ -465,18 +466,16 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
   const dropNotice = dropNoticeRouting ? getRomDropNotice(dropNoticeRouting, localizer) : "";
   const dropNoticeLevel = dropNoticeRouting ? getRomDropNoticeLevel(dropNoticeRouting) : "warn";
   const originalSourceKey = useMemo(
-    () => (original ? getBinarySourceListStableIds([original])[0] || "" : ""),
-    [original],
+    () => (original ? getBinarySourceListStableIds(sourceGroups.get(original) || [original]).join("\n") : ""),
+    [original, sourceGroups],
   );
   const modifiedSourceKey = useMemo(
-    () => (modified ? getBinarySourceListStableIds([modified])[0] || "" : ""),
-    [modified],
+    () => (modified ? getBinarySourceListStableIds(sourceGroups.get(modified) || [modified]).join("\n") : ""),
+    [modified, sourceGroups],
   );
   const candidateThreads = props.threads ?? settings.workers?.threads;
-  // Canonical (order-independent) key: the available patch formats for a pair of
-  // ROMs do not depend on which is original vs modified, so swapping must not
-  // invalidate the resolved candidates (which would re-extract to re-measure).
-  const patchFormatCandidateKey = `${[originalSourceKey, modifiedSourceKey].sort().join("\n")}\n${String(candidateThreads ?? "")}`;
+  // Candidate restrictions MUST follow the Original/Modified direction, including PMSR eligibility.
+  const patchFormatCandidateKey = JSON.stringify([originalSourceKey, modifiedSourceKey, candidateThreads ?? ""]);
   const activePatchFormatCandidates =
     createPatchFormatCandidates?.key === patchFormatCandidateKey ? createPatchFormatCandidates : null;
   const requestedPatchType = props.patchType || internalPatchType;
@@ -640,8 +639,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
       setCreatePatchFormatCandidates(null);
       return;
     }
-    // Same pair already resolved (e.g. after a Swap, the canonical key is
-    // unchanged) - keep the candidates instead of re-extracting to re-measure.
+    // Only candidates resolved for this direction MAY be reused.
     if (resolvedCandidateKeyRef.current === patchFormatCandidateKey) return;
     resolvedCandidateKeyRef.current = patchFormatCandidateKey;
     setCreatePatchFormatCandidates(null);
@@ -716,6 +714,18 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
   const handledPageDropIdRef = useRef<number | null>(null);
   const applyRoutedDrop = (routed: PendingCreateDrop) => {
     const [originalFile, modifiedFile] = routed.assignment;
+    setSourceGroups((current) => {
+      const next = new Map<BinarySource, File[]>();
+      for (const source of [originalFile ?? original, modifiedFile ?? modified]) {
+        if (!source) continue;
+        const group = (source instanceof File ? routed.groups.get(source) : undefined) || current.get(source);
+        if (group) next.set(source, group);
+      }
+      // Keep the previous map when nothing changed so the staging effect does not rerun and drop in-flight progress.
+      const unchanged =
+        next.size === current.size && [...next].every(([source, group]) => current.get(source) === group);
+      return unchanged ? current : next;
+    });
     if (originalFile) updateOriginal(originalFile);
     if (modifiedFile) updateModified(modifiedFile);
     setDropNoticeRouting(routed);
@@ -741,7 +751,15 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
       setSampleTutorial(null);
     }
     const slotFilled = [!!original, !!modified && !replaceModified];
-    const routed = routeByOrder(files, slotFilled);
+    let routed: PendingCreateDrop;
+    try {
+      routed = routeByOrder(files, slotFilled);
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      setOutputWorkflowMessage(normalizedError);
+      onError?.(normalizedError);
+      return;
+    }
     const emptySlotCount = slotFilled.filter((filled) => !filled).length;
     if (emptySlotCount > 0 && routed.roms.length > emptySlotCount) {
       setDropNoticeRouting(null);
@@ -956,7 +974,8 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
             commit: () => setOriginalState(activeWorkflow.getOriginal()),
             generation: originalGeneration,
             role: "original",
-            setSource: () => activeWorkflow.setOriginal(original as BinarySource),
+            setSource: () =>
+              activeWorkflow.setOriginal(sourceGroups.get(original as BinarySource) || (original as BinarySource)),
             source: original,
           },
           {
@@ -964,7 +983,8 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
             commit: () => setModifiedState(activeWorkflow.getModified()),
             generation: modifiedGeneration,
             role: "modified",
-            setSource: () => activeWorkflow.setModified(modified as BinarySource),
+            setSource: () =>
+              activeWorkflow.setModified(sourceGroups.get(modified as BinarySource) || (modified as BinarySource)),
             source: modified,
           },
         ],
@@ -997,6 +1017,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
     resolvedAssetBaseUrl,
     setWorkflowMessage,
     stagingSettingsKey,
+    sourceGroups,
     setProgress,
   ]);
 
@@ -1176,6 +1197,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
 
   const createFileInputAccept = getFileInputAcceptAttributes();
   const createSourcesEmpty = !(original || modified || createPreparationPending);
+  const dropError = createSourcesEmpty && messagePlacement === "output" ? message : "";
   const sampleTutorialReady = createSourcesReady && !createPreparationPending;
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: createQueued });
@@ -1227,11 +1249,16 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
       accept: createFileInputAccept.unifiedApply,
       addLabel: localizer.message("ui.drop.addRom"),
       afterDropZone:
-        dropNotice || identicalSources ? (
+        dropNotice || dropError || identicalSources ? (
           <>
             {dropNotice ? (
               <Notice id="patch-builder-input-notice" level={dropNoticeLevel}>
                 {dropNotice}
+              </Notice>
+            ) : null}
+            {dropError ? (
+              <Notice id="patch-builder-input-error" level="error">
+                <WorkflowErrorMessage message={dropError} />
               </Notice>
             ) : null}
             {identicalSources ? (

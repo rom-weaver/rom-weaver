@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { getPatchFileBlob, getPatchFileExternalSource } from "../../src/lib/input/binary-service.ts";
+import { getPatchFileBlob, getPatchFileBytes, getPatchFileExternalSource } from "../../src/lib/input/binary-service.ts";
 import {
   getBinarySourceSize,
   prepareInput,
@@ -36,6 +36,24 @@ describe("getBinarySourceSize", () => {
 });
 
 describe("prepareMultipleDirectInputAssets", () => {
+  it("prepares a supplied NFS group with its primary File and companions intact", async () => {
+    const source = makeFile("header", "hif_000000.nfs");
+    const part = makeFile("segment", "hif_000001.nfs");
+    const key = makeFile("synthetic-key", "htk.bin");
+    const bytes = Uint8Array.of(1, 2, 3, 4);
+    const run = vi.fn(async () => ({
+      result: { assets: [{}], patches: [] },
+      outputs: [{ fileName: "disc.iso", size: bytes.length, bytes }],
+      patchOutputs: [],
+    }));
+    const runtime = { name: "browser", sidecars: {}, workerIo: {}, ingest: { run } };
+    const assets = await prepareMultipleDirectInputAssets([key, source, part], undefined, runtime as never);
+    expect(run).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ source, companionFiles: [key, part] }));
+    expect(assets?.map((asset) => asset.fileName)).toEqual(["disc.iso"]);
+    expect(assets?.[0]?.patchable).toBe(true);
+    expect(assets?.map((asset) => getPatchFileBytes(asset.file))).toEqual([bytes]);
+  });
+
   it("leaves raw NFS sources to normal staging when extraction is disabled", async () => {
     const sources = [makeFile("raw-nfs", "hif_000000.nfs"), makeFile("key", "htk.bin")];
     await expect(prepareMultipleDirectInputAssets(sources, NO_CONTAINER_OPTIONS)).resolves.toBeNull();

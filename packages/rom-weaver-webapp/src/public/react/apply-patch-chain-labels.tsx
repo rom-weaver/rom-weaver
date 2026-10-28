@@ -4,6 +4,7 @@ import { useExpectedRomIdentification } from "./use-expected-rom-identification.
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
 import type { PatchInputBasis } from "./patch-input-basis.ts";
+import { isPatchFileChecksumFailure } from "./patch-validation-failure.ts";
 
 /** The chain chip: one plain-language line for what this patch's input was matched against.
  * Positions in the verdict are 0-based ENABLED-chain positions; `enabledIndexes` maps them to
@@ -17,6 +18,9 @@ export const chainChipText = (
   patchLabels: readonly string[],
 ): { text: string; warn?: boolean } | null => {
   const verdict = item.chainVerdict;
+  if (item.validationState === "invalid" && isPatchFileChecksumFailure(item.validationMessage)) {
+    return { text: localizer.message("ui.patchChecks.corrupt"), warn: true };
+  }
   // The patch itself is unreadable, so no ROM was checked and the chip must not blame the ROM.
   if (item.validationUnreadable) return { text: localizer.message("ui.patchChecks.unreadable"), warn: true };
   // "Verified" claims a checksum matched; a patch that merely applied (IPS, or no checksum to
