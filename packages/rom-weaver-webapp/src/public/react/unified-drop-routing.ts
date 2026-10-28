@@ -1,3 +1,4 @@
+import { groupNfsFiles } from "../../lib/input/nfs-inputs.ts";
 import { createLogger } from "../../lib/logging.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import type { CandidateSelectionRequest, SelectFile } from "../../types/selection.ts";
@@ -43,6 +44,7 @@ const collectRomDropFiles = (files: File[]): RomDropCollection => {
 
 type RomDropRouting = {
   assignment: (File | null)[];
+  groups: ReadonlyMap<File, File[]>;
   ignoredPatches: File[];
   roms: File[];
   unused: File[];
@@ -68,14 +70,19 @@ const formatDropNoticeName = (file: File) =>
  * dropped than there are empty slots, the remainder is reported as unused.
  *
  * Returns one entry per slot: a `File` to place, or `null` to leave unchanged.
+ * NFS companions MUST stay with their primary file through selection and staging.
  * Files that do not fit stay in `unused`; they are never substituted into a
  * filled slot.
  */
 const routeByOrder = (files: File[], slotFilled: boolean[]): RomDropRouting => {
   const assignment: (File | null)[] = slotFilled.map(() => null);
-  const { ignoredPatches, roms } = collectRomDropFiles(files);
+  const { ignoredPatches, roms: inputs } = collectRomDropFiles(files);
+  const nfsFiles = groupNfsFiles(inputs);
+  const groups = new Map<File, File[]>(nfsFiles ? [[nfsFiles[0], nfsFiles]] : []);
+  const companions = new Set(nfsFiles?.slice(1));
+  const roms = inputs.filter((file) => !companions.has(file));
   if (roms.length === 0 || slotFilled.length === 0) {
-    return { assignment, ignoredPatches, roms, unused: roms };
+    return { assignment, groups, ignoredPatches, roms, unused: roms };
   }
   const emptySlots = slotFilled.map((filled, index) => (filled ? -1 : index)).filter((index) => index >= 0);
   let fileIndex = 0;
@@ -91,7 +98,7 @@ const routeByOrder = (files: File[], slotFilled: boolean[]): RomDropRouting => {
     slotFilled,
     unused: unused.map((file) => file.name),
   });
-  return { assignment, ignoredPatches, roms, unused };
+  return { assignment, groups, ignoredPatches, roms, unused };
 };
 
 /** Trim-tab routing: return the first ROM plus every other candidate. */
