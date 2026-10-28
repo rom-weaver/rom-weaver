@@ -314,7 +314,7 @@ pub(crate) struct ExtractChecksumTiming {
 /// Detect output identity from the stream, seeking PBP headers beyond the prefix when needed.
 fn detect_emitted_identity(identity: &IdentityPrefix, output_path: &Path) -> RomIdentity {
     let detected = identity.detect(output_extension(output_path).as_deref());
-    if detected.is_empty() && identity.has_pbp_signature() {
+    if identity.has_pbp_signature() {
         return rom_weaver_checksum::detect_rom_identity_for_path(output_path);
     }
     detected

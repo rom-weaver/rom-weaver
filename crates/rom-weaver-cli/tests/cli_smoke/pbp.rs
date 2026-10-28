@@ -255,7 +255,10 @@ fn psp_nonempty_psar_fixtures() -> Vec<(&'static str, Vec<u8>)> {
         large[8 + section * 4..12 + section * 4]
             .copy_from_slice(&u32::try_from(offset).expect("offset").to_le_bytes());
     }
+    let mut collision = large.clone();
+    collision[0x100..0x104].copy_from_slice(b"SEGA");
     vec![
+        ("padding-collision", collision),
         ("large-sections", large),
         ("elf-assets", psp_pbp(&elf, b"asset")),
         ("prx-assets", psp_pbp(&prx, b"asset")),
@@ -274,6 +277,7 @@ fn assert_psp_nonempty_psar_preserved(name: &str) {
         "prx-assets" => "6b07ae315c7bbd707d34ddbdaaae0142fb705bc0",
         "npumd" => "abae146504a094569fdcc7340fe53c7c283150e7",
         "large-sections" => "b3e4c071ecbed779d4cf4097329fb107905328cb",
+        "padding-collision" => "3ac24b6222f8f7e3d290beb31cbbc868b4059982",
         _ => panic!("unknown fixture"),
     };
     let temp = setup_temp_dir();
@@ -297,6 +301,14 @@ fn assert_psp_nonempty_psar_preserved(name: &str) {
         0,
     );
     assert_eq!(raw["details"]["checksums"]["sha1"], expected_sha1);
+    assert_eq!(
+        raw["details"]["checksum_variants"]
+            .as_array()
+            .expect("variants")
+            .len(),
+        1,
+        "{raw}"
+    );
     let inner = temp.child("inner.zip");
     isolated_json_event(
         &temp,
@@ -366,10 +378,23 @@ fn assert_psp_nonempty_psar_preserved(name: &str) {
         );
         assert_eq!(assets[0]["checksums"]["sha1"], expected_sha1);
         assert_eq!(
+            assets[0]["checksum_variants"]
+                .as_array()
+                .expect("variants")
+                .len(),
+            1,
+            "{event}"
+        );
+        assert_eq!(
             fs::read(assets[0]["path"].as_str().expect("path")).expect("ROM bytes"),
             bytes
         );
     }
+}
+
+#[test]
+fn psp_padding_collision_preserves_checksum_identify_ingest() {
+    assert_psp_nonempty_psar_preserved("padding-collision");
 }
 
 #[test]

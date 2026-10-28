@@ -114,8 +114,7 @@ impl CliApp {
             .extension()
             .map(|ext| format!(".{}", ext.to_string_lossy()));
         let mut rom_identity = identity.detect(extension.as_deref());
-        if rom_identity.is_empty()
-            && identity.has_pbp_signature()
+        if identity.has_pbp_signature()
             && rom_weaver_core::pbp::classify_pbp(&mut file, file_len)
                 .is_ok_and(|layout| layout.kind.psp_layout().is_some())
         {
