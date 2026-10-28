@@ -617,8 +617,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const weaveOutputChecksum = Object.entries(weaveOutputChecks || {})
     .map(([algorithm, digest]) => `${algorithm}=${digest}`)
     .join(",");
+  const seededWeaveOutputChecksumRef = useRef("");
   useEffect(() => {
-    if (!weaveOutputChecksum || weaveChainStatus === null) return;
+    const staleChecksum = seededWeaveOutputChecksumRef.current;
+    const hasStale = staleChecksum !== "" && staleChecksum !== weaveOutputChecksum;
+    if ((!weaveOutputChecksum || weaveChainStatus === null) && !hasStale) return;
     const desired = weaveChainStatus === "full" ? weaveOutputChecksum : "";
     const targetIndex = (activeWeaveSession?.entries.length ?? 0) - 1;
     const abort = new AbortController();
@@ -628,14 +631,28 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       await waitForPatchStackReady(weaveControllersRef.current.patchStack, { signal: abort.signal });
       if (abort.signal.aborted) return;
       const stack = weaveControllersRef.current.patchStack;
+      // A previous weave session's value stays on its patch when the bench switches sessions
+      // (patches append); clear it so it cannot reject an apply of the remaining patches.
+      if (hasStale) {
+        const staleItems = stack?.getState().items || [];
+        for (let index = 0; index < staleItems.length; index++) {
+          if ((staleItems[index]?.validateOutputChecksum || "") === staleChecksum)
+            await Promise.resolve(stack?.setPatchOption?.(index, { validateOutputChecksum: "" }));
+        }
+        if (abort.signal.aborted) return;
+        seededWeaveOutputChecksumRef.current = "";
+      }
+      if (!weaveOutputChecksum || weaveChainStatus === null) return;
       const items = stack?.getState().items || [];
       const carrierIndex = items.findIndex((item) => (item.validateOutputChecksum || "") === weaveOutputChecksum);
       if (desired) {
         if (carrierIndex === targetIndex) return;
         if (carrierIndex >= 0)
           await Promise.resolve(stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" }));
-        if (!abort.signal.aborted && targetIndex >= 0 && targetIndex < items.length)
+        if (!abort.signal.aborted && targetIndex >= 0 && targetIndex < items.length) {
+          seededWeaveOutputChecksumRef.current = weaveOutputChecksum;
           await Promise.resolve(stack?.setPatchOption?.(targetIndex, { validateOutputChecksum: weaveOutputChecksum }));
+        }
         return;
       }
       if (carrierIndex >= 0)
