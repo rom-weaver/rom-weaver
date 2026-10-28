@@ -247,9 +247,12 @@ export const main = async () => {
     process.stdout.write(`  ${status}  ${name}  -  ${summarizeOutput(result.output)}\n`);
   };
 
-  // Run the first file alone so the optimizer cache is warm before the pool
-  // starts concurrent Vitest processes against it.
-  const [warmupFile, ...pooledFiles] = files;
+  // Run the smallest file alone so the optimizer cache is warm before the pool
+  // starts concurrent Vitest processes against it. The optimizer scans every
+  // test file whichever one runs, so a small file warms it just as well.
+  const fileSize = (file) => fs.statSync(file, { throwIfNoEntry: false })?.size ?? 0;
+  const warmupFile = files.reduce((smallest, file) => (fileSize(file) < fileSize(smallest) ? file : smallest));
+  const pooledFiles = files.filter((file) => file !== warmupFile);
   recordResult(warmupFile, await runFile(warmupFile, vitestArgs));
   await runPool(pooledFiles, vitestArgs, concurrency, recordResult);
 
