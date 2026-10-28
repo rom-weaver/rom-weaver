@@ -1,5 +1,228 @@
 # Changelog
 
+## [0.23.0](https://github.com/rom-weaver/rom-weaver/compare/v0.22.2...v0.23.0) (2026-10-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** unify N64 byte order into one core type ([#1372](https://github.com/rom-weaver/rom-weaver/issues/1372))
+* **cli:** share archive selection args between probe and identify ([#1371](https://github.com/rom-weaver/rom-weaver/issues/1371))
+
+### Features
+
+* add an M3U playlist tool for multi-disc games ([#1283](https://github.com/rom-weaver/rom-weaver/issues/1283)) ([b9ae2f9](https://github.com/rom-weaver/rom-weaver/commit/b9ae2f9688492898a3cc66e88edec612d4833700))
+* **chd:** report create mode from Rust and drop TS byte-inference ([#1376](https://github.com/rom-weaver/rom-weaver/issues/1376)) ([9af5490](https://github.com/rom-weaver/rom-weaver/commit/9af5490949a06b8c774fe310f1b084cf5e79cb5e))
+* **containers:** extract GameCube CISO images ([#1286](https://github.com/rom-weaver/rom-weaver/issues/1286)) ([964acbc](https://github.com/rom-weaver/rom-weaver/commit/964acbc576704921d850e31546ab197822891833))
+* **containers:** read CSO v1 deflate images ([#1271](https://github.com/rom-weaver/rom-weaver/issues/1271)) ([cdac8e9](https://github.com/rom-weaver/rom-weaver/commit/cdac8e990171c4a7beb5e7ecdf1ede00bb09c063))
+* **containers:** read maxcso CSO v2 deflate, LZ4, and raw blocks ([#1287](https://github.com/rom-weaver/rom-weaver/issues/1287)) ([aece584](https://github.com/rom-weaver/rom-weaver/commit/aece584ebb73aa2a48e6542a4a5ee40e30efd5da))
+* **webapp:** extract split WBFS sets in the browser ([#1305](https://github.com/rom-weaver/rom-weaver/issues/1305)) ([4788c4b](https://github.com/rom-weaver/rom-weaver/commit/4788c4b761b9833635ca1e94cf516bfd50b09ce9))
+* **webapp:** import saves dropped on the home page ([#1327](https://github.com/rom-weaver/rom-weaver/issues/1327)) ([5f9348d](https://github.com/rom-weaver/rom-weaver/commit/5f9348d1ef86332c064ecd0f64ef2645a36810ed))
+* **webapp:** keep weave cheats toggleable [[#1330](https://github.com/rom-weaver/rom-weaver/issues/1330)] ([#1331](https://github.com/rom-weaver/rom-weaver/issues/1331)) ([9c9bdb5](https://github.com/rom-weaver/rom-weaver/commit/9c9bdb5fca27040a2373980618d556777dfaface))
+* **webapp:** show what changed since last visit ([#1269](https://github.com/rom-weaver/rom-weaver/issues/1269)) ([96d0622](https://github.com/rom-weaver/rom-weaver/commit/96d06228582db04226e750969370b0c7d2fe2c32))
+
+
+### User Experience
+
+* **chd:** create CHDs with the vendored chd-rs writer ([#1309](https://github.com/rom-weaver/rom-weaver/issues/1309)) ([4c92947](https://github.com/rom-weaver/rom-weaver/commit/4c92947d174e8cb3df416067c338c9b298ad8c8a))
+* **webapp:** fold guide step text behind More on phones ([#1424](https://github.com/rom-weaver/rom-weaver/issues/1424)) ([4e677d6](https://github.com/rom-weaver/rom-weaver/commit/4e677d65ba233bc9dba4b1df5a69edecdafffd11))
+* **webapp:** link CHD and RVZ guides from extract and home ([#1421](https://github.com/rom-weaver/rom-weaver/issues/1421)) ([01c4235](https://github.com/rom-weaver/rom-weaver/commit/01c423570baf8b824c3f6c18e22172e3bb56487d))
+* **webapp:** put console actions beside close ([#1310](https://github.com/rom-weaver/rom-weaver/issues/1310)) ([d8e39d5](https://github.com/rom-weaver/rom-weaver/commit/d8e39d5ebd6829f254de2eb3acbe86d38d9b57ff))
+* **webapp:** show a pending card while practice files load ([#1382](https://github.com/rom-weaver/rom-weaver/issues/1382)) ([59e046d](https://github.com/rom-weaver/rom-weaver/commit/59e046dd0cb5beae1e78527334a5d1f6859c9177))
+* **webapp:** show release dates on the What's new page ([#1351](https://github.com/rom-weaver/rom-weaver/issues/1351)) ([dcf7f29](https://github.com/rom-weaver/rom-weaver/commit/dcf7f29758d1cae9b67c18d94a2b1e9e73b47c4c))
+
+
+### Bug Fixes
+
+* **apply:** accept size-only patches on headered ROMs ([#1344](https://github.com/rom-weaver/rom-weaver/issues/1344)) ([c8eed07](https://github.com/rom-weaver/rom-weaver/commit/c8eed0712cb29ee4f74f670a04deccd9f31d3c00))
+* **apply:** accept the bare member file for patch-level target.member weaves ([#1280](https://github.com/rom-weaver/rom-weaver/issues/1280)) ([a869283](https://github.com/rom-weaver/rom-weaver/commit/a8692831174ce5bbf5e1dac9dbc3f53e05ecdc90))
+* **apply:** clearer no-ROM error, PPF undo mismatch warning, quiet picker cancel ([#1321](https://github.com/rom-weaver/rom-weaver/issues/1321)) ([bcd746a](https://github.com/rom-weaver/rom-weaver/commit/bcd746acdb7b23ca99cc9fd448a5e483118373ad))
+* **apply:** keep rom extension on dotted names ([#1343](https://github.com/rom-weaver/rom-weaver/issues/1343)) ([ca8bee4](https://github.com/rom-weaver/rom-weaver/commit/ca8bee4c3e507b28f1f084d4fe9f3a8666045aa4))
+* **apply:** repair disc exports and lookup escape ([#1335](https://github.com/rom-weaver/rom-weaver/issues/1335)) ([d4b2fcc](https://github.com/rom-weaver/rom-weaver/commit/d4b2fcc40b09a8ec36ebc0d204b9e5cc362de214))
+* browser min zstd level and RVZ open error path leak ([#1319](https://github.com/rom-weaver/rom-weaver/issues/1319)) ([caaa8e7](https://github.com/rom-weaver/rom-weaver/commit/caaa8e7352bd9ccae27b71433f365493e00c4e2f))
+* **bsp:** reject unsupported interactive menus ([#1471](https://github.com/rom-weaver/rom-weaver/issues/1471)) ([a27f6b1](https://github.com/rom-weaver/rom-weaver/commit/a27f6b11ad94e18061658b8258142de44f936b9f))
+* **chd:** match chdman for mixed-size cds and gd mode2 ([#1315](https://github.com/rom-weaver/rom-weaver/issues/1315)) ([7463ba0](https://github.com/rom-weaver/rom-weaver/commit/7463ba053e10f278a90f740bfc7ac64b49960c1d))
+* **chd:** pad gd-rom tracks like chdman ([#1311](https://github.com/rom-weaver/rom-weaver/issues/1311)) ([897059e](https://github.com/rom-weaver/rom-weaver/commit/897059e88abb46c5510878c32a050bed2ff227e9))
+* **chd:** place cd and gd pregaps like chdman ([#1312](https://github.com/rom-weaver/rom-weaver/issues/1312)) ([94af95e](https://github.com/rom-weaver/rom-weaver/commit/94af95ef8356a1f5268bf85366f4769a5babea7b))
+* **chd:** preserve CHD media and codecs ([#1353](https://github.com/rom-weaver/rom-weaver/issues/1353)) ([efd26f0](https://github.com/rom-weaver/rom-weaver/commit/efd26f01d2949f7f74b43bdb86671f152c444f0a))
+* classify malformed patch failures ([#1463](https://github.com/rom-weaver/rom-weaver/issues/1463)) ([461dea6](https://github.com/rom-weaver/rom-weaver/commit/461dea67e32f3a132b4368e328ed4796f3395929))
+* **cli:** correct noninteractive tui guidance ([#1460](https://github.com/rom-weaver/rom-weaver/issues/1460)) ([317aaf7](https://github.com/rom-weaver/rom-weaver/commit/317aaf79985f44b81e195e323a49b7c8d60431c9))
+* **cli:** emit weaves for wrapped dcp patches ([#1478](https://github.com/rom-weaver/rom-weaver/issues/1478)) ([1bb342d](https://github.com/rom-weaver/rom-weaver/commit/1bb342d904223d6991091e4dbbd22525b4e7c7f5))
+* **cli:** explain explicit .bin output ([#1472](https://github.com/rom-weaver/rom-weaver/issues/1472)) ([1ca985b](https://github.com/rom-weaver/rom-weaver/commit/1ca985bd22b35e029adb961faadc8a0c9796b2ad))
+* **cli:** reject database cheats for dcp ([#1473](https://github.com/rom-weaver/rom-weaver/issues/1473)) ([2498529](https://github.com/rom-weaver/rom-weaver/commit/249852914f440075079611b01981644817aa557c))
+* **cli:** reject hard-linked save outputs and dedupe CLI helpers ([#1373](https://github.com/rom-weaver/rom-weaver/issues/1373)) ([63f81fa](https://github.com/rom-weaver/rom-weaver/commit/63f81fa378f11772ff2ae49b629d208a48f303ab))
+* **cli:** reject unsupported dcp checksum guards ([#1475](https://github.com/rom-weaver/rom-weaver/issues/1475)) ([477aa4a](https://github.com/rom-weaver/rom-weaver/commit/477aa4a4dc45a901c115f1fc99a987c1bc63aa6a))
+* **cli:** show the checksum thread plan that runs ([#1403](https://github.com/rom-weaver/rom-weaver/issues/1403)) ([49367b9](https://github.com/rom-weaver/rom-weaver/commit/49367b9296b38aff7477a3e01d4f55acb58b8646))
+* **containers:** extract lz4 stream payloads ([#1468](https://github.com/rom-weaver/rom-weaver/issues/1468)) ([c02afa8](https://github.com/rom-weaver/rom-weaver/commit/c02afa8b7942a954d39b6ca9c762c92955b51a9a))
+* **containers:** fit 7z and RVZ LZMA decoders in 1 GiB browser memory ([#1336](https://github.com/rom-weaver/rom-weaver/issues/1336)) ([769297a](https://github.com/rom-weaver/rom-weaver/commit/769297ab9ffcc07cf3e995040a3de2646e40c03e))
+* **containers:** read 7z folders after a full buffer ([#1338](https://github.com/rom-weaver/rom-weaver/issues/1338)) ([59df458](https://github.com/rom-weaver/rom-weaver/commit/59df4584aea61de49b009538b2b1acd62719b33d))
+* **containers:** refuse multi-disc PBP extracts before writing any disc ([#1398](https://github.com/rom-weaver/rom-weaver/issues/1398)) ([a2c0342](https://github.com/rom-weaver/rom-weaver/commit/a2c03420d2a3ddf37cde04c4275649b21213bfe7))
+* **containers:** stop compress and extract on Ctrl-C ([#1391](https://github.com/rom-weaver/rom-weaver/issues/1391)) ([76d49b7](https://github.com/rom-weaver/rom-weaver/commit/76d49b7226dc7c05c900fd6ee415b5304543c520))
+* **create:** handle compressed and nested inputs ([#1333](https://github.com/rom-weaver/rom-weaver/issues/1333)) ([e77781c](https://github.com/rom-weaver/rom-weaver/commit/e77781c259e7b5ba27cf03ab4206941fb085ef7e))
+* **create:** hide patch formats that cannot represent the selected files ([#1325](https://github.com/rom-weaver/rom-weaver/issues/1325)) ([cddd2bf](https://github.com/rom-weaver/rom-weaver/commit/cddd2bf00bf70797cad8b329ea3a5c8fb10c3a0c))
+* exclude pmsr for shrinking targets ([#1477](https://github.com/rom-weaver/rom-weaver/issues/1477)) ([ad21c64](https://github.com/rom-weaver/rom-weaver/commit/ad21c64a98c8f5fbc0d8f20785b4d4cb9b365394))
+* **extract:** decode legacy archive member names ([#1341](https://github.com/rom-weaver/rom-weaver/issues/1341)) ([d724fcc](https://github.com/rom-weaver/rom-weaver/commit/d724fccfe193bc1f460d0463dd3e1d8e71a666a5))
+* **extract:** preserve Unicode filenames ([#1334](https://github.com/rom-weaver/rom-weaver/issues/1334)) ([918b84f](https://github.com/rom-weaver/rom-weaver/commit/918b84f900b0463229c8812f2158bc9cf77927a3))
+* keep the original file when compress --force stops early ([#1394](https://github.com/rom-weaver/rom-weaver/issues/1394)) ([3e08a00](https://github.com/rom-weaver/rom-weaver/commit/3e08a006f8ed588c28206dbedb338fffea305e09))
+* **patches:** accept APS-GBA records past source EOF in the in-memory path ([#1433](https://github.com/rom-weaver/rom-weaver/issues/1433)) ([a7a45a9](https://github.com/rom-weaver/rom-weaver/commit/a7a45a9481be9727e32210389295b8fc68bd45ae))
+* **patches:** apply UPS, DLDI, SOLID, BSP and RUP patches to read-only inputs ([#1432](https://github.com/rom-weaver/rom-weaver/issues/1432)) ([bad8fe8](https://github.com/rom-weaver/rom-weaver/commit/bad8fe871eab7b3206ed50485bb3e9fecaa91e41))
+* **pat:** surface skipped-record warnings ([#1474](https://github.com/rom-weaver/rom-weaver/issues/1474)) ([ef589b3](https://github.com/rom-weaver/rom-weaver/commit/ef589b3637dbcb14fddbbbc86cf55c338a4d923f))
+* recommend rvz for split wbfs and refuse partial sets ([#1306](https://github.com/rom-weaver/rom-weaver/issues/1306)) ([d2bd6dd](https://github.com/rom-weaver/rom-weaver/commit/d2bd6dd9d4ab62bea73ce817f3fe73af3606a93c))
+* report save integrity failures and reject empty ROMs ([#1322](https://github.com/rom-weaver/rom-weaver/issues/1322)) ([e062c58](https://github.com/rom-weaver/rom-weaver/commit/e062c58b6f0c381d6c6042dc6d915a8e949c8261))
+* **rvz:** honor selected block sizes ([#1339](https://github.com/rom-weaver/rom-weaver/issues/1339)) ([e730876](https://github.com/rom-weaver/rom-weaver/commit/e730876415f6318c1f953ed1595bf66da0f6febf))
+* **wasm:** report full OPFS storage as ENOSPC ([#1345](https://github.com/rom-weaver/rom-weaver/issues/1345)) ([9a5f93a](https://github.com/rom-weaver/rom-weaver/commit/9a5f93af405f384f5d61d03f11ac541fe8123745))
+* **weave:** accept a weave zip whose rom.path is not bundled ([#1284](https://github.com/rom-weaver/rom-weaver/issues/1284)) ([8ea8e42](https://github.com/rom-weaver/rom-weaver/commit/8ea8e4258c4d67d9a7bede3ea46a3c566183b04f))
+* **webapp:** accept reverse UPS patches ([#1469](https://github.com/rom-weaver/rom-weaver/issues/1469)) ([af6f034](https://github.com/rom-weaver/rom-weaver/commit/af6f03401752ef0a4633526ed3d38f49620e331d))
+* **webapp:** accept SHA-256 and other declared patch input checks in Apply ([#1285](https://github.com/rom-weaver/rom-weaver/issues/1285)) ([fe4955d](https://github.com/rom-weaver/rom-weaver/commit/fe4955d20fd9daa2d15e764ee54f03153d3d14c3))
+* **webapp:** block invalid check drafts ([#1355](https://github.com/rom-weaver/rom-weaver/issues/1355)) ([56e9aaa](https://github.com/rom-weaver/rom-weaver/commit/56e9aaa61ae8eae230be58afe73bfb00a7bc2c68))
+* **webapp:** block weave export on invalid drafts ([#1357](https://github.com/rom-weaver/rom-weaver/issues/1357)) ([8a95aba](https://github.com/rom-weaver/rom-weaver/commit/8a95aba36ad465af9ba72697e867e4cc9462291f))
+* **webapp:** cache every input of multi-file runs ([#1401](https://github.com/rom-weaver/rom-weaver/issues/1401)) ([a20fe4e](https://github.com/rom-weaver/rom-weaver/commit/a20fe4e3cbc3caa63be284711e9d1f0861e4adbf))
+* **webapp:** cap concurrent WASM runners so large drops do not crash the page ([#1317](https://github.com/rom-weaver/rom-weaver/issues/1317)) ([d7a31aa](https://github.com/rom-weaver/rom-weaver/commit/d7a31aa726b2247d742ce745bcfe1decdfc3c6bc))
+* **webapp:** checksum and identify polish ([#1320](https://github.com/rom-weaver/rom-weaver/issues/1320)) ([d56287d](https://github.com/rom-weaver/rom-weaver/commit/d56287d42232e256cb188d9bc2b76dc2892aa07d))
+* **webapp:** correct archive recovery advice ([#1464](https://github.com/rom-weaver/rom-weaver/issues/1464)) ([c800af0](https://github.com/rom-weaver/rom-weaver/commit/c800af035ba2b1827ab00ded078d446df2fc9f12))
+* **webapp:** count cheats in apply selection ([#1329](https://github.com/rom-weaver/rom-weaver/issues/1329)) ([5e9a964](https://github.com/rom-weaver/rom-weaver/commit/5e9a9644341f6a6bbf25021e248fcd587d2b4d9e))
+* **webapp:** filter formats by prepared ROM size ([#1476](https://github.com/rom-weaver/rom-weaver/issues/1476)) ([ccb01b7](https://github.com/rom-weaver/rom-weaver/commit/ccb01b7971051fc5716246b6364be02758622960))
+* **webapp:** flush OPFS adapter writes when closing wasm files ([#1434](https://github.com/rom-weaver/rom-weaver/issues/1434)) ([b7c88c3](https://github.com/rom-weaver/rom-weaver/commit/b7c88c39e256a11d982e3c32182ea26b372e7b19))
+* **webapp:** hash weave ROM variants with on-demand checksums ([#1270](https://github.com/rom-weaver/rom-weaver/issues/1270)) ([5c4dfe0](https://github.com/rom-weaver/rom-weaver/commit/5c4dfe0d73be2bea6f629973aa7806e9f6d0ac8d))
+* **webapp:** honor patch filename crc32 tokens ([#1274](https://github.com/rom-weaver/rom-weaver/issues/1274)) ([aaf5367](https://github.com/rom-weaver/rom-weaver/commit/aaf53678ddba584f060c282e2e383ec0ada46d83))
+* **webapp:** improve shell accessibility and console deep links ([#1316](https://github.com/rom-weaver/rom-weaver/issues/1316)) ([b155255](https://github.com/rom-weaver/rom-weaver/commit/b1552557f65522e832f6fec091280c0c84463a66))
+* **webapp:** keep dotted and typed extensions in derived output names ([#1349](https://github.com/rom-weaver/rom-weaver/issues/1349)) ([0488930](https://github.com/rom-weaver/rom-weaver/commit/0488930aa22c3e38ee04a33caf9f491a538b0552))
+* **webapp:** keep dotted versions in typed output names ([#1346](https://github.com/rom-weaver/rom-weaver/issues/1346)) ([4df3b0d](https://github.com/rom-weaver/rom-weaver/commit/4df3b0d364abdb1b9695ebc6a9be32f8b1b827cf))
+* **webapp:** keep edited checks open as checks arrive ([#1359](https://github.com/rom-weaver/rom-weaver/issues/1359)) ([690513f](https://github.com/rom-weaver/rom-weaver/commit/690513f48b09dbedf12e5a47c61924a4442eebcc))
+* **webapp:** keep identify skip on derived files ([#1455](https://github.com/rom-weaver/rom-weaver/issues/1455)) ([e0fa80e](https://github.com/rom-weaver/rom-weaver/commit/e0fa80ebbdba24e8f603dc896426c732cba12dd0))
+* **webapp:** keep identify skip when checksumming ([#1458](https://github.com/rom-weaver/rom-weaver/issues/1458)) ([737ca67](https://github.com/rom-weaver/rom-weaver/commit/737ca67b121138fcb8023caa0f547a4ba78e2ceb))
+* **webapp:** keep Markdown and schema copies out of search indexes ([#1461](https://github.com/rom-weaver/rom-weaver/issues/1461)) ([028b679](https://github.com/rom-weaver/rom-weaver/commit/028b6790cfbe420db210b146f171b31fd1c6f7e0))
+* **webapp:** keep output option labels uncut on phones ([#1365](https://github.com/rom-weaver/rom-weaver/issues/1365)) ([94631ff](https://github.com/rom-weaver/rom-weaver/commit/94631ffdbed4cf846f1e3158716dd636b970ae73))
+* **webapp:** keep the log reader's place across tabs and resizes ([#1314](https://github.com/rom-weaver/rom-weaver/issues/1314)) ([167a2a5](https://github.com/rom-weaver/rom-weaver/commit/167a2a5aa519ef3be98f8c30baad3af00950b60c))
+* **webapp:** label raw output by what it saves ([#1425](https://github.com/rom-weaver/rom-weaver/issues/1425)) ([1b8a938](https://github.com/rom-weaver/rom-weaver/commit/1b8a938b169c4a1a5a7ce98d06817aafb633ea69))
+* **webapp:** list queued boot logs in log reports ([#1402](https://github.com/rom-weaver/rom-weaver/issues/1402)) ([918dea8](https://github.com/rom-weaver/rom-weaver/commit/918dea8649012f5d5f54f2cbcb21765503480f4f))
+* **webapp:** name DCP and the CLI when a .dcp is added to browser Apply ([#1279](https://github.com/rom-weaver/rom-weaver/issues/1279)) ([bbcf74f](https://github.com/rom-weaver/rom-weaver/commit/bbcf74fb735fb87c5fcafe84ec32b273a05b6d5b))
+* **webapp:** never read a spaced dotted tail as a file extension ([#1350](https://github.com/rom-weaver/rom-weaver/issues/1350)) ([7b85e16](https://github.com/rom-weaver/rom-weaver/commit/7b85e165cac1579831d8b2562dcb29f7d5bf95dc))
+* **webapp:** offer CHD for a .bin only on disc content evidence ([#1326](https://github.com/rom-weaver/rom-weaver/issues/1326)) ([048e5dd](https://github.com/rom-weaver/rom-weaver/commit/048e5ddcc46db86c92849dca03695e4b9095bc36))
+* **webapp:** preserve clicks while inputs load ([#1436](https://github.com/rom-weaver/rom-weaver/issues/1436)) ([010de61](https://github.com/rom-weaver/rom-weaver/commit/010de61d1128c3a363439b379465c1989763d6d3))
+* **webapp:** preserve loose GDI track groups ([#1462](https://github.com/rom-weaver/rom-weaver/issues/1462)) ([2164ced](https://github.com/rom-weaver/rom-weaver/commit/2164ced46ac3f1aac715429081817d5dda22bb1a))
+* **webapp:** preserve pending patch order ([#1470](https://github.com/rom-weaver/rom-weaver/issues/1470)) ([c237a6f](https://github.com/rom-weaver/rom-weaver/commit/c237a6f1ecbfc907e9066eb662aebb547822197b))
+* **webapp:** preserve unknown patch sizes ([#1354](https://github.com/rom-weaver/rom-weaver/issues/1354)) ([876b3f7](https://github.com/rom-weaver/rom-weaver/commit/876b3f7c588cbb43412b33ca0275a3b5aea2db6a))
+* **webapp:** rearm cancelled patch creation ([#1467](https://github.com/rom-weaver/rom-weaver/issues/1467)) ([e724a48](https://github.com/rom-weaver/rom-weaver/commit/e724a480dbd3c6803c53ba0622ed83e7ac600dfa))
+* **webapp:** recycle runner on silent proxy poison ([#1459](https://github.com/rom-weaver/rom-weaver/issues/1459)) ([3635d81](https://github.com/rom-weaver/rom-weaver/commit/3635d8134d719ca70c8d44c1ea90ea3b8239a905))
+* **webapp:** recycle runner when the proxy is poisoned ([#1456](https://github.com/rom-weaver/rom-weaver/issues/1456)) ([d413c82](https://github.com/rom-weaver/rom-weaver/commit/d413c827850f49badd8585a09a27d076f94289a7))
+* **webapp:** refresh ready release details [[#1308](https://github.com/rom-weaver/rom-weaver/issues/1308)] ([#1307](https://github.com/rom-weaver/rom-weaver/issues/1307)) ([1267b24](https://github.com/rom-weaver/rom-weaver/commit/1267b244c8db5308a8a2a79e4f6bb29108af97fe))
+* **webapp:** reload into an update on any tab ([#1277](https://github.com/rom-weaver/rom-weaver/issues/1277)) ([8e11820](https://github.com/rom-weaver/rom-weaver/commit/8e118205ba73999917c5b175f11c951dce2b77de))
+* **webapp:** remove unlinked OPFS temp files created by 7z compress ([#1318](https://github.com/rom-weaver/rom-weaver/issues/1318)) ([99a5ed7](https://github.com/rom-weaver/rom-weaver/commit/99a5ed7830732791e16a480762ba4755c5b8ba01))
+* **webapp:** retain apply while checks settle ([#1352](https://github.com/rom-weaver/rom-weaver/issues/1352)) ([4e9a97c](https://github.com/rom-weaver/rom-weaver/commit/4e9a97cd5dce9c07c7286ea05d802b25dcff4201))
+* **webapp:** retain nfs companions during apply ([#1466](https://github.com/rom-weaver/rom-weaver/issues/1466)) ([417fc51](https://github.com/rom-weaver/rom-weaver/commit/417fc51ac5c400071bfc7cac8957d1fd86e0508b))
+* **webapp:** retire finished apply output when the cheat list changes ([#1323](https://github.com/rom-weaver/rom-weaver/issues/1323)) ([30ef4ce](https://github.com/rom-weaver/rom-weaver/commit/30ef4cee169ce9a7f9d49215c90166c0859f8ad6))
+* **webapp:** sanitize typed output file names ([#1342](https://github.com/rom-weaver/rom-weaver/issues/1342)) ([914d552](https://github.com/rom-weaver/rom-weaver/commit/914d552ebe3ec317954765033be47eebdde0fa0f))
+* **webapp:** sharpen homepage search metadata and add sitemap dates ([#1465](https://github.com/rom-weaver/rom-weaver/issues/1465)) ([86ae374](https://github.com/rom-weaver/rom-weaver/commit/86ae374db7cbc9a246ed2f7fd16fe1e6d42835b9))
+* **webapp:** show a validation-blocked Apply as disabled with a reason ([#1288](https://github.com/rom-weaver/rom-weaver/issues/1288)) ([bd97441](https://github.com/rom-weaver/rom-weaver/commit/bd974415c578adf68e7f15c1cd5dd8082a6ec3f9))
+* **webapp:** show an on-page error when a weave drop cannot be read ([#1324](https://github.com/rom-weaver/rom-weaver/issues/1324)) ([c3b0abb](https://github.com/rom-weaver/rom-weaver/commit/c3b0abb30c652636e8248c0bdc1c6fa7273a6f09))
+* **webapp:** show DVD codecs for UDF ISO inputs ([#1363](https://github.com/rom-weaver/rom-weaver/issues/1363)) ([0f5e806](https://github.com/rom-weaver/rom-weaver/commit/0f5e806212124e5bcb4cbe13fdd23482af8919e7))
+* **webapp:** stack download button on phones ([#1437](https://github.com/rom-weaver/rom-weaver/issues/1437)) ([44f7b79](https://github.com/rom-weaver/rom-weaver/commit/44f7b79586e3a1db3b5279d8071956cc02c4d939))
+* **webapp:** stage a ROM dropped with its weave ([#1273](https://github.com/rom-weaver/rom-weaver/issues/1273)) ([a1e2059](https://github.com/rom-weaver/rom-weaver/commit/a1e2059fd2655ad2593a9da09c3c61bc4885b53f))
+* **webapp:** stop large discs exhausting iOS tab memory ([#1431](https://github.com/rom-weaver/rom-weaver/issues/1431)) ([b97392a](https://github.com/rom-weaver/rom-weaver/commit/b97392acbc83ea47195b049ff242d890b614f8a2))
+* **webapp:** use automatic name after clearing output ([#1347](https://github.com/rom-weaver/rom-weaver/issues/1347)) ([f1e9233](https://github.com/rom-weaver/rom-weaver/commit/f1e923306b92795ed6027bf8a4fa8d1300f820cb))
+
+
+### Accessibility
+
+* **webapp:** make heading actions easier to tap ([#1340](https://github.com/rom-weaver/rom-weaver/issues/1340)) ([e08c105](https://github.com/rom-weaver/rom-weaver/commit/e08c105e59614601b7b91f8d67f3e7508174682f))
+
+
+### Performance Improvements
+
+* **chd:** share the parsed hunk map across decode workers ([#1405](https://github.com/rom-weaver/rom-weaver/issues/1405)) ([a282839](https://github.com/rom-weaver/rom-weaver/commit/a282839847f74452745bfdbe7a0e3c3b2bf9ebc4))
+* **checksum:** hash small files without threads ([#1386](https://github.com/rom-weaver/rom-weaver/issues/1386)) ([0923157](https://github.com/rom-weaver/rom-weaver/commit/09231579c1f5926b6df95d806fabd41db4799b36))
+* **checksum:** parse identify packs without per-hash hex strings ([#1392](https://github.com/rom-weaver/rom-weaver/issues/1392)) ([fa38aa4](https://github.com/rom-weaver/rom-weaver/commit/fa38aa4dc2aca3271f3992a06a9b9323c8fa0e8f))
+* **checksum:** retune the wasm hashing cut-offs ([#1396](https://github.com/rom-weaver/rom-weaver/issues/1396)) ([a34dc4a](https://github.com/rom-weaver/rom-weaver/commit/a34dc4a05bf9a469667f12bd65b40c85786f1654))
+* **containers:** read the CSO block index once per extract ([#1407](https://github.com/rom-weaver/rom-weaver/issues/1407)) ([90a936b](https://github.com/rom-weaver/rom-weaver/commit/90a936b353b1435b73b814b264cd45371c34267c))
+* **containers:** size the nod group cache to the read-ahead window ([#1408](https://github.com/rom-weaver/rom-weaver/issues/1408)) ([313b7f0](https://github.com/rom-weaver/rom-weaver/commit/313b7f0c7c82db49d32ef09319178c26458a8a94))
+* **dcp:** stream untouched files when rebuilding GD-ROM tracks ([#1406](https://github.com/rom-weaver/rom-weaver/issues/1406)) ([51d8f54](https://github.com/rom-weaver/rom-weaver/commit/51d8f5485eb8a04bf2dd022a565995b30e66b8b0))
+* **patches:** bound prepared writes for record-based patch formats ([#1419](https://github.com/rom-weaver/rom-weaver/issues/1419)) ([ed7ef3b](https://github.com/rom-weaver/rom-weaver/commit/ed7ef3b937e24dd3b7a6976182b77e5759a35cb7))
+* **patches:** stream HDiffPatch output instead of buffering the target ([#1418](https://github.com/rom-weaver/rom-weaver/issues/1418)) ([ffc163c](https://github.com/rom-weaver/rom-weaver/commit/ffc163ca0d9faf3f1daad77f1ba17b1c9cc936fc))
+* **patches:** stream sparse PPF, PMSR, PAT and APS patches instead of buffering the input ([#1423](https://github.com/rom-weaver/rom-weaver/issues/1423)) ([b2479fb](https://github.com/rom-weaver/rom-weaver/commit/b2479fb6e97dd5e36c3883d40563935608fa7ae9))
+* **webapp:** arm wasm thread slots on first spawn ([#1397](https://github.com/rom-weaver/rom-weaver/issues/1397)) ([66f7607](https://github.com/rom-weaver/rom-weaver/commit/66f7607a61bba1d2bb58fb2991a0a7c67d49a643))
+* **webapp:** cache dropped-file reads per run ([#1387](https://github.com/rom-weaver/rom-weaver/issues/1387)) ([1f504a2](https://github.com/rom-weaver/rom-weaver/commit/1f504a223b6785e3752371b85797ce23fbf4eeb8))
+* **webapp:** hit the proxy read cache at end of file ([#1390](https://github.com/rom-weaver/rom-weaver/issues/1390)) ([f222130](https://github.com/rom-weaver/rom-weaver/commit/f2221300474ecb4cd5e574343e783e38bed180ab))
+* **webapp:** keep boot logging and the locale sort off hydration ([#1393](https://github.com/rom-weaver/rom-weaver/issues/1393)) ([ec4da9b](https://github.com/rom-weaver/rom-weaver/commit/ec4da9b58d722096c6add8c631f831c826cfdc5a))
+* **webapp:** stage trimmed archive entries from OPFS paths ([#1404](https://github.com/rom-weaver/rom-weaver/issues/1404)) ([078c1eb](https://github.com/rom-weaver/rom-weaver/commit/078c1eba3407f010d39a0de2c722a53b42df2e5f))
+
+
+### Reverts
+
+* **webapp:** arm thread slots up front again ([#1400](https://github.com/rom-weaver/rom-weaver/issues/1400)) ([7fa433c](https://github.com/rom-weaver/rom-weaver/commit/7fa433c789f2de18ae64f053490d7e4b829723bc))
+* **webapp:** remove the M3U playlist tool ([#1481](https://github.com/rom-weaver/rom-weaver/issues/1481)) ([0772f59](https://github.com/rom-weaver/rom-weaver/commit/0772f59b37d880a15ecc8ea3401344fdbf1aa8e5))
+
+
+### Documentation
+
+* restore patch guide content cut in v0.22.0 ([#1427](https://github.com/rom-weaver/rom-weaver/issues/1427)) ([3342ede](https://github.com/rom-weaver/rom-weaver/commit/3342ede40d42977e1a09996b2865de66d9b63698))
+* retitle zero-click patching explainer and checksum intro ([#1420](https://github.com/rom-weaver/rom-weaver/issues/1420)) ([f551c2f](https://github.com/rom-weaver/rom-weaver/commit/f551c2f431c7e55803045f1e34c476f6a00f30f3))
+* **webapp:** date Notices by the release that last changed it ([#1479](https://github.com/rom-weaver/rom-weaver/issues/1479)) ([293c09c](https://github.com/rom-weaver/rom-weaver/commit/293c09c369b636f069320485c96a145418f01655))
+
+
+### Developer Experience
+
+* add read-only traffic report script ([#1426](https://github.com/rom-weaver/rom-weaver/issues/1426)) ([6dc7189](https://github.com/rom-weaver/rom-weaver/commit/6dc7189c4a1e52864fa3786489cd04b341ec374c))
+* measure SEO changes per page in the traffic report ([#1429](https://github.com/rom-weaver/rom-weaver/issues/1429)) ([108cd71](https://github.com/rom-weaver/rom-weaver/commit/108cd7142231af47a48d6c68d089bd48c4c90ee7))
+
+
+### Dependencies
+
+* bump fast-uri from 3.1.7 to 3.1.9 in /packages/rom-weaver-webapp ([#1385](https://github.com/rom-weaver/rom-weaver/issues/1385)) ([6749082](https://github.com/rom-weaver/rom-weaver/commit/6749082f57ff1de5aa0900da32e1ff082119bcd0))
+* bump fast-uri from 3.1.8 to 3.1.9 ([#1384](https://github.com/rom-weaver/rom-weaver/issues/1384)) ([4bfc0d2](https://github.com/rom-weaver/rom-weaver/commit/4bfc0d2b97ff22e4eb653fbb3509f32a5416d23b))
+* bump happy-dom from 20.14.6 to 21.0.3 in /packages/rom-weaver-webapp ([#1298](https://github.com/rom-weaver/rom-weaver/issues/1298)) ([36a1c54](https://github.com/rom-weaver/rom-weaver/commit/36a1c54bcb34821595ed831bca6882b10c03ca39))
+* bump happy-dom from 21.0.3 to 21.0.4 in /packages/rom-weaver-webapp ([#1383](https://github.com/rom-weaver/rom-weaver/issues/1383)) ([a4e2536](https://github.com/rom-weaver/rom-weaver/commit/a4e2536641f414eeb6c392ec4e7f82939a2411cb))
+* bump lru from 0.18.5 to 0.19.0 ([#1413](https://github.com/rom-weaver/rom-weaver/issues/1413)) ([cdfc80f](https://github.com/rom-weaver/rom-weaver/commit/cdfc80fb862ff6ac1fd5e235f2b64aa8ff37fd10))
+* bump lz4_flex from 0.11.6 to 0.14.0 ([#1296](https://github.com/rom-weaver/rom-weaver/issues/1296)) ([043e43d](https://github.com/rom-weaver/rom-weaver/commit/043e43dc07fbbec5d815087785b9e88870e9014b))
+* bump lzma-rust2 from 0.21.0 to 0.22.0 ([#1297](https://github.com/rom-weaver/rom-weaver/issues/1297)) ([4d2e16a](https://github.com/rom-weaver/rom-weaver/commit/4d2e16aa8ad68f38199f17c9566219b2fecb4eda))
+* bump lzma-rust2 from 0.22.0 to 0.23.0 ([#1415](https://github.com/rom-weaver/rom-weaver/issues/1415)) ([f32cbb8](https://github.com/rom-weaver/rom-weaver/commit/f32cbb8cdab2e04e2933310d9fa27aa123323b02))
+* bump markdown-it and markdownlint-cli2 ([#1337](https://github.com/rom-weaver/rom-weaver/issues/1337)) ([40cc175](https://github.com/rom-weaver/rom-weaver/commit/40cc17555ed34b34c9c9db4e5c7c24b9a79895b8))
+* bump num-derive from 0.4.2 to 0.5.1 ([#1414](https://github.com/rom-weaver/rom-weaver/issues/1414)) ([4d7c5b6](https://github.com/rom-weaver/rom-weaver/commit/4d7c5b60921e7f4fa784f1252bf4c5ed5c312766))
+* bump taiki-e/install-action from 2.87.27 to 2.87.29 in the actions group across 1 directory ([#1300](https://github.com/rom-weaver/rom-weaver/issues/1300)) ([64a7982](https://github.com/rom-weaver/rom-weaver/commit/64a7982249e3937558c54bf7828f53118c4b7cb6))
+* bump taiki-e/install-action from 2.87.29 to 2.87.31 in the actions group ([#1417](https://github.com/rom-weaver/rom-weaver/issues/1417)) ([ab96821](https://github.com/rom-weaver/rom-weaver/commit/ab9682154e326dca5e7d3450bace8562b310f8c8))
+* bump the build-toolchain group in /packages/rom-weaver-webapp with 4 updates ([#1292](https://github.com/rom-weaver/rom-weaver/issues/1292)) ([4161528](https://github.com/rom-weaver/rom-weaver/commit/4161528b56b6d4f68c42dd7506649ad3a07a68a2))
+* bump the linting group across 1 directory with 2 updates ([#1295](https://github.com/rom-weaver/rom-weaver/issues/1295)) ([31a9e57](https://github.com/rom-weaver/rom-weaver/commit/31a9e57ca003b27cbaaa2360501b7f19a05f6c5c))
+* bump the linting group in /packages/rom-weaver-webapp with 4 updates ([#1410](https://github.com/rom-weaver/rom-weaver/issues/1410)) ([407cadc](https://github.com/rom-weaver/rom-weaver/commit/407cadc2ce0068b860c75f3ba5f104184b324cfd))
+* bump the other-webapp group across 1 directory with 9 updates ([#1303](https://github.com/rom-weaver/rom-weaver/issues/1303)) ([320fd83](https://github.com/rom-weaver/rom-weaver/commit/320fd83c6f1eca212931a22347c22b91fce6247c))
+* bump the react group across 1 directory with 2 updates ([#1291](https://github.com/rom-weaver/rom-weaver/issues/1291)) ([14718b0](https://github.com/rom-weaver/rom-weaver/commit/14718b04362f5ed2ac587cf0c41ff7b9626a8542))
+* bump the root-npm group across 1 directory with 2 updates ([#1290](https://github.com/rom-weaver/rom-weaver/issues/1290)) ([4aec682](https://github.com/rom-weaver/rom-weaver/commit/4aec682cf2c7acc920675b626a1e42b22b4e5ed0))
+* bump the root-npm group with 3 updates ([#1411](https://github.com/rom-weaver/rom-weaver/issues/1411)) ([396579d](https://github.com/rom-weaver/rom-weaver/commit/396579dc022717ab42e42308ad7534a85bf7ff6e))
+* bump the rust-dependencies group across 1 directory with 6 updates ([#1304](https://github.com/rom-weaver/rom-weaver/issues/1304)) ([9fbd786](https://github.com/rom-weaver/rom-weaver/commit/9fbd78690f736f6a090d76b7afdef341621817de))
+* bump the rust-dependencies group with 6 updates ([#1416](https://github.com/rom-weaver/rom-weaver/issues/1416)) ([27f8b03](https://github.com/rom-weaver/rom-weaver/commit/27f8b032ec4ce3aac6fb4aed766a2d59fcda59ce))
+* bump vite from 8.3.4 to 8.3.5 in /packages/rom-weaver-webapp in the build-toolchain group ([#1409](https://github.com/rom-weaver/rom-weaver/issues/1409)) ([3d76244](https://github.com/rom-weaver/rom-weaver/commit/3d7624418664bf12de1897caa9fe4aaf512c63cf))
+
+
+### Internal
+
+* **cheats:** take cheat code splitting from Rust and unify title matching ([#1378](https://github.com/rom-weaver/rom-weaver/issues/1378)) ([55fdc96](https://github.com/rom-weaver/rom-weaver/commit/55fdc96c820b18005b8edb19c500caab2ac8572e))
+* **checksum:** derive algorithm facts from one table and generate TS metadata ([#1374](https://github.com/rom-weaver/rom-weaver/issues/1374)) ([c20c486](https://github.com/rom-weaver/rom-weaver/commit/c20c486ad9f8165573fbcb5bb61b95f0f1b68ce6))
+* **cli:** share archive selection args between probe and identify ([#1371](https://github.com/rom-weaver/rom-weaver/issues/1371)) ([575ec06](https://github.com/rom-weaver/rom-weaver/commit/575ec0610751bcda9f37b142ab27a5167f47999f))
+* clone full history on every deploy channel ([#1435](https://github.com/rom-weaver/rom-weaver/issues/1435)) ([01a1840](https://github.com/rom-weaver/rom-weaver/commit/01a18407b1641be096149b6baf6a86805ce8d4a5))
+* clone full history so every doc page gets lastmod ([#1430](https://github.com/rom-weaver/rom-weaver/issues/1430)) ([c638d4a](https://github.com/rom-weaver/rom-weaver/commit/c638d4a6f1c6631f5104f09759eee966c628eb30))
+* **containers:** cover multi-disc pbp in cli and wasm ([#1278](https://github.com/rom-weaver/rom-weaver/issues/1278)) ([d5bba33](https://github.com/rom-weaver/rom-weaver/commit/d5bba33861bacb43244deb98d682ab954fb32742))
+* **containers:** cover split, large, and multi-disc WBFS handling ([#1281](https://github.com/rom-weaver/rom-weaver/issues/1281)) ([6072dec](https://github.com/rom-weaver/rom-weaver/commit/6072dec5b2581c11de67dd7fe452551e360dc8c9))
+* **containers:** dedupe CHD ECC and extract checksum plumbing ([#1368](https://github.com/rom-weaver/rom-weaver/issues/1368)) ([a98a7b5](https://github.com/rom-weaver/rom-weaver/commit/a98a7b5b485b3792474266f738670e06dcda58a4))
+* **core:** share save catalog helpers and CRC primitives ([#1367](https://github.com/rom-weaver/rom-weaver/issues/1367)) ([51e7361](https://github.com/rom-weaver/rom-weaver/commit/51e73617f89267712db6d334ea0920f831829252))
+* **core:** unify N64 byte order into one core type ([#1372](https://github.com/rom-weaver/rom-weaver/issues/1372)) ([abc67b1](https://github.com/rom-weaver/rom-weaver/commit/abc67b1ed2f6e459c7f74029bbbd7c0312b6544d))
+* drop label runs and always deploy PR previews ([#1302](https://github.com/rom-weaver/rom-weaver/issues/1302)) ([e761163](https://github.com/rom-weaver/rom-weaver/commit/e761163984395cfb823e2a62def37c1b79d28345))
+* generate hand-kept TS tables from Rust via typegen ([#1377](https://github.com/rom-weaver/rom-weaver/issues/1377)) ([4b0a834](https://github.com/rom-weaver/rom-weaver/commit/4b0a834c8afec84ab028147d658bbd2a16fd7761))
+* pass original patch names to ingest ([#1360](https://github.com/rom-weaver/rom-weaver/issues/1360)) ([7a4201a](https://github.com/rom-weaver/rom-weaver/commit/7a4201a041f95f1eee08da57a9b569bc17b37837))
+* **patches:** share apply/validate reports, hex, date, checked-add and varint helpers ([#1369](https://github.com/rom-weaver/rom-weaver/issues/1369)) ([915af15](https://github.com/rom-weaver/rom-weaver/commit/915af15389aabbd1340a52b13561ac3409988615))
+* raise asset byte budgets by 40000 ([#1422](https://github.com/rom-weaver/rom-weaver/issues/1422)) ([92b9602](https://github.com/rom-weaver/rom-weaver/commit/92b9602e4aa4ae4a2f0acd92d152035b17bce081))
+* raise the CSS raw size limit to 277000 bytes ([#1370](https://github.com/rom-weaver/rom-weaver/issues/1370)) ([d0a3b34](https://github.com/rom-weaver/rom-weaver/commit/d0a3b3452e803e61fbe0b42444173bfa51f0343a))
+* read z3ds and error tables from Rust ([#1356](https://github.com/rom-weaver/rom-weaver/issues/1356)) ([48c79c9](https://github.com/rom-weaver/rom-weaver/commit/48c79c90a38ea342ae8761bc4d58ad4db9c77577))
+* run webapp unit tests when shared case tables change ([#1366](https://github.com/rom-weaver/rom-weaver/issues/1366)) ([6b1e8f4](https://github.com/rom-weaver/rom-weaver/commit/6b1e8f45d478c41a3f452f7e3183cdbd9765212c))
+* share cheat code split cases with Rust ([#1361](https://github.com/rom-weaver/rom-weaver/issues/1361)) ([a4db3d1](https://github.com/rom-weaver/rom-weaver/commit/a4db3d17a4935642cfa9a74960669d5f2ec24b77))
+* share hard-disk and lane cases with Rust ([#1364](https://github.com/rom-weaver/rom-weaver/issues/1364)) ([aa87205](https://github.com/rom-weaver/rom-weaver/commit/aa872053c4d6f9d8fc9491c7234cefda546e4f7f))
+* share one platform name normalizer ([#1362](https://github.com/rom-weaver/rom-weaver/issues/1362)) ([46f0ef5](https://github.com/rom-weaver/rom-weaver/commit/46f0ef55b3db1d11fc07902d3ff1c32d96778330))
+* stop failing mutation runs on unviable mutants ([#1399](https://github.com/rom-weaver/rom-weaver/issues/1399)) ([c1715c0](https://github.com/rom-weaver/rom-weaver/commit/c1715c061ba9cafdeb7e67f73f943c2ba08de3d7))
+* type command result keys from Rust ([#1381](https://github.com/rom-weaver/rom-weaver/issues/1381)) ([10d15fd](https://github.com/rom-weaver/rom-weaver/commit/10d15fd6498249accc3aa4433428e49696bbf706))
+* **webapp:** drop _comment history from performance budgets ([#1301](https://github.com/rom-weaver/rom-weaver/issues/1301)) ([e01955c](https://github.com/rom-weaver/rom-weaver/commit/e01955c0d6548a75fee68bd3343a91b2f6014656))
+* **webapp:** raise JS and docs-search size maximums ([#1328](https://github.com/rom-weaver/rom-weaver/issues/1328)) ([0bf3066](https://github.com/rom-weaver/rom-weaver/commit/0bf3066587eb96466fa99368f896185244c1101e))
+* **webapp:** read run warnings from details only ([#1358](https://github.com/rom-weaver/rom-weaver/issues/1358)) ([4b89093](https://github.com/rom-weaver/rom-weaver/commit/4b89093fcb2b49497fefe078ec84f0682d39c005))
+* **webapp:** read weave check refs and filename tokens from Rust ([#1375](https://github.com/rom-weaver/rom-weaver/issues/1375)) ([3442e77](https://github.com/rom-weaver/rom-weaver/commit/3442e7763b285b226124f240c151287ce1c38a80))
+* **webapp:** stop vitest cache race in browser runner ([#1482](https://github.com/rom-weaver/rom-weaver/issues/1482)) ([9903dc4](https://github.com/rom-weaver/rom-weaver/commit/9903dc44c84ff2253cad9186dc8c752392815f56))
+* **webapp:** trace swallowed Apply clicks in E2E download timeouts ([#1428](https://github.com/rom-weaver/rom-weaver/issues/1428)) ([32f9a04](https://github.com/rom-weaver/rom-weaver/commit/32f9a0487353c867b4774e0258d7b00b893c527b))
+
 ## [0.22.2](https://github.com/rom-weaver/rom-weaver/releases/tag/v0.22.2) (2026-10-18)
 
 ### Highlights
