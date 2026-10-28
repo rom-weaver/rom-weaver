@@ -526,7 +526,7 @@ const parseDeclaredOutputChecks = (declared: string) =>
 // The CLI judges a weave's output.checks on the FINISHED output (header re-added, N64 order restored,
 // checksum repaired) and ignores them for discs. The per-step path sees the normalised last step, so the
 // declared final check joins it only when finishing cannot change those bytes; otherwise it is skipped
-// (a correct apply must never be rejected). Disc assets are skipped like the CLI skips disc inputs.
+// (a correct apply must never be rejected). A user cheat placed before the last patch likewise. Disc assets are skipped like the CLI skips disc inputs.
 const logger = createLogger("apply-workflow");
 
 const finishingMayChangeBytes = (
@@ -534,8 +534,12 @@ const finishingMayChangeBytes = (
   patchIndices: number[],
   patchOptions: PatchInput["patchOptions"],
   options: ApplyPatchOptions,
+  selectedCheatPositions?: number[],
 ) =>
   !!asset.discGroupId ||
+  // A cheat is baked in before the step at its position, so one ahead of the last patch changes the
+  // last step's bytes; one after it runs past the check.
+  !!selectedCheatPositions?.some((position) => position < patchIndices.length) ||
   asset.kind !== "rom" ||
   !!(options.compatibility?.addHeader || options.compatibility?.fixChecksum || options.compatibility?.removeHeader) ||
   (!!options.output?.header && options.output.header !== "auto") ||
@@ -614,7 +618,13 @@ const applyPatchesToAsset = async ({
   const patchInputs = getPatchInputs(patchIndices, patchOptions, asset, bareMemberRule);
   const patchTargets = getPatchTargets(patchIndices, patchOptions, asset, bareMemberRule);
   const patchInputChecks = getPatchChecks(patchIndices, patchOptions, "inputChecks");
-  const finalCheckApplies = !finishingMayChangeBytes(asset, patchIndices, patchOptions, options);
+  const finalCheckApplies = !finishingMayChangeBytes(
+    asset,
+    patchIndices,
+    patchOptions,
+    options,
+    selectedCheatPositions,
+  );
   if (!finalCheckApplies && patchOptions?.[patchIndices.at(-1) ?? -1]?.validateOutputChecksum?.trim())
     logger.debug("weave final-output check skipped: finishing may change the output bytes", {
       asset: asset.fileName,
