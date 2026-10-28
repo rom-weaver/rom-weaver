@@ -40,7 +40,7 @@ Group changes to the same workflow when their concrete outcomes remain clear. Do
 Rules:
 
 - Select the strongest benefits before grouping them under `#### New features`, `#### Improvements`, `#### Fixes`, and `#### Security`, in that order. Omit unused sections even when matching commits exist. Choose the section by the user-visible outcome, not just the commit type; put each bullet in one section only.
-- Lead each section with its strongest bullet. The webapp's update banner shows only the first highlight of the newest release it announces; What's new has the rest.
+- Lead each section with its strongest bullet. The first bullet of the whole list is the release's most exciting new feature: the one most likely to make a user want to open What's new. Pick it for user appeal, not commit order or size; never let a fix take that slot. The webapp's update banner shows only the first highlight of the newest release it announces; What's new has the rest.
 - Use no fixed count or section quotas. Include distinct new capabilities, meaningful workflow improvements, and notable fixes. A capability can matter to a specific audience without defining the whole release; do not discard it just to shorten the list. Leave routine polish and maintenance in `All changes`.
 - Each bullet is one concise sentence in plain words. Name the affected task, tool, or format and the concrete result. Keep necessary scope and conditions, even when that needs more words. Avoid vague summaries such as "more tools", "better handling", or "more reliable" without saying what changed. Leave out flags, crate names, and internals.
 - Add `(still in beta)` after a feature that lives in a tool that is still in beta: "in Save Editor (still in beta)". A bare `(beta)` tag is not enough. Check the pull request and the app's beta settings; when unsure, say so when showing the notes.
@@ -48,8 +48,8 @@ Rules:
 - Explain the user benefit through the changed behavior, rather than implementation details or a generic positive claim.
 - Highlight fixes that restore an important workflow, prevent lost files or incorrect results, or address material security risks. Name the affected case instead of listing each failure mode. A `fix` or `security` commit does not automatically need a headline; leave minor repairs and internal hardening in `All changes`.
 - Every bullet MUST trace to listed commits and end with supporting pull request references as `(#123)`. The workflow turns them into links. Cite only the PRs needed to substantiate the headline, not every related change. When grouping changes, preserve their scope and conditions; do not turn separate fixes into a broader guarantee.
-- Put breaking changes in a `#### Breaking changes` section before all other highlights. Say what changes for the user in plain words, without flag names: "Command-line output is now compressed by default". The PR body has the exact flags; the release notes link there. The generated `⚠ BREAKING CHANGES` group also stays visible above the collapsed list.
-- Always include required migration actions and urgent security notices.
+- Do not write breaking changes into the highlights. The generated `⚠ BREAKING CHANGES` group is their single representation and stays visible above the collapsed list, so repeating them shows each twice. If a breaking commit's footer does not say in plain words what changes for the user, tell the user so the message can be fixed before dispatch.
+- Always include urgent security notices. Required migration actions belong in the breaking commit's footer, which feeds the generated group.
 - Use only section headings and bullets. Put blank lines around headings, but no blank lines between bullets within a section. Do not add a top-level Highlights heading, introductory text, trailing notes, or markdown links; the workflow adds `### Highlights`.
 
 - Good: `* Edit saves for 29 more games in Save Editor (still in beta) (#999)`
