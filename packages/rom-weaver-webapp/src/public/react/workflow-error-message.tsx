@@ -14,6 +14,23 @@ const WorkflowErrorMessage = ({ message }: { message: string }) => {
     !archiveDepth &&
     (code === "WORKER_FAILED" || code === "COMPRESSION_FAILED") &&
     /\b(out of memory|cannot enlarge memory|memory allocation|not enough memory|bad alloc|ENOMEM|OOM)\b/i.test(message);
+  const archiveRead =
+    !(archiveDepth || memory) &&
+    (!code || code === "COMPRESSION_FAILED") &&
+    /(?:^| Details: )validation failed: (?:(?:zip|7z|rar|tar) (?:list failed while (?:reading|decoding) entry \d+:|archive is invalid:)|archive read (?:header|data) failed:|unknown libarchive failure\b)/i.test(
+      message,
+    );
+  if (archiveRead) {
+    return (
+      <>
+        {localizer.message("ui.errorRecovery.archiveRead")}
+        <details>
+          <summary>{localizer.message("ui.errorRecovery.details")}</summary>
+          {message}
+        </details>
+      </>
+    );
+  }
   const recovery = memory
     ? "memory"
     : archiveDepth

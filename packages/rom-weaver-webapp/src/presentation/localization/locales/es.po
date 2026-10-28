@@ -6012,3 +6012,18 @@ msgstr "Códec ZIP"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z y paquetes"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.archiveRead"
+msgstr "Este archivo comprimido está dañado o no es compatible. Elige otro o extráelo primero en tu dispositivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.details"
+msgstr "Detalles técnicos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.outputHelp"
+msgstr "De forma predeterminada se descarga el parche sin comprimir. Elige ZIP o 7z en Opciones → Tipo para empaquetarlo en un archivo comprimido."

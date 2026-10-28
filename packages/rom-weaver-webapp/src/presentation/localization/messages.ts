@@ -1202,6 +1202,16 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.errorRecovery.archiveDepth",
     message: "Extract the outer archive on your device, then add the required file or a less deeply nested archive.",
   }),
+  "ui.errorRecovery.archiveRead": msg({
+    id: "ui.errorRecovery.archiveRead",
+    message: "This archive is damaged or unsupported. Choose another archive or extract it on your device first.",
+  }),
+  "ui.errorRecovery.details": msg({ id: "ui.errorRecovery.details", message: "Technical details" }),
+  "ui.create.outputHelp": msg({
+    id: "ui.create.outputHelp",
+    message:
+      "The raw patch file is downloaded by default. Choose ZIP or 7z under Options → Type to package it in an archive.",
+  }),
   "ui.errorRecovery.memory": msg({
     id: "ui.errorRecovery.memory",
     message:

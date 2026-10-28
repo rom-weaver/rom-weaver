@@ -6012,3 +6012,18 @@ msgstr "ZIP codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z and weaves"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.archiveRead"
+msgstr "This archive is damaged or unsupported. Choose another archive or extract it on your device first."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.details"
+msgstr "Technical details"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.outputHelp"
+msgstr "The raw patch file is downloaded by default. Choose ZIP or 7z under Options → Type to package it in an archive."

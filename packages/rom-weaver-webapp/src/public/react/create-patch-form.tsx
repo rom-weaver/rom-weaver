@@ -1370,10 +1370,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
           <ul>
             <li>Set the filename without an extension - the format selector controls the patch type.</li>
             <li>BPS records source &amp; target checksums so applies can be verified.</li>
-            <li>
-              The patch is packaged in an archive by default; set Options &rarr; Type to None to download the raw patch
-              file.
-            </li>
+            <li>{localizer.message("ui.create.outputHelp")}</li>
           </ul>
         </InfoPopover>
       ),

@@ -78,6 +78,9 @@ describe("workflow error recovery", () => {
     "INVALID_INPUT: SELECTION_NOT_FOUND: nested detail",
     "INVALID_INPUT: nested extract exceeded max depth of 8",
     "COMPRESSION_FAILED: archive max depth of 8",
+    "validation failed: zip create failed: unknown libarchive failure",
+    "A file named validation failed: zip archive is invalid: example.zip",
+    "INVALID_INPUT: validation failed: archive read header failed: unrelated detail",
   ])("does not guess recovery for unrelated failure %s", (message) => {
     const view = showNotice(message);
     expect(view.queryByRole("link")).toBeNull();
@@ -92,6 +95,45 @@ describe("workflow error recovery", () => {
     expect(view.queryByRole("link")).toBeNull();
     view.rerender(<SectionNotice state={{ ...state, visible: false }} />);
     expect(view.queryByRole("alert")).toBeNull();
+  });
+
+  it.each([
+    [
+      "en",
+      "This archive is damaged or unsupported. Choose another archive or extract it on your device first.",
+      "Technical details",
+    ],
+    [
+      "de",
+      "Dieses Archiv ist beschädigt oder wird nicht unterstützt. Wähle ein anderes Archiv oder entpacke es zuerst auf deinem Gerät.",
+      "Technische Details",
+    ],
+    [
+      "es",
+      "Este archivo comprimido está dañado o no es compatible. Elige otro o extráelo primero en tu dispositivo.",
+      "Detalles técnicos",
+    ],
+  ])("explains archive read failures in %s with expandable diagnostics", async (locale, advice, detailsLabel) => {
+    await loadCatalog(locale);
+    for (const detail of ["Truncated ZIP file header", "unknown libarchive failure"]) {
+      const diagnostic = `validation failed: zip list failed while reading entry 0: validation failed: archive read header failed: ${detail}`;
+      for (const message of [
+        diagnostic,
+        formatCodedErrorForDisplay(
+          Object.assign(new Error(diagnostic), { code: "COMPRESSION_FAILED" }),
+          createLocalizer(locale),
+        ),
+      ]) {
+        const view = showNotice(message, locale);
+        const alert = view.getByRole("alert");
+        expect(alert.querySelector(".notice-copy")?.firstChild?.textContent).toBe(advice);
+        const details = alert.querySelector("details");
+        expect(details?.open).toBe(false);
+        expect(details?.querySelector("summary")?.textContent).toBe(detailsLabel);
+        expect(details?.textContent).toContain(message);
+        view.unmount();
+      }
+    }
   });
 
   it.each([
