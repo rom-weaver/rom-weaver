@@ -1127,6 +1127,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.patch.validationMismatch",
     message: "The patch checks did not match this ROM.",
   }),
+  "ui.patch.validationCorruptHint": msg({
+    id: "ui.patch.validationCorruptHint",
+    message: "The patch file is damaged. Obtain a fresh copy and replace this patch.",
+  }),
+  "ui.patchChecks.corrupt": msg({ id: "ui.patchChecks.corrupt", message: "Patch file is damaged" }),
   "ui.patch.validationUnreadableHint": msg({
     id: "ui.patch.validationUnreadableHint",
     message: "Remove this patch and choose a valid patch file.",

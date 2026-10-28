@@ -6012,3 +6012,13 @@ msgstr "ZIP codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z and weaves"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.validationCorruptHint"
+msgstr "The patch file is damaged. Obtain a fresh copy and replace this patch."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.corrupt"
+msgstr "Patch file is damaged"

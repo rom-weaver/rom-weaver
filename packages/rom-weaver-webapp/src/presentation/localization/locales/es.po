@@ -6012,3 +6012,13 @@ msgstr "Códec ZIP"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z y paquetes"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.validationCorruptHint"
+msgstr "El archivo del parche está dañado. Consigue una copia nueva y reemplaza este parche."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.corrupt"
+msgstr "El archivo del parche está dañado"
