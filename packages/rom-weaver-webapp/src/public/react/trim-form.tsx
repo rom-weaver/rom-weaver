@@ -21,7 +21,7 @@ import type {
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
-import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
+import { identifiedOutputBaseName, sameIdentification } from "../../presentation/identify-title.ts";
 import type { TrimWorkflowSourceState } from "../../types/trim-workflow.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel } from "./components/ds/compress-panel.tsx";
@@ -655,7 +655,12 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       ? "rvz"
       : requestedOutputFormat;
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
-  const identifiedOutputTitle = identifiedOutputBaseName(sourceState?.identification);
+  // Once a run started the file keeps the name it was produced with; a late identification still
+  // refreshes the card but must not rename the field away from the Download label.
+  const liveIdentifiedTitle = identifiedOutputBaseName(sourceState?.identification);
+  const frozenIdentifiedTitleRef = useRef<string | null>(null);
+  if (!(busy || completedOutput)) frozenIdentifiedTitleRef.current = liveIdentifiedTitle;
+  const identifiedOutputTitle = busy || completedOutput ? frozenIdentifiedTitleRef.current : liveIdentifiedTitle;
   const useIdentifiedOutputName = settings.output?.identifiedName !== false;
   const generatedOutputName =
     configuredOutputName ||
@@ -835,7 +840,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
           return;
         const next = workflow.getInput();
         setSourceState((previous) =>
-          previous && next && previous.identification !== next.identification ? next : previous,
+          previous && next && !sameIdentification(previous.identification, next.identification) ? next : previous,
         );
       };
       workflow.on("change", handleChange);

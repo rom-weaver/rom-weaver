@@ -129,7 +129,30 @@ const identifiedOutputBaseName = (identification: ParsedIdentifyResolution | und
   return identifyOutputBaseName(titles[0] || "") || null;
 };
 
+/** Value comparison of what the cards and generated names display; source clones rebuild the object each read. */
+const sameIdentification = (
+  left: ParsedIdentifyResolution | undefined,
+  right: ParsedIdentifyResolution | undefined,
+): boolean => {
+  if (left === right) return true;
+  if (!(left && right)) return false;
+  if (left.status !== right.status || left.unavailableReason !== right.unavailableReason) return false;
+  if (left.matches.length !== right.matches.length) return false;
+  return left.matches.every((match, index) => {
+    const other = right.matches[index];
+    return (
+      !!other &&
+      match.name === other.name &&
+      match.platform === other.platform &&
+      match.database === other.database &&
+      match.variant === other.variant &&
+      match.algorithm === other.algorithm
+    );
+  });
+};
+
 export {
+  sameIdentification,
   formatIdentifyTitle,
   identifiedOutputBaseName,
   identifyGoodToolsRevisionLabels,

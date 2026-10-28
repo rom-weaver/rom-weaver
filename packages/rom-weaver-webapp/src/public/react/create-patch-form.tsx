@@ -15,7 +15,7 @@ import type {
   getCreatePatchFormatCandidates,
 } from "../../platform/browser/browser-api.ts";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
-import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
+import { identifiedOutputBaseName, sameIdentification } from "../../presentation/identify-title.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
@@ -510,7 +510,12 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
     : modified || (displayedOriginalInfo?.fileName ? new File([], displayedOriginalInfo.fileName) : original);
   // The patch is named after the ROM it patches, so the original's title is the
   // one that names it - the modified ROM is a hack and rarely has a record.
-  const identifiedOutputTitle = identifiedOutputBaseName(originalState?.identification);
+  // Once a run started the patch keeps the name it was produced with; a late identification still
+  // refreshes the card but must not rename the field away from the Download label.
+  const liveIdentifiedTitle = identifiedOutputBaseName(originalState?.identification);
+  const frozenIdentifiedTitleRef = useRef<string | null>(null);
+  if (!(busy || completedOutput)) frozenIdentifiedTitleRef.current = liveIdentifiedTitle;
+  const identifiedOutputTitle = busy || completedOutput ? frozenIdentifiedTitleRef.current : liveIdentifiedTitle;
   const useIdentifiedOutputName = settings.output?.identifiedName !== false;
   const generatedOutputName =
     configuredOutputName ||
@@ -963,11 +968,13 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
           previous: CreateDisplaySourceState | null,
           next: CreateDisplaySourceState | null,
         ): CreateDisplaySourceState | null =>
-          previous && next && previous.identification !== next.identification ? next : previous;
+          previous && next && !sameIdentification(previous.identification, next.identification) ? next : previous;
         setOriginalState((previous) => refresh(previous, activeWorkflow.getOriginal()));
         setModifiedState((previous) => refresh(previous, activeWorkflow.getModified()));
       };
       activeWorkflow.on("change", handleChange);
+      // A change emitted while this listener was detached (inactive mode) is otherwise lost.
+      handleChange();
       const session = createCreateStagingSession({
         activeWorkflow,
         clearInputProgress: () => clearProgressForStage("input"),

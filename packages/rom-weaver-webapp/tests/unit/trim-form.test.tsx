@@ -66,6 +66,10 @@ const makeFakeTrimWorkflow = () => {
       input = makeTrimSource(input?.fileName || "game.nes");
       for (const listener of changeListeners) listener();
     },
+    emitChange: (patch?: { size: number }) => {
+      if (patch) input = { ...makeTrimSource(input?.fileName || "game.nes"), ...patch };
+      for (const listener of changeListeners) listener();
+    },
     run: vi.fn(async () => ({
       input,
       output,
@@ -133,6 +137,44 @@ describe("TrimPatchForm", () => {
     await act(async () => fireEvent.click(confirm as HTMLButtonElement));
     await vi.waitFor(() => expect(latest?.workflow.setOutputName).toHaveBeenCalled());
     expect(String(latest?.workflow.setOutputName.mock.calls[0]?.[0])).toContain("Trim Example (USA)");
+  });
+
+  it("does not replace the source state for a change with an identification equal by value", async () => {
+    const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
+    const { container } = renderForm({ pageDrop: { files: [file], id: 1 } });
+    await vi.waitFor(() => expect(container.querySelector("#trim-builder-button-run")).toBeTruthy());
+    expect(container.textContent).toContain("Trim Example (USA)");
+    expect(container.textContent).toContain("BYTES 128");
+    await act(async () => {
+      // Fresh source and identification objects with the same identification value but another size.
+      (latest as NonNullable<typeof latest>).workflow.emitChange({ size: 4096 });
+    });
+    expect(container.textContent).toContain("BYTES 128");
+    expect(container.textContent).not.toContain("BYTES 4096");
+  });
+
+  it("keeps the output name consistent with the finished run when a late identification arrives", async () => {
+    startUnidentified = true;
+    const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
+    const { container } = renderForm({ pageDrop: { files: [file], id: 1 } });
+    await vi.waitFor(() => expect(container.querySelector("#trim-builder-button-run")).toBeTruthy());
+    const nameField = () => container.querySelector("#trim-builder-output-file") as HTMLInputElement;
+    const before = nameField().value;
+    expect(before).not.toContain("Trim Example (USA)");
+    await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+    const confirm = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Trim ROM"),
+    );
+    await act(async () => fireEvent.click(confirm as HTMLButtonElement));
+    await vi.waitFor(() =>
+      expect(container.querySelector("#trim-builder-button-run")?.textContent).toContain("Download"),
+    );
+    await act(async () => {
+      ((latest as NonNullable<typeof latest>).workflow as unknown as { reidentify: () => void }).reidentify();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(nameField().value).toBe(before);
+    expect(container.querySelector("#trim-builder-button-run")?.textContent).toContain("Download");
   });
 
   it("renders the empty hero and forwards a page drop into staging", async () => {
