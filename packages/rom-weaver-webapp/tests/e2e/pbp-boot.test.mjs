@@ -201,6 +201,7 @@ test("legal PBP programs render through the application and native disk control"
             core === "psx" ? pixels.brown > 1000 && pixels.padWhite > 20 : pixels.saturated > 1000,
             `expected demo pixels, got ${JSON.stringify(pixels)}`,
           );
+          if (core === "psp") assert(pixels.purple < 150000, "cube must fail the raycast color oracle");
           let advanced;
           for (let attempt = 0; attempt < 60; attempt += 1) {
             await frame.evaluate(() => new Promise(requestAnimationFrame));
@@ -234,7 +235,11 @@ test("legal PBP programs render through the application and native disk control"
           const held = await capture("input-held");
           await page.keyboard.up(key);
           if (core === "psx") assert.notEqual(held.padHash, pixels.padHash, "controller byte region must respond");
-          else assert(held.purple > 1000, "Start must switch the cube to the raycast scene");
+          else
+            assert(
+              held.purple > 150000 && held.purple > pixels.purple * 10,
+              "Start must switch the cube to the raycast scene",
+            );
           const diskStates = [native];
           if (disks === 2) {
             await frame.locator("#ejs_disksMenu > button").click();

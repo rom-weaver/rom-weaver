@@ -115,6 +115,8 @@ The cube's saturated pixels and the PS1 demo's brown framebuffer distinguish the
 
 The pinned EmulatorJS 4.2.3 PCSX-ReARMed threaded asset (`017cd5727be628983e26fab99c9a7f859cf7d180d7a74798a43f76cd601f2266`) cannot read stored PBP blocks directly. The application extracts these cases into a CUE/BIN playlist bundle; the test checks every BIN's complete bytes and its CUE data/audio tracks inside the native core's file system.
 
+The PSP cube must fail the purple-scene threshold before Start. After Start, purple pixels must exceed 150,000 and ten times their initial count.
+
 ## Evidence requirements
 
 Record the application revision, WASM source and artifact hashes, browser version, EmulatorJS lock hashes, fixture hashes, and viewport with each run. Use the fresh application Test file picker, not a mocked loader. Block external requests so a missing pinned core cannot silently fall back to the CDN.
