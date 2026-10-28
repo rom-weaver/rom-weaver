@@ -548,8 +548,9 @@ pub(crate) fn build_test_pbp_disc_psar(
     psar[0x81E] = 0x41;
     psar[0x81E + 2] = encode_bcd(1);
     psar[0x81E + 3] = encode_bcd(0);
-    psar[0x81E + 4] = encode_bcd(2);
+    psar[0x81E + 4] = encode_bcd(0);
     psar[0x81E + 5] = encode_bcd(0);
+    psar[0x81E + 8] = encode_bcd(2);
 
     let mut block_bytes = Vec::new();
     for block_index in 0..block_count {

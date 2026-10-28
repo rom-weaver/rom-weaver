@@ -746,11 +746,11 @@ impl PbpContainerHandler {
             writer.write_all(
                 format!("  TRACK {:02} {track_type}\n", track.track_number).as_bytes(),
             )?;
-            // PBP TOC times are absolute disc MSF (include the 150-frame lead-in);
-            // cue INDEX offsets are file-relative, so track 1 INDEX 01 must be 00:00:00.
-            let index01 = track.start_frames.saturating_sub(150);
+            // TOC bytes 3..5 MUST remain file-relative INDEX 01 offsets.
+            // https://github.com/RupertAvery/PSXPackager/blob/76fc019460dbf550e3ddbc184959f4ed182e36f8/Popstation/CueFileExtensions.cs#L88-L96
+            let index01 = track.start_frames;
             if track.track_type == 0x01 {
-                let index00 = track.start_frames.saturating_sub(300);
+                let index00 = index01.saturating_sub(150);
                 writer.write_all(
                     format!("    INDEX 00 {}\n", Self::format_msf(index00)).as_bytes(),
                 )?;
