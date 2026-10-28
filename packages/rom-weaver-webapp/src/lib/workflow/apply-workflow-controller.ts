@@ -162,6 +162,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private defaultPatchBasis: "auto" | "base" | "previous" = "auto";
   private outputState: ApplyOutputState;
   private inputSession?: InputSession<TSource>;
+  private onInputIdentified?: (input: ApplyWorkflowInputState | null) => void;
   private patches: Array<StagedSource<TSource>> = [];
   /** Toggled-off patches from the latest validation pass; they are excluded from the run. Tracked by
    * stage, not index: re-staging (the run's enabled-only list) creates new stages, which none match. */
@@ -345,6 +346,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       appendSidecarPatches?: boolean;
       onPrepared?: (input: ApplyWorkflowInputState | null) => void;
       onFinalized?: (input: ApplyWorkflowInputState | null) => void;
+      /** Called when identification data that was not ready at the bound later updated the input. */
+      onIdentified?: (input: ApplyWorkflowInputState | null) => void;
     },
   ): Promise<void> {
     this.cancelWeaveRomHash();
@@ -397,6 +400,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         // disc group, so hosts can collapse raw drop rows into one card without waiting on track checksums.
         options?.onPrepared?.(this.getInput());
         const endFinalize = startStageSpan("setInput:finalizeStableState");
+        this.onInputIdentified = options?.onIdentified;
         await this.finalizeInputStableState();
         endFinalize();
         if (!this.inputSession) {
@@ -1771,6 +1775,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return finalizeApplyInputChecksums(this.inputSession, {
       emitProgress: (event) => this.emitProgress(event),
       getSelectedInputOwner: () => this.getSelectedInputOwner(),
+      isCurrentSession: (session) => this.inputSession === session,
+      onIdentified: () => {
+        this.emitChange();
+        this.onInputIdentified?.(this.getInput());
+      },
       runtime: this.runtime,
       settings: this.settings,
       syncInputSessionView: () => this.syncInputSessionView(),

@@ -5295,6 +5295,11 @@ msgstr "Die Worker-Ausführung ist fehlgeschlagen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.weaveTrackChecksSkipped"
+msgstr "Die Spurprüfungen aus der Identifikationsdatenbank wurden übersprungen, weil sie nicht rechtzeitig geladen wurde. Die eigenen Prüfungen des Weaves gelten weiterhin."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.weaveTutorial.safeWeave.body"
 msgstr "Der Weave-Download ist von Anwenden getrennt. Weave + Patches (.zip) teilt Anleitung und Patches ohne ein urheberrechtlich geschütztes ROM im Download."
 

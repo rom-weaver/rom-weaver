@@ -175,12 +175,14 @@ const prepareIngestIdentify = async ({
   knownInputPaths?: string[];
 }): Promise<{
   entryNames: string[];
+  identifyRetry?: Promise<boolean>;
   packs: BrowserIdentifyPack[];
   unavailable?: string;
 }> => {
   const trace = { logLevel, namespace: "runtime:browser-workflow", onLog };
   let entryNames: string[] = [];
   let resumePausedWarmup: (() => void) | undefined;
+  let identifyRetry: Promise<boolean> | undefined;
   try {
     let hints: Parameters<typeof loadIdentifyPackSelection>[0] = { fileName };
     const extensionSlugs = selectIdentifySlugs(hints);
@@ -214,6 +216,11 @@ const prepareIngestIdentify = async ({
         const resume = resumePausedWarmup;
         resumePausedWarmup = undefined;
         if (resume) void work.then(resume, resume);
+        // The extension-selection work resolves `{ error }` instead of rejecting.
+        identifyRetry = work.then(
+          (settled) => !(settled && typeof settled === "object" && "error" in settled),
+          () => false,
+        );
         throw new Error(result.timedOut);
       }
       return result as T;
@@ -267,7 +274,7 @@ const prepareIngestIdentify = async ({
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     emitTraceLog(trace, "ROM identify data unavailable; continuing without title lookup", { error: reason, fileName });
-    return { entryNames, packs: [], unavailable: reason };
+    return { entryNames, packs: [], unavailable: reason, ...(identifyRetry ? { identifyRetry } : {}) };
   } finally {
     resumePausedWarmup?.();
   }
@@ -319,7 +326,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
     try {
       const identifyPacks =
         identify === false
-          ? { entryNames: [], packs: [], unavailable: undefined }
+          ? { entryNames: [], identifyRetry: undefined, packs: [], unavailable: undefined }
           : await prepareIngestIdentify({
               fileName: fileName || "input.bin",
               logLevel,
@@ -427,6 +434,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
       );
       return {
         ...(identifyPacks.unavailable ? { identifyUnavailable: identifyPacks.unavailable } : {}),
+        ...(identifyPacks.identifyRetry ? { identifyRetry: identifyPacks.identifyRetry } : {}),
         outputs,
         patchOutputs,
         result,

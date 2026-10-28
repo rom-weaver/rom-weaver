@@ -2520,6 +2520,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.saves.editor.confirm": msg({ id: "ui.saves.editor.confirm", message: "Confirm" }),
   "ui.saves.editor.undoReplacement": msg({ id: "ui.saves.editor.undoReplacement", message: "Undo replacement" }),
+  "ui.apply.weaveTrackChecksSkipped": msg({
+    id: "ui.apply.weaveTrackChecksSkipped",
+    message:
+      "The track checks from the identification database were skipped because it did not load in time. The weave's own checks still apply.",
+  }),
 };
 
 export { MESSAGES };

@@ -5295,6 +5295,11 @@ msgstr "The task stopped unexpectedly. Reload the page and try again."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.weaveTrackChecksSkipped"
+msgstr "The track checks from the identification database were skipped because it did not load in time. The weave's own checks still apply."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.weaveTutorial.safeWeave.body"
 msgstr "The weave download is separate from Apply. Weave + patches shares the recipe and patches without putting a copyrighted ROM in the download."
 

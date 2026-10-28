@@ -5295,6 +5295,11 @@ msgstr "La ejecución del worker falló."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.weaveTrackChecksSkipped"
+msgstr "Se omitieron las comprobaciones de pistas de la base de datos de identificación porque no se cargó a tiempo. Las comprobaciones propias del weave siguen aplicándose."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.weaveTutorial.safeWeave.body"
 msgstr "La descarga del paquete es independiente de Aplicar. Paquete + parches (.zip) comparte la receta y los parches sin incluir una ROM con derechos de autor."
 

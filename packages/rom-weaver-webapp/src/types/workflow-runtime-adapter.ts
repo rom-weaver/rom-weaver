@@ -554,6 +554,12 @@ type WorkflowRuntimeIngest = {
      * unavailable", never as a failed ROM or a genuine no-match.
      */
     identifyUnavailable?: string;
+    /**
+     * Set with `identifyUnavailable` when the wait for identify data was cut short while the
+     * background load continues. Settles `true` once that load succeeded (a later lookup then hits
+     * the cache) and `false` when it failed. Never rejects.
+     */
+    identifyRetry?: Promise<boolean>;
     result: ParsedIngestResult;
     outputs: PublicOutput[];
     patchOutputs: PublicOutput[];

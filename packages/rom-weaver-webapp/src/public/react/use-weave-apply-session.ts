@@ -117,36 +117,72 @@ const stripOutputNameExtension = (name: string): string => {
   return removeKnownOutputExtension(trimmed).trim() || trimmed;
 };
 
+type MemberLaneResolution = {
+  fills: ReadonlyMap<number, ParsedWeaveChecks>;
+  /**
+   * Set when the lookup timed out: settles with the fills once the background lookup completes
+   * (possibly none), or `undefined` when it failed or the database stayed unavailable.
+   */
+  late?: Promise<ReadonlyMap<number, ParsedWeaveChecks> | undefined>;
+  /** The identification database could not answer, so no lane checks were derived from it. */
+  skipped: boolean;
+};
+
 /**
  * Per-track input checks for the weave's ROM-member lanes, taken from the
  * identify record its `rom` checks name. Apply-time only: the values are handed
  * to the patch options, never merged into the exported weave metadata.
  */
-const resolveMemberLaneChecks = async (session: WeaveApplySession): Promise<ReadonlyMap<number, ParsedWeaveChecks>> => {
-  const empty = new Map<number, ParsedWeaveChecks>();
+const resolveMemberLaneChecks = async (session: WeaveApplySession): Promise<MemberLaneResolution> => {
+  const none: MemberLaneResolution = { fills: new Map(), skipped: false };
   const needsFill = session.entries.some(
     (entry) => !!(entry.target && "rom" in entry.target && entry.target.member) && !(entry.input || entry.inputChecks),
   );
-  if (!needsFill) return empty;
+  if (!needsFill) return none;
   const romChecks = session.romExpectation?.checks || session.chainEndpointChecks.input;
-  if (!romChecks) return empty;
+  if (!romChecks) return none;
   try {
     // The lookup is optional and keeps Apply disabled while pending, so the wait is bounded; the
     // download keeps running and later lookups reuse it.
+    const lookup = lookupExpectedRom(romChecks);
+    let timedOut = false;
     const identification = await boundIdentifyWait(
-      lookupExpectedRom(romChecks),
+      lookup,
       "weave member-lane ROM lookup",
-      (reason): ParsedIdentifyResolution => ({ matches: [], status: "unavailable", unavailableReason: reason }),
+      (reason): ParsedIdentifyResolution => {
+        timedOut = true;
+        return { matches: [], status: "unavailable", unavailableReason: reason };
+      },
     );
     const fills = fillMemberLaneChecks(session.entries, identification);
     if (fills.size) logger.debug("weave session filled member lane checks", { entries: [...fills.keys()] });
-    return fills;
+    return {
+      fills,
+      ...(timedOut
+        ? {
+            late: lookup.then(
+              (found) => (found?.status === "unavailable" ? undefined : fillMemberLaneChecks(session.entries, found)),
+              () => undefined,
+            ),
+          }
+        : {}),
+      skipped: identification?.status === "unavailable",
+    };
   } catch {
-    // A ROM the identify database cannot name is not an apply error; the lanes
-    // simply keep the checks the weave itself declared.
-    return empty;
+    // The database could not be read: the lanes keep the checks the weave itself declared, and
+    // the notice says the identification-database checks were skipped.
+    return { fills: new Map(), skipped: true };
   }
 };
+
+const laneCheckTokens = (fills: ReadonlyMap<number, ParsedWeaveChecks>, ids: readonly string[]) =>
+  new Map(
+    [...fills].flatMap(([index, checks]) => {
+      const id = ids[index];
+      const tokens = weaveCheckTokens(checks);
+      return id && tokens ? [[id, tokens] as const] : [];
+    }),
+  );
 
 const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -162,12 +198,15 @@ const useWeaveApplySession = ({
   controllersRef,
   getPatchIds,
   seedPatchEnablement,
+  applyStartedRef,
 }: {
   weaveSession: WeaveApplySession | null;
   /** Latest-controller ref - the local controllers are recreated per render, so reads go through here. */
   controllersRef: MutableRefObject<WeaveSessionControllers>;
   getPatchIds: () => string[];
   seedPatchEnablement: (entries: Array<{ id: string; enabled: boolean }>) => void;
+  /** Holds true once the user has started Apply; a late lookup then leaves the run's checks alone. */
+  applyStartedRef?: MutableRefObject<boolean>;
 }) => {
   const appliedKeyRef = useRef<string | null>(null);
   // Latest delivered patch list: a locally-dropped weave delivers its patches
@@ -177,6 +216,7 @@ const useWeaveApplySession = ({
   const lastPatchesRef = useRef<BinarySource[]>([]);
   const [weaveMetaById, setWeaveMetaById] = useState<ReadonlyMap<string, WeavePatchMeta>>(new Map());
   const [weaveDefaultsPending, setWeaveDefaultsPending] = useState(false);
+  const [memberChecksSkipped, setMemberChecksSkipped] = useState(false);
   const seedGenerationRef = useRef(0);
   const seedAbortRef = useRef<AbortController | null>(null);
   // Apply-time input checks per patch id, filled from the identify record the
@@ -208,6 +248,7 @@ const useWeaveApplySession = ({
           activeSeedPatchNamesRef.current = null;
           appliedKeyRef.current = null;
           setWeaveDefaultsPending(false);
+          setMemberChecksSkipped(false);
           logger.debug("weave session seed cancelled after patch-list change", {
             patchCount: patches.length,
           });
@@ -226,6 +267,7 @@ const useWeaveApplySession = ({
           activeSeedPatchNamesRef.current = null;
           appliedKeyRef.current = null;
           setWeaveDefaultsPending(false);
+          setMemberChecksSkipped(false);
           logger.debug("weave session seed cancelled after patch-list change", {
             key: session.key,
             patchCount: names.length,
@@ -246,6 +288,7 @@ const useWeaveApplySession = ({
       seedAbortRef.current = seedAbort;
       activeSeedPatchNamesRef.current = expected;
       setWeaveDefaultsPending(true);
+      setMemberChecksSkipped(false);
       logger.debug("weave session matched patch list; seeding enablement + defaults", {
         key: session.key,
         patchCount: patches.length,
@@ -275,15 +318,30 @@ const useWeaveApplySession = ({
             signal: seedAbort.signal,
           });
           if (!isCurrent()) return;
-          const memberLaneChecks = await resolveMemberLaneChecks(session);
+          const { fills: memberLaneChecks, late, skipped } = await resolveMemberLaneChecks(session);
           if (!isCurrent()) return;
-          memberLaneChecksRef.current = new Map(
-            [...memberLaneChecks].flatMap(([index, checks]) => {
-              const id = ids[index];
-              const tokens = weaveCheckTokens(checks);
-              return id && tokens ? [[id, tokens] as const] : [];
-            }),
-          );
+          memberLaneChecksRef.current = laneCheckTokens(memberLaneChecks, ids);
+          setMemberChecksSkipped(skipped);
+          // The lookup finished after the bound: seed the lanes once it lands, unless the seed was
+          // replaced or the user already started Apply with the checks the weave declared.
+          void late
+            ?.then(async (lateChecks) => {
+              if (!(isCurrent() && lateChecks) || applyStartedRef?.current) return;
+              // The lookup completed, so the checks are no longer skipped even with nothing to seed.
+              setMemberChecksSkipped(false);
+              if (!lateChecks.size) return;
+              memberLaneChecksRef.current = laneCheckTokens(lateChecks, ids);
+              const lastIndex = Math.max(...lateChecks.keys());
+              for (const [index, checks] of lateChecks) {
+                await Promise.resolve(
+                  controllersRef.current.patchStack?.setPatchOption?.(index, {
+                    inputChecks: weaveCheckTokens(checks) || "",
+                    revalidate: index === lastIndex,
+                  }),
+                );
+              }
+            })
+            .catch((error: unknown) => logger.warn("weave late member lane checks failed", { error }));
           // Seed header modes through normal options. The weave's ROM checksum
           // belongs only to the chain input; reactive sync owns the chain output
           // because it applies only while the full weave chain remains intact.
@@ -337,7 +395,7 @@ const useWeaveApplySession = ({
         }
       })();
     },
-    [weaveMetaById, controllersRef, weaveSession, getPatchIds, seedPatchEnablement],
+    [weaveMetaById, controllersRef, weaveSession, getPatchIds, seedPatchEnablement, applyStartedRef],
   );
 
   // Replay the match when the session lands AFTER its patches did (local
@@ -370,6 +428,7 @@ const useWeaveApplySession = ({
   }, []);
 
   return {
+    memberChecksSkipped,
     weaveDefaultsPending,
     weaveMetaById,
     handleWeavePatchesChange,

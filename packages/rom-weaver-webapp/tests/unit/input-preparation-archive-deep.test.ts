@@ -385,6 +385,26 @@ describe("attachBareRomIngestMetadata", () => {
     });
   });
 
+  it("carries a bounded identify wait as unavailable identification plus the retry", async () => {
+    const file = archive("game.sfc", 8) as Record<string, unknown>;
+    const identifyRetry = Promise.resolve(true);
+    runtime.ingest.run.mockResolvedValue({
+      identifyRetry,
+      identifyUnavailable: "ROM identify data did not finish within 5000 ms",
+      result: { isRom: true, assets: [{ checksums: { crc32: "a1b2c3d4" } }] },
+    });
+    await attachBareRomIngestMetadata(file as never, undefined, runtime as never);
+    expect(file).toMatchObject({
+      checksums: { crc32: "a1b2c3d4" },
+      identification: {
+        matches: [],
+        status: "unavailable",
+        unavailableReason: "ROM identify data did not finish within 5000 ms",
+      },
+      identifyRetry,
+    });
+  });
+
   it("is best effort for non-ROM, unavailable, failed, and already computed inputs", async () => {
     const existing = archive("existing.sfc") as Record<string, unknown>;
     existing.checksums = { crc32: "existing" };
