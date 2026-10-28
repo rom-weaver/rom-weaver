@@ -828,6 +828,17 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       stagedTrimWorkflowRef.current = workflow;
       const handleProgress = createProgressHandler("input");
       workflow.on("progress", handleProgress);
+      // A timed-out identification is upgraded by the controller once the pack loads; mirror it into
+      // the card and the identification-derived output name (only once staging published a state).
+      const handleChange = () => {
+        if (stagedTrimWorkflowGenerationRef.current !== generation || stagedTrimWorkflowRef.current !== workflow)
+          return;
+        const next = workflow.getInput();
+        setSourceState((previous) =>
+          previous && next && previous.identification !== next.identification ? next : previous,
+        );
+      };
+      workflow.on("change", handleChange);
       setSourceStaging(true);
       emitTrimFormTrace("stage.set-input.start", {
         generation,
@@ -890,6 +901,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
       cleanup = () => {
         workflow.off("progress", handleProgress);
+        workflow.off("change", handleChange);
         emitTrimFormTrace("stage.cleanup", {
           generation,
           isCurrentWorkflow: stagedTrimWorkflowRef.current === workflow,

@@ -6,24 +6,28 @@ import type { BinarySource } from "../../src/public/react/patcher-form.ts";
 
 let recommendedFormat: string | undefined;
 let stagingGate: Promise<void> | undefined;
+let startUnidentified = false;
+const changeListeners = new Set<() => void>();
 
 const makeTrimSource = (fileName: string) => ({
   candidates: [{ id: "rom-candidate", label: "ROM" }],
   checksums: { crc32: "C6FB1252", md5: "0123456789abcdef", sha1: "0123456789012345678901234567890123456789" },
   fileName,
   id: "trim-input-1",
-  identification: {
-    matches: [
-      {
-        algorithm: "crc32",
-        database: "No-Intro",
-        name: "Trim Example (USA)",
-        platform: "Nintendo Entertainment System",
-        variant: "raw",
+  identification: startUnidentified
+    ? { matches: [], status: "unavailable" }
+    : {
+        matches: [
+          {
+            algorithm: "crc32",
+            database: "No-Intro",
+            name: "Trim Example (USA)",
+            platform: "Nintendo Entertainment System",
+            variant: "raw",
+          },
+        ],
+        status: "matched",
       },
-    ],
-    status: "matched",
-  },
   parentCompressions: [],
   romProbe: recommendedFormat ? undefined : { trim: { detected: true, trimmedInputBytes: 96 } },
   romType: recommendedFormat ? { recommendedFormat } : undefined,
@@ -51,8 +55,17 @@ const makeFakeTrimWorkflow = () => {
     getInput: vi.fn(() => input),
     id: "fake-trim-workflow",
     isDisposed: () => disposed,
-    off: vi.fn(),
-    on: vi.fn(),
+    off: vi.fn((event: string, listener: () => void) => {
+      if (event === "change") changeListeners.delete(listener);
+    }),
+    on: vi.fn((event: string, listener: () => void) => {
+      if (event === "change") changeListeners.add(listener);
+    }),
+    reidentify: () => {
+      startUnidentified = false;
+      input = makeTrimSource(input?.fileName || "game.nes");
+      for (const listener of changeListeners) listener();
+    },
     run: vi.fn(async () => ({
       input,
       output,
@@ -92,6 +105,8 @@ beforeEach(() => {
   latest = null;
   recommendedFormat = undefined;
   stagingGate = undefined;
+  startUnidentified = false;
+  changeListeners.clear();
 });
 
 afterEach(() => {
@@ -101,6 +116,25 @@ afterEach(() => {
 });
 
 describe("TrimPatchForm", () => {
+  it("shows a late re-identification and runs with the upgraded automatic output name", async () => {
+    startUnidentified = true;
+    const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
+    const { container } = renderForm({ pageDrop: { files: [file], id: 1 } });
+    await vi.waitFor(() => expect(container.querySelector("#trim-builder-button-run")).toBeTruthy());
+    expect(container.textContent).not.toContain("Trim Example (USA)");
+    await act(async () => {
+      ((latest as NonNullable<typeof latest>).workflow as unknown as { reidentify: () => void }).reidentify();
+    });
+    await vi.waitFor(() => expect(container.textContent).toContain("Trim Example (USA)"));
+    await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+    const confirm = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Trim ROM"),
+    );
+    await act(async () => fireEvent.click(confirm as HTMLButtonElement));
+    await vi.waitFor(() => expect(latest?.workflow.setOutputName).toHaveBeenCalled());
+    expect(String(latest?.workflow.setOutputName.mock.calls[0]?.[0])).toContain("Trim Example (USA)");
+  });
+
   it("renders the empty hero and forwards a page drop into staging", async () => {
     const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
     const { container } = renderForm({ pageDrop: { files: [file], id: 1 } });

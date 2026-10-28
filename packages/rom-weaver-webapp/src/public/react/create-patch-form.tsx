@@ -955,6 +955,19 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
       stagedCreateWorkflowRef.current = activeWorkflow;
       const handleProgress = createProgressHandler("input");
       activeWorkflow.on("progress", handleProgress);
+      // Late re-identification (timed-out pack finished loading) arrives as a controller change; mirror
+      // it into the cards and the identification-derived patch name once a state was published.
+      const handleChange = () => {
+        if (stagedCreateWorkflowRef.current !== activeWorkflow) return;
+        const refresh = (
+          previous: CreateDisplaySourceState | null,
+          next: CreateDisplaySourceState | null,
+        ): CreateDisplaySourceState | null =>
+          previous && next && previous.identification !== next.identification ? next : previous;
+        setOriginalState((previous) => refresh(previous, activeWorkflow.getOriginal()));
+        setModifiedState((previous) => refresh(previous, activeWorkflow.getModified()));
+      };
+      activeWorkflow.on("change", handleChange);
       const session = createCreateStagingSession({
         activeWorkflow,
         clearInputProgress: () => clearProgressForStage("input"),
@@ -996,7 +1009,10 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
       });
       const finishStaging = () => session.finish(() => activeWorkflow.off("progress", handleProgress));
       void finishStaging();
-      cleanup = () => activeWorkflow.off("progress", handleProgress);
+      cleanup = () => {
+        activeWorkflow.off("progress", handleProgress);
+        activeWorkflow.off("change", handleChange);
+      };
     };
     void stage();
     return () => {

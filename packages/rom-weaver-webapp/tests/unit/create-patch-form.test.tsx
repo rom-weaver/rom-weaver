@@ -60,26 +60,30 @@ type FakeSource = {
   warnings: [];
 };
 
+let originalUnidentified = false;
+
 const sourceState = (fileName: string, role: "original" | "modified"): FakeSource => ({
   candidates: [{ id: `${role}-candidate`, label: `${role} candidate` }],
   checksums: { crc32: "C6FB1252", md5: "0123456789abcdef", sha1: "0123456789012345678901234567890123456789" },
   fileName,
   id: `${role}-1`,
   identification:
-    role === "original"
-      ? {
-          matches: [
-            {
-              algorithm: "crc32",
-              database: "No-Intro",
-              name: "Example Game (USA)",
-              platform: "Nintendo Entertainment System",
-              variant: "raw",
-            },
-          ],
-          status: "matched",
-        }
-      : undefined,
+    role === "original" && originalUnidentified
+      ? { matches: [], status: "unavailable" as never }
+      : role === "original"
+        ? {
+            matches: [
+              {
+                algorithm: "crc32",
+                database: "No-Intro",
+                name: "Example Game (USA)",
+                platform: "Nintendo Entertainment System",
+                variant: "raw",
+              },
+            ],
+            status: "matched",
+          }
+        : undefined,
   parentCompressions: [],
   selectedCandidateId: `${role}-candidate`,
   size: 128,
@@ -119,6 +123,11 @@ const makeFakeWorkflow = () => {
       sizeSummary: { createTimeMs: 12, outputSize: 64, rawSize: 128 },
       type: "bps",
     })),
+    reidentifyOriginal: () => {
+      originalUnidentified = false;
+      original = original ? sourceState(original.fileName, "original") : original;
+      for (const listener of listeners.get("change") || []) listener(undefined);
+    },
     setModified: vi.fn(async (input: BinarySource | BinarySource[]) => {
       const source = Array.isArray(input) ? input[0] : input;
       if (nextModifiedError) {
@@ -193,6 +202,7 @@ beforeEach(async () => {
   latest = null;
   nextOriginalError = null;
   nextModifiedError = null;
+  originalUnidentified = false;
 });
 
 afterEach(() => {
@@ -788,5 +798,28 @@ describe("CreatePatchForm", () => {
     await vi.waitFor(() => expect(getCandidates).toHaveBeenCalled());
     expect(container.querySelector("#patch-builder-button-create")).toBeTruthy();
     expect(container.textContent).not.toContain("format probe failed");
+  });
+
+  it("shows a late original re-identification and renames the automatic patch", async () => {
+    originalUnidentified = true;
+    const { container, unmount } = renderForm(withSeams());
+    const input = container.querySelector("#patch-builder-input-file-unified") as HTMLInputElement;
+    const original = new File(["original"], "original.nes", { type: "application/octet-stream" });
+    const modified = new File(["modified"], "modified.nes", { type: "application/octet-stream" });
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [original, modified] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(container.querySelector("#patch-builder-button-create")).toBeTruthy());
+    const outputName = container.querySelector("#patch-builder-output-file") as HTMLInputElement;
+    expect(outputName.value).not.toContain("Example Game (USA)");
+    await act(async () => {
+      (
+        (latest as NonNullable<typeof latest>).workflow as unknown as { reidentifyOriginal: () => void }
+      ).reidentifyOriginal();
+    });
+    await vi.waitFor(() => expect(container.textContent).toContain("Example Game (USA)"));
+    expect(outputName.value).toContain("Example Game (USA)");
+    unmount();
   });
 });
