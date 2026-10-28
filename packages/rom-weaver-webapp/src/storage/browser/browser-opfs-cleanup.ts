@@ -14,8 +14,6 @@ const TRANSIENT_OPFS_PATHS = [
   "/work/temp",
 ] as const;
 const EMULATOR_RETENTION_OPFS_PATH = "/work/runtime-output/emulator";
-// Copies of handed-over discs left by the removed Playlist tool; swept once so old installs free the space.
-const PLAYLIST_RETENTION_OPFS_PATH = "/work/runtime-output/playlist";
 const logger = createLogger("browser-opfs-cleanup");
 // A reload while work runs leaves the previous page's workers holding sync access handles for a moment, so
 // removeEntry fails with NoModificationAllowedError. The proxy worker already retries; what is still locked
@@ -28,7 +26,7 @@ const resetBrowserTransientOpfs = async (
   options: { includeEmulator?: boolean; skipBusy?: boolean } = {},
 ): Promise<void> => {
   const paths = options.includeEmulator
-    ? [...TRANSIENT_OPFS_PATHS, EMULATOR_RETENTION_OPFS_PATH, PLAYLIST_RETENTION_OPFS_PATH]
+    ? [...TRANSIENT_OPFS_PATHS, EMULATOR_RETENTION_OPFS_PATH]
     : TRANSIENT_OPFS_PATHS;
   await Promise.all(
     paths.map(async (filePath) => {
