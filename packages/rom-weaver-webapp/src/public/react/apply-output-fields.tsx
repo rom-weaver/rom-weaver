@@ -282,6 +282,9 @@ const ChecksumOverrideRow = ({
           )}
         </span>
       </label>
+      {state.namesDamagedPatch ? (
+        <p className="warn">{localizer.message("ui.apply.validation.damagedPatchWarning")}</p>
+      ) : null}
     </>
   );
 };

@@ -1435,6 +1435,11 @@ msgstr "Los valores predeterminados de compresión provienen de Configuración �
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.PATCH_FILE_DAMAGED"
+msgstr "El archivo del parche está dañado (su suma de comprobación no es válida). Consigue una copia nueva y reemplaza este parche."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.COMPRESSION_FAILED"
 msgstr "La compresión falló."
 
@@ -6016,7 +6021,7 @@ msgstr "ZIP, 7z y paquetes"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.validationCorruptHint"
-msgstr "El archivo del parche está dañado. Consigue una copia nueva y reemplaza este parche."
+msgstr "El archivo del parche está dañado. Consigue una copia nueva y reemplaza este parche. Tampoco se comprobó la ROM con él."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -6026,7 +6031,12 @@ msgstr "El archivo del parche está dañado"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.validation.overrideDamagedPatch"
-msgstr "Aplicar de todos modos pese a la suma de comprobación dañada del archivo del parche"
+msgstr "Aplicar de todos modos pese a la suma de comprobación dañada del archivo del parche (tampoco se comprueba la ROM)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.damagedPatchWarning"
+msgstr "Advertencia: aplicar de todos modos usa el parche dañado tal cual y puede producir un resultado incorrecto o corrupto. La ROM no se verifica."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

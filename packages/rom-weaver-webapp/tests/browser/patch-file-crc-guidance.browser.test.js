@@ -59,6 +59,7 @@ for (const format of ["bps", "ups"]) {
     expect(row.textContent).not.toContain("different ROM");
     expect(row.textContent).not.toContain("Choose the ROM");
     expect(fault().textContent).not.toContain("Apply anyway");
+    expect(fault().textContent).toContain("ROM was not checked");
     const inputRow = getInputStackRows()[0];
     const button = document.getElementById("rom-weaver-button-apply");
     expect(button.getAttribute("aria-disabled")).toBe("true");
@@ -66,6 +67,10 @@ for (const format of ["bps", "ups"]) {
     expect(override).not.toBeNull();
     expect(override.closest("label").textContent).toContain("damaged patch file's checksum");
     expect(override.closest("label").textContent).not.toContain("ROM check mismatch");
+    expect(override.closest("label").textContent).toContain("ROM is not checked either");
+    expect(document.body.textContent).toContain(
+      "uses the damaged patch as is and may produce a wrong or corrupt result",
+    );
     expect(document.body.textContent).not.toContain("Compare the expected ROM before bypassing checks");
     expect(document.getElementById(button.getAttribute("aria-describedby")).textContent).toContain(
       "the patch file is damaged",
@@ -125,3 +130,70 @@ for (const format of ["bps", "ups"]) {
     expect((await waitForApplyOutcome()).kind).toBe("download");
   });
 }
+
+test("a damaged patch and a real source-ROM mismatch together keep the ROM wording", async () => {
+  const bps = await makePatch("bps");
+  const ups = await makePatch("ups");
+  const damaged = ups.bytes.slice();
+  damaged[damaged.length - 1] ^= 1;
+  const wrong = bps.original.slice();
+  wrong[900] ^= 1;
+  mount(
+    createElement(ApplyPatchForm, {
+      defaultSettings: { output: { compression: "none" }, validation: { requireInputChecksumMatch: true } },
+      pageDrop: {
+        files: [new File([wrong], "wrong.bin"), new File([damaged], "damaged.ups"), new File([bps.bytes], "valid.bps")],
+        id: 1,
+      },
+      threads: 1,
+    }),
+  );
+  const rows = () => [...document.querySelectorAll("#rom-weaver-list-patch-stack .file.bad")];
+  await expect.poll(() => rows().length, { timeout: 60000 }).toBeGreaterThan(0);
+  setFormControlValue(document.getElementById("rom-weaver-select-patch-target-1"), "rom");
+  await expect.poll(() => rows().length, { timeout: 60000 }).toBe(2);
+  expect(
+    rows()
+      .map((row) => row.textContent)
+      .join(" "),
+  ).toContain("Patch file is damaged");
+  const label = document.getElementById("rom-weaver-checkbox-checksum-override").closest("label").textContent;
+  expect(label).toContain("patch and ROM check mismatch");
+  expect(label).not.toContain("damaged patch file's checksum");
+});
+
+test("a damaged patch later in a chain says the patch is damaged when Apply runs", async () => {
+  const first = await makePatch("bps");
+  const second = await browserRuntime.patch.createPatch({
+    original: new File([first.modified], "a.bin"),
+    modified: new File([first.modified.map((byte) => byte ^ 0x55)], "b.bin"),
+    format: "bps",
+    metadata: {},
+    outputName: "second.bps",
+    threads: 1,
+  });
+  let damaged;
+  try {
+    const blob = await browserRuntime.publicOutput.getBlob(second.output);
+    damaged = new Uint8Array(await blob.arrayBuffer());
+  } finally {
+    await second.output.dispose();
+  }
+  damaged[damaged.length - 1] ^= 1;
+  mount(
+    createElement(ApplyPatchForm, {
+      defaultSettings: { output: { compression: "none" }, validation: { requireInputChecksumMatch: true } },
+      pageDrop: {
+        files: [first.rom, new File([first.bytes], "p1.bps"), new File([damaged], "p2.bps")],
+        id: 1,
+      },
+      threads: 1,
+    }),
+  );
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  const outcome = await waitForApplyOutcome();
+  expect(outcome.kind).toBe("error");
+  expect(outcome.errorText).toContain("patch file is damaged");
+  expect(outcome.errorText).not.toContain("Check that you chose the right ROM");
+});
