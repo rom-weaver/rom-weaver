@@ -4800,6 +4800,11 @@ msgstr "ranura {slot} · índice {index}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.weaveTrackChecksSkipped"
+msgstr "Se omitieron algunas comprobaciones de pistas del weave porque la base de datos de títulos no estaba disponible. Las comprobaciones propias del weave siguen aplicándose."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.flowWeaveBringAfter"
 msgstr "que alguien te haya enviado."
 

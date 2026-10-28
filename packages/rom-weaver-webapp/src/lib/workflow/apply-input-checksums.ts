@@ -1,7 +1,10 @@
 import type { WorkflowProgress } from "../../types/progress.ts";
 import type { ApplySettings } from "../../types/settings.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
-import { getPrimaryInputAsset, isChecksummableInputAsset } from "../input/input-assets.ts";
+import type { ParsedIdentifyResolution } from "../../types/identify.ts";
+import { lookupExpectedRom } from "../apply/expected-rom-lookup.ts";
+import { createLogger } from "../logging.ts";
+import { getPrimaryInputAsset, type InputAsset, isChecksummableInputAsset } from "../input/input-assets.ts";
 import { shouldIdentifySource } from "../input/input-identification-policy.ts";
 import { getPreparedAssetFileName } from "./apply-source-staging.ts";
 import type { InputSession, StagedSource } from "./apply-workflow-state.ts";
@@ -19,8 +22,11 @@ import {
   getPatchFilePrecomputedChecksums,
   getPatchFilePrecomputedChecksumVariants,
   getPatchFilePrecomputedIdentification,
+  getPatchFilePrecomputedIdentifyRetry,
   getPatchFilePrecomputedRomType,
 } from "./staged-source-checksums.ts";
+
+const logger = createLogger("apply-input-identify");
 
 type InputChecksumAdapters<TSource> = {
   emitProgress: (event: {
@@ -33,10 +39,65 @@ type InputChecksumAdapters<TSource> = {
     workflow: WorkflowProgress["workflow"];
   }) => void;
   getSelectedInputOwner: () => StagedSource<TSource> | undefined;
+  /** False once the session was removed or replaced, so a late identification is dropped. */
+  isCurrentSession: (session: InputSession<TSource>) => boolean;
+  /** Called after a late identification updated the staged input. */
+  onIdentified: () => void;
   runtime: WorkflowRuntime;
   settings: Partial<ApplySettings>;
   syncInputSessionView: () => void;
   workflowId: string;
+};
+
+/**
+ * True only when a raw hash-only lookup sees everything normal ingest would match: one plain ROM
+ * blob with no extra checksum variants (header-removed, N64 byte orders) and no disc tracks.
+ */
+const hashLookupCoversAsset = (asset: InputAsset): boolean =>
+  asset.kind === "rom" &&
+  (asset.checksumVariants?.length ?? 0) <= 1 &&
+  !(asset.groupId || asset.discGroupId || asset.trackNumber !== undefined || asset.chdCodecMode !== undefined) &&
+  !/\.(chd|cue|gdi|iso|bin)$/i.test(asset.fileName);
+
+/**
+ * An ingest that stopped waiting for identify data reports `unavailable` while the pack keeps
+ * loading. Once that load succeeds, look the already-computed checksums up again and update the
+ * card; a failed load, a removed or replaced input, or a changed identification leaves it alone.
+ * The lookup is hash-only, so a miss is reported as `unknown` only when it covers the whole input;
+ * otherwise the input stays `unavailable` (a miss could be a variant or disc fingerprint it cannot see).
+ */
+const reidentifyWhenLoaded = <TSource>({
+  adapters,
+  asset,
+  retry,
+  session,
+  stage,
+}: {
+  adapters: InputChecksumAdapters<TSource>;
+  asset: InputAsset;
+  retry: Promise<boolean>;
+  session: InputSession<TSource>;
+  stage: StagedSource<TSource>;
+}): void => {
+  const pending = asset.identification;
+  const checksums = Object.fromEntries(Object.entries(asset.checksums ?? {}).filter(([, value]) => !!value));
+  void (async () => {
+    if (!((await retry) && Object.keys(checksums).length)) return;
+    const found = await lookupExpectedRom({
+      checksums,
+      ...(typeof asset.size === "number" ? { size: asset.size } : {}),
+    });
+    if (found?.status === "unavailable") return;
+    const matched = !!found && found.status !== "unknown" && (found.matches?.length ?? 1) > 0;
+    if (!(matched || hashLookupCoversAsset(asset))) return;
+    if (!adapters.isCurrentSession(session) || asset.identification !== pending) return;
+    asset.identification = found ?? ({ matches: [], status: "unknown" } satisfies ParsedIdentifyResolution);
+    if (getPrimaryInputAsset(stage.preparedInputAssets || []) === asset) {
+      stage.state.identification = cloneIdentification(asset.identification);
+    }
+    if (session.synthetic) adapters.syncInputSessionView();
+    adapters.onIdentified();
+  })().catch((error: unknown) => logger.warn("late ROM identification failed", { error }));
 };
 
 const finalizeApplyInputChecksums = async <TSource>(
@@ -66,6 +127,8 @@ const finalizeApplyInputChecksums = async <TSource>(
         // A bare ROM checksummed in place (`ingest`) carries its real elapsed time; an archive leaf
         // checksummed during extract has none → 0, which renders as "from extract".
         asset.checksumTimeMs = getPatchFilePrecomputedChecksumMs(asset.file) ?? 0;
+        const precomputedRetry = getPatchFilePrecomputedIdentifyRetry(asset.file);
+        if (precomputedRetry) reidentifyWhenLoaded({ adapters, asset, retry: precomputedRetry, session, stage });
         continue;
       }
       const checksumFileName = getPreparedAssetFileName(asset, stage.state.fileName);
@@ -99,6 +162,9 @@ const finalizeApplyInputChecksums = async <TSource>(
       asset.romProbe = checksumResult.romProbe;
       asset.romType = checksumResult.romType;
       asset.checksumTimeMs = Date.now() - checksumStartedAt;
+      if (checksumResult.identifyRetry) {
+        reidentifyWhenLoaded({ adapters, asset, retry: checksumResult.identifyRetry, session, stage });
+      }
     }
     const primaryAsset = getPrimaryInputAsset(assets);
     const primaryChecksums = getInputAssetChecksums(primaryAsset);

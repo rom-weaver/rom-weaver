@@ -121,7 +121,10 @@ vi.mock("../../src/lib/path-utils.ts", () => ({
       .split(/[\\/]/u)
       .pop() || fallback,
 }));
-vi.mock("../../src/lib/logging.ts", () => ({ emitTraceLog: state.emitTrace }));
+vi.mock("../../src/lib/logging.ts", () => ({
+  createLogger: () => ({ debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() }),
+  emitTraceLog: state.emitTrace,
+}));
 vi.mock("../../src/lib/runtime/run-output-paths.ts", () => ({ createRomWeaverOutputScope: state.createOutputScope }));
 vi.mock("../../src/lib/runtime/run-result-parsing.ts", () => ({
   romTypeFromEmittedFile: (asset: { platform?: string }) => asset.platform || "unknown",
@@ -332,6 +335,69 @@ describe("browser ingest and weave runtime", () => {
       "ROM identify probe failed; widening the identify pack selection",
       expect.objectContaining({ error: "probe failed" }),
     );
+  });
+
+  it("keeps the offline warm-up held after the identify bound until the background download settles", async () => {
+    vi.useFakeTimers();
+    try {
+      let release: (value: { packs: never[] }) => void = () => undefined;
+      state.identifySelection.mockReturnValueOnce(
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+      );
+      const running = browserRuntime.ingest.run({
+        fileName: "game.nes",
+        identify: true,
+        identifyBounded: true,
+        source: "bytes",
+      } as never);
+      await vi.advanceTimersByTimeAsync(5000);
+      const result = await running;
+      expect(result.identifyUnavailable).toEqual(expect.any(String));
+      expect(state.pauseWarmup).toHaveBeenCalledOnce();
+      expect(state.resumeWarmup).not.toHaveBeenCalled();
+      release({ packs: [] });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(state.resumeWarmup).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ["succeeds", true],
+    ["fails", false],
+  ])("reports whether the timed-out identify load %s through identifyRetry", async (_label, succeeds) => {
+    vi.useFakeTimers();
+    try {
+      let settle: (value: unknown) => void = () => undefined;
+      let fail: (error: Error) => void = () => undefined;
+      state.identifySelection.mockReturnValueOnce(
+        new Promise((resolve, reject) => {
+          settle = resolve;
+          fail = reject;
+        }),
+      );
+      const running = browserRuntime.ingest.run({
+        fileName: "game.nes",
+        identify: true,
+        identifyBounded: true,
+        source: "bytes",
+      } as never);
+      await vi.advanceTimersByTimeAsync(5000);
+      const result = await running;
+      const outcome = vi.fn();
+      void result.identifyRetry?.then(outcome);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(outcome).not.toHaveBeenCalled();
+      if (succeeds) settle({ packs: [] });
+      else fail(new Error("pack download failed"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(outcome).toHaveBeenCalledWith(succeeds);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("hands ingest the original name, not the sanitized staged one", async () => {

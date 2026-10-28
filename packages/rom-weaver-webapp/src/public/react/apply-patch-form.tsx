@@ -429,7 +429,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     setPatchInputBasis(activeWeaveSession?.patchBasis || "auto");
   }, [activeWeaveSession]);
   const weaveControllersRef = useRef<WeaveSessionControllers>({ output: null, patchStack: null });
+  const applyStartedRef = useRef(false);
   const {
+    memberChecksSkipped,
     weaveDefaultsPending,
     handleWeavePatchesChange,
     weaveMetaById,
@@ -441,6 +443,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     controllersRef: weaveControllersRef,
     getPatchIds,
     seedPatchEnablement,
+    applyStartedRef,
   });
 
   // Metadata edits MUST invalidate the workflow name because the source identities stay unchanged.
@@ -573,6 +576,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
   const handleLocalPatchesChange = useCallback(
     (nextPatches: BinarySource[]) => {
+      // A changed patch list starts a new run, so the sticky Apply-started guard resets.
+      applyStartedRef.current = false;
       setCompletedOutput(null);
       setCompletedCheats(undefined);
       if (!nextPatches.length) {
@@ -919,6 +924,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
                 handlers.onInputPrepared?.(state);
                 emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow input prepared", { input: state });
               },
+              onIdentified: (state) => handlers.onInputState?.(state),
               onFinalized: (state) => {
                 handlers.onInputState?.(state);
                 if (state?.checksums) handlers.onChecksumReady?.(state);
@@ -1840,6 +1846,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     workflowHandle,
   });
 
+  // Sticky until the patch list changes (reset in handleLocalPatchesChange and the weave hook).
+  if (outputState.applyButton.loading) applyStartedRef.current = true;
+
   const combinedPatch = useCombinedPatch({
     revision: combinedRevision,
     name: outputState.displayFileName,
@@ -2123,6 +2132,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           ? { weaveRomExpectation: activeWeaveSession.romExpectation }
           : {})}
         weaveTools={{
+          memberChecksSkipped: memberChecksSkipped && !!activeWeaveSession,
           hasOptionalEntries:
             !!activeWeaveSession?.entries.some((entry) => entry.optional) || disabledPatchIds.size > 0,
           outputVerification,
