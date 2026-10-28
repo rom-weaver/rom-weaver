@@ -590,6 +590,33 @@ fn parse_rejects_non_monotonic_section_offsets() {
 }
 
 #[test]
+fn parse_errors_carry_one_validation_prefix() {
+    let temp = TempDir::new("sections-prefix");
+    let mut bytes = single_disc_pbp(&DiscSpec::single_track());
+    write_u32_le(&mut bytes, 8, 0x200);
+    let error = parse_error(&temp, "prefix.pbp", &bytes);
+    assert_eq!(error.matches("validation failed").count(), 1, "{error}");
+}
+
+#[test]
+fn classify_keeps_read_failures_as_io_errors() {
+    struct FailingReader;
+    impl std::io::Read for FailingReader {
+        fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("device failure"))
+        }
+    }
+    impl std::io::Seek for FailingReader {
+        fn seek(&mut self, _: std::io::SeekFrom) -> std::io::Result<u64> {
+            Ok(0)
+        }
+    }
+    let error = rom_weaver_core::pbp::classify_pbp(&mut FailingReader, 0x1000)
+        .expect_err("a failing reader must not classify");
+    assert!(matches!(error, RomWeaverError::Io(_)), "{error}");
+}
+
+#[test]
 fn parse_rejects_a_section_offset_past_the_end_of_the_file() {
     let temp = TempDir::new("sections-range");
     let mut bytes = single_disc_pbp(&DiscSpec::single_track());

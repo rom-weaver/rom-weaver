@@ -97,9 +97,16 @@ impl PbpContainerHandler {
             )));
         }
 
-        let layout = rom_weaver_core::pbp::classify_pbp(&mut file, file_size).map_err(|error| {
-            RomWeaverError::Validation(format!("pbp source `{}`: {error}", source.display()))
-        })?;
+        let layout =
+            rom_weaver_core::pbp::classify_pbp(&mut file, file_size).map_err(
+                |error| match error {
+                    RomWeaverError::Validation(message) => RomWeaverError::Validation(format!(
+                        "pbp source `{}`: {message}",
+                        source.display()
+                    )),
+                    other => other,
+                },
+            )?;
         let psar_offset = layout.psar_offset;
         if let Some(description) = layout.kind.psp_layout() {
             debug!(source = %source.display(), description, "keeping PSP PBP intact");

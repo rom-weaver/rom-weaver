@@ -311,7 +311,8 @@ pub(crate) struct ExtractChecksumTiming {
     pub(crate) hash_busy_ns: u128,
 }
 
-/// Detect output identity from the stream, seeking PBP headers beyond the prefix when needed.
+/// Detect output identity once the stream is complete, seeking PBP headers beyond the prefix
+/// when needed. `output_path` MUST be the file the bytes were written to, not its final name.
 fn detect_emitted_identity(identity: &IdentityPrefix, output_path: &Path) -> RomIdentity {
     let detected = identity.detect(output_extension(output_path).as_deref());
     if identity.has_pbp_signature() {
@@ -416,7 +417,9 @@ impl ExtractHasher {
                     return None;
                 }
                 *identity_emitted = true;
-                let detected = detect_emitted_identity(identity, output_path);
+                // The output is still being staged under another name, so only the streamed
+                // prefix can be trusted here.
+                let detected = identity.detect(output_extension(output_path).as_deref());
                 (!detected.is_empty()).then_some(detected)
             }
         }

@@ -1,6 +1,8 @@
 //! Shared PBP layout recognition for container handling and ROM identity.
 
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{ErrorKind, Read, Seek, SeekFrom};
+
+use tracing::debug;
 
 use crate::{Result, RomWeaverError};
 
@@ -37,6 +39,20 @@ pub struct PbpLayout {
 /// Recognize supported layouts without decoding executable or encrypted disc data.
 /// All section offsets are checked before any section is read.
 pub fn classify_pbp(reader: &mut (impl Read + Seek), file_size: u64) -> Result<PbpLayout> {
+    let result = read_pbp_layout(reader, file_size);
+    match &result {
+        Ok(layout) => debug!(
+            kind = ?layout.kind,
+            psar_offset = layout.psar_offset,
+            file_size,
+            "classified PBP"
+        ),
+        Err(error) => debug!(%error, file_size, "PBP classification failed"),
+    }
+    result
+}
+
+fn read_pbp_layout(reader: &mut (impl Read + Seek), file_size: u64) -> Result<PbpLayout> {
     let mut header = [0u8; 40];
     read_at(reader, 0, &mut header, "PBP header")?;
     if &header[..4] != b"\0PBP" {
@@ -132,8 +148,10 @@ fn read_at(
 ) -> Result<()> {
     reader.seek(SeekFrom::Start(offset))?;
     reader.read_exact(bytes).map_err(|error| {
-        RomWeaverError::Validation(format!(
-            "source is truncated while reading {label}: {error}"
-        ))
+        if error.kind() == ErrorKind::UnexpectedEof {
+            RomWeaverError::Validation(format!("source is truncated while reading {label}"))
+        } else {
+            error.into()
+        }
     })
 }
