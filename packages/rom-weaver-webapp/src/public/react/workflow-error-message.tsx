@@ -17,7 +17,7 @@ const WorkflowErrorMessage = ({ message }: { message: string }) => {
   const archiveRead =
     !(archiveDepth || memory) &&
     (!code || code === "COMPRESSION_FAILED") &&
-    /(?:^| Details: )validation failed: (?:(?:zip|7z|rar|tar) (?:list failed while (?:reading|decoding) entry \d+:|archive is invalid:)|archive read (?:header|data) failed:|unknown libarchive failure\b)/i.test(
+    /(?:^| Details: )validation failed: (?:[a-z0-9.]+ (?:(?:list|extract) failed while (?:reading|decoding) entry \d+(?: \(`[^`]*`\))?:|archive is invalid:)|archive read (?:header|data) failed:|unknown libarchive failure\b)/i.test(
       message,
     );
   if (archiveRead) {

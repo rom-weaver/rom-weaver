@@ -42,6 +42,8 @@ test.each(["original", "modified"])(
     const run = vi.spyOn(CreateWorkflow.prototype, "run");
     try {
       document.getElementById("patch-builder-button-create").click();
+      // Create reaches workflow.run() only after several awaits, so let them settle before asserting.
+      await new Promise((resolve) => setTimeout(resolve, 750));
       expect(run).not.toHaveBeenCalled();
       expect(notice().textContent).toContain("This archive is damaged or unsupported.");
     } finally {
@@ -87,7 +89,7 @@ test.each(["none", "zip", "7z"])(
     await expect
       .poll(() => document.body.textContent)
       .toContain(
-        "The raw patch file is downloaded by default. Choose ZIP or 7z under Options → Type to package it in an archive.",
+        "Options → Type sets the download: None gives the raw patch file, and ZIP or 7z packages it in an archive. New settings start on None.",
       );
     document.querySelector('button[aria-label="Output options"]').click();
     if (compression !== "none") setFormControlValue(selector, compression);

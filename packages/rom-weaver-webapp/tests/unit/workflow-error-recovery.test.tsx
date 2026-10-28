@@ -137,6 +137,22 @@ describe("workflow error recovery", () => {
   });
 
   it.each([
+    "validation failed: tar.gz list failed while reading entry 0: validation failed: archive read header failed: x",
+    "validation failed: tar.xz archive is invalid: validation failed: archive read header failed: x",
+    "validation failed: zipx list failed while decoding entry 1: validation failed: archive read header failed: x",
+    "validation failed: zip extract failed while reading entry 0 (`game.bin`): validation failed: archive entry read failed: ZIP bad CRC",
+    "validation failed: 7z extract failed while reading entry 2: validation failed: archive read header failed: x",
+  ])("explains archive failures for other formats and extract-time reads: %s", (message) => {
+    const view = showNotice(message);
+    const alert = view.getByRole("alert");
+    expect(alert.querySelector(".notice-copy")?.firstChild?.textContent).toBe(
+      "This archive is damaged or unsupported. Choose another archive or extract it on your device first.",
+    );
+    expect(alert.querySelector("details")?.textContent).toContain(message);
+    view.unmount();
+  });
+
+  it.each([
     ["en", "Extract files guide (opens in a new tab)", "Remove the affected input"],
     ["de", "Anleitung zum Entpacken (öffnet in einem neuen Tab)", "Entferne die betroffene Eingabe"],
     ["es", "Guía para extraer archivos (se abre en una pestaña nueva)", "Quita la entrada afectada"],

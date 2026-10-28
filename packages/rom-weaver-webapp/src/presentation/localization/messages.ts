@@ -1210,7 +1210,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.create.outputHelp": msg({
     id: "ui.create.outputHelp",
     message:
-      "The raw patch file is downloaded by default. Choose ZIP or 7z under Options → Type to package it in an archive.",
+      "Options → Type sets the download: None gives the raw patch file, and ZIP or 7z packages it in an archive. New settings start on None.",
   }),
   "ui.errorRecovery.memory": msg({
     id: "ui.errorRecovery.memory",

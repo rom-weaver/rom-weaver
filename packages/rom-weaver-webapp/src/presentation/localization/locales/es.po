@@ -6026,4 +6026,4 @@ msgstr "Detalles técnicos"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.outputHelp"
-msgstr "De forma predeterminada se descarga el parche sin comprimir. Elige ZIP o 7z en Opciones → Tipo para empaquetarlo en un archivo comprimido."
+msgstr "En Opciones → Tipo se elige la descarga: None entrega el parche sin comprimir, y ZIP o 7z lo empaqueta en un archivo comprimido. Los ajustes nuevos empiezan en None."
