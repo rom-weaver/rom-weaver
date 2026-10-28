@@ -270,6 +270,7 @@ const ChecksumOverrideRow = ({
         <input
           checked={state.checked}
           disabled={state.disabled}
+          aria-describedby={state.namesDamagedPatch ? "rom-weaver-damaged-patch-warning" : undefined}
           id="rom-weaver-checkbox-checksum-override"
           onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
           type="checkbox"
@@ -283,7 +284,9 @@ const ChecksumOverrideRow = ({
         </span>
       </label>
       {state.namesDamagedPatch ? (
-        <p className="warn">{localizer.message("ui.apply.validation.damagedPatchWarning")}</p>
+        <Notice id="rom-weaver-damaged-patch-warning" level="warn">
+          {localizer.message("ui.apply.validation.damagedPatchWarning")}
+        </Notice>
       ) : null}
     </>
   );

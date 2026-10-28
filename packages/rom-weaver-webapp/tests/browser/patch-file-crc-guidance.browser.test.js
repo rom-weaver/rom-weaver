@@ -95,6 +95,29 @@ for (const format of ["bps", "ups"]) {
     expect(output).toEqual(modified);
   });
 
+  test(`${format.toUpperCase()} patch-file CRC damage override unblocks Apply and downloads`, async () => {
+    const { bytes, rom } = await makePatch(format);
+    const damaged = bytes.slice();
+    damaged[damaged.length - 1] ^= 1;
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: { output: { compression: "none" }, validation: { requireInputChecksumMatch: true } },
+        pageDrop: { files: [rom, new File([damaged], `damaged.${format}`)], id: 1 },
+        threads: 1,
+      }),
+    );
+    const override = () => document.getElementById("rom-weaver-checkbox-checksum-override");
+    await expect.poll(() => override(), { timeout: 60000 }).not.toBeNull();
+    expect(override().getAttribute("aria-describedby")).toBe("rom-weaver-damaged-patch-warning");
+    expect(document.getElementById("rom-weaver-damaged-patch-warning").textContent).toContain(
+      "uses the damaged patch as is",
+    );
+    override().click();
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    expect((await waitForApplyOutcome()).kind).toBe("download");
+  });
+
   test(`${format.toUpperCase()} source-ROM mismatch keeps ROM guidance and its override`, async () => {
     const { bytes, original } = await makePatch(format);
     original[900] ^= 1;
