@@ -968,10 +968,12 @@ const useLocalApplyPatchFormSession = ({
 
     patchChangePendingRef.current = true;
     setPatchChangePending(true);
-    invalidatePatchDependentOutput("enablement changed", {
+    const invalidated = invalidatePatchDependentOutput("enablement changed", {
       disabledPatchCount: current.size,
     });
-  }, [activePatches.length, disabledPatchIds, invalidatePatchDependentOutput]);
+    // A failed apply leaves no output to retire, but its error describes the previous On/Off state.
+    if (!invalidated) clearDismissibleErrors();
+  }, [activePatches.length, clearDismissibleErrors, disabledPatchIds, invalidatePatchDependentOutput]);
 
   // Enablement changes alter the chain plan. Recheck both directions: disabled patches are skipped
   // from the run, while re-enabled patches need a fresh verdict before the next manual Apply.
