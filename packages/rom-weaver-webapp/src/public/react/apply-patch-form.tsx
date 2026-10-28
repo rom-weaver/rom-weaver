@@ -576,6 +576,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
   const handleLocalPatchesChange = useCallback(
     (nextPatches: BinarySource[]) => {
+      // A changed patch list starts a new run, so the sticky Apply-started guard resets.
+      applyStartedRef.current = false;
       setCompletedOutput(null);
       setCompletedCheats(undefined);
       if (!nextPatches.length) {
@@ -1844,7 +1846,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     workflowHandle,
   });
 
-  applyStartedRef.current = outputState.applyButton.loading;
+  // Sticky until the patch list changes (reset in handleLocalPatchesChange and the weave hook).
+  if (outputState.applyButton.loading) applyStartedRef.current = true;
 
   const combinedPatch = useCombinedPatch({
     revision: combinedRevision,
@@ -2129,7 +2132,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           ? { weaveRomExpectation: activeWeaveSession.romExpectation }
           : {})}
         weaveTools={{
-          memberChecksSkipped,
+          memberChecksSkipped: memberChecksSkipped && !!activeWeaveSession,
           hasOptionalEntries:
             !!activeWeaveSession?.entries.some((entry) => entry.optional) || disabledPatchIds.size > 0,
           outputVerification,

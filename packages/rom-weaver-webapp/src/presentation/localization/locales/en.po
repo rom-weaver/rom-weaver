@@ -4795,6 +4795,11 @@ msgstr "slot {slot}, index {index}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.weaveTrackChecksSkipped"
+msgstr "Some weave track checks were skipped because the title database was not available. The weave's own checks still apply."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.flowWeaveBringAfter"
 msgstr "someone sent you."
 
@@ -5292,11 +5297,6 @@ msgstr "The system of this ROM was not identified. Identify its game or choose a
 #: src/presentation/localization/messages.ts
 msgid "error.WORKER_FAILED"
 msgstr "The task stopped unexpectedly. Reload the page and try again."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.weaveTrackChecksSkipped"
-msgstr "The track checks from the identification database were skipped because it did not load in time. The weave's own checks still apply."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

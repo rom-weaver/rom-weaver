@@ -2523,7 +2523,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.weaveTrackChecksSkipped": msg({
     id: "ui.apply.weaveTrackChecksSkipped",
     message:
-      "The track checks from the identification database were skipped because it did not load in time. The weave's own checks still apply.",
+      "Some weave track checks were skipped because the title database was not available. The weave's own checks still apply.",
   }),
 };
 

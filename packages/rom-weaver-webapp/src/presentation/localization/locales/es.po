@@ -4795,6 +4795,11 @@ msgstr "ranura {slot} · índice {index}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.weaveTrackChecksSkipped"
+msgstr "Se omitieron algunas comprobaciones de pistas del weave porque la base de datos de títulos no estaba disponible. Las comprobaciones propias del weave siguen aplicándose."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.flowWeaveBringAfter"
 msgstr "que alguien te haya enviado."
 
@@ -5292,11 +5297,6 @@ msgstr "No se identificó el sistema de esta ROM. Identifica su juego o elige un
 #: src/presentation/localization/messages.ts
 msgid "error.WORKER_FAILED"
 msgstr "La ejecución del worker falló."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.weaveTrackChecksSkipped"
-msgstr "Se omitieron las comprobaciones de pistas de la base de datos de identificación porque no se cargó a tiempo. Las comprobaciones propias del weave siguen aplicándose."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

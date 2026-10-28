@@ -205,7 +205,11 @@ const useWeaveApplySession = ({
   controllersRef: MutableRefObject<WeaveSessionControllers>;
   getPatchIds: () => string[];
   seedPatchEnablement: (entries: Array<{ id: string; enabled: boolean }>) => void;
-  /** Holds true once the user has started Apply; a late lookup then leaves the run's checks alone. */
+  /**
+   * Sticky: true from the moment Apply starts (through its finished output) until the patch list or
+   * weave changes, which resets it here. A late lookup then leaves patch options alone, since a
+   * patch-option write would invalidate and delete the finished output.
+   */
   applyStartedRef?: MutableRefObject<boolean>;
 }) => {
   const appliedKeyRef = useRef<string | null>(null);
@@ -224,6 +228,23 @@ const useWeaveApplySession = ({
   // rebuilds run options from that metadata, and an export must not carry these.
   const memberLaneChecksRef = useRef<ReadonlyMap<string, string>>(new Map());
   const activeSeedPatchNamesRef = useRef<readonly string[] | null>(null);
+  // True while a skipped-checks notice or a pending late lookup belongs to the current seed.
+  const lateTrackedRef = useRef(false);
+
+  /** Drops the late handler and its notice once the patch list or weave it was seeded for is gone. */
+  const invalidateLate = useCallback(() => {
+    if (!lateTrackedRef.current) return;
+    lateTrackedRef.current = false;
+    seedGenerationRef.current += 1;
+    memberLaneChecksRef.current = new Map();
+    setMemberChecksSkipped(false);
+    // A new patch list starts a new run: a finished output no longer exists, so the guard resets.
+    if (applyStartedRef) applyStartedRef.current = false;
+  }, [applyStartedRef]);
+
+  useEffect(() => {
+    if (!weaveSession) invalidateLate();
+  }, [weaveSession, invalidateLate]);
 
   useEffect(
     () => () => {
@@ -253,6 +274,7 @@ const useWeaveApplySession = ({
             patchCount: patches.length,
           });
         }
+        invalidateLate();
         return;
       }
       const names = patches.map((patch, index) => getReactBinarySourceFileName(patch, `Patch ${index + 1}`));
@@ -273,6 +295,7 @@ const useWeaveApplySession = ({
             patchCount: names.length,
           });
         }
+        invalidateLate();
         return;
       }
       const ids = getPatchIds();
@@ -281,6 +304,7 @@ const useWeaveApplySession = ({
         return;
       }
       appliedKeyRef.current = session.key;
+      lateTrackedRef.current = false;
       const generation = seedGenerationRef.current + 1;
       seedGenerationRef.current = generation;
       seedAbortRef.current?.abort();
@@ -322,6 +346,7 @@ const useWeaveApplySession = ({
           if (!isCurrent()) return;
           memberLaneChecksRef.current = laneCheckTokens(memberLaneChecks, ids);
           setMemberChecksSkipped(skipped);
+          lateTrackedRef.current = skipped || !!late;
           // The lookup finished after the bound: seed the lanes once it lands, unless the seed was
           // replaced or the user already started Apply with the checks the weave declared.
           void late
@@ -329,10 +354,13 @@ const useWeaveApplySession = ({
               if (!(isCurrent() && lateChecks) || applyStartedRef?.current) return;
               // The lookup completed, so the checks are no longer skipped even with nothing to seed.
               setMemberChecksSkipped(false);
+              lateTrackedRef.current = false;
               if (!lateChecks.size) return;
               memberLaneChecksRef.current = laneCheckTokens(lateChecks, ids);
               const lastIndex = Math.max(...lateChecks.keys());
               for (const [index, checks] of lateChecks) {
+                // Apply started, or the patch list changed, during an earlier lane await.
+                if (!isCurrent() || applyStartedRef?.current) return;
                 await Promise.resolve(
                   controllersRef.current.patchStack?.setPatchOption?.(index, {
                     inputChecks: weaveCheckTokens(checks) || "",
@@ -395,7 +423,7 @@ const useWeaveApplySession = ({
         }
       })();
     },
-    [weaveMetaById, controllersRef, weaveSession, getPatchIds, seedPatchEnablement, applyStartedRef],
+    [weaveMetaById, controllersRef, weaveSession, getPatchIds, seedPatchEnablement, applyStartedRef, invalidateLate],
   );
 
   // Replay the match when the session lands AFTER its patches did (local

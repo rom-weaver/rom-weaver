@@ -4795,6 +4795,11 @@ msgstr "Slot {slot} · Index {index}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.weaveTrackChecksSkipped"
+msgstr "Einige Spurprüfungen des Weaves wurden übersprungen, weil die Titeldatenbank nicht verfügbar war. Die eigenen Prüfungen des Weaves gelten weiterhin."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.flowWeaveBringAfter"
 msgstr ", die dir jemand geschickt hat."
 
@@ -5292,11 +5297,6 @@ msgstr "Das System dieser ROM wurde nicht erkannt. Identifiziere ihr Spiel oder 
 #: src/presentation/localization/messages.ts
 msgid "error.WORKER_FAILED"
 msgstr "Die Worker-Ausführung ist fehlgeschlagen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.weaveTrackChecksSkipped"
-msgstr "Die Spurprüfungen aus der Identifikationsdatenbank wurden übersprungen, weil sie nicht rechtzeitig geladen wurde. Die eigenen Prüfungen des Weaves gelten weiterhin."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

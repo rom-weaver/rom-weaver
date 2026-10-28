@@ -273,7 +273,17 @@ describe("useWeaveApplySession", () => {
       status: "matched",
     } as never;
 
+    const laneSession = () =>
+      session({
+        entries: [
+          { fileName: "first.ips", id: "first", optional: false, target: { member: "track01.bin", rom: true } },
+          { fileName: "second.ips", id: "second", optional: false, target: { member: "track02.bin", rom: true } },
+        ],
+      });
+    let shownSession: WeaveApplySession | null = null;
+
     const mount = (applyStartedRef?: { current: boolean }) => {
+      shownSession = laneSession();
       const setPatchOption = vi.fn().mockResolvedValue(undefined);
       const controllersRef = {
         current: {
@@ -286,12 +296,7 @@ describe("useWeaveApplySession", () => {
       } as never;
       const hook = renderHook(() =>
         useWeaveApplySession({
-          weaveSession: session({
-            entries: [
-              { fileName: "first.ips", id: "first", optional: false, target: { member: "track01.bin", rom: true } },
-              { fileName: "second.ips", id: "second", optional: false, target: { member: "track02.bin", rom: true } },
-            ],
-          }),
+          weaveSession: shownSession,
           controllersRef,
           getPatchIds: () => ["slot-1", "slot-2"],
           applyStartedRef,
@@ -346,6 +351,81 @@ describe("useWeaveApplySession", () => {
         expect(result.current.memberChecksSkipped).toBe(true);
         expect(result.current.memberLaneChecksRef.current.size).toBe(0);
         expect(setPatchOption).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("stops seeding lanes when Apply starts during an earlier lane write", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const applyStartedRef = { current: false };
+        const { resolveLookup, setPatchOption } = await timedOutLookup(applyStartedRef);
+        setPatchOption.mockImplementation(async () => {
+          applyStartedRef.current = true;
+        });
+        setPatchOption.mockClear();
+        await act(async () => resolveLookup(twoTrackMatch));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(10);
+        });
+        expect(setPatchOption).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("leaves patch options alone when the sticky guard stayed true through a finished run", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const applyStartedRef = { current: false };
+        const { resolveLookup, setPatchOption } = await timedOutLookup(applyStartedRef);
+        // Apply ran and finished before the lookup landed; the form keeps the guard true.
+        applyStartedRef.current = true;
+        setPatchOption.mockClear();
+        await act(async () => resolveLookup(twoTrackMatch));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(10);
+        });
+        expect(setPatchOption).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("drops the late handler and the notice when the patch list changes after seeding", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const { result, resolveLookup, setPatchOption } = await timedOutLookup();
+        expect(result.current.memberChecksSkipped).toBe(true);
+        setPatchOption.mockClear();
+        act(() => result.current.handleWeavePatchesChange([patch("second.ips")]));
+        expect(result.current.memberChecksSkipped).toBe(false);
+        await act(async () => resolveLookup(twoTrackMatch));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(10);
+        });
+        expect(setPatchOption).not.toHaveBeenCalled();
+        expect(result.current.memberLaneChecksRef.current.size).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("drops the late handler and the notice when the weave is dismissed after seeding", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const { rerender, result, resolveLookup, setPatchOption } = await timedOutLookup();
+        expect(result.current.memberChecksSkipped).toBe(true);
+        setPatchOption.mockClear();
+        shownSession = null;
+        rerender();
+        await waitFor(() => expect(result.current.memberChecksSkipped).toBe(false));
+        await act(async () => resolveLookup(twoTrackMatch));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(10);
+        });
+        expect(setPatchOption).not.toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
       }

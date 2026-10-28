@@ -141,4 +141,51 @@ describe("late identification after the ingest bound", () => {
     expect(rom.identification).toEqual({ matches: [], status: "unknown" });
     expect(adapters.onIdentified).toHaveBeenCalledTimes(1);
   });
+
+  describe("a hash-only miss that cannot see every variant or track", () => {
+    const missWith = async (patch: Record<string, unknown>) => {
+      let settle: (ok: boolean) => void = () => undefined;
+      const mounted = setup(new Promise<boolean>((resolve) => (settle = resolve)));
+      vi.mocked(lookupExpectedRom).mockResolvedValue(undefined);
+      await finalizeApplyInputChecksums(mounted.session as never, mounted.adapters as never);
+      // Finalize records the ingest's own variants; set the shape under test afterwards.
+      Object.assign(mounted.rom, patch);
+      settle(true);
+      await flush();
+      return mounted;
+    };
+
+    it("stays unavailable for a headered asset with a remove-header variant", async () => {
+      const { adapters, rom } = await missWith({
+        checksumVariants: [
+          { checksums: { crc32: "d4c3b2a1" }, id: "raw", label: "Raw" },
+          { checksums: { crc32: "11223344" }, id: "remove-header", label: "Header removed" },
+        ],
+        fileName: "game.nes",
+      });
+      expect((rom.identification as { status: string }).status).toBe("unavailable");
+      expect(adapters.onIdentified).not.toHaveBeenCalled();
+    });
+
+    it("stays unavailable for a disc track and for a CHD", async () => {
+      const track = await missWith({ discGroupId: "disc-1", kind: "track", trackNumber: 1 });
+      expect((track.rom.identification as { status: string }).status).toBe("unavailable");
+      expect(track.adapters.onIdentified).not.toHaveBeenCalled();
+      const chd = await missWith({ fileName: "disc.chd" });
+      expect((chd.rom.identification as { status: string }).status).toBe("unavailable");
+    });
+
+    it("still upgrades a headered asset on a positive match", async () => {
+      let settle: (ok: boolean) => void = () => undefined;
+      const { adapters, rom, session } = setup(new Promise<boolean>((resolve) => (settle = resolve)));
+      const matched = { matches: [{ name: "Game" }], status: "matched" };
+      vi.mocked(lookupExpectedRom).mockResolvedValue(matched as never);
+      await finalizeApplyInputChecksums(session as never, adapters as never);
+      Object.assign(rom, { checksumVariants: [{ id: "raw" }, { id: "remove-header" }], fileName: "game.nes" });
+      settle(true);
+      await flush();
+      expect(rom.identification).toEqual(matched);
+      expect(adapters.onIdentified).toHaveBeenCalledTimes(1);
+    });
+  });
 });

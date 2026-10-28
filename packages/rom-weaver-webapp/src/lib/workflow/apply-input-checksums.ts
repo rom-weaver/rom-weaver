@@ -50,9 +50,21 @@ type InputChecksumAdapters<TSource> = {
 };
 
 /**
+ * True only when a raw hash-only lookup sees everything normal ingest would match: one plain ROM
+ * blob with no extra checksum variants (header-removed, N64 byte orders) and no disc tracks.
+ */
+const hashLookupCoversAsset = (asset: InputAsset): boolean =>
+  asset.kind === "rom" &&
+  (asset.checksumVariants?.length ?? 0) <= 1 &&
+  !(asset.groupId || asset.discGroupId || asset.trackNumber !== undefined || asset.chdCodecMode !== undefined) &&
+  !/\.(chd|cue|gdi|iso|bin)$/i.test(asset.fileName);
+
+/**
  * An ingest that stopped waiting for identify data reports `unavailable` while the pack keeps
  * loading. Once that load succeeds, look the already-computed checksums up again and update the
  * card; a failed load, a removed or replaced input, or a changed identification leaves it alone.
+ * The lookup is hash-only, so a miss is reported as `unknown` only when it covers the whole input;
+ * otherwise the input stays `unavailable` (a miss could be a variant or disc fingerprint it cannot see).
  */
 const reidentifyWhenLoaded = <TSource>({
   adapters,
@@ -76,6 +88,8 @@ const reidentifyWhenLoaded = <TSource>({
       ...(typeof asset.size === "number" ? { size: asset.size } : {}),
     });
     if (found?.status === "unavailable") return;
+    const matched = !!found && found.status !== "unknown" && (found.matches?.length ?? 1) > 0;
+    if (!(matched || hashLookupCoversAsset(asset))) return;
     if (!adapters.isCurrentSession(session) || asset.identification !== pending) return;
     asset.identification = found ?? ({ matches: [], status: "unknown" } satisfies ParsedIdentifyResolution);
     if (getPrimaryInputAsset(stage.preparedInputAssets || []) === asset) {
