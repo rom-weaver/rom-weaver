@@ -1251,7 +1251,7 @@ msgstr "Elija el juego que necesita"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.validationMismatchOverride"
-msgstr "Elige la ROM para la que se creó este parche o usa la anulación en 0x04."
+msgstr "Elige la ROM para la que se creó este parche o usa la anulación en el paso 0x04."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

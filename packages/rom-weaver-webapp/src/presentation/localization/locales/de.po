@@ -1251,7 +1251,7 @@ msgstr "Wählen Sie das benötigte Spiel"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.validationMismatchOverride"
-msgstr "Wähle die ROM, für die dieser Patch erstellt wurde, oder nutze die Überschreibung in 0x04."
+msgstr "Wähle die ROM, für die dieser Patch erstellt wurde, oder nutze die Überschreibung in Schritt 0x04."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
