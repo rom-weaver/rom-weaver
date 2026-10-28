@@ -964,17 +964,3 @@
 .rw-app .identify-search-result-btn:active {
   background: var(--plate-2);
 }
-/* Playlist tool: the disc list is an ordered list of file cards with move buttons in the action column. */
-.rw-app ol.cards {
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-.rw-app .playlist-order-buttons {
-  display: flex;
-  gap: var(--sp-s);
-}
-.rw-app .playlist-extras {
-  color: var(--ink-3);
-  overflow-wrap: anywhere;
-}

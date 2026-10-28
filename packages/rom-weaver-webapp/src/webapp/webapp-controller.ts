@@ -48,7 +48,6 @@ const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
   "extract",
   "identify",
   "trim",
-  "playlist",
   "ppf-undo",
   "save-editor",
   "test",

@@ -2855,11 +2855,6 @@ msgstr "Make all optional"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.docs.toolPlaylist"
-msgstr "Make an M3U playlist"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.cheats.manualDescription"
 msgstr "Manual cheat"
 
@@ -4087,11 +4082,6 @@ msgstr "Read the full FAQ"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyGuide"
 msgstr "Read the Identify guide"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.playlistGuide"
-msgstr "Read the M3U playlist guide"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

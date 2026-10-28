@@ -32,8 +32,6 @@ const OFFLINE_PAGES = [
   { expectedView: "trim", label: "trim canonical", path: "trim-rom" },
   { expectedView: "trim", label: "trim canonical directory", path: "trim-rom/" },
   { expectedView: "trim", label: "trim canonical document", path: "trim-rom/index.html" },
-  { expectedView: "playlist", label: "m3u-playlist directory", path: "m3u-playlist/" },
-  { expectedView: "playlist", label: "m3u-playlist directory document", path: "m3u-playlist/index.html" },
   { expectedView: "ppf-undo", label: "ppf-undo directory", path: "ppf-undo/" },
   { expectedView: "ppf-undo", label: "ppf-undo directory document", path: "ppf-undo/index.html" },
   { expectedView: "save-editor", label: "save-editor directory", path: "save-editor/" },
