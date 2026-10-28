@@ -511,7 +511,13 @@ const getFinalOutputChecksums = (patchIndices: number[], patchOptions: PatchInpu
   const checksum = declared.toLowerCase().replace(/^0x/, "");
   const algorithm = identifyHashAlgorithm(checksum);
   if (!algorithm) throw new Error("Output checksum must be a CRC32, MD5, or SHA-1 hex digest");
-  return [`${algorithm}=${checksum}`];
+  const expected = `${algorithm}=${checksum}`;
+  // A value the last step already declares (weave patch outputChecks) is enforced per step in the
+  // normalized layout; expect_out compares the delivered layout (N64 byte order, headers) and would
+  // reject a correct result the user supplied swapped or headered.
+  const stepChecks = patchOptions?.[lastIndex ?? -1]?.outputChecks?.toLowerCase().split(/[\s,]+/);
+  if (stepChecks?.includes(expected)) return undefined;
+  return [expected];
 };
 
 const canReuseWorkerOutputPath = (output: PublicOutputWithApplySummary) =>

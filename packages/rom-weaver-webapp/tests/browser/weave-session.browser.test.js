@@ -2171,6 +2171,29 @@ test.each([
   }
 });
 
+test("a wrong declared output check on a byte-swapped N64 weave is still rejected", async () => {
+  const body = withBytes(noiseBytes(1024 * 1024, 0x64), 0, [0x80, 0x37, 0x12, 0x40]);
+  const records = [[0x100, 0xf2]];
+  const patches = [new File([createIps(records)], "first.ips")];
+  const wrong = await fileChecks(applyRecords(body, [[0x100, 0xf3]]));
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "transform-output" },
+      patches: [{ path: patches[0].name, outputChecks: wrong }],
+      rom: { checks: await fileChecks(body), name: "game.v64" },
+      version: 1,
+    },
+    patches,
+  );
+  mountStrict([weaveArchive, new File([byteSwap16(body)], "game.v64")]);
+  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("transform-output");
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  const outcome = await waitForApplyOutcome();
+  expect(outcome?.kind).toBe("error");
+  expect(outcome?.errorText).toContain("checksum mismatch");
+});
+
 test("auto basis keeps an independent embedded raw BPS source", async () => {
   const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
   const first = withBytes(headered, 0xa8, [0x12]);
