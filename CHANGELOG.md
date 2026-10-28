@@ -1,12 +1,49 @@
 # Changelog
 
-## [0.23.0](https://github.com/rom-weaver/rom-weaver/compare/v0.22.2...v0.23.0) (2026-10-28)
+## [0.23.0](https://github.com/rom-weaver/rom-weaver/releases/tag/v0.23.0) (2026-10-28)
 
+### Highlights
+
+#### Breaking changes
+
+* Rust library users must update: the `rom-weaver-core` N64 byte-order type is now `N64ByteOrder` (replacing `PatchInputN64ByteOrder`), and `rom-weaver-cli` probe and identify commands take their archive selection options through one shared field; command-line flags and JSON output are unchanged (#1372, #1371)
+
+#### New features
+
+* Build an `.m3u` playlist for multi-disc games with the new `playlist` command, ordering discs from names like `Disc 1` and optionally bundling them into a ZIP ([#1283](https://github.com/rom-weaver/rom-weaver/issues/1283))
+* Drop a save file on the home page to open it in Test, or restore a Saves & storage backup without typing the ROM's SHA-1 ([#1327](https://github.com/rom-weaver/rom-weaver/issues/1327))
+* Keep weave cheats as separate toggleable IPS steps when exporting, instead of merging them into one patch ([#1331](https://github.com/rom-weaver/rom-weaver/issues/1331))
+* Extract split WBFS sets (`.wbfs` plus `.wbf1`, `.wbf2`, ...) in the browser ([#1305](https://github.com/rom-weaver/rom-weaver/issues/1305))
+* Extract CSO v1 and v2 (deflate, LZ4, raw blocks) and GameCube CISO images (#1271, #1287, #1286)
+* See what changed since your last visit, with release dates on the What's new page (#1269, #1351)
+
+#### Improvements
+
+* Apply UPS, DLDI, SOLID, BSP and RUP patches to read-only inputs, and apply reverse UPS patches in the browser (#1432, #1469)
+* Apply sparse PPF, PMSR, PAT and APS patches and HDiffPatch patches with much less memory by streaming instead of buffering whole files (#1423, #1418)
+* Create CHDs with the vendored writer and match chdman for CD and GD-ROM pregaps, padding and mixed-size tracks (#1309, #1312, #1311, #1315)
+* Large disc images no longer exhaust memory on iOS tabs, and dropping many files at once no longer crashes the page (#1431, #1317)
+* Hash small files faster by skipping threads ([#1386](https://github.com/rom-weaver/rom-weaver/issues/1386))
+
+#### Fixes
+
+* Stop compress and extract cleanly on Ctrl-C, and keep the original file when `compress --force` stops early (#1391, #1394)
+* Keep Unicode and legacy-encoded archive member names intact on extract (#1334, #1341)
+* Extract 7z and RVZ images within the 1 GiB browser memory limit, and fix 7z folders that read past a full buffer (#1336, #1338)
+* Keep NFS companion files during Apply and loose GDI track groups, and extract LZ4 stream payloads (#1466, #1462, #1468)
+* Refuse multi-disc PBP extracts before writing any disc ([#1398](https://github.com/rom-weaver/rom-weaver/issues/1398))
+* Accept size-only patches on headered ROMs and keep the ROM extension on dotted file names in Apply (#1344, #1343)
+* Report a full browser storage quota as an out-of-space error ([#1345](https://github.com/rom-weaver/rom-weaver/issues/1345))
 
 ### ⚠ BREAKING CHANGES
 
 * **core:** unify N64 byte order into one core type ([#1372](https://github.com/rom-weaver/rom-weaver/issues/1372))
 * **cli:** share archive selection args between probe and identify ([#1371](https://github.com/rom-weaver/rom-weaver/issues/1371))
+
+<details>
+<summary>All changes</summary>
+
+[Compare v0.22.2...v0.23.0](https://github.com/rom-weaver/rom-weaver/compare/v0.22.2...v0.23.0)
 
 ### Features
 
@@ -20,7 +57,6 @@
 * **webapp:** keep weave cheats toggleable [[#1330](https://github.com/rom-weaver/rom-weaver/issues/1330)] ([#1331](https://github.com/rom-weaver/rom-weaver/issues/1331)) ([9c9bdb5](https://github.com/rom-weaver/rom-weaver/commit/9c9bdb5fca27040a2373980618d556777dfaface))
 * **webapp:** show what changed since last visit ([#1269](https://github.com/rom-weaver/rom-weaver/issues/1269)) ([96d0622](https://github.com/rom-weaver/rom-weaver/commit/96d06228582db04226e750969370b0c7d2fe2c32))
 
-
 ### User Experience
 
 * **chd:** create CHDs with the vendored chd-rs writer ([#1309](https://github.com/rom-weaver/rom-weaver/issues/1309)) ([4c92947](https://github.com/rom-weaver/rom-weaver/commit/4c92947d174e8cb3df416067c338c9b298ad8c8a))
@@ -29,7 +65,6 @@
 * **webapp:** put console actions beside close ([#1310](https://github.com/rom-weaver/rom-weaver/issues/1310)) ([d8e39d5](https://github.com/rom-weaver/rom-weaver/commit/d8e39d5ebd6829f254de2eb3acbe86d38d9b57ff))
 * **webapp:** show a pending card while practice files load ([#1382](https://github.com/rom-weaver/rom-weaver/issues/1382)) ([59e046d](https://github.com/rom-weaver/rom-weaver/commit/59e046dd0cb5beae1e78527334a5d1f6859c9177))
 * **webapp:** show release dates on the What's new page ([#1351](https://github.com/rom-weaver/rom-weaver/issues/1351)) ([dcf7f29](https://github.com/rom-weaver/rom-weaver/commit/dcf7f29758d1cae9b67c18d94a2b1e9e73b47c4c))
-
 
 ### Bug Fixes
 
@@ -121,11 +156,9 @@
 * **webapp:** stop large discs exhausting iOS tab memory ([#1431](https://github.com/rom-weaver/rom-weaver/issues/1431)) ([b97392a](https://github.com/rom-weaver/rom-weaver/commit/b97392acbc83ea47195b049ff242d890b614f8a2))
 * **webapp:** use automatic name after clearing output ([#1347](https://github.com/rom-weaver/rom-weaver/issues/1347)) ([f1e9233](https://github.com/rom-weaver/rom-weaver/commit/f1e923306b92795ed6027bf8a4fa8d1300f820cb))
 
-
 ### Accessibility
 
 * **webapp:** make heading actions easier to tap ([#1340](https://github.com/rom-weaver/rom-weaver/issues/1340)) ([e08c105](https://github.com/rom-weaver/rom-weaver/commit/e08c105e59614601b7b91f8d67f3e7508174682f))
-
 
 ### Performance Improvements
 
@@ -145,12 +178,10 @@
 * **webapp:** keep boot logging and the locale sort off hydration ([#1393](https://github.com/rom-weaver/rom-weaver/issues/1393)) ([ec4da9b](https://github.com/rom-weaver/rom-weaver/commit/ec4da9b58d722096c6add8c631f831c826cfdc5a))
 * **webapp:** stage trimmed archive entries from OPFS paths ([#1404](https://github.com/rom-weaver/rom-weaver/issues/1404)) ([078c1eb](https://github.com/rom-weaver/rom-weaver/commit/078c1eba3407f010d39a0de2c722a53b42df2e5f))
 
-
 ### Reverts
 
 * **webapp:** arm thread slots up front again ([#1400](https://github.com/rom-weaver/rom-weaver/issues/1400)) ([7fa433c](https://github.com/rom-weaver/rom-weaver/commit/7fa433c789f2de18ae64f053490d7e4b829723bc))
 * **webapp:** remove the M3U playlist tool ([#1481](https://github.com/rom-weaver/rom-weaver/issues/1481)) ([0772f59](https://github.com/rom-weaver/rom-weaver/commit/0772f59b37d880a15ecc8ea3401344fdbf1aa8e5))
-
 
 ### Documentation
 
@@ -158,12 +189,10 @@
 * retitle zero-click patching explainer and checksum intro ([#1420](https://github.com/rom-weaver/rom-weaver/issues/1420)) ([f551c2f](https://github.com/rom-weaver/rom-weaver/commit/f551c2f431c7e55803045f1e34c476f6a00f30f3))
 * **webapp:** date Notices by the release that last changed it ([#1479](https://github.com/rom-weaver/rom-weaver/issues/1479)) ([293c09c](https://github.com/rom-weaver/rom-weaver/commit/293c09c369b636f069320485c96a145418f01655))
 
-
 ### Developer Experience
 
 * add read-only traffic report script ([#1426](https://github.com/rom-weaver/rom-weaver/issues/1426)) ([6dc7189](https://github.com/rom-weaver/rom-weaver/commit/6dc7189c4a1e52864fa3786489cd04b341ec374c))
 * measure SEO changes per page in the traffic report ([#1429](https://github.com/rom-weaver/rom-weaver/issues/1429)) ([108cd71](https://github.com/rom-weaver/rom-weaver/commit/108cd7142231af47a48d6c68d089bd48c4c90ee7))
-
 
 ### Dependencies
 
@@ -190,8 +219,8 @@
 * bump the rust-dependencies group with 6 updates ([#1416](https://github.com/rom-weaver/rom-weaver/issues/1416)) ([27f8b03](https://github.com/rom-weaver/rom-weaver/commit/27f8b032ec4ce3aac6fb4aed766a2d59fcda59ce))
 * bump vite from 8.3.4 to 8.3.5 in /packages/rom-weaver-webapp in the build-toolchain group ([#1409](https://github.com/rom-weaver/rom-weaver/issues/1409)) ([3d76244](https://github.com/rom-weaver/rom-weaver/commit/3d7624418664bf12de1897caa9fe4aaf512c63cf))
 
-
-### Internal
+<details>
+<summary>Internal</summary>
 
 * **cheats:** take cheat code splitting from Rust and unify title matching ([#1378](https://github.com/rom-weaver/rom-weaver/issues/1378)) ([55fdc96](https://github.com/rom-weaver/rom-weaver/commit/55fdc96c820b18005b8edb19c500caab2ac8572e))
 * **checksum:** derive algorithm facts from one table and generate TS metadata ([#1374](https://github.com/rom-weaver/rom-weaver/issues/1374)) ([c20c486](https://github.com/rom-weaver/rom-weaver/commit/c20c486ad9f8165573fbcb5bb61b95f0f1b68ce6))
@@ -222,6 +251,8 @@
 * **webapp:** read weave check refs and filename tokens from Rust ([#1375](https://github.com/rom-weaver/rom-weaver/issues/1375)) ([3442e77](https://github.com/rom-weaver/rom-weaver/commit/3442e7763b285b226124f240c151287ce1c38a80))
 * **webapp:** stop vitest cache race in browser runner ([#1482](https://github.com/rom-weaver/rom-weaver/issues/1482)) ([9903dc4](https://github.com/rom-weaver/rom-weaver/commit/9903dc44c84ff2253cad9186dc8c752392815f56))
 * **webapp:** trace swallowed Apply clicks in E2E download timeouts ([#1428](https://github.com/rom-weaver/rom-weaver/issues/1428)) ([32f9a04](https://github.com/rom-weaver/rom-weaver/commit/32f9a0487353c867b4774e0258d7b00b893c527b))
+</details>
+</details>
 
 ## [0.22.2](https://github.com/rom-weaver/rom-weaver/releases/tag/v0.22.2) (2026-10-18)
 
