@@ -19,6 +19,7 @@ import { reportProgress } from "../../lib/progress/progress-reporting.ts";
 import { getNamedSourcePath } from "../../storage/shared/binary/source-file-utils.ts";
 import { copyRuntimeOutputToPath } from "../../storage/vfs/runtime-output.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
+import { identifyHashAlgorithm } from "../../types/identify.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { PatchApplySummary, PatchFileInstance } from "../../types/workflow-internal.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
@@ -503,6 +504,16 @@ const getPatchChecks = (
   return checks.some(Boolean) ? checks : undefined;
 };
 
+const getFinalOutputChecksums = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) => {
+  const lastIndex = patchIndices.at(-1);
+  const declared = patchOptions?.[lastIndex ?? -1]?.validateOutputChecksum?.trim();
+  if (!declared) return undefined;
+  const checksum = declared.toLowerCase().replace(/^0x/, "");
+  const algorithm = identifyHashAlgorithm(checksum);
+  if (!algorithm) throw new Error("Output checksum must be a CRC32, MD5, or SHA-1 hex digest");
+  return [`${algorithm}=${checksum}`];
+};
+
 const canReuseWorkerOutputPath = (output: PublicOutputWithApplySummary) =>
   !!(
     output &&
@@ -551,6 +562,7 @@ const applyPatchesToAsset = async ({
   const patchTargets = getPatchTargets(patchIndices, patchOptions, asset, bareMemberRule);
   const patchInputChecks = getPatchChecks(patchIndices, patchOptions, "inputChecks");
   const patchOutputChecks = getPatchChecks(patchIndices, patchOptions, "outputChecks");
+  const finalOutputChecksums = getFinalOutputChecksums(patchIndices, patchOptions);
   const selectedPatches = getSelectedPatchInputs(assetPatches, patches, patchFiles);
   const patchNames = selectedPatches.map((entry) => entry.patchFileName).filter(Boolean);
   const patchLabel = patchNames.length
@@ -583,6 +595,7 @@ const applyPatchesToAsset = async ({
       ...(patchTargets ? { patchTargets } : {}),
       ...(patchInputChecks ? { patchInputChecks } : {}),
       ...(patchOutputChecks ? { patchOutputChecks } : {}),
+      ...(finalOutputChecksums ? { validateWithOutputChecksums: finalOutputChecksums } : {}),
     },
     patches: selectedPatches,
     signal: options.signal,

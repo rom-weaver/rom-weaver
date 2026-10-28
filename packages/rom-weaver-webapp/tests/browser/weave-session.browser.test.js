@@ -556,6 +556,107 @@ const captureDownloads = () => {
   };
 };
 
+test.each(["deadbeef", "2cccfa33"])("v1 IPS weave enforces final-output CRC32 %s", async (crc32) => {
+  const romFile = new File(["ORIGINAL-ROM\n"], "game.bin");
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { checks: { checksums: { crc32 } }, name: "audit" },
+        patches: [{ name: "Core", path: "change.ips" }],
+        rom: { checks: { checksums: { crc32: "c6fb1252" } }, name: "game.bin" },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  const weaveArchive = await buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: createIpsPatch("change.ips", 1, 0x58), fileName: "change.ips" },
+    ],
+    "final-output-check.zip",
+  );
+  const capture = captureDownloads();
+  try {
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: { output: { compression: "none" } },
+        pageDrop: { files: [romFile, weaveArchive], id: 1 },
+      }),
+    );
+    await expect.poll(() => getOutputFileNameValue()).toBe("audit");
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    const outcome = await waitForApplyOutcome();
+    if (crc32 === "deadbeef") {
+      expect(outcome?.kind).toBe("error");
+      expect(outcome?.errorText).toContain("output checksum mismatch for crc32; expected deadbeef, actual 2cccfa33");
+      expect(capture.getDownloads()).toEqual([]);
+      return;
+    }
+    expect(outcome).toEqual({ kind: "download" });
+    await expect.poll(() => capture.getDownloads().length).toBe(1);
+    const download = capture.getDownloads()[0];
+    expect(download.name).toBe("audit.bin");
+    expect(new TextDecoder().decode(await download.blob.arrayBuffer())).toBe("OXIGINAL-ROM\n");
+    expect(await sha256Hex(download.blob)).toBe("43b1cc171d0b795e224072752effd13400f6392d0fab8d0793373cce4b4f46fb");
+  } finally {
+    capture.restore();
+  }
+});
+
+test("weave final-output CRC32 stands down for a partial chain and returns for the full chain", async () => {
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { checks: { checksums: { crc32: "deadbeef" } }, name: "partial-output" },
+        patches: [
+          { name: "Optional", optional: true, path: "optional.ips" },
+          { name: "Core", path: "change.ips" },
+        ],
+        rom: { checks: { checksums: { crc32: "c6fb1252" } }, name: "game.bin" },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  const weaveArchive = await buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: createIpsPatch("optional.ips", 0, 0x59), fileName: "optional.ips" },
+      { file: createIpsPatch("change.ips", 1, 0x58), fileName: "change.ips" },
+    ],
+    "partial-final-output-check.zip",
+  );
+  const capture = captureDownloads();
+  try {
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: { output: { compression: "none" } },
+        pageDrop: { files: [new File(["ORIGINAL-ROM\n"], "game.bin"), weaveArchive], id: 1 },
+      }),
+    );
+    await expect.poll(() => getPatchToggles().map((toggle) => toggle.checked)).toEqual([false, true]);
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    await expect.poll(() => capture.getDownloads().length).toBe(1);
+
+    getPatchToggles()[0].click();
+    await expect.poll(() => getPatchToggles()[0].checked).toBe(true);
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    const outcome = await waitForApplyOutcome();
+    expect(outcome?.kind).toBe("error");
+    expect(outcome?.errorText).toContain("output checksum mismatch for crc32; expected deadbeef");
+    expect(capture.getDownloads()).toHaveLength(1);
+  } finally {
+    capture.restore();
+  }
+});
+
 const applyDottedSampleWeave = async ({
   compression,
   typedName,
@@ -679,6 +780,7 @@ test("expected-ROM checks follow a reordered sample weave", async () => {
     expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
     const options = applySpy.mock.calls.at(-1)?.[0]?.options;
     expect(options?.validateWithChecksums).toBeUndefined();
+    expect(options?.validateWithOutputChecksums).toBeUndefined();
     expect(options?.patchInputChecks).toBeUndefined();
   } finally {
     applySpy.mockRestore();

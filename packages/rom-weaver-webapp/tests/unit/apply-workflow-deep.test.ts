@@ -80,6 +80,66 @@ beforeEach(() => {
   mocks.createPatchFileFromPublicOutput.mockImplementation(async (output: unknown) => output);
 });
 
+describe("runApplyWorkflow final-output checksum", () => {
+  const applyWithChecksum = async (checksum?: string) => {
+    const inputAsset = asset();
+    const first = parsedPatch();
+    const last = parsedPatch();
+    const runtime = makeRuntime();
+    mocks.resolvePatchTargets.mockResolvedValue([inputAsset, inputAsset]);
+    mocks.buildSessionOutputFiles.mockResolvedValue({ files: [runtime.output] });
+    await runApplyWorkflow(
+      {
+        inputs: sourceRef("game.bin", 20),
+        options: { output: { outputName: "result" } },
+        parsedPatches: [first, last],
+        patchOptions: [
+          { validateOutputChecksum: "11111111" },
+          { outputChecks: "size=30", validateOutputChecksum: checksum },
+        ],
+        patches: [sourceRef("first.ips", 4), sourceRef("last.ips", 4)],
+        preparedInputAssets: [inputAsset],
+        preparedPatchFiles: [patchFile("first.ips"), patchFile("last.ips")],
+      } as never,
+      runtime as never,
+    );
+    return runtime;
+  };
+
+  it.each([
+    ["deadbeef", "crc32=deadbeef"],
+    [" 0xDEADBEEF ", "crc32=deadbeef"],
+    ["0123456789abcdef0123456789abcdef", "md5=0123456789abcdef0123456789abcdef"],
+    ["0123456789abcdef0123456789abcdef01234567", "sha1=0123456789abcdef0123456789abcdef01234567"],
+  ])("forwards the final patch's %s checksum as %s", async (checksum, token) => {
+    const runtime = await applyWithChecksum(checksum);
+    expect(runtime.patch.applyPatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          patchOutputChecks: ["", "size=30"],
+          validateWithOutputChecksums: [token],
+        }),
+      }),
+    );
+  });
+
+  it.each([undefined, "", " "])(
+    "omits a cleared final checksum (%s) despite earlier patch checks",
+    async (checksum) => {
+      const runtime = await applyWithChecksum(checksum);
+      const options = runtime.patch.applyPatch.mock.calls[0]?.[0]?.options;
+      expect(options.patchOutputChecks).toEqual(["", "size=30"]);
+      expect(options.validateWithOutputChecksums).toBeUndefined();
+    },
+  );
+
+  it.each(["0x", "bad", "zzzzzzzz"])("rejects malformed final-output checksum %s", async (checksum) => {
+    await expect(applyWithChecksum(checksum)).rejects.toThrow(
+      "Output checksum must be a CRC32, MD5, or SHA-1 hex digest",
+    );
+  });
+});
+
 describe("runApplyWorkflow validation and preparation", () => {
   it("requires an output name", async () => {
     await expect(
