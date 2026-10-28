@@ -142,3 +142,78 @@ test.each(["headers", "body"])("stalled pack %s cannot block local checksums and
   respondWith("abc");
   expect((await loadIdentifyPackSelection({ fileName: ROM.name })).packs).toHaveLength(1);
 });
+
+const stall = (signal) =>
+  new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(signal.reason), { once: true }));
+
+const stubFetch = (handlers) => {
+  const nativeFetch = globalThis.fetch.bind(globalThis);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input, options) => {
+      const url = new URL(String(input), location.href);
+      for (const [needle, handler] of Object.entries(handlers)) {
+        if (url.pathname.includes(needle)) return handler(options?.signal);
+      }
+      return nativeFetch(input, options);
+    }),
+  );
+};
+
+const indexResponse = () => Response.json({ format: "rom-weaver-identify-system-pack-v1", systems: [PACK] });
+const catalogResponse = () => Response.json({ format: "rom-weaver-identify-catalog-v1", platforms: [] });
+
+test("a slow but steadily progressing pack body longer than the idle deadline completes", async () => {
+  const encoder = new TextEncoder();
+  stubFetch({
+    "identify-index": indexResponse,
+    "identify-catalog": catalogResponse,
+    [PACK.file]: (signal) => {
+      let sent = 0;
+      return new Response(
+        new ReadableStream({
+          async pull(controller) {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            if (signal?.aborted) return controller.error(signal.reason);
+            controller.enqueue(encoder.encode("abc"[sent]));
+            sent += 1;
+            if (sent === 3) controller.close();
+          },
+        }),
+      );
+    },
+  });
+  const started = performance.now();
+  const selection = await loadIdentifyPackSelection({ fileName: ROM.name });
+  expect(selection.packs).toHaveLength(1);
+  expect(performance.now() - started).toBeGreaterThan(5000);
+}, 20000);
+
+test("a stalled identify index rejects as unavailable after the idle deadline and is retried", async () => {
+  stubFetch({ "identify-index": stall, "identify-catalog": catalogResponse, [PACK.file]: () => new Response("abc") });
+  await expect(loadIdentifyPackSelection({ fileName: ROM.name })).rejects.toHaveProperty(
+    "name",
+    "IdentifyDataUnavailableError",
+  );
+  stubFetch({
+    "identify-index": indexResponse,
+    "identify-catalog": catalogResponse,
+    [PACK.file]: () => new Response("abc"),
+  });
+  expect((await loadIdentifyPackSelection({ fileName: ROM.name })).packs).toHaveLength(1);
+}, 20000);
+
+test("a stalled identify catalog degrades without blocking and is not cached", async () => {
+  stubFetch({ "identify-index": indexResponse, "identify-catalog": stall, [PACK.file]: () => new Response("abc") });
+  const started = performance.now();
+  await loadIdentifyPackSelection({ fileName: ROM.name }).catch(() => undefined);
+  expect(performance.now() - started).toBeLessThan(9000);
+  const catalogFetch = vi.fn(catalogResponse);
+  stubFetch({
+    "identify-index": indexResponse,
+    "identify-catalog": catalogFetch,
+    [PACK.file]: () => new Response("abc"),
+  });
+  await loadIdentifyPackSelection({ fileName: ROM.name });
+  expect(catalogFetch).toHaveBeenCalledTimes(1);
+}, 20000);
