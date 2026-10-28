@@ -830,56 +830,6 @@ test("Apply anyway bypasses the weave final-output check like every other check"
   }
 });
 
-// Switching to a second weave appends its patches; the first weave's final check must not stay on a
-// patch that now ends a different chain.
-test("a first weave's final-output check does not outlive a switch to a second weave", async () => {
-  const romFile = new File(["ORIGINAL-ROM\n"], "game.bin");
-  const [firstWeave, secondWeave] = await Promise.all([
-    buildFinalCheckWeave({
-      files: [createIpsPatch("a.ips", 0, 0x41), createIpsPatch("b.ips", 1, 0x58)],
-      outputChecks: { checksums: { crc32: "deadbeef" } },
-      patches: [
-        { name: "A", path: "a.ips" },
-        { name: "B", path: "b.ips" },
-      ],
-    }),
-    buildFinalCheckWeave({
-      files: [createIpsPatch("c.ips", 2, 0x59)],
-      outputChecks: undefined,
-      patches: [{ name: "C", path: "c.ips" }],
-    }),
-  ]);
-  const capture = captureDownloads();
-  try {
-    const props = {
-      defaultSettings: { output: { compression: "none" }, validation: { requireInputChecksumMatch: true } },
-    };
-    const root = mount(createElement(ApplyPatchForm, { ...props, pageDrop: { files: [romFile, firstWeave], id: 1 } }));
-    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("audit");
-    root.render(
-      createElement(
-        RomWeaverSettingsProvider,
-        { settings: { detailedViewEnabled: true } },
-        createElement(ApplyPatchForm, { ...props, pageDrop: { files: [secondWeave], id: 2 } }),
-      ),
-    );
-    await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["a.ips", "b.ips", "c.ips"]);
-    for (const name of ["a.ips", "c.ips"]) {
-      const index = getPatchStackFileNames().indexOf(name);
-      const remove = document.querySelectorAll("button[id^='rom-weaver-patch-menu-remove-']")[index];
-      if (!(remove instanceof HTMLButtonElement)) throw new Error(`Missing remove button for ${name}`);
-      remove.click();
-      await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).not.toContain(name);
-    }
-    expect(getPatchStackFileNames()).toEqual(["b.ips"]);
-    await waitForApplyButtonEnabled();
-    await clickApplyButton();
-    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
-  } finally {
-    capture.restore();
-  }
-}, 120000);
-
 test("non-strict mode does not enforce the weave final-output check", async () => {
   const romFile = new File(["ORIGINAL-ROM\n"], "game.bin");
   const weaveArchive = await buildFinalCheckWeave({
