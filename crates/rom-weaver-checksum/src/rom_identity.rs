@@ -4,7 +4,7 @@
 //! no additional I/O, avoiding extra OPFS handles and output mutation.
 
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::{self, Cursor, Read, Seek};
 use std::path::Path;
 
 use tracing::{debug, trace};
@@ -128,8 +128,10 @@ pub fn detect_rom_identity(prefix: &[u8], total_len: u64, extension: Option<&str
         );
         return identity;
     }
-    if pbp_has_empty_psar(prefix, total_len) {
-        trace!("detected PSP homebrew PBP (empty DATA.PSAR)");
+    if rom_weaver_core::pbp::classify_pbp(&mut Cursor::new(prefix), total_len)
+        .is_ok_and(|layout| layout.kind.psp_layout().is_some())
+    {
+        trace!("detected supported PSP PBP");
         return RomIdentity {
             platform: Some(platform::PSP),
             disc_format: None,
@@ -147,18 +149,6 @@ pub fn detect_rom_identity(prefix: &[u8], total_len: u64, extension: Option<&str
         total_len, "no rom identity detected"
     );
     RomIdentity::default()
-}
-
-/// True for a `\0PBP` file whose DATA.PSAR offset (header field 0x24) equals the file size:
-/// PSP homebrew `EBOOT.PBP` with no PSAR. PlayStation PBPs always carry a PSAR, so this never
-/// matches a PS1 disc image.
-fn pbp_has_empty_psar(prefix: &[u8], total_len: u64) -> bool {
-    const PBP_HEADER_LEN: usize = 0x28;
-    if prefix.len() < PBP_HEADER_LEN || prefix[..4] != [0x00, b'P', b'B', b'P'] {
-        return false;
-    }
-    let psar_offset = u32::from_le_bytes([prefix[0x24], prefix[0x25], prefix[0x26], prefix[0x27]]);
-    u64::from(psar_offset) == total_len
 }
 
 /// A streaming sink that captures the first ≤[`DETECT_PREFIX_BYTES`] of a byte
@@ -187,6 +177,11 @@ impl IdentityPrefix {
         }
     }
 
+    /// Whether bounded PBP header reads can recover an identity beyond the captured prefix.
+    pub fn has_pbp_signature(&self) -> bool {
+        self.buf.starts_with(b"\0PBP")
+    }
+
     /// Detect the platform + medium from the captured prefix. `extension` is the
     /// source/output file extension (with leading dot) when known.
     pub fn detect(&self, extension: Option<&str>) -> RomIdentity {
@@ -208,7 +203,7 @@ impl IdentityPrefix {
     }
 }
 
-/// Read a bounded prefix from a decoded file on disk and detect its identity.
+/// Detect a file's identity using bounded PBP header reads or a bounded ROM prefix.
 ///
 /// Intended for callers holding a path to *decoded* bytes (an extracted ISO/BIN
 /// or a bare ROM) - not a compressed container, whose prefix is not disc data.
@@ -222,6 +217,17 @@ pub fn detect_rom_identity_for_path(path: &Path) -> RomIdentity {
         }
     };
     let total_len = file.metadata().map(|metadata| metadata.len()).unwrap_or(0);
+    if rom_weaver_core::pbp::classify_pbp(&mut file, total_len)
+        .is_ok_and(|layout| layout.kind.psp_layout().is_some())
+    {
+        return RomIdentity {
+            platform: Some(platform::PSP),
+            disc_format: None,
+        };
+    }
+    if file.rewind().is_err() {
+        return RomIdentity::default();
+    }
     let mut prefix = Vec::new();
     if let Err(error) = file
         .by_ref()
@@ -385,6 +391,9 @@ mod tests {
     fn detects_psp_homebrew_pbp_with_empty_psar() {
         let mut pbp = vec![0u8; 0x100];
         write(&mut pbp, 0, &[0x00, b'P', b'B', b'P']);
+        for section in 0..7 {
+            write(&mut pbp, 8 + section * 4, &0x28u32.to_le_bytes());
+        }
         write(&mut pbp, 0x24, &0x100u32.to_le_bytes());
         let identity = detect_rom_identity(&pbp, pbp.len() as u64, Some(".PBP"));
         assert_eq!(identity.platform, Some(platform::PSP));
@@ -394,6 +403,24 @@ mod tests {
             detect_rom_identity(&pbp, pbp.len() as u64, Some(".pbp")).platform,
             None
         );
+    }
+
+    #[test]
+    fn invalid_pbp_section_tables_do_not_identify_as_psp() {
+        let mut pbp = vec![0; 0x100];
+        write(&mut pbp, 0, b"\0PBP");
+        for section in 0..7 {
+            write(&mut pbp, 8 + section * 4, &0x28_u32.to_le_bytes());
+        }
+        write(&mut pbp, 0x24, &0x100_u32.to_le_bytes());
+        for (field, offset) in [(8, 0_u32), (12, 0x27), (0x20, 0x101)] {
+            let mut invalid = pbp.clone();
+            write(&mut invalid, field, &offset.to_le_bytes());
+            assert_eq!(
+                detect_rom_identity(&invalid, 0x100, Some(".pbp")).platform,
+                None
+            );
+        }
     }
 
     #[test]

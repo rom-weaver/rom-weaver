@@ -1024,3 +1024,97 @@ fn multi_disc_extract_without_selections_writes_every_pair() {
         );
     }
 }
+
+fn executable_asset_pbp(executable: &[u8], psar: &[u8]) -> Vec<u8> {
+    let mut pbp = wrap_psar_in_pbp(psar);
+    pbp.splice(
+        PSAR_FILE_OFFSET..PSAR_FILE_OFFSET,
+        executable.iter().copied(),
+    );
+    write_u32_le(
+        &mut pbp,
+        0x24,
+        u32::try_from(PSAR_FILE_OFFSET + executable.len()).expect("offset"),
+    );
+    pbp
+}
+
+#[test]
+fn psp_assets_require_a_recognized_executable_and_validate_section_boundaries() {
+    let temp = TempDir::new("psp-assets");
+    let mut elf = vec![0; 52];
+    elf[..7].copy_from_slice(b"\x7fELF\x01\x01\x01");
+    elf[18..20].copy_from_slice(&8_u16.to_le_bytes());
+    elf[20..24].copy_from_slice(&1_u32.to_le_bytes());
+    elf[40..42].copy_from_slice(&52_u16.to_le_bytes());
+    let mut prx = vec![0; 0x150];
+    prx[..4].copy_from_slice(b"~PSP");
+    for executable in [&elf, &prx] {
+        let path = temp.join("asset.pbp");
+        fs::write(&path, executable_asset_pbp(executable, b"x")).expect("fixture");
+        assert!(PbpContainerHandler.is_self_contained_rom(&path));
+        for length in [0, 3, executable.len() - 1] {
+            fs::write(&path, executable_asset_pbp(&executable[..length], b"x")).expect("fixture");
+            assert!(
+                !PbpContainerHandler.is_self_contained_rom(&path),
+                "length {length}"
+            );
+        }
+    }
+    let path = temp.join("invalid-executable.pbp");
+    for field in [0, 4, 5, 6, 18, 20, 40] {
+        let mut invalid = elf.clone();
+        invalid[field] ^= 0xFF;
+        fs::write(&path, executable_asset_pbp(&invalid, b"assets")).expect("fixture");
+        assert!(
+            !PbpContainerHandler.is_self_contained_rom(&path),
+            "ELF field {field}"
+        );
+    }
+    fs::write(
+        &path,
+        executable_asset_pbp(b"unknown executable", b"unknown PSAR data"),
+    )
+    .expect("fixture");
+    assert!(!PbpContainerHandler.is_self_contained_rom(&path));
+    let mut invalid = executable_asset_pbp(&prx, b"assets");
+    write_u32_le(&mut invalid, 0x20, 0xFFFF_FFFF);
+    assert!(
+        parse_error(&temp, "bad-table.pbp", &invalid).contains("out-of-range PBP section offset")
+    );
+}
+
+#[test]
+fn npumd_header_requires_all_256_bytes_even_with_an_executable() {
+    let temp = TempDir::new("npumd");
+    let mut executable = vec![0; 0x150];
+    executable[..4].copy_from_slice(b"~PSP");
+    let mut header = vec![0; 256];
+    header[..8].copy_from_slice(b"NPUMDIMG");
+    for length in [8, 255, 256] {
+        let path = temp.join("disc.pbp");
+        fs::write(&path, executable_asset_pbp(&executable, &header[..length])).expect("fixture");
+        assert_eq!(
+            PbpContainerHandler.is_self_contained_rom(&path),
+            length == 256
+        );
+    }
+}
+
+#[test]
+fn a_psp_executable_does_not_hide_a_malformed_ps1_disc() {
+    let temp = TempDir::new("ps1-priority");
+    let mut executable = vec![0; 0x150];
+    executable[..4].copy_from_slice(b"~PSP");
+    for signature in [
+        b"PSISOIMG0000".as_slice(),
+        b"PSTITLEIMG000000".as_slice(),
+        b"PSISOIMG9999xxxx".as_slice(),
+        b"PSTITLEIMG999999".as_slice(),
+    ] {
+        let path = temp.join("disc.pbp");
+        fs::write(&path, executable_asset_pbp(&executable, signature)).expect("fixture");
+        assert!(!PbpContainerHandler.is_self_contained_rom(&path));
+        assert!(PbpContainerHandler.parse_archive(&path).is_err());
+    }
+}

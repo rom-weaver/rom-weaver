@@ -214,3 +214,221 @@ fn multi_disc_pbp_converts_to_zip_and_7z_holding_every_disc() {
         }
     }
 }
+
+fn psp_pbp(executable: &[u8], psar: &[u8]) -> Vec<u8> {
+    let mut bytes = vec![0; 0x28];
+    bytes[..4].copy_from_slice(b"\0PBP");
+    bytes[4..8].copy_from_slice(&0x10000_u32.to_le_bytes());
+    for section in 0..8 {
+        let offset = if section == 7 {
+            0x28 + executable.len()
+        } else {
+            0x28
+        };
+        bytes[8 + section * 4..12 + section * 4]
+            .copy_from_slice(&u32::try_from(offset).expect("offset").to_le_bytes());
+    }
+    bytes.extend_from_slice(executable);
+    bytes.extend_from_slice(psar);
+    bytes
+}
+
+fn psp_nonempty_psar_fixtures() -> Vec<(&'static str, Vec<u8>)> {
+    let mut elf = vec![0; 52];
+    elf[..7].copy_from_slice(b"\x7fELF\x01\x01\x01");
+    elf[18..20].copy_from_slice(&8_u16.to_le_bytes());
+    elf[20..24].copy_from_slice(&1_u32.to_le_bytes());
+    elf[40..42].copy_from_slice(&52_u16.to_le_bytes());
+    let mut prx = vec![0; 0x150];
+    prx[..4].copy_from_slice(b"~PSP");
+    let mut npumd = vec![0; 256];
+    npumd[..8].copy_from_slice(b"NPUMDIMG");
+    let mut large = psp_pbp(&elf, b"asset");
+    let padding = 2 * 1024 * 1024;
+    large.splice(0x28..0x28, std::iter::repeat_n(0, padding));
+    for section in 0..8 {
+        let offset = if section == 7 {
+            0x28 + padding + elf.len()
+        } else {
+            0x28 + padding
+        };
+        large[8 + section * 4..12 + section * 4]
+            .copy_from_slice(&u32::try_from(offset).expect("offset").to_le_bytes());
+    }
+    vec![
+        ("large-sections", large),
+        ("elf-assets", psp_pbp(&elf, b"asset")),
+        ("prx-assets", psp_pbp(&prx, b"asset")),
+        ("npumd", psp_pbp(&[], &npumd)),
+    ]
+}
+
+fn assert_psp_nonempty_psar_preserved(name: &str) {
+    let (_, bytes) = psp_nonempty_psar_fixtures()
+        .into_iter()
+        .find(|(fixture, _)| *fixture == name)
+        .expect("fixture");
+    // Python hashlib.sha1 over each complete synthetic PBP, independent of CLI hashing.
+    let expected_sha1 = match name {
+        "elf-assets" => "df6424c53e8a2a6c9084faacaf08852045010713",
+        "prx-assets" => "6b07ae315c7bbd707d34ddbdaaae0142fb705bc0",
+        "npumd" => "abae146504a094569fdcc7340fe53c7c283150e7",
+        "large-sections" => "b3e4c071ecbed779d4cf4097329fb107905328cb",
+        _ => panic!("unknown fixture"),
+    };
+    let temp = setup_temp_dir();
+    let source = temp.child(format!("{name}.pbp"));
+    fs::write(source.path(), &bytes).expect("PSP PBP");
+    let database = temp.child("database.pack");
+    fs::write(
+        database.path(),
+        super::identify::identify_pack_with_crc([0; 4], "unused"),
+    )
+    .expect("database");
+    let raw = isolated_json_event(
+        &temp,
+        &[
+            "checksum",
+            "--input",
+            path_str(source.path()),
+            "--no-extract",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(raw["details"]["checksums"]["sha1"], expected_sha1);
+    let inner = temp.child("inner.zip");
+    isolated_json_event(
+        &temp,
+        &[
+            "compress",
+            "--input",
+            path_str(source.path()),
+            "--format",
+            "zip",
+            "--output",
+            path_str(inner.path()),
+            "--json",
+        ],
+        0,
+    );
+    let outer = temp.child("outer.tar.gz");
+    write_tar_gz_fixture(&[(inner.path(), "inner.zip")], outer.path());
+    for (index, input) in [source.path(), inner.path(), outer.path()]
+        .into_iter()
+        .enumerate()
+    {
+        for command in ["checksum", "identify"] {
+            let mut args = vec![command, "--input", path_str(input), "--json"];
+            if command == "identify" {
+                args.extend(["--database", path_str(database.path())]);
+            }
+            let event = isolated_json_event(&temp, &args, 0);
+            let details = if command == "identify" {
+                &event["details"]["identify"]
+            } else {
+                &event["details"]
+            };
+            assert_eq!(
+                details["checksums"]["sha1"], expected_sha1,
+                "{name} {command} {index}"
+            );
+            let platform_field = if command == "identify" {
+                "detected_platform"
+            } else {
+                "platform"
+            };
+            assert_eq!(
+                details[platform_field], "Sony Playstation Portable",
+                "{name} {command} {index}: {event}"
+            );
+        }
+        let output = temp.child(format!("ingest-{index}"));
+        let event = isolated_json_event(
+            &temp,
+            &[
+                "ingest",
+                "--input",
+                path_str(input),
+                "--output",
+                path_str(output.path()),
+                "--json",
+            ],
+            0,
+        );
+        let assets = event["details"]["ingest"]["assets"]
+            .as_array()
+            .expect("assets");
+        assert_eq!(assets.len(), 1);
+        assert_eq!(
+            assets[0]["platform"], "Sony Playstation Portable",
+            "{name} ingest {index}: {event}"
+        );
+        assert_eq!(assets[0]["checksums"]["sha1"], expected_sha1);
+        assert_eq!(
+            fs::read(assets[0]["path"].as_str().expect("path")).expect("ROM bytes"),
+            bytes
+        );
+    }
+}
+
+#[test]
+fn psp_nonempty_psar_large_sections_preserve_checksum_identify_ingest() {
+    assert_psp_nonempty_psar_preserved("large-sections");
+}
+
+#[test]
+fn psp_nonempty_psar_elf_preserves_checksum_identify_ingest() {
+    assert_psp_nonempty_psar_preserved("elf-assets");
+}
+
+#[test]
+fn psp_nonempty_psar_prx_preserves_checksum_identify_ingest() {
+    assert_psp_nonempty_psar_preserved("prx-assets");
+}
+
+#[test]
+fn psp_nonempty_psar_npumd_preserves_checksum_identify_ingest() {
+    assert_psp_nonempty_psar_preserved("npumd");
+}
+
+#[test]
+fn psp_nonempty_psar_probe_and_extract_explain_passthrough() {
+    for (name, bytes) in psp_nonempty_psar_fixtures() {
+        let temp = setup_temp_dir();
+        let source = temp.child(format!("{name}.pbp"));
+        fs::write(source.path(), &bytes).expect("PSP PBP");
+        let probe = isolated_json_event(
+            &temp,
+            &["probe", "--input", path_str(source.path()), "--json"],
+            0,
+        );
+        assert!(
+            probe.to_string().contains(if name == "npumd" {
+                "NPUMDIMG"
+            } else {
+                "asset DATA.PSAR"
+            }),
+            "{probe}"
+        );
+        let output = temp.child("extract");
+        let error = isolated_json_event(
+            &temp,
+            &[
+                "extract",
+                "--input",
+                path_str(source.path()),
+                "--output",
+                path_str(output.path()),
+                "--json",
+            ],
+            1,
+        );
+        assert!(
+            error.to_string().contains("no extractable PS1 disc"),
+            "{error}"
+        );
+        assert!(error.to_string().contains("keep the PBP intact"), "{error}");
+        assert_eq!(fs::read(source.path()).expect("source unchanged"), bytes);
+    }
+}

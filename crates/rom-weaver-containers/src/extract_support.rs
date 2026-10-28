@@ -311,9 +311,13 @@ pub(crate) struct ExtractChecksumTiming {
     pub(crate) hash_busy_ns: u128,
 }
 
-/// Detect a decoded output's identity from an [`IdentityPrefix`] using the output file's extension.
+/// Detect output identity from the stream, seeking PBP headers beyond the prefix when needed.
 fn detect_emitted_identity(identity: &IdentityPrefix, output_path: &Path) -> RomIdentity {
-    identity.detect(output_extension(output_path).as_deref())
+    let detected = identity.detect(output_extension(output_path).as_deref());
+    if detected.is_empty() && identity.has_pbp_signature() {
+        return rom_weaver_checksum::detect_rom_identity_for_path(output_path);
+    }
+    detected
 }
 
 /// Hash decoded bytes during extraction, with variants when the length is
