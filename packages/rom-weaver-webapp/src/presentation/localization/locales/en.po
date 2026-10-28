@@ -580,6 +580,11 @@ msgstr "Apply anyway despite patch and ROM check mismatch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.overrideDamagedPatch"
+msgstr "Apply anyway despite the damaged patch file's checksum (the ROM is not checked either)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.applyDescription"
 msgstr "Apply BPS, IPS, UPS, xdelta, PPF, and other ROM patches online. Open archives, apply patches in order, and choose your output format. Your files stay on your device."
 
@@ -592,6 +597,11 @@ msgstr "Apply cheat codes"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyCheatsThesis"
 msgstr "Apply cheat codes to ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlockedDamagedPatch"
+msgstr "Apply is blocked because the patch file is damaged. Replace the patch, or tick “Apply anyway” to use it as is."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1432,11 +1442,6 @@ msgstr "Compression"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.outputOptions.compression"
 msgstr "Compression defaults come from Settings › Compression and apply to compressed output."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "error.PATCH_FILE_DAMAGED"
-msgstr "The patch file is damaged (its checksum is invalid). Obtain a fresh copy and replace this patch."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3485,6 +3490,11 @@ msgstr "Options"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.create.outputHelp"
+msgstr "Options → Type sets the download: None gives the raw patch file, and ZIP or 7z packages it in an archive. New settings start on None."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.homeDrop"
 msgstr "or drop files here"
 
@@ -3697,6 +3707,11 @@ msgstr "Patch details"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.inputHandling.patchEntries"
 msgstr "Patch entries can be required or optional, and record names, sources, header rules, and expected ROM checks."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.corrupt"
+msgstr "Patch file is damaged"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5015,6 +5030,11 @@ msgstr "Tap to choose files"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.details"
+msgstr "Technical details"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.goTest"
 msgstr "Test"
 
@@ -5250,6 +5270,16 @@ msgstr "The patch couldn't be applied. Check that it was made for this ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.PATCH_FILE_DAMAGED"
+msgstr "The patch file is damaged (its checksum is invalid). Obtain a fresh copy and replace this patch."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.validationCorruptHint"
+msgstr "The patch file is damaged. Obtain a fresh copy and replace this patch. The ROM was not checked against it either."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.flowApplyGet"
 msgstr "The patched ROM with checksums checked. Save the chain as a weave to replay or share it."
 
@@ -5357,6 +5387,11 @@ msgstr "These patches expect different ROMs - each patch card shows the one it n
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.weaveTutorial.patches.body"
 msgstr "These patches target the original ROM, so players can change their order or skip either one. Use Patch details to edit each patch's label, version, author, and description."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.archiveRead"
+msgstr "This archive is damaged or unsupported. Choose another archive or extract it on your device first."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5755,6 +5790,11 @@ msgstr "Want your own copy? Host it yourself from static files or a Docker image
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.damagedPatchWarning"
+msgstr "Warning: applying anyway uses the damaged patch as is and may produce a wrong or corrupt result. The ROM is not verified."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.suggestion.emulatorSaveStorage"
 msgstr "Warning: If you turn this off, new save states and in-game saves are not stored. Existing saves remain until you delete them in Storage."
 
@@ -6022,43 +6062,3 @@ msgstr "ZIP codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z and weaves"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.errorRecovery.archiveRead"
-msgstr "This archive is damaged or unsupported. Choose another archive or extract it on your device first."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.errorRecovery.details"
-msgstr "Technical details"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.create.outputHelp"
-msgstr "Options → Type sets the download: None gives the raw patch file, and ZIP or 7z packages it in an archive. New settings start on None."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.validationCorruptHint"
-msgstr "The patch file is damaged. Obtain a fresh copy and replace this patch. The ROM was not checked against it either."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.corrupt"
-msgstr "Patch file is damaged"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.validation.overrideDamagedPatch"
-msgstr "Apply anyway despite the damaged patch file's checksum (the ROM is not checked either)"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.validation.damagedPatchWarning"
-msgstr "Warning: applying anyway uses the damaged patch as is and may produce a wrong or corrupt result. The ROM is not verified."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.output.applyBlockedDamagedPatch"
-msgstr "Apply is blocked because the patch file is damaged. Replace the patch, or tick “Apply anyway” to use it as is."
