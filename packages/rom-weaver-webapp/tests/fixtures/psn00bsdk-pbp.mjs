@@ -9,7 +9,7 @@ const msf = (frames) =>
 
 // Callers MUST supply a legally built raw Mode 2 CD image; arbitrary sectors cannot establish boot compatibility.
 // Layout: https://github.com/libretro/pcsx_rearmed/blob/master/libpcsxcore/cdriso.c (handlepbp).
-export const packHomebrewPbp = (images) => {
+export const packHomebrewPbp = (images, { stored = false, audioStartSector } = {}) => {
   assert(images.length >= 1 && images.length <= 5);
   const discs = images.map((image) => {
     assert(image.length % sectorBytes === 0);
@@ -19,8 +19,8 @@ export const packHomebrewPbp = (images) => {
     header.write("_TEST_00001", 0x400);
     for (const [offset, point, time] of [
       [0, 0xa0, Buffer.from([1, 0, 0])],
-      [10, 0xa1, Buffer.from([1, 0, 0])],
-      [20, 0xa2, msf(image.length / sectorBytes + 150)],
+      [10, 0xa1, Buffer.from([audioStartSector === undefined ? 1 : 2, 0, 0])],
+      [20, 0xa2, msf(image.length / sectorBytes)],
     ]) {
       header[0x802 + offset] = point;
       time.copy(header, 0x807 + offset);
@@ -28,12 +28,21 @@ export const packHomebrewPbp = (images) => {
     header[0x81e] = 0x41;
     header[0x820] = 1;
     msf(150).copy(header, 0x825);
+    if (audioStartSector !== undefined) {
+      assert(
+        Number.isInteger(audioStartSector) && audioStartSector > 0 && audioStartSector < image.length / sectorBytes,
+      );
+      header[0x828] = 0x01;
+      header[0x82a] = 2;
+      msf(audioStartSector).copy(header, 0x82b);
+      msf(audioStartSector + 150).copy(header, 0x82f);
+    }
     const blocks = [];
     let payloadOffset = 0;
     for (let offset = 0, index = 0; offset < image.length; offset += blockBytes, index += 1) {
       const block = Buffer.alloc(blockBytes);
       image.copy(block, 0, offset, offset + blockBytes);
-      const compressed = deflateRawSync(block);
+      const compressed = stored ? block : deflateRawSync(block);
       header.writeUInt32LE(payloadOffset, 0x4000 + index * 32);
       header.writeUInt32LE(compressed.length, 0x4004 + index * 32);
       payloadOffset += compressed.length;
