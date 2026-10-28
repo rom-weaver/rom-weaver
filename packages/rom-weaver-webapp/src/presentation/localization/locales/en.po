@@ -6022,3 +6022,13 @@ msgstr "The patch file is damaged. Obtain a fresh copy and replace this patch."
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.corrupt"
 msgstr "Patch file is damaged"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.overrideDamagedPatch"
+msgstr "Apply anyway despite the damaged patch file's checksum"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlockedDamagedPatch"
+msgstr "Apply is blocked because the patch file is damaged. Replace the patch, or tick “Apply anyway” to use it as is."

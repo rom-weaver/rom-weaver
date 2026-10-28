@@ -62,6 +62,14 @@ for (const format of ["bps", "ups"]) {
     const inputRow = getInputStackRows()[0];
     const button = document.getElementById("rom-weaver-button-apply");
     expect(button.getAttribute("aria-disabled")).toBe("true");
+    const override = document.getElementById("rom-weaver-checkbox-checksum-override");
+    expect(override).not.toBeNull();
+    expect(override.closest("label").textContent).toContain("damaged patch file's checksum");
+    expect(override.closest("label").textContent).not.toContain("ROM check mismatch");
+    expect(document.body.textContent).not.toContain("Compare the expected ROM before bypassing checks");
+    expect(document.getElementById(button.getAttribute("aria-describedby")).textContent).toContain(
+      "the patch file is damaged",
+    );
     button.click();
     expect(button.textContent).not.toContain("Download");
     expect(fault()).not.toBeNull();
@@ -107,6 +115,10 @@ for (const format of ["bps", "ups"]) {
     await expect.poll(() => row()?.textContent).toContain("expected a different ROM");
     expect(row().textContent).not.toContain("Patch file is damaged");
     expect(document.getElementById("rom-weaver-button-apply").getAttribute("aria-disabled")).toBe("true");
+    expect(document.body.textContent).toContain("Compare the expected ROM before bypassing checks");
+    expect(document.getElementById("rom-weaver-checkbox-checksum-override").closest("label").textContent).toContain(
+      "Apply anyway despite patch and ROM check mismatch",
+    );
     document.getElementById("rom-weaver-checkbox-checksum-override").click();
     await waitForApplyButtonEnabled();
     await clickApplyButton();

@@ -1132,6 +1132,15 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "The patch file is damaged. Obtain a fresh copy and replace this patch.",
   }),
   "ui.patchChecks.corrupt": msg({ id: "ui.patchChecks.corrupt", message: "Patch file is damaged" }),
+  "ui.apply.validation.overrideDamagedPatch": msg({
+    id: "ui.apply.validation.overrideDamagedPatch",
+    message: "Apply anyway despite the damaged patch file's checksum",
+  }),
+  "ui.output.applyBlockedDamagedPatch": msg({
+    id: "ui.output.applyBlockedDamagedPatch",
+    message:
+      "Apply is blocked because the patch file is damaged. Replace the patch, or tick “Apply anyway” to use it as is.",
+  }),
   "ui.patch.validationUnreadableHint": msg({
     id: "ui.patch.validationUnreadableHint",
     message: "Remove this patch and choose a valid patch file.",

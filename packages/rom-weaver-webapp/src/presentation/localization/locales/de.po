@@ -6022,3 +6022,13 @@ msgstr "Die Patch-Datei ist beschädigt. Besorge eine neue Kopie und ersetze die
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.corrupt"
 msgstr "Patch-Datei ist beschädigt"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.overrideDamagedPatch"
+msgstr "Trotz beschädigter Prüfsumme der Patch-Datei anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlockedDamagedPatch"
+msgstr "Anwenden ist blockiert, weil die Patch-Datei beschädigt ist. Ersetze den Patch oder aktiviere „Trotz beschädigter Prüfsumme der Patch-Datei anwenden“, um ihn unverändert zu verwenden."
