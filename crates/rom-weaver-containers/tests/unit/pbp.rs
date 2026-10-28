@@ -1398,6 +1398,62 @@ fn extract_accepts_the_pcsx_pbp_index_end_marker_for_every_disc() {
     }
 }
 
+fn check_zero_padding_before_index_end_marker(multi_disc: bool) {
+    let temp = TempDir::new("index-end-padding");
+    let (marked, expected) = compressed_disc_with_index_end_marker();
+    let mut padded = marked.clone();
+    let marker = PSAR_INDEX_OFFSET + 2 * INDEX_ENTRY_BYTES;
+    padded.copy_within(
+        marker..marker + INDEX_ENTRY_BYTES,
+        marker + INDEX_ENTRY_BYTES,
+    );
+    padded[marker..marker + INDEX_ENTRY_BYTES].fill(0);
+    let container = if multi_disc {
+        build_multi_disc_psar(&[marked, padded])
+    } else {
+        padded
+    };
+    let source = write_fixture(&temp, "game.pbp", &wrap_psar_in_pbp(&container));
+    let out_dir = temp.join("out");
+    PbpContainerHandler
+        .extract(
+            &extract_request(&source, &out_dir),
+            &test_context(temp.path()),
+        )
+        .expect("extract discs with zero padding before the terminal offset");
+    let names = if multi_disc {
+        vec!["game.disc01.bin", "game.disc02.bin"]
+    } else {
+        vec!["game.bin"]
+    };
+    for name in names {
+        assert_eq!(fs::read(out_dir.join(name)).expect("full disc"), expected);
+    }
+    let report = PbpContainerHandler
+        .probe_details(
+            &ContainerProbeRequest {
+                source,
+                split_bin: false,
+            },
+            &test_context(temp.path()),
+        )
+        .expect("probe discs with zero padding before the terminal offset");
+    assert_eq!(
+        report.details.expect("probe details")["pbp"]["has_index_end_offsets"],
+        false
+    );
+}
+
+#[test]
+fn zero_padding_before_index_end_marker_preserves_single_disc_extraction() {
+    check_zero_padding_before_index_end_marker(false);
+}
+
+#[test]
+fn zero_padding_before_index_end_marker_preserves_mixed_multidisc_extraction() {
+    check_zero_padding_before_index_end_marker(true);
+}
+
 #[test]
 fn parse_rejects_a_pbp_index_end_marker_that_does_not_match_the_payload_end() {
     let temp = TempDir::new("index-end-offset");

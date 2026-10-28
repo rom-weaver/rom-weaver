@@ -470,7 +470,7 @@ impl PbpContainerHandler {
                         .iter()
                         .all(|byte| *byte == 0);
                 if is_end_marker {
-                    has_index_end_offset = true;
+                    has_index_end_offset = index == indexes.len();
                     break;
                 }
                 return Err(RomWeaverError::Validation(format!(
