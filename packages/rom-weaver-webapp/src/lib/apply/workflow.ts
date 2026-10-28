@@ -29,6 +29,7 @@ import type { ParsedPatchLike } from "../../workers/protocol/patch-engine.ts";
 import { type createPatchFile, getPatchFileExternalSource } from "../input/binary-service.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { roundElapsedMs } from "../workflow/source-preparation.ts";
+import { getPatchFilePrecomputedChecksumVariants } from "../workflow/staged-source-checksums.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
 import { type BareMemberRule, createRunBareMemberRule, findMemberAssets } from "./bare-member-target.ts";
 import { parsePatchForApply, resolvePatchTargets, toPublicOutput } from "./patch-apply-service.ts";
@@ -539,7 +540,15 @@ const finishingMayChangeBytes = (
   !!(options.compatibility?.addHeader || options.compatibility?.fixChecksum || options.compatibility?.removeHeader) ||
   (!!options.output?.header && options.output.header !== "auto") ||
   patchIndices.some((patchIndex) => patchOptions?.[patchIndex]?.header === "strip") ||
-  !!asset.checksumVariants?.some((variant) => Object.values(variant.applyCompatibility || {}).some(Boolean));
+  patchIndices.some((patchIndex) =>
+    [patchOptions?.[patchIndex]?.n64ByteOrder, patchOptions?.[patchIndex]?.resolvedN64ByteOrder].some(
+      (order) => !!order && order !== "keep",
+    ),
+  ) ||
+  // A re-prepared asset has no variants of its own; the file still carries the precomputed ones.
+  !!(
+    asset.checksumVariants?.length ? asset.checksumVariants : getPatchFilePrecomputedChecksumVariants(asset.file)
+  )?.some((variant) => Object.values(variant.applyCompatibility || {}).some(Boolean));
 
 const getPatchOutputChecks = (
   patchIndices: number[],
@@ -940,4 +949,10 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
   };
 };
 
-export { getPatchHeaderModes, getPatchN64ByteOrders, retainUncompressedWorkerOutputs, runApplyWorkflow };
+export {
+  finishingMayChangeBytes,
+  getPatchHeaderModes,
+  getPatchN64ByteOrders,
+  retainUncompressedWorkerOutputs,
+  runApplyWorkflow,
+};
