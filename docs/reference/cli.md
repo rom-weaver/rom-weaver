@@ -555,7 +555,7 @@ A ZIP or folder output holds the playlist as `<game>.m3u`, each disc by its file
 
 `--rename` numbers the discs from 1 in playlist order and keeps each extension. A disc's single sheet file takes the disc's name, for example `Game (Disc 1).bin`. Several take `<disc> (Track N)`, zero-padded to the width of the file count, for example `Game (Disc 1) (Track 01).bin`. The rewritten sheet quotes names that contain spaces, and the source sheet is not changed. An `.mds` disc cannot be renamed, because it can name its `.mdf` inside.
 
-Procedures: [Make an M3U playlist in the browser](../how-to/make-m3u-playlist-browser.md) and [from the CLI](../how-to/cli-playlist.md).
+Procedure: [Make an M3U playlist from the CLI](../how-to/cli-playlist.md).
 
 ## Supported formats
 

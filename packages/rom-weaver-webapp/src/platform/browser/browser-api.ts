@@ -14,12 +14,7 @@ import { createSingleFileRomSpecificOutput } from "../../lib/output/output-build
 import { toPublicOutput } from "../../lib/apply/patch-apply-service.ts";
 import type { RomSpecificCompressionFormat } from "../../lib/compression/container-format-registry.ts";
 import { createArchiveOutput, createPatchFileFromRuntimeOutput } from "../../lib/output/archive-output-service.ts";
-import { getNamedSourceFileName } from "../../storage/shared/binary/source-file-utils.ts";
-import { normalizeVirtualFileName } from "../../workers/protocol/browser-opfs-source-ref.ts";
-import { getPathBaseName } from "../../lib/path-utils.ts";
-import { matchPlaylistLines, realPlaylistLines, renamePlaylistText } from "../../lib/playlist-names.ts";
-import { createRuntimeOutputFromBytes, readRuntimeOutputBytes } from "../../storage/vfs/runtime-output.ts";
-import { invokeRomWeaverPlaylistWorker, invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-runtime.ts";
+import { invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-runtime.ts";
 import type { CheatDatabaseRecord, CheatRecord, ClassifiedCheatRecord } from "../../lib/cheats/model.ts";
 import { ApplyWorkflowController } from "../../lib/workflow/apply-workflow-controller.ts";
 import { CreateWorkflowController } from "../../lib/workflow/create-workflow-controller.ts";
@@ -70,18 +65,6 @@ type BrowserPpfUndoInput = {
   outputName: string;
   patch: BrowserSourceRef;
   rom: BrowserSourceRef;
-  signal?: AbortSignal;
-};
-
-type BrowserPlaylistInput = {
-  /** Every file of the game: the discs plus any track files their sheets name. */
-  files: Array<BrowserSourceRef | PublicOutput>;
-  /** Order the discs by the numbers in their names; false keeps `files` order. */
-  sort: boolean;
-  /** A ZIP holding the playlist and its discs; otherwise just the `.m3u`. */
-  archive: boolean;
-  logLevel?: LogLevel;
-  outputName: string;
   signal?: AbortSignal;
 };
 
@@ -591,108 +574,6 @@ const undoPpf = async ({
   }
 };
 
-/**
- * Build a disc-change playlist (`.m3u`, or a ZIP with the playlist and its discs) with the shared
- * `playlist` command. Returns the output and the playlist lines in playlist order.
- */
-const buildPlaylistNow = async ({ archive, files, logLevel, outputName, signal, sort }: BrowserPlaylistInput) => {
-  // Outputs another tool keeps alive are already runtime-owned; only caller-supplied files need validating.
-  assertPublicSources(files.filter((source): source is BrowserSourceRef => source instanceof Blob));
-  const names = new Map<string, string>();
-  for (const source of files) {
-    if (!(source instanceof Blob)) continue;
-    const name = getNamedSourceFileName(source, { fallback: "disc.bin" });
-    const normalized = normalizeVirtualFileName(normalizeVirtualFileName(name, "disc.bin"));
-    const previous = names.get(normalized);
-    if (previous !== undefined && previous !== name) {
-      throw new Error(
-        `Playlist files "${previous}" and "${name}" use the same browser staging name "${normalized}". Rename one file and update its CUE/GDI references before adding them again.`,
-      );
-    }
-    names.set(normalized, name);
-  }
-  const staged = await browserRuntime.workerIo.stageSources(
-    files.map((source) => ({
-      fallbackFileName: "disc.bin",
-      pathPrefix: "playlist-disc",
-      scope: "apply" as const,
-      source,
-      trace: { logLevel },
-    })),
-  );
-  try {
-    for (const [index, source] of files.entries()) {
-      if (!(source instanceof Blob)) continue;
-      const name = getNamedSourceFileName(source, { fallback: "disc.bin" });
-      const normalized = normalizeVirtualFileName(normalizeVirtualFileName(name, "disc.bin"));
-      const stagedSource = staged[index];
-      if (stagedSource && getPathBaseName(stagedSource.filePath, stagedSource.fileName) !== normalized) {
-        throw new Error(
-          `Playlist file "${name}" could not keep its browser staging name "${normalized}". Rename the file and update its CUE/GDI references, or finish other running operations before trying again.`,
-        );
-      }
-    }
-    const result = await invokeRomWeaverPlaylistWorker({
-      archive,
-      discFilePaths: staged.map((source) => source.filePath),
-      stagedPaths: Object.fromEntries(
-        staged.map((source, index) => {
-          const name = getNamedSourceFileName(files[index], { fallback: "disc.bin", preserveWhitespace: true });
-          const directory = source.filePath.slice(0, source.filePath.lastIndexOf("/") + 1);
-          return [`${directory}${name}`, source.filePath];
-        }),
-      ),
-      logLevel,
-      outputName,
-      signal,
-      sort,
-    });
-    const output = await browserRuntime.workerIo.createWorkerOutput(
-      result,
-      outputName,
-      "Playlist did not return a file",
-    );
-    const stagedNames = staged.map((source) => getPathBaseName(source.filePath, source.fileName));
-    const realNames = files.map((source) =>
-      "fileName" in source ? (source.fileName ?? "") : source instanceof File ? source.name : "",
-    );
-    const discIndexes = matchPlaylistLines(result.entries, stagedNames);
-    const entries = realPlaylistLines(result.entries, discIndexes, realNames);
-    const renames = new Map<string, string>();
-    for (const [position, line] of result.entries.entries()) {
-      const real = entries[position];
-      if (real && real !== line) renames.set(line, real);
-    }
-    if (archive || renames.size === 0) return { discIndexes, entries, output };
-    // The playlist sits next to the user's own files, so it must name them as they are on disk.
-    try {
-      const text = new TextDecoder().decode(await readRuntimeOutputBytes(output));
-      const renamed = await createRuntimeOutputFromBytes(
-        output.vfs,
-        new TextEncoder().encode(renamePlaylistText(text, renames)),
-        output.fileName,
-        { mediaType: output.mediaType },
-      );
-      return { discIndexes, entries, output: renamed };
-    } finally {
-      await output.dispose();
-    }
-  } finally {
-    await Promise.all(staged.map((source) => source.cleanup().catch(() => undefined)));
-    await browserRuntime.workerIo.releaseSources?.(files.filter((source) => source instanceof Blob));
-  }
-};
-
-// Staging gives a file the first free name in one shared folder, so two playlist runs over files with the
-// same names at once would rename the second run's files (`Game (Disc 1)-2.bin`) and a cue sheet would no
-// longer find its track file. Run them one after another.
-let playlistQueue: Promise<unknown> = Promise.resolve();
-const buildPlaylist = (input: BrowserPlaylistInput) => {
-  const run = playlistQueue.then(() => buildPlaylistNow(input));
-  playlistQueue = run.catch(() => undefined);
-  return run;
-};
-
 // The public browser workflows ARE their UI-agnostic controllers - a thin subclass adds only the
 // browser binding (asset-base config + runtime pre-warm + browserRuntime/source-validation wiring).
 // All staging/run/progress/`subscribe`/`getSnapshot` methods are inherited directly from the
@@ -736,7 +617,6 @@ class ChecksumWorkflow extends ChecksumWorkflowController<BrowserSourceRef> {
 
 export {
   ApplyWorkflow,
-  buildPlaylist,
   ChecksumWorkflow,
   CreateWorkflow,
   getCreatePatchFormatCandidates,

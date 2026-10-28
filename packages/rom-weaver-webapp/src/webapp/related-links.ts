@@ -102,9 +102,6 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
   "docs/trim-roms-browser": {
     tools: [{ beta: true, labelId: "ui.docs.toolTrim", view: "trim" }],
   },
-  "docs/make-m3u-playlist-browser": {
-    tools: [{ labelId: "ui.docs.toolPlaylist", view: "playlist" }],
-  },
   "docs/undo-ppf-browser": {
     tools: [{ labelId: "ui.docs.toolUndo", view: "ppf-undo" }],
   },

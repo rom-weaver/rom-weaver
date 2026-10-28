@@ -315,4 +315,4 @@ const createBrowserOpfsSourceRef = async (
   };
 };
 
-export { createBrowserOpfsSourceRef, getStagedInputMs, normalizeVirtualFileName };
+export { createBrowserOpfsSourceRef, getStagedInputMs };

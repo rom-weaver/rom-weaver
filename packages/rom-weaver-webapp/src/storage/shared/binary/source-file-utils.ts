@@ -17,8 +17,6 @@ type SourceFileNameGetter = (source: SourceValue) => string;
 
 type NamedSourceOptions = {
   fallback?: string;
-  /** Exact filename identity MUST retain whitespace used by disc-sheet references. */
-  preserveWhitespace?: boolean;
   nameKeys?: string[];
   sourceKeys?: string[];
 };
@@ -82,11 +80,11 @@ const getNamedSourcePath = (source: SourceValue): string => {
   return "";
 };
 
-const getRecordFileName = (source: RuntimeValue, keys: string[], preserveWhitespace = false): string | undefined => {
+const getRecordFileName = (source: RuntimeValue, keys: string[]): string | undefined => {
   if (!isRecord(source)) return undefined;
   for (const key of keys) {
     const value = source[key];
-    if (typeof value === "string" && value.trim()) return preserveWhitespace ? value : value.trim();
+    if (typeof value === "string" && value.trim()) return value.trim();
   }
   return undefined;
 };
@@ -95,7 +93,7 @@ const getNamedSourceFileName = (source: SourceValue, options?: NamedSourceOption
   const fallback = options?.fallback || "";
   const nameKeys =
     Array.isArray(options?.nameKeys) && options.nameKeys.length ? options.nameKeys : ["fileName", "name"];
-  const sourceFileName = getRecordFileName(source, nameKeys, options?.preserveWhitespace);
+  const sourceFileName = getRecordFileName(source, nameKeys);
   if (sourceFileName) return sourceFileName;
 
   const directSource = getNamedSource(source, options);
@@ -107,7 +105,7 @@ const getNamedSourceFileName = (source: SourceValue, options?: NamedSourceOption
       fallback,
       keys: ["fileName", "name"],
     });
-    if (directFileName) return options?.preserveWhitespace ? directFileName : directFileName.trim();
+    if (directFileName) return directFileName.trim();
   }
 
   return fallback;

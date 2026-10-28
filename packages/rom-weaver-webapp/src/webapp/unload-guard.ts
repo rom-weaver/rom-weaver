@@ -114,7 +114,6 @@ const getPendingChangeState = ({
   compress: !!compressActive,
   extract: false,
   identify: false,
-  playlist: false,
   patcher: patcherHasPendingChanges({
     outputState,
     patcherFormEdited,

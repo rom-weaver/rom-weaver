@@ -27,7 +27,6 @@ const workflowPages = {
   checksum: "checksum",
   identify: "identify-rom",
   trim: "trim-rom",
-  playlist: "m3u-playlist",
   "ppf-undo": "ppf-undo",
   "save-editor": "save-editor",
   test: "test-rom",
@@ -171,7 +170,7 @@ export function installWebMcp(actions?: WorkflowActions) {
       {
         name: "list_workflows",
         description:
-          "List all twelve browser file workflows, including beta tools. Navigate to a workflow before reading or configuring it. Files must be selected by the user and stay on this device.",
+          "List all eleven browser file workflows, including beta tools. Navigate to a workflow before reading or configuring it. Files must be selected by the user and stay on this device.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         execute: () =>
           Object.entries(workflowPages).map(([workflow, slug]) => ({

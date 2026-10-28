@@ -79,15 +79,11 @@ describe("browser OPFS cleanup", () => {
     expect(removed).toEqual(["/work/libarchive_AbC123", "/work/rw-tmp-abc"]);
   });
 
-  it("sweeps emulator and playlist retention only for the boot cleanup", async () => {
+  it("sweeps emulator retention only for the boot cleanup", async () => {
     await startBrowserOpfsBootCleanup();
     expect(requestBrowserOpfsStorage).toHaveBeenCalledWith({
       action: "remove",
       filePath: "/work/runtime-output/emulator",
-    });
-    expect(requestBrowserOpfsStorage).toHaveBeenCalledWith({
-      action: "remove",
-      filePath: "/work/runtime-output/playlist",
     });
 
     requestBrowserOpfsStorage.mockClear();
@@ -95,10 +91,6 @@ describe("browser OPFS cleanup", () => {
     expect(requestBrowserOpfsStorage).not.toHaveBeenCalledWith({
       action: "remove",
       filePath: "/work/runtime-output/emulator",
-    });
-    expect(requestBrowserOpfsStorage).not.toHaveBeenCalledWith({
-      action: "remove",
-      filePath: "/work/runtime-output/playlist",
     });
   });
 

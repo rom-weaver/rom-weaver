@@ -51,12 +51,6 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     slug: "apply-patches",
     title: `ROM Patcher Online: BPS, IPS, UPS, xdelta & PPF | ${SITE_NAME}`,
   }),
-  playlist: Object.freeze({
-    description:
-      "Build an M3U playlist for a multi-disc game so RetroArch and other emulators can change discs. Orders Disc 1, Disc 2, and .disc02 files and optionally bundles the discs in a ZIP, locally in your browser. No uploads.",
-    slug: "m3u-playlist",
-    title: `M3U playlist maker for multi-disc games | ${SITE_NAME}`,
-  }),
   "ppf-undo": Object.freeze({
     description:
       "Undo a PPF3 patch using its stored original bytes and download a restored ROM locally in your browser. Requires the exact patch with undo data. No uploads.",
