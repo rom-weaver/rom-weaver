@@ -239,6 +239,25 @@ describe("runRomWeaverProbeWorker", () => {
     });
   });
 
+  it("reports validated PBP disc and stored-block counts", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult({ pbp: { disc_count: 2, stored_block_count: 3 } }));
+    await expect(runRomWeaverProbeWorker({ sourcePath: "/game.pbp" })).resolves.toMatchObject({
+      pbp: { discCount: 2, storedBlockCount: 3 },
+    });
+  });
+
+  it.each([
+    {},
+    { disc_count: 0, stored_block_count: 0 },
+    { disc_count: 6, stored_block_count: 0 },
+    { disc_count: 2, stored_block_count: -1 },
+    { disc_count: 2, stored_block_count: 1.5 },
+    { disc_count: "2", stored_block_count: 0 },
+  ])("omits invalid PBP metadata %j", async (pbp) => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult({ pbp }));
+    await expect(runRomWeaverProbeWorker({ sourcePath: "/game.pbp" })).resolves.not.toHaveProperty("pbp");
+  });
+
   it("omits the chd field for a container without header digests", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(succeededResult({ container: { entry_records: ["game.sfc"] } }));
 

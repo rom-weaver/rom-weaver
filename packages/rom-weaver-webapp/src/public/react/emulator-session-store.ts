@@ -16,6 +16,7 @@ type EmulatorSessionEntry = {
   artifact?: Pick<RetainedRuntimeOutput, "dispose" | "getBlob">;
   source: EmulatorSessionSource;
   sizeBytes: number;
+  expandedSizeBytes?: number;
   savePreviewRevision?: number;
   /**
    * The playable bytes. The player mints a fresh object URL per mount from
@@ -72,23 +73,41 @@ const prepareEntry = async (id: string): Promise<Blob | null> => {
   if (entry.blob) return entry.blob;
   if (!entry.artifact) return null;
   const blob = await entry.artifact.getBlob();
-  const { checksum } = await loadEmulatorRom(blob, entry.fileName);
+  const loaded = await loadEmulatorRom(blob, entry.fileName);
+  // A prepared disc bundle MUST replace its source so EmulatorJS can load the generated playlist.
+  const preparedBlob = loaded.expandedSizeBytes === undefined ? blob : loaded.blob;
   let accepted = false;
   store.setState((state) => {
     const current = state.entries.find((candidate) => candidate.id === id);
     if (!current || current.artifact !== entry.artifact) return {};
     accepted = true;
     return {
-      entries: state.entries.map((candidate) => (candidate.id === id ? { ...candidate, blob, checksum } : candidate)),
+      entries: state.entries.map((candidate) =>
+        candidate.id === id
+          ? {
+              ...candidate,
+              blob: preparedBlob,
+              checksum: loaded.checksum,
+              ...(loaded.expandedSizeBytes === undefined
+                ? {}
+                : {
+                    expandedSizeBytes: loaded.expandedSizeBytes,
+                    fileName: loaded.fileName,
+                    sizeBytes: loaded.blob.size,
+                  }),
+            }
+          : candidate,
+      ),
     };
   });
-  return accepted ? blob : null;
+  return accepted ? preparedBlob : null;
 };
 
 // A game this large is a disc; smaller ones cost little to keep.
 const LARGE_GAME_BYTES = 128 * 1024 * 1024;
 
-const isLargeEntry = (entry: EmulatorSessionEntry) => entry.sizeBytes > LARGE_GAME_BYTES;
+const isLargeEntry = (entry: EmulatorSessionEntry) =>
+  Math.max(entry.sizeBytes, entry.expandedSizeBytes ?? 0) > LARGE_GAME_BYTES;
 
 /**
  * Release a disc-sized game before the page reads another disc or another action runs. A hidden Test view only

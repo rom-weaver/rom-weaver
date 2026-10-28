@@ -422,6 +422,7 @@ const runPostApplyActions = async ({
         id: playableOutput.id || `apply-${fileName}`,
         platform,
         sizeBytes: loaded.blob.size,
+        ...(loaded.expandedSizeBytes === undefined ? {} : { expandedSizeBytes: loaded.expandedSizeBytes }),
         source: "apply",
       };
       addSessionEntry(entry);

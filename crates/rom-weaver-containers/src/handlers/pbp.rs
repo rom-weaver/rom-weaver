@@ -447,14 +447,27 @@ impl PbpContainerHandler {
             "ISO index table",
         )?;
 
-        let mut indexes = Vec::new();
-        for chunk in bytes.chunks_exact(Self::PSAR_INDEX_ENTRY_SIZE) {
+        let mut indexes: Vec<PbpIsoIndexEntry> = Vec::new();
+        for (index, chunk) in bytes.chunks_exact(Self::PSAR_INDEX_ENTRY_SIZE).enumerate() {
             let offset = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]) as u64;
             let length = u32::from_le_bytes([chunk[4], chunk[5], chunk[6], chunk[7]]) as u64;
             if offset == 0 && length == 0 {
                 continue;
             }
             if length == 0 {
+                // A PCSX-compatible end marker MUST point immediately after the final payload block.
+                // https://github.com/libretro/pcsx_rearmed/blob/master/libpcsxcore/cdriso.c (handlepbp)
+                let is_end_marker = indexes.len() >= 2
+                    && indexes
+                        .last()
+                        .is_some_and(|previous| previous.offset + previous.length == offset)
+                    && chunk[8..].iter().all(|byte| *byte == 0)
+                    && bytes[(index + 1) * Self::PSAR_INDEX_ENTRY_SIZE..]
+                        .iter()
+                        .all(|byte| *byte == 0);
+                if is_end_marker {
+                    break;
+                }
                 return Err(RomWeaverError::Validation(format!(
                     "source `{}` has a malformed ISO index entry",
                     source.display()
@@ -850,6 +863,16 @@ impl ContainerHandlerOperations for PbpContainerHandler {
             ));
         }
         let disc_count = archive.discs.len();
+        let mut stored_block_count = 0;
+        for disc in &archive.discs {
+            let required_blocks = self.required_block_count(disc.iso_size)?;
+            stored_block_count += disc
+                .iso_indexes
+                .iter()
+                .take(required_blocks)
+                .filter(|entry| entry.length == Self::ISO_BLOCK_BYTES as u64)
+                .count();
+        }
         let total_tracks = archive
             .discs
             .iter()
@@ -863,7 +886,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
             .collect::<Vec<_>>()
             .join(", ");
 
-        Ok(OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(PBP.name.to_string()),
             "probe",
@@ -872,7 +895,11 @@ impl ContainerHandlerOperations for PbpContainerHandler {
             ),
             Some(100.0),
             Some(execution),
-        ))
+        );
+        report.details = Some(json!({
+            "pbp": { "disc_count": disc_count, "stored_block_count": stored_block_count }
+        }));
+        Ok(report)
     }
 
     fn list_entries(

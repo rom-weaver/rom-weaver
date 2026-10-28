@@ -263,6 +263,7 @@ const runRomWeaverProbeWorker = async (
   const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
   const platform = typeof details?.platform === "string" ? details.platform.trim() : "";
   const chd = getChdProbeDetails(details?.chd);
+  const pbp = getPbpProbeDetails(details?.pbp);
   const container = asRecord(details?.container);
   const discFormat = typeof details?.disc_format === "string" ? details.disc_format.trim() : "";
   const recommendedFormat = String(
@@ -276,7 +277,19 @@ const runRomWeaverProbeWorker = async (
     ...(discFormat ? { discFormat } : {}),
     ...(recommendedFormat ? { recommendedFormat } : {}),
     ...(chd ? { chd } : {}),
+    ...(pbp ? { pbp } : {}),
   };
+};
+
+const getPbpProbeDetails = (value: unknown): CompressionProbeResult["pbp"] | undefined => {
+  const record = asRecord(value);
+  const discCount = record?.disc_count;
+  const storedBlockCount = record?.stored_block_count;
+  if (typeof discCount !== "number" || !Number.isSafeInteger(discCount) || discCount < 1 || discCount > 5)
+    return undefined;
+  if (typeof storedBlockCount !== "number" || !Number.isSafeInteger(storedBlockCount) || storedBlockCount < 0)
+    return undefined;
+  return { discCount, storedBlockCount };
 };
 
 // The CHD header's own digests: `raw_sha1` covers the decoded payload, `sha1` the payload plus

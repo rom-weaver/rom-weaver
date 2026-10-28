@@ -148,18 +148,21 @@ describe("runPostApplyActions", () => {
         return new Blob(["disc"]);
       },
     });
+    let preparedEntry: EmulatorSessionEntry | undefined;
+    const expandedSizeBytes = 128 * 1024 * 1024 + 1;
     const outcome = await runPostApplyActions({
-      addSessionEntry: () => {
+      addSessionEntry: (entry) => {
+        preparedEntry = entry;
         calls.push("add");
       },
       core: "psx",
       download: () => undefined,
       downloadBehavior: "show",
-      fileName: "disc.chd",
+      fileName: "disc.pbp",
       focusDownload: () => undefined,
       loadRom: async (blob, fileName) => {
         calls.push("load");
-        return { blob, checksum: "a".repeat(40), fileName };
+        return { blob, checksum: "a".repeat(40), fileName, expandedSizeBytes };
       },
       onSelectTestView: () => calls.push("navigate"),
       output,
@@ -171,6 +174,7 @@ describe("runPostApplyActions", () => {
     // A paused disc and the patched one read in its place can exceed an iOS tab's memory limit together.
     expect(calls).toEqual(["release", "read", "load", "add", "current", "navigate"]);
     expect(outcome).toEqual({ downloaded: false, tested: true });
+    expect(preparedEntry).toMatchObject({ sizeBytes: 4, expandedSizeBytes });
   });
 });
 

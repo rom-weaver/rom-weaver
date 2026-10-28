@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildPbp, buildPbpDiscBytes } from "../wasm/pbp-fixture.mjs";
 import type { WorkflowProgress } from "../../src/platform/browser/browser-api.ts";
 import {
   loadEmulatorRom,
@@ -11,12 +12,28 @@ const workflowMocks = vi.hoisted(() => ({
   ingestRom: vi.fn(),
   outputDispose: vi.fn(async () => undefined),
   probeRom: vi.fn(),
+  checksumSetInput: vi.fn(),
+  checksumGetInput: vi.fn(),
+  checksumDispose: vi.fn(async () => undefined),
+  checksumOptions: vi.fn(),
+  checksumOn: vi.fn(),
+  prepareEmulatorPbp: vi.fn(),
 }));
 
 vi.mock("../../src/platform/browser/browser-api.ts", () => ({
+  ChecksumWorkflow: class {
+    constructor(options: unknown) {
+      workflowMocks.checksumOptions(options);
+    }
+    on = workflowMocks.checksumOn;
+    setInput = workflowMocks.checksumSetInput;
+    getInput = workflowMocks.checksumGetInput;
+    dispose = workflowMocks.checksumDispose;
+  },
   getIngestOutputBlob: workflowMocks.getIngestOutputBlob,
   ingestRom: workflowMocks.ingestRom,
   probeRom: workflowMocks.probeRom,
+  prepareEmulatorPbp: workflowMocks.prepareEmulatorPbp,
 }));
 
 type ArchiveOutput = Parameters<typeof pickEmulatorRomOutput>[0][number];
@@ -28,6 +45,13 @@ beforeEach(() => {
   workflowMocks.ingestRom.mockReset();
   workflowMocks.outputDispose.mockClear();
   workflowMocks.probeRom.mockReset();
+  workflowMocks.checksumSetInput.mockReset();
+  workflowMocks.checksumGetInput.mockReset();
+  workflowMocks.checksumGetInput.mockReturnValue({ files: [{ checksums: { sha1: "f".repeat(40) } }] });
+  workflowMocks.checksumDispose.mockClear();
+  workflowMocks.checksumOptions.mockClear();
+  workflowMocks.checksumOn.mockClear();
+  workflowMocks.prepareEmulatorPbp.mockReset();
   workflowMocks.ingestRom.mockImplementation(async (_blob, _fileName, options) => {
     options.onProgress?.({
       id: "extract",
@@ -252,5 +276,139 @@ describe("renameRomToOutput", () => {
 
   it("handles a ROM without an extension", () => {
     expect(renameRomToOutput("my-hack.zip", "ROMFILE")).toBe("my-hack");
+  });
+});
+
+describe("native PS1 PBP loading", () => {
+  const disc = { discId: "SLUS12345", iso: buildPbpDiscBytes(32, 7) };
+
+  it.each([2, 5])("preserves a %i-disc PBP for PSX without extraction", async (count) => {
+    const blob = new Blob([buildPbp(Array.from({ length: count }, () => disc))]);
+    const signal = new AbortController().signal;
+    workflowMocks.probeRom.mockResolvedValue({ entries: ["Game.bin"], pbp: { discCount: count, storedBlockCount: 0 } });
+    const loaded = await loadEmulatorRom(blob, "Game.PBP", { signal });
+    expect(loaded).toEqual({ blob, checksum: "f".repeat(40), fileName: "Game.PBP", platform: "Sony PlayStation" });
+    expect(loaded.blob).toBe(blob);
+    expect(workflowMocks.probeRom).toHaveBeenCalledWith(blob, "Game.PBP", expect.objectContaining({ signal }));
+    expect(workflowMocks.checksumSetInput).toHaveBeenCalledWith(
+      { fileName: "Game.PBP", source: blob },
+      { algorithms: ["sha1"], autoExtract: false },
+    );
+    expect(workflowMocks.checksumOptions).toHaveBeenCalledWith({ signal });
+    expect(workflowMocks.checksumDispose).toHaveBeenCalledOnce();
+    expect(workflowMocks.ingestRom).not.toHaveBeenCalled();
+  });
+
+  it("preserves the extracted single-disc checksum while handing PSX the original PBP", async () => {
+    const blob = new Blob([buildPbp([disc])]);
+    workflowMocks.probeRom.mockResolvedValue({ entries: ["Game.bin"], pbp: { discCount: 1, storedBlockCount: 0 } });
+    workflowMocks.ingestRom.mockResolvedValue({
+      outputs: [{ fileName: "Game.bin", checksums: { sha1: "a".repeat(40) }, dispose: workflowMocks.outputDispose }],
+      result: { assets: [{ copiedInPlace: false }] },
+    });
+    await expect(loadEmulatorRom(blob, "Game.pbp")).resolves.toEqual({
+      blob,
+      checksum: "a".repeat(40),
+      fileName: "Game.pbp",
+      platform: "Sony PlayStation",
+    });
+    expect(workflowMocks.getIngestOutputBlob).not.toHaveBeenCalled();
+    expect(workflowMocks.outputDispose).toHaveBeenCalledOnce();
+    expect(workflowMocks.checksumSetInput).not.toHaveBeenCalled();
+  });
+
+  it.each([1, 2, 5])("prepares all %i discs when a PBP contains stored blocks", async (discCount) => {
+    const blob = new Blob([buildPbp(Array.from({ length: discCount }, () => disc))]);
+    const bundle = new Blob(["complete native playlist bundle"]);
+    const signal = new AbortController().signal;
+    workflowMocks.probeRom.mockResolvedValue({ entries: [], pbp: { discCount, storedBlockCount: 1 } });
+    workflowMocks.prepareEmulatorPbp.mockResolvedValue({
+      blob: bundle,
+      checksum: "a".repeat(40),
+      expandedSizeBytes: discCount * disc.iso.length,
+    });
+    await expect(loadEmulatorRom(blob, "Game.pbp", { signal })).resolves.toEqual({
+      blob: bundle,
+      checksum: "a".repeat(40),
+      expandedSizeBytes: discCount * disc.iso.length,
+      fileName: "Game.zip",
+      platform: "Sony PlayStation",
+    });
+    expect(workflowMocks.prepareEmulatorPbp).toHaveBeenCalledWith(
+      blob,
+      "Game.pbp",
+      discCount,
+      expect.objectContaining({ signal }),
+    );
+    expect(workflowMocks.ingestRom).not.toHaveBeenCalled();
+    expect(workflowMocks.checksumSetInput).not.toHaveBeenCalled();
+  });
+
+  it("rejects a stored-block bundle without its save checksum", async () => {
+    workflowMocks.probeRom.mockResolvedValue({ entries: [], pbp: { discCount: 2, storedBlockCount: 1 } });
+    workflowMocks.prepareEmulatorPbp.mockResolvedValue({ blob: new Blob(["zip"]), checksum: undefined });
+    await expect(loadEmulatorRom(new Blob([buildPbp([disc, disc])]), "Game.pbp")).rejects.toThrow("PBP SHA-1");
+  });
+
+  it("keeps empty-PSAR PSP homebrew on the in-place ingest path", async () => {
+    const header = new Uint8Array(40);
+    header.set([0, 80, 66, 80]);
+    for (let offset = 8; offset < 40; offset += 4) new DataView(header.buffer).setUint32(offset, 40, true);
+    const blob = new Blob([header]);
+    workflowMocks.probeRom.mockResolvedValue({ entries: [], platform: "Sony Playstation Portable" });
+    workflowMocks.ingestRom.mockResolvedValue({
+      outputs: [],
+      result: {
+        assets: [{ copiedInPlace: true, checksums: { sha1: "b".repeat(40) }, platform: "Sony Playstation Portable" }],
+      },
+    });
+    await expect(loadEmulatorRom(blob, "EBOOT.PBP")).resolves.toEqual({
+      blob,
+      checksum: "b".repeat(40),
+      fileName: "EBOOT.PBP",
+      platform: "Sony Playstation Portable",
+    });
+    expect(workflowMocks.checksumSetInput).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "does not contain a supported PS1 DATA.PSAR signature",
+    "has non-monotonic PBP section offsets",
+    "has an out-of-range PBP section offset",
+    "is too small to be a pbp container",
+  ])("propagates parser validation: %s", async (message) => {
+    workflowMocks.probeRom.mockRejectedValue(new Error(message));
+    await expect(loadEmulatorRom(new Blob(["invalid"]), "Game.pbp")).rejects.toThrow(message);
+    expect(workflowMocks.ingestRom).not.toHaveBeenCalled();
+    expect(workflowMocks.checksumSetInput).not.toHaveBeenCalled();
+  });
+
+  it("disposes the checksum workflow when hashing fails", async () => {
+    workflowMocks.probeRom.mockResolvedValue({ entries: [], pbp: { discCount: 2, storedBlockCount: 0 } });
+    workflowMocks.checksumSetInput.mockRejectedValue(new Error("hash failed"));
+    await expect(loadEmulatorRom(new Blob([buildPbp([disc, disc])]), "Game.pbp")).rejects.toThrow("hash failed");
+    expect(workflowMocks.checksumDispose).toHaveBeenCalledOnce();
+  });
+
+  it("forwards checksum progress and preserves cancellation across cleanup failure", async () => {
+    const onProgress = vi.fn();
+    const signal = new AbortController().signal;
+    const error = new DOMException("Cancelled", "AbortError");
+    workflowMocks.probeRom.mockResolvedValue({ entries: [], pbp: { discCount: 2, storedBlockCount: 0 } });
+    workflowMocks.checksumSetInput.mockRejectedValue(error);
+    workflowMocks.checksumDispose.mockRejectedValueOnce(new Error("cleanup failed"));
+    await expect(loadEmulatorRom(new Blob([buildPbp([disc, disc])]), "Game.pbp", { onProgress, signal })).rejects.toBe(
+      error,
+    );
+    expect(workflowMocks.checksumOn).toHaveBeenCalledWith("progress", onProgress);
+    expect(workflowMocks.checksumOptions).toHaveBeenCalledWith({ signal });
+    expect(workflowMocks.checksumDispose).toHaveBeenCalledOnce();
+  });
+
+  it("requires a valid whole-PBP save checksum", async () => {
+    workflowMocks.probeRom.mockResolvedValue({ entries: [], pbp: { discCount: 2, storedBlockCount: 0 } });
+    workflowMocks.checksumGetInput.mockReturnValue({ files: [{ checksums: { sha1: "invalid" } }] });
+    await expect(loadEmulatorRom(new Blob([buildPbp([disc, disc])]), "Game.pbp")).rejects.toThrow("PBP SHA-1");
+    expect(workflowMocks.checksumDispose).toHaveBeenCalledOnce();
   });
 });

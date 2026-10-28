@@ -390,6 +390,32 @@ describe("createEmulatorDocument", () => {
     expect(start).toBeLessThan(document.indexOf("loader.js"));
   });
 
+  it("skips the pinned disk menu's initial selection while forwarding real disc changes", () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.pbp", "psx");
+    const start = document.indexOf("Object.defineProperty(window, 'EmulatorJS'");
+    const script = document.slice(document.lastIndexOf("(() => {", start), document.indexOf("})();", start) + 5);
+    const calls: unknown[][] = [];
+    class FakeEmulatorJS {
+      gameManager = { getCurrentDisk: () => 0 };
+      menuOptionChanged(...args: unknown[]) {
+        calls.push(args);
+        return "changed";
+      }
+    }
+    const window: { EmulatorJS?: typeof FakeEmulatorJS } = {};
+    runInNewContext(script, { window });
+    window.EmulatorJS = FakeEmulatorJS;
+    const emulator = new window.EmulatorJS();
+    expect(emulator.menuOptionChanged("disk", "0")).toBeUndefined();
+    expect(calls).toEqual([]);
+    expect(emulator.menuOptionChanged("disk", "1")).toBe("changed");
+    expect(emulator.menuOptionChanged("volume", "0")).toBe("changed");
+    expect(calls).toEqual([
+      ["disk", "1"],
+      ["volume", "0"],
+    ]);
+  });
+
   const readGameBufferScript = (gameUrl: string) => {
     const document = createEmulatorDocument("/emulatorjs/data/", gameUrl, "game.chd", "psx");
     const start = document.indexOf("Object.defineProperty(window, 'EJS_emulator'");
@@ -454,7 +480,7 @@ describe("emulator game identity", () => {
     expect(identity.gameId).toBe(createEmulatorGameIdentity({ checksum }).gameId);
   });
 
-  it.each(["iso", "cue", "img", "mds", "ccd", "cso", "pbp", "m3u", "gdi", "toc", "mdf"])(
+  it.each(["iso", "cue", "img", "mds", "ccd", "cso", "pbp", "m3u", "gdi", "toc", "mdf", "zip"])(
     "keeps the .%s extension of a disc image",
     (extension) => {
       const checksum = "a9993e364706816aba3e25717850c26c9cd0d89d";

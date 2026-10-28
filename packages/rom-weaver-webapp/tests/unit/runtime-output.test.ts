@@ -151,3 +151,19 @@ describe("runtime output paths", () => {
     expect(files.get(second.path)).toEqual(new Uint8Array([2]));
   });
 });
+
+it("cancels a large output snapshot between bounded chunks", async () => {
+  const { vfs } = createVfs();
+  const controller = new AbortController();
+  const chunkSize = 8 * 1024 * 1024;
+  const source = new Blob([new Uint8Array(chunkSize * 2)]);
+  const slice = vi.fn((start: number, end: number) => {
+    controller.abort();
+    return source.slice(start, end);
+  });
+  vfs.getFile = vi.fn(async () => ({ type: "", slice }) as unknown as File);
+  await expect(
+    readRuntimeOutputBlob({ path: "/work/discs.zip", size: source.size, vfs }, controller.signal),
+  ).rejects.toMatchObject({ code: "CANCELLED" });
+  expect(slice).toHaveBeenCalledOnce();
+});

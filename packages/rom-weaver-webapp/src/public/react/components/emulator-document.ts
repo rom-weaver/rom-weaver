@@ -22,7 +22,7 @@ const hashString = (value: string): number => {
 };
 
 /**
- * Disc image extensions the vendored disc cores (pcsx_rearmed, yabause,
+ * Disc image and bundle extensions the vendored disc cores (pcsx_rearmed, yabause,
  * genesis_plus_gx, ppsspp) read or EmulatorJS acts on. EmulatorJS names the
  * file it writes into the core after `EJS_gameName`, picks its loader and
  * invents a `MODE1/2352` cue sheet from that name, so a disc MUST keep its
@@ -41,6 +41,7 @@ const DISC_IMAGE_EXTENSIONS: ReadonlySet<string> = new Set([
   "mds",
   "pbp",
   "toc",
+  "zip",
 ]);
 
 /**
@@ -158,7 +159,7 @@ const TOLERATE_WAKE_LOCK_DENIAL = `{const w=navigator.wakeLock,r=w?.request?.bin
  * which gives this accessor the one window in which to neutralize it. The
  * script MUST run before `loader.js`.
  */
-const DISABLE_UPDATE_CHECK = `
+const PREPARE_EMULATORJS = `
       (() => {
         let EmulatorJS;
         Object.defineProperty(window, 'EmulatorJS', {
@@ -166,6 +167,15 @@ const DISABLE_UPDATE_CHECK = `
           get: () => EmulatorJS,
           set: (value) => {
             if (value && value.prototype) value.prototype.checkForUpdates = () => {};
+            // EmulatorJS 4.2.3 MUST skip its initial no-op disk selection: setupDisksMenu runs before
+            // setupSettingsMenu initializes allSettings (https://cdn.emulatorjs.org/4.2.3/data/src/emulator.js).
+            if (value && typeof value.prototype?.menuOptionChanged === 'function') {
+              const changeOption = value.prototype.menuOptionChanged;
+              value.prototype.menuOptionChanged = function (option, selected) {
+                if (option === 'disk' && this.gameManager && Number(selected) === this.gameManager.getCurrentDisk()) return;
+                return changeOption.apply(this, arguments);
+              };
+            }
             EmulatorJS = value;
           },
         });
@@ -390,7 +400,7 @@ const createEmulatorDocument = (
       EJS_pathtodata = ${toScriptString(dataUrl)};
     </script>
     <script>${createEmulatorAudioContextBridgeScript(gameName)}</script>
-    <script>${DISABLE_UPDATE_CHECK}</script>
+    <script>${PREPARE_EMULATORJS}</script>
     <script>${OWN_GAME_BUFFER}</script>
     <script>${LABEL_MENU_BUTTONS}</script>
     <script>${TOLERATE_WAKE_LOCK_DENIAL}</script>
