@@ -121,7 +121,10 @@ vi.mock("../../src/lib/path-utils.ts", () => ({
       .split(/[\\/]/u)
       .pop() || fallback,
 }));
-vi.mock("../../src/lib/logging.ts", () => ({ emitTraceLog: state.emitTrace }));
+vi.mock("../../src/lib/logging.ts", () => ({
+  createLogger: () => ({ debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() }),
+  emitTraceLog: state.emitTrace,
+}));
 vi.mock("../../src/lib/runtime/run-output-paths.ts", () => ({ createRomWeaverOutputScope: state.createOutputScope }));
 vi.mock("../../src/lib/runtime/run-result-parsing.ts", () => ({
   romTypeFromEmittedFile: (asset: { platform?: string }) => asset.platform || "unknown",

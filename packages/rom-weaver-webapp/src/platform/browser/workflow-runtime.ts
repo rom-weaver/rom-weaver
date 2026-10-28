@@ -7,6 +7,7 @@ import {
 import { createBundleRuntime } from "../../lib/runtime/bundle-runtime.ts";
 import { invokeRomWeaverChecksumWorker } from "../../lib/runtime/wasm-checksum-command.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
+import { boundIdentifyWait } from "./bounded-identify-wait.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import { createRomWeaverOutputScope } from "../../lib/runtime/run-output-paths.ts";
 import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
@@ -162,8 +163,10 @@ const prepareIngestIdentify = async ({
   signal,
   sourcePath,
   knownInputPaths,
+  identifyBounded = true,
 }: {
   fileName: string;
+  identifyBounded?: boolean;
   logLevel?: IngestRunInput["logLevel"];
   onLog?: IngestRunInput["onLog"];
   onProgress?: IngestRunInput["onProgress"];
@@ -199,6 +202,18 @@ const prepareIngestIdentify = async ({
           (error: unknown) => ({ error }),
         )
       : undefined;
+    // Index, catalog, router, and pack downloads gate local checksumming and queued Apply, so the
+    // wait is bounded; on timeout the lookup is skipped and the download keeps filling its cache.
+    const bounded = async <T>(work: Promise<T>): Promise<T> => {
+      if (!identifyBounded) return work;
+      const result = await boundIdentifyWait<T, { timedOut: string }>(work, "ROM identify data", (timedOut) => ({
+        timedOut,
+      }));
+      if (result && typeof result === "object" && "timedOut" in result && typeof result.timedOut === "string") {
+        throw new Error(result.timedOut);
+      }
+      return result as T;
+    };
     // Always probe: the platform the probe reports (decoded from the actual
     // bytes) outranks the file extension for routing, and a mislabeled or
     // unknown extension must not silently fall back to the cartridge packs.
@@ -235,11 +250,11 @@ const prepareIngestIdentify = async ({
       extensionSlugs.length === selectedSlugs.length &&
       extensionSlugs.every((slug) => selectedSlugs.includes(slug));
     if (extensionSelectionStillApplies) {
-      const settled = await extensionSelection;
+      const settled = await bounded(extensionSelection);
       if ("error" in settled) throw settled.error;
       selection = settled.selection;
     } else {
-      selection = await loadIdentifyPackSelection(hints, reportSelectedPlatforms);
+      selection = await bounded(loadIdentifyPackSelection(hints, reportSelectedPlatforms));
     }
     return {
       entryNames,
@@ -264,6 +279,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
     checksumAlgorithms,
     identify,
     identifyAllRomEntries,
+    identifyBounded,
     select,
     interactiveSelectionEnabled,
     splitBin,
@@ -308,6 +324,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
               signal,
               sourcePath: stagedSource.filePath,
               knownInputPaths: stagedInputs.map((entry) => entry.filePath),
+              identifyBounded,
             });
       /* Identifying an archive must answer for EVERY ROM member, so the selection
        is made here instead of being left to the interactive host prompt - which

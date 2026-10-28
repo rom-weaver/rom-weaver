@@ -1,4 +1,5 @@
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
+import { boundIdentifyWait } from "../../platform/browser/bounded-identify-wait.ts";
 import { lookupExpectedRom } from "../../lib/apply/expected-rom-lookup.ts";
 import { fillMemberLaneChecks } from "../../lib/weave/weave-member-checks.ts";
 import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
@@ -6,6 +7,7 @@ import { weaveCheckTokens } from "../../lib/weave/weave-targets.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { createPatchMetadataLabel } from "../../lib/output/output-name-composition.ts";
 import { removeKnownOutputExtension } from "../../lib/output/output-name-validation.ts";
+import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import type { ParsedWeaveChecks, ParsedWeavePatchInput } from "../../types/weave.ts";
 import type { BinarySource, PatcherOutputController, PatcherStackController } from "./patcher-form.ts";
 import { waitForPatchStackReady } from "./wait-for-patch-stack-ready.ts";
@@ -129,7 +131,13 @@ const resolveMemberLaneChecks = async (session: WeaveApplySession): Promise<Read
   const romChecks = session.romExpectation?.checks || session.chainEndpointChecks.input;
   if (!romChecks) return empty;
   try {
-    const identification = await lookupExpectedRom(romChecks);
+    // The lookup is optional and keeps Apply disabled while pending, so the wait is bounded; the
+    // download keeps running and later lookups reuse it.
+    const identification = await boundIdentifyWait(
+      lookupExpectedRom(romChecks),
+      "weave member-lane ROM lookup",
+      (reason): ParsedIdentifyResolution => ({ matches: [], status: "unavailable", unavailableReason: reason }),
+    );
     const fills = fillMemberLaneChecks(session.entries, identification);
     if (fills.size) logger.debug("weave session filled member lane checks", { entries: [...fills.keys()] });
     return fills;

@@ -105,6 +105,7 @@ type BrowserIngestRomOptions = {
   checksumAlgorithms?: string[];
   identify?: boolean;
   identifyAllRomEntries?: boolean;
+  identifyBounded?: boolean;
   onProgress?: Parameters<NonNullable<NonNullable<typeof browserRuntime.ingest>["run"]>>[0]["onProgress"];
   signal?: AbortSignal;
 };
@@ -119,6 +120,7 @@ const ingestRom = async (source: Blob, fileName: string, options: BrowserIngestR
     fileName,
     identify: options.identify,
     identifyAllRomEntries: options.identifyAllRomEntries,
+    identifyBounded: options.identifyBounded,
     onProgress: options.onProgress,
     signal: options.signal,
     source,
@@ -155,6 +157,7 @@ const identifyRom = async (
     checksumAlgorithms: ["crc32", "md5", "sha1"],
     identify: true,
     identifyAllRomEntries: true,
+    identifyBounded: false,
   });
   try {
     // Disc sheets are metadata sidecars. They do not contain ROM bytes and the
