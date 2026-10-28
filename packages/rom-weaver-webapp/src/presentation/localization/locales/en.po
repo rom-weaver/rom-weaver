@@ -4800,6 +4800,11 @@ msgstr "slot {slot}, index {index}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.weaveTrackChecksSkipped"
+msgstr "Some weave track checks were skipped because the title database was not available. The weave's own checks still apply."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.flowWeaveBringAfter"
 msgstr "someone sent you."
 

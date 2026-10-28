@@ -43,6 +43,8 @@ export type WeaveToolsState = {
   /** Why the woven final result won't be verified against an expected output;
    * null when it will be, or when nothing declares an output. */
   outputVerification: { level: "warn"; message: string } | null;
+  /** The per-track checks from the identification database were skipped (lookup unavailable). */
+  memberChecksSkipped: boolean;
 };
 
 export type WeaveExportState = {
@@ -364,6 +366,12 @@ export const ApplyOutputAction = ({
         shown={postApplyTestOption.visible}
       />
       {weaveVerificationError ? <Notice level="error">{weaveVerificationError}</Notice> : null}
+      {weaveTools?.memberChecksSkipped ? (
+        <p aria-live="polite" className="patch-off-note" id="rom-weaver-weave-track-checks-skipped">
+          <TriangleAlert aria-hidden="true" />
+          <span>{localizer.message("ui.apply.weaveTrackChecksSkipped")}</span>
+        </p>
+      ) : null}
       {weaveTools?.outputVerification ? (
         <p aria-live="polite" className="patch-off-note" id="rom-weaver-weave-output-unverified">
           <TriangleAlert aria-hidden="true" />

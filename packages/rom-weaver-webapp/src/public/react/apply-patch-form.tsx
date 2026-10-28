@@ -429,7 +429,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     setPatchInputBasis(activeWeaveSession?.patchBasis || "auto");
   }, [activeWeaveSession]);
   const weaveControllersRef = useRef<WeaveSessionControllers>({ output: null, patchStack: null });
+  const applyStartedRef = useRef(false);
   const {
+    memberChecksSkipped,
     weaveDefaultsPending,
     handleWeavePatchesChange,
     weaveMetaById,
@@ -441,6 +443,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     controllersRef: weaveControllersRef,
     getPatchIds,
     seedPatchEnablement,
+    applyStartedRef,
   });
 
   // Metadata edits MUST invalidate the workflow name because the source identities stay unchanged.
@@ -573,6 +576,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
   const handleLocalPatchesChange = useCallback(
     (nextPatches: BinarySource[]) => {
+      // A changed patch list starts a new run, so the sticky Apply-started guard resets.
+      applyStartedRef.current = false;
       setCompletedOutput(null);
       setCompletedCheats(undefined);
       if (!nextPatches.length) {
@@ -611,10 +616,17 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // that result), stood down otherwise. Runs through the same per-patch option
   // path as user edits; the carrier index is found by value so reorders and
   // clears stay aligned.
+  // Every declared algorithm is seeded. The workflow skips the check for disc assets (as the CLI does) and
+  // whenever finishing could change the last step's bytes.
   const weaveOutputChecks = activeWeaveSession?.chainEndpointChecks.output?.checksums;
-  const weaveOutputChecksum = weaveOutputChecks?.sha1 || weaveOutputChecks?.md5 || weaveOutputChecks?.crc32 || "";
+  const weaveOutputChecksum = Object.entries(weaveOutputChecks || {})
+    .map(([algorithm, digest]) => `${algorithm}=${digest}`)
+    .join(",");
+  const seededWeaveOutputChecksumRef = useRef("");
   useEffect(() => {
-    if (!weaveOutputChecksum || weaveChainStatus === null) return;
+    const staleChecksum = seededWeaveOutputChecksumRef.current;
+    const hasStale = staleChecksum !== "" && staleChecksum !== weaveOutputChecksum;
+    if ((!weaveOutputChecksum || weaveChainStatus === null) && !hasStale) return;
     const desired = weaveChainStatus === "full" ? weaveOutputChecksum : "";
     const targetIndex = (activeWeaveSession?.entries.length ?? 0) - 1;
     const abort = new AbortController();
@@ -624,14 +636,28 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       await waitForPatchStackReady(weaveControllersRef.current.patchStack, { signal: abort.signal });
       if (abort.signal.aborted) return;
       const stack = weaveControllersRef.current.patchStack;
+      // A previous weave session's value stays on its patch when the bench switches sessions
+      // (patches append); clear it so it cannot reject an apply of the remaining patches.
+      if (hasStale) {
+        const staleItems = stack?.getState().items || [];
+        for (let index = 0; index < staleItems.length; index++) {
+          if ((staleItems[index]?.validateOutputChecksum || "") === staleChecksum)
+            await Promise.resolve(stack?.setPatchOption?.(index, { validateOutputChecksum: "" }));
+        }
+        if (abort.signal.aborted) return;
+        seededWeaveOutputChecksumRef.current = "";
+      }
+      if (!weaveOutputChecksum || weaveChainStatus === null) return;
       const items = stack?.getState().items || [];
       const carrierIndex = items.findIndex((item) => (item.validateOutputChecksum || "") === weaveOutputChecksum);
       if (desired) {
         if (carrierIndex === targetIndex) return;
         if (carrierIndex >= 0)
           await Promise.resolve(stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" }));
-        if (!abort.signal.aborted && targetIndex >= 0 && targetIndex < items.length)
+        if (!abort.signal.aborted && targetIndex >= 0 && targetIndex < items.length) {
+          seededWeaveOutputChecksumRef.current = weaveOutputChecksum;
           await Promise.resolve(stack?.setPatchOption?.(targetIndex, { validateOutputChecksum: weaveOutputChecksum }));
+        }
         return;
       }
       if (carrierIndex >= 0)
@@ -919,6 +945,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
                 handlers.onInputPrepared?.(state);
                 emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow input prepared", { input: state });
               },
+              onIdentified: (state) => handlers.onInputState?.(state),
               onFinalized: (state) => {
                 handlers.onInputState?.(state);
                 if (state?.checksums) handlers.onChecksumReady?.(state);
@@ -1247,6 +1274,25 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         })),
       );
       for (const [index, option] of runOptions.entries()) Object.assign(option, gatedChecks[index]);
+      // The final-output value (drawer or seeded) is a chain-output check too: it stands down with the
+      // same chain-prefix gate on weave entries, as the CLI skips non-prefix output checks.
+      const finalGate = gateWeaveChainChecks(
+        runOptions.map((option, index) => ({
+          ...option,
+          enabled: enabled[index] ?? true,
+          authoredInputChecks: false,
+          inputChecks: undefined,
+          outputChecks: "x",
+        })),
+      );
+      for (const [index, option] of runOptions.entries()) {
+        if (
+          option.validateOutputChecksum &&
+          weaveMetaRef.current.has(patchIds[index] || "") &&
+          !finalGate[index]?.outputChecks
+        )
+          option.validateOutputChecksum = "";
+      }
       const dependencyError = validatePatchDependencies(
         runOptions.map((option, index) => ({
           id: option.id || `patch-${index + 1}`,
@@ -1840,6 +1886,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     workflowHandle,
   });
 
+  // Sticky until the patch list changes (reset in handleLocalPatchesChange and the weave hook).
+  if (outputState.applyButton.loading) applyStartedRef.current = true;
+
   const combinedPatch = useCombinedPatch({
     revision: combinedRevision,
     name: outputState.displayFileName,
@@ -2123,6 +2172,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           ? { weaveRomExpectation: activeWeaveSession.romExpectation }
           : {})}
         weaveTools={{
+          memberChecksSkipped: memberChecksSkipped && !!activeWeaveSession,
           hasOptionalEntries:
             !!activeWeaveSession?.entries.some((entry) => entry.optional) || disabledPatchIds.size > 0,
           outputVerification,

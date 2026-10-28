@@ -16,9 +16,11 @@ import {
 import { buildSessionOutputFiles } from "../../lib/output/output-build-service.ts";
 import { requireOutputName, withOutputExtension } from "../../lib/output/output-name-validation.ts";
 import { reportProgress } from "../../lib/progress/progress-reporting.ts";
+import { createLogger } from "../logging.ts";
 import { getNamedSourcePath } from "../../storage/shared/binary/source-file-utils.ts";
 import { copyRuntimeOutputToPath } from "../../storage/vfs/runtime-output.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
+import { identifyHashAlgorithm } from "../../types/identify.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { PatchApplySummary, PatchFileInstance } from "../../types/workflow-internal.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
@@ -27,6 +29,7 @@ import type { ParsedPatchLike } from "../../workers/protocol/patch-engine.ts";
 import { type createPatchFile, getPatchFileExternalSource } from "../input/binary-service.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { roundElapsedMs } from "../workflow/source-preparation.ts";
+import { getPatchFilePrecomputedChecksumVariants } from "../workflow/staged-source-checksums.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
 import { type BareMemberRule, createRunBareMemberRule, findMemberAssets } from "./bare-member-target.ts";
 import { parsePatchForApply, resolvePatchTargets, toPublicOutput } from "./patch-apply-service.ts";
@@ -503,6 +506,67 @@ const getPatchChecks = (
   return checks.some(Boolean) ? checks : undefined;
 };
 
+// The declared final-output check (digest tokens such as "crc32=deadbeef,sha1=...", or a bare digest)
+// joins the last step's own output checks. That keeps it on the per-step path: judged in the
+// normalised layout (header stripped, N64 big-endian) and skipped when validation is not strict,
+// exactly like every other per-step check.
+const parseDeclaredOutputChecks = (declared: string) =>
+  declared
+    .toLowerCase()
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map((token) => {
+      if (token.includes("=")) return token;
+      const checksum = token.replace(/^0x/, "");
+      const algorithm = identifyHashAlgorithm(checksum);
+      if (!algorithm) throw new Error("Output checksum must be a CRC32, MD5, or SHA-1 hex digest");
+      return `${algorithm}=${checksum}`;
+    });
+
+// The CLI judges a weave's output.checks on the FINISHED output (header re-added, N64 order restored,
+// checksum repaired) and ignores them for discs. The per-step path sees the normalised last step, so the
+// declared final check joins it only when finishing cannot change those bytes; otherwise it is skipped
+// (a correct apply must never be rejected). Disc assets are skipped like the CLI skips disc inputs.
+const logger = createLogger("apply-workflow");
+
+const finishingMayChangeBytes = (
+  asset: InputAsset,
+  patchIndices: number[],
+  patchOptions: PatchInput["patchOptions"],
+  options: ApplyPatchOptions,
+) =>
+  !!asset.discGroupId ||
+  asset.kind !== "rom" ||
+  !!(options.compatibility?.addHeader || options.compatibility?.fixChecksum || options.compatibility?.removeHeader) ||
+  (!!options.output?.header && options.output.header !== "auto") ||
+  patchIndices.some((patchIndex) => patchOptions?.[patchIndex]?.header === "strip") ||
+  patchIndices.some((patchIndex) =>
+    [patchOptions?.[patchIndex]?.n64ByteOrder, patchOptions?.[patchIndex]?.resolvedN64ByteOrder].some(
+      (order) => !!order && order !== "keep",
+    ),
+  ) ||
+  // A re-prepared asset has no variants of its own; the file still carries the precomputed ones.
+  !!(
+    asset.checksumVariants?.length ? asset.checksumVariants : getPatchFilePrecomputedChecksumVariants(asset.file)
+  )?.some((variant) => Object.values(variant.applyCompatibility || {}).some(Boolean));
+
+const getPatchOutputChecks = (
+  patchIndices: number[],
+  patchOptions: PatchInput["patchOptions"],
+  finalCheckApplies: boolean,
+) => {
+  const checks = getPatchChecks(patchIndices, patchOptions, "outputChecks");
+  const lastIndex = patchIndices.at(-1);
+  const declared = patchOptions?.[lastIndex ?? -1]?.validateOutputChecksum?.trim();
+  if (!(declared && finalCheckApplies)) return checks;
+  const merged = patchIndices.map((patchIndex) => patchOptions?.[patchIndex]?.outputChecks || "");
+  const own = merged.at(-1) ?? "";
+  const ownTokens = own.toLowerCase().split(/[\s,]+/);
+  const added = parseDeclaredOutputChecks(declared).filter((token) => !ownTokens.includes(token));
+  merged[merged.length - 1] = [own, ...added].filter(Boolean).join(",");
+  return merged;
+};
+
 const canReuseWorkerOutputPath = (output: PublicOutputWithApplySummary) =>
   !!(
     output &&
@@ -550,7 +614,12 @@ const applyPatchesToAsset = async ({
   const patchInputs = getPatchInputs(patchIndices, patchOptions, asset, bareMemberRule);
   const patchTargets = getPatchTargets(patchIndices, patchOptions, asset, bareMemberRule);
   const patchInputChecks = getPatchChecks(patchIndices, patchOptions, "inputChecks");
-  const patchOutputChecks = getPatchChecks(patchIndices, patchOptions, "outputChecks");
+  const finalCheckApplies = !finishingMayChangeBytes(asset, patchIndices, patchOptions, options);
+  if (!finalCheckApplies && patchOptions?.[patchIndices.at(-1) ?? -1]?.validateOutputChecksum?.trim())
+    logger.debug("weave final-output check skipped: finishing may change the output bytes", {
+      asset: asset.fileName,
+    });
+  const patchOutputChecks = getPatchOutputChecks(patchIndices, patchOptions, finalCheckApplies);
   const selectedPatches = getSelectedPatchInputs(assetPatches, patches, patchFiles);
   const patchNames = selectedPatches.map((entry) => entry.patchFileName).filter(Boolean);
   const patchLabel = patchNames.length
@@ -880,4 +949,10 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
   };
 };
 
-export { getPatchHeaderModes, getPatchN64ByteOrders, retainUncompressedWorkerOutputs, runApplyWorkflow };
+export {
+  finishingMayChangeBytes,
+  getPatchHeaderModes,
+  getPatchN64ByteOrders,
+  retainUncompressedWorkerOutputs,
+  runApplyWorkflow,
+};

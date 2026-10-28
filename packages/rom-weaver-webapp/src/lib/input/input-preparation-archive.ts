@@ -1,5 +1,6 @@
 import { ROM_WEAVER_FILE_FILTERS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
+import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import type { SourceObject, SourceRef } from "../../types/source.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import { isNfsPartName } from "./nfs-inputs.ts";
@@ -439,6 +440,24 @@ const getChdMode = (assets: Array<{ discFormat?: string; kind?: string }>) => {
     : "dvd";
 };
 
+/**
+ * Ingest stops waiting for identify data after a bound and reports `identifyUnavailable` (plus an
+ * `identifyRetry` for the still-loading data). Carry both on the staged file so the checksum step,
+ * which reuses these precomputed values, shows "unavailable" and can re-identify once data loads.
+ */
+const markIdentifyUnavailable = (
+  file: PatchFileInstance,
+  ingest: { identifyRetry?: Promise<boolean>; identifyUnavailable?: string },
+): void => {
+  if (!ingest.identifyUnavailable) return;
+  (file as { identification?: ParsedIdentifyResolution }).identification = {
+    matches: [],
+    status: "unavailable",
+    unavailableReason: ingest.identifyUnavailable,
+  };
+  if (ingest.identifyRetry) (file as { identifyRetry?: Promise<boolean> }).identifyRetry = ingest.identifyRetry;
+};
+
 /** Discover a compressed archive's input assets with a SINGLE recursive ingest (classify + descend +
  * checksum): the Rust core descends nested containers, resolving one payload per level (auto-pick when
  * unambiguous, host prompt when not, plus the multi-track CHD CD split-bin prompt), and returns the
@@ -470,6 +489,8 @@ const resolveArchiveInputAssetsByDescent = async (
   // each level's source against the longest matching `out_dir` to show the path inside its parent.
   const steps: DescentExtractStep[] = [];
   const {
+    identifyRetry,
+    identifyUnavailable,
     result: ingestResult,
     outputs,
     patchOutputs,
@@ -499,6 +520,8 @@ const resolveArchiveInputAssetsByDescent = async (
     traceArchivePreparation(options, "input.archive.chd-mode", { chdMode, sourceIndex });
   }
   return buildIngestInputAssets(archiveFile, options, sourceIndex, compressionFormat, steps, {
+    identifyRetry,
+    identifyUnavailable,
     result: ingestResult,
     outputs,
     patchOutputs,
@@ -507,7 +530,7 @@ const resolveArchiveInputAssetsByDescent = async (
 
 type IngestOutputs = Pick<
   Awaited<ReturnType<NonNullable<NonNullable<WorkflowRuntime["ingest"]>["run"]>>>,
-  "result" | "outputs" | "patchOutputs"
+  "result" | "outputs" | "patchOutputs" | "identifyRetry" | "identifyUnavailable"
 >;
 
 const buildIngestInputAssets = async (
@@ -516,7 +539,7 @@ const buildIngestInputAssets = async (
   sourceIndex: number,
   compressionFormat: string,
   steps: DescentExtractStep[],
-  { result: ingestResult, outputs, patchOutputs }: IngestOutputs,
+  { identifyRetry, identifyUnavailable, result: ingestResult, outputs, patchOutputs }: IngestOutputs,
 ): Promise<InputAsset[]> => {
   if (!outputs.length) {
     // A nested patch-only weave can default to the ROM bucket before descent
@@ -564,6 +587,7 @@ const buildIngestInputAssets = async (
       const identification = ingestResult.assets[index]?.identification;
       if (identification)
         (file as typeof file & { identification?: typeof identification }).identification = identification;
+      markIdentifyUnavailable(file, { identifyRetry, identifyUnavailable });
       return file;
     }),
   );
@@ -794,7 +818,7 @@ const resolveUnclassifiedInputAssets = async (
       throw error;
     }
   }
-  const { result } = ingested;
+  const { identifyRetry, identifyUnavailable, result } = ingested;
   const asset = result.isRom ? result.assets[0] : undefined;
   if (!asset?.copiedInPlace) return;
   if (asset.checksums && Object.keys(asset.checksums).length) {
@@ -806,6 +830,7 @@ const resolveUnclassifiedInputAssets = async (
   if (asset.identification) {
     (file as { identification?: typeof asset.identification }).identification = asset.identification;
   }
+  markIdentifyUnavailable(file, { identifyRetry, identifyUnavailable });
   const romType = romTypeFromEmittedFile({
     discFormat: asset.discFormat,
     platform: asset.platform,

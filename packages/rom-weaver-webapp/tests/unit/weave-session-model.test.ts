@@ -20,6 +20,19 @@ const parsedResult = (overrides: Partial<ParsedWeaveParseResult> = {}): ParsedWe
   ...overrides,
 });
 
+describe("weaveChainEndpointChecks with recorded cheats", () => {
+  const outputChecks = { checksums: { crc32: "cafef00d" } };
+  const weave = { output: { checks: outputChecks }, patches: [{}], version: 1 };
+
+  it("drops the weave-level output check the browser cannot reproduce", () => {
+    expect(weaveChainEndpointChecks({ ...weave, recordsCheats: true })).toEqual({});
+  });
+
+  it("keeps the weave-level output check when no cheats are recorded", () => {
+    expect(weaveChainEndpointChecks(weave)).toEqual({ output: outputChecks });
+  });
+});
+
 describe("buildWeaveApplySessionPlan", () => {
   it("uses automatic inference for v1 and reads the v2 shared basis", () => {
     const v1 = buildWeaveApplySessionPlan(

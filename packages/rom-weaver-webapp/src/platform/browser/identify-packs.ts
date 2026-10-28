@@ -317,7 +317,15 @@ const getIndex = (): Promise<IdentifyIndex> => {
 };
 
 const getCatalog = (): Promise<IdentifyCatalog | undefined> => {
-  if (!catalogPromise) catalogPromise = loadCatalog();
+  if (!catalogPromise) {
+    // A catalog that resolves unavailable (HTTP or parse failure) must not stay cached; a later lookup
+    // retries. A stalled fetch has no deadline and never settles, so it is not retried.
+    const pending: Promise<IdentifyCatalog | undefined> = loadCatalog().then((catalog) => {
+      if (!catalog && catalogPromise === pending) catalogPromise = undefined;
+      return catalog;
+    });
+    catalogPromise = pending;
+  }
   return catalogPromise;
 };
 
