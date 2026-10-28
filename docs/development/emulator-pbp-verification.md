@@ -143,7 +143,7 @@ The application extracted each stored-block PBP and loaded its generated M3U/CUE
 
 Every CUE retained MODE2/2352 data and AUDIO track 02, with `INDEX 00 00:12:10` and `INDEX 01 00:14:10`; the core selected `discs.m3u`. This proves application fallback wiring, complete data/audio byte retention, and native disk control. The run was muted and does not establish audible CD audio playback, commercial-game compatibility, or save progression across different game discs.
 
-![PSn00bSDK controller demo after returning to disk 1 through the native disk menu](../screenshots/pbp-ps1-pads.png)
+![PSn00bSDK controller demo after returning to disk 1 through the native disk menu](../screenshots/pbp-ps1-pads.webp)
 
 The PS1 capture shows the unmodified [PSn00bSDK controller example](https://github.com/Lameguy64/PSn00bSDK/tree/06e65bea3a778b2dae5af77a7935ae3868ddd4d3/examples/io/pads), copyright © 2021 spicyjpeg, under [MPL-2.0](https://www.mozilla.org/MPL/2.0/). Its source remains available at that pinned upstream revision; no SDK or program binary is included here.
 
@@ -151,8 +151,8 @@ The PS1 capture shows the unmodified [PSn00bSDK controller example](https://gith
 
 These captures show the separate PSP repair validation at revision `1b203d1871ced76c496c53e438ea719d90af5293`, at 1280 × 900 in headless Chromium. Its 2,259,267-byte `SEGA.PBP` fixture is a section-relocated variant of the same MIT Cornell-Box program, with unchanged original sections and an added asset payload; it is distinct from the empty-PSAR release above. The source fingerprint was `0e5781afc3b3b1c0ccdff4735bcfec814342b24f78eea4b6f7772f476ef83db8` and the served WASM SHA-256 was `7baea8affc5d6b622e6b7d338ac3fe788b8438ae1bab57939a577cf774099684`.
 
-![Cornell-Box PSP colored cube before Start](../screenshots/pbp-psp-cube.png)
+![Cornell-Box PSP colored cube before Start](../screenshots/pbp-psp-cube.webp)
 
-![Cornell-Box PSP raycast spheres after Start](../screenshots/pbp-psp-raycast.png)
+![Cornell-Box PSP raycast spheres after Start](../screenshots/pbp-psp-raycast.webp)
 
-PSP program copyright © 2025 Saymond, from [PSP-apps revision `55553eb`](https://github.com/Saymond/PSP-apps/tree/55553eb52f4c0e1a87de65368df7d299ad2762e1). The [MIT notice](../screenshots/pbp-psp-LICENSE.txt) is retained with these captures.
+PSP program copyright © 2025 Saymond, from [PSP-apps revision `55553eb`](https://github.com/Saymond/PSP-apps/tree/55553eb52f4c0e1a87de65368df7d299ad2762e1). The [MIT notice](https://github.com/Saymond/PSP-apps/blob/55553eb52f4c0e1a87de65368df7d299ad2762e1/LICENSE) is retained with these captures.
