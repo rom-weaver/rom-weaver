@@ -504,20 +504,34 @@ const getPatchChecks = (
   return checks.some(Boolean) ? checks : undefined;
 };
 
-const getFinalOutputChecksums = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) => {
+// The declared final-output check (digest tokens such as "crc32=deadbeef,sha1=...", or a bare digest)
+// joins the last step's own output checks. That keeps it on the per-step path: judged in the
+// normalised layout (header stripped, N64 big-endian) and skipped when validation is not strict,
+// exactly like every other per-step check.
+const parseDeclaredOutputChecks = (declared: string) =>
+  declared
+    .toLowerCase()
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map((token) => {
+      if (token.includes("=")) return token;
+      const checksum = token.replace(/^0x/, "");
+      const algorithm = identifyHashAlgorithm(checksum);
+      if (!algorithm) throw new Error("Output checksum must be a CRC32, MD5, or SHA-1 hex digest");
+      return `${algorithm}=${checksum}`;
+    });
+
+const getPatchOutputChecks = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) => {
+  const checks = getPatchChecks(patchIndices, patchOptions, "outputChecks");
   const lastIndex = patchIndices.at(-1);
   const declared = patchOptions?.[lastIndex ?? -1]?.validateOutputChecksum?.trim();
-  if (!declared) return undefined;
-  const checksum = declared.toLowerCase().replace(/^0x/, "");
-  const algorithm = identifyHashAlgorithm(checksum);
-  if (!algorithm) throw new Error("Output checksum must be a CRC32, MD5, or SHA-1 hex digest");
-  const expected = `${algorithm}=${checksum}`;
-  // A value the last step already declares (weave patch outputChecks) is enforced per step in the
-  // normalized layout; expect_out compares the delivered layout (N64 byte order, headers) and would
-  // reject a correct result the user supplied swapped or headered.
-  const stepChecks = patchOptions?.[lastIndex ?? -1]?.outputChecks?.toLowerCase().split(/[\s,]+/);
-  if (stepChecks?.includes(expected)) return undefined;
-  return [expected];
+  if (!declared) return checks;
+  const merged = patchIndices.map((patchIndex) => patchOptions?.[patchIndex]?.outputChecks || "");
+  const own = merged.at(-1) ?? "";
+  const ownTokens = own.toLowerCase().split(/[\s,]+/);
+  const added = parseDeclaredOutputChecks(declared).filter((token) => !ownTokens.includes(token));
+  merged[merged.length - 1] = [own, ...added].filter(Boolean).join(",");
+  return merged;
 };
 
 const canReuseWorkerOutputPath = (output: PublicOutputWithApplySummary) =>
@@ -567,8 +581,7 @@ const applyPatchesToAsset = async ({
   const patchInputs = getPatchInputs(patchIndices, patchOptions, asset, bareMemberRule);
   const patchTargets = getPatchTargets(patchIndices, patchOptions, asset, bareMemberRule);
   const patchInputChecks = getPatchChecks(patchIndices, patchOptions, "inputChecks");
-  const patchOutputChecks = getPatchChecks(patchIndices, patchOptions, "outputChecks");
-  const finalOutputChecksums = getFinalOutputChecksums(patchIndices, patchOptions);
+  const patchOutputChecks = getPatchOutputChecks(patchIndices, patchOptions);
   const selectedPatches = getSelectedPatchInputs(assetPatches, patches, patchFiles);
   const patchNames = selectedPatches.map((entry) => entry.patchFileName).filter(Boolean);
   const patchLabel = patchNames.length
@@ -601,7 +614,6 @@ const applyPatchesToAsset = async ({
       ...(patchTargets ? { patchTargets } : {}),
       ...(patchInputChecks ? { patchInputChecks } : {}),
       ...(patchOutputChecks ? { patchOutputChecks } : {}),
-      ...(finalOutputChecksums ? { validateWithOutputChecksums: finalOutputChecksums } : {}),
     },
     patches: selectedPatches,
     signal: options.signal,

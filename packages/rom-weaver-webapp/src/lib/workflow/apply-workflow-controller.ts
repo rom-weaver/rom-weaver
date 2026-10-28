@@ -1062,6 +1062,12 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       const intermediateOutputs: PublicOutput[] = [];
       const modifiedSources: SourceRef[] = [];
       const applyInput = this.createPatchInput((progress) => this.emitApplyWorkerProgress(progress));
+      // The final-output check describes the delivered result; this intermediate keeps the header, so
+      // the check would compare against different bytes.
+      applyInput.patchOptions = applyInput.patchOptions?.map((option) => ({
+        ...option,
+        validateOutputChecksum: undefined,
+      }));
       applyInput.options = {
         ...applyInput.options,
         retainUncompressedOutput: undefined,

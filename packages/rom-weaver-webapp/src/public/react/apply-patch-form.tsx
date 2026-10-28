@@ -611,8 +611,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // that result), stood down otherwise. Runs through the same per-patch option
   // path as user edits; the carrier index is found by value so reorders and
   // clears stay aligned.
+  // Every declared algorithm is enforced. A chain with a `target` lane applies per lane/track asset, so
+  // the reassembled output's checks have no single asset to meet (the CLI skips them for discs too).
   const weaveOutputChecks = activeWeaveSession?.chainEndpointChecks.output?.checksums;
-  const weaveOutputChecksum = weaveOutputChecks?.sha1 || weaveOutputChecks?.md5 || weaveOutputChecks?.crc32 || "";
+  const weaveOutputChecksum = activeWeaveSession?.entries.some((entry) => entry.target)
+    ? ""
+    : Object.entries(weaveOutputChecks || {})
+        .map(([algorithm, digest]) => `${algorithm}=${digest}`)
+        .join(",");
   useEffect(() => {
     if (!weaveOutputChecksum || weaveChainStatus === null) return;
     const desired = weaveChainStatus === "full" ? weaveOutputChecksum : "";

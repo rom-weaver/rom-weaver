@@ -581,7 +581,7 @@ test.each(["deadbeef", "2cccfa33"])("v1 IPS weave enforces final-output CRC32 %s
   try {
     mount(
       createElement(ApplyPatchForm, {
-        defaultSettings: { output: { compression: "none" } },
+        defaultSettings: { output: { compression: "none" }, validation: { requireInputChecksumMatch: true } },
         pageDrop: { files: [romFile, weaveArchive], id: 1 },
       }),
     );
@@ -591,7 +591,7 @@ test.each(["deadbeef", "2cccfa33"])("v1 IPS weave enforces final-output CRC32 %s
     const outcome = await waitForApplyOutcome();
     if (crc32 === "deadbeef") {
       expect(outcome?.kind).toBe("error");
-      expect(outcome?.errorText).toContain("output checksum mismatch for crc32; expected deadbeef, actual 2cccfa33");
+      expect(outcome?.errorText).toContain("checksum mismatch for crc32; expected deadbeef, actual 2cccfa33");
       expect(capture.getDownloads()).toEqual([]);
       return;
     }
@@ -634,7 +634,7 @@ test("weave final-output CRC32 stands down for a partial chain and returns for t
   try {
     mount(
       createElement(ApplyPatchForm, {
-        defaultSettings: { output: { compression: "none" } },
+        defaultSettings: { output: { compression: "none" }, validation: { requireInputChecksumMatch: true } },
         pageDrop: { files: [new File(["ORIGINAL-ROM\n"], "game.bin"), weaveArchive], id: 1 },
       }),
     );
@@ -650,8 +650,197 @@ test("weave final-output CRC32 stands down for a partial chain and returns for t
     await clickApplyButton();
     const outcome = await waitForApplyOutcome();
     expect(outcome?.kind).toBe("error");
-    expect(outcome?.errorText).toContain("output checksum mismatch for crc32; expected deadbeef");
+    expect(outcome?.errorText).toContain("checksum mismatch for crc32; expected deadbeef");
     expect(capture.getDownloads()).toHaveLength(1);
+  } finally {
+    capture.restore();
+  }
+});
+
+const buildFinalCheckWeave = async ({ outputChecks, romChecks = { crc32: "c6fb1252" }, patches, files }) =>
+  buildZip(
+    [
+      {
+        file: new File(
+          [
+            JSON.stringify({
+              output: { checks: outputChecks, name: "audit" },
+              patches,
+              rom: { checks: { checksums: romChecks }, name: "game.bin" },
+              version: 1,
+            }),
+          ],
+          "rom-weaver-weave.json",
+          { type: "application/json" },
+        ),
+        fileName: "rom-weaver-weave.json",
+      },
+      ...files.map((file) => ({ file, fileName: file.name })),
+    ],
+    "final-output-check.zip",
+  );
+
+const mountWeaveWithCapture = async (element, files) => {
+  const capture = captureDownloads();
+  try {
+    mount(element(files));
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("audit");
+    return capture;
+  } catch (error) {
+    capture.restore();
+    throw error;
+  }
+};
+
+test("Apply anyway bypasses the weave final-output check like every other check", async () => {
+  const romFile = new File(["ORIGINAL-ROM\n"], "game.bin");
+  const weaveArchive = await buildFinalCheckWeave({
+    files: [createIpsPatch("change.ips", 1, 0x58)],
+    outputChecks: { checksums: { crc32: "deadbeef" } },
+    patches: [{ name: "Core", path: "change.ips" }],
+    romChecks: { crc32: "00000001" },
+  });
+  const capture = await mountWeaveWithCapture(
+    (files) =>
+      createElement(ApplyPatchForm, {
+        defaultSettings: { output: { compression: "none" }, validation: { requireInputChecksumMatch: true } },
+        pageDrop: { files, id: 1 },
+      }),
+    [romFile, weaveArchive],
+  );
+  try {
+    const override = await waitForState(getChecksumOverride, 60000);
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("audit");
+    override.click();
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    await expect.poll(() => capture.getDownloads().length).toBe(1);
+  } finally {
+    capture.restore();
+  }
+});
+
+test("non-strict mode does not enforce the weave final-output check", async () => {
+  const romFile = new File(["ORIGINAL-ROM\n"], "game.bin");
+  const weaveArchive = await buildFinalCheckWeave({
+    files: [createIpsPatch("change.ips", 1, 0x58)],
+    outputChecks: { checksums: { crc32: "deadbeef" } },
+    patches: [{ name: "Core", path: "change.ips" }],
+  });
+  const capture = await mountWeaveWithCapture(
+    (files) =>
+      createElement(ApplyPatchForm, {
+        defaultSettings: { output: { compression: "none" }, validation: { requireInputChecksumMatch: false } },
+        pageDrop: { files, id: 1 },
+      }),
+    [romFile, weaveArchive],
+  );
+  try {
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    await expect.poll(() => capture.getDownloads().length).toBe(1);
+  } finally {
+    capture.restore();
+  }
+});
+
+test("every declared weave output algorithm is enforced, not just one", async () => {
+  const romFile = new File(["ORIGINAL-ROM\n"], "game.bin");
+  const patched = new TextEncoder().encode("OXIGINAL-ROM\n");
+  const correct = await fileChecks(patched);
+  const weaveArchive = await buildFinalCheckWeave({
+    files: [createIpsPatch("change.ips", 1, 0x58)],
+    outputChecks: { checksums: { crc32: "deadbeef", sha1: correct.checksums.sha1 } },
+    patches: [{ name: "Core", path: "change.ips" }],
+  });
+  const capture = await mountWeaveWithCapture(
+    (files) =>
+      createElement(ApplyPatchForm, {
+        defaultSettings: { output: { compression: "none" }, validation: { requireInputChecksumMatch: true } },
+        pageDrop: { files, id: 1 },
+      }),
+    [romFile, weaveArchive],
+  );
+  try {
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    const outcome = await waitForApplyOutcome();
+    expect(outcome?.kind).toBe("error");
+    expect(outcome?.errorText).toContain("crc32");
+    expect(outcome?.errorText).toContain("deadbeef");
+    expect(capture.getDownloads()).toEqual([]);
+  } finally {
+    capture.restore();
+  }
+});
+
+test("a weave output check declared only in output.checks accepts a byte-swapped N64 dump", async () => {
+  const body = withBytes(noiseBytes(1024 * 1024, 0x64), 0, [0x80, 0x37, 0x12, 0x40]);
+  const records = [[0x100, 0xf2]];
+  const patches = [new File([createIps(records)], "first.ips")];
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { checks: await fileChecks(applyRecords(body, records)), name: "transform-output" },
+      patches: [{ path: patches[0].name }],
+      rom: { checks: await fileChecks(body), name: "game.v64" },
+      version: 1,
+    },
+    patches,
+  );
+  await applyWeaveAndReadOutput([weaveArchive, new File([byteSwap16(body)], "game.v64")]);
+});
+
+test("a disc-level weave output check is not compared with a single track", async () => {
+  const track = (seed) => Uint8Array.from({ length: 2352 * 40 }, (_, index) => (index * seed) & 0xff);
+  const trackOne = new File([track(19)], "disc-track01.bin");
+  const trackTwo = new File([track(29)], "disc-track02.bin");
+  const cue = new File(
+    [
+      'FILE "disc-track01.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n' +
+        'FILE "disc-track02.bin" BINARY\n  TRACK 02 MODE1/2352\n    INDEX 01 00:00:00\n',
+    ],
+    "disc.cue",
+  );
+  const weaveArchive = await buildZip(
+    [
+      {
+        file: new File(
+          [
+            JSON.stringify({
+              output: { checks: { checksums: { crc32: "deadbeef" } }, name: "audit" },
+              patches: [
+                { path: "a.ips", target: { member: "disc-track01.bin", rom: true } },
+                { path: "b.ips", target: { member: "disc-track02.bin", rom: true } },
+              ],
+              rom: { name: "disc.cue" },
+              version: 1,
+            }),
+          ],
+          "rom-weaver-weave.json",
+          { type: "application/json" },
+        ),
+        fileName: "rom-weaver-weave.json",
+      },
+      { file: createIpsPatch("a.ips", 0, 0xa1), fileName: "a.ips" },
+      { file: createIpsPatch("b.ips", 0, 0xb2), fileName: "b.ips" },
+    ],
+    "disc-weave.zip",
+  );
+  const capture = captureDownloads();
+  try {
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: { output: { compression: "none" }, validation: { requireInputChecksumMatch: true } },
+        pageDrop: { files: [weaveArchive, cue, trackOne, trackTwo], id: 1 },
+      }),
+    );
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("audit");
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    const outcome = await waitForApplyOutcome();
+    expect(outcome, outcome && "errorText" in outcome ? outcome.errorText : "").toEqual({ kind: "download" });
   } finally {
     capture.restore();
   }

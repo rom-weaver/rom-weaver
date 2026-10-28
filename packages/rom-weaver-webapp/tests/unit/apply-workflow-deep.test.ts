@@ -111,13 +111,12 @@ describe("runApplyWorkflow final-output checksum", () => {
     [" 0xDEADBEEF ", "crc32=deadbeef"],
     ["0123456789abcdef0123456789abcdef", "md5=0123456789abcdef0123456789abcdef"],
     ["0123456789abcdef0123456789abcdef01234567", "sha1=0123456789abcdef0123456789abcdef01234567"],
-  ])("forwards the final patch's %s checksum as %s", async (checksum, token) => {
+  ])("merges the final patch's %s checksum into its output checks as %s", async (checksum, token) => {
     const runtime = await applyWithChecksum(checksum);
     expect(runtime.patch.applyPatch).toHaveBeenCalledWith(
       expect.objectContaining({
         options: expect.objectContaining({
-          patchOutputChecks: ["", "size=30"],
-          validateWithOutputChecksums: [token],
+          patchOutputChecks: ["", `size=30,${token}`],
         }),
       }),
     );
@@ -132,6 +131,14 @@ describe("runApplyWorkflow final-output checksum", () => {
       expect(options.validateWithOutputChecksums).toBeUndefined();
     },
   );
+
+  it("keeps every declared algorithm and skips tokens the step already declares", async () => {
+    const runtime = await applyWithChecksum("crc32=deadbeef,sha1=0123456789abcdef0123456789abcdef01234567,size=30");
+    expect(runtime.patch.applyPatch.mock.calls[0]?.[0]?.options.patchOutputChecks).toEqual([
+      "",
+      "size=30,crc32=deadbeef,sha1=0123456789abcdef0123456789abcdef01234567",
+    ]);
+  });
 
   it.each(["0x", "bad", "zzzzzzzz"])("rejects malformed final-output checksum %s", async (checksum) => {
     await expect(applyWithChecksum(checksum)).rejects.toThrow(
