@@ -22,7 +22,7 @@ vi.mock("../../src/lib/runtime/public-output-bin-file.ts", () => ({
 
 import { shouldIdentifySource, skipSourceIdentification } from "../../src/lib/input/input-identification-policy.ts";
 import {
-  attachBareRomIngestMetadata,
+  resolveUnclassifiedInputAssets,
   describeArchiveFileForTrace,
   getCompressionFormat,
   listDroppedArchiveEntryNames,
@@ -352,15 +352,18 @@ describe("resolveArchiveInputAssets", () => {
   });
 });
 
-describe("attachBareRomIngestMetadata", () => {
+describe("resolveUnclassifiedInputAssets", () => {
   it("copies checksums, variants, identification, type, and Rust timing", async () => {
     const file = archive("game.sfc", 8) as Record<string, unknown>;
     const identification = { matches: [{ name: "Demo" }] };
     runtime.ingest.run.mockResolvedValue({
+      outputs: [],
+      patchOutputs: [],
       result: {
         isRom: true,
         assets: [
           {
+            copiedInPlace: true,
             checksums: { crc32: "a1b2c3d4" },
             checksumVariants: [{ crc32: "deadbeef" }],
             identification,
@@ -371,7 +374,7 @@ describe("attachBareRomIngestMetadata", () => {
         ],
       },
     });
-    await attachBareRomIngestMetadata(
+    await resolveUnclassifiedInputAssets(
       file as never,
       { input: { containerInputsEnabled: true } } as never,
       runtime as never,
@@ -388,35 +391,37 @@ describe("attachBareRomIngestMetadata", () => {
   it("is best effort for non-ROM, unavailable, failed, and already computed inputs", async () => {
     const existing = archive("existing.sfc") as Record<string, unknown>;
     existing.checksums = { crc32: "existing" };
-    await attachBareRomIngestMetadata(existing as never, undefined, runtime as never);
+    await resolveUnclassifiedInputAssets(existing as never, undefined, runtime as never);
     expect(runtime.ingest.run).not.toHaveBeenCalled();
 
-    runtime.ingest.run.mockResolvedValueOnce({ result: { isRom: false, assets: [] } });
+    runtime.ingest.run.mockResolvedValueOnce({ outputs: [], patchOutputs: [], result: { isRom: false, assets: [] } });
     const nonRom = archive("text.bin") as Record<string, unknown>;
-    await attachBareRomIngestMetadata(nonRom as never, undefined, runtime as never);
+    await resolveUnclassifiedInputAssets(nonRom as never, undefined, runtime as never);
     expect(nonRom.checksums).toBeUndefined();
 
     runtime.ingest.run.mockRejectedValueOnce(new Error("hash failed"));
     const failed = archive("failed.sfc") as Record<string, unknown>;
-    await expect(attachBareRomIngestMetadata(failed as never, undefined, runtime as never)).resolves.toBeUndefined();
+    await expect(resolveUnclassifiedInputAssets(failed as never, undefined, runtime as never)).resolves.toBeUndefined();
     expect(failed.checksums).toBeUndefined();
 
-    runtime.ingest.run.mockResolvedValueOnce({ result: { isRom: true, assets: [] } });
+    runtime.ingest.run.mockResolvedValueOnce({ outputs: [], patchOutputs: [], result: { isRom: true, assets: [] } });
     const empty = archive("empty.sfc") as Record<string, unknown>;
-    await expect(attachBareRomIngestMetadata(empty as never, undefined, runtime as never)).resolves.toBeUndefined();
+    await expect(resolveUnclassifiedInputAssets(empty as never, undefined, runtime as never)).resolves.toBeUndefined();
     expect(empty.checksums).toBeUndefined();
 
     runtime.ingest.run.mockImplementationOnce(async ({ onProgress }) => {
       onProgress?.({ percent: 10, label: "Hashing" });
       return {
+        outputs: [],
+        patchOutputs: [],
         result: {
           isRom: true,
-          assets: [{ checksums: { crc32: "abc", md5: "def", sha1: "ghi" }, platform: "snes" }],
+          assets: [{ copiedInPlace: true, checksums: { crc32: "abc", md5: "def", sha1: "ghi" }, platform: "snes" }],
         },
       };
     });
     const fallback = archive("fallback.sfc") as Record<string, unknown>;
-    await attachBareRomIngestMetadata(fallback as never, undefined, runtime as never);
+    await resolveUnclassifiedInputAssets(fallback as never, undefined, runtime as never);
     expect(fallback).toMatchObject({ checksums: { crc32: "abc" }, romType: { platform: "snes" } });
     expect(fallback._precomputedChecksumMs).toEqual(expect.any(Number));
   });

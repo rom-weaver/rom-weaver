@@ -14,7 +14,7 @@ import {
 } from "./input-assets.ts";
 import { classifyPatcherInput } from "./input-classification.ts";
 import {
-  attachBareRomIngestMetadata,
+  resolveUnclassifiedInputAssets,
   describeArchiveFileForTrace,
   resolveArchiveInput,
   resolveArchiveInputAssets,
@@ -566,11 +566,7 @@ const resolveCompressedInputAssets = async (
       selectedEntryName: selectedEntryName || "",
       sourceIndex,
     });
-    // Finalize a bare (non-container) ROM: checksum it via `ingest` (in place, full thread budget,
-    // shared variant engine) and attach the result as precomputed metadata, so the input-checksum step
-    // reuses it instead of the standalone `checksum` command, which under-threaded multi-variant ROMs
-    // (e.g. GBA: raw + fix-header → 1 thread per variant). Best-effort - on failure (or a source `ingest`
-    // classifies as a patch) the file is left unchanged and checksummed the usual way downstream.
+    // Ingest MUST resolve containers missed by synchronous classification before attaching checksums.
     const finalizeAsSingleRom = () =>
       finalizePreparedInputAssets(
         [makeRomAsset(makeInputId(sourceIndex, current.fileName, normalizeArchiveEntryName), current)],
@@ -580,9 +576,24 @@ const resolveCompressedInputAssets = async (
         parentCompressions,
         harvestedSidecarPatches,
       );
-    const finalizeBareRom = async (): Promise<InputAsset[]> => {
-      await attachBareRomIngestMetadata(current, options, runtime);
-      return finalizeAsSingleRom();
+    const finalizeUnclassifiedInput = async (): Promise<InputAsset[]> => {
+      const startedAt = Date.now();
+      const assets = await resolveUnclassifiedInputAssets(current, options, runtime, sourceIndex, selectedEntryName);
+      if (!assets) return finalizeAsSingleRom();
+      decompressionTimeMs += recordDecompressionMetrics({
+        assets,
+        current,
+        durationMs: Date.now() - startedAt,
+        parentCompressions,
+      });
+      return finalizePreparedInputAssets(
+        assets,
+        sourceSize,
+        true,
+        decompressionTimeMs,
+        parentCompressions,
+        harvestedSidecarPatches,
+      );
     };
     const finalizeReason = getPreparedInputFinalizeReason(current, classification);
     if (finalizeReason) {
@@ -593,12 +604,10 @@ const resolveCompressedInputAssets = async (
         reason: finalizeReason,
         sourceIndex,
       });
-      // A large bare ROM is kept as a lazy browser source, so it lands here (`lazy-non-compression`)
-      // rather than the plain non-compression branch below - ingest it too. A `disc-output-non-probeable`
-      // file is a mid-pipeline decoded disc; leave it on the standard checksum path.
-      return finalizeReason === "lazy-non-compression" ? finalizeBareRom() : finalizeAsSingleRom();
+      // Lazy unclassified sources MUST pass through ingest; decoded disc outputs already carry resolved payloads.
+      return finalizeReason === "lazy-non-compression" ? finalizeUnclassifiedInput() : finalizeAsSingleRom();
     }
-    if (classification.kind !== "compression") return finalizeBareRom();
+    if (classification.kind !== "compression") return finalizeUnclassifiedInput();
     const compressedIdentity = getCompressedIdentityKey(current, classification);
     assertNoRepeatedIdentity(seenCompressedInputs, compressedIdentity, { current, options, pass, sourceIndex });
     seenCompressedInputs.add(compressedIdentity);
