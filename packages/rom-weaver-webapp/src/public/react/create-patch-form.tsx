@@ -721,7 +721,10 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
         const group = (source instanceof File ? routed.groups.get(source) : undefined) || current.get(source);
         if (group) next.set(source, group);
       }
-      return next;
+      // Keep the previous map when nothing changed so the staging effect does not rerun and drop in-flight progress.
+      const unchanged =
+        next.size === current.size && [...next].every(([source, group]) => current.get(source) === group);
+      return unchanged ? current : next;
     });
     if (originalFile) updateOriginal(originalFile);
     if (modifiedFile) updateModified(modifiedFile);
