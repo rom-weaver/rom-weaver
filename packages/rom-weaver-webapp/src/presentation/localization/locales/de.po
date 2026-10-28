@@ -1435,6 +1435,11 @@ msgstr "Komprimierungsvorgaben kommen aus Einstellungen › Komprimierung und ge
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.PATCH_FILE_DAMAGED"
+msgstr "Die Patch-Datei ist beschädigt (ihre Prüfsumme ist ungültig). Besorge eine neue Kopie und ersetze diesen Patch."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.COMPRESSION_FAILED"
 msgstr "Die Kompression ist fehlgeschlagen."
 
@@ -6012,3 +6017,28 @@ msgstr "ZIP-Codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z und Weaves"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.validationCorruptHint"
+msgstr "Die Patch-Datei ist beschädigt. Besorge eine neue Kopie und ersetze diesen Patch. Die ROM wurde damit ebenfalls nicht geprüft."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.corrupt"
+msgstr "Patch-Datei ist beschädigt"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.overrideDamagedPatch"
+msgstr "Trotz beschädigter Prüfsumme der Patch-Datei anwenden (die ROM wird ebenfalls nicht geprüft)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.damagedPatchWarning"
+msgstr "Warnung: Wenn du trotzdem anwendest, wird der beschädigte Patch unverändert verwendet und das Ergebnis kann falsch oder fehlerhaft sein. Die ROM wird nicht geprüft."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlockedDamagedPatch"
+msgstr "Anwenden ist blockiert, weil die Patch-Datei beschädigt ist. Ersetze den Patch oder aktiviere „Trotz beschädigter Prüfsumme der Patch-Datei anwenden“, um ihn unverändert zu verwenden."

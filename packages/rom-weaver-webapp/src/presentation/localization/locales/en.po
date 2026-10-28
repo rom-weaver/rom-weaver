@@ -1435,6 +1435,11 @@ msgstr "Compression defaults come from Settings › Compression and apply to com
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.PATCH_FILE_DAMAGED"
+msgstr "The patch file is damaged (its checksum is invalid). Obtain a fresh copy and replace this patch."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.COMPRESSION_FAILED"
 msgstr "Compression failed."
 
@@ -6012,3 +6017,28 @@ msgstr "ZIP codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z and weaves"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.validationCorruptHint"
+msgstr "The patch file is damaged. Obtain a fresh copy and replace this patch. The ROM was not checked against it either."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.corrupt"
+msgstr "Patch file is damaged"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.overrideDamagedPatch"
+msgstr "Apply anyway despite the damaged patch file's checksum (the ROM is not checked either)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.damagedPatchWarning"
+msgstr "Warning: applying anyway uses the damaged patch as is and may produce a wrong or corrupt result. The ROM is not verified."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlockedDamagedPatch"
+msgstr "Apply is blocked because the patch file is damaged. Replace the patch, or tick “Apply anyway” to use it as is."

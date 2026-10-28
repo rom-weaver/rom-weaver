@@ -56,6 +56,7 @@ import { useInputStaging } from "./use-input-staging.ts";
 import { useInputUiController, usePatchStackController } from "./use-patcher-controllers.ts";
 import { useActiveAbortController, useDisposableCleanup } from "./workflow-run-hooks.ts";
 import { retainBrowserSource, releaseBrowserSource } from "../../storage/browser/browser-source-primitives.ts";
+import { isPatchFileChecksumFailure } from "./patch-validation-failure.ts";
 import { clearApplyEntries } from "./emulator-session-store.ts";
 
 // weavePackage is read from the settings by the form directly and persisted as the user toggles
@@ -417,6 +418,12 @@ const useLocalApplyPatchFormSession = ({
   const strictInputChecksumValidation = activeSettings.validation?.requireInputChecksumMatch === true;
   const hasStrictInputChecksumMismatch =
     strictInputChecksumValidation && stagedPatchInfos.some((info) => info.checksumPreflightMismatch === true);
+  // Only when every mismatching patch failed its own file CRC does the override row drop the wrong-ROM wording.
+  const checksumOverrideNamesDamagedPatch =
+    hasStrictInputChecksumMismatch &&
+    stagedPatchInfos
+      .filter((info) => info.checksumPreflightMismatch === true)
+      .every((info) => isPatchFileChecksumFailure(info.validationMessage ?? ""));
   const inputNoticeMessage = failurePlacement === "input" ? failureMessage : "";
   const patchNoticeMessage = failurePlacement === "patch" ? failureMessage : "";
   const outputRuntimeNoticeMessage = outputErrorMessage || (failurePlacement === "output" ? failureMessage : "");
@@ -535,6 +542,7 @@ const useLocalApplyPatchFormSession = ({
       buildUiViewState({
         busy,
         checksumOverrideChecked,
+        checksumOverrideNamesDamagedPatch,
         disabled,
         effectiveOutputNoticeMessage,
         hasStrictInputChecksumMismatch,
@@ -551,6 +559,7 @@ const useLocalApplyPatchFormSession = ({
     [
       busy,
       checksumOverrideChecked,
+      checksumOverrideNamesDamagedPatch,
       disabled,
       inputStaging,
       hasStrictInputChecksumMismatch,
@@ -584,6 +593,8 @@ const useLocalApplyPatchFormSession = ({
       buildOutputViewState({
         activeSettings,
         applyBlocked: !!applyValidationError || strictInputChecksumBlocked || patchValidationBlocked,
+        applyBlockedByDamagedPatch:
+          checksumOverrideNamesDamagedPatch && !applyValidationError && !patchValidationBlocked,
         applyQueued,
         applyTimingText,
         busy,
@@ -610,6 +621,7 @@ const useLocalApplyPatchFormSession = ({
       applyDisabled,
       applyValidationError,
       activeSettings,
+      checksumOverrideNamesDamagedPatch,
       strictInputChecksumBlocked,
       patchValidationBlocked,
       identifiedTitle,

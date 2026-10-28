@@ -1127,6 +1127,26 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.patch.validationMismatch",
     message: "The patch checks did not match this ROM.",
   }),
+  "ui.patch.validationCorruptHint": msg({
+    id: "ui.patch.validationCorruptHint",
+    message:
+      "The patch file is damaged. Obtain a fresh copy and replace this patch. The ROM was not checked against it either.",
+  }),
+  "ui.patchChecks.corrupt": msg({ id: "ui.patchChecks.corrupt", message: "Patch file is damaged" }),
+  "ui.apply.validation.overrideDamagedPatch": msg({
+    id: "ui.apply.validation.overrideDamagedPatch",
+    message: "Apply anyway despite the damaged patch file's checksum (the ROM is not checked either)",
+  }),
+  "ui.apply.validation.damagedPatchWarning": msg({
+    id: "ui.apply.validation.damagedPatchWarning",
+    message:
+      "Warning: applying anyway uses the damaged patch as is and may produce a wrong or corrupt result. The ROM is not verified.",
+  }),
+  "ui.output.applyBlockedDamagedPatch": msg({
+    id: "ui.output.applyBlockedDamagedPatch",
+    message:
+      "Apply is blocked because the patch file is damaged. Replace the patch, or tick “Apply anyway” to use it as is.",
+  }),
   "ui.patch.validationUnreadableHint": msg({
     id: "ui.patch.validationUnreadableHint",
     message: "Remove this patch and choose a valid patch file.",
@@ -1223,6 +1243,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "error.CHECKSUM_MISMATCH": msg({
     id: "error.CHECKSUM_MISMATCH",
     message: "This file's checksum doesn't match the expected one. Check that you chose the right ROM.",
+  }),
+  "error.PATCH_FILE_DAMAGED": msg({
+    id: "error.PATCH_FILE_DAMAGED",
+    message: "The patch file is damaged (its checksum is invalid). Obtain a fresh copy and replace this patch.",
   }),
   "error.COMPRESSION_FAILED": msg({ id: "error.COMPRESSION_FAILED", message: "Compression failed." }),
   "error.INVALID_INPUT": msg({ id: "error.INVALID_INPUT", message: "rom-weaver couldn't use the files you added." }),
