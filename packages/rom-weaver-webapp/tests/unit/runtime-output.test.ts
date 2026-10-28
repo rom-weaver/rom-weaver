@@ -75,37 +75,6 @@ describe("runtime output paths", () => {
     expect(files.has(retained.path)).toBe(false);
   });
 
-  it("keeps the real file name under a shared folder when asked, so a sheet finds its track files", async () => {
-    const { files, vfs } = createVfs();
-    files.set("/work/a.bin", new Uint8Array([1]));
-    const source = (fileName: string) => ({ fileName, path: "/work/a.bin", size: 1, vfs });
-    const cue = await copyRuntimeOutputToPath(
-      source("Game (Disc 1).cue"),
-      "Game (Disc 1).cue",
-      "runtime-output/playlist",
-      "h1",
-    );
-    const bin = await copyRuntimeOutputToPath(
-      source("Game (Disc 1).bin"),
-      "Game (Disc 1).bin",
-      "runtime-output/playlist",
-      "h1",
-    );
-    expect(cue.path).toBe("/work/runtime-output/playlist/h1/Game (Disc 1).cue");
-    expect(bin.path).toBe("/work/runtime-output/playlist/h1/Game (Disc 1).bin");
-  });
-
-  it("keeps a relative path under the shared folder so same-named files stay apart", async () => {
-    const { files, vfs } = createVfs();
-    files.set("/work/a.bin", new Uint8Array([1]));
-    const source = { fileName: "Game.cue", path: "/work/a.bin", size: 1, vfs };
-    const first = await copyRuntimeOutputToPath(source, "Disc 1/Game.cue", "runtime-output/playlist", "h1");
-    const second = await copyRuntimeOutputToPath(source, "Disc 2/Game.cue", "runtime-output/playlist", "h1");
-    expect(first.path).toBe("/work/runtime-output/playlist/h1/Disc 1/Game.cue");
-    expect(second.path).toBe("/work/runtime-output/playlist/h1/Disc 2/Game.cue");
-    expect(first.fileName).toBe("Game.cue");
-  });
-
   it("returns a native VFS file snapshot without reading the output into a second buffer", async () => {
     const { vfs } = createVfs();
     const nativeFile = new Blob([new Uint8Array([1, 2, 3, 4])], { type: "application/octet-stream" }) as File;

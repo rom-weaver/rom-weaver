@@ -28,7 +28,6 @@ type WorkflowRouteProps = {
     slug: string;
   };
   extract: {
-    onSelectTab?: (id: string) => void;
     pageDrop?: import("../public/react/public-types.ts").PageFileDrop | null;
   };
   home: HomePageProps;
