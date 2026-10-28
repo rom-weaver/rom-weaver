@@ -38,6 +38,7 @@ const inertOutputController: PatcherOutputController = {
   ...createStaticStoreController({
     applyButton: {
       blocked: false,
+      blockedByDamagedPatch: false,
       disabled: true,
       label: "Apply patch",
       loading: false,

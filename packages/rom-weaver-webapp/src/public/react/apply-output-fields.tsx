@@ -259,21 +259,35 @@ const ChecksumOverrideRow = ({
   if (!state.visible) return null;
   return (
     <>
-      <p>
-        <a href={resolveAssetUrl(assetBaseUrl, "docs/fix-checksum-errors")} target="_blank" rel="noreferrer">
-          {localizer.message("ui.apply.validation.fixChecksum")}
-        </a>
-      </p>
+      {state.namesDamagedPatch ? null : (
+        <p>
+          <a href={resolveAssetUrl(assetBaseUrl, "docs/fix-checksum-errors")} target="_blank" rel="noreferrer">
+            {localizer.message("ui.apply.validation.fixChecksum")}
+          </a>
+        </p>
+      )}
       <label className="checkrow warn">
         <input
           checked={state.checked}
           disabled={state.disabled}
+          aria-describedby={state.namesDamagedPatch ? "rom-weaver-damaged-patch-warning" : undefined}
           id="rom-weaver-checkbox-checksum-override"
           onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
           type="checkbox"
         />
-        <span>{localizer.message("ui.apply.validation.overrideChecksum")}</span>
+        <span>
+          {localizer.message(
+            state.namesDamagedPatch
+              ? "ui.apply.validation.overrideDamagedPatch"
+              : "ui.apply.validation.overrideChecksum",
+          )}
+        </span>
       </label>
+      {state.namesDamagedPatch ? (
+        <Notice id="rom-weaver-damaged-patch-warning" level="warn">
+          {localizer.message("ui.apply.validation.damagedPatchWarning")}
+        </Notice>
+      ) : null}
     </>
   );
 };

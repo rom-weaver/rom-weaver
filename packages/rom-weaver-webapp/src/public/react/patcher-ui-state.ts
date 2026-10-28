@@ -87,6 +87,8 @@ type PatcherUiState = {
     checked: boolean;
     disabled: boolean;
     label: string;
+    /** Every mismatching patch failed its own file CRC: the row blames the patch, not the ROM. */
+    namesDamagedPatch: boolean;
   };
 };
 
@@ -102,6 +104,7 @@ const createEmptyPatcherUiState = (): PatcherUiState => ({
     checked: false,
     disabled: true,
     label: "Apply anyway despite patch & ROM check mismatch",
+    namesDamagedPatch: false,
     visible: false,
   },
   patchInput: {

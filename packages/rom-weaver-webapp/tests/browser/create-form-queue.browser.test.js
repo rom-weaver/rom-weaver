@@ -581,6 +581,35 @@ test("create active output cancel button aborts the workflow without an error no
   expect(document.getElementById("patch-builder-output-error-message")).toBeNull();
 });
 
+test("an unused overflow ROM does not restart in-flight staging", async () => {
+  mount(
+    createElement(
+      CreatePatchForm,
+      withCreateWorkflowMock({
+        defaultModified: new File([new Uint8Array([0, 1, 2, 4])], "modified.bin"),
+        defaultOriginal: new File([new Uint8Array([0, 1, 2, 3])], "original.bin"),
+      }),
+    ),
+  );
+
+  await expect.poll(() => document.querySelectorAll(".stage-status").length).toBeGreaterThan(0);
+  await expect.poll(() => workflowMockState.instances[0]?.listeners.get("progress")?.size ?? 0).toBeGreaterThan(0);
+  const progressListeners = () => workflowMockState.instances[0]?.listeners.get("progress")?.size ?? 0;
+  const listenersBefore = progressListeners();
+  expect(listenersBefore).toBeGreaterThan(0);
+
+  selectFileInput(
+    document.getElementById("patch-builder-input-file-unified"),
+    new File([new Uint8Array([0, 1, 2, 5])], "modified-v2.bin"),
+  );
+  await expect.poll(() => document.body.textContent || "").toContain("Not used: modified-v2.bin.");
+  // A drop that assigned nothing must not rerun staging, which would detach the in-flight progress listener.
+  expect(progressListeners()).toBe(listenersBefore);
+  expect(document.querySelectorAll(".stage-status").length).toBeGreaterThan(0);
+  workflowMockState.originalDeferred.resolve();
+  workflowMockState.modifiedDeferred.resolve();
+});
+
 test("an overflow ROM is reported without replacing the prepared sources", async () => {
   mount(
     createElement(

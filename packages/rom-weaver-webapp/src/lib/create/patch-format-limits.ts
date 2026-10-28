@@ -87,8 +87,8 @@ const normalizeCandidateCreatePatchFormats = (formats?: readonly string[] | null
 
 /**
  * Planned candidates MUST respect prepared ROM sizes: archive plans measure compressed inputs.
- * Without candidates, source-restricted formats stay hidden. Shrinking restrictions also apply
- * because candidates are shared between Original/Modified orderings.
+ * Source-restricted formats MUST stay hidden without resolved candidates. Prepared sizes MUST
+ * enforce shrinking restrictions even when the plan only measured compressed inputs.
  */
 const getSelectableCreatePatchFormats = ({
   candidateFormats,
