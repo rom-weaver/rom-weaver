@@ -6,6 +6,7 @@ import { isNfsPartName } from "./nfs-inputs.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime-types.ts";
 import type { ExtractedFileEntry, ExtractStepDetails } from "../../wasm/index.ts";
 import { createArchiveSourceBlob } from "../archive-utils.ts";
+import { STANDARD_CHECKSUM_ALGORITHMS } from "../checksum-algorithms.ts";
 import { RomWeaverError, throwIfAborted, toRomWeaverError } from "../errors.ts";
 import { emitTraceLog } from "../logging.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
@@ -733,6 +734,42 @@ const resolveUnclassifiedInputAssets = async (
     traceArchivePreparation(options, "input.archive.bare-rom.ingest-failed", {
       error: error instanceof Error ? error.message : String(error),
       file: describeArchiveFileForTrace(file),
+    });
+    return;
+  }
+  // XISO MUST retain raw bytes: Rust Apply and nested extraction skip its image rebuild.
+  if (steps[0]?.format === "xiso") {
+    await Promise.all(
+      [...ingested.outputs, ...ingested.patchOutputs].map((output) =>
+        Promise.resolve()
+          .then(() => output.dispose())
+          .catch(() => undefined),
+      ),
+    );
+    throwIfAborted(options?.signal);
+    if (!resolvedRuntime.checksum) throw new Error("The checksum runtime is unavailable");
+    const checksumStartedAt = Date.now();
+    const raw = await resolvedRuntime.checksum.run({
+      algorithms: [...STANDARD_CHECKSUM_ALGORITHMS],
+      autoExtract: false,
+      fileName: file.fileName,
+      source: getCompressionRuntimeSource(file),
+      threads: options?.workers?.threads,
+      logLevel: options?.logging?.level,
+      onLog: options?.onLog,
+      onProgress: (progress) =>
+        options?.onProgress?.({
+          ...progress,
+          stage: "input",
+          label: progress.label || progress.message || file.fileName,
+        }),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
+    throwIfAborted(options?.signal);
+    Object.assign(file, {
+      checksums: raw.checksums,
+      checksumVariants: raw.variants,
+      _precomputedChecksumMs: Date.now() - checksumStartedAt,
     });
     return;
   }

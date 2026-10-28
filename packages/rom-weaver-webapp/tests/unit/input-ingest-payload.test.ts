@@ -22,13 +22,6 @@ describe("ingest resolves the selected payload before staging", () => {
       payload: new Uint8Array(32768),
     });
   }
-  for (const offset of [1234, 69632]) {
-    const payload = xisoFixture();
-    const container = payload.slice();
-    container[offset] ^= 1;
-    if (offset === 69632) payload[offset] ^= 1;
-    fixtures.push({ extension: `xiso-${offset}.iso`, payloadExtension: "iso", container, payload });
-  }
   it.each(fixtures)(
     "uses emitted bytes, size, name and checksums for $extension in both source roles",
     async ({ extension, payloadExtension, payload, container }) => {
@@ -69,6 +62,125 @@ describe("ingest resolves the selected payload before staging", () => {
         expect(asset.preparation).toMatchObject({ sourceSize: container.length, wasDecompressed: true });
       }
       expect(run).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each([1234, 69632])("preserves raw XISO bytes and hashes them after an edit at %i", async (offset) => {
+    const rebuilt = xisoFixture();
+    const raw = rebuilt.slice();
+    raw[offset] ^= 1;
+    const dispose = vi.fn(async () => undefined);
+    const hash = vi.fn(async () => ({ checksums: checksum(raw), fileName: "original.iso", size: raw.length }));
+    const run = vi.fn(async ({ onProgress }: { onProgress: (event: unknown) => void }) => {
+      onProgress({
+        details: {
+          extract_step: {
+            status: "succeeded",
+            format: "xiso",
+            depth: 0,
+            source_name: "original.iso",
+            source: "/input/original.iso",
+            out_dir: "/work",
+            outputs: [{ size_bytes: rebuilt.length }],
+          },
+        },
+      });
+      return {
+        result: { isRom: true, assets: [{ copiedInPlace: false, checksums: checksum(rebuilt) }], patches: [] },
+        outputs: [
+          {
+            fileName: "rebuilt.iso",
+            path: "/work/rebuilt.iso",
+            blob: new Blob([rebuilt]),
+            size: rebuilt.length,
+            checksums: checksum(rebuilt),
+            dispose,
+          },
+        ],
+        patchOutputs: [],
+      };
+    });
+    const runtime = {
+      name: "browser",
+      workerIo: {},
+      compression: {},
+      ingest: { run },
+      checksum: { run: hash },
+    } as unknown as InputPreparationRuntime;
+    for (const sourceIndex of [0, 1]) {
+      const source = new File([raw], "original.iso");
+      const [asset] = await prepareInputAssets(source, undefined, sourceIndex, runtime);
+      if (!asset) throw new Error("expected one prepared asset");
+      expect(asset.fileName).toBe("original.iso");
+      expect(asset.size).toBe(raw.length);
+      expect((asset.file as typeof asset.file & { checksums?: unknown }).checksums).toEqual(checksum(raw));
+      expect(asset.preparation).toMatchObject({ sourceSize: raw.length, wasDecompressed: false });
+      const blob = getPatchFileBlob(asset.file);
+      if (!blob) throw new Error("expected raw source blob");
+      const actual = new Uint8Array(await blob.arrayBuffer());
+      expect(actual.length).toBe(raw.length);
+      expect(actual.findIndex((byte, index) => byte !== raw[index])).toBe(-1);
+      expect(hash).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          algorithms: ["crc32", "md5", "sha1"],
+          autoExtract: false,
+          fileName: "original.iso",
+          source: expect.objectContaining({ source }),
+        }),
+      );
+    }
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(hash).toHaveBeenCalledTimes(2);
+    expect(dispose).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["failure", "cancellation", "late cancellation"])(
+    "releases rebuilt XISO outputs and propagates raw hashing %s",
+    async (kind) => {
+      const controller = new AbortController();
+      const error =
+        kind === "failure"
+          ? new Error("Raw hashing failed")
+          : new RomWeaverError("CANCELLED", "Workflow was cancelled");
+      const dispose = vi.fn().mockRejectedValue(new Error("Cleanup failed"));
+      const hash = vi.fn(async () => {
+        if (kind === "late cancellation") {
+          controller.abort();
+          return { checksums: { crc32: "12345678" }, fileName: "original.iso", size: 131072 };
+        }
+        throw error;
+      });
+      const run = vi.fn(async ({ onProgress }: { onProgress: (event: unknown) => void }) => {
+        onProgress({
+          details: {
+            extract_step: {
+              status: "succeeded",
+              format: "xiso",
+              source_name: "original.iso",
+              outputs: [],
+            },
+          },
+        });
+        return { result: { isRom: true, assets: [], patches: [] }, outputs: [{ dispose }], patchOutputs: [] };
+      });
+      const runtime = {
+        name: "browser",
+        workerIo: {},
+        compression: {},
+        ingest: { run },
+        checksum: { run: hash },
+      } as unknown as InputPreparationRuntime;
+      const prepared = prepareInputAssets(
+        new File([xisoFixture()], "original.iso"),
+        { signal: controller.signal },
+        0,
+        runtime,
+      );
+      if (kind === "late cancellation") await expect(prepared).rejects.toMatchObject({ code: "CANCELLED" });
+      else await expect(prepared).rejects.toBe(error);
+      expect(dispose).toHaveBeenCalledOnce();
+      expect(hash).toHaveBeenCalledOnce();
+      expect(hash).toHaveBeenCalledWith(expect.objectContaining({ signal: controller.signal }));
     },
   );
 

@@ -107,7 +107,7 @@ const pbpFixture = () => {
 
 export const patchContainerFixtures = () => [csoFixture(), pbpFixture(), cisoFixture(), wbfsFixture(), tgcFixture()];
 
-export const xisoFixture = () => {
+export const xisoFixture = (partitionOffset = 0) => {
   const bytes = new Uint8Array(131072);
   const sector = 2048;
   bytes.set(text("MICROSOFT*XBOX*MEDIA"), 32 * sector);
@@ -121,5 +121,56 @@ export const xisoFixture = () => {
   bytes[root + 13] = 11;
   bytes.set(text("default.xbe"), root + 14);
   bytes.set(text("XBE-STUB"), 34 * sector);
-  return bytes;
+  if (!partitionOffset) return bytes;
+  const disc = new Uint8Array(partitionOffset + bytes.length);
+  disc.set(text("SYNTHETIC VIDEO PARTITION"));
+  disc.set(bytes, partitionOffset);
+  return disc;
+};
+
+const crcTable = Uint32Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit++) value = (value >>> 1) ^ (value & 1 ? 0xedb88320 : 0);
+  return value >>> 0;
+});
+
+export const rawCrc32 = (bytes) => {
+  let crc = 0xffffffff;
+  for (const byte of bytes) crc = (crc >>> 8) ^ crcTable[(crc ^ byte) & 255];
+  return (crc ^ 0xffffffff) >>> 0;
+};
+
+// This independent BPS encoder MUST use the raw source, without workflow preparation.
+export const rawBpsFixture = (source, offset) => {
+  const target = source.slice();
+  target[offset] ^= 1;
+  const patch = [...text("BPS1")];
+  const number = (input) => {
+    let value = input;
+    while (true) {
+      const byte = value & 127;
+      value = Math.floor(value / 128);
+      if (!value) {
+        patch.push(byte | 128);
+        return;
+      }
+      patch.push(byte);
+      value--;
+    }
+  };
+  number(source.length);
+  number(target.length);
+  number(0);
+  if (offset) number((offset - 1) * 4);
+  number(1);
+  patch.push(target[offset]);
+  const remaining = target.length - offset - 1;
+  if (remaining) number((remaining - 1) * 4);
+  const appendCrc = (crc) => {
+    for (let shift = 0; shift < 32; shift += 8) patch.push((crc >>> shift) & 255);
+  };
+  appendCrc(rawCrc32(source));
+  appendCrc(rawCrc32(target));
+  appendCrc(rawCrc32(patch));
+  return { patch: new Uint8Array(patch), target };
 };
