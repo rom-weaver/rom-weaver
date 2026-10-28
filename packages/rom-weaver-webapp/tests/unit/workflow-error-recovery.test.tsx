@@ -79,6 +79,8 @@ describe("workflow error recovery", () => {
     "INVALID_INPUT: nested extract exceeded max depth of 8",
     "COMPRESSION_FAILED: archive max depth of 8",
     "validation failed: zip create failed: unknown libarchive failure",
+    "validation failed: zip archive is invalid: Failed to open '/work/a.zip'",
+    "validation failed: zip list failed while reading entry 0: validation failed: archive read header failed: Error reading '/work/a.zip'",
     "A file named validation failed: zip archive is invalid: example.zip",
     "INVALID_INPUT: validation failed: archive read header failed: unrelated detail",
   ])("does not guess recovery for unrelated failure %s", (message) => {
@@ -142,6 +144,8 @@ describe("workflow error recovery", () => {
     "validation failed: zipx list failed while decoding entry 1: validation failed: archive read header failed: x",
     "validation failed: zip extract failed while reading entry 0 (`game.bin`): validation failed: archive entry read failed: ZIP bad CRC",
     "validation failed: 7z extract failed while reading entry 2: validation failed: archive read header failed: x",
+    "validation failed: zip extract failed while reading entry 0 (`a`b.bin`): validation failed: archive entry read failed: ZIP bad CRC",
+    "CHECKSUM_MISMATCH: Details: validation failed: tar list failed while reading entry 0: validation failed: archive read header failed: Damaged tar archive (bad header checksum)",
   ])("explains archive failures for other formats and extract-time reads: %s", (message) => {
     const view = showNotice(message);
     const alert = view.getByRole("alert");
