@@ -81,8 +81,10 @@
 /m3u-playlist/ /docs/cli-playlist 301
 /m3u-playlist.html /docs/cli-playlist 301
 /m3u-playlist/index.html /docs/cli-playlist 301
+/m3u-playlist.md /docs/cli-playlist.md 301
 /playlist /docs/cli-playlist 301
 /playlist/ /docs/cli-playlist 301
 /docs/make-m3u-playlist-browser /docs/cli-playlist 301
 /docs/make-m3u-playlist-browser/ /docs/cli-playlist 301
 /docs/make-m3u-playlist-browser.html /docs/cli-playlist 301
+/docs/make-m3u-playlist-browser.md /docs/cli-playlist.md 301

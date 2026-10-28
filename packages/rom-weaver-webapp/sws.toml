@@ -262,3 +262,60 @@ source = "/.well-known/api-catalog"
 [advanced.headers.headers]
 Content-Type = 'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"'
 Link = '</.well-known/api-catalog>; rel="api-catalog"'
+
+# The M3U playlist tool left the browser app; the CLI guide is what remains.
+
+[[advanced.redirects]]
+source = "/m3u-playlist"
+destination = "/docs/cli-playlist"
+kind = 301
+
+[[advanced.redirects]]
+source = "/m3u-playlist/"
+destination = "/docs/cli-playlist"
+kind = 301
+
+[[advanced.redirects]]
+source = "/m3u-playlist.html"
+destination = "/docs/cli-playlist"
+kind = 301
+
+[[advanced.redirects]]
+source = "/m3u-playlist/index.html"
+destination = "/docs/cli-playlist"
+kind = 301
+
+[[advanced.redirects]]
+source = "/m3u-playlist.md"
+destination = "/docs/cli-playlist.md"
+kind = 301
+
+[[advanced.redirects]]
+source = "/playlist"
+destination = "/docs/cli-playlist"
+kind = 301
+
+[[advanced.redirects]]
+source = "/playlist/"
+destination = "/docs/cli-playlist"
+kind = 301
+
+[[advanced.redirects]]
+source = "/docs/make-m3u-playlist-browser"
+destination = "/docs/cli-playlist"
+kind = 301
+
+[[advanced.redirects]]
+source = "/docs/make-m3u-playlist-browser/"
+destination = "/docs/cli-playlist"
+kind = 301
+
+[[advanced.redirects]]
+source = "/docs/make-m3u-playlist-browser.html"
+destination = "/docs/cli-playlist"
+kind = 301
+
+[[advanced.redirects]]
+source = "/docs/make-m3u-playlist-browser.md"
+destination = "/docs/cli-playlist.md"
+kind = 301
