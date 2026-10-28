@@ -13,7 +13,28 @@ const WorkflowErrorMessage = ({ message }: { message: string }) => {
   const memory =
     !archiveDepth &&
     (code === "WORKER_FAILED" || code === "COMPRESSION_FAILED") &&
-    /\b(out of memory|cannot enlarge memory|memory allocation|not enough memory|bad alloc|ENOMEM|OOM)\b/i.test(message);
+    /\b(out of memory|cannot enlarge memory|memory allocation|not enough memory|allocate memory|bad alloc|ENOMEM|OOM)\b/i.test(
+      message,
+    );
+  // Open and read failures on a valid archive are storage problems, not archive damage.
+  const storageFailure = /(?:Failed to open|Error reading) '/.test(message);
+  const archiveRead =
+    !(archiveDepth || memory || storageFailure) &&
+    (!code || code === "COMPRESSION_FAILED" || code === "CHECKSUM_MISMATCH") &&
+    /(?:^| Details: )validation failed: (?:[a-z0-9.]+ (?:(?:list|extract) failed while (?:reading|decoding) entry \d+(?: \(`.*?`\))?:|archive is invalid:)|archive read (?:header|data) failed:|unknown libarchive failure\b)/i.test(
+      message,
+    );
+  if (archiveRead) {
+    return (
+      <>
+        {localizer.message("ui.errorRecovery.archiveRead")}
+        <details>
+          <summary>{localizer.message("ui.errorRecovery.details")}</summary>
+          {message}
+        </details>
+      </>
+    );
+  }
   const recovery = memory
     ? "memory"
     : archiveDepth

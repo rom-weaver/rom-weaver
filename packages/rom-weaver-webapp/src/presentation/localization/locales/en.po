@@ -6020,6 +6020,21 @@ msgstr "ZIP, 7z and weaves"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.archiveRead"
+msgstr "This archive is damaged or unsupported. Choose another archive or extract it on your device first."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.details"
+msgstr "Technical details"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.outputHelp"
+msgstr "Options → Type sets the download: None gives the raw patch file, and ZIP or 7z packages it in an archive. New settings start on None."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.validationCorruptHint"
 msgstr "The patch file is damaged. Obtain a fresh copy and replace this patch. The ROM was not checked against it either."
 

@@ -6020,6 +6020,21 @@ msgstr "ZIP, 7z y paquetes"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.archiveRead"
+msgstr "Este archivo comprimido está dañado o no es compatible. Elige otro o extráelo primero en tu dispositivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.details"
+msgstr "Detalles técnicos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.outputHelp"
+msgstr "En Opciones → Tipo se elige la descarga: None entrega el parche sin comprimir, y ZIP o 7z lo empaqueta en un archivo comprimido. Los ajustes nuevos empiezan en None."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.validationCorruptHint"
 msgstr "El archivo del parche está dañado. Consigue una copia nueva y reemplaza este parche. Tampoco se comprobó la ROM con él."
 

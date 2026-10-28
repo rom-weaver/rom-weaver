@@ -302,6 +302,23 @@ describe("CreatePatchForm", () => {
     });
   };
 
+  it("describes bare-patch output with archives as an opt-in", async () => {
+    const { container, getByRole } = render(
+      <RomWeaverSettingsProvider settings={{ defaultCompression: "zip/special" }}>
+        <CreatePatchFormForTest {...withSeams()} />
+      </RomWeaverSettingsProvider>,
+    );
+    await upload(container, [new File(["original"], "original.bin"), new File(["modified"], "modified.bin")]);
+    await vi.waitFor(() => expect(container.querySelector("#patch-builder-select-output-compression")).toBeTruthy());
+    expect((container.querySelector("#patch-builder-select-output-compression") as HTMLSelectElement).value).toBe(
+      "none",
+    );
+    fireEvent.click(getByRole("button", { name: "Output options" }));
+    expect(document.body.textContent).toContain(
+      "Options → Type sets the download: None gives the raw patch file, and ZIP or 7z packages it in an archive. New settings start on None.",
+    );
+  });
+
   it.each(["cheats", "rom", undefined] as const)("opens the %s entry in its requested mode", async (entry) => {
     const { container } = renderForm(withSeams({ entry }));
     expect(activeButton(container, "Patches & cheats").getAttribute("aria-pressed")).toBe(String(entry === "cheats"));
