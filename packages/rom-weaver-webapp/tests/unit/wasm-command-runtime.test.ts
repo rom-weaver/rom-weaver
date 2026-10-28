@@ -239,10 +239,12 @@ describe("runRomWeaverProbeWorker", () => {
     });
   });
 
-  it("reports validated PBP disc and stored-block counts", async () => {
-    mocks.runRomWeaverJson.mockResolvedValue(succeededResult({ pbp: { disc_count: 2, stored_block_count: 3 } }));
+  it.each([true, false])("reports validated PBP disc metadata with end offsets %s", async (hasIndexEndOffsets) => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({ pbp: { disc_count: 2, stored_block_count: 3, has_index_end_offsets: hasIndexEndOffsets } }),
+    );
     await expect(runRomWeaverProbeWorker({ sourcePath: "/game.pbp" })).resolves.toMatchObject({
-      pbp: { discCount: 2, storedBlockCount: 3 },
+      pbp: { discCount: 2, storedBlockCount: 3, hasIndexEndOffsets },
     });
   });
 
@@ -253,6 +255,8 @@ describe("runRomWeaverProbeWorker", () => {
     { disc_count: 2, stored_block_count: -1 },
     { disc_count: 2, stored_block_count: 1.5 },
     { disc_count: "2", stored_block_count: 0 },
+    { disc_count: 2, stored_block_count: 0 },
+    { disc_count: 2, stored_block_count: 0, has_index_end_offsets: "true" },
   ])("omits invalid PBP metadata %j", async (pbp) => {
     mocks.runRomWeaverJson.mockResolvedValue(succeededResult({ pbp }));
     await expect(runRomWeaverProbeWorker({ sourcePath: "/game.pbp" })).resolves.not.toHaveProperty("pbp");

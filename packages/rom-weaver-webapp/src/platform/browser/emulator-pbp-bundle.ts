@@ -20,7 +20,7 @@ type PbpBundleOptions = {
 const preparePbpEmulatorBundle = async (
   workerIo: RuntimeWorkerIo,
   source: Blob,
-  fileName: string,
+  _fileName: string,
   discCount: number,
   options: PbpBundleOptions = {},
 ) => {
@@ -29,10 +29,10 @@ const preparePbpEmulatorBundle = async (
   try {
     throwIfAborted(options.signal);
     staged = await workerIo.stageSource({
-      fallbackFileName: fileName,
+      fallbackFileName: "game.pbp",
       pathPrefix: "emulator-pbp",
       scope: "archive",
-      source,
+      source: new File([source], "game.pbp", { type: source.type }),
     });
     throwIfAborted(options.signal);
     const extracted = await invokeRomWeaverExtractAllWorker(

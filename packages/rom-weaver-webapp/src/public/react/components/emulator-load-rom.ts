@@ -130,7 +130,7 @@ const loadEmulatorRom = async (
   if (/\.pbp$/i.test(fileName.trim())) {
     // The probe MUST validate the section table and every PS1 disc before native passthrough.
     const probe = await probeRom(blob, fileName, { signal: options.signal });
-    if (probe.pbp && probe.pbp.storedBlockCount > 0) {
+    if (probe.pbp && (probe.pbp.storedBlockCount > 0 || !probe.pbp.hasIndexEndOffsets)) {
       const prepared = await prepareEmulatorPbp(blob, fileName, probe.pbp.discCount, {
         onProgress,
         signal: options.signal,

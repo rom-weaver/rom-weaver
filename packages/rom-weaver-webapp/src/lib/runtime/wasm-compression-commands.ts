@@ -289,7 +289,9 @@ const getPbpProbeDetails = (value: unknown): CompressionProbeResult["pbp"] | und
     return undefined;
   if (typeof storedBlockCount !== "number" || !Number.isSafeInteger(storedBlockCount) || storedBlockCount < 0)
     return undefined;
-  return { discCount, storedBlockCount };
+  const hasIndexEndOffsets = record?.has_index_end_offsets;
+  if (typeof hasIndexEndOffsets !== "boolean") return undefined;
+  return { discCount, storedBlockCount, hasIndexEndOffsets };
 };
 
 // The CHD header's own digests: `raw_sha1` covers the decoded payload, `sha1` the payload plus

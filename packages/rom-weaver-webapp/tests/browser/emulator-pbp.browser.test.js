@@ -15,18 +15,18 @@ const sha1 = async (blob) =>
 // Synthetic containers prove loader routing and identity, not game boot or gameplay.
 describe("Test loader with real PBP parsing and hashing", () => {
   it.each([1, 2, 5])("bundles every stored-block disc of a %i-disc PBP for PSX", async (count) => {
-    const blob = new Blob([buildPbp(Array.from({ length: count }, () => disc))]);
+    const blob = new File([buildPbp(Array.from({ length: count }, () => disc))], "#Game.pbp");
     const stat = vi.spyOn(browserVfs, "stat");
     let loaded;
     try {
-      loaded = await loadEmulatorRom(blob, "Synthetic v1.2 雨 #2.PBP");
+      loaded = await loadEmulatorRom(blob, "#Game.pbp");
       const archivePaths = stat.mock.calls.map(([path]) => path).filter((path) => path.endsWith(".zip"));
       expect(archivePaths.length).toBeGreaterThan(0);
       for (const path of new Set(archivePaths)) expect(await browserVfs.stat(path)).toBeNull();
     } finally {
       stat.mockRestore();
     }
-    expect(loaded.fileName).toBe("Synthetic v1.2 雨 #2.zip");
+    expect(loaded.fileName).toBe("#Game.zip");
     expect(loaded.platform).toBe("Sony PlayStation");
     expect(loaded.expandedSizeBytes).toBeGreaterThanOrEqual(count * disc.iso.length);
     expect(getEmulatorJsCore(loaded.platform, loaded.fileName)).toBe("psx");
@@ -41,6 +41,8 @@ describe("Test loader with real PBP parsing and hashing", () => {
       const playlist = extracted.outputs.find((entry) => entry.fileName.endsWith(".m3u"));
       expect(bins).toHaveLength(count);
       expect(cues).toHaveLength(count);
+      for (const entry of [...bins, ...cues])
+        expect(entry.fileName).toMatch(/^game(?:-\d+)?(?:\.disc\d+)?\.(?:bin|cue)$/);
       expect(playlist).toBeDefined();
       const lines = (await (await getIngestOutputBlob(playlist)).text())
         .trim()

@@ -34,6 +34,7 @@ struct PbpDiscEntry {
     iso_size: u64,
     toc_tracks: Vec<PbpTocTrack>,
     iso_indexes: Vec<PbpIsoIndexEntry>,
+    has_index_end_offset: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -264,7 +265,8 @@ impl PbpContainerHandler {
 
         let disc_id = self.read_disc_id(source, file, disc_psar_offset)?;
         let (toc_tracks, leadout_frames) = self.read_toc_tracks(source, file, disc_psar_offset)?;
-        let iso_indexes = self.read_iso_indexes(source, file, disc_psar_offset, file_size)?;
+        let (iso_indexes, has_index_end_offset) =
+            self.read_iso_indexes(source, file, disc_psar_offset, file_size)?;
         if iso_indexes.len() < 2 {
             return Err(RomWeaverError::Validation(format!(
                 "source `{}` disc {} has too few ISO index blocks",
@@ -320,6 +322,7 @@ impl PbpContainerHandler {
             iso_size,
             toc_tracks,
             iso_indexes,
+            has_index_end_offset,
         })
     }
 
@@ -435,7 +438,7 @@ impl PbpContainerHandler {
         file: &mut File,
         disc_psar_offset: u64,
         file_size: u64,
-    ) -> Result<Vec<PbpIsoIndexEntry>> {
+    ) -> Result<(Vec<PbpIsoIndexEntry>, bool)> {
         let index_span = usize::try_from(Self::PSAR_ISO_OFFSET - Self::PSAR_INDEX_OFFSET)
             .map_err(|_| RomWeaverError::Validation("pbp index table length overflowed".into()))?;
         let mut bytes = vec![0u8; index_span];
@@ -448,6 +451,7 @@ impl PbpContainerHandler {
         )?;
 
         let mut indexes: Vec<PbpIsoIndexEntry> = Vec::new();
+        let mut has_index_end_offset = false;
         for (index, chunk) in bytes.chunks_exact(Self::PSAR_INDEX_ENTRY_SIZE).enumerate() {
             let offset = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]) as u64;
             let length = u32::from_le_bytes([chunk[4], chunk[5], chunk[6], chunk[7]]) as u64;
@@ -466,6 +470,7 @@ impl PbpContainerHandler {
                         .iter()
                         .all(|byte| *byte == 0);
                 if is_end_marker {
+                    has_index_end_offset = true;
                     break;
                 }
                 return Err(RomWeaverError::Validation(format!(
@@ -497,7 +502,7 @@ impl PbpContainerHandler {
                 source.display()
             )));
         }
-        Ok(indexes)
+        Ok((indexes, has_index_end_offset))
     }
 
     fn read_iso_size_from_index(
@@ -897,7 +902,8 @@ impl ContainerHandlerOperations for PbpContainerHandler {
             Some(execution),
         );
         report.details = Some(json!({
-            "pbp": { "disc_count": disc_count, "stored_block_count": stored_block_count }
+            "pbp": { "disc_count": disc_count, "stored_block_count": stored_block_count,
+                "has_index_end_offsets": archive.discs.iter().all(|disc| disc.has_index_end_offset) }
         }));
         Ok(report)
     }

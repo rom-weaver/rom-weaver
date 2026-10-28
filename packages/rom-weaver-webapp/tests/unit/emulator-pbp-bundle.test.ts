@@ -55,6 +55,15 @@ beforeEach(() => {
 });
 
 describe("stored-block PBP emulator preparation", () => {
+  it("overrides a File name before staging while preserving every byte", async () => {
+    const blob = new File([await source().arrayBuffer()], "#Game.pbp");
+    await preparePbpEmulatorBundle(workerIo, blob, "#Game.pbp", 2);
+    const staged = state.stage.mock.calls[0]?.[0];
+    expect(staged.source.name).toBe("game.pbp");
+    expect(staged.fallbackFileName).toBe("game.pbp");
+    expect(await staged.source.arrayBuffer()).toEqual(await blob.arrayBuffer());
+  });
+
   it.each([1, 2, 5])("bundles all %i complete discs through Rust playlist", async (count) => {
     state.count = count;
     const blob = source();
@@ -66,9 +75,7 @@ describe("stored-block PBP emulator preparation", () => {
       checksum: "a".repeat(40),
       expandedSizeBytes: count * (disc.iso.length + 100),
     });
-    expect(state.stage).toHaveBeenCalledWith(
-      expect.objectContaining({ source: blob, fallbackFileName: "Game v1.2 雨 #2.PBP" }),
-    );
+    expect(state.stage).toHaveBeenCalledWith(expect.objectContaining({ fallbackFileName: "game.pbp" }));
     expect(state.extract).toHaveBeenCalledWith(
       expect.objectContaining({ interactiveSelectionEnabled: false, noIgnore: true, signal }),
       onProgress,

@@ -288,6 +288,7 @@ fn disc_entry(iso_size: u64, iso_indexes: Vec<PbpIsoIndexEntry>) -> PbpDiscEntry
         iso_size,
         toc_tracks: Vec::new(),
         iso_indexes,
+        has_index_end_offset: false,
     }
 }
 
@@ -1452,7 +1453,7 @@ fn probe_reports_stored_blocks_from_the_validated_disc_indexes() {
             .expect("probe disc");
         assert_eq!(
             report.details.expect("probe details")["pbp"],
-            serde_json::json!({ "disc_count": 1, "stored_block_count": ([2, 0, 1][index]) })
+            serde_json::json!({ "disc_count": 1, "stored_block_count": ([2, 0, 1][index]), "has_index_end_offsets": false })
         );
     }
     let source = write_fixture(
@@ -1471,7 +1472,7 @@ fn probe_reports_stored_blocks_from_the_validated_disc_indexes() {
         .expect("probe all discs");
     assert_eq!(
         report.details.expect("probe details")["pbp"],
-        serde_json::json!({ "disc_count": 3, "stored_block_count": 3 })
+        serde_json::json!({ "disc_count": 3, "stored_block_count": 3, "has_index_end_offsets": false })
     );
 }
 
@@ -1496,4 +1497,36 @@ fn probe_does_not_count_unused_stored_index_blocks() {
         report.details.expect("probe details")["pbp"]["stored_block_count"],
         2
     );
+}
+
+#[test]
+fn probe_reports_end_offsets_only_when_every_disc_has_a_validated_marker() {
+    let temp = TempDir::new("probe-end-offsets");
+    let (marked, _) = compressed_disc_with_index_end_marker();
+    let mut unmarked = marked.clone();
+    write_u32_le(&mut unmarked, PSAR_INDEX_OFFSET + 2 * INDEX_ENTRY_BYTES, 0);
+    for (name, discs, expected) in [
+        ("marked", vec![marked.clone(), marked.clone()], true),
+        ("mixed", vec![marked.clone(), unmarked.clone()], false),
+        ("unmarked", vec![unmarked.clone(), unmarked], false),
+    ] {
+        let source = write_fixture(
+            &temp,
+            &format!("{name}.pbp"),
+            &wrap_psar_in_pbp(&build_multi_disc_psar(&discs)),
+        );
+        let report = PbpContainerHandler
+            .probe_details(
+                &ContainerProbeRequest {
+                    source,
+                    split_bin: false,
+                },
+                &test_context(temp.path()),
+            )
+            .expect("probe valid discs");
+        assert_eq!(
+            report.details.expect("probe details")["pbp"]["has_index_end_offsets"],
+            expected
+        );
+    }
 }
