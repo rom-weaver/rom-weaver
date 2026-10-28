@@ -210,6 +210,10 @@ const prepareIngestIdentify = async ({
         timedOut,
       }));
       if (result && typeof result === "object" && "timedOut" in result && typeof result.timedOut === "string") {
+        // The pack download keeps running in the background; keep the warm-up held until it settles.
+        const resume = resumePausedWarmup;
+        resumePausedWarmup = undefined;
+        if (resume) void work.then(resume, resume);
         throw new Error(result.timedOut);
       }
       return result as T;

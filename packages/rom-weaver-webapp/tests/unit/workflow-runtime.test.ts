@@ -337,6 +337,34 @@ describe("browser ingest and weave runtime", () => {
     );
   });
 
+  it("keeps the offline warm-up held after the identify bound until the background download settles", async () => {
+    vi.useFakeTimers();
+    try {
+      let release: (value: { packs: never[] }) => void = () => undefined;
+      state.identifySelection.mockReturnValueOnce(
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+      );
+      const running = browserRuntime.ingest.run({
+        fileName: "game.nes",
+        identify: true,
+        identifyBounded: true,
+        source: "bytes",
+      } as never);
+      await vi.advanceTimersByTimeAsync(5000);
+      const result = await running;
+      expect(result.identifyUnavailable).toEqual(expect.any(String));
+      expect(state.pauseWarmup).toHaveBeenCalledOnce();
+      expect(state.resumeWarmup).not.toHaveBeenCalled();
+      release({ packs: [] });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(state.resumeWarmup).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("hands ingest the original name, not the sanitized staged one", async () => {
     // Staging rewrites `:` to `_`, which would hide the `[crc32:..]` token from the engine.
     state.workerIo.stageSource.mockImplementationOnce(async (input: { pathPrefix: string }) => ({
