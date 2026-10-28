@@ -325,6 +325,11 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "development/ARCHITECTURE.md", label: "Architecture", slug: "docs/architecture" }),
   Object.freeze({ file: "development/development.md", label: "Development", slug: "docs/development" }),
   Object.freeze({
+    file: "development/emulator-pbp-verification.md",
+    label: "PBP emulator verification",
+    slug: "docs/emulator-pbp-verification",
+  }),
+  Object.freeze({
     file: "development/performance.md",
     label: "CHD, RVZ, and archive benchmarks",
     slug: "docs/performance",
