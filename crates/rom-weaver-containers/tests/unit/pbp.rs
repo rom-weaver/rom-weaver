@@ -87,7 +87,7 @@ struct DiscSpec {
     disc_id: String,
     /// `(track type byte, absolute start frame)` per track, in track order.
     tracks: Vec<(u8, u32)>,
-    /// Stamped into block 1's size descriptor; drives `iso_size`.
+    /// ISO volume sector count stamped into block 1's size descriptor.
     sector_count: u32,
     block_count: usize,
 }
@@ -150,7 +150,7 @@ fn build_disc_psar_with_blocks(spec: &DiscSpec, stored_blocks: &[Vec<u8>]) -> Ve
     psar[0x401..0x405].copy_from_slice(&disc_id[..4]);
     psar[0x405] = b'_';
     psar[0x406..0x40B].copy_from_slice(&disc_id[4..9]);
-    write_toc(&mut psar, &spec.tracks, 150 + spec.sector_count);
+    write_toc(&mut psar, &spec.tracks, spec.sector_count);
 
     let mut payload = Vec::new();
     for (block_index, block) in stored_blocks.iter().enumerate() {
@@ -1023,4 +1023,121 @@ fn multi_disc_extract_without_selections_writes_every_pair() {
             "unexpected bin size for {disc}"
         );
     }
+}
+
+#[test]
+fn extract_preserves_the_full_disc_beyond_the_iso_volume() {
+    for sectors in [64u32, 65, 319, 320, 321] {
+        for compressed in [false, true] {
+            let temp = TempDir::new("full-disc");
+            let spec = DiscSpec {
+                tracks: vec![(0x41, 0), (0x01, 48)],
+                sector_count: 32,
+                block_count: (sectors as usize).div_ceil(16),
+                ..DiscSpec::single_track()
+            };
+            let blocks = default_stored_blocks(&spec);
+            let expected = blocks.concat()[..sectors as usize * SECTOR_BYTES].to_vec();
+            let stored = if compressed {
+                blocks.iter().map(|block| raw_deflate(block)).collect()
+            } else {
+                blocks
+            };
+            let mut psar = build_disc_psar_with_blocks(&spec, &stored);
+            write_toc(&mut psar, &spec.tracks, sectors);
+            for (index, (_, start)) in spec.tracks.iter().enumerate() {
+                let (minutes, seconds, frames) = frames_to_msf(start + 150);
+                let entry = TOC_OFFSET + 30 + index * 10;
+                psar[entry + 7] = encode_bcd(minutes);
+                psar[entry + 8] = encode_bcd(seconds);
+                psar[entry + 9] = encode_bcd(frames);
+            }
+            let source = write_fixture(&temp, "game.pbp", &wrap_psar_in_pbp(&psar));
+            let out_dir = temp.join("out");
+            PbpContainerHandler
+                .extract(
+                    &extract_request(&source, &out_dir),
+                    &test_context(temp.path()),
+                )
+                .expect("extract every sector through the TOC leadout");
+            let actual = fs::read(out_dir.join("game.bin")).unwrap();
+            assert_eq!(
+                actual.len(),
+                expected.len(),
+                "sectors={sectors}, compressed={compressed}"
+            );
+            assert!(
+                actual == expected,
+                "disc bytes differ: sectors={sectors}, compressed={compressed}"
+            );
+        }
+    }
+}
+
+#[test]
+fn parse_rejects_a_leadout_before_the_iso_volume_end() {
+    let temp = TempDir::new("leadout-short");
+    for sectors in [0, 1, 31] {
+        let error = corrupt_psar_parse_error(&temp, &format!("leadout-{sectors}.pbp"), |psar| {
+            write_toc(psar, &DiscSpec::single_track().tracks, sectors);
+        });
+        assert!(
+            error.contains("TOC leadout precedes the ISO volume end"),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn parse_rejects_a_leadout_beyond_the_index_capacity() {
+    let temp = TempDir::new("leadout-large");
+    let error = corrupt_psar_parse_error(&temp, "leadout-large.pbp", |psar| {
+        write_toc(psar, &DiscSpec::single_track().tracks, 33);
+    });
+    assert!(
+        error.contains("index table is incomplete (3 blocks required, 2 present)"),
+        "{error}"
+    );
+}
+
+#[test]
+fn parse_rejects_invalid_leadout_timestamps() {
+    let temp = TempDir::new("leadout-invalid");
+    for (label, offset, value, message) in [
+        ("bcd", 27, 0xFA, "invalid BCD value for TOC leadout minute"),
+        ("seconds", 28, 0x60, "invalid MSF timestamp"),
+        ("frames", 29, 0x75, "invalid MSF timestamp"),
+    ] {
+        let error = corrupt_psar_parse_error(&temp, &format!("{label}.pbp"), |psar| {
+            psar[TOC_OFFSET + offset] = value;
+        });
+        assert!(error.contains(message), "{error}");
+    }
+}
+
+#[test]
+fn extract_rejects_a_short_payload_beyond_the_iso_volume() {
+    let temp = TempDir::new("leadout-short-payload");
+    let spec = DiscSpec {
+        block_count: 3,
+        ..DiscSpec::single_track()
+    };
+    let mut blocks = default_stored_blocks(&spec);
+    blocks[2] = raw_deflate(&[0u8; SECTOR_BYTES - 1]);
+    let mut psar = build_disc_psar_with_blocks(&spec, &blocks);
+    write_toc(&mut psar, &spec.tracks, 33);
+    let source = write_fixture(&temp, "game.pbp", &wrap_psar_in_pbp(&psar));
+    let out_dir = temp.join("out");
+    let error = PbpContainerHandler
+        .extract(
+            &extract_request(&source, &out_dir),
+            &test_context(temp.path()),
+        )
+        .expect_err("the full-disc extent must be backed by decoded sectors")
+        .to_string();
+    assert!(
+        error.contains("wrote 77615 bytes but expected 77616"),
+        "{error}"
+    );
+    assert!(!out_dir.join("game.bin").exists());
 }

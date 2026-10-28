@@ -312,7 +312,7 @@ impl PbpContainerHandler {
         }
 
         let disc_id = self.read_disc_id(source, file, disc_psar_offset)?;
-        let toc_tracks = self.read_toc_tracks(source, file, disc_psar_offset)?;
+        let (toc_tracks, leadout_frames) = self.read_toc_tracks(source, file, disc_psar_offset)?;
         let iso_indexes = self.read_iso_indexes(source, file, disc_psar_offset, file_size)?;
         if iso_indexes.len() < 2 {
             return Err(RomWeaverError::Validation(format!(
@@ -321,8 +321,18 @@ impl PbpContainerHandler {
                 disc_number
             )));
         }
-        let iso_size =
+        let volume_size =
             self.read_iso_size_from_index(source, file, disc_psar_offset, &iso_indexes)?;
+        // A2 MUST be interpreted as the full BIN sector count, without a lead-in bias.
+        // https://github.com/RupertAvery/PSXPackager/blob/76fc019460dbf550e3ddbc184959f4ed182e36f8/Popstation/CueFileExtensions.cs#L51-L79
+        let iso_size = u64::from(leadout_frames) * Self::ISO_SECTOR_BYTES as u64;
+        if iso_size < volume_size {
+            return Err(RomWeaverError::Validation(format!(
+                "source `{}` disc {} TOC leadout precedes the ISO volume end",
+                source.display(),
+                disc_number
+            )));
+        }
         let required_blocks = self.required_block_count(iso_size)?;
         if iso_indexes.len() < required_blocks {
             return Err(RomWeaverError::Validation(format!(
@@ -377,7 +387,7 @@ impl PbpContainerHandler {
         source: &Path,
         file: &mut File,
         disc_psar_offset: u64,
-    ) -> Result<Vec<PbpTocTrack>> {
+    ) -> Result<(Vec<PbpTocTrack>, u32)> {
         let mut entry = [0u8; 10];
         let mut cursor = disc_psar_offset + Self::PSAR_TOC_OFFSET;
         self.read_exact_at(source, file, cursor, &mut entry, "TOC start-track entry")?;
@@ -413,7 +423,7 @@ impl PbpContainerHandler {
                 source.display()
             )));
         }
-        let _leadout = Self::msf_to_frames(
+        let leadout = Self::msf_to_frames(
             Self::decode_bcd(entry[7], "TOC leadout minute")?,
             Self::decode_bcd(entry[8], "TOC leadout second")?,
             Self::decode_bcd(entry[9], "TOC leadout frame")?,
@@ -447,7 +457,7 @@ impl PbpContainerHandler {
             track.cue_track_type()?;
             tracks.push(track);
         }
-        Ok(tracks)
+        Ok((tracks, leadout))
     }
 
     fn read_iso_indexes(

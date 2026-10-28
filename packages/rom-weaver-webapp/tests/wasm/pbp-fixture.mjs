@@ -28,7 +28,7 @@ function buildDiscPsar(discId, iso) {
   psar.set(new TextEncoder().encode("PSISOIMG0000"));
   writeU32(psar, 12, psar.length);
   psar.set(new TextEncoder().encode(`_${discId.slice(0, 4)}_${discId.slice(4)}`), 0x400);
-  const leadout = 150 + sectorCount;
+  const leadout = sectorCount;
   psar[0x800 + 2] = 0xa0;
   psar[0x800 + 7] = bcd(1);
   psar[0x80a + 2] = 0xa1;

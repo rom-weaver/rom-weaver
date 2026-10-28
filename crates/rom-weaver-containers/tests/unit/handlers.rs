@@ -528,7 +528,7 @@ mod tests {
         psar[0x406..0x40B].copy_from_slice(&disc_id_bytes[4..9]);
 
         let sector_count = u32::try_from(iso_data.len() / TEST_PBP_SECTOR_BYTES).expect("sectors");
-        let leadout_frames = 150u32 + sector_count;
+        let leadout_frames = sector_count;
         let (leadout_m, leadout_s, leadout_f) = frames_to_msf(leadout_frames);
         psar[0x800 + 2] = 0xA0;
         psar[0x800 + 7] = encode_bcd(1);
