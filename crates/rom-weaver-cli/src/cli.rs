@@ -1184,8 +1184,7 @@ fn run_apply_tui(
             return ExitCode::from(2);
         }
     };
-    // Run the apply itself without the tui/emit hooks, then author the weave.
-    apply.tui = false;
+    // Keep the native TUI flag so apply can guard its resolved output paths.
     apply.emit_bundle = None;
     let apply_outcome = run_command_outcome(
         Commands::Patch(PatchCommands::Apply(apply)),
@@ -1202,6 +1201,11 @@ fn run_apply_tui(
         reporter,
         prompter,
     );
+    if create_outcome.exit_code != 0 && !process_cancellation_token().is_cancelled() {
+        crate::render::write_stderr(format_args!(
+            "patch apply succeeded, but TUI recipe creation failed; the patched output was kept\n"
+        ));
+    }
     ExitCode::from(create_outcome.exit_code)
 }
 

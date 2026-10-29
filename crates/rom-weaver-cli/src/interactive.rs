@@ -3,7 +3,10 @@
 //! command. The apply itself still runs through the normal path; this only
 //! authors the accompanying `rom-weaver-weave.json`.
 
-use std::path::PathBuf;
+use std::{
+    fs, io,
+    path::{Component, Path, PathBuf},
+};
 
 use dialoguer::{Confirm, Input};
 use rom_weaver_app::{PatchApplyCommand, WeaveCreateCommand, WeaveCreatePatchSpec};
@@ -21,6 +24,48 @@ pub fn run_weave_tui(apply: &PatchApplyCommand) -> Result<WeaveCreateCommand, St
             "--tui needs explicit --patch files (re-opening a weave input is not supported yet); pass --patch <file> ..."
                 .to_string(),
         );
+    }
+    if apply.bundle.is_some() || crate::weave_apply::is_canonical_weave_input(&apply.input) {
+        return Err("--tui cannot re-open a weave; rerun without --tui".to_string());
+    }
+    if !apply.codes.is_empty()
+        || !apply.cheat_selection.cheats.is_empty()
+        || !apply.cheat_records.is_empty()
+    {
+        return Err("--tui cannot record cheat settings; rerun without --tui".to_string());
+    }
+    if apply.repair_checksum {
+        return Err("--tui cannot record --repair-checksum; rerun without --tui".to_string());
+    }
+    if apply
+        .n64_byte_order
+        .iter()
+        .any(|mode| *mode != crate::PatchN64ByteOrderMode::Auto)
+    {
+        return Err("--tui cannot record --n64-byte-order; rerun without --tui".to_string());
+    }
+    let recipe = Path::new(DEFAULT_WEAVE_NAME);
+    let recipe_identity = prospective_path(recipe, &mut 40);
+    if recipe_identity.is_none() {
+        return Err(format!(
+            "--tui recipe destination cannot be resolved safely; repair `{DEFAULT_WEAVE_NAME}` or choose another working directory"
+        ));
+    }
+    if let Some(path) = std::iter::once(&apply.input)
+        .chain(&apply.patches)
+        .chain(&apply.output)
+        .find(|path| {
+            crate::path_access::paths_refer_to_same_file(recipe, path)
+                || matches!(
+                    (recipe_identity.as_ref(), prospective_path(path, &mut 40)),
+                    (Some(recipe), Some(path)) if recipe == &path
+                )
+        })
+    {
+        return Err(format!(
+            "--tui recipe `{DEFAULT_WEAVE_NAME}` and `{}` resolve to the same file; choose a different --output path or working directory",
+            path.display()
+        ));
     }
 
     crate::render::write_stderr(format_args!(
@@ -74,6 +119,7 @@ pub fn run_weave_tui(apply: &PatchApplyCommand) -> Result<WeaveCreateCommand, St
             version: non_empty(version),
             author: non_empty(author),
             optional: optional.then_some(true),
+            header: apply.patch_header.get(index).copied(),
             ..WeaveCreatePatchSpec::default()
         });
     }
@@ -95,13 +141,77 @@ pub fn run_weave_tui(apply: &PatchApplyCommand) -> Result<WeaveCreateCommand, St
         rom: Some(apply.input.clone()),
         output: PathBuf::from(DEFAULT_WEAVE_NAME),
         output_name: non_empty(output_name),
+        output_header: apply.output_header,
         threads: apply.threads,
+        force: apply.force,
         patch_specs,
         ..WeaveCreateCommand::default()
     })
 }
 
+// Check physical paths after inferred names and compression extensions settle.
+// Display/report paths MUST NOT be used: they can lose native filename bytes.
+pub(crate) fn protect_recipe_paths(
+    mut report: rom_weaver_core::OperationReport,
+    paths: &[PathBuf],
+) -> rom_weaver_core::OperationReport {
+    use rom_weaver_core::{OperationStatus, RomWeaverErrorKind};
+
+    if report.status != OperationStatus::Succeeded {
+        return report;
+    }
+    let collision = paths.iter().find(|path| {
+        crate::path_access::paths_refer_to_same_file(Path::new(DEFAULT_WEAVE_NAME), path)
+    });
+    if let Some(path) = collision {
+        report.status = OperationStatus::Failed;
+        report.label = format!(
+            "patch apply succeeded, but the TUI recipe would overwrite `{}`; choose a different --output path or working directory; the patched output was kept",
+            path.display()
+        );
+        report = report.with_error_kind(RomWeaverErrorKind::Validation);
+    }
+    report
+}
+
 fn non_empty(value: String) -> Option<String> {
     let trimmed = value.trim();
     (!trimmed.is_empty()).then(|| trimmed.to_owned())
+}
+
+// Only missing paths MAY be resolved prospectively; other I/O errors MUST fail
+// closed. One link-expansion budget is shared across the whole recursion: links
+// may form cycles, and `..` re-resolves the same link, so depth alone is not
+// enough to bound the work.
+fn prospective_path(path: &Path, links_left: &mut u8) -> Option<PathBuf> {
+    match fs::canonicalize(path) {
+        Ok(canonical) => return Some(canonical),
+        Err(error) if error.kind() != io::ErrorKind::NotFound => return None,
+        Err(_) => {}
+    }
+    let absolute = std::path::absolute(path).ok()?;
+    let mut resolved = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                resolved.pop();
+            }
+            component => {
+                resolved.push(component.as_os_str());
+                match fs::canonicalize(&resolved) {
+                    Ok(canonical) => resolved = canonical,
+                    Err(error) if error.kind() != io::ErrorKind::NotFound => return None,
+                    Err(_) => {
+                        if let Ok(target) = fs::read_link(&resolved) {
+                            *links_left = links_left.checked_sub(1)?;
+                            let target = resolved.parent()?.join(target);
+                            resolved = prospective_path(&target, links_left)?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Some(resolved)
 }

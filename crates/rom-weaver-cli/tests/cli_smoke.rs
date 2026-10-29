@@ -16,6 +16,10 @@ mod checksum_output;
 #[path = "cli_smoke/cli_inputs.rs"]
 mod cli_inputs;
 
+#[cfg(unix)]
+#[path = "cli_smoke/tui.rs"]
+mod tui;
+
 #[path = "cli_smoke/streams.rs"]
 mod streams;
 
