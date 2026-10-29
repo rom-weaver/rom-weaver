@@ -303,7 +303,20 @@ fn sparse_ppf_handler_selects_streaming_below_memory_cap() {
     let temp = TestDir::new();
     let request = sparse_ppf_fixture(&temp, 32 * 1024 * 1024);
     let paths = ApplyPaths(Arc::new(Mutex::new(Vec::new())));
+    // A second distinct dispatch MUST stay alive to avoid tracing-core's thread-local
+    // callsite-interest fast path: https://github.com/rom-weaver/rom-weaver/issues/1520.
+    let _cross_thread_interest = tracing::Dispatch::new(paths.clone());
     tracing::subscriber::with_default(paths.clone(), || {
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    PpfPatchHandler::new(&PPF)
+                        .apply(&request, &test_context_with_threads(&temp, 1))
+                        .expect("apply sparse PPF without subscriber");
+                })
+                .join()
+                .expect("uninstrumented apply thread");
+        });
         PpfPatchHandler::new(&PPF)
             .apply(
                 &request,
