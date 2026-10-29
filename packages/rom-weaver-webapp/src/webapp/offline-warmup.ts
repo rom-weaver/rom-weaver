@@ -748,6 +748,18 @@ const createOfflineWarmup = ({
     return batch.sort((left, right) => unitBytes(right) - unitBytes(left));
   };
 
+  /** Move failed units behind the rest of the live queue so the next pump tries another unit.
+   * Match by identity in the live queue: a priority bump or group toggle can replace or reorder it mid-pump. */
+  const deferFailedUnits = (failed: WarmupUnit[]) => {
+    if (!queue || failed.length === 0) return;
+    const deferred = queue.filter((unit) => failed.includes(unit));
+    if (deferred.length === 0) return;
+    queue = [...queue.filter((unit) => !failed.includes(unit)), ...deferred];
+    log("warm-up unit failed; deferred behind the rest of the queue", {
+      units: deferred.map((unit) => unitLabel(unit)),
+    });
+  };
+
   // Pumps MUST run serially. Concurrent clients can take the same head unit and discard work when one removes it.
   let pumpChain: Promise<unknown> = Promise.resolve();
 
@@ -825,19 +837,28 @@ const createOfflineWarmup = ({
       void progress.update();
     }
     // Remove completed files by identity because a priority bump can replace or reorder the live queue.
+    const failedUnits: WarmupUnit[] = [];
     try {
-      await Promise.all(
+      const results = await Promise.allSettled(
         batch.map(async (batchUnit) => {
-          if (batchUnit.kind === "emulatorjs-file") {
-            const stored = await downloadEmulatorJsFile(batchUnit, onBytes);
-            onCached?.();
-            if (stored && queue) queue = queue.filter((candidate) => candidate !== batchUnit);
-          } else {
-            await installGroupWith(fetchForWarmup, batchUnit.group.id, onBytes, onCached);
+          try {
+            if (batchUnit.kind === "emulatorjs-file") {
+              const stored = await downloadEmulatorJsFile(batchUnit, onBytes);
+              onCached?.();
+              if (stored && queue) queue = queue.filter((candidate) => candidate !== batchUnit);
+            } else {
+              await installGroupWith(fetchForWarmup, batchUnit.group.id, onBytes, onCached);
+            }
+          } catch (error) {
+            failedUnits.push(batchUnit);
+            throw error;
           }
         }),
       );
+      const failure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+      if (failure) throw failure.reason;
     } finally {
+      deferFailedUnits(failedUnits);
       await flushInterims();
     }
     if (batch.some((batchUnit) => batchUnit.kind === "emulatorjs-file")) await finishEmulatorJsIfComplete();
