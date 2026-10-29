@@ -20,7 +20,7 @@ Reading, checksumming, patching, compressing, and writing all happen inside your
 
 The patching engine is compiled to WebAssembly and runs in your browser's workers. There is no server-side patching endpoint for your files to go to, and no account to attach them to.
 
-Remote weaves and their sources are downloaded from their hosts. Identify packs and emulator cores are downloaded as app assets when needed. These downloads do not upload your local files.
+Remote weaves and their sources are downloaded from their hosts. Identify packs and emulator cores are downloaded as app assets when needed, or ahead of time by the offline copy. These downloads do not upload your local files.
 
 ## Where files live while a job runs
 
