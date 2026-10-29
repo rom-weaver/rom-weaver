@@ -482,13 +482,17 @@ impl CliApp {
             trace!(path = %path.display(), format, is_xiso, can_extract, "raw-container check: handler not eligible for extract");
             return false;
         }
+        // A name match settles it without the probe (apply errors on a damaged one), and the
+        // probe can decompress the whole stream.
+        if handler.descriptor().matches_path(path) {
+            trace!(path = %path.display(), format, "raw-container check: apply would extract");
+            return true;
+        }
         let request = ContainerProbeRequest {
             source: path.to_path_buf(),
             split_bin: false,
         };
-        if let Err(error) = handler.probe_details(&request, context)
-            && !handler.descriptor().matches_path(path)
-        {
+        if let Err(error) = handler.probe_details(&request, context) {
             debug!(path = %path.display(), format, error = %error, "raw-container check: signature-only match failed its probe; apply uses the raw file");
             return false;
         }
