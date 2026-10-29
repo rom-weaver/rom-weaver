@@ -1,4 +1,5 @@
 use super::*;
+use crate::extract_support::{ExtractHasher, emit_extract_identity, emit_variant_plan};
 use tracing::{debug, trace};
 
 #[derive(Clone, Copy, Debug)]
@@ -53,7 +54,7 @@ impl StreamContainerHandler {
         overwrite: bool,
         context: &OperationContext,
         execution: &ThreadExecution,
-    ) -> Result<u64> {
+    ) -> Result<(u64, Option<ExtractedFileChecksum>)> {
         let format_name = self.descriptor.name;
         // The uncompressed size is unknown without decoding the whole stream, and a probe pass to
         // learn it would decompress the payload a second time - emit indeterminate progress instead.
@@ -73,7 +74,8 @@ impl StreamContainerHandler {
         );
         let mut archive =
             libarchive_open_read_stream(source, format_name, self.libarchive_read_filter())?;
-        let result = (|| -> Result<u64> {
+        let mut created_output = false;
+        let result = (|| -> Result<(u64, Option<ExtractedFileChecksum>)> {
             if !archive.next_header(&format!(
                 "{format_name} extract failed while reading header"
             ))? {
@@ -85,7 +87,34 @@ impl StreamContainerHandler {
             if let Some(parent) = output_path.parent() {
                 fs::create_dir_all(parent)?;
             }
-            let mut output = BufWriter::new(create_extract_output_file(output_path, overwrite)?);
+            let output_file = if overwrite {
+                match fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(output_path)
+                {
+                    Ok(file) => {
+                        created_output = true;
+                        file
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                        create_extract_output_file(output_path, true)?
+                    }
+                    Err(error) => {
+                        return Err(RomWeaverError::io_path(
+                            rom_weaver_core::IoOp::Create,
+                            output_path,
+                            error,
+                        ));
+                    }
+                }
+            } else {
+                let file = create_extract_output_file(output_path, false)?;
+                created_output = true;
+                file
+            };
+            let mut output = BufWriter::new(output_file);
+            let mut hasher = ExtractHasher::new(context, None, output_path, 1)?;
             let mut copied = 0_u64;
             let mut buffer = vec![0_u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
             loop {
@@ -98,18 +127,30 @@ impl StreamContainerHandler {
                     break;
                 }
                 output.write_all(&buffer[..read])?;
+                hasher.update(&buffer[..read])?;
+                if let Some(identity) = hasher.take_ready_identity(output_path) {
+                    emit_extract_identity(context, format_name, &identity);
+                }
+                if let Some(plan) = hasher.take_ready_variant_plan() {
+                    emit_variant_plan(context, format_name, output_path, &plan);
+                }
                 copied = copied.saturating_add(read as u64);
                 trace!(format = format_name, copied, "stream extract progress");
             }
             output.flush()?;
-            Ok(copied)
+            drop(output);
+            Ok((copied, hasher.finish(output_path)?))
         })();
 
-        match (result, libarchive_close_read_stream(archive, format_name)) {
+        let result = match (result, libarchive_close_read_stream(archive, format_name)) {
             (Ok(bytes), Ok(())) => Ok(bytes),
             (Err(error), _) => Err(error),
             (Ok(_), Err(error)) => Err(error),
+        };
+        if result.is_err() && created_output {
+            let _ = fs::remove_file(output_path);
         }
+        result
     }
 
     fn output_name(&self, source: &Path) -> String {
@@ -268,19 +309,13 @@ impl ContainerHandlerOperations for StreamContainerHandler {
         }
 
         let output_path = request.out_dir.join(&output_name);
-        let written = match self.extract_with_libarchive(
+        let (written, checksum) = self.extract_with_libarchive(
             &request.source,
             &output_path,
             request.overwrite,
             context,
             &execution,
-        ) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                let _ = fs::remove_file(&output_path);
-                return Err(error);
-            }
-        };
+        )?;
         selections.ensure_all_matched()?;
 
         let report = OperationReport::succeeded(
@@ -296,7 +331,11 @@ impl ContainerHandlerOperations for StreamContainerHandler {
             Some(100.0),
             Some(execution),
         );
-        Ok(attach_emitted_file_paths(report, &[output_path]))
+        let report = attach_emitted_file_paths(report, &[output_path]);
+        Ok(attach_extract_checksum_details(
+            report,
+            checksum.into_iter().collect(),
+        ))
     }
 
     fn create(

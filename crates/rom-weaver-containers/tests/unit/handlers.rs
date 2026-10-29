@@ -6121,10 +6121,8 @@ mod tests {
             let temp_dir = temp_dir_path("libarchive-stream-empty");
             fs::create_dir_all(&temp_dir).expect("temp dir");
             let source = temp_dir.join("empty.gz");
-            // An empty file cannot be opened as a raw archive stream, so the wrapper surfaces a
-            // `Validation` error carrying the format-name context it injected. (libarchive's raw
-            // reader passes non-gzip *bytes* through the gzip filter rather than erroring, so a
-            // truly empty input is the sound way to drive the open-stream failure path.)
+            // A zero-byte input has no compression header. The probe MUST reject it instead of
+            // treating it as a valid compressed representation of an empty payload.
             fs::write(&source, b"").expect("fixture");
 
             let error = crate::probe_stream_with_libarchive(

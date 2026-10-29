@@ -73,7 +73,7 @@ const WASM_BINDGEN_READ_FUNCTIONS: &[&str] = &[
     "archive_read_support_format_mtree",
     "archive_read_support_format_rar",
     "archive_read_support_format_rar5",
-    "archive_read_support_format_raw",
+    "archive_read_set_format",
     "archive_read_support_format_tar",
     "archive_read_support_format_warc",
     "archive_read_support_format_zip",
@@ -671,6 +671,7 @@ fn build_libarchive(libarchive_dir: &Path, lzma_glue_dir: &Path, target_sysroot:
         .define("POSIX_REGEX_LIB", "NONE")
         .define("ENABLE_NETTLE", "OFF")
         .define("ENABLE_EXPAT", "OFF")
+        .define("ENABLE_WIN32_XMLLITE", "OFF")
         .define("ENABLE_LIBGCC", "OFF")
         .define("ENABLE_LIBB2", "OFF")
         .define("ENABLE_TEST", "OFF")

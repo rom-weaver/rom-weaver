@@ -64,6 +64,97 @@ fn read_all(reader: &mut dyn Read) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+fn tar_link_fixture(kind: u8) -> Vec<u8> {
+    let mut bytes = vec![0u8; 1536];
+    let header = &mut bytes[..512];
+    header[..9].copy_from_slice(b"alias.bin");
+    header[100..108].copy_from_slice(b"0000644\0");
+    header[108..116].copy_from_slice(b"0000000\0");
+    header[116..124].copy_from_slice(b"0000000\0");
+    header[124..136].copy_from_slice(b"00000000000\0");
+    header[136..148].copy_from_slice(b"00000000000\0");
+    header[148..156].fill(b' ');
+    header[156] = kind;
+    header[157..167].copy_from_slice(b"target.bin");
+    header[257..263].copy_from_slice(b"ustar\0");
+    header[263..265].copy_from_slice(b"00");
+    let checksum: u32 = header.iter().map(|byte| u32::from(*byte)).sum();
+    header[148..156].copy_from_slice(format!("{checksum:06o}\0 ").as_bytes());
+    bytes
+}
+
+#[test]
+fn archive_links_are_skipped_instead_of_becoming_empty_files() {
+    let dir = unique_temp_dir("links");
+    for kind in *b"12" {
+        let source = dir.join(format!("link-{kind}.tar"));
+        fs::write(&source, tar_link_fixture(kind)).expect("write tar link fixture");
+        let entries = list_regular_archive_entries(&source, "tar")
+            .expect("a tar holding only a link lists without error");
+        assert!(
+            entries.is_empty(),
+            "link kind {}: a link must not be listed as an empty regular file: {entries:?}",
+            kind as char
+        );
+    }
+}
+
+#[test]
+fn rar_links_are_skipped_instead_of_listed_as_regular_files() {
+    let dir = unique_temp_dir("rar-links");
+    for (name, bytes, link_names) in [
+        (
+            "rar4",
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/fixtures/rar/rar4-unicode.rar"
+            ))
+            .as_slice(),
+            &["表だよ/ファイル"][..],
+        ),
+        (
+            "rar5",
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/fixtures/rar/rar5-unicode.rar"
+            ))
+            .as_slice(),
+            &["Ⓗⓐⓡⓓ Ⓛⓘⓝⓚ.txt", "𝒮𝓎𝓂𝒷𝑜𝓁𝒾𝒸 𝐿𝒾𝓃𝓀.txt"][..],
+        ),
+    ] {
+        let source = dir.join(format!("{name}.rar"));
+        fs::write(&source, bytes).expect("write upstream RAR link fixture");
+        let entries = list_regular_archive_entries(&source, "rar")
+            .expect("RAR links are skipped, not an error");
+        assert!(
+            !entries.is_empty(),
+            "{name}: the regular files must still list"
+        );
+        for link in link_names {
+            assert!(
+                entries.iter().all(|entry| entry.path != *link),
+                "{name}: link `{link}` must not be listed as a regular file: {entries:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn empty_regular_tar_entries_remain_supported() {
+    let dir = unique_temp_dir("empty-regular");
+    let source = dir.join("empty.tar");
+    fs::write(&source, tar_link_fixture(b'0')).expect("write empty regular tar entry");
+    let entries = list_regular_archive_entries(&source, "tar").expect("list empty regular file");
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].size, Some(0));
+    assert!(!entries[0].is_dir);
+    assert_eq!(
+        with_regular_archive_file_entry_reader(&source, "tar", 0, "alias.bin", read_all)
+            .expect("read empty regular file"),
+        b""
+    );
+}
+
 #[test]
 fn listing_file_entries_skips_directories_and_normalizes_names() {
     let dir = unique_temp_dir("file-entries");

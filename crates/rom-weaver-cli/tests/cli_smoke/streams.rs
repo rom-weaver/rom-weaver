@@ -123,6 +123,255 @@ fn streams_round_trip_zip_gzip_and_7z_bytes() {
     }
 }
 
+fn empty_stream_binary(temp: &TempDir) -> ProcessCommand {
+    let mut command = binary();
+    command
+        .env("HOME", temp.path())
+        .env("XDG_CONFIG_HOME", temp.path().join("config"))
+        .env("XDG_CACHE_HOME", temp.path().join("cache"))
+        .env("XDG_STATE_HOME", temp.path().join("state"));
+    command
+}
+
+fn empty_compressed_streams() -> [(&'static str, Vec<u8>); 5] {
+    [
+        ("gz", "1f8b080000000000000303000000000000000000"),
+        ("bz2", "425a683917724538509000000000"),
+        (
+            "xz",
+            "fd377a585a000004e6d6b446000000001cdf44211fb6f37d010000000004595a",
+        ),
+        ("zst", "28b52ffd240001000099e9d851"),
+        ("lz4", "04224d186440a700000000055dcc02"),
+    ]
+    .map(|(format, hex)| {
+        let bytes = hex
+            .as_bytes()
+            .chunks_exact(2)
+            .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+            .collect();
+        (format, bytes)
+    })
+}
+
+#[test]
+fn stream_qa_preserves_existing_outputs_on_failure() {
+    let temp = setup_temp_dir();
+    let mut failures = Vec::new();
+    for (format, bytes) in empty_compressed_streams() {
+        let source = temp.child(format!("empty.bin.{format}"));
+        let destination = temp.child(format!("preserved-{format}"));
+        fs::create_dir_all(destination.path()).unwrap();
+        let output = destination.child("empty.bin");
+        for input in [bytes, b"corrupt compressed input".to_vec()] {
+            fs::write(source.path(), &input).unwrap();
+            for sentinel in [b"".as_slice(), b"KEEP EXISTING CONTENT".as_slice()] {
+                fs::write(output.path(), sentinel).unwrap();
+                let result = empty_stream_binary(&temp)
+                    .arg("extract")
+                    .arg(source.path())
+                    .arg("-o")
+                    .arg(destination.path())
+                    .output()
+                    .unwrap();
+                if result.status.code() != Some(1)
+                    || fs::read(output.path()).ok().as_deref() != Some(sentinel)
+                {
+                    failures.push(format!(
+                        "{format}: input {} bytes, existing {} bytes: status {:?}, output {:?}",
+                        input.len(),
+                        sentinel.len(),
+                        result.status.code(),
+                        fs::read(output.path())
+                    ));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+#[test]
+fn stream_qa_force_extracts_to_new_and_existing_outputs() {
+    let temp = setup_temp_dir();
+    for (format, bytes) in empty_compressed_streams() {
+        let source = temp.child(format!("empty.bin.{format}"));
+        fs::write(source.path(), bytes).unwrap();
+        let destination = temp.child(format!("force-{format}"));
+        for existing in [false, true] {
+            if existing {
+                fs::write(
+                    destination.child("empty.bin").path(),
+                    b"KEEP EXISTING CONTENT",
+                )
+                .unwrap();
+            }
+            let result = empty_stream_binary(&temp)
+                .arg("extract")
+                .arg(source.path())
+                .arg("-o")
+                .arg(destination.path())
+                .arg("--force")
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{format}: {}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+            assert_eq!(
+                fs::read(destination.child("empty.bin").path()).unwrap(),
+                b"",
+                "{format}"
+            );
+        }
+    }
+}
+
+#[test]
+fn stream_qa_reports_requested_payload_checksums() {
+    let temp = setup_temp_dir();
+    let mut fixtures = empty_compressed_streams()
+        .into_iter()
+        .map(|(format, bytes)| {
+            (
+                format.to_string(),
+                bytes,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::default());
+    encoder.write_all(b"abc").unwrap();
+    fixtures.push((
+        "control.gz".to_string(),
+        encoder.finish().unwrap(),
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    ));
+    let mut failures = Vec::new();
+    for (format, bytes, expected) in fixtures {
+        let source = temp.child(format!("payload.bin.{format}"));
+        fs::write(source.path(), bytes).unwrap();
+        let result = empty_stream_binary(&temp)
+            .arg("extract")
+            .arg(source.path())
+            .arg("-o")
+            .arg(temp.child(format!("checksum-{format}")).path())
+            .args(["--checksum", "sha256", "--json"])
+            .output()
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+        if !result.status.success()
+            || json["details"]["emitted_files"][0]["checksums"]["sha256"] != expected
+        {
+            failures.push(format!("{format}: {json}"));
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+#[test]
+fn valid_empty_compressed_streams_extract_to_files_and_stdout() {
+    let temp = setup_temp_dir();
+    let mut failures = Vec::new();
+    for (format, bytes) in empty_compressed_streams() {
+        let source = temp.child(format!("empty.bin.{format}"));
+        fs::write(source.path(), bytes).expect("write independently encoded empty stream");
+        let destination = temp.child(format!("out-{format}"));
+        for output in ["-", destination.path().to_str().unwrap()] {
+            let result = empty_stream_binary(&temp)
+                .args([
+                    "extract",
+                    "--input",
+                    source.path().to_str().unwrap(),
+                    "--output",
+                    output,
+                ])
+                .output()
+                .expect("extract empty stream");
+            if !result.status.success() {
+                failures.push(format!(
+                    "{format} ({output}): {}",
+                    String::from_utf8_lossy(&result.stderr)
+                ));
+            }
+            if output == "-" {
+                assert!(result.stdout.is_empty(), "{format}: empty binary stdout");
+            } else if result.status.success() {
+                assert_eq!(
+                    fs::read(destination.child("empty.bin").path()).unwrap(),
+                    b""
+                );
+            }
+        }
+        let probe = empty_stream_binary(&temp)
+            .args([
+                "probe",
+                "--input",
+                source.path().to_str().unwrap(),
+                "--no-extract",
+                "--json",
+            ])
+            .output()
+            .expect("probe empty stream");
+        if !probe.status.success() {
+            failures.push(format!(
+                "{format} probe: {}",
+                String::from_utf8_lossy(&probe.stdout)
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "valid empty streams rejected: {failures:?}"
+    );
+}
+
+#[test]
+fn invalid_empty_compressed_streams_leave_stdout_empty() {
+    let temp = setup_temp_dir();
+    for (format, bytes) in empty_compressed_streams() {
+        let source = temp.child(format!("truncated.bin.{format}"));
+        for length in [0, bytes.len() / 2, bytes.len() - 1] {
+            fs::write(source.path(), &bytes[..length]).expect("write truncated empty stream");
+            let result = empty_stream_binary(&temp)
+                .args([
+                    "extract",
+                    "--input",
+                    source.path().to_str().unwrap(),
+                    "--output",
+                    "-",
+                ])
+                .output()
+                .expect("reject truncated empty stream");
+            assert!(
+                !result.status.success(),
+                "{format}: accepted {length} of {} bytes",
+                bytes.len()
+            );
+            assert!(result.stdout.is_empty(), "{format}: partial binary stdout");
+        }
+        let mut corrupt = bytes;
+        *corrupt.last_mut().unwrap() ^= 1;
+        fs::write(source.path(), corrupt).expect("write corrupt empty stream");
+        let result = empty_stream_binary(&temp)
+            .args([
+                "extract",
+                "--input",
+                source.path().to_str().unwrap(),
+                "--output",
+                "-",
+            ])
+            .output()
+            .expect("reject corrupt empty stream");
+        assert!(
+            !result.status.success(),
+            "{format}: accepted corrupt empty stream"
+        );
+        assert!(result.stdout.is_empty(), "{format}: partial binary stdout");
+    }
+}
+
 #[test]
 fn compress_stdin_name_is_the_archive_entry_name() {
     let temp = setup_temp_dir();

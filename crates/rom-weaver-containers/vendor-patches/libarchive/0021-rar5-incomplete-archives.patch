@@ -1,0 +1,101 @@
+diff --git a/libarchive/archive_read_support_format_rar5.c b/libarchive/archive_read_support_format_rar5.c
+--- a/libarchive/archive_read_support_format_rar5.c
++++ b/libarchive/archive_read_support_format_rar5.c
+@@ -952,13 +952,9 @@
+ 	const uint8_t* p;
+ 	uint8_t b;
+ 
+-	/* We will read maximum of 8 bytes. We don't have to handle the
+-	 * situation to read the RAR5 variable-sized value stored at the end of
+-	 * the file, because such situation will never happen. */
+-	if(!read_ahead(a, 8, &p))
+-		return 0;
+-
+ 	for(shift = 0, i = 0; i < 8; i++, shift += 7) {
++		if(!read_ahead(a, i + 1, &p))
++			return 0;
+ 		b = p[i];
+ 
+ 		/* Strip the MSB from the input byte and add the resulting
+@@ -2119,6 +2115,12 @@
+ 
+ 	if(!read_var_sized(a, &archive_flags, NULL)) {
+ 		return ARCHIVE_EOF;
++	}
++
++	if(archive_flags & (VOLUME | VOLUME_NUMBER)) {
++		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
++		    "Multivolume RAR5 archives are not supported");
++		return ARCHIVE_FATAL;
+ 	}
+ 
+ 	rar->main.volume = (archive_flags & VOLUME) > 0;
+@@ -2390,7 +2392,18 @@
+ 			    ARCHIVE_ERRNO_FILE_FORMAT,
+ 			    "Encryption is not supported");
+ 			return ARCHIVE_FATAL;
+-		case HEAD_ENDARC:
++		case HEAD_ENDARC: {
++			size_t end_flags;
++			if(!read_var_sized(a, &end_flags, NULL)) {
++				archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
++				    "Truncated RAR5 end marker");
++				return ARCHIVE_FATAL;
++			}
++			if(end_flags & 1) {
++				archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
++				    "Multivolume RAR5 archives are not supported");
++				return ARCHIVE_FATAL;
++			}
+ 			rar->main.endarc = 1;
+ 
+ 			/* After encountering an end of file marker, we need
+@@ -2420,6 +2433,7 @@
+ 			} else {
+ 				return ARCHIVE_EOF;
+ 			}
++		}
+ 		case HEAD_MARK:
+ 			return ARCHIVE_EOF;
+ 		default:
+@@ -2557,6 +2571,12 @@
+ 		ret = process_base_block(a, entry);
+ 	} while(ret == ARCHIVE_RETRY ||
+ 			(rar->main.endarc > 0 && ret == ARCHIVE_OK));
++
++	if(ret == ARCHIVE_EOF && !rar->main.endarc) {
++		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
++		    "Truncated RAR5 archive: missing end marker");
++		return ARCHIVE_FATAL;
++	}
+ 
+ 	return ret;
+ }
+@@ -4236,12 +4256,26 @@
+ 	}
+ 
+ 	ret = do_unpack(a, rar, buff, size, offset);
++	if(ret == ARCHIVE_EOF && !rar->skip_mode &&
++	    (rar->file.bytes_remaining != 0 ||
++	    (rar->cstate.method == 0 ? rar->cstate.last_unstore_ptr :
++	    rar->cstate.last_write_ptr) != rar->file.unpacked_size)) {
++		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
++		    "Truncated RAR5 file data");
++		return ARCHIVE_FATAL;
++	}
++	if(ret == ARCHIVE_EOF && !rar->skip_mode) {
++		rar->file.eof = 1;
++		ret = verify_global_checksums(a);
++		return ret == ARCHIVE_OK ? ARCHIVE_EOF : ret;
++	}
+ 	if(ret != ARCHIVE_OK) {
+ 		return ret;
+ 	}
+ 
+ 	if(rar->file.bytes_remaining == 0 &&
+-			rar->cstate.last_write_ptr == rar->file.unpacked_size)
++			(rar->cstate.method == 0 ? rar->cstate.last_unstore_ptr :
++			rar->cstate.last_write_ptr) == rar->file.unpacked_size)
+ 	{
+ 		/* If all bytes of current file were processed, run
+ 		 * finalization.

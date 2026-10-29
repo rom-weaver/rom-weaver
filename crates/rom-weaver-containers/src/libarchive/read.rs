@@ -1,7 +1,7 @@
 use super::legacy_pathname::decode_legacy_pathname;
 use super::*;
 use std::os::raw::{c_char, c_int};
-use tracing::trace;
+use tracing::{trace, warn};
 
 type SupportFunction = unsafe extern "C" fn(*mut archive) -> c_int;
 
@@ -14,6 +14,7 @@ unsafe extern "C" {
     fn rom_weaver_7zip_entry_decoder_bytes(archive: *mut archive) -> i64;
     // Appended to the staged archive_entry.c the same way.
     fn rom_weaver_archive_entry_stored_pathname(entry: *mut archive_entry) -> *const c_char;
+    fn rom_weaver_archive_entry_is_link(entry: *mut archive_entry) -> c_int;
 }
 
 const REGULAR_ARCHIVE_SUPPORT: &[(&str, SupportFunction)] = &[
@@ -68,7 +69,9 @@ impl ReadArchive {
     }
 
     pub fn support_raw_format(&mut self, context: &str) -> Result<()> {
-        let status = unsafe { archive_read_support_format_raw(self.as_ptr()) };
+        // The raw bidder requires decoded bytes; explicit selection MUST also accept empty streams.
+        let status =
+            unsafe { sys::archive_read_set_format(self.as_ptr(), sys::ARCHIVE_FORMAT_RAW) };
         self.check_status(status, context)
     }
 
@@ -100,7 +103,12 @@ impl ReadArchive {
 
     /// Fails unless `filter` decodes the opened input. libarchive silently falls back to its
     /// pass-through filter when the decoder rejects the header, which would yield the input bytes.
-    pub(crate) fn require_filter(&self, filter: ReadFilter, source: &Path) -> Result<()> {
+    pub(crate) fn require_filter(
+        &self,
+        filter: ReadFilter,
+        source: &Path,
+        context: &str,
+    ) -> Result<()> {
         let (expected, name) = match filter {
             ReadFilter::Gzip => (ARCHIVE_FILTER_GZIP, "gzip"),
             ReadFilter::Bzip2 => (ARCHIVE_FILTER_BZIP2, "bzip2"),
@@ -114,7 +122,7 @@ impl ReadArchive {
             return Ok(());
         }
         Err(RomWeaverError::Validation(format!(
-            "`{}` is not a valid {name} stream",
+            "{context}: `{}` is not a valid {name} stream",
             source.display()
         )))
     }
@@ -154,18 +162,33 @@ impl ReadArchive {
         unsafe { archive_format(self.as_ptr()) }
     }
 
+    /// Returns the next entry that is not a symbolic or hard link. Links carry no data of their
+    /// own, so listing them would fabricate empty files; they are skipped with a warning instead.
     fn next_entry_ptr(&mut self, context: &str) -> Result<Option<NonNull<archive_entry>>> {
-        let mut entry = ptr::null_mut();
-        let status = unsafe { archive_read_next_header(self.as_ptr(), &mut entry) };
-        if status == ARCHIVE_EOF {
-            return Ok(None);
+        loop {
+            let mut entry = ptr::null_mut();
+            let status = unsafe { archive_read_next_header(self.as_ptr(), &mut entry) };
+            if status == ARCHIVE_EOF {
+                return Ok(None);
+            }
+            self.check_status(status, context)?;
+            let ptr = NonNull::new(entry).ok_or_else(|| {
+                RomWeaverError::Validation(format!(
+                    "{context}: libarchive returned a null entry pointer"
+                ))
+            })?;
+            if unsafe { rom_weaver_archive_entry_is_link(ptr.as_ptr()) } == 0 {
+                return Ok(Some(ptr));
+            }
+            let entry = ReadArchiveEntry { archive: self, ptr };
+            let pathname = entry
+                .pathname()
+                .map_err(|error| RomWeaverError::Validation(format!("{context}: {error}")))?;
+            warn!(
+                path = %pathname,
+                "skipping archive link: symbolic and hard links are not supported"
+            );
         }
-        self.check_status(status, context)?;
-        NonNull::new(entry).map(Some).ok_or_else(|| {
-            RomWeaverError::Validation(format!(
-                "{context}: libarchive returned a null entry pointer"
-            ))
-        })
     }
 
     pub fn read_data(&mut self, buffer: &mut [u8], context: &str) -> Result<usize> {
@@ -375,7 +398,7 @@ where
             source.display()
         ),
     )?;
-    archive.require_filter(filter, source)?;
+    archive.require_filter(filter, source, &format!("{format_name} stream read failed"))?;
 
     let result = (|| -> Result<T> {
         if !archive.next_header(&format!(

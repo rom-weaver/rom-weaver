@@ -250,6 +250,13 @@
       "reason": "Keep the stored bytes of ZIP names without the UTF-8 flag so the caller can decode legacy charsets; skip the locale-dependent wide-form backslash rewrite for them.",
       "upstream": { "status": "local" },
       "tests": ["cargo test -p rom-weaver-cli --test unicode_extract"]
+    },
+    {
+      "file": "0021-rar5-incomplete-archives.patch",
+      "stage": "source",
+      "reason": "Reject incomplete RAR5 headers and file data, require ENDARC, and reject unsupported multivolume archives.",
+      "upstream": { "status": "local" },
+      "tests": ["cargo test -p rom-weaver-cli --test cli_smoke extract_rar5_"]
     }
   ],
   "materialized": false,
