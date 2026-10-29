@@ -5,7 +5,8 @@ fn streamed_gba_repair_hashes_the_complement_at_bd() {
     for len in [0xBD, 0xBE, 0xC0, 0x1BD, 0x1BE, 32768] {
         for chunk_len in [1, 189, 4099] {
             let mut rom = vec![0x31_u8; len];
-            rom[4..8].copy_from_slice(&[0x24, 0xFF, 0xAE, 0x51]);
+            rom[4..0xA0].copy_from_slice(&crate::rom_headers::GBA_NINTENDO_LOGO);
+            rom[0xB2] = 0x96;
             let mut expected = rom.clone();
             if len > 0xBD {
                 // gbafix: https://github.com/devkitPro/gba-tools/blob/master/src/gbafix.c
@@ -65,7 +66,8 @@ fn streamed_gba_repair_hashes_the_complement_at_bd() {
 fn streamed_gba_repair_requires_both_declared_and_available_header_bytes() {
     for (declared_len, available_len) in [(0xBD, 0xBE), (32768, 0xBD)] {
         let mut rom = vec![0x31_u8; available_len];
-        rom[4..8].copy_from_slice(&[0x24, 0xFF, 0xAE, 0x51]);
+        rom[4..0xA0].copy_from_slice(&crate::rom_headers::GBA_NINTENDO_LOGO);
+        rom[0xB2] = 0x96;
         let algorithms = vec!["crc32".to_owned()];
         let mut engine = StreamingVariantChecksums::new(
             &algorithms,
@@ -79,6 +81,29 @@ fn streamed_gba_repair_requires_both_declared_and_available_header_bytes() {
         assert!(
             !output.rows.iter().any(|row| row.id == "fix-header"),
             "GBA repair requires both declared and available header bytes"
+        );
+    }
+}
+
+#[test]
+fn streamed_gba_repair_rejects_incomplete_boot_signatures() {
+    for damaged_offset in [0x08, 0x9F, 0xB2] {
+        let mut rom = vec![0x31; 32768];
+        rom[4..0xA0].copy_from_slice(&crate::rom_headers::GBA_NINTENDO_LOGO);
+        rom[0xB2] = 0x96;
+        rom[damaged_offset] ^= 1;
+        let mut engine = StreamingVariantChecksums::new(
+            &["crc32".to_owned()],
+            rom.len() as u64,
+            Some("partial.gba"),
+            1,
+        )
+        .expect("stream engine");
+        engine.update(&rom).expect("stream update");
+        let output = engine.finalize().expect("stream finalize");
+        assert!(
+            !output.rows.iter().any(|row| row.id == "fix-header"),
+            "damaged boot signature at {damaged_offset:#x} must not authorize a GBA write"
         );
     }
 }

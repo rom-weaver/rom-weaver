@@ -71,10 +71,11 @@ fn gba_header_checksum(bytes: &[u8]) -> u8 {
 fn build_test_gba_rom(payload_len: usize) -> Vec<u8> {
     let rom_len = payload_len.max(0x200);
     let mut bytes = vec![0u8; rom_len];
-    bytes[0x04..0x08].copy_from_slice(&[0x24, 0xFF, 0xAE, 0x51]);
+    bytes[0x04..0xA0].copy_from_slice(&rom_weaver_checksum::rom_headers::GBA_NINTENDO_LOGO);
     for (index, value) in bytes[0xA0..=0xBC].iter_mut().enumerate() {
         *value = (index as u8).wrapping_mul(3).wrapping_add(7);
     }
+    bytes[0xB2] = 0x96;
     bytes[0xBD] = gba_header_checksum(&bytes);
     for (index, value) in bytes[0xC0..].iter_mut().enumerate() {
         *value = (index as u8).wrapping_mul(5).wrapping_add(0x31);

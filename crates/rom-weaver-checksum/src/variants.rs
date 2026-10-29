@@ -16,8 +16,8 @@ use serde_json::{Value, json};
 use tracing::{trace, warn};
 
 use crate::rom_headers::{
-    GBA_HEADER_MAGIC, KnownRomHeaderMatch, ROM_HEADER_SCAN_BYTES,
-    detect_strippable_rom_header_from_prefix, header_has_nsrt_metadata,
+    KnownRomHeaderMatch, ROM_HEADER_SCAN_BYTES, detect_strippable_rom_header_from_prefix,
+    header_has_gba_boot_signature, header_has_nsrt_metadata,
 };
 use crate::{StreamingChecksum, StreamingChecksumTiming, parallel_hashing_pays_off};
 
@@ -938,7 +938,7 @@ fn plan_gba_repair(header: &[u8], total_len: u64) -> Option<GbaRepair> {
     if total_len < 0xBE || header.len() < 0xBE {
         return None;
     }
-    if header[0x04..0x08] != GBA_HEADER_MAGIC {
+    if !header_has_gba_boot_signature(header) {
         return None;
     }
     let old_checksum = header[0xBD];
