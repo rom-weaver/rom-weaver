@@ -9,6 +9,7 @@ use std::{
 use rom_weaver_checksum::{
     IdentityPrefix, RomIdentity, StreamingChecksum, StreamingVariantChecksums, VariantOutput,
     VariantRow, finish_deferred_fix_header, parallel_hashing_pays_off,
+    platform_detection::platform,
 };
 use rom_weaver_core::{
     ContainerByteProgress, OperationContext, OperationFamily, OperationReport, OperationStatus,
@@ -258,7 +259,8 @@ pub(crate) struct ExtractedFileChecksum {
     /// single-file libarchive path). Surfaced in the report's `emitted_files` so the
     /// UI can show where the extract's time went. `None` on paths not yet instrumented.
     pub(crate) timing: Option<ExtractTiming>,
-    /// Console + optical medium, detected from the streamed output (no extra read).
+    /// Console + optical medium, detected from the streamed output (no extra read, except that
+    /// a PBP output is re-read once for its bounded header sections).
     /// Every producing path captures this via [`IdentityPrefix`] (or the variant
     /// engine), so it is always populated; empty when nothing matched.
     pub(crate) rom_identity: RomIdentity,
@@ -420,6 +422,15 @@ impl ExtractHasher {
                 // The output is still being staged under another name, so only the streamed
                 // prefix can be trusted here.
                 let detected = identity.detect(output_extension(output_path).as_deref());
+                // A PBP is never a cartridge: when its header sections lie beyond the prefix, a
+                // cartridge signature inside the prefix is a collision. Wait for the final
+                // identity, which `detect_emitted_identity` reads from the finished file.
+                if identity.has_pbp_signature()
+                    && detected.platform != Some(platform::PSP)
+                    && detected.disc_format.is_none()
+                {
+                    return None;
+                }
                 (!detected.is_empty()).then_some(detected)
             }
         }
@@ -674,7 +685,7 @@ pub(crate) struct ExtractChunkWriter<'a> {
     writer: OrderedChunkWriter<BufWriter<File>>,
     checksum: Option<StreamingChecksum>,
     /// Identity prefix captured from the decoded output for detection at finish (the
-    /// plain checksum here doesn't retain bytes). No extra read.
+    /// plain checksum here doesn't retain bytes). No extra read, except for PBP outputs.
     identity: IdentityPrefix,
     /// Output extension (with leading dot) for identity detection; cached so each chunk write
     /// doesn't re-derive it.
@@ -1029,6 +1040,30 @@ mod tests {
         assert_eq!(entry.path, output_path);
         assert!(entry.variants.is_empty());
         assert!(entry.values.contains_key("crc32"));
+    }
+
+    #[test]
+    fn mid_stream_identity_ignores_a_cartridge_signature_inside_a_pbp_prefix() {
+        let temp = TestDir::new("hasher-pbp-collision");
+        let (context, _sink) = recording_context(&temp);
+        let context = context.with_extract_checksum_algorithms(vec!["crc32".to_string()]);
+        let output_path = temp.child("game.bin");
+        // A PBP whose header sections lie beyond the prefix, with a Mega Drive signature at 0x100.
+        let mut prefix = vec![0u8; rom_weaver_checksum::DETECT_PREFIX_BYTES];
+        prefix[..4].copy_from_slice(b"\0PBP");
+        prefix[0x100..0x104].copy_from_slice(b"SEGA");
+
+        let mut probe = IdentityPrefix::new();
+        probe.push(&prefix);
+        let collided = probe.detect(Some(".bin"));
+        assert!(
+            collided.platform.is_some() && collided.platform != Some(platform::PSP),
+            "precondition: the prefix alone reads as a cartridge, got {collided:?}"
+        );
+
+        let mut hasher = ExtractHasher::new(&context, None, &output_path, 1).expect("hasher");
+        hasher.update(&prefix).expect("update");
+        assert!(hasher.take_ready_identity(&output_path).is_none());
     }
 
     #[test]
