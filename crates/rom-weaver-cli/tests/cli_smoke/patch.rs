@@ -1091,6 +1091,36 @@ round_trip_test!(
     }
 );
 
+round_trip_test!(
+    patch_create_succeeds_for_ips32_and_round_trips,
+    RoundTrip {
+        format: "ips32",
+        expect_format: "IPS32",
+        patch_ext: "ips32",
+        original: b"abcdefgh",
+        modified: b"a1XYZf!!!",
+        apply_extra: &["--ignore-checksum-validation"],
+        patch_assert: Some(|bytes| {
+            assert!(bytes.starts_with(b"IPS32"));
+            assert!(bytes.ends_with(b"EEOF"));
+        }),
+    }
+);
+round_trip_test!(
+    patch_create_succeeds_for_apsgba_and_round_trips,
+    RoundTrip {
+        format: "apsgba",
+        expect_format: "APSGBA",
+        patch_ext: "aps",
+        original: b"GBA source image with a few bytes to change",
+        modified: b"GBA target image with a few bytes to change!",
+        apply_extra: &["--ignore-checksum-validation"],
+        patch_assert: Some(|bytes| {
+            assert!(bytes.starts_with(b"APS1"));
+        }),
+    }
+);
+
 /// Thread-mode assertion for `patch apply` (always invoked with `--threads 8`).
 enum ApplyThreads {
     /// Single-threaded format: effective=1, used_parallelism=false.
