@@ -1,5 +1,5 @@
 use super::*;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 #[derive(Clone, Debug)]
 struct PbpIsoIndexEntry {
@@ -263,7 +263,7 @@ impl PbpContainerHandler {
         }
 
         let disc_id = self.read_disc_id(source, file, disc_psar_offset)?;
-        let toc_tracks = self.read_toc_tracks(source, file, disc_psar_offset)?;
+        let (toc_tracks, leadout_frames) = self.read_toc_tracks(source, file, disc_psar_offset)?;
         let iso_indexes = self.read_iso_indexes(source, file, disc_psar_offset, file_size)?;
         if iso_indexes.len() < 2 {
             return Err(RomWeaverError::Validation(format!(
@@ -272,8 +272,36 @@ impl PbpContainerHandler {
                 disc_number
             )));
         }
-        let iso_size =
+        let volume_size =
             self.read_iso_size_from_index(source, file, disc_psar_offset, &iso_indexes)?;
+        // Only PSXPackager writes A2 as the full BIN sector count and puts a file-relative
+        // 00:00:00 in the first track's INDEX 01 bytes, so A2 MUST NOT size a disc without that
+        // marker: pop-fe and popstation store other values there (sector count plus one, padded
+        // counts, a fixed template). Data-only discs are exact from the ISO volume.
+        // https://github.com/RupertAvery/PSXPackager/blob/76fc019460dbf550e3ddbc184959f4ed182e36f8/Popstation/CueFileExtensions.cs#L51-L79
+        let has_audio = toc_tracks.iter().any(|track| track.track_type == 0x01);
+        let packager_toc = toc_tracks
+            .first()
+            .is_some_and(|track| track.start_frames == 0);
+        let leadout_size = u64::from(leadout_frames) * Self::ISO_SECTOR_BYTES as u64;
+        let leadout_fits = leadout_size >= volume_size
+            && iso_indexes.len() >= self.required_block_count(leadout_size)?;
+        let iso_size = if has_audio && packager_toc && leadout_fits {
+            leadout_size
+        } else {
+            if has_audio && iso_indexes.len() > self.required_block_count(volume_size)? {
+                warn!(
+                    source = %source.display(),
+                    disc_number,
+                    leadout_size,
+                    volume_size,
+                    index_blocks = iso_indexes.len(),
+                    packager_toc,
+                    "PBP holds audio past the ISO volume that cannot be sized reliably; extracting the ISO volume only"
+                );
+            }
+            volume_size
+        };
         let required_blocks = self.required_block_count(iso_size)?;
         if iso_indexes.len() < required_blocks {
             return Err(RomWeaverError::Validation(format!(
@@ -328,7 +356,7 @@ impl PbpContainerHandler {
         source: &Path,
         file: &mut File,
         disc_psar_offset: u64,
-    ) -> Result<Vec<PbpTocTrack>> {
+    ) -> Result<(Vec<PbpTocTrack>, u32)> {
         let mut entry = [0u8; 10];
         let mut cursor = disc_psar_offset + Self::PSAR_TOC_OFFSET;
         self.read_exact_at(source, file, cursor, &mut entry, "TOC start-track entry")?;
@@ -364,7 +392,7 @@ impl PbpContainerHandler {
                 source.display()
             )));
         }
-        let _leadout = Self::msf_to_frames(
+        let leadout = Self::msf_to_frames(
             Self::decode_bcd(entry[7], "TOC leadout minute")?,
             Self::decode_bcd(entry[8], "TOC leadout second")?,
             Self::decode_bcd(entry[9], "TOC leadout frame")?,
@@ -398,7 +426,7 @@ impl PbpContainerHandler {
             track.cue_track_type()?;
             tracks.push(track);
         }
-        Ok(tracks)
+        Ok((tracks, leadout))
     }
 
     fn read_iso_indexes(
