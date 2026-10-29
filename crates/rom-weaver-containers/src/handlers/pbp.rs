@@ -1,5 +1,5 @@
 use super::*;
-use tracing::{debug, trace, warn};
+use tracing::{debug, trace};
 
 #[derive(Clone, Debug)]
 struct PbpIsoIndexEntry {
@@ -291,23 +291,21 @@ impl PbpContainerHandler {
         let iso_size = if has_audio && packager_toc && leadout_fits {
             leadout_size
         } else {
-            if has_audio && iso_indexes.len() > self.required_block_count(volume_size)? {
-                warn!(
-                    source = %source.display(),
-                    disc_number,
-                    leadout_size,
-                    volume_size,
-                    index_blocks = iso_indexes.len(),
-                    packager_toc,
-                    "PBP holds audio past the ISO volume that cannot be sized reliably; extracting the ISO volume only"
-                );
-            }
             volume_size
         };
         let required_blocks = self.required_block_count(iso_size)?;
         if iso_indexes.len() < required_blocks {
             return Err(RomWeaverError::Validation(format!(
                 "source `{}` disc {} index table is incomplete ({} blocks required, {} present)",
+                source.display(),
+                disc_number,
+                required_blocks,
+                iso_indexes.len()
+            )));
+        }
+        if iso_indexes.len() > required_blocks {
+            return Err(RomWeaverError::Validation(format!(
+                "source `{}` disc {} index table has excess blocks ({} blocks required, {} present)",
                 source.display(),
                 disc_number,
                 required_blocks,
@@ -689,8 +687,20 @@ impl PbpContainerHandler {
                 block_index,
                 &mut block,
             )?;
-            if decoded == 0 {
-                break;
+            let expected_block_len = remaining.min(Self::ISO_BLOCK_BYTES as u64);
+            trace!(
+                disc = disc.disc_number,
+                block_index, decoded, expected_block_len, "pbp ISO block decoded"
+            );
+            if (decoded as u64) < expected_block_len {
+                return Err(RomWeaverError::Validation(format!(
+                    "source `{}` disc {} ISO block {} decoded {} bytes but expected at least {}",
+                    source.display(),
+                    disc.disc_number,
+                    block_index,
+                    decoded,
+                    expected_block_len
+                )));
             }
             let to_write = remaining.min(decoded as u64);
             let to_write_usize = usize::try_from(to_write).map_err(|_| {
