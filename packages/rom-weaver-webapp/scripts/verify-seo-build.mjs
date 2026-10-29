@@ -1,4 +1,5 @@
 import { countVisibleWords, hasDescriptiveHeading } from "./html-document.mjs";
+import { findCrawlerBrokenLinks } from "./crawler-links.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -496,7 +497,7 @@ for (const route of [
 }
 assertIncludes(
   read("create/index.html"),
-  'aria-current="page" aria-label="Create Patch" class="nav-row" href="create-rom-patch" id="tab-creator"',
+  'aria-current="page" aria-label="Create Patch" class="nav-row" href="/create-rom-patch" id="tab-creator"',
   "static-host create prerendered workflow",
 );
 assertIncludes(
@@ -706,7 +707,7 @@ for (const [legacy, canonical] of Object.entries({
 for (const weave of ["weave/index.html", "weave.html"]) {
   assertIncludes(
     read(weave),
-    'aria-current="page" aria-label="Weave Patches" class="nav-row" href="weave-patches" id="tab-weave"',
+    'aria-current="page" aria-label="Weave Patches" class="nav-row" href="/weave-patches" id="tab-weave"',
     `${weave} weave shell`,
   );
   assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/weave-patches"', `${weave} canonical`);
@@ -789,6 +790,17 @@ for (const slug of [
   "whats-new",
 ]) {
   assertIncludes(precacheManifest, `"${slug}/index.html"`, `${slug} precache entry`);
+}
+
+// A crawler may ignore <base href>, so every built link must resolve against its own page URL.
+const crawlerBrokenLinks = findCrawlerBrokenLinks(distDir);
+if (crawlerBrokenLinks.length) {
+  throw new Error(
+    `built pages link to missing paths when <base> is ignored:\n${crawlerBrokenLinks
+      .slice(0, 20)
+      .map((link) => `- ${link.page}: href="${link.href}" -> ${link.pathname}`)
+      .join("\n")}`,
+  );
 }
 
 console.log(`SEO build verified for ${channel}`);

@@ -378,7 +378,8 @@ const Masthead = ({
     });
     project.entries.push({
       current: currentTab === "whats-new",
-      href: "whats-new",
+      // Like the workflow tabs, a bare slug is wrong one level down (a guide page) or at an arbitrary path (the 404 page).
+      href: currentTab === "docs" || currentTab === "" ? `${homeHref}whats-new` : "whats-new",
       icon: <Newspaper aria-hidden="true" />,
       id: "whats-new",
       label: localizer.message("ui.update.whatsNew"),

@@ -14,6 +14,7 @@ import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/wor
 import { createRootManifestSource } from "./channel.mjs";
 import { copyEmulatorJsAssets } from "./emulatorjs.mjs";
 import { rootDir } from "./paths.mjs";
+import { rootRelativeAnchors } from "./route-copy-html.mjs";
 import { PRERENDER_ROOT } from "./prerender-shell.mjs";
 import {
   createLlmsSource,
@@ -227,7 +228,11 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         const routeDir = path.join(distDir, slug);
         fs.mkdirSync(routeDir, { recursive: true });
         fs.writeFileSync(path.join(distDir, `${slug}.html`), html);
-        fs.writeFileSync(path.join(routeDir, "index.html"), html.replace("<head>", '<head>\n    <base href="../" />'));
+        // Served at /<slug>/, where a crawler ignoring <base> would resolve bare anchor hrefs one level too deep.
+        fs.writeFileSync(
+          path.join(routeDir, "index.html"),
+          rootRelativeAnchors(html).replace("<head>", '<head>\n    <base href="../" />'),
+        );
       }
       fs.writeFileSync(path.join(distDir, "robots.txt"), createRobotsSource(channel));
       // Static hosts without redirect rules MUST retain usable legacy documents.
