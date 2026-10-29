@@ -27,6 +27,7 @@ import {
   nameWorkerSharedGroup,
   shareWorkerRuntimeChunks,
 } from "./scripts/vite-config/worker-chunks.mjs";
+import { nameWorkflowSharedGroup, resetWorkflowChunks } from "./scripts/vite-config/workflow-chunks.mjs";
 import { DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
 
 /** Shared chunks below this many raw bytes are folded back into their importer; see build.rollupOptions.output. */
@@ -78,8 +79,9 @@ export default defineConfig(({ command, mode }) => {
           // context; the size floor keeps a future split from re-stranding it.
           codeSplitting: {
             groups: [
-              { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkerRuntimeGroup, priority: 2 },
-              { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkerSharedGroup, priority: 1 },
+              { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkerRuntimeGroup, priority: 3 },
+              { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkerSharedGroup, priority: 2 },
+              { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkflowSharedGroup, priority: 1 },
               { minShareCount: 2, name: "shared", priority: 0, test: /./ },
             ],
             minSize: SHARED_CHUNK_MIN_SIZE,
@@ -134,6 +136,7 @@ export default defineConfig(({ command, mode }) => {
       compileLinguiCatalogs(),
       docsVirtualModule(DOC_ROUTES),
       shareWorkerRuntimeChunks(),
+      resetWorkflowChunks(),
       serveRootStaticAssets(appChannel, appChannelLabel, siteOrigin),
       serveEmulatorJsAssets(),
       serveChangelogAsset(releaseVersion),

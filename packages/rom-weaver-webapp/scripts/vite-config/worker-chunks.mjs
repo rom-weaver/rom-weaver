@@ -106,3 +106,6 @@ export const nameWorkerSharedGroup = (moduleId, ctx) =>
  * includeDependenciesRecursively MUST stay off to keep app-facing dependencies separate.
  */
 export const nameWorkerRuntimeGroup = (moduleId, ctx) => (isWorkerOnlyModule(moduleId, ctx) ? "wasm-runtime" : null);
+
+/** True when the id is the bare path of an emitted worker entry. */
+export const isWorkerEntryFile = (moduleId) => workerEntryFiles.has(moduleId);
