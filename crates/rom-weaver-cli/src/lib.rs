@@ -387,6 +387,10 @@ The format comes from the --output extension, so `--output hack.bps` writes a
 BPS patch. Use --plan to see which formats suit these two files before
 committing to one.
 
+Inputs are compared as raw files, including any archive or compressed container.
+Extract both ROMs first to create a patch for their payloads. For a raw container
+patch, apply with --no-extract --no-compress to reconstruct Modified exactly.
+
 Instead of a second ROM, --code builds the patch from Game Genie or
 GameShark/Pro Action Replay codes."
         )

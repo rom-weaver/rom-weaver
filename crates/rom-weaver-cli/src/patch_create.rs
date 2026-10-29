@@ -412,6 +412,13 @@ impl CliApp {
             solid_options.or(args.ppf_undo.then_some(PatchCreateFormatOptions::PpfUndo)),
             &context,
         );
+        if report.status == OperationStatus::Succeeded {
+            self.warn_patch_create_container_inputs(
+                &mut report,
+                &request.original,
+                &request.modified,
+            );
+        }
         if report.status == OperationStatus::Succeeded
             && let Some(warning) = format_warning.as_deref()
         {
@@ -431,6 +438,26 @@ impl CliApp {
             report = Self::attach_emitted_files_details(report, vec![create_output.clone()], None);
         }
         self.finish("patch-create", report)
+    }
+
+    fn warn_patch_create_container_inputs(
+        &self,
+        report: &mut OperationReport,
+        original: &Path,
+        modified: &Path,
+    ) {
+        let uses_container_bytes = [original, modified].into_iter().any(|path| {
+            self.containers.probe(path).is_some_and(|handler| {
+                !handler.is_self_contained_rom(path)
+                    && !handler.descriptor().matches_name("xiso")
+                    && handler.capabilities().extract
+            })
+        });
+        if uses_container_bytes {
+            let warning = "patch create compares raw container bytes without extraction. Apply with --no-extract --no-compress to reconstruct Modified exactly, including any container. Extract both ROMs before creation to patch ROM payloads";
+            report.label = format!("{}; warning: {warning}", report.label);
+            Self::append_report_warnings(report, [warning.to_string()]);
+        }
     }
 
     /// `patch create --plan`: recommend a format for the two inputs without writing a patch.
@@ -551,6 +578,7 @@ impl CliApp {
                 },
             }
         }));
+        self.warn_patch_create_container_inputs(&mut report, &args.original, modified);
         report
     }
 

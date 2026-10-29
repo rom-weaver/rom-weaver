@@ -14319,6 +14319,123 @@ fn patch_apply_xiso_system_area_is_not_a_copier_header() {
 }
 
 #[test]
+fn patch_create_warns_that_container_inputs_require_raw_application() {
+    for (original_zip, modified_zip) in [(true, true), (true, false), (false, true), (false, false)]
+    {
+        let temp = setup_temp_dir();
+        let home = temp.path().to_str().expect("home");
+        let envs = [
+            ("HOME", home),
+            ("XDG_CONFIG_HOME", home),
+            ("XDG_CACHE_HOME", home),
+            ("XDG_STATE_HOME", home),
+        ];
+        let run = |args: &[&str], code| command_stdout_with_env(args, &envs, code);
+        let original = temp.child("original.bin");
+        let modified = temp.child("modified.bin");
+        fs::write(original.path(), b"abcdefgh").expect("original");
+        fs::write(modified.path(), b"abcXefgh").expect("modified");
+        let original_archive = temp.child("original.zip");
+        let modified_archive = temp.child("modified.zip");
+        for (input, archive) in [
+            (&original, &original_archive),
+            (&modified, &modified_archive),
+        ] {
+            run(
+                &[
+                    "compress",
+                    "--input",
+                    input.path().to_str().expect("path"),
+                    "--format",
+                    "zip",
+                    "--output",
+                    archive.path().to_str().expect("path"),
+                    "--jsonl",
+                ],
+                0,
+            );
+        }
+        let original = if original_zip {
+            original_archive.path()
+        } else {
+            original.path()
+        };
+        let modified = if modified_zip {
+            modified_archive.path()
+        } else {
+            modified.path()
+        };
+        let patch = temp.child("change.bps");
+        let output = temp.child(if modified_zip {
+            "rebuilt.zip"
+        } else {
+            "rebuilt.bin"
+        });
+        let event = parse_single_json_line(&run(
+            &[
+                "patch",
+                "create",
+                "--original",
+                original.to_str().expect("path"),
+                "--modified",
+                modified.to_str().expect("path"),
+                "--output",
+                patch.path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            0,
+        ));
+        let plan = parse_single_json_line(&run(
+            &[
+                "patch",
+                "create",
+                "--original",
+                original.to_str().expect("path"),
+                "--modified",
+                modified.to_str().expect("path"),
+                "--plan",
+                "--jsonl",
+            ],
+            0,
+        ));
+        for event in [event, plan] {
+            let warnings = event["details"]["warnings"].as_array();
+            let has_raw_warning = warnings.is_some_and(|warnings| {
+                warnings.iter().any(|warning| {
+                    warning.as_str().is_some_and(|warning| {
+                        warning.contains("raw container bytes")
+                            && warning.contains("--no-extract")
+                            && warning.contains("--no-compress")
+                            && warning.contains("Extract both ROMs")
+                    })
+                })
+            });
+            assert_eq!(has_raw_warning, original_zip || modified_zip, "{event}");
+        }
+        run(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                original.to_str().expect("path"),
+                "--patch",
+                patch.path().to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--no-extract",
+                "--no-compress",
+                "--jsonl",
+            ],
+            0,
+        );
+        assert_eq!(
+            fs::read(output.path()).expect("output"),
+            fs::read(modified).expect("modified")
+        );
+    }
+}
+
+#[test]
 fn patch_create_ips32_rejects_shrink_and_empty_targets() {
     for modified_bytes in [b"abc".as_slice(), b""] {
         for ignore in [false, true] {
