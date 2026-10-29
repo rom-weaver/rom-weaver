@@ -701,6 +701,22 @@ describe("offline warm-up (service worker side)", () => {
     expect((await warmup.getIdentifyGroupState())[0]).toMatchObject({ installed: false });
   });
 
+  it("tries packs that failed last time after the rest of the group", async () => {
+    const { fetcher, group, names, setPackBody } = await buildManyPackGroup(6);
+    const broken = names.slice(0, 3);
+    setPackBody((url) =>
+      broken.some((name) => url.includes(name)) ? new Response("missing", { status: 404 }) : new Response(PACK_BODY),
+    );
+    const warmup = await createWarmup(fetcher, { identifyOptionalGroups: [group] });
+    await expect(warmup.installIdentifyGroup("optional-computers")).rejects.toThrow();
+    await expect(warmup.installIdentifyGroup("optional-computers")).rejects.toThrow();
+    const cachedPacks = (await warmup.getCachedFiles())
+      .map((file) => new URL(file.url).pathname)
+      .filter((path) => path.endsWith(".pack"))
+      .sort();
+    expect(cachedPacks).toEqual(["/assets/identify-3.pack", "/assets/identify-4.pack", "/assets/identify-5.pack"]);
+  });
+
   it("caches the rest of an EmulatorJS batch when one file fails and moves it behind the queue", async () => {
     let broken = true;
     const fetcher = createFetcher();

@@ -267,6 +267,9 @@ const createOfflineWarmup = ({
   let queuePromise: Promise<WarmupUnit[]> | null = null;
   let queueGeneration = 0;
   const transferSizes = createCachedTransferSizeReader();
+  // Packs that failed this worker's last attempt go last, so failures that persist cannot use up a
+  // group attempt's failure budget before the packs behind them are tried.
+  const failedPackUrls = new Set<string>();
 
   const loadEmulatorJsManifest = (): Promise<EmulatorJsManifest> => {
     if (!manifestPromise) {
@@ -593,8 +596,11 @@ const createOfflineWarmup = ({
     // storage error is systemic (quota, cache failure), so it throws at once instead.
     let firstFailure: { error: unknown } | undefined;
     let failedPacks = 0;
+    const packs = [...group.packs].sort(
+      (left, right) => Number(failedPackUrls.has(left.url)) - Number(failedPackUrls.has(right.url)),
+    );
     // Group installs MUST stay sequential so a low-priority warmup does not open one connection per pack.
-    for (const pack of group.packs) {
+    for (const pack of packs) {
       if (policy && (generation !== policy.token() || !(await policy.isEnabled()))) return null;
       if (await cache.match(new URL(pack.url, scope).href)) {
         // Credit cached packs so a resumed group reports continuous progress.
@@ -607,16 +613,21 @@ const createOfflineWarmup = ({
       try {
         verified = await fetchVerifiedPack(pack, scope, fetcher, onBytes, log);
       } catch (error) {
-        log("identify pack failed; continuing with the rest of its group", {
+        log("identify pack failed", {
           error: error instanceof Error ? error.message : String(error),
           group: group.id,
           url: pack.url,
         });
+        failedPackUrls.add(pack.url);
         firstFailure ??= { error };
         failedPacks += 1;
-        if (failedPacks >= MAX_GROUP_PACK_FAILURES) break;
+        if (failedPacks >= MAX_GROUP_PACK_FAILURES) {
+          log("identify group install stopped after repeated pack failures", { failedPacks, group: group.id });
+          break;
+        }
         continue;
       }
+      failedPackUrls.delete(pack.url);
       const { request, response } = verified;
       const stored = policy
         ? await policy.write(() => cacheWithDownloadLog(cache, request, response, log), generation)
@@ -980,6 +991,7 @@ const createOfflineWarmup = ({
     queuePromise = null;
     manifestPromise = null;
     transferSizes.clear();
+    failedPackUrls.clear();
   };
 
   return {
