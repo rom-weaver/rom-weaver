@@ -67,4 +67,38 @@ describe("wasm commands vs the page-boot OPFS sweep", () => {
     expect(mocks.runRomWeaverJson).toHaveBeenCalledTimes(1);
     vi.unstubAllGlobals();
   });
+
+  it("does not start a command until an in-flight reset sweep has finished", async () => {
+    vi.resetModules();
+    let release: () => void = () => undefined;
+    const resetGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mocks.requestBrowserOpfsStorage.mockImplementation(async () => {
+      await resetGate;
+      return { entries: [], success: true };
+    });
+    mocks.runRomWeaverJson.mockReset();
+    mocks.runRomWeaverJson.mockResolvedValue({
+      events: [{ details: { patch_sources: [] }, status: "succeeded" }],
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+    });
+    const cleanup = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    const runtime = await import("../../src/lib/runtime/wasm-command-runtime.ts");
+    const reset = cleanup.resetBrowserTransientOpfs();
+    const parse = runtime
+      .invokeRomWeaverWeaveParseWorker({
+        extractDirPath: "/work/weave-parse/id",
+        sourcePath: "/work/weave-input/first-weave.zip",
+      })
+      .catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mocks.runRomWeaverJson).not.toHaveBeenCalled();
+    release();
+    await reset;
+    await parse;
+    expect(mocks.runRomWeaverJson).toHaveBeenCalledTimes(1);
+  });
 });

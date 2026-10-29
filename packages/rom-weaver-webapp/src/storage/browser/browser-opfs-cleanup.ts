@@ -21,10 +21,10 @@ const logger = createLogger("browser-opfs-cleanup");
 // the text pattern is a fallback for stacks that carry only the Chromium-style "Name: message" prefix.
 const BUSY_REMOVE_PATTERN = /NoModificationAllowedError|modifications are not allowed/i;
 let bootCleanupPromise: Promise<void> | null = null;
+// In-flight user-requested reset sweeps; commands wait for them like they wait for the boot sweep.
+const pendingResetSweeps = new Set<Promise<void>>();
 
-const resetBrowserTransientOpfs = async (
-  options: { includeEmulator?: boolean; skipBusy?: boolean } = {},
-): Promise<void> => {
+const removeTransientOpfs = async (options: { includeEmulator?: boolean; skipBusy?: boolean } = {}): Promise<void> => {
   const paths = options.includeEmulator
     ? [...TRANSIENT_OPFS_PATHS, EMULATOR_RETENTION_OPFS_PATH]
     : TRANSIENT_OPFS_PATHS;
@@ -41,6 +41,16 @@ const resetBrowserTransientOpfs = async (
       throw new Error(message);
     }),
   );
+};
+
+const resetBrowserTransientOpfs = (options: { includeEmulator?: boolean; skipBusy?: boolean } = {}): Promise<void> => {
+  const sweep = removeTransientOpfs(options);
+  pendingResetSweeps.add(sweep);
+  const settled = () => {
+    pendingResetSweeps.delete(sweep);
+  };
+  sweep.then(settled, settled);
+  return sweep;
 };
 
 // libarchive spools some writers (7z) into `libarchive_XXXXXX` files at the OPFS root. A run that dies
@@ -70,7 +80,7 @@ const sweepStaleLibarchiveTemps = async (): Promise<void> => {
 const startBrowserOpfsBootCleanup = (): Promise<void> => {
   if (!bootCleanupPromise) {
     const cleanup = async () => {
-      await resetBrowserTransientOpfs({ includeEmulator: true, skipBusy: true });
+      await removeTransientOpfs({ includeEmulator: true, skipBusy: true });
       await sweepStaleLibarchiveTemps();
     };
     const locks = globalThis.navigator?.locks;
@@ -81,10 +91,20 @@ const startBrowserOpfsBootCleanup = (): Promise<void> => {
           const name = "rom-weaver-opfs-pages";
           void locks
             .request(name, { ifAvailable: true }, async (lock) => {
-              if (lock) await cleanup();
+              // A failed sweep must still take the shared lease below, or a later tab would win the
+              // exclusive lock and delete scratch this page is using. The error still rejects the promise.
+              let sweepError: unknown;
+              let sweepFailed = false;
+              if (lock) {
+                await cleanup().catch((error: unknown) => {
+                  sweepFailed = true;
+                  sweepError = error;
+                });
+              }
               void locks
                 .request(name, { mode: "shared" }, () => {
-                  resolve();
+                  if (sweepFailed) reject(sweepError);
+                  else resolve();
                   return new Promise<void>(() => {
                     // The lease MUST remain held until the browser destroys this page.
                   });
@@ -98,7 +118,13 @@ const startBrowserOpfsBootCleanup = (): Promise<void> => {
   return bootCleanupPromise;
 };
 
-const waitForBrowserOpfsBootCleanup = () => bootCleanupPromise || Promise.resolve();
+// Waits for the boot sweep (rejecting with its error) and any in-flight reset sweep. A reset sweep's own
+// failure is reported to whoever started it, so it never rejects here.
+const waitForBrowserOpfsBootCleanup = async (): Promise<void> => {
+  const resets = [...pendingResetSweeps].map((sweep) => sweep.catch(() => undefined));
+  await Promise.all(resets);
+  await (bootCleanupPromise || Promise.resolve());
+};
 
 const listBrowserOpfs = async (): Promise<BrowserOpfsEntry[]> => {
   const response = await requestBrowserOpfsStorage({ action: "list" });
