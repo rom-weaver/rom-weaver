@@ -842,6 +842,35 @@ test("a settled landing panel keeps the mobile scroll reserve once the bench hol
   }
 });
 
+test("a settled Apply bench keeps no mobile scroll reserve until it holds a card", async () => {
+  // The settled shell never clears, so the empty-bench padding fallback must
+  // release once a card is staged or the card sits under the browser toolbar.
+  await page.viewport(390, 844);
+  try {
+    mountWebappRoot({ initialView: "patcher" });
+    const emptyStep = await waitForState(() => document.querySelector("#panel-patcher .step.is-input.is-empty"));
+    expect(emptyStep).not.toBeNull();
+    const workflowBody = document.querySelector("#panel-patcher .workflow-body");
+    const root = document.querySelector("#webapp-root");
+    root.dataset.shellSettled = "true";
+    root.removeAttribute("aria-busy");
+    expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("0px");
+
+    emptyStep.classList.remove("is-empty");
+    expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("96px");
+
+    // Desktop has no mobile reserve rule, so the empty bench's 0px comes from
+    // the settled fallback alone, and a staged bench gets the normal padding.
+    await page.viewport(1280, 900);
+    emptyStep.classList.add("is-empty");
+    expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("0px");
+    emptyStep.classList.remove("is-empty");
+    expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("28px");
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
 test.each([
   ["patcher", "/apply-patches?guide=apply", "/docs/apply-rom-patches"],
   ["creator", "/create-rom-patch?guide=create", "/docs/create-rom-patches"],
