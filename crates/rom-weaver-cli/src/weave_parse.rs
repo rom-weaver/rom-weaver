@@ -40,7 +40,7 @@ pub(crate) fn weave_file_name_codec(file_name: &str) -> Option<Option<&str>> {
 /// fast-path (see `weave_file_name_codec`); this only widens the fallback net.
 pub(crate) fn is_weave_json_candidate(base_name: &str) -> bool {
     let bytes = base_name.as_bytes();
-    bytes.len() > 5 && base_name[base_name.len() - 5..].eq_ignore_ascii_case(".json")
+    bytes.len() > 5 && bytes[bytes.len() - 5..].eq_ignore_ascii_case(b".json")
 }
 
 /// Whether raw bytes parse and validate as a weave. Used to content-probe
