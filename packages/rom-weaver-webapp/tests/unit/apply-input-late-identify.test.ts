@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { lookupExpectedRom } from "../../src/lib/apply/expected-rom-lookup.ts";
-import { attachBareRomIngestMetadata } from "../../src/lib/input/input-preparation-archive.ts";
+import { resolveUnclassifiedInputAssets } from "../../src/lib/input/input-preparation-archive.ts";
 import { finalizeApplyInputChecksums } from "../../src/lib/workflow/apply-input-checksums.ts";
 
 vi.mock("../../src/lib/apply/expected-rom-lookup.ts", () => ({ lookupExpectedRom: vi.fn() }));
@@ -117,10 +117,12 @@ describe("late identification after the ingest bound", () => {
     const ingested = await runtime.ingest.run();
     runtime.ingest.run.mockResolvedValue({
       ...ingested,
-      result: { assets: [{ checksums, isRom: true }], isRom: true },
+      outputs: [],
+      patchOutputs: [],
+      result: { assets: [{ checksums, copiedInPlace: true, isRom: true }], isRom: true },
     });
     runtime.ingest.run.mockClear();
-    await attachBareRomIngestMetadata(rom.file as never, undefined, {
+    await resolveUnclassifiedInputAssets(rom.file as never, undefined, {
       ...runtime,
       name: "browser",
       workerIo: {},

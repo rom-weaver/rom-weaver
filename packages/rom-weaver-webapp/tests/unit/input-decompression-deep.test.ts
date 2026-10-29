@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const archiveMocks = vi.hoisted(() => ({
-  attachBareRomIngestMetadata: vi.fn(async () => undefined),
+  resolveUnclassifiedInputAssets: vi.fn(async () => undefined),
   resolveArchiveInput: vi.fn(),
   resolveArchiveInputAssets: vi.fn(),
 }));
 
 vi.mock("../../src/lib/input/input-preparation-archive.ts", () => ({
-  attachBareRomIngestMetadata: archiveMocks.attachBareRomIngestMetadata,
+  resolveUnclassifiedInputAssets: archiveMocks.resolveUnclassifiedInputAssets,
   describeArchiveFileForTrace: (file: { fileName?: string; fileSize?: number }) => ({
     fileName: file.fileName || "input.bin",
     fileSize: file.fileSize || 0,
@@ -41,7 +41,7 @@ const options = {
 };
 
 beforeEach(() => {
-  archiveMocks.attachBareRomIngestMetadata.mockReset().mockResolvedValue(undefined);
+  archiveMocks.resolveUnclassifiedInputAssets.mockReset().mockResolvedValue(undefined);
   archiveMocks.resolveArchiveInput.mockReset();
   archiveMocks.resolveArchiveInputAssets.mockReset();
 });
@@ -146,7 +146,7 @@ describe("resolveCompressedInputFile", () => {
 describe("resolveCompressedInputAssets", () => {
   it("finalizes a bare ROM through ingest and attaches source metrics", async () => {
     const input = file("game.bin", 42);
-    archiveMocks.attachBareRomIngestMetadata.mockClear();
+    archiveMocks.resolveUnclassifiedInputAssets.mockClear();
 
     const assets = await resolveCompressedInputAssets(
       input as never,
@@ -164,7 +164,13 @@ describe("resolveCompressedInputAssets", () => {
       patchable: true,
       preparation: { sourceSize: 42, wasDecompressed: false },
     });
-    expect(archiveMocks.attachBareRomIngestMetadata).toHaveBeenCalledWith(input, options, { name: "browser" });
+    expect(archiveMocks.resolveUnclassifiedInputAssets).toHaveBeenCalledWith(
+      input,
+      options,
+      { name: "browser" },
+      3,
+      undefined,
+    );
   });
 
   it("finalizes a container input as a ROM when container extraction is disabled", async () => {
