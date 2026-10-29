@@ -68,6 +68,9 @@ mod extract_batch_plan;
 #[path = "cli_smoke/formats.rs"]
 mod formats;
 
+#[path = "cli_smoke/format_coverage.rs"]
+mod format_coverage;
+
 #[path = "cli_smoke/dry_run.rs"]
 mod dry_run;
 
