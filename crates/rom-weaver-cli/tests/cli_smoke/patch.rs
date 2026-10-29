@@ -3373,7 +3373,7 @@ fn patch_create_rejects_formats_that_cannot_shrink_before_writing_output() {
     fs::write(original.path(), b"hello old world, longer").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    for format in ["ebp", "pmsr", "mod", "ppf"] {
+    for format in ["ebp", "ips32", "pmsr", "mod", "ppf"] {
         let patch = temp.child(format!("new.{format}"));
         let output = command_stdout(
             &[
@@ -14314,6 +14314,49 @@ fn patch_apply_xiso_system_area_is_not_a_copier_header() {
                     .expect("label")
                     .contains("input header stripped")
             );
+        }
+    }
+}
+
+#[test]
+fn patch_create_ips32_rejects_shrink_and_empty_targets() {
+    for modified_bytes in [b"abc".as_slice(), b""] {
+        for ignore in [false, true] {
+            let temp = setup_temp_dir();
+            let home = temp.path().to_str().expect("home");
+            let envs = [
+                ("HOME", home),
+                ("XDG_CONFIG_HOME", home),
+                ("XDG_CACHE_HOME", home),
+                ("XDG_STATE_HOME", home),
+            ];
+            let original = temp.child("original.bin");
+            let modified = temp.child("modified.bin");
+            let patch = temp.child("change.ips32");
+            fs::write(original.path(), b"abcdefgh").expect("original");
+            fs::write(modified.path(), modified_bytes).expect("modified");
+            let mut args = vec![
+                "patch",
+                "create",
+                "--original",
+                original.path().to_str().expect("path"),
+                "--modified",
+                modified.path().to_str().expect("path"),
+                "--output",
+                patch.path().to_str().expect("path"),
+                "--jsonl",
+            ];
+            if ignore {
+                args.push("--ignore-checksum-validation");
+            }
+            let event = parse_single_json_line(&command_stdout_with_env(&args, &envs, 1));
+            let label = event["label"].as_str().expect("label");
+            assert!(
+                label.contains("IPS32 patches cannot shrink the output"),
+                "{event}"
+            );
+            assert!(label.contains("BPS"), "{event}");
+            assert!(!patch.path().exists());
         }
     }
 }

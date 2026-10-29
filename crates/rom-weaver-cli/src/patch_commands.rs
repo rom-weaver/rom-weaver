@@ -16,10 +16,8 @@ pub(super) const MEDIUM_CREATE_PATCH_FORMATS: &[&str] =
 pub(super) const MID_LARGE_CREATE_PATCH_FORMATS: &[&str] =
     &["xdelta", "bps", "aps", "bdf", "pmsr", "ppf", "rup", "ups"];
 pub(super) const LARGE_CREATE_PATCH_FORMATS: &[&str] = &["xdelta", "ppf"];
-/// Formats whose create cannot express a target smaller than the source: PMSR and PPF reject it and
-/// EBP (IPS plus trailing JSON metadata) has no truncate footer, so applying the patch would
-/// leave the output at the source size.
-pub(super) const NO_SHRINK_CREATE_PATCH_FORMATS: &[&str] = &["ebp", "pmsr", "ppf"];
+/// IPS32 and EBP have no truncate footer; PMSR and PPF also cannot shrink output.
+pub(super) const NO_SHRINK_CREATE_PATCH_FORMATS: &[&str] = &["ebp", "ips32", "pmsr", "ppf"];
 /// Formats whose patches only apply to one known source ROM (MOD/PMSR: Paper Mario USA v1.0).
 pub(super) const SOURCE_RESTRICTED_CREATE_PATCH_FORMATS: &[&str] = &["pmsr"];
 pub(super) const CREATE_PATCH_ARCHIVE_DEFAULT_EXTENSIONS: &[&str] = &[
