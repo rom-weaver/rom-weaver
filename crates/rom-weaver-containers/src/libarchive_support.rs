@@ -618,7 +618,7 @@ pub(crate) fn libarchive_open_read_stream(
                 source.display()
             ),
         )?;
-        archive.require_filter(filter, source)
+        archive.require_filter(filter, source, &format!("{format_name} probe failed"))
     })();
 
     setup_result?;

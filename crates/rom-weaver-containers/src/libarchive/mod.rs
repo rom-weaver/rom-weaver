@@ -35,8 +35,8 @@ use sys::{
     archive_read_support_format_empty, archive_read_support_format_iso9660,
     archive_read_support_format_lha, archive_read_support_format_mtree,
     archive_read_support_format_rar, archive_read_support_format_rar5,
-    archive_read_support_format_raw, archive_read_support_format_tar,
-    archive_read_support_format_warc, archive_read_support_format_zip,
+    archive_read_support_format_tar, archive_read_support_format_warc,
+    archive_read_support_format_zip,
 };
 use sys::{
     archive_entry_free, archive_entry_new2, archive_entry_set_filetype, archive_entry_set_perm,

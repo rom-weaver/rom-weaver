@@ -68,7 +68,9 @@ impl ReadArchive {
     }
 
     pub fn support_raw_format(&mut self, context: &str) -> Result<()> {
-        let status = unsafe { archive_read_support_format_raw(self.as_ptr()) };
+        // The raw bidder requires decoded bytes; explicit selection MUST also accept empty streams.
+        let status =
+            unsafe { sys::archive_read_set_format(self.as_ptr(), sys::ARCHIVE_FORMAT_RAW) };
         self.check_status(status, context)
     }
 
@@ -100,7 +102,12 @@ impl ReadArchive {
 
     /// Fails unless `filter` decodes the opened input. libarchive silently falls back to its
     /// pass-through filter when the decoder rejects the header, which would yield the input bytes.
-    pub(crate) fn require_filter(&self, filter: ReadFilter, source: &Path) -> Result<()> {
+    pub(crate) fn require_filter(
+        &self,
+        filter: ReadFilter,
+        source: &Path,
+        context: &str,
+    ) -> Result<()> {
         let (expected, name) = match filter {
             ReadFilter::Gzip => (ARCHIVE_FILTER_GZIP, "gzip"),
             ReadFilter::Bzip2 => (ARCHIVE_FILTER_BZIP2, "bzip2"),
@@ -114,7 +121,7 @@ impl ReadArchive {
             return Ok(());
         }
         Err(RomWeaverError::Validation(format!(
-            "`{}` is not a valid {name} stream",
+            "{context}: `{}` is not a valid {name} stream",
             source.display()
         )))
     }
@@ -375,7 +382,7 @@ where
             source.display()
         ),
     )?;
-    archive.require_filter(filter, source)?;
+    archive.require_filter(filter, source, &format!("{format_name} stream read failed"))?;
 
     let result = (|| -> Result<T> {
         if !archive.next_header(&format!(

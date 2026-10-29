@@ -73,7 +73,7 @@ const WASM_BINDGEN_READ_FUNCTIONS: &[&str] = &[
     "archive_read_support_format_mtree",
     "archive_read_support_format_rar",
     "archive_read_support_format_rar5",
-    "archive_read_support_format_raw",
+    "archive_read_set_format",
     "archive_read_support_format_tar",
     "archive_read_support_format_warc",
     "archive_read_support_format_zip",
