@@ -1578,6 +1578,15 @@ impl CliApp {
             }
             _ => vec![terminal_output_path],
         };
+        #[cfg(not(target_arch = "wasm32"))]
+        if run.args.tui {
+            let mut protected_paths = run.source_paths();
+            for step in &chain.patch_steps {
+                protected_paths.extend([step.patch.source.clone(), step.patch.resolved.clone()]);
+            }
+            protected_paths.extend(emitted_paths.iter().cloned());
+            report = crate::interactive::protect_recipe_paths(report, &protected_paths);
+        }
         Self::attach_emitted_files_details(report, emitted_paths, kind_hint)
     }
 

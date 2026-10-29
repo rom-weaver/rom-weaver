@@ -43,6 +43,17 @@ fn run_tui(temp: &TempDir, extra: &[&str]) -> (ExitStatus, String) {
 }
 
 fn run_tui_to(temp: &TempDir, output: &str, extra: &[&str]) -> (ExitStatus, String) {
+    run_tui_paths(temp, "game.nes", "main.ips", Some(output), true, extra)
+}
+
+fn run_tui_paths(
+    temp: &TempDir,
+    input: &str,
+    patch: &str,
+    output: Option<&str>,
+    no_compress: bool,
+    extra: &[&str],
+) -> (ExitStatus, String) {
     let mut master = -1;
     let mut slave = -1;
     // SAFETY: openpty initializes both descriptors; optional terminal settings are null.
@@ -61,21 +72,18 @@ fn run_tui_to(temp: &TempDir, output: &str, extra: &[&str]) -> (ExitStatus, Stri
     let mut command = isolated_command(temp);
     command
         .args([
-            "patch",
-            "apply",
-            "--input",
-            "game.nes",
-            "--patch",
-            "main.ips",
-            "--output",
-            output,
-            "--no-compress",
-            "--tui",
+            "patch", "apply", "--input", input, "--patch", patch, "--tui",
         ])
         .args(extra)
         .stdin(slave.try_clone().expect("terminal stdin"))
         .stdout(slave.try_clone().expect("terminal stdout"))
         .stderr(slave);
+    if let Some(output) = output {
+        command.args(["--output", output]);
+    }
+    if no_compress {
+        command.arg("--no-compress");
+    }
     // SAFETY: setsid and ioctl are async-signal-safe; fd 0 is the child terminal.
     unsafe {
         command.pre_exec(|| {
@@ -445,5 +453,238 @@ fn tui_rejects_unresolvable_recipe_before_writing() {
             input_before,
             "{case}"
         );
+    }
+}
+
+#[test]
+fn tui_rejects_resolved_recipe_output_aliases() {
+    use std::os::unix::fs::symlink;
+
+    for compressed in [false, true] {
+        let temp = fixture();
+        let target = if compressed {
+            "out.zip"
+        } else {
+            "game-patched.nes"
+        };
+        symlink(target, temp.child("rom-weaver-weave.json").path()).expect("recipe symlink");
+        let input = fs::read(temp.child("game.nes").path()).expect("input");
+        let (output, flags): (Option<&str>, &[&str]) = if compressed {
+            (Some("out"), &["--force", "--compress-format", "zip"])
+        } else {
+            (None, &["--force"])
+        };
+        let (status, transcript) =
+            run_tui_paths(&temp, "game.nes", "main.ips", output, !compressed, flags);
+        assert_eq!(status.code(), Some(1), "{transcript}");
+        assert!(
+            transcript.contains("the TUI recipe would overwrite"),
+            "{transcript}"
+        );
+        assert!(
+            transcript.contains("the patched output was kept"),
+            "{transcript}"
+        );
+        let actual = fs::read(temp.child(target).path()).expect("kept output");
+        if compressed {
+            assert!(actual.starts_with(b"PK\x03\x04"), "ZIP output preserved");
+        } else {
+            let mut expected = input.clone();
+            expected[20] = 0xaa;
+            assert_eq!(actual, expected);
+        }
+        assert_eq!(
+            fs::read(temp.child("game.nes").path()).expect("input"),
+            input
+        );
+    }
+}
+
+#[test]
+fn tui_guards_native_output_paths_with_literal_backslashes() {
+    use std::os::unix::fs::symlink;
+
+    let temp = fixture();
+    fs::create_dir(temp.child("odd\\name").path()).expect("output directory");
+    symlink(
+        "odd\\name/out.zip",
+        temp.child("rom-weaver-weave.json").path(),
+    )
+    .expect("recipe symlink");
+    let (status, transcript) = run_tui_paths(
+        &temp,
+        "game.nes",
+        "main.ips",
+        Some("odd\\name/out"),
+        false,
+        &["--force", "--compress-format", "zip"],
+    );
+    assert_eq!(status.code(), Some(1), "{transcript}");
+    assert!(
+        transcript.contains("the TUI recipe would overwrite"),
+        "{transcript}"
+    );
+    let bytes = fs::read(temp.child("odd\\name/out.zip").path()).expect("kept ZIP");
+    assert!(bytes.starts_with(b"PK\x03\x04"));
+}
+
+#[test]
+fn tui_rejects_canonical_weave_inputs_before_writing() {
+    for name in [
+        "rom-weaver-weave.json",
+        "ROM-WEAVER-WEAVE.JSON",
+        "rom-weaver-bundle.json",
+        "rom-weaver-weave.json.gz",
+    ] {
+        let temp = fixture();
+        fs::create_dir(temp.child("recipes").path()).expect("recipe directory");
+        let rom = fs::read(temp.child("game.nes").path()).expect("ROM");
+        fs::write(temp.child("recipes/game.nes").path(), &rom).expect("nested ROM");
+        let document = serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "rom": {"path": "game.nes"},
+            "patches": [],
+            "cheats": [{"id": "snapshot", "code": "AKE-LVS", "codeKind": "game-genie"}],
+            "output": {"header": "strip"}
+        }))
+        .expect("weave JSON");
+        let bytes = if name.ends_with(".gz") {
+            let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::default());
+            encoder.write_all(&document).expect("gzip weave");
+            encoder.finish().expect("compressed weave")
+        } else {
+            document
+        };
+        let input = format!("recipes/{name}");
+        fs::write(temp.child(&input).path(), &bytes).expect("nested weave");
+        let (status, transcript) = run_tui_paths(
+            &temp,
+            &input,
+            "main.ips",
+            Some("out.nes"),
+            true,
+            &["--force"],
+        );
+        assert_eq!(status.code(), Some(2), "{name}: {transcript}");
+        assert!(
+            transcript.contains("--tui cannot re-open a weave"),
+            "{name}: {transcript}"
+        );
+        assert!(
+            !transcript.contains("Authoring rom-weaver-weave.json"),
+            "{transcript}"
+        );
+        assert!(!temp.child("out.nes").path().exists());
+        assert!(!temp.child("rom-weaver-weave.json").path().exists());
+        assert_eq!(fs::read(temp.child(&input).path()).expect("weave"), bytes);
+        assert_eq!(
+            fs::read(temp.child("recipes/game.nes").path()).expect("ROM"),
+            rom
+        );
+    }
+}
+
+#[test]
+fn tui_preserves_disc_sources_and_companion_outputs() {
+    use rom_weaver_app::gdrom::{
+        GD_HIGH_DENSITY_START_LBA, IsoFile, IsoTimestamp, USER_DATA_SIZE, build_iso,
+        encode_mode1_sector,
+    };
+    use std::os::unix::fs::symlink;
+
+    for (recipe_target, compressed) in [
+        ("track03.bin", true),
+        ("out/track03.bin", false),
+        ("out/disc.zip", true),
+    ] {
+        let temp = setup_temp_dir();
+        let cooked = build_iso(
+            &[IsoFile {
+                path: "KEEP.DAT".to_string(),
+                data: b"source file".to_vec(),
+            }],
+            GD_HIGH_DENSITY_START_LBA,
+            IsoTimestamp::default(),
+        )
+        .expect("source ISO");
+        let raw = cooked
+            .chunks_exact(USER_DATA_SIZE)
+            .enumerate()
+            .flat_map(|(index, sector)| {
+                encode_mode1_sector(
+                    GD_HIGH_DENSITY_START_LBA + index as u32,
+                    sector.try_into().expect("sector"),
+                )
+            })
+            .collect::<Vec<_>>();
+        fs::write(temp.child("track03.bin").path(), &raw).expect("source track");
+        fs::write(
+            temp.child("disc.gdi").path(),
+            b"1\n3 45000 4 2352 track03.bin 0\n",
+        )
+        .expect("source sheet");
+        fs::write(temp.child("NEW.DAT").path(), b"added by DCP").expect("DCP payload");
+        let create = isolated_command(&temp)
+            .args([
+                "compress",
+                "--input",
+                "NEW.DAT",
+                "--format",
+                "zip",
+                "--output",
+                "update.dcp",
+                "--json",
+            ])
+            .output()
+            .expect("create DCP");
+        assert!(create.status.success(), "{create:?}");
+        fs::create_dir(temp.child("out").path()).expect("output directory");
+        symlink(recipe_target, temp.child("rom-weaver-weave.json").path()).expect("recipe symlink");
+        let flags: &[&str] = if compressed {
+            &["--force", "--compress-format", "zip"]
+        } else {
+            &["--force"]
+        };
+        let output = if compressed {
+            "out/disc"
+        } else {
+            "out/disc.gdi"
+        };
+        let (status, transcript) = run_tui_paths(
+            &temp,
+            "disc.gdi",
+            "update.dcp",
+            Some(output),
+            !compressed,
+            flags,
+        );
+        assert_eq!(status.code(), Some(1), "{recipe_target}: {transcript}");
+        assert!(
+            transcript.contains("the TUI recipe would overwrite"),
+            "{transcript}"
+        );
+        assert!(
+            transcript.contains("the patched output was kept"),
+            "{transcript}"
+        );
+        assert_eq!(
+            fs::read(temp.child("track03.bin").path()).expect("source track"),
+            raw
+        );
+        let kept = fs::read(
+            temp.child(if compressed {
+                "out/disc.zip"
+            } else {
+                "out/track03.bin"
+            })
+            .path(),
+        )
+        .expect("kept output");
+        if compressed {
+            assert!(kept.starts_with(b"PK\x03\x04"));
+        } else {
+            assert!(kept.len() >= 2352);
+            assert!(!kept.starts_with(b"{"));
+        }
     }
 }

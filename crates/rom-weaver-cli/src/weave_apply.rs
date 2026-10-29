@@ -14,6 +14,15 @@ use super::weave_parse::{
 use super::*;
 use crate::path_access::path_basename;
 
+pub(super) fn is_canonical_weave_input(input: &Path) -> bool {
+    let input_name = input
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    weave_file_name_codec(input_name)
+        .is_some_and(|codec| codec.is_none_or(is_stream_codec_format_name))
+}
+
 /// What a weave contributed beyond the merged command fields: expected
 /// input-ROM requirements enforced after the CLI checksum flags parse, and
 /// the expected checksums of the final output for this selection.
@@ -524,20 +533,14 @@ impl CliApp {
         if let Some(weave) = &args.bundle {
             return Ok(Some(WeaveApplySource::Explicit(weave.clone())));
         }
+        if is_canonical_weave_input(&args.input) {
+            return Ok(Some(WeaveApplySource::InputIsWeave));
+        }
         let input_name = args
             .input
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or_default();
-        if let Some(codec) = weave_file_name_codec(input_name) {
-            let recognized = match codec {
-                None => true,
-                Some(extension) => is_stream_codec_format_name(extension),
-            };
-            if recognized {
-                return Ok(Some(WeaveApplySource::InputIsWeave));
-            }
-        }
         // Archive / non-canonical-JSON auto-detection is guarded on "no
         // explicit --patch": a user patching an archive that happens to carry a
         // weave (or naming a `.json` input) keeps today's behavior by naming

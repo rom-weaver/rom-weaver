@@ -25,7 +25,7 @@ pub fn run_weave_tui(apply: &PatchApplyCommand) -> Result<WeaveCreateCommand, St
                 .to_string(),
         );
     }
-    if apply.bundle.is_some() {
+    if apply.bundle.is_some() || crate::weave_apply::is_canonical_weave_input(&apply.input) {
         return Err("--tui cannot re-open a weave; rerun without --tui".to_string());
     }
     if !apply.codes.is_empty()
@@ -136,6 +136,31 @@ pub fn run_weave_tui(apply: &PatchApplyCommand) -> Result<WeaveCreateCommand, St
         patch_specs,
         ..WeaveCreateCommand::default()
     })
+}
+
+// Check physical paths after inferred names and compression extensions settle.
+// Display/report paths MUST NOT be used: they can lose native filename bytes.
+pub(crate) fn protect_recipe_paths(
+    mut report: rom_weaver_core::OperationReport,
+    paths: &[PathBuf],
+) -> rom_weaver_core::OperationReport {
+    use rom_weaver_core::{OperationStatus, RomWeaverErrorKind};
+
+    if report.status != OperationStatus::Succeeded {
+        return report;
+    }
+    let collision = paths.iter().find(|path| {
+        crate::path_access::paths_refer_to_same_file(Path::new(DEFAULT_WEAVE_NAME), path)
+    });
+    if let Some(path) = collision {
+        report.status = OperationStatus::Failed;
+        report.label = format!(
+            "patch apply succeeded, but the TUI recipe would overwrite `{}`; choose a different --output path or working directory; the patched output was kept",
+            path.display()
+        );
+        report = report.with_error_kind(RomWeaverErrorKind::Validation);
+    }
+    report
 }
 
 fn non_empty(value: String) -> Option<String> {

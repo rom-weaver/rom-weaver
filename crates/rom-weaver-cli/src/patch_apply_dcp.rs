@@ -233,6 +233,24 @@ impl CliApp {
             &context,
             single.clone(),
         );
+        #[cfg(not(target_arch = "wasm32"))]
+        if args.tui {
+            let output_paths = if compression_options.enabled {
+                match self.resolve_patch_apply_compression_plan(
+                    output,
+                    &args.input,
+                    &compression_options,
+                ) {
+                    Ok(plan) => vec![plan.output_path],
+                    Err(error) => return fail_error("validate", error),
+                }
+            } else {
+                Self::disc_output_paths(&disc, output)
+            };
+            sources.extend(Self::disc_source_paths(&disc));
+            sources.extend(output_paths);
+            report = crate::interactive::protect_recipe_paths(report, &sources);
+        }
         Self::append_report_warnings(&mut report, name_warning);
         #[cfg(not(target_arch = "wasm32"))]
         if report.status == OperationStatus::Succeeded && !skipped_weave_cheats.is_empty() {
