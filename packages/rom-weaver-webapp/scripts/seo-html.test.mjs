@@ -184,6 +184,38 @@ test("workflow Markdown and discovery reuse each route's SEO metadata", () => {
   }
 });
 
+test("workflow Markdown includes task instructions and limits from the published guides", () => {
+  const cases = [
+    [WORKFLOW_SEO_ROUTES.home, "Change a game", "Codes that need live game memory cannot be baked."],
+    [WORKFLOW_SEO_ROUTES.patcher, "Patch a ROM in four steps", "Dreamcast DCP patches need the CLI"],
+    [WORKFLOW_SEO_ROUTES.creator, "Add Original and Modified", "formats that cannot shrink a file"],
+    [WORKFLOW_SEO_ROUTES.weave, "Build the patch recipe", "Choose what to include"],
+    [WORKFLOW_SEO_ROUTES.checksum, "Calculate checksums", "If no checksum matches"],
+    [WORKFLOW_SEO_ROUTES.compress, "Choose an output", "A supported input is not necessarily a supported output."],
+    [WORKFLOW_SEO_ROUTES.extract, "Extract an archive", "Extract opens one archive per run."],
+    [WORKFLOW_SEO_ROUTES.identify, "Identify a file", "It does not prove that your file is corrupt."],
+    [WORKFLOW_SEO_ROUTES["ppf-undo"], "Restore the saved bytes", "If the patch lacks undo data"],
+    [WORKFLOW_SEO_ROUTES.test, "Load a ROM", "Converting, patching, or identifying a ROM"],
+    [WORKFLOW_ENTRY_ROUTES["apply-cheats"], "Add cheats to a ROM", "Codes that need live game memory"],
+    [
+      WORKFLOW_ENTRY_ROUTES["create-rom-cheat-patch"],
+      "Build from patches and cheats",
+      "multi-file ROMs are unsupported",
+    ],
+  ];
+  for (const [route, heading, limitation] of cases) {
+    const markdown = createWorkflowMarkdown(route);
+    assert.ok(markdown.includes(`## ${String(heading)}\n`), `${route.slug} instructions`);
+    assert.ok(markdown.includes(limitation), `${route.slug} limits`);
+    assert.match(markdown, /\[Full guide\]\(https:\/\/rom-weaver.com\/docs\/[\w-]+\.md\)/);
+    assert.doesNotMatch(markdown, /doctoc|## Table of contents|<figure|<picture|src="\.\.\//);
+  }
+  assert.match(
+    createWorkflowMarkdown(WORKFLOW_SEO_ROUTES.compress),
+    /\[container table\]\(<https:\/\/rom-weaver.com\/docs\/supported-formats.md#container-and-compression-formats>\)/,
+  );
+});
+
 test("beta tool pages get their own title, social titles, and channel badge", () => {
   const shell = `${routeShell.replace("</head>", '<meta name="robots" content="index, follow" />\n</head>')}`;
   for (const [slug, name] of [

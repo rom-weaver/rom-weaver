@@ -8,7 +8,7 @@ import { createDocsMarkdown } from "./docs-discovery.mjs";
 import { PRODUCTION_SITE_ORIGIN, resolveSiteOrigin } from "./vite-config/channel.mjs";
 import { createLlmsSource, rootStaticAssetSourcesForChannel } from "./vite-config/root-static-assets.mjs";
 import { createWorkflowMarkdown } from "./vite-config/seo-html.mjs";
-import { WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
+import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
 
 const NIGHTLY = "https://nightly.rom-weaver.com";
 const llmsPath = rootStaticAssetSourcesForChannel("nightly")["/llms.txt"];
@@ -64,6 +64,15 @@ test("Markdown alternates link to the serving origin and keep the production can
   assert.ok(workflow.startsWith(`Canonical: ${SITE_ORIGIN}/compress\n`));
   assert.ok(workflow.includes(`[Open in browser](${NIGHTLY}/compress)`));
   assert.ok(workflow.includes(`[Documentation](${NIGHTLY}/docs.md)`));
+  for (const route of [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]) {
+    const expanded = createWorkflowMarkdown(route, NIGHTLY);
+    assert.ok(expanded.startsWith(`Canonical: ${SITE_ORIGIN}/${route.slug}\n`));
+    assert.equal(expanded.includes(`](<${SITE_ORIGIN}`), false, `${route.slug} guide links to production`);
+    assert.ok(expanded.includes(`[Full guide](${NIGHTLY}/docs/`), `${route.slug} guide origin`);
+  }
+  assert.ok(
+    workflow.includes(`[container table](<${NIGHTLY}/docs/supported-formats.md#container-and-compression-formats>)`),
+  );
 });
 
 test("no published Markdown alternate links to production from another origin", () => {
