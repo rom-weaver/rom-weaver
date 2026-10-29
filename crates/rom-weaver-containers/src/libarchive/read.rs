@@ -14,6 +14,7 @@ unsafe extern "C" {
     fn rom_weaver_7zip_entry_decoder_bytes(archive: *mut archive) -> i64;
     // Appended to the staged archive_entry.c the same way.
     fn rom_weaver_archive_entry_stored_pathname(entry: *mut archive_entry) -> *const c_char;
+    fn rom_weaver_archive_entry_is_link(entry: *mut archive_entry) -> c_int;
 }
 
 const REGULAR_ARCHIVE_SUPPORT: &[(&str, SupportFunction)] = &[
@@ -168,11 +169,21 @@ impl ReadArchive {
             return Ok(None);
         }
         self.check_status(status, context)?;
-        NonNull::new(entry).map(Some).ok_or_else(|| {
+        let ptr = NonNull::new(entry).ok_or_else(|| {
             RomWeaverError::Validation(format!(
                 "{context}: libarchive returned a null entry pointer"
             ))
-        })
+        })?;
+        if unsafe { rom_weaver_archive_entry_is_link(ptr.as_ptr()) } != 0 {
+            let entry = ReadArchiveEntry { archive: self, ptr };
+            let pathname = entry
+                .pathname()
+                .map_err(|error| RomWeaverError::Validation(format!("{context}: {error}")))?;
+            return Err(RomWeaverError::Validation(format!(
+                "{context}: unsupported archive link `{pathname}`: symbolic and hard links are not supported"
+            )));
+        }
+        Ok(Some(ptr))
     }
 
     pub fn read_data(&mut self, buffer: &mut [u8], context: &str) -> Result<usize> {

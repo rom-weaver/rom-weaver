@@ -19,3 +19,11 @@ rom_weaver_archive_entry_stored_pathname(struct archive_entry *entry)
 		return (NULL);
 	return (entry->ae_pathname.aes_mbs.s);
 }
+
+/* Link detection MUST not depend on converting a link target's character set. */
+int
+rom_weaver_archive_entry_is_link(struct archive_entry *entry)
+{
+	return ((entry->ae_set & (AE_SET_HARDLINK | AE_SET_SYMLINK)) != 0 ||
+	    archive_entry_filetype(entry) == AE_IFLNK);
+}

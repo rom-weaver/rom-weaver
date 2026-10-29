@@ -64,6 +64,116 @@ fn read_all(reader: &mut dyn Read) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+fn tar_link_fixture(kind: u8) -> Vec<u8> {
+    let mut bytes = vec![0u8; 1536];
+    let header = &mut bytes[..512];
+    header[..9].copy_from_slice(b"alias.bin");
+    header[100..108].copy_from_slice(b"0000644\0");
+    header[108..116].copy_from_slice(b"0000000\0");
+    header[116..124].copy_from_slice(b"0000000\0");
+    header[124..136].copy_from_slice(b"00000000000\0");
+    header[136..148].copy_from_slice(b"00000000000\0");
+    header[148..156].fill(b' ');
+    header[156] = kind;
+    header[157..167].copy_from_slice(b"target.bin");
+    header[257..263].copy_from_slice(b"ustar\0");
+    header[263..265].copy_from_slice(b"00");
+    let checksum: u32 = header.iter().map(|byte| u32::from(*byte)).sum();
+    header[148..156].copy_from_slice(format!("{checksum:06o}\0 ").as_bytes());
+    bytes
+}
+
+#[test]
+fn extracting_archive_links_rejects_fabricated_empty_files() {
+    use rom_weaver_core::{
+        CancellationToken, ContainerExtractRequest, NoopProgressSink, OperationContext,
+        ThreadBudget,
+    };
+    use std::sync::Arc;
+
+    let dir = unique_temp_dir("links");
+    let context = OperationContext::new(
+        ThreadBudget::Fixed(1),
+        dir.to_path_buf(),
+        Arc::new(NoopProgressSink),
+        CancellationToken::new(),
+    );
+    let registry = crate::ContainerRegistry::new();
+    for kind in *b"12" {
+        let source = dir.join(format!("link-{kind}.tar"));
+        fs::write(&source, tar_link_fixture(kind)).expect("write tar link fixture");
+        let out_dir = dir.join(format!("out-{kind}"));
+        let result = registry.find_by_name("tar").expect("tar handler").extract(
+            &ContainerExtractRequest {
+                source,
+                out_dir: out_dir.clone(),
+                selections: Vec::new(),
+                kind_filter: Default::default(),
+                containing_archive: None,
+                split_bin: false,
+                ignore_common_files: false,
+                overwrite: false,
+                parent: None,
+            },
+            &context,
+        );
+        let error = result.expect_err("archive links must not become empty regular files");
+        assert!(
+            error.to_string().contains("unsupported archive link"),
+            "{error}"
+        );
+        assert!(!out_dir.join("alias.bin").exists());
+    }
+}
+
+#[test]
+fn rar_links_are_rejected_before_listing_them_as_regular_files() {
+    let dir = unique_temp_dir("rar-links");
+    for (name, bytes) in [
+        (
+            "rar4",
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/fixtures/rar/rar4-unicode.rar"
+            ))
+            .as_slice(),
+        ),
+        (
+            "rar5",
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/fixtures/rar/rar5-unicode.rar"
+            ))
+            .as_slice(),
+        ),
+    ] {
+        let source = dir.join(format!("{name}.rar"));
+        fs::write(&source, bytes).expect("write upstream RAR link fixture");
+        let error = list_regular_archive_entries(&source, "rar")
+            .expect_err("RAR links must not be listed as ordinary files");
+        assert!(
+            error.to_string().contains("unsupported archive link"),
+            "{name}: {error}"
+        );
+    }
+}
+
+#[test]
+fn empty_regular_tar_entries_remain_supported() {
+    let dir = unique_temp_dir("empty-regular");
+    let source = dir.join("empty.tar");
+    fs::write(&source, tar_link_fixture(b'0')).expect("write empty regular tar entry");
+    let entries = list_regular_archive_entries(&source, "tar").expect("list empty regular file");
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].size, Some(0));
+    assert!(!entries[0].is_dir);
+    assert_eq!(
+        with_regular_archive_file_entry_reader(&source, "tar", 0, "alias.bin", read_all)
+            .expect("read empty regular file"),
+        b""
+    );
+}
+
 #[test]
 fn listing_file_entries_skips_directories_and_normalizes_names() {
     let dir = unique_temp_dir("file-entries");

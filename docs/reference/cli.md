@@ -188,6 +188,8 @@ Not every command takes all five. `extract` has no `--no-extract`, since unpacki
 
 Valid gzip, bzip2, xz, zstd, and LZ4 streams with empty payloads produce zero-byte files, including binary stdout. Corrupt or truncated streams cause an error.
 
+Archive symbolic links and hard links are unsupported and cause an error.
+
 `extract --split-bin` writes a CD-format CHD as a CUE plus one Redump-style `<name> (Track N).bin` per track instead of one merged BIN; it is ignored, with a warning, for non-CHD input. `probe --split-bin` lists the per-track BIN files of a CD-format CHD.
 
 XISO extraction rejects an output that refers to its source file, including symbolic links and native hard links, even with `--force`.
