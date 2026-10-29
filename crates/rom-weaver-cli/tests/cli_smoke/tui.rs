@@ -197,3 +197,54 @@ fn tui_rejects_cheats_before_writing_outputs() {
         }
     }
 }
+#[test]
+fn tui_force_replaces_rom_and_recipe_on_repeat() {
+    let temp = fixture();
+    for run in 0..2 {
+        let (status, transcript) = run_tui(&temp, &["--force"]);
+        assert!(status.success(), "repeated forced TUI failed: {transcript}");
+        let recipe = temp.child("rom-weaver-weave.json");
+        let document: Value =
+            serde_json::from_slice(&fs::read(recipe.path()).expect("recipe")).expect("recipe JSON");
+        assert_eq!(document["patches"][0]["name"], "main");
+        if run == 0 {
+            fs::write(recipe.path(), b"stale recipe").expect("stale recipe");
+            fs::write(temp.child("out.nes").path(), b"stale ROM").expect("stale ROM");
+        }
+    }
+    assert_replay(&temp);
+}
+
+#[test]
+fn tui_recipe_failure_discloses_kept_output_without_force() {
+    let temp = fixture();
+    let recipe = temp.child("rom-weaver-weave.json");
+    fs::write(recipe.path(), b"existing recipe").expect("recipe sentinel");
+    let (status, transcript) = run_tui(&temp, &[]);
+    assert_eq!(status.code(), Some(1), "{transcript}");
+    assert!(
+        transcript.contains(
+            "patch apply succeeded, but TUI recipe creation failed; the patched output was kept"
+        ),
+        "{transcript}"
+    );
+    assert!(
+        transcript.contains("pass --force to overwrite it"),
+        "{transcript}"
+    );
+    assert_eq!(fs::read(recipe.path()).expect("recipe"), b"existing recipe");
+    let output = fs::read(temp.child("out.nes").path()).expect("kept output");
+    assert_eq!(output.len(), 32_784);
+    assert_eq!(output[20], 0xaa);
+    let (status, transcript) = run_tui(&temp, &[]);
+    assert_eq!(status.code(), Some(1), "{transcript}");
+    assert!(
+        !transcript.contains("the patched output was kept"),
+        "{transcript}"
+    );
+    assert_eq!(fs::read(recipe.path()).expect("recipe"), b"existing recipe");
+    assert_eq!(
+        fs::read(temp.child("out.nes").path()).expect("output"),
+        output
+    );
+}

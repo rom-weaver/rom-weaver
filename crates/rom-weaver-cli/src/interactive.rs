@@ -103,6 +103,7 @@ pub fn run_weave_tui(apply: &PatchApplyCommand) -> Result<WeaveCreateCommand, St
         output_name: non_empty(output_name),
         output_header: apply.output_header,
         threads: apply.threads,
+        force: apply.force,
         patch_specs,
         ..WeaveCreateCommand::default()
     })
