@@ -805,7 +805,7 @@ describe("automatic update apply", () => {
     expect(harness.reload).not.toHaveBeenCalled();
   });
 
-  it("reloads when the page still runs the outgoing controller's code", async () => {
+  it("shows the update prompt instead of reloading when the page still runs the outgoing controller's code", async () => {
     const onBeforeReload = vi.fn();
     const harness = createHarness({
       appVersion: "test",
@@ -818,9 +818,12 @@ describe("automatic update apply", () => {
 
     harness.registerOptions().onNeedRefresh?.();
 
-    expect(onBeforeReload).toHaveBeenCalledTimes(1);
-    harness.registerOptions().onNeedReload?.();
-    expect(harness.reload).toHaveBeenCalledTimes(1);
+    expect(harness.client.getState().updateReady).toBe(true);
+    expect(harness.updateServiceWorker).not.toHaveBeenCalled();
+    expect(onBeforeReload).not.toHaveBeenCalled();
+    expect(harness.sessionStorage.state.get("rom-weaver-sw-auto-apply-reloads")).toBeUndefined();
+    harness.fireDocument("controllerchange");
+    expect(harness.reload).not.toHaveBeenCalled();
   });
 
   it("falls back to the manual prompt once the per-session budget is spent", async () => {

@@ -308,6 +308,7 @@ const loadWorker = async (
     hasActiveWorker?: boolean;
     href?: string;
     manifest?: PrecacheManifestEntry[];
+    omitRedirectList?: boolean;
     redirectSourcePaths?: string[];
     seedCaches?: (cacheStorage: FakeCacheStorage) => Promise<void> | void;
     unparsableHref?: boolean;
@@ -333,7 +334,9 @@ const loadWorker = async (
   vi.stubGlobal("caches", cacheStorage);
   vi.stubGlobal("fetch", fetchStub.stub);
   vi.stubGlobal("__EMULATORJS_VERSION__", EMULATORJS_VERSION);
-  if (options.redirectSourcePaths) vi.stubGlobal("__REDIRECT_SOURCE_PATHS__", options.redirectSourcePaths);
+  // The test build defines the real list as a global, so fail-closed needs an explicit undefined.
+  if (options.omitRedirectList) vi.stubGlobal("__REDIRECT_SOURCE_PATHS__", undefined);
+  else if (options.redirectSourcePaths) vi.stubGlobal("__REDIRECT_SOURCE_PATHS__", options.redirectSourcePaths);
   vi.stubGlobal("__IDENTIFY_OPTIONAL_PACK_GROUPS__", [
     { id: "computers", label: "Computers", packs: [{ sha256: "aa", url: "assets/identify-computers.pack" }] },
   ]);
@@ -810,6 +813,36 @@ describe("network-first handler", () => {
 });
 
 describe("navigation requests", () => {
+  const DEFERRED_URL = `${APP_ORIGIN}/assets/deferred.js`;
+  const COMPLETE_MANIFEST: PrecacheManifestEntry[] = [
+    { revision: "r1", url: "index.html" },
+    "assets/app.js",
+    { install: false, url: "assets/deferred.js" },
+  ];
+  const DEFERRED_CACHE_NAME = "precache-rom-weaver-app-deferred";
+  // A worker whose core precache and deferred entries are all stored: the only state that serves cache-first.
+  const loadCompleteWorker = (options: {
+    missingDeferred?: boolean;
+    omitRedirectList?: boolean;
+    redirectSourcePaths?: string[];
+    runtimeEntries?: Record<string, string>;
+  }) =>
+    loadWorker({
+      manifest: COMPLETE_MANIFEST,
+      omitRedirectList: options.omitRedirectList,
+      redirectSourcePaths: options.redirectSourcePaths,
+      seedCaches: async (cacheStorage) => {
+        const core = await cacheStorage.open(PRECACHE_NAME);
+        await core.put(`${APP_ORIGIN}/index.html?__WB_REVISION__=r1`, new Response("x"));
+        await core.put(`${APP_ORIGIN}/assets/app.js`, new Response("x"));
+        if (!options.missingDeferred) {
+          await (await cacheStorage.open(DEFERRED_CACHE_NAME)).put(DEFERRED_URL, new Response("x"));
+        }
+        const runtime = await cacheStorage.open(RUNTIME_CACHE_NAME);
+        for (const [url, body] of Object.entries(options.runtimeEntries ?? {}))
+          await runtime.put(url, new Response(body));
+      },
+    });
   const precachedDocs = () =>
     setPrecache({
       "docs/guide/index.html": () => new Response("guide", { status: 200 }),
@@ -817,7 +850,7 @@ describe("navigation requests", () => {
     });
 
   it("answers a precached navigation without touching the network and keeps isolation headers", async () => {
-    const harness = await loadWorker({ redirectSourcePaths: [] });
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
     precachedDocs();
 
     const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
@@ -831,12 +864,34 @@ describe("navigation requests", () => {
     expect(harness.fetchStub.calls).toHaveLength(0);
   });
 
+  it("goes to the network when a deferred entry is not cached yet, even for a precached document", async () => {
+    const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
+    precachedDocs();
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("fresh", { status: 200 }));
+
+    const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
+
+    await expect(response.text()).resolves.toBe("fresh");
+    expect(harness.fetchStub.calls).toHaveLength(1);
+  });
+
+  it("serves cache-first once the missing deferred entry is stored by a download", async () => {
+    const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
+    precachedDocs();
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("fresh", { status: 200 }));
+    await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
+    harness.fetchStub.handlers.set(DEFERRED_URL, () => new Response("js", { status: 200 }));
+
+    await routed(harness, requireRoute(2), new Request(DEFERRED_URL));
+    const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
+
+    await expect(response.text()).resolves.toBe("guide");
+  });
+
   it("does not answer from the runtime cache, which may hold a newer deploy", async () => {
-    const harness = await loadWorker({
-      seedCaches: async (cacheStorage) => {
-        const cache = await cacheStorage.open(RUNTIME_CACHE_NAME);
-        await cache.put(new Request(`${APP_ORIGIN}/newer`), new Response("newer-cached", { status: 200 }));
-      },
+    const harness = await loadCompleteWorker({
+      redirectSourcePaths: [],
+      runtimeEntries: { [`${APP_ORIGIN}/newer`]: "newer-cached" },
     });
     harness.fetchStub.handlers.set(`${APP_ORIGIN}/newer`, () => new Response("newer-network", { status: 200 }));
 
@@ -887,7 +942,7 @@ describe("navigation requests", () => {
   });
 
   it("fails closed and uses the network when the redirect list was not injected", async () => {
-    const harness = await loadWorker();
+    const harness = await loadCompleteWorker({ omitRedirectList: true });
     precachedDocs();
     harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("fresh", { status: 200 }));
 
@@ -923,7 +978,7 @@ describe("navigation requests", () => {
   it("checks for a new worker in the background, at most once a minute", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
-    const harness = await loadWorker({ redirectSourcePaths: ["/apply", "/apply/"] });
+    const harness = await loadCompleteWorker({ redirectSourcePaths: ["/apply", "/apply/"] });
     precachedDocs();
     const update = harness.scope.registration.update;
     const pending: Array<Promise<unknown>> = [];
@@ -959,6 +1014,58 @@ describe("navigation requests", () => {
     await vi.advanceTimersByTimeAsync(4000);
 
     await expect((await pending).text()).resolves.toBe("cached");
+  });
+
+  it("measures the timeout to the response headers, not the body or the cache write", async () => {
+    vi.useFakeTimers();
+    const harness = await loadWorker({
+      seedCaches: async (cacheStorage) => {
+        const cache = await cacheStorage.open(RUNTIME_CACHE_NAME);
+        await cache.put(new Request(`${APP_ORIGIN}/newer`), new Response("cached", { status: 200 }));
+      },
+    });
+    const cache = await harness.cacheStorage.open(RUNTIME_CACHE_NAME);
+    let finishWrite: () => void = () => undefined;
+    const originalPut = cache.put.bind(cache);
+    vi.spyOn(cache, "put").mockImplementation(
+      (request, response) =>
+        new Promise<void>((resolve) => (finishWrite = () => resolve(originalPut(request, response)))),
+    );
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/newer`, () => new Response("network", { status: 200 }));
+
+    const pending = routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/newer`));
+    await vi.advanceTimersByTimeAsync(10_000);
+    finishWrite();
+
+    await expect((await pending).text()).resolves.toBe("network");
+  });
+
+  it("hands the background refresh after a timeout to waitUntil", async () => {
+    vi.useFakeTimers();
+    const harness = await loadWorker({
+      seedCaches: async (cacheStorage) => {
+        const cache = await cacheStorage.open(RUNTIME_CACHE_NAME);
+        await cache.put(new Request(`${APP_ORIGIN}/newer`), new Response("cached", { status: 200 }));
+      },
+    });
+    let release: (response: Response) => void = () => undefined;
+    harness.fetchStub.stub.mockImplementation(() => new Promise<Response>((resolve) => (release = resolve)));
+    const pending: Array<Promise<unknown>> = [];
+    const event = { type: "fetch", waitUntil: (promise: Promise<unknown>) => void pending.push(promise) };
+
+    const response = harness.networkFirstRoute.handler({
+      event,
+      request: asNavigationRequest(`${APP_ORIGIN}/newer`),
+      url: new URL(`${APP_ORIGIN}/newer`),
+    });
+    await vi.advanceTimersByTimeAsync(4000);
+    await expect((await response).text()).resolves.toBe("cached");
+    expect(pending).toHaveLength(1);
+
+    release(new Response("fresh", { status: 200 }));
+    await Promise.all(pending);
+    const runtime = await harness.cacheStorage.open(RUNTIME_CACHE_NAME);
+    await expect((await runtime.match(`${APP_ORIGIN}/newer`))?.text()).resolves.toBe("fresh");
   });
 
   it("waits for the network when a stalled navigation has no exact cached copy", async () => {

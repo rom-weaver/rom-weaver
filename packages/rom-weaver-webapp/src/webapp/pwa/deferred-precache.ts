@@ -102,6 +102,14 @@ const createDeferredPrecache = ({
     return result;
   };
 
+  // Cheap completeness probe: every required file has a stored entry (no size measurements).
+  const isComplete = async () => {
+    const required = await requiredFiles();
+    const cache = await caches.open(cacheName);
+    const keys = new Set((await cache.keys()).map((request) => request.url));
+    return required.every((file) => keys.has(file.key));
+  };
+
   const match = async (url: string) => {
     const file = find(url);
     if (!file) return undefined;
@@ -282,6 +290,7 @@ const createDeferredPrecache = ({
   return {
     cleanup,
     has: (url: string) => Boolean(find(url)),
+    isComplete,
     match,
     migrate,
     reset,

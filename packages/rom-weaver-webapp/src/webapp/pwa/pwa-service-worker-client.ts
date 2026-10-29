@@ -584,24 +584,35 @@ const createPwaServiceWorkerClient = ({
       onNeedRefresh: () => {
         logServiceWorkerClient("service worker update ready");
         const autoApplyReloads = Number.parseInt(getSessionStorageItem(AUTO_APPLY_RELOAD_COUNT_KEY), 10) || 0;
-        if (shouldAutoApplyUpdate?.() && updateServiceWorker && autoApplyReloads < AUTO_APPLY_RELOAD_BUDGET) {
-          // Reload only when the page is still running the code the outgoing controller cached. When the
-          // running version is already ahead of that controller: the shell was served fresh from the
-          // network, so the page IS the incoming version and a reload would swap in nothing; activate via
-          // skipWaiting silently and let the controllerchange handler re-sync COEP and the cache version.
-          const reloadToApply = controllerVersion === appVersion;
+        // The page is still running the code the outgoing controller cached (it served its own shell),
+        // so applying the update means reloading it. That reload would land seconds after the visit,
+        // so leave the new worker waiting and show the update prompt: the user picks when to reload,
+        // and the worker otherwise activates on the next visit once no client uses the old one.
+        const reloadToApply = controllerVersion === appVersion;
+        if (
+          shouldAutoApplyUpdate?.() &&
+          updateServiceWorker &&
+          autoApplyReloads < AUTO_APPLY_RELOAD_BUDGET &&
+          !reloadToApply
+        ) {
+          // The running version is already ahead of the controller: the shell was served fresh from the
+          // network, so a reload would swap in nothing. Activate via skipWaiting silently and let the
+          // controllerchange handler re-sync COEP and the cache version.
           logServiceWorkerClient("auto-applying service worker update; no in-progress work", {
             autoApplyReloads,
             controllerVersion,
-            reloadToApply,
             runningVersion: appVersion,
           });
           setSessionStorageItem(AUTO_APPLY_RELOAD_COUNT_KEY, String(autoApplyReloads + 1));
           clearUpdateReady();
-          reloadOnIncomingControl = reloadToApply;
-          if (reloadToApply) onBeforeReload?.();
+          reloadOnIncomingControl = false;
           void updateServiceWorker();
           return;
+        }
+        if (reloadToApply && shouldAutoApplyUpdate?.()) {
+          logServiceWorkerClient("service worker update waiting; page runs the controller's version", {
+            controllerVersion,
+          });
         }
         if (autoApplyReloads >= AUTO_APPLY_RELOAD_BUDGET) {
           logServiceWorkerClient("auto-apply budget exhausted; deferring to manual update prompt", {
