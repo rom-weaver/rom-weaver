@@ -66,3 +66,23 @@ test("allowed paths are served by functions, not files", () => {
     assert.deepEqual(findCrawlerBrokenLinks(dist, { allowed: ["/docs/x.md"] }), []);
   });
 });
+
+test("a malformed percent escape is a broken link, not a crash", () => {
+  withDist({ "index.html": page(["/apply-patches%E0%A4%A"]) }, (dist) => {
+    assert.equal(findCrawlerBrokenLinks(dist).length, 1);
+  });
+});
+
+test("paths the host redirects are not broken", () => {
+  withDist(
+    {
+      _redirects: "# legacy\n/docs/formats /docs/work-with-archives 301\n",
+      "index.html": page(["/docs/formats", "/gone"]),
+    },
+    (dist) =>
+      assert.deepEqual(
+        findCrawlerBrokenLinks(dist).map((link) => link.pathname),
+        ["/gone"],
+      ),
+  );
+});

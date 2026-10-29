@@ -20,12 +20,34 @@ export const pageUrlPath = (distDir, file) => {
   return `/${route}`;
 };
 
+const safeDecode = (pathname) => {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+};
+
 const builtTargetExists = (distDir, pathname) => {
-  const relative = decodeURIComponent(pathname).replace(/^\/+/, "");
+  const decoded = safeDecode(pathname);
+  if (decoded === null) return false;
+  const relative = decoded.replace(/^\/+/, "");
   const candidates = relative ? [relative, `${relative}.html`, path.join(relative, "index.html")] : ["index.html"];
   return candidates.some(
     (candidate) => fs.existsSync(path.join(distDir, candidate)) && fs.statSync(path.join(distDir, candidate)).isFile(),
   );
+};
+
+// Paths the static host answers with a redirect have no built file; a crawler follows them.
+const redirectSources = (distDir) => {
+  const file = path.join(distDir, "_redirects");
+  if (!fs.existsSync(file)) return [];
+  return fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"))
+    .map((line) => line.split(/\s+/)[0]);
 };
 
 export const internalHrefs = (html) => {
@@ -41,16 +63,17 @@ export const internalHrefs = (html) => {
 /**
  * Same-origin links in the built pages whose target does not exist when resolved
  * against the page URL alone. `allowed` lists `<pathname>` values served by a
- * function or redirect instead of a file.
+ * function instead of a file; `_redirects` sources are allowed too.
  */
 export const findCrawlerBrokenLinks = (distDir, { allowed = [] } = {}) => {
+  const served = new Set([...allowed, ...redirectSources(distDir)]);
   const broken = [];
   for (const file of walkHtml(distDir)) {
     const page = pageUrlPath(distDir, file);
     const seen = new Set();
     for (const href of internalHrefs(fs.readFileSync(file, "utf8"))) {
       const { pathname } = new URL(href, `https://crawler.invalid${page}`);
-      if (seen.has(pathname) || allowed.includes(pathname) || builtTargetExists(distDir, pathname)) continue;
+      if (seen.has(pathname) || served.has(pathname) || builtTargetExists(distDir, pathname)) continue;
       seen.add(pathname);
       broken.push({ href, page, pathname });
     }
