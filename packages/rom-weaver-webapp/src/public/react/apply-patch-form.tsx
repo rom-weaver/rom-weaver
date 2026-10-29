@@ -708,7 +708,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     if (!shouldRetainEmulatorOutput(request)) return;
     const core = getEmulatorJsCore(request.platform, request.fileName);
     if (!core) return;
-    await waitForBrowserOpfsBootCleanup();
+    // A failed boot sweep must not stop the entry from being retained for the session.
+    await waitForBrowserOpfsBootCleanup().catch(() => undefined);
     const artifact = await request.retain();
     try {
       addEntry({

@@ -172,10 +172,16 @@ const createFakeApplyWorkflow = () => {
 
 let latestFakeWorkflow: ReturnType<typeof createFakeApplyWorkflow> | null = null;
 let validationBarrier: Promise<void> | null = null;
+let latestWorkflowOptions: { retainUncompressedOutput?: (request: unknown) => Promise<void> } | null = null;
+const bootCleanup = vi.hoisted(() => ({ wait: vi.fn<() => Promise<void>>() }));
+vi.mock("../../src/storage/browser/browser-opfs-cleanup.ts", () => ({
+  waitForBrowserOpfsBootCleanup: bootCleanup.wait,
+}));
 
 vi.mock("../../src/platform/browser/browser-api.ts", () => ({
   ApplyWorkflow: class {
-    constructor() {
+    constructor(options?: typeof latestWorkflowOptions) {
+      latestWorkflowOptions = options ?? null;
       latestFakeWorkflow = createFakeApplyWorkflow();
       // Instances of this fake class delegate every call to the shared fake
       // workflow object so test code can drive it via `latestFakeWorkflow`.
@@ -742,5 +748,21 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     const download = container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement;
     await act(async () => fireEvent.click(download));
     await vi.waitFor(() => expect(container.textContent).toContain("download failed"));
+  });
+});
+
+describe("ApplyPatchForm - emulator output retention", () => {
+  it("still retains the output when the boot OPFS sweep failed", async () => {
+    bootCleanup.wait.mockRejectedValue(new Error("quota exceeded"));
+    renderForm({ defaultInputs: [new File(["rom"], "game.nes")] });
+    await vi.waitFor(() => expect(latestWorkflowOptions?.retainUncompressedOutput).toBeTypeOf("function"));
+    const retain = vi.fn(async () => ({ dispose: vi.fn(async () => undefined), size: 3 }));
+    await latestWorkflowOptions?.retainUncompressedOutput?.({
+      fileName: "game.nes",
+      platform: "Nintendo Entertainment System",
+      retain,
+      size: 3,
+    });
+    expect(retain).toHaveBeenCalledTimes(1);
   });
 });

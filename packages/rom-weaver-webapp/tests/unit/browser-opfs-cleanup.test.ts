@@ -13,6 +13,7 @@ vi.mock("../../src/workers/protocol/browser-opfs-worker-client.ts", () => ({ req
 import {
   resetBrowserTransientOpfs,
   startBrowserOpfsBootCleanup,
+  waitForBrowserOpfsBootCleanup,
 } from "../../src/storage/browser/browser-opfs-cleanup.ts";
 
 describe("browser OPFS cleanup", () => {
@@ -22,6 +23,43 @@ describe("browser OPFS cleanup", () => {
   });
 
   afterEach(() => vi.unstubAllGlobals());
+
+  it("still takes the shared lifetime lease when the boot sweep fails", async () => {
+    const locks = {
+      request: vi.fn(
+        async (_name: string, options: LockOptions, callback: (lock: { name: string } | null) => unknown) =>
+          callback(options.ifAvailable || options.mode === "shared" ? { name: _name } : null),
+      ),
+    };
+    vi.stubGlobal("navigator", { locks });
+    requestBrowserOpfsStorage.mockResolvedValue({ error: { message: "quota exceeded" }, success: false });
+    vi.resetModules();
+    const tab = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    await expect(tab.startBrowserOpfsBootCleanup()).rejects.toThrow("quota exceeded");
+    expect(locks.request).toHaveBeenCalledWith("rom-weaver-opfs-pages", { mode: "shared" }, expect.any(Function));
+  });
+
+  it("makes the boot-cleanup wait cover an in-flight reset sweep without rejecting on its failure", async () => {
+    let release: () => void = () => undefined;
+    requestBrowserOpfsStorage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ error: { message: "quota exceeded" }, success: false });
+        }),
+    );
+    const reset = resetBrowserTransientOpfs();
+    const rejection = expect(reset).rejects.toThrow("quota exceeded");
+    let waited = false;
+    const waiting = waitForBrowserOpfsBootCleanup().then(() => {
+      waited = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(waited).toBe(false);
+    release();
+    await rejection;
+    await waiting;
+    expect(waited).toBe(true);
+  });
 
   it("preserves live-tab outputs and reclaims abandoned storage after the last tab closes", async () => {
     let liveTabs = 0;
