@@ -1093,6 +1093,42 @@ fn parse_ignores_a_leadout_that_disagrees_with_the_volume_or_index_table() {
 }
 
 #[test]
+fn parse_trusts_the_leadout_only_for_packager_discs_with_audio() {
+    let temp = TempDir::new("leadout-writers");
+    let volume_bytes = 32 * SECTOR_BYTES as u64;
+    // (label, tracks, leadout, expected sectors): block_count 3 holds 48 sectors.
+    for (label, tracks, leadout, sectors) in [
+        // PSXPackager: first track at 00:00:00 and audio, A2 is the full BIN.
+        ("packager-audio", vec![(0x41, 0), (0x01, 48)], 48, 48),
+        // pop-fe and popstation: first track at 00:02:01, A2 is not the sector count.
+        ("popfe-audio", vec![(0x41, 151), (0x01, 48)], 34, 32),
+        ("template-audio", vec![(0x41, 151), (0x01, 48)], 48, 32),
+        // Data-only discs are exact from the ISO volume, whatever A2 says.
+        ("packager-data", vec![(0x41, 0)], 40, 32),
+        ("popfe-data", vec![(0x41, 151)], 33, 32),
+    ] {
+        let spec = DiscSpec {
+            tracks: tracks.clone(),
+            sector_count: 32,
+            block_count: 3,
+            ..DiscSpec::single_track()
+        };
+        let mut psar = build_disc_psar(&spec);
+        write_toc(&mut psar, &tracks, leadout);
+        let path = write_fixture(&temp, &format!("{label}.pbp"), &wrap_psar_in_pbp(&psar));
+        let archive = PbpContainerHandler
+            .parse_archive(&path)
+            .unwrap_or_else(|error| panic!("{label} must parse: {error}"));
+        let expected = if sectors == 32 {
+            volume_bytes
+        } else {
+            sectors * SECTOR_BYTES as u64
+        };
+        assert_eq!(archive.discs[0].iso_size, expected, "{label}");
+    }
+}
+
+#[test]
 fn parse_rejects_invalid_leadout_timestamps() {
     let temp = TempDir::new("leadout-invalid");
     for (label, offset, value, message) in [
@@ -1111,6 +1147,7 @@ fn parse_rejects_invalid_leadout_timestamps() {
 fn extract_rejects_a_short_payload_beyond_the_iso_volume() {
     let temp = TempDir::new("leadout-short-payload");
     let spec = DiscSpec {
+        tracks: vec![(0x41, 0), (0x01, 20)],
         block_count: 3,
         ..DiscSpec::single_track()
     };
