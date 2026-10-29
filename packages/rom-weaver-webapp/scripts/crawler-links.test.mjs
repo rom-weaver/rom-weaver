@@ -24,7 +24,8 @@ const page = (links, head = "") =>
 test("maps built files to the clean URL they are served at", () => {
   assert.equal(pageUrlPath("/d", "/d/index.html"), "/");
   assert.equal(pageUrlPath("/d", "/d/apply-patches.html"), "/apply-patches");
-  assert.equal(pageUrlPath("/d", "/d/docs/guide/index.html"), "/docs/guide");
+  assert.equal(pageUrlPath("/d", "/d/docs/guide/index.html"), "/docs/guide/");
+  assert.equal(pageUrlPath("/d", "/d/apply-patches/index.html"), "/apply-patches/");
 });
 
 test("skips external, hash-only, and scheme links", () => {
@@ -84,5 +85,20 @@ test("paths the host redirects are not broken", () => {
         findCrawlerBrokenLinks(dist).map((link) => link.pathname),
         ["/gone"],
       ),
+  );
+});
+
+test("flags a bare slug on a directory-index copy that only its <base> would fix", () => {
+  withDist(
+    {
+      "apply-patches/index.html": page(["compress"], '<base href="../" />'),
+      "compress.html": page([]),
+      "index.html": page([]),
+    },
+    (dist) => {
+      assert.deepEqual(findCrawlerBrokenLinks(dist), [
+        { href: "compress", page: "/apply-patches/", pathname: "/apply-patches/compress" },
+      ]);
+    },
   );
 });

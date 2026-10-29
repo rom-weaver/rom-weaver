@@ -13,11 +13,14 @@ const walkHtml = (dir) =>
     return entry.isFile() && entry.name.endsWith(".html") ? [file] : [];
   });
 
-/** The clean URL path a static host serves a built file at: `a.html` and `a/index.html` are `/a`. */
+/**
+ * The URL a static host serves a built file at. `a.html` is `/a`, but `a/index.html`
+ * is `/a/`: a crawler that ignores `<base href>` resolves its relative links there.
+ */
 export const pageUrlPath = (distDir, file) => {
   const relative = path.relative(distDir, file).split(path.sep).join("/");
-  const route = relative.replace(/(?:^|\/)index\.html$/, "").replace(/\.html$/, "");
-  return `/${route}`;
+  if (/(?:^|\/)index\.html$/.test(relative)) return `/${relative.replace(/index\.html$/, "")}`;
+  return `/${relative.replace(/\.html$/, "")}`;
 };
 
 const safeDecode = (pathname) => {

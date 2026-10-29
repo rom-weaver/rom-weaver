@@ -497,7 +497,7 @@ for (const route of [
 }
 assertIncludes(
   read("create/index.html"),
-  'aria-current="page" aria-label="Create Patch" class="nav-row" href="create-rom-patch" id="tab-creator"',
+  'aria-current="page" aria-label="Create Patch" class="nav-row" href="/create-rom-patch" id="tab-creator"',
   "static-host create prerendered workflow",
 );
 assertIncludes(
@@ -707,7 +707,7 @@ for (const [legacy, canonical] of Object.entries({
 for (const weave of ["weave/index.html", "weave.html"]) {
   assertIncludes(
     read(weave),
-    'aria-current="page" aria-label="Weave Patches" class="nav-row" href="weave-patches" id="tab-weave"',
+    'aria-current="page" aria-label="Weave Patches" class="nav-row" href="/weave-patches" id="tab-weave"',
     `${weave} weave shell`,
   );
   assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/weave-patches"', `${weave} canonical`);

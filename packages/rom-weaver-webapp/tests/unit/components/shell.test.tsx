@@ -314,11 +314,21 @@ describe("Masthead", () => {
     expect(trim.querySelector(".nav-row-label")?.nextElementSibling?.classList.contains("nav-beta")).toBe(true);
   });
 
+  it("roots the What's new link where a bare slug would resolve under the wrong path", () => {
+    for (const currentTab of ["docs", ""]) {
+      const { container, unmount } = render(withSettings(<Masthead {...mastheadProps} currentTab={currentTab} />));
+      fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+      expect(container.querySelector('.menu-sheet a[href="/whats-new"]'), currentTab).not.toBeNull();
+      expect(container.querySelector('.menu-sheet a[href="whats-new"]'), currentTab).toBeNull();
+      unmount();
+    }
+  });
+
   it("keeps every workflow row a real link so a modified click opens it normally", () => {
     const onSelectTab = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
-    const row = container.querySelector('.side-nav .nav-row[href="/whats-new"]') as HTMLAnchorElement;
-    expect(row.getAttribute("href")).toBe("/whats-new");
+    const row = container.querySelector('.side-nav .nav-row[href="whats-new"]') as HTMLAnchorElement;
+    expect(row.getAttribute("href")).toBe("whats-new");
     fireEvent.click(row, { ctrlKey: true });
     expect(onSelectTab).not.toHaveBeenCalled();
     fireEvent.click(row);
