@@ -759,7 +759,7 @@ impl PbpContainerHandler {
             // TOC bytes 3..5 hold file-relative INDEX 01 offsets, but popstation and pop-fe write
             // 00:02:01 for the first data track, so it MUST be forced to the start of the BIN.
             // https://github.com/RupertAvery/PSXPackager/blob/76fc019460dbf550e3ddbc184959f4ed182e36f8/Popstation/CueFileExtensions.cs#L88-L96
-            // https://github.com/RupertAvery/PSXPackager/blob/76fc019460dbf550e3ddbc184959f4ed182e36f8/PSXPackager.Common/Cue/TOCHelper.cs#L94-L99
+            // https://github.com/RupertAvery/PSXPackager/blob/76fc019460dbf550e3ddbc184959f4ed182e36f8/PSXPackager.Common/TOCHelper.cs#L94-L99
             let index01 = if track.track_number == 1 && track.track_type != 0x01 {
                 0
             } else {
