@@ -394,14 +394,14 @@ describe("offline warm-up (service worker side)", () => {
     const warmup = await createSerialWarmup();
     await warmup.setIdentifyGroupWanted("optional-computers", true);
     let progress = await warmup.runNextUnit();
-    expect(progress.unit).toBe("emulatorjs:loader.js");
+    expect(progress.unit).toBe("identify-group:optional-computers");
     expect(progress.ready).toBe(false);
+    progress = await warmup.runNextUnit();
+    expect(progress.unit).toBe("emulatorjs:loader.js");
     progress = await warmup.runNextUnit();
     expect(progress.unit).toBe("emulatorjs:cores/core.wasm");
     progress = await warmup.runNextUnit();
     expect(progress.unit).toBe("emulatorjs:cores/extra.data");
-    progress = await warmup.runNextUnit();
-    expect(progress.unit).toBe("identify-group:optional-computers");
     expect(progress.ready).toBe(true);
     expect(progress.cachedBytes).toBe(progress.totalBytes);
 
@@ -514,15 +514,276 @@ describe("offline warm-up (service worker side)", () => {
     expect(state.ready).toBe(false);
   });
 
-  it("bumps identify groups ahead of emulatorjs files", async () => {
+  it("downloads wanted identify groups before emulatorjs files without a bump", async () => {
     const warmup = await createSerialWarmup();
     await warmup.setIdentifyGroupWanted("optional-computers", true);
-    // Build the queue: the first pump takes the first emulatorjs file.
+    expect((await warmup.runNextUnit()).unit).toBe("identify-group:optional-computers");
+    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:loader.js");
+    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:cores/core.wasm");
+  });
+
+  it("still downloads every emulatorjs file and completes after the identify groups", async () => {
+    const warmup = await createSerialWarmup();
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    const units: Array<string | null> = [];
+    let state = await warmup.runNextUnit();
+    units.push(state.unit);
+    while (!state.ready) {
+      state = await warmup.runNextUnit();
+      units.push(state.unit);
+    }
+    const firstEmulator = units.findIndex((unit) => unit?.startsWith("emulatorjs:"));
+    const lastIdentify = units.map((unit) => unit?.startsWith("identify-group:")).lastIndexOf(true);
+    expect(lastIdentify).toBeGreaterThanOrEqual(0);
+    expect(lastIdentify).toBeLessThan(firstEmulator);
+    expect(units.filter((unit) => unit?.startsWith("emulatorjs:"))).toEqual([
+      "emulatorjs:loader.js",
+      "emulatorjs:cores/core.wasm",
+      "emulatorjs:cores/extra.data",
+    ]);
+  });
+
+  it("keeps downloading emulatorjs files while a wanted identify pack keeps failing", async () => {
+    const fetcher = createFetcher();
+    const base = fetcher.getMockImplementation();
+    fetcher.mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("identify-computers.pack")) return new Response("tampered-bytes");
+      return base ? base(input) : new Response("missing", { status: 404 });
+    });
+    const warmup = await createSerialWarmup(fetcher);
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    const units: Array<string | null> = [];
+    let failures = 0;
+    for (let pump = 0; pump < 8; pump += 1) {
+      try {
+        units.push((await warmup.runNextUnit()).unit);
+      } catch {
+        failures += 1;
+      }
+    }
+    expect(failures).toBeGreaterThan(0);
+    for (const unit of ["emulatorjs:loader.js", "emulatorjs:cores/core.wasm", "emulatorjs:cores/extra.data"]) {
+      expect(units).toContain(unit);
+    }
+    const cached = (await warmup.getCachedFiles()).map((file) => new URL(file.url).pathname);
+    expect(cached.filter((path) => path.includes("emulatorjs/data/"))).toHaveLength(manifest.files.length);
+    expect((await warmup.getReadyState()).ready).toBe(false);
+  });
+
+  it("installs a deferred identify group once its pack recovers", async () => {
+    let broken = true;
+    const fetcher = createFetcher();
+    const base = fetcher.getMockImplementation();
+    fetcher.mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("identify-computers.pack")) {
+        return broken ? new Response("server error", { status: 500 }) : new Response(PACK_BODY);
+      }
+      return base ? base(input) : new Response("missing", { status: 404 });
+    });
+    const warmup = await createSerialWarmup(fetcher);
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    await expect(warmup.runNextUnit()).rejects.toThrow();
+    for (let pump = 0; pump < 3; pump += 1) await warmup.runNextUnit();
+    expect((await warmup.getReadyState()).ready).toBe(false);
+    broken = false;
+    let state = await warmup.runNextUnit();
+    expect(state.unit).toBe("identify-group:optional-computers");
+    for (let pump = 0; pump < 4 && !state.ready; pump += 1) state = await warmup.runNextUnit();
+    expect(state.ready).toBe(true);
+  });
+
+  it("caches the rest of a group's packs when one pack fails", async () => {
+    const digest = await sha256Hex(PACK_BODY);
+    const packNames = ["identify-a.pack", "identify-b.pack", "identify-c.pack"];
+    const group = {
+      id: "optional-computers",
+      label: "Computers",
+      packs: packNames.map((name) => ({
+        sha256: digest,
+        sizeBytes: PACK_BODY.length,
+        url: `assets/${name}?sha256=${digest}`,
+      })),
+    };
+    let broken = true;
+    const fetcher = createFetcher();
+    const base = fetcher.getMockImplementation();
+    fetcher.mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("identify-b.pack") && broken) return new Response("missing", { status: 404 });
+      if (packNames.some((name) => url.includes(name))) return new Response(PACK_BODY);
+      return base ? base(input) : new Response("missing", { status: 404 });
+    });
+    const warmup = await createWarmup(fetcher, { emulatorJsBatchSize: 1, identifyOptionalGroups: [group] });
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    await expect(warmup.runNextUnit()).rejects.toThrow();
+    const cachedPacks = async () =>
+      (await warmup.getCachedFiles())
+        .map((file) => new URL(file.url).pathname)
+        .filter((path) => path.endsWith(".pack"))
+        .sort();
+    expect(await cachedPacks()).toEqual(["/assets/identify-a.pack", "/assets/identify-c.pack"]);
+    expect((await warmup.getIdentifyGroupState())[0]).toMatchObject({ id: "optional-computers", installed: false });
+    for (let pump = 0; pump < 3; pump += 1) await warmup.runNextUnit();
+    broken = false;
+    const before = fetchedUrls(fetcher).length;
+    let state = await warmup.runNextUnit();
+    expect(state.unit).toBe("identify-group:optional-computers");
+    // Only the missing pack is fetched again.
+    expect(
+      fetchedUrls(fetcher)
+        .slice(before)
+        .filter((url) => url.endsWith(`?sha256=${digest}`)),
+    ).toEqual([expect.stringContaining("identify-b.pack")]);
+    for (let pump = 0; pump < 4 && !state.ready; pump += 1) state = await warmup.runNextUnit();
+    expect(state.ready).toBe(true);
+    expect(await cachedPacks()).toHaveLength(3);
+  });
+
+  const buildManyPackGroup = async (count: number) => {
+    const digest = await sha256Hex(PACK_BODY);
+    const names = Array.from({ length: count }, (_, index) => `identify-${index}.pack`);
+    const group = {
+      id: "optional-computers",
+      label: "Computers",
+      packs: names.map((name) => ({
+        sha256: digest,
+        sizeBytes: PACK_BODY.length,
+        url: `assets/${name}?sha256=${digest}`,
+      })),
+    };
+    const fetcher = createFetcher();
+    const base = fetcher.getMockImplementation();
+    return {
+      digest,
+      fetcher,
+      group,
+      names,
+      setPackBody: (body: (url: string) => Response) =>
+        fetcher.mockImplementation(async (input) => {
+          const url = typeof input === "string" ? input : input.url;
+          if (names.some((name) => url.includes(name))) return body(url);
+          return base ? base(input) : new Response("missing", { status: 404 });
+        }),
+    };
+  };
+  const packFetches = (fetcher: ReturnType<typeof createFetcher>) =>
+    fetchedUrls(fetcher).filter((url) => url.includes(".pack"));
+
+  it("stops a group install at the first storage error", async () => {
+    const { fetcher, group, setPackBody } = await buildManyPackGroup(10);
+    setPackBody(() => new Response(PACK_BODY));
+    const warmup = await createWarmup(fetcher, { emulatorJsBatchSize: 1, identifyOptionalGroups: [group] });
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    const cache = (await cacheStorage.open(IDENTIFY_CACHE)) as unknown as {
+      put: (...args: unknown[]) => Promise<void>;
+    };
+    const put = cache.put.bind(cache);
+    cache.put = async (request, response) => {
+      if (String((request as Request).url ?? request).includes(".pack")) {
+        throw new DOMException("full", "QuotaExceededError");
+      }
+      return put(request, response as Response);
+    };
+    await expect(warmup.runNextUnit()).rejects.toThrow("full");
+    expect(packFetches(fetcher)).toHaveLength(1);
+    expect((await warmup.getIdentifyGroupState())[0]).toMatchObject({ installed: false });
+  });
+
+  it("stops a group install after three pack verification failures", async () => {
+    const { fetcher, group, setPackBody } = await buildManyPackGroup(6);
+    setPackBody(() => new Response("wrong-bytes"));
+    const warmup = await createWarmup(fetcher, { emulatorJsBatchSize: 1, identifyOptionalGroups: [group] });
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    await expect(warmup.runNextUnit()).rejects.toThrow();
+    expect(packFetches(fetcher)).toHaveLength(3);
+    expect((await warmup.getIdentifyGroupState())[0]).toMatchObject({ installed: false });
+  });
+
+  it("tries packs that failed last time after the rest of the group", async () => {
+    const { fetcher, group, names, setPackBody } = await buildManyPackGroup(6);
+    const broken = names.slice(0, 3);
+    setPackBody((url) =>
+      broken.some((name) => url.includes(name)) ? new Response("missing", { status: 404 }) : new Response(PACK_BODY),
+    );
+    const warmup = await createWarmup(fetcher, { identifyOptionalGroups: [group] });
+    await expect(warmup.installIdentifyGroup("optional-computers")).rejects.toThrow();
+    await expect(warmup.installIdentifyGroup("optional-computers")).rejects.toThrow();
+    const cachedPacks = (await warmup.getCachedFiles())
+      .map((file) => new URL(file.url).pathname)
+      .filter((path) => path.endsWith(".pack"))
+      .sort();
+    expect(cachedPacks).toEqual(["/assets/identify-3.pack", "/assets/identify-4.pack", "/assets/identify-5.pack"]);
+  });
+
+  it("caches the rest of an EmulatorJS batch when one file fails and moves it behind the queue", async () => {
+    let broken = true;
+    const fetcher = createFetcher();
+    const base = fetcher.getMockImplementation();
+    fetcher.mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (broken && url.includes("emulatorjs/data/loader.js")) return new Response("missing", { status: 404 });
+      return base ? base(input) : new Response("missing", { status: 404 });
+    });
+    const warmup = await createWarmup(fetcher, { emulatorJsBatchSize: 2 });
+    await expect(warmup.runNextUnit()).rejects.toThrow();
+    const cached = (await warmup.getCachedFiles()).map((file) => new URL(file.url).pathname);
+    expect(cached).toContain("/emulatorjs/data/cores/core.wasm");
+    expect(cached).not.toContain("/emulatorjs/data/loader.js");
+    // The failed file now trails the remaining queue, so the next batch is the last file plus the retry.
+    broken = false;
+    const before = fetchedUrls(fetcher).length;
+    const state = await warmup.runNextUnit();
+    expect(state.unit).toBe("emulatorjs:cores/extra.data");
+    expect(fetchedUrls(fetcher).slice(before)).toEqual([
+      expect.stringContaining("cores/extra.data"),
+      expect.stringContaining("loader.js"),
+    ]);
+  });
+
+  it("rejects installIdentifyGroup for a partly failed group without marking or wanting it", async () => {
+    const { fetcher, group, names, setPackBody } = await buildManyPackGroup(3);
+    setPackBody((url) =>
+      url.includes(names[1] as string) ? new Response("missing", { status: 404 }) : new Response(PACK_BODY),
+    );
+    const warmup = await createWarmup(fetcher, { identifyOptionalGroups: [group] });
+    await expect(warmup.installIdentifyGroup("optional-computers")).rejects.toThrow();
+    const cachedPacks = (await warmup.getCachedFiles())
+      .map((file) => new URL(file.url).pathname)
+      .filter((path) => path.endsWith(".pack"))
+      .sort();
+    expect(cachedPacks).toEqual(["/assets/identify-0.pack", "/assets/identify-2.pack"]);
+    expect((await warmup.getIdentifyGroupState())[0]).toMatchObject({ installed: false, wanted: false });
+  });
+
+  it("bumps emulatorjs files ahead of identify groups", async () => {
+    const warmup = await createSerialWarmup();
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    // A bump before the queue exists builds it first, then reorders; let that settle.
+    warmup.bumpPriority({ kind: "emulatorjs" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:loader.js");
+    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:cores/core.wasm");
+  });
+
+  it("bumps identify groups back to the front after an emulatorjs bump", async () => {
+    const warmup = await createSerialWarmup();
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    warmup.bumpPriority({ kind: "emulatorjs" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:loader.js");
     warmup.bumpPriority({ groupIds: ["optional-computers"], kind: "identify-groups" });
-    // Without the bump the next unit would be emulatorjs:cores/core.wasm.
     expect((await warmup.runNextUnit()).unit).toBe("identify-group:optional-computers");
     expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:cores/core.wasm");
+  });
+
+  it("keeps identify-before-emulatorjs order when the queue is rebuilt after a restart", async () => {
+    const warmup = await createSerialWarmup();
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    warmup.reset();
+    expect((await warmup.runNextUnit()).unit).toBe("identify-group:optional-computers");
+    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:loader.js");
   });
 
   it("reports fast chunks while cache reads are blocked", async () => {
@@ -592,8 +853,8 @@ describe("offline warm-up (service worker side)", () => {
     });
     // At least the immediate start event fires, naming the unit before bytes land.
     expect(interims.length).toBeGreaterThan(0);
-    expect(interims[0]).toMatchObject({ detail: { kind: "emulatorjs", name: "loader.js" } });
-    expect(progress.detail).toEqual({ kind: "emulatorjs", name: "loader.js" });
+    expect(interims[0]).toMatchObject({ detail: { kind: "identify-group", name: "Computers" } });
+    expect(progress.detail).toEqual({ kind: "identify-group", name: "Computers" });
     expect(progress.unitLoadedBytes).toBeNull();
     expect(progress.cachedFiles).toBe(1);
     expect(progress.totalFiles).toBe(4);
@@ -608,8 +869,6 @@ describe("offline warm-up (service worker side)", () => {
     // bytes sit in both the baseline and the per-unit credit, and the interim
     // counter must still never exceed what is really cached.
     await warmup.serveOptionalIdentifyPack(new Request(packUrl));
-    // Build the queue: the first pump takes the first emulatorjs file.
-    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:loader.js");
     warmup.bumpPriority({ groupIds: ["optional-computers"], kind: "identify-groups" });
     const interimCachedBytes: number[] = [];
     const progress = await warmup.runNextUnit((interim) => {
@@ -620,7 +879,7 @@ describe("offline warm-up (service worker side)", () => {
     for (const cachedBytes of interimCachedBytes) {
       expect(cachedBytes).toBeLessThanOrEqual(progress.cachedBytes);
     }
-    expect(progress.cachedBytes).toBe(3 + PACK_BODY.length);
+    expect(progress.cachedBytes).toBe(PACK_BODY.length);
   });
 
   it("counts a partially cached group's packs without its marker", async () => {

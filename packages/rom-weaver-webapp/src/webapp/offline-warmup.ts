@@ -139,6 +139,9 @@ type OfflineWarmup = {
 // Download small EmulatorJS files in one pump. Identify groups stay sequential
 // because their installer limits itself to one pack connection at a time.
 const EMULATORJS_BATCH_SIZE = 6;
+// A group install stops after this many failed packs, so a systemic failure (every pack rejected)
+// does not re-download the whole group on each retry.
+const MAX_GROUP_PACK_FAILURES = 3;
 
 const EMULATORJS_COMPLETE_MARKER_PATH = "/__rom-weaver-emulatorjs-complete__";
 
@@ -264,6 +267,9 @@ const createOfflineWarmup = ({
   let queuePromise: Promise<WarmupUnit[]> | null = null;
   let queueGeneration = 0;
   const transferSizes = createCachedTransferSizeReader();
+  // Packs that failed this worker's last attempt go last, so failures that persist cannot use up a
+  // group attempt's failure budget before the packs behind them are tried.
+  const failedPackUrls = new Set<string>();
 
   const loadEmulatorJsManifest = (): Promise<EmulatorJsManifest> => {
     if (!manifestPromise) {
@@ -398,6 +404,11 @@ const createOfflineWarmup = ({
       isEmulatorJsComplete(emulatorJsCache),
       Promise.all(identifyOptionalGroups.map((group) => isGroupInstalled(identifyCache, group))),
     ]);
+    // Identify data serves file drops, so it goes before the emulator files; both still download automatically.
+    const wanted = await readWantedGroupIds(identifyCache, installedGroups);
+    for (const [index, group] of identifyOptionalGroups.entries()) {
+      if (!installedGroups[index] && isGroupWanted(group, wanted)) units.push({ kind: "identify-group", group });
+    }
     if (!emulatorJsReady) {
       const [manifest, cachedUrls] = await Promise.all([loadEmulatorJsManifest(), cachedRequestUrls(emulatorJsCache)]);
       for (const file of manifest.files) {
@@ -406,10 +417,6 @@ const createOfflineWarmup = ({
         }
       }
       // Runtime requests can cache every file before this marker exists. An empty pump writes the marker.
-    }
-    const wanted = await readWantedGroupIds(identifyCache, installedGroups);
-    for (const [index, group] of identifyOptionalGroups.entries()) {
-      if (!installedGroups[index] && isGroupWanted(group, wanted)) units.push({ kind: "identify-group", group });
     }
     return units;
   };
@@ -584,8 +591,16 @@ const createOfflineWarmup = ({
     const group = identifyOptionalGroups.find((candidate) => candidate.id === groupId);
     if (!group) throw new Error(`Unknown ROM identify pack group: ${groupId}`);
     const cache = await caches.open(identifyOptionalCacheName);
+    // One failed pack must not keep the rest of the group from downloading. The group still fails
+    // after the loop, so it is not marked installed and retries only the packs it is missing. A
+    // storage error is systemic (quota, cache failure), so it throws at once instead.
+    let firstFailure: { error: unknown } | undefined;
+    let failedPacks = 0;
+    const packs = [...group.packs].sort(
+      (left, right) => Number(failedPackUrls.has(left.url)) - Number(failedPackUrls.has(right.url)),
+    );
     // Group installs MUST stay sequential so a low-priority warmup does not open one connection per pack.
-    for (const pack of group.packs) {
+    for (const pack of packs) {
       if (policy && (generation !== policy.token() || !(await policy.isEnabled()))) return null;
       if (await cache.match(new URL(pack.url, scope).href)) {
         // Credit cached packs so a resumed group reports continuous progress.
@@ -594,7 +609,26 @@ const createOfflineWarmup = ({
         continue;
       }
       if (policy && (generation !== policy.token() || !(await policy.isEnabled()))) return null;
-      const { request, response } = await fetchVerifiedPack(pack, scope, fetcher, onBytes, log);
+      let verified: Awaited<ReturnType<typeof fetchVerifiedPack>>;
+      try {
+        verified = await fetchVerifiedPack(pack, scope, fetcher, onBytes, log);
+      } catch (error) {
+        log("identify pack failed", {
+          error: error instanceof Error ? error.message : String(error),
+          group: group.id,
+          url: pack.url,
+        });
+        failedPackUrls.add(pack.url);
+        firstFailure ??= { error };
+        failedPacks += 1;
+        if (failedPacks >= MAX_GROUP_PACK_FAILURES) {
+          log("identify group install stopped after repeated pack failures", { failedPacks, group: group.id });
+          break;
+        }
+        continue;
+      }
+      failedPackUrls.delete(pack.url);
+      const { request, response } = verified;
       const stored = policy
         ? await policy.write(() => cacheWithDownloadLog(cache, request, response, log), generation)
         : (await cacheWithDownloadLog(cache, request, response, log), true);
@@ -602,6 +636,7 @@ const createOfflineWarmup = ({
       transferSizes.forget(request.url);
       onCached?.();
     }
+    if (firstFailure) throw firstFailure.error;
     const marked = policy
       ? await policy.write(
           () => cache.put(optionalGroupMarkerUrl(scope, group.id), new Response(optionalGroupRevision(group))),
@@ -747,6 +782,18 @@ const createOfflineWarmup = ({
     return batch.sort((left, right) => unitBytes(right) - unitBytes(left));
   };
 
+  /** Move failed units behind the rest of the live queue so the next pump tries another unit.
+   * Match by identity in the live queue: a priority bump or group toggle can replace or reorder it mid-pump. */
+  const deferFailedUnits = (failed: WarmupUnit[]) => {
+    if (!queue || failed.length === 0) return;
+    const deferred = queue.filter((unit) => failed.includes(unit));
+    if (deferred.length === 0) return;
+    queue = [...queue.filter((unit) => !failed.includes(unit)), ...deferred];
+    log("warm-up unit failed; deferred behind the rest of the queue", {
+      units: deferred.map((unit) => unitLabel(unit)),
+    });
+  };
+
   // Pumps MUST run serially. Concurrent clients can take the same head unit and discard work when one removes it.
   let pumpChain: Promise<unknown> = Promise.resolve();
 
@@ -824,19 +871,28 @@ const createOfflineWarmup = ({
       void progress.update();
     }
     // Remove completed files by identity because a priority bump can replace or reorder the live queue.
+    const failedUnits: WarmupUnit[] = [];
     try {
-      await Promise.all(
+      const results = await Promise.allSettled(
         batch.map(async (batchUnit) => {
-          if (batchUnit.kind === "emulatorjs-file") {
-            const stored = await downloadEmulatorJsFile(batchUnit, onBytes);
-            onCached?.();
-            if (stored && queue) queue = queue.filter((candidate) => candidate !== batchUnit);
-          } else {
-            await installGroupWith(fetchForWarmup, batchUnit.group.id, onBytes, onCached);
+          try {
+            if (batchUnit.kind === "emulatorjs-file") {
+              const stored = await downloadEmulatorJsFile(batchUnit, onBytes);
+              onCached?.();
+              if (stored && queue) queue = queue.filter((candidate) => candidate !== batchUnit);
+            } else {
+              await installGroupWith(fetchForWarmup, batchUnit.group.id, onBytes, onCached);
+            }
+          } catch (error) {
+            failedUnits.push(batchUnit);
+            throw error;
           }
         }),
       );
+      const failure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+      if (failure) throw failure.reason;
     } finally {
+      deferFailedUnits(failedUnits);
       await flushInterims();
     }
     if (batch.some((batchUnit) => batchUnit.kind === "emulatorjs-file")) await finishEmulatorJsIfComplete();
@@ -935,6 +991,7 @@ const createOfflineWarmup = ({
     queuePromise = null;
     manifestPromise = null;
     transferSizes.clear();
+    failedPackUrls.clear();
   };
 
   return {
