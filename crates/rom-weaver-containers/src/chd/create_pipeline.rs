@@ -357,8 +357,7 @@ impl ChdContainerHandler {
         let (min, max) = match codec {
             ChdCodec::ZLIB | ChdCodec::CD_ZLIB => (Self::ZLIB_LEVEL_MIN, Self::ZLIB_LEVEL_MAX),
             ChdCodec::LZMA | ChdCodec::CD_LZMA => (Self::LZMA_LEVEL_MIN, Self::LZMA_LEVEL_MAX),
-            // `--level 9` stays accepted for FLAC and compresses like libFLAC's top level, 8.
-            ChdCodec::FLAC | ChdCodec::CD_FLAC => (Self::FLAC_LEVEL_MIN, 8),
+            ChdCodec::FLAC | ChdCodec::CD_FLAC => (Self::FLAC_LEVEL_MIN, Self::FLAC_LEVEL_MAX),
             ChdCodec::ZSTD | ChdCodec::CD_ZSTD => (
                 zstd::zstd_safe::min_c_level(),
                 zstd::zstd_safe::max_c_level(),

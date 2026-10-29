@@ -25,7 +25,7 @@ impl ChdContainerHandler {
     pub(super) const LZMA_LEVEL_MIN: i32 = 0;
     pub(super) const LZMA_LEVEL_MAX: i32 = 9;
     pub(super) const FLAC_LEVEL_MIN: i32 = 0;
-    pub(super) const FLAC_LEVEL_MAX: i32 = 9;
+    pub(super) const FLAC_LEVEL_MAX: i32 = 8;
     pub(super) const SUPPORTED_CODEC_CLAUSE: &str = "supported codecs are store, zlib, zstd, lzma, huff (alias: huffman), flac, cdlz, cdzl, cdzs, cdfl, and avhuff (alias: avhu)";
 
     pub(super) fn progress_bytes_callback(
