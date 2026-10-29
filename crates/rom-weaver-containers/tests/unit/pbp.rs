@@ -882,9 +882,9 @@ fn a_blank_disc_id_header_probes_as_unknown() {
 #[test]
 fn extract_writes_an_index_00_for_audio_tracks() {
     for (audio_start, index00, index01) in [
-        (214, "00:00:64", "00:02:64"),
-        (150, "00:00:00", "00:02:00"),
-        (30, "00:00:00", "00:00:30"),
+        (214, Some("00:00:64"), "00:02:64"),
+        (150, Some("00:00:00"), "00:02:00"),
+        (30, None, "00:00:30"),
     ] {
         let temp = TempDir::new("extract-audio");
         let spec = DiscSpec {
@@ -903,10 +903,11 @@ fn extract_writes_an_index_00_for_audio_tracks() {
             .expect("extract the audio-track fixture");
 
         let cue = fs::read_to_string(out_dir.join("game.cue")).expect("read cue sheet");
+        let index00 = index00.map_or_else(String::new, |value| format!("    INDEX 00 {value}\n"));
         assert_eq!(
             cue,
             format!(
-                "FILE \"game.bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    INDEX 00 {index00}\n    INDEX 01 {index01}\n"
+                "FILE \"game.bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n{index00}    INDEX 01 {index01}\n"
             )
         );
         assert_eq!(
@@ -914,6 +915,30 @@ fn extract_writes_an_index_00_for_audio_tracks() {
             expected_bin
         );
     }
+}
+
+#[test]
+fn extract_forces_the_first_data_track_to_the_start_of_the_bin() {
+    // popstation and pop-fe write 00:02:01 in the first data track's INDEX 01 bytes.
+    let temp = TempDir::new("extract-popstation-toc");
+    let mut bytes = single_disc_pbp(&DiscSpec::single_track());
+    let entry = PSAR_FILE_OFFSET + TOC_OFFSET + 30;
+    bytes[entry + 3] = encode_bcd(0);
+    bytes[entry + 4] = encode_bcd(2);
+    bytes[entry + 5] = encode_bcd(1);
+    let source = write_fixture(&temp, "game.pbp", &bytes);
+    let out_dir = temp.join("out");
+    PbpContainerHandler
+        .extract(
+            &extract_request(&source, &out_dir),
+            &test_context(temp.path()),
+        )
+        .expect("extract a popstation-style TOC");
+    let cue = fs::read_to_string(out_dir.join("game.cue")).expect("read cue sheet");
+    assert_eq!(
+        cue,
+        "FILE \"game.bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n"
+    );
 }
 
 #[test]
@@ -1027,7 +1052,7 @@ fn multi_disc_extract_without_selections_writes_every_pair() {
         let cue =
             fs::read_to_string(out_dir.join(format!("game.{disc}.cue"))).expect("read disc cue");
         let audio = if disc == "disc02" {
-            "  TRACK 02 AUDIO\n    INDEX 00 00:00:00\n    INDEX 01 00:00:30\n"
+            "  TRACK 02 AUDIO\n    INDEX 01 00:00:30\n"
         } else {
             ""
         };
