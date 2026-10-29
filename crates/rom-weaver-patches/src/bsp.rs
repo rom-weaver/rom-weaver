@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{fs, io, path::Path};
 #[cfg(test)]
 use std::{
     path::PathBuf,
@@ -68,34 +68,36 @@ impl BspPatchHandler {
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        // The BSP VM edits in place, so seed and patch the final output to avoid
-        // an extra OPFS copy. Skip seeding when input == output to prevent
-        // truncation; otherwise remove partial output on failure.
-        let in_place = request.input == request.output;
+        let target_path = &request.output;
+        let staged_path = match fs::symlink_metadata(target_path) {
+            Ok(_) => Some(context.temp_paths().next_path("bsp-output", Some("bin"))),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => return Err(RomWeaverError::Io(error)),
+        };
+        let output_path = staged_path.as_deref().unwrap_or(target_path);
         trace!(
             format = self.descriptor.name,
-            in_place, "bsp apply output seeding decision"
+            output = %output_path.display(), "bsp apply output seeding decision"
         );
-        if !in_place {
-            drop(crate::copy_input_to_output(
-                &request.input,
-                &request.output,
-            )?);
-        }
-        let apply_result = apply_bsp_patch_path(
-            patch_path,
-            &request.output,
-            execution.used_parallelism.then_some(&pool),
-        );
-        let written = match apply_result {
-            Ok(written) => written,
-            Err(error) => {
-                if !in_place {
-                    let _ = fs::remove_file(&request.output);
-                }
-                return Err(error);
+        let apply_result = (|| -> Result<u64> {
+            if let Some(parent) = output_path.parent() {
+                fs::create_dir_all(parent)?;
             }
-        };
+            drop(crate::copy_input_to_output(&request.input, output_path)?);
+            let written = apply_bsp_patch_path(
+                patch_path,
+                output_path,
+                execution.used_parallelism.then_some(&pool),
+            )?;
+            if staged_path.is_some() {
+                drop(crate::copy_input_to_output(output_path, target_path)?);
+            }
+            Ok(written)
+        })();
+        if staged_path.is_some() || apply_result.is_err() {
+            let _ = fs::remove_file(output_path);
+        }
+        let written = apply_result?;
         Ok(crate::patch_success_report(
             self.descriptor,
             "apply",

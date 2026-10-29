@@ -136,6 +136,51 @@ fn forced_patch_apply_publishes_verified_raw_output() {
 }
 
 #[test]
+fn malformed_bsp_apply_preserves_existing_output() {
+    let temp = setup_temp_dir();
+    let input = temp.child("source.bin");
+    let patch = temp.child("bad.bsp");
+    let output = temp.child("output.bin");
+    fs::write(input.path(), b"abc").unwrap();
+    let mut lost = Vec::new();
+    for bytes in [
+        vec![],
+        vec![0x06],
+        vec![0xc0],
+        vec![0x18, 0x5a, 0xc0],
+        vec![0x06, 1, 0, 0, 0],
+    ] {
+        fs::write(patch.path(), &bytes).unwrap();
+        for force in [false, true] {
+            fs::write(output.path(), b"SENTINEL").unwrap();
+            let mut args = vec![
+                "patch",
+                "apply",
+                "--input",
+                input.path().to_str().unwrap(),
+                "--patch",
+                patch.path().to_str().unwrap(),
+                "--output",
+                output.path().to_str().unwrap(),
+                "--no-compress",
+                "--jsonl",
+            ];
+            if force {
+                args.push("--force");
+            }
+            let event = run_output_preservation_event(&temp, &args, 1);
+            assert_eq!(event["status"], "failed", "{event}");
+            assert_eq!(event["error_kind"], "validation", "{event}");
+            if fs::read(output.path()).ok().as_deref() != Some(b"SENTINEL") {
+                lost.push((bytes.clone(), force));
+            }
+            assert_eq!(fs::read(input.path()).unwrap(), b"abc");
+        }
+    }
+    assert!(lost.is_empty(), "existing BSP output lost: {lost:?}");
+}
+
+#[test]
 fn patch_create_rejects_input_output_aliases_with_force() {
     let temp = setup_temp_dir();
     let original = temp.child("original.bin");
