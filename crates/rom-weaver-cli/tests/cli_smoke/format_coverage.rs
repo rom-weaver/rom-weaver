@@ -1,9 +1,10 @@
 // Registry-driven coverage gate plus end-to-end extract tests for formats that had no
 // content-verified CLI test.
 //
-// The gate reads `formats --json` and fails when a registered container or patch format has
-// neither a named test below nor an explicit, reasoned entry in the gap lists. Every named test
-// must exist in the test sources, so renaming or deleting one breaks the gate.
+// The gate reads `formats --json` and fails when a registered container or patch format has no
+// entry in the coverage tables below. Every named test must exist in the test sources, so
+// renaming or deleting one breaks the gate. The gate checks that a test exists, not what it
+// asserts; `nfs`, `cso` and `tgc` point at container-crate unit tests, not a CLI extract.
 
 use super::shared::*;
 use serde_json::Value;
@@ -29,8 +30,8 @@ fn find_file(root: &Path, name: &str) -> Option<PathBuf> {
     None
 }
 
-fn extract_to(source: &Path, out_dir: &Path) {
-    command_stdout(
+fn extract_to(source: &Path, out_dir: &Path) -> Value {
+    let output = command_stdout(
         &[
             "extract",
             "--no-ignore",
@@ -42,6 +43,7 @@ fn extract_to(source: &Path, out_dir: &Path) {
         ],
         0,
     );
+    parse_json_lines(&output).pop().expect("terminal event")
 }
 
 /// Extract-only container formats: each fixture was produced by the reference tool for the
@@ -67,7 +69,11 @@ fn extract_only_formats_extract_reference_tool_fixtures_byte_exact() {
         let source = temp.child(fixture);
         fs::copy(extract_only_fixture(fixture), source.path()).expect("copy fixture");
         let out_dir = temp.child("extract");
-        extract_to(source.path(), out_dir.path());
+        let terminal = extract_to(source.path(), out_dir.path());
+        assert_eq!(
+            terminal["format"], *format,
+            "{format}: a sibling handler took {fixture}"
+        );
         let extracted = find_file(out_dir.path(), "payload.txt")
             .unwrap_or_else(|| panic!("{format}: no payload.txt extracted from {fixture}"));
         assert_eq!(
@@ -76,22 +82,6 @@ fn extract_only_formats_extract_reference_tool_fixtures_byte_exact() {
             "{format}: extracted bytes differ from the {fixture} source"
         );
     }
-}
-
-#[test]
-fn rar_extract_restores_the_member_that_unrar_lists() {
-    // `unrar p version.rar VERSION` prints these bytes.
-    let temp = setup_temp_dir();
-    let source = temp.child("version.rar");
-    fs::copy(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/rar/version.rar"),
-        source.path(),
-    )
-    .expect("copy fixture");
-    let out_dir = temp.child("extract");
-    extract_to(source.path(), out_dir.path());
-    let version = find_file(out_dir.path(), "VERSION").expect("VERSION extracted");
-    assert_eq!(fs::read(version).expect("VERSION"), b"unrar-0.4.0");
 }
 
 #[test]
@@ -113,7 +103,6 @@ fn xiso_extract_yields_the_source_image_byte_exact() {
 const TEST_SOURCES: &[&str] = &[
     include_str!("compress.rs"),
     include_str!("format_coverage.rs"),
-    include_str!("ingest.rs"),
     include_str!("patch.rs"),
     include_str!("pbp.rs"),
     include_str!("probe_extract.rs"),
@@ -122,6 +111,7 @@ const TEST_SOURCES: &[&str] = &[
     include_str!("chd.rs"),
     include_str!("../../../rom-weaver-containers/tests/unit/handlers.rs"),
     include_str!("../../../rom-weaver-containers/tests/unit/nod_tgc.rs"),
+    include_str!("../../../rom-weaver-containers/tests/unit/nod_nfs.rs"),
 ];
 
 fn test_exists(name: &str) -> bool {
@@ -134,7 +124,7 @@ fn test_exists(name: &str) -> bool {
 }
 
 /// Container formats: the named test extracts (and for creatable formats, compresses) real data
-/// and compares bytes. `tgc` and `cso` are covered by the container-crate unit tests only.
+/// and compares bytes. `nfs`, `tgc` and `cso` are covered by the container-crate unit tests only.
 const CONTAINER_EXTRACT: &[(&str, &str)] = &[
     ("zip", "archive_container_formats_round_trip"),
     ("7z", "archive_container_formats_round_trip"),
@@ -142,7 +132,7 @@ const CONTAINER_EXTRACT: &[(&str, &str)] = &[
         "zipx",
         "extract_only_formats_extract_reference_tool_fixtures_byte_exact",
     ),
-    ("rar", "rar_extract_restores_the_member_that_unrar_lists"),
+    ("rar", "extract_rar_reports_thread_fallback_in_json"),
     (
         "tar",
         "extract_only_formats_extract_reference_tool_fixtures_byte_exact",
@@ -189,7 +179,10 @@ const CONTAINER_EXTRACT: &[(&str, &str)] = &[
         "tgc",
         "block_reader_rebuilds_the_original_gcm_byte_for_byte",
     ),
-    ("nfs", "extract_keeps_raw_files_of_a_keyless_nfs_archive"),
+    (
+        "nfs",
+        "read_block_decrypts_mapped_sectors_and_zeroes_unmapped_ones",
+    ),
     ("wbfs", "split_wbfs_sets_extract_byte_exactly"),
     ("rvz", "rvz_compress_and_extract_round_trips"),
     ("z3ds", "z3ds_compress_probe_and_extract_round_trip"),
