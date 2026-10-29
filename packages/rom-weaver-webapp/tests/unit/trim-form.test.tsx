@@ -104,6 +104,9 @@ const renderForm = (props: Record<string, unknown> = {}) =>
     </RomWeaverSettingsProvider>,
   );
 
+// The form builds its workflow after an async import, so the run button can render before it exists.
+const waitForWorkflow = () => vi.waitFor(() => expect(latest).not.toBeNull());
+
 beforeEach(() => {
   window.history.replaceState(null, "", "/trim-rom");
   latest = null;
@@ -125,6 +128,7 @@ describe("TrimPatchForm", () => {
     const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
     const { container } = renderForm({ pageDrop: { files: [file], id: 1 } });
     await vi.waitFor(() => expect(container.querySelector("#trim-builder-button-run")).toBeTruthy());
+    await waitForWorkflow();
     expect(container.textContent).not.toContain("Trim Example (USA)");
     await act(async () => {
       ((latest as NonNullable<typeof latest>).workflow as unknown as { reidentify: () => void }).reidentify();
@@ -143,6 +147,7 @@ describe("TrimPatchForm", () => {
     const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
     const { container } = renderForm({ pageDrop: { files: [file], id: 1 } });
     await vi.waitFor(() => expect(container.querySelector("#trim-builder-button-run")).toBeTruthy());
+    await waitForWorkflow();
     expect(container.textContent).toContain("Trim Example (USA)");
     expect(container.textContent).toContain("BYTES 128");
     await act(async () => {
@@ -158,6 +163,7 @@ describe("TrimPatchForm", () => {
     const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
     const { container } = renderForm({ pageDrop: { files: [file], id: 1 } });
     await vi.waitFor(() => expect(container.querySelector("#trim-builder-button-run")).toBeTruthy());
+    await waitForWorkflow();
     const nameField = () => container.querySelector("#trim-builder-output-file") as HTMLInputElement;
     const before = nameField().value;
     expect(before).not.toContain("Trim Example (USA)");
@@ -228,6 +234,7 @@ describe("TrimPatchForm", () => {
       fireEvent.change(input);
     });
     await vi.waitFor(() => expect(container.querySelector("#trim-builder-button-run")).toBeTruthy());
+    await waitForWorkflow();
     (latest as NonNullable<typeof latest>).workflow.run.mockResolvedValueOnce({
       input: latest.workflow.getInput(),
       output: { ...latest.output, size: 128 },
