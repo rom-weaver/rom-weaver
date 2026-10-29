@@ -139,6 +139,9 @@ type OfflineWarmup = {
 // Download small EmulatorJS files in one pump. Identify groups stay sequential
 // because their installer limits itself to one pack connection at a time.
 const EMULATORJS_BATCH_SIZE = 6;
+// A group install stops after this many failed packs, so a systemic failure (every pack rejected)
+// does not re-download the whole group on each retry.
+const MAX_GROUP_PACK_FAILURES = 3;
 
 const EMULATORJS_COMPLETE_MARKER_PATH = "/__rom-weaver-emulatorjs-complete__";
 
@@ -586,8 +589,10 @@ const createOfflineWarmup = ({
     if (!group) throw new Error(`Unknown ROM identify pack group: ${groupId}`);
     const cache = await caches.open(identifyOptionalCacheName);
     // One failed pack must not keep the rest of the group from downloading. The group still fails
-    // after the loop, so it is not marked installed and retries only the packs it is missing.
+    // after the loop, so it is not marked installed and retries only the packs it is missing. A
+    // storage error is systemic (quota, cache failure), so it throws at once instead.
     let firstFailure: { error: unknown } | undefined;
+    let failedPacks = 0;
     // Group installs MUST stay sequential so a low-priority warmup does not open one connection per pack.
     for (const pack of group.packs) {
       if (policy && (generation !== policy.token() || !(await policy.isEnabled()))) return null;
@@ -598,13 +603,9 @@ const createOfflineWarmup = ({
         continue;
       }
       if (policy && (generation !== policy.token() || !(await policy.isEnabled()))) return null;
-      let stored: boolean;
+      let verified: Awaited<ReturnType<typeof fetchVerifiedPack>>;
       try {
-        const { request, response } = await fetchVerifiedPack(pack, scope, fetcher, onBytes, log);
-        stored = policy
-          ? await policy.write(() => cacheWithDownloadLog(cache, request, response, log), generation)
-          : (await cacheWithDownloadLog(cache, request, response, log), true);
-        if (stored) transferSizes.forget(request.url);
+        verified = await fetchVerifiedPack(pack, scope, fetcher, onBytes, log);
       } catch (error) {
         log("identify pack failed; continuing with the rest of its group", {
           error: error instanceof Error ? error.message : String(error),
@@ -612,9 +613,16 @@ const createOfflineWarmup = ({
           url: pack.url,
         });
         firstFailure ??= { error };
+        failedPacks += 1;
+        if (failedPacks >= MAX_GROUP_PACK_FAILURES) break;
         continue;
       }
+      const { request, response } = verified;
+      const stored = policy
+        ? await policy.write(() => cacheWithDownloadLog(cache, request, response, log), generation)
+        : (await cacheWithDownloadLog(cache, request, response, log), true);
       if (!stored) return null;
+      transferSizes.forget(request.url);
       onCached?.();
     }
     if (firstFailure) throw firstFailure.error;
