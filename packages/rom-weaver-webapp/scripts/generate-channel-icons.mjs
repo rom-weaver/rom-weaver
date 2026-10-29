@@ -105,6 +105,15 @@ const showSvg = async (page, svg, width, height) => {
   );
   await page.locator("img").waitFor({ state: "visible" });
   await page.locator("img").evaluate((img) => img.decode());
+  // CI occasionally captured an icon whose mark touched the bottom edge while the other insets were correct.
+  // The cause is unconfirmed; the suspect is a capture taken before the resized viewport was laid out and
+  // painted on a loaded runner. Wait until the page reports the requested size, then for two animation frames,
+  // before anything is captured.
+  await page.waitForFunction(
+    ([expectedWidth, expectedHeight]) => window.innerWidth === expectedWidth && window.innerHeight === expectedHeight,
+    [width, height],
+  );
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 };
 
 /** Screenshot a square master as an optimized PNG. */
