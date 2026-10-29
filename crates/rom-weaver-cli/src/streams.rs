@@ -536,11 +536,18 @@ impl StagingDir {
                 "rom-weaver-stream-{}-{sequence}",
                 std::process::id()
             ));
-            match builder.create(&path) {
+            let created =
+                rom_weaver_core::with_output_creation(&process_cancellation_token(), || {
+                    let created = builder.create(&path);
+                    if created.is_ok() {
+                        // Drop is skipped by the forced second-interrupt exit; register for removal there.
+                        rom_weaver_core::register_live_temp_dir(&path);
+                    }
+                    Ok(created)
+                })?;
+            match created {
                 Ok(()) => {
                     trace!(path = %path.display(), "created private stream staging directory");
-                    // Drop is skipped by the forced second-interrupt exit; register for removal there.
-                    rom_weaver_core::register_live_temp_dir(&path);
                     return Ok(Self(path));
                 }
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,

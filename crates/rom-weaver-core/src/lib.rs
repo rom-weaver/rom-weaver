@@ -30,6 +30,7 @@ pub use cancel::{
     CancellationToken, clear_in_progress_outputs, complete_in_progress_output,
     process_cancellation_token, register_in_progress_output, register_live_temp_dir,
     remove_in_progress_outputs, remove_live_temp_dirs, unregister_live_temp_dir,
+    with_output_creation,
 };
 pub use common_files::{
     ArchiveEntryKindFilter, COMMON_CONTAINER_FILE_EXTENSIONS, CONTAINER_FILTER_FILE_EXTENSIONS,

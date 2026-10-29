@@ -1,5 +1,5 @@
 use std::sync::{
-    Arc, Mutex, OnceLock,
+    Arc, Mutex, OnceLock, RwLock,
     atomic::{AtomicBool, Ordering},
 };
 
@@ -94,9 +94,89 @@ pub fn remove_in_progress_outputs() {
     }
 }
 
-fn live_temp_dirs() -> &'static Mutex<Vec<std::path::PathBuf>> {
-    static PATHS: OnceLock<Mutex<Vec<std::path::PathBuf>>> = OnceLock::new();
-    PATHS.get_or_init(|| Mutex::new(Vec::new()))
+#[derive(Default)]
+struct LiveTempDirs {
+    creation: RwLock<()>,
+    closed: AtomicBool,
+    paths: Mutex<Vec<std::path::PathBuf>>,
+}
+
+impl LiveTempDirs {
+    fn with_creation<T>(
+        &self,
+        cancel: &CancellationToken,
+        create: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        let _creation = self
+            .creation
+            .read()
+            .unwrap_or_else(|error| error.into_inner());
+        cancel.check()?;
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(RomWeaverError::Cancelled);
+        }
+        create()
+    }
+
+    fn register(&self, path: &std::path::Path) {
+        let mut paths = self.paths.lock().unwrap_or_else(|error| error.into_inner());
+        if self.closed.load(Ordering::SeqCst) {
+            remove_temp_path(path);
+        } else {
+            paths.push(path.to_path_buf());
+        }
+    }
+
+    fn unregister(&self, path: &std::path::Path) {
+        self.paths
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .retain(|registered| registered != path);
+    }
+
+    fn remove(&self) {
+        let _creation = self
+            .creation
+            .write()
+            .unwrap_or_else(|error| error.into_inner());
+        self.closed.store(true, Ordering::SeqCst);
+        let mut paths = self.paths.lock().unwrap_or_else(|error| error.into_inner());
+        tracing::debug!(
+            paths = paths.len(),
+            "removing live temporary outputs after closing creation"
+        );
+        for path in paths.drain(..).rev() {
+            remove_temp_path(&path);
+        }
+    }
+}
+
+fn remove_temp_path(path: &std::path::Path) {
+    let is_dir = std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_dir());
+    let result = if is_dir {
+        std::fs::remove_dir_all(path)
+    } else {
+        std::fs::remove_file(path)
+    };
+    tracing::debug!(path = %path.display(), ?result, "live temporary output cleanup result");
+}
+
+fn live_temp_dirs() -> &'static LiveTempDirs {
+    static PATHS: OnceLock<LiveTempDirs> = OnceLock::new();
+    PATHS.get_or_init(LiveTempDirs::default)
+}
+
+/// Protect native output entry creation from forced cleanup. The callback MUST cover
+/// directory/file creation and any registration; long decoding work belongs outside it.
+pub fn with_output_creation<T>(
+    cancel: &CancellationToken,
+    create: impl FnOnce() -> Result<T>,
+) -> Result<T> {
+    if cfg!(target_arch = "wasm32") {
+        cancel.check()?;
+        return create();
+    }
+    live_temp_dirs().with_creation(cancel, create)
 }
 
 /// Track a temp directory or file owned by a live guard (`TempPathAllocator`, staging dir, stdin spool), so a process that must leave
@@ -105,33 +185,20 @@ pub fn register_live_temp_dir(path: &std::path::Path) {
     if cfg!(target_arch = "wasm32") {
         return;
     }
-    if let Ok(mut paths) = live_temp_dirs().lock() {
-        paths.push(path.to_path_buf());
-    }
+    live_temp_dirs().register(path);
 }
 
 /// Stop tracking a temp directory or file once its owner has removed it itself. Call this after the removal, not before, so a
 /// forced exit during a slow removal still finds the path in `remove_live_temp_dirs`.
 pub fn unregister_live_temp_dir(path: &std::path::Path) {
-    if let Ok(mut paths) = live_temp_dirs().lock() {
-        paths.retain(|registered| registered != path);
-    }
+    live_temp_dirs().unregister(path);
 }
 
 /// Remove every tracked temp path. Called right before the process exits without
-/// unwinding, since `Drop` will not run then.
+/// unwinding, since `Drop` will not run then. This permanently closes native
+/// output creation, so callers MUST sweep partial outputs after this call.
 pub fn remove_live_temp_dirs() {
-    let Ok(mut paths) = live_temp_dirs().lock() else {
-        return;
-    };
-    for path in paths.drain(..) {
-        // Entries are directories (allocators, staging) or single files (stdin spool).
-        if path.is_dir() {
-            let _ = std::fs::remove_dir_all(&path);
-        } else {
-            let _ = std::fs::remove_file(&path);
-        }
-    }
+    live_temp_dirs().remove();
 }
 
 /// Forget the registered outputs; the run finished and they are real files now.

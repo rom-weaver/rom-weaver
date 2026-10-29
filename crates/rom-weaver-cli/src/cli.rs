@@ -1090,9 +1090,9 @@ fn install_cancel_handler(mode: OutputMode) {
     let ignored_signals = ignored_termination_signals();
     let result = ctrlc::set_handler(move || {
         if SIGNALLED.swap(true, Ordering::SeqCst) {
-            remove_in_progress_outputs();
             // process::exit skips Drop, so the temp allocators cannot clean up on their own.
             rom_weaver_core::remove_live_temp_dirs();
+            remove_in_progress_outputs();
             crate::render::clear_progress();
             if mode.is_json() {
                 native_output::print_error(

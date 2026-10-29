@@ -403,7 +403,11 @@ impl CliApp {
         };
         if let Some(parent) = apply_output.parent()
             && !parent.exists()
-            && let Err(error) = fs::create_dir_all(parent)
+            && let Err(error) =
+                rom_weaver_core::with_output_creation(inputs.context.cancel(), || {
+                    fs::create_dir_all(parent)?;
+                    Ok(())
+                })
         {
             return Err(Box::new(
                 OperationReport::failed(
@@ -416,7 +420,7 @@ impl CliApp {
                     ),
                     inputs.context.single_thread_execution(),
                 )
-                .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io),
+                .with_error_kind(error.kind()),
             ));
         }
         Ok(apply_output)

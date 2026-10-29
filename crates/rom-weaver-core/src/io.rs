@@ -159,11 +159,17 @@ impl StagedOutput {
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let Some(staged) = Self::claim_sibling(parent, &name) else {
+        let staged = crate::with_output_creation(&crate::process_cancellation_token(), || {
+            let staged = Self::claim_sibling(parent, &name);
+            if let Some(staged) = &staged {
+                // A forced second Ctrl-C skips `Drop`, so track the sibling for that exit.
+                crate::register_live_temp_dir(staged);
+            }
+            Ok(staged)
+        })?;
+        let Some(staged) = staged else {
             return Ok(in_place());
         };
-        // A forced second Ctrl-C skips `Drop`, so track the sibling for that exit.
-        crate::register_live_temp_dir(&staged);
         // The claimed sibling is a new, empty file beside the original, so it shows what
         // a rename would keep.
         let lost = crate::output_replace::rename_would_lose(&target, &metadata, &staged);

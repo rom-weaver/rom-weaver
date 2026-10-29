@@ -163,6 +163,7 @@ impl PatchHandler for VcdiffPatchHandler {
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
+        context.cancel().check()?;
         let patch_path = require_single_patch_file(&request.patches, self.descriptor.name)?.clone();
         let mut patch_reader = BufReader::new(File::open(&patch_path)?);
         let patch = parse_patch_file(&mut patch_reader, &patch_path)?;
@@ -208,6 +209,7 @@ impl PatchHandler for VcdiffPatchHandler {
                 &request.output,
                 input_len,
                 validate_checksums,
+                context.cancel(),
             )?;
 
             let execution = context.plan_threads(ThreadCapability::single_threaded());
@@ -246,6 +248,7 @@ impl PatchHandler for VcdiffPatchHandler {
                 &request.output,
                 input_len,
                 validate_checksums,
+                context.cancel(),
             )?;
 
             let execution = context.plan_threads(ThreadCapability::single_threaded());
@@ -307,6 +310,7 @@ impl PatchHandler for VcdiffPatchHandler {
                             input_len,
                             secondary_compressor_id,
                             validate_checksums_for_tasks,
+                            context.cancel(),
                         )
                     })
                     .collect::<Result<Vec<_>>>()
@@ -323,6 +327,7 @@ impl PatchHandler for VcdiffPatchHandler {
                         input_len,
                         secondary_compressor_id,
                         validate_checksums_for_tasks,
+                        context.cancel(),
                     )
                 })
                 .collect::<Result<Vec<_>>>()?;
@@ -331,10 +336,15 @@ impl PatchHandler for VcdiffPatchHandler {
 
         decoded.sort_by_key(|window| (window.output_offset, window.index));
 
-        let mut output =
-            BufWriter::with_capacity(APPLY_OUTPUT_BUFFER_BYTES, File::create(&request.output)?);
+        let mut output = BufWriter::with_capacity(
+            APPLY_OUTPUT_BUFFER_BYTES,
+            rom_weaver_core::with_output_creation(context.cancel(), || {
+                Ok(File::create(&request.output)?)
+            })?,
+        );
         let mut expected_offset = 0u64;
         for window in decoded {
+            context.cancel().check()?;
             if window.output_offset != expected_offset {
                 return Err(RomWeaverError::Validation(format!(
                     "window output offset mismatch: expected {expected_offset}, got {}",
@@ -343,7 +353,7 @@ impl PatchHandler for VcdiffPatchHandler {
             }
 
             let mut temp = BufReader::new(File::open(&window.temp_path)?);
-            rom_weaver_core::copy_retrying_interrupted(&mut temp, &mut output)?;
+            rom_weaver_core::copy_cancelable(&mut temp, &mut output, context.cancel())?;
             expected_offset = checked_add(expected_offset, window.len, "assembled output size")?;
             let _ = fs::remove_file(&window.temp_path);
         }
@@ -1004,7 +1014,9 @@ pub(super) fn decode_window_task(
     input_len: u64,
     secondary_compressor_id: Option<u8>,
     validate_checksums: bool,
+    cancel: &rom_weaver_core::CancellationToken,
 ) -> Result<DecodedWindow> {
+    cancel.check()?;
     let mut input_reader = BufReader::new(File::open(input_path)?);
     let source = match task.window.source_kind {
         None => Vec::new(),
@@ -1030,10 +1042,13 @@ pub(super) fn decode_window_task(
         validate_checksums,
     )?;
 
-    if let Some(parent) = task.temp_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(&task.temp_path, &target)?;
+    rom_weaver_core::with_output_creation(cancel, || {
+        if let Some(parent) = task.temp_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&task.temp_path, &target)?;
+        Ok(())
+    })?;
 
     Ok(DecodedWindow {
         index: task.index,
@@ -1049,29 +1064,32 @@ fn apply_windows_serial<F>(
     input_path: &Path,
     output_path: &Path,
     input_len: u64,
+    cancel: &rom_weaver_core::CancellationToken,
     mut decode_window: F,
 ) -> Result<()>
 where
     F: FnMut(&mut BufReader<File>, &WindowIndex, &[u8]) -> Result<Vec<u8>>,
 {
-    if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
     let mut input_reader = BufReader::new(File::open(input_path)?);
     let mut patch_reader = BufReader::new(File::open(patch_path)?);
     let mut output = BufWriter::with_capacity(
         APPLY_OUTPUT_BUFFER_BYTES,
-        OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .read(true)
-            .write(true)
-            .open(output_path)?,
+        rom_weaver_core::with_output_creation(cancel, || {
+            if let Some(parent) = output_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            Ok(OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .read(true)
+                .write(true)
+                .open(output_path)?)
+        })?,
     );
     let mut assembled_output_size = 0u64;
 
     for window in &patch.windows {
+        cancel.check()?;
         if window.output_offset != assembled_output_size {
             return Err(RomWeaverError::Validation(format!(
                 "window output offset mismatch: expected {assembled_output_size}, got {}",
@@ -1107,6 +1125,7 @@ where
         };
 
         let target = decode_window(&mut patch_reader, window, &source)?;
+        cancel.check()?;
         output.write_all(&target)?;
         assembled_output_size = checked_add(
             assembled_output_size,
@@ -1126,6 +1145,7 @@ pub(super) fn apply_windows_with_xdelta_lzma_sections(
     output_path: &Path,
     input_len: u64,
     validate_checksums: bool,
+    cancel: &rom_weaver_core::CancellationToken,
 ) -> Result<()> {
     let mut lzma_decoders = XdeltaLzmaSectionDecoders::new();
     apply_windows_serial(
@@ -1134,6 +1154,7 @@ pub(super) fn apply_windows_with_xdelta_lzma_sections(
         input_path,
         output_path,
         input_len,
+        cancel,
         |patch_reader, window, source| {
             decode_window_with_xdelta_lzma_sections(
                 patch_reader,
@@ -1153,6 +1174,7 @@ pub(super) fn apply_windows_with_target_sources(
     output_path: &Path,
     input_len: u64,
     validate_checksums: bool,
+    cancel: &rom_weaver_core::CancellationToken,
 ) -> Result<()> {
     apply_windows_serial(
         patch,
@@ -1160,6 +1182,7 @@ pub(super) fn apply_windows_with_target_sources(
         input_path,
         output_path,
         input_len,
+        cancel,
         |patch_reader, window, source| {
             decode_window_with_native_engine(
                 patch_reader,

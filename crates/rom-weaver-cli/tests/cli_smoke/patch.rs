@@ -12100,6 +12100,8 @@ mod termination_signals {
     #[test]
     fn second_sigterm_after_a_gap_exits_130_and_leaves_no_temp_folder() {
         let temp = setup_temp_dir();
+        let preserved = temp.path().join("completed.bin");
+        fs::write(&preserved, b"completed before cancellation").expect("completed output");
         let mut child = spawn_long_apply(temp.path(), false);
         unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
         std::thread::sleep(Duration::from_millis(30));
@@ -12107,6 +12109,10 @@ mod termination_signals {
         let status = child.wait().expect("wait");
         assert_eq!(status.code(), Some(130), "{status:?}");
         assert_no_temp_folder_left(temp.path());
+        assert_eq!(
+            fs::read(preserved).expect("preserved output"),
+            b"completed before cancellation"
+        );
     }
 
     /// A stdin compress stages the piped bytes under `$TMPDIR/rom-weaver-stream-*`; the forced exit

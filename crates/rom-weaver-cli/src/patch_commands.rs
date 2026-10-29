@@ -424,7 +424,10 @@ impl CliApp {
             .and_then(|extension| extension.to_str())
             .unwrap_or("");
         let entry_dir = context.temp_paths().next_path(purpose, None);
-        fs::create_dir_all(&entry_dir)?;
+        rom_weaver_core::with_output_creation(context.cancel(), || {
+            fs::create_dir_all(&entry_dir)?;
+            Ok(())
+        })?;
         let raw_output = entry_dir.join(&entry_file_name);
         trace!(
             raw_output = %raw_output.display(),
