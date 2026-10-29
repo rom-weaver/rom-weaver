@@ -33,7 +33,7 @@ Start in the browser. No account, installation, or commercial game is needed for
 
 Prefer the terminal? Start with [Install the CLI](how-to/install-cli.md), then [your first CLI apply](tutorials/cli-first-weave.md).
 
-Guided runs in the app: [Apply](https://rom-weaver.com/apply-patches?guide=apply), [Create](https://rom-weaver.com/create-rom-patch?guide=create), [Weave](https://rom-weaver.com/weave-patches?guide=weave), and [Test](https://rom-weaver.com/test-rom?guide=test), plus cheat runs for [Apply](https://rom-weaver.com/apply-patches?guide=apply-cheats) and [Create](https://rom-weaver.com/create-rom-patch?guide=create-cheats). Guided Apply waits for you to add files, and its **Continue** uses the practice files when you have none. [Guided practice runs](reference/guided-runs.md) lists what each run covers and where it starts.
+Guided runs in the app: [Apply](https://rom-weaver.com/apply-rom-patches?guide=apply), [Create](https://rom-weaver.com/create-rom-patch?guide=create), [Weave](https://rom-weaver.com/weave-rom-patches?guide=weave), and [Test](https://rom-weaver.com/play-rom?guide=test), plus cheat runs for [Apply](https://rom-weaver.com/apply-rom-patches?guide=apply-cheats) and [Create](https://rom-weaver.com/create-rom-patch?guide=create-cheats). Guided Apply waits for you to add files, and its **Continue** uses the practice files when you have none. [Guided practice runs](reference/guided-runs.md) lists what each run covers and where it starts.
 
 ## Choose a task
 

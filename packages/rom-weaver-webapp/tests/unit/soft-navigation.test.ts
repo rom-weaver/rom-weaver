@@ -33,10 +33,10 @@ test("keeps fragment-only links on the current route despite the app base URL", 
   anchor.href = "#main-content";
   document.body.append(anchor);
   try {
-    const route = new URL("/apply-patches?guide=apply", window.location.origin);
+    const route = new URL("/apply-rom-patches?guide=apply", window.location.origin);
     expect(new URL(anchor.href).pathname).toBe("/");
     expect(getSoftNavigationUrl(click(anchor), anchor, route)?.href).toBe(
-      `${window.location.origin}/apply-patches?guide=apply#main-content`,
+      `${window.location.origin}/apply-rom-patches?guide=apply#main-content`,
     );
   } finally {
     anchor.remove();

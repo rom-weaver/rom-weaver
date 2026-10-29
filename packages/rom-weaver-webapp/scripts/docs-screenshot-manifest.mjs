@@ -4,7 +4,7 @@ const DOCS_SCREENSHOT_CASES = [
     docsRoute: "docs/apply-rom-patches",
     practiceFiles: true,
     name: "apply-patches",
-    route: "/apply-patches?guide=apply",
+    route: "/apply-rom-patches?guide=apply",
     target: "#rom-weaver-row-patch-stack",
   },
   {
@@ -12,7 +12,7 @@ const DOCS_SCREENSHOT_CASES = [
     docsRoute: "docs/apply-rom-patches",
     practiceFiles: true,
     name: "apply-output",
-    route: "/apply-patches?guide=apply",
+    route: "/apply-rom-patches?guide=apply",
     target: "#rom-weaver-row-output-file-name",
   },
   {
@@ -33,7 +33,7 @@ const DOCS_SCREENSHOT_CASES = [
     dismissGuide: true,
     // quality-reason: The guide omits obsolete Bundle-labeled images; retain this capture case for a refreshed Weave screenshot.
     name: "bundle-output",
-    route: "/weave-patches?guide=weave",
+    route: "/weave-rom-patches?guide=weave",
     target: "#rom-weaver-weave-job",
   },
   {
@@ -45,14 +45,14 @@ const DOCS_SCREENSHOT_CASES = [
   {
     docsRoute: "docs/edit-gen3-saves",
     name: "save-editor",
-    route: "/save-editor",
+    route: "/rom-save-editor",
     target: "#save-editor-container",
   },
   {
     dismissGuide: true,
     docsRoute: "docs/test-roms",
     name: "test-player",
-    route: "/test-rom?guide=test",
+    route: "/play-rom?guide=test",
     target: "#emulator-test-player",
   },
   {
@@ -60,7 +60,7 @@ const DOCS_SCREENSHOT_CASES = [
     docsRoute: "docs/use-cheats",
     practiceFiles: true,
     name: "cheat-step",
-    route: "/apply-patches?guide=apply",
+    route: "/apply-rom-patches?guide=apply",
     target: "#rom-weaver-row-patch-stack",
   },
   // The README shows this whole first screen; no docs guide embeds it.
@@ -69,7 +69,7 @@ const DOCS_SCREENSHOT_CASES = [
     fullScreen: true,
     practiceFiles: true,
     name: "apply-page",
-    route: "/apply-patches?guide=apply",
+    route: "/apply-rom-patches?guide=apply",
     target: "#rom-weaver-row-patch-stack",
   },
 ];

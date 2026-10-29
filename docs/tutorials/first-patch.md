@@ -28,7 +28,7 @@ That is all you need to know to start. [How patching works](../explanation/how-p
 
 ## Step 1: open the guide and add the practice files
 
-Open [guided Apply Patches](https://rom-weaver.com/apply-patches?guide=apply). On the plain [Apply Patches](https://rom-weaver.com/apply-patches) page, the same guide is **Patch a practice ROM** › **Start a practice run** under the empty drop zone.
+Open [guided Apply Patches](https://rom-weaver.com/apply-rom-patches?guide=apply). On the plain [Apply Patches](https://rom-weaver.com/apply-rom-patches) page, the same guide is **Patch a practice ROM** › **Start a practice run** under the empty drop zone.
 
 The guide opens on **Add your files**, the drop area every file goes through. It lists the ways in (on a phone, choose **More** on the guide card to see them): drop files or a whole folder, drop a ZIP, 7z, or weave, or choose **Add files** to pick them.
 
@@ -88,7 +88,7 @@ To see the sample files for yourself, choose **Download a test weave** from **Pa
 The same practice files drive two more guided runs:
 
 - [Guided Create](https://rom-weaver.com/create-rom-patch?guide=create) makes a patch from two homebrew ROMs.
-- [Guided Weave Patches](https://rom-weaver.com/weave-patches?guide=weave) turns the Apply Patches sample into a patch-only release archive.
+- [Guided Weave Patches](https://rom-weaver.com/weave-rom-patches?guide=weave) turns the Apply Patches sample into a patch-only release archive.
 
 These are optional follow-up exercises. [Guided practice runs](../reference/guided-runs.md) lists every guided run, its steps, and its files.
 
@@ -96,7 +96,7 @@ These are optional follow-up exercises. [Guided practice runs](../reference/guid
 
 The supplied homebrew ROM also has guided cheat-code exercises:
 
-- [Guided Apply cheats](https://rom-weaver.com/apply-patches?guide=apply-cheats) adds a working practice code to the patch order.
+- [Guided Apply cheats](https://rom-weaver.com/apply-rom-patches?guide=apply-cheats) adds a working practice code to the patch order.
 - [Guided Create cheats](https://rom-weaver.com/create-rom-patch?guide=create-cheats) turns a working practice code into a patch.
 
 These guides label the sample as practice. The checksum above is still the result of the two-patch tutorial. A cheat changes the output bytes, so do not expect that checksum after you select one.
@@ -105,7 +105,7 @@ These guides label the sample as practice. The checksum above is still the resul
 
 This tutorial is written against the guided sample, so the usual surprises have simple causes:
 
-- **The page was empty when it opened.** That is expected: the guide waits for you to add files. Choose **Continue** twice on the guide card to use the practice files. If no guide card appeared, the guide runs from the `?guide=apply` part of the link. Open [guided Apply Patches](https://rom-weaver.com/apply-patches?guide=apply) again rather than the plain Apply Patches page.
+- **The page was empty when it opened.** That is expected: the guide waits for you to add files. Choose **Continue** twice on the guide card to use the practice files. If no guide card appeared, the guide runs from the `?guide=apply` part of the link. Open [guided Apply Patches](https://rom-weaver.com/apply-rom-patches?guide=apply) again rather than the plain Apply Patches page.
 - **The button was greyed out.** Every file has to finish reading and checksumming first. The notice nearest the disabled button always says what it is still waiting for.
 - **The patches were in the other order.** That is valid for this sample. Both patches target the original ROM, so either order produces the same result.
 - **Your checksum did not match.** Confirm you applied both patches and that you are hashing the downloaded file rather than the sample you started from.

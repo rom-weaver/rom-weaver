@@ -353,7 +353,7 @@ describe("Masthead", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
     const side = container.querySelector(".side-nav") as HTMLElement;
     expect(side.querySelector('.guide-nav [aria-current="page"]')?.textContent).toBe("Overview");
-    expect(side.querySelector('[href="/apply-patches"]')?.textContent).toContain("Back to tools");
+    expect(side.querySelector('[href="/apply-rom-patches"]')?.textContent).toContain("Back to tools");
     expect(container.querySelector(".dock")).not.toBeNull();
     expect(container.querySelector(".guide-nav")).not.toBeNull();
   });

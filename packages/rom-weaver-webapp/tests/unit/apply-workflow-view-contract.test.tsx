@@ -286,8 +286,20 @@ describe("apply workflow view - empty bench", () => {
   });
 
   it.each([
-    ["apply", "/apply-patches?guide=apply", "Start a practice run", "/docs/apply-rom-patches", "Read the Apply guide"],
-    ["weave", "/weave-patches?guide=weave", "Start a practice weave", "/docs/create-bundles", "Read the Weave guide"],
+    [
+      "apply",
+      "/apply-rom-patches?guide=apply",
+      "Start a practice run",
+      "/docs/apply-rom-patches",
+      "Read the Apply guide",
+    ],
+    [
+      "weave",
+      "/weave-rom-patches?guide=weave",
+      "Start a practice weave",
+      "/docs/create-bundles",
+      "Read the Weave guide",
+    ],
   ] as const)("offers the %s guide and the test weave download", (mode, href, label, docsHref, docsLabel) => {
     const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
     const chip = container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement;
@@ -298,7 +310,7 @@ describe("apply workflow view - empty bench", () => {
     expect(actions[0].getAttribute("href")).toBe(href);
     expect(actions[0].textContent).toContain(label);
     if (mode === "apply") {
-      expect(actions[1].getAttribute("href")).toBe("/apply-patches?guide=apply-cheats");
+      expect(actions[1].getAttribute("href")).toBe("/apply-rom-patches?guide=apply-cheats");
       expect(actions[1].textContent).toContain("Apply cheats to a ROM");
     }
     expect(container.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe(docsHref);

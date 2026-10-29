@@ -10,12 +10,12 @@ const GUIDED_SAMPLE_VIEWS = {
 type GuidedSample = keyof typeof GUIDED_SAMPLE_VIEWS;
 
 const GUIDED_SAMPLE_HREFS = {
-  apply: "/apply-patches?guide=apply",
-  "apply-cheats": "/apply-patches?guide=apply-cheats",
-  weave: "/weave-patches?guide=weave",
+  apply: "/apply-rom-patches?guide=apply",
+  "apply-cheats": "/apply-rom-patches?guide=apply-cheats",
+  weave: "/weave-rom-patches?guide=weave",
   create: "/create-rom-patch?guide=create",
   "create-cheats": "/create-rom-patch?guide=create-cheats",
-  test: "/test-rom?guide=test",
+  test: "/play-rom?guide=test",
 } as const;
 
 const readGuidedSampleFromSearch = (search: string): GuidedSample | null => {

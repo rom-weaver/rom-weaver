@@ -23,7 +23,8 @@ const REPO = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(path.join(REPO, "packages/rom-weaver-webapp/package.json"));
 const { chromium } = require("playwright");
 const BASE_URL = process.env.RW_URL || "https://localhost:5191/";
-const APPLY_URL = new URL("apply-patches", BASE_URL.endsWith("/") ? BASE_URL : `${BASE_URL}/`).href;
+const APPLY_URL = new URL("apply-rom-patches", BASE_URL.endsWith("/") ? BASE_URL : `${BASE_URL}/`)
+  .href;
 const OUT = process.env.RW_OUT || "/tmp/rw-driver";
 const HEADLESS = process.env.RW_HEAD !== "1";
 const cmd = process.argv[2] || "load";
@@ -46,7 +47,9 @@ async function boot() {
   log("navigating", APPLY_URL);
   await page.goto(APPLY_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
   // The unified file input is the stable anchor that the app has mounted.
-  await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached", timeout: 60000 });
+  await page
+    .locator("#rom-weaver-input-file-unified")
+    .waitFor({ state: "attached", timeout: 60000 });
   // Give the wasm warmup extraction a moment to finish before driving inputs.
   await page.waitForTimeout(3000);
   return { browser, ctx, page, errors };
@@ -63,7 +66,10 @@ async function load() {
   log("title", await page.title());
   await shot(page, "load.png");
   await browser.close();
-  if (errors.length) { console.error("PAGE ERRORS:", errors); process.exit(1); }
+  if (errors.length) {
+    console.error("PAGE ERRORS:", errors);
+    process.exit(1);
+  }
   log("OK: app booted and rendered");
 }
 
@@ -99,11 +105,20 @@ async function apply() {
   await page.waitForTimeout(1500);
   await shot(page, "apply-done.png");
   await browser.close();
-  if (errors.length) { console.error("PAGE ERRORS:", errors); process.exit(1); }
-  if (size <= 0) { console.error("download was empty"); process.exit(1); }
+  if (errors.length) {
+    console.error("PAGE ERRORS:", errors);
+    process.exit(1);
+  }
+  if (size <= 0) {
+    console.error("download was empty");
+    process.exit(1);
+  }
   log("OK: apply produced", path.basename(saved), `(${size} bytes)`);
 }
 
 if (cmd === "load") await load();
 else if (cmd === "apply") await apply();
-else { console.error("unknown command:", cmd, "(load|apply)"); process.exit(2); }
+else {
+  console.error("unknown command:", cmd, "(load|apply)");
+  process.exit(2);
+}

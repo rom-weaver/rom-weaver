@@ -202,6 +202,16 @@ describe("computeLinkAuditRoutes", () => {
     assert.equal(routes.filter((route) => route === "docs/a").length, 1);
     assert.ok(routes.includes(""));
     assert.ok(routes.includes("apply-patches"));
+    for (const route of [
+      "apply-rom-patches",
+      "weave-rom-patches",
+      "rom-save-editor",
+      "file-checksum",
+      "compress-files",
+      "extract-files",
+      "play-rom",
+    ])
+      assert.ok(routes.includes(route), route);
     assert.ok(routes.includes("weave-patches"));
     assert.ok(routes.includes("weave"));
     assert.ok(routes.includes("bundle-patches"));

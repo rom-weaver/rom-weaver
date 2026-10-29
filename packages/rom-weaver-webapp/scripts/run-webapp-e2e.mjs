@@ -52,6 +52,13 @@ export const hasVisiblePrerenderedShell = (layout) => layout.prerendered && layo
 const DOCS_ROUTES = computeDocsRouteSlugs(DOC_SOURCES);
 const LINK_AUDIT_WORKFLOW_ROUTES = [
   "",
+  "apply-rom-patches",
+  "weave-rom-patches",
+  "rom-save-editor",
+  "file-checksum",
+  "compress-files",
+  "extract-files",
+  "play-rom",
   "apply-patches",
   "apply-cheats",
   "create-rom-patch",
@@ -274,14 +281,14 @@ const runHydrationAudit = async (createContext, baseUrl) => {
 
   try {
     for (const testCase of [
-      { finalView: "patcher", initialView: "patcher", path: "apply-patches/", replayClick: true },
+      { finalView: "patcher", initialView: "patcher", path: "apply-rom-patches/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create-rom-patch/", settledPanel: true },
       { finalView: "creator", initialView: "creator", path: "create-rom-patch?guide=create-cheats" },
       { finalView: "trim", initialView: "trim", path: "trim-rom/", settledPanel: true },
       { finalView: "patcher", initialView: "patcher", path: "apply/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create/" },
       { finalView: "trim", initialView: "trim", path: "trim/" },
-      { finalView: "weave", initialView: "weave", path: "weave-patches?guide=weave" },
+      { finalView: "weave", initialView: "weave", path: "weave-rom-patches?guide=weave" },
     ]) {
       const page = await context.newPage();
       const failures = [];
@@ -464,6 +471,33 @@ export const collectInternalLinkTargets = (links, baseUrl) => {
 };
 
 export const runLinkAudit = async (createContext, baseUrl) => {
+  for (const [legacy, canonical] of [
+    ["apply-patches", "apply-rom-patches"],
+    ["weave-patches", "weave-rom-patches"],
+    ["save-editor", "rom-save-editor"],
+    ["checksum", "file-checksum"],
+    ["compress", "compress-files"],
+    ["extract", "extract-files"],
+    ["test-rom", "play-rom"],
+  ]) {
+    for (const suffix of ["", "/", ".html", "/index.html", ...(legacy === "save-editor" ? [] : [".md"])]) {
+      const source = new URL(`${legacy}${suffix}?guide=apply&weave=https%3A%2F%2Fexample.com%2Fa.zip`, baseUrl);
+      const expected = new URL(`${canonical}${suffix === ".md" ? ".md" : ""}${source.search}`, baseUrl);
+      await new Promise((resolve, reject) => {
+        const request = https.get(source, { rejectUnauthorized: shouldRejectUnauthorized(source) }, (response) => {
+          response.resume();
+          if (response.statusCode !== 301 || new URL(response.headers.location ?? "", source).href !== expected.href) {
+            reject(
+              new Error(
+                `${source.href}: expected 301 to ${expected.href}, got ${response.statusCode} ${response.headers.location}`,
+              ),
+            );
+          } else resolve();
+        });
+        request.on("error", reject);
+      });
+    }
+  }
   const context = await createContext({ ignoreHTTPSErrors: true });
   const page = await context.newPage();
   const links = [];
@@ -729,7 +763,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     for (const [name, href, expected] of [
       ["brand mark", notFoundLinks.brand, baseUrl],
       ["brand word", notFoundLinks.word, baseUrl],
-      ["home action", notFoundLinks.home, new URL("apply-patches", baseUrl).href],
+      ["home action", notFoundLinks.home, new URL("apply-rom-patches", baseUrl).href],
     ]) {
       if (href !== expected) throw new Error(`404 page ${name} link at ${missedUrl} is ${href}, expected ${expected}`);
     }
@@ -982,7 +1016,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.locator("#rom-weaver-button-test-emulator").waitFor({ state: "visible", timeout: 60_000 });
 
     await scanGuidedLoading(page, ["first-weave.zip"], "guided Weave loading (desktop, light)", async () => {
-      await page.goto(new URL("weave-patches?guide=weave", baseUrl).href, { waitUntil: "domcontentloaded" });
+      await page.goto(new URL("weave-rom-patches?guide=weave", baseUrl).href, { waitUntil: "domcontentloaded" });
       await page.locator("#rom-weaver-input-file-unified-weave").waitFor({ state: "attached" });
       await installAuditTools();
     });

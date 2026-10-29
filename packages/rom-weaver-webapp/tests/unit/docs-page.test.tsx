@@ -773,7 +773,7 @@ Fixture description.
     ["de", "Zurück zu den Werkzeugen", "Suchen"],
   ])("localizes the Docs navigation controls in %s", (language, back, find) => {
     render(docsShell("docs", "docs", language));
-    expect(document.querySelector('.side-nav a[href="/apply-patches"]')?.textContent).toBe(back);
+    expect(document.querySelector('.side-nav a[href="/apply-rom-patches"]')?.textContent).toBe(back);
     fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
     expect(document.querySelector("#menu-sheet .find-input")?.getAttribute("aria-label")).toBe(find);
   });
@@ -790,7 +790,7 @@ Fixture description.
   it("keeps Find in the global Menu sheet beside the separate docs drawer", async () => {
     renderDocsShell("docs/cli");
     expect(document.querySelector(".dock")).not.toBeNull();
-    expect(document.querySelector('.side-nav a[href="/apply-patches"]')?.textContent).toBe("Back to tools");
+    expect(document.querySelector('.side-nav a[href="/apply-rom-patches"]')?.textContent).toBe("Back to tools");
     expect(document.querySelector(".side-nav .nav-group")?.textContent).not.toContain("Settings");
     const drawer = document.querySelector("#docs-drawer") as HTMLElement;
     fireEvent.click(document.querySelector(".docs-bar-open") as HTMLElement);
@@ -986,19 +986,19 @@ Fixture description.
   });
 
   it.each([
-    ["docs/apply-rom-patches", "patcher", "/apply-patches", "Apply ROM patches"],
+    ["docs/apply-rom-patches", "patcher", "/apply-rom-patches", "Apply ROM patches"],
     ["docs/create-rom-patches", "creator", "/create-rom-patch?mode=rom", "Create ROM patches"],
-    ["docs/create-bundles", "weave", "/weave-patches", "Weave ROM patches"],
+    ["docs/create-bundles", "weave", "/weave-rom-patches", "Weave ROM patches"],
     ["docs/identify-roms-browser", "identify", "/identify-rom", "Identify ROMs"],
     ["docs/search-rom-checksums", "identify", "/identify-rom", "Identify ROMs"],
-    ["docs/checksum-roms-browser", "checksum", "/checksum", "Calculate ROM checksums"],
-    ["docs/convert-to-chd", "compress", "/compress", "Compress and convert ROMs"],
-    ["docs/convert-rvz-to-iso", "extract", "/extract", "Extract and convert ROMs"],
-    ["docs/test-roms", "test", "/test-rom", "Test ROMs"],
+    ["docs/checksum-roms-browser", "checksum", "/file-checksum", "Calculate ROM checksums"],
+    ["docs/convert-to-chd", "compress", "/compress-files", "Compress and convert ROMs"],
+    ["docs/convert-rvz-to-iso", "extract", "/extract-files", "Extract and convert ROMs"],
+    ["docs/test-roms", "test", "/play-rom", "Test ROMs"],
     ["docs/trim-roms-browser", "trim", "/trim-rom", "Trim ROMs"],
-    ["docs/edit-gen3-saves", "save-editor", "/save-editor", "Edit game saves"],
+    ["docs/edit-gen3-saves", "save-editor", "/rom-save-editor", "Edit game saves"],
     ["docs/undo-ppf-browser", "ppf-undo", "/ppf-undo", "Undo PPF patches"],
-    ["docs/get-started", "patcher", "/apply-patches", "Apply ROM patches"],
+    ["docs/get-started", "patcher", "/apply-rom-patches", "Apply ROM patches"],
   ])("links to the matching tool below the heading and footer of %s", (slug, view, href, label) => {
     const onSelectTab = vi.fn();
     render(<DocsPage active onSelectTab={onSelectTab} slug={slug} />);
@@ -1039,7 +1039,7 @@ Fixture description.
     expect(toolPaths()).toEqual(["/apply-cheats", "/create-rom-cheat-patch"]);
 
     rerender(<DocsPage active slug="docs/create-bundles" />);
-    expect(toolPaths()).toEqual(["/weave-patches"]);
+    expect(toolPaths()).toEqual(["/weave-rom-patches"]);
 
     rerender(<DocsPage active slug="docs/privacy" />);
     expect(document.querySelector(".docs-tools")).toBeNull();

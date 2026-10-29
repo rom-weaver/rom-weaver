@@ -13,7 +13,7 @@ Compress a GameCube or Wii ISO to RVZ with local browser compression. Use this R
 
 ## Add the ISO
 
-1. Open [Compress](https://rom-weaver.com/compress).
+1. Open [Compress](https://rom-weaver.com/compress-files).
 2. Add one GameCube or Wii `.iso` file to **Inputs**.
 3. Remove other files before choosing the output format.
 

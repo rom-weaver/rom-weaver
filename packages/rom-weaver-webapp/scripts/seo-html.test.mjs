@@ -91,7 +91,7 @@ test("workflow pages take their lastmod from the newest commit of their text sou
   }
   assert.doesNotMatch(
     createSitemapSource({ root: directory, repo: directory }),
-    /<loc>https:\/\/rom-weaver.com\/compress<\/loc><lastmod>/,
+    /<loc>https:\/\/rom-weaver.com\/compress-files<\/loc><lastmod>/,
   );
   git("2026-01-01T00:00:00Z", "init");
   git("2026-01-01T00:00:00Z", "add", ".");
@@ -106,7 +106,7 @@ test("workflow pages take their lastmod from the newest commit of their text sou
     assert.match(lastmodOf(route.slug) ?? "", /^\d{4}-\d{2}-\d{2}T/, route.slug || "home");
   }
   // The landing change is newer than the shared sources, so only the apex follows it.
-  assert.ok(lastmodOf("") > lastmodOf("compress"));
+  assert.ok(lastmodOf("") > lastmodOf("compress-files"));
 });
 
 test("the Notices entry takes the injected generated-page date, and none when it is unknown", () => {
@@ -118,25 +118,25 @@ test("the Notices entry takes the injected generated-page date, and none when it
 
 test("the sitemap includes the public compression workflow", () => {
   const sitemap = createSitemapSource();
-  assert.ok(sitemap.includes("<loc>https://rom-weaver.com/compress</loc>"));
+  assert.ok(sitemap.includes("<loc>https://rom-weaver.com/compress-files</loc>"));
 });
 
 test("the sitemap contains each indexable workflow once and excludes beta tools", () => {
   const locations = [...createSitemapSource().matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1]);
   assert.equal(locations.length, new Set(locations).size);
   for (const slug of [
-    "apply-patches",
-    "weave-patches",
-    "checksum",
+    "apply-rom-patches",
+    "weave-rom-patches",
+    "file-checksum",
     "create-rom-patch",
-    "extract",
+    "extract-files",
     "identify-rom",
     "ppf-undo",
-    "test-rom",
+    "play-rom",
   ]) {
     assert.ok(locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
-  for (const slug of ["trim-rom", "save-editor"]) {
+  for (const slug of ["trim-rom", "rom-save-editor"]) {
     assert.ok(!locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
 });
@@ -219,7 +219,7 @@ test("workflow Markdown includes task instructions and limits from the published
 test("beta tool pages get their own title, social titles, and channel badge", () => {
   const shell = `${routeShell.replace("</head>", '<meta name="robots" content="index, follow" />\n</head>')}`;
   for (const [slug, name] of [
-    ["save-editor", "Save Editor"],
+    ["rom-save-editor", "Save Editor"],
     ["trim-rom", "Trim ROM"],
     ["whats-new", "What's new"],
   ]) {
@@ -245,4 +245,22 @@ test("task entries resolve static-host variants and avoid documentation paths", 
     assert.ok(html.includes(`href="https://rom-weaver.com/${slug}"`));
   }
   assert.equal(readWorkflowEntryFromPathname("/create-rom-patch"), null);
+});
+
+test("renamed workflows emit only descriptive canonical URLs", () => {
+  for (const [view, slug, legacy] of [
+    ["patcher", "apply-rom-patches", "apply-patches"],
+    ["weave", "weave-rom-patches", "weave-patches"],
+    ["checksum", "file-checksum", "checksum"],
+    ["compress", "compress-files", "compress"],
+    ["extract", "extract-files", "extract"],
+    ["test", "play-rom", "test-rom"],
+  ]) {
+    const route = WORKFLOW_SEO_ROUTES[view];
+    assert.equal(route.slug, slug);
+    const html = createWorkflowRouteHtml(routeShell, route, "prod", "Production");
+    assert.ok(html.includes(`rel="canonical" href="https://rom-weaver.com/${slug}"`), view);
+    assert.ok(!createSitemapSource().includes(`<loc>https://rom-weaver.com/${legacy}</loc>`), legacy);
+    assert.ok(createWorkflowMarkdown(route).startsWith(`Canonical: https://rom-weaver.com/${slug}\n`), view);
+  }
 });

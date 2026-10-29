@@ -31,9 +31,9 @@ To merge several patches or add cheats, see [Build from patches and cheats](crea
 
 ## Check the converted patch
 
-1. In [Apply](https://rom-weaver.com/apply-patches), apply the original patch to a fresh copy of the clean ROM.
+1. In [Apply](https://rom-weaver.com/apply-rom-patches), apply the original patch to a fresh copy of the clean ROM.
 2. Apply the new patch to another fresh copy.
-3. Compare both results in [Checksum file](https://rom-weaver.com/checksum). The checksums should match.
+3. Compare both results in [Checksum file](https://rom-weaver.com/file-checksum). The checksums should match.
 
 ## Which format should you pick?
 

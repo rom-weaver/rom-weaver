@@ -59,17 +59,16 @@ const assertCount = (source, expected, count, label) => {
   if (actual !== count)
     throw new Error(`${label} contains ${actual} copies of ${JSON.stringify(expected)}; expected ${count}`);
 };
-// index.html is the apex landing page; the patcher lives at apply-patches.html.
 const homeHtml = read("index.html");
-const applyHtml = read("apply-patches.html");
-const weaveHtml = read("weave-patches.html");
+const applyHtml = read("apply-rom-patches.html");
+const weaveHtml = read("weave-rom-patches.html");
 const notFoundHtml = read("404.html");
 const createHtml = read("create-rom-patch.html");
-const checksumHtml = read("checksum.html");
-const compressHtml = read("compress.html");
-const extractHtml = read("extract.html");
+const checksumHtml = read("file-checksum.html");
+const compressHtml = read("compress-files.html");
+const extractHtml = read("extract-files.html");
 const identifyHtml = read("identify-rom.html");
-const testHtml = read("test-rom.html");
+const testHtml = read("play-rom.html");
 const headers = read("_headers");
 const swsConfig = fs.readFileSync(path.join(packageDir, "sws.toml"), "utf8");
 const installScript = read("install.sh");
@@ -109,7 +108,7 @@ for (const publicPath of [
   if (!production && robotsTag !== "noindex, nofollow") throw new Error(`${publicPath} must stay noindex off prod`);
 }
 if (production) {
-  for (const htmlPath of ["/", "/apply-patches", "/docs/get-started"]) {
+  for (const htmlPath of ["/", "/apply-rom-patches", "/docs/get-started"]) {
     if (matchPagesHeaders(parsePagesHeaders(headers), htmlPath)["X-Robots-Tag"]) {
       throw new Error(`${htmlPath} must stay indexable`);
     }
@@ -164,6 +163,13 @@ for (const route of DOC_ROUTES) {
 }
 
 for (const route of [
+  "apply-rom-patches",
+  "weave-rom-patches",
+  "rom-save-editor",
+  "file-checksum",
+  "compress-files",
+  "extract-files",
+  "play-rom",
   "apply-patches",
   "weave-patches",
   "checksum",
@@ -255,7 +261,7 @@ for (const endpoint of expectedEndpoints) {
     throw new Error(`API catalog service-doc for ${endpoint} MUST point at the URL session guide section`);
   }
 }
-assertIncludes(llmsTxt, `](${siteOrigin}/apply-patches)`, "llms.txt web app link");
+assertIncludes(llmsTxt, `](${siteOrigin}/apply-rom-patches)`, "llms.txt web app link");
 assertIncludes(llmsTxt, `](${siteOrigin}/index.md)`, "llms.txt Markdown link");
 assertIncludes(read("index.md"), `](${siteOrigin}/docs.md)`, "home Markdown documentation link");
 if (openapi.servers?.[0]?.url !== siteOrigin) throw new Error(`OpenAPI server must be ${siteOrigin}`);
@@ -326,25 +332,44 @@ assertIncludes(notFoundHtml, '<meta name="robots" content="noindex" />', "404 ro
 assertIncludes(notFoundHtml, 'data-page="not-found"', "404 app state");
 assertIncludes(notFoundHtml, 'aria-label="404: Page not found"', "404 heading");
 assertIncludes(notFoundHtml, '<header class="shell-banner"', "404 app chrome");
-assertIncludes(notFoundHtml, 'class="btn primary not-found-home" href="/apply-patches"', "404 home action");
+assertIncludes(notFoundHtml, 'class="btn primary not-found-home" href="/apply-rom-patches"', "404 home action");
 assertIncludes(notFoundHtml, 'class="btn ghost not-found-docs" href="/docs"', "404 docs action");
 assertIncludes(notFoundHtml, "That page is not here.", "404 recovery heading");
-assertIncludes(notFoundHtml, 'class="nav-row" href="/apply-patches" id="tab-patcher"', "404 inactive workflow row");
+assertIncludes(notFoundHtml, 'class="nav-row" href="/apply-rom-patches" id="tab-patcher"', "404 inactive workflow row");
 if (notFoundHtml.includes('aria-current="page"')) throw new Error("404 page marks a destination as current");
 if (notFoundHtml.includes("\u2014")) throw new Error("404 page contains an em dash");
 for (const source of ["/weave", "/weave/", "/weave.html", "/weave/index.html"]) {
-  assertIncludes(redirects, `${source} /weave-patches 301`, `${source} compatibility redirect`);
+  assertIncludes(redirects, `${source} /weave-rom-patches 301`, `${source} compatibility redirect`);
 }
 for (const source of ["/create-patch", "/create-patch/", "/create-patch.html", "/create-patch/index.html"]) {
   assertIncludes(redirects, `${source} /create-rom-patch 301`, `${source} renamed Create redirect`);
 }
 assertIncludes(redirects, "/create-patch.md /create-rom-patch.md 301", "renamed Create Markdown redirect");
 for (const source of ["/apply-patch", "/apply-patch/", "/apply-patch.html", "/apply-patch/index.html"]) {
-  assertIncludes(redirects, `${source} /apply-patches 301`, `${source} renamed Apply Patches redirect`);
+  assertIncludes(redirects, `${source} /apply-rom-patches 301`, `${source} renamed Apply Patches redirect`);
+}
+for (const [legacy, canonical] of [
+  ["apply-patches", "apply-rom-patches"],
+  ["weave-patches", "weave-rom-patches"],
+  ["save-editor", "rom-save-editor"],
+  ["checksum", "file-checksum"],
+  ["compress", "compress-files"],
+  ["extract", "extract-files"],
+  ["test-rom", "play-rom"],
+]) {
+  for (const suffix of ["", "/", ".html", "/index.html", ...(legacy === "save-editor" ? [] : [".md"])]) {
+    const destination = `/${canonical}${suffix === ".md" ? ".md" : ""}`;
+    assertIncludes(redirects, `/${legacy}${suffix} ${destination} 301`, `${legacy}${suffix} migration redirect`);
+    assertIncludes(
+      swsConfig,
+      `source = "/${legacy}${suffix}"\ndestination = "${destination}"\nkind = 301`,
+      `${legacy}${suffix} Docker migration redirect`,
+    );
+  }
 }
 assertIncludes(llmsTxt, `# ${SITE_NAME}`, "llms.txt site heading");
 for (const url of [
-  `${siteOrigin}/apply-patches`,
+  `${siteOrigin}/apply-rom-patches`,
   `${siteOrigin}/create-rom-patch`,
   `${siteOrigin}/identify-rom`,
   `${siteOrigin}/docs`,
@@ -388,7 +413,7 @@ assertIncludes(homeHtml, "Online ROM patcher.", "home headline");
 // The brand steps down to a span here so the landing headline is the
 // document's only h1.
 if ((homeHtml.match(/<h1\b/g) || []).length !== 1) throw new Error("the home page must contain exactly one h1");
-assertIncludes(homeHtml, 'class="btn ghost slim home-route-go" href="/apply-patches"', "home Apply action");
+assertIncludes(homeHtml, 'class="btn ghost slim home-route-go" href="/apply-rom-patches"', "home Apply action");
 assertIncludes(homeHtml, 'id="home-file-input"', "home drop zone picker");
 assertIncludes(homeHtml, 'href="/create-rom-patch"', "home Create card");
 assertIncludes(homeHtml, 'href="/docs/features"', "home feature reference link");
@@ -452,12 +477,12 @@ assertIncludes(testHtml, WORKFLOW_SEO_ROUTES.test.description, "test description
 assertIncludes(read("test/index.html"), WORKFLOW_SEO_ROUTES.test.description, "static-host test description");
 assertIncludes(
   applyHtml,
-  'aria-current="page" aria-label="Apply Patches" class="nav-row" href="apply-patches" id="tab-patcher"',
+  'aria-current="page" aria-label="Apply Patches" class="nav-row" href="apply-rom-patches" id="tab-patcher"',
   "apply prerendered workflow",
 );
 assertIncludes(
   weaveHtml,
-  'aria-current="page" aria-label="Weave Patches" class="nav-row" href="weave-patches" id="tab-weave"',
+  'aria-current="page" aria-label="Weave Patches" class="nav-row" href="weave-rom-patches" id="tab-weave"',
   "bundle prerendered workflow",
 );
 assertIncludes(
@@ -586,9 +611,9 @@ for (const route of DOC_ROUTES) {
   // closing on the same three buttons made it furniture. Each guide still reaches
   // the samples through the prose links its own author wrote.
   if (route.slug === "docs") {
-    assertIncludes(docsHtml, 'href="/apply-patches?guide=apply"', `${route.slug} guided Apply Patches link`);
+    assertIncludes(docsHtml, 'href="/apply-rom-patches?guide=apply"', `${route.slug} guided Apply Patches link`);
     assertIncludes(docsHtml, 'href="/create-rom-patch?guide=create"', `${route.slug} guided Create link`);
-    assertIncludes(docsHtml, 'href="/weave-patches?guide=weave"', `${route.slug} guided Weave Patches link`);
+    assertIncludes(docsHtml, 'href="/weave-rom-patches?guide=weave"', `${route.slug} guided Weave Patches link`);
     assertIncludes(docsHtml, 'href="/docs/faq"', `${route.slug} FAQ link`);
     assertIncludes(docsHtml, 'href="/docs/get-started"', `${route.slug} tutorial link`);
     assertIncludes(docsHtml, 'href="/docs/cli"', `${route.slug} CLI usage link`);
@@ -638,7 +663,7 @@ for (const script of bundledScripts) {
 }
 
 for (const [slug, title] of [
-  ["save-editor", "Save Editor | rom-weaver"],
+  ["rom-save-editor", "Save Editor | rom-weaver"],
   ["trim-rom", "Trim ROM | rom-weaver"],
   ["whats-new", "What's new | rom-weaver"],
 ]) {
@@ -647,7 +672,7 @@ for (const [slug, title] of [
   assertIncludes(html, `property="og:title" content="${title}`, `${slug} og:title`);
   assertIncludes(html, `name="twitter:title" content="${title}`, `${slug} twitter:title`);
 }
-for (const beta of ["trim-rom", "whats-new", "save-editor"]) {
+for (const beta of ["trim-rom", "whats-new", "rom-save-editor"]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
   assertIncludes(
     read(`${beta}/index.html`),
@@ -656,14 +681,14 @@ for (const beta of ["trim-rom", "whats-new", "save-editor"]) {
   );
 }
 for (const [route, panel] of Object.entries({
-  "apply-patches": "panel-patcher",
-  checksum: "panel-checksum",
+  "apply-rom-patches": "panel-patcher",
+  "file-checksum": "panel-checksum",
   "create-rom-patch": "panel-creator",
-  extract: "panel-extract",
+  "extract-files": "panel-extract",
   "identify-rom": "panel-identify",
   "ppf-undo": "panel-ppf-undo",
-  "save-editor": "panel-save-editor",
-  "test-rom": "panel-test",
+  "rom-save-editor": "panel-save-editor",
+  "play-rom": "panel-test",
   "trim-rom": "panel-trim",
   "whats-new": "panel-whats-new",
   tools: "panel-ppf-undo",
@@ -675,16 +700,23 @@ for (const [route, panel] of Object.entries({
   }
 }
 for (const [legacy, canonical] of Object.entries({
-  apply: "apply-patches",
-  "apply-patch": "apply-patches",
-  bundle: "weave-patches",
-  "bundle-patches": "weave-patches",
+  "apply-patches": "apply-rom-patches",
+  "weave-patches": "weave-rom-patches",
+  "save-editor": "rom-save-editor",
+  checksum: "file-checksum",
+  compress: "compress-files",
+  extract: "extract-files",
+  "test-rom": "play-rom",
+  apply: "apply-rom-patches",
+  "apply-patch": "apply-rom-patches",
+  bundle: "weave-rom-patches",
+  "bundle-patches": "weave-rom-patches",
   create: "create-rom-patch",
   "create-patch": "create-rom-patch",
   identify: "identify-rom",
-  test: "test-rom",
+  test: "play-rom",
   trim: "trim-rom",
-  weave: "weave-patches",
+  weave: "weave-rom-patches",
 })) {
   for (const file of [`${legacy}.html`, `${legacy}/index.html`]) {
     assertIncludes(read(file), 'name="robots" content="noindex,follow"', `${file} noindex`);
@@ -707,10 +739,10 @@ for (const [legacy, canonical] of Object.entries({
 for (const weave of ["weave/index.html", "weave.html"]) {
   assertIncludes(
     read(weave),
-    'aria-current="page" aria-label="Weave Patches" class="nav-row" href="/weave-patches" id="tab-weave"',
+    'aria-current="page" aria-label="Weave Patches" class="nav-row" href="/weave-rom-patches" id="tab-weave"',
     `${weave} weave shell`,
   );
-  assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/weave-patches"', `${weave} canonical`);
+  assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/weave-rom-patches"', `${weave} canonical`);
 }
 // The retired /tools/ slug serves the PPF undo page and canonicalizes to it.
 assertIncludes(read("tools/index.html"), 'name="robots" content="noindex, nofollow"', "tools alias noindex");
@@ -726,7 +758,7 @@ if (production) {
   assertIncludes(robots, "Sitemap: https://rom-weaver.com/sitemap.xml", "production robots.txt");
   assertIncludes(read("sitemap.xml"), "<loc>https://rom-weaver.com/</loc>", "home sitemap entry");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/create-rom-patch", "sitemap");
-  assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/extract", "extract sitemap entry");
+  assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/extract-files", "extract sitemap entry");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/identify-rom", "sitemap");
   for (const route of DOC_ROUTES) {
     assertIncludes(read("sitemap.xml"), `https://rom-weaver.com/${route.slug}`, `${route.slug} sitemap entry`);

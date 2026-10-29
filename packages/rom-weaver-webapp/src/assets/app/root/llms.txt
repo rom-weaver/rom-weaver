@@ -10,15 +10,15 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 
 ## Web app
 
-- [Online ROM patcher](https://rom-weaver.com/apply-patches): Apply BPS, IPS, IPS32, UPS, xdelta, VCDIFF, PPF, APS, RUP, and other supported ROM patches with format detection and ordered patch chains.
+- [Online ROM patcher](https://rom-weaver.com/apply-rom-patches): Apply BPS, IPS, IPS32, UPS, xdelta, VCDIFF, PPF, APS, RUP, and other supported ROM patches with format detection and ordered patch chains.
 - [Apply cheat codes](https://rom-weaver.com/apply-cheats): Bake supported cheat codes into your ROM with the Apply workflow.
 - [Create a patch from cheat codes](https://rom-weaver.com/create-rom-cheat-patch): Create a patch from an original ROM and supported cheat codes.
 - [Create ROM patches](https://rom-weaver.com/create-rom-patch): Create patches with format-aware settings and distributable weaves.
-- [Compress files](https://rom-weaver.com/compress): Compress ISO or BIN/CUE to CHD, GameCube and Wii ISO to RVZ, and Nintendo 3DS ROMs to Z3DS; create ZIP or 7z archives.
-- [Extract files](https://rom-weaver.com/extract): Decompress Z3DS, ZCCI, ZCXI, ZCIA, Z3DSX, CHD, RVZ, and supported archives locally in the browser.
-- [Checksum a file](https://rom-weaver.com/checksum): Calculate CRC32, MD5, SHA-1, SHA-256, and other checksums of any file, with optional archive extraction, and compare them with an expected value.
+- [Compress files](https://rom-weaver.com/compress-files): Compress ISO or BIN/CUE to CHD, GameCube and Wii ISO to RVZ, and Nintendo 3DS ROMs to Z3DS; create ZIP or 7z archives.
+- [Extract files](https://rom-weaver.com/extract-files): Decompress Z3DS, ZCCI, ZCXI, ZCIA, Z3DSX, CHD, RVZ, and supported archives locally in the browser.
+- [Checksum a file](https://rom-weaver.com/file-checksum): Calculate CRC32, MD5, SHA-1, SHA-256, and other checksums of any file, with optional archive extraction, and compare them with an expected value.
 - [Identify a ROM](https://rom-weaver.com/identify-rom): Identify a ROM file or search an existing CRC32, MD5, or SHA-1 checksum locally. Look up recorded games, regions, revisions, and dump names.
-- [ROM tester online](https://rom-weaver.com/test-rom): Play supported ROMs and test patched games locally with the browser emulator. Gameplay testing does not verify file checksums.
+- [ROM tester online](https://rom-weaver.com/play-rom): Play supported ROMs and test patched games locally with the browser emulator. Gameplay testing does not verify file checksums.
 - [Documentation](https://rom-weaver.com/docs): Tutorials, how-to guides, reference tables, and explanation, for the browser app and the CLI.
 - [Use MCP and browser agents](https://rom-weaver.com/docs/use-mcp): Connect an MCP client for public documentation and formats, or use WebMCP workflows with browser approval.
 - [What rom-weaver supports](https://rom-weaver.com/docs/features): Plain-language feature map, browser and CLI availability, and links to exact support limits.

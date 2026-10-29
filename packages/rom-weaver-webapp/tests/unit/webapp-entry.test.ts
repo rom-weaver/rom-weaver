@@ -163,7 +163,7 @@ const loadWebapp = async (options?: {
 }) => {
   vi.resetModules();
   mocks.renders.length = 0;
-  window.history.replaceState({}, "", options?.url ?? "/apply-patches");
+  window.history.replaceState({}, "", options?.url ?? "/apply-rom-patches");
   document.documentElement.dataset.page = options?.notFound ? "not-found" : "app";
   document.documentElement.dataset.betaToolsEnabled = options?.betaTools ? "true" : "false";
   document.documentElement.dataset.offlineCopyEnabled = options?.offlineCopy === false ? "false" : "true";
@@ -286,7 +286,7 @@ describe("boot", () => {
     ["/identify-rom", "identify"],
     ["/trim-rom", "trim"],
     ["/ppf-undo", "ppf-undo"],
-    ["/save-editor", "save-editor"],
+    ["/rom-save-editor", "save-editor"],
   ] as const)("hydrates %s with its own prerendered shell", async (url, view) => {
     await loadWebapp({ prerendered: true, url });
 
@@ -351,13 +351,13 @@ describe("boot", () => {
 
     expect(latest().urlSession?.request).toMatchObject({ kind: "direct" });
     expect(latest().state.currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/apply-patches");
+    expect(window.location.pathname).toBe("/apply-rom-patches");
   });
 
   it("replaces the retired Weave route", async () => {
     await loadWebapp({ url: "/weave?guide=weave" });
 
-    expect(window.location.pathname).toBe("/weave-patches");
+    expect(window.location.pathname).toBe("/weave-rom-patches");
     expect(window.location.search).toBe("?guide=weave");
     expect(latest().state.currentView).toBe("weave");
   });
@@ -370,22 +370,22 @@ describe("boot", () => {
       expect(links.length).toBeGreaterThan(0);
       for (const href of links) {
         const url = new URL(href);
-        expect(url.pathname).toBe("/weave-patches");
+        expect(url.pathname).toBe("/weave-rom-patches");
         await loadWebapp({ url: `${url.pathname}${url.search}` });
         expect(latest().urlSession?.request).toEqual({
           kind: "weave",
           weaveUrl: "https://example.com/release.zip",
         });
         expect(latest().state.currentView).toBe("weave");
-        expect(window.location.pathname).toBe("/weave-patches");
+        expect(window.location.pathname).toBe("/weave-rom-patches");
       }
     },
   );
 
-  it.each(["/apply-patch", "/apply-patches"])("moves weave sessions from %s to the Weave route", async (route) => {
+  it.each(["/apply-patch", "/apply-rom-patches"])("moves weave sessions from %s to the Weave route", async (route) => {
     await loadWebapp({ url: `${route}?weave=/weaves/first-weave.zip` });
 
-    expect(window.location.pathname).toBe("/weave-patches");
+    expect(window.location.pathname).toBe("/weave-rom-patches");
     expect(window.location.search).toBe("?weave=/weaves/first-weave.zip");
     expect(latest().state.currentView).toBe("weave");
   });
@@ -393,7 +393,7 @@ describe("boot", () => {
   it("moves the legacy weave guide to Weave and keeps its guide query", async () => {
     await loadWebapp({ url: "/apply-patch?guide=weave" });
 
-    expect(window.location.pathname).toBe("/weave-patches");
+    expect(window.location.pathname).toBe("/weave-rom-patches");
     expect(window.location.search).toBe("?guide=weave");
     expect(latest().state.currentView).toBe("weave");
   });
@@ -883,7 +883,7 @@ describe("routing", () => {
     const anchor = clickAnchor("/not-a-route");
     await flush();
 
-    expect(window.location.pathname).toBe("/apply-patches");
+    expect(window.location.pathname).toBe("/apply-rom-patches");
     expect(anchor.isConnected).toBe(true);
   });
 
@@ -905,7 +905,7 @@ describe("routing", () => {
     await flush();
 
     expect(latest().state.currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/apply-patches");
+    expect(window.location.pathname).toBe("/apply-rom-patches");
   });
 
   it("starts the guide named in the address bar after a navigation", async () => {
@@ -940,7 +940,7 @@ describe("routing", () => {
     expect(window.dispatchEvent(new Event("beforeunload", { cancelable: true }))).toBe(false);
 
     latest().actions.onSelectView("compress");
-    window.history.replaceState(null, "", "/apply-patches");
+    window.history.replaceState(null, "", "/apply-rom-patches");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush();
     await nextFrame();

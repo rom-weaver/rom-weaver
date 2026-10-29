@@ -34,82 +34,82 @@ log-level = "info"
 # Legacy workflow links MUST retain query strings and redirect directly.
 [[advanced.redirects]]
 source = "/apply"
-destination = "/apply-patches"
+destination = "/apply-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/apply/"
-destination = "/apply-patches"
+destination = "/apply-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/apply.html"
-destination = "/apply-patches"
+destination = "/apply-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/apply/index.html"
-destination = "/apply-patches"
+destination = "/apply-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/apply-patch"
-destination = "/apply-patches"
+destination = "/apply-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/apply-patch/"
-destination = "/apply-patches"
+destination = "/apply-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/apply-patch.html"
-destination = "/apply-patches"
+destination = "/apply-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/apply-patch/index.html"
-destination = "/apply-patches"
+destination = "/apply-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/bundle"
-destination = "/weave-patches"
+destination = "/weave-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/bundle/"
-destination = "/weave-patches"
+destination = "/weave-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/bundle.html"
-destination = "/weave-patches"
+destination = "/weave-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/bundle/index.html"
-destination = "/weave-patches"
+destination = "/weave-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/bundle-patches"
-destination = "/weave-patches"
+destination = "/weave-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/bundle-patches/"
-destination = "/weave-patches"
+destination = "/weave-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/bundle-patches.html"
-destination = "/weave-patches"
+destination = "/weave-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/bundle-patches/index.html"
-destination = "/weave-patches"
+destination = "/weave-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
@@ -179,22 +179,22 @@ kind = 301
 
 [[advanced.redirects]]
 source = "/test"
-destination = "/test-rom"
+destination = "/play-rom"
 kind = 301
 
 [[advanced.redirects]]
 source = "/test/"
-destination = "/test-rom"
+destination = "/play-rom"
 kind = 301
 
 [[advanced.redirects]]
 source = "/test.html"
-destination = "/test-rom"
+destination = "/play-rom"
 kind = 301
 
 [[advanced.redirects]]
 source = "/test/index.html"
-destination = "/test-rom"
+destination = "/play-rom"
 kind = 301
 
 [[advanced.redirects]]
@@ -219,22 +219,192 @@ kind = 301
 
 [[advanced.redirects]]
 source = "/weave"
-destination = "/weave-patches"
+destination = "/weave-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/weave/"
-destination = "/weave-patches"
+destination = "/weave-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/weave.html"
-destination = "/weave-patches"
+destination = "/weave-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/weave/index.html"
-destination = "/weave-patches"
+destination = "/weave-rom-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/apply-patches"
+destination = "/apply-rom-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/apply-patches/"
+destination = "/apply-rom-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/apply-patches.html"
+destination = "/apply-rom-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/apply-patches/index.html"
+destination = "/apply-rom-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/apply-patches.md"
+destination = "/apply-rom-patches.md"
+kind = 301
+
+[[advanced.redirects]]
+source = "/weave-patches"
+destination = "/weave-rom-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/weave-patches/"
+destination = "/weave-rom-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/weave-patches.html"
+destination = "/weave-rom-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/weave-patches/index.html"
+destination = "/weave-rom-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/weave-patches.md"
+destination = "/weave-rom-patches.md"
+kind = 301
+
+[[advanced.redirects]]
+source = "/save-editor"
+destination = "/rom-save-editor"
+kind = 301
+
+[[advanced.redirects]]
+source = "/save-editor/"
+destination = "/rom-save-editor"
+kind = 301
+
+[[advanced.redirects]]
+source = "/save-editor.html"
+destination = "/rom-save-editor"
+kind = 301
+
+[[advanced.redirects]]
+source = "/save-editor/index.html"
+destination = "/rom-save-editor"
+kind = 301
+
+[[advanced.redirects]]
+source = "/checksum"
+destination = "/file-checksum"
+kind = 301
+
+[[advanced.redirects]]
+source = "/checksum/"
+destination = "/file-checksum"
+kind = 301
+
+[[advanced.redirects]]
+source = "/checksum.html"
+destination = "/file-checksum"
+kind = 301
+
+[[advanced.redirects]]
+source = "/checksum/index.html"
+destination = "/file-checksum"
+kind = 301
+
+[[advanced.redirects]]
+source = "/checksum.md"
+destination = "/file-checksum.md"
+kind = 301
+
+[[advanced.redirects]]
+source = "/compress"
+destination = "/compress-files"
+kind = 301
+
+[[advanced.redirects]]
+source = "/compress/"
+destination = "/compress-files"
+kind = 301
+
+[[advanced.redirects]]
+source = "/compress.html"
+destination = "/compress-files"
+kind = 301
+
+[[advanced.redirects]]
+source = "/compress/index.html"
+destination = "/compress-files"
+kind = 301
+
+[[advanced.redirects]]
+source = "/compress.md"
+destination = "/compress-files.md"
+kind = 301
+
+[[advanced.redirects]]
+source = "/extract"
+destination = "/extract-files"
+kind = 301
+
+[[advanced.redirects]]
+source = "/extract/"
+destination = "/extract-files"
+kind = 301
+
+[[advanced.redirects]]
+source = "/extract.html"
+destination = "/extract-files"
+kind = 301
+
+[[advanced.redirects]]
+source = "/extract/index.html"
+destination = "/extract-files"
+kind = 301
+
+[[advanced.redirects]]
+source = "/extract.md"
+destination = "/extract-files.md"
+kind = 301
+
+[[advanced.redirects]]
+source = "/test-rom"
+destination = "/play-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/test-rom/"
+destination = "/play-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/test-rom.html"
+destination = "/play-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/test-rom/index.html"
+destination = "/play-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/test-rom.md"
+destination = "/play-rom.md"
 kind = 301
 
 # Cross-origin isolation - required for SharedArrayBuffer (wasm threads).

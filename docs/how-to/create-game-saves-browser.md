@@ -12,7 +12,7 @@ Create a Super Mario World or Zelda save, edit its properties, and download a co
 
 ## Create a fresh save
 
-1. [Enable beta tools](browser-settings.md#enable-beta-tools), then open [Save Editor](https://rom-weaver.com/save-editor).
+1. [Enable beta tools](browser-settings.md#enable-beta-tools), then open [Save Editor](https://rom-weaver.com/rom-save-editor).
 2. Under **New save**, select **Choose a game**, then select the game.
 3. Leave **Files to edit** on **All files**. Select **File 1 only** only if you want raw numeric codes for Zelda.
 4. Select **Create save**. The editor opens the new file.

@@ -181,15 +181,23 @@ async function healthy(container) {
 }
 
 const routes = {
-  apply: "apply-patches",
-  "apply-patch": "apply-patches",
-  weave: "weave-patches",
-  bundle: "weave-patches",
-  "bundle-patches": "weave-patches",
+  "apply-patches": "apply-rom-patches",
+  "weave-patches": "weave-rom-patches",
+  "save-editor": "rom-save-editor",
+  checksum: "file-checksum",
+  compress: "compress-files",
+  extract: "extract-files",
+  "test-rom": "play-rom",
+
+  apply: "apply-rom-patches",
+  "apply-patch": "apply-rom-patches",
+  weave: "weave-rom-patches",
+  bundle: "weave-rom-patches",
+  "bundle-patches": "weave-rom-patches",
   create: "create-rom-patch",
   "create-patch": "create-rom-patch",
   identify: "identify-rom",
-  test: "test-rom",
+  test: "play-rom",
   trim: "trim-rom",
 };
 const queries = [
@@ -200,7 +208,22 @@ const queries = [
 async function redirects(origin, prefix) {
   let count = 0;
   for (const [old, destination] of Object.entries(routes)) {
-    for (const suffix of ["", "/", ".html", "/index.html"]) {
+    for (const suffix of [
+      "",
+      "/",
+      ".html",
+      "/index.html",
+      ...([
+        "apply-patches",
+        "weave-patches",
+        "checksum",
+        "compress",
+        "extract",
+        "test-rom",
+      ].includes(old)
+        ? [".md"]
+        : []),
+    ]) {
       for (const query of queries) {
         const response = await fetch(`${origin}${prefix}/${old}${suffix}${query}`, {
           redirect: "manual",
@@ -209,7 +232,10 @@ async function redirects(origin, prefix) {
         assert.equal(response.status, 301, `${prefix}/${old}${suffix}`);
         const location = new URL(response.headers.get("location"), origin);
         assert.equal(location.origin, origin);
-        assert.equal(location.pathname + location.search, `${prefix}/${destination}${query}`);
+        assert.equal(
+          location.pathname + location.search,
+          `${prefix}/${destination}${suffix === ".md" ? ".md" : ""}${query}`,
+        );
         await response.body?.cancel();
         count++;
       }
@@ -238,11 +264,11 @@ async function checkBrowser(origins) {
         await page
           .locator("#rom-weaver-input-file-unified-weave")
           .waitFor({ state: "attached", timeout: 60_000 });
-        assert.equal(new URL(page.url()).pathname, `${prefix}/weave-patches`);
+        assert.equal(new URL(page.url()).pathname, `${prefix}/weave-rom-patches`);
         assert.equal(new URL(page.url()).search, "?check=a%2Bb&check=c");
         assert.equal(await page.evaluate(() => crossOriginIsolated), true);
       }
-      await page.goto(`${origin}${prefix}/apply-patches`, { waitUntil: "domcontentloaded" });
+      await page.goto(`${origin}${prefix}/apply-rom-patches`, { waitUntil: "domcontentloaded" });
       const input = page.locator("#rom-weaver-input-file-unified");
       await input.waitFor({ state: "attached", timeout: 60_000 });
       await input.setInputFiles([join(scratch, "source.bin"), join(scratch, "bundle.zip")]);
@@ -342,7 +368,7 @@ async function checkWebapp() {
   }
   for (const path of [
     "/",
-    "/weave-patches",
+    "/weave-rom-patches",
     "/rom-weaver-bundle-v1.schema.json",
     "/rom-weaver-bundle-v2.schema.json",
     "/rom-weaver-weave-v1.schema.json",

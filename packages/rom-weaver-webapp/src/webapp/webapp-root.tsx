@@ -111,7 +111,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   {
     dock: true,
     group: "patches",
-    href: "apply-patches",
+    href: "apply-rom-patches",
     icon: <Stamp aria-hidden="true" />,
     id: "patcher",
     label: "Apply Patches",
@@ -128,7 +128,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   },
   {
     group: "patches",
-    href: "weave-patches",
+    href: "weave-rom-patches",
     icon: <Spool aria-hidden="true" />,
     id: "weave",
     label: "Weave Patches",
@@ -152,7 +152,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   },
   {
     group: "files",
-    href: "checksum",
+    href: "file-checksum",
     icon: <Hash aria-hidden="true" />,
     id: "checksum",
     label: "Checksum file",
@@ -160,7 +160,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   },
   {
     group: "files",
-    href: "compress",
+    href: "compress-files",
     icon: <Archive aria-hidden="true" />,
     id: "compress",
     label: "Compress files",
@@ -168,7 +168,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   },
   {
     group: "files",
-    href: "extract",
+    href: "extract-files",
     icon: <PackageOpen aria-hidden="true" />,
     id: "extract",
     label: "Extract files",
@@ -186,7 +186,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   {
     dock: true,
     group: "roms",
-    href: "test-rom",
+    href: "play-rom",
     icon: <Gamepad aria-hidden="true" />,
     id: "test",
     label: "Test ROM",
@@ -195,7 +195,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   {
     beta: true,
     group: "roms",
-    href: "save-editor",
+    href: "rom-save-editor",
     icon: <SaveIcon aria-hidden="true" />,
     id: "save-editor",
     label: "Save Editor",
@@ -474,7 +474,7 @@ const NotFoundPage = ({ assetBaseUrl, onSelectTab }: { assetBaseUrl: string; onS
         </h1>
         <p className="not-found-copy">{localizer.message("ui.notFound.copy")}</p>
         <div className="not-found-actions">
-          <a className="btn primary not-found-home" href={appPathHref("apply-patches", assetBaseUrl)}>
+          <a className="btn primary not-found-home" href={appPathHref("apply-rom-patches", assetBaseUrl)}>
             <House aria-hidden="true" />
             {localizer.message("ui.home.applyPatchCta")}
           </a>
@@ -725,7 +725,7 @@ function WebappRoot({
     pendingViewRef.current = null;
     selectViewWithTransition(() => actions.onSelectView("whats-new"));
   }, [actions, cancelFileRouting]);
-  // Docs guides live one level down (`/docs/<slug>`), so a bare slug would resolve to `/docs/apply-patches`, a 404.
+  // Docs guides live one level down (`/docs/<slug>`), so a bare slug would resolve to `/docs/apply-rom-patches`, a 404.
   const resolveTabHrefs = notFound || state.currentView === "docs";
   // One identity per shell, so Find's index is not rebuilt on every render of the 404 page.
   const mastheadTabs = useMemo(

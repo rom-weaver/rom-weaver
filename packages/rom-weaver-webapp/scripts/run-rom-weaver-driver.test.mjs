@@ -12,7 +12,7 @@ test("run-rom-weaver webapp driver opens the Apply route and its file picker", (
   const journeys = read("./production-workflow-journeys.mjs");
 
   const route = driver.match(/new URL\("([^"]+)", BASE_URL/)?.[1];
-  assert.equal(route, "apply-patches");
+  assert.equal(route, "apply-rom-patches");
   assert.match(routes, new RegExp(`"${route}": "patcher"`));
 
   const pickerIds = [...driver.matchAll(/locator\("#([\w-]+)"\)/g)].map((match) => match[1]);

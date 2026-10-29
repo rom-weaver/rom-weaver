@@ -62,7 +62,7 @@ node ../../.agents/skills/run-rom-weaver/webapp-driver.mjs load
 node ../../.agents/skills/run-rom-weaver/webapp-driver.mjs apply
 ```
 
-Both commands open the Apply route (`apply-patches`) under the server URL. `load` checks that the app starts and saves a screenshot. `apply` uploads the committed source and xdelta fixtures, runs **Apply & download**, and checks that a file was downloaded. Output goes to `/tmp/rw-driver/` by default.
+Both commands open the Apply route (`apply-rom-patches`) under the server URL. `load` checks that the app starts and saves a screenshot. `apply` uploads the committed source and xdelta fixtures, runs **Apply & download**, and checks that a file was downloaded. Output goes to `/tmp/rw-driver/` by default.
 
 Environment overrides:
 

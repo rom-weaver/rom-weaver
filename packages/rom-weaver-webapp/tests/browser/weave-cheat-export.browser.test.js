@@ -31,7 +31,7 @@ const clickButton = async (label) => {
 const toggles = () => [...document.querySelectorAll("#rom-weaver-list-patch-stack .patch-enable input")];
 
 const exportCheats = async (rom, patches, descriptions, patchEnabled = true) => {
-  window.history.replaceState(null, "", "/apply-patches?guide=apply");
+  window.history.replaceState(null, "", "/apply-rom-patches?guide=apply");
   let result = null;
   let archive = null;
   const saveAs = browserRuntime.publicOutput.saveAs;

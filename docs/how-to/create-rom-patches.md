@@ -114,7 +114,7 @@ The browser reads both ROMs and creates the patch locally. None of those files a
 
 Your Modified file working does not prove the downloaded patch works. Test the artifact another person will receive:
 
-1. Open a fresh [Apply](https://rom-weaver.com/apply-patches) page.
+1. Open a fresh [Apply](https://rom-weaver.com/apply-rom-patches) page.
 2. Add a fresh copy of the documented Original.
 3. Add the patch you just downloaded.
 4. Confirm the card accepts the Original without a checksum warning.

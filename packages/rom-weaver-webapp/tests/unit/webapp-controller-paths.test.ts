@@ -125,7 +125,7 @@ describe("selectView with a leave guard", () => {
     expect(view).toBe("patcher");
     expect(controller.getState().currentView).toBe("patcher");
     expect(onConfirmViewLeave).toHaveBeenCalledWith({ currentView: "patcher", nextView: "docs" });
-    expect(window.location.pathname).toBe("/apply-patches");
+    expect(window.location.pathname).toBe("/apply-rom-patches");
   });
 
   it("moves on when the guard agrees", () => {
@@ -163,7 +163,7 @@ describe("the landing route at the app base", () => {
   it.each(["weave", "weave-patches", "bundle", "bundle-patches"])("preserves the HTML alias for %s", (slug) => {
     expect(readWorkflowViewFromPath(`/roms/${slug}.html`)).toBe("weave");
   });
-  it.each(["ppf-undo", "save-editor", "tools"])("keeps the unsupported HTML suffix for %s unresolved", (slug) => {
+  it.each(["ppf-undo", "tools"])("keeps the unsupported HTML suffix for %s unresolved", (slug) => {
     expect(readWorkflowViewFromPath(`/roms/${slug}.html`)).toBeNull();
   });
 
@@ -206,7 +206,7 @@ describe("the landing route at the app base", () => {
     expect(window.location.pathname).toBe("/rom-weaver/");
 
     controller.selectView("patcher");
-    expect(window.location.pathname).toBe("/rom-weaver/apply-patches");
+    expect(window.location.pathname).toBe("/rom-weaver/apply-rom-patches");
   });
 });
 
@@ -247,6 +247,37 @@ describe("task entry routes", () => {
     expect(controller.selectView(view)).toBe(view);
     expect(window.location.pathname).toBe(`/roms/${slug}/index.html`);
     controller.selectView("checksum");
-    expect(window.location.pathname).toBe("/roms/checksum");
+    expect(window.location.pathname).toBe("/roms/file-checksum");
+  });
+});
+
+describe("descriptive URL migration", () => {
+  it.each([
+    ["apply-patches", "apply-rom-patches", "patcher"],
+    ["weave-patches", "weave-rom-patches", "weave"],
+    ["save-editor", "rom-save-editor", "save-editor"],
+    ["checksum", "file-checksum", "checksum"],
+    ["compress", "compress-files", "compress"],
+    ["extract", "extract-files", "extract"],
+    ["test-rom", "play-rom", "test"],
+  ] as const)("preserves %s aliases and selects %s canonically", (legacy, canonical, view) => {
+    for (const prefix of ["/", "/roms/"]) {
+      for (const slug of [legacy, canonical]) {
+        for (const suffix of ["", "/", ".html", "/index.html"]) {
+          expect(readWorkflowViewFromPath(`${prefix}${slug}${suffix}`)).toBe(view);
+        }
+      }
+      window.history.replaceState({}, "", `${prefix}${legacy}?guide=apply#console-storage`);
+      const storage = createStorage();
+      persistExternalSettings(storage, { betaToolsEnabled: true });
+      const controller = createController({ storage });
+      expect(controller.getState().currentView).toBe(view);
+      expect(window.location.pathname).toBe(`${prefix}${canonical}`);
+      expect(window.location.search).toBe("?guide=apply");
+      expect(window.location.hash).toBe("#console-storage");
+      controller.selectView("home");
+      controller.selectView(view);
+      expect(window.location.pathname).toBe(`${prefix}${canonical}`);
+    }
   });
 });

@@ -5,7 +5,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   weave: Object.freeze({
     description:
       "Package multiple ROM patches, their order, and expected checksums into one weave locally in your browser, then optionally apply it with checksum validation. No uploads or account required.",
-    slug: "weave-patches",
+    slug: "weave-rom-patches",
     title: `Package multiple ROM patches into one weave | ${SITE_NAME}`,
   }),
   creator: Object.freeze({
@@ -17,19 +17,19 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   checksum: Object.freeze({
     description:
       "Calculate and compare CRC32, MD5, SHA-1, SHA-256, and other file hashes locally in your browser. Check ROMs or archive contents against expected checksums. No uploads.",
-    slug: "checksum",
+    slug: "file-checksum",
     title: `CRC32, MD5 & SHA checksum calculator online | ${SITE_NAME}`,
   }),
   compress: Object.freeze({
     description:
       "Compress ISO, BIN/CUE, or GDI disc images to CHD and GameCube or Wii ISO to RVZ locally in your browser. Create Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX 3DS ROMs, ZIP, and 7z archives. No uploads.",
-    slug: "compress",
+    slug: "compress-files",
     title: `ISO to CHD & RVZ: Compress ROMs online | ${SITE_NAME}`,
   }),
   extract: Object.freeze({
     description:
       "Decompress GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs locally in your browser. Extract archives and Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX.",
-    slug: "extract",
+    slug: "extract-files",
     title: `RVZ to ISO & CHD to ISO converter online | ${SITE_NAME}`,
   }),
   // The apex. An empty slug is deliberate: the canonical URL is the bare origin.
@@ -48,7 +48,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   patcher: Object.freeze({
     description:
       "Apply BPS, IPS, UPS, xdelta, and other ROM patches online, including files in ZIP, 7z, or RAR archives. Add supported cheat codes. Process files locally with no uploads.",
-    slug: "apply-patches",
+    slug: "apply-rom-patches",
     title: `ROM Patcher Online: BPS, IPS, UPS, xdelta & PPF | ${SITE_NAME}`,
   }),
   "ppf-undo": Object.freeze({
@@ -60,7 +60,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   test: Object.freeze({
     description:
       "Test a ROM or patched game online with EmulatorJS. Play supported NES, SNES, Game Boy, GBA, N64, DS, and PlayStation games locally. No uploads.",
-    slug: "test-rom",
+    slug: "play-rom",
     title: `ROM tester online: Play and test ROMs | ${SITE_NAME}`,
   }),
 });
@@ -93,7 +93,7 @@ const readWorkflowEntryFromPathname = (pathname) => {
 
 // Beta tools stay out of WORKFLOW_SEO_ROUTES (no sitemap, no Markdown twin) but still need their own page title.
 const BETA_ROUTE_TITLES = Object.freeze({
-  "save-editor": `Save Editor | ${SITE_NAME}`,
+  "rom-save-editor": `Save Editor | ${SITE_NAME}`,
   "trim-rom": `Trim ROM | ${SITE_NAME}`,
   "whats-new": `What's new | ${SITE_NAME}`,
 });

@@ -313,7 +313,7 @@ const runCombinedPatchRoundtrips = async (page, baseUrl, configureUncompressedOu
     requireEqual(patch.bytes.subarray(0, 4).toString("ascii"), "BPS1", `${label}: missing BPS header`);
     requireEqual(patch.bytes.readUInt32LE(patch.bytes.length - 12), zlib.crc32(original), `${label}: source CRC32`);
     requireEqual(patch.bytes.readUInt32LE(patch.bytes.length - 8), zlib.crc32(expected), `${label}: target CRC32`);
-    const picker = await openWorkflow(page, baseUrl, "apply-patches", "rom-weaver-input-file-unified");
+    const picker = await openWorkflow(page, baseUrl, "apply-rom-patches", "rom-weaver-input-file-unified");
     await picker.setInputFiles([inputFile("original.bin", original), inputFile(patch.name, patch.bytes)]);
     await waitForEnabled(page, "rom-weaver-button-apply");
     await waitForSettledInputs(page);
@@ -349,8 +349,8 @@ const runCombinedPatchRoundtrips = async (page, baseUrl, configureUncompressedOu
   await reapplyCombined(created, "Create ordered IPS -> combined BPS");
 
   for (const [route, pickerId, otherJob] of [
-    ["apply-patches", "rom-weaver-input-file-unified", "rom-weaver-weave-job"],
-    ["weave-patches", "rom-weaver-input-file-unified-weave", "rom-weaver-apply-job"],
+    ["apply-rom-patches", "rom-weaver-input-file-unified", "rom-weaver-weave-job"],
+    ["weave-rom-patches", "rom-weaver-input-file-unified-weave", "rom-weaver-apply-job"],
   ]) {
     const picker = await openWorkflow(page, baseUrl, route, pickerId);
     await picker.setInputFiles(stackFiles());
@@ -496,14 +496,14 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
       "BPS target CRC32 differs from modified",
     );
     await enableTraceLogging(page);
-    const applyPicker = await openWorkflow(page, baseUrl, "apply-patches", "rom-weaver-input-file-unified");
+    const applyPicker = await openWorkflow(page, baseUrl, "apply-rom-patches", "rom-weaver-input-file-unified");
     const output = await applyDuringPopulation(page, applyPicker, [
       inputFile("original.bin", original),
       inputFile(patch.name, patch.bytes),
     ]);
     assertJourneyBytes(output.bytes, modified, "Create -> Apply BPS roundtrip");
     process.stdout.write("PASS trusted Apply click during input population -> exact patched bytes\n");
-    const weavePicker = await openWorkflow(page, baseUrl, "weave-patches", "rom-weaver-input-file-unified-weave");
+    const weavePicker = await openWorkflow(page, baseUrl, "weave-rom-patches", "rom-weaver-input-file-unified-weave");
     await weavePicker.setInputFiles([inputFile("original.bin", original), inputFile(patch.name, patch.bytes)]);
     await waitForEnabled(page, "rom-weaver-button-export-weave");
     await waitForSettledInputs(page);
@@ -514,7 +514,7 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
       page.locator("#rom-weaver-button-export-weave[data-downloadable]").click(),
     );
     requireJourney(recipe.name.endsWith(".zip"), `Weave: expected ZIP, received ${recipe.name}`);
-    const recipePicker = await openWorkflow(page, baseUrl, "apply-patches", "rom-weaver-input-file-unified");
+    const recipePicker = await openWorkflow(page, baseUrl, "apply-rom-patches", "rom-weaver-input-file-unified");
     await recipePicker.setInputFiles(inputFile(recipe.name, recipe.bytes));
     await page.locator("#rom-weaver-list-patch-stack .file").waitFor({ state: "visible" });
     await waitForEnabled(page, "rom-weaver-button-apply");
@@ -536,7 +536,7 @@ export const runChecksumJourney = async (createContext, baseUrl) => {
   page.setDefaultTimeout(60_000);
   const { original } = makeJourneyInputs();
   try {
-    const picker = await openWorkflow(page, baseUrl, "checksum", "checksum-input-picker");
+    const picker = await openWorkflow(page, baseUrl, "file-checksum", "checksum-input-picker");
     await picker.setInputFiles(inputFile("checksum.bin", original));
     for (const algorithm of ["md5", "sha1"]) {
       await page.locator("#checksum-results").getByText(digest(algorithm, original), { exact: true }).waitFor();
@@ -569,14 +569,14 @@ export const runCompressExtractRoundtrip = async (createContext, baseUrl) => {
   page.setDefaultTimeout(60_000);
   const { original, modified } = makeJourneyInputs();
   try {
-    const picker = await openWorkflow(page, baseUrl, "compress", "compress-input-picker");
+    const picker = await openWorkflow(page, baseUrl, "compress-files", "compress-input-picker");
     await picker.setInputFiles([inputFile("original.bin", original), inputFile("modified.bin", modified)]);
     const container = page.locator("#compress-container");
     await container.getByRole("combobox").first().selectOption("zip");
     await container.getByRole("button", { name: /^Compress$/ }).click();
     const archive = await downloadedBytes(page, () => container.getByRole("button", { name: /^Download/ }).click());
     requireJourney(archive.name.endsWith(".zip"), `Compress: expected ZIP, received ${archive.name}`);
-    const extractPicker = await openWorkflow(page, baseUrl, "extract", "extract-input-picker");
+    const extractPicker = await openWorkflow(page, baseUrl, "extract-files", "extract-input-picker");
     const extraction = page.locator("#extract-container");
     await extractPicker.setInputFiles(inputFile("broken.zip", Buffer.from("not a valid zip archive")));
     await extraction.getByRole("alert").waitFor();
@@ -646,7 +646,7 @@ export const runSaveEditorJourney = async (createContext, baseUrl) => {
   expected.set([0x06, 0x54, 0x32], 0x25f3);
   expected[0x3523] = ~expected.subarray(0x2598, 0x3523).reduce((sum, byte) => sum + byte, 0) & 0xff;
   try {
-    const picker = await openWorkflow(page, baseUrl, "save-editor", "save-editor-input-picker");
+    const picker = await openWorkflow(page, baseUrl, "rom-save-editor", "save-editor-input-picker");
     await picker.setInputFiles(inputFile("red.sav", original));
     const editor = page.locator("#save-editor-container");
     await editor.getByRole("button", { name: "Choose game profile", exact: true }).click();

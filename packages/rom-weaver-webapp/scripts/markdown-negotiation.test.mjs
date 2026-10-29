@@ -96,13 +96,13 @@ test("other routes and methods bypass negotiation", async () => {
 });
 
 test("workflow HTML pages advertise their Markdown alternate", async () => {
-  const { response } = await negotiate("text/html", { path: "/checksum" });
-  assert.equal(response.headers.get("Link"), '</checksum.md>; rel="alternate"; type="text/markdown"');
-  for (const options of [{ path: "/" }, { path: "/checksum", htmlStatus: 404 }, { path: "/docs/get-started" }]) {
+  const { response } = await negotiate("text/html", { path: "/file-checksum" });
+  assert.equal(response.headers.get("Link"), '</file-checksum.md>; rel="alternate"; type="text/markdown"');
+  for (const options of [{ path: "/" }, { path: "/file-checksum", htmlStatus: 404 }, { path: "/docs/get-started" }]) {
     const { response: other } = await negotiate("text/html", options);
     assert.equal(other.headers.get("Link"), null, JSON.stringify(options));
   }
-  const { response: markdown } = await negotiate("text/markdown", { path: "/checksum" });
+  const { response: markdown } = await negotiate("text/markdown", { path: "/file-checksum" });
   assert.equal(markdown.headers.get("Link"), null);
 });
 
@@ -117,14 +117,14 @@ test("query variants stay uncached so deployment URL purges cover cached pages",
 });
 
 test("query variants of a page name the clean URL as canonical", async () => {
-  const { response } = await negotiate("text/html", { path: "/weave-patches?guide=weave" });
+  const { response } = await negotiate("text/html", { path: "/weave-rom-patches?guide=weave" });
   assert.deepEqual(response.headers.get("Link").split(", "), [
-    '</weave-patches.md>; rel="alternate"; type="text/markdown"',
-    '<https://rom-weaver.com/weave-patches>; rel="canonical"',
+    '</weave-rom-patches.md>; rel="alternate"; type="text/markdown"',
+    '<https://rom-weaver.com/weave-rom-patches>; rel="canonical"',
   ]);
   const { response: home } = await negotiate("text/html", { path: "/?bundle=example" });
   assert.equal(home.headers.get("Link"), '<https://rom-weaver.com/>; rel="canonical"');
-  for (const options of [{ path: "/weave-patches" }, { path: "/weave-patches?guide=weave", htmlStatus: 404 }]) {
+  for (const options of [{ path: "/weave-rom-patches" }, { path: "/weave-rom-patches?guide=weave", htmlStatus: 404 }]) {
     const { response: clean } = await negotiate("text/html", options);
     assert.ok(!(clean.headers.get("Link") ?? "").includes("canonical"), JSON.stringify(options));
   }

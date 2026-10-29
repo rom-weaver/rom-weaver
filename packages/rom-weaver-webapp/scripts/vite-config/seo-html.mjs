@@ -167,7 +167,7 @@ const WORKFLOW_MARKDOWN_GUIDES = {
     slug: "docs/features",
     sections: ["Change a game", "Check and prepare files", "Play and manage saves"],
   },
-  "apply-patches": {
+  "apply-rom-patches": {
     slug: "docs/apply-rom-patches",
     sections: [
       "Patch a ROM in four steps",
@@ -180,19 +180,19 @@ const WORKFLOW_MARKDOWN_GUIDES = {
     slug: "docs/create-rom-patches",
     sections: ["Add Original and Modified", "Choose a patch format", "Create and download the patch"],
   },
-  "weave-patches": {
+  "weave-rom-patches": {
     slug: "docs/create-bundles",
     sections: ["Choose what to include", "Build the patch recipe", "Turn on weave output and download it"],
   },
-  checksum: {
+  "file-checksum": {
     slug: "docs/checksum-roms-browser",
     sections: ["Calculate checksums", "Add an algorithm", "Compare with an expected checksum"],
   },
-  compress: {
+  "compress-files": {
     slug: "docs/convert-roms-browser",
     sections: ["Add files", "Choose an output", "Check the result"],
   },
-  extract: {
+  "extract-files": {
     slug: "docs/extract-files-browser",
     sections: ["Extract an archive", "Download the files", "Convert CHD to ISO or BIN/CUE"],
   },
@@ -204,7 +204,7 @@ const WORKFLOW_MARKDOWN_GUIDES = {
     slug: "docs/undo-ppf-browser",
     sections: ["Restore the saved bytes", "Check the restored copy"],
   },
-  "test-rom": {
+  "play-rom": {
     slug: "docs/test-roms",
     sections: ["Check platform support", "Load a ROM", "Fix a game that does not start"],
   },

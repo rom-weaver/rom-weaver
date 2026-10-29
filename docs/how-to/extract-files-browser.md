@@ -19,7 +19,7 @@ To decompress Nintendo 3DS files, follow [Extract Z3DS, ZCCI, ZCXI, ZCIA, and Z3
 
 ## Extract an archive
 
-1. Open [Extract](https://rom-weaver.com/extract).
+1. Open [Extract](https://rom-weaver.com/extract-files).
 2. Add one archive or disc image to **Archive**.
 3. Wait for extraction to finish. rom-weaver also extracts archives found inside the file.
 

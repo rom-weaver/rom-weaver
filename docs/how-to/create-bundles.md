@@ -18,7 +18,7 @@ Package multiple patches, their order, and expected ROM checksums into one downl
 
 <!-- END doctoc -->
 
-See [What a weave is](../explanation/bundles.md) for background, or try the [guided Weave Patches tour](https://rom-weaver.com/weave-patches?guide=weave) with homebrew files.
+See [What a weave is](../explanation/bundles.md) for background, or try the [guided Weave Patches tour](https://rom-weaver.com/weave-rom-patches?guide=weave) with homebrew files.
 
 ## Choose what to include
 
@@ -30,7 +30,7 @@ Choose ZIP for broad compatibility, or 7z. This selects the recipe archive forma
 
 ## Build the patch recipe
 
-1. Open [Weave](https://rom-weaver.com/weave-patches).
+1. Open [Weave](https://rom-weaver.com/weave-rom-patches).
 2. Add the clean ROM and every patch. Add supported ROM cheats through **Add cheats to the patch order** when needed.
 3. Put the patches in execution order. Drag a numbered handle, click it to choose a position, or focus it and use the arrow keys.
 4. Open each patch's three-dot **Patch actions** menu → **Edit details**. Add a readable name and any description, version, and author users need.
@@ -85,7 +85,7 @@ Files are read locally. Patch-only weaves contain ROM checksums, not ROM bytes.
 
 Test the actual archive you will publish:
 
-1. Open a fresh [Apply](https://rom-weaver.com/apply-patches) page.
+1. Open a fresh [Apply](https://rom-weaver.com/apply-rom-patches) page.
 2. Add the downloaded weave archive.
 3. For a patch-only weave, add a fresh copy of the documented Original.
 4. Confirm the displayed patch order, names, required switches, and optional switches match the release.
@@ -115,7 +115,7 @@ For updates, rebuild from the same clean Original and new patches, update their 
 Share a link that preloads the public weave:
 
 ```text
-https://rom-weaver.com/weave-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip
+https://rom-weaver.com/weave-rom-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip
 ```
 
 Weave links open **Weave**, including links that start on the Apply route. Recipients add their matching ROM, review the recipe, expand **Download this ROM**, and choose **APPLY & DOWNLOAD**. Opening the link does not apply patches automatically.
