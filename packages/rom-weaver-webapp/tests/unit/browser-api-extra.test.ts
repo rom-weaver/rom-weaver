@@ -76,6 +76,8 @@ describe("browser ingest and identify API", () => {
       checksumAlgorithms: ["md5"],
       identify: true,
       identifyAllRomEntries: true,
+      interactiveSelectionEnabled: false,
+      preserveNestedFormats: ["pbp"],
       onProgress,
       signal,
     });
@@ -84,6 +86,8 @@ describe("browser ingest and identify API", () => {
       fileName: "game.gba",
       identify: true,
       identifyAllRomEntries: true,
+      interactiveSelectionEnabled: false,
+      preserveNestedFormats: ["pbp"],
       onProgress,
       signal,
       source: expect.any(File),

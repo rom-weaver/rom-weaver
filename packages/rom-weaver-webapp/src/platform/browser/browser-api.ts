@@ -107,6 +107,8 @@ type BrowserIngestRomOptions = {
   identify?: boolean;
   identifyAllRomEntries?: boolean;
   identifyBounded?: boolean;
+  interactiveSelectionEnabled?: boolean;
+  preserveNestedFormats?: string[];
   onProgress?: Parameters<NonNullable<NonNullable<typeof browserRuntime.ingest>["run"]>>[0]["onProgress"];
   signal?: AbortSignal;
 };
@@ -122,6 +124,8 @@ const ingestRom = async (source: Blob, fileName: string, options: BrowserIngestR
     identify: options.identify,
     identifyAllRomEntries: options.identifyAllRomEntries,
     identifyBounded: options.identifyBounded,
+    interactiveSelectionEnabled: options.interactiveSelectionEnabled,
+    preserveNestedFormats: options.preserveNestedFormats,
     onProgress: options.onProgress,
     signal: options.signal,
     source,

@@ -457,3 +457,144 @@ fn psp_nonempty_psar_probe_and_extract_explain_passthrough() {
         assert_eq!(fs::read(source.path()).expect("source unchanged"), bytes);
     }
 }
+
+#[test]
+fn ingest_preserves_nested_pbp_only_when_requested() {
+    use rom_weaver_app::{AppRunOptions, Commands, RomWeaverApp};
+    use rom_weaver_core::{NoninteractivePrompter, ProgressEvent, ProgressSink};
+    #[derive(Default)]
+    struct Events(Mutex<Vec<ProgressEvent>>);
+    impl ProgressSink for Events {
+        fn emit(&self, event: ProgressEvent) {
+            self.0.lock().unwrap().push(event);
+        }
+    }
+    use std::sync::{Arc, Mutex};
+
+    let fixture = multi_disc_pbp();
+    let inner = fixture.temp.child("inner.zip").path().to_path_buf();
+    let outer = fixture.temp.child("outer.zip").path().to_path_buf();
+    for (source, output) in [(&fixture.pbp, &inner), (&inner, &outer)] {
+        command_stdout(
+            &[
+                "compress",
+                "--input",
+                path_str(source),
+                "--format",
+                "zip",
+                "--output",
+                path_str(output),
+                "--json",
+            ],
+            0,
+        );
+    }
+    fn bins(path: &Path) -> usize {
+        fs::read_dir(path)
+            .unwrap()
+            .map(|entry| {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    bins(&path)
+                } else {
+                    usize::from(path.extension().is_some_and(|ext| ext == "bin"))
+                }
+            })
+            .sum()
+    }
+    let invalid_output = fixture.temp.child("invalid-format").path().to_path_buf();
+    let invalid: Commands = serde_json::from_value(serde_json::json!({
+        "type": "ingest", "args": {"input": inner, "output": invalid_output, "preserve_nested_formats": ["unknown-format"]}
+    })).unwrap();
+    let events = Arc::new(Events::default());
+    let outcome = RomWeaverApp::run(
+        invalid,
+        AppRunOptions {
+            emit_progress_events: false,
+            interactive_selection_enabled: false,
+            assume_yes: true,
+            dry_run: false,
+        },
+        events.clone(),
+        Arc::new(NoninteractivePrompter),
+    );
+    assert_eq!(outcome.exit_code, 1);
+    assert!(!invalid_output.exists());
+    assert!(events.0.lock().unwrap().iter().any(|event| {
+        event
+            .label
+            .contains("unknown preserved nested format `unknown-format`")
+    }));
+    for (depth, input) in [&inner, &outer].iter().enumerate() {
+        for (case, formats, expected) in [
+            ("default", vec![], 2),
+            ("preserved", vec!["PBP"], 0),
+            ("alias", vec!["7zip"], 2),
+        ] {
+            let output = fixture
+                .temp
+                .child(format!("{depth}-{case}"))
+                .path()
+                .to_path_buf();
+            let mut request = serde_json::json!({
+                "type": "ingest", "args": {"input": input, "output": output,
+                "preserve_nested_formats": formats, "checksum": ["sha1"], "threads": 1},
+            });
+            if case == "default" {
+                request["args"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("preserve_nested_formats");
+            }
+            let command: Commands = serde_json::from_value(request).expect("typed ingest request");
+            let events = Arc::new(Events::default());
+            let outcome = RomWeaverApp::run(
+                command,
+                AppRunOptions {
+                    emit_progress_events: false,
+                    interactive_selection_enabled: false,
+                    assume_yes: true,
+                    dry_run: false,
+                },
+                events.clone(),
+                Arc::new(NoninteractivePrompter),
+            );
+            assert_eq!(outcome.exit_code, 0, "{depth}-{case}");
+            assert_eq!(bins(&output), expected, "{depth}-{case}");
+            let events = events.0.lock().unwrap();
+            let details = events
+                .iter()
+                .rev()
+                .find(|event| event.stage == "ingest" && event.details.is_some())
+                .unwrap()
+                .details
+                .as_ref()
+                .unwrap();
+            let assets = details["ingest"]["assets"].as_array().expect("ROM assets");
+            if case == "preserved" {
+                assert_eq!(assets.len(), 1);
+                let retained = Path::new(assets[0]["path"].as_str().unwrap());
+                assert_eq!(fs::read(retained).unwrap(), fs::read(&fixture.pbp).unwrap());
+            } else {
+                assert_eq!(
+                    assets
+                        .iter()
+                        .filter(|asset| asset["file_name"]
+                            .as_str()
+                            .is_some_and(|name| name.ends_with(".bin")))
+                        .count(),
+                    2
+                );
+                assert_eq!(
+                    assets
+                        .iter()
+                        .filter(|asset| asset["file_name"]
+                            .as_str()
+                            .is_some_and(|name| name.ends_with(".cue")))
+                        .count(),
+                    2
+                );
+            }
+        }
+    }
+}

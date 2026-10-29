@@ -52,14 +52,48 @@ describe("Test loader with real PBP parsing and hashing", () => {
       expect(lines.slice().sort()).toEqual(cues.map((entry) => entry.fileName).sort());
       const discHash = await sha1(new Blob([disc.iso]));
       for (const bin of bins) expect(await sha1(await getIngestOutputBlob(bin))).toBe(discHash);
-      for (const cue of cues)
-        expect(await (await getIngestOutputBlob(cue)).text()).toContain(
-          `FILE "${cue.fileName.replace(/\.cue$/, ".bin")}" BINARY`,
-        );
+      for (const cue of cues) {
+        const expected = `FILE "${cue.fileName.replace(/\.cue$/, ".bin")}" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n`;
+        expect(await sha1(await getIngestOutputBlob(cue))).toBe(await sha1(new Blob([expected])));
+      }
     } finally {
       await Promise.all(extracted.outputs.map((entry) => entry.dispose()));
     }
     expect((await loadEmulatorRom(blob, "Renamed.pbp")).checksum).toBe(loaded.checksum);
+  });
+
+  it.each([1, 2, 5])("retains an archived %i-disc PBP through ZIP and nested ZIP", async (count) => {
+    const inner = new File([buildPbp(Array.from({ length: count }, () => disc))], "#Inner.pbp");
+    let source = inner;
+    for (const name of ["Outer.zip", "Nested.zip"]) {
+      const archive = await browserRuntime.compression.create({
+        entries: [{ file: source, fileName: source.name }],
+        format: "zip",
+        options: { outputName: name, threads: 1 },
+      });
+      try {
+        source = new File([await browserRuntime.publicOutput.getBlob(archive.output)], name);
+      } finally {
+        await archive.output.dispose();
+      }
+      const loaded = await loadEmulatorRom(source, name);
+      expect(loaded.fileName).toBe("#Inner.zip");
+      expect(loaded.platform).toBe("Sony PlayStation");
+      expect(loaded.checksum).toBe(await sha1(count === 1 ? new Blob([disc.iso]) : inner));
+      const unpacked = await browserRuntime.compression.extract({
+        source: { source: loaded.blob, fileName: "prepared.zip" },
+        extractAll: true,
+      });
+      try {
+        const bins = unpacked.outputs.filter((entry) => entry.fileName.endsWith(".bin"));
+        expect(bins).toHaveLength(count);
+        expect(unpacked.outputs.filter((entry) => entry.fileName.endsWith(".cue"))).toHaveLength(count);
+        for (const bin of bins)
+          expect(await sha1(await getIngestOutputBlob(bin))).toBe(await sha1(new Blob([disc.iso])));
+      } finally {
+        await Promise.all(unpacked.outputs.map((entry) => entry.dispose()));
+      }
+    }
   });
 
   it("keeps empty-PSAR PSP passthrough and whole-file identity", async () => {
@@ -71,6 +105,20 @@ describe("Test loader with real PBP parsing and hashing", () => {
     expect(loaded.blob).toBe(blob);
     expect(getEmulatorJsCore(loaded.platform, loaded.fileName)).toBe("psp");
     expect(loaded.checksum).toBe(await sha1(blob));
+    const archive = await browserRuntime.compression.create({
+      entries: [{ file: new File([blob], "EBOOT.PBP"), fileName: "EBOOT.PBP" }],
+      format: "zip",
+      options: { outputName: "PSP.zip", threads: 1 },
+    });
+    try {
+      const archived = await loadEmulatorRom(await browserRuntime.publicOutput.getBlob(archive.output), "PSP.zip");
+      expect(archived.fileName).toBe("EBOOT.PBP");
+      expect(getEmulatorJsCore(archived.platform, archived.fileName)).toBe("psp");
+      expect(await sha1(archived.blob)).toBe(await sha1(blob));
+      expect(archived.checksum).toBe(await sha1(blob));
+    } finally {
+      await archive.output.dispose();
+    }
   });
 
   it.each([

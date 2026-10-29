@@ -84,6 +84,7 @@ const invokeRomWeaverIngestWorker = async (
     logLevel?: LogLevel | string;
     noIgnore?: boolean;
     noNestedExtract?: boolean;
+    preserveNestedFormats?: string[];
     outDirPath: string;
     select?: string[];
     signal?: AbortSignal;
@@ -112,6 +113,7 @@ const invokeRomWeaverIngestWorker = async (
     ...(select.length ? { select } : {}),
     ...(input.noIgnore ? { no_ignore: true } : {}),
     ...(input.noNestedExtract ? { no_nested_extract: true } : {}),
+    ...(input.preserveNestedFormats?.length ? { preserve_nested_formats: input.preserveNestedFormats } : {}),
     ...(typeof input.splitBin === "boolean" ? { split_bin: input.splitBin } : {}),
     ...(checksum.length ? { checksum } : {}),
     ...(threadArg ? { threads: threadArg } : {}),

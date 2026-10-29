@@ -1,4 +1,14 @@
 use super::*;
+
+pub(super) struct NestedExtractRequest<'a> {
+    pub(super) root_source: &'a Path,
+    pub(super) root_candidates: &'a [PathBuf],
+    pub(super) preserve_nested_formats: &'a [String],
+    pub(super) kind_filter: ArchiveEntryKindFilter,
+    pub(super) ignore_common_files: bool,
+    pub(super) overwrite: bool,
+}
+
 /// The result of descending nested archives during a single `extract` command.
 pub(super) struct NestedExtractOutcome {
     /// Number of nested containers that were extracted.
@@ -36,13 +46,17 @@ impl CliApp {
 
     pub(super) fn extract_nested_archives(
         &self,
-        root_source: &Path,
-        root_candidates: &[PathBuf],
-        kind_filter: ArchiveEntryKindFilter,
-        ignore_common_files: bool,
-        overwrite: bool,
+        request: NestedExtractRequest<'_>,
         context: &OperationContext,
     ) -> Result<NestedExtractOutcome> {
+        let NestedExtractRequest {
+            root_source,
+            root_candidates,
+            preserve_nested_formats,
+            kind_filter,
+            ignore_common_files,
+            overwrite,
+        } = request;
         trace!(
             root_source = %root_source.display(),
             candidate_count = root_candidates.len(),
@@ -138,6 +152,14 @@ impl CliApp {
                     error = %error,
                     "skipping nested archive candidate because probe failed"
                 );
+                continue;
+            }
+
+            if preserve_nested_formats
+                .iter()
+                .any(|name| handler.descriptor().matches_name(name))
+            {
+                debug!(source = %source.display(), format = handler.descriptor().name, "preserving nested container");
                 continue;
             }
 
@@ -472,11 +494,14 @@ mod nfs_probe_tests {
                 fs::write(directory.path().join("htk.bin"), key).expect("key fixture");
             }
             let result = app.extract_nested_archives(
-                &directory.path().join("outer.zip"),
-                std::slice::from_ref(&source),
-                ArchiveEntryKindFilter::default(),
-                true,
-                false,
+                crate::nested_extract::NestedExtractRequest {
+                    root_source: &directory.path().join("outer.zip"),
+                    root_candidates: std::slice::from_ref(&source),
+                    preserve_nested_formats: &[],
+                    kind_filter: ArchiveEntryKindFilter::default(),
+                    ignore_common_files: true,
+                    overwrite: false,
+                },
                 &context,
             );
             let outcome = result.expect("a keyless NFS must not fail the nested scan");
@@ -509,14 +534,17 @@ mod nfs_probe_tests {
         let context = app.context(ThreadBudget::Fixed(1));
         let outcome = app
             .extract_nested_archives(
-                &directory.path().join("outer.zip"),
-                &[source],
-                ArchiveEntryKindFilter {
-                    rom: false,
-                    patch: true,
+                crate::nested_extract::NestedExtractRequest {
+                    root_source: &directory.path().join("outer.zip"),
+                    root_candidates: &[source],
+                    preserve_nested_formats: &[],
+                    kind_filter: ArchiveEntryKindFilter {
+                        rom: false,
+                        patch: true,
+                    },
+                    ignore_common_files: true,
+                    overwrite: false,
                 },
-                true,
-                false,
                 &context,
             )
             .expect("patch-only extraction skips NFS probe errors");
@@ -538,11 +566,14 @@ mod nfs_probe_tests {
         let context = app.context(ThreadBudget::Fixed(1));
         let outcome = app
             .extract_nested_archives(
-                &directory.path().join("outer.zip"),
-                &[source],
-                ArchiveEntryKindFilter::default(),
-                true,
-                false,
+                crate::nested_extract::NestedExtractRequest {
+                    root_source: &directory.path().join("outer.zip"),
+                    root_candidates: &[source],
+                    preserve_nested_formats: &[],
+                    kind_filter: ArchiveEntryKindFilter::default(),
+                    ignore_common_files: true,
+                    overwrite: false,
+                },
                 &context,
             )
             .expect("extension-only candidates are skipped");

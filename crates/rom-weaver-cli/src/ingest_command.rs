@@ -213,6 +213,7 @@ struct IngestRequest<'a> {
     raw_selections: Vec<String>,
     no_ignore: bool,
     no_nested_extract: bool,
+    preserve_nested_formats: &'a [String],
     split_bin: Option<bool>,
     algorithms: &'a [String],
     context: &'a OperationContext,
@@ -225,6 +226,7 @@ struct IngestLeavesRequest<'a> {
     kind_filter: ArchiveEntryKindFilter,
     no_ignore: bool,
     no_nested_extract: bool,
+    preserve_nested_formats: &'a [String],
     split_bin: bool,
     interactive: bool,
     source_label: &'static str,
@@ -258,10 +260,29 @@ impl CliApp {
             input_name,
             no_ignore,
             no_nested_extract,
+            preserve_nested_formats,
             split_bin,
             checksum,
             threads,
         } = args;
+        if let Some(invalid) = preserve_nested_formats.iter().find(|name| {
+            !self
+                .containers
+                .handlers()
+                .iter()
+                .any(|handler| handler.descriptor().matches_name(name))
+        }) {
+            return self.finish(
+                "ingest",
+                OperationReport::failed(
+                    OperationFamily::Command,
+                    Some("ingest".to_string()),
+                    "validate",
+                    format!("unknown preserved nested format `{invalid}`"),
+                    None,
+                ),
+            );
+        }
         let identify_database = match IdentifyDatabaseSet::load(&database) {
             Ok(identify_database) => identify_database,
             Err(error) => {
@@ -352,6 +373,7 @@ impl CliApp {
                 raw_selections: select,
                 no_ignore,
                 no_nested_extract,
+                preserve_nested_formats: &preserve_nested_formats,
                 split_bin,
                 algorithms: &algorithms,
                 context: &context,
@@ -395,6 +417,7 @@ impl CliApp {
             raw_selections,
             no_ignore,
             no_nested_extract,
+            preserve_nested_formats,
             split_bin,
             algorithms,
             context,
@@ -436,6 +459,7 @@ impl CliApp {
                     raw_selections,
                     no_ignore,
                     no_nested_extract,
+                    preserve_nested_formats,
                     split_bin,
                     algorithms,
                     context,
@@ -456,6 +480,7 @@ impl CliApp {
             raw_selections,
             no_ignore,
             no_nested_extract,
+            preserve_nested_formats,
             split_bin,
             algorithms,
             context,
@@ -493,6 +518,7 @@ impl CliApp {
                     kind_filter: Self::archive_entry_kind_filter(false, true),
                     no_ignore,
                     no_nested_extract,
+                    preserve_nested_formats,
                     split_bin: false,
                     interactive: true,
                     source_label: "ingest patch input",
@@ -532,6 +558,7 @@ impl CliApp {
                     kind_filter: Self::archive_entry_kind_filter(false, true),
                     no_ignore,
                     no_nested_extract,
+                    preserve_nested_formats,
                     split_bin: false,
                     interactive: false,
                     source_label: "ingest patch input",
@@ -553,6 +580,7 @@ impl CliApp {
                 kind_filter: Self::archive_entry_kind_filter(true, false),
                 no_ignore,
                 no_nested_extract,
+                preserve_nested_formats,
                 split_bin: resolved_split_bin,
                 interactive: true,
                 source_label: "ingest input",
@@ -582,6 +610,7 @@ impl CliApp {
                                 kind_filter: Self::archive_entry_kind_filter(false, true),
                                 no_ignore,
                                 no_nested_extract,
+                                preserve_nested_formats,
                                 split_bin: false,
                                 interactive: false,
                                 source_label: "ingest patch input",
@@ -799,6 +828,7 @@ impl CliApp {
             kind_filter,
             no_ignore,
             no_nested_extract,
+            preserve_nested_formats,
             split_bin,
             interactive,
             source_label,
@@ -813,6 +843,7 @@ impl CliApp {
                 kind_filter,
                 no_ignore,
                 no_nested_extract,
+                preserve_nested_formats,
                 split_bin,
                 interactive,
                 source_label,
@@ -931,6 +962,7 @@ impl CliApp {
             kind_filter,
             no_ignore,
             no_nested_extract,
+            preserve_nested_formats,
             split_bin,
             interactive,
             source_label,
@@ -945,6 +977,7 @@ impl CliApp {
                 kind_filter,
                 no_ignore,
                 no_nested_extract,
+                preserve_nested_formats,
                 split_bin,
                 interactive,
                 source_label,
@@ -984,6 +1017,7 @@ impl CliApp {
             kind_filter,
             no_ignore,
             no_nested_extract,
+            preserve_nested_formats,
             split_bin,
             interactive,
             source_label,
@@ -1050,6 +1084,7 @@ impl CliApp {
                 ignore_common_files: !no_ignore,
                 overwrite: true,
                 no_nested_extract,
+                preserve_nested_formats,
                 discard_consumed_nfs_companions: true,
                 require_decodable_nfs: true,
                 context,

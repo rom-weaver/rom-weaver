@@ -895,6 +895,10 @@ pub struct IngestCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_nested_extract: bool,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub preserve_nested_formats: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(

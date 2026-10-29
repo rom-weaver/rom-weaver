@@ -411,10 +411,11 @@ describe("browser ingest and weave runtime", () => {
     await browserRuntime.ingest.run({
       fileName: "hack [crc32:4af1a4bb].ips",
       identify: false,
+      preserveNestedFormats: ["pbp"],
       source: new Blob(["patch"]),
     } as never);
     expect(state.ingest).toHaveBeenLastCalledWith(
-      expect.objectContaining({ inputName: "hack [crc32:4af1a4bb].ips" }),
+      expect.objectContaining({ inputName: "hack [crc32:4af1a4bb].ips", preserveNestedFormats: ["pbp"] }),
       undefined,
       undefined,
     );
