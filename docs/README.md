@@ -167,6 +167,7 @@ Background on the engine, formats, and design decisions.
 - [Development guide](development/development.md): prerequisites, setup, native and WASM builds, the dev server, tests, generated files, and worktrees.
 - [Architecture](development/ARCHITECTURE.md): workspace layout, crate graph, command core, browser boundary, OPFS, workers, and test organization.
 - [ROM identify data](development/identify-data.md): rebuild the Libretro and OpenGood packs.
+- [PBP emulator verification](development/emulator-pbp-verification.md): legal homebrew inputs and real-core boot evidence.
 - [Save Editor development](development/save-editor.md): shared handler architecture, integrity boundary, and the eight-step contributor flow.
 - [ROM patch and disc format specifications](development/references.md): format specifications and upstream reference implementations.
 

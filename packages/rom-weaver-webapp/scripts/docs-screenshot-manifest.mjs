@@ -121,6 +121,9 @@ const DOCS_SCREENSHOT_NAMES = [
   "checksum-initial-light.webp",
   "checksum-mobile-dark.webp",
   "ppf-undo-restored.webp",
+  "pbp-ps1-pads.webp",
+  "pbp-psp-cube.webp",
+  "pbp-psp-raycast.webp",
 ];
 
 export {

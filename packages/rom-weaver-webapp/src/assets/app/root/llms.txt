@@ -100,6 +100,7 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Architecture](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/ARCHITECTURE.md): Crate graph, registries, browser workers, OPFS, and the Rust-TypeScript boundary.
 - [Edit a game save in the browser](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/how-to/edit-gen3-saves.md): Recognition, editing, previews, downloads, and testing with a matching ROM.
 - [Save Editor development](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/save-editor.md): Handler architecture, integrity rules, and the eight-step contributor flow.
+- [PBP emulator verification](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/emulator-pbp-verification.md): Legal homebrew fixtures and real-core browser boot evidence.
 - [Release guide](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/.github/RELEASING.md): Release automation, publishing channels, and retry procedures.
 
 ## Project

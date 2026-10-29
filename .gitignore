@@ -1,6 +1,7 @@
 /target
 /node_modules/
 /.tmp/
+/.cache/
 /.tmp-disc/
 /rom-weaver-out/
 /rom-weaver/
