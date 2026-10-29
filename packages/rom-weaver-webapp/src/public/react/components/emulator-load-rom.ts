@@ -151,7 +151,6 @@ const loadEmulatorRom = async (
   }
   const { outputs, result } = await ingestRom(blob, fileName, {
     identify: false,
-    interactiveSelectionEnabled: false,
     preserveNestedFormats: ["pbp"],
     onProgress,
     signal: options.signal,

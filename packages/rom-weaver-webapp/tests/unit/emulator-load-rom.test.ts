@@ -88,7 +88,7 @@ it("forwards archive extraction progress and releases the workflow", async () =>
   expect(workflowMocks.ingestRom).toHaveBeenCalledWith(
     expect.any(Blob),
     "games.zip",
-    expect.objectContaining({ signal: abortController.signal, interactiveSelectionEnabled: false }),
+    expect.objectContaining({ signal: abortController.signal }),
   );
   expect(loaded.fileName).toBe("game.nes");
   expect(loaded.checksum).toBe("a".repeat(40));
@@ -467,7 +467,7 @@ it.each([1, 2, 5])("prepares the selected archived %i-disc PBP and disposes all 
   expect(workflowMocks.ingestRom).toHaveBeenCalledWith(
     expect.any(Blob),
     "Outer.zip",
-    expect.objectContaining({ preserveNestedFormats: ["pbp"], interactiveSelectionEnabled: false }),
+    expect.objectContaining({ preserveNestedFormats: ["pbp"] }),
   );
   expect(workflowMocks.probeRom).toHaveBeenCalledWith(snapshot, "Game.pbp", expect.any(Object));
   expect(workflowMocks.prepareEmulatorPbp).toHaveBeenCalledWith(snapshot, "Game.pbp", discCount, expect.any(Object));
@@ -517,10 +517,10 @@ it("keeps archived PSP PBP bytes and whole-file identity", async () => {
   expect(workflowMocks.outputDispose).toHaveBeenCalledOnce();
 });
 
-it("selects one ordinary ROM from a multi-ROM archive without interactive selection", async () => {
+it("leaves archive ROM selection interactive and uses the first returned ROM", async () => {
   const disposeOther = vi.fn(async () => undefined);
   workflowMocks.ingestRom.mockImplementationOnce(async (_blob, _fileName, options) => {
-    expect(options.interactiveSelectionEnabled).toBe(false);
+    expect(options.interactiveSelectionEnabled).not.toBe(false);
     return {
       outputs: [
         { checksums: { sha1: "a".repeat(40) }, dispose: workflowMocks.outputDispose, fileName: "First.nes" },
