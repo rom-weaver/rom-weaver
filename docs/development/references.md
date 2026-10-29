@@ -1,8 +1,8 @@
-# BPS, IPS, xdelta, PPF and CHD format specifications
+# ROM patch and disc format specifications: BPS, IPS, CHD
 
 This page lists the format specifications and implementations used to check rom-weaver.
 
-<a id="references"></a> Where a format has no stable specification, the linked implementation and compatibility tests define the behavior rom-weaver follows.
+<a id="references"></a><a id="rom-patch-and-disc-format-specifications-bps-ips-xdelta-ppf-and-chd"></a> Where a format has no stable specification, the linked implementation and compatibility tests define the behavior rom-weaver follows.
 
 <!-- START doctoc -->
 ## Table of contents
