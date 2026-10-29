@@ -105,6 +105,22 @@ const showSvg = async (page, svg, width, height) => {
   );
   await page.locator("img").waitFor({ state: "visible" });
   await page.locator("img").evaluate((img) => img.decode());
+  // A loaded runner applies the viewport resize asynchronously, and a capture taken first comes out shifted
+  // (the mark off-center by the previous viewport's height). Wait until the page lays out at the requested
+  // size, then for two painted frames, before anything is captured.
+  await page.waitForFunction(
+    ([expectedWidth, expectedHeight]) => {
+      const rect = document.querySelector("img")?.getBoundingClientRect();
+      return (
+        window.innerWidth === expectedWidth &&
+        window.innerHeight === expectedHeight &&
+        rect?.width === expectedWidth &&
+        rect?.height === expectedHeight
+      );
+    },
+    [width, height],
+  );
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 };
 
 /** Screenshot a square master as an optimized PNG. */
