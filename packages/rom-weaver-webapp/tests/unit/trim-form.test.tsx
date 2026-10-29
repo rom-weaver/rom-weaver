@@ -148,7 +148,7 @@ describe("TrimPatchForm", () => {
     const { container } = renderForm({ pageDrop: { files: [file], id: 1 } });
     await vi.waitFor(() => expect(container.querySelector("#trim-builder-button-run")).toBeTruthy());
     await waitForWorkflow();
-    expect(container.textContent).toContain("Trim Example (USA)");
+    await vi.waitFor(() => expect(container.textContent).toContain("Trim Example (USA)"));
     expect(container.textContent).toContain("BYTES 128");
     await act(async () => {
       // Fresh source and identification objects with the same identification value but another size.
