@@ -1,3 +1,4 @@
+import { waitForBrowserOpfsBootCleanup } from "../../storage/browser/browser-opfs-cleanup.ts";
 import { withBrowserOutputStorageFailureContext } from "../../storage/browser/browser-output-storage-guard.ts";
 import {
   formatBrowserStorageEstimateState,
@@ -12,8 +13,14 @@ import type { RomWeaverRunJsonResult } from "./run-result-parsing.ts";
 type RunRomWeaverJson = typeof runRomWeaverJsonType;
 let runnerModulePromise: Promise<typeof import("../../workers/rom-weaver/rom-weaver-runner.ts")> | undefined;
 const loadRomWeaverRunner = () => (runnerModulePromise ??= import("../../workers/rom-weaver/rom-weaver-runner.ts"));
-const runRomWeaverJson = async (...args: Parameters<RunRomWeaverJson>): ReturnType<RunRomWeaverJson> =>
-  (await loadRomWeaverRunner()).runRomWeaverJson(...args);
+// Every command may create or read scratch under /work/{weave-parse,input,operations,...}, the exact
+// directories the page-boot sweep deletes. A command that starts before the sweep finishes would have its
+// fresh scratch deleted underneath it (e.g. "OPFS prefix file not found: /work/weave-parse/<id>/...").
+const runRomWeaverJson = async (...args: Parameters<RunRomWeaverJson>): ReturnType<RunRomWeaverJson> => {
+  // A failed sweep is already logged at boot; it must not block user work.
+  await waitForBrowserOpfsBootCleanup().catch(() => undefined);
+  return (await loadRomWeaverRunner()).runRomWeaverJson(...args);
+};
 
 const relaySimpleProgress =
   (onProgress?: (progress: NonNullable<ReturnType<typeof toSimpleProgress>>) => void) =>
