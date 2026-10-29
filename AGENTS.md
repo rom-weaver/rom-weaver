@@ -13,8 +13,7 @@ There are no Git submodules. Prepare a new worktree with
 `node scripts/remove-worktree.mjs .worktrees/<name>`, which refuses worktrees
 with changes (`docs/development/development.md#linked-worktrees`). Give each
 checkout its own `target/`; a shared one can reuse stale staged C sources
-(recover with `cargo clean -p rom-weaver-containers`). Never put `/` or `+` in
-a worktree name (vitest browser mode hangs on `+` in test paths).
+(recover with `cargo clean -p rom-weaver-containers`).
 
 ## Commands
 
