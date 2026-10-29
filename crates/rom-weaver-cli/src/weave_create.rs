@@ -624,7 +624,13 @@ impl CliApp {
         args: &WeaveCreateCommand,
         specs: &[WeaveCreatePatchSpec],
     ) -> Result<()> {
-        ensure_weave_create_sources_preserved(args, specs)?;
+        let mut disc_sources = Vec::new();
+        for input in args.rom.iter().chain(args.bundle_rom.iter()) {
+            if let Some(paths) = super::patch_apply_disc::disc_source_paths(input)? {
+                disc_sources.extend(paths);
+            }
+        }
+        ensure_weave_create_sources_preserved(args, specs, &disc_sources)?;
         if let Some(weave) = args.bundle.as_deref() {
             if weave_create_outputs_alias(&args.output, weave) {
                 return Err(RomWeaverError::Validation(
@@ -655,7 +661,7 @@ impl CliApp {
             }
         }
         // Creating missing parents can reveal aliases through `child/..` paths.
-        ensure_weave_create_sources_preserved(args, specs)?;
+        ensure_weave_create_sources_preserved(args, specs, &disc_sources)?;
         if let Some(weave) = args.bundle.as_deref()
             && weave_create_outputs_alias_after_parent_checks(&args.output, weave)
         {
@@ -1297,6 +1303,7 @@ fn weave_create_outputs_alias(left: &Path, right: &Path) -> bool {
 fn ensure_weave_create_sources_preserved(
     args: &WeaveCreateCommand,
     specs: &[WeaveCreatePatchSpec],
+    disc_sources: &[PathBuf],
 ) -> Result<()> {
     for (flag, output) in std::iter::once(("--output", args.output.as_path()))
         .chain(args.bundle.as_deref().map(|path| ("--weave", path)))
@@ -1308,7 +1315,17 @@ fn ensure_weave_create_sources_preserved(
             .chain(args.bundle_rom.as_deref())
             .chain(args.from.as_deref().filter(|path| *path != Path::new("-")))
             .chain(specs.iter().map(|spec| spec.path.as_path()))
+            .chain(disc_sources.iter().map(PathBuf::as_path))
         {
+            if let Err(error) = fs::metadata(source)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                return Err(RomWeaverError::io_path(
+                    rom_weaver_core::IoOp::Inspect,
+                    source,
+                    error,
+                ));
+            }
             if super::path_access::paths_refer_to_same_file(output, source) {
                 return Err(RomWeaverError::Validation(format!(
                     "{flag} must not overwrite source `{}`",
@@ -1329,14 +1346,36 @@ fn weave_create_outputs_alias_after_parent_checks(left: &Path, right: &Path) -> 
 }
 
 fn output_path_identity(path: &Path) -> Option<PathBuf> {
-    let name = path.file_name()?;
-    let parent = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    fs::canonicalize(parent)
-        .ok()
-        .map(|parent| parent.join(name))
+    // `canonicalize` needs an existing target; dangling links still identify planned output files.
+    let mut current = path.to_path_buf();
+    let mut visited = BTreeSet::new();
+    loop {
+        let name = current.file_name()?;
+        let parent = current
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let parent = fs::canonicalize(parent).ok()?;
+        let identity = parent.join(name);
+        if !visited.insert(identity.clone()) {
+            return None;
+        }
+        match fs::symlink_metadata(&identity) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                let target = fs::read_link(&identity).ok()?;
+                current = if target.is_absolute() {
+                    target
+                } else {
+                    parent.join(target)
+                };
+            }
+            Ok(_) => return Some(identity),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Some(identity);
+            }
+            Err(_) => return None,
+        }
+    }
 }
 
 /// Write weave bytes honoring the output name's codec extension: plain
