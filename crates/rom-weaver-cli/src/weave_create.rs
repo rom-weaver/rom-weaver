@@ -367,7 +367,7 @@ impl CliApp {
         context: &OperationContext,
     ) -> Result<WeaveCreateResult> {
         let specs = weave_create_patch_specs(args)?;
-        self.preflight_weave_create_outputs(args)?;
+        self.preflight_weave_create_outputs(args, &specs)?;
         let patch_basis = args.default_patch_basis.unwrap_or(PatchBasisMode::Auto);
         let cheats = self.weave_create_cheat_entries(args, context)?;
         if specs.is_empty() && cheats.is_empty() {
@@ -617,9 +617,14 @@ impl CliApp {
         )
     }
 
-    /// The definition and archive MUST name different files. Both destinations
-    /// need validation before source hashing or either output is written.
-    fn preflight_weave_create_outputs(&self, args: &WeaveCreateCommand) -> Result<()> {
+    /// Destinations MUST differ from each other and every source. Validate both
+    /// before source hashing or either output is written.
+    fn preflight_weave_create_outputs(
+        &self,
+        args: &WeaveCreateCommand,
+        specs: &[WeaveCreatePatchSpec],
+    ) -> Result<()> {
+        ensure_weave_create_sources_preserved(args, specs)?;
         if let Some(weave) = args.bundle.as_deref() {
             if weave_create_outputs_alias(&args.output, weave) {
                 return Err(RomWeaverError::Validation(
@@ -649,6 +654,8 @@ impl CliApp {
                 super::path_access::check_writable_dir(parent)?;
             }
         }
+        // Creating missing parents can reveal aliases through `child/..` paths.
+        ensure_weave_create_sources_preserved(args, specs)?;
         if let Some(weave) = args.bundle.as_deref()
             && weave_create_outputs_alias_after_parent_checks(&args.output, weave)
         {
@@ -1287,6 +1294,53 @@ fn weave_create_outputs_alias(left: &Path, right: &Path) -> bool {
     left == right || super::path_access::native_file_identity_matches(left, right)
 }
 
+fn ensure_weave_create_sources_preserved(
+    args: &WeaveCreateCommand,
+    specs: &[WeaveCreatePatchSpec],
+) -> Result<()> {
+    let mut disc_sources = Vec::new();
+    for input in args.rom.iter().chain(args.bundle_rom.iter()) {
+        if let Some(paths) = super::patch_apply_disc::disc_source_paths(input)? {
+            disc_sources.extend(paths);
+        }
+    }
+    let output_flag = if args.output_is_emit_weave {
+        "--emit-weave"
+    } else {
+        "--output"
+    };
+    for (flag, output) in std::iter::once((output_flag, args.output.as_path()))
+        .chain(args.bundle.as_deref().map(|path| ("--weave", path)))
+    {
+        for source in args
+            .rom
+            .as_deref()
+            .into_iter()
+            .chain(args.bundle_rom.as_deref())
+            .chain(args.from.as_deref().filter(|path| *path != Path::new("-")))
+            .chain(specs.iter().map(|spec| spec.path.as_path()))
+            .chain(disc_sources.iter().map(PathBuf::as_path))
+        {
+            if let Err(error) = fs::metadata(source)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                return Err(RomWeaverError::io_path(
+                    rom_weaver_core::IoOp::Inspect,
+                    source,
+                    error,
+                ));
+            }
+            if super::path_access::paths_refer_to_same_file(output, source) {
+                return Err(RomWeaverError::Validation(format!(
+                    "{flag} must not overwrite source `{}`",
+                    source.display()
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn weave_create_outputs_alias_after_parent_checks(left: &Path, right: &Path) -> bool {
     weave_create_outputs_alias(left, right)
         || matches!(
@@ -1296,14 +1350,36 @@ fn weave_create_outputs_alias_after_parent_checks(left: &Path, right: &Path) -> 
 }
 
 fn output_path_identity(path: &Path) -> Option<PathBuf> {
-    let name = path.file_name()?;
-    let parent = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    fs::canonicalize(parent)
-        .ok()
-        .map(|parent| parent.join(name))
+    // `canonicalize` needs an existing target; dangling links still identify planned output files.
+    let mut current = path.to_path_buf();
+    let mut visited = BTreeSet::new();
+    loop {
+        let name = current.file_name()?;
+        let parent = current
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let parent = fs::canonicalize(parent).ok()?;
+        let identity = parent.join(name);
+        if !visited.insert(identity.clone()) {
+            return None;
+        }
+        match fs::symlink_metadata(&identity) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                let target = fs::read_link(&identity).ok()?;
+                current = if target.is_absolute() {
+                    target
+                } else {
+                    parent.join(target)
+                };
+            }
+            Ok(_) => return Some(identity),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Some(identity);
+            }
+            Err(_) => return None,
+        }
+    }
 }
 
 /// Write weave bytes honoring the output name's codec extension: plain

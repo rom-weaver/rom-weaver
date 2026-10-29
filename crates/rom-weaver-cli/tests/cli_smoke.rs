@@ -35,6 +35,9 @@ mod ingest;
 #[path = "cli_smoke/weave.rs"]
 mod weave;
 
+#[path = "cli_smoke/weave_unicode.rs"]
+mod weave_unicode;
+
 #[path = "cli_smoke/compress.rs"]
 mod compress;
 

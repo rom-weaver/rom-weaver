@@ -74,7 +74,7 @@
         "extension": ".wasm",
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 9050000,
-        "maxRawBytes": 9355000,
+        "maxRawBytes": 9365000,
         "expectedBrotliBytes": 2290000,
         "maxBrotliBytes": 2424500
       }

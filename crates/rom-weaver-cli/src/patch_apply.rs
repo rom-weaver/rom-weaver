@@ -911,6 +911,7 @@ impl CliApp {
             threads: inputs.threads,
             patch_specs,
             cheats: inputs.cheats,
+            output_is_emit_weave: true,
             ..WeaveCreateCommand::default()
         };
         let result = self.weave_create_inner(&create, &context)?;

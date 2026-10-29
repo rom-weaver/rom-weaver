@@ -17,6 +17,583 @@ fn write_min_ips(temp: &TempDir, name: &str) -> PathBuf {
     patch.path().to_path_buf()
 }
 
+fn weave_create_test_command(temp: &TempDir) -> Command {
+    let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+    for (key, directory) in [
+        ("HOME", "home"),
+        ("XDG_CONFIG_HOME", "config"),
+        ("XDG_DATA_HOME", "data"),
+        ("XDG_STATE_HOME", "state"),
+        ("XDG_CACHE_HOME", "cache"),
+    ] {
+        command.env(key, temp.path().join(directory));
+    }
+    command.current_dir(temp.path());
+    command
+}
+
+fn assert_weave_create_preserves_sources(alias: impl Fn(&Path, &Path) -> PathBuf) {
+    for archive in [false, true] {
+        for source_index in 0..4 {
+            let temp = setup_temp_dir();
+            let names = if archive {
+                ["original.zip", "fix.zip", "spec.zip", "packaged.zip"]
+            } else {
+                ["original.bin", "fix.ips", "spec.json", "packaged.bin"]
+            };
+            let sources = names.map(|name| temp.path().join(name));
+            let contents = [
+                b"abcdefgh".to_vec(),
+                b"PATCHEOF".to_vec(),
+                serde_json::to_vec(&json!({
+                    "version": 1,
+                    "rom": { "path": names[0] },
+                    "patches": [{ "path": names[1] }]
+                }))
+                .expect("spec"),
+                b"packaged ROM".to_vec(),
+            ];
+            for (source, bytes) in sources.iter().zip(&contents) {
+                fs::write(source, bytes).expect("source fixture");
+            }
+            let destination = alias(temp.path(), &sources[source_index]);
+            let other_output = temp
+                .path()
+                .join(if archive { "result.json" } else { "result.zip" });
+            let (output, weave) = if archive {
+                (&other_output, &destination)
+            } else {
+                (&destination, &other_output)
+            };
+            for mode in ["--dry-run", "", "--force"] {
+                let mut command = weave_create_test_command(&temp);
+                command.args([
+                    "--jsonl",
+                    "weave",
+                    "create",
+                    "--from",
+                    names[2],
+                    "--weave-rom",
+                    names[3],
+                    "--output",
+                    output.to_str().expect("path"),
+                    "--weave",
+                    weave.to_str().expect("path"),
+                ]);
+                if !mode.is_empty() {
+                    command.arg(mode);
+                }
+                let result = command.output().expect("create");
+                for (source, bytes) in sources.iter().zip(&contents) {
+                    assert_eq!(
+                        fs::read(source).expect("source remains"),
+                        *bytes,
+                        "source bytes changed: {source:?}, archive={archive}"
+                    );
+                }
+                let dry_run = mode == "--dry-run";
+                assert_eq!(
+                    result.status.code(),
+                    Some(if dry_run { 0 } else { 1 }),
+                    "{result:?}"
+                );
+                let events = parse_json_lines(&result.stdout);
+                let terminal = events.last().expect("terminal");
+                assert_eq!(
+                    terminal["status"],
+                    if dry_run { "succeeded" } else { "failed" }
+                );
+                if mode == "--force" {
+                    assert!(
+                        terminal.to_string().contains("must not overwrite source"),
+                        "{terminal}"
+                    );
+                }
+                assert!(!other_output.exists(), "other output was written");
+            }
+        }
+    }
+}
+
+#[test]
+fn weave_create_preserves_direct_sources() {
+    assert_weave_create_preserves_sources(|_, source| source.to_path_buf());
+}
+
+#[test]
+fn weave_create_preserves_sources_through_parent_traversal() {
+    assert_weave_create_preserves_sources(|root, source| {
+        fs::create_dir(root.join("child")).expect("child");
+        root.join("child/..")
+            .join(source.file_name().expect("name"))
+    });
+}
+
+#[test]
+fn weave_create_preserves_sources_through_missing_parent_traversal() {
+    assert_weave_create_preserves_sources(|root, source| {
+        root.join("missing/..")
+            .join(source.file_name().expect("name"))
+    });
+}
+
+#[test]
+fn weave_create_preserves_hardlinked_sources() {
+    assert_weave_create_preserves_sources(|root, source| {
+        let alias = root.join("alias.zip");
+        fs::hard_link(source, &alias).expect("hardlink");
+        alias
+    });
+}
+
+#[cfg(unix)]
+#[test]
+fn weave_create_preserves_symlinked_sources() {
+    assert_weave_create_preserves_sources(|root, source| {
+        let alias = root.join("alias.zip");
+        std::os::unix::fs::symlink(source, &alias).expect("symlink");
+        alias
+    });
+}
+
+#[test]
+fn weave_create_indirect_disc_sources_are_preserved() {
+    for layout in ["cue", "gdi", "cue-with-gdi"] {
+        let source_names: &[&str] = if layout == "cue-with-gdi" {
+            &["track.bin", "other.bin", "disc.gdi"]
+        } else {
+            &["track.bin", "other.bin"]
+        };
+        for source_name in source_names {
+            for cached in [false, true] {
+                for archive in [false, true] {
+                    let temp = setup_temp_dir();
+                    fs::write(temp.path().join("track.bin"), vec![0x11; 4096]).expect("track");
+                    fs::write(temp.path().join("other.bin"), vec![0x22; 4096])
+                        .expect("other track");
+                    if layout != "gdi" {
+                        let mut cue =
+                            "FILE \"track.bin\" BINARY\n TRACK 01 MODE1/2048\n INDEX 01 00:00:00\n"
+                                .to_string();
+                        if layout == "cue" {
+                            cue.push_str("FILE \"other.bin\" BINARY\n TRACK 02 MODE1/2048\n INDEX 01 00:00:00\n");
+                        }
+                        fs::write(temp.path().join("disc.cue"), cue).expect("CUE");
+                    }
+                    if layout != "cue" {
+                        fs::write(
+                            temp.path().join("disc.gdi"),
+                            "2\n1 0 4 2048 track.bin 0\n2 10 4 2048 other.bin 0\n",
+                        )
+                        .expect("GDI");
+                    }
+                    write_min_ips(&temp, "fix.ips");
+                    let source = temp.path().join(source_name);
+                    let original = fs::read(&source).expect("original source");
+                    let input = if layout == "gdi" {
+                        "disc.gdi"
+                    } else {
+                        "disc.cue"
+                    };
+                    let args = [
+                        "--jsonl",
+                        "weave",
+                        "create",
+                        "--input",
+                        input,
+                        "--rom-member",
+                        "track.bin",
+                        "--patch",
+                        "fix.ips",
+                    ];
+                    let mut control = weave_create_test_command(&temp);
+                    control.args(args).args(["--output", "control.json"]);
+                    if cached {
+                        control.args(["--assume-in", "size=4096"]);
+                    }
+                    control.assert().code(0);
+                    let mut command = weave_create_test_command(&temp);
+                    command.args(args).arg("--force");
+                    if cached {
+                        command.args(["--assume-in", "size=4096"]);
+                    }
+                    if archive {
+                        fs::hard_link(&source, temp.path().join("alias.zip")).expect("hardlink");
+                        command.args(["--output", "result.json", "--weave", "alias.zip"]);
+                    } else {
+                        command.args(["--output", source_name]);
+                    }
+                    let result = command.output().expect("create");
+                    assert_eq!(
+                        fs::read(&source).expect("source"),
+                        original,
+                        "disc source changed: {layout}/{source_name}, cached={cached}, archive={archive}"
+                    );
+                    assert_eq!(result.status.code(), Some(1), "{result:?}");
+                    let events = parse_json_lines(&result.stdout);
+                    let terminal = events.last().expect("terminal");
+                    assert!(
+                        terminal.to_string().contains("must not overwrite source"),
+                        "{terminal}"
+                    );
+                    assert!(!temp.path().join("result.json").exists());
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn weave_create_indirect_case_distinct_tracks_are_preserved() {
+    for layout in ["cue", "gdi", "cue-with-gdi"] {
+        for cached in [false, true] {
+            for archive in [false, true] {
+                let temp = setup_temp_dir();
+                fs::write(temp.path().join("track.bin"), vec![0x11; 4096]).expect("track");
+                fs::write(temp.path().join("TRACK.bin"), vec![0x22; 4096]).expect("track");
+                let mut cue =
+                    "FILE track.bin BINARY\n TRACK 01 MODE1/2048\n INDEX 01 00:00:00\n".to_string();
+                if layout == "cue" {
+                    cue.push_str(
+                        "FILE TRACK.bin BINARY\n TRACK 02 MODE1/2048\n INDEX 01 00:00:00\n",
+                    );
+                }
+                fs::write(temp.path().join("disc.cue"), cue).expect("CUE");
+                if layout != "cue" {
+                    fs::write(
+                        temp.path().join("disc.gdi"),
+                        "2\n1 0 4 2048 track.bin 0\n2 10 4 2048 TRACK.bin 0\n",
+                    )
+                    .expect("GDI");
+                }
+                write_min_ips(&temp, "fix.ips");
+                let original = fs::read(temp.path().join("TRACK.bin")).expect("source");
+                let args = [
+                    "--jsonl",
+                    "weave",
+                    "create",
+                    "--input",
+                    if layout == "gdi" {
+                        "disc.gdi"
+                    } else {
+                        "disc.cue"
+                    },
+                    "--rom-member",
+                    "track.bin",
+                    "--patch",
+                    "fix.ips",
+                ];
+                let mut control = weave_create_test_command(&temp);
+                control.args(args).args(["--output", "control.json"]);
+                if cached {
+                    control.args(["--assume-in", "size=4096"]);
+                }
+                control.assert().code(0);
+                let mut command = weave_create_test_command(&temp);
+                command.args(args).arg("--force");
+                if cached {
+                    command.args(["--assume-in", "size=4096"]);
+                }
+                if archive {
+                    fs::hard_link(temp.path().join("TRACK.bin"), temp.path().join("alias.zip"))
+                        .expect("hardlink");
+                    command.args(["--output", "result.json", "--weave", "alias.zip"]);
+                } else {
+                    command.args(["--output", "TRACK.bin"]);
+                }
+                let result = command.output().expect("create");
+                assert_eq!(
+                    fs::read(temp.path().join("TRACK.bin")).expect("source"),
+                    original,
+                    "source changed: {layout}, cached={cached}, archive={archive}"
+                );
+                assert_eq!(result.status.code(), Some(1), "{result:?}");
+                assert!(
+                    String::from_utf8_lossy(&result.stdout).contains("must not overwrite source"),
+                    "{result:?}"
+                );
+                assert!(!temp.path().join("result.json").exists());
+            }
+        }
+    }
+}
+
+#[test]
+fn weave_create_indirect_missing_input_parent_is_rechecked() {
+    for archive in [false, true] {
+        let temp = setup_temp_dir();
+        fs::write(temp.path().join("track.bin"), vec![0x11; 4096]).expect("track");
+        fs::write(
+            temp.path().join("disc.cue"),
+            "FILE track.bin BINARY\n TRACK 01 MODE1/2048\n INDEX 01 00:00:00\n",
+        )
+        .expect("CUE");
+        write_min_ips(&temp, "fix.ips");
+        let original = fs::read(temp.path().join("track.bin")).expect("source");
+        let args = [
+            "--jsonl",
+            "weave",
+            "create",
+            "--input",
+            "child/../disc.cue",
+            "--rom-member",
+            "track.bin",
+            "--assume-in",
+            "size=4096",
+            "--patch",
+            "fix.ips",
+        ];
+        weave_create_test_command(&temp)
+            .args(args)
+            .args(["--output", "child/../control.json"])
+            .assert()
+            .code(0);
+        // Windows resolves `child/..` lexically, so the first run never creates `child`.
+        let child = temp.path().join("child");
+        if child.exists() {
+            fs::remove_dir(&child).expect("remove empty child");
+        }
+        let mut command = weave_create_test_command(&temp);
+        command.args(args).arg("--force");
+        if archive {
+            fs::hard_link(temp.path().join("track.bin"), temp.path().join("alias.zip"))
+                .expect("hardlink");
+            command.args([
+                "--output",
+                "child/../result.json",
+                "--weave",
+                "child/../alias.zip",
+            ]);
+        } else {
+            command.args(["--output", "child/../track.bin"]);
+        }
+        let result = command.output().expect("create");
+        assert_eq!(
+            fs::read(temp.path().join("track.bin")).expect("source"),
+            original,
+            "source changed: archive={archive}"
+        );
+        assert_eq!(result.status.code(), Some(1), "{result:?}");
+        assert!(
+            String::from_utf8_lossy(&result.stdout).contains("must not overwrite source"),
+            "{result:?}"
+        );
+        assert!(!temp.path().join("result.json").exists());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn weave_create_indirect_output_aliases_are_rejected() {
+    for reverse in [false, true] {
+        for chain in [false, true] {
+            let temp = setup_temp_dir();
+            write_min_ips(&temp, "fix.ips");
+            let (link, target) = if reverse {
+                ("release.zip", "recipe.json")
+            } else {
+                ("recipe.json", "release.zip")
+            };
+            let link_target = if chain { "middle.link" } else { target };
+            if chain {
+                std::os::unix::fs::symlink(target, temp.path().join("middle.link"))
+                    .expect("middle link");
+            }
+            std::os::unix::fs::symlink(link_target, temp.path().join(link)).expect("output link");
+            let result = weave_create_test_command(&temp)
+                .args([
+                    "--jsonl",
+                    "weave",
+                    "create",
+                    "--patch",
+                    "fix.ips",
+                    "--output",
+                    "recipe.json",
+                    "--weave",
+                    "release.zip",
+                ])
+                .output()
+                .expect("create");
+            assert_eq!(
+                result.status.code(),
+                Some(1),
+                "dangling output aliases must be rejected: {result:?}"
+            );
+            let events = parse_json_lines(&result.stdout);
+            assert!(
+                events
+                    .last()
+                    .expect("terminal")
+                    .to_string()
+                    .contains("must name different files")
+            );
+            assert!(
+                !temp.path().join(target).exists(),
+                "aliased output was written"
+            );
+            assert_eq!(
+                fs::read_link(temp.path().join(link)).expect("preserved link"),
+                PathBuf::from(link_target)
+            );
+        }
+    }
+}
+
+#[test]
+fn weave_create_indirect_cached_disc_metadata_needs_no_tracks() {
+    for extension in ["cue", "gdi"] {
+        for member in [false, true] {
+            let temp = setup_temp_dir();
+            let input = format!("disc.{extension}");
+            let sheet = if extension == "cue" {
+                "FILE \"track.bin\" BINARY\n TRACK 01 MODE1/2048\n INDEX 01 00:00:00\n"
+            } else {
+                "1\n1 0 4 2048 track.bin 0\n"
+            };
+            fs::write(temp.path().join(&input), sheet).expect("disc sheet");
+            write_min_ips(&temp, "fix.ips");
+            let mut command = weave_create_test_command(&temp);
+            command.args([
+                "--jsonl",
+                "weave",
+                "create",
+                "--input",
+                &input,
+                "--patch",
+                "fix.ips",
+                "--assume-in",
+                "size=4096",
+                "--output",
+                "recipe.json",
+            ]);
+            if member {
+                command.args(["--rom-member", "track.bin"]);
+            }
+            command.assert().code(0);
+            let recipe: Value =
+                serde_json::from_slice(&fs::read(temp.path().join("recipe.json")).expect("recipe"))
+                    .expect("JSON");
+            assert_eq!(recipe["version"], 2);
+            assert!(!temp.path().join("track.bin").exists());
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn weave_create_indirect_uninspectable_disc_sources_are_preserved() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = setup_temp_dir();
+    let locked = temp.path().join("locked");
+    fs::create_dir(&locked).expect("track directory");
+    let original = vec![0x11; 4096];
+    let track = locked.join("track.bin");
+    fs::write(&track, &original).expect("track");
+    fs::hard_link(&track, temp.path().join("alias.bin")).expect("output alias");
+    fs::write(
+        temp.path().join("disc.cue"),
+        "FILE \"locked/track.bin\" BINARY\n TRACK 01 MODE1/2048\n INDEX 01 00:00:00\n",
+    )
+    .expect("CUE");
+    write_min_ips(&temp, "fix.ips");
+    let mut command = weave_create_test_command(&temp);
+    command.args([
+        "--jsonl",
+        "weave",
+        "create",
+        "--input",
+        "disc.cue",
+        "--rom-member",
+        "locked/track.bin",
+        "--patch",
+        "fix.ips",
+        "--assume-in",
+        "size=4096",
+        "--output",
+        "alias.bin",
+        "--force",
+    ]);
+    let permissions = fs::metadata(&locked).expect("permissions").permissions();
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).expect("lock directory");
+    let result = command.output();
+    fs::set_permissions(&locked, permissions).expect("restore directory permissions");
+    let result = result.expect("create");
+    assert_eq!(
+        fs::read(&track).expect("source"),
+        original,
+        "uninspectable source was overwritten"
+    );
+    assert_eq!(result.status.code(), Some(1), "{result:?}");
+    assert_eq!(
+        parse_json_lines(&result.stdout).last().expect("terminal")["status"],
+        "failed"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn weave_create_indirect_unrelated_outputs_are_supported() {
+    for archive in [false, true] {
+        let temp = setup_temp_dir();
+        write_min_ips(&temp, "fix.ips");
+        let (link, target) = if archive {
+            ("release.zip", "stored.zip")
+        } else {
+            ("recipe.json", "stored.json")
+        };
+        std::os::unix::fs::symlink(target, temp.path().join(link)).expect("output link");
+        weave_create_test_command(&temp)
+            .args([
+                "--jsonl",
+                "weave",
+                "create",
+                "--patch",
+                "fix.ips",
+                "--output",
+                "recipe.json",
+                "--weave",
+                "release.zip",
+            ])
+            .assert()
+            .code(0);
+        let recipe: Value =
+            serde_json::from_slice(&fs::read(temp.path().join("recipe.json")).expect("recipe"))
+                .expect("JSON");
+        assert_eq!(recipe["version"], 2);
+        assert!(
+            fs::read(temp.path().join("release.zip"))
+                .expect("ZIP")
+                .starts_with(b"PK")
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn weave_create_indirect_output_loops_do_not_hang() {
+    let temp = setup_temp_dir();
+    write_min_ips(&temp, "fix.ips");
+    std::os::unix::fs::symlink("middle.link", temp.path().join("recipe.json")).expect("first link");
+    std::os::unix::fs::symlink("recipe.json", temp.path().join("middle.link"))
+        .expect("second link");
+    weave_create_test_command(&temp)
+        .timeout(std::time::Duration::from_secs(5))
+        .args([
+            "weave",
+            "create",
+            "--patch",
+            "fix.ips",
+            "--output",
+            "recipe.json",
+            "--weave",
+            "release.zip",
+        ])
+        .assert()
+        .code(1);
+    assert!(!temp.path().join("release.zip").exists());
+}
+
 #[test]
 fn weave_parse_plain_json_resolves_refs_verbatim() {
     let temp = setup_temp_dir();

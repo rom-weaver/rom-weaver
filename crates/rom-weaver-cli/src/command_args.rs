@@ -3108,6 +3108,12 @@ Any flag you also pass overrides what the file says."
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub force: bool,
+    /// Set by `patch apply --emit-weave`, where `output` is the emit path, so
+    /// source-protection errors name `--emit-weave` instead of `--output`.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(skip)]
+    #[cfg_attr(feature = "typescript-types", ts(skip))]
+    pub output_is_emit_weave: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]

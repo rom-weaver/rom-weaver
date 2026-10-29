@@ -60,7 +60,7 @@ fn sheet_directory(input: &Path) -> &Path {
     }
 }
 
-fn discover_disc_files(input: &Path, kind: DiscSheetKind) -> Result<(Vec<PathBuf>, Vec<DiscFile>)> {
+fn discover_disc_refs(input: &Path, kind: DiscSheetKind) -> Result<(Vec<PathBuf>, Vec<String>)> {
     let mut sheet_paths = vec![input.to_path_buf()];
     let mut referenced_names = enumerate_disc_sheet_refs(input)?.referenced_files;
     // A `.cue` with a sibling `.gdi` is a GD-ROM whose tracks are the union
@@ -78,7 +78,11 @@ fn discover_disc_files(input: &Path, kind: DiscSheetKind) -> Result<(Vec<PathBuf
         }
         sheet_paths.push(gdi);
     }
+    Ok((sheet_paths, referenced_names))
+}
 
+fn discover_disc_files(input: &Path, kind: DiscSheetKind) -> Result<(Vec<PathBuf>, Vec<DiscFile>)> {
+    let (sheet_paths, referenced_names) = discover_disc_refs(input, kind)?;
     let sheet_dir = sheet_directory(input);
     let output_names = staging::output_names(&sheet_paths, &referenced_names);
     let files = referenced_names
@@ -100,6 +104,28 @@ fn discover_disc_files(input: &Path, kind: DiscSheetKind) -> Result<(Vec<PathBuf
         })
         .collect::<Result<Vec<_>>>()?;
     Ok((sheet_paths, files))
+}
+
+pub(super) fn disc_source_paths(input: &Path) -> Result<Option<Vec<PathBuf>>> {
+    let Some(kind) = detect_disc_sheet(input).filter(|_| input.is_file()) else {
+        return Ok(None);
+    };
+    let mut sheets = vec![input.to_path_buf()];
+    if kind == DiscSheetKind::Cue
+        && let Some(gdi) = sibling_gdi_path(input)
+    {
+        sheets.push(gdi);
+    }
+    let mut sources = sheets.clone();
+    for sheet in &sheets {
+        sources.extend(
+            rom_weaver_core::enumerate_disc_sheet_file_names(sheet)?
+                .into_iter()
+                .map(|name| sheet_directory(sheet).join(name)),
+        );
+    }
+    trace!(input = %input.display(), sheets = sheets.len(), sources = sources.len(), "enumerated disc source paths");
+    Ok(Some(sources))
 }
 
 impl CliApp {
