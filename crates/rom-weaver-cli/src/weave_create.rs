@@ -624,13 +624,7 @@ impl CliApp {
         args: &WeaveCreateCommand,
         specs: &[WeaveCreatePatchSpec],
     ) -> Result<()> {
-        let mut disc_sources = Vec::new();
-        for input in args.rom.iter().chain(args.bundle_rom.iter()) {
-            if let Some(paths) = super::patch_apply_disc::disc_source_paths(input)? {
-                disc_sources.extend(paths);
-            }
-        }
-        ensure_weave_create_sources_preserved(args, specs, &disc_sources)?;
+        ensure_weave_create_sources_preserved(args, specs)?;
         if let Some(weave) = args.bundle.as_deref() {
             if weave_create_outputs_alias(&args.output, weave) {
                 return Err(RomWeaverError::Validation(
@@ -661,7 +655,7 @@ impl CliApp {
             }
         }
         // Creating missing parents can reveal aliases through `child/..` paths.
-        ensure_weave_create_sources_preserved(args, specs, &disc_sources)?;
+        ensure_weave_create_sources_preserved(args, specs)?;
         if let Some(weave) = args.bundle.as_deref()
             && weave_create_outputs_alias_after_parent_checks(&args.output, weave)
         {
@@ -1303,8 +1297,13 @@ fn weave_create_outputs_alias(left: &Path, right: &Path) -> bool {
 fn ensure_weave_create_sources_preserved(
     args: &WeaveCreateCommand,
     specs: &[WeaveCreatePatchSpec],
-    disc_sources: &[PathBuf],
 ) -> Result<()> {
+    let mut disc_sources = Vec::new();
+    for input in args.rom.iter().chain(args.bundle_rom.iter()) {
+        if let Some(paths) = super::patch_apply_disc::disc_source_paths(input)? {
+            disc_sources.extend(paths);
+        }
+    }
     for (flag, output) in std::iter::once(("--output", args.output.as_path()))
         .chain(args.bundle.as_deref().map(|path| ("--weave", path)))
     {

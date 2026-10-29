@@ -48,8 +48,8 @@ pub use context::{
     PatchEndpointSelection, PatchPolicy, XdeltaSecondaryMode,
 };
 pub use disc_sheet::{
-    DiscSheetKind, DiscSheetRefs, detect_disc_sheet, enumerate_disc_sheet_refs,
-    parse_disc_sheet_refs_from_text, sibling_gdi_path,
+    DiscSheetKind, DiscSheetRefs, detect_disc_sheet, enumerate_disc_sheet_file_names,
+    enumerate_disc_sheet_refs, parse_disc_sheet_refs_from_text, sibling_gdi_path,
 };
 pub use env::{env_u64, env_u64_opt};
 pub use error::{

@@ -110,14 +110,22 @@ pub(super) fn disc_source_paths(input: &Path) -> Result<Option<Vec<PathBuf>>> {
     let Some(kind) = detect_disc_sheet(input).filter(|_| input.is_file()) else {
         return Ok(None);
     };
-    let (mut sheets, names) = discover_disc_refs(input, kind)?;
-    trace!(input = %input.display(), sheets = sheets.len(), tracks = names.len(), "enumerated disc source paths");
-    sheets.extend(
-        names
-            .into_iter()
-            .map(|name| sheet_directory(input).join(name)),
-    );
-    Ok(Some(sheets))
+    let mut sheets = vec![input.to_path_buf()];
+    if kind == DiscSheetKind::Cue
+        && let Some(gdi) = sibling_gdi_path(input)
+    {
+        sheets.push(gdi);
+    }
+    let mut sources = sheets.clone();
+    for sheet in &sheets {
+        sources.extend(
+            rom_weaver_core::enumerate_disc_sheet_file_names(sheet)?
+                .into_iter()
+                .map(|name| sheet_directory(sheet).join(name)),
+        );
+    }
+    trace!(input = %input.display(), sheets = sheets.len(), sources = sources.len(), "enumerated disc source paths");
+    Ok(Some(sources))
 }
 
 impl CliApp {

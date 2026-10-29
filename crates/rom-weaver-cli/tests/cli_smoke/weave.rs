@@ -243,6 +243,141 @@ fn weave_create_indirect_disc_sources_are_preserved() {
     }
 }
 
+#[test]
+fn weave_create_indirect_case_distinct_tracks_are_preserved() {
+    for layout in ["cue", "gdi", "cue-with-gdi"] {
+        for cached in [false, true] {
+            for archive in [false, true] {
+                let temp = setup_temp_dir();
+                fs::write(temp.path().join("track.bin"), vec![0x11; 4096]).expect("track");
+                fs::write(temp.path().join("TRACK.bin"), vec![0x22; 4096]).expect("track");
+                let mut cue =
+                    "FILE track.bin BINARY\n TRACK 01 MODE1/2048\n INDEX 01 00:00:00\n".to_string();
+                if layout == "cue" {
+                    cue.push_str(
+                        "FILE TRACK.bin BINARY\n TRACK 02 MODE1/2048\n INDEX 01 00:00:00\n",
+                    );
+                }
+                fs::write(temp.path().join("disc.cue"), cue).expect("CUE");
+                if layout != "cue" {
+                    fs::write(
+                        temp.path().join("disc.gdi"),
+                        "2\n1 0 4 2048 track.bin 0\n2 10 4 2048 TRACK.bin 0\n",
+                    )
+                    .expect("GDI");
+                }
+                write_min_ips(&temp, "fix.ips");
+                let original = fs::read(temp.path().join("TRACK.bin")).expect("source");
+                let args = [
+                    "--jsonl",
+                    "weave",
+                    "create",
+                    "--input",
+                    if layout == "gdi" {
+                        "disc.gdi"
+                    } else {
+                        "disc.cue"
+                    },
+                    "--rom-member",
+                    "track.bin",
+                    "--patch",
+                    "fix.ips",
+                ];
+                let mut control = weave_create_test_command(&temp);
+                control.args(args).args(["--output", "control.json"]);
+                if cached {
+                    control.args(["--assume-in", "size=4096"]);
+                }
+                control.assert().code(0);
+                let mut command = weave_create_test_command(&temp);
+                command.args(args).arg("--force");
+                if cached {
+                    command.args(["--assume-in", "size=4096"]);
+                }
+                if archive {
+                    fs::hard_link(temp.path().join("TRACK.bin"), temp.path().join("alias.zip"))
+                        .expect("hardlink");
+                    command.args(["--output", "result.json", "--weave", "alias.zip"]);
+                } else {
+                    command.args(["--output", "TRACK.bin"]);
+                }
+                let result = command.output().expect("create");
+                assert_eq!(
+                    fs::read(temp.path().join("TRACK.bin")).expect("source"),
+                    original,
+                    "source changed: {layout}, cached={cached}, archive={archive}"
+                );
+                assert_eq!(result.status.code(), Some(1), "{result:?}");
+                assert!(
+                    String::from_utf8_lossy(&result.stdout).contains("must not overwrite source"),
+                    "{result:?}"
+                );
+                assert!(!temp.path().join("result.json").exists());
+            }
+        }
+    }
+}
+
+#[test]
+fn weave_create_indirect_missing_input_parent_is_rechecked() {
+    for archive in [false, true] {
+        let temp = setup_temp_dir();
+        fs::write(temp.path().join("track.bin"), vec![0x11; 4096]).expect("track");
+        fs::write(
+            temp.path().join("disc.cue"),
+            "FILE track.bin BINARY\n TRACK 01 MODE1/2048\n INDEX 01 00:00:00\n",
+        )
+        .expect("CUE");
+        write_min_ips(&temp, "fix.ips");
+        let original = fs::read(temp.path().join("track.bin")).expect("source");
+        let args = [
+            "--jsonl",
+            "weave",
+            "create",
+            "--input",
+            "child/../disc.cue",
+            "--rom-member",
+            "track.bin",
+            "--assume-in",
+            "size=4096",
+            "--patch",
+            "fix.ips",
+        ];
+        weave_create_test_command(&temp)
+            .args(args)
+            .args(["--output", "child/../control.json"])
+            .assert()
+            .code(0);
+        fs::remove_dir(temp.path().join("child")).expect("remove empty child");
+        let mut command = weave_create_test_command(&temp);
+        command.args(args).arg("--force");
+        if archive {
+            fs::hard_link(temp.path().join("track.bin"), temp.path().join("alias.zip"))
+                .expect("hardlink");
+            command.args([
+                "--output",
+                "child/../result.json",
+                "--weave",
+                "child/../alias.zip",
+            ]);
+        } else {
+            command.args(["--output", "child/../track.bin"]);
+        }
+        let result = command.output().expect("create");
+        assert_eq!(
+            fs::read(temp.path().join("track.bin")).expect("source"),
+            original,
+            "source changed: archive={archive}"
+        );
+        assert_eq!(result.status.code(), Some(1), "{result:?}");
+        assert!(
+            String::from_utf8_lossy(&result.stdout).contains("must not overwrite source"),
+            "{result:?}"
+        );
+        assert!(!temp.path().join("result.json").exists());
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn weave_create_indirect_output_aliases_are_rejected() {

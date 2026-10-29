@@ -49,6 +49,24 @@ pub fn detect_disc_sheet(path: &Path) -> Option<DiscSheetKind> {
 /// Returns an error if `path` is not a recognized disc sheet or if the sheet is
 /// malformed (missing `FILE` name, empty/invalid `.gdi`).
 pub fn enumerate_disc_sheet_refs(path: &Path) -> Result<DiscSheetRefs> {
+    let (kind, referenced_files) = read_disc_sheet_refs(path, push_unique)?;
+    Ok(DiscSheetRefs {
+        kind,
+        sheet_path: path.to_path_buf(),
+        referenced_files,
+    })
+}
+
+/// Read every declared filename, preserving repeated names and case variants.
+/// Source protection MUST keep these names distinct until filesystem identity is checked.
+pub fn enumerate_disc_sheet_file_names(path: &Path) -> Result<Vec<String>> {
+    read_disc_sheet_refs(path, |out, name| out.push(name.to_string())).map(|(_, names)| names)
+}
+
+fn read_disc_sheet_refs(
+    path: &Path,
+    collect: fn(&mut Vec<String>, &str),
+) -> Result<(DiscSheetKind, Vec<String>)> {
     let kind = detect_disc_sheet(path).ok_or_else(|| {
         RomWeaverError::Validation(format!(
             "`{}` is not a disc sheet (.cue/.gdi)",
@@ -57,14 +75,10 @@ pub fn enumerate_disc_sheet_refs(path: &Path) -> Result<DiscSheetRefs> {
     })?;
     let text = std::fs::read_to_string(path)?;
     let referenced_files = match kind {
-        DiscSheetKind::Cue => enumerate_cue_refs(&text, path)?,
-        DiscSheetKind::Gdi => enumerate_gdi_refs(&text, path)?,
+        DiscSheetKind::Cue => enumerate_cue_refs_with(&text, path, collect)?,
+        DiscSheetKind::Gdi => enumerate_gdi_refs_with(&text, path, collect)?,
     };
-    Ok(DiscSheetRefs {
-        kind,
-        sheet_path: path.to_path_buf(),
-        referenced_files,
-    })
+    Ok((kind, referenced_files))
 }
 
 /// Parse sheet text into ordered, de-duplicated references without I/O.
@@ -107,6 +121,14 @@ fn push_unique(out: &mut Vec<String>, name: &str) {
 
 /// Collect the `FILE "<name>" <TYPE>` references from a cue sheet, in order.
 fn enumerate_cue_refs(text: &str, path: &Path) -> Result<Vec<String>> {
+    enumerate_cue_refs_with(text, path, push_unique)
+}
+
+fn enumerate_cue_refs_with(
+    text: &str,
+    path: &Path,
+    collect: fn(&mut Vec<String>, &str),
+) -> Result<Vec<String>> {
     let mut files = Vec::new();
     for raw_line in text.lines() {
         let line = raw_line.trim();
@@ -126,7 +148,7 @@ fn enumerate_cue_refs(text: &str, path: &Path) -> Result<Vec<String>> {
                     path.display()
                 ))
             })?;
-        push_unique(&mut files, name);
+        collect(&mut files, name);
     }
     if files.is_empty() {
         return Err(RomWeaverError::Validation(format!(
@@ -139,6 +161,14 @@ fn enumerate_cue_refs(text: &str, path: &Path) -> Result<Vec<String>> {
 
 /// Collect the filename column (5th token) from each track line of a gdi sheet.
 fn enumerate_gdi_refs(text: &str, path: &Path) -> Result<Vec<String>> {
+    enumerate_gdi_refs_with(text, path, push_unique)
+}
+
+fn enumerate_gdi_refs_with(
+    text: &str,
+    path: &Path,
+    collect: fn(&mut Vec<String>, &str),
+) -> Result<Vec<String>> {
     let mut files = Vec::new();
     let mut saw_header = false;
     for raw_line in text.lines() {
@@ -171,7 +201,7 @@ fn enumerate_gdi_refs(text: &str, path: &Path) -> Result<Vec<String>> {
                 path.display()
             ))
         })?;
-        push_unique(&mut files, name);
+        collect(&mut files, name);
     }
     if files.is_empty() {
         return Err(RomWeaverError::Validation(format!(
@@ -198,6 +228,10 @@ fn split_token(text: &str) -> Option<(&str, &str)> {
         Some((&trimmed[..end], &trimmed[end..]))
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/disc_sheet.rs"]
+mod source_tests;
 
 #[cfg(test)]
 mod tests {
