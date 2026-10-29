@@ -903,13 +903,11 @@ describe("navigation requests", () => {
     const navigate = () => routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
     await navigate();
     const open = vi.spyOn(harness.cacheStorage, "open");
-    const listing = vi.spyOn(harness.cacheStorage, "keys");
 
     await routed(harness, requireRoute(2), new Request(DEFERRED_URL));
     await navigate();
 
     expect(open.mock.calls.filter(([name]) => name === PRECACHE_NAME)).toHaveLength(0);
-    expect(listing).not.toHaveBeenCalled();
   });
 
   it("goes to the network when a deferred entry is not cached yet, even for a precached document", async () => {

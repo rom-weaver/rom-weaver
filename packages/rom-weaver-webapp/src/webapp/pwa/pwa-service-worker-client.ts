@@ -41,9 +41,10 @@ type CreatePwaServiceWorkerClientOptions = {
   registerServiceWorker?: RegisterServiceWorker;
   sessionStorage?: SessionStorageLike | undefined;
   // Return true to apply an update as soon as it's detected instead of prompting. Called when an update
-  // is detected, while there's no in-progress work. Applied silently (skipWaiting, no reload) when the
-  // page already runs the incoming version, or with a reload when the running code is the outgoing
-  // controller's (see the appVersion comparison in onNeedRefresh).
+  // is detected, while there's no in-progress work. Applied silently (skipWaiting, no reload) only when
+  // the page already runs the incoming version; when the running code is the outgoing controller's, the
+  // prompt shows instead (see the appVersion comparison in onNeedRefresh). Also checked before a
+  // sibling-triggered reload.
   shouldAutoApplyUpdate?: () => boolean;
   updateIntervalMs: number;
   window: WindowLike | undefined;
@@ -138,7 +139,8 @@ const createPwaServiceWorkerClient = ({
   // thing standing between a silent activation and a surprise reload.
   let reloadOnIncomingControl = false;
   // Set when the update banner was shown for a page running the outgoing controller's code. If another
-  // tab accepts the update and the new worker takes control here, this tab is still on the old build
+  // tab applies the update (the user accepted there, or that tab already ran the new build and applied it
+  // silently) and the new worker takes control here, this tab is still on the old build
   // (its lazy chunks can 404 after a deploy), so it reloads once, provided it has no in-progress work.
   let waitingOnOutgoingBuild = false;
   // Applies a reload the incoming worker's control was asked for, once. Both controllerchange and
@@ -151,7 +153,8 @@ const createPwaServiceWorkerClient = ({
     waitingOnOutgoingBuild = false;
     logServiceWorkerClient("incoming service worker took control", { reload, siblingAccepted, source });
     if (reload) return reloadPage("reloading page to apply service worker update", "swupdate");
-    // The user accepted in another tab, so this reload does not count against the auto-apply budget.
+    // Another tab applied the update, and that tab's own budget bounds silent applies, so this reload
+    // does not count against this tab's auto-apply budget.
     if (!(siblingAccepted && shouldAutoApplyUpdate?.())) return false;
     onBeforeReload?.();
     return reloadPage("reloading page; a sibling tab applied the service worker update", "swupdate-sibling");
