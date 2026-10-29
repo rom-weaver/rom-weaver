@@ -242,6 +242,19 @@ test("legal PBP programs render through the application and native disk control"
               "Start must switch the cube to the raycast scene",
             );
           const diskStates = [native];
+          const diskFrames = [];
+          const verifyRunningDisk = async (label) => {
+            const initial = await capture(label);
+            assert(initial.brown > 1000, "selected disc must retain the demo scene");
+            let next;
+            for (let attempt = 0; attempt < 60; attempt += 1) {
+              await frame.evaluate(() => new Promise(requestAnimationFrame));
+              next = await capture(`${label}-advanced`);
+              if (next.frameHash !== initial.frameHash) break;
+            }
+            assert.notEqual(next.frameHash, initial.frameHash, "selected disc must keep rendering changing frames");
+            diskFrames.push({ initial, advanced: next });
+          };
           if (disks === 2) {
             await frame.locator("#ejs_disksMenu > button").click();
             await frame.locator("#ejs_disksMenu button[ejs_value='1']").click();
@@ -252,8 +265,7 @@ test("legal PBP programs render through the application and native disk control"
             assert.deepEqual(second, { count: 2, index: 1 });
             diskStates.push(second);
             for (let index = 0; index < 30; index += 1) await frame.evaluate(() => new Promise(requestAnimationFrame));
-            const afterSwitch = await capture("disk-2");
-            assert(afterSwitch.brown > 1000);
+            await verifyRunningDisk("disk-2");
             const firstDisk = frame.locator("#ejs_disksMenu button[ejs_value='0']");
             if (!(await firstDisk.isVisible())) await frame.locator("#ejs_disksMenu > button").click();
             await firstDisk.click();
@@ -264,7 +276,7 @@ test("legal PBP programs render through the application and native disk control"
             assert.deepEqual(returned, { count: 2, index: 0 });
             diskStates.push(returned);
             for (let index = 0; index < 30; index += 1) await frame.evaluate(() => new Promise(requestAnimationFrame));
-            assert((await capture("disk-1-return")).brown > 1000);
+            await verifyRunningDisk("disk-1-return");
           }
           assert.deepEqual(external, [], "pinned assets must not fall back to a remote CDN");
           assert.deepEqual(errors, []);
@@ -274,6 +286,7 @@ test("legal PBP programs render through the application and native disk control"
             core,
             native,
             diskStates,
+            diskFrames,
             contents,
             servedWasm,
             servedEmulatorAssets,

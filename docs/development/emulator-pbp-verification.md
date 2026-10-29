@@ -111,7 +111,7 @@ trap - EXIT HUP INT TERM
 
 If the test fails, stop only the preview PID written to `preview.pid` after inspecting `preview.log` and the failure captures. The opt-in test fails explicitly for missing inputs. It launches muted headless Chromium, uses the actual Test picker, blocks external network requests, hashes the actual served WASM and EmulatorJS loader/native core against the pinned lock, records the lock digest and version, and saves canvas captures and a JSON report. Retain the scratch directory while reviewing that evidence.
 
-The cube's saturated pixels and the PS1 demo's brown framebuffer distinguish the programs from a black canvas or RetroArch's gray menu. The PS1 controller-byte region must change while Up is held; on PSP, Start must switch the cube to the purple-background raycast scene. Every case must render successive changing frames. These oracles apply to the pinned homebrew programs, rather than games in general.
+The cube's saturated pixels and the PS1 demo's brown framebuffer distinguish the programs from a black canvas or RetroArch's gray menu. The PS1 controller-byte region must change while Up is held; on PSP, Start must switch the cube to the purple-background raycast scene. Every case must render successive changing frames. Both multi-disc selections must also produce fresh changing frames; a retained framebuffer cannot pass. These oracles apply to the pinned homebrew programs, rather than games in general.
 
 The application prepares every PS1 PBP as a complete CUE/BIN playlist bundle through the shared Rust reader. It loads the reader's extracted discs across layouts the pinned native PBP reader cannot parse. The test checks every PS1 BIN's complete bytes inside the native core's file system; stored audio fixtures also require the CUE audio track and index markers. Preparing these bundles needs temporary storage for expanded discs and memory for the emulator's unpacked files.
 
@@ -125,7 +125,7 @@ Record the application revision, WASM source and artifact hashes, browser versio
 
 For PS1, record rendered controller-demo text and a changed controller-byte region while a button is held. For PSP, record the colored cube and a visible response to the demo's controls. Capture multiple rendered frames; a black canvas, nonzero canvas dimensions, or a start callback is insufficient.
 
-For multiple discs, require native `getDiskCount()` to return two, switch using the emulator's disk menu, and check `getCurrentDisk()` changes from zero to one and back. Capture continued demo rendering after the switch. A JavaScript disc array or mocked disk callback does not establish native core support. A return value of `-1` indicates unavailable disk control in the RetroArch adapter, not a successful switch.
+For multiple discs, require native `getDiskCount()` to return two, switch using the emulator's disk menu, and check `getCurrentDisk()` changes from zero to one and back. Capture successive changing demo frames after each switch. A JavaScript disc array or mocked disk callback does not establish native core support. A return value of `-1` indicates unavailable disk control in the RetroArch adapter, not a successful switch.
 
 ## Recorded browser run
 
