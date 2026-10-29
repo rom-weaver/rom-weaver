@@ -1462,6 +1462,8 @@ fn flips_limits_reject_an_exact_limit_output_that_needs_a_truncate_footer() {
         PatchChecksumValidation::Strict,
     )
     .expect_err("a truncate footer at the limit is not encodable");
+    assert!(error.to_string().contains("use BPS, xdelta"));
+    assert!(!error.to_string().contains("use IPS32"));
     assert!(
         error
             .to_string()
@@ -1935,4 +1937,106 @@ fn probing_reads_ips32_offsets_past_the_24_bit_limit() {
     assert_eq!(probed.records.len(), 1);
     assert_eq!(probed.records[0].offset, 0x0100_0000);
     assert_eq!(probed.prefix_writes, [None; IPS_PROBE_PREFIX_BYTES]);
+}
+
+#[test]
+fn ips32_rejects_shrinking_targets_without_writing_output() {
+    for handler in [
+        IpsPatchHandler::new_ips32(&IPS32),
+        IpsPatchHandler::new_ebp(&EBP),
+    ] {
+        for target in [b"abc".as_slice(), b""] {
+            for validation in [
+                PatchChecksumValidation::Strict,
+                PatchChecksumValidation::Ignore,
+            ] {
+                let temp = TestDir::new();
+                let original = temp.child("original.bin");
+                let modified = temp.child("modified.bin");
+                let output = temp.child("change.patch");
+                fs::write(&original, b"abcdefgh").expect("original");
+                fs::write(&modified, target).expect("modified");
+                let context = test_context_with_threads_named(&temp, 8, "ips32-shrink")
+                    .with_patch_checksum_validation(validation);
+                let error = handler
+                    .create(
+                        &PatchCreateRequest {
+                            original,
+                            modified,
+                            output: output.clone(),
+                            format: handler.descriptor().name.into(),
+                        },
+                        &context,
+                    )
+                    .expect_err("patch format must reject shrinking targets");
+                assert!(
+                    error.to_string().contains(&format!(
+                        "{} patches cannot shrink the output",
+                        handler.descriptor().name
+                    )),
+                    "{error}"
+                );
+                assert!(!output.exists(), "rejected creation left output");
+            }
+        }
+    }
+}
+
+#[test]
+fn ips32_same_size_and_growth_round_trip() {
+    for (source, target) in [
+        (b"abcdefgh".as_slice(), b"abcXefgh".as_slice()),
+        (b"abc", b"abcdefgh"),
+        (b"", b"abc"),
+        (b"", b""),
+    ] {
+        let temp = TestDir::new();
+        let original = temp.child("original.bin");
+        let modified = temp.child("modified.bin");
+        let patch = temp.child("change.ips32");
+        let output = temp.child("output.bin");
+        fs::write(&original, source).expect("original");
+        fs::write(&modified, target).expect("modified");
+        let handler = IpsPatchHandler::new_ips32(&IPS32);
+        let context = test_context_with_threads(&temp, 4);
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: original.clone(),
+                    modified,
+                    output: patch.clone(),
+                    format: "IPS32".into(),
+                },
+                &context,
+            )
+            .expect("create");
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: original,
+                    patches: vec![patch],
+                    output: output.clone(),
+                },
+                &context,
+            )
+            .expect("apply");
+        assert_eq!(fs::read(output).expect("output"), target);
+    }
+}
+
+proptest::proptest! {
+    #[test]
+    fn ips32_shorter_prefixes_are_rejected(source in proptest::collection::vec(proptest::prelude::any::<u8>(), 1..256), remove in 1usize..256) {
+        let temp = TestDir::new();
+        let original = temp.child("original.bin");
+        let modified = temp.child("modified.bin");
+        let patch = temp.child("change.ips32");
+        fs::write(&original, &source).expect("original");
+        fs::write(&modified, &source[..source.len().saturating_sub(remove)]).expect("modified");
+        let result = IpsPatchHandler::new_ips32(&IPS32).create(&PatchCreateRequest {
+            original, modified, output: patch.clone(), format: "IPS32".into(),
+        }, &test_context_with_threads(&temp, 1));
+        proptest::prop_assert!(result.is_err());
+        proptest::prop_assert!(!patch.exists());
+    }
 }

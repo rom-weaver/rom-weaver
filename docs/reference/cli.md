@@ -449,6 +449,12 @@ Under `--plan` and `--independent`, structural parser failures set `unreadable: 
 
 `patch create` rejects an output that refers to either input file, including symbolic links and native hard links, even with `--force`.
 
+`patch create` compares raw input bytes, including archive and compressed-container headers. It does not extract ROM payloads. Creation and `--plan` reports identify inputs that may need `--no-extract` during application.
+
+Applying container patches requires `--no-extract --no-compress` for exact reconstruction of Modified.
+
+IPS32 creation rejects targets shorter than the original, including empty targets. IPS32 has no truncation footer. BPS, xdelta, and classic IPS support shrinking targets.
+
 SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for its three-string header. Any of `--solid-version`, `--solid-author`, `--solid-contact`, or `--solid-comment` selects the seven-string extended header. `--solid-extended` selects the extended header with empty extra fields. When `--code` supplies the changes and the extended header has no `--solid-comment`, the comment records the codes. These options require SOLID output and cannot be combined with `--plan`.
 
 `--ppf-undo` writes PPF3 undo data (the original bytes under every record) so `tools ppf-undo` can revert the patch. It requires PPF output. Bytes the modified file adds past the original's end are restored as zeros, because PPF cannot shrink a file.

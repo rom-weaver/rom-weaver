@@ -3373,7 +3373,7 @@ fn patch_create_rejects_formats_that_cannot_shrink_before_writing_output() {
     fs::write(original.path(), b"hello old world, longer").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    for format in ["ebp", "pmsr", "mod", "ppf"] {
+    for format in ["ebp", "ips32", "pmsr", "mod", "ppf"] {
         let patch = temp.child(format!("new.{format}"));
         let output = command_stdout(
             &[
@@ -14314,6 +14314,228 @@ fn patch_apply_xiso_system_area_is_not_a_copier_header() {
                     .expect("label")
                     .contains("input header stripped")
             );
+        }
+    }
+}
+
+#[test]
+fn patch_create_warns_that_container_inputs_require_raw_application() {
+    for (original_zip, modified_zip) in [(true, true), (true, false), (false, true), (false, false)]
+    {
+        let temp = setup_temp_dir();
+        let home = temp.path().to_str().expect("home");
+        let envs = [
+            ("HOME", home),
+            ("XDG_CONFIG_HOME", home),
+            ("XDG_CACHE_HOME", home),
+            ("XDG_STATE_HOME", home),
+        ];
+        let run = |args: &[&str], code| command_stdout_with_env(args, &envs, code);
+        let original = temp.child("original.bin");
+        let modified = temp.child("modified.bin");
+        fs::write(original.path(), b"abcdefgh").expect("original");
+        fs::write(modified.path(), b"abcXefgh").expect("modified");
+        let original_archive = temp.child("original.zip");
+        let modified_archive = temp.child("modified.zip");
+        for (input, archive) in [
+            (&original, &original_archive),
+            (&modified, &modified_archive),
+        ] {
+            run(
+                &[
+                    "compress",
+                    "--input",
+                    input.path().to_str().expect("path"),
+                    "--format",
+                    "zip",
+                    "--output",
+                    archive.path().to_str().expect("path"),
+                    "--jsonl",
+                ],
+                0,
+            );
+        }
+        let original = if original_zip {
+            original_archive.path()
+        } else {
+            original.path()
+        };
+        let modified = if modified_zip {
+            modified_archive.path()
+        } else {
+            modified.path()
+        };
+        let patch = temp.child("change.bps");
+        let output = temp.child(if modified_zip {
+            "rebuilt.zip"
+        } else {
+            "rebuilt.bin"
+        });
+        let event = parse_single_json_line(&run(
+            &[
+                "patch",
+                "create",
+                "--original",
+                original.to_str().expect("path"),
+                "--modified",
+                modified.to_str().expect("path"),
+                "--output",
+                patch.path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            0,
+        ));
+        let plan = parse_single_json_line(&run(
+            &[
+                "patch",
+                "create",
+                "--original",
+                original.to_str().expect("path"),
+                "--modified",
+                modified.to_str().expect("path"),
+                "--plan",
+                "--jsonl",
+            ],
+            0,
+        ));
+        for event in [event, plan] {
+            let warnings = event["details"]["warnings"].as_array();
+            let has_raw_warning = warnings.is_some_and(|warnings| {
+                warnings.iter().any(|warning| {
+                    warning.as_str().is_some_and(|warning| {
+                        warning.contains("raw container bytes")
+                            && warning.contains("--no-extract")
+                            && warning.contains("--no-compress")
+                            && warning.contains("Extract both ROMs")
+                    })
+                })
+            });
+            assert_eq!(has_raw_warning, original_zip || modified_zip, "{event}");
+        }
+        run(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                original.to_str().expect("path"),
+                "--patch",
+                patch.path().to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--no-extract",
+                "--no-compress",
+                "--jsonl",
+            ],
+            0,
+        );
+        assert_eq!(
+            fs::read(output.path()).expect("output"),
+            fs::read(modified).expect("modified")
+        );
+    }
+}
+
+#[test]
+fn patch_create_does_not_warn_for_raw_rom_with_container_like_signature() {
+    let temp = setup_temp_dir();
+    let home = temp.path().to_str().expect("home");
+    let envs = [
+        ("HOME", home),
+        ("XDG_CONFIG_HOME", home),
+        ("XDG_CACHE_HOME", home),
+        ("XDG_STATE_HOME", home),
+    ];
+    let run = |args: &[&str], code| command_stdout_with_env(args, &envs, code);
+    let original = temp.child("original.sfc");
+    let modified = temp.child("modified.sfc");
+    let mut original_bytes = vec![0x1F, 0x8B, 0x00];
+    original_bytes.extend_from_slice(b"abcdefghijklm");
+    let mut modified_bytes = original_bytes.clone();
+    modified_bytes[8] = b'X';
+    fs::write(original.path(), &original_bytes).expect("original");
+    fs::write(modified.path(), &modified_bytes).expect("modified");
+    let patch = temp.child("change.bps");
+    let output = temp.child("rebuilt.sfc");
+    let event = parse_single_json_line(&run(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    ));
+    let has_raw_warning = event["details"]["warnings"]
+        .as_array()
+        .is_some_and(|warnings| {
+            warnings.iter().any(|warning| {
+                warning
+                    .as_str()
+                    .is_some_and(|warning| warning.contains("raw container bytes"))
+            })
+        });
+    assert!(!has_raw_warning, "{event}");
+    run(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(fs::read(output.path()).expect("output"), modified_bytes);
+}
+
+#[test]
+fn patch_create_ips32_rejects_shrink_and_empty_targets() {
+    for modified_bytes in [b"abc".as_slice(), b""] {
+        for ignore in [false, true] {
+            let temp = setup_temp_dir();
+            let home = temp.path().to_str().expect("home");
+            let envs = [
+                ("HOME", home),
+                ("XDG_CONFIG_HOME", home),
+                ("XDG_CACHE_HOME", home),
+                ("XDG_STATE_HOME", home),
+            ];
+            let original = temp.child("original.bin");
+            let modified = temp.child("modified.bin");
+            let patch = temp.child("change.ips32");
+            fs::write(original.path(), b"abcdefgh").expect("original");
+            fs::write(modified.path(), modified_bytes).expect("modified");
+            let mut args = vec![
+                "patch",
+                "create",
+                "--original",
+                original.path().to_str().expect("path"),
+                "--modified",
+                modified.path().to_str().expect("path"),
+                "--output",
+                patch.path().to_str().expect("path"),
+                "--jsonl",
+            ];
+            if ignore {
+                args.push("--ignore-checksum-validation");
+            }
+            let event = parse_single_json_line(&command_stdout_with_env(&args, &envs, 1));
+            let label = event["label"].as_str().expect("label");
+            assert!(
+                label.contains("IPS32 patches cannot shrink the output"),
+                "{event}"
+            );
+            assert!(label.contains("BPS"), "{event}");
+            assert!(!patch.path().exists());
         }
     }
 }

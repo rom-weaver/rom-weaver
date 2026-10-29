@@ -254,6 +254,12 @@ impl PatchHandler for IpsPatchHandler {
             format = self.descriptor.name,
             original_len, modified_len, "ips patch create start"
         );
+        if matches!(self.flavor, IpsFlavor::Ips32 | IpsFlavor::Ebp) && modified_len < original_len {
+            return Err(RomWeaverError::Validation(format!(
+                "{} patches cannot shrink the output (original: {original_len}, modified: {modified_len}); use BPS, xdelta, or IPS instead",
+                self.descriptor.name
+            )));
+        }
         validate_ips_create_flips_limits(
             original_len,
             modified_len,
@@ -878,14 +884,14 @@ fn validate_ips_create_flips_limits(
     if modified_len > max_ips_len {
         let limit = format_human_bytes(max_ips_len);
         return Err(RomWeaverError::Validation(format!(
-            "IPS create target size {modified_len} exceeds the Flips-compatible {limit} limit; use IPS32 or --ignore-checksum-validation to try a non-Flips-compatible IPS patch"
+            "IPS create target size {modified_len} exceeds the Flips-compatible {limit} limit; use BPS, xdelta, or --ignore-checksum-validation to try a non-Flips-compatible IPS patch"
         )));
     }
 
     if modified_len == max_ips_len && original_len > modified_len {
         let limit = format_human_bytes(max_ips_len);
         return Err(RomWeaverError::Validation(format!(
-            "IPS create cannot encode a truncate footer for exact {limit} output; use IPS32 or --ignore-checksum-validation to try a non-Flips-compatible IPS patch"
+            "IPS create cannot encode a truncate footer for exact {limit} output; use BPS, xdelta, or --ignore-checksum-validation to try a non-Flips-compatible IPS patch"
         )));
     }
 
