@@ -348,7 +348,11 @@ fn weave_create_indirect_missing_input_parent_is_rechecked() {
             .args(["--output", "child/../control.json"])
             .assert()
             .code(0);
-        fs::remove_dir(temp.path().join("child")).expect("remove empty child");
+        // Windows resolves `child/..` lexically, so the first run never creates `child`.
+        let child = temp.path().join("child");
+        if child.exists() {
+            fs::remove_dir(&child).expect("remove empty child");
+        }
         let mut command = weave_create_test_command(&temp);
         command.args(args).arg("--force");
         if archive {
