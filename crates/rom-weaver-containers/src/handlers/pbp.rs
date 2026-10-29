@@ -715,11 +715,19 @@ impl PbpContainerHandler {
             writer.write_all(
                 format!("  TRACK {:02} {track_type}\n", track.track_number).as_bytes(),
             )?;
-            // PBP TOC times are absolute disc MSF (include the 150-frame lead-in);
-            // cue INDEX offsets are file-relative, so track 1 INDEX 01 must be 00:00:00.
-            let index01 = track.start_frames.saturating_sub(150);
-            if track.track_type == 0x01 {
-                let index00 = track.start_frames.saturating_sub(300);
+            // TOC bytes 3..5 hold file-relative INDEX 01 offsets, but popstation and pop-fe write
+            // 00:02:01 for the first data track, so it MUST be forced to the start of the BIN.
+            // https://github.com/RupertAvery/PSXPackager/blob/76fc019460dbf550e3ddbc184959f4ed182e36f8/Popstation/CueFileExtensions.cs#L88-L96
+            // https://github.com/RupertAvery/PSXPackager/blob/76fc019460dbf550e3ddbc184959f4ed182e36f8/PSXPackager.Common/TOCHelper.cs#L94-L99
+            let index01 = if track.track_number == 1 && track.track_type != 0x01 {
+                0
+            } else {
+                track.start_frames
+            };
+            // An INDEX 00 before the BIN start cannot exist, so audio that starts inside the
+            // first 150 frames has none.
+            if track.track_type == 0x01 && index01 >= 150 {
+                let index00 = index01 - 150;
                 writer.write_all(
                     format!("    INDEX 00 {}\n", Self::format_msf(index00)).as_bytes(),
                 )?;

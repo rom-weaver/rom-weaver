@@ -85,7 +85,7 @@ fn raw_deflate(payload: &[u8]) -> Vec<u8> {
 #[derive(Clone)]
 struct DiscSpec {
     disc_id: String,
-    /// `(track type byte, absolute start frame)` per track, in track order.
+    /// `(track type byte, file-relative INDEX 01 frame)` per track, in track order.
     tracks: Vec<(u8, u32)>,
     /// ISO volume sector count stamped into block 1's size descriptor.
     sector_count: u32,
@@ -98,7 +98,7 @@ impl DiscSpec {
     fn single_track() -> Self {
         Self {
             disc_id: "SLUS01234".to_string(),
-            tracks: vec![(0x41, 150)],
+            tracks: vec![(0x41, 0)],
             sector_count: 32,
             block_count: 2,
         }
@@ -139,6 +139,10 @@ fn write_toc(psar: &mut [u8], tracks: &[(u8, u32)], leadout_frames: u32) {
         psar[entry + 3] = encode_bcd(minutes);
         psar[entry + 4] = encode_bcd(seconds);
         psar[entry + 5] = encode_bcd(frames);
+        let (minutes, seconds, frames) = frames_to_msf(*start_frames + 150);
+        psar[entry + 7] = encode_bcd(minutes);
+        psar[entry + 8] = encode_bcd(seconds);
+        psar[entry + 9] = encode_bcd(frames);
     }
 }
 
@@ -865,7 +869,7 @@ fn parse_rejects_an_inverted_toc_track_range() {
 fn parse_rejects_out_of_order_toc_tracks() {
     let temp = TempDir::new("toc-order");
     let spec = DiscSpec {
-        tracks: vec![(0x41, 150), (0x01, 180)],
+        tracks: vec![(0x41, 0), (0x01, 30)],
         ..DiscSpec::single_track()
     };
     let mut psar = build_disc_psar(&spec);
@@ -904,30 +908,63 @@ fn a_blank_disc_id_header_probes_as_unknown() {
 
 #[test]
 fn extract_writes_an_index_00_for_audio_tracks() {
-    let temp = TempDir::new("extract-audio");
-    let spec = DiscSpec {
-        tracks: vec![(0x41, 150), (0x01, 180)],
-        ..DiscSpec::single_track()
-    };
-    let source = write_fixture(&temp, "game.pbp", &single_disc_pbp(&spec));
+    for (audio_start, index00, index01) in [
+        (214, Some("00:00:64"), "00:02:64"),
+        (150, Some("00:00:00"), "00:02:00"),
+        (30, None, "00:00:30"),
+    ] {
+        let temp = TempDir::new("extract-audio");
+        let spec = DiscSpec {
+            tracks: vec![(0x41, 0), (0x01, audio_start)],
+            sector_count: 320,
+            block_count: 20,
+            ..DiscSpec::single_track()
+        };
+        let expected_bin = default_stored_blocks(&spec).concat();
+        let source = write_fixture(&temp, "game.pbp", &single_disc_pbp(&spec));
+        let out_dir = temp.join("out");
+        let context = test_context(temp.path());
+
+        PbpContainerHandler
+            .extract(&extract_request(&source, &out_dir), &context)
+            .expect("extract the audio-track fixture");
+
+        let cue = fs::read_to_string(out_dir.join("game.cue")).expect("read cue sheet");
+        let index00 = index00.map_or_else(String::new, |value| format!("    INDEX 00 {value}\n"));
+        assert_eq!(
+            cue,
+            format!(
+                "FILE \"game.bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n{index00}    INDEX 01 {index01}\n"
+            )
+        );
+        assert_eq!(
+            fs::read(out_dir.join("game.bin")).expect("read bin"),
+            expected_bin
+        );
+    }
+}
+
+#[test]
+fn extract_forces_the_first_data_track_to_the_start_of_the_bin() {
+    // popstation and pop-fe write 00:02:01 in the first data track's INDEX 01 bytes.
+    let temp = TempDir::new("extract-popstation-toc");
+    let mut bytes = single_disc_pbp(&DiscSpec::single_track());
+    let entry = PSAR_FILE_OFFSET + TOC_OFFSET + 30;
+    bytes[entry + 3] = encode_bcd(0);
+    bytes[entry + 4] = encode_bcd(2);
+    bytes[entry + 5] = encode_bcd(1);
+    let source = write_fixture(&temp, "game.pbp", &bytes);
     let out_dir = temp.join("out");
-    let context = test_context(temp.path());
-
     PbpContainerHandler
-        .extract(&extract_request(&source, &out_dir), &context)
-        .expect("extract the audio-track fixture");
-
+        .extract(
+            &extract_request(&source, &out_dir),
+            &test_context(temp.path()),
+        )
+        .expect("extract a popstation-style TOC");
     let cue = fs::read_to_string(out_dir.join("game.cue")).expect("read cue sheet");
-    assert!(cue.contains("FILE \"game.bin\" BINARY"), "cue was: {cue}");
-    assert!(cue.contains("  TRACK 01 MODE2/2352"), "cue was: {cue}");
-    assert!(cue.contains("  TRACK 02 AUDIO"), "cue was: {cue}");
-    assert!(cue.contains("    INDEX 00 00:00:00"), "cue was: {cue}");
-    assert!(cue.contains("    INDEX 01 00:00:30"), "cue was: {cue}");
     assert_eq!(
-        fs::metadata(out_dir.join("game.bin"))
-            .expect("read bin metadata")
-            .len(),
-        (32 * SECTOR_BYTES) as u64
+        cue,
+        "FILE \"game.bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n"
     );
 }
 
@@ -1021,6 +1058,7 @@ fn multi_disc_extract_without_selections_writes_every_pair() {
     let first = DiscSpec::single_track();
     let second = DiscSpec {
         disc_id: "SLUS56789".to_string(),
+        tracks: vec![(0x41, 0), (0x01, 30)],
         ..DiscSpec::single_track()
     };
     let psar = build_multi_disc_psar(&[build_disc_psar(&first), build_disc_psar(&second)]);
@@ -1038,6 +1076,19 @@ fn multi_disc_extract_without_selections_writes_every_pair() {
         report.label
     );
     for disc in ["disc01", "disc02"] {
+        let cue =
+            fs::read_to_string(out_dir.join(format!("game.{disc}.cue"))).expect("read disc cue");
+        let audio = if disc == "disc02" {
+            "  TRACK 02 AUDIO\n    INDEX 01 00:00:30\n"
+        } else {
+            ""
+        };
+        assert_eq!(
+            cue,
+            format!(
+                "FILE \"game.{disc}.bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n{audio}"
+            )
+        );
         assert!(
             out_dir.join(format!("game.{disc}.cue")).exists(),
             "missing cue for {disc}"

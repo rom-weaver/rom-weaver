@@ -40,8 +40,9 @@ function buildDiscPsar(discId, iso) {
   psar[0x81e] = 0x41;
   psar[0x81e + 2] = bcd(1);
   psar[0x81e + 3] = bcd(0);
-  psar[0x81e + 4] = bcd(2);
+  psar[0x81e + 4] = bcd(0);
   psar[0x81e + 5] = bcd(0);
+  psar[0x81e + 8] = bcd(2);
   for (let block = 0; block < blockCount; block += 1) {
     const entry = INDEX_OFFSET + block * 0x20;
     writeU32(psar, entry, block * BLOCK_BYTES);
