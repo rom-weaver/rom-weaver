@@ -84,6 +84,18 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   }
 };
 
+// Request paths the host answers with a redirect (`_redirects` rules with a 30x status). The service
+// worker keeps these on the network: a prerendered legacy document exists for several of them, but
+// serving it from the precache would skip the redirect.
+export const redirectSourcePaths = () => {
+  const paths = [];
+  for (const line of fs.readFileSync(path.join(rootAssetDir, "_redirects"), "utf8").split("\n")) {
+    const match = /^(\/\S*)\s+\S+\s+30[1278]\s*$/.exec(line.trim());
+    if (match && !/[*:]/.test(match[1])) paths.push(match[1]);
+  }
+  return paths;
+};
+
 export const LEGACY_WORKFLOW_ROUTES = {
   apply: "apply-patches",
   "apply-patch": "apply-patches",

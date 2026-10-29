@@ -27,6 +27,8 @@ import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 import { createServiceWorkerCachePolicy, findStaleServiceWorkerCaches } from "./pwa/service-worker-cache-policy.ts";
 
 declare const __EMULATORJS_VERSION__: string;
+// Paths the host redirects (from `_redirects`); the build injects them.
+declare const __REDIRECT_SOURCE_PATHS__: string[];
 declare const __IDENTIFY_OPTIONAL_PACK_GROUPS__: Array<{
   id: string;
   label: string;
@@ -552,11 +554,91 @@ const matchCachedResponse = async (request: Request, url: URL) => {
   return undefined;
 };
 
+// A navigation answered from this worker's own precache never waits for the network, so the
+// background update check is what lets a new deploy reach the update banner. The page's own
+// interval (see pwa-service-worker-client.ts) runs the same check; update() calls overlap safely,
+// this only keeps a burst of navigations from issuing one each.
+const NAVIGATION_UPDATE_THROTTLE_MS = 60_000;
+// A network-first navigation that has an exact cached copy gives up on a stalled fetch after this.
+const NAVIGATION_NETWORK_TIMEOUT_MS = 3500;
+let lastNavigationUpdateCheckAt = Number.NEGATIVE_INFINITY;
+
+const requestPrefersMarkdown = (request: Request) => (request.headers.get("accept") || "").includes("text/markdown");
+
+const isTopLevelNavigation = (request: Request, url: URL) =>
+  request.mode === "navigate" && request.method === "GET" && isSameOriginRequest(url);
+
+// Only this worker's own precache: the runtime cache can hold a newer deploy's HTML, which references
+// assets this worker has not precached. Paths with no precached document (404s, newer pages, redirect
+// aliases such as /apply/) stay on the network so the server's answer wins.
+// Fails closed: without the injected list no path is known to be safe, so none is served from cache.
+const redirectSourcePaths = new Set(typeof __REDIRECT_SOURCE_PATHS__ === "undefined" ? [] : __REDIRECT_SOURCE_PATHS__);
+const isRedirectSourcePath = (pathname: string) =>
+  typeof __REDIRECT_SOURCE_PATHS__ === "undefined" || redirectSourcePaths.has(pathname);
+
+const matchPrecachedNavigation = async (url: URL) => {
+  if (!offlineCopyRequestedEnabled || isRedirectSourcePath(url.pathname)) return undefined;
+  if (url.pathname === "/") return await matchPrecache("index.html");
+  return await matchRouteDocument(url);
+};
+
+const scheduleNavigationUpdateCheck = (event: unknown) => {
+  const now = Date.now();
+  if (now - lastNavigationUpdateCheckAt < NAVIGATION_UPDATE_THROTTLE_MS) return;
+  lastNavigationUpdateCheckAt = now;
+  const check = self.registration.update().catch((err: unknown) => {
+    logServiceWorker("navigation update check failed", { error: formatError(err) });
+  });
+  const waitUntil = (event as { waitUntil?: (promise: Promise<unknown>) => void } | undefined)?.waitUntil;
+  if (typeof waitUntil === "function") waitUntil.call(event, check);
+};
+
+const serveNavigationFromPrecache = async (request: Request, url: URL, event: unknown) => {
+  if (!isTopLevelNavigation(request, url) || requestPrefersMarkdown(request)) return undefined;
+  const document = await matchPrecachedNavigation(url);
+  if (!document) return undefined;
+  scheduleNavigationUpdateCheck(event);
+  const credentialless = await ensureCoepModeHydrated();
+  return withCrossOriginIsolationHeaders(document, credentialless) || document;
+};
+
+const matchExactCachedNavigation = async (request: Request, url: URL) => {
+  const cached = (await caches.match(request)) ?? (await matchPrecachedNavigation(url));
+  if (!cached) return undefined;
+  const credentialless = await ensureCoepModeHydrated();
+  return withCrossOriginIsolationHeaders(cached, credentialless) || cached;
+};
+
+const NETWORK_TIMED_OUT = Symbol("network-timed-out");
+
+const fetchWithNavigationTimeout = async (request: Request, url: URL) => {
+  const fetching = fetchAndUpdateCache(request);
+  if (!isTopLevelNavigation(request, url) || requestPrefersMarkdown(request)) return await fetching;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<typeof NETWORK_TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(NETWORK_TIMED_OUT), NAVIGATION_NETWORK_TIMEOUT_MS);
+  });
+  try {
+    const first = await Promise.race([fetching, timeout]);
+    if (first !== NETWORK_TIMED_OUT) return first;
+    const cached = await matchExactCachedNavigation(request, url);
+    if (!cached) return await fetching;
+    // The fetch keeps running so it still refreshes the runtime cache; its outcome no longer matters here.
+    fetching.catch(() => undefined);
+    logServiceWorker("navigation network timed out; serving cached copy", { url: url.href });
+    return cached;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 registerRoute(
   ({ request, url }) => shouldUseNetworkFirst(request, url),
-  async ({ request, url }) => {
+  async ({ event, request, url }) => {
+    const precached = await serveNavigationFromPrecache(request, url, event);
+    if (precached) return precached;
     try {
-      return await fetchAndUpdateCache(request);
+      return await fetchWithNavigationTimeout(request, url);
     } catch (err) {
       const cachedResponse = await matchCachedResponse(request, url);
       logServiceWorker("network-first request failed", {
