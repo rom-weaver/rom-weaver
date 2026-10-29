@@ -28,8 +28,10 @@ export const resetWorkflowChunks = () => ({
     shellKinds.clear();
   },
   // A renamed shell root would silently fall out of the shell and drag its
-  // dependencies into the workflow chunk, so fail the build instead.
-  buildEnd() {
+  // dependencies into the workflow chunk, so fail the build instead. A failed
+  // build keeps its own error.
+  buildEnd(error) {
+    if (error) return;
     const ids = [...this.getModuleIds()];
     for (const file of SHELL_ROOT_FILES) {
       if (!ids.some((id) => normalizeId(id).endsWith(`/${file}`))) {
