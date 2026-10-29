@@ -1,4 +1,4 @@
-# ROM patcher comparisons: rom-weaver, RomPatcher.js and other tools
+# ROM patcher comparison: rom-weaver vs other tools
 
 The right ROM patcher depends on the job: one patch, an embedded patcher, or a complete workflow. This comparison covers RomPatcher.js, Flips, MultiPatch, and specialist disc converters. Format counts alone do not establish which tool fits your files.
 

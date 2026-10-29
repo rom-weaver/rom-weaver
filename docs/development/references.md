@@ -1,4 +1,4 @@
-# ROM patch and disc format specifications: BPS, IPS, xdelta, PPF, and CHD
+# BPS, IPS, xdelta, PPF and CHD format specifications
 
 This page lists the format specifications and implementations used to check rom-weaver.
 

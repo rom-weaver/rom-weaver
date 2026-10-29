@@ -56,7 +56,7 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Browser and CLI](https://rom-weaver.com/docs/browser-and-cli): One engine, two front ends, and how to choose.
 - [Identify data sources](https://rom-weaver.com/docs/identify-sources): How pinned Libretro and OpenGood data provides local ROM identification.
 - [ROM patcher comparison](https://rom-weaver.com/docs/comparisons): Compare rom-weaver with RomPatcher.js (Rom Patcher JS), Flips, MultiPatch, and specialist converters by workflow and tool support.
-- [BPS vs IPS, UPS, xdelta and PPF: ROM patch formats compared](https://rom-weaver.com/docs/patch-formats): Compare BPS, IPS, IPS32, UPS, xdelta/VCDIFF, and PPF by checksum protection, size limits, and suitable uses.
+- [BPS vs IPS, UPS, xdelta and PPF: patch formats compared](https://rom-weaver.com/docs/patch-formats): Compare BPS, IPS, IPS32, UPS, xdelta/VCDIFF, and PPF by checksum protection, size limits, and suitable uses.
 - [CHD, RVZ, ZIP, and 7z speed benchmarks](https://rom-weaver.com/docs/performance): Recorded native CLI timings against chdman, dolphin-tool, 7zz, and Info-ZIP, with versions, inputs, settings, and limits. These are not browser, Z3DS, or patching competitor benchmarks.
 - [Compression formats guide](https://rom-weaver.com/docs/compression-formats): Pick format-specific compression such as CHD, RVZ, or Z3DS, plus ZIP and 7z, and learn when trimming beats compressing.
 - [Install the CLI](https://rom-weaver.com/docs/install): Install rom-weaver with package managers, verified scripts, npm, Docker, or from source.
