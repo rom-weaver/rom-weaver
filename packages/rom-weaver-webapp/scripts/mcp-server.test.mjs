@@ -18,6 +18,10 @@ test("discovery and initialization agree with the implemented transport and capa
   assert.equal(response.status, 200);
   const catalog = await response.json();
   assert.equal(catalog.entries[0].url, "https://rom-weaver.com/mcp/server-card");
+  assert.ok(catalog.entries[0].displayName);
+  assert.ok(
+    catalog.entries[0].representativeQueries.length >= 2 && catalog.entries[0].representativeQueries.length <= 5,
+  );
   const card = createServerCard("https://rom-weaver.com");
   assert.equal(card.remotes[0].url, "https://rom-weaver.com/mcp");
   const legacy = await discoveryResponse(request, "legacy").json();

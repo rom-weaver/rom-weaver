@@ -56,6 +56,13 @@ export const discoveryResponse = (request, kind) => {
         entries: [
           {
             identifier: "urn:air:rom-weaver.com:mcp:public",
+            displayName: "rom-weaver public MCP server",
+            representativeQueries: [
+              "Search the rom-weaver documentation",
+              "Which ROM patch formats does rom-weaver support?",
+              "Which compression and archive formats can rom-weaver read?",
+              "How do I apply a patch to a ROM with rom-weaver?",
+            ],
             type: "application/mcp-server-card+json",
             url: `${origin}/mcp/server-card`,
           },
