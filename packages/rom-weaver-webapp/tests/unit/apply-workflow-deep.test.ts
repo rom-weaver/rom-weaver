@@ -641,6 +641,15 @@ describe("finishingMayChangeBytes", () => {
     expect(may(overrides, patchOptions, options)).toBe(true);
   });
 
+  it("is true only for a cheat positioned before the last selected patch", () => {
+    const withCheats = (patchIndices: number[], positions: number[]) =>
+      finishingMayChangeBytes(asset() as never, patchIndices, [{}, {}] as never, {} as never, positions);
+    expect(withCheats([0, 1], [0])).toBe(true);
+    expect(withCheats([0, 1], [1])).toBe(true);
+    expect(withCheats([0, 1], [2])).toBe(false);
+    expect(withCheats([0, 1], [])).toBe(false);
+  });
+
   it("is false for output.header auto and plain file-level variants", () => {
     expect(may({}, [{}], { output: { header: "auto" } })).toBe(false);
     expect(may({ file: { ...patchFile("game.bin"), checksumVariants: [plainVariant] } })).toBe(false);

@@ -12,6 +12,7 @@ import {
   clickApplyButton,
   getOutputFileNameValue,
   getPatchStackFileNames,
+  getRuntimeErrorText,
   installPatcherTestHooks,
   loadFixtureFile,
   mount,
@@ -825,6 +826,43 @@ test("Apply anyway bypasses the weave final-output check like every other check"
     await clickApplyButton();
     expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
     await expect.poll(() => capture.getDownloads().length).toBe(1);
+  } finally {
+    capture.restore();
+  }
+});
+
+test("a rejected apply's error clears when a patch is turned off", async () => {
+  const romFile = new File(["ORIGINAL-ROM\n"], "game.bin");
+  const weaveArchive = await buildFinalCheckWeave({
+    files: [createIpsPatch("a.ips", 1, 0x58), createIpsPatch("b.ips", 2, 0x59)],
+    outputChecks: { checksums: { crc32: "deadbeef" } },
+    patches: [
+      { name: "A", path: "a.ips" },
+      { name: "B", path: "b.ips" },
+    ],
+  });
+  const capture = await mountWeaveWithCapture(
+    (files) =>
+      createElement(ApplyPatchForm, {
+        defaultSettings: { output: { compression: "none" }, validation: { requireInputChecksumMatch: true } },
+        pageDrop: { files, id: 1 },
+      }),
+    [romFile, weaveArchive],
+  );
+  try {
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    expect((await waitForApplyOutcome())?.kind).toBe("error");
+    getPatchToggles()[0]?.click();
+    await expect.poll(() => getPatchToggles().map((toggle) => toggle.checked)).toEqual([false, true]);
+    await expect
+      .poll(
+        () => getRuntimeErrorText() || document.getElementById("rom-weaver-output-notice-message")?.textContent?.trim(),
+        {
+          timeout: 30000,
+        },
+      )
+      .toBeFalsy();
   } finally {
     capture.restore();
   }
