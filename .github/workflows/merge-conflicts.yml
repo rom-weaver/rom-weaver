@@ -11,10 +11,6 @@ permissions:
   pull-requests: read
   statuses: write
 
-concurrency:
-  group: merge-conflicts-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: false
-
 jobs:
   check:
     name: Check merge conflicts
@@ -24,6 +20,10 @@ jobs:
        (github.event.action != 'edited' || github.event.changes.base != null))
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # Skipped title/body edits MUST NOT replace a queued base-change check.
+    concurrency:
+      group: merge-conflicts-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: false
     steps:
       # This privileged workflow MUST NOT check out or execute PR code.
       - uses: actions/github-script@v9
@@ -52,6 +52,8 @@ jobs:
                 core.warning(`Rate limited; re-run after Retry-After=${headers['retry-after'] ?? 'unspecified'} seconds or X-RateLimit-Reset=${headers['x-ratelimit-reset'] ?? 'unspecified'} (Unix seconds).`);
               }
             };
+            // PRs sharing a head SHA share this commit-scoped context.
+            // https://docs.github.com/en/rest/commits/statuses
             const publish = (pr, state, description) => github.rest.repos.createCommitStatus({
               ...repo,
               sha: pr.head.sha,
@@ -61,14 +63,13 @@ jobs:
               target_url: targetUrl,
             });
             const check = async seed => {
-              // Clear a previous verdict before API errors or unknown mergeability can leave it stale.
-              await publish(seed, 'pending', "GitHub hasn't determined mergeability yet");
-              let pendingSha = seed.head.sha;
+              let pendingSha = null;
               for (let attempt = 0; attempt < 5; attempt++) {
                 const { data: pr } = await github.rest.pulls.get({
                   ...repo,
                   pull_number: seed.number,
                 });
+                // A stale sweep MUST NOT overwrite the result of a completed retarget check.
                 if (pr.state !== 'open' || (base !== null && pr.base.ref !== base)) return;
                 if (pr.mergeable === true || pr.mergeable === false) {
                   const state = pr.mergeable ? 'success' : 'failure';

@@ -80,6 +80,8 @@ test("triggers cover retargeting and every base branch without checking out PR c
   assert.match(workflow, /push:\n    branches: \["\*\*"\]/);
   assert.match(workflow, /github\.event\.changes\.base != null/);
   assert.match(workflow, /!github\.event\.deleted/);
+  assert.doesNotMatch(workflow, /\nconcurrency:/);
+  assert.match(workflow, /    concurrency:\n      group: merge-conflicts-/);
   assert.match(workflow, /permissions:\n  pull-requests: read\n  statuses: write/);
   assert.match(workflow, /uses: actions\/github-script@v9/);
   assert.match(workflow, /retries: 2/);
@@ -94,8 +96,8 @@ for (const [mergeable, state, description] of [
 ]) {
   test(`a fork PR with mergeable=${mergeable} publishes ${state} on its head in the base repository`, async () => {
     const result = await run({ seed: makePr(1, { mergeable }) });
-    assert.deepEqual(result.statuses.map(status => status.state), ["pending", state]);
-    assert.equal(result.statuses[1].description, description);
+    assert.deepEqual(result.statuses.map(status => status.state), [state]);
+    assert.equal(result.statuses[0].description, description);
     for (const status of result.statuses) {
       assert.equal(status.owner, repository.owner);
       assert.equal(status.repo, repository.repo);
@@ -132,7 +134,7 @@ test("a new head during retries receives its own pending and final status", asyn
     head: { sha: "new-head" }, mergeable: attempt < 2 ? null : true,
   }) });
   assert.deepEqual(result.statuses.map(status => [status.sha, status.state]), [
-    ["head-1", "pending"], ["new-head", "pending"], ["new-head", "success"],
+    ["new-head", "pending"], ["new-head", "success"],
   ]);
 });
 
@@ -145,7 +147,7 @@ test("pushes paginate only affected open PRs, including non-default base branche
   assert.equal(result.lists[0].state, "open");
   assert.equal(result.lists[0].per_page, 100);
   assert.deepEqual(result.reads.map(args => args.pull_number), [1, 2]);
-  assert.deepEqual(result.statuses.map(status => status.state), ["pending", "success", "pending", "failure"]);
+  assert.deepEqual(result.statuses.map(status => status.state), ["success", "failure"]);
 });
 
 test("base pushes re-evaluate the same head after a clean verdict becomes conflicting", async () => {
@@ -161,11 +163,22 @@ test("retargeted PR events use live mergeability rather than the event snapshot"
   assert.equal(result.statuses.at(-1).state, "failure");
 });
 
-test("PRs closed or retargeted during a push sweep get no obsolete verdict", async () => {
+test("PRs closed or retargeted during a push sweep get no status writes", async () => {
   for (const overrides of [{ state: "closed" }, { base: { ref: "elsewhere" } }]) {
     const result = await run({ event: "push", get: () => makePr(1, overrides) });
-    assert.deepEqual(result.statuses.map(status => status.state), ["pending"]);
+    assert.deepEqual(result.statuses, []);
   }
+});
+
+test("an older base sweep preserves a completed retarget-event status", async () => {
+  let latest;
+  const retargeted = makePr(1, { base: { ref: "other-base" } });
+  const post = status => { latest = status; };
+  await run({ seed: retargeted, post });
+  assert.equal(latest.state, "success");
+  const completed = latest;
+  await run({ event: "push", get: () => retargeted, post });
+  assert.equal(latest, completed);
 });
 
 test("pushes without affected PRs do no detail reads or status writes", async () => {
@@ -174,21 +187,21 @@ test("pushes without affected PRs do no detail reads or status writes", async ()
   assert.deepEqual(result.statuses, []);
 });
 
-test("an API error leaves pending, fails the run, and does not prevent checking other PRs", async () => {
+test("a detail API error fails the run without writing a stale status or preventing other PR checks", async () => {
   const result = await run({ event: "push", pages: [[makePr(1), makePr(2)]], get: args => {
     if (args.pull_number === 1) throw new Error("GitHub unavailable");
     return makePr(2);
   } });
   assert.deepEqual(result.failures, ["GitHub unavailable"]);
   assert.deepEqual(result.statuses.map(status => [status.sha, status.state]), [
-    ["head-1", "pending"], ["head-2", "pending"], ["head-2", "success"],
+    ["head-2", "success"],
   ]);
 });
 
 test("fork status permission errors fail visibly without writing to the fork", async () => {
   const result = await run({ post: () => { throw Object.assign(new Error("Resource not accessible by integration"), { status: 403 }); } });
   assert.deepEqual(result.failures, ["Resource not accessible by integration"]);
-  assert.equal(result.reads.length, 0);
+  assert.equal(result.reads.length, 1);
   assert.equal(result.statuses[0].owner, repository.owner);
 });
 
@@ -200,7 +213,7 @@ test("rate limits stop the sweep and report GitHub's retry guidance", async () =
       });
     } });
     assert.equal(result.reads.length, 1);
-    assert.equal(result.statuses.length, 1);
+    assert.equal(result.statuses.length, 0);
     assert.equal(result.failures.length, 1);
     assert.match(result.warnings[0], /Retry-After=60 seconds/);
     assert.match(result.warnings[0], /X-RateLimit-Reset=1234567890/);
@@ -213,11 +226,11 @@ test("pagination errors fail the run after preserving completed results", async 
   assert.deepEqual(result.failures, ["Page unavailable"]);
 });
 
-test("a thousand PRs need only one detail read and two status writes each", async () => {
+test("a thousand resolved PRs need only one detail read and one status write each", async () => {
   const prs = Array.from({ length: 1000 }, (_value, index) => makePr(index + 1));
   const pages = Array.from({ length: 10 }, (_value, index) => prs.slice(index * 100, (index + 1) * 100));
   const result = await run({ event: "push", pages, get: args => prs[args.pull_number - 1] });
   assert.equal(result.reads.length, 1000);
-  assert.equal(result.statuses.length, 2000);
+  assert.equal(result.statuses.length, 1000);
   assert.deepEqual(result.failures, []);
 });
