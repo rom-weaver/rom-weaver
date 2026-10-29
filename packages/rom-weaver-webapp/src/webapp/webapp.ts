@@ -339,7 +339,16 @@ const markWebappMounted = () => {
   const appRootElement = document.getElementById("webapp-root");
   if (!appRootElement) return;
   const firstMount = appRootElement.hasAttribute("aria-busy");
-  if (firstMount && hadPrerenderedShell) appRootElement.dataset.shellSettled = "true";
+  if (firstMount && hadPrerenderedShell) {
+    // Same synchronous step as releasing aria-busy, so the panel never
+    // leaves the settled state. Docs has its own settled rule, and What's new
+    // prerenders only its heading (the changelog arrives after hydration), so
+    // both keep their own entry.
+    appRootElement
+      .querySelector<HTMLElement>(".panel.workflow:not([hidden]):not(#panel-docs, #panel-whats-new)")
+      ?.setAttribute("data-shell-panel", "");
+    appRootElement.dataset.shellSettled = "true";
+  }
   appRootElement.removeAttribute("aria-busy");
   if (!firstMount) return;
   // Last, so any state change it triggers lands on a fully settled first frame.
@@ -480,6 +489,9 @@ const renderWebappRoot = (): undefined => {
     appRootElement = document.getElementById("webapp-root");
     if (appRootElement) {
       hadPrerenderedShell = appRootElement.childElementCount > 0;
+      // Without a prerendered shell nothing is on screen to keep settled, so the
+      // busy-phase CSS must not postpone panel-in until aria-busy releases.
+      if (!hadPrerenderedShell) appRootElement.dataset.shellAbsent = "true";
       // Always drained, shell or not, so the inline capture listener stops here.
       captureShellClicks();
       shouldHydrate = hadPrerenderedShell && !weaveRouteWasReplaced;
