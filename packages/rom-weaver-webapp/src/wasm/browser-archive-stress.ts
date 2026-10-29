@@ -143,6 +143,12 @@ const runBrowserArchiveStress = async (options: ArchiveStressOptions = {}): Prom
     const sourcePath = `${OPFS_GUEST_ROOT}/${directoryName}/${testCase.fileName}`;
     const outDir = `${OPFS_GUEST_ROOT}/${directoryName}/out`;
     const worker = createBrowserWorkerClient({});
+    const cleanup = async () => {
+      worker.terminate();
+      await worker.whenClosed();
+      await root.removeEntry(directoryName, { recursive: true }).catch(() => undefined);
+    };
+    let operationFailed = false;
     try {
       const response = await fetch(testCase.url, { cache: "no-store" });
       if (!response.ok) throw new Error(`${testCase.id}: fixture fetch failed with ${response.status}`);
@@ -186,6 +192,7 @@ const runBrowserArchiveStress = async (options: ArchiveStressOptions = {}): Prom
       options.onStep?.(succeeded);
       setActiveCase(null);
     } catch (error) {
+      operationFailed = true;
       setActiveCase(null);
       const failed: BrowserFormatMatrixStep = {
         command: "extract",
@@ -199,8 +206,9 @@ const runBrowserArchiveStress = async (options: ArchiveStressOptions = {}): Prom
       options.onStep?.(failed);
       throw error;
     } finally {
-      worker.terminate();
-      await root.removeEntry(directoryName, { recursive: true }).catch(() => undefined);
+      await cleanup().catch((error: unknown) => {
+        if (!operationFailed) throw error;
+      });
     }
   }
 

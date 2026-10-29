@@ -2,10 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   removeManagedOpfsPath: vi.fn(async () => undefined),
+  waitForRomWeaverShutdown: vi.fn(async () => undefined),
 }));
 
 vi.mock("../../src/workers/protocol/opfs-path.ts", () => ({
   removeManagedOpfsPath: mocks.removeManagedOpfsPath,
+}));
+vi.mock("../../src/workers/rom-weaver/runner-control.ts", () => ({
+  waitForRomWeaverShutdown: mocks.waitForRomWeaverShutdown,
 }));
 
 import {
@@ -14,10 +18,52 @@ import {
   runWithRomWeaverOutputScope,
 } from "../../src/lib/runtime/run-output-paths.ts";
 
-// Scope removal retries while a just-terminated (cancelled) worker still holds OPFS handles.
-const scopeRemoveOptions = { busyRetryDelaysMs: expect.any(Array) };
+const scopeRemoveOptions = { ignoreErrors: false };
 
 describe("run output path ownership", () => {
+  it("keeps cleanup pending until cancelled writers acknowledge closure", async () => {
+    mocks.removeManagedOpfsPath.mockClear();
+    let close!: () => void;
+    mocks.waitForRomWeaverShutdown.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          close = resolve;
+        }),
+    );
+    const scope = createRomWeaverOutputScope();
+    const cleanup = scope.cleanup();
+    await Promise.resolve();
+    expect(mocks.removeManagedOpfsPath).not.toHaveBeenCalled();
+    close();
+    await cleanup;
+    expect(mocks.removeManagedOpfsPath).toHaveBeenCalledWith(scope.rootPath, undefined, scopeRemoveOptions);
+  });
+
+  it("retains cleanup ownership after strict deletion fails", async () => {
+    mocks.removeManagedOpfsPath.mockClear();
+    mocks.removeManagedOpfsPath.mockRejectedValueOnce(new DOMException("still locked", "NoModificationAllowedError"));
+    const scope = createRomWeaverOutputScope();
+    await expect(scope.cleanup()).rejects.toThrow("still locked");
+    await scope.cleanup();
+    expect(mocks.removeManagedOpfsPath).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a failed final output cleanup without losing its scope ownership", async () => {
+    mocks.removeManagedOpfsPath.mockClear();
+    const scope = createRomWeaverOutputScope();
+    const removeOutputPath = vi.fn(async () => undefined);
+    const [release] = await scope.createOutputCleanups([`${scope.rootPath}/rom.bin`], removeOutputPath);
+    if (!release) throw new Error("output scope did not create a cleanup");
+    removeOutputPath.mockRejectedValueOnce(new Error("output locked"));
+    await expect(release()).rejects.toThrow("output locked");
+    expect(mocks.removeManagedOpfsPath).not.toHaveBeenCalled();
+    mocks.removeManagedOpfsPath.mockRejectedValueOnce(new Error("scope locked"));
+    await expect(release()).rejects.toThrow("scope locked");
+    await release();
+    expect(mocks.removeManagedOpfsPath).toHaveBeenCalledTimes(2);
+    expect(removeOutputPath).toHaveBeenCalledTimes(2);
+  });
+
   it("selects an operation-scoped path and rejects active input conflicts", () => {
     const scope = createRomWeaverOutputScope();
     const selected = scope.selectOutputPath("/work/source.bin", "nested/result.bin", [undefined, "/work/patch.ips"]);

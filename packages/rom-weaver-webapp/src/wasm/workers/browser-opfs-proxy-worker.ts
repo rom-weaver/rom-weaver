@@ -1,4 +1,5 @@
 import { getManagedOpfsFileHandle } from "../../workers/protocol/opfs-path.ts";
+import { acknowledgeOpfsShutdown } from "../browser-opfs-shutdown.ts";
 // This dedicated worker owns the runner's OPFS handles and resolves mount paths from the OPFS root.
 // File I/O uses the shared channel; bootstrap, Blob registration, tracing, and shutdown use postMessage.
 
@@ -12,6 +13,7 @@ import type { FileSystemDirectoryHandleLike, RomWeaverBrowserSyncAccessMode } fr
 
 interface ProxyBootstrapMessage {
   channel: OpfsProxyChannelTransfer;
+  shutdownControl: SharedArrayBuffer;
   mounts: OpfsProxyMountBootstrap[];
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;
   type: "bootstrap";
@@ -89,6 +91,7 @@ const bootstrap = async (data: ProxyBootstrapMessage): Promise<void> => {
     }
     server = startOpfsProxyServer({
       channel,
+      shutdownControl: new Int32Array(data.shutdownControl),
       mounts,
       syncAccessMode: data.syncAccessMode,
       trace: (line) => {
@@ -99,6 +102,12 @@ const bootstrap = async (data: ProxyBootstrapMessage): Promise<void> => {
     });
     workerScope.postMessage({ type: "ready" });
   } catch (error) {
+    if (server) {
+      server.stop();
+      await server.done;
+    } else {
+      acknowledgeOpfsShutdown(new Int32Array(data.shutdownControl));
+    }
     workerScope.postMessage({ message: `OPFS proxy bootstrap failed: ${String(error)}`, type: "error" });
   }
 };

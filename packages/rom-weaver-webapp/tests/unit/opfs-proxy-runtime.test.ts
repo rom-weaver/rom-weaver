@@ -88,8 +88,15 @@ describe("OPFS proxy runtime", () => {
       type: "register-blob-source",
     });
     expect(worker?.messages).toContainEqual({ path: "/work/input.bin", type: "unregister-blob-source" });
-    await runtime.stop();
-    expect(worker?.messages.at(-1)).toEqual({ type: "stop" });
+    if (!worker) throw new Error("proxy worker was not created");
+    const control = new Int32Array((worker.messages[0] as { shutdownControl: SharedArrayBuffer }).shutdownControl);
+    const stopped = runtime.stop();
+    expect(runtime.stop()).toBe(stopped);
+    expect(Atomics.load(control, 0)).toBe(1);
+    expect(worker?.terminated).toBe(false);
+    Atomics.store(control, 0, 2);
+    Atomics.notify(control, 0);
+    await stopped;
     expect(worker?.terminated).toBe(true);
   });
 
@@ -97,14 +104,28 @@ describe("OPFS proxy runtime", () => {
     FakeWorker.mode = "bootstrap-error";
     const bootstrap = startOpfsProxyRuntime({ mounts: [], slotCount: 1 });
     const bootstrapWorker = FakeWorker.instances[0];
+    if (!bootstrapWorker) throw new Error("proxy worker was not created");
+    const bootstrapControl = new Int32Array(
+      (bootstrapWorker.messages[0] as { shutdownControl: SharedArrayBuffer }).shutdownControl,
+    );
+    Atomics.store(bootstrapControl, 0, 2);
     bootstrapWorker?.onmessage?.({ data: { message: "bad mounts", type: "error" } } as MessageEvent);
     await expect(bootstrap).rejects.toThrow("bad mounts");
+    expect(bootstrapWorker.terminated).toBe(true);
+    expect(Atomics.load(bootstrapControl, 0)).toBe(2);
+    expect(Atomics.load(bootstrapControl, 1)).toBe(1);
 
     FakeWorker.mode = "error";
     const failure = startOpfsProxyRuntime({ mounts: [], slotCount: 1 });
     const failureWorker = FakeWorker.instances[1];
+    if (!failureWorker) throw new Error("proxy worker was not created");
     failureWorker?.onerror?.({ message: "CSP blocked" });
     await expect(failure).rejects.toThrow("CSP blocked");
+    const failedControl = new Int32Array(
+      (failureWorker.messages[0] as { shutdownControl: SharedArrayBuffer }).shutdownControl,
+    );
+    expect(Atomics.load(failedControl, 0)).toBe(3);
+    expect(failureWorker.terminated).toBe(true);
   });
 
   it("times out a worker that never sends a ready message", async () => {
@@ -114,5 +135,35 @@ describe("OPFS proxy runtime", () => {
     const failure = expect(pending).rejects.toThrow("did not become ready in time");
     await vi.advanceTimersByTimeAsync(30_000);
     await failure;
+    const worker = FakeWorker.instances[0];
+    if (!worker) throw new Error("proxy worker was not created");
+    expect(worker.terminated).toBe(true);
+    const control = new Int32Array((worker.messages[0] as { shutdownControl: SharedArrayBuffer }).shutdownControl);
+    expect(Atomics.load(control, 0)).toBe(3);
+  });
+
+  it("acknowledges closure when bootstrap cannot be posted", async () => {
+    const control = new Int32Array(new SharedArrayBuffer(8));
+    vi.spyOn(FakeWorker.prototype, "postMessage").mockImplementationOnce(() => {
+      throw new DOMException("could not clone bootstrap", "DataCloneError");
+    });
+    await expect(startOpfsProxyRuntime({ mounts: [], slotCount: 1, shutdownControl: control.buffer })).rejects.toThrow(
+      "could not clone bootstrap",
+    );
+    expect(Atomics.load(control, 0)).toBe(2);
+    expect(Atomics.load(control, 1)).toBe(0);
+    expect(FakeWorker.instances[0]?.terminated).toBe(true);
+    vi.restoreAllMocks();
+  });
+
+  it("rejects failed resource closure and still terminates the proxy", async () => {
+    const control = new Int32Array(new SharedArrayBuffer(8));
+    const runtime = await startOpfsProxyRuntime({ mounts: [], slotCount: 1, shutdownControl: control.buffer });
+    const stopped = runtime.stop();
+    const rejected = expect(stopped).rejects.toThrow("failed to close its owned resources");
+    Atomics.store(control, 0, 3);
+    Atomics.notify(control, 0);
+    await rejected;
+    expect(FakeWorker.instances[0]?.terminated).toBe(true);
   });
 });

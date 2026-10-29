@@ -1,3 +1,4 @@
+import { waitForBrowserOpfsBootCleanup } from "../../storage/browser/browser-opfs-cleanup.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import { releaseBrowserSource, retainBrowserSource } from "../../storage/browser/browser-source-primitives.ts";
 import { getNamedSource } from "../../storage/shared/binary/source-file-utils.ts";
@@ -182,6 +183,7 @@ const createBrowserRuntimeVfsIo = ({
     trace,
     pathPrefixInPath,
   }) => {
+    await waitForBrowserOpfsBootCleanup();
     emitBrowserRuntimeVfsTrace(trace, "stageSource start", {
       fallbackFileName,
       pathBucket,

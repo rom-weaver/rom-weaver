@@ -307,6 +307,7 @@ const runThreadSweepCell = async (input: {
   name: string;
   onEvent?: (event: RomWeaverRunJsonEvent) => void;
   recordObservation: (observation: BrowserThreadSweepObservation) => void;
+  onClosureFailure: () => void;
   root: FileSystemDirectoryHandle;
   sharedMemoryMaximumPages: number | undefined;
   threads: number;
@@ -315,6 +316,11 @@ const runThreadSweepCell = async (input: {
   const { archivePath, cell, entries, formatCase, ingestDir, inputPaths, name, root, threads } = input;
   // A fresh worker per cell keeps a pool sized for N from serving N+1.
   const worker = createBrowserWorkerClient({});
+  const closeWorker = async () => {
+    worker.terminate();
+    await worker.whenClosed();
+  };
+  let failed = false;
   try {
     await worker.init({
       runtimeMounts: [OPFS_GUEST_ROOT],
@@ -385,8 +391,14 @@ const runThreadSweepCell = async (input: {
       command: `compress=${compressObservation.effectiveThreads}/${threads} ingest=${ingestObservation.effectiveThreads}/${threads} verified=${compared}/${emitted.length}`,
       terminalStatus: ingestTerminal.status,
     };
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
-    worker.terminate();
+    await closeWorker().catch((error: unknown) => {
+      input.onClosureFailure();
+      if (!failed) throw error;
+    });
   }
 };
 
@@ -409,6 +421,7 @@ export async function runBrowserThreadSweep(
 
   const steps: BrowserFormatMatrixStep[] = [];
   const observations: BrowserThreadSweepObservation[] = [];
+  let closureFailed = false;
   const startedAt = performance.now();
 
   const addStep = (step: BrowserFormatMatrixStep) => {
@@ -424,11 +437,15 @@ export async function runBrowserThreadSweep(
     const inputPaths = entries.map((entry) => entry.path);
 
     for (const threads of threadCounts) {
+      if (closureFailed) return;
       const name = `${formatCase.name}/${sizeLabel}/threads-${threads}`;
       const stepStartedAt = performance.now();
       addStep({ command: "compress+ingest", name, status: "running", timestamp: new Date().toISOString() });
       try {
         const { command, terminalStatus } = await runThreadSweepCell({
+          onClosureFailure: () => {
+            closureFailed = true;
+          },
           archivePath: joinGuestPath(
             fixtureGuestRoot,
             `${formatCase.name}-${sizeLabel}-${threads}.${formatCase.format}`,
@@ -468,7 +485,7 @@ export async function runBrowserThreadSweep(
         // `failedSteps` carries the failure to the caller.
       }
     }
-    await removeFixtureDirectory(root, `${fixtureName}/${pathBasename(sourceDir)}`);
+    if (!closureFailed) await removeFixtureDirectory(root, `${fixtureName}/${pathBasename(sourceDir)}`);
   };
 
   try {
@@ -476,7 +493,7 @@ export async function runBrowserThreadSweep(
       for (const payloadBytes of formatCase.payloadBytes) await sweepFormatSize(formatCase, payloadBytes);
     }
   } finally {
-    await removeFixtureDirectory(root, fixtureName);
+    if (!closureFailed) await removeFixtureDirectory(root, fixtureName);
   }
 
   return {

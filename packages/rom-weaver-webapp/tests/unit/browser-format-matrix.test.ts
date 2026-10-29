@@ -47,6 +47,7 @@ let workers: Array<{
   init: ReturnType<typeof vi.fn>;
   runJson: ReturnType<typeof vi.fn>;
   terminate: ReturnType<typeof vi.fn>;
+  whenClosed: ReturnType<typeof vi.fn>;
 }>;
 
 const createWorker = (options?: { initMode?: string; initError?: Error; runError?: Error }) => {
@@ -58,6 +59,7 @@ const createWorker = (options?: { initMode?: string; initError?: Error; runError
     ),
     runJson: vi.fn(() => Promise.reject(options?.runError ?? new Error("worker offline"))),
     terminate: vi.fn(),
+    whenClosed: vi.fn(() => Promise.resolve()),
   };
   workers.push(worker);
   return worker;
@@ -226,6 +228,61 @@ describe("runBrowserFullFormatMatrix", () => {
 
     await expect(runBrowserFullFormatMatrix(inlineFixtures)).rejects.toThrow("worker offline");
 
+    expect(mocks.removeFixtureDirectory).not.toHaveBeenCalled();
+  });
+
+  it("preserves command errors and retains fixtures when closure fails", async () => {
+    mocks.createBrowserWorkerClient.mockImplementation(() => {
+      const worker = createWorker();
+      worker.whenClosed.mockRejectedValue(new Error("closure failed"));
+      return worker;
+    });
+
+    await expect(runBrowserFullFormatMatrix(inlineFixtures)).rejects.toThrow("worker offline");
+    expect(mocks.removeFixtureDirectory).not.toHaveBeenCalled();
+  });
+
+  it("preserves init errors and retains fixtures when closure fails", async () => {
+    mocks.createBrowserWorkerClient.mockImplementation(() => {
+      const worker = createWorker({ initError: new Error("init failed") });
+      worker.whenClosed.mockRejectedValue(new Error("closure failed"));
+      return worker;
+    });
+    await expect(runBrowserFullFormatMatrix(inlineFixtures)).rejects.toThrow("init failed");
+    expect(mocks.removeFixtureDirectory).not.toHaveBeenCalled();
+  });
+
+  it("preserves mobile command errors and retains fixtures when closure fails", async () => {
+    mocks.resolveAppleMobileSharedMemoryMaximumPages.mockReturnValue(2048);
+    mocks.createBrowserWorkerClient.mockImplementation(() => {
+      const worker = createWorker();
+      worker.whenClosed.mockRejectedValue(new Error("closure failed"));
+      return worker;
+    });
+    await expect(
+      runBrowserFullFormatMatrix({
+        ...inlineFixtures,
+        initOptions: { module: new WebAssembly.Module(EMPTY_WASM) },
+      }),
+    ).rejects.toThrow("worker offline");
+    expect(mocks.removeFixtureDirectory).not.toHaveBeenCalled();
+  });
+
+  it("waits for closure before deleting fixtures", async () => {
+    let release!: () => void;
+    const closed = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mocks.createBrowserWorkerClient.mockImplementation(() => {
+      const worker = createWorker();
+      worker.whenClosed.mockReturnValue(closed);
+      return worker;
+    });
+    const run = runBrowserFullFormatMatrix(inlineFixtures).catch((error: unknown) => error);
+    await vi.waitFor(() => expect(workers[0]?.whenClosed).toHaveBeenCalled());
+    expect(mocks.removeFixtureDirectory).not.toHaveBeenCalled();
+    release();
+    expect(await run).toMatchObject({ message: "worker offline" });
     expect(mocks.removeFixtureDirectory).toHaveBeenCalledTimes(1);
   });
 

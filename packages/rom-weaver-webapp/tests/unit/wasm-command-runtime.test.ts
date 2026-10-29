@@ -26,6 +26,10 @@ import {
 
 const mocks = vi.hoisted(() => ({ runRomWeaverJson: vi.fn() }));
 
+vi.mock("../../src/storage/browser/browser-opfs-cleanup.ts", () => ({
+  waitForBrowserOpfsBootCleanup: vi.fn(async () => undefined),
+}));
+
 vi.mock("../../src/workers/rom-weaver/rom-weaver-runner.ts", () => ({
   runRomWeaverJson: mocks.runRomWeaverJson,
 }));

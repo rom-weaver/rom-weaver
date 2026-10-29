@@ -1,3 +1,5 @@
+export { waitForRomWeaverShutdown } from "../../wasm/browser-opfs-shutdown.ts";
+import { waitForRomWeaverShutdown } from "../../wasm/browser-opfs-shutdown.ts";
 import { createLogger } from "../../lib/logging.ts";
 
 type InputSelectionHandler = (request: string) => number[] | Promise<number[]>;
@@ -62,6 +64,7 @@ const registerRunnerLifecycle = (control: RunnerLifecycleControl) => {
 
 const resetRomWeaverRunner = async (options: { terminate?: boolean } = {}) => {
   await runnerLifecycleControl?.disposeAll(options);
+  await waitForRomWeaverShutdown();
 };
 
 const markRomWeaverRunnerStale = () => {

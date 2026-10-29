@@ -48,11 +48,8 @@ describe("rom-weaver-wasm benchmark parity with python bench-checksum-threading"
   }, 300_000);
 
   afterAll(async () => {
-    try {
-      worker?.terminate();
-    } catch {
-      // best-effort cleanup only
-    }
+    worker?.terminate();
+    await worker?.whenClosed();
   });
 
   for (const algorithm of ALGORITHMS) {

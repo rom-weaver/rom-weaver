@@ -16,6 +16,7 @@ const guest = vi.hoisted(() => ({
   runs: [] as RomWeaverCommand[],
   terminations: 0,
   workerCreations: 0,
+  close: null as (() => Promise<void>) | null,
 }));
 
 const responses = vi.hoisted(() => ({
@@ -52,6 +53,7 @@ vi.mock("../../src/wasm/workers/browser-worker-client.ts", () => ({
         for (const event of result.events) options.onEvent?.(event);
         return result;
       }),
+      whenClosed: vi.fn(() => guest.close?.() ?? Promise.resolve()),
       terminate: vi.fn(() => {
         guest.terminations += 1;
       }),
@@ -137,6 +139,7 @@ beforeEach(() => {
   guest.runs.length = 0;
   guest.terminations = 0;
   guest.workerCreations = 0;
+  guest.close = null;
   responses.compress = compressOk;
   responses.ingest = echoSourceEntries("src-");
 
@@ -150,6 +153,40 @@ beforeEach(() => {
 });
 
 describe("runBrowserThreadSweep", () => {
+  it("retains fixtures and records closure failure", async () => {
+    guest.close = () => Promise.reject(new Error("closure failed"));
+    const summary = await runBrowserThreadSweep({ formats: ["chd"], threadCounts: [1, 4] });
+    expect(guest.workerCreations).toBe(1);
+    expect(summary.failedSteps).toBe(1);
+    expect(firstFailureError(summary)).toBe("closure failed");
+    expect(guest.removed).toEqual([]);
+  });
+
+  it("preserves the command error when closure also fails", async () => {
+    responses.compress = () => {
+      throw new Error("command failed");
+    };
+    guest.close = () => Promise.reject(new Error("closure failed"));
+    const summary = await runBrowserThreadSweep({ formats: ["chd"], threadCounts: [1] });
+    expect(firstFailureError(summary)).toBe("command failed");
+    expect(guest.removed).toEqual([]);
+  });
+
+  it("waits for closure before deleting fixtures", async () => {
+    let release!: () => void;
+    const closed = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const closing = vi.fn(() => closed);
+    guest.close = closing;
+    const run = runBrowserThreadSweep({ formats: ["chd"], threadCounts: [1] });
+    await vi.waitFor(() => expect(closing).toHaveBeenCalled());
+    expect(guest.removed).toEqual([]);
+    release();
+    expect((await run).passedSteps).toBe(1);
+    expect(guest.removed).toHaveLength(2);
+  });
+
   it("sweeps every requested thread count for one format and reports the round trip", async () => {
     const steps: { name: string; status: string }[] = [];
     const summary = await runBrowserThreadSweep({

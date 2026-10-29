@@ -13,7 +13,6 @@ vi.mock("../../src/workers/protocol/browser-opfs-worker-client.ts", () => ({ req
 import {
   resetBrowserTransientOpfs,
   startBrowserOpfsBootCleanup,
-  waitForBrowserOpfsBootCleanup,
 } from "../../src/storage/browser/browser-opfs-cleanup.ts";
 
 describe("browser OPFS cleanup", () => {
@@ -40,6 +39,12 @@ describe("browser OPFS cleanup", () => {
   });
 
   it("makes the boot-cleanup wait cover an in-flight reset sweep without rejecting on its failure", async () => {
+    // The wait now starts the boot sweep, so use a fresh module with a finished boot sweep and no real Web
+    // Lock, whose page lifetime lease would otherwise stay held for the rest of the file.
+    vi.stubGlobal("navigator", {});
+    vi.resetModules();
+    const fresh = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    await fresh.startBrowserOpfsBootCleanup();
     let release: () => void = () => undefined;
     requestBrowserOpfsStorage.mockImplementation(
       () =>
@@ -47,10 +52,10 @@ describe("browser OPFS cleanup", () => {
           release = () => resolve({ error: { message: "quota exceeded" }, success: false });
         }),
     );
-    const reset = resetBrowserTransientOpfs();
+    const reset = fresh.resetBrowserTransientOpfs();
     const rejection = expect(reset).rejects.toThrow("quota exceeded");
     let waited = false;
-    const waiting = waitForBrowserOpfsBootCleanup().then(() => {
+    const waiting = fresh.waitForBrowserOpfsBootCleanup().then(() => {
       waited = true;
     });
     await new Promise((resolve) => setTimeout(resolve, 10));

@@ -17,8 +17,7 @@ const loadRomWeaverRunner = () => (runnerModulePromise ??= import("../../workers
 // directories the page-boot sweep deletes. A command that starts before the sweep finishes would have its
 // fresh scratch deleted underneath it (e.g. "OPFS prefix file not found: /work/weave-parse/<id>/...").
 const runRomWeaverJson = async (...args: Parameters<RunRomWeaverJson>): ReturnType<RunRomWeaverJson> => {
-  // A failed sweep is already logged at boot; it must not block user work.
-  await waitForBrowserOpfsBootCleanup().catch(() => undefined);
+  await waitForBrowserOpfsBootCleanup();
   return (await loadRomWeaverRunner()).runRomWeaverJson(...args);
 };
 

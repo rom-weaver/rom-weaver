@@ -10,15 +10,18 @@ import {
 } from "../../src/wasm/browser-opfs-proxy-client.ts";
 import { annotateThreadWorkerError } from "../../src/wasm/browser-wasi-thread-errors.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { registerRomWeaverShutdown } from "../../src/wasm/browser-opfs-shutdown.ts";
 
 const state = vi.hoisted(() => ({
   browser: true,
   clients: [] as Array<Record<string, unknown>>,
+  createScratch: vi.fn(),
   disposeAll: vi.fn(async () => undefined),
   forced: vi.fn((request: unknown, threads: number) => ({ ...(request as object), forcedThreads: threads })),
   initOptions: [] as unknown[],
   markStale: vi.fn(),
   run: vi.fn(),
+  removeScratch: vi.fn(),
   supportsThreads: vi.fn((command: { type?: string }) => command.type !== "probe"),
   virtualFiles: [] as Array<{ path: string; source?: unknown; useProxyHandle?: boolean }>,
 }));
@@ -62,7 +65,8 @@ vi.mock("../../src/wasm/workers/browser-worker-client.ts", () => ({
         return { mode: "browser-opfs", threaded: true, wasmUrl: "/worker.wasm" };
       }),
       runJson: state.run,
-      terminate: vi.fn(),
+      terminate: vi.fn(() => registerRomWeaverShutdown(client.whenClosed())),
+      whenClosed: vi.fn(async () => undefined),
     };
     state.clients.push(client);
     return client;
@@ -72,6 +76,10 @@ vi.mock("../../src/wasm/workers/worker-trace-format.ts", () => ({
   formatCommandForTrace: (command: unknown) => String((command as { type?: string })?.type ?? "unknown"),
 }));
 vi.mock("../../src/workers/protocol/browser-opfs-source-ref.ts", () => ({ getStagedInputMs: vi.fn(() => undefined) }));
+vi.mock("../../src/workers/protocol/opfs-path.ts", () => ({
+  getManagedOpfsFileHandle: state.createScratch,
+  removeManagedOpfsPath: state.removeScratch,
+}));
 vi.mock("../../src/workers/protocol/browser-virtual-files.ts", () => ({
   getActiveBrowserVirtualFiles: () => state.virtualFiles,
 }));
@@ -105,6 +113,8 @@ beforeEach(async () => {
   state.virtualFiles = [];
   state.run.mockReset();
   state.run.mockResolvedValue(success());
+  state.createScratch.mockReset().mockRejectedValue(new Error("OPFS unavailable"));
+  state.removeScratch.mockReset().mockResolvedValue(undefined);
   state.forced.mockClear();
   state.markStale.mockClear();
   vi.stubGlobal("crossOriginIsolated", true);
@@ -173,9 +183,82 @@ describe("browser runner lifecycle", () => {
     await resetRomWeaverRunner({ terminate: true });
     expect(state.clients[1]?.terminate).toHaveBeenCalled();
   });
+
+  it.each([false, true])("concurrent resets wait for closure (hard=%s)", async (hard) => {
+    await warmupRomWeaverRunner();
+    let acknowledge!: () => void;
+    const closed = new Promise<void>((resolve) => {
+      acknowledge = resolve;
+    });
+    vi.mocked(state.clients[0]?.whenClosed as () => Promise<void>).mockReturnValue(closed);
+    const firstDone = vi.fn();
+    const secondDone = vi.fn();
+    const first = resetRomWeaverRunner({ terminate: hard }).then(firstDone);
+    const second = resetRomWeaverRunner({ terminate: hard }).then(secondDone);
+    try {
+      await vi.waitFor(() => expect(state.clients[0]?.terminate).toHaveBeenCalled());
+      expect(firstDone).not.toHaveBeenCalled();
+      expect(secondDone).not.toHaveBeenCalled();
+    } finally {
+      acknowledge();
+      await Promise.all([first, second]);
+    }
+    expect(firstDone).toHaveBeenCalledOnce();
+    expect(secondDone).toHaveBeenCalledOnce();
+  });
 });
 
 describe("runRomWeaverJson", () => {
+  it.each(["success", "error", "cancel"])(
+    "waits for closure before strict compress scratch deletion (%s)",
+    async (outcome) => {
+      await warmupRomWeaverRunner();
+      state.createScratch.mockResolvedValue({});
+      let acknowledge!: () => void;
+      const closed = new Promise<void>((resolve) => {
+        acknowledge = resolve;
+      });
+      vi.mocked(state.clients[0]?.whenClosed as () => Promise<void>).mockReturnValue(closed);
+      const controller = new AbortController();
+      if (outcome === "error") state.run.mockRejectedValueOnce(new Error("compression failed"));
+      if (outcome === "cancel") state.run.mockReturnValueOnce(new Promise(() => undefined));
+      const pending = runRomWeaverJson(command("compress"), { signal: controller.signal }).then(
+        (result) => ({ result, error: undefined }),
+        (error: Error) => ({ result: undefined, error }),
+      );
+      await vi.waitFor(() => expect(state.run).toHaveBeenCalled());
+      if (outcome === "cancel") controller.abort();
+      try {
+        await vi.waitFor(() => expect(state.clients[0]?.terminate).toHaveBeenCalled());
+        expect(state.removeScratch).not.toHaveBeenCalled();
+      } finally {
+        acknowledge();
+      }
+      const settled = await pending;
+      expect(state.removeScratch).toHaveBeenCalledWith(expect.stringMatching(/^\/work\/rw-tmp-/), undefined, {
+        ignoreErrors: false,
+      });
+      if (outcome === "success") expect(settled.result).toEqual(success());
+      if (outcome === "error") expect(settled.error?.message).toBe("compression failed");
+      if (outcome === "cancel") expect(settled.error).toMatchObject({ name: "AbortError", code: "CANCELLED" });
+    },
+  );
+
+  it("propagates strict scratch removal failure after successful compression", async () => {
+    state.createScratch.mockResolvedValue({});
+    state.removeScratch.mockRejectedValueOnce(new DOMException("still owned", "NoModificationAllowedError"));
+    await expect(runRomWeaverJson(command("compress"))).rejects.toThrow("still owned");
+    expect(state.removeScratch).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves the command error when strict scratch removal also fails", async () => {
+    state.createScratch.mockResolvedValue({});
+    state.run.mockRejectedValueOnce(new Error("compression failed"));
+    state.removeScratch.mockRejectedValueOnce(new Error("remove failed"));
+    await expect(runRomWeaverJson(command("compress"))).rejects.toThrow("compression failed");
+    expect(state.removeScratch).toHaveBeenCalledTimes(1);
+  });
+
   it("scopes active virtual files, adds defaults, and forces an allotted thread count", async () => {
     state.virtualFiles = [
       { path: "/work/input.bin", source: new Uint8Array([1, 2, 3]) },

@@ -34,6 +34,7 @@ import browserOpfsProxyWorkerUrl from "../../wasm/workers/browser-opfs-proxy-wor
 import browserRunnerWorkerUrl from "../../wasm/workers/browser-runner-worker.ts?worker&url";
 import browserThreadWorkerUrl from "../../wasm/workers/browser-wasi-thread-worker.ts?worker&url";
 import { createBrowserWorkerClient } from "../../wasm/workers/browser-worker-client.ts";
+import { registerRomWeaverShutdown, waitForRomWeaverShutdown } from "../../wasm/browser-opfs-shutdown.ts";
 import { formatCommandForTrace } from "../../wasm/workers/worker-trace-format.ts";
 import { createVfsPathId } from "../../storage/vfs/path-id.ts";
 import { getManagedOpfsFileHandle, removeManagedOpfsPath } from "../protocol/opfs-path.ts";
@@ -66,6 +67,7 @@ type RomWeaverWorkerClient = {
   init: (...args: unknown[]) => Promise<RomWeaverRunnerReadyMetadata>;
   dispose?: () => Promise<void>;
   terminate?: () => void;
+  whenClosed?: () => Promise<void>;
   runJson: (
     commandOrRequest: RomWeaverRunInput,
     options?: RomWeaverRunnerRunJsonOptions,
@@ -315,12 +317,15 @@ const createBrowserRunner = async (options?: { threads?: RuntimeValue }): Promis
     });
     return {
       dispose: async () => {
+        const closed = client.whenClosed?.();
+        if (closed) registerRomWeaverShutdown(closed);
         // Always terminate after the bounded cleanup to release the grown WASM heap.
         const graceful = client.dispose?.().catch(() => undefined);
         if (graceful) {
           await Promise.race([graceful, new Promise((resolve) => setTimeout(resolve, RUNNER_DISPOSE_GRACE_MS))]);
         }
         client.terminate?.();
+        await client.whenClosed?.();
       },
       ready,
       runJson: (commandOrRequest, options) => client.runJson(commandOrRequest, options),
@@ -445,9 +450,6 @@ const isRunnerUnrecoverableError = (error: unknown): boolean => {
   );
 };
 
-// A terminated runner releases its OPFS handles a moment after the abort.
-const SCRATCH_REMOVE_BUSY_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600, 3200];
-
 const createRunnerAbortError = () => {
   const error = new Error("Workflow was cancelled") as Error & { code?: string };
   error.name = "AbortError";
@@ -518,9 +520,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
   // Reserve the estimated working set from staged input sizes to prevent overlap that exhausts device memory.
   const operationBytes = estimateOpWorkingSetBytes(command, inputBytes);
 
-  // libarchive's 7z writer spools into an unlinked temp file under TMPDIR. A cancelled run kills the worker
-  // (and its OPFS proxy) before the deferred removal can happen, so give each compress its own scratch
-  // directory and remove it from here once the run settles, whatever the outcome.
+  // Each compress MUST own its temp directory so cancellation can remove unlinked spool files after proxy closure.
   const createRunScratchDir = async (): Promise<string | null> => {
     if (command.type !== "compress") return null;
     const scratchPath = `/work/rw-tmp-${createVfsPathId()}`;
@@ -562,8 +562,9 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
         lease.terminate();
       }
     };
+    let outcome: { result: RomWeaverRunnerRunJsonResult } | { error: unknown };
     try {
-      return await new Promise<RomWeaverRunnerRunJsonResult>((resolve, reject) => {
+      const result = await new Promise<RomWeaverRunnerRunJsonResult>((resolve, reject) => {
         let settled = false;
         const abortRun = () => {
           if (settled) return;
@@ -605,14 +606,23 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
           },
         );
       });
+      outcome = { result };
     } catch (error) {
+      outcome = { error };
       recycleUnrecoverableError(error);
-      throw error;
     } finally {
       removeAbortListener?.();
+    }
+    try {
       if (scratchPath) {
-        void removeManagedOpfsPath(scratchPath, undefined, { busyRetryDelaysMs: SCRATCH_REMOVE_BUSY_RETRY_DELAYS_MS });
+        lease.terminate();
+        await waitForRomWeaverShutdown();
+        await removeManagedOpfsPath(scratchPath, undefined, { ignoreErrors: false });
       }
+    } catch (error) {
+      if ("result" in outcome && outcome.result.ok) outcome = { error };
+      else logger.warn("compress scratch cleanup failed", { scratchPath, message: String(error) });
+    } finally {
       if (isMobileRuntime()) {
         // Mobile releases runners after heavy or threaded work. Light-operation runners remain for a short burst, then idle eviction releases them.
         const mobileHeavyOp = operationBytes >= IDLE_RECYCLE_MIN_OP_BYTES || operationThreads > 1;
@@ -637,6 +647,8 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
         scheduleIdleRecycle(operationBytes);
       }
     }
+    if ("error" in outcome) throw outcome.error;
+    return outcome.result;
   };
 
   // Measure perceived latency from scheduler admission until the worker reply. A thread-capable command closes the user-facing drop-to-done interval.

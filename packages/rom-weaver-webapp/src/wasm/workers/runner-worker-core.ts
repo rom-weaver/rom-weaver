@@ -1,4 +1,5 @@
 import type { BrowserOpfsRunOptions } from "../browser-opfs-runtime-types.ts";
+import { acknowledgeOpfsShutdown, requestOpfsShutdown } from "../browser-opfs-shutdown.ts";
 import type { RomWeaverBrowserOpfsRunner } from "../rom-weaver-browser-opfs-api.ts";
 import type {
   RomWeaverRunJsonEvent,
@@ -89,10 +90,23 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }: Runn
 
     switch (message.type) {
       case "init": {
-        const { runner: nextRunner, mode } = await initRunner({
-          mode: typeof message.mode === "string" ? message.mode : undefined,
-          options: message.options ?? {},
-        });
+        let initialized: RunnerWorkerInitResult;
+        try {
+          initialized = await initRunner({
+            mode: typeof message.mode === "string" ? message.mode : undefined,
+            options: message.options ?? {},
+          });
+        } catch (error) {
+          const buffer = message.options?.__shutdownControl;
+          if (buffer) {
+            const control = new Int32Array(buffer);
+            // Once bootstrap was posted, only the proxy MAY acknowledge resource closure.
+            if (Atomics.load(control, 1) === 0) acknowledgeOpfsShutdown(control);
+            else requestOpfsShutdown(control);
+          }
+          throw error;
+        }
+        const { runner: nextRunner, mode } = initialized;
         runner = nextRunner;
         postMessage({
           mode: String(mode),

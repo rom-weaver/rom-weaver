@@ -1,3 +1,9 @@
+import {
+  acknowledgeOpfsShutdown,
+  registerRomWeaverShutdown,
+  requestOpfsShutdown,
+  waitForOpfsShutdownState,
+} from "../browser-opfs-shutdown.ts";
 import type { RomWeaverBrowserOpfsOptions, RomWeaverDefaultThreads } from "../rom-weaver-types.d.ts";
 import { normalizeDefaultThreads, resolveBrowserDefaultThreads } from "./browser-thread-budget.ts";
 import { createBrowserWorkerTransport, RomWeaverWorkerClientCore } from "./worker-client-core.ts";
@@ -34,6 +40,10 @@ export function createBrowserWorkerClient(options: BrowserWorkerClientOptions = 
 const BROWSER_WORKER_TRANSPORT = createBrowserWorkerTransport();
 
 export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
+  private readonly shutdownControl = new Int32Array(new SharedArrayBuffer(8));
+  private shutdownPromise: Promise<void> | null = null;
+  private stopped = false;
+  private initialized = false;
   private _defaultThreads: number | null;
 
   constructor(worker: Worker, options: Pick<BrowserWorkerClientOptions, "defaultThreads"> = {}) {
@@ -57,15 +67,37 @@ export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
   }
 
   _sendInit(options: RomWeaverBrowserOpfsOptions): Promise<BrowserWorkerReadyResult> {
-    return this._send<BrowserWorkerReadyResult>({
+    const requestId = this._nextRequestId;
+    const pending = this._send<BrowserWorkerReadyResult>({
       mode: "browser-opfs",
-      options,
+      options: { ...options, __shutdownControl: this.shutdownControl.buffer as SharedArrayBuffer },
       type: "init",
     });
+    // Worker replies MUST arrive asynchronously; a missing request here means postMessage failed synchronously.
+    this.initialized ||= this._pending.has(requestId);
+    return pending;
   }
 
-  terminate() {
+  whenClosed(): Promise<void> {
+    this.shutdownPromise ??= waitForOpfsShutdownState(this.shutdownControl, 2);
+    return this.shutdownPromise;
+  }
+
+  terminate(): void {
+    if (this.stopped) return;
+    this.stopped = true;
+    requestOpfsShutdown(this.shutdownControl);
+    if (!this.initialized) acknowledgeOpfsShutdown(this.shutdownControl);
+    if (Atomics.load(this.shutdownControl, 0) >= 2) {
+      this._terminateWorker();
+    } else {
+      // Resource closure MUST precede native worker termination; failed closure still stops computation.
+      void this.whenClosed().then(
+        () => this._terminateWorker(),
+        () => this._terminateWorker(),
+      );
+    }
+    registerRomWeaverShutdown(this.whenClosed());
     this._shutdown("worker terminated");
-    this._terminateWorker();
   }
 }

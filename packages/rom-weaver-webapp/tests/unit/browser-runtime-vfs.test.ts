@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("../../src/storage/browser/browser-opfs-cleanup.ts", () => ({
+  waitForBrowserOpfsBootCleanup: vi.fn(async () => undefined),
+}));
+
 const state = vi.hoisted(() => ({
   createdRefs: [] as Array<{ filePath: string; fileName: string; cleanup: ReturnType<typeof vi.fn> }>,
   released: [] as unknown[],

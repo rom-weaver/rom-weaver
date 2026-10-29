@@ -1,3 +1,4 @@
+import { acknowledgeOpfsShutdown, requestOpfsShutdown, waitForOpfsShutdownState } from "./browser-opfs-shutdown.ts";
 // Producer (proxy worker) side of the OPFS async proxy channel.
 //
 // Sole owner of OPFS sync handles and directories. Its async doorbell loop may
@@ -87,6 +88,7 @@ export interface OpfsProxyMountBootstrap {
 export interface OpfsProxyServerOptions {
   channel: OpfsProxyChannel;
   mounts: OpfsProxyMountDescriptor[];
+  shutdownControl?: Int32Array;
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;
   trace?: (line: string) => void;
 }
@@ -146,6 +148,9 @@ class OpfsProxyServer {
   // Read-only Blob inputs registered by guest path. opOpen resolves these to Blob-backed handles so a
   // worker-selected file is served like an OPFS handle without staging a copy into OPFS first.
   private readonly blobSources = new Map<string, Blob>();
+  private readonly pendingRemovals = new Set<Promise<void>>();
+  private readonly shutdownControl?: Int32Array;
+  private closeFailed = false;
   private running = true;
   private nativeDoorbellWaitPending = false;
   private idleRescanDelayMs = 1;
@@ -155,6 +160,10 @@ class OpfsProxyServer {
 
   constructor(options: OpfsProxyServerOptions) {
     this.channel = options.channel;
+    this.shutdownControl = options.shutdownControl;
+    if (this.shutdownControl) {
+      void waitForOpfsShutdownState(this.shutdownControl, 1).then(() => this.stop());
+    }
     // Longest mountPath first so nested mounts resolve to the most specific root.
     this.mounts = [...options.mounts].sort((a, b) => b.mountPath.length - a.mountPath.length);
     this.syncAccessMode = options.syncAccessMode;
@@ -163,6 +172,8 @@ class OpfsProxyServer {
 
   stop(): void {
     this.running = false;
+    if (this.shutdownControl) requestOpfsShutdown(this.shutdownControl);
+    this.poisonAndWakeConsumers();
     // Wake the loop so it observes the stop flag promptly.
     Atomics.add(this.channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX, 1);
     Atomics.notify(this.channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
@@ -188,6 +199,7 @@ class OpfsProxyServer {
         const seen = Atomics.load(global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
         let servicedAny = false;
         for (const slot of slots) {
+          if (!this.running || (this.shutdownControl && Atomics.load(this.shutdownControl, 0) > 0)) break;
           if (!this.claimRequestedSlot(slot)) continue;
           await this.serviceSlot(slot);
           servicedAny = true;
@@ -205,11 +217,12 @@ class OpfsProxyServer {
       this.trace?.(`[browser-opfs] proxy server loop died ${String(error)}`);
     } finally {
       this.wakeIdleWait?.();
-      this.closeAllHandles();
+      await this.closeAllHandles();
       // The loop has exited, so nothing will ever service another request: poison + wake every parked
       // consumer (a clean stop, not just a crash) so they fail fast instead of waiting out their full
       // op/acquire timeouts. Idempotent with the catch path above.
       this.poisonAndWakeConsumers();
+      if (this.shutdownControl) acknowledgeOpfsShutdown(this.shutdownControl, this.closeFailed);
       this.trace?.("[browser-opfs] proxy server stopped");
     }
   }
@@ -617,6 +630,7 @@ class OpfsProxyServer {
     try {
       entry.handle?.close();
     } catch (error) {
+      this.closeFailed = true;
       this.trace?.(`[browser-opfs] proxy handle close failed id=${handleId} ${String(error)}`);
     }
     this.byId.delete(handleId);
@@ -629,9 +643,7 @@ class OpfsProxyServer {
     if (entry.pendingRemoval) {
       const { dir, name } = entry.pendingRemoval;
       entry.pendingRemoval = null;
-      void Promise.resolve(dir.removeEntry?.(name)).catch((error: unknown) => {
-        this.trace?.(`[browser-opfs] proxy deferred unlink failed path=${entry.path} ${String(error)}`);
-      });
+      this.deferRemoval(dir, name, entry.path);
     }
   }
 
@@ -647,22 +659,33 @@ class OpfsProxyServer {
     return next;
   }
 
-  private closeAllHandles(): void {
+  private deferRemoval(dir: FileSystemDirectoryHandleLike, name: string, path: string): void {
+    const removal = Promise.resolve()
+      .then(() => dir.removeEntry?.(name))
+      .catch((error: unknown) => {
+        this.closeFailed = true;
+        this.trace?.(`[browser-opfs] proxy deferred unlink failed path=${path} ${String(error)}`);
+      });
+    this.pendingRemovals.add(removal);
+    void removal.then(() => this.pendingRemovals.delete(removal));
+  }
+
+  private async closeAllHandles(): Promise<void> {
     for (const entry of this.byId.values()) {
       try {
         entry.handle?.close();
-      } catch {
-        // best-effort close
+      } catch (error) {
+        this.closeFailed = true;
+        this.trace?.(`[browser-opfs] proxy handle close failed id=${entry.id} ${String(error)}`);
       }
       // Unlinked-while-open files would otherwise outlive a cancelled run: finish their deferred removal.
       if (entry.pendingRemoval) {
         const { dir, name } = entry.pendingRemoval;
         entry.pendingRemoval = null;
-        void Promise.resolve(dir.removeEntry?.(name)).catch((error: unknown) => {
-          this.trace?.(`[browser-opfs] proxy deferred unlink failed path=${entry.path} ${String(error)}`);
-        });
+        this.deferRemoval(dir, name, entry.path);
       }
     }
+    await Promise.all(this.pendingRemovals);
     this.byId.clear();
     this.byPath.clear();
     this.pendingByPath.clear();

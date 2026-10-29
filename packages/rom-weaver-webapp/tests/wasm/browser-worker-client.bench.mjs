@@ -129,11 +129,8 @@ describe("rom-weaver-wasm benchmark parity with python bench-command-paths", () 
 
   afterAll(async () => {
     for (const worker of workersByRuntime.values()) {
-      try {
-        worker.terminate();
-      } catch {
-        // best-effort cleanup only
-      }
+      worker.terminate();
+      await worker.whenClosed();
     }
     workersByRuntime.clear();
 
