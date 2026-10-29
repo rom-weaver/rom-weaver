@@ -1,5 +1,140 @@
 use super::shared::*;
 
+fn run_output_preservation_event(temp: &TempDir, args: &[&str], code: i32) -> Value {
+    let root = temp.path().to_str().unwrap();
+    parse_single_json_line(&command_stdout_with_env(
+        args,
+        &[
+            ("HOME", root),
+            ("XDG_CACHE_HOME", root),
+            ("XDG_CONFIG_HOME", root),
+            ("XDG_DATA_HOME", root),
+            ("XDG_STATE_HOME", root),
+        ],
+        code,
+    ))
+}
+
+#[test]
+fn forced_patch_apply_preserves_existing_output_on_checksum_rejection() {
+    let temp = setup_temp_dir();
+    let (rom, first, second) = write_zero_rom_and_two_ips(&temp, "base.bin");
+    let mut lost = Vec::new();
+    for compressed in [false, true] {
+        for patch_count in [1, 2] {
+            for gate in ["--expect-out", "--patch-output-check"] {
+                for gate_index in 0..if gate == "--expect-out" {
+                    1
+                } else {
+                    patch_count
+                } {
+                    let output = temp.child(if compressed { "out.zip" } else { "out.bin" });
+                    fs::write(output.path(), b"SENTINEL").expect("existing output");
+                    let mut args = vec![
+                        "patch",
+                        "apply",
+                        "--input",
+                        rom.to_str().unwrap(),
+                        "--output",
+                        output.path().to_str().unwrap(),
+                        "--force",
+                        "--jsonl",
+                    ];
+                    if compressed {
+                        args.extend(["--compress-format", "zip"]);
+                    } else {
+                        args.push("--no-compress");
+                    }
+                    for (index, patch) in
+                        [&first, &second].into_iter().take(patch_count).enumerate()
+                    {
+                        args.extend(["--patch", patch.to_str().unwrap()]);
+                        if gate == "--patch-output-check" && index == gate_index {
+                            args.extend([gate, "crc32=deadbeef"]);
+                        }
+                    }
+                    if gate == "--expect-out" {
+                        args.extend([gate, "crc32=deadbeef"]);
+                    }
+                    let event = run_output_preservation_event(&temp, &args, 1);
+                    assert_eq!(event["status"], "failed", "{event}");
+                    assert_eq!(event["stage"], "validate", "{event}");
+                    assert!(
+                        event["label"].as_str().unwrap().contains("output"),
+                        "{event}"
+                    );
+                    if gate == "--patch-output-check" {
+                        assert!(
+                            event["label"]
+                                .as_str()
+                                .unwrap()
+                                .contains(&format!("patch_index={gate_index}")),
+                            "{event}"
+                        );
+                    }
+                    if fs::read(output.path()).ok().as_deref() != Some(b"SENTINEL") {
+                        lost.push((compressed, patch_count, gate, gate_index));
+                    }
+                    assert_eq!(fs::read(&rom).unwrap(), [0; 64]);
+                }
+            }
+        }
+    }
+    assert!(lost.is_empty(), "existing output lost: {lost:?}");
+}
+
+#[test]
+fn forced_patch_apply_publishes_verified_raw_output() {
+    use std::io::Read;
+
+    let temp = setup_temp_dir();
+    let (rom, first, second) = write_zero_rom_and_two_ips(&temp, "base.bin");
+    for patch_count in [1, 2] {
+        for existing in [false, true] {
+            for gate in ["--expect-out", "--patch-output-check"] {
+                let output = temp.child(format!("out-{patch_count}-{existing}-{gate}.bin"));
+                if existing {
+                    fs::write(output.path(), b"SENTINEL").unwrap();
+                }
+                let retained_output = existing.then(|| File::open(output.path()).unwrap());
+                let mut expected = [0u8; 64];
+                expected[0] = 1;
+                if patch_count == 2 {
+                    expected[10] = 2;
+                }
+                let checksum = format!("crc32={:08x}", crc32fast::hash(&expected));
+                let mut args = vec![
+                    "patch",
+                    "apply",
+                    "--input",
+                    rom.to_str().unwrap(),
+                    "--output",
+                    output.path().to_str().unwrap(),
+                    "--no-compress",
+                    "--force",
+                    "--jsonl",
+                ];
+                for patch in [&first, &second].into_iter().take(patch_count) {
+                    args.extend(["--patch", patch.to_str().unwrap()]);
+                }
+                args.extend([gate, &checksum]);
+                let event = run_output_preservation_event(&temp, &args, 0);
+                assert_eq!(event["status"], "succeeded", "{event}");
+                assert_eq!(fs::read(output.path()).unwrap(), expected);
+                if let Some(mut retained_output) = retained_output {
+                    let mut bytes = Vec::new();
+                    retained_output.read_to_end(&mut bytes).unwrap();
+                    assert_eq!(
+                        bytes, expected,
+                        "existing output handle must see published bytes"
+                    );
+                }
+                assert_eq!(fs::read(&rom).unwrap(), [0; 64]);
+            }
+        }
+    }
+}
+
 #[test]
 fn patch_create_rejects_input_output_aliases_with_force() {
     let temp = setup_temp_dir();

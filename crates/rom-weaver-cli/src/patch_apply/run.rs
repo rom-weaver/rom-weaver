@@ -1232,8 +1232,6 @@ impl CliApp {
                 || run.args.repair_checksum
                 || n64_order.is_some()
                 || patch_count > 1);
-        let needs_staged_output =
-            is_disc || requires_compat_finalize || run.compression_options.enabled;
         let failed = |stage: &str, error: RomWeaverError| {
             Box::new(OperationReport::failed_with_error(
                 OperationFamily::Patch,
@@ -1243,6 +1241,13 @@ impl CliApp {
                 run.context.single_thread_execution(),
             ))
         };
+        // Existing raw outputs MUST remain untouched until every output check succeeds.
+        let preserve_existing_output = run.args.force
+            && path_is_occupied(&run.output).map_err(|error| failed("prepare", error))?;
+        let needs_staged_output = is_disc
+            || requires_compat_finalize
+            || run.compression_options.enabled
+            || preserve_existing_output;
         let staged_output = Self::patch_apply_staged_output(
             &run.output,
             &run.resolved_input,
@@ -1380,7 +1385,13 @@ impl CliApp {
             None,
             run.context.single_thread_execution(),
         );
-        let finalized_output_path = if run.compression_options.enabled || run.output_was_inferred {
+        let preserve_existing_output = run.args.force
+            && path_is_occupied(&run.output)
+                .map_err(|error| failed(report.format.clone(), "prepare", error))?;
+        let finalized_output_path = if run.compression_options.enabled
+            || run.output_was_inferred
+            || preserve_existing_output
+        {
             Self::patch_apply_raw_output_path(
                 &run.output,
                 &run.resolved_input,
@@ -1506,6 +1517,17 @@ impl CliApp {
             },
         ) {
             return *error_report;
+        }
+
+        if report.status == OperationStatus::Succeeded
+            && !run.output_was_inferred
+            && !run.compression_options.enabled
+            && !run.is_disc()
+            && raw_ready_output != run.output
+            && let Err(error) =
+                Self::copy_with_optional_header(&raw_ready_output, &run.output, None)
+        {
+            return *run.fail_error("publish", error);
         }
 
         if report.status == OperationStatus::Succeeded && run.compression_options.enabled {
