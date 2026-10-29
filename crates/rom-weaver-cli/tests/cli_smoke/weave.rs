@@ -17,6 +17,139 @@ fn write_min_ips(temp: &TempDir, name: &str) -> PathBuf {
     patch.path().to_path_buf()
 }
 
+fn assert_weave_create_preserves_sources(alias: impl Fn(&Path, &Path) -> PathBuf) {
+    for archive in [false, true] {
+        for source_index in 0..4 {
+            let temp = setup_temp_dir();
+            let names = if archive {
+                ["original.zip", "fix.zip", "spec.zip", "packaged.zip"]
+            } else {
+                ["original.bin", "fix.ips", "spec.json", "packaged.bin"]
+            };
+            let sources = names.map(|name| temp.path().join(name));
+            let contents = [
+                b"abcdefgh".to_vec(),
+                b"PATCHEOF".to_vec(),
+                serde_json::to_vec(&json!({
+                    "version": 1,
+                    "rom": { "path": names[0] },
+                    "patches": [{ "path": names[1] }]
+                }))
+                .expect("spec"),
+                b"packaged ROM".to_vec(),
+            ];
+            for (source, bytes) in sources.iter().zip(&contents) {
+                fs::write(source, bytes).expect("source fixture");
+            }
+            let destination = alias(temp.path(), &sources[source_index]);
+            let other_output = temp
+                .path()
+                .join(if archive { "result.json" } else { "result.zip" });
+            let (output, weave) = if archive {
+                (&other_output, &destination)
+            } else {
+                (&destination, &other_output)
+            };
+            for mode in ["--dry-run", "", "--force"] {
+                let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+                for (key, directory) in [
+                    ("HOME", "home"),
+                    ("XDG_CONFIG_HOME", "config"),
+                    ("XDG_DATA_HOME", "data"),
+                    ("XDG_STATE_HOME", "state"),
+                    ("XDG_CACHE_HOME", "cache"),
+                ] {
+                    command.env(key, temp.path().join(directory));
+                }
+                command.current_dir(temp.path()).args([
+                    "--jsonl",
+                    "weave",
+                    "create",
+                    "--from",
+                    names[2],
+                    "--weave-rom",
+                    names[3],
+                    "--output",
+                    output.to_str().expect("path"),
+                    "--weave",
+                    weave.to_str().expect("path"),
+                ]);
+                if !mode.is_empty() {
+                    command.arg(mode);
+                }
+                let result = command.output().expect("create");
+                for (source, bytes) in sources.iter().zip(&contents) {
+                    assert_eq!(
+                        fs::read(source).expect("source remains"),
+                        *bytes,
+                        "source bytes changed: {source:?}, archive={archive}"
+                    );
+                }
+                let dry_run = mode == "--dry-run";
+                assert_eq!(
+                    result.status.code(),
+                    Some(if dry_run { 0 } else { 1 }),
+                    "{result:?}"
+                );
+                let events = parse_json_lines(&result.stdout);
+                let terminal = events.last().expect("terminal");
+                assert_eq!(
+                    terminal["status"],
+                    if dry_run { "succeeded" } else { "failed" }
+                );
+                if mode == "--force" {
+                    assert!(
+                        terminal.to_string().contains("must not overwrite source"),
+                        "{terminal}"
+                    );
+                }
+                assert!(!other_output.exists(), "other output was written");
+            }
+        }
+    }
+}
+
+#[test]
+fn weave_create_preserves_direct_sources() {
+    assert_weave_create_preserves_sources(|_, source| source.to_path_buf());
+}
+
+#[test]
+fn weave_create_preserves_sources_through_parent_traversal() {
+    assert_weave_create_preserves_sources(|root, source| {
+        fs::create_dir(root.join("child")).expect("child");
+        root.join("child/..")
+            .join(source.file_name().expect("name"))
+    });
+}
+
+#[test]
+fn weave_create_preserves_sources_through_missing_parent_traversal() {
+    assert_weave_create_preserves_sources(|root, source| {
+        root.join("missing/..")
+            .join(source.file_name().expect("name"))
+    });
+}
+
+#[test]
+fn weave_create_preserves_hardlinked_sources() {
+    assert_weave_create_preserves_sources(|root, source| {
+        let alias = root.join("alias.zip");
+        fs::hard_link(source, &alias).expect("hardlink");
+        alias
+    });
+}
+
+#[cfg(unix)]
+#[test]
+fn weave_create_preserves_symlinked_sources() {
+    assert_weave_create_preserves_sources(|root, source| {
+        let alias = root.join("alias.zip");
+        std::os::unix::fs::symlink(source, &alias).expect("symlink");
+        alias
+    });
+}
+
 #[test]
 fn weave_parse_plain_json_resolves_refs_verbatim() {
     let temp = setup_temp_dir();

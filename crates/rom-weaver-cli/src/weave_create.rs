@@ -367,7 +367,7 @@ impl CliApp {
         context: &OperationContext,
     ) -> Result<WeaveCreateResult> {
         let specs = weave_create_patch_specs(args)?;
-        self.preflight_weave_create_outputs(args)?;
+        self.preflight_weave_create_outputs(args, &specs)?;
         let patch_basis = args.default_patch_basis.unwrap_or(PatchBasisMode::Auto);
         let cheats = self.weave_create_cheat_entries(args, context)?;
         if specs.is_empty() && cheats.is_empty() {
@@ -617,9 +617,14 @@ impl CliApp {
         )
     }
 
-    /// The definition and archive MUST name different files. Both destinations
-    /// need validation before source hashing or either output is written.
-    fn preflight_weave_create_outputs(&self, args: &WeaveCreateCommand) -> Result<()> {
+    /// Destinations MUST differ from each other and every source. Validate both
+    /// before source hashing or either output is written.
+    fn preflight_weave_create_outputs(
+        &self,
+        args: &WeaveCreateCommand,
+        specs: &[WeaveCreatePatchSpec],
+    ) -> Result<()> {
+        ensure_weave_create_sources_preserved(args, specs)?;
         if let Some(weave) = args.bundle.as_deref() {
             if weave_create_outputs_alias(&args.output, weave) {
                 return Err(RomWeaverError::Validation(
@@ -649,6 +654,8 @@ impl CliApp {
                 super::path_access::check_writable_dir(parent)?;
             }
         }
+        // Creating missing parents can reveal aliases through `child/..` paths.
+        ensure_weave_create_sources_preserved(args, specs)?;
         if let Some(weave) = args.bundle.as_deref()
             && weave_create_outputs_alias_after_parent_checks(&args.output, weave)
         {
@@ -1285,6 +1292,32 @@ fn required_base_name(path: &Path, what: &str) -> Result<String> {
 
 fn weave_create_outputs_alias(left: &Path, right: &Path) -> bool {
     left == right || super::path_access::native_file_identity_matches(left, right)
+}
+
+fn ensure_weave_create_sources_preserved(
+    args: &WeaveCreateCommand,
+    specs: &[WeaveCreatePatchSpec],
+) -> Result<()> {
+    for (flag, output) in std::iter::once(("--output", args.output.as_path()))
+        .chain(args.bundle.as_deref().map(|path| ("--weave", path)))
+    {
+        for source in args
+            .rom
+            .as_deref()
+            .into_iter()
+            .chain(args.bundle_rom.as_deref())
+            .chain(args.from.as_deref().filter(|path| *path != Path::new("-")))
+            .chain(specs.iter().map(|spec| spec.path.as_path()))
+        {
+            if super::path_access::paths_refer_to_same_file(output, source) {
+                return Err(RomWeaverError::Validation(format!(
+                    "{flag} must not overwrite source `{}`",
+                    source.display()
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn weave_create_outputs_alias_after_parent_checks(left: &Path, right: &Path) -> bool {
