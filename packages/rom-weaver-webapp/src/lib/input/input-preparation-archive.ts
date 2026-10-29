@@ -1,12 +1,14 @@
 import { ROM_WEAVER_FILE_FILTERS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
+import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import type { SourceObject, SourceRef } from "../../types/source.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import { isNfsPartName } from "./nfs-inputs.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime-types.ts";
 import type { ExtractedFileEntry, ExtractStepDetails } from "../../wasm/index.ts";
 import { createArchiveSourceBlob } from "../archive-utils.ts";
-import { RomWeaverError } from "../errors.ts";
+import { STANDARD_CHECKSUM_ALGORITHMS } from "../checksum-algorithms.ts";
+import { RomWeaverError, throwIfAborted, toRomWeaverError } from "../errors.ts";
 import { emitTraceLog } from "../logging.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { romTypeFromEmittedFile } from "../runtime/run-result-parsing.ts";
@@ -168,11 +170,6 @@ const getCompressionRuntimeOptions = (
   onProgress: options?.onProgress,
   threads: options?.workers?.threads,
 });
-
-// A multi-track CHD cue can be extracted as split bins; the split-bin affordance rides on the
-// visible track rows (the cue itself is no longer shown as a row).
-const isChdSplitBinCue = (archiveFile: PatchFileInstance, cueText: string): boolean =>
-  getCompressionFormat(archiveFile) === "chd" && parseCueFile(cueText).tracks.length > 1;
 
 const listCompressionEntries = async (
   file: PatchFileInstance,
@@ -443,6 +440,24 @@ const getChdMode = (assets: Array<{ discFormat?: string; kind?: string }>) => {
     : "dvd";
 };
 
+/**
+ * Ingest stops waiting for identify data after a bound and reports `identifyUnavailable` (plus an
+ * `identifyRetry` for the still-loading data). Carry both on the staged file so the checksum step,
+ * which reuses these precomputed values, shows "unavailable" and can re-identify once data loads.
+ */
+const markIdentifyUnavailable = (
+  file: PatchFileInstance,
+  ingest: { identifyRetry?: Promise<boolean>; identifyUnavailable?: string },
+): void => {
+  if (!ingest.identifyUnavailable) return;
+  (file as { identification?: ParsedIdentifyResolution }).identification = {
+    matches: [],
+    status: "unavailable",
+    unavailableReason: ingest.identifyUnavailable,
+  };
+  if (ingest.identifyRetry) (file as { identifyRetry?: Promise<boolean> }).identifyRetry = ingest.identifyRetry;
+};
+
 /** Discover a compressed archive's input assets with a SINGLE recursive ingest (classify + descend +
  * checksum): the Rust core descends nested containers, resolving one payload per level (auto-pick when
  * unambiguous, host prompt when not, plus the multi-track CHD CD split-bin prompt), and returns the
@@ -474,6 +489,8 @@ const resolveArchiveInputAssetsByDescent = async (
   // each level's source against the longest matching `out_dir` to show the path inside its parent.
   const steps: DescentExtractStep[] = [];
   const {
+    identifyRetry,
+    identifyUnavailable,
     result: ingestResult,
     outputs,
     patchOutputs,
@@ -502,6 +519,28 @@ const resolveArchiveInputAssetsByDescent = async (
     } as never);
     traceArchivePreparation(options, "input.archive.chd-mode", { chdMode, sourceIndex });
   }
+  return buildIngestInputAssets(archiveFile, options, sourceIndex, compressionFormat, steps, {
+    identifyRetry,
+    identifyUnavailable,
+    result: ingestResult,
+    outputs,
+    patchOutputs,
+  });
+};
+
+type IngestOutputs = Pick<
+  Awaited<ReturnType<NonNullable<NonNullable<WorkflowRuntime["ingest"]>["run"]>>>,
+  "result" | "outputs" | "patchOutputs" | "identifyRetry" | "identifyUnavailable"
+>;
+
+const buildIngestInputAssets = async (
+  archiveFile: PatchFileInstance,
+  options: InputPreparationOptions,
+  sourceIndex: number,
+  compressionFormat: string,
+  steps: DescentExtractStep[],
+  { identifyRetry, identifyUnavailable, result: ingestResult, outputs, patchOutputs }: IngestOutputs,
+): Promise<InputAsset[]> => {
   if (!outputs.length) {
     // A nested patch-only weave can default to the ROM bucket before descent
     // reveals its leaves. Reclassify and abort ROM staging so it releases OPFS
@@ -548,6 +587,7 @@ const resolveArchiveInputAssetsByDescent = async (
       const identification = ingestResult.assets[index]?.identification;
       if (identification)
         (file as typeof file & { identification?: typeof identification }).identification = identification;
+      markIdentifyUnavailable(file, { identifyRetry, identifyUnavailable });
       return file;
     }),
   );
@@ -573,7 +613,7 @@ const resolveArchiveInputAssetsByDescent = async (
     const gdiText = gdiFile ? (gdiFile.metadata?.gdiText ?? decodeUtf8(getPatchFileBytes(gdiFile))) : undefined;
     const primarySheet = cueFile ?? (gdiFile as PatchFileInstance);
     const groupId = makeInputId(sourceIndex, primarySheet.fileName, normalizeArchiveEntryName, "-group");
-    const splitBinAvailable = cueText ? isChdSplitBinCue(archiveFile, cueText) : true;
+    const splitBinAvailable = cueText ? compressionFormat === "chd" && parseCueFile(cueText).tracks.length > 1 : true;
     assets = trackFiles.map((trackFile) =>
       makeTrackAsset(
         makeInputId(sourceIndex, trackFile.fileName, normalizeArchiveEntryName),
@@ -680,77 +720,139 @@ const resolveArchiveInputAssets = async (
   );
 };
 
-/**
- * Attach bare-ROM ingest checksums, variants, and type as precomputed metadata
- * so the downstream checksum step does not dispatch ingest again.
- *
- * Bare ROMs hash in place through the same full-budget variant engine as
- * archive leaves. Best-effort failures leave the file untouched for the normal
- * checksum pass.
- */
-const attachBareRomIngestMetadata = async (
+/** Ingest MUST supply both the selected payload and its metadata when synchronous classification misses a container. */
+const resolveUnclassifiedInputAssets = async (
   file: PatchFileInstance,
   options: ApplyWorkflowOptions | undefined,
   runtime: InputPreparationRuntimeLike = DEFAULT_INPUT_PREPARATION_RUNTIME,
-): Promise<void> => {
+  sourceIndex = 0,
+  selectedInputEntryName?: string,
+): Promise<InputAsset[] | undefined> => {
   // Already precomputed (e.g. an archive leaf) - nothing to do.
   if ((file as { checksums?: unknown }).checksums) return;
   const resolvedRuntime = await resolveInputPreparationRuntime(runtime);
   if (!resolvedRuntime.ingest?.run) return;
+  let firstProgressAt = 0;
+  const startedAt = Date.now();
+  const steps: DescentExtractStep[] = [];
+  let ingested: IngestOutputs;
   try {
-    let firstProgressAt = 0;
-    const startedAt = Date.now();
-    const { result } = await resolvedRuntime.ingest.run({
+    ingested = await resolvedRuntime.ingest.run({
       fileName: file.fileName,
       identify: shouldIdentifySource(file),
+      ...(selectedInputEntryName ? { select: [selectedInputEntryName] } : {}),
       logLevel: options?.logging?.level,
       onLog: options?.onLog,
       onProgress: (progress) => {
         if (!firstProgressAt) firstProgressAt = Date.now();
+        const details = isRecord(progress) ? (progress as { details?: unknown }).details : undefined;
+        appendDescentExtractStep(details, steps, "compression");
         options?.onProgress?.(progress as never);
       },
       source: getCompressionRuntimeSource(file),
       ...(options?.signal ? { signal: options.signal } : {}),
     });
-    const asset = result.isRom ? result.assets[0] : undefined;
-    if (!asset) return;
-    if (asset.checksums && Object.keys(asset.checksums).length) {
-      (file as { checksums?: typeof asset.checksums }).checksums = asset.checksums;
-    }
-    if (asset.checksumVariants?.length) {
-      (file as { checksumVariants?: typeof asset.checksumVariants }).checksumVariants = asset.checksumVariants;
-    }
-    if (asset.identification) {
-      (file as { identification?: typeof asset.identification }).identification = asset.identification;
-    }
-    const romType = romTypeFromEmittedFile({
-      discFormat: asset.discFormat,
-      platform: asset.platform,
-      recommendedFormat: asset.recommendedFormat,
-      chdCreateMode: asset.chdCreateMode,
-    });
-    if (romType) (file as { romType?: typeof romType }).romType = romType;
-    // A bare ROM is checksummed in place (no extract), so it carries a real checksum duration - unlike
-    // an archive leaf (checksummed DURING extract, reported as 0 → the "from extract" label). Prefer the
-    // Rust-reported hash wall time (`asset.checksumMs`); only if it is absent (e.g. older wasm) fall back
-    // to the JS compute span (first progress → done, which excludes the one-time wasm/thread warm-up).
-    const checksumMs = asset.checksumMs ?? Date.now() - (firstProgressAt || startedAt);
-    (file as { _precomputedChecksumMs?: number })._precomputedChecksumMs = checksumMs;
-    traceArchivePreparation(options, "input.archive.bare-rom.ingest", {
-      checksumMs,
-      checksumMsSource: asset.checksumMs === undefined ? "js-fallback" : "rust",
-      file: describeArchiveFileForTrace(file),
-      hasChecksums: !!asset.checksums,
-      platform: asset.platform || "",
-      variantCount: asset.checksumVariants?.length ?? 0,
-    });
   } catch (error) {
-    // Non-fatal: the input-checksum step will checksum the file the usual way.
+    if (toRomWeaverError(error).code === "CANCELLED") throw error;
+    throwIfAborted(options?.signal);
     traceArchivePreparation(options, "input.archive.bare-rom.ingest-failed", {
       error: error instanceof Error ? error.message : String(error),
       file: describeArchiveFileForTrace(file),
     });
+    return;
   }
+  // XISO MUST retain raw bytes: Rust Apply and nested extraction skip its image rebuild.
+  if (steps[0]?.format === "xiso") {
+    await Promise.all(
+      [...ingested.outputs, ...ingested.patchOutputs].map((output) =>
+        Promise.resolve()
+          .then(() => output.dispose())
+          .catch(() => undefined),
+      ),
+    );
+    throwIfAborted(options?.signal);
+    if (!resolvedRuntime.checksum) throw new Error("The checksum runtime is unavailable");
+    const checksumStartedAt = Date.now();
+    const raw = await resolvedRuntime.checksum.run({
+      algorithms: [...STANDARD_CHECKSUM_ALGORITHMS],
+      autoExtract: false,
+      fileName: file.fileName,
+      source: getCompressionRuntimeSource(file),
+      threads: options?.workers?.threads,
+      logLevel: options?.logging?.level,
+      onLog: options?.onLog,
+      onProgress: (progress) =>
+        options?.onProgress?.({
+          ...progress,
+          stage: "input",
+          label: progress.label || progress.message || file.fileName,
+        }),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
+    throwIfAborted(options?.signal);
+    Object.assign(file, {
+      checksums: raw.checksums,
+      checksumVariants: raw.variants,
+      _precomputedChecksumMs: Date.now() - checksumStartedAt,
+    });
+    return;
+  }
+  if (ingested.outputs.length) {
+    try {
+      return await buildIngestInputAssets(
+        file,
+        options,
+        sourceIndex,
+        steps[0]?.format || "compression",
+        steps,
+        ingested,
+      );
+    } catch (error) {
+      await Promise.all(
+        [...ingested.outputs, ...ingested.patchOutputs].map((output) =>
+          Promise.resolve()
+            .then(() => output.dispose())
+            .catch(() => undefined),
+        ),
+      );
+      throw error;
+    }
+  }
+  const { identifyRetry, identifyUnavailable, result } = ingested;
+  const asset = result.isRom ? result.assets[0] : undefined;
+  if (!asset?.copiedInPlace) return;
+  if (asset.checksums && Object.keys(asset.checksums).length) {
+    (file as { checksums?: typeof asset.checksums }).checksums = asset.checksums;
+  }
+  if (asset.checksumVariants?.length) {
+    (file as { checksumVariants?: typeof asset.checksumVariants }).checksumVariants = asset.checksumVariants;
+  }
+  if (asset.identification) {
+    (file as { identification?: typeof asset.identification }).identification = asset.identification;
+  }
+  markIdentifyUnavailable(file, { identifyRetry, identifyUnavailable });
+  const romType = romTypeFromEmittedFile({
+    discFormat: asset.discFormat,
+    platform: asset.platform,
+    recommendedFormat: asset.recommendedFormat,
+    chdCreateMode: asset.chdCreateMode,
+  });
+  if (romType) (file as { romType?: typeof romType }).romType = romType;
+  // A bare ROM is checksummed in place (no extract), so it carries a real checksum duration - unlike
+  // an archive leaf (checksummed DURING extract, reported as 0 → the "from extract" label). Prefer the
+  // Rust-reported hash wall time (`asset.checksumMs`); only if it is absent (e.g. older wasm) fall back
+  // to the JS compute span (first progress → done, which excludes the one-time wasm/thread warm-up).
+  const checksumMs = asset.checksumMs ?? Date.now() - (firstProgressAt || startedAt);
+  (file as { _precomputedChecksumMs?: number })._precomputedChecksumMs = checksumMs;
+  traceArchivePreparation(options, "input.archive.bare-rom.ingest", {
+    checksumMs,
+    checksumMsSource: asset.checksumMs === undefined ? "js-fallback" : "rust",
+    file: describeArchiveFileForTrace(file),
+    hasChecksums: !!asset.checksums,
+    platform: asset.platform || "",
+    variantCount: asset.checksumVariants?.length ?? 0,
+  });
+  return undefined;
 };
 
 // Shared low-level archive primitives consumed by the sibling modules split out of this orchestrator
@@ -758,7 +860,7 @@ const attachBareRomIngestMetadata = async (
 // input-archive cluster.
 export type { InputPreparationOptions, InputPreparationRuntimeLike };
 export {
-  attachBareRomIngestMetadata,
+  resolveUnclassifiedInputAssets,
   describeArchiveFileForTrace,
   getCompressionFormat,
   getCompressionRuntimeSource,

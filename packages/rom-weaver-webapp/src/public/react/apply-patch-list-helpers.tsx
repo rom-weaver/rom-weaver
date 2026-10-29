@@ -6,6 +6,7 @@ import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import { CHECK_ALGORITHMS, type CHECK_FIELDS, CHECK_LABELS } from "./components/ds/check-fields.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
+import { isPatchFileChecksumFailure } from "./patch-validation-failure.ts";
 
 export const TIMING_LABEL = (ms?: number) =>
   typeof ms === "number" && Number.isFinite(ms) ? formatTiming(createTiming(ms)) : "";
@@ -94,6 +95,14 @@ export const PatchFaultWell = ({
   unreadable?: boolean;
 }) => {
   const localizer = useUiLocalizer();
+  let hint = localizer.message("ui.patch.validationMismatchHint");
+  if (isPatchFileChecksumFailure(message)) {
+    hint = localizer.message("ui.patch.validationCorruptHint");
+  } else if (unreadable) {
+    hint = localizer.message("ui.patch.validationUnreadableHint");
+  } else if (overrideAvailable) {
+    hint = localizer.message("ui.patch.validationMismatchOverride");
+  }
   return (
     <div className="pverdict pfault">
       <div className="pfault-title">
@@ -101,13 +110,7 @@ export const PatchFaultWell = ({
         <span>{localizer.message("ui.patch.validationFailed")}</span>
       </div>
       <p className="pfault-detail">{toFaultDetail(message, localizer)}</p>
-      <p className="pfault-hint">
-        {unreadable
-          ? localizer.message("ui.patch.validationUnreadableHint")
-          : overrideAvailable
-            ? localizer.message("ui.patch.validationMismatchOverride")
-            : localizer.message("ui.patch.validationMismatchHint")}
-      </p>
+      <p className="pfault-hint">{hint}</p>
     </div>
   );
 };

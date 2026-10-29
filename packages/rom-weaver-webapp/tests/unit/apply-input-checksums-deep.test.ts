@@ -36,6 +36,8 @@ const state = (id: string, status: string = "ready") => ({
 const adapters = (runtime: unknown, selected: unknown, synthetic = false) => ({
   emitProgress: vi.fn(),
   getSelectedInputOwner: vi.fn(() => selected),
+  isCurrentSession: vi.fn(() => true),
+  onIdentified: vi.fn(),
   runtime,
   settings: { logging: { level: "debug", sink: vi.fn() } },
   syncInputSessionView: vi.fn(),

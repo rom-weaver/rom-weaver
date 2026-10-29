@@ -132,6 +132,12 @@ const getPatchFilePrecomputedIdentification = (
     : undefined;
 };
 
+/** Pending re-identification a precomputed (ingest-bounded) file carries, see `markIdentifyUnavailable`. */
+const getPatchFilePrecomputedIdentifyRetry = (file: PatchFileInstance | undefined): Promise<boolean> | undefined => {
+  const retry = (file as (PatchFileInstance & { identifyRetry?: unknown }) | undefined)?.identifyRetry;
+  return retry instanceof Promise ? (retry as Promise<boolean>) : undefined;
+};
+
 // Elapsed time of a precomputed checksum produced OUTSIDE an extract (a bare ROM checksummed in place
 // via `ingest`). Absent for an archive leaf, whose checksum ran during extract (reported as 0 → the
 // "from extract" timing label).
@@ -194,6 +200,7 @@ const calculateInputChecksumsForFile = async ({
 }): Promise<{
   checksums: Record<string, string>;
   identification?: ParsedIdentifyResolution;
+  identifyRetry?: Promise<boolean>;
   romType?: RomTypeTag;
   variants?: ChecksumVariant[];
 }> => {
@@ -209,7 +216,7 @@ const calculateInputChecksumsForFile = async ({
     stage: "checksum",
     workflow,
   });
-  const { identifyUnavailable, result } = await runtime.ingest.run({
+  const { identifyRetry, identifyUnavailable, result } = await runtime.ingest.run({
     checksumAlgorithms: [...algorithms],
     fileName: state.fileName,
     ...(identify === undefined ? {} : { identify }),
@@ -247,6 +254,7 @@ const calculateInputChecksumsForFile = async ({
   return {
     checksums,
     identification,
+    ...(identifyUnavailable && identifyRetry ? { identifyRetry } : {}),
     romType: romTypeFromEmittedFile({
       discFormat: asset?.discFormat,
       platform: asset?.platform,
@@ -266,6 +274,7 @@ const calculateStandardInputChecksumsForFile = async (
 ): Promise<{
   checksums: StandardWorkflowChecksums;
   identification?: ParsedIdentifyResolution;
+  identifyRetry?: Promise<boolean>;
   romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;
   variants?: ChecksumVariant[];
@@ -291,5 +300,6 @@ export {
   getPatchFilePrecomputedChecksums,
   getPatchFilePrecomputedChecksumVariants,
   getPatchFilePrecomputedIdentification,
+  getPatchFilePrecomputedIdentifyRetry,
   getPatchFilePrecomputedRomType,
 };

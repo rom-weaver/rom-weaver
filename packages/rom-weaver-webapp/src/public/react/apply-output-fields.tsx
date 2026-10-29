@@ -43,6 +43,8 @@ export type WeaveToolsState = {
   /** Why the woven final result won't be verified against an expected output;
    * null when it will be, or when nothing declares an output. */
   outputVerification: { level: "warn"; message: string } | null;
+  /** The per-track checks from the identification database were skipped (lookup unavailable). */
+  memberChecksSkipped: boolean;
 };
 
 export type WeaveExportState = {
@@ -259,21 +261,35 @@ const ChecksumOverrideRow = ({
   if (!state.visible) return null;
   return (
     <>
-      <p>
-        <a href={resolveAssetUrl(assetBaseUrl, "docs/fix-checksum-errors")} target="_blank" rel="noreferrer">
-          {localizer.message("ui.apply.validation.fixChecksum")}
-        </a>
-      </p>
+      {state.namesDamagedPatch ? null : (
+        <p>
+          <a href={resolveAssetUrl(assetBaseUrl, "docs/fix-checksum-errors")} target="_blank" rel="noreferrer">
+            {localizer.message("ui.apply.validation.fixChecksum")}
+          </a>
+        </p>
+      )}
       <label className="checkrow warn">
         <input
           checked={state.checked}
           disabled={state.disabled}
+          aria-describedby={state.namesDamagedPatch ? "rom-weaver-damaged-patch-warning" : undefined}
           id="rom-weaver-checkbox-checksum-override"
           onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
           type="checkbox"
         />
-        <span>{localizer.message("ui.apply.validation.overrideChecksum")}</span>
+        <span>
+          {localizer.message(
+            state.namesDamagedPatch
+              ? "ui.apply.validation.overrideDamagedPatch"
+              : "ui.apply.validation.overrideChecksum",
+          )}
+        </span>
       </label>
+      {state.namesDamagedPatch ? (
+        <Notice id="rom-weaver-damaged-patch-warning" level="warn">
+          {localizer.message("ui.apply.validation.damagedPatchWarning")}
+        </Notice>
+      ) : null}
     </>
   );
 };
@@ -350,6 +366,12 @@ export const ApplyOutputAction = ({
         shown={postApplyTestOption.visible}
       />
       {weaveVerificationError ? <Notice level="error">{weaveVerificationError}</Notice> : null}
+      {weaveTools?.memberChecksSkipped ? (
+        <p aria-live="polite" className="patch-off-note" id="rom-weaver-weave-track-checks-skipped">
+          <TriangleAlert aria-hidden="true" />
+          <span>{localizer.message("ui.apply.weaveTrackChecksSkipped")}</span>
+        </p>
+      ) : null}
       {weaveTools?.outputVerification ? (
         <p aria-live="polite" className="patch-off-note" id="rom-weaver-weave-output-unverified">
           <TriangleAlert aria-hidden="true" />

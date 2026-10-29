@@ -526,6 +526,12 @@ type WorkflowRuntimeIngest = {
      * archive reports one result per member instead of cancelling on the prompt.
      */
     identifyAllRomEntries?: boolean;
+    /**
+     * Bound the optional identify-data wait (default true) so a stalled lookup cannot block local
+     * checksums or queued Apply. The standalone Identify workflow sets false: its result IS the
+     * lookup, and the service worker holds pack responses until the whole pack is downloaded.
+     */
+    identifyBounded?: boolean;
     // Pin which archive payload(s) to extract (the resolved "keep one ROM" entry). Empty/omitted lets
     // ingest auto-pick a single logical payload or prompt the host when ambiguous.
     select?: string[];
@@ -548,6 +554,12 @@ type WorkflowRuntimeIngest = {
      * unavailable", never as a failed ROM or a genuine no-match.
      */
     identifyUnavailable?: string;
+    /**
+     * Set with `identifyUnavailable` when the wait for identify data was cut short while the
+     * background load continues. Settles `true` once that load succeeded (a later lookup then hits
+     * the cache) and `false` when it failed. Never rejects.
+     */
+    identifyRetry?: Promise<boolean>;
     result: ParsedIngestResult;
     outputs: PublicOutput[];
     patchOutputs: PublicOutput[];

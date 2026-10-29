@@ -191,6 +191,7 @@ const parseWeave = (value: unknown): ParsedWeave | undefined => {
   if (record.patchBasis === "auto" || record.patchBasis === "base" || record.patchBasis === "previous") {
     weave.patchBasis = record.patchBasis;
   }
+  if (Array.isArray(record.cheats) && record.cheats.length > 0) weave.recordsCheats = true;
   const rom = parseWeaveRom(record.rom);
   if (rom) weave.rom = rom;
   const output = parseWeaveOutput(record.output);
