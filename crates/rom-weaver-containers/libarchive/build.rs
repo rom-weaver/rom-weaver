@@ -671,6 +671,7 @@ fn build_libarchive(libarchive_dir: &Path, lzma_glue_dir: &Path, target_sysroot:
         .define("POSIX_REGEX_LIB", "NONE")
         .define("ENABLE_NETTLE", "OFF")
         .define("ENABLE_EXPAT", "OFF")
+        .define("ENABLE_WIN32_XMLLITE", "OFF")
         .define("ENABLE_LIBGCC", "OFF")
         .define("ENABLE_LIBB2", "OFF")
         .define("ENABLE_TEST", "OFF")
