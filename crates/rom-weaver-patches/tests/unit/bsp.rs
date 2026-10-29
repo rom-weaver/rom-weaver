@@ -332,6 +332,111 @@ fn apply_surfaces_non_zero_exit_status() {
 }
 
 #[test]
+fn apply_preserves_existing_output_on_script_failure() {
+    let temp = TestDir::new();
+    let input = temp.child("source.bin");
+    let patch = temp.child("bad.bsp");
+    let output = temp.child("output.bin");
+    fs::write(&input, b"abc").unwrap();
+    let mut lost = Vec::new();
+    for bytes in [
+        vec![],
+        vec![0x06],
+        vec![0xc0],
+        vec![0x18, 0x5a, 0xc0],
+        vec![0x06, 1, 0, 0, 0],
+    ] {
+        fs::write(&patch, &bytes).unwrap();
+        fs::write(&output, b"SENTINEL").unwrap();
+        let error = BspPatchHandler::new(&BSP)
+            .apply(
+                &PatchApplyRequest {
+                    input: input.clone(),
+                    patches: vec![patch.clone()],
+                    output: output.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect_err("malformed BSP must fail");
+        assert!(error.to_string().contains("BSP"), "{error}");
+        if fs::read(&output).ok().as_deref() != Some(b"SENTINEL") {
+            lost.push(bytes);
+        }
+        assert_eq!(fs::read(&input).unwrap(), b"abc");
+    }
+    assert!(lost.is_empty(), "existing BSP output lost: {lost:?}");
+}
+
+#[test]
+fn apply_preserves_in_place_and_hardlinked_outputs_on_failure() {
+    let temp = TestDir::new();
+    let input = temp.child("source.bin");
+    let patch = temp.child("change.bsp");
+    let output = temp.child("output.bin");
+    let alias = temp.child("alias.bin");
+    for in_place in [false, true] {
+        fs::write(&input, b"abc").unwrap();
+        fs::write(&output, b"SENTINEL").unwrap();
+        fs::hard_link(&output, &alias).unwrap();
+        let source = if in_place { &output } else { &input };
+        for (program, succeeds) in [
+            (vec![0x18, 0x5a, 0xc0], false),
+            (vec![0x18, 0x5a, 0x06, 0, 0, 0, 0], true),
+        ] {
+            fs::write(&patch, program).unwrap();
+            let result = BspPatchHandler::new(&BSP).apply(
+                &PatchApplyRequest {
+                    input: source.clone(),
+                    patches: vec![patch.clone()],
+                    output: output.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            );
+            assert_eq!(result.is_ok(), succeeds, "{result:?}");
+            let expected: &[u8] = if !succeeds {
+                b"SENTINEL"
+            } else if in_place {
+                b"ZENTINEL"
+            } else {
+                b"Zbc"
+            };
+            assert_eq!(fs::read(&output).unwrap(), expected);
+            assert_eq!(fs::read(&alias).unwrap(), expected);
+            assert_eq!(fs::read(&input).unwrap(), b"abc");
+        }
+        fs::remove_file(&alias).unwrap();
+    }
+}
+
+#[test]
+fn apply_removes_new_output_on_script_failure() {
+    let temp = TestDir::new();
+    let input = temp.child("source.bin");
+    let patch = temp.child("bad.bsp");
+    let output = temp.child("output.bin");
+    fs::write(&input, b"abc").unwrap();
+    fs::write(&patch, [0x18, 0x5a, 0xc0]).unwrap();
+    BspPatchHandler::new(&BSP)
+        .apply(
+            &PatchApplyRequest {
+                input,
+                patches: vec![patch],
+                output: output.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("malformed BSP must fail");
+    assert!(!output.exists());
+    assert!(fs::read_dir(temp.path()).unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".rw-partial-")
+    }));
+}
+
+#[test]
 fn apply_matches_reference_runtime_vectors() {
     let temp = TestDir::new();
     let Some(runtime_path) = prepare_reference_runtime(&temp) else {
@@ -731,15 +836,13 @@ fn apply_rejects_read_word_past_file_end() {
 }
 
 #[test]
-fn apply_in_place_patches_the_input_file_without_seeding_a_copy() {
+fn apply_in_place_patches_the_input_file_without_truncation() {
     let temp = TestDir::new();
     let path = temp.child("in-place.bin");
     let patch_path = temp.child("in-place.bsp");
     fs::write(&path, [0x01, 0x02, 0x03]).expect("fixture");
     fs::write(&patch_path, [0x18, 0xFF, 0x06, 0x00, 0x00, 0x00, 0x00]).expect("fixture");
 
-    // input == output, so the handler edits the file the VM already owns
-    // instead of copying the input over itself and truncating it.
     let report = BspPatchHandler::new(&BSP)
         .apply(
             &PatchApplyRequest {
