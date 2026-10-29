@@ -585,6 +585,9 @@ const createOfflineWarmup = ({
     const group = identifyOptionalGroups.find((candidate) => candidate.id === groupId);
     if (!group) throw new Error(`Unknown ROM identify pack group: ${groupId}`);
     const cache = await caches.open(identifyOptionalCacheName);
+    // One failed pack must not keep the rest of the group from downloading. The group still fails
+    // after the loop, so it is not marked installed and retries only the packs it is missing.
+    let firstFailure: { error: unknown } | undefined;
     // Group installs MUST stay sequential so a low-priority warmup does not open one connection per pack.
     for (const pack of group.packs) {
       if (policy && (generation !== policy.token() || !(await policy.isEnabled()))) return null;
@@ -595,14 +598,26 @@ const createOfflineWarmup = ({
         continue;
       }
       if (policy && (generation !== policy.token() || !(await policy.isEnabled()))) return null;
-      const { request, response } = await fetchVerifiedPack(pack, scope, fetcher, onBytes, log);
-      const stored = policy
-        ? await policy.write(() => cacheWithDownloadLog(cache, request, response, log), generation)
-        : (await cacheWithDownloadLog(cache, request, response, log), true);
+      let stored: boolean;
+      try {
+        const { request, response } = await fetchVerifiedPack(pack, scope, fetcher, onBytes, log);
+        stored = policy
+          ? await policy.write(() => cacheWithDownloadLog(cache, request, response, log), generation)
+          : (await cacheWithDownloadLog(cache, request, response, log), true);
+        if (stored) transferSizes.forget(request.url);
+      } catch (error) {
+        log("identify pack failed; continuing with the rest of its group", {
+          error: error instanceof Error ? error.message : String(error),
+          group: group.id,
+          url: pack.url,
+        });
+        firstFailure ??= { error };
+        continue;
+      }
       if (!stored) return null;
-      transferSizes.forget(request.url);
       onCached?.();
     }
+    if (firstFailure) throw firstFailure.error;
     const marked = policy
       ? await policy.write(
           () => cache.put(optionalGroupMarkerUrl(scope, group.id), new Response(optionalGroupRevision(group))),

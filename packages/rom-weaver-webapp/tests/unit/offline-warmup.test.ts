@@ -594,6 +594,53 @@ describe("offline warm-up (service worker side)", () => {
     expect(state.ready).toBe(true);
   });
 
+  it("caches the rest of a group's packs when one pack fails", async () => {
+    const digest = await sha256Hex(PACK_BODY);
+    const packNames = ["identify-a.pack", "identify-b.pack", "identify-c.pack"];
+    const group = {
+      id: "optional-computers",
+      label: "Computers",
+      packs: packNames.map((name) => ({
+        sha256: digest,
+        sizeBytes: PACK_BODY.length,
+        url: `assets/${name}?sha256=${digest}`,
+      })),
+    };
+    let broken = true;
+    const fetcher = createFetcher();
+    const base = fetcher.getMockImplementation();
+    fetcher.mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("identify-b.pack") && broken) return new Response("missing", { status: 404 });
+      if (packNames.some((name) => url.includes(name))) return new Response(PACK_BODY);
+      return base ? base(input) : new Response("missing", { status: 404 });
+    });
+    const warmup = await createWarmup(fetcher, { emulatorJsBatchSize: 1, identifyOptionalGroups: [group] });
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    await expect(warmup.runNextUnit()).rejects.toThrow();
+    const cachedPacks = async () =>
+      (await warmup.getCachedFiles())
+        .map((file) => new URL(file.url).pathname)
+        .filter((path) => path.endsWith(".pack"))
+        .sort();
+    expect(await cachedPacks()).toEqual(["/assets/identify-a.pack", "/assets/identify-c.pack"]);
+    expect((await warmup.getIdentifyGroupState())[0]).toMatchObject({ id: "optional-computers", installed: false });
+    for (let pump = 0; pump < 3; pump += 1) await warmup.runNextUnit();
+    broken = false;
+    const before = fetchedUrls(fetcher).length;
+    let state = await warmup.runNextUnit();
+    expect(state.unit).toBe("identify-group:optional-computers");
+    // Only the missing pack is fetched again.
+    expect(
+      fetchedUrls(fetcher)
+        .slice(before)
+        .filter((url) => url.endsWith(`?sha256=${digest}`)),
+    ).toEqual([expect.stringContaining("identify-b.pack")]);
+    for (let pump = 0; pump < 4 && !state.ready; pump += 1) state = await warmup.runNextUnit();
+    expect(state.ready).toBe(true);
+    expect(await cachedPacks()).toHaveLength(3);
+  });
+
   it("bumps emulatorjs files ahead of identify groups", async () => {
     const warmup = await createSerialWarmup();
     await warmup.setIdentifyGroupWanted("optional-computers", true);
