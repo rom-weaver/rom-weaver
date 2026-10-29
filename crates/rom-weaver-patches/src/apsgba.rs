@@ -492,6 +492,10 @@ fn create_apsgba_patch_bytes(source: &[u8], target: &[u8]) -> Result<CreatedApsG
         source_size,
         target_size,
         records,
+        (
+            crc16_range(source, 0, APS_GBA_BLOCK_SIZE),
+            crc16_range(target, 0, APS_GBA_BLOCK_SIZE),
+        ),
     ))
 }
 
@@ -697,6 +701,7 @@ fn create_apsgba_patch_streaming(
     let max_len = source_size_u64.max(target_size_u64);
     let block_count = max_len.div_ceil(APS_GBA_BLOCK_SIZE as u64);
 
+    let mut identity_checksums = (crc16_bytes(&[]), crc16_bytes(&[]));
     let mut source_buffer = vec![0u8; APS_GBA_BLOCK_SIZE];
     let mut target_buffer = vec![0u8; APS_GBA_BLOCK_SIZE];
     let mut xor_bytes = vec![0u8; APS_GBA_BLOCK_SIZE];
@@ -721,6 +726,9 @@ fn create_apsgba_patch_streaming(
 
         let source_crc16 = crc16_bytes(&source_buffer[..source_chunk_len]);
         let target_crc16 = crc16_bytes(&target_buffer[..target_chunk_len]);
+        if block_index == 0 {
+            identity_checksums = (source_crc16, target_crc16);
+        }
         let mut changed = false;
         for (index, xor_byte) in xor_bytes.iter_mut().enumerate() {
             let source_byte = if index < source_chunk_len {
@@ -758,6 +766,7 @@ fn create_apsgba_patch_streaming(
         source_size,
         target_size,
         records,
+        identity_checksums,
     ))
 }
 
@@ -803,10 +812,18 @@ fn create_apsgba_patch_parallel(
             .collect::<Result<Vec<_>>>()
     })?;
     let records = records.into_iter().flatten().collect::<Vec<_>>();
+    let mut identity_checksums = (crc16_bytes(&[]), crc16_bytes(&[]));
+    if records.is_empty() {
+        identity_checksums = (
+            crc16_bytes(&read_apsgba_block(&source, source_size_u64, 0)?),
+            crc16_bytes(&read_apsgba_block(&target, target_size_u64, 0)?),
+        );
+    }
     Ok(finalize_created_apsgba_patch(
         source_size,
         target_size,
         records,
+        identity_checksums,
     ))
 }
 
@@ -872,9 +889,10 @@ fn finalize_created_apsgba_patch(
     source_size: u32,
     target_size: u32,
     mut records: Vec<ApsGbaRecord>,
+    identity_checksums: (u16, u16),
 ) -> CreatedApsGbaPatch {
     if records.is_empty() {
-        records.push(empty_apsgba_record());
+        records.push(empty_apsgba_record(identity_checksums));
     }
 
     let mut bytes = Vec::with_capacity(APS_GBA_HEADER_SIZE + records.len() * APS_GBA_RECORD_SIZE);
@@ -895,11 +913,11 @@ fn finalize_created_apsgba_patch(
     }
 }
 
-fn empty_apsgba_record() -> ApsGbaRecord {
+fn empty_apsgba_record((source_crc16, target_crc16): (u16, u16)) -> ApsGbaRecord {
     ApsGbaRecord {
         offset: 0,
-        source_crc16: crc16_bytes(&[]),
-        target_crc16: crc16_bytes(&[]),
+        source_crc16,
+        target_crc16,
         xor_bytes: vec![0u8; APS_GBA_BLOCK_SIZE],
     }
 }

@@ -898,3 +898,114 @@ fn assert_past_eof_paths(source: &[u8], target: &[u8], patch: &[u8], error: Opti
         }
     }
 }
+
+#[test]
+fn identical_inputs_round_trip_with_valid_block_checksums() {
+    for size in [
+        0,
+        1,
+        8,
+        super::APS_GBA_BLOCK_SIZE,
+        super::APS_GBA_BLOCK_SIZE + 1,
+        super::APS_GBA_BLOCK_SIZE * 2,
+    ] {
+        for threads in [1, 8] {
+            let temp = TestDir::new();
+            let source = temp.child("source.gba");
+            let patch = temp.child("identity.apsgba");
+            let output = temp.child("output.gba");
+            let bytes = build_source_bytes(size);
+            fs::write(&source, &bytes).expect("source");
+            let handler = ApsGbaPatchHandler::new(&APSGBA);
+            let context = test_context_with_threads(&temp, threads);
+            handler
+                .create(
+                    &PatchCreateRequest {
+                        original: source.clone(),
+                        modified: source.clone(),
+                        output: patch.clone(),
+                        format: "APSGBA".into(),
+                    },
+                    &context,
+                )
+                .expect("create identity patch");
+            let expected = create_apsgba_patch_bytes(&bytes, &bytes).expect("create bytes");
+            assert_eq!(fs::read(&patch).expect("patch"), expected.bytes);
+            for memory_limit in [0, u64::MAX] {
+                handler
+                    .apply(
+                        &PatchApplyRequest {
+                            input: source.clone(),
+                            patches: vec![patch.clone()],
+                            output: output.clone(),
+                        },
+                        &test_context_with_threads(&temp, threads)
+                            .with_patch_apply_in_memory_limit(memory_limit),
+                    )
+                    .expect("apply identity patch with default validation");
+                assert_eq!(
+                    fs::read(&output).expect("output"),
+                    bytes,
+                    "size {size}, threads {threads}, memory {memory_limit}"
+                );
+            }
+        }
+    }
+}
+
+proptest::proptest! {
+    #[test]
+    fn identity_patch_checksums_match_the_first_block(source in proptest::collection::vec(proptest::prelude::any::<u8>(), 0..4097)) {
+        let created = create_apsgba_patch_bytes(&source, &source).expect("create");
+        let parsed = parse_apsgba_bytes(&created.bytes).expect("parse");
+        proptest::prop_assert_eq!(parsed.records.len(), 1);
+        proptest::prop_assert_eq!(parsed.records[0].source_crc16, super::crc16_bytes(&source));
+        proptest::prop_assert_eq!(parsed.records[0].target_crc16, super::crc16_bytes(&source));
+        proptest::prop_assert!(parsed.records[0].xor_bytes.iter().all(|byte| *byte == 0));
+    }
+}
+
+#[test]
+fn zero_xor_resizes_round_trip_with_valid_checksums() {
+    for (source_size, target_size) in [
+        (0, 8),
+        (8, 0),
+        (8, 3),
+        (3, 8),
+        (super::APS_GBA_BLOCK_SIZE + 1, 8),
+    ] {
+        for threads in [1, 8] {
+            let temp = TestDir::new();
+            let source = temp.child("source.gba");
+            let target = temp.child("target.gba");
+            let patch = temp.child("change.apsgba");
+            let output = temp.child("output.gba");
+            fs::write(&source, vec![0; source_size]).expect("source");
+            fs::write(&target, vec![0; target_size]).expect("target");
+            let handler = ApsGbaPatchHandler::new(&APSGBA);
+            let context = test_context_with_threads(&temp, threads);
+            handler
+                .create(
+                    &PatchCreateRequest {
+                        original: source.clone(),
+                        modified: target,
+                        output: patch.clone(),
+                        format: "APSGBA".into(),
+                    },
+                    &context,
+                )
+                .expect("create zero XOR resize");
+            handler
+                .apply(
+                    &PatchApplyRequest {
+                        input: source,
+                        patches: vec![patch],
+                        output: output.clone(),
+                    },
+                    &context,
+                )
+                .expect("apply zero XOR resize");
+            assert_eq!(fs::read(output).expect("output"), vec![0; target_size]);
+        }
+    }
+}
