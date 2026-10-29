@@ -248,6 +248,33 @@ fn resolve_compression_level_enforces_codec_ranges() {
 }
 
 #[test]
+fn flac_compression_levels_match_encoder_bounds() {
+    let handler = ChdContainerHandler;
+    for codec in [ChdCodec::FLAC, ChdCodec::CD_FLAC] {
+        for level in 0..=8 {
+            assert_eq!(
+                handler
+                    .resolve_compression_level(codec, Some(level))
+                    .unwrap(),
+                level
+            );
+        }
+        for level in [-1, 9] {
+            let error = handler
+                .resolve_compression_level(codec, Some(level))
+                .expect_err("FLAC levels outside 0..=8 must be rejected");
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "validation failed: chd codec `{}` level `{level}` is out of range; expected 0..=8",
+                    handler.codec_label(codec)
+                )
+            );
+        }
+    }
+}
+
+#[test]
 fn codec_accepts_level_excludes_levelless_codecs() {
     assert!(!ChdContainerHandler::codec_accepts_level(ChdCodec::NONE));
     assert!(!ChdContainerHandler::codec_accepts_level(ChdCodec::HUFFMAN));
