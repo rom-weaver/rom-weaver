@@ -740,28 +740,42 @@ const corePrecache = createDeferredPrecache({
 
 // Whether this worker's whole offline copy (core precache plus every deferred entry) is cached.
 // Memoized so a navigation does not list the caches; cleared whenever the answer can change: after
-// each offline download batch or on-demand deferred fetch, on activation, and when the copy is removed.
+// each offline download batch or on-demand deferred fetch that may have added a file, on activation,
+// and when the copy is removed.
 let offlineCopyCompleteness: Promise<boolean> | undefined;
+// Set only by a probe that resolved true and is still the current memo, so a probe that was in
+// flight across an invalidation cannot revive a stale answer.
+let offlineCopyKnownComplete = false;
 const invalidateOfflineCopyCompleteness = () => {
   offlineCopyCompleteness = undefined;
+  offlineCopyKnownComplete = false;
 };
 const isOfflineCopyComplete = () => {
   if (!offlineCopyRequestedEnabled) return Promise.resolve(false);
-  offlineCopyCompleteness ??= Promise.all([corePrecache.isComplete(), deferredPrecache.isComplete()]).then(
-    ([core, deferred]) => core && deferred,
+  if (offlineCopyCompleteness) return offlineCopyCompleteness;
+  const probe: Promise<boolean> = Promise.all([corePrecache.isComplete(), deferredPrecache.isComplete()]).then(
+    ([core, deferred]) => {
+      const complete = core && deferred;
+      if (complete && offlineCopyCompleteness === probe) offlineCopyKnownComplete = true;
+      return complete;
+    },
     (err: unknown) => {
       logServiceWorker("offline copy completeness check failed", { error: formatError(err) });
       return false;
     },
   );
-  return offlineCopyCompleteness;
+  offlineCopyCompleteness = probe;
+  return probe;
 };
 
 registerRoute(
   ({ request, url }) => request.method === "GET" && deferredPrecache.has(url.href),
   async ({ url }) => {
     const credentialless = await ensureCoepModeHydrated();
-    const response = await deferredPrecache.serve(url.href).finally(invalidateOfflineCopyCompleteness);
+    // A serve only ever adds files, so once the copy is known complete a cache hit cannot change the answer.
+    const response = await deferredPrecache.serve(url.href).finally(() => {
+      if (!offlineCopyKnownComplete) invalidateOfflineCopyCompleteness();
+    });
     return withCrossOriginIsolationHeaders(response, credentialless) || response;
   },
 );
@@ -912,6 +926,8 @@ const setOfflineCopyEnabled = (enabled: boolean, docImageFormat?: "avif" | "webp
     if (enabled && docImageFormat && (await docsImagePolicy.setFormat(docImageFormat))) {
       logServiceWorker("offline documentation image format selected", { format: docImageFormat });
       appPumpGeneration += 1;
+      // Entries change with the format, so drop the memo now and again after the cleanup.
+      invalidateOfflineCopyCompleteness();
       await appPumpChain;
       await deferredPrecache.cleanup();
       invalidateOfflineCopyCompleteness();

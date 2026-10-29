@@ -137,14 +137,24 @@ const createPwaServiceWorkerClient = ({
   // the registrar reloads unconditionally unless we supply that callback, so this flag is the only
   // thing standing between a silent activation and a surprise reload.
   let reloadOnIncomingControl = false;
+  // Set when the update banner was shown for a page running the outgoing controller's code. If another
+  // tab accepts the update and the new worker takes control here, this tab is still on the old build
+  // (its lazy chunks can 404 after a deploy), so it reloads once, provided it has no in-progress work.
+  let waitingOnOutgoingBuild = false;
   // Applies a reload the incoming worker's control was asked for, once. Both controllerchange and
   // onNeedReload call it: the registrar's callback alone misses pages first loaded without a
   // controller, because workbox-window decides whether a change is an update when it registers.
   const reloadForIncomingControl = (source: string) => {
     const reload = reloadOnIncomingControl;
     reloadOnIncomingControl = false;
-    logServiceWorkerClient("incoming service worker took control", { reload, source });
-    return reload && reloadPage("reloading page to apply service worker update", "swupdate");
+    const siblingAccepted = waitingOnOutgoingBuild;
+    waitingOnOutgoingBuild = false;
+    logServiceWorkerClient("incoming service worker took control", { reload, siblingAccepted, source });
+    if (reload) return reloadPage("reloading page to apply service worker update", "swupdate");
+    // The user accepted in another tab, so this reload does not count against the auto-apply budget.
+    if (!(siblingAccepted && shouldAutoApplyUpdate?.())) return false;
+    onBeforeReload?.();
+    return reloadPage("reloading page; a sibling tab applied the service worker update", "swupdate-sibling");
   };
 
   const setSessionStorageItem = (key: string, value: string) => {
@@ -609,6 +619,7 @@ const createPwaServiceWorkerClient = ({
           void updateServiceWorker();
           return;
         }
+        if (reloadToApply) waitingOnOutgoingBuild = true;
         if (reloadToApply && shouldAutoApplyUpdate?.()) {
           logServiceWorkerClient("service worker update waiting; page runs the controller's version", {
             controllerVersion,

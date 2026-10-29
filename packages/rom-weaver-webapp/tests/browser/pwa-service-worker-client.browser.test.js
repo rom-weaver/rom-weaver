@@ -179,7 +179,7 @@ test("auto-applies an update silently without reloading when no work is in progr
   expect(harness.client.getState().updateReady).toBe(false);
 });
 
-test("auto-applies with a reload when the page is still running the outgoing controller's code", async () => {
+test("shows the update prompt instead of reloading when the page is still running the outgoing controller's code", async () => {
   const controller = createController();
   const harness = createHarness({
     appVersion: "test",
@@ -193,11 +193,11 @@ test("auto-applies with a reload when the page is still running the outgoing con
   harness.triggerNeedRefresh();
   await flushAsync();
 
-  // Running version matches the outgoing controller (both "test"), so the loaded code is stale and a
-  // reload is needed to pick up the incoming worker's assets.
-  expect(harness.updateServiceWorker).toHaveBeenCalledTimes(1);
-  expect(harness.location.reload).toHaveBeenCalledTimes(1);
-  expect(harness.client.getState().updateReady).toBe(false);
+  // Running version matches the outgoing controller (both "test"), so applying the update means a
+  // reload seconds into the visit. The new worker waits and the user picks when to reload.
+  expect(harness.updateServiceWorker).not.toHaveBeenCalled();
+  expect(harness.location.reload).not.toHaveBeenCalled();
+  expect(harness.client.getState().updateReady).toBe(true);
 });
 
 test("reloads when the user applies a deferred update from the prompt", async () => {

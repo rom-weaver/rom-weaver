@@ -822,19 +822,22 @@ describe("navigation requests", () => {
   const DEFERRED_CACHE_NAME = "precache-rom-weaver-app-deferred";
   // A worker whose core precache and deferred entries are all stored: the only state that serves cache-first.
   const loadCompleteWorker = (options: {
+    hasActiveWorker?: boolean;
+    missingCore?: boolean;
     missingDeferred?: boolean;
     omitRedirectList?: boolean;
     redirectSourcePaths?: string[];
     runtimeEntries?: Record<string, string>;
   }) =>
     loadWorker({
+      hasActiveWorker: options.hasActiveWorker,
       manifest: COMPLETE_MANIFEST,
       omitRedirectList: options.omitRedirectList,
       redirectSourcePaths: options.redirectSourcePaths,
       seedCaches: async (cacheStorage) => {
         const core = await cacheStorage.open(PRECACHE_NAME);
         await core.put(`${APP_ORIGIN}/index.html?__WB_REVISION__=r1`, new Response("x"));
-        await core.put(`${APP_ORIGIN}/assets/app.js`, new Response("x"));
+        if (!options.missingCore) await core.put(`${APP_ORIGIN}/assets/app.js`, new Response("x"));
         if (!options.missingDeferred) {
           await (await cacheStorage.open(DEFERRED_CACHE_NAME)).put(DEFERRED_URL, new Response("x"));
         }
@@ -862,6 +865,51 @@ describe("navigation requests", () => {
     const root = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/`));
     await expect(root.text()).resolves.toBe("root");
     expect(harness.fetchStub.calls).toHaveLength(0);
+  });
+
+  it("goes to the network while the core precache is incomplete", async () => {
+    const harness = await loadCompleteWorker({ missingCore: true, redirectSourcePaths: [] });
+    precachedDocs();
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("fresh", { status: 200 }));
+
+    const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
+
+    await expect(response.text()).resolves.toBe("fresh");
+    expect(harness.fetchStub.calls).toHaveLength(1);
+  });
+
+  it("serves cache-first once a pump stores the last missing deferred entry", async () => {
+    const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
+    precachedDocs();
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("fresh", { status: 200 }));
+    await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
+    harness.fetchStub.handlers.set(DEFERRED_URL, () => new Response("js", { status: 200 }));
+
+    await dispatch(harness.scope, "message", {
+      data: { action: "offline-warmup-pump" },
+      ports: [{ postMessage: () => undefined }],
+    });
+    expect(await harness.cacheStorage.caches.get(DEFERRED_CACHE_NAME)?.match(DEFERRED_URL)).toBeDefined();
+    const callsBefore = harness.fetchStub.calls.length;
+    const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
+
+    await expect(response.text()).resolves.toBe("guide");
+    expect(harness.fetchStub.calls).toHaveLength(callsBefore);
+  });
+
+  it("keeps the completeness answer across a deferred cache hit", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
+    precachedDocs();
+    const navigate = () => routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
+    await navigate();
+    const open = vi.spyOn(harness.cacheStorage, "open");
+    const listing = vi.spyOn(harness.cacheStorage, "keys");
+
+    await routed(harness, requireRoute(2), new Request(DEFERRED_URL));
+    await navigate();
+
+    expect(open.mock.calls.filter(([name]) => name === PRECACHE_NAME)).toHaveLength(0);
+    expect(listing).not.toHaveBeenCalled();
   });
 
   it("goes to the network when a deferred entry is not cached yet, even for a precached document", async () => {
@@ -901,7 +949,7 @@ describe("navigation requests", () => {
   });
 
   it("keeps an unknown path network-first so the server decides", async () => {
-    const harness = await loadWorker({ redirectSourcePaths: ["/apply", "/apply/"] });
+    const harness = await loadCompleteWorker({ redirectSourcePaths: ["/apply", "/apply/"] });
     precachedDocs();
     harness.fetchStub.handlers.set(`${APP_ORIGIN}/unknown`, () => new Response("server-404", { status: 404 }));
 
@@ -912,7 +960,7 @@ describe("navigation requests", () => {
   });
 
   it("leaves a redirect alias to the server even when its legacy document is precached", async () => {
-    const harness = await loadWorker({ redirectSourcePaths: ["/apply", "/apply/"] });
+    const harness = await loadCompleteWorker({ redirectSourcePaths: ["/apply", "/apply/"] });
     precachedDocs();
     setPrecache({ "apply/index.html": () => new Response("legacy", { status: 200 }) });
     harness.fetchStub.handlers.set(
@@ -928,12 +976,18 @@ describe("navigation requests", () => {
   });
 
   it("goes to the network when the offline copy is disabled", async () => {
-    const harness = await loadWorker({ hasActiveWorker: true, redirectSourcePaths: [] });
+    const harness = await loadCompleteWorker({ hasActiveWorker: true, redirectSourcePaths: [] });
     precachedDocs();
     await dispatch(harness.scope, "message", {
       data: { action: "set-offline-copy-enabled", enabled: false },
       ports: [],
     });
+    // Disabling clears the caches; refill them so only the disabled flag can send the navigation to the network.
+    await (
+      await harness.cacheStorage.open(PRECACHE_NAME)
+    ).put(`${APP_ORIGIN}/index.html?__WB_REVISION__=r1`, new Response("x"));
+    await (await harness.cacheStorage.open(PRECACHE_NAME)).put(`${APP_ORIGIN}/assets/app.js`, new Response("x"));
+    await (await harness.cacheStorage.open(DEFERRED_CACHE_NAME)).put(DEFERRED_URL, new Response("x"));
     harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("fresh", { status: 200 }));
 
     const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
@@ -952,7 +1006,7 @@ describe("navigation requests", () => {
   });
 
   it("goes to the network when the client prefers Markdown", async () => {
-    const harness = await loadWorker({ redirectSourcePaths: ["/apply", "/apply/"] });
+    const harness = await loadCompleteWorker({ redirectSourcePaths: ["/apply", "/apply/"] });
     precachedDocs();
     harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("# md", { status: 200 }));
 
@@ -966,7 +1020,7 @@ describe("navigation requests", () => {
   });
 
   it("does not serve non-navigation HTML requests from the precache", async () => {
-    const harness = await loadWorker({ redirectSourcePaths: ["/apply", "/apply/"] });
+    const harness = await loadCompleteWorker({ redirectSourcePaths: ["/apply", "/apply/"] });
     precachedDocs();
     harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("fresh", { status: 200 }));
 
@@ -1013,6 +1067,23 @@ describe("navigation requests", () => {
     const pending = routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/newer`));
     await vi.advanceTimersByTimeAsync(4000);
 
+    await expect((await pending).text()).resolves.toBe("cached");
+  });
+
+  it("falls back at once when the fetch rejects before headers, without waiting out the timeout", async () => {
+    vi.useFakeTimers();
+    const harness = await loadWorker({
+      seedCaches: async (cacheStorage) => {
+        const cache = await cacheStorage.open(RUNTIME_CACHE_NAME);
+        await cache.put(new Request(`${APP_ORIGIN}/newer`), new Response("cached", { status: 200 }));
+      },
+    });
+    harness.fetchStub.stub.mockImplementation(() => Promise.reject(new TypeError("offline")));
+
+    const pending = routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/newer`));
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(vi.getTimerCount()).toBe(0);
     await expect((await pending).text()).resolves.toBe("cached");
   });
 
