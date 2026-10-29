@@ -40,7 +40,6 @@ type WarmupStub = {
   getIdentifyGroupState: () => Promise<Array<{ id: string }>>;
   getReadyState: () => Promise<ReadyState>;
   installIdentifyGroup: (groupId: string) => Promise<{ id: string; installed: boolean }>;
-  markEmulatorJsWanted: () => Promise<void>;
   runNextUnit: (onInterim?: (interim: { bytes: number }) => void) => Promise<{ bytes: number; files: number }>;
   reset: () => void;
   serveOptionalIdentifyPack: (request: Request) => Promise<Response>;
@@ -90,10 +89,7 @@ vi.mock("workbox-precaching", () => ({
   precacheAndRoute: hoisted.precacheAndRoute,
 }));
 
-vi.mock("../../src/webapp/offline-warmup.ts", async () => ({
-  carryEmulatorJsIntent: (
-    await vi.importActual<typeof import("../../src/webapp/offline-warmup.ts")>("../../src/webapp/offline-warmup.ts")
-  ).carryEmulatorJsIntent,
+vi.mock("../../src/webapp/offline-warmup.ts", () => ({
   createOfflineWarmup: (config: unknown) => {
     hoisted.warmup.config = config as WarmupConfig;
     return hoisted.warmup.instance;
@@ -240,7 +236,6 @@ const createWarmupStub = (): WarmupStub => ({
     totalFiles: 5,
   })),
   installIdentifyGroup: vi.fn(async (groupId: string) => ({ id: groupId, installed: true })),
-  markEmulatorJsWanted: vi.fn(async () => undefined),
   runNextUnit: vi.fn(async () => ({ bytes: 12, files: 1 })),
   reset: vi.fn(),
   serveOptionalIdentifyPack: vi.fn(async () => new Response("pack-bytes")),
@@ -1154,32 +1149,6 @@ describe("install and activate", () => {
   });
 });
 
-describe("EmulatorJS upgrade", () => {
-  const oldName = "precache-rom-weaver-emulatorjs-0.0.1";
-  const markerUrl = (name: string) => `${APP_ORIGIN}/__rom-weaver-emulatorjs-${name}__`;
-
-  it("copies the intent into the new cache before deleting an older cache that held it", async () => {
-    const harness = await loadWorker({
-      seedCaches: async (cacheStorage) => {
-        await (await cacheStorage.open(oldName)).put(markerUrl("complete"), new Response("0.0.1"));
-      },
-    });
-    await dispatch(harness.scope, "activate");
-    expect(harness.cacheStorage.deleted).toContain(oldName);
-    expect(await harness.cacheStorage.caches.get(EMULATORJS_CACHE_NAME)?.match(markerUrl("wanted"))).toBeDefined();
-  });
-
-  it("leaves the new cache without intent when no older cache has a marker", async () => {
-    const harness = await loadWorker({
-      seedCaches: async (cacheStorage) => {
-        await (await cacheStorage.open(oldName)).put(`${APP_ORIGIN}/emulatorjs/data/a.js`, new Response("a"));
-      },
-    });
-    await dispatch(harness.scope, "activate");
-    expect(await harness.cacheStorage.caches.get(EMULATORJS_CACHE_NAME)?.match(markerUrl("wanted"))).toBeUndefined();
-  });
-});
-
 describe("COEP mode", () => {
   it("persists a require-corp downgrade and serves it on the next response", async () => {
     const harness = await loadWorker();
@@ -1292,19 +1261,6 @@ describe("offline warm-up messages", () => {
       release();
       await Promise.all([first, queued]);
     }
-  });
-
-  it("records emulator intent only for pumps that ask for it and not for bounded identify pumps", async () => {
-    const harness = await loadWorker({ manifest: [] });
-    await collect(harness, { action: "offline-warmup-pump" });
-    await collect(harness, {
-      action: "offline-warmup-pump",
-      identifyGroupIds: ["optional-computers"],
-      includeEmulatorJs: true,
-    });
-    expect(harness.warmup.markEmulatorJsWanted).not.toHaveBeenCalled();
-    await collect(harness, { action: "offline-warmup-pump", includeEmulatorJs: true });
-    expect(harness.warmup.markEmulatorJsWanted).toHaveBeenCalledOnce();
   });
 
   it("streams interim progress and the final unit result for a pump", async () => {
@@ -1483,7 +1439,6 @@ describe("offline copy policy", () => {
   it("removes managed files while keeping COEP, identify choices, and unrelated caches", async () => {
     const deferredUrl = `${APP_ORIGIN}/assets/deferred.bin`;
     const wantedUrl = `${APP_ORIGIN}/__rom-weaver-identify-wanted__`;
-    const emulatorWantedUrl = `${APP_ORIGIN}/__rom-weaver-emulatorjs-wanted__`;
     const harness = await loadWorker({
       manifest: [
         { url: "index.html", sizeBytes: 3 },
@@ -1499,7 +1454,6 @@ describe("offline copy policy", () => {
           await storage.open(IDENTIFY_CACHE_NAME)
         ).put(`${APP_ORIGIN}/assets/identify-computers.pack`, new Response("pack"));
         await (await storage.open("unrelated-cache")).put(`${APP_ORIGIN}/save`, new Response("save"));
-        await (await storage.open(EMULATORJS_CACHE_NAME)).put(emulatorWantedUrl, new Response("1"));
       },
     });
     vi.mocked(harness.warmup.getReadyState).mockImplementation(async () => {
@@ -1524,8 +1478,6 @@ describe("offline copy policy", () => {
       await harness.cacheStorage.caches.get(IDENTIFY_CACHE_NAME)?.match(`${APP_ORIGIN}/assets/identify-computers.pack`),
     ).toBeUndefined();
     expect(await harness.cacheStorage.caches.get("unrelated-cache")?.match(`${APP_ORIGIN}/save`)).toBeDefined();
-    // The emulator intent lives in the EmulatorJS cache, so removing the offline copy clears it.
-    expect(await harness.cacheStorage.caches.get(EMULATORJS_CACHE_NAME)?.match(emulatorWantedUrl)).toBeUndefined();
     expect(await harness.cacheStorage.caches.get(PRECACHE_NAME)?.match(`${APP_ORIGIN}/index.html`)).toBeUndefined();
     expect(
       await harness.cacheStorage.caches.get("precache-rom-weaver-app-deferred")?.match(deferredUrl),

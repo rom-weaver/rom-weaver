@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { carryEmulatorJsIntent, createOfflineWarmup } from "../../src/webapp/offline-warmup.ts";
+import { createOfflineWarmup } from "../../src/webapp/offline-warmup.ts";
 import { createOfflineCopyPolicy } from "../../src/webapp/pwa/offline-copy-policy.ts";
 
 const SCOPE = "https://example.test/";
@@ -100,7 +100,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const buildWarmup = async (
+const createWarmup = async (
   fetcher = createFetcher(),
   options: Partial<Parameters<typeof createOfflineWarmup>[0]> = {},
 ) =>
@@ -114,16 +114,6 @@ const buildWarmup = async (
     scope: SCOPE,
     ...options,
   });
-
-/** A warm-up whose user has already shown emulator intent, so EmulatorJS joins the queue and the totals. */
-const createWarmup = async (
-  fetcher = createFetcher(),
-  options: Partial<Parameters<typeof createOfflineWarmup>[0]> = {},
-) => {
-  const warmup = await buildWarmup(fetcher, options);
-  await warmup.markEmulatorJsWanted();
-  return warmup;
-};
 
 /** One file per pump, for tests that assert queue ordering. */
 const createSerialWarmup = async (fetcher = createFetcher()) => createWarmup(fetcher, { emulatorJsBatchSize: 1 });
@@ -142,91 +132,6 @@ const createWarmupWithOptionalGroup = async (
 };
 
 describe("offline warm-up (service worker side)", () => {
-  it("queues and fetches no EmulatorJS file, or its manifest, without emulator intent", async () => {
-    const fetcher = createFetcher();
-    const warmup = await buildWarmup(fetcher);
-    expect(await warmup.runNextUnit()).toMatchObject({ unit: null, ready: true, totalFiles: 0, pendingUnits: 0 });
-    expect(fetchedUrls(fetcher).filter((url) => url.includes("emulatorjs/"))).toEqual([]);
-  });
-
-  it("still warms the default identify group in the same order without intent", async () => {
-    const fetcher = createFetcher();
-    const warmup = await buildWarmup(fetcher);
-    await warmup.setIdentifyGroupWanted("optional-computers", true);
-    expect(await warmup.getReadyState()).toMatchObject({ ready: false, pendingUnits: 1, totalFiles: 1 });
-    expect(await warmup.runNextUnit()).toMatchObject({ unit: "identify-group:optional-computers", ready: true });
-    expect(fetchedUrls(fetcher).filter((url) => url.includes("emulatorjs/"))).toEqual([]);
-  });
-
-  it("starts the EmulatorJS download when the emulator bump arrives and keeps it across a rebuilt queue", async () => {
-    const fetcher = createFetcher();
-    const warmup = await buildWarmup(fetcher, { emulatorJsBatchSize: 1 });
-    expect((await warmup.runNextUnit()).ready).toBe(true);
-    warmup.bumpPriority({ kind: "emulatorjs" });
-    expect(await warmup.runNextUnit()).toMatchObject({ unit: "emulatorjs:loader.js", ready: false });
-    // A restarted worker has no queue or memory of the bump, only the stored intent.
-    const restarted = await buildWarmup(fetcher, { emulatorJsBatchSize: 1 });
-    expect(await restarted.getReadyState()).toMatchObject({ ready: false, totalFiles: 3, cachedFiles: 1 });
-    expect((await restarted.runNextUnit()).unit).toBe("emulatorjs:cores/core.wasm");
-    while (!(await restarted.runNextUnit()).ready) {
-      // drain
-    }
-    expect(fetchedUrls(fetcher).filter((url) => url.includes("emulatorjs/data/"))).toHaveLength(3);
-  });
-
-  it("leaves a fully cached EmulatorJS set counted so existing offline copies stay ready", async () => {
-    const warmup = await createWarmup();
-    while (!(await warmup.runNextUnit()).ready) {
-      // drain
-    }
-    cacheStorage.caches.get(EMULATORJS_CACHE)?.entries.delete(new URL("/__rom-weaver-emulatorjs-wanted__", SCOPE).href);
-    expect(await (await buildWarmup()).getReadyState()).toMatchObject({ ready: true, totalFiles: 3, cachedFiles: 3 });
-  });
-
-  describe("EmulatorJS version upgrade", () => {
-    const OLD = "emulatorjs-old";
-    const carry = () =>
-      carryEmulatorJsIntent({
-        currentCacheName: EMULATORJS_CACHE,
-        currentVersion: EMULATORJS_VERSION,
-        scope: SCOPE,
-        staleCacheNames: [OLD],
-      });
-    const seedOld = async (path: string | null) => {
-      const old = await cacheStorage.open(OLD);
-      if (path) await old.put(new URL(path, SCOPE).href, new Response("x"));
-    };
-
-    it("upgrade from an old cache with the complete marker sets intent", async () => {
-      await seedOld("/__rom-weaver-emulatorjs-complete__");
-      expect(await carry()).toBe(true);
-      expect(await (await buildWarmup()).getReadyState()).toMatchObject({ ready: false, totalFiles: 3 });
-    });
-
-    it("upgrade from an old cache with only the wanted marker sets intent", async () => {
-      await seedOld("/__rom-weaver-emulatorjs-wanted__");
-      expect(await carry()).toBe(true);
-      const fetcher = createFetcher();
-      await (await buildWarmup(fetcher)).runNextUnit();
-      expect(fetchedUrls(fetcher).filter((url) => url.includes("emulatorjs/data/"))).toHaveLength(3);
-    });
-
-    it("upgrade with neither marker leaves EmulatorJS out", async () => {
-      await seedOld("/emulatorjs/data/loader.js");
-      expect(await carry()).toBe(false);
-      expect(await (await buildWarmup()).getReadyState()).toMatchObject({ ready: true, totalFiles: 0 });
-    });
-  });
-
-  it("forgets the intent when the EmulatorJS cache is removed with the offline copy", async () => {
-    const warmup = await createWarmup();
-    expect((await warmup.getReadyState()).totalFiles).toBe(3);
-    cacheStorage.caches.delete(EMULATORJS_CACHE);
-    warmup.reset();
-    expect(await warmup.getReadyState()).toMatchObject({ ready: true, totalFiles: 0 });
-    expect(await warmup.runNextUnit()).toMatchObject({ unit: null });
-  });
-
   it("restricts data-saver pumps to requested groups without downloading emulator files", async () => {
     const fetcher = createFetcher();
     const warmup = await createWarmupWithOptionalGroup(fetcher);
@@ -474,13 +379,11 @@ describe("offline warm-up (service worker side)", () => {
     const warmup = await createWarmupWithOptionalGroup();
     const identifyCacheBefore = cacheStorage.caches.get(IDENTIFY_CACHE);
     const identifyMatchesBefore = identifyCacheBefore?.matchCallCount ?? 0;
-    const emulatorJsMatchesBefore = cacheStorage.caches.get(EMULATORJS_CACHE)?.matchCallCount ?? 0;
     await warmup.getReadyState();
     const emulatorJsCache = cacheStorage.caches.get(EMULATORJS_CACHE);
     const identifyCache = cacheStorage.caches.get(IDENTIFY_CACHE);
     expect(emulatorJsCache?.keysCallCount).toBe(1);
-    // Completion marker, intent marker, and the stored manifest.
-    expect((emulatorJsCache?.matchCallCount ?? 0) - emulatorJsMatchesBefore).toBe(3);
+    expect(emulatorJsCache?.matchCallCount).toBe(2);
     expect(identifyCache?.keysCallCount).toBe(1);
     // One marker read per group. The opt-in list is memoised by the ticking
     // above, so a snapshot does not re-read it.
@@ -491,14 +394,14 @@ describe("offline warm-up (service worker side)", () => {
     const warmup = await createSerialWarmup();
     await warmup.setIdentifyGroupWanted("optional-computers", true);
     let progress = await warmup.runNextUnit();
-    expect(progress.unit).toBe("emulatorjs:loader.js");
+    expect(progress.unit).toBe("identify-group:optional-computers");
     expect(progress.ready).toBe(false);
+    progress = await warmup.runNextUnit();
+    expect(progress.unit).toBe("emulatorjs:loader.js");
     progress = await warmup.runNextUnit();
     expect(progress.unit).toBe("emulatorjs:cores/core.wasm");
     progress = await warmup.runNextUnit();
     expect(progress.unit).toBe("emulatorjs:cores/extra.data");
-    progress = await warmup.runNextUnit();
-    expect(progress.unit).toBe("identify-group:optional-computers");
     expect(progress.ready).toBe(true);
     expect(progress.cachedBytes).toBe(progress.totalBytes);
 
@@ -598,24 +501,75 @@ describe("offline warm-up (service worker side)", () => {
       // drain
     }
     const fetcher = createFetcher();
-    const upgraded = await buildWarmup(fetcher, {
+    const upgraded = createOfflineWarmup({
       emulatorJsCacheName: "emulatorjs-5.0.0",
       emulatorJsVersion: "5.0.0",
+      fetchForWarmup: fetcher,
+      identifyOptionalCacheName: IDENTIFY_CACHE,
+      identifyOptionalGroups: await buildGroups(),
+      log: () => undefined,
+      scope: SCOPE,
     });
-    await upgraded.markEmulatorJsWanted();
     const state = await upgraded.getReadyState();
     expect(state.ready).toBe(false);
   });
 
-  it("bumps identify groups ahead of emulatorjs files", async () => {
+  it("downloads wanted identify groups before emulatorjs files without a bump", async () => {
     const warmup = await createSerialWarmup();
     await warmup.setIdentifyGroupWanted("optional-computers", true);
-    // Build the queue: the first pump takes the first emulatorjs file.
+    expect((await warmup.runNextUnit()).unit).toBe("identify-group:optional-computers");
+    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:loader.js");
+    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:cores/core.wasm");
+  });
+
+  it("still downloads every emulatorjs file and completes after the identify groups", async () => {
+    const warmup = await createSerialWarmup();
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    const units: Array<string | undefined> = [];
+    let state = await warmup.runNextUnit();
+    units.push(state.unit);
+    while (!state.ready) {
+      state = await warmup.runNextUnit();
+      units.push(state.unit);
+    }
+    const firstEmulator = units.findIndex((unit) => unit?.startsWith("emulatorjs:"));
+    const lastIdentify = units.map((unit) => unit?.startsWith("identify-group:")).lastIndexOf(true);
+    expect(lastIdentify).toBeGreaterThanOrEqual(0);
+    expect(lastIdentify).toBeLessThan(firstEmulator);
+    expect(units.filter((unit) => unit?.startsWith("emulatorjs:"))).toEqual([
+      "emulatorjs:loader.js",
+      "emulatorjs:cores/core.wasm",
+      "emulatorjs:cores/extra.data",
+    ]);
+  });
+
+  it("bumps emulatorjs files ahead of identify groups", async () => {
+    const warmup = await createSerialWarmup();
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    // A bump before the queue exists builds it first, then reorders; let that settle.
+    warmup.bumpPriority({ kind: "emulatorjs" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:loader.js");
+    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:cores/core.wasm");
+  });
+
+  it("bumps identify groups back to the front after an emulatorjs bump", async () => {
+    const warmup = await createSerialWarmup();
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    warmup.bumpPriority({ kind: "emulatorjs" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:loader.js");
     warmup.bumpPriority({ groupIds: ["optional-computers"], kind: "identify-groups" });
-    // Without the bump the next unit would be emulatorjs:cores/core.wasm.
     expect((await warmup.runNextUnit()).unit).toBe("identify-group:optional-computers");
     expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:cores/core.wasm");
+  });
+
+  it("keeps identify-before-emulatorjs order when the queue is rebuilt after a restart", async () => {
+    const warmup = await createSerialWarmup();
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    warmup.reset();
+    expect((await warmup.runNextUnit()).unit).toBe("identify-group:optional-computers");
+    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:loader.js");
   });
 
   it("reports fast chunks while cache reads are blocked", async () => {
@@ -685,8 +639,8 @@ describe("offline warm-up (service worker side)", () => {
     });
     // At least the immediate start event fires, naming the unit before bytes land.
     expect(interims.length).toBeGreaterThan(0);
-    expect(interims[0]).toMatchObject({ detail: { kind: "emulatorjs", name: "loader.js" } });
-    expect(progress.detail).toEqual({ kind: "emulatorjs", name: "loader.js" });
+    expect(interims[0]).toMatchObject({ detail: { kind: "identify-group", name: "Computers" } });
+    expect(progress.detail).toEqual({ kind: "identify-group", name: "Computers" });
     expect(progress.unitLoadedBytes).toBeNull();
     expect(progress.cachedFiles).toBe(1);
     expect(progress.totalFiles).toBe(4);
@@ -701,8 +655,6 @@ describe("offline warm-up (service worker side)", () => {
     // bytes sit in both the baseline and the per-unit credit, and the interim
     // counter must still never exceed what is really cached.
     await warmup.serveOptionalIdentifyPack(new Request(packUrl));
-    // Build the queue: the first pump takes the first emulatorjs file.
-    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:loader.js");
     warmup.bumpPriority({ groupIds: ["optional-computers"], kind: "identify-groups" });
     const interimCachedBytes: number[] = [];
     const progress = await warmup.runNextUnit((interim) => {
@@ -713,7 +665,7 @@ describe("offline warm-up (service worker side)", () => {
     for (const cachedBytes of interimCachedBytes) {
       expect(cachedBytes).toBeLessThanOrEqual(progress.cachedBytes);
     }
-    expect(progress.cachedBytes).toBe(3 + PACK_BODY.length);
+    expect(progress.cachedBytes).toBe(PACK_BODY.length);
   });
 
   it("counts a partially cached group's packs without its marker", async () => {

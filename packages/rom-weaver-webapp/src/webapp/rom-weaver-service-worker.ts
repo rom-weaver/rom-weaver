@@ -11,7 +11,7 @@ import type { WorkboxPlugin } from "workbox-core/types.js";
 import { addPlugins, cleanupOutdatedCaches, matchPrecache, precacheAndRoute } from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
-import { carryEmulatorJsIntent, createOfflineWarmup } from "./offline-warmup.ts";
+import { createOfflineWarmup } from "./offline-warmup.ts";
 import { createOfflineProgressReporter } from "./pwa/offline-progress-reporter.ts";
 import { prioritizePrecacheInstallRequest } from "./pwa/fetch-priority.ts";
 import { createDeferredPrecache } from "./pwa/deferred-precache.ts";
@@ -664,11 +664,7 @@ let appPumpChain: Promise<unknown> = Promise.resolve();
 let appPumpGeneration = 0;
 let offlineCopyRequestedEnabled = true;
 let coreRefillNeeded = true;
-const pumpOfflineFiles = (
-  onInterim: (progress: unknown) => void,
-  identifyGroupIds?: string[],
-  includeEmulatorJs = false,
-) => {
+const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupIds?: string[]) => {
   // A pause MUST stop refilling both active pumps and pumps waiting for cache reads.
   const generation = appPumpGeneration;
   const process = async () => {
@@ -683,8 +679,6 @@ const pumpOfflineFiles = (
     // Automatic identify requests on data saver must not refill the app or
     // emulator caches before reaching the requested group.
     if (identifyGroupIds) return offlineWarmup.runNextUnit(onInterim, identifyGroupIds);
-    // An explicit "download offline copy" includes the EmulatorJS cores; the automatic warm-up leaves them to the emulator view.
-    if (includeEmulatorJs) await offlineWarmup.markEmulatorJsWanted();
     const baseline = await offlineWarmup.getReadyState();
     if (coreRefillNeeded) corePrecache.setSizes(await loadPrecacheSizes());
     let coreCachedBytes = coreRefillNeeded ? (await corePrecache.state()).cachedBytes : 0;
@@ -897,16 +891,6 @@ self.addEventListener("activate", (event) => {
         emulatorJsCacheName: EMULATORJS_CACHE_NAME,
         precacheVersion: PRECACHE_VERSION,
       });
-      if (await offlineCopyPolicy.isEnabled()) {
-        await runServiceWorkerPhase("carry emulator intent", () =>
-          carryEmulatorJsIntent({
-            currentCacheName: EMULATORJS_CACHE_NAME,
-            currentVersion: __EMULATORJS_VERSION__,
-            scope: self.registration.scope,
-            staleCacheNames: cachesToDelete.filter((name) => name.startsWith(EMULATORJS_CACHE_PREFIX)),
-          }),
-        );
-      }
       await runServiceWorkerPhase("delete stale caches", () =>
         Promise.all(cachesToDelete.map((cacheName) => caches.delete(cacheName))),
       );
@@ -983,7 +967,6 @@ self.addEventListener("message", (event) => {
     const pump = pumpOfflineFiles(
       (interim) => replyTo({ action: "offline-warmup-interim", ...(interim as Record<string, unknown>) }),
       identifyGroupIds,
-      event.data.includeEmulatorJs === true,
     )
       .then((progress) => ({ action: "offline-warmup-progress", ...progress }))
       .catch((error) => ({ action: "offline-warmup-failed", error: formatError(error) }));

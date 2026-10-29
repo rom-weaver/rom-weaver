@@ -1,7 +1,6 @@
 /**
  * The page starts offline warm-up when a worker takes control, then waits for idle time between units.
  * Data saver disables automatic warm-up; explicit identify-group requests still run, while EmulatorJS fetches needed files on demand.
- * Without data saver the automatic warm-up also leaves EmulatorJS alone until the emulator view bumps it.
  */
 import { createLogger } from "../../lib/logging.ts";
 import type { LogDetails } from "../../types/logging.ts";
@@ -385,12 +384,7 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
               }
             },
             PUMP_TIMEOUT_MS,
-            identifyGroupIds
-              ? { identifyGroupIds }
-              : // The explicit download button keeps pulling EmulatorJS; the automatic warm-up does not.
-                offlineCopyState.downloadRequested
-                ? { includeEmulatorJs: true }
-                : {},
+            identifyGroupIds ? { identifyGroupIds } : {},
             requestController.signal,
           );
         } catch (error) {
