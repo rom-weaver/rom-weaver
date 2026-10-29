@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createOfflineWarmup } from "../../src/webapp/offline-warmup.ts";
+import { carryEmulatorJsIntent, createOfflineWarmup } from "../../src/webapp/offline-warmup.ts";
 import { createOfflineCopyPolicy } from "../../src/webapp/pwa/offline-copy-policy.ts";
 
 const SCOPE = "https://example.test/";
@@ -100,7 +100,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const createWarmup = async (
+const buildWarmup = async (
   fetcher = createFetcher(),
   options: Partial<Parameters<typeof createOfflineWarmup>[0]> = {},
 ) =>
@@ -114,6 +114,16 @@ const createWarmup = async (
     scope: SCOPE,
     ...options,
   });
+
+/** A warm-up whose user has already shown emulator intent, so EmulatorJS joins the queue and the totals. */
+const createWarmup = async (
+  fetcher = createFetcher(),
+  options: Partial<Parameters<typeof createOfflineWarmup>[0]> = {},
+) => {
+  const warmup = await buildWarmup(fetcher, options);
+  await warmup.markEmulatorJsWanted();
+  return warmup;
+};
 
 /** One file per pump, for tests that assert queue ordering. */
 const createSerialWarmup = async (fetcher = createFetcher()) => createWarmup(fetcher, { emulatorJsBatchSize: 1 });
@@ -132,6 +142,91 @@ const createWarmupWithOptionalGroup = async (
 };
 
 describe("offline warm-up (service worker side)", () => {
+  it("queues and fetches no EmulatorJS file, or its manifest, without emulator intent", async () => {
+    const fetcher = createFetcher();
+    const warmup = await buildWarmup(fetcher);
+    expect(await warmup.runNextUnit()).toMatchObject({ unit: null, ready: true, totalFiles: 0, pendingUnits: 0 });
+    expect(fetchedUrls(fetcher).filter((url) => url.includes("emulatorjs/"))).toEqual([]);
+  });
+
+  it("still warms the default identify group in the same order without intent", async () => {
+    const fetcher = createFetcher();
+    const warmup = await buildWarmup(fetcher);
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
+    expect(await warmup.getReadyState()).toMatchObject({ ready: false, pendingUnits: 1, totalFiles: 1 });
+    expect(await warmup.runNextUnit()).toMatchObject({ unit: "identify-group:optional-computers", ready: true });
+    expect(fetchedUrls(fetcher).filter((url) => url.includes("emulatorjs/"))).toEqual([]);
+  });
+
+  it("starts the EmulatorJS download when the emulator bump arrives and keeps it across a rebuilt queue", async () => {
+    const fetcher = createFetcher();
+    const warmup = await buildWarmup(fetcher, { emulatorJsBatchSize: 1 });
+    expect((await warmup.runNextUnit()).ready).toBe(true);
+    warmup.bumpPriority({ kind: "emulatorjs" });
+    expect(await warmup.runNextUnit()).toMatchObject({ unit: "emulatorjs:loader.js", ready: false });
+    // A restarted worker has no queue or memory of the bump, only the stored intent.
+    const restarted = await buildWarmup(fetcher, { emulatorJsBatchSize: 1 });
+    expect(await restarted.getReadyState()).toMatchObject({ ready: false, totalFiles: 3, cachedFiles: 1 });
+    expect((await restarted.runNextUnit()).unit).toBe("emulatorjs:cores/core.wasm");
+    while (!(await restarted.runNextUnit()).ready) {
+      // drain
+    }
+    expect(fetchedUrls(fetcher).filter((url) => url.includes("emulatorjs/data/"))).toHaveLength(3);
+  });
+
+  it("leaves a fully cached EmulatorJS set counted so existing offline copies stay ready", async () => {
+    const warmup = await createWarmup();
+    while (!(await warmup.runNextUnit()).ready) {
+      // drain
+    }
+    cacheStorage.caches.get(EMULATORJS_CACHE)?.entries.delete(new URL("/__rom-weaver-emulatorjs-wanted__", SCOPE).href);
+    expect(await (await buildWarmup()).getReadyState()).toMatchObject({ ready: true, totalFiles: 3, cachedFiles: 3 });
+  });
+
+  describe("EmulatorJS version upgrade", () => {
+    const OLD = "emulatorjs-old";
+    const carry = () =>
+      carryEmulatorJsIntent({
+        currentCacheName: EMULATORJS_CACHE,
+        currentVersion: EMULATORJS_VERSION,
+        scope: SCOPE,
+        staleCacheNames: [OLD],
+      });
+    const seedOld = async (path: string | null) => {
+      const old = await cacheStorage.open(OLD);
+      if (path) await old.put(new URL(path, SCOPE).href, new Response("x"));
+    };
+
+    it("upgrade from an old cache with the complete marker sets intent", async () => {
+      await seedOld("/__rom-weaver-emulatorjs-complete__");
+      expect(await carry()).toBe(true);
+      expect(await (await buildWarmup()).getReadyState()).toMatchObject({ ready: false, totalFiles: 3 });
+    });
+
+    it("upgrade from an old cache with only the wanted marker sets intent", async () => {
+      await seedOld("/__rom-weaver-emulatorjs-wanted__");
+      expect(await carry()).toBe(true);
+      const fetcher = createFetcher();
+      await (await buildWarmup(fetcher)).runNextUnit();
+      expect(fetchedUrls(fetcher).filter((url) => url.includes("emulatorjs/data/"))).toHaveLength(3);
+    });
+
+    it("upgrade with neither marker leaves EmulatorJS out", async () => {
+      await seedOld("/emulatorjs/data/loader.js");
+      expect(await carry()).toBe(false);
+      expect(await (await buildWarmup()).getReadyState()).toMatchObject({ ready: true, totalFiles: 0 });
+    });
+  });
+
+  it("forgets the intent when the EmulatorJS cache is removed with the offline copy", async () => {
+    const warmup = await createWarmup();
+    expect((await warmup.getReadyState()).totalFiles).toBe(3);
+    cacheStorage.caches.delete(EMULATORJS_CACHE);
+    warmup.reset();
+    expect(await warmup.getReadyState()).toMatchObject({ ready: true, totalFiles: 0 });
+    expect(await warmup.runNextUnit()).toMatchObject({ unit: null });
+  });
+
   it("restricts data-saver pumps to requested groups without downloading emulator files", async () => {
     const fetcher = createFetcher();
     const warmup = await createWarmupWithOptionalGroup(fetcher);
@@ -379,11 +474,13 @@ describe("offline warm-up (service worker side)", () => {
     const warmup = await createWarmupWithOptionalGroup();
     const identifyCacheBefore = cacheStorage.caches.get(IDENTIFY_CACHE);
     const identifyMatchesBefore = identifyCacheBefore?.matchCallCount ?? 0;
+    const emulatorJsMatchesBefore = cacheStorage.caches.get(EMULATORJS_CACHE)?.matchCallCount ?? 0;
     await warmup.getReadyState();
     const emulatorJsCache = cacheStorage.caches.get(EMULATORJS_CACHE);
     const identifyCache = cacheStorage.caches.get(IDENTIFY_CACHE);
     expect(emulatorJsCache?.keysCallCount).toBe(1);
-    expect(emulatorJsCache?.matchCallCount).toBe(2);
+    // Completion marker, intent marker, and the stored manifest.
+    expect((emulatorJsCache?.matchCallCount ?? 0) - emulatorJsMatchesBefore).toBe(3);
     expect(identifyCache?.keysCallCount).toBe(1);
     // One marker read per group. The opt-in list is memoised by the ticking
     // above, so a snapshot does not re-read it.
@@ -501,15 +598,11 @@ describe("offline warm-up (service worker side)", () => {
       // drain
     }
     const fetcher = createFetcher();
-    const upgraded = createOfflineWarmup({
+    const upgraded = await buildWarmup(fetcher, {
       emulatorJsCacheName: "emulatorjs-5.0.0",
       emulatorJsVersion: "5.0.0",
-      fetchForWarmup: fetcher,
-      identifyOptionalCacheName: IDENTIFY_CACHE,
-      identifyOptionalGroups: await buildGroups(),
-      log: () => undefined,
-      scope: SCOPE,
     });
+    await upgraded.markEmulatorJsWanted();
     const state = await upgraded.getReadyState();
     expect(state.ready).toBe(false);
   });

@@ -124,10 +124,13 @@ type OfflineWarmupOptions = {
 };
 
 type OfflineWarmup = {
+  /** Reorders the queue. An EmulatorJS target also records the user's intent to keep the cores offline. */
   bumpPriority: (target: WarmupBumpTarget) => void;
   getCachedFiles: (onFileMeasured?: () => void) => Promise<OfflineCachedFile[]>;
   getIdentifyGroupState: () => Promise<IdentifyGroupState[]>;
   getReadyState: () => Promise<OfflineReadyState>;
+  /** Persist the intent to keep EmulatorJS offline; the background warm-up downloads it from then on. */
+  markEmulatorJsWanted: () => Promise<void>;
   installIdentifyGroup: (groupId: string) => Promise<{ id: string; installed: true; label: string; packs: number }>;
   /** onInterim streams progress; identifyGroupIds limits data-saver pumps to those queued groups. */
   runNextUnit: (onInterim?: (progress: WarmupProgress) => void, identifyGroupIds?: string[]) => Promise<WarmupProgress>;
@@ -141,6 +144,9 @@ type OfflineWarmup = {
 const EMULATORJS_BATCH_SIZE = 6;
 
 const EMULATORJS_COMPLETE_MARKER_PATH = "/__rom-weaver-emulatorjs-complete__";
+
+// Stored in the EmulatorJS cache, so removing the offline copy clears it with the cores.
+const EMULATORJS_WANTED_MARKER_PATH = "/__rom-weaver-emulatorjs-wanted__";
 
 const optionalGroupMarkerUrl = (scope: string, groupId: string) =>
   new URL(`/__rom-weaver-identify-group__/${groupId}`, scope).href;
@@ -239,6 +245,37 @@ const parseEmulatorJsManifest = (value: unknown): EmulatorJsManifest => {
   return { files, version: record.version };
 };
 
+/**
+ * Before an upgrade deletes an older EmulatorJS cache, copy the user's intent
+ * into the current one when the old cache holds the intent or completion
+ * marker, so the new version's cores keep downloading. No old marker, no intent.
+ */
+const carryEmulatorJsIntent = async ({
+  currentCacheName,
+  currentVersion,
+  scope,
+  staleCacheNames,
+}: {
+  currentCacheName: string;
+  currentVersion: string;
+  scope: string;
+  staleCacheNames: readonly string[];
+}) => {
+  const wantedUrl = new URL(EMULATORJS_WANTED_MARKER_PATH, scope).href;
+  const completeUrl = new URL(EMULATORJS_COMPLETE_MARKER_PATH, scope).href;
+  const current = await caches.open(currentCacheName);
+  if (await current.match(wantedUrl)) return false;
+  for (const name of staleCacheNames) {
+    if (name === currentCacheName) continue;
+    const old = await caches.open(name);
+    if ((await old.match(wantedUrl)) || (await old.match(completeUrl))) {
+      await current.put(wantedUrl, new Response(currentVersion, { headers: { "content-type": "text/plain" } }));
+      return true;
+    }
+  }
+  return false;
+};
+
 const createOfflineWarmup = ({
   emulatorJsCacheName,
   emulatorJsVersion,
@@ -254,6 +291,7 @@ const createOfflineWarmup = ({
 }: OfflineWarmupOptions): OfflineWarmup => {
   const emulatorJsManifestUrl = new URL("emulatorjs/manifest.json", scope).href;
   const emulatorJsMarkerUrl = new URL(EMULATORJS_COMPLETE_MARKER_PATH, scope).href;
+  const emulatorJsWantedUrl = new URL(EMULATORJS_WANTED_MARKER_PATH, scope).href;
   const emulatorJsAssetUrl = (path: string) =>
     new URL(`emulatorjs/data/${path.split("/").map(encodeURIComponent).join("/")}`, scope).href;
 
@@ -358,6 +396,8 @@ const createOfflineWarmup = ({
   const isEmulatorJsComplete = async (cache: Cache) =>
     (await (await cache.match(emulatorJsMarkerUrl))?.text()) === emulatorJsVersion;
 
+  const isEmulatorJsWanted = async (cache: Cache) => (await cache.match(emulatorJsWantedUrl)) !== undefined;
+
   /** Size and count of the emulatorjs manifest files already in the cache. */
   const cachedEmulatorJsState = (cachedUrls: ReadonlySet<string>, manifest: EmulatorJsManifest) => {
     let bytes = 0;
@@ -394,11 +434,13 @@ const createOfflineWarmup = ({
       caches.open(emulatorJsCacheName),
       caches.open(identifyOptionalCacheName),
     ]);
-    const [emulatorJsReady, installedGroups] = await Promise.all([
+    const [emulatorJsReady, emulatorJsWanted, installedGroups] = await Promise.all([
       isEmulatorJsComplete(emulatorJsCache),
+      isEmulatorJsWanted(emulatorJsCache),
       Promise.all(identifyOptionalGroups.map((group) => isGroupInstalled(identifyCache, group))),
     ]);
-    if (!emulatorJsReady) {
+    // EmulatorJS cores are large and cached on use; the background warm-up fetches them only after the user shows intent.
+    if (emulatorJsWanted && !emulatorJsReady) {
       const [manifest, cachedUrls] = await Promise.all([loadEmulatorJsManifest(), cachedRequestUrls(emulatorJsCache)]);
       for (const file of manifest.files) {
         if (!cachedUrls.has(emulatorJsAssetUrl(file.path))) {
@@ -438,10 +480,13 @@ const createOfflineWarmup = ({
       caches.open(emulatorJsCacheName),
       caches.open(identifyOptionalCacheName),
     ]);
-    const [emulatorJsReady, installedGroups] = await Promise.all([
+    const [emulatorJsReady, emulatorJsWanted, installedGroups] = await Promise.all([
       isEmulatorJsComplete(emulatorJsCache),
+      isEmulatorJsWanted(emulatorJsCache),
       Promise.all(identifyOptionalGroups.map((group) => isGroupInstalled(identifyCache, group))),
     ]);
+    // A set that is already complete keeps counting, so existing offline copies stay ready.
+    const emulatorJsCounted = emulatorJsWanted || emulatorJsReady;
     const [cachedEmulatorJsUrls, cachedIdentifyUrls] = await Promise.all([
       cachedRequestUrls(emulatorJsCache),
       cachedRequestUrls(identifyCache),
@@ -485,33 +530,36 @@ const createOfflineWarmup = ({
         });
       }
     }
-    try {
-      const manifest = await loadEmulatorJsManifest();
-      const manifestBytes = manifest.files.reduce((sum, file) => sum + file.sizeBytes, 0);
-      for (const file of manifest.files) {
-        const url = emulatorJsAssetUrl(file.path);
-        if (emulatorJsReady || cachedEmulatorJsUrls.has(url)) measureTransfer(emulatorJsCache, url, file.sizeBytes);
+    // Without intent EmulatorJS stays out of the totals, so it never blocks readiness or reads the manifest.
+    if (emulatorJsCounted) {
+      try {
+        const manifest = await loadEmulatorJsManifest();
+        const manifestBytes = manifest.files.reduce((sum, file) => sum + file.sizeBytes, 0);
+        for (const file of manifest.files) {
+          const url = emulatorJsAssetUrl(file.path);
+          if (emulatorJsReady || cachedEmulatorJsUrls.has(url)) measureTransfer(emulatorJsCache, url, file.sizeBytes);
+        }
+        totalBytes += manifestBytes;
+        totalFiles += manifest.files.length;
+        if (emulatorJsReady) {
+          cachedBytes += manifestBytes;
+          cachedFiles += manifest.files.length;
+        } else {
+          const cached = cachedEmulatorJsState(cachedEmulatorJsUrls || new Set(), manifest);
+          cachedBytes += cached.bytes;
+          cachedFiles += cached.files;
+          pendingUnits += manifest.files.length;
+          // A missing marker remains pending even when every file is cached. The next pump marks the set ready.
+        }
+      } catch (error) {
+        // Offline with no cached manifest: readiness cannot improve right now.
+        // Report not-ready without byte totals for the emulatorjs share.
+        transferBytesIncomplete = true;
+        if (!emulatorJsReady) pendingUnits += 1;
+        log("emulatorjs manifest unavailable for ready state", {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
-      totalBytes += manifestBytes;
-      totalFiles += manifest.files.length;
-      if (emulatorJsReady) {
-        cachedBytes += manifestBytes;
-        cachedFiles += manifest.files.length;
-      } else {
-        const cached = cachedEmulatorJsState(cachedEmulatorJsUrls || new Set(), manifest);
-        cachedBytes += cached.bytes;
-        cachedFiles += cached.files;
-        pendingUnits += manifest.files.length;
-        // A missing marker remains pending even when every file is cached. The next pump marks the set ready.
-      }
-    } catch (error) {
-      // Offline with no cached manifest: readiness cannot improve right now.
-      // Report not-ready without byte totals for the emulatorjs share.
-      transferBytesIncomplete = true;
-      if (!emulatorJsReady) pendingUnits += 1;
-      log("emulatorjs manifest unavailable for ready state", {
-        error: error instanceof Error ? error.message : String(error),
-      });
     }
     const wanted = await readWantedGroupIds(identifyCache, installedGroups);
     for (const [index, group] of identifyOptionalGroups.entries()) {
@@ -534,7 +582,7 @@ const createOfflineWarmup = ({
         pendingUnits += 1;
       }
     }
-    const ready = emulatorJsReady && pendingUnits === 0;
+    const ready = (emulatorJsReady || !emulatorJsCounted) && pendingUnits === 0;
     await Promise.all(transferMeasurements);
     return {
       cachedBytes,
@@ -699,7 +747,8 @@ const createOfflineWarmup = ({
     const generation = policy?.token();
     if (queue?.some((unit) => unit.kind === "emulatorjs-file")) return;
     const cache = await caches.open(emulatorJsCacheName);
-    if (await isEmulatorJsComplete(cache)) return;
+    // Without intent nothing here may fetch the manifest.
+    if (!(await isEmulatorJsWanted(cache)) || (await isEmulatorJsComplete(cache))) return;
     const manifest = await loadEmulatorJsManifest();
     const cachedUrls = await cachedRequestUrls(cache);
     for (const file of manifest.files) {
@@ -866,11 +915,48 @@ const createOfflineWarmup = ({
     });
   };
 
+  const markEmulatorJsWanted = async () => {
+    const mark = async () => {
+      if (policy && !(await policy.isEnabled())) return;
+      const generation = policy?.token();
+      const cache = await caches.open(emulatorJsCacheName);
+      if (await isEmulatorJsWanted(cache)) return;
+      const marker = new Response(emulatorJsVersion, { headers: { "content-type": "text/plain" } });
+      const stored = policy
+        ? await policy.write(() => cache.put(emulatorJsWantedUrl, marker), generation)
+        : (await cache.put(emulatorJsWantedUrl, marker), true);
+      if (!stored) return;
+      // The built queue omitted the cores; rebuild it so they join it.
+      queueGeneration += 1;
+      queue = null;
+      queuePromise = null;
+      log("emulatorjs offline warm-up wanted");
+    };
+    // Serialize with pumps so a rebuild never lands between a pump's queue read and its removals.
+    const run = pumpChain.then(mark, mark);
+    pumpChain = run.catch(() => undefined);
+    await run;
+  };
+
   const bumpPriority = (target: WarmupBumpTarget) => {
+    if (target.kind === "emulatorjs") {
+      markEmulatorJsWanted()
+        .then(() => reorderQueue(target))
+        .catch((error) => {
+          log("emulatorjs warm-up intent was not saved", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      return;
+    }
+    reorderQueue(target);
+  };
+
+  const reorderQueue = (target: WarmupBumpTarget) => {
     if (!queue) {
       // Build before reordering. The following pump awaits getQueue before it reads the queue.
       getQueue()
-        .then(() => bumpPriority(target))
+        .then(() => reorderQueue(target))
         .catch((error) => {
           log("warm-up bump dropped; queue build failed", {
             error: error instanceof Error ? error.message : String(error),
@@ -943,6 +1029,7 @@ const createOfflineWarmup = ({
     getIdentifyGroupState,
     getReadyState,
     installIdentifyGroup,
+    markEmulatorJsWanted,
     runNextUnit,
     reset,
     serveOptionalIdentifyPack,
@@ -950,5 +1037,5 @@ const createOfflineWarmup = ({
   };
 };
 
-export { createOfflineWarmup };
+export { carryEmulatorJsIntent, createOfflineWarmup };
 export type { OfflineCachedFile, OfflineReadyState, WarmupBumpTarget, WarmupProgress };

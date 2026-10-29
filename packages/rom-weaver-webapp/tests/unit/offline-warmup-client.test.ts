@@ -147,7 +147,8 @@ describe("offline warm-up client", () => {
     expect(policyMessages.map(({ enabled }) => enabled)).toEqual([false, true]);
     expect(downloadOfflineCopy()).toBe(true);
     await flush();
-    expect(messages).toEqual([{ action: "offline-warmup-pump" }]);
+    // The explicit download keeps including the EmulatorJS cores; automatic pumps do not send this flag.
+    expect(messages).toEqual([{ action: "offline-warmup-pump", includeEmulatorJs: true }]);
   });
 
   it("starts a manual download from disabled and resumes automatic download after removal without data saver", async () => {
