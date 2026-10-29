@@ -341,7 +341,9 @@ const markWebappMounted = () => {
   const firstMount = appRootElement.hasAttribute("aria-busy");
   if (firstMount && hadPrerenderedShell) {
     // Same synchronous step as releasing aria-busy, so the panel never
-    // leaves the settled state. Docs and what's-new keep their own entry.
+    // leaves the settled state. Docs has its own settled rule, and What's new
+    // prerenders only its heading (the changelog arrives after hydration), so
+    // both keep their own entry.
     appRootElement
       .querySelector<HTMLElement>(".panel.workflow:not([hidden]):not(#panel-docs, #panel-whats-new)")
       ?.setAttribute("data-shell-panel", "");

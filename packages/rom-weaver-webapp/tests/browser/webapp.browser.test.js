@@ -820,6 +820,28 @@ test("the mobile scroll reserve returns once the bench holds a card", async () =
   await page.viewport(1280, 900);
 });
 
+test("a settled landing panel keeps the mobile scroll reserve once the bench holds a card", async () => {
+  // Hydration marks the prerendered landing panel settled for good, so only its
+  // entry animation may stay off; the reserve must still return.
+  await page.viewport(390, 844);
+  try {
+    mountWebappRoot({ initialView: "creator" });
+    const emptyStep = await waitForState(() => document.querySelector("#panel-creator .step.is-input.is-empty"));
+    expect(emptyStep).not.toBeNull();
+    const workflowBody = document.querySelector("#panel-creator .workflow-body");
+    const root = document.querySelector("#webapp-root");
+    root.dataset.shellSettled = "true";
+    document.querySelector("#panel-creator").setAttribute("data-shell-panel", "");
+    root.removeAttribute("aria-busy");
+    expect(getComputedStyle(workflowBody).animationName).toBe("none");
+
+    emptyStep.classList.remove("is-empty");
+    expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("96px");
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
 test.each([
   ["patcher", "/apply-patches?guide=apply", "/docs/apply-rom-patches"],
   ["creator", "/create-rom-patch?guide=create", "/docs/create-rom-patches"],
