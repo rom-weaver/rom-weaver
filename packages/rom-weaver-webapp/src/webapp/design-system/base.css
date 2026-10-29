@@ -25,12 +25,14 @@
   animation: none !important;
 }
 /* Apply's prerendered empty bench must not inherit the mobile card scroll
-   reserve. The busy phase stays independent of :has() so older standalone
+   reserve. The busy rule is its own rule, without :has(), so older standalone
    WebKit builds still paint the footer in the opening viewport. Once settled
    (which never clears), only the empty bench keeps padding at 0, so hydration
    does not move the footer; a staged card gets the normal padding and the
    mobile reserve back, clear of the collapsing browser toolbar. */
-#webapp-root[aria-busy="true"] #panel-patcher .workflow-body,
+#webapp-root[aria-busy="true"] #panel-patcher .workflow-body {
+  padding-block-end: 0 !important;
+}
 #webapp-root[data-shell-settled="true"] #panel-patcher .workflow-body:has(.step.is-input.is-empty) {
   padding-block-end: 0 !important;
 }

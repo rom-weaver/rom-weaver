@@ -858,6 +858,14 @@ test("a settled Apply bench keeps no mobile scroll reserve until it holds a card
 
     emptyStep.classList.remove("is-empty");
     expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("96px");
+
+    // Desktop has no mobile reserve rule, so the empty bench's 0px comes from
+    // the settled fallback alone, and a staged bench gets the normal padding.
+    await page.viewport(1280, 900);
+    emptyStep.classList.add("is-empty");
+    expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("0px");
+    emptyStep.classList.remove("is-empty");
+    expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("28px");
   } finally {
     await page.viewport(1280, 900);
   }
