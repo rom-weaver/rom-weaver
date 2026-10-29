@@ -155,6 +155,122 @@ fn empty_compressed_streams() -> [(&'static str, Vec<u8>); 5] {
 }
 
 #[test]
+fn stream_qa_preserves_existing_outputs_on_failure() {
+    let temp = setup_temp_dir();
+    let mut failures = Vec::new();
+    for (format, bytes) in empty_compressed_streams() {
+        let source = temp.child(format!("empty.bin.{format}"));
+        let destination = temp.child(format!("preserved-{format}"));
+        fs::create_dir_all(destination.path()).unwrap();
+        let output = destination.child("empty.bin");
+        for input in [bytes, b"corrupt compressed input".to_vec()] {
+            fs::write(source.path(), &input).unwrap();
+            for sentinel in [b"".as_slice(), b"KEEP EXISTING CONTENT".as_slice()] {
+                fs::write(output.path(), sentinel).unwrap();
+                let result = empty_stream_binary(&temp)
+                    .arg("extract")
+                    .arg(source.path())
+                    .arg("-o")
+                    .arg(destination.path())
+                    .output()
+                    .unwrap();
+                if result.status.code() != Some(1)
+                    || fs::read(output.path()).ok().as_deref() != Some(sentinel)
+                {
+                    failures.push(format!(
+                        "{format}: input {} bytes, existing {} bytes: status {:?}, output {:?}",
+                        input.len(),
+                        sentinel.len(),
+                        result.status.code(),
+                        fs::read(output.path())
+                    ));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+#[test]
+fn stream_qa_force_extracts_to_new_and_existing_outputs() {
+    let temp = setup_temp_dir();
+    for (format, bytes) in empty_compressed_streams() {
+        let source = temp.child(format!("empty.bin.{format}"));
+        fs::write(source.path(), bytes).unwrap();
+        let destination = temp.child(format!("force-{format}"));
+        for existing in [false, true] {
+            if existing {
+                fs::write(
+                    destination.child("empty.bin").path(),
+                    b"KEEP EXISTING CONTENT",
+                )
+                .unwrap();
+            }
+            let result = empty_stream_binary(&temp)
+                .arg("extract")
+                .arg(source.path())
+                .arg("-o")
+                .arg(destination.path())
+                .arg("--force")
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{format}: {}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+            assert_eq!(
+                fs::read(destination.child("empty.bin").path()).unwrap(),
+                b"",
+                "{format}"
+            );
+        }
+    }
+}
+
+#[test]
+fn stream_qa_reports_requested_payload_checksums() {
+    let temp = setup_temp_dir();
+    let mut fixtures = empty_compressed_streams()
+        .into_iter()
+        .map(|(format, bytes)| {
+            (
+                format.to_string(),
+                bytes,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::default());
+    encoder.write_all(b"abc").unwrap();
+    fixtures.push((
+        "control.gz".to_string(),
+        encoder.finish().unwrap(),
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    ));
+    let mut failures = Vec::new();
+    for (format, bytes, expected) in fixtures {
+        let source = temp.child(format!("payload.bin.{format}"));
+        fs::write(source.path(), bytes).unwrap();
+        let result = empty_stream_binary(&temp)
+            .arg("extract")
+            .arg(source.path())
+            .arg("-o")
+            .arg(temp.child(format!("checksum-{format}")).path())
+            .args(["--checksum", "sha256", "--json"])
+            .output()
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+        if !result.status.success()
+            || json["details"]["emitted_files"][0]["checksums"]["sha256"] != expected
+        {
+            failures.push(format!("{format}: {json}"));
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+#[test]
 fn valid_empty_compressed_streams_extract_to_files_and_stdout() {
     let temp = setup_temp_dir();
     let mut failures = Vec::new();
