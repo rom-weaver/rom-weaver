@@ -121,3 +121,42 @@ fn validate_checksum_file_accepts_owner_read_only_input() {
         fs::remove_dir_all(dir).expect("cleanup");
     }
 }
+
+#[test]
+fn repair_checksum_file_keeps_snes_with_partial_gba_logo() {
+    let dir = scratch_dir("partial-gba-logo");
+    let path = dir.join("rom.sfc");
+    let mut expected = vec![0_u8; 32768];
+    expected[4..8].copy_from_slice(&GBA_HEADER_MAGIC);
+    expected[0xB2] = 0x96;
+    expected[0xBD] = 0x51;
+    expected[0x1BD] = 0x51;
+    expected[0x7FC0..0x7FD5].copy_from_slice(b"ROM WEAVER SNES TEST ");
+    expected[0x7FD5] = 0x20;
+    expected[0x7FD7] = 5;
+    expected[0x7FD9] = 1;
+    expected[0x7FFC..0x7FFE].copy_from_slice(&0x8000_u16.to_le_bytes());
+    fs::write(&path, &expected).expect("SNES fixture with an incidental GBA magic prefix");
+    // Snes9x: https://github.com/snes9xgit/snes9x/blob/master/memmap.cpp
+    // The final checksum MUST include the pair's 0x1FE byte contribution.
+    let checksum = expected
+        .iter()
+        .fold(0x1FE_u16, |s, b| s.wrapping_add(u16::from(*b)));
+    expected[0x7FDC..0x7FDE].copy_from_slice(&(!checksum).to_le_bytes());
+    expected[0x7FDE..0x7FE0].copy_from_slice(&checksum.to_le_bytes());
+
+    let outcome = CliApp::repair_checksum_file_in_place(&path, Some(&path)).expect("repair SNES");
+    assert!(
+        outcome.repaired_profiles.contains(&"snes"),
+        "a partial GBA logo must not suppress SNES checksum repair"
+    );
+    let actual = fs::read(&path).expect("repaired SNES");
+    assert_eq!(actual, expected);
+    assert_eq!(
+        actual
+            .iter()
+            .fold(0_u16, |s, b| s.wrapping_add(u16::from(*b))),
+        checksum
+    );
+    fs::remove_dir_all(dir).expect("cleanup");
+}

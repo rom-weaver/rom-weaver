@@ -935,13 +935,13 @@ impl StreamingVariantChecksums {
 }
 
 fn plan_gba_repair(header: &[u8], total_len: u64) -> Option<GbaRepair> {
-    if total_len < 0x1BE || header.len() < 0x1BE {
+    if total_len < 0xBE || header.len() < 0xBE {
         return None;
     }
     if header[0x04..0x08] != GBA_HEADER_MAGIC {
         return None;
     }
-    let old_checksum = header[0x1BD];
+    let old_checksum = header[0xBD];
     let mut checksum = 0i32;
     for value in &header[0xA0..=0xBC] {
         checksum -= i32::from(*value);
@@ -951,7 +951,7 @@ fn plan_gba_repair(header: &[u8], total_len: u64) -> Option<GbaRepair> {
         return None;
     }
     Some(GbaRepair {
-        offset: 0x1BD,
+        offset: 0xBD,
         corrected,
     })
 }
@@ -1158,6 +1158,10 @@ pub fn overlay_checksums<R: Read>(
     }
     checksum.finalize()
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/variants_gba.rs"]
+mod gba_tests;
 
 #[cfg(test)]
 mod tests {

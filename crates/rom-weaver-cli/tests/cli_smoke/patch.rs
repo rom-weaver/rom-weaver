@@ -1,6 +1,69 @@
 use super::shared::*;
 
 #[test]
+fn patch_apply_repair_checksum_game_boy_uses_final_header() {
+    let temp = setup_temp_dir();
+    let patch = temp.child("noop.ips");
+    fs::write(patch.path(), b"PATCHEOF").expect("no-op IPS");
+    for old_header in [0, 0xFF] {
+        let input = temp.child(format!("input-{old_header}.gb"));
+        let output = temp.child(format!("output-{old_header}.gb"));
+        let repeated = temp.child(format!("repeated-{old_header}.gb"));
+        let mut expected = build_test_game_boy_rom(32768);
+        expected[0x7FC0..0x7FD5].copy_from_slice(b"ROM WEAVER SNES TEST ");
+        expected[0x14D] = old_header;
+        expected[0x14E..0x150].copy_from_slice(&[0xAB, 0xCD]);
+        fs::write(input.path(), &expected).expect("Game Boy fixture");
+
+        // Pan Docs: https://gbdev.io/pandocs/The_Cartridge_Header.html
+        // The global checksum MUST include the repaired header checksum.
+        expected[0x14D] =
+            (0x134..=0x14C).fold(0_u8, |sum, i| sum.wrapping_sub(expected[i]).wrapping_sub(1));
+        let global = expected.iter().enumerate().fold(0_u16, |sum, (i, byte)| {
+            if (0x14E..0x150).contains(&i) {
+                sum
+            } else {
+                sum.wrapping_add(u16::from(*byte))
+            }
+        });
+        expected[0x14E..0x150].copy_from_slice(&global.to_be_bytes());
+
+        for (source, target) in [
+            (input.path(), output.path()),
+            (output.path(), repeated.path()),
+        ] {
+            let event = isolated_json_event(
+                &temp,
+                &[
+                    "patch",
+                    "apply",
+                    "--input",
+                    source.to_str().expect("input path"),
+                    "--patch",
+                    patch.path().to_str().expect("patch path"),
+                    "--output",
+                    target.to_str().expect("output path"),
+                    "--repair-checksum",
+                    "--patch-header",
+                    "keep",
+                    "--output-header",
+                    "keep",
+                    "--no-compress",
+                    "--jsonl",
+                ],
+                0,
+            );
+            assert_eq!(event["status"], "succeeded");
+            assert_eq!(
+                fs::read(target).expect("repaired ROM"),
+                expected,
+                "Game Boy repair must include the final header and be idempotent"
+            );
+        }
+    }
+}
+
+#[test]
 fn patch_create_rejects_input_output_aliases_with_force() {
     let temp = setup_temp_dir();
     let original = temp.child("original.bin");
@@ -4969,7 +5032,7 @@ fn patch_apply_repair_checksum_repairs_genesis_header() {
 fn patch_apply_repair_checksum_repairs_gba_header() {
     let temp = setup_temp_dir();
     let mut input = build_test_gba_rom(0x4000);
-    input[0x1BD] ^= 0x7F;
+    input[0xBD] ^= 0x7F;
     fs::write(temp.child("input.gba").path(), &input).expect("fixture");
     fs::write(
         temp.child("update.ips").path(),
@@ -5012,7 +5075,7 @@ fn patch_apply_repair_checksum_repairs_gba_header() {
     );
 
     let output_bytes = fs::read(temp.child("output.gba").path()).expect("output");
-    assert_eq!(output_bytes[0x1BD], gba_header_checksum(&output_bytes));
+    assert_eq!(output_bytes[0xBD], gba_header_checksum(&output_bytes));
 }
 
 #[test]
@@ -13735,4 +13798,235 @@ fn patch_validate_plan_flags_interactive_bsp_menu_as_unsupported_not_a_rom_misma
             .expect("message")
             .contains("interactive BSP menus are not supported")
     );
+}
+
+#[test]
+fn patch_apply_repair_checksum_gba_preserves_unrelated_bytes() {
+    let temp = setup_temp_dir();
+    let patch = temp.child("noop.ips");
+    fs::write(patch.path(), b"PATCHEOF").expect("no-op IPS");
+    for len in [0xBD, 0xBE, 0xBF, 0xC0, 0x1BD, 0x1BE, 32768] {
+        let input = temp.child(format!("input-{len}.gba"));
+        let output = temp.child(format!("output-{len}.gba"));
+        let mut expected = build_test_gba_rom(len);
+        expected.truncate(len);
+        if let Some(byte) = expected.get_mut(0x1BD) {
+            *byte = 0xA5;
+        }
+        if len > 0xBD {
+            expected[0xBD] = 0;
+        }
+        fs::write(input.path(), &expected).expect("GBA fixture");
+        // gbafix: https://github.com/devkitPro/gba-tools/blob/master/src/gbafix.c
+        // The complement MUST make 0xA0..=0xBD plus 0x19 sum to zero modulo 256.
+        if len > 0xBD {
+            let sum: u32 = expected[0xA0..0xBD].iter().map(|b| u32::from(*b)).sum();
+            expected[0xBD] = (0_u32.wrapping_sub(sum + 0x19) & 0xFF) as u8;
+        }
+        for pass in 0..2 {
+            let source = if pass == 0 {
+                input.path()
+            } else {
+                output.path()
+            };
+            let target = temp.child(format!("pass-{len}-{pass}.gba"));
+            let event = isolated_json_event(
+                &temp,
+                &[
+                    "patch",
+                    "apply",
+                    "--input",
+                    source.to_str().expect("input path"),
+                    "--patch",
+                    patch.path().to_str().expect("patch path"),
+                    "--output",
+                    target.path().to_str().expect("output path"),
+                    "--repair-checksum",
+                    "--patch-header",
+                    "keep",
+                    "--output-header",
+                    "keep",
+                    "--no-compress",
+                    "--jsonl",
+                ],
+                0,
+            );
+            assert_eq!(event["status"], "succeeded");
+            let actual = fs::read(target.path()).expect("repaired ROM");
+            assert_eq!(
+                actual, expected,
+                "GBA repair must only change 0xBD, length={len:#x}"
+            );
+            if len > 0xBD {
+                assert_eq!(
+                    actual[0xA0..=0xBD]
+                        .iter()
+                        .fold(0x19_u8, |s, b| s.wrapping_add(*b)),
+                    0
+                );
+            }
+            fs::copy(target.path(), output.path()).expect("repeat input");
+        }
+    }
+}
+
+#[test]
+fn patch_apply_repair_checksum_snes_includes_checksum_pair() {
+    let temp = setup_temp_dir();
+    let patch = temp.child("noop.ips");
+    fs::write(patch.path(), b"PATCHEOF").expect("no-op IPS");
+    for header in [0x7FC0, 0xFFC0] {
+        for (len, copier) in [(0x40000, 0), (0x40000, 512), (0x60000, 0), (0x60000, 512)] {
+            let input = temp.child(format!("input-{header}-{len}-{copier}.sfc"));
+            let output = temp.child(format!("output-{header}-{len}-{copier}.sfc"));
+            let mut expected = vec![0_u8; copier + len];
+            expected[..copier].fill(0x5A);
+            for (index, byte) in expected[copier..].iter_mut().enumerate() {
+                *byte = ((index * 17 + index / 0x8000) % 251) as u8;
+            }
+            for candidate in [0x7FC0, 0xFFC0] {
+                expected[copier + candidate..copier + candidate + 0x30].fill(0);
+            }
+            let offset = copier + header;
+            expected[offset..offset + 21].copy_from_slice(b"ROM WEAVER SNES TEST ");
+            expected[offset + 0x15] = if header == 0x7FC0 { 0x20 } else { 0x21 };
+            expected[offset + 0x17] = if len == 0x40000 { 8 } else { 9 };
+            expected[offset + 0x19] = 1;
+            expected[offset + 0x3C..offset + 0x3E].copy_from_slice(&0x8000_u16.to_le_bytes());
+            expected[offset + 0x1C..offset + 0x20].copy_from_slice(&[0x12, 0x34, 0x56, 0x78]);
+            fs::write(input.path(), &expected).expect("SNES fixture");
+            expected[offset + 0x1C..offset + 0x20].fill(0);
+            // Snes9x: https://github.com/snes9xgit/snes9x/blob/master/memmap.cpp
+            // The checksum MUST include the final pair and mirrored trailing bytes.
+            let mut mirrored = expected[copier..].to_vec();
+            if len == 0x60000 {
+                mirrored.extend_from_slice(&expected[copier + 0x40000..]);
+            }
+            let checksum = mirrored
+                .iter()
+                .fold(0x1FE_u16, |s, b| s.wrapping_add(u16::from(*b)));
+            expected[offset + 0x1C..offset + 0x1E].copy_from_slice(&(!checksum).to_le_bytes());
+            expected[offset + 0x1E..offset + 0x20].copy_from_slice(&checksum.to_le_bytes());
+            for pass in 0..2 {
+                let source = if pass == 0 {
+                    input.path()
+                } else {
+                    output.path()
+                };
+                let target = temp.child(format!("pass-{header}-{len}-{copier}-{pass}.sfc"));
+                let event = isolated_json_event(
+                    &temp,
+                    &[
+                        "patch",
+                        "apply",
+                        "--input",
+                        source.to_str().expect("input path"),
+                        "--patch",
+                        patch.path().to_str().expect("patch path"),
+                        "--output",
+                        target.path().to_str().expect("output path"),
+                        "--repair-checksum",
+                        "--patch-header",
+                        "keep",
+                        "--output-header",
+                        "keep",
+                        "--no-compress",
+                        "--jsonl",
+                    ],
+                    0,
+                );
+                assert_eq!(event["status"], "succeeded");
+                let actual = fs::read(target.path()).expect("repaired SNES ROM");
+                assert_eq!(
+                    actual, expected,
+                    "SNES repair must include the checksum pair contribution"
+                );
+                let mut mirrored = actual[copier..].to_vec();
+                if len == 0x60000 {
+                    mirrored.extend_from_slice(&actual[copier + 0x40000..]);
+                }
+                assert_eq!(
+                    mirrored
+                        .iter()
+                        .fold(0_u16, |s, b| s.wrapping_add(u16::from(*b))),
+                    checksum
+                );
+                fs::copy(target.path(), output.path()).expect("repeat input");
+            }
+        }
+    }
+}
+
+#[test]
+fn patch_apply_xiso_system_area_is_not_a_copier_header() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.xiso");
+    write_xiso_fixture_from_directory(temp.child("tree").path(), original.path());
+    let mut expected = fs::read(original.path()).expect("XISO fixture");
+    assert_eq!(&expected[0x10000..0x10014], b"MICROSOFT*XBOX*MEDIA");
+    assert_eq!(&expected[0x107EC..0x10800], b"MICROSOFT*XBOX*MEDIA");
+    let patch = temp.child("change.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 16,
+                data: vec![0x42],
+            }],
+            None,
+        ),
+    )
+    .expect("IPS fixture");
+    expected[16] = 0x42;
+    for extension in ["xiso", "iso", "bin", "sfc"] {
+        let input = temp.child(format!("disc.{extension}"));
+        fs::copy(original.path(), input.path()).expect("named input");
+        for keep in [false, true] {
+            let output = temp.child(format!("patched-{extension}-{keep}.bin"));
+            let mut args = vec![
+                "patch",
+                "apply",
+                "--input",
+                input.path().to_str().expect("input path"),
+                "--patch",
+                patch.path().to_str().expect("patch path"),
+                "--output",
+                output.path().to_str().expect("output path"),
+                "--no-compress",
+                "--jsonl",
+            ];
+            if keep {
+                args.extend(["--patch-header", "keep", "--output-header", "keep"]);
+            }
+            let event = isolated_json_event(&temp, &args, 0);
+            assert_eq!(event["status"], "succeeded");
+            let actual = fs::read(output.path()).expect("patched XISO");
+            assert_eq!(
+                actual.len(),
+                expected.len(),
+                "XISO system area must not be stripped"
+            );
+            assert_eq!(
+                actual, expected,
+                "XISO patch must preserve all unrelated bytes"
+            );
+            let reader = std::io::BufReader::new(File::open(output.path()).expect("patched XISO"));
+            let mut image = XdvdfsOffsetWrapper::new(reader).expect("XDVDFS partition");
+            let volume = rom_weaver_containers::xdvdfs::read::read_volume(&mut image)
+                .expect("XDVDFS descriptor remains readable");
+            assert!(
+                !volume
+                    .root_table
+                    .walk_dirent_tree(&mut image)
+                    .expect("root entries")
+                    .is_empty()
+            );
+            assert!(
+                !event["label"]
+                    .as_str()
+                    .expect("label")
+                    .contains("input header stripped")
+            );
+        }
+    }
 }

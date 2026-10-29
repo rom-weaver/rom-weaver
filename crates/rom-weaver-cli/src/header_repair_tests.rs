@@ -75,8 +75,8 @@ fn build_test_gba_rom(payload_len: usize) -> Vec<u8> {
     for (index, value) in bytes[0xA0..=0xBC].iter_mut().enumerate() {
         *value = (index as u8).wrapping_mul(3).wrapping_add(7);
     }
-    bytes[0x1BD] = gba_header_checksum(&bytes);
-    for (index, value) in bytes[0x1BE..].iter_mut().enumerate() {
+    bytes[0xBD] = gba_header_checksum(&bytes);
+    for (index, value) in bytes[0xC0..].iter_mut().enumerate() {
         *value = (index as u8).wrapping_mul(5).wrapping_add(0x31);
     }
     bytes
@@ -217,12 +217,12 @@ fn repair_checksum_file_repairs_gba_and_genesis_headers() {
     let scratch = ScratchDir::new("single");
 
     let mut gba = build_test_gba_rom(0x5000);
-    gba[0x1BD] ^= 0x7F;
+    gba[0xBD] ^= 0x7F;
     let (gba_path, gba_repaired, gba_matched) = repair_fixture(scratch.path(), "game.gba", &gba);
     assert_eq!(gba_repaired, vec!["gba".to_string()]);
     assert!(gba_matched.is_empty());
     let gba_fixed = fs::read(&gba_path).expect("read gba output");
-    assert_eq!(gba_fixed[0x1BD], gba_header_checksum(&gba_fixed));
+    assert_eq!(gba_fixed[0xBD], gba_header_checksum(&gba_fixed));
 
     let mut genesis = vec![0_u8; 0x300];
     genesis[0x100..0x104].copy_from_slice(b"SEGA");
@@ -281,7 +281,7 @@ fn repair_checksum_file_covers_19_profile_matrix() {
     record("gameboy.gb", &game_boy);
 
     let mut gba = build_test_gba_rom(0x5000);
-    gba[0x1BD] ^= 0x55;
+    gba[0xBD] ^= 0x55;
     record("gba.gba", &gba);
 
     let mut genesis = vec![0_u8; 0x300];
@@ -438,15 +438,14 @@ fn build_test_snes_rom() -> Vec<u8> {
     bytes
 }
 
-/// Independent reimplementation of the SNES checksum: sum every byte in the
-/// ROM, treating the checksum and complement fields as zero, masked to 16
-/// bits. `checksum` is the complement of `sum & 0xFFFF`.
+/// The checksum/complement pair MUST contribute 0x1FE to the final byte sum.
+/// Reference: https://github.com/snes9xgit/snes9x/blob/master/memmap.cpp
 fn snes_reference_checksum(
     bytes: &[u8],
     checksum_offset: usize,
     complement_offset: usize,
 ) -> (u16, u16) {
-    let mut sum = 0_u32;
+    let mut sum = 0x1FE_u32;
     for (index, value) in bytes.iter().enumerate() {
         let in_checksum = index >= checksum_offset && index < checksum_offset + 2;
         let in_complement = index >= complement_offset && index < complement_offset + 2;
@@ -546,19 +545,19 @@ fn repair_checksum_file_is_idempotent_for_valid_nes_header() {
 fn repair_checksum_file_gba_repair_leaves_other_bytes_untouched() {
     let scratch = ScratchDir::new("gba-repair-bytes");
     let mut gba = build_test_gba_rom(0x4000);
-    gba[0x1BD] ^= 0x7F;
+    gba[0xBD] ^= 0x7F;
     let original = gba.clone();
 
     let (path, repaired, _) = repair_fixture(scratch.path(), "corrupt.gba", &gba);
     assert!(repaired.contains(&"gba".to_string()));
 
     let fixed = fs::read(&path).expect("read gba output");
-    assert_eq!(fixed[0x1BD], gba_header_checksum(&fixed));
+    assert_eq!(fixed[0xBD], gba_header_checksum(&fixed));
 
     let diff: BTreeSet<usize> = (0..original.len())
         .filter(|&index| original[index] != fixed[index])
         .collect();
-    let expected_range: BTreeSet<usize> = [0x1BD].into_iter().collect();
+    let expected_range: BTreeSet<usize> = [0xBD].into_iter().collect();
     assert_eq!(diff, expected_range);
 }
 

@@ -1375,9 +1375,9 @@ fn checksum_broken_header_checksums_include_fix_header_variant() {
     let temp = setup_temp_dir();
 
     let mut broken_gba = build_test_gba_rom(0x4000);
-    broken_gba[0x1BD] ^= 0x7F;
+    broken_gba[0xBD] ^= 0x7F;
     let mut repaired_gba = broken_gba.clone();
-    repaired_gba[0x1BD] = gba_header_checksum(&repaired_gba);
+    repaired_gba[0xBD] = gba_header_checksum(&repaired_gba);
     fs::write(temp.child("broken.gba").path(), &broken_gba).expect("gba fixture");
     fs::write(temp.child("repaired.gba").path(), &repaired_gba).expect("gba repaired fixture");
 
@@ -1457,7 +1457,7 @@ fn extract_checksum_variants_match_checksum_command() {
     .expect("nes fixture");
 
     let mut broken_gba = build_test_gba_rom(0x4000);
-    broken_gba[0x1BD] ^= 0x7F;
+    broken_gba[0xBD] ^= 0x7F;
     fs::write(temp.child("broken.gba").path(), &broken_gba).expect("gba fixture");
 
     let mut broken_genesis = vec![0_u8; 0x260];

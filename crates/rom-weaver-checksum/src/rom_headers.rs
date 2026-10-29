@@ -7,7 +7,8 @@
 //! types lives in `rom-weaver-cli`'s `header_detection_and_finalize`.
 
 pub const ROM_HEADER_BYTES: usize = 512;
-pub const ROM_HEADER_SCAN_BYTES: usize = 0x8000;
+pub const ROM_HEADER_SCAN_BYTES: usize = 0x10800;
+const XISO_VOLUME_MAGIC: &[u8; 20] = b"MICROSOFT*XBOX*MEDIA";
 pub const A78_HEADER_MAGIC: [u8; 9] = *b"ATARI7800";
 pub const LNX_HEADER_MAGIC: [u8; 4] = *b"LYNX";
 pub const INES_HEADER_MAGIC: [u8; 4] = *b"NES\x1A";
@@ -313,6 +314,9 @@ pub fn detect_known_rom_header_from_prefix(
     prefix: &[u8],
     extension: Option<&str>,
 ) -> Option<KnownRomHeaderMatch> {
+    if has_xiso_volume_descriptor(prefix) {
+        return None;
+    }
     for header in known_header_candidates(extension) {
         if header.signature_matches(prefix) {
             return Some(KnownRomHeaderMatch {
@@ -331,6 +335,9 @@ pub fn detect_strippable_rom_header_from_prefix(
     total_len: u64,
     extension: Option<&str>,
 ) -> Option<KnownRomHeaderMatch> {
+    if has_xiso_volume_descriptor(prefix) {
+        return None;
+    }
     let mut matched = detect_known_rom_header_from_prefix(prefix, extension);
     if matched
         .and_then(KnownRomHeaderMatch::stripped_bytes)
@@ -339,6 +346,13 @@ pub fn detect_strippable_rom_header_from_prefix(
         matched = detect_size_based_copier_header(prefix, extension, total_len);
     }
     matched
+}
+
+// XDVDFS sector 32 MUST retain its preceding system area.
+// https://github.com/antangelo/xdvdfs/blob/main/xdvdfs-core/src/layout/volume.rs
+fn has_xiso_volume_descriptor(prefix: &[u8]) -> bool {
+    prefix.get(0x10000..0x10014) == Some(XISO_VOLUME_MAGIC.as_slice())
+        && prefix.get(0x107EC..0x10800) == Some(XISO_VOLUME_MAGIC.as_slice())
 }
 
 fn detect_size_based_copier_header(
@@ -401,6 +415,10 @@ pub struct StripHeaderResult {
     pub header_bytes: Vec<u8>,
     pub matched_header: Option<KnownRomHeaderMatch>,
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/rom_headers_xiso.rs"]
+mod xiso_tests;
 
 #[cfg(test)]
 mod tests {
