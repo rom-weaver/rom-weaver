@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
-import { createDocsRouteHtml } from "../../src/webapp/docs-pages.mjs";
+import { createDocsRouteHtml, DOC_ROUTES } from "../../src/webapp/docs-pages.mjs";
+import { createDocsSeoMetadata } from "../../src/webapp/docs-routing.mjs";
 
 const SHELL = [
   "<!doctype html>",
@@ -113,5 +114,13 @@ describe("documentation sample links", () => {
     expect(html).toContain('href="/first-weave.zip"');
     expect(html).toContain('href="/compress"');
     expect(html).not.toContain("https://rom-weaver.com");
+  });
+});
+
+describe("published doc titles", () => {
+  // SEO audits flag titles over 70 characters as likely to be truncated.
+  it("keeps every production page title under 70 characters", () => {
+    const tooLong = DOC_ROUTES.map((doc) => createDocsSeoMetadata(doc).title).filter((title) => title.length >= 70);
+    expect(tooLong).toEqual([]);
   });
 });
