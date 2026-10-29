@@ -113,7 +113,7 @@ If the test fails, stop only the preview PID written to `preview.pid` after insp
 
 The cube's saturated pixels and the PS1 demo's brown framebuffer distinguish the programs from a black canvas or RetroArch's gray menu. The PS1 controller-byte region must change while Up is held; on PSP, Start must switch the cube to the purple-background raycast scene. Every case must render successive changing frames. These oracles apply to the pinned homebrew programs, rather than games in general.
 
-The pinned EmulatorJS 4.2.3 PCSX-ReARMed threaded asset (`017cd5727be628983e26fab99c9a7f859cf7d180d7a74798a43f76cd601f2266`) cannot read stored PBP blocks directly. The application extracts these cases into a CUE/BIN playlist bundle; the test checks every BIN's complete bytes and its CUE data/audio tracks inside the native core's file system.
+The application prepares every PS1 PBP as a complete CUE/BIN playlist bundle through the shared Rust reader. This preserves compressed and stored inputs across layouts the pinned native PBP reader cannot parse. The test checks every PS1 BIN's complete bytes inside the native core's file system; stored audio fixtures also require the CUE audio track and index markers. Preparing these bundles needs temporary storage for expanded discs and memory for the emulator's unpacked files.
 
 The PSP cube must fail the purple-scene threshold before Start. After Start, purple pixels must exceed 150,000 and ten times their initial count.
 

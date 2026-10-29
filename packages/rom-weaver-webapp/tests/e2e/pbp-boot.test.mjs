@@ -115,26 +115,27 @@ test("legal PBP programs render through the application and native disk control"
           assert(frame);
           await frame.waitForFunction(() => window.EJS_emulator?.started, null, { timeout: 60000 });
           assert.equal(await frame.evaluate(() => window.EJS_core), core);
-          const contents = stored
-            ? await frame.evaluate(async () => {
-                const fs = window.EJS_emulator.gameManager.FS;
-                const entries = [];
-                for (const name of fs.readdir("/").filter((name) => /\.(bin|cue|m3u)$/i.test(name))) {
-                  const bytes = fs.readFile(`/${name}`);
-                  entries.push({
-                    name,
-                    size: bytes.length,
-                    sha256: Array.from(
-                      new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(bytes).buffer)),
-                      (byte) => byte.toString(16).padStart(2, "0"),
-                    ).join(""),
-                    text: /\.(cue|m3u)$/i.test(name) ? new TextDecoder().decode(bytes) : undefined,
-                  });
-                }
-                return { selected: window.EJS_emulator.fileName, entries };
-              })
-            : undefined;
-          if (stored) {
+          const contents =
+            core === "psx"
+              ? await frame.evaluate(async () => {
+                  const fs = window.EJS_emulator.gameManager.FS;
+                  const entries = [];
+                  for (const name of fs.readdir("/").filter((name) => /\.(bin|cue|m3u)$/i.test(name))) {
+                    const bytes = fs.readFile(`/${name}`);
+                    entries.push({
+                      name,
+                      size: bytes.length,
+                      sha256: Array.from(
+                        new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(bytes).buffer)),
+                        (byte) => byte.toString(16).padStart(2, "0"),
+                      ).join(""),
+                      text: /\.(cue|m3u)$/i.test(name) ? new TextDecoder().decode(bytes) : undefined,
+                    });
+                  }
+                  return { selected: window.EJS_emulator.fileName, entries };
+                })
+              : undefined;
+          if (core === "psx") {
             const bins = contents.entries.filter((entry) => /\.bin$/i.test(entry.name));
             const cues = contents.entries.filter((entry) => /\.cue$/i.test(entry.name));
             assert.equal(bins.length, disks);
@@ -145,7 +146,7 @@ test("legal PBP programs render through the application and native disk control"
             }
             for (const cue of cues) {
               assert.match(cue.text, /TRACK 01 MODE2\/2352/);
-              assert.match(cue.text, /TRACK 02 AUDIO\s+INDEX 00 00:12:10\s+INDEX 01 00:14:10/);
+              if (stored) assert.match(cue.text, /TRACK 02 AUDIO\s+INDEX 00 00:12:10\s+INDEX 01 00:14:10/);
             }
             assert.match(contents.selected, /\.m3u$/i);
           }
