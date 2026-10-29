@@ -1,6 +1,9 @@
-use std::sync::{
-    Arc, Mutex, OnceLock, RwLock,
-    atomic::{AtomicBool, Ordering},
+use std::{
+    sync::{
+        Arc, Mutex, OnceLock, RwLock,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, Instant},
 };
 
 use crate::{Result, RomWeaverError};
@@ -94,6 +97,9 @@ pub fn remove_in_progress_outputs() {
     }
 }
 
+/// Longest a forced exit waits for in-flight output creation before cleaning up anyway.
+const FORCED_CLEANUP_LOCK_WAIT: Duration = Duration::from_secs(1);
+
 #[derive(Default)]
 struct LiveTempDirs {
     creation: RwLock<()>,
@@ -134,11 +140,25 @@ impl LiveTempDirs {
             .retain(|registered| registered != path);
     }
 
+    fn write_bounded(&self, wait: Duration) -> Option<std::sync::RwLockWriteGuard<'_, ()>> {
+        let deadline = Instant::now() + wait;
+        loop {
+            match self.creation.try_write() {
+                Ok(guard) => return Some(guard),
+                Err(std::sync::TryLockError::Poisoned(error)) => return Some(error.into_inner()),
+                Err(std::sync::TryLockError::WouldBlock) => {}
+            }
+            if Instant::now() >= deadline {
+                return None;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
     fn remove(&self) {
-        let _creation = self
-            .creation
-            .write()
-            .unwrap_or_else(|error| error.into_inner());
+        // Bounded wait: a creator blocked in the kernel (e.g. opening a FIFO with no reader) holds the read lock
+        // indefinitely, and a forced exit must still make progress. On timeout, close and clean up best effort.
+        let _creation = self.write_bounded(FORCED_CLEANUP_LOCK_WAIT);
         self.closed.store(true, Ordering::SeqCst);
         let mut paths = self.paths.lock().unwrap_or_else(|error| error.into_inner());
         tracing::debug!(

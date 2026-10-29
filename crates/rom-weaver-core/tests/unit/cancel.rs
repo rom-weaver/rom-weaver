@@ -115,6 +115,24 @@ fn or_cancelled_reports_failures_after_a_cancel_as_cancelled() {
 // quality-reason: Native threads and subprocesses exercise the terminal cleanup gate that WASM bypasses.
 #[cfg(not(target_arch = "wasm32"))]
 mod live_temp_lifecycle {
+    #[test]
+    fn remove_proceeds_when_a_creator_never_releases_the_gate() {
+        let registry = LiveTempDirs::default();
+        let temp = TempDir::new("blocked-creator");
+        let path = temp.path().join("registered");
+        fs::create_dir(&path).expect("create registered dir");
+        registry.register(&path);
+        let _held = registry.creation.read().expect("hold creation gate");
+        let started = Instant::now();
+        registry.remove();
+        assert!(started.elapsed() < Duration::from_secs(10));
+        assert!(!path.exists(), "registered path removed despite held gate");
+        assert!(matches!(
+            registry.with_creation(&CancellationToken::new(), || Ok(())),
+            Err(RomWeaverError::Cancelled)
+        ));
+    }
+
     use std::{
         process::{Command, Stdio},
         sync::{Arc, mpsc},

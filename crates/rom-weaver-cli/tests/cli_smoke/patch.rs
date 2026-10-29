@@ -12115,6 +12115,77 @@ mod termination_signals {
         );
     }
 
+    /// An output FIFO with no reader blocks the main thread inside output creation; the second
+    /// signal must still exit 130 instead of hanging behind the creation gate.
+    #[test]
+    fn second_sigterm_while_blocked_opening_a_fifo_output_exits_130() {
+        let temp = setup_temp_dir();
+        let original = temp.path().join("original.bin");
+        let modified = temp.path().join("modified.bin");
+        let patch = temp.path().join("update.xdelta");
+        fs::write(&original, pseudo_random_bytes(64 * 1024, 3)).expect("original");
+        let mut changed = pseudo_random_bytes(64 * 1024, 3);
+        changed[100] ^= 0xff;
+        fs::write(&modified, changed).expect("modified");
+        let bin = assert_cmd::cargo::cargo_bin("rom-weaver");
+        let status = std::process::Command::new(&bin)
+            .current_dir(temp.path())
+            .env("PWD", temp.path())
+            .args(["patch", "create", "--original"])
+            .arg(&original)
+            .arg("--modified")
+            .arg(&modified)
+            .args(["--format", "xdelta", "--output"])
+            .arg(&patch)
+            .output()
+            .expect("create")
+            .status;
+        assert!(status.success());
+        let fifo = temp.path().join("out.bin");
+        let c_path = std::ffi::CString::new(fifo.to_str().expect("utf8 path")).expect("c path");
+        // SAFETY: c_path is a valid NUL-terminated string.
+        assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+        let mut command = std::process::Command::new(&bin);
+        command
+            .current_dir(temp.path())
+            .env("PWD", temp.path())
+            .args(["patch", "apply", "--input"])
+            .arg(&original)
+            .arg("--patch")
+            .arg(&patch)
+            .arg("--output")
+            .arg(&fifo)
+            .arg("--force")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        // SAFETY: only async-signal-safe signal() runs between fork and exec.
+        unsafe {
+            command.pre_exec(|| {
+                libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+        let mut child = command.spawn().expect("spawn apply");
+        // Let the run reach the blocking open of the reader-less FIFO.
+        std::thread::sleep(Duration::from_millis(1500));
+        unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+        std::thread::sleep(Duration::from_millis(100));
+        unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let status = loop {
+            if let Some(status) = child.try_wait().expect("try_wait") {
+                break status;
+            }
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("process did not exit after two SIGTERMs");
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        assert_eq!(status.code(), Some(130), "{status:?}");
+    }
+
     /// A stdin compress stages the piped bytes under `$TMPDIR/rom-weaver-stream-*`; the forced exit
     /// must remove that too.
     #[test]
