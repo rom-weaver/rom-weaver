@@ -22,6 +22,12 @@ pub fn run_weave_tui(apply: &PatchApplyCommand) -> Result<WeaveCreateCommand, St
                 .to_string(),
         );
     }
+    if !apply.codes.is_empty()
+        || !apply.cheat_selection.cheats.is_empty()
+        || !apply.cheat_records.is_empty()
+    {
+        return Err("--tui cannot record cheat settings; rerun without --tui".to_string());
+    }
 
     crate::render::write_stderr(format_args!(
         "Authoring rom-weaver-weave.json for {} patch(es) applied to {}\n",
@@ -95,6 +101,7 @@ pub fn run_weave_tui(apply: &PatchApplyCommand) -> Result<WeaveCreateCommand, St
         rom: Some(apply.input.clone()),
         output: PathBuf::from(DEFAULT_WEAVE_NAME),
         output_name: non_empty(output_name),
+        output_header: apply.output_header,
         threads: apply.threads,
         patch_specs,
         ..WeaveCreateCommand::default()
