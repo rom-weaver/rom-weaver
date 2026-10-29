@@ -125,6 +125,33 @@ afterEach(() => {
 });
 
 describe("EmulatorTestView", () => {
+  it("keeps expanded PBP bundle size for disc retention while reporting the archive size", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    const bundle = new Blob(["zip"]);
+    const expandedSizeBytes = 128 * 1024 * 1024 + 1;
+    loadRomMock.mockResolvedValueOnce({
+      blob: bundle,
+      checksum: "b".repeat(40),
+      fileName: "Game.zip",
+      platform: "Sony PlayStation",
+      expandedSizeBytes,
+    });
+    render(withSettings(<EmulatorTestView />));
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
+      target: { files: [new File(["PBP"], "Game.pbp")] },
+    });
+    await waitFor(() =>
+      expect(getEmulatorSessionState().entries[0]).toMatchObject({
+        fileName: "Game.zip",
+        sizeBytes: bundle.size,
+        expandedSizeBytes,
+      }),
+    );
+    act(() => releaseLargeEntries());
+    expect(getEmulatorSessionState().entries).toEqual([]);
+  });
+
   it("opens a matching uploaded ROM with the saved upload", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);

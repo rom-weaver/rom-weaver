@@ -448,6 +448,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
           id: createLocalEntryId(loaded.fileName),
           platform: loaded.platform,
           sizeBytes: loaded.blob.size,
+          ...(loaded.expandedSizeBytes === undefined ? {} : { expandedSizeBytes: loaded.expandedSizeBytes }),
           source: "local" as const,
         };
         const cancelled = () => abortController.signal.aborted || loadAbortControllerRef.current !== abortController;

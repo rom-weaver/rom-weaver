@@ -33,6 +33,7 @@ import type { PublicOutput, CompressionProbeInput } from "../../types/workflow-r
 import { getDefaultBrowserThreadCount } from "../shared/compression-options.ts";
 import { createPublicSourcesValidator, createPublicSourceValidator } from "../shared/public-source-validation.ts";
 import { configureBrowserAssetBaseUrl } from "./browser-asset-base.ts";
+import { preparePbpEmulatorBundle } from "./emulator-pbp-bundle.ts";
 import { scheduleBrowserRuntimeWarmupExtraction } from "./browser-runtime-warmup.ts";
 // The public browser API is itself lazy-loaded by workflow routes. Keep the
 // heavy workflow runtime behind that boundary so importing the API types and
@@ -106,6 +107,8 @@ type BrowserIngestRomOptions = {
   identify?: boolean;
   identifyAllRomEntries?: boolean;
   identifyBounded?: boolean;
+  interactiveSelectionEnabled?: boolean;
+  preserveNestedFormats?: string[];
   onProgress?: Parameters<NonNullable<NonNullable<typeof browserRuntime.ingest>["run"]>>[0]["onProgress"];
   signal?: AbortSignal;
 };
@@ -121,10 +124,22 @@ const ingestRom = async (source: Blob, fileName: string, options: BrowserIngestR
     identify: options.identify,
     identifyAllRomEntries: options.identifyAllRomEntries,
     identifyBounded: options.identifyBounded,
+    interactiveSelectionEnabled: options.interactiveSelectionEnabled,
+    preserveNestedFormats: options.preserveNestedFormats,
     onProgress: options.onProgress,
     signal: options.signal,
     source,
   });
+};
+
+const prepareEmulatorPbp = async (
+  source: Blob,
+  fileName: string,
+  discCount: number,
+  options: Pick<BrowserIngestRomOptions, "onProgress" | "signal"> = {},
+) => {
+  if (!browserRuntime.workerIo) throw new Error("The rom-weaver file runtime is unavailable.");
+  return preparePbpEmulatorBundle(browserRuntime.workerIo, source, fileName, discCount, options);
 };
 
 type BrowserProbeRomOptions = Partial<Pick<NonNullable<CompressionProbeInput["options"]>, "onProgress" | "signal">>;
@@ -631,6 +646,7 @@ export {
   identifyRom,
   ingestRom,
   preloadBrowserRuntime,
+  prepareEmulatorPbp,
   probeRom,
   runBrowserCheats,
   TrimWorkflow,

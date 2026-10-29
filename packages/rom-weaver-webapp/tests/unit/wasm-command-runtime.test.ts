@@ -239,6 +239,29 @@ describe("runRomWeaverProbeWorker", () => {
     });
   });
 
+  it.each([true, false])("reports validated PBP disc metadata with end offsets %s", async (hasIndexEndOffsets) => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({ pbp: { disc_count: 2, stored_block_count: 3, has_index_end_offsets: hasIndexEndOffsets } }),
+    );
+    await expect(runRomWeaverProbeWorker({ sourcePath: "/game.pbp" })).resolves.toMatchObject({
+      pbp: { discCount: 2, storedBlockCount: 3, hasIndexEndOffsets },
+    });
+  });
+
+  it.each([
+    {},
+    { disc_count: 0, stored_block_count: 0 },
+    { disc_count: 6, stored_block_count: 0 },
+    { disc_count: 2, stored_block_count: -1 },
+    { disc_count: 2, stored_block_count: 1.5 },
+    { disc_count: "2", stored_block_count: 0 },
+    { disc_count: 2, stored_block_count: 0 },
+    { disc_count: 2, stored_block_count: 0, has_index_end_offsets: "true" },
+  ])("omits invalid PBP metadata %j", async (pbp) => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult({ pbp }));
+    await expect(runRomWeaverProbeWorker({ sourcePath: "/game.pbp" })).resolves.not.toHaveProperty("pbp");
+  });
+
   it("omits the chd field for a container without header digests", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(succeededResult({ container: { entry_records: ["game.sfc"] } }));
 
@@ -305,6 +328,7 @@ describe("invokeRomWeaverIngestWorker", () => {
         interactiveSelectionEnabled: false,
         noIgnore: true,
         noNestedExtract: true,
+        preserveNestedFormats: ["pbp"],
         outDirPath: " /out ",
         select: [" game.sfc ", ""],
         sourcePath: " game.zip ",
@@ -324,6 +348,7 @@ describe("invokeRomWeaverIngestWorker", () => {
         input: "game.zip",
         no_ignore: true,
         no_nested_extract: true,
+        preserve_nested_formats: ["pbp"],
         output: "/out",
         select: ["game.sfc"],
         split_bin: false,

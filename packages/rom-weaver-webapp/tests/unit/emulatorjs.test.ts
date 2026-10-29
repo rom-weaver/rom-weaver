@@ -182,6 +182,41 @@ describe("createEmulatorDocument", () => {
   });
 
   it.each([
+    ["copies legacy BIN settings without bare settings", "psx", "legacy", null, null, "legacy"],
+    ["prefers legacy BIN settings", "psx", "legacy", "bare", null, "legacy"],
+    ["falls back to bare settings", "psx", null, "bare", null, "bare"],
+    ["keeps existing ZIP settings", "psx", "legacy", "bare", "current", "current"],
+    ["does not copy BIN settings for another core", "segaSaturn", "legacy", null, null, undefined],
+    ["retains bare migration for another core", "segaSaturn", "legacy", "bare", null, "bare"],
+  ] as const)("%s", (_label, core, legacy, bare, current, expected) => {
+    const checksum = "c".repeat(40);
+    const identity = createEmulatorGameIdentity({ checksum, fileName: "Game.zip" });
+    const document = createEmulatorDocument("/data/", "blob:game", identity.gameName, core, {
+      gameId: identity.gameId,
+      saveId: identity.saveId,
+    });
+    const prefix = `ejs-${identity.gameId}-${core}-${checksum}`;
+    const store = new Map<string, string>();
+    if (bare !== null) store.set(`${prefix}-settings`, bare);
+    if (legacy !== null) store.set(`${prefix}.bin-settings`, legacy);
+    if (current !== null) store.set(`${prefix}.zip-settings`, current);
+    const original = new Map(store);
+    const localStorage = {
+      get length() {
+        return store.size;
+      },
+      key: (index: number) => [...store.keys()][index] ?? null,
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    };
+    const script = document.split("<script>").find((part) => part.includes("const bare ="));
+    expect(script).toBeDefined();
+    runInNewContext(script?.split("</script>")[0] ?? "", { console, localStorage });
+    expect(store.get(`${prefix}.zip-settings`)).toBe(expected);
+    for (const [key, value] of original) expect(store.get(key)).toBe(value);
+  });
+
+  it.each([
     ["lowercase", "<script>", "</script>"],
     ["uppercase", "<SCRIPT>", "</SCRIPT>"],
     ["mixed case with attributes", '<ScRiPt type="text/javascript">', "</sCrIpT >"],
@@ -390,6 +425,32 @@ describe("createEmulatorDocument", () => {
     expect(start).toBeLessThan(document.indexOf("loader.js"));
   });
 
+  it("skips the pinned disk menu's initial selection while forwarding real disc changes", () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.pbp", "psx");
+    const start = document.indexOf("Object.defineProperty(window, 'EmulatorJS'");
+    const script = document.slice(document.lastIndexOf("(() => {", start), document.indexOf("})();", start) + 5);
+    const calls: unknown[][] = [];
+    class FakeEmulatorJS {
+      gameManager = { getCurrentDisk: () => 0 };
+      menuOptionChanged(...args: unknown[]) {
+        calls.push(args);
+        return "changed";
+      }
+    }
+    const window: { EmulatorJS?: typeof FakeEmulatorJS } = {};
+    runInNewContext(script, { window });
+    window.EmulatorJS = FakeEmulatorJS;
+    const emulator = new window.EmulatorJS();
+    expect(emulator.menuOptionChanged("disk", "0")).toBeUndefined();
+    expect(calls).toEqual([]);
+    expect(emulator.menuOptionChanged("disk", "1")).toBe("changed");
+    expect(emulator.menuOptionChanged("volume", "0")).toBe("changed");
+    expect(calls).toEqual([
+      ["disk", "1"],
+      ["volume", "0"],
+    ]);
+  });
+
   const readGameBufferScript = (gameUrl: string) => {
     const document = createEmulatorDocument("/emulatorjs/data/", gameUrl, "game.chd", "psx");
     const start = document.indexOf("Object.defineProperty(window, 'EJS_emulator'");
@@ -454,7 +515,7 @@ describe("emulator game identity", () => {
     expect(identity.gameId).toBe(createEmulatorGameIdentity({ checksum }).gameId);
   });
 
-  it.each(["iso", "cue", "img", "mds", "ccd", "cso", "pbp", "m3u", "gdi", "toc", "mdf"])(
+  it.each(["iso", "cue", "img", "mds", "ccd", "cso", "pbp", "m3u", "gdi", "toc", "mdf", "zip"])(
     "keeps the .%s extension of a disc image",
     (extension) => {
       const checksum = "a9993e364706816aba3e25717850c26c9cd0d89d";

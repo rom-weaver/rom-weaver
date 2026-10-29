@@ -288,6 +288,7 @@ fn disc_entry(iso_size: u64, iso_indexes: Vec<PbpIsoIndexEntry>) -> PbpDiscEntry
         iso_size,
         toc_tracks: Vec::new(),
         iso_indexes,
+        has_index_end_offset: false,
     }
 }
 
@@ -1345,4 +1346,243 @@ fn extract_rejects_a_short_payload_beyond_the_iso_volume() {
         "{error}"
     );
     assert!(!out_dir.join("game.bin").exists());
+}
+
+fn compressed_disc_with_index_end_marker() -> (Vec<u8>, Vec<u8>) {
+    let spec = DiscSpec::single_track();
+    let raw_blocks = default_stored_blocks(&spec);
+    let blocks: Vec<_> = raw_blocks.iter().map(|block| raw_deflate(block)).collect();
+    let mut psar = build_disc_psar_with_blocks(&spec, &blocks);
+    let end = u32::try_from(blocks.iter().map(Vec::len).sum::<usize>()).expect("payload end");
+    write_u32_le(
+        &mut psar,
+        PSAR_INDEX_OFFSET + blocks.len() * INDEX_ENTRY_BYTES,
+        end,
+    );
+    (psar, raw_blocks.concat())
+}
+
+#[test]
+fn extract_accepts_the_pcsx_pbp_index_end_marker_for_every_disc() {
+    let temp = TempDir::new("index-end-marker");
+    let (psar, expected) = compressed_disc_with_index_end_marker();
+    for count in [1, 2, 5] {
+        let container = if count == 1 {
+            psar.clone()
+        } else {
+            build_multi_disc_psar(&vec![psar.clone(); count])
+        };
+        let source = write_fixture(
+            &temp,
+            &format!("game{count}.pbp"),
+            &wrap_psar_in_pbp(&container),
+        );
+        let out_dir = temp.join(&format!("out{count}"));
+        PbpContainerHandler
+            .extract(
+                &extract_request(&source, &out_dir),
+                &test_context(temp.path()),
+            )
+            .expect("extract compressed discs with a PCSX-compatible terminal offset");
+        for index in 1..=count {
+            let file_name = if count == 1 {
+                format!("game{count}.bin")
+            } else {
+                format!("game{count}.disc{index:02}.bin")
+            };
+            assert_eq!(
+                fs::read(out_dir.join(file_name)).expect("extracted disc"),
+                expected
+            );
+        }
+    }
+}
+
+fn check_zero_padding_before_index_end_marker(multi_disc: bool) {
+    let temp = TempDir::new("index-end-padding");
+    let (marked, expected) = compressed_disc_with_index_end_marker();
+    let mut padded = marked.clone();
+    let marker = PSAR_INDEX_OFFSET + 2 * INDEX_ENTRY_BYTES;
+    padded.copy_within(
+        marker..marker + INDEX_ENTRY_BYTES,
+        marker + INDEX_ENTRY_BYTES,
+    );
+    padded[marker..marker + INDEX_ENTRY_BYTES].fill(0);
+    let container = if multi_disc {
+        build_multi_disc_psar(&[marked, padded])
+    } else {
+        padded
+    };
+    let source = write_fixture(&temp, "game.pbp", &wrap_psar_in_pbp(&container));
+    let out_dir = temp.join("out");
+    PbpContainerHandler
+        .extract(
+            &extract_request(&source, &out_dir),
+            &test_context(temp.path()),
+        )
+        .expect("extract discs with zero padding before the terminal offset");
+    let names = if multi_disc {
+        vec!["game.disc01.bin", "game.disc02.bin"]
+    } else {
+        vec!["game.bin"]
+    };
+    for name in names {
+        assert_eq!(fs::read(out_dir.join(name)).expect("full disc"), expected);
+    }
+    let report = PbpContainerHandler
+        .probe_details(
+            &ContainerProbeRequest {
+                source,
+                split_bin: false,
+            },
+            &test_context(temp.path()),
+        )
+        .expect("probe discs with zero padding before the terminal offset");
+    assert_eq!(
+        report.details.expect("probe details")["pbp"]["has_index_end_offsets"],
+        false
+    );
+}
+
+#[test]
+fn zero_padding_before_index_end_marker_preserves_single_disc_extraction() {
+    check_zero_padding_before_index_end_marker(false);
+}
+
+#[test]
+fn zero_padding_before_index_end_marker_preserves_mixed_multidisc_extraction() {
+    check_zero_padding_before_index_end_marker(true);
+}
+
+#[test]
+fn parse_rejects_a_pbp_index_end_marker_that_does_not_match_the_payload_end() {
+    let temp = TempDir::new("index-end-offset");
+    for delta in [-1i64, 1, i64::from(u32::MAX)] {
+        let (mut psar, _) = compressed_disc_with_index_end_marker();
+        let marker = PSAR_INDEX_OFFSET + 2 * INDEX_ENTRY_BYTES;
+        let end = u32::from_le_bytes(psar[marker..marker + 4].try_into().expect("offset"));
+        let invalid = u32::try_from((i64::from(end) + delta).min(i64::from(u32::MAX)))
+            .expect("invalid offset");
+        write_u32_le(&mut psar, marker, invalid);
+        assert!(
+            parse_error(&temp, "bad-end.pbp", &wrap_psar_in_pbp(&psar))
+                .contains("malformed ISO index entry")
+        );
+    }
+}
+
+#[test]
+fn parse_rejects_nonzero_index_data_after_a_pbp_end_marker() {
+    let temp = TempDir::new("index-end-trailing");
+    for relative in [8, INDEX_ENTRY_BYTES, INDEX_ENTRY_BYTES + 4] {
+        let (mut psar, _) = compressed_disc_with_index_end_marker();
+        psar[PSAR_INDEX_OFFSET + 2 * INDEX_ENTRY_BYTES + relative] = 1;
+        assert!(
+            parse_error(&temp, "bad-tail.pbp", &wrap_psar_in_pbp(&psar))
+                .contains("malformed ISO index entry")
+        );
+    }
+}
+
+#[test]
+fn probe_reports_stored_blocks_from_the_validated_disc_indexes() {
+    let temp = TempDir::new("probe-stored-blocks");
+    let spec = DiscSpec::single_track();
+    let raw = default_stored_blocks(&spec);
+    let compressed: Vec<_> = raw.iter().map(|block| raw_deflate(block)).collect();
+    let mixed = vec![raw[0].clone(), compressed[1].clone()];
+    let discs = [
+        build_disc_psar_with_blocks(&spec, &raw),
+        build_disc_psar_with_blocks(&spec, &compressed),
+        build_disc_psar_with_blocks(&spec, &mixed),
+    ];
+    for (index, disc) in discs.iter().enumerate() {
+        let source = write_fixture(&temp, &format!("disc{index}.pbp"), &wrap_psar_in_pbp(disc));
+        let report = PbpContainerHandler
+            .probe_details(
+                &ContainerProbeRequest {
+                    source,
+                    split_bin: false,
+                },
+                &test_context(temp.path()),
+            )
+            .expect("probe disc");
+        assert_eq!(
+            report.details.expect("probe details")["pbp"],
+            serde_json::json!({ "disc_count": 1, "stored_block_count": ([2, 0, 1][index]), "has_index_end_offsets": false })
+        );
+    }
+    let source = write_fixture(
+        &temp,
+        "multi.pbp",
+        &wrap_psar_in_pbp(&build_multi_disc_psar(&discs)),
+    );
+    let report = PbpContainerHandler
+        .probe_details(
+            &ContainerProbeRequest {
+                source,
+                split_bin: false,
+            },
+            &test_context(temp.path()),
+        )
+        .expect("probe all discs");
+    assert_eq!(
+        report.details.expect("probe details")["pbp"],
+        serde_json::json!({ "disc_count": 3, "stored_block_count": 3, "has_index_end_offsets": false })
+    );
+}
+
+#[test]
+fn probe_does_not_count_unused_stored_index_blocks() {
+    let temp = TempDir::new("probe-unused-blocks");
+    let spec = DiscSpec {
+        block_count: 3,
+        ..DiscSpec::single_track()
+    };
+    let source = write_fixture(&temp, "unused.pbp", &single_disc_pbp(&spec));
+    let report = PbpContainerHandler
+        .probe_details(
+            &ContainerProbeRequest {
+                source,
+                split_bin: false,
+            },
+            &test_context(temp.path()),
+        )
+        .expect("probe disc with unused block");
+    assert_eq!(
+        report.details.expect("probe details")["pbp"]["stored_block_count"],
+        2
+    );
+}
+
+#[test]
+fn probe_reports_end_offsets_only_when_every_disc_has_a_validated_marker() {
+    let temp = TempDir::new("probe-end-offsets");
+    let (marked, _) = compressed_disc_with_index_end_marker();
+    let mut unmarked = marked.clone();
+    write_u32_le(&mut unmarked, PSAR_INDEX_OFFSET + 2 * INDEX_ENTRY_BYTES, 0);
+    for (name, discs, expected) in [
+        ("marked", vec![marked.clone(), marked.clone()], true),
+        ("mixed", vec![marked.clone(), unmarked.clone()], false),
+        ("unmarked", vec![unmarked.clone(), unmarked], false),
+    ] {
+        let source = write_fixture(
+            &temp,
+            &format!("{name}.pbp"),
+            &wrap_psar_in_pbp(&build_multi_disc_psar(&discs)),
+        );
+        let report = PbpContainerHandler
+            .probe_details(
+                &ContainerProbeRequest {
+                    source,
+                    split_bin: false,
+                },
+                &test_context(temp.path()),
+            )
+            .expect("probe valid discs");
+        assert_eq!(
+            report.details.expect("probe details")["pbp"]["has_index_end_offsets"],
+            expected
+        );
+    }
 }

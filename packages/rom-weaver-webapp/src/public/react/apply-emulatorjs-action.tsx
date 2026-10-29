@@ -81,6 +81,7 @@ export const EmulatorJsAction = ({
         id: output.id,
         platform,
         sizeBytes: loaded.blob.size,
+        ...(loaded.expandedSizeBytes === undefined ? {} : { expandedSizeBytes: loaded.expandedSizeBytes }),
         source: "apply" as const,
       };
       addEntry(entry);

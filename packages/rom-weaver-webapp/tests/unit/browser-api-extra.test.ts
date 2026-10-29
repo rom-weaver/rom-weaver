@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   configureBrowserAssetBaseUrl: vi.fn(),
+  preparePbpEmulatorBundle: vi.fn(),
   identifyHashWorker: vi.fn(),
   invokeRomWeaverPpfUndoWorker: vi.fn(),
   loadIdentifyPacks: vi.fn(),
@@ -25,6 +26,10 @@ class IdentifyDataUnavailableError extends Error {
     this.name = "IdentifyDataUnavailableError";
   }
 }
+
+vi.mock("../../src/platform/browser/emulator-pbp-bundle.ts", () => ({
+  preparePbpEmulatorBundle: mocks.preparePbpEmulatorBundle,
+}));
 
 vi.mock("../../src/platform/browser/workflow-runtime.ts", () => ({ browserRuntime: mocks.runtime }));
 vi.mock("../../src/platform/browser/browser-asset-base.ts", () => ({
@@ -71,6 +76,8 @@ describe("browser ingest and identify API", () => {
       checksumAlgorithms: ["md5"],
       identify: true,
       identifyAllRomEntries: true,
+      interactiveSelectionEnabled: false,
+      preserveNestedFormats: ["pbp"],
       onProgress,
       signal,
     });
@@ -79,6 +86,8 @@ describe("browser ingest and identify API", () => {
       fileName: "game.gba",
       identify: true,
       identifyAllRomEntries: true,
+      interactiveSelectionEnabled: false,
+      preserveNestedFormats: ["pbp"],
       onProgress,
       signal,
       source: expect.any(File),
@@ -468,5 +477,18 @@ describe("browser runtime helpers", () => {
     await expect(api.undoPpf({ outputName: "x.gba", patch: blob("x.ppf"), rom: blob("x.gba") })).rejects.toThrow(
       "PPF undo inputs could not be staged",
     );
+  });
+});
+
+it("forwards stored PBP preparation to the scoped browser runtime", async () => {
+  const source = blob("Game.pbp");
+  const signal = new AbortController().signal;
+  const onProgress = vi.fn();
+  const prepared = { blob: new Blob(["complete playlist"]), checksum: "a".repeat(40) };
+  mocks.preparePbpEmulatorBundle.mockResolvedValue(prepared);
+  await expect(api.prepareEmulatorPbp(source, "Game.pbp", 2, { onProgress, signal })).resolves.toBe(prepared);
+  expect(mocks.preparePbpEmulatorBundle).toHaveBeenCalledWith(mocks.runtime.workerIo, source, "Game.pbp", 2, {
+    onProgress,
+    signal,
   });
 });

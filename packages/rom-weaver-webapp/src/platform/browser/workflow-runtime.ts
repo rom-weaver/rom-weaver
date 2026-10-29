@@ -291,6 +291,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
     identify,
     identifyAllRomEntries,
     identifyBounded,
+    preserveNestedFormats,
     select,
     interactiveSelectionEnabled,
     splitBin,
@@ -356,6 +357,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
       staged.push(...stagedPacks);
       const result = await invokeRomWeaverIngestWorker(
         {
+          preserveNestedFormats,
           ...(checksumAlgorithms?.length ? { checksumAlgorithms } : {}),
           ...(stagedPacks.length ? { databasePaths: stagedPacks.map((entry) => entry.filePath) } : {}),
           ...(select?.length ? { select } : identifySelection.length ? { select: identifySelection } : {}),

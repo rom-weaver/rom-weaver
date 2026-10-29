@@ -100,27 +100,66 @@ const loadEmulatorChd = async (blob: Blob, fileName: string, probeRom: ProbeRom,
   return { blob, checksum, fileName, ...(probe.platform ? { platform: probe.platform } : {}) };
 };
 
-const loadEmulatorRom = async (blob: Blob, fileName: string, options: LoadEmulatorRomOptions = {}) => {
-  const { getIngestOutputBlob, ingestRom, probeRom } = await import("../../../platform/browser/browser-api.ts");
+type LoadedEmulatorRom = {
+  blob: Blob;
+  checksum: string;
+  fileName: string;
+  platform?: string;
+  expandedSizeBytes?: number;
+};
+
+const loadEmulatorRom = async (
+  blob: Blob,
+  fileName: string,
+  options: LoadEmulatorRomOptions = {},
+): Promise<LoadedEmulatorRom> => {
+  const { getIngestOutputBlob, ingestRom, prepareEmulatorPbp, probeRom } =
+    await import("../../../platform/browser/browser-api.ts");
+  let sequence = 0;
+  const onProgress = (progress: { label?: string; message?: string; percent?: number | null; stage?: string }) =>
+    options.onProgress?.({
+      id: "emulator-ingest",
+      label: progress.label || progress.message || "Reading ROM...",
+      percent: progress.percent,
+      role: "input",
+      sequence: ++sequence,
+      stage: (progress.stage as WorkflowProgress["stage"]) || "checksum",
+      workflow: "apply",
+    });
+  if (/\.pbp$/i.test(fileName.trim())) {
+    // The probe MUST validate the section table and every PS1 disc before preparing the complete-disc bundle.
+    const probe = await probeRom(blob, fileName, { signal: options.signal });
+    if (probe.pbp) {
+      const prepared = await prepareEmulatorPbp(blob, fileName, probe.pbp.discCount, {
+        onProgress,
+        signal: options.signal,
+      });
+      const checksum = normalizedSha1(prepared.checksum);
+      if (!checksum) throw new Error("rom-weaver did not return the PBP SHA-1 checksum.");
+      return {
+        blob: prepared.blob,
+        checksum,
+        expandedSizeBytes: prepared.expandedSizeBytes,
+        fileName: fileName.trim().replace(/\.pbp$/i, ".zip"),
+        platform: "Sony PlayStation",
+      };
+    }
+  }
   if (isChdFileName(fileName)) {
     const loaded = await loadEmulatorChd(blob, fileName, probeRom, options);
     if (loaded) return loaded;
   }
-  let sequence = 0;
   const { outputs, result } = await ingestRom(blob, fileName, {
     identify: false,
-    onProgress: (progress) =>
-      options.onProgress?.({
-        id: "emulator-ingest",
-        label: progress.label || progress.message || "Reading ROM...",
-        percent: progress.percent,
-        role: "input",
-        sequence: ++sequence,
-        stage: (progress.stage as WorkflowProgress["stage"]) || "checksum",
-        workflow: "apply",
-      }),
+    preserveNestedFormats: ["pbp"],
+    onProgress,
     signal: options.signal,
   });
+  let released: Promise<unknown> | undefined;
+  const releaseOutputs = () => {
+    released ??= Promise.all(outputs.map((output) => output.dispose().catch(() => undefined)));
+    return released;
+  };
   try {
     const bare = result.assets.find((asset) => asset.copiedInPlace);
     if (bare) {
@@ -129,14 +168,19 @@ const loadEmulatorRom = async (blob: Blob, fileName: string, options: LoadEmulat
       return { blob, checksum, fileName, ...(bare.platform ? { platform: bare.platform } : {}) };
     }
     const chosen = pickEmulatorRomOutput(outputs);
-    const extracted = await getIngestOutputBlob(chosen);
     const checksum = normalizedSha1(chosen.checksums?.sha1);
     if (!checksum) throw new Error("rom-weaver did not return the extracted ROM SHA-1 checksum.");
+    const extracted = await getIngestOutputBlob(chosen);
+    if (/\.pbp$/i.test(chosen.fileName.trim())) {
+      // The extracted Blob outlives its output; release the ingest copy before the bundle stages another.
+      await releaseOutputs();
+      return await loadEmulatorRom(extracted, chosen.fileName, options);
+    }
     const platform = chosen.romType?.platform;
     const romFileName = (await cookedBinIsoName(chosen, outputs, getIngestOutputBlob)) ?? chosen.fileName;
     return { blob: extracted, checksum, fileName: romFileName, ...(platform ? { platform } : {}) };
   } finally {
-    await Promise.all(outputs.map((output) => output.dispose().catch(() => undefined)));
+    await releaseOutputs();
   }
 };
 

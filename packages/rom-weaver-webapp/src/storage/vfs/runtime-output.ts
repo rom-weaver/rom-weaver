@@ -1,4 +1,5 @@
 import { getPathBaseName } from "../../lib/path-utils.ts";
+import { throwIfAborted } from "../../lib/errors.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import type { RetainedRuntimeOutput } from "./types.ts";
@@ -169,8 +170,11 @@ const readRuntimeOutputBytes = async (
 
 const readRuntimeOutputBlob = async (
   output: Pick<PublicOutput, "mediaType" | "path" | "size" | "vfs">,
+  signal?: AbortSignal,
 ): Promise<Blob> => {
+  throwIfAborted(signal);
   const nativeFile = await output.vfs.getFile?.(output.path);
+  throwIfAborted(signal);
   if (nativeFile) {
     // getBlob callers own the returned Blob after output disposal, so removing the output path MUST NOT
     // invalidate it. Copy the OPFS snapshot into browser-managed Blob storage one chunk at a time: WebKit
@@ -179,12 +183,15 @@ const readRuntimeOutputBlob = async (
     const size = Math.max(0, Math.floor(output.size || 0));
     const parts: Blob[] = [];
     for (let offset = 0; offset < size; offset += OUTPUT_CHUNK_SIZE) {
+      throwIfAborted(signal);
       const chunk = nativeFile.slice(offset, Math.min(size, offset + OUTPUT_CHUNK_SIZE));
       parts.push(new Blob([await chunk.arrayBuffer()]));
     }
+    throwIfAborted(signal);
     return new Blob(parts, { type: mediaType });
   }
   const bytes = await readRuntimeOutputBytes(output);
+  throwIfAborted(signal);
   // Compatibility fallback for VFS implementations that cannot expose a native disk-backed snapshot.
   // readRuntimeOutputBytes returns a freshly-owned (never SAB-backed) array; the Blob ctor snapshots it.
   return new Blob([bytes], {

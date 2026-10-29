@@ -232,11 +232,14 @@ fn a_cancelled_nested_extract_reports_the_cancel() {
 
     let error = app
         .extract_nested_archives(
-            &dir.join("outer.zip"),
-            std::slice::from_ref(&inner),
-            no_filter(),
-            false,
-            false,
+            crate::nested_extract::NestedExtractRequest {
+                root_source: &dir.join("outer.zip"),
+                root_candidates: std::slice::from_ref(&inner),
+                preserve_nested_formats: &[],
+                kind_filter: no_filter(),
+                ignore_common_files: false,
+                overwrite: false,
+            },
             &cancelled,
         )
         .err()

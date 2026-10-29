@@ -470,7 +470,7 @@ sidecar_names?: Array<string>, sidecar_only?: boolean,
  * patch declares in its name (`[crc32:..]`) are read from it, because staging rewrites
  * characters such as `:`.
  */
-input_name?: string, no_ignore?: boolean, no_nested_extract?: boolean, split_bin?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
+input_name?: string, no_ignore?: boolean, no_nested_extract?: boolean, preserve_nested_formats?: Array<string>, split_bin?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
 
 export type CheatCommand = { input: string,
 /**

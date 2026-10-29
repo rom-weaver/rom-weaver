@@ -12,6 +12,7 @@ pub(crate) struct AssembleExtractedLeavesInputs<'a> {
     pub ignore_common_files: bool,
     pub overwrite: bool,
     pub no_nested_extract: bool,
+    pub preserve_nested_formats: &'a [String],
     pub discard_consumed_nfs_companions: bool,
     /// Fail with the NFS decode error when a recognized NFS dump could not be decoded and nothing
     /// else was extracted. `extract` leaves this off and keeps the raw files.
@@ -345,6 +346,7 @@ impl CliApp {
             ignore_common_files: run.ignore_common_files,
             overwrite: run.overwrite,
             no_nested_extract: run.no_nested_extract,
+            preserve_nested_formats: &[],
             discard_consumed_nfs_companions: false,
             require_decodable_nfs: false,
             context: run.context,
@@ -413,6 +415,7 @@ impl CliApp {
             ignore_common_files,
             overwrite,
             no_nested_extract,
+            preserve_nested_formats,
             discard_consumed_nfs_companions,
             require_decodable_nfs,
             context,
@@ -460,11 +463,14 @@ impl CliApp {
                 context.single_thread_execution(),
             );
             let outcome = self.extract_nested_archives(
-                source,
-                &primary_emitted_files,
-                kind_filter,
-                ignore_common_files,
-                overwrite,
+                crate::nested_extract::NestedExtractRequest {
+                    root_source: source,
+                    root_candidates: &primary_emitted_files,
+                    preserve_nested_formats,
+                    kind_filter,
+                    ignore_common_files,
+                    overwrite,
+                },
                 context,
             )?;
             descended = outcome.descended;

@@ -343,6 +343,8 @@ type CompressionProbeResult = {
   chdCreateMode?: string;
   /** Digests read from a CHD header, without decompressing the payload. */
   chd?: { rawSha1?: string; sha1?: string };
+  /** PS1 disc layout and raw stored blocks counted from validated PBP indexes. */
+  pbp?: { discCount: number; storedBlockCount: number; hasIndexEndOffsets: boolean };
 };
 
 type CompressionExtractResult = {

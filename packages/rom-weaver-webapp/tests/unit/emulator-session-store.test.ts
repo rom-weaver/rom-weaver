@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const loadEmulatorRom = vi.hoisted(() =>
-  vi.fn(async (blob: Blob, fileName: string) => ({ blob, checksum: "a".repeat(40), fileName })),
+  vi.fn(
+    async (
+      blob: Blob,
+      fileName: string,
+    ): Promise<{ blob: Blob; checksum: string; fileName: string; expandedSizeBytes?: number }> => ({
+      blob,
+      checksum: "a".repeat(40),
+      fileName,
+    }),
+  ),
 );
 
 vi.mock("../../src/public/react/components/emulator-load-rom.ts", () => ({ loadEmulatorRom }));
@@ -183,4 +192,32 @@ describe("emulator session store", () => {
     expect(getEmulatorSessionState().entries.map(({ id }) => id)).toEqual(["local"]);
     expect(getEmulatorSessionState().currentGameId).toBe("local");
   });
+});
+
+it("releases a small archive whose expanded game is disc-sized", () => {
+  addEntry(entry({ fileName: "Game.zip", sizeBytes: 3, expandedSizeBytes: 128 * 1024 * 1024 + 1 }));
+  releaseLargeEntries();
+  expect(getEmulatorSessionState().entries).toEqual([]);
+});
+
+it("prepares a retained PBP using its returned bundle and expanded size", async () => {
+  const bundle = new Blob(["zip"]);
+  const expandedSizeBytes = 128 * 1024 * 1024 + 1;
+  loadEmulatorRom.mockResolvedValueOnce({
+    blob: bundle,
+    checksum: "a".repeat(40),
+    fileName: "Game.zip",
+    expandedSizeBytes,
+  });
+  addEntry(
+    entry({
+      blob: undefined,
+      artifact: { dispose: vi.fn(async () => undefined), getBlob: async () => new Blob(["PBP"]) },
+      fileName: "Game.pbp",
+    }),
+  );
+  expect(await prepareEntry("game")).toBe(bundle);
+  expect(getEmulatorSessionState().entries[0]).toMatchObject({ blob: bundle, fileName: "Game.zip", expandedSizeBytes });
+  releaseLargeEntries();
+  expect(getEmulatorSessionState().entries).toEqual([]);
 });
