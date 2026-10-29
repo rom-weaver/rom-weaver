@@ -11,8 +11,9 @@ import { ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY } from "../../wasm/generated/rom-
 import { CREATE_ARCHIVE_COMPRESSION_FORMATS } from "../compression/container-format-registry.ts";
 import { getCreatePatchFormatsForSizes, normalizeCreatePatchFormat } from "../create/patch-format-limits.ts";
 import { runCreateWorkflow } from "../create/workflow.ts";
+import { reidentifyAssetWhenLoaded } from "./apply-input-checksums.ts";
 import { RomWeaverError, withAbortSignal } from "../errors.ts";
-import { getPrimaryInputAsset, isChecksummableInputAsset } from "../input/input-assets.ts";
+import { getPrimaryInputAsset, type InputAsset, isChecksummableInputAsset } from "../input/input-assets.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { sanitizeTypedOutputName } from "../path-utils.ts";
 import { wrapPublicOutput } from "../output/index.ts";
@@ -29,6 +30,7 @@ import {
   getPatchFilePrecomputedChecksums,
   getPatchFilePrecomputedChecksumVariants,
   getPatchFilePrecomputedIdentification,
+  getPatchFilePrecomputedIdentifyRetry,
   getPatchFilePrecomputedRomType,
   type StandardWorkflowChecksums,
 } from "./staged-source-checksums.ts";
@@ -364,6 +366,8 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
           asset.identification = getPatchFilePrecomputedIdentification(asset.file);
           asset.romType = getPatchFilePrecomputedRomType(asset.file);
           asset.checksumTimeMs = 0;
+          const precomputedRetry = getPatchFilePrecomputedIdentifyRetry(asset.file);
+          if (precomputedRetry) this.reidentifyWhenLoaded(session, stage, asset, precomputedRetry);
           continue;
         }
         const checksumStartedAt = Date.now();
@@ -386,6 +390,8 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
         asset.romProbe = checksumResult.romProbe;
         asset.romType = checksumResult.romType;
         asset.checksumTimeMs = Date.now() - checksumStartedAt;
+        if (checksumResult.identifyRetry)
+          this.reidentifyWhenLoaded(session, stage, asset, checksumResult.identifyRetry);
       }
       const primaryAsset = getPrimaryInputAsset(assets);
       const primaryChecksums = getInputAssetChecksums(primaryAsset);
@@ -398,6 +404,27 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
       }
     }
     if (session.synthetic) this.syncSourceSessionView(session);
+  }
+
+  /** Upgrade a timed-out (`unavailable`) identification once the pack loads; dropped if the input changed. */
+  private reidentifyWhenLoaded(
+    session: SourceSession<TSource>,
+    stage: StagedSource<TSource>,
+    asset: InputAsset,
+    retry: Promise<boolean>,
+  ) {
+    reidentifyAssetWhenLoaded({
+      asset,
+      isCurrent: () => !this.disposed && (this.originalSession === session || this.modifiedSession === session),
+      onIdentified: () => {
+        if (getPrimaryInputAsset(stage.preparedInputAssets || []) === asset) {
+          stage.state.identification = cloneIdentification(asset.identification);
+        }
+        if (session.synthetic) this.syncSourceSessionView(session);
+        this.emitChange();
+      },
+      retry,
+    });
   }
 
   private getPreparedPatchSource(stage: StagedSource<TSource>): unknown | undefined {

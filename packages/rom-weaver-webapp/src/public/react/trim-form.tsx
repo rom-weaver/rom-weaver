@@ -21,7 +21,7 @@ import type {
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
-import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
+import { identifiedOutputBaseName, sameIdentification } from "../../presentation/identify-title.ts";
 import type { TrimWorkflowSourceState } from "../../types/trim-workflow.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel } from "./components/ds/compress-panel.tsx";
@@ -655,7 +655,12 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       ? "rvz"
       : requestedOutputFormat;
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
-  const identifiedOutputTitle = identifiedOutputBaseName(sourceState?.identification);
+  // Once a run started the file keeps the name it was produced with; a late identification still
+  // refreshes the card but must not rename the field away from the Download label.
+  const liveIdentifiedTitle = identifiedOutputBaseName(sourceState?.identification);
+  const frozenIdentifiedTitleRef = useRef<string | null>(null);
+  if (!(busy || completedOutput)) frozenIdentifiedTitleRef.current = liveIdentifiedTitle;
+  const identifiedOutputTitle = busy || completedOutput ? frozenIdentifiedTitleRef.current : liveIdentifiedTitle;
   const useIdentifiedOutputName = settings.output?.identifiedName !== false;
   const generatedOutputName =
     configuredOutputName ||
@@ -828,6 +833,17 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       stagedTrimWorkflowRef.current = workflow;
       const handleProgress = createProgressHandler("input");
       workflow.on("progress", handleProgress);
+      // A timed-out identification is upgraded by the controller once the pack loads; mirror it into
+      // the card and the identification-derived output name (only once staging published a state).
+      const handleChange = () => {
+        if (stagedTrimWorkflowGenerationRef.current !== generation || stagedTrimWorkflowRef.current !== workflow)
+          return;
+        const next = workflow.getInput();
+        setSourceState((previous) =>
+          previous && next && !sameIdentification(previous.identification, next.identification) ? next : previous,
+        );
+      };
+      workflow.on("change", handleChange);
       setSourceStaging(true);
       emitTrimFormTrace("stage.set-input.start", {
         generation,
@@ -890,6 +906,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
       cleanup = () => {
         workflow.off("progress", handleProgress);
+        workflow.off("change", handleChange);
         emitTrimFormTrace("stage.cleanup", {
           generation,
           isCurrentWorkflow: stagedTrimWorkflowRef.current === workflow,

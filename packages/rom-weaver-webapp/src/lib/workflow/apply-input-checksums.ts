@@ -66,18 +66,18 @@ const hashLookupCoversAsset = (asset: InputAsset): boolean =>
  * The lookup is hash-only, so a miss is reported as `unknown` only when it covers the whole input;
  * otherwise the input stays `unavailable` (a miss could be a variant or disc fingerprint it cannot see).
  */
-const reidentifyWhenLoaded = <TSource>({
-  adapters,
+const reidentifyAssetWhenLoaded = ({
   asset,
+  isCurrent,
+  onIdentified,
   retry,
-  session,
-  stage,
 }: {
-  adapters: InputChecksumAdapters<TSource>;
   asset: InputAsset;
+  /** False once the input was removed or replaced, so a late identification is dropped. */
+  isCurrent: () => boolean;
+  /** Called after `asset.identification` was updated. */
+  onIdentified: () => void;
   retry: Promise<boolean>;
-  session: InputSession<TSource>;
-  stage: StagedSource<TSource>;
 }): void => {
   const pending = asset.identification;
   const checksums = Object.fromEntries(Object.entries(asset.checksums ?? {}).filter(([, value]) => !!value));
@@ -90,15 +90,37 @@ const reidentifyWhenLoaded = <TSource>({
     if (found?.status === "unavailable") return;
     const matched = !!found && found.status !== "unknown" && (found.matches?.length ?? 1) > 0;
     if (!(matched || hashLookupCoversAsset(asset))) return;
-    if (!adapters.isCurrentSession(session) || asset.identification !== pending) return;
+    if (!isCurrent() || asset.identification !== pending) return;
     asset.identification = found ?? ({ matches: [], status: "unknown" } satisfies ParsedIdentifyResolution);
-    if (getPrimaryInputAsset(stage.preparedInputAssets || []) === asset) {
-      stage.state.identification = cloneIdentification(asset.identification);
-    }
-    if (session.synthetic) adapters.syncInputSessionView();
-    adapters.onIdentified();
+    onIdentified();
   })().catch((error: unknown) => logger.warn("late ROM identification failed", { error }));
 };
+
+const reidentifyWhenLoaded = <TSource>({
+  adapters,
+  asset,
+  retry,
+  session,
+  stage,
+}: {
+  adapters: InputChecksumAdapters<TSource>;
+  asset: InputAsset;
+  retry: Promise<boolean>;
+  session: InputSession<TSource>;
+  stage: StagedSource<TSource>;
+}): void =>
+  reidentifyAssetWhenLoaded({
+    asset,
+    isCurrent: () => adapters.isCurrentSession(session),
+    onIdentified: () => {
+      if (getPrimaryInputAsset(stage.preparedInputAssets || []) === asset) {
+        stage.state.identification = cloneIdentification(asset.identification);
+      }
+      if (session.synthetic) adapters.syncInputSessionView();
+      adapters.onIdentified();
+    },
+    retry,
+  });
 
 const finalizeApplyInputChecksums = async <TSource>(
   session: InputSession<TSource> | undefined,
@@ -181,4 +203,4 @@ const finalizeApplyInputChecksums = async <TSource>(
   return !!(selected && session.view.state.status === "ready" && selected.preparedInputAssets?.[0]?.file);
 };
 
-export { finalizeApplyInputChecksums };
+export { finalizeApplyInputChecksums, reidentifyAssetWhenLoaded };
