@@ -1,0 +1,111 @@
+name: Merge conflicts
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited]
+  # Any branch can be a PR base; tag pushes cannot affect mergeability.
+  push:
+    branches: ["**"]
+
+permissions:
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: merge-conflicts-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check merge conflicts
+    if: >-
+      (github.event_name == 'push' && !github.event.deleted) ||
+      (github.event_name == 'pull_request_target' &&
+       (github.event.action != 'edited' || github.event.changes.base != null))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # This privileged workflow MUST NOT check out or execute PR code.
+      - uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          retries: 2
+          # Stop on rate limits rather than retrying before GitHub permits it.
+          retry-exempt-status-codes: 400,401,403,404,422,429
+          script: |
+            const repo = context.repo;
+            const statusContext = 'Merge Conflict Check';
+            const targetUrl = `${context.serverUrl}/${repo.owner}/${repo.repo}/actions/runs/${context.runId}`;
+            const base = context.eventName === 'push'
+              ? context.ref.slice('refs/heads/'.length)
+              : null;
+            const rateLimited = error => error.status === 429 ||
+              (error.status === 403 && (
+                error.response?.headers?.['x-ratelimit-remaining'] === '0' ||
+                error.response?.headers?.['retry-after'] != null ||
+                /rate limit|secondary limit|abuse/i.test(error.message)
+              ));
+            const reportError = error => {
+              core.setFailed(error.message);
+              if (rateLimited(error)) {
+                const headers = error.response?.headers ?? {};
+                core.warning(`Rate limited; re-run after Retry-After=${headers['retry-after'] ?? 'unspecified'} seconds or X-RateLimit-Reset=${headers['x-ratelimit-reset'] ?? 'unspecified'} (Unix seconds).`);
+              }
+            };
+            const publish = (pr, state, description) => github.rest.repos.createCommitStatus({
+              ...repo,
+              sha: pr.head.sha,
+              context: statusContext,
+              state,
+              description,
+              target_url: targetUrl,
+            });
+            const check = async seed => {
+              // Clear a previous verdict before API errors or unknown mergeability can leave it stale.
+              await publish(seed, 'pending', "GitHub hasn't determined mergeability yet");
+              let pendingSha = seed.head.sha;
+              for (let attempt = 0; attempt < 5; attempt++) {
+                const { data: pr } = await github.rest.pulls.get({
+                  ...repo,
+                  pull_number: seed.number,
+                });
+                if (pr.state !== 'open' || (base !== null && pr.base.ref !== base)) return;
+                if (pr.mergeable === true || pr.mergeable === false) {
+                  const state = pr.mergeable ? 'success' : 'failure';
+                  const description = pr.mergeable ? 'No merge conflicts' : 'Merge conflicts detected';
+                  await publish(pr, state, description);
+                  core.info(`PR #${pr.number}: ${state} (${description})`);
+                  return;
+                }
+                if (pr.head.sha !== pendingSha) {
+                  await publish(pr, 'pending', "GitHub hasn't determined mergeability yet");
+                  pendingSha = pr.head.sha;
+                }
+                if (attempt < 4) await new Promise(resolve => setTimeout(resolve, 3000));
+              }
+              core.warning(`PR #${seed.number}: mergeability remains unknown after 5 attempts; status remains pending. Re-run this workflow to retry.`);
+            };
+
+            try {
+              const pages = base === null
+                ? [{ data: [context.payload.pull_request] }]
+                : github.paginate.iterator(github.rest.pulls.list, {
+                    ...repo,
+                    state: 'open',
+                    base,
+                    per_page: 100,
+                  });
+              for await (const { data: prs } of pages) {
+                for (const pr of prs) {
+                  try {
+                    await check(pr);
+                  } catch (error) {
+                    core.error(`PR #${pr.number}: ${error.message}`);
+                    reportError(error);
+                    if (rateLimited(error)) return;
+                  }
+                }
+              }
+            } catch (error) {
+              reportError(error);
+            }
