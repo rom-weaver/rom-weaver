@@ -12722,6 +12722,174 @@ fn patch_apply_output_header_strip_accepts_headerless_extension() {
     assert_eq!(renamed.len(), 256 * 1024);
 }
 
+fn header_extension_swap_command(temp: &TempDir) -> Command {
+    let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+    for name in [
+        "HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME",
+    ] {
+        let directory = temp.child(name);
+        fs::create_dir_all(directory.path()).expect("isolated user directory");
+        command.env(name, directory.path());
+    }
+    command.current_dir(temp.path());
+    command
+}
+
+fn header_extension_swap_fixture(temp: &TempDir) -> (Vec<u8>, Vec<u8>) {
+    let base = vec![0xa5; 32_768];
+    let mut modified = base.clone();
+    modified[0] = b'Z';
+    let mut input = vec![0; 512];
+    input.extend_from_slice(&base);
+    fs::write(temp.child("base.sfc").path(), &base).expect("base");
+    fs::write(temp.child("modified.sfc").path(), &modified).expect("modified");
+    fs::write(temp.child("input.smc").path(), &input).expect("headered input");
+    for (original, patch) in [("base.sfc", "update.bps"), ("modified.sfc", "identity.bps")] {
+        header_extension_swap_command(temp)
+            .args([
+                "patch",
+                "create",
+                "--original",
+                original,
+                "--modified",
+                "modified.sfc",
+                "--format",
+                "bps",
+                "--output",
+                patch,
+                "--jsonl",
+            ])
+            .assert()
+            .success();
+    }
+    (input, modified)
+}
+
+fn check_header_extension_swap_existing_output(force: bool, reject_output: bool) {
+    for patch_count in [1, 2] {
+        let temp = setup_temp_dir();
+        let (input, modified) = header_extension_swap_fixture(&temp);
+        let output = temp.child("output.sfc");
+        fs::write(output.path(), b"SENTINEL").expect("existing output");
+        let mut command = header_extension_swap_command(&temp);
+        command.args([
+            "patch",
+            "apply",
+            "--input",
+            "input.smc",
+            "--patch",
+            "update.bps",
+            "--output",
+            "output.smc",
+            "--no-compress",
+            "--jsonl",
+        ]);
+        if patch_count == 2 {
+            command.args(["--patch", "identity.bps"]);
+        }
+        if force {
+            command.arg("--force");
+        }
+        if reject_output {
+            command.args(["--expect-out", "crc32=deadbeef"]);
+        }
+        let succeeds = force && !reject_output;
+        let result = command.assert().code(if succeeds { 0 } else { 1 });
+        let event = parse_single_json_line(&result.get_output().stdout);
+        let label = event["label"].as_str().expect("terminal label");
+        if !force {
+            assert!(
+                label.contains("refusing to overwrite existing output"),
+                "{label}"
+            );
+            assert!(label.contains("output.sfc"), "{label}");
+            assert!(label.contains("--force"), "{label}");
+        } else if reject_output {
+            assert!(
+                label.contains("output checksum mismatch for crc32"),
+                "{label}"
+            );
+        }
+        assert_eq!(
+            fs::read(output.path()).expect("resolved output retained"),
+            if succeeds {
+                modified
+            } else {
+                b"SENTINEL".to_vec()
+            },
+            "patch_count={patch_count}, force={force}, reject_output={reject_output}"
+        );
+        assert_eq!(
+            fs::read(temp.child("input.smc").path()).expect("input"),
+            input
+        );
+        assert!(!temp.child("output.smc").path().exists());
+    }
+}
+
+#[test]
+fn patch_apply_header_extension_swap_rejects_existing_output() {
+    check_header_extension_swap_existing_output(false, false);
+}
+
+#[test]
+fn patch_apply_header_extension_swap_rejects_existing_output_before_expect_out() {
+    check_header_extension_swap_existing_output(false, true);
+}
+
+#[test]
+fn patch_apply_header_extension_swap_replaces_existing_output_with_force() {
+    check_header_extension_swap_existing_output(true, false);
+}
+
+#[test]
+fn patch_apply_header_extension_swap_keeps_existing_output_when_forced_expect_out_fails() {
+    check_header_extension_swap_existing_output(true, true);
+}
+
+#[test]
+fn patch_apply_header_extension_swap_rejects_source_aliases_with_force() {
+    for patch_count in [1, 2] {
+        for source in ["input.smc", "update.bps"] {
+            let temp = setup_temp_dir();
+            header_extension_swap_fixture(&temp);
+            let source_path = temp.child(source);
+            let original = fs::read(source_path.path()).expect("source");
+            let output = temp.child("output.sfc");
+            fs::hard_link(source_path.path(), output.path()).expect("source alias");
+            let mut command = header_extension_swap_command(&temp);
+            command.args([
+                "patch",
+                "apply",
+                "--input",
+                "input.smc",
+                "--patch",
+                "update.bps",
+                "--output",
+                "output.smc",
+                "--no-compress",
+                "--force",
+                "--jsonl",
+            ]);
+            if patch_count == 2 {
+                command.args(["--patch", "identity.bps"]);
+            }
+            let result = command.assert().code(1);
+            let event = parse_single_json_line(&result.get_output().stdout);
+            let label = event["label"].as_str().expect("terminal label");
+            assert!(label.contains("resolve to the same file"), "{label}");
+            assert!(label.contains("output.sfc"), "{label}");
+            assert_eq!(fs::read(source_path.path()).expect("source kept"), original);
+            assert_eq!(fs::read(output.path()).expect("alias kept"), original);
+            assert!(!temp.child("output.smc").path().exists());
+        }
+    }
+}
+
 #[test]
 fn patch_validate_independent_lists_every_patch_verdict_in_human_output() {
     let temp = setup_temp_dir();
