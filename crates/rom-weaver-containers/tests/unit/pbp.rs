@@ -1129,11 +1129,15 @@ fn extract_preserves_the_full_disc_beyond_the_iso_volume() {
 fn parse_ignores_a_leadout_that_disagrees_with_the_volume_or_index_table() {
     let temp = TempDir::new("leadout-inconsistent");
     let volume_bytes = 32 * SECTOR_BYTES as u64;
-    // Below the ISO volume, beyond the index capacity (popstation and pop-fe style).
+    let spec = DiscSpec {
+        tracks: vec![(0x41, 0), (0x01, 20)],
+        ..DiscSpec::single_track()
+    };
+    // A packager mixed-mode disc whose A2 is below the ISO volume or beyond the index capacity.
     for sectors in [0, 1, 31, 33, 0x1_0000] {
         let path = write_fixture(&temp, &format!("leadout-{sectors}.pbp"), &{
-            let mut psar = build_disc_psar(&DiscSpec::single_track());
-            write_toc(&mut psar, &DiscSpec::single_track().tracks, sectors);
+            let mut psar = build_disc_psar(&spec);
+            write_toc(&mut psar, &spec.tracks, sectors);
             wrap_psar_in_pbp(&psar)
         });
         let archive = PbpContainerHandler

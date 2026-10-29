@@ -325,8 +325,8 @@ impl PbpContainerHandler {
             self.read_iso_size_from_index(source, file, disc_psar_offset, &iso_indexes)?;
         // Only PSXPackager writes A2 as the full BIN sector count and puts a file-relative
         // 00:00:00 in the first track's INDEX 01 bytes, so A2 MUST NOT size a disc without that
-        // marker: pop-fe stores the sector count plus one and the popstation template stores a
-        // fixed value. Data-only discs are exact from the ISO volume.
+        // marker: pop-fe and popstation store other values there (sector count plus one, padded
+        // counts, a fixed template). Data-only discs are exact from the ISO volume.
         // https://github.com/RupertAvery/PSXPackager/blob/76fc019460dbf550e3ddbc184959f4ed182e36f8/Popstation/CueFileExtensions.cs#L51-L79
         let has_audio = toc_tracks.iter().any(|track| track.track_type == 0x01);
         let packager_toc = toc_tracks
