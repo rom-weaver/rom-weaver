@@ -3,7 +3,10 @@
 //! command. The apply itself still runs through the normal path; this only
 //! authors the accompanying `rom-weaver-weave.json`.
 
-use std::path::PathBuf;
+use std::{
+    fs, io,
+    path::{Component, Path, PathBuf},
+};
 
 use dialoguer::{Confirm, Input};
 use rom_weaver_app::{PatchApplyCommand, WeaveCreateCommand, WeaveCreatePatchSpec};
@@ -22,11 +25,37 @@ pub fn run_weave_tui(apply: &PatchApplyCommand) -> Result<WeaveCreateCommand, St
                 .to_string(),
         );
     }
+    if apply.bundle.is_some() {
+        return Err("--tui cannot re-open a weave; rerun without --tui".to_string());
+    }
     if !apply.codes.is_empty()
         || !apply.cheat_selection.cheats.is_empty()
         || !apply.cheat_records.is_empty()
     {
         return Err("--tui cannot record cheat settings; rerun without --tui".to_string());
+    }
+    let recipe = Path::new(DEFAULT_WEAVE_NAME);
+    let recipe_identity = prospective_path(recipe, 40);
+    if recipe_identity.is_none() {
+        return Err(format!(
+            "--tui recipe destination cannot be resolved safely; repair `{DEFAULT_WEAVE_NAME}` or choose another working directory"
+        ));
+    }
+    if let Some(path) = std::iter::once(&apply.input)
+        .chain(&apply.patches)
+        .chain(&apply.output)
+        .find(|path| {
+            crate::path_access::paths_refer_to_same_file(recipe, path)
+                || matches!(
+                    (recipe_identity.as_ref(), prospective_path(path, 40)),
+                    (Some(recipe), Some(path)) if recipe == &path
+                )
+        })
+    {
+        return Err(format!(
+            "--tui recipe `{DEFAULT_WEAVE_NAME}` and `{}` resolve to the same file; choose a different --output path or working directory",
+            path.display()
+        ));
     }
 
     crate::render::write_stderr(format_args!(
@@ -112,4 +141,38 @@ pub fn run_weave_tui(apply: &PatchApplyCommand) -> Result<WeaveCreateCommand, St
 fn non_empty(value: String) -> Option<String> {
     let trimmed = value.trim();
     (!trimmed.is_empty()).then(|| trimmed.to_owned())
+}
+
+// Only missing paths MAY be resolved prospectively; other I/O errors MUST fail
+// closed. Dangling-link traversal MUST be bounded because links may form cycles.
+fn prospective_path(path: &Path, links_left: u8) -> Option<PathBuf> {
+    match fs::canonicalize(path) {
+        Ok(canonical) => return Some(canonical),
+        Err(error) if error.kind() != io::ErrorKind::NotFound => return None,
+        Err(_) => {}
+    }
+    let absolute = std::path::absolute(path).ok()?;
+    let mut resolved = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                resolved.pop();
+            }
+            component => {
+                resolved.push(component.as_os_str());
+                match fs::canonicalize(&resolved) {
+                    Ok(canonical) => resolved = canonical,
+                    Err(error) if error.kind() != io::ErrorKind::NotFound => return None,
+                    Err(_) => {
+                        if let Ok(target) = fs::read_link(&resolved) {
+                            let target = resolved.parent()?.join(target);
+                            resolved = prospective_path(&target, links_left.checked_sub(1)?)?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Some(resolved)
 }

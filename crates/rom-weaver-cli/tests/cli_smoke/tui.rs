@@ -39,6 +39,10 @@ fn fixture() -> TempDir {
 }
 
 fn run_tui(temp: &TempDir, extra: &[&str]) -> (ExitStatus, String) {
+    run_tui_to(temp, "out.nes", extra)
+}
+
+fn run_tui_to(temp: &TempDir, output: &str, extra: &[&str]) -> (ExitStatus, String) {
     let mut master = -1;
     let mut slave = -1;
     // SAFETY: openpty initializes both descriptors; optional terminal settings are null.
@@ -64,7 +68,7 @@ fn run_tui(temp: &TempDir, extra: &[&str]) -> (ExitStatus, String) {
             "--patch",
             "main.ips",
             "--output",
-            "out.nes",
+            output,
             "--no-compress",
             "--tui",
         ])
@@ -247,4 +251,199 @@ fn tui_recipe_failure_discloses_kept_output_without_force() {
         fs::read(temp.child("out.nes").path()).expect("output"),
         output
     );
+}
+
+#[test]
+fn tui_rejects_recipe_aliases_before_writing() {
+    use std::os::unix::fs::symlink;
+
+    for case in [
+        "output",
+        "relative",
+        "absolute",
+        "missing-parent",
+        "symlink-parent",
+        "dangling-recipe",
+        "symlink-input",
+        "hardlink-input",
+        "symlink-patch",
+        "hardlink-patch",
+        "symlink-output",
+        "hardlink-output",
+    ] {
+        let temp = fixture();
+        let recipe = temp.child("rom-weaver-weave.json");
+        let input = temp.child("game.nes");
+        let patch = temp.child("main.ips");
+        let input_before = fs::read(input.path()).expect("input");
+        let patch_before = fs::read(patch.path()).expect("patch");
+        let output = match case {
+            "output" => "rom-weaver-weave.json".to_owned(),
+            "relative" => "./rom-weaver-weave.json".to_owned(),
+            "absolute" => recipe.path().to_str().expect("absolute output").to_owned(),
+            "missing-parent" => "missing/../rom-weaver-weave.json".to_owned(),
+            "symlink-parent" => {
+                symlink(".", temp.child("alias").path()).expect("parent symlink");
+                "alias/rom-weaver-weave.json".to_owned()
+            }
+            "dangling-recipe" => {
+                symlink("out.nes", recipe.path()).expect("dangling recipe");
+                "out.nes".to_owned()
+            }
+            "symlink-input" | "symlink-patch" => {
+                let source = if case == "symlink-input" {
+                    "game.nes"
+                } else {
+                    "main.ips"
+                };
+                symlink(source, recipe.path()).expect("source symlink");
+                "out.nes".to_owned()
+            }
+            "hardlink-input" | "hardlink-patch" => {
+                let source = if case == "hardlink-input" {
+                    input.path()
+                } else {
+                    patch.path()
+                };
+                fs::hard_link(source, recipe.path()).expect("source hardlink");
+                "out.nes".to_owned()
+            }
+            "symlink-output" | "hardlink-output" => {
+                let output = temp.child("out.nes");
+                fs::write(output.path(), b"existing output").expect("output sentinel");
+                if case == "symlink-output" {
+                    symlink("out.nes", recipe.path()).expect("output symlink");
+                } else {
+                    fs::hard_link(output.path(), recipe.path()).expect("output hardlink");
+                }
+                "out.nes".to_owned()
+            }
+            _ => unreachable!(),
+        };
+        let output_path = temp.child(&output);
+        let output_before = fs::read(output_path.path()).ok();
+        let recipe_before = fs::read(recipe.path()).ok();
+        let (status, transcript) = run_tui_to(&temp, &output, &["--force"]);
+        assert_eq!(status.code(), Some(2), "{case}: {transcript}");
+        assert!(transcript.contains("--tui recipe"), "{case}: {transcript}");
+        assert!(
+            !transcript.contains("Authoring rom-weaver-weave.json"),
+            "{case}: {transcript}"
+        );
+        assert_eq!(
+            fs::read(input.path()).expect("preserved input"),
+            input_before,
+            "{case}"
+        );
+        assert_eq!(
+            fs::read(patch.path()).expect("preserved patch"),
+            patch_before,
+            "{case}"
+        );
+        assert_eq!(fs::read(output_path.path()).ok(), output_before, "{case}");
+        assert_eq!(fs::read(recipe.path()).ok(), recipe_before, "{case}");
+    }
+}
+
+#[test]
+fn tui_allows_distinct_recipe_basename_in_another_directory() {
+    let temp = fixture();
+    let (status, transcript) = run_tui_to(&temp, "nested/rom-weaver-weave.json", &["--force"]);
+    assert!(status.success(), "{transcript}");
+    let rom = fs::read(temp.child("nested/rom-weaver-weave.json").path()).expect("output ROM");
+    assert_eq!(rom.len(), 32_784);
+    assert_eq!(rom[20], 0xaa);
+    let recipe: Value = serde_json::from_slice(
+        &fs::read(temp.child("rom-weaver-weave.json").path()).expect("recipe"),
+    )
+    .expect("recipe JSON");
+    assert_eq!(recipe["patches"][0]["name"], "main");
+}
+
+#[test]
+fn tui_rejects_inherited_weave_settings_before_writing() {
+    let temp = fixture();
+    let weave = serde_json::json!({
+        "version": 1,
+        "rom": {"path": "game.nes"},
+        "patches": [],
+        "cheats": [{"id": "snapshot", "code": "AKE-LVS", "codeKind": "game-genie"}],
+        "output": {"header": "strip"}
+    });
+    fs::write(
+        temp.child("source.json").path(),
+        serde_json::to_vec(&weave).expect("weave JSON"),
+    )
+    .expect("weave fixture");
+    let input_before = fs::read(temp.child("game.nes").path()).expect("input");
+    let (status, transcript) = run_tui(&temp, &["--weave", "source.json", "--force"]);
+    assert_eq!(status.code(), Some(2), "{transcript}");
+    assert!(
+        transcript.contains("--tui cannot re-open a weave"),
+        "{transcript}"
+    );
+    assert_eq!(
+        fs::read(temp.child("game.nes").path()).expect("input"),
+        input_before
+    );
+    assert!(!temp.child("out.nes").path().exists());
+    assert!(!temp.child("rom-weaver-weave.json").path().exists());
+}
+
+#[test]
+fn tui_rejects_unresolvable_recipe_before_writing() {
+    use std::os::unix::fs::symlink;
+
+    for case in ["self", "pair", "chain41"] {
+        let temp = fixture();
+        let recipe = temp.child("rom-weaver-weave.json");
+        let output = temp.child("out.nes");
+        fs::write(output.path(), b"existing output").expect("output sentinel");
+        match case {
+            "self" => symlink("rom-weaver-weave.json", recipe.path()).expect("self link"),
+            "pair" => {
+                symlink("other-link", recipe.path()).expect("first link");
+                symlink("rom-weaver-weave.json", temp.child("other-link").path())
+                    .expect("second link");
+            }
+            "chain41" => {
+                for index in 0..41 {
+                    let link = if index == 0 {
+                        recipe.path().to_path_buf()
+                    } else {
+                        temp.child(format!("link-{index}")).path().to_path_buf()
+                    };
+                    let target = if index == 40 {
+                        "out.nes".to_owned()
+                    } else {
+                        format!("link-{}", index + 1)
+                    };
+                    symlink(target, link).expect("chain link");
+                }
+            }
+            _ => unreachable!(),
+        }
+        let input = temp.child("game.nes");
+        let input_before = fs::read(input.path()).expect("input");
+        let (status, transcript) = run_tui(&temp, &["--force"]);
+        assert_eq!(status.code(), Some(2), "{case}: {transcript}");
+        assert!(
+            transcript.contains("cannot be resolved safely"),
+            "{case}: {transcript}"
+        );
+        assert!(
+            !transcript.contains("Authoring rom-weaver-weave.json"),
+            "{case}: {transcript}"
+        );
+        assert_eq!(
+            fs::read(output.path()).expect("output"),
+            b"existing output",
+            "{case}"
+        );
+        assert_eq!(
+            fs::read(input.path()).expect("input"),
+            input_before,
+            "{case}"
+        );
+    }
 }
