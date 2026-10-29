@@ -182,6 +182,41 @@ describe("createEmulatorDocument", () => {
   });
 
   it.each([
+    ["copies legacy BIN settings without bare settings", "psx", "legacy", null, null, "legacy"],
+    ["prefers legacy BIN settings", "psx", "legacy", "bare", null, "legacy"],
+    ["falls back to bare settings", "psx", null, "bare", null, "bare"],
+    ["keeps existing ZIP settings", "psx", "legacy", "bare", "current", "current"],
+    ["does not copy BIN settings for another core", "segaSaturn", "legacy", null, null, undefined],
+    ["retains bare migration for another core", "segaSaturn", "legacy", "bare", null, "bare"],
+  ] as const)("%s", (_label, core, legacy, bare, current, expected) => {
+    const checksum = "c".repeat(40);
+    const identity = createEmulatorGameIdentity({ checksum, fileName: "Game.zip" });
+    const document = createEmulatorDocument("/data/", "blob:game", identity.gameName, core, {
+      gameId: identity.gameId,
+      saveId: identity.saveId,
+    });
+    const prefix = `ejs-${identity.gameId}-${core}-${checksum}`;
+    const store = new Map<string, string>();
+    if (bare !== null) store.set(`${prefix}-settings`, bare);
+    if (legacy !== null) store.set(`${prefix}.bin-settings`, legacy);
+    if (current !== null) store.set(`${prefix}.zip-settings`, current);
+    const original = new Map(store);
+    const localStorage = {
+      get length() {
+        return store.size;
+      },
+      key: (index: number) => [...store.keys()][index] ?? null,
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    };
+    const script = document.split("<script>").find((part) => part.includes("const bare ="));
+    expect(script).toBeDefined();
+    runInNewContext(script?.split("</script>")[0] ?? "", { console, localStorage });
+    expect(store.get(`${prefix}.zip-settings`)).toBe(expected);
+    for (const [key, value] of original) expect(store.get(key)).toBe(value);
+  });
+
+  it.each([
     ["lowercase", "<script>", "</script>"],
     ["uppercase", "<SCRIPT>", "</SCRIPT>"],
     ["mixed case with attributes", '<ScRiPt type="text/javascript">', "</sCrIpT >"],

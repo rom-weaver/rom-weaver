@@ -120,19 +120,22 @@ const CLEAR_HIDDEN_SETTINGS = `
  * the old entry to the new key once so remaps, settings, and cheats survive.
  * Safe to delete once no such saved setting can be in the wild.
  */
-const createMigrateBareSettings = (gameId: number, saveId: string, gameName: string) => `
+const createMigrateBareSettings = (gameId: number, saveId: string, gameName: string, core: string) => `
       (() => {
         const bare = ${toScriptString(saveId)};
         const named = ${toScriptString(gameName)};
         if (named === bare) return;
         const prefix = 'ejs-' + ${gameId} + '-';
-        const oldTail = '-' + bare + '-settings';
+        const names = ${core === "psx" && gameName === `${saveId}.zip` ? "[bare + '.bin', bare]" : "[bare]"};
         try {
-          for (let index = 0; index < localStorage.length; index += 1) {
-            const key = localStorage.key(index);
-            if (!key || !key.startsWith(prefix) || !key.endsWith(oldTail)) continue;
-            const next = key.slice(0, key.length - oldTail.length) + '-' + named + '-settings';
-            if (localStorage.getItem(next) === null) localStorage.setItem(next, localStorage.getItem(key));
+          for (const name of names) {
+            const oldTail = '-' + name + '-settings';
+            for (let index = 0; index < localStorage.length; index += 1) {
+              const key = localStorage.key(index);
+              if (!key || !key.startsWith(prefix) || !key.endsWith(oldTail)) continue;
+              const next = key.slice(0, key.length - oldTail.length) + '-' + named + '-settings';
+              if (localStorage.getItem(next) === null) localStorage.setItem(next, localStorage.getItem(key));
+            }
           }
         } catch (error) {
           console.warn('Could not migrate the EmulatorJS settings for ' + bare, error);
@@ -404,7 +407,7 @@ const createEmulatorDocument = (
     <script>${OWN_GAME_BUFFER}</script>
     <script>${LABEL_MENU_BUTTONS}</script>
     <script>${TOLERATE_WAKE_LOCK_DENIAL}</script>
-    <script>${createMigrateBareSettings(options.gameId ?? hashString(gameName), options.saveId || gameName, gameName)}</script>
+    <script>${createMigrateBareSettings(options.gameId ?? hashString(gameName), options.saveId || gameName, gameName, core)}</script>
     <script>${CLEAR_HIDDEN_SETTINGS}</script>
     <script>${createEmulatorBridgeScript(gameName, options.gameLabel || gameName, options.saveId || gameName)}</script>
     <script src="${dataUrl}loader.js"></script>
