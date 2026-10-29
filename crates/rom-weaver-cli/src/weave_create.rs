@@ -1304,7 +1304,12 @@ fn ensure_weave_create_sources_preserved(
             disc_sources.extend(paths);
         }
     }
-    for (flag, output) in std::iter::once(("--output", args.output.as_path()))
+    let output_flag = if args.output_is_emit_weave {
+        "--emit-weave"
+    } else {
+        "--output"
+    };
+    for (flag, output) in std::iter::once((output_flag, args.output.as_path()))
         .chain(args.bundle.as_deref().map(|path| ("--weave", path)))
     {
         for source in args

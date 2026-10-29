@@ -167,6 +167,54 @@ fn report_output_apply_reports_failed_weave_sidecar_before_terminal_success() {
 }
 
 #[test]
+fn report_output_apply_emit_weave_source_overwrite_names_emit_weave_flag() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.bin");
+    let patch = temp.child("change.ips");
+    let output = temp.child("patched.bin");
+    fs::write(input.path(), b"hello world").expect("input fixture");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0,
+                data: vec![b'H'],
+            }],
+            None,
+        ),
+    )
+    .expect("patch fixture");
+    let original = fs::read(patch.path()).expect("patch bytes");
+    let result = report(&[
+        "patch",
+        "apply",
+        "-i",
+        input.path().to_str().expect("input path"),
+        "--patch",
+        patch.path().to_str().expect("patch path"),
+        "-o",
+        output.path().to_str().expect("output path"),
+        "--no-compress",
+        "--emit-weave",
+        patch.path().to_str().expect("patch path"),
+        "--force",
+        "--json",
+    ]);
+    assert_eq!(result["status"], "succeeded");
+    assert_eq!(fs::read(patch.path()).expect("patch remains"), original);
+    assert!(
+        result["details"]["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .any(|warning| warning.as_str().is_some_and(|warning| {
+                warning.contains("--emit-weave must not overwrite source")
+            })),
+        "{result}"
+    );
+}
+
+#[test]
 fn report_output_trim_reports_final_path_and_size() {
     let temp = setup_temp_dir();
     let input = temp.child("game.nds");
