@@ -38,9 +38,7 @@ struct PbpDiscEntry {
 
 #[derive(Clone, Debug)]
 struct PbpArchive {
-    /// False for a PBP whose `DATA.PSAR` section is empty (PSP homebrew `EBOOT.PBP`): it is
-    /// itself the executable and has no disc to extract.
-    has_psar: bool,
+    psp_layout: Option<&'static str>,
     discs: Vec<PbpDiscEntry>,
 }
 
@@ -70,8 +68,6 @@ pub(crate) struct PbpContainerHandler;
 
 impl PbpContainerHandler {
     const PBP_HEADER_SIZE: usize = 0x28;
-    const PBP_SECTION_COUNT: usize = 8;
-    const PSAR_INDEX_FIELD_OFFSET: usize = 0x24;
     const PSAR_GAME_ID_OFFSET: u64 = 0x400;
     const PSAR_TOC_OFFSET: u64 = 0x800;
     const PSAR_INDEX_OFFSET: u64 = 0x4000;
@@ -101,15 +97,21 @@ impl PbpContainerHandler {
             )));
         }
 
-        let psar_offset = self.parse_psar_offset(source, &mut file, file_size)?;
-        if psar_offset == file_size {
-            debug!(
-                source = %source.display(),
-                psar_offset,
-                "pbp has an empty DATA.PSAR section (self-contained PSP executable)"
-            );
+        let layout =
+            rom_weaver_core::pbp::classify_pbp(&mut file, file_size).map_err(
+                |error| match error {
+                    RomWeaverError::Validation(message) => RomWeaverError::Validation(format!(
+                        "pbp source `{}`: {message}",
+                        source.display()
+                    )),
+                    other => other,
+                },
+            )?;
+        let psar_offset = layout.psar_offset;
+        if let Some(description) = layout.kind.psp_layout() {
+            debug!(source = %source.display(), description, "keeping PSP PBP intact");
             return Ok(PbpArchive {
-                has_psar: false,
+                psp_layout: Some(description),
                 discs: Vec::new(),
             });
         }
@@ -131,70 +133,19 @@ impl PbpContainerHandler {
             )));
         }
         Ok(PbpArchive {
-            has_psar: true,
+            psp_layout: None,
             discs,
         })
     }
 
-    fn ensure_has_psar(source: &Path, archive: &PbpArchive) -> Result<()> {
-        if archive.has_psar {
+    fn ensure_has_ps1_discs(source: &Path, archive: &PbpArchive) -> Result<()> {
+        let Some(layout) = archive.psp_layout else {
             return Ok(());
-        }
+        };
         Err(RomWeaverError::Validation(format!(
-            "pbp source `{}` has an empty DATA.PSAR, so it is a self-contained PSP executable with no disc to extract",
+            "pbp source `{}`: {layout}; no extractable PS1 disc; keep the PBP intact for a PSP emulator",
             source.display()
         )))
-    }
-
-    fn parse_psar_offset(&self, source: &Path, file: &mut File, file_size: u64) -> Result<u64> {
-        let mut header = [0u8; Self::PBP_HEADER_SIZE];
-        self.read_exact_at(source, file, 0, &mut header, "PBP header")?;
-        if header[..4] != PBP_SIGNATURE {
-            return Err(RomWeaverError::Validation(format!(
-                "source `{}` is not a pbp container (missing \\0PBP magic)",
-                source.display()
-            )));
-        }
-
-        let mut previous = 0u32;
-        for section_index in 0..Self::PBP_SECTION_COUNT {
-            let offset_index = 8 + (section_index * 4);
-            let offset = u32::from_le_bytes([
-                header[offset_index],
-                header[offset_index + 1],
-                header[offset_index + 2],
-                header[offset_index + 3],
-            ]);
-            if section_index == 0 && offset < Self::PBP_HEADER_SIZE as u32 {
-                return Err(RomWeaverError::Validation(format!(
-                    "source `{}` has an invalid PBP section table (first section offset is {offset:#X})",
-                    source.display()
-                )));
-            }
-            if section_index > 0 && offset < previous {
-                return Err(RomWeaverError::Validation(format!(
-                    "source `{}` has non-monotonic PBP section offsets",
-                    source.display()
-                )));
-            }
-            if u64::from(offset) > file_size {
-                return Err(RomWeaverError::Validation(format!(
-                    "source `{}` has an out-of-range PBP section offset ({offset:#X})",
-                    source.display()
-                )));
-            }
-            previous = offset;
-        }
-
-        let psar_offset = u32::from_le_bytes([
-            header[Self::PSAR_INDEX_FIELD_OFFSET],
-            header[Self::PSAR_INDEX_FIELD_OFFSET + 1],
-            header[Self::PSAR_INDEX_FIELD_OFFSET + 2],
-            header[Self::PSAR_INDEX_FIELD_OFFSET + 3],
-        ]) as u64;
-        // The section loop above already rejected an offset past the end of the file. An offset
-        // equal to the file size is an empty DATA.PSAR section, handled by `parse_archive`.
-        Ok(psar_offset)
     }
 
     fn parse_disc_offsets(
@@ -878,7 +829,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
 
     fn is_self_contained_rom(&self, source: &Path) -> bool {
         self.parse_archive(source)
-            .is_ok_and(|archive| !archive.has_psar)
+            .is_ok_and(|archive| archive.psp_layout.is_some())
     }
 
     fn probe_details(
@@ -888,13 +839,12 @@ impl ContainerHandlerOperations for PbpContainerHandler {
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         let archive = self.parse_archive(&request.source)?;
-        if !archive.has_psar {
+        if let Some(layout) = archive.psp_layout {
             return Ok(OperationReport::succeeded(
                 OperationFamily::Container,
                 Some(PBP.name.to_string()),
                 "probe",
-                "pbp: empty DATA.PSAR; self-contained PSP executable with no disc to extract"
-                    .to_string(),
+                format!("pbp: {layout}"),
                 Some(100.0),
                 Some(execution),
             ));
@@ -931,7 +881,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
         _context: &OperationContext,
     ) -> Result<Vec<String>> {
         let archive = self.parse_archive(&request.source)?;
-        Self::ensure_has_psar(&request.source, &archive)?;
+        Self::ensure_has_ps1_discs(&request.source, &archive)?;
         let outputs = self.build_disc_outputs(&request.source, archive.discs.len());
         let mut entries = Vec::with_capacity(outputs.len() * 2);
         for output in outputs {
@@ -947,7 +897,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let archive = self.parse_archive(&request.source)?;
-        Self::ensure_has_psar(&request.source, &archive)?;
+        Self::ensure_has_ps1_discs(&request.source, &archive)?;
         let outputs = self.build_disc_outputs(&request.source, archive.discs.len());
         fs::create_dir_all(&request.out_dir)?;
 

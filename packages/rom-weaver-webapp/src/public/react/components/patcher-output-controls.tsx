@@ -77,7 +77,10 @@ function PatcherPrimaryAction({
   const runDisabled = state.applyButton.disabled || !!disableRun;
   const blocked = state.applyButton.blocked && !state.applyButton.loading && !runDisabled;
   const disabledReason = disableRun && !state.applyButton.loading && !state.applyButton.disabled ? disableReason : "";
-  const reason = blocked ? localizer.message("ui.output.applyBlocked") : disabledReason;
+  const blockedMessageId = state.applyButton.blockedByDamagedPatch
+    ? "ui.output.applyBlockedDamagedPatch"
+    : "ui.output.applyBlocked";
+  const reason = blocked ? localizer.message(blockedMessageId) : disabledReason;
   return (
     <>
       <ProgressActionButton

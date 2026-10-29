@@ -62,8 +62,8 @@ impl CliApp {
             engine_budget,
         )?;
 
-        // Identity detection is a separate stream consumer fed the same bytes as the
-        // variant engine - neither embeds the other. No extra read.
+        // Identity detection shares the checksum stream; PBP headers beyond the prefix
+        // are read with bounded seeks after hashing.
         let mut identity = IdentityPrefix::new();
         let mut file = File::open(&request.source)?;
         let mut buffer = vec![0_u8; CHECKSUM_VARIANT_CHUNK_SIZE];
@@ -113,7 +113,16 @@ impl CliApp {
             .source
             .extension()
             .map(|ext| format!(".{}", ext.to_string_lossy()));
-        let rom_identity = identity.detect(extension.as_deref());
+        let mut rom_identity = identity.detect(extension.as_deref());
+        if identity.has_pbp_signature()
+            && rom_weaver_core::pbp::classify_pbp(&mut file, file_len)
+                .is_ok_and(|layout| layout.kind.psp_layout().is_some())
+        {
+            rom_identity = rom_weaver_checksum::RomIdentity {
+                platform: Some(rom_weaver_checksum::platform_detection::platform::PSP),
+                disc_format: None,
+            };
+        }
 
         let primary_checksums = rows
             .iter()

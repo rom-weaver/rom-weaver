@@ -734,9 +734,16 @@ impl StreamingVariantChecksums {
             precomputed_checksums: std::mem::take(&mut self.precomputed_raw_checksums),
         };
 
-        let mut remove_header = self.plan_remove_header(&header)?;
-        let mut fix = self.plan_fix_header(&header)?;
-        let mut n64_orders = self.plan_n64_orders(&header)?;
+        // PBP sections and padding MUST NOT be interpreted as cartridge headers.
+        let (mut remove_header, mut fix, mut n64_orders) = if header.starts_with(b"\0PBP") {
+            (None, None, Vec::new())
+        } else {
+            (
+                self.plan_remove_header(&header)?,
+                self.plan_fix_header(&header)?,
+                self.plan_n64_orders(&header)?,
+            )
+        };
 
         // Split the budget evenly across active variants: a deferred `fix-header` carries no hasher
         // so it doesn't count; `new_parallel` caps each share at its algorithm count; a share of 1

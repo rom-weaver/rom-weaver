@@ -721,7 +721,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.create.tutorial.cheats.body": msg({
     id: "ui.create.tutorial.cheats.body",
     message:
-      "Choose Patches & cheats in step 3 to build from ordered changes. Modified ROM is the default; switching modes keeps your inputs.",
+      "Choose Patches & cheats in step 0x03 to build from ordered changes. Modified ROM is the default; switching modes keeps your inputs.",
   }),
   "ui.create.tutorial.cheats.tryIt": msg({
     id: "ui.create.tutorial.cheats.tryIt",
@@ -1127,6 +1127,26 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.patch.validationMismatch",
     message: "The patch checks did not match this ROM.",
   }),
+  "ui.patch.validationCorruptHint": msg({
+    id: "ui.patch.validationCorruptHint",
+    message:
+      "The patch file is damaged. Obtain a fresh copy and replace this patch. The ROM was not checked against it either.",
+  }),
+  "ui.patchChecks.corrupt": msg({ id: "ui.patchChecks.corrupt", message: "Patch file is damaged" }),
+  "ui.apply.validation.overrideDamagedPatch": msg({
+    id: "ui.apply.validation.overrideDamagedPatch",
+    message: "Apply anyway despite the damaged patch file's checksum (the ROM is not checked either)",
+  }),
+  "ui.apply.validation.damagedPatchWarning": msg({
+    id: "ui.apply.validation.damagedPatchWarning",
+    message:
+      "Warning: applying anyway uses the damaged patch as is and may produce a wrong or corrupt result. The ROM is not verified.",
+  }),
+  "ui.output.applyBlockedDamagedPatch": msg({
+    id: "ui.output.applyBlockedDamagedPatch",
+    message:
+      "Apply is blocked because the patch file is damaged. Replace the patch, or tick “Apply anyway” to use it as is.",
+  }),
   "ui.patch.validationUnreadableHint": msg({
     id: "ui.patch.validationUnreadableHint",
     message: "Remove this patch and choose a valid patch file.",
@@ -1137,7 +1157,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.patch.validationMismatchOverride": msg({
     id: "ui.patch.validationMismatchOverride",
-    message: "Choose the ROM that this patch was made for, or turn on Apply anyway in step 4.",
+    message: "Choose the ROM that this patch was made for, or turn on Apply anyway in step 0x04.",
   }),
   "ui.patch.version": msg({ id: "ui.patch.version", message: "Version" }),
   "ui.tutorial.actions": msg({ id: "ui.tutorial.actions", message: "On this card" }),
@@ -1202,6 +1222,16 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.errorRecovery.archiveDepth",
     message: "Extract the outer archive on your device, then add the required file or a less deeply nested archive.",
   }),
+  "ui.errorRecovery.archiveRead": msg({
+    id: "ui.errorRecovery.archiveRead",
+    message: "This archive is damaged or unsupported. Choose another archive or extract it on your device first.",
+  }),
+  "ui.errorRecovery.details": msg({ id: "ui.errorRecovery.details", message: "Technical details" }),
+  "ui.create.outputHelp": msg({
+    id: "ui.create.outputHelp",
+    message:
+      "Options → Type sets the download: None gives the raw patch file, and ZIP or 7z packages it in an archive. New settings start on None.",
+  }),
   "ui.errorRecovery.memory": msg({
     id: "ui.errorRecovery.memory",
     message:
@@ -1223,6 +1253,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "error.CHECKSUM_MISMATCH": msg({
     id: "error.CHECKSUM_MISMATCH",
     message: "This file's checksum doesn't match the expected one. Check that you chose the right ROM.",
+  }),
+  "error.PATCH_FILE_DAMAGED": msg({
+    id: "error.PATCH_FILE_DAMAGED",
+    message: "The patch file is damaged (its checksum is invalid). Obtain a fresh copy and replace this patch.",
   }),
   "error.COMPRESSION_FAILED": msg({ id: "error.COMPRESSION_FAILED", message: "Compression failed." }),
   "error.INVALID_INPUT": msg({ id: "error.INVALID_INPUT", message: "rom-weaver couldn't use the files you added." }),
@@ -2520,6 +2554,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.saves.editor.confirm": msg({ id: "ui.saves.editor.confirm", message: "Confirm" }),
   "ui.saves.editor.undoReplacement": msg({ id: "ui.saves.editor.undoReplacement", message: "Undo replacement" }),
+  "ui.apply.weaveTrackChecksSkipped": msg({
+    id: "ui.apply.weaveTrackChecksSkipped",
+    message:
+      "Some weave track checks were skipped because the title database was not available. The weave's own checks still apply.",
+  }),
 };
 
 export { MESSAGES };

@@ -580,6 +580,11 @@ msgstr "Aplicar de todos modos pese a la discrepancia de comprobación del parch
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.overrideDamagedPatch"
+msgstr "Aplicar de todos modos pese a la suma de verificación dañada del archivo del parche (tampoco se comprueba la ROM)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.applyDescription"
 msgstr "Aplica parches BPS, IPS, UPS y xdelta. Abre archivos comprimidos, aplica parches en orden y elige el formato de salida. Tus archivos se quedan en tu dispositivo."
 
@@ -592,6 +597,11 @@ msgstr "Aplicar códigos de trucos"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyCheatsThesis"
 msgstr "Aplica códigos de trucos a ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlockedDamagedPatch"
+msgstr "Aplicar está bloqueado porque el archivo del parche está dañado. Reemplaza el parche o marca «Aplicar de todos modos» para usarlo tal cual."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1251,7 +1261,7 @@ msgstr "Elija el juego que necesita"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.validationMismatchOverride"
-msgstr "Elige la ROM para la que se creó este parche o usa la anulación en 0x04."
+msgstr "Elige la ROM para la que se creó este parche o activa «Aplicar de todos modos» en el paso 0x04."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3480,6 +3490,11 @@ msgstr "Opciones"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.create.outputHelp"
+msgstr "En Opciones → Tipo se elige la descarga: Ninguna entrega el parche sin comprimir, y ZIP o 7z lo empaqueta en un archivo comprimido. Los ajustes nuevos empiezan en Ninguna."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.homeDrop"
 msgstr "o suelta ROMs y parches aquí"
 
@@ -3692,6 +3707,11 @@ msgstr "Detalles del parche"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.inputHandling.patchEntries"
 msgstr "Las entradas de parches pueden ser obligatorias u opcionales, y registran nombres, fuentes, reglas de encabezado y comprobaciones esperadas de la ROM."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.corrupt"
+msgstr "El archivo del parche está dañado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4795,6 +4815,11 @@ msgstr "ranura {slot} · índice {index}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.weaveTrackChecksSkipped"
+msgstr "Se omitieron algunas comprobaciones de pistas del weave porque la base de datos de títulos no estaba disponible. Las comprobaciones propias del weave siguen aplicándose."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.flowWeaveBringAfter"
 msgstr "que alguien te haya enviado."
 
@@ -5002,6 +5027,11 @@ msgstr "Toca para agregar ROM, parches, paquetes o archivos"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.tap"
 msgstr "Toca para elegir archivos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.details"
+msgstr "Detalles técnicos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5240,6 +5270,16 @@ msgstr "No se pudo aplicar el parche."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.PATCH_FILE_DAMAGED"
+msgstr "El archivo del parche está dañado (su suma de verificación no es válida). Consigue una copia nueva y reemplaza este parche."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.validationCorruptHint"
+msgstr "El archivo del parche está dañado. Consigue una copia nueva y reemplaza este parche. Tampoco se comprobó la ROM con él."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.flowApplyGet"
 msgstr "La ROM parcheada con las sumas de verificación comprobadas. Guarda la cadena como paquete para repetirla o compartirla."
 
@@ -5347,6 +5387,11 @@ msgstr "Estos parches esperan ROMs distintas: cada tarjeta de parche muestra la 
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.weaveTutorial.patches.body"
 msgstr "Estos parches usan la ROM original, por lo que se puede cambiar su orden u omitir cualquiera. Usa Detalles del parche para editar la etiqueta, versión, autor y descripción de cada parche."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.archiveRead"
+msgstr "Este archivo comprimido está dañado o no es compatible. Elige otro o extráelo primero en tu dispositivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5742,6 +5787,11 @@ msgstr "Ver el código en GitHub"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.webappFoot"
 msgstr "¿Quieres tu propia copia? Hospédala tú mismo con archivos estáticos o una imagen de Docker."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.damagedPatchWarning"
+msgstr "Advertencia: aplicar de todos modos usa el parche dañado tal cual y puede producir un resultado incorrecto o corrupto. La ROM no se verifica."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

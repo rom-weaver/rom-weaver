@@ -580,6 +580,11 @@ msgstr "Trotz abweichender Patch- und ROM-Prüfung anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.overrideDamagedPatch"
+msgstr "Trotz beschädigter Prüfsumme der Patch-Datei anwenden (die ROM wird ebenfalls nicht geprüft)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.applyDescription"
 msgstr "Wende BPS-, IPS-, UPS- und xdelta-Patches an. Öffne Archive, wende Patches der Reihe nach an und wähle dein Ausgabeformat. Deine Dateien bleiben auf deinem Gerät."
 
@@ -592,6 +597,11 @@ msgstr "Cheat-Codes anwenden"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyCheatsThesis"
 msgstr "Cheat-Codes auf ROMs anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlockedDamagedPatch"
+msgstr "Anwenden ist blockiert, weil die Patch-Datei beschädigt ist. Ersetze den Patch oder aktiviere „Trotz beschädigter Prüfsumme der Patch-Datei anwenden“, um ihn unverändert zu verwenden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1251,7 +1261,7 @@ msgstr "Wählen Sie das benötigte Spiel"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.validationMismatchOverride"
-msgstr "Wähle die ROM, für die dieser Patch erstellt wurde, oder nutze die Überschreibung in 0x04."
+msgstr "Wähle die ROM, für die dieser Patch erstellt wurde, oder aktiviere in Schritt 0x04 „Trotz abweichender Patch- und ROM-Prüfung anwenden“."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3480,6 +3490,11 @@ msgstr "Optionen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.create.outputHelp"
+msgstr "Unter Optionen → Typ legst du den Download fest: Keine liefert die reine Patch-Datei, ZIP oder 7z packt sie in ein Archiv. Neue Einstellungen starten mit Keine."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.homeDrop"
 msgstr "oder ROMs und Patches hier ablegen"
 
@@ -3692,6 +3707,11 @@ msgstr "Patch-Details"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.inputHandling.patchEntries"
 msgstr "Patch-Einträge können erforderlich oder optional sein und erfassen Namen, Quellen, Header-Regeln und erwartete ROM-Prüfungen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.corrupt"
+msgstr "Patch-Datei ist beschädigt"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4795,6 +4815,11 @@ msgstr "Slot {slot} · Index {index}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.weaveTrackChecksSkipped"
+msgstr "Einige Spurprüfungen des Weaves wurden übersprungen, weil die Titeldatenbank nicht verfügbar war. Die eigenen Prüfungen des Weaves gelten weiterhin."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.flowWeaveBringAfter"
 msgstr ", die dir jemand geschickt hat."
 
@@ -5002,6 +5027,11 @@ msgstr "Tippen, um ROMs, Patches, Weaves oder Archive hinzuzufügen"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.tap"
 msgstr "Tippen, um Dateien zu wählen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.details"
+msgstr "Technische Details"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5240,6 +5270,16 @@ msgstr "Das Anwenden des Patches ist fehlgeschlagen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.PATCH_FILE_DAMAGED"
+msgstr "Die Patch-Datei ist beschädigt (ihre Prüfsumme ist ungültig). Besorge eine neue Kopie und ersetze diesen Patch."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.validationCorruptHint"
+msgstr "Die Patch-Datei ist beschädigt. Besorge eine neue Kopie und ersetze diesen Patch. Die ROM wurde damit ebenfalls nicht geprüft."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.flowApplyGet"
 msgstr "Die gepatchte ROM mit geprüften Prüfsummen. Speichere die Kette als Weave, um sie zu wiederholen oder zu teilen."
 
@@ -5347,6 +5387,11 @@ msgstr "Diese Patches erwarten unterschiedliche ROMs - jede Patch-Karte zeigt di
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.weaveTutorial.patches.body"
 msgstr "Diese Patches zielen auf das Original-ROM. Spieler können ihre Reihenfolge ändern oder einen überspringen. Verwende Patch-Details, um Bezeichnung, Version, Autor und Beschreibung zu bearbeiten."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.archiveRead"
+msgstr "Dieses Archiv ist beschädigt oder wird nicht unterstützt. Wähle ein anderes Archiv oder entpacke es zuerst auf deinem Gerät."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5742,6 +5787,11 @@ msgstr "Quelltext auf GitHub"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.webappFoot"
 msgstr "Möchtest du eine eigene Kopie? Hoste sie selbst aus statischen Dateien oder einem Docker-Image."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.damagedPatchWarning"
+msgstr "Warnung: Wenn du trotzdem anwendest, wird der beschädigte Patch unverändert verwendet und das Ergebnis kann falsch oder fehlerhaft sein. Die ROM wird nicht geprüft."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

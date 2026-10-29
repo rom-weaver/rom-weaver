@@ -42,6 +42,7 @@ const formatHeaderAutoLabel = (
 interface UiViewStateInput {
   busy: boolean;
   checksumOverrideChecked: boolean;
+  checksumOverrideNamesDamagedPatch: boolean;
   disabled: boolean;
   effectiveOutputNoticeMessage: string;
   hasStrictInputChecksumMismatch: boolean;
@@ -60,6 +61,7 @@ interface UiViewStateInput {
 const buildUiViewState = ({
   busy,
   checksumOverrideChecked,
+  checksumOverrideNamesDamagedPatch,
   disabled,
   effectiveOutputNoticeMessage,
   hasStrictInputChecksumMismatch,
@@ -80,6 +82,7 @@ const buildUiViewState = ({
       checked: checksumOverrideChecked,
       disabled: disabled || busy || inputStaging || patchStaging,
       label: emptyState.checksumOverride.label,
+      namesDamagedPatch: checksumOverrideNamesDamagedPatch,
       visible: hasStrictInputChecksumMismatch,
     },
     inputNotice: {
@@ -217,6 +220,8 @@ interface OutputViewStateInput {
   applyTimingText: string;
   busy: boolean;
   applyBlocked: boolean;
+  /** The only blocker is a damaged patch file, so the reason text must not blame the ROM. */
+  applyBlockedByDamagedPatch: boolean;
   canQueueApply: boolean;
   completedSizeSummary: OutputSizeSummary;
   compressTimingText: string;
@@ -243,6 +248,7 @@ const buildOutputViewState = ({
   activeSettings,
   applyQueued,
   applyBlocked,
+  applyBlockedByDamagedPatch,
   applyTimingText,
   busy,
   canQueueApply,
@@ -265,6 +271,7 @@ const buildOutputViewState = ({
 }: OutputViewStateInput) => ({
   applyButton: {
     blocked: applyBlocked && !hasPendingDownload,
+    blockedByDamagedPatch: applyBlockedByDamagedPatch,
     disabled: disabled || !(busy || hasPendingDownload || canQueueApply),
     label: hasPendingDownload ? `Download ${pendingDownloadFileName || "output"}` : "Apply & download",
     loading: busy || applyQueued,

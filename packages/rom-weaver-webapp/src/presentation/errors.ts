@@ -1,5 +1,6 @@
 import type { MessageId } from "./localization/catalog.ts";
 import { createLocalizer, type Localizer } from "./localization/index.ts";
+import { isPatchFileChecksumFailure } from "../public/react/patch-validation-failure.ts";
 
 type CodedErrorLike = Error & {
   code?: unknown;
@@ -70,6 +71,8 @@ const getUserFacingErrorMessage = (error: unknown, localizer: Localizer = create
   if (code === "INVALID_INPUT" && message.toLowerCase().includes("multi-file output")) return message;
   if ((code === "WORKER_FAILED" || code === "COMPRESSION_FAILED") && OUT_OF_MEMORY_MESSAGE_REGEX.test(message))
     return message;
+  if (code === "CHECKSUM_MISMATCH" && getDistinctErrorMessages(error).some(isPatchFileChecksumFailure))
+    return localizer.message("error.PATCH_FILE_DAMAGED");
   const messageId = `error.${code}` as MessageId;
   const localized = localizer.message(messageId, getErrorDetails(error));
   return localized === messageId ? getErrorMessage(error) : localized;

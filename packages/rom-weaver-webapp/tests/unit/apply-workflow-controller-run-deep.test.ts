@@ -200,6 +200,16 @@ describe("ApplyWorkflowController.createCombinedPatch", () => {
     expect(mocks.runCreateWorkflow).toHaveBeenCalledTimes(2);
   });
 
+  it("does not carry the final-output check into the combined-patch apply", async () => {
+    const { controller } = arrange();
+    controller.patches[0].state.validateOutputChecksum = "deadbeef";
+    controller.patches[0].state.outputChecks = "size=12";
+    await controller.createCombinedPatch({ format: "bps", output: { outputName: "combined.bps" } });
+    const [option] = mocks.runApplyWorkflow.mock.calls[0][0].patchOptions;
+    expect(option.validateOutputChecksum).toBeUndefined();
+    expect(option.outputChecks).toBe("size=12");
+  });
+
   it("names the intermediate ROM after the original, not the compressed output name", async () => {
     const { controller } = arrange();
     controller.outputState.outputName = "MyHack.zip";
