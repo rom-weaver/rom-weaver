@@ -140,6 +140,61 @@ fn rar_links_are_skipped_instead_of_listed_as_regular_files() {
 }
 
 #[test]
+fn rar5_preserves_stored_unicode_names_and_payloads() {
+    let dir = unique_temp_dir("rar5-unicode");
+    let source = dir.join("unicode.rar");
+    fs::write(
+        &source,
+        include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/fixtures/rar/rar5-unicode.rar"
+        )),
+    )
+    .expect("write upstream RAR5 Unicode fixture");
+    let entries = list_regular_archive_file_entries(&source, "rar").expect("list Unicode names");
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "👋🌎.txt");
+    assert_eq!(entries[0].size, Some(13));
+    assert_eq!(
+        with_regular_archive_file_entry_reader(
+            &source,
+            "rar",
+            entries[0].index,
+            "👋🌎.txt",
+            read_all
+        )
+        .expect("read the Unicode entry"),
+        b"Hello, world!"
+    );
+}
+
+#[test]
+fn rar5_rejects_invalid_utf8_instead_of_substituting_a_name() {
+    let dir = unique_temp_dir("rar5-invalid-utf8");
+    let source = dir.join("invalid.rar");
+    let mut bytes = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tests/fixtures/rar/rar5-stored.rar"
+    ))
+    .to_vec();
+    assert_eq!(&bytes[34..39], b"empty");
+    // Keep the header checksum valid so the pathname decoder sees the malformed name.
+    bytes[34] = 0xff;
+    let header_crc = crc32fast::hash(&bytes[20..39]);
+    bytes[16..20].copy_from_slice(&header_crc.to_le_bytes());
+    fs::write(&source, bytes).expect("write invalid UTF-8 RAR5 fixture");
+
+    let error = list_regular_archive_file_entries(&source, "rar")
+        .expect_err("invalid UTF-8 must not become a legacy or substituted name");
+    assert!(
+        error
+            .to_string()
+            .contains("invalid UTF-8 archive entry pathname"),
+        "{error}"
+    );
+}
+
+#[test]
 fn empty_regular_tar_entries_remain_supported() {
     let dir = unique_temp_dir("empty-regular");
     let source = dir.join("empty.tar");

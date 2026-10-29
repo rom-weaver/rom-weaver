@@ -1851,6 +1851,41 @@ fn extract_rar_reports_thread_fallback_in_json() {
 }
 
 #[test]
+fn extract_rar5_preserves_unicode_names_under_both_locales() {
+    for locale in ["C", "C.UTF-8"] {
+        let temp = setup_temp_dir();
+        let out = temp.child("out");
+        let output = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .env("HOME", temp.path())
+            .env("XDG_CONFIG_HOME", temp.child("config").path())
+            .env("XDG_CACHE_HOME", temp.child("cache").path())
+            .env("XDG_STATE_HOME", temp.child("state").path())
+            .env("LC_ALL", locale)
+            .args(["extract", "--input"])
+            .arg(rar_fixture_path("rar5-unicode.rar"))
+            .arg("--output")
+            .arg(out.path())
+            .args(["--no-ignore", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .clone();
+        assert_eq!(
+            fs::read(out.child("👋🌎.txt").path()).expect("exact Unicode filename"),
+            b"Hello, world!",
+            "locale {locale}"
+        );
+        assert_eq!(fs::read_dir(out.path()).expect("output entries").count(), 1);
+        let stderr = String::from_utf8(output.stderr).expect("UTF-8 diagnostics");
+        for link in ["Ⓗⓐⓡⓓ Ⓛⓘⓝⓚ.txt", "𝒮𝓎𝓂𝒷𝑜𝓁𝒾𝒸 𝐿𝒾𝓃𝓀.txt"]
+        {
+            assert!(stderr.contains(link), "locale {locale}: {stderr}");
+        }
+    }
+}
+
+#[test]
 fn extract_rar5_rejects_truncated_archive() {
     assert_rar5_truncated_lengths(&[828, 600]);
 }

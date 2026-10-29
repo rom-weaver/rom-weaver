@@ -293,6 +293,17 @@ impl<'a> ReadArchiveEntry<'a> {
 
     /// The entry name as UTF-8, decoding names stored in a legacy charset.
     pub(crate) fn pathname(&self) -> io::Result<String> {
+        // RAR5 names MUST use the original UTF-8. The cached locale form can contain
+        // asterisks after musl's iconv reports a successful, lossy conversion.
+        if self.archive.format() == ARCHIVE_FORMAT_RAR_V5 {
+            trace!("reading the original RAR5 UTF-8 pathname");
+            return self.pathname_utf8().map(str::to_owned).map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("invalid UTF-8 archive entry pathname: {error}"),
+                )
+            });
+        }
         // The stored bytes come first: on Windows the UTF-8 accessor widens raw legacy bytes to
         // Latin-1 code points instead of failing.
         let stored = unsafe { rom_weaver_archive_entry_stored_pathname(self.ptr.as_ptr()) };
