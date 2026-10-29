@@ -62,7 +62,7 @@ Patching support, emulator support, cheat support, and save editing support are 
 
 | Feature | Support and limits |
 | --- | --- |
-| Offline use | Cached app files, databases, and emulator cores work offline. Remote links and uncached assets need a connection. [Offline setup](../how-to/browser-settings.md#prepare-for-offline-use). |
+| Offline use | The offline copy caches the app, every emulator core, and selected databases. Remote links and unselected databases need a connection. [Offline setup](../how-to/browser-settings.md#prepare-for-offline-use). |
 | Browser preferences | Theme, accent, language, byte units, guided help, output defaults, compression settings, and worker threads. [Settings](../how-to/browser-settings.md). |
 | Guided practice runs | Step-by-step cards for Apply, Create, Weave, Test, and the two cheat workflows, using homebrew practice files. Guided Apply waits for you to add files. [Guided practice runs](guided-runs.md). |
 | Beta tools | Trim and Save Editor are behind the browser's beta setting. PPF Undo and cheat tools in Apply, Create, and Identify are available without it. |

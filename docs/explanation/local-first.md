@@ -46,7 +46,7 @@ When a browser cannot finish a large job, the CLI is the same engine without the
 
 ## Offline
 
-Cached app code and local files can be used offline. Uncached identify packs, emulator cores, sample files, and remote weave sources still need a connection. Browser storage eviction can remove cached assets.
+With an offline copy, cached app code, every emulator core, selected identify databases, and local files can be used offline. Unselected identify databases and remote weave sources still need a connection. Browser storage eviction can remove cached assets.
 
 [Set up offline use](../how-to/browser-settings.md#prepare-for-offline-use) covers preparation. [Back up emulator saves](../how-to/test-roms-in-browser.md#export-and-restore-a-save) covers progress stored in the browser.
 

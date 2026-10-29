@@ -15,7 +15,7 @@ An open-source ROM, cheat, patch, and save toolkit for desktop browsers, support
 
 Drop in a compressed ROM and your patches, apply them in order, and recompress the result. One workflow, without unpacking each file by hand.
 
-Files stay on your device. No uploads, accounts, or telemetry. Works offline after caching needed browser assets, databases, and emulator cores, or setting up the CLI.
+Files stay on your device. No uploads, accounts, or telemetry. Works offline after keeping a browser offline copy (app and emulator cores, plus any selected databases), or setting up the CLI.
 
 <p>
   <a href="https://rom-weaver.com/apply-patches"><img alt="Open the webapp" src="https://img.shields.io/badge/Open_the_webapp-d9690f?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xNCAzaDd2N00yMSAzIDEwIDE0Ii8%2BPHBhdGggZD0iTTEwIDNINWEyIDIgMCAwIDAtMiAydjE0YTIgMiAwIDAgMCAyIDJoMTRhMiAyIDAgMCAwIDItMnYtNSIvPjwvc3ZnPg%3D%3D"></a>
@@ -68,7 +68,7 @@ Choose the [webapp](#webapp), [self-hosting](#self-hosting), or [CLI](#cli) path
 
 Open [rom-weaver.com/apply-patches](https://rom-weaver.com/apply-patches). Add your ROM and patches, then download the result. Files are processed on your device. No install or account is needed.
 
-For offline use, first cache the app and any needed identify packs, cheat databases, and emulator cores. Remote files still need a connection. See [offline behavior](docs/explanation/local-first.md#offline) and [privacy](docs/legal/privacy.md).
+For offline use, turn on the offline copy, which caches the app and every emulator core, and select any extra identify databases you need. Remote files still need a connection. See [offline behavior](docs/explanation/local-first.md#offline) and [privacy](docs/legal/privacy.md).
 
 Start with [your first patch](docs/tutorials/first-patch.md) to practise on supplied homebrew files. For your own files:
 

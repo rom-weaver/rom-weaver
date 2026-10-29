@@ -36,10 +36,8 @@ Only Trim and Save Editor require this setting; PPF Undo and cheats in Apply, Cr
 1. While online, open **Settings**, select **Keep an offline copy**, then **Save**.
 2. Wait for the app's offline download to finish.
 3. Reopen **Settings** and select the **Optional ROM databases** you need. These choices download immediately.
-4. Open the sample, weave, or cheat list you plan to use while online.
-5. Load a game for each emulator system you need, so its core is cached.
 
-**Offline active** confirms only the app cache. Finish optional downloads, keep ROMs and patches locally, and cache needed emulator cores. Browser-menu installation does not verify these resources.
+**Offline active** confirms the app, every emulator core, and the **Optional ROM databases** you selected are cached. Keep ROMs and patches locally. Browser-menu installation does not verify these resources.
 
 Before relying on offline use, disconnect, reopen rom-weaver, and run a small local job.
 

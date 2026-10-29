@@ -159,4 +159,4 @@ Use the **Delete** action in **Saves & storage** to remove one game. Use your br
 - **An imported save does not load:** confirm that its SHA-1 matches the ROM shown in Storage.
 - **The player has no sound on iPhone or iPad:** start the game inside the player. Safari requires that direct tap before it enables audio.
 
-The emulator and its selected cores download from rom-weaver's own origin. Load a game for each system you plan to use while online, so its emulator core is cached before you go offline.
+The emulator and its cores download from rom-weaver's own origin. With **Keep an offline copy** on, the offline download includes every core, so [offline use](browser-settings.md#prepare-for-offline-use) needs no per-system step.
