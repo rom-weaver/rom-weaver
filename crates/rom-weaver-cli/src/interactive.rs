@@ -109,6 +109,7 @@ pub fn run_weave_tui(apply: &PatchApplyCommand) -> Result<WeaveCreateCommand, St
             version: non_empty(version),
             author: non_empty(author),
             optional: optional.then_some(true),
+            header: apply.patch_header.get(index).copied(),
             ..WeaveCreatePatchSpec::default()
         });
     }

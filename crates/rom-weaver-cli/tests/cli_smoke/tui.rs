@@ -95,13 +95,21 @@ fn run_tui_paths(
     }
     let mut child = command.spawn().expect("TUI child");
     drop(command);
-    let prompts = [
-        "  name",
-        "  version",
-        "  author",
-        "optional (starts deselected)?",
-        "Output file name",
-    ];
+    let patch_count = 1 + extra
+        .iter()
+        .filter(|argument| **argument == "--patch")
+        .count();
+    let prompts = (0..patch_count)
+        .flat_map(|_| {
+            [
+                "  name",
+                "  version",
+                "  author",
+                "optional (starts deselected)?",
+            ]
+        })
+        .chain(std::iter::once("Output file name"))
+        .collect::<Vec<_>>();
     let deadline = Instant::now() + Duration::from_secs(20);
     let mut transcript = String::new();
     let mut prompt = 0;
@@ -164,11 +172,17 @@ fn assert_replay(temp: &TempDir) -> Vec<u8> {
 
 #[test]
 fn tui_recipe_replays_output_header_strip() {
-    for (mode, length) in [("strip", 32_768), ("keep", 32_784), ("auto", 32_784)] {
-        let temp = fixture();
-        let (status, transcript) = run_tui(&temp, &["--output-header", mode]);
-        assert!(status.success(), "{transcript}");
-        assert_eq!(assert_replay(&temp).len(), length);
+    for patch_mode in [None, Some("keep"), Some("strip")] {
+        for (mode, length) in [("strip", 32_768), ("keep", 32_784), ("auto", 32_784)] {
+            let temp = fixture();
+            let mut flags = vec!["--output-header", mode];
+            if let Some(patch_mode) = patch_mode {
+                flags.extend(["--patch-header", patch_mode]);
+            }
+            let (status, transcript) = run_tui(&temp, &flags);
+            assert!(status.success(), "{transcript}");
+            assert_eq!(assert_replay(&temp).len(), length);
+        }
     }
 }
 
@@ -686,5 +700,34 @@ fn tui_preserves_disc_sources_and_companion_outputs() {
             assert!(kept.len() >= 2352);
             assert!(!kept.starts_with(b"{"));
         }
+    }
+}
+
+#[test]
+fn tui_recipe_replays_aligned_per_patch_header_modes() {
+    for second_mode in [None, Some("keep"), Some("strip")] {
+        let temp = fixture();
+        fs::write(
+            temp.child("second.ips").path(),
+            b"PATCH\x00\x00\x15\x00\x01\xbbEOF",
+        )
+        .expect("second patch");
+        let mut flags = vec!["--patch-header", "strip", "--patch", "second.ips"];
+        if let Some(mode) = second_mode {
+            flags.extend(["--patch-header", mode]);
+        }
+        flags.extend(["--output-header", "strip"]);
+        let (status, transcript) = run_tui(&temp, &flags);
+        assert!(status.success(), "{transcript}");
+        assert_replay(&temp);
+        let recipe: Value = serde_json::from_slice(
+            &fs::read(temp.child("rom-weaver-weave.json").path()).expect("recipe"),
+        )
+        .expect("recipe JSON");
+        assert_eq!(recipe["patches"][0]["header"], "strip");
+        assert_eq!(
+            recipe["patches"][1]["header"],
+            second_mode.unwrap_or("strip")
+        );
     }
 }
