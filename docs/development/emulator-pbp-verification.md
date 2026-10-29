@@ -29,13 +29,14 @@ The PSP release is available from its [upstream release](https://github.com/Saym
 
 Use Linux x86-64 from the repository root in a prepared worktree. Complete the [development prerequisites and setup](development.md#prerequisites), including WASI SDK v33 or newer, `mise install`, and both npm installs. The commands below also require `curl`, `unzip`, CMake 3.21 or newer, `sha256sum`, and `openssl`; install the Chromium browser with `node packages/rom-weaver-webapp/node_modules/playwright/cli.js install chromium` before running the check.
 
-Run the following blocks in the same POSIX shell. They create a unique ignored scratch directory, download the two named releases, and verify their hashes before executing any SDK program. Downloaded binaries, toolchains, generated discs, and reports remain in that directory.
+Start a disposable POSIX shell with `sh` and run the following blocks in it: `set -e` ends that shell on the first failure and leaves your terminal open, and the scratch path is printed first. They create a unique ignored scratch directory, download the two named releases, and verify their hashes before executing any SDK program. Downloaded binaries, toolchains, generated discs, and reports remain in that directory.
 
 ```sh
 set -eu
 mkdir -p "$PWD/.cache/agents/scratch"
 PBP_ROOT=$(mktemp -d "$PWD/.cache/agents/scratch/pbp-reproduction.XXXXXX")
 export PBP_ROOT
+printf 'Scratch directory: %s\n' "$PBP_ROOT"
 mkdir -p "$PBP_ROOT/fixtures" "$PBP_ROOT/sdk"
 curl -fL --retry 3 https://github.com/Lameguy64/PSn00bSDK/releases/download/v0.24/PSn00bSDK-0.24-Linux.zip -o "$PBP_ROOT/sdk.zip"
 curl -fL --retry 3 https://github.com/Saymond/PSP-apps/releases/download/v1.0-C/EBOOT.PBP -o "$PBP_ROOT/fixtures/psp-v1.0-C.pbp"
@@ -109,7 +110,7 @@ kill "$PBP_PREVIEW_PID"
 trap - EXIT HUP INT TERM
 ```
 
-If the test fails, stop only the preview PID written to `preview.pid` after inspecting `preview.log` and the failure captures. The opt-in test fails explicitly for missing inputs. It launches muted headless Chromium, uses the actual Test picker, blocks external network requests, hashes the actual served WASM and EmulatorJS loader/native core against the pinned lock, records the lock digest and version, and saves canvas captures and a JSON report. Retain the scratch directory while reviewing that evidence.
+If a block fails, the shell exits and its trap stops the preview. Inspect `preview.log` and the failure captures in the printed scratch directory, then start a new shell for any rerun. The opt-in test fails explicitly for missing inputs. It launches muted headless Chromium, uses the actual Test picker, blocks external network requests, hashes the actual served WASM and EmulatorJS loader/native core against the pinned lock, records the lock digest and version, and saves canvas captures and a JSON report. Retain the scratch directory while reviewing that evidence.
 
 The cube's saturated pixels and the PS1 demo's brown framebuffer distinguish the programs from a black canvas or RetroArch's gray menu. The PS1 controller-byte region must change while Up is held; on PSP, Start must switch the cube to the purple-background raycast scene. Every case must render successive changing frames. Both multi-disc selections must also produce fresh changing frames; a retained framebuffer cannot pass. These oracles apply to the pinned homebrew programs, rather than games in general.
 
@@ -129,7 +130,7 @@ For multiple discs, require native `getDiskCount()` to return two, switch using 
 
 ## Recorded browser run
 
-On 2026-10-28, headless Chromium 156.0.8078.4 at 1280 × 900 exercised the production Test picker at revision `951d87934dfe15b2cccae5a4d206ddc38d6d64ee`. All five cases passed, with no external requests or page errors. Every case verified the actual served WASM SHA-256 `ebbd284a478e534edf70b3c761b87236770aaff03d384e2a7ae3619cf328a947`; its source fingerprint was `ff8106ccf78b807d1b38fce7ae9f3d295752ebf94880aa9d22bec17ac3da7d62`.
+On 2026-10-28, headless Chromium 156.0.8078.4 at 1280 × 900 exercised the production Test picker at revision `37d1b9565739ee597b52959a75c0f801801bd177`. All five cases passed, with no external requests or page errors. Every case verified the actual served WASM SHA-256 `0abf650de3b152a161670458954cb59630014f51a469094e7435239bf7aa1abc`; its source fingerprint was `6ae8e135b57d866d72f9ff7626ccb969d743c025cf756a32b6620ac6acb1ab18`.
 
 | Fixture | SHA-256 | Observed result |
 | --- | --- | --- |
@@ -139,7 +140,7 @@ On 2026-10-28, headless Chromium 156.0.8078.4 at 1280 × 900 exercised the produ
 | Stored PS1 multi with audio | `0de1a480d09902dfac07e0ce8600e63ee3fbc9b3f2f5bb34c84ef8a859da9614` | Full CUE/BIN fallback, same rendering/input checks, native count 2, disk menu 0 → 1 → 0 |
 | Empty-PSAR PSP | `8b4f679ed2494a7b23df5e96e60e2f66eaf1c943a2991089e3c5989d4585f96b` | Rotating cube, changing frames, Start switches to raycast spheres |
 
-The PSP canvas contained 109,628 saturated cube pixels before Start and 287,529 purple scene pixels afterward. Each PS1 case initially contained 73,448 brown demo pixels and 855 white pixels in the controller-byte region; holding Up changed that region's hash from `-2141861938` to `-1672915604`. Both multi-disc cases continued rendering after each real disk-menu switch.
+The PSP canvas contained 105,012 saturated cube pixels before Start and 272,697 purple scene pixels afterward. Each PS1 case initially contained 73,448 brown demo pixels and 855 white pixels in the controller-byte region; holding Up changed that region's hash from `-2141861938` to `-1672915604`. Both multi-disc cases captured two frames with different frame hashes after each of the two real disk-menu switches.
 
 ### Stored-block fallback and audio retention
 
