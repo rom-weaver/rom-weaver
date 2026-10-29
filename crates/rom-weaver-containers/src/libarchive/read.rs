@@ -1,7 +1,7 @@
 use super::legacy_pathname::decode_legacy_pathname;
 use super::*;
 use std::os::raw::{c_char, c_int};
-use tracing::trace;
+use tracing::{trace, warn};
 
 type SupportFunction = unsafe extern "C" fn(*mut archive) -> c_int;
 
@@ -162,28 +162,33 @@ impl ReadArchive {
         unsafe { archive_format(self.as_ptr()) }
     }
 
+    /// Returns the next entry that is not a symbolic or hard link. Links carry no data of their
+    /// own, so listing them would fabricate empty files; they are skipped with a warning instead.
     fn next_entry_ptr(&mut self, context: &str) -> Result<Option<NonNull<archive_entry>>> {
-        let mut entry = ptr::null_mut();
-        let status = unsafe { archive_read_next_header(self.as_ptr(), &mut entry) };
-        if status == ARCHIVE_EOF {
-            return Ok(None);
-        }
-        self.check_status(status, context)?;
-        let ptr = NonNull::new(entry).ok_or_else(|| {
-            RomWeaverError::Validation(format!(
-                "{context}: libarchive returned a null entry pointer"
-            ))
-        })?;
-        if unsafe { rom_weaver_archive_entry_is_link(ptr.as_ptr()) } != 0 {
+        loop {
+            let mut entry = ptr::null_mut();
+            let status = unsafe { archive_read_next_header(self.as_ptr(), &mut entry) };
+            if status == ARCHIVE_EOF {
+                return Ok(None);
+            }
+            self.check_status(status, context)?;
+            let ptr = NonNull::new(entry).ok_or_else(|| {
+                RomWeaverError::Validation(format!(
+                    "{context}: libarchive returned a null entry pointer"
+                ))
+            })?;
+            if unsafe { rom_weaver_archive_entry_is_link(ptr.as_ptr()) } == 0 {
+                return Ok(Some(ptr));
+            }
             let entry = ReadArchiveEntry { archive: self, ptr };
             let pathname = entry
                 .pathname()
                 .map_err(|error| RomWeaverError::Validation(format!("{context}: {error}")))?;
-            return Err(RomWeaverError::Validation(format!(
-                "{context}: unsupported archive link `{pathname}`: symbolic and hard links are not supported"
-            )));
+            warn!(
+                path = %pathname,
+                "skipping archive link: symbolic and hard links are not supported"
+            );
         }
-        Ok(Some(ptr))
     }
 
     pub fn read_data(&mut self, buffer: &mut [u8], context: &str) -> Result<usize> {

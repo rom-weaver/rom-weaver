@@ -84,52 +84,25 @@ fn tar_link_fixture(kind: u8) -> Vec<u8> {
 }
 
 #[test]
-fn extracting_archive_links_rejects_fabricated_empty_files() {
-    use rom_weaver_core::{
-        CancellationToken, ContainerExtractRequest, NoopProgressSink, OperationContext,
-        ThreadBudget,
-    };
-    use std::sync::Arc;
-
+fn archive_links_are_skipped_instead_of_becoming_empty_files() {
     let dir = unique_temp_dir("links");
-    let context = OperationContext::new(
-        ThreadBudget::Fixed(1),
-        dir.to_path_buf(),
-        Arc::new(NoopProgressSink),
-        CancellationToken::new(),
-    );
-    let registry = crate::ContainerRegistry::new();
     for kind in *b"12" {
         let source = dir.join(format!("link-{kind}.tar"));
         fs::write(&source, tar_link_fixture(kind)).expect("write tar link fixture");
-        let out_dir = dir.join(format!("out-{kind}"));
-        let result = registry.find_by_name("tar").expect("tar handler").extract(
-            &ContainerExtractRequest {
-                source,
-                out_dir: out_dir.clone(),
-                selections: Vec::new(),
-                kind_filter: Default::default(),
-                containing_archive: None,
-                split_bin: false,
-                ignore_common_files: false,
-                overwrite: false,
-                parent: None,
-            },
-            &context,
-        );
-        let error = result.expect_err("archive links must not become empty regular files");
+        let entries = list_regular_archive_entries(&source, "tar")
+            .expect("a tar holding only a link lists without error");
         assert!(
-            error.to_string().contains("unsupported archive link"),
-            "{error}"
+            entries.is_empty(),
+            "link kind {}: a link must not be listed as an empty regular file: {entries:?}",
+            kind as char
         );
-        assert!(!out_dir.join("alias.bin").exists());
     }
 }
 
 #[test]
-fn rar_links_are_rejected_before_listing_them_as_regular_files() {
+fn rar_links_are_skipped_instead_of_listed_as_regular_files() {
     let dir = unique_temp_dir("rar-links");
-    for (name, bytes) in [
+    for (name, bytes, link_names) in [
         (
             "rar4",
             include_bytes!(concat!(
@@ -137,6 +110,7 @@ fn rar_links_are_rejected_before_listing_them_as_regular_files() {
                 "/../../tests/fixtures/rar/rar4-unicode.rar"
             ))
             .as_slice(),
+            &["表だよ/ファイル"][..],
         ),
         (
             "rar5",
@@ -145,16 +119,23 @@ fn rar_links_are_rejected_before_listing_them_as_regular_files() {
                 "/../../tests/fixtures/rar/rar5-unicode.rar"
             ))
             .as_slice(),
+            &["Ⓗⓐⓡⓓ Ⓛⓘⓝⓚ.txt", "𝒮𝓎𝓂𝒷𝑜𝓁𝒾𝒸 𝐿𝒾𝓃𝓀.txt"][..],
         ),
     ] {
         let source = dir.join(format!("{name}.rar"));
         fs::write(&source, bytes).expect("write upstream RAR link fixture");
-        let error = list_regular_archive_entries(&source, "rar")
-            .expect_err("RAR links must not be listed as ordinary files");
+        let entries = list_regular_archive_entries(&source, "rar")
+            .expect("RAR links are skipped, not an error");
         assert!(
-            error.to_string().contains("unsupported archive link"),
-            "{name}: {error}"
+            !entries.is_empty(),
+            "{name}: the regular files must still list"
         );
+        for link in link_names {
+            assert!(
+                entries.iter().all(|entry| entry.path != *link),
+                "{name}: link `{link}` must not be listed as a regular file: {entries:?}"
+            );
+        }
     }
 }
 
