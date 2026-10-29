@@ -12,9 +12,16 @@
 }
 /* The prerendered boot shell must stay settled through hydration. Releasing
    aria-busy and starting panel-in in separate steps lets standalone WebKit
-   paint a visible upward jump. */
-#webapp-root[aria-busy="true"] #panel-patcher .workflow-body,
-#webapp-root[data-shell-settled="true"] #panel-patcher .workflow-body {
+   paint a visible upward jump. Every route prerenders its own document, so
+   the shell covers whichever workflow panel it shows; hydration then marks
+   that panel with data-shell-panel so it stays settled afterwards. Apply
+   stays settled after any prerendered landing, as before; other tab switches
+   still play panel-in. */
+#webapp-root[aria-busy="true"]:not([data-shell-absent])
+  .panel.workflow:not(#panel-docs, #panel-whats-new)
+  .workflow-body,
+#webapp-root[data-shell-settled="true"] #panel-patcher .workflow-body,
+#webapp-root[data-shell-settled="true"] .panel.workflow[data-shell-panel] .workflow-body {
   padding-block-end: 0 !important;
   animation: none !important;
 }

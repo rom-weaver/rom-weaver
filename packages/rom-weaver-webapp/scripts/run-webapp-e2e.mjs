@@ -262,9 +262,9 @@ const runHydrationAudit = async (createContext, baseUrl) => {
   try {
     for (const testCase of [
       { finalView: "patcher", initialView: "patcher", path: "apply-patches/", replayClick: true },
-      { finalView: "creator", initialView: "creator", path: "create-rom-patch/" },
+      { finalView: "creator", initialView: "creator", path: "create-rom-patch/", settledPanel: true },
       { finalView: "creator", initialView: "creator", path: "create-rom-patch?guide=create-cheats" },
-      { finalView: "trim", initialView: "trim", path: "trim-rom/" },
+      { finalView: "trim", initialView: "trim", path: "trim-rom/", settledPanel: true },
       { finalView: "patcher", initialView: "patcher", path: "apply/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create/" },
       { finalView: "trim", initialView: "trim", path: "trim/" },
@@ -326,7 +326,9 @@ const runHydrationAudit = async (createContext, baseUrl) => {
             const dock = document.querySelector(".dock")?.getBoundingClientRect();
             const links = document.querySelector(".dock-tab")?.getBoundingClientRect();
             const status = [...document.querySelectorAll(".dock-tab")].at(-1)?.getBoundingClientRect();
-            const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
+            const workflow = document
+              .querySelector(".panel.workflow:not([hidden]) .workflow-body")
+              ?.getBoundingClientRect();
             return {
               dockInFirstViewport:
                 !!dock &&
@@ -366,8 +368,10 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           const audit = window.__romWeaverHydrationAudit;
           const root = document.getElementById("webapp-root");
           const dock = document.querySelector(".dock")?.getBoundingClientRect();
-          const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
-          const workflowStyle = document.querySelector("#panel-patcher .workflow-body");
+          const workflow = document
+            .querySelector(".panel.workflow:not([hidden]) .workflow-body")
+            ?.getBoundingClientRect();
+          const workflowStyle = document.querySelector(".panel.workflow:not([hidden]) .workflow-body");
           const viewToggle = document.querySelector("#panel-patcher .panel-view-toggle input");
           return {
             detailedViewEnabled: viewToggle?.checked === true,
@@ -409,7 +413,10 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           problems.push("prerendered view toggle click was not replayed after hydration");
         if (testCase.replayClick && !result.shellHandoffStable)
           problems.push("prerendered shell moved during hydration");
-        if (testCase.replayClick && (!result.shellSettled || result.panelAnimation !== "none"))
+        if (
+          (testCase.replayClick || testCase.settledPanel) &&
+          (!result.shellSettled || result.panelAnimation !== "none")
+        )
           problems.push(`prerendered panel was not settled: ${JSON.stringify(result)}`);
         if (failures.length) problems.push(`browser errors: ${failures.join(" | ")}`);
         if (problems.length)
