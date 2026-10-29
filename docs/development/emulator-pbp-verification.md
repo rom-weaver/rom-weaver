@@ -146,7 +146,7 @@ The PSP canvas contained 105,012 saturated cube pixels before Start and 272,697 
 
 The application extracted each stored-block PBP and loaded its generated M3U/CUE/BIN bundle through the Test picker. Each BIN contained the SDK demo's 1,060 data sectors plus 75 sectors of locally generated stereo 440 Hz PCM audio. All three BIN files read back from the core's file system (one single-disc image and two multi-disc images) were 2,669,520 bytes with SHA-256 `c071d3f6694a6fa4f0e1dae19ab99db136a879856daafef48f45906acbfaf6bc`, matching their complete source images.
 
-Every CUE retained MODE2/2352 data and AUDIO track 02, with `INDEX 00 00:12:10` and `INDEX 01 00:14:10`; the core selected `discs.m3u`. This proves application fallback wiring, complete data/audio byte retention, and native disk control. The run was muted and does not establish audible CD audio playback, commercial-game compatibility, or save progression across different game discs.
+Every CUE retained MODE2/2352 data and AUDIO track 02, with `INDEX 00 00:12:10` and `INDEX 01 00:14:10`; the core selected the bundle's M3U (`discs.m3u` at the recorded revision; later revisions name it after the disc SHA-1 so each game keeps its own memory card). This proves application fallback wiring, complete data/audio byte retention, and native disk control. The run was muted and does not establish audible CD audio playback, commercial-game compatibility, or save progression across different game discs.
 
 ![PSn00bSDK controller demo after returning to disk 1 through the native disk menu](../screenshots/pbp-ps1-pads.webp)
 
