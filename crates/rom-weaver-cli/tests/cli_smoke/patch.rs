@@ -14436,6 +14436,68 @@ fn patch_create_warns_that_container_inputs_require_raw_application() {
 }
 
 #[test]
+fn patch_create_does_not_warn_for_raw_rom_with_container_like_signature() {
+    let temp = setup_temp_dir();
+    let home = temp.path().to_str().expect("home");
+    let envs = [
+        ("HOME", home),
+        ("XDG_CONFIG_HOME", home),
+        ("XDG_CACHE_HOME", home),
+        ("XDG_STATE_HOME", home),
+    ];
+    let run = |args: &[&str], code| command_stdout_with_env(args, &envs, code);
+    let original = temp.child("original.sfc");
+    let modified = temp.child("modified.sfc");
+    let mut original_bytes = vec![0x1F, 0x8B, 0x00];
+    original_bytes.extend_from_slice(b"abcdefghijklm");
+    let mut modified_bytes = original_bytes.clone();
+    modified_bytes[8] = b'X';
+    fs::write(original.path(), &original_bytes).expect("original");
+    fs::write(modified.path(), &modified_bytes).expect("modified");
+    let patch = temp.child("change.bps");
+    let output = temp.child("rebuilt.sfc");
+    let event = parse_single_json_line(&run(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    ));
+    let has_raw_warning = event["details"]["warnings"]
+        .as_array()
+        .is_some_and(|warnings| {
+            warnings.iter().any(|warning| {
+                warning
+                    .as_str()
+                    .is_some_and(|warning| warning.contains("raw container bytes"))
+            })
+        });
+    assert!(!has_raw_warning, "{event}");
+    run(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(fs::read(output.path()).expect("output"), modified_bytes);
+}
+
+#[test]
 fn patch_create_ips32_rejects_shrink_and_empty_targets() {
     for modified_bytes in [b"abc".as_slice(), b""] {
         for ignore in [false, true] {

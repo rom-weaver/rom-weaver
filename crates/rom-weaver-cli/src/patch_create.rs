@@ -417,6 +417,7 @@ impl CliApp {
                 &mut report,
                 &request.original,
                 &request.modified,
+                &context,
             );
         }
         if report.status == OperationStatus::Succeeded
@@ -445,19 +446,54 @@ impl CliApp {
         report: &mut OperationReport,
         original: &Path,
         modified: &Path,
+        context: &OperationContext,
     ) {
-        let uses_container_bytes = [original, modified].into_iter().any(|path| {
-            self.containers.probe(path).is_some_and(|handler| {
-                !handler.is_self_contained_rom(path)
-                    && !handler.descriptor().matches_name("xiso")
-                    && handler.capabilities().extract
-            })
-        });
+        let uses_container_bytes = [original, modified]
+            .into_iter()
+            .any(|path| self.apply_would_extract_container(path, context));
+        debug!(
+            original = %original.display(),
+            modified = %modified.display(),
+            uses_container_bytes,
+            "patch create raw-container warning decision"
+        );
         if uses_container_bytes {
             let warning = "patch create compares raw container bytes without extraction. Apply with --no-extract --no-compress to reconstruct Modified exactly, including any container. Extract both ROMs before creation to patch ROM payloads";
             report.label = format!("{}; warning: {warning}", report.label);
             Self::append_report_warnings(report, [warning.to_string()]);
         }
+    }
+
+    /// Mirrors the default `patch apply` auto-extract gate (`source_resolution.rs`): true only
+    /// when apply would extract `path` as a container rather than use the raw file.
+    fn apply_would_extract_container(&self, path: &Path, context: &OperationContext) -> bool {
+        let Some(handler) = self
+            .containers
+            .probe(path)
+            .filter(|handler| !handler.is_self_contained_rom(path))
+        else {
+            trace!(path = %path.display(), "raw-container check: no extractable handler matched");
+            return false;
+        };
+        let format = handler.descriptor().name;
+        let is_xiso = handler.descriptor().matches_name("xiso");
+        let can_extract = handler.capabilities().extract;
+        if is_xiso || !can_extract {
+            trace!(path = %path.display(), format, is_xiso, can_extract, "raw-container check: handler not eligible for extract");
+            return false;
+        }
+        let request = ContainerProbeRequest {
+            source: path.to_path_buf(),
+            split_bin: false,
+        };
+        if let Err(error) = handler.probe_details(&request, context)
+            && !handler.descriptor().matches_path(path)
+        {
+            debug!(path = %path.display(), format, error = %error, "raw-container check: signature-only match failed its probe; apply uses the raw file");
+            return false;
+        }
+        trace!(path = %path.display(), format, "raw-container check: apply would extract");
+        true
     }
 
     /// `patch create --plan`: recommend a format for the two inputs without writing a patch.
@@ -578,7 +614,12 @@ impl CliApp {
                 },
             }
         }));
-        self.warn_patch_create_container_inputs(&mut report, &args.original, modified);
+        self.warn_patch_create_container_inputs(
+            &mut report,
+            &args.original,
+            modified,
+            base_context,
+        );
         report
     }
 
