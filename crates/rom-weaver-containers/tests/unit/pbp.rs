@@ -1075,29 +1075,21 @@ fn extract_preserves_the_full_disc_beyond_the_iso_volume() {
 }
 
 #[test]
-fn parse_rejects_a_leadout_before_the_iso_volume_end() {
-    let temp = TempDir::new("leadout-short");
-    for sectors in [0, 1, 31] {
-        let error = corrupt_psar_parse_error(&temp, &format!("leadout-{sectors}.pbp"), |psar| {
-            write_toc(psar, &DiscSpec::single_track().tracks, sectors);
+fn parse_ignores_a_leadout_that_disagrees_with_the_volume_or_index_table() {
+    let temp = TempDir::new("leadout-inconsistent");
+    let volume_bytes = 32 * SECTOR_BYTES as u64;
+    // Below the ISO volume, beyond the index capacity (popstation and pop-fe style).
+    for sectors in [0, 1, 31, 33, 0x1_0000] {
+        let path = write_fixture(&temp, &format!("leadout-{sectors}.pbp"), &{
+            let mut psar = build_disc_psar(&DiscSpec::single_track());
+            write_toc(&mut psar, &DiscSpec::single_track().tracks, sectors);
+            wrap_psar_in_pbp(&psar)
         });
-        assert!(
-            error.contains("TOC leadout precedes the ISO volume end"),
-            "{error}"
-        );
+        let archive = PbpContainerHandler
+            .parse_archive(&path)
+            .unwrap_or_else(|error| panic!("leadout {sectors} must fall back: {error}"));
+        assert_eq!(archive.discs[0].iso_size, volume_bytes, "leadout {sectors}");
     }
-}
-
-#[test]
-fn parse_rejects_a_leadout_beyond_the_index_capacity() {
-    let temp = TempDir::new("leadout-large");
-    let error = corrupt_psar_parse_error(&temp, "leadout-large.pbp", |psar| {
-        write_toc(psar, &DiscSpec::single_track().tracks, 33);
-    });
-    assert!(
-        error.contains("index table is incomplete (3 blocks required, 2 present)"),
-        "{error}"
-    );
 }
 
 #[test]

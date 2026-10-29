@@ -323,16 +323,26 @@ impl PbpContainerHandler {
         }
         let volume_size =
             self.read_iso_size_from_index(source, file, disc_psar_offset, &iso_indexes)?;
-        // A2 MUST be interpreted as the full BIN sector count, without a lead-in bias.
+        // PSXPackager writes A2 as the full BIN sector count, without a lead-in bias, so a
+        // consistent A2 sizes mixed-mode discs beyond the ISO volume. Other writers (popstation
+        // template TOC, pop-fe) store unrelated values, so those discs keep the volume size.
         // https://github.com/RupertAvery/PSXPackager/blob/76fc019460dbf550e3ddbc184959f4ed182e36f8/Popstation/CueFileExtensions.cs#L51-L79
-        let iso_size = u64::from(leadout_frames) * Self::ISO_SECTOR_BYTES as u64;
-        if iso_size < volume_size {
-            return Err(RomWeaverError::Validation(format!(
-                "source `{}` disc {} TOC leadout precedes the ISO volume end",
-                source.display(),
-                disc_number
-            )));
-        }
+        let leadout_size = u64::from(leadout_frames) * Self::ISO_SECTOR_BYTES as u64;
+        let leadout_fits = leadout_size >= volume_size
+            && iso_indexes.len() >= self.required_block_count(leadout_size)?;
+        let iso_size = if leadout_fits {
+            leadout_size
+        } else {
+            debug!(
+                source = %source.display(),
+                disc_number,
+                leadout_size,
+                volume_size,
+                index_blocks = iso_indexes.len(),
+                "ignoring TOC leadout that disagrees with the ISO volume or index table"
+            );
+            volume_size
+        };
         let required_blocks = self.required_block_count(iso_size)?;
         if iso_indexes.len() < required_blocks {
             return Err(RomWeaverError::Validation(format!(
