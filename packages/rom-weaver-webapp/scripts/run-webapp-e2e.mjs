@@ -35,6 +35,19 @@ const EXPECTED_PATCHED_SHA256 = "43b1cc171d0b795e224072752effd13400f6392d0fab8d0
 const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa", "best-practice"];
 // Derived from the route table, so a new guide is audited without a second edit.
 export const computeDocsRouteSlugs = (docSources) => docSources.map((source) => source.slug);
+// Resource-load errors carry no URL in their text; the message location (when the
+// browser reports one) is the only way to tell which resource failed.
+export const formatConsoleError = (text, location) => {
+  const url = location?.url;
+  if (!url) return text;
+  // Playwright's `line` is 0-based (`lineNumber` is its deprecated alias); print the 1-based line readers expect.
+  const line = location.line ?? location.lineNumber;
+  return `${text} (at ${url}${typeof line === "number" ? `:${line + 1}` : ""})`;
+};
+export const formatRequestFailure = (url, errorText) => `DIAGNOSTIC requestfailed ${url} ${errorText ?? "unknown"}`;
+const watchRequestFailures = (page, report = (line) => process.stdout.write(`${line}\n`)) => {
+  page.on("requestfailed", (request) => report(formatRequestFailure(request.url(), request.failure()?.errorText)));
+};
 export const hasVisiblePrerenderedShell = (layout) => layout.prerendered && layout.dockInFirstViewport;
 const DOCS_ROUTES = computeDocsRouteSlugs(DOC_SOURCES);
 const LINK_AUDIT_WORKFLOW_ROUTES = [
@@ -273,8 +286,9 @@ const runHydrationAudit = async (createContext, baseUrl) => {
       const page = await context.newPage();
       const failures = [];
       page.on("console", (message) => {
-        if (message.type() === "error") failures.push(message.text());
+        if (message.type() === "error") failures.push(formatConsoleError(message.text(), message.location()));
       });
+      watchRequestFailures(page);
       page.on("pageerror", (error) => failures.push(error.stack || error.message));
 
       let releaseScripts = () => undefined;
@@ -628,6 +642,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   // reader through every navigation in the audit to find it.
   const watchPageErrors = () => {
     const watched = page;
+    watchRequestFailures(watched);
     watched.on("pageerror", (error) => failures.push(`[${watched.url()}] ${error.stack || error.message}`));
   };
   watchPageErrors();
