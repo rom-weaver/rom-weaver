@@ -24,14 +24,11 @@
 #webapp-root[data-shell-settled="true"] .panel.workflow[data-shell-panel] .workflow-body {
   animation: none !important;
 }
-/* The prerendered empty bench must not inherit the mobile card scroll reserve.
-   This first-paint fallback stays independent of :has() so older standalone
-   WebKit builds still paint the footer in the opening viewport. Only Apply
-   keeps it once settled, as before; other landing panels get their reserve
-   back when the bench fills. */
-#webapp-root[aria-busy="true"]:not([data-shell-absent])
-  .panel.workflow:not(#panel-docs, #panel-whats-new)
-  .workflow-body,
+/* Apply's prerendered empty bench must not inherit the mobile card scroll
+   reserve. This first-paint fallback stays independent of :has() so older
+   standalone WebKit builds still paint the footer in the opening viewport.
+   Other panels keep their padding through hydration, so it never jumps. */
+#webapp-root[aria-busy="true"] #panel-patcher .workflow-body,
 #webapp-root[data-shell-settled="true"] #panel-patcher .workflow-body {
   padding-block-end: 0 !important;
 }
