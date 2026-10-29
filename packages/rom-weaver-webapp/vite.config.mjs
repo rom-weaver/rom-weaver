@@ -19,7 +19,7 @@ import { minifyDocumentInlineScripts } from "./scripts/vite-config/minify-docume
 import { repoRoot, rootDir } from "./scripts/vite-config/paths.mjs";
 import { preparePrecacheEntries, writePrecacheSizes } from "./scripts/vite-config/precache.mjs";
 import { prerenderWebappShell } from "./scripts/vite-config/prerender-shell.mjs";
-import { serveRootStaticAssets } from "./scripts/vite-config/root-static-assets.mjs";
+import { redirectSourcePaths, serveRootStaticAssets } from "./scripts/vite-config/root-static-assets.mjs";
 import { preloadWorkflowRouteChunks } from "./scripts/vite-config/route-preload.mjs";
 import { writeWebappStaticAssets } from "./scripts/vite-config/static-assets.mjs";
 import {
@@ -114,6 +114,7 @@ export default defineConfig(({ command, mode }) => {
       __EMULATORJS_VERSION__: JSON.stringify(emulatorJsLock.version),
       __IDENTIFY_MANIFEST_FILES__: JSON.stringify(identifyManifestFiles),
       __IDENTIFY_OPTIONAL_PACK_GROUPS__: JSON.stringify(identifyOptionalPackGroups),
+      __REDIRECT_SOURCE_PATHS__: JSON.stringify(redirectSourcePaths()),
       __GIT_BRANCH__: JSON.stringify(gitBranch),
       __VERSION_BRANCH__: JSON.stringify(versionBranch),
       __VERSION_IS_TAGGED__: JSON.stringify(versionIsTagged),
