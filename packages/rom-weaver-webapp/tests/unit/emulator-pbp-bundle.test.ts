@@ -86,7 +86,7 @@ describe("stored-block PBP emulator preparation", () => {
       type: "playlist",
       args: {
         input: files.filter((entry) => entry.fileName.endsWith(".cue")).map((entry) => entry.filePath),
-        output: "/work/operations/pbp-1/discs.zip",
+        output: `/work/operations/pbp-1/${"a".repeat(40)}.zip`,
         layout: "flat",
         staged_paths: Object.fromEntries(files.map((entry) => [entry.filePath, entry.filePath])),
       },
@@ -106,7 +106,7 @@ describe("stored-block PBP emulator preparation", () => {
       }),
     );
     expect(state.readBlob).toHaveBeenCalledWith(
-      expect.objectContaining({ path: "/work/operations/pbp-1/discs.zip", size: 3 }),
+      expect.objectContaining({ path: `/work/operations/pbp-1/${"a".repeat(40)}.zip`, size: 3 }),
       signal,
     );
     expect(state.cleanup).toHaveBeenCalledExactlyOnceWith("/work/operations/pbp-1");
@@ -184,7 +184,7 @@ describe("stored-block PBP emulator preparation", () => {
     ]);
     expect(
       state.run.mock.calls.map(([command]) => command.args.output).sort((left, right) => left.localeCompare(right)),
-    ).toEqual(["/work/operations/pbp-1/discs.zip", "/work/operations/pbp-2/discs.zip"]);
+    ).toEqual([`/work/operations/pbp-1/${"a".repeat(40)}.zip`, `/work/operations/pbp-2/${"a".repeat(40)}.zip`]);
   });
 
   it("rejects a failed or empty playlist archive", async () => {

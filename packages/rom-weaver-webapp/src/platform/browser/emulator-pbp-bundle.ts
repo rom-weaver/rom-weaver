@@ -76,7 +76,10 @@ const preparePbpEmulatorBundle = async (
       sourcePath: checksumSource,
     });
     throwIfAborted(options.signal);
-    const archivePath = joinVfsPath(scope.rootPath, "discs.zip");
+    // The archive stem becomes the playlist stem, which names the core's save file; a shared stem would share one memory card.
+    const bundleStem = (checksums.sha1 ?? "").toLowerCase();
+    if (!/^[0-9a-f]{40}$/.test(bundleStem)) throw new Error("PBP extraction returned no SHA-1 checksum.");
+    const archivePath = joinVfsPath(scope.rootPath, `${bundleStem}.zip`);
     const result = await runRomWeaverJson(
       createRomWeaverCommand("playlist", {
         input: cues.map((entry) => entry.filePath),

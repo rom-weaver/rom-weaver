@@ -156,6 +156,11 @@ const loadEmulatorRom = async (
     onProgress,
     signal: options.signal,
   });
+  let released: Promise<unknown> | undefined;
+  const releaseOutputs = () => {
+    released ??= Promise.all(outputs.map((output) => output.dispose().catch(() => undefined)));
+    return released;
+  };
   try {
     const bare = result.assets.find((asset) => asset.copiedInPlace);
     if (bare) {
@@ -168,13 +173,15 @@ const loadEmulatorRom = async (
     if (!checksum) throw new Error("rom-weaver did not return the extracted ROM SHA-1 checksum.");
     const extracted = await getIngestOutputBlob(chosen);
     if (/\.pbp$/i.test(chosen.fileName.trim())) {
+      // The extracted Blob outlives its output; release the ingest copy before the bundle stages another.
+      await releaseOutputs();
       return await loadEmulatorRom(extracted, chosen.fileName, options);
     }
     const platform = chosen.romType?.platform;
     const romFileName = (await cookedBinIsoName(chosen, outputs, getIngestOutputBlob)) ?? chosen.fileName;
     return { blob: extracted, checksum, fileName: romFileName, ...(platform ? { platform } : {}) };
   } finally {
-    await Promise.all(outputs.map((output) => output.dispose().catch(() => undefined)));
+    await releaseOutputs();
   }
 };
 

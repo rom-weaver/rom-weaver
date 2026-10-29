@@ -480,6 +480,9 @@ it.each([1, 2, 5])("prepares the selected archived %i-disc PBP and disposes all 
   });
   expect(workflowMocks.outputDispose).toHaveBeenCalledOnce();
   expect(disposeOther).toHaveBeenCalledOnce();
+  expect(workflowMocks.outputDispose.mock.invocationCallOrder[0]).toBeLessThan(
+    workflowMocks.prepareEmulatorPbp.mock.invocationCallOrder[0] ?? 0,
+  );
 });
 
 it("disposes archived outputs when retained PBP validation fails", async () => {
