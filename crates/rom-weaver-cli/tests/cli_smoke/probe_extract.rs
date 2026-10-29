@@ -1850,6 +1850,114 @@ fn extract_rar_reports_thread_fallback_in_json() {
     );
 }
 
+#[test]
+fn extract_rar5_rejects_truncated_archive() {
+    assert_rar5_truncated_lengths(&[828, 600]);
+}
+
+#[test]
+fn extract_rar5_requires_complete_end_marker() {
+    assert_rar5_truncated_lengths(&[1648, 1649, 1652, 1653, 1655]);
+}
+
+fn assert_rar5_truncated_lengths(lengths: &[usize]) {
+    let temp = setup_temp_dir();
+    let complete = fs::read(rar_fixture_path("rar5-multiple-files.rar")).expect("fixture");
+    for &length in lengths {
+        let name = format!("truncated-{length}.rar");
+        let bytes = &complete[..length];
+        let archive = temp.child(&name);
+        fs::write(archive.path(), bytes).expect("fixture");
+        let out = temp.child(format!("out-{name}"));
+        rar5_extract(archive.path(), out.path(), 1);
+        assert!(
+            !out.path().exists(),
+            "failed extract left output for {name}"
+        );
+    }
+}
+
+#[test]
+fn extract_rar5_rejects_multivolume_archive() {
+    let temp = setup_temp_dir();
+    let out = temp.child("out");
+    let error = rar5_extract(&rar_fixture_path("rar5-part01.rar"), out.path(), 1);
+    assert!(
+        error.contains("Multivolume RAR5 archives are not supported"),
+        "{error}"
+    );
+    assert!(!out.path().exists(), "failed extract left output");
+}
+
+#[test]
+fn extract_rar5_stored_entries_validate_size_and_crc() {
+    let temp = setup_temp_dir();
+    let out = temp.child("out");
+    rar5_extract(&rar_fixture_path("rar5-stored.rar"), out.path(), 0);
+    assert_eq!(fs::read(out.child("empty").path()).expect("empty"), b"");
+    assert_eq!(
+        fs::read(out.child("payload").path()).expect("payload"),
+        b"RAR5 stored payload"
+    );
+    let mut corrupt = fs::read(rar_fixture_path("rar5-stored.rar")).expect("fixture");
+    let payload = corrupt
+        .windows(19)
+        .position(|w| w == b"RAR5 stored payload")
+        .expect("payload offset");
+    corrupt[payload] ^= 1;
+    let archive = temp.child("corrupt.rar");
+    fs::write(archive.path(), corrupt).expect("corrupt fixture");
+    let failed_out = temp.child("failed");
+    rar5_extract(archive.path(), failed_out.path(), 1);
+    assert!(!failed_out.path().exists());
+    for declared_size in [18, 20] {
+        let mut wrong_size = fs::read(rar_fixture_path("rar5-stored.rar")).expect("fixture");
+        wrong_size[48] = declared_size;
+        let crc = crc32fast::hash(&wrong_size[43..64]);
+        wrong_size[39..43].copy_from_slice(&crc.to_le_bytes());
+        fs::write(archive.path(), wrong_size).expect("wrong size fixture");
+        rar5_extract(archive.path(), failed_out.path(), 1);
+        assert!(!failed_out.path().exists());
+    }
+}
+
+#[test]
+fn extract_rar5_complete_archive_succeeds() {
+    let temp = setup_temp_dir();
+    let out = temp.child("out");
+    rar5_extract(&rar_fixture_path("rar5-multiple-files.rar"), out.path(), 0);
+    for number in 0..4_u32 {
+        let name = format!("test{}.bin", number + 1);
+        let expected = (0..1024_u32)
+            .flat_map(|index| (index * index.saturating_sub(1) + number).to_le_bytes())
+            .collect::<Vec<_>>();
+        assert_eq!(fs::read(out.child(name).path()).expect("entry"), expected);
+    }
+}
+
+fn rar5_extract(input: &Path, out: &Path, expected_code: i32) -> String {
+    let home = setup_temp_dir();
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .env("HOME", home.path())
+        .env("XDG_CONFIG_HOME", home.child("config").path())
+        .env("XDG_CACHE_HOME", home.child("cache").path())
+        .env("XDG_STATE_HOME", home.child("state").path())
+        .args([
+            "extract",
+            input.to_str().expect("path"),
+            "-o",
+            out.to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(expected_code)
+        .get_output()
+        .stdout
+        .clone();
+    String::from_utf8(output).expect("UTF-8 JSON")
+}
+
 fn rar_fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/fixtures/rar")
