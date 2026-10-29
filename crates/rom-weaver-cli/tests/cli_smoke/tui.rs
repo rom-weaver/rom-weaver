@@ -224,6 +224,54 @@ fn tui_rejects_cheats_before_writing_outputs() {
     }
 }
 #[test]
+fn tui_rejects_unrecordable_apply_flags_before_writing_outputs() {
+    for (flag, extra) in [
+        ("--repair-checksum", vec!["--repair-checksum"]),
+        ("--n64-byte-order", vec!["--n64-byte-order", "keep"]),
+    ] {
+        let temp = fixture();
+        let (status, transcript) = run_tui(&temp, &extra);
+        assert_eq!(status.code(), Some(2), "{flag}: {transcript}");
+        assert!(
+            transcript.contains(&format!("--tui cannot record {flag}")),
+            "{flag}: {transcript}"
+        );
+        assert!(transcript.contains("rerun without --tui"), "{transcript}");
+        assert!(
+            !transcript.contains("Authoring rom-weaver-weave.json"),
+            "{transcript}"
+        );
+        assert!(!temp.child("out.nes").path().exists());
+        assert!(!temp.child("rom-weaver-weave.json").path().exists());
+    }
+}
+
+#[test]
+fn tui_bounds_exponential_dangling_symlink_chain() {
+    use std::os::unix::fs::symlink;
+    let temp = fixture();
+    let dir = temp.path();
+    symlink("L1/../L1/../m0", dir.join("rom-weaver-weave.json")).expect("recipe link");
+    for i in 1..30 {
+        symlink(
+            format!("L{n}/../L{n}/../m{i}", n = i + 1),
+            dir.join(format!("L{i}")),
+        )
+        .expect("chain link");
+    }
+    symlink("missing", dir.join("L30")).expect("tail link");
+    let started = Instant::now();
+    let (status, transcript) = run_tui(&temp, &[]);
+    assert!(started.elapsed() < Duration::from_secs(10), "{transcript}");
+    assert_eq!(status.code(), Some(2), "{transcript}");
+    assert!(
+        transcript.contains("cannot be resolved safely"),
+        "{transcript}"
+    );
+    assert!(!temp.child("out.nes").path().exists());
+}
+
+#[test]
 fn tui_force_replaces_rom_and_recipe_on_repeat() {
     let temp = fixture();
     for run in 0..2 {

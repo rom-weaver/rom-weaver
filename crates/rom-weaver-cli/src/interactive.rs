@@ -34,8 +34,18 @@ pub fn run_weave_tui(apply: &PatchApplyCommand) -> Result<WeaveCreateCommand, St
     {
         return Err("--tui cannot record cheat settings; rerun without --tui".to_string());
     }
+    if apply.repair_checksum {
+        return Err("--tui cannot record --repair-checksum; rerun without --tui".to_string());
+    }
+    if apply
+        .n64_byte_order
+        .iter()
+        .any(|mode| *mode != crate::PatchN64ByteOrderMode::Auto)
+    {
+        return Err("--tui cannot record --n64-byte-order; rerun without --tui".to_string());
+    }
     let recipe = Path::new(DEFAULT_WEAVE_NAME);
-    let recipe_identity = prospective_path(recipe, 40);
+    let recipe_identity = prospective_path(recipe, &mut 40);
     if recipe_identity.is_none() {
         return Err(format!(
             "--tui recipe destination cannot be resolved safely; repair `{DEFAULT_WEAVE_NAME}` or choose another working directory"
@@ -47,7 +57,7 @@ pub fn run_weave_tui(apply: &PatchApplyCommand) -> Result<WeaveCreateCommand, St
         .find(|path| {
             crate::path_access::paths_refer_to_same_file(recipe, path)
                 || matches!(
-                    (recipe_identity.as_ref(), prospective_path(path, 40)),
+                    (recipe_identity.as_ref(), prospective_path(path, &mut 40)),
                     (Some(recipe), Some(path)) if recipe == &path
                 )
         })
@@ -170,8 +180,10 @@ fn non_empty(value: String) -> Option<String> {
 }
 
 // Only missing paths MAY be resolved prospectively; other I/O errors MUST fail
-// closed. Dangling-link traversal MUST be bounded because links may form cycles.
-fn prospective_path(path: &Path, links_left: u8) -> Option<PathBuf> {
+// closed. One link-expansion budget is shared across the whole recursion: links
+// may form cycles, and `..` re-resolves the same link, so depth alone is not
+// enough to bound the work.
+fn prospective_path(path: &Path, links_left: &mut u8) -> Option<PathBuf> {
     match fs::canonicalize(path) {
         Ok(canonical) => return Some(canonical),
         Err(error) if error.kind() != io::ErrorKind::NotFound => return None,
@@ -192,8 +204,9 @@ fn prospective_path(path: &Path, links_left: u8) -> Option<PathBuf> {
                     Err(error) if error.kind() != io::ErrorKind::NotFound => return None,
                     Err(_) => {
                         if let Ok(target) = fs::read_link(&resolved) {
+                            *links_left = links_left.checked_sub(1)?;
                             let target = resolved.parent()?.join(target);
-                            resolved = prospective_path(&target, links_left.checked_sub(1)?)?;
+                            resolved = prospective_path(&target, links_left)?;
                         }
                     }
                 }
