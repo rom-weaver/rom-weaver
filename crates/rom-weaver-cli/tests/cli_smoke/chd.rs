@@ -2106,7 +2106,7 @@ fn chd_compress_and_extract_cdfl_with_level_round_trip() {
             "--output",
             chd_path.path().to_str().expect("path"),
             "--codec",
-            "cdfl:9",
+            "cdfl:8",
             "--jsonl",
         ],
         0,
@@ -2977,7 +2977,6 @@ fn chd_compress_accepts_advertised_level_range_and_min_profile_for_every_codec()
     temp.child("disc.cue")
         .write_str("FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n")
         .expect("cue fixture");
-    let cue = temp.child("disc.cue");
     let mut checked = 0;
     for codec in formats["codecs"].as_array().expect("codecs") {
         let name = codec["name"].as_str().expect("codec name");
@@ -2991,50 +2990,56 @@ fn chd_compress_accepts_advertised_level_range_and_min_profile_for_every_codec()
         }
         let min = codec["minLevel"].as_i64().expect("min");
         let max = codec["maxLevel"].as_i64().expect("max");
-        let attempts = [
-            (format!("{name}:{min}"), None),
-            (format!("{name}:{max}"), None),
-            (name.to_string(), Some("min")),
-        ];
-        for (codec_arg, profile) in &attempts {
-            let out = temp.child(format!("{name}.chd"));
-            let _ = fs::remove_file(out.path());
-            let mut args = vec![
-                "compress",
-                "--input",
-                cue.path().to_str().expect("path"),
-                "--output",
-                out.path().to_str().expect("path"),
-                "--codec",
-                codec_arg.as_str(),
-                "--quiet",
+        let input_names: &[&str] = if name == "flac" {
+            &["disc.bin", "disc.cue"]
+        } else {
+            &["disc.cue"]
+        };
+        for input_name in input_names {
+            let input = temp.child(input_name);
+            let attempts = [
+                (format!("{name}:{min}"), None),
+                (format!("{name}:{max}"), None),
+                (name.to_string(), Some("min")),
+                (name.to_string(), Some("max")),
             ];
-            if let Some(profile) = profile {
-                args.extend(["--level", profile]);
-            }
-            command_stdout(&args, 0);
-            assert!(out.path().exists(), "{codec_arg} {profile:?}");
-        }
-        // FLAC also accepts an extended level 9 above its advertised `max` profile (see
-        // chd_compress_and_extract_cdfl_with_level_round_trip), so only its lower bound is out of range.
-        let above = (!matches!(name, "flac" | "cdfl")).then_some(max + 1);
-        for outside in std::iter::once(min - 1).chain(above) {
-            let codec_arg = format!("{name}:{outside}");
-            let out = temp.child(format!("{name}-outside.chd"));
-            command_stdout(
-                &[
+            for (codec_arg, profile) in &attempts {
+                let out = temp.child(format!("{name}.chd"));
+                let _ = fs::remove_file(out.path());
+                let mut args = vec![
                     "compress",
                     "--input",
-                    cue.path().to_str().expect("path"),
+                    input.path().to_str().expect("path"),
                     "--output",
                     out.path().to_str().expect("path"),
                     "--codec",
                     codec_arg.as_str(),
                     "--quiet",
-                ],
-                1,
-            );
-            assert!(!out.path().exists(), "{codec_arg} must be rejected");
+                ];
+                if let Some(profile) = profile {
+                    args.extend(["--level", profile]);
+                }
+                command_stdout(&args, 0);
+                assert!(out.path().exists(), "{codec_arg} {profile:?}");
+            }
+            for outside in [min - 1, max + 1] {
+                let codec_arg = format!("{name}:{outside}");
+                let out = temp.child(format!("{name}-outside.chd"));
+                command_stdout(
+                    &[
+                        "compress",
+                        "--input",
+                        input.path().to_str().expect("path"),
+                        "--output",
+                        out.path().to_str().expect("path"),
+                        "--codec",
+                        codec_arg.as_str(),
+                        "--quiet",
+                    ],
+                    1,
+                );
+                assert!(!out.path().exists(), "{codec_arg} must be rejected");
+            }
         }
         checked += 1;
     }
