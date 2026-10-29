@@ -1,5 +1,5 @@
 use super::*;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 #[derive(Clone, Debug)]
 struct PbpIsoIndexEntry {
@@ -323,24 +323,32 @@ impl PbpContainerHandler {
         }
         let volume_size =
             self.read_iso_size_from_index(source, file, disc_psar_offset, &iso_indexes)?;
-        // PSXPackager writes A2 as the full BIN sector count, without a lead-in bias, so a
-        // consistent A2 sizes mixed-mode discs beyond the ISO volume. Other writers (popstation
-        // template TOC, pop-fe) store unrelated values, so those discs keep the volume size.
+        // Only PSXPackager writes A2 as the full BIN sector count and puts a file-relative
+        // 00:00:00 in the first track's INDEX 01 bytes, so A2 MUST NOT size a disc without that
+        // marker: pop-fe stores the sector count plus one and the popstation template stores a
+        // fixed value. Data-only discs are exact from the ISO volume.
         // https://github.com/RupertAvery/PSXPackager/blob/76fc019460dbf550e3ddbc184959f4ed182e36f8/Popstation/CueFileExtensions.cs#L51-L79
+        let has_audio = toc_tracks.iter().any(|track| track.track_type == 0x01);
+        let packager_toc = toc_tracks
+            .first()
+            .is_some_and(|track| track.start_frames == 0);
         let leadout_size = u64::from(leadout_frames) * Self::ISO_SECTOR_BYTES as u64;
         let leadout_fits = leadout_size >= volume_size
             && iso_indexes.len() >= self.required_block_count(leadout_size)?;
-        let iso_size = if leadout_fits {
+        let iso_size = if has_audio && packager_toc && leadout_fits {
             leadout_size
         } else {
-            debug!(
-                source = %source.display(),
-                disc_number,
-                leadout_size,
-                volume_size,
-                index_blocks = iso_indexes.len(),
-                "ignoring TOC leadout that disagrees with the ISO volume or index table"
-            );
+            if has_audio && iso_indexes.len() > self.required_block_count(volume_size)? {
+                warn!(
+                    source = %source.display(),
+                    disc_number,
+                    leadout_size,
+                    volume_size,
+                    index_blocks = iso_indexes.len(),
+                    packager_toc,
+                    "PBP holds audio past the ISO volume that cannot be sized reliably; extracting the ISO volume only"
+                );
+            }
             volume_size
         };
         let required_blocks = self.required_block_count(iso_size)?;
