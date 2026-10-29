@@ -15,6 +15,7 @@ mod n64;
 mod output_replace;
 mod parallel_heap;
 mod patch_support;
+pub mod pbp;
 mod progress;
 mod prompt;
 mod registry;
