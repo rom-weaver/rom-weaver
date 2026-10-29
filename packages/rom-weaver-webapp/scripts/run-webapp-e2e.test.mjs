@@ -14,6 +14,8 @@ import {
   collectInternalLinkTargets,
   computeLinkAuditRoutes,
   computeDocsRouteSlugs,
+  formatConsoleError,
+  formatRequestFailure,
   hasVisiblePrerenderedShell,
   resolveE2EBuild,
   resolveE2EShard,
@@ -392,5 +394,23 @@ describe("runE2EScenario", () => {
       /browser has been closed/,
     );
     assert.equal(attempts, 2);
+  });
+});
+
+describe("formatConsoleError", () => {
+  it("returns the bare text without a url", () => {
+    assert.equal(formatConsoleError("boom", undefined), "boom");
+    assert.equal(formatConsoleError("boom", { url: "", lineNumber: 3 }), "boom");
+  });
+  it("appends the url, with the line only when set", () => {
+    assert.equal(formatConsoleError("boom", { url: "blob:x", lineNumber: 0 }), "boom (at blob:x)");
+    assert.equal(formatConsoleError("boom", { url: "https://a/b.js", lineNumber: 7 }), "boom (at https://a/b.js:7)");
+  });
+});
+
+describe("formatRequestFailure", () => {
+  it("prefixes the diagnostic with url and error text", () => {
+    assert.equal(formatRequestFailure("blob:x", "net::ERR"), "DIAGNOSTIC requestfailed blob:x net::ERR");
+    assert.equal(formatRequestFailure("blob:x", undefined), "DIAGNOSTIC requestfailed blob:x unknown");
   });
 });
