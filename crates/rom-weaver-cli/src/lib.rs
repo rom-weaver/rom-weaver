@@ -44,7 +44,8 @@ use rom_weaver_checksum::rom_headers::{
     PCE_COPIER_HEADER_MODULUS, ROM_HEADER_BYTES, ROM_HEADER_SCAN_BYTES, SMS_TMR_SEGA_MAGIC,
     SNES_COPIER_HEADER_MODULUS, StripHeaderResult,
     detect_known_rom_header_from_prefix as detect_known_header_from_prefix,
-    detect_strippable_rom_header_from_prefix, header_has_nsrt_metadata,
+    detect_strippable_rom_header_from_prefix, header_has_gba_boot_signature,
+    header_has_nsrt_metadata,
 };
 use rom_weaver_checksum::{
     ChecksumProgress, IdentityPrefix, NativeChecksumEngine, StreamingVariantChecksums,

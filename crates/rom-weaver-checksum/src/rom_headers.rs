@@ -7,7 +7,8 @@
 //! types lives in `rom-weaver-cli`'s `header_detection_and_finalize`.
 
 pub const ROM_HEADER_BYTES: usize = 512;
-pub const ROM_HEADER_SCAN_BYTES: usize = 0x8000;
+pub const ROM_HEADER_SCAN_BYTES: usize = 0x10800;
+const XISO_VOLUME_MAGIC: &[u8; 20] = b"MICROSOFT*XBOX*MEDIA";
 pub const A78_HEADER_MAGIC: [u8; 9] = *b"ATARI7800";
 pub const LNX_HEADER_MAGIC: [u8; 4] = *b"LYNX";
 pub const INES_HEADER_MAGIC: [u8; 4] = *b"NES\x1A";
@@ -15,6 +16,25 @@ pub const FDS_HEADER_MAGIC: [u8; 3] = *b"FDS";
 pub const SMS_TMR_SEGA_MAGIC: [u8; 8] = *b"TMR SEGA";
 pub const NGP_COPYRIGHT_MAGIC: [u8; 16] = *b"COPYRIGHT BY SNK";
 pub const GBA_HEADER_MAGIC: [u8; 4] = [0x24, 0xFF, 0xAE, 0x51];
+pub const GBA_NINTENDO_LOGO: [u8; 156] = [
+    0x24, 0xFF, 0xAE, 0x51, 0x69, 0x9A, 0xA2, 0x21, 0x3D, 0x84, 0x82, 0x0A, 0x84, 0xE4, 0x09, 0xAD,
+    0x11, 0x24, 0x8B, 0x98, 0xC0, 0x81, 0x7F, 0x21, 0xA3, 0x52, 0xBE, 0x19, 0x93, 0x09, 0xCE, 0x20,
+    0x10, 0x46, 0x4A, 0x4A, 0xF8, 0x27, 0x31, 0xEC, 0x58, 0xC7, 0xE8, 0x33, 0x82, 0xE3, 0xCE, 0xBF,
+    0x85, 0xF4, 0xDF, 0x94, 0xCE, 0x4B, 0x09, 0xC1, 0x94, 0x56, 0x8A, 0xC0, 0x13, 0x72, 0xA7, 0xFC,
+    0x9F, 0x84, 0x4D, 0x73, 0xA3, 0xCA, 0x9A, 0x61, 0x58, 0x97, 0xA3, 0x27, 0xFC, 0x03, 0x98, 0x76,
+    0x23, 0x1D, 0xC7, 0x61, 0x03, 0x04, 0xAE, 0x56, 0xBF, 0x38, 0x84, 0x00, 0x40, 0xA7, 0x0E, 0xFD,
+    0xFF, 0x52, 0xFE, 0x03, 0x6F, 0x95, 0x30, 0xF1, 0x97, 0xFB, 0xC0, 0x85, 0x60, 0xD6, 0x80, 0x25,
+    0xA9, 0x63, 0xBE, 0x03, 0x01, 0x4E, 0x38, 0xE2, 0xF9, 0xA2, 0x34, 0xFF, 0xBB, 0x3E, 0x03, 0x44,
+    0x78, 0x00, 0x90, 0xCB, 0x88, 0x11, 0x3A, 0x94, 0x65, 0xC0, 0x7C, 0x63, 0x87, 0xF0, 0x3C, 0xAF,
+    0xD6, 0x25, 0xE4, 0x8B, 0x38, 0x0A, 0xAC, 0x72, 0x21, 0xD4, 0xF8, 0x07,
+];
+
+/// Identify a standard GBA boot header before offering a checksum write.
+/// gbafix: https://github.com/devkitPro/gba-tools/blob/master/src/gbafix.c
+pub fn header_has_gba_boot_signature(prefix: &[u8]) -> bool {
+    prefix.get(0x04..0xA0) == Some(GBA_NINTENDO_LOGO.as_slice()) && prefix.get(0xB2) == Some(&0x96)
+}
+
 pub use rom_weaver_core::{N64_BIG_ENDIAN_MAGIC, N64_BYTE_SWAPPED_MAGIC, N64_LITTLE_ENDIAN_MAGIC};
 pub const SNES_COPIER_HEADER_MODULUS: u64 = 1024;
 pub const PCE_COPIER_HEADER_MODULUS: u64 = 8192;
@@ -313,6 +333,9 @@ pub fn detect_known_rom_header_from_prefix(
     prefix: &[u8],
     extension: Option<&str>,
 ) -> Option<KnownRomHeaderMatch> {
+    if has_xiso_volume_descriptor(prefix) {
+        return None;
+    }
     for header in known_header_candidates(extension) {
         if header.signature_matches(prefix) {
             return Some(KnownRomHeaderMatch {
@@ -331,6 +354,9 @@ pub fn detect_strippable_rom_header_from_prefix(
     total_len: u64,
     extension: Option<&str>,
 ) -> Option<KnownRomHeaderMatch> {
+    if has_xiso_volume_descriptor(prefix) {
+        return None;
+    }
     let mut matched = detect_known_rom_header_from_prefix(prefix, extension);
     if matched
         .and_then(KnownRomHeaderMatch::stripped_bytes)
@@ -339,6 +365,13 @@ pub fn detect_strippable_rom_header_from_prefix(
         matched = detect_size_based_copier_header(prefix, extension, total_len);
     }
     matched
+}
+
+// XDVDFS sector 32 MUST retain its preceding system area.
+// https://github.com/antangelo/xdvdfs/blob/main/xdvdfs-core/src/layout/volume.rs
+fn has_xiso_volume_descriptor(prefix: &[u8]) -> bool {
+    prefix.get(0x10000..0x10014) == Some(XISO_VOLUME_MAGIC.as_slice())
+        && prefix.get(0x107EC..0x10800) == Some(XISO_VOLUME_MAGIC.as_slice())
 }
 
 fn detect_size_based_copier_header(
@@ -401,6 +434,10 @@ pub struct StripHeaderResult {
     pub header_bytes: Vec<u8>,
     pub matched_header: Option<KnownRomHeaderMatch>,
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/rom_headers_xiso.rs"]
+mod xiso_tests;
 
 #[cfg(test)]
 mod tests {

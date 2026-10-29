@@ -17,6 +17,16 @@ impl CliApp {
             return Ok(HeaderRepairStatus::NotMatched);
         }
 
+        // Complete Game Boy/GBA boot logos MUST take precedence over a printable SNES title.
+        // https://github.com/devkitPro/gba-tools/blob/master/src/gbafix.c
+        let prefix = read_vec_at(file, 0, 0x150)?;
+        let is_gba = header_has_gba_boot_signature(&prefix);
+        let is_game_boy = prefix[0x104..0x134] == GAME_BOY_NINTENDO_LOGO;
+        if is_gba || is_game_boy {
+            debug!("recognized handheld header; skipping SNES title-based checksum repair");
+            return Ok(HeaderRepairStatus::NotMatched);
+        }
+
         let copier_offset =
             if file_len as u64 % SNES_COPIER_HEADER_MODULUS == ROM_HEADER_BYTES as u64 {
                 ROM_HEADER_BYTES
@@ -58,36 +68,14 @@ impl CliApp {
             (checksum_offset, checksum_offset + 2),
         ];
 
-        let sum = if rom_size.is_power_of_two() {
-            sum_range_with_zeroed(file, copier_offset, file_len, &zeroed_ranges)?
-        } else {
-            let Some(next_power_of_two) = rom_size.checked_next_power_of_two() else {
-                return Ok(HeaderRepairStatus::NotMatched);
-            };
-            let base_size = next_power_of_two / 2;
-            let excess_size = rom_size.saturating_sub(base_size);
-            let mut sum = sum_range_with_zeroed(
-                file,
-                copier_offset,
-                copier_offset + base_size,
-                &zeroed_ranges,
-            )?;
-            if excess_size > 0 {
-                let excess_sum = sum_range_with_zeroed(
-                    file,
-                    copier_offset + base_size,
-                    file_len,
-                    &zeroed_ranges,
-                )?;
-                let mirror_count = (next_power_of_two - base_size)
-                    .checked_div(excess_size)
-                    .unwrap_or(0);
-                sum = sum.wrapping_add(excess_sum.wrapping_mul(mirror_count as u32));
-            }
-            sum
+        let Some(mapped_size) = rom_size.checked_next_power_of_two() else {
+            return Ok(HeaderRepairStatus::NotMatched);
         };
+        let sum =
+            sum_snes_mirrored_file(file, copier_offset, rom_size, mapped_size, &zeroed_ranges)?;
 
-        let new_checksum = (sum & 0xFFFF) as u16;
+        // The checksum/complement pair MUST contribute 0x1FE to the byte sum.
+        let new_checksum = (sum.wrapping_add(0x1FE) & 0xFFFF) as u16;
         let new_complement = new_checksum ^ 0xFFFF;
         write_all_at(
             file,
@@ -169,20 +157,20 @@ impl CliApp {
         file: &mut File,
         file_len: usize,
     ) -> Result<HeaderRepairStatus> {
-        if file_len < 0x1BE {
+        if file_len < 0xBE {
             return Ok(HeaderRepairStatus::NotMatched);
         }
-        let header = read_vec_at(file, 0, 0x1BE)?;
-        if header[0x04..0x08] != GBA_HEADER_MAGIC {
+        let header = read_vec_at(file, 0, 0xBE)?;
+        if !header_has_gba_boot_signature(&header) {
             return Ok(HeaderRepairStatus::NotMatched);
         }
-        let old_checksum = header[0x1BD];
+        let old_checksum = header[0xBD];
         let mut checksum = 0_i32;
         for value in &header[0xA0..=0xBC] {
             checksum -= i32::from(*value);
         }
         let new_checksum = ((checksum - 0x19) & 0xFF) as u8;
-        write_all_at(file, 0x1BD, &[new_checksum])?;
+        write_all_at(file, 0xBD, &[new_checksum])?;
 
         if old_checksum == new_checksum {
             Ok(HeaderRepairStatus::MatchedNoChange)
@@ -237,7 +225,8 @@ impl CliApp {
             header_checksum = header_checksum.wrapping_sub(*value).wrapping_sub(1);
         }
 
-        let global_sum = sum_range_with_zeroed(file, 0, file_len, &[(0x14E, 0x150)])?;
+        let global_sum = sum_range_with_zeroed(file, 0, file_len, &[(0x14D, 0x150)])?
+            .wrapping_add(u32::from(header_checksum));
         let global_checksum = (global_sum & 0xFFFF) as u16;
 
         write_all_at(file, 0x14D, &[header_checksum])?;
@@ -603,4 +592,30 @@ impl CliApp {
             HeaderRepairStatus::NotMatched
         }
     }
+}
+
+/// Sum the mapped ROM, recursively mirroring each partial tail to its bank size.
+/// Snes9x checksum_mirror_sum: https://github.com/snes9xgit/snes9x/blob/master/memmap.cpp
+fn sum_snes_mirrored_file(
+    file: &mut File,
+    start: usize,
+    physical_len: usize,
+    mapped_len: usize,
+    zeroed_ranges: &[(usize, usize)],
+) -> Result<u32> {
+    if physical_len == mapped_len {
+        return sum_range_with_zeroed(file, start, start + physical_len, zeroed_ranges);
+    }
+    let base_len = mapped_len / 2;
+    let tail_len = physical_len - base_len;
+    let tail_mapped_len = tail_len.next_power_of_two();
+    let base_sum = sum_range_with_zeroed(file, start, start + base_len, zeroed_ranges)?;
+    let tail_sum = sum_snes_mirrored_file(
+        file,
+        start + base_len,
+        tail_len,
+        tail_mapped_len,
+        zeroed_ranges,
+    )?;
+    Ok(base_sum.wrapping_add(tail_sum.wrapping_mul((base_len / tail_mapped_len) as u32)))
 }

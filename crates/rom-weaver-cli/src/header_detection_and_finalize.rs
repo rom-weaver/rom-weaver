@@ -24,10 +24,7 @@ impl CliApp {
     }
 
     pub(super) fn detect_known_rom_header(path: &Path) -> Result<Option<KnownRomHeaderMatch>> {
-        let mut source = BufReader::new(File::open(path)?);
-        let mut prefix = vec![0_u8; ROM_HEADER_SCAN_BYTES];
-        let bytes_read = source.read(&mut prefix)?;
-        prefix.truncate(bytes_read);
+        let prefix = rom_weaver_core::read_up_to(File::open(path)?, ROM_HEADER_SCAN_BYTES)?;
         Ok(Self::detect_known_rom_header_from_prefix(path, &prefix))
     }
 
