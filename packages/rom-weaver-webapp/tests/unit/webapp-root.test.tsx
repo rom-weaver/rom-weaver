@@ -237,6 +237,16 @@ describe("the workbench shell", () => {
     expect(container.querySelector(".workbench")?.className).toContain("is-not-found");
   });
 
+  it("links the workflow tabs from a guide page by root-relative path", async () => {
+    const { container } = await renderRoot({ currentView: "docs" });
+
+    // A bare slug would resolve under /docs/<guide> and 404.
+    for (const href of ["/apply-patches", "/create-rom-patch", "/identify-rom", "/test-rom"]) {
+      expect(container.querySelector(`a[href="${href}"]`), href).not.toBeNull();
+    }
+    expect(container.querySelector('a[href="apply-patches"]')).toBeNull();
+  });
+
   it("renders the not-found page in the browser locale", async () => {
     const languages = vi.spyOn(window.navigator, "languages", "get").mockReturnValue(["de"]);
     await preloadCatalog("de");

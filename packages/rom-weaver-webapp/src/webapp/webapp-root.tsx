@@ -725,13 +725,15 @@ function WebappRoot({
     pendingViewRef.current = null;
     selectViewWithTransition(() => actions.onSelectView("whats-new"));
   }, [actions, cancelFileRouting]);
+  // Docs guides live one level down (`/docs/<slug>`), so a bare slug would resolve to `/docs/apply-patches`, a 404.
+  const resolveTabHrefs = notFound || state.currentView === "docs";
   // One identity per shell, so Find's index is not rebuilt on every render of the 404 page.
   const mastheadTabs = useMemo(
     () =>
-      notFound
+      resolveTabHrefs
         ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: appPathHref(tab.href, resolvedAssetBaseUrl) }))
         : WORKFLOW_TABS,
-    [notFound, resolvedAssetBaseUrl],
+    [resolveTabHrefs, resolvedAssetBaseUrl],
   );
 
   // The settings console draws its own copy of the phone dock: a modal makes the real one inert.
