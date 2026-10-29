@@ -40,7 +40,9 @@ export const computeDocsRouteSlugs = (docSources) => docSources.map((source) => 
 export const formatConsoleError = (text, location) => {
   const url = location?.url;
   if (!url) return text;
-  return `${text} (at ${url}${location.lineNumber ? `:${location.lineNumber}` : ""})`;
+  // Playwright's `line` is 0-based (`lineNumber` is its deprecated alias); print the 1-based line readers expect.
+  const line = location.line ?? location.lineNumber;
+  return `${text} (at ${url}${typeof line === "number" ? `:${line + 1}` : ""})`;
 };
 export const formatRequestFailure = (url, errorText) => `DIAGNOSTIC requestfailed ${url} ${errorText ?? "unknown"}`;
 const watchRequestFailures = (page, report = (line) => process.stdout.write(`${line}\n`)) => {

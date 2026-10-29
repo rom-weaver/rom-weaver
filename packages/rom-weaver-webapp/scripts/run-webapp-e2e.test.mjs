@@ -400,11 +400,15 @@ describe("runE2EScenario", () => {
 describe("formatConsoleError", () => {
   it("returns the bare text without a url", () => {
     assert.equal(formatConsoleError("boom", undefined), "boom");
-    assert.equal(formatConsoleError("boom", { url: "", lineNumber: 3 }), "boom");
+    assert.equal(formatConsoleError("boom", { url: "", line: 3 }), "boom");
   });
-  it("appends the url, with the line only when set", () => {
-    assert.equal(formatConsoleError("boom", { url: "blob:x", lineNumber: 0 }), "boom (at blob:x)");
-    assert.equal(formatConsoleError("boom", { url: "https://a/b.js", lineNumber: 7 }), "boom (at https://a/b.js:7)");
+  it("appends the url and the 1-based line from Playwright's 0-based line", () => {
+    assert.equal(formatConsoleError("boom", { url: "blob:x", line: 0 }), "boom (at blob:x:1)");
+    assert.equal(formatConsoleError("boom", { url: "https://a/b.js", line: 7 }), "boom (at https://a/b.js:8)");
+    assert.equal(formatConsoleError("boom", { url: "https://a/b.js", lineNumber: 7 }), "boom (at https://a/b.js:8)");
+  });
+  it("omits the line when the browser reports none", () => {
+    assert.equal(formatConsoleError("boom", { url: "blob:x" }), "boom (at blob:x)");
   });
 });
 
