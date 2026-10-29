@@ -63,8 +63,6 @@ mod native {
         path: PathBuf,
         mut file: File,
     ) -> crate::Result<Option<StdinSpool>> {
-        // Drop is skipped by the forced second-interrupt exit; register for removal there.
-        rom_weaver_core::register_live_temp_dir(&path);
         let spool = StdinSpool { path: path.clone() };
         let copied = (|| -> crate::Result<u64> {
             let bytes = rom_weaver_core::copy_cancelable(
@@ -137,18 +135,28 @@ mod native {
     /// Reserve a unique, freshly-created temp path (no `tempfile` dependency).
     /// Uniqueness comes from the pid plus a process-monotonic counter;
     /// `create_new` guards against colliding with a stale file from a prior run.
-    fn create_temp_file() -> crate::Result<(PathBuf, File)> {
+    pub(super) fn create_temp_file() -> crate::Result<(PathBuf, File)> {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let dir = std::env::temp_dir();
         let pid = std::process::id();
         loop {
             let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
             let candidate = dir.join(format!("rom-weaver-stdin-{pid}-{seq}.tmp"));
-            match OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&candidate)
-            {
+            let created = rom_weaver_core::with_output_creation(
+                &rom_weaver_core::process_cancellation_token(),
+                || {
+                    let created = OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(&candidate);
+                    if created.is_ok() {
+                        // Drop is skipped by the forced second-interrupt exit; register for removal there.
+                        rom_weaver_core::register_live_temp_dir(&candidate);
+                    }
+                    Ok(created)
+                },
+            )?;
+            match created {
                 Ok(file) => return Ok((candidate, file)),
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
                 Err(error) => return Err(error.into()),

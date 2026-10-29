@@ -1,10 +1,9 @@
 use std::{
-    fs::OpenOptions,
     io::{self, Read},
     path::PathBuf,
 };
 
-use super::native::spool_reader_to_file;
+use super::native::{create_temp_file, spool_reader_to_file};
 
 struct PartialFailingReader {
     sent_bytes: bool,
@@ -23,13 +22,7 @@ impl Read for PartialFailingReader {
 
 #[test]
 fn failed_stdin_spool_removes_the_partial_file() {
-    let temp = assert_fs::TempDir::new().expect("temp dir");
-    let path = temp.path().join("stdin-spool.tmp");
-    let file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&path)
-        .expect("reserve spool file");
+    let (path, file) = create_temp_file().expect("reserve spool file");
     let mut input = PathBuf::from("-");
     let mut reader = PartialFailingReader { sent_bytes: false };
 

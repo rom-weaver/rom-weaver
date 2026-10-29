@@ -85,6 +85,49 @@ fn parse_and_apply_basic_source_patch() {
 }
 
 #[test]
+fn cancelled_apply_does_not_create_output_or_temp_windows() {
+    let input = b"hello old world";
+    let patch_bytes = build_patch(TestPatch {
+        windows: vec![
+            TestWindow {
+                win_indicator: WIN_SOURCE,
+                source_segment_size: Some(input.len() as u64),
+                source_segment_position: Some(0),
+                target_window_size: 15,
+                checksum: None,
+                data: b"new".to_vec(),
+                inst: vec![22, 4, 22],
+                addr: encode_all_varints(&[0, 9]),
+            };
+            2
+        ],
+        ..Default::default()
+    });
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let patch_path = temp.join("update.vcdiff");
+    let output_path = temp.join("output.bin");
+    fs::write(&input_path, input).expect("write input");
+    fs::write(&patch_path, patch_bytes).expect("write patch");
+    let context = test_context_with_threads(2);
+    context.cancel().cancel();
+
+    let error = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &context,
+        )
+        .expect_err("cancelled VCDIFF must not write output or temp windows");
+    assert!(matches!(error, RomWeaverError::Cancelled));
+    assert!(!output_path.exists());
+    assert!(!context.temp_paths().root().exists());
+}
+
+#[test]
 fn apply_names_truncated_patch_file() {
     let patch_bytes = build_patch(TestPatch {
         windows: vec![TestWindow {
