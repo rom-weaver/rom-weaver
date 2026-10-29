@@ -1,14 +1,23 @@
 import { isWorkerEntryFile } from "./worker-chunks.mjs";
 
-// The Home and docs routes only need the app shell: the entry, the home page and
-// the docs page, plus what they import statically. Everything else two or more
-// route chunks reach (the Apply and Create forms, input staging, cheat
-// database, output build services) is workflow code; left in the catch-all
-// `shared` chunk it is modulepreloaded on every route. Grouping it into its own
-// chunk keeps the compression context of a single chunk (see the comment above
+// The Home and docs routes only need the app shell: the entry, the home page,
+// the docs page and the log and settings dialogs they idle-preload, plus what
+// they import statically. Everything else two or more route chunks reach (the
+// Apply and Create forms, input staging, cheat database, output build
+// services) is workflow code; left in the catch-all `shared` chunk it is
+// modulepreloaded on every route. Grouping it into its own chunk keeps the
+// compression context of a single chunk (see the comment above
 // `codeSplitting`) while Home and docs stop fetching it. The chunk is only
 // reached through dynamic imports, so it loads with the workflow route chunks.
-const SHELL_ROOT_PATTERN = /\/src\/webapp\/(?:components\/home-page|docs-page)\.tsx$/;
+const SHELL_ROOT_FILES = [
+  "src/webapp/components/home-page.tsx",
+  "src/webapp/docs-page.tsx",
+  "src/webapp/components/log-dialog.tsx",
+  "src/webapp/webapp-settings.tsx",
+];
+
+const normalizeId = (id) => id.split("?")[0].replace(/\\/g, "/");
+const isShellRootFile = (id) => SHELL_ROOT_FILES.some((file) => normalizeId(id).endsWith(`/${file}`));
 
 /** Memoized shell reachability; the module graph is rebuilt per build. */
 const shellKinds = new Map();
@@ -18,11 +27,20 @@ export const resetWorkflowChunks = () => ({
   buildStart() {
     shellKinds.clear();
   },
+  // A renamed shell root would silently fall out of the shell and drag its
+  // dependencies into the workflow chunk, so fail the build instead.
+  buildEnd() {
+    const ids = [...this.getModuleIds()];
+    for (const file of SHELL_ROOT_FILES) {
+      if (!ids.some((id) => normalizeId(id).endsWith(`/${file}`))) {
+        throw new Error(`rom-weaver-reset-workflow-chunks: shell root module not found in the build: ${file}`);
+      }
+    }
+  },
   name: "rom-weaver-reset-workflow-chunks",
 });
 
-const isShellRoot = (id, info) =>
-  (info.isEntry && !isWorkerEntryFile(id)) || SHELL_ROOT_PATTERN.test(id.split("?")[0].replace(/\\/g, "/"));
+const isShellRoot = (id, info) => (info.isEntry && !isWorkerEntryFile(id)) || isShellRootFile(id);
 
 /** True when a chain of static imports leads from the entry or a shell route to the module. */
 const isShellModule = (moduleId, ctx) => {
