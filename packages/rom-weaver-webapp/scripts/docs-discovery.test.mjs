@@ -19,6 +19,28 @@ test("Markdown exports resolve links without changing code examples", () => {
   assert.ok(result.includes("| CLI | [CLI](<https://rom-weaver.com/docs/cli.md>) |"));
 });
 
+test("Markdown images link to image bytes while repository links keep their navigation URLs", () => {
+  const markdown = [
+    '![Restored ROM](../screenshots/ppf-undo-restored.webp "Result")',
+    "[Screenshot](../screenshots/ppf-undo-restored.webp)",
+    "![Remote](https://example.com/image.webp)",
+    "`![Literal](../screenshots/ppf-undo-restored.webp)`",
+  ].join("\n\n");
+  const result = createDocsMarkdown(source, markdown);
+  assert.ok(
+    result.includes(
+      '![Restored ROM](<https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/screenshots/ppf-undo-restored.webp> "Result")',
+    ),
+  );
+  assert.ok(
+    result.includes(
+      "[Screenshot](<https://github.com/rom-weaver/rom-weaver/blob/main/docs/screenshots/ppf-undo-restored.webp>)",
+    ),
+  );
+  assert.ok(result.includes("![Remote](<https://example.com/image.webp>)"));
+  assert.ok(result.includes("`![Literal](../screenshots/ppf-undo-restored.webp)`"));
+});
+
 test("lastmod is omitted for dirty files and missing history", (context) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "seo-history-"));
   context.after(() => fs.rmSync(directory, { recursive: true, force: true }));

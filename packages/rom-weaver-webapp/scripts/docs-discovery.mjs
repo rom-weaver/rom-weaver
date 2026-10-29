@@ -9,7 +9,7 @@ const repositoryOrigin = "https://github.com/rom-weaver/rom-weaver/blob/main";
 // Links point at `siteOrigin`, the deployment that serves the file. The
 // Canonical line stays on production: it names the page, not where this copy lives.
 export function createDocsMarkdown(source, markdown, siteOrigin = SITE_ORIGIN) {
-  const resolveHref = (href) => {
+  const resolveHref = (href, type) => {
     const absolute = /^https?:\/\//i.test(href) && URL.canParse(href) ? new URL(href) : null;
     if (absolute?.origin === SITE_ORIGIN) return `${siteOrigin}${absolute.pathname}${absolute.search}${absolute.hash}`;
     if (/^(?:[a-z]+:|\/\/|#)/i.test(href)) return href;
@@ -19,7 +19,8 @@ export function createDocsMarkdown(source, markdown, siteOrigin = SITE_ORIGIN) {
     if (route) return `${siteOrigin}/${route.slug}.md${url.search}${url.hash}`;
     const samplePath = siteSamplePath(url.pathname.slice(1));
     if (samplePath) return `${siteOrigin}${samplePath}${url.search}${url.hash}`;
-    return `${repositoryOrigin}${url.pathname}${url.search}${url.hash}`;
+    const origin = type === "image" ? "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main" : repositoryOrigin;
+    return `${origin}${url.pathname}${url.search}${url.hash}`;
   };
   const parser = new Marked();
   const tokens = parser.lexer(markdown);
@@ -29,7 +30,7 @@ export function createDocsMarkdown(source, markdown, siteOrigin = SITE_ORIGIN) {
       const title = token.title ? ` "${token.title.replaceAll('"', "&quot;")}"` : "";
       replacements.set(
         token.raw,
-        `${token.type === "image" ? "!" : ""}[${token.text}](<${resolveHref(token.href)}>${title})`,
+        `${token.type === "image" ? "!" : ""}[${token.text}](<${resolveHref(token.href, token.type)}>${title})`,
       );
     }
     // Sample commands in code blocks follow the serving origin, like the rendered page.
