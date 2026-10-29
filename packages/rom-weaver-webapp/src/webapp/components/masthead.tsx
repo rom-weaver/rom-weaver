@@ -378,7 +378,8 @@ const Masthead = ({
     });
     project.entries.push({
       current: currentTab === "whats-new",
-      href: "whats-new",
+      // Under the app base, never a bare slug: a guide page resolves that under /docs/.
+      href: `${homeHref}whats-new`,
       icon: <Newspaper aria-hidden="true" />,
       id: "whats-new",
       label: localizer.message("ui.update.whatsNew"),
