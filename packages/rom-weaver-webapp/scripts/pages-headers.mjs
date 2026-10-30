@@ -12,7 +12,7 @@ const PLACEHOLDER = /:([A-Za-z]\w*)/g;
 
 const patternToRegExp = (pattern) =>
   new RegExp(
-    `^${pattern.replace(PATTERN_ESCAPE, "\\$&").replace("*", "(?<splat>.*)").replace(PLACEHOLDER, "(?<$1>[^/]+)")}$`,
+    `^${pattern.replace(PATTERN_ESCAPE, "\\$&").replace(/\*/g, "(?<splat>.*)").replace(PLACEHOLDER, "(?<$1>[^/]+)")}$`,
   );
 
 // Each rule keeps its header operations in file order; a `null` value is a `! Name` unset.
