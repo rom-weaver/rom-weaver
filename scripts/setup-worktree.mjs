@@ -4,7 +4,7 @@ import { execFile, execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { createWasmSourceFingerprint } from "./wasm/wasm-source-fingerprint.mjs";
 
@@ -44,9 +44,19 @@ export function worktreePaths(cwd = process.cwd()) {
   return { root, main: dirname(commonDir) };
 }
 
-export async function main(cwd = process.cwd(), { prime = true } = {}) {
+// Pruning is advisory: it skips unless the machine is idle and frees disk for the builds below.
+export function pruneTargets(cwd) {
+  try {
+    execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "prune-targets.mjs"), "--yes"], { cwd, stdio: "inherit" });
+  } catch (error) {
+    process.stdout.write(`  target pruning failed (${error.message.split("\n")[0]})\n`);
+  }
+}
+
+export async function main(cwd = process.cwd(), { prime = true, prune = true } = {}) {
   const { root, main: mainRoot } = worktreePaths(cwd);
   if (root === mainRoot) throw new Error("setup-worktree: run this from inside a worktree, not the main checkout");
+  if (prune) pruneTargets(cwd);
   process.stdout.write("setup-worktree: npm ci (root)\n");
   execFileSync("npm", ["ci", "--no-audit", "--no-fund", "--prefix", root], { stdio: "inherit" });
   process.stdout.write("setup-worktree: npm ci (packages/rom-weaver-webapp)\n");
@@ -81,6 +91,6 @@ export async function main(cwd = process.cwd(), { prime = true } = {}) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main(process.cwd(), { prime: shouldPrime(process.cwd(), process.argv) })
+  main(process.cwd(), { prime: shouldPrime(process.cwd(), process.argv), prune: !process.argv.includes("--no-prune") })
     .catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
 }

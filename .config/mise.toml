@@ -260,6 +260,10 @@ run = "node {{ config_root }}/scripts/lint-tracked.mjs '*Dockerfile' '*Dockerfil
 description = "Fail on threaded-WASM suppression regressions"
 run = "node {{ config_root }}/scripts/check-thread-guards.mjs"
 
+[tasks.prune-targets]
+description = "Preview pruning stale Cargo target dirs in every worktree (pass --yes to delete)"
+run = "node {{ config_root }}/scripts/prune-targets.mjs"
+
 [tasks.dev]
 description = "Run the webapp dev server"
 run = "npm --prefix packages/rom-weaver-webapp run dev --"
