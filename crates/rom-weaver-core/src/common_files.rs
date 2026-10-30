@@ -246,12 +246,24 @@ pub fn is_container_filter_passthrough_candidate_name(candidate_name: &str) -> b
     has_extension(candidate_name, CONTAINER_FILTER_FILE_EXTENSIONS)
 }
 
-/// Name filters MUST defer unknown suffixes to content checks after extraction.
+/// Name filters MUST defer extension-less names and implausible extension tails to content checks.
 pub fn payload_name_needs_content_classification(candidate_name: &str) -> bool {
-    !is_rom_filter_candidate_name(candidate_name)
-        && !is_patch_filter_candidate_name(candidate_name)
-        && !is_container_filter_passthrough_candidate_name(candidate_name)
-        && !should_ignore_common_container_file(candidate_name)
+    let basename = candidate_name.rsplit(['/', '\\']).next().unwrap_or("");
+    if matches!(basename, "" | "." | "..")
+        || is_rom_filter_candidate_name(candidate_name)
+        || is_patch_filter_candidate_name(candidate_name)
+        || is_container_filter_passthrough_candidate_name(candidate_name)
+        || should_ignore_common_container_file(candidate_name)
+    {
+        return false;
+    }
+    let Some((_, tail)) = basename.rsplit_once('.') else {
+        return true;
+    };
+    let plausible_extension = (1..=8).contains(&tail.len())
+        && tail.as_bytes()[0].is_ascii_alphabetic()
+        && tail.bytes().all(|byte| byte.is_ascii_alphanumeric());
+    !plausible_extension
 }
 
 fn has_extension(candidate_name: &str, extensions: &[&str]) -> bool {

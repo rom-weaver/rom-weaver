@@ -45,3 +45,69 @@ fn kind_filters_defer_unnamed_payloads_and_streams_to_content() {
     assert!(!patch_filter.matches_payload_name("notes.txt.gz"));
     assert!(!patch_filter.matches_payload_name("archive.tar.gz"));
 }
+
+#[test]
+fn kind_filters_reject_real_extensions_and_directories() {
+    for name in [
+        "game.exe",
+        "game.bat",
+        "game.sh",
+        "game.url",
+        "game.srm",
+        "game.sav",
+        "game.cht",
+        "game.msu",
+        "game-1.pcm",
+        "game.xml",
+        "game.a",
+        "game.a1234567",
+        "folder/",
+        "folder.sfc/",
+        "folder.bps/",
+        r"folder\",
+        "",
+        ".",
+        "..",
+        "folder/tool.EXE.gz",
+        "folder/save.srm.gz.xz",
+    ] {
+        for filter in [
+            ArchiveEntryKindFilter::new(true, false),
+            ArchiveEntryKindFilter::new(false, true),
+        ] {
+            assert!(!filter.matches_payload_name(name), "{name}: {filter:?}");
+            assert!(
+                !filter.matches_payload_or_container_name(name)
+                    || name.ends_with(".gz")
+                    || name.ends_with(".xz"),
+                "{name}"
+            );
+        }
+    }
+}
+
+#[test]
+fn kind_filters_accept_non_extension_tails() {
+    for name in [
+        "dump",
+        "folder.with.dot/dump",
+        r"folder.with.dot\dump",
+        "Hack v1.1",
+        "Dr. Mario (Japan, USA)",
+        "Game.",
+        "Game.a12345678",
+        "Game.a-b",
+        "Game.é",
+        "Game.1a",
+        "Game.abc def",
+        "Game.(USA)",
+        "Game.Japan,USA",
+    ] {
+        for filter in [
+            ArchiveEntryKindFilter::new(true, false),
+            ArchiveEntryKindFilter::new(false, true),
+        ] {
+            assert!(filter.matches_payload_name(name), "{name}: {filter:?}");
+        }
+    }
+}

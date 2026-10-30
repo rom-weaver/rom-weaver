@@ -546,9 +546,12 @@ impl CliApp {
         // patch dialog - the two single-modal prompts never overlap.
         let resolved_split_bin =
             self.resolve_ingest_split_bin(handler, source, split_bin, context)?;
-        // Emit mixed-archive patches before the slower ROM extract+checksum so
-        // the host can open selection early. Return every patch independently
-        // of ROM selection; derive sidecar ordering from classified ROM names.
+        // Hosts MUST see signature-classified and named patches together in their first manifest.
+        let defer_patch_manifest = entries.iter().any(|entry| {
+            rom_weaver_core::payload_name_needs_content_classification(&entry.path)
+                || rom_weaver_core::is_container_filter_passthrough_candidate_name(&entry.path)
+        });
+        // Sidecars MUST remain independent of ROM selection; derive ordering from ROM names.
         let mut patches = if has_patch {
             let rom_hint = summaries
                 .iter()
@@ -572,7 +575,9 @@ impl CliApp {
                 rom_hint.as_deref(),
                 false,
             )?;
-            self.emit_patch_manifest(source, &patches);
+            if !defer_patch_manifest {
+                self.emit_patch_manifest(source, &patches);
+            }
             patches
         } else {
             Vec::new()
@@ -635,6 +640,9 @@ impl CliApp {
                     patch_count = patches.len(),
                     "ingest ROM branch found no ROM; re-routed nested weave as patch source"
                 );
+                if defer_patch_manifest {
+                    self.emit_patch_manifest(source, &patches);
+                }
                 return Ok(IngestOutcome {
                     kind: IngestKind::Patch,
                     is_rom: false,
@@ -667,15 +675,6 @@ impl CliApp {
                     false,
                 )?;
             }
-            // Named patches found by the pass above have not been announced yet; send them with the
-            // signature patches in ONE manifest, since the host acts on the first manifest it sees.
-            if named_pass_ran {
-                let mut manifest = patches.clone();
-                manifest.extend(signature_patches.iter().cloned());
-                self.emit_patch_manifest(source, &manifest);
-            } else {
-                self.emit_patch_manifest(source, &signature_patches);
-            }
             patches.extend(signature_patches);
             if assets.is_empty() {
                 trace!(
@@ -683,6 +682,9 @@ impl CliApp {
                     patch_count = patches.len(),
                     "ingest ROM branch found only signature-classified patches; routing as patch source"
                 );
+                if defer_patch_manifest {
+                    self.emit_patch_manifest(source, &patches);
+                }
                 return Ok(IngestOutcome {
                     kind: IngestKind::Patch,
                     is_rom: false,
@@ -690,6 +692,9 @@ impl CliApp {
                     patches,
                 });
             }
+        }
+        if defer_patch_manifest {
+            self.emit_patch_manifest(source, &patches);
         }
         Ok(IngestOutcome {
             kind: IngestKind::Rom,
@@ -1517,12 +1522,8 @@ impl CliApp {
         });
     }
 
-    /// Stream the sidecar patch descriptors the instant they are enumerated - before the ROM is
-    /// hashed - so the host can open the patch-selection dialog while the (slower) ROM checksum runs,
-    /// instead of waiting for the whole ingest to return. Purely additive and gated on streaming
-    /// output (`emit_progress_events`), so the CLI report bytes are unchanged; the identical
-    /// descriptors also ride the terminal `details.ingest.patches`. The leaf files referenced here are
-    /// already extracted to `out_dir` by the patch sub-pass, so the host can act on the picks at once.
+    /// Hosts MUST receive one complete sidecar list before the terminal report, because selection
+    /// uses the first manifest. Referenced leaves are already extracted and ready for selection.
     fn emit_patch_manifest(&self, source: &Path, patches: &[PatchDescriptor]) {
         if !self.emit_progress_events || patches.is_empty() {
             return;

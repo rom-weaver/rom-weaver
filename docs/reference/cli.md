@@ -182,7 +182,9 @@ Examples are in [Use an archive pipeline](../how-to/work-with-archives.md#use-an
 - `--no-ignore` also considers the files normally skipped: readmes, images, checksum sidecars, and OS clutter such as `.DS_Store`.
 - `--no-extract` skips all of this and works on the file itself.
 
-Unknown payload names, including `patch` and `Hack v1.1`, pass both name filters. `ingest` and commands resolving one extracted payload classify them using reliable patch signatures. Other bytes remain ROM candidates; `extract` keeps unknown candidates under either filter.
+Extension-less payload names and dotted names without a plausible extension pass both name filters. A plausible extension is a final dotted token of 1–8 ASCII alphanumeric characters, starting with a letter. Numeric tails (`Hack v1.1`), empty tails (`Game.`), and tails containing whitespace, parentheses, commas, or other characters (`Dr. Mario (Japan, USA)`) qualify for content classification. Known ROM, patch, container, and ignored common-file extensions retain their existing rules.
+
+`ingest` and commands resolving one extracted payload classify eligible names using reliable patch signatures. Other bytes remain ROM candidates; `extract` keeps eligible names under either filter. Stream wrappers apply these rules to the inferred payload name: `rom.gz`, `Hack v1.1.gz`, and `Dr. Mario (Japan, USA).gz` qualify. Real-looking extensions such as `.exe`, `.msu`, `.pcm`, and `.srm` do not become ROM or patch candidates. Directory entries never become payload candidates.
 
 Not every command takes all five. `extract` has no `--no-extract`, since unpacking is the whole job. `trim` spells its filter `--no-filter`, because it filters to ROMs by default. `rom-weaver <command> --help` is authoritative.
 
@@ -278,6 +280,8 @@ The terminal report has the `matched`, `ambiguous`, or `unknown` status. JSON re
 CUE/GDI/CHD inputs are identified per selected payload track, not yet as complete track sets. A single matched data track reports `quality: "partial"`, with `evidence` counting the required components that did not match.
 
 A `--hash` run has no input components, so `components` reports the matched record's components instead of the input's.
+
+In streaming output, mixed-archive `ingest` emits one complete `patch-manifest` event before the terminal report. Names requiring content classification or nested extraction defer the event until those patches are discovered. Named patches inside stream wrappers remain sidecars beside ROMs.
 
 The internal `ingest` command also identifies each ROM asset. It identifies a patch's expected source when the patch supplies a source checksum. Its JSON result puts these compact matches in `details.ingest`.
 

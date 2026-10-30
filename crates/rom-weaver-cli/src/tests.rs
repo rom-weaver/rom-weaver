@@ -1526,3 +1526,38 @@ fn old_bundle_source_and_typed_result_contracts_remain_usable() {
     assert_eq!(schema["$id"], super::BUNDLE_JSON_SCHEMA_URL);
     assert_ne!(super::BUNDLE_JSON_SCHEMA_URL, super::WEAVE_JSON_SCHEMA_URL);
 }
+
+#[test]
+fn extract_payload_selection_ignores_directory_entries_without_prompting() {
+    let app = test_app_with_prompt(vec![0]);
+    let context = app.context(ThreadBudget::Fixed(1));
+    let handler = TestListHandler {
+        entries: vec![
+            ContainerListEntry {
+                path: "Game/".to_string(),
+                size: None,
+            },
+            ContainerListEntry {
+                path: "Game/Game.sfc".to_string(),
+                size: Some(100),
+            },
+        ],
+    };
+    let selected = app
+        .resolve_extract_payload_selections(
+            &handler,
+            Path::new("folder.zip"),
+            SelectionResolutionOptions {
+                kind_filter: ArchiveEntryKindFilter::new(true, false),
+                split_bin: false,
+                ignore_common_files: true,
+                source_label: "extract input",
+            },
+            &context,
+        )
+        .unwrap();
+    assert!(
+        selected.is_empty(),
+        "unexpected prompt selection: {selected:?}"
+    );
+}

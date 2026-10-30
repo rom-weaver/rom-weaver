@@ -720,11 +720,12 @@ pub(crate) fn list_regular_archive_entries_with_libarchive(
     source: &Path,
     format_name: &str,
 ) -> Result<Vec<String>> {
-    Ok(list_regular_archive_entries(source, format_name)?
-        .into_iter()
-        .map(|entry| normalize_archive_name(&entry.path))
-        .filter(|entry| !entry.is_empty())
-        .collect())
+    Ok(
+        list_regular_archive_entry_records_with_libarchive(source, format_name)?
+            .into_iter()
+            .map(|entry| entry.path)
+            .collect(),
+    )
 }
 
 pub(crate) fn list_regular_archive_entry_records_with_libarchive(
@@ -734,9 +735,12 @@ pub(crate) fn list_regular_archive_entry_records_with_libarchive(
     Ok(list_regular_archive_entries(source, format_name)?
         .into_iter()
         .filter_map(|entry| {
-            let path = normalize_archive_name(&entry.path);
+            let mut path = normalize_archive_name(&entry.path);
             if path.is_empty() {
                 return None;
+            }
+            if entry.is_dir {
+                path.push('/');
             }
             Some(ContainerListEntry {
                 path,
@@ -993,6 +997,10 @@ fn build_libarchive_extract_tasks(
         let entry_path = entry.path;
         let archive_name = normalize_archive_name(&entry_path);
         if archive_name.is_empty() || !matcher.matches(&archive_name) {
+            continue;
+        }
+        if kind_filter.enabled() && entry.is_dir {
+            trace!(entry = %archive_name, "skipped directory under payload kind filter");
             continue;
         }
         if should_filter_common && should_ignore_common_container_file(&archive_name) {
@@ -2934,7 +2942,7 @@ mod tests {
     }
 
     #[test]
-    fn entry_records_carry_file_sizes_and_leave_directories_sizeless() {
+    fn entry_records_carry_file_sizes_and_mark_directories() {
         let dir = unique_temp_dir("entry-records");
         let archive = create_test_zip(
             &dir,
@@ -2952,7 +2960,7 @@ mod tests {
             records,
             vec![
                 ContainerListEntry {
-                    path: "sub".to_string(),
+                    path: "sub/".to_string(),
                     size: None,
                 },
                 ContainerListEntry {
@@ -2964,6 +2972,13 @@ mod tests {
                     size: Some(0),
                 },
             ]
+        );
+        assert_eq!(
+            list_regular_archive_entries_with_libarchive(&archive, "zip").unwrap(),
+            records
+                .iter()
+                .map(|entry| entry.path.clone())
+                .collect::<Vec<_>>()
         );
         fs::remove_dir_all(&dir).ok();
     }
