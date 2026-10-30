@@ -122,7 +122,7 @@ changes ── changed paths -> rust / rust_lint / webapp / webapp_browser / was
          ├── webapp-wasm-browser ─┤ (runtime inputs only)
          ├── webapp-e2e ──────────┤
          ├── webapp-webkit-e2e ───┘ (browser + WebKit skip guide-only PRs)
-wasm ────┤ (module + production bundle + asset size gate)
+wasm ────┤ (module + production bundle + chunk guard)
          └── deploy ── Cloudflare Pages, one leg per channel (non-gating)
                  ↑
            changes ── ref -> channel list
@@ -150,7 +150,7 @@ security ── advisories (warn only, always green)
 | `docker` | Builds the CLI and webapp images from source; pushes CLI `nightly` digests on `main` | `CI gate` |
 | `docker-prebuilt` | Builds the webapp image from the `wasm` bundle; pushes webapp `nightly` digests on `main` | `CI gate` |
 | `docker-nightly`, `docker-prebuilt-nightly` | Join each image's digests into its `:nightly` manifest list | not required |
-| `wasm` | Builds the production WASM module and webapp bundle, then runs the size gate | `CI gate` |
+| `wasm` | Builds the production WASM module and webapp bundle, then runs the worker runtime chunk guard | `CI gate` |
 | `rust-lint` | fmt, clippy, typegen drift, thread guards, licenses, dependency policy, fuzz build | `CI gate` |
 | `rust-host` | Linux Rust tests and `cargo publish --dry-run` | `CI gate` |
 | `rust-macos`, `rust-windows` | Rust tests on macOS and Windows | `CI gate` |
@@ -209,7 +209,7 @@ security ── advisories (warn only, always green)
 - **`docker-nightly`** and **`docker-prebuilt-nightly`** run on `main` pushes only. The build legs above push tagless digests; these join each image's two digests into the manifest list that actually claims `:nightly`, then attest that list. See [Multi-arch images](#multi-arch-images).
 - **`wasm`** builds the production WASM module once and shares it with `webapp` and `deploy` as an artifact, and with `release` by artifact download. It is the single most expensive step in the pipeline (~6.5 min) and it used to run twice. The verified module is saved before the webapp build, so a bundle failure cannot discard a valid module cache. A webapp-only change restores it by its source-exact key; a change outside the webapp/runtime stack skips the job outright, along with everything downstream that would have consumed the artifact.
 
-  On non-tag webapp changes it also builds and uploads the production webapp bundle, then runs the asset size gate on it as a non-fatal step whose outcome the gate asserts (see [Performance budgets](#performance-budgets)).
+  On non-tag webapp changes it also builds and uploads the production webapp bundle, then runs the worker runtime chunk guard on it as a non-fatal step whose outcome the gate asserts (see [Performance budgets](#performance-budgets)).
 - **`rust-lint`** runs the Linux lint and metadata checks: fmt, clippy, typegen drift, whitespace, thread guards, license attribution, `cargo deny` licenses/sources, and unused dependencies. When `fuzz/` changed it also runs `cargo check` on the fuzz workspace, which no other job compiles. It has its own `rust_lint` flag, which a fuzz change selects without the rest of the Rust group. **`rust-host`** runs the Linux Rust test suite and `cargo publish --dry-run` in parallel with it. Both download the shared identify-data artifact before a task can request the packs.
 - **`cli-platforms`** builds and packages the native release targets before release day: macOS arm64/x86-64; Linux x86-64 GNU plus arm64/i686/x86-64 musl; and Windows arm64/x86/x86-64 MSVC. Every binary verifies a SHA-256; round-trips ZIP, 7z, and Z3DS; extracts fixed CHD, RVZ, TAR, and RAR fixtures; and creates/applies fourteen patch formats on its target architecture. Native arm64 runners and OS emulation cover the 32-bit x86 targets. The matrix runs only when Rust or native-package inputs change.
 
@@ -271,13 +271,11 @@ Build logs show pack-encoding time, compression time or a content-cache hit, and
 
 `wasm` uploads its freshly built production bundle; `webapp-static` downloads that exact artifact and runs the Lighthouse gates from the checked-in budgets in `packages/rom-weaver-webapp/performance-budgets.json`. Lighthouse scores are 0-1 and timings are milliseconds; crossing an `expected` value emits a warning annotation and crossing the wider `maximum`/`minimum` fails the required `CI gate` check.
 
-The `wasm` job also runs `check:size` on the bundle it just built, against the absolute asset-size budgets in the same file. Sizes are bytes: crossing an `expected*Bytes` value emits a warning annotation and crossing the wider `max*Bytes` fails the required `CI gate` check. The numbers are hand-maintained, so a change that grows an asset on purpose raises that budget in the same pull request. The step is `continue-on-error`, so a size failure does not stop Lighthouse, Docker, or the deploy from consuming the bundle; the gate asserts the step's outcome, which is what makes it required.
+The `wasm` job also runs `check:worker-chunk` on the bundle it just built. It asserts the chunk graph (one shared worker runtime chunk, off the first-paint path), not byte sizes: asset sizes have no gate. The step is `continue-on-error`, so a failure does not stop Lighthouse, Docker, or the deploy from consuming the bundle; the gate asserts the step's outcome, which is what makes it required.
 
 The Chromium webapp E2E pass reuses its live axe-core crawl to collect CSS coverage from the served production bundle. It visits the not-found page, Settings, every workflow, candidate selection, reset confirmation, the log dialog, an info popover, a codec menu, patch editing and reordering, and every guided Apply/Create step in both themes at desktop and mobile sizes. It unions the observed rules and fails when unused external stylesheet bytes exceed the `cssCoverage` budget.
 
 The budget is a regression ceiling, not a claim that unobserved rules are dead: progress, result, error, pointer-drag, update, and other conditional states can legitimately remain outside that crawl. Duplicate declarations are covered by Biome's recommended CSS rules, and duplicate selectors are enabled explicitly.
-
-`check-size-budget.mjs` measures raw bytes plus the bundled `.br` sidecar where one exists. The mutable identify index and assets that fail the 2% savings bar stay raw; root files deliberately stay off the sidecar path, so their Brotli column is an estimate compressed at `assetSizes.brotliQuality` and moves with that setting rather than with anything shipped.
 
 Lighthouse always audits the local build through `scripts/dev-server.mjs preview`, using Lighthouse's default mobile emulation, on every event, including forks. A Lighthouse runtime collection error gets one fresh-browser retry; threshold failures are never retried.
 

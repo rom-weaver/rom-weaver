@@ -20,7 +20,7 @@ export function runCi(run = runNpm) {
   run([...WEBAPP, "run", "test:scripts"]);
   run([...WEBAPP, "run", "test:unit"]);
   run([...WEBAPP, "run", "build"], { ROM_WEAVER_CHANNEL: "prod" });
-  run([...WEBAPP, "run", "check:size"]);
+  run([...WEBAPP, "run", "check:worker-chunk"]);
   run([...WEBAPP, "run", "test:browser:wasm"]);
   run([...WEBAPP, "run", "test:browser"]);
   run([...WEBAPP, "run", "test:e2e:webapp"], {

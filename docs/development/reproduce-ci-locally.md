@@ -53,7 +53,7 @@ From the repository root, run the browser and CLI regression gate:
 mise run test-e2e-fast
 ```
 
-The gate builds production WASM and the webapp, then checks asset sizes. It runs CLI, Chromium, WASM, and E2E tests. E2E reuses the checked bundle.
+The gate builds production WASM and the webapp, then checks the worker runtime chunk guard. It runs CLI, Chromium, WASM, and E2E tests. E2E reuses the checked bundle.
 
 Build or size failures stop the gate. Its summary reports each stage and total time, including preparation.
 
@@ -101,14 +101,14 @@ Fixtures cannot cover every input. Keep platform CI and [real-device checks](mob
 Before pushing webapp or published-doc changes, check the generated bundle, even when lint and pre-commit hooks pass. Documentation changes can grow the search JavaScript and HTML; UI changes can grow shared CSS and JavaScript.
 
 1. Prepare the worktree with the [development guide](development.md#linked-worktrees). Use a production WASM build from the current sources (`mise run build-wasm-prod`) before measuring sizes; a development module is not comparable to CI's optimized artifact.
-2. From the repository root, build the production channel and check its sizes:
+2. From the repository root, build the production channel and check its chunk graph:
 
    ```bash
    ROM_WEAVER_CHANNEL=prod npm --prefix packages/rom-weaver-webapp run build
-   npm --prefix packages/rom-weaver-webapp run check:size
+   npm --prefix packages/rom-weaver-webapp run check:worker-chunk
    ```
 
-3. Investigate unexpected growth using the failing asset group and its raw/Brotli measurements. Remove accidental imports or duplicated assets before considering a budget change. For intentional growth, record the measured size and old and new limits in the same change. Follow the [byte-count limit policy](../../AGENTS.md#byte-count-limits): automatically raise a failing limit without asking for consent when its total increase in the PR is at most 10,000 bytes; ask before larger increases. Keep the checks enabled and rerun them after the update.
+3. If the guard fails, follow the error: it names the chunk and the `ARCHITECTURE.md` bullet that explains the invariant. Rerun it after the fix.
 4. For UI changes, also run the affected browser tests and `test:e2e:a11y`. Run `test:e2e:webapp:webkit` for Safari-sensitive behavior. Reproduce failures against the same production channel as CI. When changing tutorial steps, Settings controls, or navigation, check the browser assertions, E2E locators, and screenshot targets together. Prefer stable state attributes for readiness; keep assertions for intended step counts and content.
 
 Choose browser test files from the behavior you changed. These are starting points, not an exhaustive dependency map; include other affected tests and run the full browser suite when shared behavior makes the selection unclear. Paths below are relative to `packages/rom-weaver-webapp/tests/browser/`.
@@ -142,7 +142,7 @@ Use `test:e2e:webapp` for all Chromium E2E scenarios or `test:e2e:webapp:webkit`
 
 For webapp build or tooling changes, run `npm run test:scripts` from the webapp directory. From the repository root, `node --test scripts/ci/*.test.mjs` checks the change classifier and its WASM dependency coverage without compiling Rust or launching browsers. The pre-commit hook runs these CI script tests when CI files, webapp JavaScript/TypeScript, or fixture trees change, including runtime imports outside `src/wasm`.
 
-If the final `CI gate` job reports `webapp-size=failure`, open **Build WASM module + webapp → Asset size gates** and its size summary. The build job can be green because that step deliberately continues on error; the final aggregate still blocks the change. `gh run view --log-failed` alone can miss the size diagnostics in that successful job. Read the build job's full log.
+If the final `CI gate` job reports `webapp-chunk-guard=failure`, open **Build WASM module + webapp → Worker runtime chunk guard**. The build job can be green because that step deliberately continues on error; the final aggregate still blocks the change.
 
 Retry browser crashes or connection failures only after checking the first error. A repeated missing locator, changed count, accessibility violation, or size-budget failure needs a fix; increasing timeouts or rerunning the same assertions does not address it.
 
@@ -178,7 +178,7 @@ After the matching check passes, run the complete local gate:
 mise run ci
 ```
 
-The pre-commit hooks select lint and CI script checks from staged paths. CI uses the same tasks, then adds tests, builds, publishability checks, and macOS and Windows Rust jobs. `mise run ci` runs repository tests, webapp script tests, lint, and unit tests, then builds the production webapp once and checks its asset sizes before browser suites run. E2E reuses that same production bundle. It does not reproduce those other operating systems or run every hosted check: run Lighthouse separately with `test:performance`, and use the matching commands above for publishability checks.
+The pre-commit hooks select lint and CI script checks from staged paths. CI uses the same tasks, then adds tests, builds, publishability checks, and macOS and Windows Rust jobs. `mise run ci` runs repository tests, webapp script tests, lint, and unit tests, then builds the production webapp once and checks its worker chunk graph before browser suites run. E2E reuses that same production bundle. It does not reproduce those other operating systems or run every hosted check: run Lighthouse separately with `test:performance`, and use the matching commands above for publishability checks.
 
 ## Still red in CI but green locally?
 

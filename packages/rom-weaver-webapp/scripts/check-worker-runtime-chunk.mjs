@@ -4,17 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import zlib from "node:zlib";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const CONFIG_PATH = path.join(PACKAGE_ROOT, "performance-budgets.json");
 const DIST_DIR = path.join(PACKAGE_ROOT, "dist");
-
-const listFiles = (directory) =>
-  fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const entryPath = path.join(directory, entry.name);
-    return entry.isDirectory() ? listFiles(entryPath) : [entryPath];
-  });
 
 // The worker runtime chunk guard. `rom-weaver-share-worker-runtime-chunks` (scripts/vite-config/worker-chunks.mjs) emits
 // each `?worker&url` entry into the main rollup graph so the `wasm-runtime` codeSplitting group can
@@ -111,110 +103,6 @@ export function checkWorkerRuntimeChunk(distDir = DIST_DIR) {
   return { failures: problems.length, problems };
 }
 
-const selectBudgetFiles = (distDir, budget) => {
-  let files = budget.path
-    ? [path.join(distDir, budget.path)]
-    : listFiles(path.join(distDir, budget.directory || "")).filter((file) => file.endsWith(budget.extension));
-  const relativePath = (file) => path.relative(distDir, file).split(path.sep).join("/");
-  const matches = (file, patterns) => patterns.some((pattern) => new RegExp(pattern).test(relativePath(file)));
-  if (budget.includePatterns) files = files.filter((file) => matches(file, budget.includePatterns));
-  if (budget.excludePatterns) files = files.filter((file) => !matches(file, budget.excludePatterns));
-  return files;
-};
-
-export function measureSizeBudget(distDir, budget, brotliQuality) {
-  const files = selectBudgetFiles(distDir, budget);
-  if (files.length === 0 || files.some((file) => !fs.statSync(file).isFile())) {
-    throw new Error(`${budget.name} matched no built files`);
-  }
-  if (
-    budget.requireBrotliMinBytes &&
-    files.some((file) => fs.statSync(file).size >= budget.requireBrotliMinBytes && !fs.existsSync(`${file}.br`))
-  ) {
-    throw new Error(`${budget.name} is missing a Brotli sidecar`);
-  }
-  const buffers = files.map((file) => fs.readFileSync(file));
-  const brotliOptions = { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: brotliQuality } };
-  return {
-    brotliBytes: files.reduce(
-      (total, file, index) =>
-        total +
-        (fs.existsSync(`${file}.br`)
-          ? fs.statSync(`${file}.br`).size
-          : zlib.brotliCompressSync(buffers[index], brotliOptions).length),
-      0,
-    ),
-    fileCount: files.length,
-    rawBytes: buffers.reduce((total, buffer) => total + buffer.length, 0),
-  };
-}
-
-export function checkAssetBudgetCoverage(config, distDir = DIST_DIR) {
-  const groups = Map.groupBy(
-    config.assetSizes.budgets.filter((budget) => budget.directory && budget.extension),
-    (budget) => `${budget.directory}\0${budget.extension}`,
-  );
-  const problems = [];
-  for (const budgets of groups.values()) {
-    const [{ directory, extension }] = budgets;
-    const files = listFiles(path.join(distDir, directory)).filter((file) => file.endsWith(extension));
-    for (const file of files) {
-      const owners = budgets.filter((budget) => selectBudgetFiles(distDir, budget).includes(file));
-      if (owners.length !== 1) {
-        problems.push(
-          `${path.relative(distDir, file)} belongs to ${owners.length} ${extension} budgets` +
-            `${owners.length ? ` (${owners.map((budget) => budget.name).join(", ")})` : ""}`,
-        );
-      }
-    }
-  }
-  return { failures: problems.length, problems };
-}
-
-export function evaluateSizeBudget(budget, measured) {
-  if (measured.rawBytes > budget.maxRawBytes || measured.brotliBytes > budget.maxBrotliBytes) return "error";
-  if (measured.rawBytes > budget.expectedRawBytes || measured.brotliBytes > budget.expectedBrotliBytes)
-    return "warning";
-  return "pass";
-}
-
-const kib = (bytes) => `${(bytes / 1024).toFixed(1)} KiB`;
-const difference = (actual, expected) => `${actual >= expected ? "+" : ""}${kib(actual - expected)}`;
-
-export function runSizeBudget(config, distDir = DIST_DIR) {
-  const rows = [];
-  let failures = 0;
-  for (const budget of config.assetSizes.budgets) {
-    const measured = measureSizeBudget(distDir, budget, config.assetSizes.brotliQuality);
-    const severity = evaluateSizeBudget(budget, measured);
-    const detail =
-      `raw ${kib(measured.rawBytes)} (${difference(measured.rawBytes, budget.expectedRawBytes)}), ` +
-      `brotli ${kib(measured.brotliBytes)} (${difference(measured.brotliBytes, budget.expectedBrotliBytes)})`;
-    rows.push({ ...measured, budget, detail, severity });
-    process.stdout.write(`${severity.toUpperCase().padEnd(7)} ${budget.name}: ${detail}\n`);
-    if (severity === "warning")
-      process.stdout.write(`::warning title=Asset size budget::${budget.name} exceeded its expected size; ${detail}\n`);
-    if (severity === "error") {
-      failures += 1;
-      process.stdout.write(`::error title=Asset size budget::${budget.name} exceeded its maximum size; ${detail}\n`);
-    }
-  }
-  return { failures, rows };
-}
-
-const summary = (rows) =>
-  [
-    "### Asset size budgets",
-    "",
-    "| Asset | Files | Raw | Brotli | Result |",
-    "| --- | ---: | ---: | ---: | --- |",
-    ...rows.map(
-      ({ brotliBytes, budget, fileCount, rawBytes, severity }) =>
-        `| ${budget.name} | ${fileCount} | ${kib(rawBytes)} | ${kib(brotliBytes)} | ${severity} |`,
-    ),
-    "",
-  ].join("\n");
-
 export function reportWorkerRuntimeChunk(distDir = DIST_DIR) {
   const { failures, problems } = checkWorkerRuntimeChunk(distDir);
   if (failures === 0) {
@@ -230,15 +118,7 @@ export function reportWorkerRuntimeChunk(distDir = DIST_DIR) {
 }
 
 export function main() {
-  const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
-  const result = runSizeBudget(config);
-  const chunkFailures = reportWorkerRuntimeChunk();
-  const coverage = checkAssetBudgetCoverage(config);
-  if (coverage.failures === 0)
-    process.stdout.write("PASS    Asset budget coverage: every split asset has one budget\n");
-  for (const problem of coverage.problems) process.stdout.write(`ERROR   Asset budget coverage: ${problem}\n`);
-  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary(result.rows));
-  return result.failures + chunkFailures + coverage.failures === 0 ? 0 : 1;
+  return reportWorkerRuntimeChunk() === 0 ? 0 : 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = main();

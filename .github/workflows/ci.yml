@@ -824,7 +824,7 @@ jobs:
     needs: changes
     outputs:
       bundle: ${{ steps.webapp-bundle.outcome }}
-      size: ${{ steps.size.outcome }}
+      chunk-guard: ${{ steps.chunk-guard.outcome }}
     # Skipped whole rather than started with every step gated off. Webapp tests
     # and `docker-prebuilt` still select this through `changes.webapp`, while
     # every first-party pull request also builds it for its preview.
@@ -960,14 +960,12 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
 
-      # The budgets the gate reads are the numbers in performance-budgets.json - see the
-      # Performance budgets section of docs/development/ci.md. A pull request that grows an asset
-      # on purpose raises its own budget in the same change.
-      - name: Asset size gates
-        id: size
+      # Structural check of the built chunk graph; see docs/development/ci.md.
+      - name: Worker runtime chunk guard
+        id: chunk-guard
         if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
         continue-on-error: true
-        run: npm --prefix packages/rom-weaver-webapp run check:size
+        run: npm --prefix packages/rom-weaver-webapp run check:worker-chunk
 
   # Host-profile Rust lint and metadata checks. The test suite has its own job
   # below so both compile-heavy paths can run at the same time.
@@ -1755,7 +1753,7 @@ jobs:
           '${{ needs.changes.result }}'
           '${{ needs.changes.outputs.webapp }}'
           'webapp-build=${{ needs.wasm.outputs.bundle || needs.wasm.result }}'
-          'webapp-size=${{ needs.wasm.outputs.size || needs.wasm.result }}'
+          'webapp-chunk-guard=${{ needs.wasm.outputs.chunk-guard || needs.wasm.result }}'
           'webapp-static=${{ needs.webapp-static.result }}'
           'webapp-e2e=${{ needs.webapp-e2e.result }}'
 

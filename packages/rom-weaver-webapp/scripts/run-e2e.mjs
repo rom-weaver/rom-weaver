@@ -56,7 +56,7 @@ export const runE2EProfile = async (profileName, execute = run, environment = pr
     ...(production
       ? [
           ["production webapp build", "npm", ["run", "build"], PACKAGE_DIR],
-          ["asset size budgets", "npm", ["run", "check:size"], PACKAGE_DIR],
+          ["worker runtime chunk guard", "npm", ["run", "check:worker-chunk"], PACKAGE_DIR],
         ]
       : []),
   ];

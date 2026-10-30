@@ -31,7 +31,7 @@ npm --prefix packages/rom-weaver-webapp run test:browser:wasm  # wasm-layer brow
 
 Before pushing webapp or published-doc changes, follow
 `docs/development/reproduce-ci-locally.md#prevent-repeat-failures`: one
-production build and `check:size`; for UI changes, also browser tests picked
+production build and `check:worker-chunk`; for UI changes, also browser tests picked
 from its behavior-to-test table (full suite when shared behavior makes the
 selection unclear) and E2E reusing that bundle.
 

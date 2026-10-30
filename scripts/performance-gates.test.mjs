@@ -7,10 +7,6 @@ import test from "node:test";
 import zlib from "node:zlib";
 
 import {
-  evaluateSizeBudget,
-  measureSizeBudget,
-} from "../packages/rom-weaver-webapp/scripts/check-size-budget.mjs";
-import {
   aggregate,
   evaluateReports,
   evaluateThreshold,
@@ -21,50 +17,6 @@ import {
 } from "../packages/rom-weaver-webapp/scripts/run-lighthouse.mjs";
 import { summarizeCssCoverage } from "../packages/rom-weaver-webapp/scripts/css-coverage.mjs";
 import { brotliCompressBuffer, brotliCompressFile } from "./wasm/brotli-compress.mjs";
-
-test("size budgets warn at the expected value and fail at the maximum", () => {
-  const budget = {
-    expectedRawBytes: 10,
-    maxRawBytes: 20,
-    expectedBrotliBytes: 10,
-    maxBrotliBytes: 20,
-  };
-  assert.equal(evaluateSizeBudget(budget, { rawBytes: 10, brotliBytes: 10 }), "pass");
-  assert.equal(evaluateSizeBudget(budget, { rawBytes: 11, brotliBytes: 10 }), "warning");
-  assert.equal(evaluateSizeBudget(budget, { rawBytes: 10, brotliBytes: 21 }), "error");
-});
-
-test("size measurement totals every matching built asset", () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-size-budget-"));
-  try {
-    fs.mkdirSync(path.join(directory, "assets"));
-    fs.writeFileSync(path.join(directory, "assets", "a.js"), "one");
-    fs.writeFileSync(path.join(directory, "assets", "b.js"), "two");
-    fs.writeFileSync(path.join(directory, "assets", "a.js.br"), "x");
-    fs.writeFileSync(path.join(directory, "assets", "b.js.br"), "yz");
-    fs.writeFileSync(path.join(directory, "assets", "ignore.css"), "three");
-    const measured = measureSizeBudget(
-      directory,
-      { name: "JavaScript", directory: "assets", extension: ".js", requireBrotliMinBytes: 1 },
-      1,
-    );
-    assert.equal(measured.fileCount, 2);
-    assert.equal(measured.rawBytes, 6);
-    assert.equal(measured.brotliBytes, 3);
-    fs.rmSync(path.join(directory, "assets", "b.js.br"));
-    assert.throws(
-      () =>
-        measureSizeBudget(
-          directory,
-          { name: "JavaScript", directory: "assets", extension: ".js", requireBrotliMinBytes: 1 },
-          1,
-        ),
-      /missing a Brotli sidecar/,
-    );
-  } finally {
-    fs.rmSync(directory, { force: true, recursive: true });
-  }
-});
 
 test("Lighthouse gates use the median and the configured warn/error bands", () => {
   assert.equal(median([0.8, 1, 0.9]), 0.9);

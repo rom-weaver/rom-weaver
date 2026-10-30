@@ -83,7 +83,7 @@ Build production WASM and the webapp before starting the preview. These builds c
 ```sh
 CARGO_BUILD_JOBS=2 mise run build-wasm-prod
 npm --prefix packages/rom-weaver-webapp run build
-npm --prefix packages/rom-weaver-webapp run check:size
+npm --prefix packages/rom-weaver-webapp run check:worker-chunk
 sha256sum packages/rom-weaver-webapp/vendor/emulatorjs.lock.json > "$PBP_ROOT/emulatorjs-lock-sha256.txt"
 PBP_REVISION=$(git rev-parse HEAD)
 PBP_WASM_SHA256=$(sha256sum packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm | cut -d ' ' -f 1)

@@ -3,16 +3,16 @@ import test from "node:test";
 
 import { runCi } from "./run-ci.mjs";
 
-test("local CI measures one production build before browser checks and reuses it for E2E", () => {
+test("local CI checks one production build before browser checks and reuses it for E2E", () => {
   const calls = [];
   runCi((args, environment) => calls.push({ task: args.at(-1), environment }));
   const tasks = calls.map(({ task }) => task);
   const build = tasks.indexOf("build");
-  const size = tasks.indexOf("check:size");
+  const guard = tasks.indexOf("check:worker-chunk");
   assert.equal(tasks.filter((task) => task === "build").length, 1);
-  assert.ok(build >= 0 && size === build + 1);
+  assert.ok(build >= 0 && guard === build + 1);
   for (const task of ["test:browser:wasm", "test:browser", "test:e2e:webapp"]) {
-    assert.ok(tasks.indexOf(task) > size, `${task} must wait for the size gate`);
+    assert.ok(tasks.indexOf(task) > guard, `${task} must wait for the chunk guard`);
   }
   assert.deepEqual(calls[build].environment, { ROM_WEAVER_CHANNEL: "prod" });
   assert.deepEqual(calls.find(({ task }) => task === "test:e2e:webapp").environment, {
@@ -27,7 +27,7 @@ test("local CI measures one production build before browser checks and reuses it
   }
 });
 
-for (const failedTask of ["test:scripts", "build", "check:size"]) {
+for (const failedTask of ["test:scripts", "build", "check:worker-chunk"]) {
   test(`a failed ${failedTask} stops local CI before browser checks`, () => {
     const tasks = [];
     const failure = new Error(`${failedTask} failed`);
