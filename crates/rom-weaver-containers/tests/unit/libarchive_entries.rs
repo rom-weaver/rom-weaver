@@ -140,6 +140,115 @@ fn rar_links_are_skipped_instead_of_listed_as_regular_files() {
 }
 
 #[test]
+fn rar5_preserves_stored_unicode_names_and_payloads() {
+    let dir = unique_temp_dir("rar5-unicode");
+    let source = dir.join("unicode.rar");
+    fs::write(
+        &source,
+        include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/fixtures/rar/rar5-unicode.rar"
+        )),
+    )
+    .expect("write upstream RAR5 Unicode fixture");
+    let entries = list_regular_archive_file_entries(&source, "rar").expect("list Unicode names");
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "👋🌎.txt");
+    assert_eq!(entries[0].size, Some(13));
+    assert_eq!(
+        with_regular_archive_file_entry_reader(
+            &source,
+            "rar",
+            entries[0].index,
+            "👋🌎.txt",
+            read_all
+        )
+        .expect("read the Unicode entry"),
+        b"Hello, world!"
+    );
+}
+
+#[test]
+fn rar5_rejects_invalid_utf8_instead_of_substituting_a_name() {
+    let dir = unique_temp_dir("rar5-invalid-utf8");
+    let source = dir.join("invalid.rar");
+    let mut bytes = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tests/fixtures/rar/rar5-stored.rar"
+    ))
+    .to_vec();
+    assert_eq!(&bytes[34..39], b"empty");
+    // Keep the header checksum valid so the pathname decoder sees the malformed name.
+    bytes[34] = 0xff;
+    let header_crc = crc32fast::hash(&bytes[20..39]);
+    bytes[16..20].copy_from_slice(&header_crc.to_le_bytes());
+    fs::write(&source, bytes).expect("write invalid UTF-8 RAR5 fixture");
+
+    let error = list_regular_archive_file_entries(&source, "rar")
+        .expect_err("invalid UTF-8 must not become a legacy or substituted name");
+    assert!(
+        error
+            .to_string()
+            .contains("invalid UTF-8 archive entry pathname"),
+        "{error}"
+    );
+}
+
+#[test]
+fn rar5_skips_links_whose_names_are_not_valid_utf8() {
+    let dir = unique_temp_dir("rar5-invalid-link-name");
+    let source = dir.join("invalid-link.rar");
+    let mut bytes = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tests/fixtures/rar/rar5-unicode.rar"
+    ))
+    .to_vec();
+    let link = "Ⓗⓐⓡⓓ Ⓛⓘⓝⓚ.txt".as_bytes();
+    let name_at = bytes
+        .windows(link.len())
+        .position(|window| window == link)
+        .expect("hard link name in the fixture");
+    // The name's last byte is ASCII; 0xff makes it malformed UTF-8 for a link only.
+    bytes[name_at + link.len() - 1] = 0xff;
+    // Keep the header checksum valid: find the header whose checked range holds the name.
+    let mut patched = false;
+    for crc_at in 0..name_at {
+        let size_at = crc_at + 4;
+        let mut size = 0usize;
+        let mut shift = 0;
+        let mut length = 0;
+        while let Some(&byte) = bytes.get(size_at + length) {
+            size |= usize::from(byte & 0x7f) << shift;
+            length += 1;
+            shift += 7;
+            if byte & 0x80 == 0 || length == 3 {
+                break;
+            }
+        }
+        let end = size_at + length + size;
+        if end < name_at + link.len() || end > bytes.len() {
+            continue;
+        }
+        let mut original = bytes[size_at..end].to_vec();
+        original[name_at + link.len() - 1 - size_at] = link[link.len() - 1];
+        let stored = u32::from_le_bytes(bytes[crc_at..crc_at + 4].try_into().expect("crc"));
+        if crc32fast::hash(&original) == stored {
+            let fixed = crc32fast::hash(&bytes[size_at..end]);
+            bytes[crc_at..crc_at + 4].copy_from_slice(&fixed.to_le_bytes());
+            patched = true;
+            break;
+        }
+    }
+    assert!(patched, "the link header checksum must be located");
+    fs::write(&source, bytes).expect("write malformed link name RAR5 fixture");
+
+    let entries = list_regular_archive_entries(&source, "rar")
+        .expect("a link with an undecodable name is skipped, not an error");
+    assert_eq!(entries.len(), 1, "{entries:?}");
+    assert_eq!(entries[0].path, "👋🌎.txt");
+}
+
+#[test]
 fn empty_regular_tar_entries_remain_supported() {
     let dir = unique_temp_dir("empty-regular");
     let source = dir.join("empty.tar");

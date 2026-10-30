@@ -181,9 +181,9 @@ impl ReadArchive {
                 return Ok(Some(ptr));
             }
             let entry = ReadArchiveEntry { archive: self, ptr };
-            let pathname = entry
-                .pathname()
-                .map_err(|error| RomWeaverError::Validation(format!("{context}: {error}")))?;
+            // A skipped link's name only feeds this warning, so a name that cannot be decoded must not
+            // fail the whole archive.
+            let pathname = entry.pathname().unwrap_or_else(|_| entry.pathname_lossy());
             warn!(
                 path = %pathname,
                 "skipping archive link: symbolic and hard links are not supported"
@@ -293,6 +293,17 @@ impl<'a> ReadArchiveEntry<'a> {
 
     /// The entry name as UTF-8, decoding names stored in a legacy charset.
     pub(crate) fn pathname(&self) -> io::Result<String> {
+        // RAR5 names MUST use the original UTF-8. The cached locale form can contain
+        // asterisks after musl's iconv reports a successful, lossy conversion.
+        if self.archive.format() == ARCHIVE_FORMAT_RAR_V5 {
+            trace!("reading the original RAR5 UTF-8 pathname");
+            return self.pathname_utf8().map(str::to_owned).map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("invalid UTF-8 archive entry pathname: {error}"),
+                )
+            });
+        }
         // The stored bytes come first: on Windows the UTF-8 accessor widens raw legacy bytes to
         // Latin-1 code points instead of failing.
         let stored = unsafe { rom_weaver_archive_entry_stored_pathname(self.ptr.as_ptr()) };
@@ -323,6 +334,17 @@ impl<'a> ReadArchiveEntry<'a> {
             return Err(self.io_error("archive entry pathname was unavailable"));
         }
         Ok(unsafe { CStr::from_ptr(pathname) })
+    }
+
+    /// The entry name with undecodable bytes replaced, for messages about entries that are not extracted.
+    fn pathname_lossy(&self) -> String {
+        let pathname = unsafe { archive_entry_pathname_utf8(self.ptr.as_ptr()) };
+        if pathname.is_null() {
+            return String::from("<unreadable name>");
+        }
+        unsafe { CStr::from_ptr(pathname) }
+            .to_string_lossy()
+            .into_owned()
     }
 
     fn pathname_utf8(&self) -> io::Result<&str> {
