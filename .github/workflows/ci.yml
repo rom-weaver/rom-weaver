@@ -106,21 +106,60 @@ jobs:
           --event schedule --branch main --status success --limit 1
           --json headSha --jq '.[0].headSha // ""')" >> "$GITHUB_OUTPUT"
 
+      # A pull request run tests the merge commit, which the API does not report,
+      # so the tested SHA rides in an artifact name that a later run can read
+      # without downloading. Only a run that ends green is used as a baseline.
+      - name: Record the tested commit
+        if: github.event_name == 'pull_request'
+        run: echo "${{ github.sha }}" > tested-sha.txt
+      # Best effort: losing the marker costs a later run its narrowing, while a
+      # failed step here would turn the gate red and skip every job.
+      - name: Upload the tested commit marker
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-tested-${{ github.sha }}
+          path: tested-sha.txt
+          retention-days: 14
+          overwrite: true
+          compression-level: 0
+
+      # Work already proven green on an earlier push of this pull request is not
+      # selected again unless a file changed since. Empty (a fork, a first push,
+      # an expired artifact, an API error) keeps the diff against the pull
+      # request base.
+      - name: Find the last green run of this pull request
+        id: prior-green
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: node scripts/ci/prior-green-run.mjs
+
       # A base that cannot be fetched (a force-pushed `before`) is left
       # missing; the classifier then selects everything, as it always has.
       - name: Fetch the diff base
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || steps.last-nightly.outputs.sha || '' }}
+          PRIOR_GREEN_SHA: ${{ steps.prior-green.outputs.sha || '' }}
         run: |
           if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
             git fetch --no-tags --depth=1 origin "$BASE_SHA" ||
               echo "::warning::base $BASE_SHA could not be fetched"
+          fi
+          if [ -n "$PRIOR_GREEN_SHA" ]; then
+            git fetch --no-tags --depth=1 origin "$PRIOR_GREEN_SHA" ||
+              echo "::warning::earlier green run $PRIOR_GREEN_SHA could not be fetched"
           fi
 
       - name: Classify changed paths
         id: classify
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || steps.last-nightly.outputs.sha || '' }}
+          PRIOR_GREEN_SHA: ${{ steps.prior-green.outputs.sha || '' }}
           HEAD_SHA: ${{ github.sha }}
           EVENT_NAME: ${{ github.event_name }}
           # Empty for anything that is not a pull request. It is what tells the
@@ -128,6 +167,16 @@ jobs:
           # where a pull request is not narrowed.
           HEAD_REF: ${{ github.head_ref }}
         run: node scripts/ci/classify-workflow.mjs
+
+      # `rust-lint` runs the same check over the whole pull request diff but is
+      # selected only by Rust changes, so a push narrowed by an earlier green run
+      # could skip it for a Markdown or TypeScript edit. It is a single `git diff`.
+      - name: Whitespace
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: node scripts/check-whitespace.mjs
 
       # Unselected Docker legs MUST be absent: GitHub rejects an empty matrix at job startup.
       # Pull requests build arm64 for image-definition changes; full runs build both architectures.

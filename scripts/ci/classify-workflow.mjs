@@ -12,25 +12,41 @@ import {
   classifyChanges,
   coverageTiers,
   formatChanges,
+  narrowSelection,
   scheduledSelection,
 } from "./classify-changes.mjs";
 import { isReleasePullRequest } from "./release-pr.mjs";
 
 const EMPTY_SHA = "0".repeat(40);
 
-function changedPaths({ eventName, baseSha, headSha }) {
+function changedPaths({ eventName, baseSha, headSha, quiet = false }) {
   if (eventName === "workflow_dispatch" || !baseSha || baseSha === EMPTY_SHA) return null;
   try {
-    return execFileSync("git", ["diff", "--name-only", baseSha, headSha], {
+    return execFileSync("git", ["diff", "--name-only", "--no-renames", baseSha, headSha], {
       encoding: "utf8",
       maxBuffer: Infinity,
     })
       .split(/\r?\n/)
       .filter(Boolean);
   } catch {
-    process.stdout.write(`base ${baseSha} is unreachable; classifying everything\n`);
+    if (!quiet) process.stdout.write(`base ${baseSha} is unreachable; classifying everything\n`);
     return null;
   }
+}
+
+// Null when no earlier green run applies; the caller then selects from the full diff.
+function priorGreenPaths({ eventName, headSha }) {
+  const priorSha = process.env.PRIOR_GREEN_SHA;
+  if (eventName !== "pull_request" || !priorSha) return null;
+  const paths = changedPaths({ eventName, baseSha: priorSha, headSha, quiet: true });
+  if (paths === null) {
+    process.stdout.write(`earlier green run ${priorSha} is unreachable; using the full diff\n`);
+    return null;
+  }
+  process.stdout.write(
+    `paths changed since the earlier green run ${priorSha}:\n${paths.length ? paths.join("\n") : "(none)"}\n`,
+  );
+  return paths;
 }
 
 runMain(() => {
@@ -48,7 +64,15 @@ runMain(() => {
   if (paths)
     process.stdout.write(`changed paths:\n${paths.length ? paths.join("\n") : "(none)"}\n`);
   const { fullMatrix, fullNative } = coverageTiers(eventName, headRef);
-  const changes = classifyChanges(paths ?? [], paths === null, eventName, headRef);
+  // An earlier green run of this pull request already tested everything that
+  // has not changed since, so a job runs only when the pull request diff and the
+  // change since that run both select it. The raw diff above still decides
+  // cache eligibility, which looks at the whole pull request.
+  const whole = classifyChanges(paths ?? [], paths === null, eventName, headRef);
+  const sincePaths = paths && priorGreenPaths({ eventName, headSha: process.env.HEAD_SHA });
+  const changes = sincePaths
+    ? narrowSelection(whole, classifyChanges(sincePaths, false, eventName, headRef))
+    : whole;
   const output = `${formatChanges(
     eventName === "schedule" ? scheduledSelection(changes) : changes,
   )}full_matrix=${fullMatrix}\nfull_native=${fullNative}\ndocker_arm_wasm_cache=${canReuseArmDockerWasm(paths)}\n`;

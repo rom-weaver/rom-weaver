@@ -415,6 +415,20 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
   return result;
 }
 
+// A pull request job stays selected unless BOTH the pull request diff and the
+// change since the last green run leave it out: the first is the rule that
+// always applied, the second is what an earlier green run already proved. The
+// prebuilt Docker smoke is the one flag that is not a union of per-path flags
+// (it needs the webapp and an image change at once), so a later push that
+// touches only one of the two still has to run it.
+export function narrowSelection(whole, since) {
+  const narrowed = Object.fromEntries(
+    Object.keys(whole).map((key) => [key, whole[key] && since[key]]),
+  );
+  narrowed.docker_prebuilt = whole.docker_prebuilt && (since.webapp || since.docker_webapp);
+  return narrowed;
+}
+
 // Which run-wide coverage tiers this event gets.
 // `fullMatrix` (macOS/arm64 Docker legs, prebuilt images) stays on for every
 // event but an ordinary pull request, because main's legs feed the nightly

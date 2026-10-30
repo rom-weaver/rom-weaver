@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
 import {
   classifyChanges,
   coverageTiers,
+  narrowSelection,
   ROOT_LEAF_SCRIPTS,
   scheduledSelection,
 } from "./classify-changes.mjs";
@@ -838,4 +840,55 @@ test("pull requests run Lighthouse only when the audited bundle can change", () 
       .lighthouse,
     true,
   );
+});
+
+// Narrowing by "both diffs select the job" is only sound when a flag selected
+// by the union of two path sets is selected by one of them. `docker_prebuilt`
+// is the known exception and has its own rule in `narrowSelection`.
+test("every flag but docker_prebuilt is a union over paths", () => {
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", maxBuffer: 64 << 20 })
+    .split("\n")
+    .filter(Boolean);
+  let seed = 20260101;
+  const next = (limit) => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed % limit;
+  };
+  const pick = () => Array.from({ length: 1 + next(4) }, () => tracked[next(tracked.length)]);
+  for (let trial = 0; trial < 3000; trial += 1) {
+    const left = pick();
+    const right = pick();
+    const both = classifyChanges([...left, ...right], false, "pull_request");
+    const a = classifyChanges(left, false, "pull_request");
+    const b = classifyChanges(right, false, "pull_request");
+    for (const key of Object.keys(both)) {
+      if (key === "docker_prebuilt") continue;
+      assert.equal(both[key], a[key] || b[key], `${key}: ${[...left, ...right].join(", ")}`);
+    }
+  }
+});
+
+test("a later push touching only half of the prebuilt Docker rule still runs it", () => {
+  const whole = classifyChanges(
+    ["packages/rom-weaver-webapp/src/a.ts", ".github/actions/docker-build-arch/action.yml"],
+    false,
+    "pull_request",
+  );
+  assert.equal(whole.docker_prebuilt, true);
+  const since = classifyChanges([".github/actions/docker-build-arch/action.yml"], false, "pull_request");
+  assert.equal(since.docker_prebuilt, false);
+  assert.equal(narrowSelection(whole, since).docker_prebuilt, true);
+});
+
+test("narrowing never selects a job the pull request diff did not", () => {
+  const whole = classifyChanges(["CHANGELOG.md"], false, "pull_request");
+  const since = classifyChanges(["crates/rom-weaver-core/src/lib.rs"], false, "pull_request");
+  for (const [key, value] of Object.entries(narrowSelection(whole, since))) {
+    if (!whole[key]) assert.equal(value, false, key);
+  }
+});
+
+test("a job runs when both diffs select it", () => {
+  const rust = classifyChanges(["crates/rom-weaver-core/src/lib.rs"], false, "pull_request");
+  assert.equal(narrowSelection(rust, rust).rust, true);
 });
