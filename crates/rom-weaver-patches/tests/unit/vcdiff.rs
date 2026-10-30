@@ -734,8 +734,8 @@ fn create_xdelta_app_header_names_files_and_tags_rom_weaver_version() {
         parse_patch(&mut Cursor::new(&patch)).expect("parse created patch")
     };
 
-    // xdelta3 reads the header as a C string: the NUL hides the tag from it, so stock xdelta3
-    // still sees `target//source/` and does not warn about an unknown compression ID.
+    // When decoding, xdelta3 treats the header as a C string: the NUL hides the tag from it, so
+    // stock xdelta3 still sees `target//source/` and does not warn about an unknown compression ID.
     let expected = format!(
         "modified.bin//input.bin/\0rom-weaver {}",
         env!("CARGO_PKG_VERSION")

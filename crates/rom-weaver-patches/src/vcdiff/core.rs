@@ -2164,9 +2164,10 @@ pub(super) fn recode_delta_indicator(
     indicator
 }
 
-/// Separates the xdelta3 `target//source/` filename fields from the rom-weaver tag. xdelta3
-/// reads the header as a C string, so everything after the NUL is ignored; a visible fifth field
-/// would instead make it warn about an unrecognized external compression ID on every decode.
+/// Separates the xdelta3 `target//source/` filename fields from the rom-weaver tag. When decoding,
+/// xdelta3 copies the header into a NUL-terminated string, so everything after the NUL is ignored;
+/// a visible fifth field would instead make it warn about an unrecognized external compression ID
+/// on every decode. `xdelta3 printhdr` still writes the raw header bytes, tag included.
 pub(super) const XDELTA_APP_HEADER_TAG_SEPARATOR: u8 = 0;
 
 /// Producer tag appended to the xdelta app header, e.g. `rom-weaver 0.23.0`.
