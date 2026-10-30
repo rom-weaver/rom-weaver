@@ -915,10 +915,17 @@ fn ensure_wbfs_parts_cover_header(input: &Path, inputs: &[PathBuf], format: &str
     let mut actual = size_of(input);
     for index in 1.. {
         let part = PathBuf::from(format!("{prefix}{index}"));
-        if !inputs.iter().any(|given| same_file_path(given, &part)) {
+        // Parts of one set may differ in case (`Game.WBFS`, `Game.wbf1`); the browser compares
+        // names as strings, so match ignoring ASCII case and size the part that was given.
+        let Some(given) = inputs.iter().find(|given| {
+            same_file_path(given, &part)
+                || given
+                    .to_str()
+                    .is_some_and(|given| given.eq_ignore_ascii_case(&part.to_string_lossy()))
+        }) else {
             break;
-        }
-        actual += size_of(&part);
+        };
+        actual += size_of(given);
     }
     debug!(
         "split WBFS `{}`: given parts total {actual} bytes, header declares {expected}",
@@ -926,9 +933,10 @@ fn ensure_wbfs_parts_cover_header(input: &Path, inputs: &[PathBuf], format: &str
     );
     if actual < expected {
         return Err(RomWeaverError::Validation(format!(
-            "`{}` is the first part of a split WBFS set; the parts given total {actual} bytes but \
-             its header declares {expected}, so {format} output would leave out parts. Compress \
-             to rvz, or pass every part as an input to a zip or 7z archive",
+            "`{}` is a WBFS file, or the first part of a split WBFS set; the parts given total \
+             {actual} bytes but its header declares {expected}, so the set is incomplete or the \
+             file is truncated and {format} output would leave out data. Compress to rvz, or pass \
+             every part as an input to a zip or 7z archive",
             input.display()
         )));
     }

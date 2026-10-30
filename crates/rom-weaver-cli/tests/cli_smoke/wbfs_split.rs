@@ -271,6 +271,27 @@ fn split_wbfs_parts_missing_from_disk_are_refused_by_the_header_size() {
 }
 
 #[test]
+fn split_wbfs_parts_differing_in_case_still_count_as_a_complete_set() {
+    for format in ["zip", "7z"] {
+        let temp = setup_temp_dir();
+        write_split_wbfs(&temp, 0x20000, 3);
+        // The names the browser accepts for one set: the source's stem with any extension case.
+        for (from, to) in [("disc.wbfs", "Disc.WBFS"), ("disc.wbf2", "Disc.WBF2")] {
+            fs::rename(temp.child(from).path(), temp.child(to).path()).expect("rename part");
+        }
+        let parts: Vec<String> = ["Disc.WBFS", "disc.wbf1", "Disc.WBF2"]
+            .iter()
+            .map(|name| path_str(temp.child(name).path()).to_string())
+            .collect();
+        let inputs: Vec<&str> = parts.iter().map(String::as_str).collect();
+        let archive = temp.child(format!("out.{format}"));
+        let output = command_stdout(&compress_args(&inputs, format, path_str(archive.path())), 0);
+        let last = parse_json_lines(&output).pop().expect("terminal event");
+        assert_eq!(last["status"], "succeeded", "{format}: {last}");
+    }
+}
+
+#[test]
 fn split_wbfs_identifies_by_the_extracted_iso_hash() {
     let temp = setup_temp_dir();
     let iso = write_split_wbfs(&temp, 0x20000, 2);

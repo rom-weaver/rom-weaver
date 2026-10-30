@@ -171,7 +171,7 @@ for (const format of ["zip", "7z"]) {
             format,
             options: { outputName: `Partial.${format}`, threads: 1 },
           }),
-        ).rejects.toThrow(/is the first part of a split WBFS set.*header declares/is);
+        ).rejects.toThrow(/WBFS file, or the first part of a split WBFS set.*header declares/is);
       }
       const archive = await create({
         entries: files.map(entryOf),
@@ -201,6 +201,31 @@ for (const format of ["zip", "7z"]) {
     }
   });
 }
+
+test("WASM archives a split WBFS whose parts differ in extension case", async () => {
+  await resetRomWeaverRunner();
+  const outputs = [];
+  try {
+    await warmupRomWeaverRunner();
+    const parts = splitParts(wbfsFromIso(gamecubeIso()), 3);
+    // The extract path accepts this mix of cases for one set, so create must too.
+    const names = ["Disc.WBFS", "disc.wbf1", "Disc.WBF2"];
+    const entries = parts.map((part, index) => ({
+      file: new File([part], names[index]),
+      fileName: names[index],
+    }));
+    const archive = await browserRuntime.compression.create({
+      entries,
+      format: "zip",
+      options: { outputName: "Mixed.zip", threads: 1 },
+    });
+    outputs.push(archive.output);
+    expect(archive.output.fileName).toBe("Mixed.zip");
+  } finally {
+    await Promise.all(outputs.map((output) => output.dispose().catch(() => undefined)));
+    await resetRomWeaverRunner();
+  }
+});
 
 test("WASM checksums a split WBFS to the extracted ISO's hashes and probes its game ID and title", async () => {
   await resetRomWeaverRunner();
