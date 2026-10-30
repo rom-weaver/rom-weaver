@@ -2498,6 +2498,55 @@ fn ingest_nested_named_and_extensionless_patches_are_both_reported() {
     assert_eq!(names, ["hack", "hack.bps"], "{ingest}");
 }
 
+/// Two named patches beside an extension-less compressed patch reach the host in ONE
+/// `patch-manifest` event: the webapp opens its dialog on the first manifest and ignores later ones.
+#[test]
+fn ingest_nested_named_and_extensionless_patches_share_one_manifest() {
+    let temp = setup_temp_dir();
+    let members = temp.child("members");
+    fs::create_dir_all(members.path()).expect("members dir");
+    let first = members.path().join("a.bps");
+    let second = members.path().join("b.bps");
+    fs::write(&first, banded_bps()).expect("first patch");
+    fs::write(&second, banded_bps()).expect("second patch");
+    let wrapped = write_wrapped(&temp, "members/hack.gz", "gz", &banded_bps());
+    let inner = temp.child("inner.zip");
+    zip_members(
+        &temp,
+        inner.path(),
+        &[first.as_path(), second.as_path(), wrapped.as_path()],
+    );
+    let outer = temp.child("outer.zip");
+    zip_members(&temp, outer.path(), &[inner.path()]);
+    let output = temp.child("nested-out");
+    let events = run_json_events(
+        &[
+            "ingest",
+            "--input",
+            outer.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let manifests: Vec<Vec<String>> = events
+        .iter()
+        .filter(|event| event["stage"] == "patch-manifest")
+        .map(|event| {
+            let mut names: Vec<String> = event["details"]["patch_manifest"]["patches"]
+                .as_array()
+                .expect("manifest patches")
+                .iter()
+                .map(|patch| patch["file_name"].as_str().expect("file_name").to_string())
+                .collect();
+            names.sort();
+            names
+        })
+        .collect();
+    assert_eq!(manifests, [["a.bps", "b.bps", "hack"]], "{events:?}");
+}
+
 /// An extension-less compressed dump ingested with `--output` set to its own directory would
 /// extract onto the source path; ingest must refuse and leave the source untouched, for payloads
 /// below and above the 8 MiB mark.

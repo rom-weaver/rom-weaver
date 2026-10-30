@@ -641,11 +641,12 @@ impl CliApp {
             }
         };
         if !signature_patches.is_empty() {
-            if assets.is_empty() && patches.is_empty() {
-                let mut named_patches = Vec::new();
+            let named_pass_ran = assets.is_empty() && patches.is_empty();
+            if named_pass_ran {
                 // The archive listing showed no patch, so the named-patch pass never ran; run it now
-                // so a named patch beside an extension-less one is not dropped.
-                for patch in self.ingest_patch_leaves(
+                // so a named patch beside an extension-less one is not dropped. That pass filters by
+                // patch name, so it never returns an extension-less signature leaf.
+                patches = self.ingest_patch_leaves(
                     handler,
                     IngestLeavesRequest {
                         source,
@@ -661,20 +662,17 @@ impl CliApp {
                         context,
                     },
                     None,
-                )? {
-                    if !signature_patches
-                        .iter()
-                        .any(|known| known.leaf_path == patch.leaf_path)
-                    {
-                        named_patches.push(patch);
-                    }
-                }
-                if !named_patches.is_empty() {
-                    self.emit_patch_manifest(source, &named_patches);
-                    patches.append(&mut named_patches);
-                }
+                )?;
             }
-            self.emit_patch_manifest(source, &signature_patches);
+            // Named patches found by the pass above have not been announced yet; send them with the
+            // signature patches in ONE manifest, since the host acts on the first manifest it sees.
+            if named_pass_ran {
+                let mut manifest = patches.clone();
+                manifest.extend(signature_patches.iter().cloned());
+                self.emit_patch_manifest(source, &manifest);
+            } else {
+                self.emit_patch_manifest(source, &signature_patches);
+            }
             patches.extend(signature_patches);
             if assets.is_empty() {
                 trace!(
