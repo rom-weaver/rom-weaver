@@ -30,8 +30,10 @@ const state = vi.hoisted(() => {
   };
   return {
     browserVfs,
+    removeManaged: vi.fn(async () => undefined),
+    storageRequest: vi.fn(async () => ({ success: true })),
     weaveCreate: vi.fn(async () => ({ archivePath: "/work/result.zip", weavePath: "/work/result.json" })),
-    weaveParse: vi.fn(async () => ({
+    weaveParse: vi.fn(async (_input: { extractDirPath: string }) => ({
       patchSources: [{ source: { extractedPath: "/work/extracted/patch.ips", kind: "extracted" } }],
       romSource: { extractedPath: "/work/extracted/game.bin", kind: "extracted" },
     })),
@@ -164,7 +166,10 @@ vi.mock("../../src/storage/vfs/runtime-output.ts", () => ({
   getRuntimeOutputStorage: state.outputStorage,
   readRuntimeOutputBlob: state.outputBlob,
 }));
-vi.mock("../../src/workers/rom-weaver/runner-control.ts", () => ({ noteRomWeaverIoBatch: state.noteIoBatch }));
+vi.mock("../../src/workers/rom-weaver/runner-control.ts", () => ({
+  noteRomWeaverIoBatch: state.noteIoBatch,
+  waitForRomWeaverShutdown: vi.fn(async () => undefined),
+}));
 vi.mock("../../src/workers/shared/worker-storage/storage-layout.ts", () => ({ WORKER_OPFS_MOUNTPOINT: "/work" }));
 vi.mock("../../src/platform/browser/browser-download.ts", () => ({ triggerBrowserDownload: state.download }));
 vi.mock("../../src/platform/browser/browser-runtime-vfs.ts", () => ({
@@ -182,6 +187,10 @@ vi.mock("../../src/platform/browser/workflow-runtime-disc-formats.ts", () => ({
   createBrowserDiscFormatsRuntime: vi.fn(() => ({})),
 }));
 vi.mock("../../src/platform/browser/workflow-runtime-vfs-cleanup.ts", () => ({ browserVfs: state.browserVfs }));
+vi.mock("../../src/workers/protocol/opfs-path.ts", () => ({ removeManagedOpfsPath: state.removeManaged }));
+vi.mock("../../src/workers/protocol/browser-opfs-worker-client.ts", () => ({
+  requestBrowserOpfsStorage: state.storageRequest,
+}));
 vi.mock("../../src/platform/browser/identify-packs.ts", () => ({
   identifyGroupIdsForHints: state.identifyGroups,
   loadIdentifyPackSelection: state.identifySelection,
@@ -485,7 +494,25 @@ describe("browser ingest and weave runtime", () => {
     await parsed?.cleanup();
     expect(state.browserVfs.remove).toHaveBeenCalledWith("/work/extracted/game.bin");
     expect(state.browserVfs.remove).toHaveBeenCalledWith("/work/extracted/patch.ips");
-    expect(state.browserVfs.remove).toHaveBeenCalledWith(expect.stringContaining("weave-parse"));
+    expect(state.removeManaged).toHaveBeenCalledWith(expect.stringContaining("weave-parse"), undefined, {
+      ignoreErrors: false,
+    });
+  });
+
+  it("keeps a locked weave parse directory owned so Reset retries it", async () => {
+    const { resetBrowserTransientOpfs } = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    const parsed = await browserRuntime.weave.parse?.({ fileName: "weave.zip", source: "weave" } as never);
+    const extractDirPath = state.weaveParse.mock.calls.at(-1)?.[0]?.extractDirPath;
+    state.removeManaged.mockRejectedValue(new DOMException("entry is locked", "NoModificationAllowedError"));
+    try {
+      await parsed?.cleanup();
+      expect(state.removeManaged).toHaveBeenCalledWith(extractDirPath, undefined, { ignoreErrors: false });
+      state.storageRequest.mockClear();
+      await resetBrowserTransientOpfs();
+      expect(state.storageRequest).toHaveBeenCalledWith({ action: "remove", filePath: extractDirPath });
+    } finally {
+      state.removeManaged.mockResolvedValue(undefined);
+    }
   });
 
   it("cleans a weave create failure after output creation", async () => {

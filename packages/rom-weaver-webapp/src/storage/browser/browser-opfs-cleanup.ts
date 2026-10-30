@@ -1,3 +1,4 @@
+import { cleanupBrowserOpfsRunScratch } from "../../wasm/browser-opfs-run-cleanup.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { requestBrowserOpfsStorage, type BrowserOpfsEntry } from "../../workers/protocol/browser-opfs-worker-client.ts";
 
@@ -32,6 +33,14 @@ let bootCleanupPromise: Promise<void> | null = null;
 // In-flight user-requested reset sweeps; commands wait for them like they wait for the boot sweep.
 const pendingResetSweeps = new Set<Promise<void>>();
 const ownedTransientOpfsPaths = new Set<string>();
+const ownedRunScratchIds = new Set<string>();
+
+const registerBrowserOpfsRunScratch = (runId: string): (() => void) => {
+  ownedRunScratchIds.add(runId);
+  return () => {
+    ownedRunScratchIds.delete(runId);
+  };
+};
 
 // Callers MUST register only their own unique scratch directory, before writing into it.
 const registerBrowserTransientOpfsPath = (filePath: string): (() => void) => {
@@ -65,7 +74,19 @@ const removeTransientOpfs = async (paths: readonly string[], options: { skipBusy
 };
 
 const resetBrowserTransientOpfs = (options: { skipBusy?: boolean } = {}): Promise<void> => {
-  const sweep = removeTransientOpfs([...ownedTransientOpfsPaths], options);
+  const paths = [...ownedTransientOpfsPaths];
+  const runIds = [...ownedRunScratchIds];
+  const sweep = (async () => {
+    const results = await Promise.allSettled([
+      removeTransientOpfs(paths, options),
+      ...runIds.map(async (runId) => {
+        await cleanupBrowserOpfsRunScratch({ runId, workGuestPath: "/work" });
+        ownedRunScratchIds.delete(runId);
+      }),
+    ]);
+    const failure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (failure) throw failure.reason;
+  })();
   pendingResetSweeps.add(sweep);
   const settled = () => {
     pendingResetSweeps.delete(sweep);
@@ -164,6 +185,7 @@ const listBrowserOpfs = async (): Promise<BrowserOpfsEntry[]> => {
 
 export {
   listBrowserOpfs,
+  registerBrowserOpfsRunScratch,
   registerBrowserTransientOpfsPath,
   resetBrowserTransientOpfs,
   startBrowserOpfsBootCleanup,

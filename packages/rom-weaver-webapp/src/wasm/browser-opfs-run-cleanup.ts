@@ -1,5 +1,5 @@
 import { requestBrowserOpfsStorage } from "../workers/protocol/browser-opfs-worker-client.ts";
-import { joinGuestPath } from "./browser-opfs-guest-paths.ts";
+import { joinVfsPath } from "../storage/vfs/path.ts";
 
 type ListedOpfsEntry = {
   kind: "directory" | "file";
@@ -72,13 +72,15 @@ export const cleanupBrowserOpfsRunScratch = async ({
   const emptyExtractPaths = findEmptyExtractStagingPaths(entries, runId);
   // Keep extract trees containing files. A failed extract may have staged user data, so cleanup
   // removes only the empty transaction directories it can prove are disposable.
-  const paths = [...tempNamespacePaths, ...emptyExtractPaths].map((path) => joinGuestPath(workGuestPath, path));
-  await Promise.all(
+  const paths = [...tempNamespacePaths, ...emptyExtractPaths].map((path) => joinVfsPath(workGuestPath, path));
+  const results = await Promise.allSettled(
     paths.map(async (path) => {
       await removeOpfsPath(path);
       trace?.(`[browser-opfs] removed run scratch path=${path}`);
     }),
   );
+  const failure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (failure) throw failure.reason;
 };
 
 export { findEmptyExtractStagingPaths, findRunTempNamespacePaths };

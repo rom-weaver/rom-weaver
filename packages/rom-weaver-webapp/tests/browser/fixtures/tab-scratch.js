@@ -60,3 +60,60 @@ export const prepareTabScratch = async () => {
     throw error;
   }
 };
+
+export const startPendingTabRun = async () => {
+  const { setInputSelectionHandler } = await import("../../../src/workers/rom-weaver/runner-control.ts");
+  const input = await browserRuntime.compression.create({
+    entries: [{ fileName: "game.bin", file: new File([new Uint8Array([0, 1, 2, 3])], "game.bin") }],
+    format: "zip",
+    options: { threads: 1 },
+  });
+  const patches = await browserRuntime.compression.create({
+    entries: ["first.ips", "second.ips"].map((name) => ({ fileName: name, file: new File(["PATCHEOF"], name) })),
+    format: "zip",
+    options: { threads: 1 },
+  });
+  let answer;
+  let requested;
+  const ready = new Promise((resolve) => {
+    requested = resolve;
+  });
+  setInputSelectionHandler(() => {
+    requested();
+    return new Promise((resolve) => {
+      answer = resolve;
+    });
+  });
+  const pending = browserRuntime.patch
+    .applyPatch({
+      input: new File([await browserRuntime.publicOutput.getBlob(input.output)], "input.zip"),
+      patches: [
+        {
+          patchFileName: "patches.zip",
+          patchFile: new File([await browserRuntime.publicOutput.getBlob(patches.output)], "patches.zip"),
+        },
+      ],
+      options: { threads: 1 },
+    })
+    .then(
+      (output) => ({ output }),
+      (error) => ({ error }),
+    );
+  await Promise.race([
+    ready,
+    pending.then(() => {
+      throw new Error("Apply finished before patch selection");
+    }),
+  ]);
+  return {
+    pending,
+    cleanup: async () => {
+      answer([]);
+      setInputSelectionHandler();
+      const result = await pending;
+      await result.output?.dispose();
+      await input.output.dispose();
+      await patches.output.dispose();
+    },
+  };
+};

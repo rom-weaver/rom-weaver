@@ -51,7 +51,8 @@ import type {
   RuntimeWorkerIo,
   WorkflowRuntime,
 } from "../../types/workflow-runtime-adapter.ts";
-import { noteRomWeaverIoBatch } from "../../workers/rom-weaver/runner-control.ts";
+import { removeManagedOpfsPath } from "../../workers/protocol/opfs-path.ts";
+import { noteRomWeaverIoBatch, waitForRomWeaverShutdown } from "../../workers/rom-weaver/runner-control.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
 import { triggerBrowserDownload } from "./browser-download.ts";
 import type { BrowserIdentifyPack } from "./identify-packs.ts";
@@ -555,7 +556,8 @@ const createBrowserWeaveRuntime = (
     });
     const releaseOwnership = registerBrowserTransientOpfsPath(extractDirPath);
     const removeExtractDir = async () => {
-      await browserVfs.remove(extractDirPath);
+      await waitForRomWeaverShutdown();
+      await removeManagedOpfsPath(extractDirPath, undefined, { ignoreErrors: false });
       releaseOwnership();
     };
     try {

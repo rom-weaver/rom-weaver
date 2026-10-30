@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { requestBrowserOpfsStorage } = vi.hoisted(() => ({
   requestBrowserOpfsStorage: vi.fn(
-    async (_request?: { filePath?: string }): Promise<{ error?: { message: string }; success: boolean }> => ({
+    async (_request?: {
+      action?: string;
+      filePath?: string;
+    }): Promise<{ error?: { message: string }; success: boolean }> => ({
       success: true,
     }),
   ),
@@ -76,6 +79,47 @@ describe("browser OPFS cleanup", () => {
     await rejection;
     await waiting;
     expect(waited).toBe(true);
+  });
+
+  it("retries failed run scratch cleanup without sweeping another tab or newly registered runs", async () => {
+    vi.resetModules();
+    const tab = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    tab.registerBrowserOpfsRunScratch("own-run");
+    const releaseFinished = tab.registerBrowserOpfsRunScratch("finished-run");
+    releaseFinished();
+    let releaseNew: () => void = () => undefined;
+    requestBrowserOpfsStorage.mockImplementation(async (request) => {
+      if (request?.action === "list-metadata") {
+        releaseNew = tab.registerBrowserOpfsRunScratch("new-run");
+        return {
+          success: true,
+          entries: ["own-run", "other-run", "finished-run", "new-run"].map((runId) => ({
+            kind: "directory",
+            path: `/rom-weaver-out/rw-${runId}-1-entropy`,
+          })),
+        };
+      }
+      return { success: false, error: { message: "entry is locked" } };
+    });
+    await expect(tab.resetBrowserTransientOpfs()).rejects.toThrow("entry is locked");
+    expect(requestBrowserOpfsStorage.mock.calls.filter(([request]) => request?.action === "remove")).toEqual([
+      [{ action: "remove", filePath: "/work/rom-weaver-out/rw-own-run-1-entropy" }],
+    ]);
+    releaseNew();
+    requestBrowserOpfsStorage.mockClear();
+    requestBrowserOpfsStorage.mockImplementation(async (request) =>
+      request?.action === "list-metadata"
+        ? { success: true, entries: [{ kind: "directory", path: "/rom-weaver-out/rw-own-run-1-entropy" }] }
+        : { success: true },
+    );
+    await tab.resetBrowserTransientOpfs();
+    expect(requestBrowserOpfsStorage).toHaveBeenCalledWith({
+      action: "remove",
+      filePath: "/work/rom-weaver-out/rw-own-run-1-entropy",
+    });
+    requestBrowserOpfsStorage.mockClear();
+    await tab.resetBrowserTransientOpfs();
+    expect(requestBrowserOpfsStorage).not.toHaveBeenCalled();
   });
 
   it("reports a failed sweep only after every sibling removal has settled", async () => {

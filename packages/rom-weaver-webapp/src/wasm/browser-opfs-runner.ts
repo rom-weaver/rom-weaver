@@ -390,7 +390,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         runEnv: runOptions.env,
         threaded,
       });
-      const opfsRunId = createVfsPathId();
+      const opfsRunId = runOptions.env?.ROM_WEAVER_OPFS_RUN_ID || createVfsPathId();
       env.ROM_WEAVER_OPFS_RUN_ID = opfsRunId;
       const sharedMemory = createRunWasmMemory(importsEnvMemory, options);
       const wasmMemory = sharedMemory?.memory;

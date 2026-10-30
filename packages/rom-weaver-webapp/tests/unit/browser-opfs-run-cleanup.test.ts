@@ -51,6 +51,37 @@ describe("browser OPFS run scratch cleanup", () => {
     ]);
   });
 
+  it("settles sibling removals before reporting a run scratch failure", async () => {
+    let finishSlow: () => void = () => undefined;
+    requestStorage.mockResolvedValueOnce({
+      action: "list-complete",
+      success: true,
+      entries: ["failed", "slow"].map((name) => ({ kind: "directory", path: `/rom-weaver-out/rw-run-1-${name}` })),
+    });
+    requestStorage.mockImplementation(async (request) => {
+      if (request.filePath?.endsWith("failed"))
+        return { action: "remove-complete", success: false, error: { message: "entry is locked" } };
+      return new Promise((resolve) => {
+        finishSlow = () => resolve({ action: "remove-complete", success: true });
+      });
+    });
+    let settled = false;
+    const pending = cleanupBrowserOpfsRunScratch({ runId: "run-1", workGuestPath: "/work" });
+    const checked = expect(pending).rejects.toThrow("entry is locked");
+    void pending.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await vi.waitFor(() => expect(requestStorage).toHaveBeenCalledTimes(3));
+    expect(settled).toBe(false);
+    finishSlow();
+    await checked;
+  });
+
   it("removes listed scratch paths without assuming the guest mount path", async () => {
     requestStorage.mockResolvedValueOnce({
       action: "list-complete",
