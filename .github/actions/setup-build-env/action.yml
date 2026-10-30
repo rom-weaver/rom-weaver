@@ -206,8 +206,8 @@ runs:
     - name: Install mise-pinned tools
       uses: jdx/mise-action@v4
       with:
-        # mise 2026.10.24 rejects `exe` on github-backend tools (binaryen in
-        # .config/mise.toml); bump deliberately after checking that config.
+        # Since 2026.10.14, mise fails installs on tool options a backend does
+        # not read; bump deliberately after checking .config/mise.toml loads.
         version: 2026.10.3
         install: true
 
