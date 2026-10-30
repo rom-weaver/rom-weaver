@@ -66,7 +66,7 @@ msgstr "{compressed} transferido · {uncompressed} almacenado"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.unsupportedPatch"
-msgstr "{count, plural, one {{names} no es un formato de parche compatible y no se usó.} other {{names} no son formatos de parche compatibles y no se usaron.}}"
+msgstr "{count, plural, one {{names} no es un formato de ROM ni de parche reconocido y no se usó.} other {{names} no son formatos de ROM ni de parche reconocidos y no se usaron.}}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

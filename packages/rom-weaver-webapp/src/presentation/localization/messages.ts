@@ -346,7 +346,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.drop.unsupportedPatch": msg({
     id: "ui.drop.unsupportedPatch",
     message:
-      "{count, plural, one {{names} is not a supported patch format and was not used.} other {{names} are not supported patch formats and were not used.}}",
+      "{count, plural, one {{names} is not a recognised ROM or patch format and was not used.} other {{names} are not recognised ROM or patch formats and were not used.}}",
   }),
   "ui.apply.add.replaceOrPatches": msg({
     id: "ui.apply.add.replaceOrPatches",

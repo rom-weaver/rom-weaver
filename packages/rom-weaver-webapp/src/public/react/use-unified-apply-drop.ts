@@ -231,7 +231,13 @@ const routeUnifiedDrop = async (
       archiveBuckets[index] === "rom" ? [[archive, archiveEntries[index] || []] as const] : [],
     ),
   );
-  const screened = screenRomCandidates({ archives: romBucketArchives, inputs });
+  const screened = screenRomCandidates({
+    archives: romBucketArchives,
+    inputs,
+    sheetReferenced: new Set(
+      (await groupDirectDiscInputs(inputs)).filter((group) => group.files.length > 1).flatMap((group) => group.files),
+    ),
+  });
   if (screened.rejection) lifecycle?.onRejected?.(screened.rejection);
   const ingestRouted = await separateIngestPatches(
     {

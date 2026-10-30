@@ -640,6 +640,49 @@ describe("useUnifiedApplyDrop", () => {
       expect(selectFile).not.toHaveBeenCalled();
     });
 
+    it("keeps tracks with unlisted extensions that a dropped GDI or CUE sheet references", async () => {
+      const gdi = new File(["2\n1 0 4 2352 track01.bin 0\n2 600 0 2352 track02.raw 0\n"], "disc.gdi");
+      const gdiTracks = [file("track01.bin"), file("track02.raw")];
+      const gdiDrop = setup();
+      act(() => gdiDrop.result.current.onDrop([gdi, ...gdiTracks]));
+      await waitFor(() => expect(gdiDrop.controller.provideRomInputFiles).toHaveBeenCalledOnce());
+      expect(gdiDrop.controller.provideRomInputFiles.mock.calls[0]?.[0].map((f: File) => f.name).sort()).toEqual([
+        "disc.gdi",
+        "track01.bin",
+        "track02.raw",
+      ]);
+      expect(gdiDrop.onRejected).not.toHaveBeenCalled();
+
+      const cue = new File(
+        [
+          'FILE "a.img" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE "b.raw" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n',
+        ],
+        "disc.cue",
+      );
+      const cueDrop = setup();
+      act(() => cueDrop.result.current.onDrop([cue, file("a.img"), file("b.raw")]));
+      await waitFor(() => expect(cueDrop.controller.provideRomInputFiles).toHaveBeenCalledOnce());
+      expect(cueDrop.controller.provideRomInputFiles.mock.calls[0]?.[0].map((f: File) => f.name).sort()).toEqual([
+        "a.img",
+        "b.raw",
+        "disc.cue",
+      ]);
+      expect(cueDrop.onRejected).not.toHaveBeenCalled();
+    });
+
+    it("sends an archive with an extension-less entry plus ignorable files to the ingest probe", async () => {
+      mockedList.mockResolvedValue(["hack", "readme.txt"]);
+      mockedProbe.mockResolvedValue("patch");
+      const { controller, onRejected, result } = setup();
+      const rom = file("base.sfc");
+      const zip = file("hack.zip");
+      act(() => result.current.onDrop([rom, zip]));
+      await waitFor(() => expect(controller.providePatchInputFiles).toHaveBeenCalledExactlyOnceWith([zip]));
+      expect(mockedProbe).toHaveBeenCalledExactlyOnceWith(zip, expect.any(AbortSignal));
+      expect(controller.provideRomInputFiles).toHaveBeenCalledExactlyOnceWith([rom]);
+      expect(onRejected).not.toHaveBeenCalled();
+    });
+
     it("still stages a lone extension-less compressed ROM or patch and offers extension-less bare files", async () => {
       mockedList.mockResolvedValue(["rom"]);
       const lone = setup();

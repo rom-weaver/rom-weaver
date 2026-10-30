@@ -103,7 +103,7 @@ export function miscCases() {
     id: "unsupported/ninja1",
     tags: ["ninja1", "unsupported", "error-ux"],
     title:
-      "NINJA1 has no apply support; a .rnp file with a NINJA2 header but no body must be named as not a supported patch and never offered as a second ROM",
+      "NINJA1 has no apply support; a .rnp file with a NINJA2 header but no body must be named as not a recognised ROM or patch format and never offered as a second ROM",
     async run(h) {
       const out = await scenario(h, {
         files: [
@@ -120,10 +120,10 @@ export function miscCases() {
         ...(out.staged?.notices ?? []).map((notice) => notice.text),
       ];
       assert(
-        visibleText.some((text) => /ninja1\.rnp is not a supported patch/i.test(String(text ?? ""))),
+        visibleText.some((text) => /ninja1\.rnp is not a recognised ROM or patch format/i.test(String(text ?? ""))),
         `ninja1.rnp was not named as an unsupported patch: ${JSON.stringify(visibleText)}`,
       );
-      return `refused (${out.outcome}): ninja1.rnp named as not a supported patch`;
+      return `refused (${out.outcome}): ninja1.rnp named as not a recognised ROM or patch format`;
     },
   });
   return cases;

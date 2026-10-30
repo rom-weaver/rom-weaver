@@ -139,6 +139,18 @@ export function containerCases({ manifest }) {
       ...(have(name) ? {} : { skip: `fixture ${name} unavailable: ${missing(name)}` }),
     });
   }
+  for (const name of ["rom.gz", "rom.xz", "rom.bz2", "rom.zst", "rom.lz4"]) {
+    cases.push({
+      ...inContainer({
+        expected: target(),
+        files: have(name) ? [{ buffer: read(cacheFile(name)), name: "rom" }, bps] : [bps],
+        id: `rom-in/bare-no-extension-${tagOf(name)}`,
+        tags: ["rom", "bare", "no-extension", tagOf(name)],
+        title: `a sole ${tagOf(name)}-compressed ROM named "rom" (no extension) plus a patch: staged with real checksums and applied`,
+      }),
+      ...(have(name) ? {} : { skip: `fixture ${name} unavailable: ${missing(name)}` }),
+    });
+  }
   cases.push({
     ...inContainer({
       expected: target(),
@@ -173,7 +185,7 @@ export function containerCases({ manifest }) {
         assert(!session.pageErrors.length, `page error ${session.pageErrors[0]}`);
         const visible = after.notices.map((notice) => notice.text).join(" | ");
         assert(
-          !/invalid_input|no extractable patch|not a supported patch/i.test(visible),
+          !/invalid_input|no extractable patch|not a recognised ROM or patch format/i.test(visible),
           `unexpected notice: ${visible}`,
         );
         assert(!after.cards.some((card) => card.classes.includes("patch")), "a phantom patch card appeared");
