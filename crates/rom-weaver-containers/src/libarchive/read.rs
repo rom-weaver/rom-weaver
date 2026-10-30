@@ -181,9 +181,9 @@ impl ReadArchive {
                 return Ok(Some(ptr));
             }
             let entry = ReadArchiveEntry { archive: self, ptr };
-            let pathname = entry
-                .pathname()
-                .map_err(|error| RomWeaverError::Validation(format!("{context}: {error}")))?;
+            // A skipped link's name only feeds this warning, so a name that cannot be decoded must not
+            // fail the whole archive.
+            let pathname = entry.pathname().unwrap_or_else(|_| entry.pathname_lossy());
             warn!(
                 path = %pathname,
                 "skipping archive link: symbolic and hard links are not supported"
@@ -334,6 +334,17 @@ impl<'a> ReadArchiveEntry<'a> {
             return Err(self.io_error("archive entry pathname was unavailable"));
         }
         Ok(unsafe { CStr::from_ptr(pathname) })
+    }
+
+    /// The entry name with undecodable bytes replaced, for messages about entries that are not extracted.
+    fn pathname_lossy(&self) -> String {
+        let pathname = unsafe { archive_entry_pathname_utf8(self.ptr.as_ptr()) };
+        if pathname.is_null() {
+            return String::from("<unreadable name>");
+        }
+        unsafe { CStr::from_ptr(pathname) }
+            .to_string_lossy()
+            .into_owned()
     }
 
     fn pathname_utf8(&self) -> io::Result<&str> {
