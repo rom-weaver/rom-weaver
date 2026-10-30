@@ -21,6 +21,7 @@ import {
   generatedLicenseAssetSources,
   generatedSampleAssetPaths,
   getGeneratedSampleAsset,
+  LEGACY_MARKDOWN_ROUTES,
   LEGACY_WORKFLOW_ROUTES,
   rootStaticAssetSourcesForChannel,
 } from "./root-static-assets.mjs";
@@ -249,7 +250,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
           legacyHtml.replace('<base href="../" />', '<base href="./" />'),
         );
         const canonicalMarkdown = path.join(distDir, `${destination}.md`);
-        if (fs.existsSync(canonicalMarkdown)) {
+        if (LEGACY_MARKDOWN_ROUTES.has(legacy) && fs.existsSync(canonicalMarkdown)) {
           fs.copyFileSync(canonicalMarkdown, path.join(distDir, `${legacy}.md`));
         }
       }

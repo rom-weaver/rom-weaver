@@ -13,6 +13,7 @@ import {
 } from "../src/webapp/api-catalog.mjs";
 import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { resolveSiteOrigin } from "./vite-config/channel.mjs";
+import { LEGACY_MARKDOWN_ROUTES, LEGACY_WORKFLOW_ROUTES } from "./vite-config/root-static-assets.mjs";
 import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
 import {
   SITE_ALTERNATE_NAMES,
@@ -345,6 +346,12 @@ for (const source of ["/create-patch", "/create-patch/", "/create-patch.html", "
   assertIncludes(redirects, `${source} /create-rom-patch 301`, `${source} renamed Create redirect`);
 }
 assertIncludes(redirects, "/create-patch.md /create-rom-patch.md 301", "renamed Create Markdown redirect");
+for (const legacy of Object.keys(LEGACY_WORKFLOW_ROUTES)) {
+  const published = fs.existsSync(path.join(distDir, `${legacy}.md`));
+  if (published !== LEGACY_MARKDOWN_ROUTES.has(legacy)) {
+    throw new Error(`/${legacy}.md must be ${LEGACY_MARKDOWN_ROUTES.has(legacy) ? "published" : "absent"}`);
+  }
+}
 for (const source of ["/apply-patch", "/apply-patch/", "/apply-patch.html", "/apply-patch/index.html"]) {
   assertIncludes(redirects, `${source} /apply-rom-patches 301`, `${source} renamed Apply Patches redirect`);
 }
