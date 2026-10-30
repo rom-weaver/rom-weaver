@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { Marked } from "marked";
+import { DOCS_SCREENSHOT_NAMES } from "./docs-screenshot-manifest.mjs";
 import { DOC_SOURCES, SAMPLE_URL_PATTERN, SITE_ORIGIN, siteSamplePath } from "../src/webapp/docs-routing.mjs";
 
 const repositoryOrigin = "https://github.com/rom-weaver/rom-weaver/blob/main";
@@ -22,6 +23,33 @@ export function createDocsMarkdown(source, markdown, siteOrigin = SITE_ORIGIN) {
     const origin = type === "image" ? "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main" : repositoryOrigin;
     return `${origin}${url.pathname}${url.search}${url.hash}`;
   };
+  // Raw HTML (screenshot <picture> blocks) ships verbatim, so its relative media URLs
+  // would resolve against the .md URL. Screenshots the site serves point at the serving
+  // deployment, so previews and releases show their own captures; other files follow
+  // the Markdown image rule.
+  const resolveHtmlUrl = (url) => {
+    if (/^(?:[a-z]+:|\/\/|\/|#)/i.test(url)) return resolveHref(url, "image");
+    const { pathname } = new URL(url, `https://repository.invalid/docs/${source.file}`);
+    const name = pathname.startsWith("/docs/screenshots/") ? pathname.slice("/docs/screenshots/".length) : null;
+    return DOCS_SCREENSHOT_NAMES.includes(name) ? `${siteOrigin}${pathname}` : resolveHref(url, "image");
+  };
+  const resolveHtmlMedia = (html) =>
+    html.replace(/(\s(?:src|srcset|poster)\s*=\s*)(?:"([^"]*)"|'([^']*)')/gi, (match, prefix, double, single) => {
+      const quote = double === undefined ? "'" : '"';
+      const value = double ?? single;
+      const name = prefix.trim().toLowerCase();
+      const resolve = (candidate) => (candidate ? resolveHtmlUrl(candidate) : candidate);
+      const resolved = name.startsWith("srcset")
+        ? value
+            .split(",")
+            .map((candidate) => {
+              const [url = "", ...descriptor] = candidate.trim().split(/\s+/);
+              return [resolve(url), ...descriptor].join(" ");
+            })
+            .join(", ")
+        : resolve(value.trim());
+      return `${prefix}${quote}${resolved}${quote}`;
+    });
   const parser = new Marked();
   const tokens = parser.lexer(markdown);
   const replacements = new Map();
@@ -41,7 +69,8 @@ export function createDocsMarkdown(source, markdown, siteOrigin = SITE_ORIGIN) {
         token.raw.replace(SAMPLE_URL_PATTERN, (_match, name) => `${siteOrigin}/${name}`),
       );
     }
-    if (["codespan", "html"].includes(token.type)) replacements.set(token.raw, token.raw);
+    if (token.type === "html") replacements.set(token.raw, resolveHtmlMedia(token.raw));
+    if (token.type === "codespan") replacements.set(token.raw, token.raw);
   });
   // Longest matches MUST consume code samples before any links inside them.
   const patterns = [...replacements.keys()].filter(Boolean).sort((a, b) => b.length - a.length);

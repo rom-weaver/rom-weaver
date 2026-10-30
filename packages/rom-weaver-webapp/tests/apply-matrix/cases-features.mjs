@@ -58,6 +58,7 @@ const undoCase = ({ id, title, files, format = "none", expected, expectRefusal, 
   async run(h) {
     for (const file of files)
       if (typeof file === "string" && !fs.existsSync(file))
+        // quality-reason: CLI-made ppf-undo fixtures need the native CLI (absent when RW_BIN is unset); the fixtures that are committed still run, and the CLI harness covers ppf-undo.
         throw new Skip(
           `fixture missing: ${path.basename(file)} (run tests/fixtures/apply-matrix/generate.mjs; CLI-made ones need the native CLI)`,
         );

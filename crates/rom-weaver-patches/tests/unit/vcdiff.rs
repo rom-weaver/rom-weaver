@@ -710,6 +710,45 @@ fn multi_window_xdelta_patch_round_trips_with_parallel_decoder() {
 }
 
 #[test]
+fn create_xdelta_app_header_names_files_and_tags_rom_weaver_version() {
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let modified_path = temp.join("modified.bin");
+    fs::write(&input_path, b"hello old world").expect("write input");
+    fs::write(&modified_path, b"hello new world").expect("write modified");
+
+    let create = |descriptor: &'static FormatDescriptor, name: &str| {
+        let patch_path = temp.join(name);
+        VcdiffPatchHandler::new(descriptor)
+            .create(
+                &PatchCreateRequest {
+                    original: input_path.clone(),
+                    modified: modified_path.clone(),
+                    output: patch_path.clone(),
+                    format: descriptor.name.into(),
+                },
+                &test_context(),
+            )
+            .expect("create patch");
+        let patch = fs::read(patch_path).expect("read patch");
+        parse_patch(&mut Cursor::new(&patch)).expect("parse created patch")
+    };
+
+    // When decoding, xdelta3 treats the header as a C string: the NUL hides the tag from it, so
+    // stock xdelta3 still sees `target//source/` and does not warn about an unknown compression ID.
+    let expected = format!(
+        "modified.bin//input.bin/\0rom-weaver {}",
+        env!("CARGO_PKG_VERSION")
+    );
+    let xdelta = create(&crate::xdelta::XDELTA, "update.xdelta");
+    assert_eq!(xdelta.app_header.as_deref(), Some(expected.as_bytes()));
+
+    // Plain VCDIFF intentionally carries no application header, unlike xdelta.
+    let vcdiff = create(&crate::xdelta::VCDIFF, "update.vcdiff");
+    assert_eq!(vcdiff.app_header, None);
+}
+
+#[test]
 fn create_vcdiff_patch_round_trips() {
     let input = b"hello old world";
     let expected = b"hello new world";
