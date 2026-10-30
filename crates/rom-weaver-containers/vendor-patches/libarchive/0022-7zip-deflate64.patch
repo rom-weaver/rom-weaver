@@ -40,7 +40,22 @@ diff --git a/libarchive/archive_read_support_format_7zip.c b/libarchive/archive_
  	case _7Z_DEFLATE:
  #ifdef HAVE_ZLIB_H
  		if (zip->stream_valid)
-@@ -1925,6 +1936,17 @@
+@@ -1704,10 +1715,12 @@
+ 			t_avail_out--;
+ 			zip->odd_bcj_size--;
+ 		}
+-		if (o_avail_in == 0 || t_avail_out == 0) {
++		/* Deflate64 MUST drain buffered output after consuming all input. */
++		if ((o_avail_in == 0 && zip->codec != _7Z_DEFLATE64) ||
++		    t_avail_out == 0) {
+ 			*used = o_avail_in - t_avail_in;
+ 			*outbytes = o_avail_out - t_avail_out;
+-			if (o_avail_in == 0)
++			if (o_avail_in == 0 && zip->codec != _7Z_DEFLATE64)
+ 				ret = ARCHIVE_EOF;
+ 			return (ret);
+ 		}
+@@ -1925,6 +1938,17 @@
  		t_avail_out = zip->bzstream.avail_out;
  		break;
  #endif
@@ -58,7 +73,7 @@ diff --git a/libarchive/archive_read_support_format_7zip.c b/libarchive/archive_
  #ifdef HAVE_ZLIB_H
  	case _7Z_DEFLATE:
  		zip->stream.next_in = (Bytef *)(uintptr_t)t_next_in;
-@@ -2137,6 +2159,8 @@
+@@ -2137,6 +2161,8 @@
  		zip->stream_valid = 0;
  	}
  #endif

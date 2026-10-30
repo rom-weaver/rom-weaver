@@ -377,6 +377,13 @@ impl CliApp {
                     error = %error,
                     "auto-extract failed: handler probe failed"
                 );
+                if is_7z_volume && handler.descriptor().matches_name("7z") {
+                    return Err(RomWeaverError::Validation(format!(
+                        "{} payload extraction failed for `{}` (7z): split 7z volume sets are unsupported; join the volumes into one archive or use --no-extract to use this volume as raw input: {error}",
+                        labels.source_label,
+                        current_source.display(),
+                    )));
+                }
                 return Err(RomWeaverError::Validation(format!(
                     "{} payload extraction failed for `{}` ({}): {error}",
                     labels.source_label,

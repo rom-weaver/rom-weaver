@@ -2662,11 +2662,86 @@ fn patch_apply_rejects_split_7z_volumes() {
             "--no-compress",
         ]);
         assert!(
-            stderr.contains("7z") && stderr.contains("payload extraction failed"),
+            stderr.contains("split 7z volume set")
+                && stderr.contains("join the volumes")
+                && stderr.contains("--no-extract")
+                && stderr.contains("payload extraction failed"),
             "{stderr}"
         );
         assert!(!output.path().exists(), "left output for {name}");
         assert_eq!(fs::read(volume.path()).expect("unchanged volume"), original);
+        command_stdout(
+            &[
+                "patch",
+                "apply",
+                "-i",
+                volume.path().to_str().expect("path"),
+                "--patch",
+                patch.path().to_str().expect("path"),
+                "-o",
+                output.path().to_str().expect("path"),
+                "--no-compress",
+                "--no-extract",
+            ],
+            0,
+        );
+        let mut expected = original.to_vec();
+        expected[100] = 42;
+        assert_eq!(
+            fs::read(output.path()).expect("patched raw volume"),
+            expected
+        );
+        assert_eq!(fs::read(volume.path()).expect("unchanged volume"), original);
+    }
+}
+
+#[test]
+fn checksum_and_probe_reject_split_7z_volumes_unless_no_extract() {
+    let temp = setup_temp_dir();
+    let volume = temp.child("split.7z.002");
+    let original = with_nes_header(&pseudo_random_bytes(1024, 19));
+    fs::write(volume.path(), &original).expect("volume");
+    for mut args in [vec!["checksum", "--algo", "crc32"], vec!["probe"]] {
+        args.extend(["-i", volume.path().to_str().expect("path")]);
+        let stderr = stderr_of_failed(&args);
+        assert!(
+            stderr.contains("split 7z volume set")
+                && stderr.contains("join the volumes")
+                && stderr.contains("--no-extract"),
+            "{stderr}"
+        );
+        args.push("--no-extract");
+        command_stdout(&args, 0);
+        assert_eq!(fs::read(volume.path()).expect("unchanged volume"), original);
+    }
+}
+
+#[test]
+fn extract_7z_deflate64_bcj_drains_buffered_output() {
+    let archive = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../rom-weaver-containers/tests/fixtures/7z/deflate64-bcj.7z");
+    let expected = (0..1024 * 1024)
+        .map(|i| (i % 251) as u8)
+        .collect::<Vec<_>>();
+    let temp = setup_temp_dir();
+    for threads in ["1", "2"] {
+        let out = temp.child(format!("out-{threads}"));
+        command_stdout(
+            &[
+                "extract",
+                "-i",
+                archive.to_str().expect("path"),
+                "-o",
+                out.path().to_str().expect("path"),
+                "-j",
+                threads,
+            ],
+            0,
+        );
+        assert_eq!(
+            fs::read(out.child("mixed.bin").path()).expect("payload"),
+            expected
+        );
     }
 }
 

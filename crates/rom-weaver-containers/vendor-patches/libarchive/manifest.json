@@ -260,7 +260,7 @@
     },
     {
       "file": "0022-7zip-deflate64.patch",
-      "stage": "source",
+      "stage": "integration",
       "reason": "Decode 7z Deflate64 folders with the Rust streaming decoder.",
       "upstream": { "status": "local" },
       "tests": ["cargo test -p rom-weaver-cli --test integration deflate64", "node scripts/apply-matrix/cli/run.mjs --filter reference.7z.source.deflate64-codec"]
