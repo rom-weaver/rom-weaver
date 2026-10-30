@@ -269,6 +269,134 @@ fn block_reader_rejects_invalid_geometry() {
     }
 }
 
+/// Splits `image[..disc_size]` into `block_size` GCZ blocks (the last one
+/// zero padded, as dolphin-tool writes it), mixing deflated and stored
+/// payloads so both read paths run inside one sector.
+fn small_block_gcz(image: &[u8], block_size: u32, disc_size: usize) -> Vec<u8> {
+    let blocks: Vec<(bool, Vec<u8>)> = image[..disc_size]
+        .chunks(block_size as usize)
+        .enumerate()
+        .map(|(index, chunk)| {
+            let mut block = chunk.to_vec();
+            block.resize(block_size as usize, 0);
+            // Like the real writers, store a block whose deflated form does not fit.
+            let deflated = zlib_stream(&block);
+            if index % 2 == 0 && deflated.len() < block.len() {
+                (false, deflated)
+            } else {
+                (true, block)
+            }
+        })
+        .collect();
+    hand_built_gcz(block_size, disc_size as u64, &blocks)
+}
+
+#[test]
+fn block_reader_reads_blocks_smaller_than_a_sector() {
+    // dolphin-tool writes any power-of-two block size, including ones below
+    // the 32 KiB disc sector, and reads them back.
+    let image = build_gamecube_iso();
+    for block_size in [512u32, 2048, 4096, 8192, 16384] {
+        let gcz = small_block_gcz(&image, block_size, image.len());
+        let mut restored = PublicDiscReader::new_stream(Box::new(gcz), &DiscOptions::default())
+            .unwrap_or_else(|error| panic!("block size {block_size}: {error}"));
+        assert_eq!(restored.meta().format, Format::Gcz);
+        assert_eq!(restored.meta().block_size, Some(block_size));
+        let mut out = Vec::with_capacity(image.len());
+        crate::nod::util::buf_copy(&mut restored, &mut out)
+            .unwrap_or_else(|error| panic!("block size {block_size}: {error}"));
+        assert_eq!(out, image, "block size {block_size} must restore the disc");
+    }
+}
+
+#[test]
+fn block_reader_groups_small_blocks_into_whole_sectors() {
+    let image = build_gamecube_iso();
+    let gcz = small_block_gcz(&image, 4096, image.len());
+    let mut reader = BlockReaderGCZ::new(Box::new(gcz)).expect("GCZ opens");
+    assert_eq!(
+        reader.block_size(),
+        SECTOR_SIZE as u32,
+        "consumers see whole-sector blocks"
+    );
+
+    let mut out = vec![0u8; SECTOR_SIZE];
+    for sector in [0u32, 1, 7, 100] {
+        let block = reader.read_block(&mut out, sector).expect("sector reads");
+        assert_eq!(block.kind, BlockKind::Raw);
+        assert_eq!((block.sector, block.count), (sector, 1));
+        let start = sector as usize * SECTOR_SIZE;
+        assert_eq!(out, image[start..start + SECTOR_SIZE], "sector {sector}");
+    }
+}
+
+#[test]
+fn block_reader_zero_fills_small_blocks_past_the_end_of_the_map() {
+    // The disc ends 0x1800 bytes before a sector boundary, so the last sector
+    // spans one real block, one partial block and six blocks the map lacks.
+    let image = build_gamecube_iso();
+    let disc_size = image.len() - 0x6000 - 0x1800;
+    let gcz = small_block_gcz(&image, 4096, disc_size);
+    let mut reader = BlockReaderGCZ::new(Box::new(gcz)).expect("GCZ opens");
+
+    let last_sector = (disc_size / SECTOR_SIZE) as u32;
+    let mut out = vec![0xEEu8; SECTOR_SIZE];
+    let block = reader
+        .read_block(&mut out, last_sector)
+        .expect("last sector");
+    assert_eq!(block.kind, BlockKind::Raw);
+    let tail = disc_size - last_sector as usize * SECTOR_SIZE;
+    let start = last_sector as usize * SECTOR_SIZE;
+    assert_eq!(out[..tail], image[start..start + tail]);
+    assert!(out[tail..].iter().all(|byte| *byte == 0), "padding is zero");
+
+    let past = reader
+        .read_block(&mut out, last_sector + 1)
+        .expect("sector past the end");
+    assert_eq!(past.kind, BlockKind::None);
+}
+
+#[test]
+fn block_reader_reports_which_small_block_is_corrupt() {
+    let image = build_gamecube_iso();
+    let mut gcz = small_block_gcz(&image, 8192, image.len());
+    let header = gcz_header(&gcz);
+    let data_offset = size_of::<GCZHeader>() + header.block_count.get() as usize * 12;
+    // Block 1 is a stored block; sector 0 groups blocks 0..4.
+    let block_one = u64::from_le_bytes(
+        gcz[size_of::<GCZHeader>() + 8..size_of::<GCZHeader>() + 16]
+            .try_into()
+            .expect("map entry"),
+    ) & !(1 << 63);
+    gcz[data_offset + block_one as usize] ^= 0xFF;
+
+    let mut reader = BlockReaderGCZ::new(Box::new(gcz)).expect("GCZ opens");
+    let mut out = vec![0u8; SECTOR_SIZE];
+    let error = reader
+        .read_block(&mut out, 0)
+        .expect_err("block 1 is corrupt");
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(
+        error.to_string().contains("Block 1 checksum mismatch"),
+        "unexpected message: {error}"
+    );
+}
+
+#[test]
+fn block_reader_rejects_unsupported_small_block_sizes() {
+    // Dolphin only writes power-of-two block sizes; the reader needs the block
+    // to divide a sector and keeps a 512 byte floor so the block map stays
+    // proportionate to the disc.
+    for block_size in [1u32, 256, 511, 513, 3072, 12288, 24576] {
+        let data = hand_built_gcz(block_size, 0, &[]);
+        let error = expect_error(BlockReaderGCZ::new(Box::new(data)));
+        assert!(
+            error.to_string().contains("Invalid block size for GCZ"),
+            "block size {block_size}: unexpected message: {error}"
+        );
+    }
+}
+
 #[test]
 fn block_reader_rejects_a_bad_magic() {
     let mut data = vec![0u8; 0x100];
