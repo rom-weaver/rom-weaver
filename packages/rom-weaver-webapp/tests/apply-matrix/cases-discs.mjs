@@ -68,12 +68,21 @@ const syntheticNfsPlain = () => {
   return plain;
 };
 
-/** Check a disc apply output: raw bytes directly, containers via native extraction (payload must appear). */
-const verifyDiscOutput = (out, target) => {
+/**
+ * Check a disc apply output: raw bytes (output format "none", not a .zip bundle) must match exactly; containers are
+ * opened with the native CLI and must hold the payload. Without a CLI a container stays unverified, and the note says so.
+ */
+const verifyDiscOutput = (out, target, format) => {
   const raw = Buffer.compare(Buffer.from(out.bytes), Buffer.from(target)) === 0;
   if (raw) return "raw payload";
+  // Format "none" still bundles multi-file outputs (bin/cue) as a .zip; any other non-exact download is a bug.
+  if (format === "none" && !/\.zip$/i.test(out.name))
+    fail(
+      out,
+      `raw output ${out.name} differs from the patched payload (${out.bytes.length} vs ${target.length} bytes)`,
+    );
   const extracted = cliExtract(out.bytes, out.name);
-  if (!extracted) return `container ${out.name} (no native CLI to open it)`;
+  if (!extracted) return `unverified (no native CLI): container ${out.name} not opened`;
   if (extracted.error) fail(out, `native CLI cannot open the ${out.name} the webapp wrote: ${extracted.error}`);
   const targetSha = sha256(target);
   if (!extracted.files.some((file) => sha256(file.bytes) === targetSha))
@@ -127,7 +136,7 @@ const discCase = ({ id, tags, title, buildFiles, everyFormat }) => ({
           return `refused (${out.outcome})`;
         }
         if (out.outcome !== "download") fail(out, `no download for output format ${format}`);
-        notes.push(`${format}: ${verifyDiscOutput(out, built.target)}`);
+        notes.push(`${format}: ${verifyDiscOutput(out, built.target, format)}`);
       }
       return notes.join("; ");
     });
@@ -265,6 +274,7 @@ export function discCases() {
     add({
       buildFiles: () => {
         const extracted = cliExtract(read(path.join(BROWSER_GENERATED, file)), file);
+        // quality-reason: the expected payload bytes come from extracting the container with the native CLI, absent when RW_BIN is unset; the container read path is covered by the CLI harness container.disc.* cases.
         if (!extracted) throw new Skip("needs the native CLI to learn the extracted payload bytes");
         if (extracted.error) throw new Error(`native extract of ${file} failed: ${extracted.error}`);
         const found = extracted.files.find(

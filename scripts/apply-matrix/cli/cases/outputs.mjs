@@ -88,7 +88,10 @@ export const register = () => {
     const { spawnSync } = await import("node:child_process");
     const useUnzip = kind === "zip" && !/zstd/.test(codec ?? "");
     const args = useUnzip ? ["unzip", ["-p", out]] : ["bsdtar", ["-xOf", out]];
-    if (!have(args[0])) return "skipped-independent";
+    if (!have(args[0])) {
+      ctx.note(`independent ${kind}${codec ? `/${codec}` : ""} oracle skipped: ${args[0]} not installed; only the rom-weaver round-trip was verified`);
+      return "skipped-independent";
+    }
     const result = spawnSync(args[0], args[1], { maxBuffer: 1 << 28 });
     check(result.status === 0, () => `${args[0]} could not read the archive: ${result.stderr?.toString().slice(0, 200)}`);
     check(Buffer.from(result.stdout).equals(fs.readFileSync(ctx.fx(TARGET))), `${args[0]} extracted bytes differ from the patched ROM`);
@@ -414,6 +417,7 @@ export const register = () => {
     check(fs.lstatSync(link).isSymbolicLink(), "symlink was replaced by a regular file");
   });
   add("output-path.read-only-directory", ["output-path", "permissions", "negative"], (ctx) => {
+    // quality-reason: root bypasses directory permissions so the read-only directory cannot be forced; path_access.rs unit tests in crates/rom-weaver-cli/tests/unit cover the permission errors.
     if (process.getuid?.() === 0) skip("running as root: directory permissions are not enforced");
     const dir = ctx.tmp("ro");
     fs.mkdirSync(dir);
@@ -426,6 +430,7 @@ export const register = () => {
     }
   });
   add("output-path.read-only-existing-output-with-force", ["output-path", "permissions"], (ctx) => {
+    // quality-reason: root bypasses file write permissions so the read-only output cannot be forced; path_access.rs unit tests in crates/rom-weaver-cli/tests/unit cover the permission errors.
     if (process.getuid?.() === 0) skip("running as root: file permissions are not enforced");
     const out = ctx.write("ro.bin", "old");
     fs.chmodSync(out, 0o444);
@@ -434,6 +439,7 @@ export const register = () => {
     if (result.code === 0) ctx.same(out, ctx.fx(TARGET), "forced over read-only");
     else ctx.failed(result, { message: /permission|denied|read-only/i, what: "read-only output" });
   });
+  // quality-reason: root bypasses file read permissions so the unreadable input cannot be forced; path_access.rs unit tests in crates/rom-weaver-cli/tests/unit cover the permission errors.
   add("output-path.unreadable-input", ["output-path", "permissions", "negative"], (ctx) => {
     if (process.getuid?.() === 0) skip("running as root: file permissions are not enforced");
     const rom = ctx.write("secret.bin", fs.readFileSync(ctx.fx(ROM)));

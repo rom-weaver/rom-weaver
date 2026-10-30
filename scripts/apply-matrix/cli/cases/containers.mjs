@@ -16,6 +16,7 @@ const viaContainer = (ctx, input, { patch = IPS, expect = "rom/same.bin", extra 
   return { result, output, expected: ctx.fx(expect) };
 };
 const needTool = (tool) => {
+  // quality-reason: the case authors its archive with the named host tool, so it cannot run without it; the extractor itself is covered by Rust tests in crates/rom-weaver-containers.
   for (const name of [tool].flat()) if (!have(name)) skip(`${name} not installed on this host`);
 };
 
@@ -179,6 +180,7 @@ export const register = async ({ root, fixtures }) => {
   });
 
   add("container.safety.zip-slip-member-name", ["container", "negative", "safety"], (ctx) => {
+    // quality-reason: python3 is the only writer of a ../ member name here (system zip refuses to); path-traversal rejection is also covered by Rust tests in crates/rom-weaver-containers/tests/unit/archive_entries.rs.
     if (!have("python3")) skip("python3 not installed (used only to write a ../ member name)");
     const zip = ctx.tmp("slip.zip");
     const script = "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1],'w'); z.writestr('../../escaped.bin', open(sys.argv[2],'rb').read()); z.close()";
@@ -259,6 +261,7 @@ export const register = async ({ root, fixtures }) => {
     const nfs = await import(pathToFileURL(path.join(fixturesDir, "synthetic-nfs.mjs")).href);
     discs = { mod, nfs };
   } catch (error) {
+    // quality-reason: importing the webapp disc fixture builders fails only when that package is not installed; the disc containers are then covered by the Rust crates/rom-weaver-containers tests.
     add("container.disc.fixture-builders-unavailable", ["container", "disc"], () => skip(`webapp fixture builders could not be imported: ${error.message}`));
     return;
   }

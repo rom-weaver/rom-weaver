@@ -181,6 +181,7 @@ export function chainCases({ manifest }) {
     tags: ["chain", "dps", "rup", "ppf", "aps", "pat", "solid", "apsgba", "bdf"],
     title: "eight CLI-written formats chained in order",
     async run(h) {
+      // quality-reason: cchain-final.bin is authored by the native CLI, which is absent when RW_BIN is unset; the same eight formats chained from JS-authored patches run in chain/js-8-formats/in-order in this file.
       if (!has("cchain-final.bin")) throw new Skip("native-chain fixtures need the native CLI (not built)");
       const out = await scenario(h, {
         files: [base, ...nativeChain],

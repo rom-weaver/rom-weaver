@@ -16,7 +16,7 @@ const usage = `usage: node scripts/apply-matrix/cli/run.mjs [options]
   --filter A,B,...      run cases whose "<id> <tags>" matches any regex (e.g. --filter bps,container.zip)
   --skip REGEX          drop cases matching this regex
   --list                list case ids and exit
-  --gen-fixtures        build every fixture and exit
+  --gen-fixtures        build missing fixtures and exit
   --update-manifest     rewrite tests/fixtures/apply-matrix/manifest.json from the built fixtures
   --strict              treat known-bug (xfail) cases as failures
   --fail-fast           stop at the first failure
@@ -64,7 +64,10 @@ if (!bin && !opt.list) {
 }
 
 const fixtureRun = (runArgs) => {
-  const result = spawnSync(bin, runArgs, { encoding: "utf8", env: { ...process.env, NO_COLOR: "1" } });
+  // Run inside the cache dir with a matching PWD so the CLI's private temp root stays out of the repo.
+  const cwd = path.resolve(defaultCacheDir());
+  fs.mkdirSync(cwd, { recursive: true });
+  const result = spawnSync(bin, runArgs, { encoding: "utf8", cwd, env: { ...process.env, NO_COLOR: "1", PWD: cwd } });
   return { code: result.status, all: `${result.stdout}\n${result.stderr}` };
 };
 const fixtures = new Fixtures({

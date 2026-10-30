@@ -2,7 +2,8 @@
 // Regenerates the apply-matrix fixtures. Idempotent: existing files whose sha256 already matches the
 // deterministic expectation are left alone; missing or stale ones are rewritten.
 //
-//   node generate.mjs                 # build everything that can be built, write manifest.json
+//   node generate.mjs                 # build everything that can be built; manifest.json is left untouched
+//   node generate.mjs --update-manifest  # also rewrite manifest.json (recorded entries are never replaced by "unavailable" ones or dropped)
 //   node generate.mjs --check         # verify files against manifest.json, exit 1 on drift
 //
 // Layout:
@@ -599,7 +600,27 @@ export function generate({ writeManifest = true } = {}) {
     });
   }
 
-  if (writeManifest) fs.writeFileSync(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`);
+  if (writeManifest) {
+    // A host without the native CLI or a tool must not erase entries recorded on a host that had it.
+    const recorded = new Map(
+      (fs.existsSync(MANIFEST) ? JSON.parse(fs.readFileSync(MANIFEST, "utf8")).entries : []).map((entry) => [
+        entry.name,
+        entry,
+      ]),
+    );
+    const seen = new Set(manifest.entries.map((entry) => entry.name));
+    const merged = {
+      ...manifest,
+      entries: [
+        ...manifest.entries.map((entry) => {
+          const previous = recorded.get(entry.name);
+          return entry.unavailable && previous && !previous.unavailable ? previous : entry;
+        }),
+        ...[...recorded.values()].filter((entry) => !seen.has(entry.name)),
+      ],
+    };
+    fs.writeFileSync(MANIFEST, `${JSON.stringify(merged, null, 2)}\n`);
+  }
   return manifest;
 }
 
@@ -621,7 +642,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     }
     process.exit(drift ? 1 : 0);
   }
-  const result = generate();
+  const result = generate({ writeManifest: process.argv.includes("--update-manifest") });
   const ok = result.entries.filter((entry) => !entry.unavailable).length;
   const missing = result.entries.filter((entry) => entry.unavailable);
   console.log(`fixtures: ${ok} ready, ${missing.length} unavailable`);
