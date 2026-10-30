@@ -576,6 +576,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           await cleanupBrowserOpfsRunScratch({ runId: opfsRunId, trace, workGuestPath });
         } catch (error) {
           trace(`[browser-opfs] run scratch cleanup failed ${formatErrorForTrace(error)}`);
+          recordFailure(error);
         }
         trace("[browser-opfs] cleanup done");
         traceRunTimings(trace, {

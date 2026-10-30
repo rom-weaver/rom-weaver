@@ -22,6 +22,10 @@ const state = vi.hoisted(() => ({
   markStale: vi.fn(),
   run: vi.fn(),
   removeScratch: vi.fn(),
+  storageRequest: vi.fn(async (_request: { action: string }) => ({
+    success: true,
+    entries: [] as Array<{ kind: "directory"; path: string }>,
+  })),
   supportsThreads: vi.fn((command: { type?: string }) => command.type !== "probe"),
   virtualFiles: [] as Array<{ path: string; source?: unknown; useProxyHandle?: boolean }>,
 }));
@@ -80,6 +84,9 @@ vi.mock("../../src/workers/protocol/opfs-path.ts", () => ({
   getManagedOpfsFileHandle: state.createScratch,
   removeManagedOpfsPath: state.removeScratch,
 }));
+vi.mock("../../src/workers/protocol/browser-opfs-worker-client.ts", () => ({
+  requestBrowserOpfsStorage: state.storageRequest,
+}));
 vi.mock("../../src/workers/protocol/browser-virtual-files.ts", () => ({
   getActiveBrowserVirtualFiles: () => state.virtualFiles,
 }));
@@ -98,6 +105,8 @@ vi.mock("../../src/workers/rom-weaver/runner-control.ts", async () =>
 const { getRomWeaverRunnerMetadata, resetRomWeaverRunner, runRomWeaverJson, warmupRomWeaverRunner } =
   await import("../../src/workers/rom-weaver/rom-weaver-runner.ts");
 
+const { resetBrowserTransientOpfs } = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+
 const command = (type: string, input: unknown = "/work/input.bin") => ({ type, args: { input } }) as never;
 const success = (details: unknown = {}) => ({
   events: [{ details, elapsed_ms: 42, status: "succeeded" }],
@@ -107,6 +116,8 @@ const success = (details: unknown = {}) => ({
 
 beforeEach(async () => {
   await resetRomWeaverRunner({ terminate: true });
+  await resetBrowserTransientOpfs();
+  state.storageRequest.mockClear();
   state.browser = true;
   state.clients.length = 0;
   state.initOptions.length = 0;
@@ -136,6 +147,61 @@ beforeEach(async () => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe("run scratch ownership", () => {
+  it("registers the run id before dispatch and passes it alongside the caller environment", async () => {
+    state.run.mockImplementationOnce(async (_request, options) => {
+      expect(options.env).toMatchObject({ CUSTOM: "kept", ROM_WEAVER_OPFS_RUN_ID: expect.any(String) });
+      expect(options.env.ROM_WEAVER_OPFS_RUN_ID).not.toBe("caller-id");
+      const path = `/rom-weaver-out/rw-${options.env.ROM_WEAVER_OPFS_RUN_ID}-1`;
+      state.storageRequest.mockResolvedValueOnce({ success: true, entries: [{ kind: "directory", path }] });
+      await resetBrowserTransientOpfs();
+      expect(state.storageRequest).toHaveBeenCalledWith({ action: "remove", filePath: `/work${path}` });
+      return success();
+    });
+    await runRomWeaverJson(command("probe"), { env: { CUSTOM: "kept", ROM_WEAVER_OPFS_RUN_ID: "caller-id" } });
+  });
+
+  it("releases the run id after success so Reset does not rescan it", async () => {
+    await runRomWeaverJson(command("probe"));
+    await resetBrowserTransientOpfs();
+    expect(state.storageRequest).not.toHaveBeenCalled();
+  });
+
+  it.each(["resolved", "rejected"])("keeps the run id after a %s failure for Reset", async (kind) => {
+    const error = new Error("scratch cleanup failed");
+    if (kind === "resolved") state.run.mockResolvedValueOnce({ ok: false, exitCode: 1, events: [], error });
+    else state.run.mockRejectedValueOnce(error);
+    await runRomWeaverJson(command("probe")).catch(() => undefined);
+    const runId = state.run.mock.calls.at(-1)?.[1]?.env?.ROM_WEAVER_OPFS_RUN_ID;
+    expect(runId).toEqual(expect.any(String));
+    const path = `/rom-weaver-out/rw-${runId}-1`;
+    state.storageRequest.mockResolvedValueOnce({ success: true, entries: [{ kind: "directory", path }] });
+    await resetBrowserTransientOpfs();
+    expect(state.storageRequest).toHaveBeenCalledWith({ action: "remove", filePath: `/work${path}` });
+    state.storageRequest.mockClear();
+    await resetBrowserTransientOpfs();
+    expect(state.storageRequest).not.toHaveBeenCalled();
+  });
+
+  it("keeps an aborted run id even when its worker resolves late", async () => {
+    let resolveRun!: (result: ReturnType<typeof success>) => void;
+    state.run.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRun = resolve;
+      }),
+    );
+    const controller = new AbortController();
+    const pending = runRomWeaverJson(command("probe"), { signal: controller.signal });
+    await vi.waitFor(() => expect(state.run).toHaveBeenCalled());
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    resolveRun(success());
+    await Promise.resolve();
+    await resetBrowserTransientOpfs();
+    expect(state.storageRequest).toHaveBeenCalledExactlyOnceWith({ action: "list-metadata" });
+  });
 });
 
 describe("browser runner lifecycle", () => {

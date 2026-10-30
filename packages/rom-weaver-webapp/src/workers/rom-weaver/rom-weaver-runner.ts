@@ -599,8 +599,8 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
         }
         lease.runner.runJson(dispatchInput, leaseRunOptions).then(
           (result) => {
-            releaseRunScratch();
             if (settled) return;
+            if (result.ok) releaseRunScratch();
             settled = true;
             // Start the perceived-latency tail that ends when the result paints.
             markWasmFinished();

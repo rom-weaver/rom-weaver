@@ -51,7 +51,7 @@ import type {
   RuntimeWorkerIo,
   WorkflowRuntime,
 } from "../../types/workflow-runtime-adapter.ts";
-import { removeManagedOpfsPath } from "../../workers/protocol/opfs-path.ts";
+import { requestBrowserOpfsStorage } from "../../workers/protocol/browser-opfs-worker-client.ts";
 import { noteRomWeaverIoBatch, waitForRomWeaverShutdown } from "../../workers/rom-weaver/runner-control.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
 import { triggerBrowserDownload } from "./browser-download.ts";
@@ -557,7 +557,9 @@ const createBrowserWeaveRuntime = (
     const releaseOwnership = registerBrowserTransientOpfsPath(extractDirPath);
     const removeExtractDir = async () => {
       await waitForRomWeaverShutdown();
-      await removeManagedOpfsPath(extractDirPath, undefined, { ignoreErrors: false });
+      const response = await requestBrowserOpfsStorage({ action: "remove", filePath: extractDirPath });
+      if (!response.success)
+        throw new Error(response.error?.message || `Unable to remove OPFS path: ${extractDirPath}`);
       releaseOwnership();
     };
     try {

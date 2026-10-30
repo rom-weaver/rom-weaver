@@ -542,15 +542,28 @@ describe("createRomWeaverBrowserOpfs run", () => {
     expect(harness.spawnerDrains).toBe(1);
   });
 
-  it("swallows a scratch cleanup failure and traces it", async () => {
+  it("reports a scratch cleanup failure to the page and traces it", async () => {
     harness.runScratchError = new Error("scratch listing failed");
     const traceLines: string[] = [];
     const runner = await createRunner();
 
     const result = await runner.run(compressCommand(), { onTraceNonJsonLine: (line) => traceLines.push(line) });
 
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(1);
+    expect(result.error).toBe(harness.runScratchError);
     expect(traceLines.some((line) => line.includes("run scratch cleanup failed"))).toBe(true);
+  });
+
+  it("preserves the guest failure when scratch cleanup also fails", async () => {
+    harness.startError = new Error("wasm trap");
+    harness.runScratchError = new Error("scratch listing failed");
+    const runner = await createRunner();
+
+    const result = await runner.runJson(compressCommand());
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe(harness.startError);
   });
 
   it("reports pre-run invalidation failures as ok:false", async () => {

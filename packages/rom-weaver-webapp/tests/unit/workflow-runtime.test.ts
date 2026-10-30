@@ -30,7 +30,6 @@ const state = vi.hoisted(() => {
   };
   return {
     browserVfs,
-    removeManaged: vi.fn(async () => undefined),
     storageRequest: vi.fn(async () => ({ success: true })),
     weaveCreate: vi.fn(async () => ({ archivePath: "/work/result.zip", weavePath: "/work/result.json" })),
     weaveParse: vi.fn(async (_input: { extractDirPath: string }) => ({
@@ -187,7 +186,6 @@ vi.mock("../../src/platform/browser/workflow-runtime-disc-formats.ts", () => ({
   createBrowserDiscFormatsRuntime: vi.fn(() => ({})),
 }));
 vi.mock("../../src/platform/browser/workflow-runtime-vfs-cleanup.ts", () => ({ browserVfs: state.browserVfs }));
-vi.mock("../../src/workers/protocol/opfs-path.ts", () => ({ removeManagedOpfsPath: state.removeManaged }));
 vi.mock("../../src/workers/protocol/browser-opfs-worker-client.ts", () => ({
   requestBrowserOpfsStorage: state.storageRequest,
 }));
@@ -494,24 +492,41 @@ describe("browser ingest and weave runtime", () => {
     await parsed?.cleanup();
     expect(state.browserVfs.remove).toHaveBeenCalledWith("/work/extracted/game.bin");
     expect(state.browserVfs.remove).toHaveBeenCalledWith("/work/extracted/patch.ips");
-    expect(state.removeManaged).toHaveBeenCalledWith(expect.stringContaining("weave-parse"), undefined, {
-      ignoreErrors: false,
+    expect(state.storageRequest).toHaveBeenCalledWith({
+      action: "remove",
+      filePath: expect.stringContaining("weave-parse"),
     });
+    state.storageRequest.mockClear();
+    const { resetBrowserTransientOpfs } = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    await resetBrowserTransientOpfs();
+    expect(state.storageRequest).not.toHaveBeenCalled();
+  });
+
+  it("removes failed weave parse scratch through the retrying storage worker", async () => {
+    const error = new Error("weave parse failed");
+    state.weaveParse.mockRejectedValueOnce(error);
+    await expect(browserRuntime.weave.parse?.({ fileName: "weave.zip", source: "weave" } as never)).rejects.toBe(error);
+    const extractDirPath = state.weaveParse.mock.calls.at(-1)?.[0]?.extractDirPath;
+    expect(state.storageRequest).toHaveBeenCalledWith({ action: "remove", filePath: extractDirPath });
   });
 
   it("keeps a locked weave parse directory owned so Reset retries it", async () => {
     const { resetBrowserTransientOpfs } = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
     const parsed = await browserRuntime.weave.parse?.({ fileName: "weave.zip", source: "weave" } as never);
     const extractDirPath = state.weaveParse.mock.calls.at(-1)?.[0]?.extractDirPath;
-    state.removeManaged.mockRejectedValue(new DOMException("entry is locked", "NoModificationAllowedError"));
+    state.storageRequest.mockResolvedValue({
+      success: false,
+      error: { name: "NoModificationAllowedError", message: "entry is locked" },
+    } as never);
     try {
       await parsed?.cleanup();
-      expect(state.removeManaged).toHaveBeenCalledWith(extractDirPath, undefined, { ignoreErrors: false });
+      expect(state.storageRequest).toHaveBeenCalledWith({ action: "remove", filePath: extractDirPath });
+      state.storageRequest.mockResolvedValue({ success: true });
       state.storageRequest.mockClear();
       await resetBrowserTransientOpfs();
       expect(state.storageRequest).toHaveBeenCalledWith({ action: "remove", filePath: extractDirPath });
     } finally {
-      state.removeManaged.mockResolvedValue(undefined);
+      state.storageRequest.mockResolvedValue({ success: true });
     }
   });
 
