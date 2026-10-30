@@ -927,3 +927,35 @@ fn parse_reports_lowercase_hex_for_high_crc_nibbles() {
         .expect("parse report");
     assert!(report.label.contains("abcdef0ff099a00a"));
 }
+
+#[test]
+fn apply_rejects_a_corrupt_output_size_that_would_write_gigabytes() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let patch_path = temp.child("corrupt.aps");
+    let output_path = temp.child("output.bin");
+    fs::write(&source_path, vec![0u8; 512]).expect("fixture");
+    fs::write(
+        &patch_path,
+        build_aps_patch(
+            0,
+            None,
+            0xF000_0000,
+            vec![TestRecord::Simple {
+                offset: 1,
+                data: b"X".to_vec(),
+            }],
+        ),
+    )
+    .expect("fixture");
+
+    let result = ApsN64PatchHandler::new(&APS).apply(
+        &rom_weaver_core::PatchApplyRequest {
+            input: source_path,
+            patches: vec![patch_path],
+            output: output_path.clone(),
+        },
+        &test_context_with_threads(&temp, 2),
+    );
+    crate::test_support::assert_implausible_output_rejected(result, &output_path);
+}

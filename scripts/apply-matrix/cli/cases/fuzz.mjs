@@ -30,6 +30,8 @@ const target = () => {
 // formats whose handlers verify the patch itself (flip => failure or still-correct output)
 const SELF_CHECKING = new Set(["bps", "ups", "xdelta", "apsgba"]);
 const FLIP_BUDGET = 400;
+// Mirrors the Rust plausibility floor (rom-weaver-patches ensure_plausible_output_size): 1 GiB for tiny inputs.
+const MAX_PLAUSIBLE_OUTPUT = 1 << 30;
 
 export const register = ({ fixtures }) => {
   fixtures.define("fuzz/base.bin", { where: "repo", purpose: "512-byte fuzz source", how: "xorshift", deterministic: true, build: () => rom() });
@@ -65,9 +67,10 @@ export const register = ({ fixtures }) => {
       check(!result.panic, () => `${what}: crash/panic :: ${ctx.describe(result)}`);
       check([0, 1, 2].includes(result.code), () => `${what}: unexpected exit ${result.code}`);
       if (result.code !== 0) check(!ctx.exists(out), `${what}: failed run left an output file`);
-      else if (fs.statSync(out).size > 64 * 1024 * 1024) {
-        ctx.note(`${what}: corrupt patch made apply write a ${fs.statSync(out).size}-byte output with exit 0 (no plausibility bound on declared sizes/offsets)`);
+      else if (fs.statSync(out).size > MAX_PLAUSIBLE_OUTPUT) {
+        const size = fs.statSync(out).size;
         fs.rmSync(out, { force: true });
+        check(false, `${what}: corrupt patch made apply write a ${size}-byte output with exit 0 (the output-size plausibility guard should reject it)`);
       }
     };
     add(`fuzz.truncate.${subject.name}`, ["fuzz", "negative", subject.name], (ctx) => {
@@ -79,12 +82,12 @@ export const register = ({ fixtures }) => {
         judge(ctx, run, `cut at ${cut}/${bytes.length}`);
         if (cut === 0) check(run.result.code !== 0, "empty patch accepted");
         if (SELF_CHECKING.has(base) && cut < bytes.length - 4 && run.result.code === 0) {
-          if (ctx.exists(run.out) && fs.statSync(run.out).size === 0) ctx.note(`cut at ${cut}: patch truncated to its header (zero windows) applied with exit 0 and wrote an empty ROM`);
+          if (ctx.exists(run.out) && fs.statSync(run.out).size === 0) ctx.note(`cut at ${cut}: patch truncated to its header (zero windows) applied with exit 0 and wrote an empty ROM (by design: RFC 3284 allows zero windows, so a cut after the header is a valid empty-target patch; a warning is reported)`);
           else failuresByShape.push(cut);
         }
       }
       check(failuresByShape.length === 0, () => `self-checking format accepted truncated patches at cuts ${failuresByShape.slice(0, 8).join(",")}`);
-    }, subject.name === "pat" ? { knownBug: "BUG-PAT-LENIENT-PARSE" } : {});
+    });
     add(`fuzz.bitflip.${subject.name}`, ["fuzz", "negative", subject.name], (ctx) => {
       const bytes = fs.readFileSync(ctx.fx(subject.fixture));
       const step = Math.max(1, Math.floor(bytes.length / FLIP_BUDGET));

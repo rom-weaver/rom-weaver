@@ -366,6 +366,58 @@ pub(crate) fn coded_validation(code: &'static str, message: &'static str) -> Rom
     RomWeaverError::ValidationCode(ValidationCodeError::new(code).with_message(message))
 }
 
+/// Stable code of the validation error for a patch that declares an output
+/// larger than [`plausible_output_limit`] allows. Carries `format`,
+/// `output_size`, `limit`, `source_size` and `patch_size` byte fields.
+pub const VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE: &str = "patch.output_size_implausible";
+
+/// Outputs up to this many bytes are always plausible (largest cartridge and
+/// disc-image targets these formats patch sit well below it).
+const PLAUSIBLE_OUTPUT_FLOOR_BYTES: u64 = 1 << 30;
+/// Beyond the floor, an output may be at most this many times the source plus
+/// patch bytes (IPS RLE records already expand 8 patch bytes to 64 KiB, so
+/// the factor is generous while still rejecting corrupt 4 GiB..1 TB sizes).
+const PLAUSIBLE_OUTPUT_FACTOR: u64 = 64;
+
+/// Largest output a patch of `patch_len` bytes may declare for `source_len` source bytes.
+pub(crate) fn plausible_output_limit(source_len: u64, patch_len: u64) -> u64 {
+    source_len
+        .saturating_add(patch_len)
+        .saturating_mul(PLAUSIBLE_OUTPUT_FACTOR)
+        .max(PLAUSIBLE_OUTPUT_FLOOR_BYTES)
+}
+
+/// Fail before any output is created when a (typically corrupt) offset or size
+/// field makes the declared output implausibly large for formats that carry no
+/// checksum to catch it.
+pub(crate) fn ensure_plausible_output_size(
+    format: &str,
+    output_size: u64,
+    source_len: u64,
+    patch_path: &Path,
+) -> Result<()> {
+    let patch_len = std::fs::metadata(patch_path)?.len();
+    let limit = plausible_output_limit(source_len, patch_len);
+    if output_size <= limit {
+        return Ok(());
+    }
+    trace!(
+        format,
+        output_size, limit, source_len, patch_len, "patch declared an implausible output size"
+    );
+    Err(RomWeaverError::ValidationCode(
+        ValidationCodeError::new(VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE)
+            .with_message(format!(
+                "{format} patch would write a {output_size} byte output, more than the {limit} byte limit for a {source_len} byte source and {patch_len} byte patch; the patch is probably corrupt"
+            ))
+            .with_field("format", format.to_string())
+            .with_field("output_size", output_size)
+            .with_field("limit", limit)
+            .with_field("source_size", source_len)
+            .with_field("patch_size", patch_len),
+    ))
+}
+
 // `require_single_patch_file` and `checksum_validation_suffix` are shared with
 // the `xdelta` module and live in the foundation crate so the error/label wording
 // stays identical across every patch format.

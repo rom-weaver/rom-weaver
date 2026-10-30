@@ -86,7 +86,7 @@ Example:
 /// inside a container takes the same four, so they read the same everywhere.
 #[cfg(not(target_arch = "wasm32"))]
 pub const SELECT_HELP: &str =
-    "Pick which file inside the archive to use, by exact name, prefix, or glob (repeatable)";
+    "Pick which file inside the archive to use, by exact name, folder, or glob (repeatable)";
 
 #[cfg(not(target_arch = "wasm32"))]
 pub const FILTER_HELP: &str = "Consider only files that look like a rom or a patch, judged by extension (repeatable, comma-separable)";
@@ -412,7 +412,7 @@ pub struct ExtractCommand {
         arg(
             short = 's',
             long = "select",
-            help = "Extract only these files, by exact name, prefix, or glob (repeatable). For example: --select 'game.disc0?.bin'"
+            help = "Extract only these files, by exact name, folder, or glob (repeatable). For example: --select 'game.disc0?.bin'"
         )
     )]
     #[serde(default)]
@@ -849,7 +849,7 @@ pub struct IngestCommand {
         arg(
             short = 's',
             long = "select",
-            help = "Pick which ROM to use when the archive holds more than one, by exact name, prefix, or glob (repeatable)"
+            help = "Pick which ROM to use when the archive holds more than one, by exact name, folder, or glob (repeatable)"
         )
     )]
     #[serde(default)]
@@ -1222,7 +1222,7 @@ pub struct PatchApplyCommand {
             short = 's',
             long = "select",
             help_heading = "Archive/weave",
-            help = "Pick which file to use when the ROM or a patch is inside an archive, by exact name, prefix, or glob (repeatable). --patch-select overrides it for the patch it follows"
+            help = "Pick which file to use when the ROM or a patch is inside an archive, by exact name, folder, or glob (repeatable). --patch-select overrides it for the patch it follows"
         )
     )]
     #[serde(default)]
@@ -1951,7 +1951,7 @@ pub struct PatchValidateCommand {
         arg(
             short = 's',
             long = "select",
-            help = "Pick which file to use when the ROM or a patch is inside an archive, by exact name, prefix, or glob (repeatable). --patch-select overrides it for the patch it follows"
+            help = "Pick which file to use when the ROM or a patch is inside an archive, by exact name, folder, or glob (repeatable). --patch-select overrides it for the patch it follows"
         )
     )]
     #[serde(default)]
@@ -2598,7 +2598,7 @@ pub struct WeaveParseCommand {
         arg(
             short = 's',
             long = "select",
-            help = "Handle only the weave entries whose file name matches this exact name, prefix, or glob (repeatable)"
+            help = "Handle only the weave entries whose file name matches this exact name, folder, or glob (repeatable)"
         )
     )]
     #[serde(default)]
@@ -3428,7 +3428,7 @@ pub struct PpfUndoCommand {
         arg(
             short = 's',
             long,
-            help = "Pick the ROM archive payload by name, prefix, or glob (repeatable)"
+            help = "Pick the ROM archive payload by name, folder, or glob (repeatable)"
         )
     )]
     #[serde(default)]
@@ -3438,7 +3438,7 @@ pub struct PpfUndoCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Pick the PPF archive payload by name, prefix, or glob (repeatable)"
+            help = "Pick the PPF archive payload by name, folder, or glob (repeatable)"
         )
     )]
     #[serde(default)]

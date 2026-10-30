@@ -1188,7 +1188,7 @@ impl CliApp {
                 };
                 let parse_failure =
                     patch_structure_failure(job.handler.as_ref(), &job.resolved, context)?;
-                let unreadable = parse_failure.is_some();
+                let mut unreadable = parse_failure.is_some();
                 let (passed, message, unsupported) = if let Some(message) = parse_failure {
                     (false, message, false)
                 } else {
@@ -1212,7 +1212,12 @@ impl CliApp {
                         ),
                         Err(RomWeaverError::Cancelled) => return Err(RomWeaverError::Cancelled),
                         Err(RomWeaverError::Unsupported(op)) => (false, op.to_string(), true),
-                        Err(error) => (false, error.to_string(), false),
+                        Err(error) => {
+                            // An implausible output size comes from the patch's own records, so
+                            // no ROM or checksum override can make it apply.
+                            unreadable = is_implausible_output_error(&error);
+                            (false, error.to_string(), false)
+                        }
                     }
                 };
                 let verdict = PerPatchVerdict {
@@ -2260,6 +2265,14 @@ fn patch_structure_failure(
             }
         }
     }
+}
+
+fn is_implausible_output_error(error: &RomWeaverError) -> bool {
+    matches!(
+        error,
+        RomWeaverError::ValidationCode(coded)
+            if coded.code() == rom_weaver_patches::VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE
+    )
 }
 
 fn is_structural_parse_error(error: &RomWeaverError) -> bool {

@@ -2040,3 +2040,184 @@ proptest::proptest! {
         proptest::prop_assert!(!patch.exists());
     }
 }
+
+#[test]
+fn ips32_apply_rejects_a_corrupt_offset_that_would_write_gigabytes() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("corrupt.ips32");
+    let output_path = temp.child("output.bin");
+    fs::write(&input_path, vec![0u8; 512]).expect("fixture");
+    fs::write(
+        &patch_path,
+        build_ips32_patch(vec![TestIpsRecord::Literal {
+            offset: 0xFF00_0000,
+            data: b"Z".to_vec(),
+        }]),
+    )
+    .expect("fixture");
+
+    let result = IpsPatchHandler::new_ips32(&IPS32).apply(
+        &PatchApplyRequest {
+            input: input_path,
+            patches: vec![patch_path],
+            output: output_path.clone(),
+        },
+        &test_context_with_threads(&temp, 2),
+    );
+    crate::test_support::assert_implausible_output_rejected(result, &output_path);
+}
+
+const SNIFFED_EBP_METADATA: &str = r#"{"patcher":"EBPatcher","Title":"Sniffed"}"#;
+
+#[test]
+fn ips_parse_recognizes_ebp_metadata_after_eof_without_the_ebp_extension() {
+    let patch = build_ebp_patch(
+        vec![TestIpsRecord::Literal {
+            offset: 1,
+            data: b"XYZ".to_vec(),
+        }],
+        SNIFFED_EBP_METADATA,
+    );
+    let parsed = parse_ips_bytes(&patch, IpsFlavor::Ips).expect("strict IPS parse of EBP bytes");
+    assert_eq!(parsed.records.len(), 1);
+    assert!(parsed.warnings.is_empty(), "{:?}", parsed.warnings);
+    let metadata = parsed.metadata.expect("metadata");
+    assert_eq!(
+        metadata.get("Title").and_then(JsonValue::as_str),
+        Some("Sniffed")
+    );
+}
+
+#[test]
+fn ips_handler_applies_an_ebp_patch_under_a_non_ebp_extension() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.patch");
+    let output_path = temp.child("output.bin");
+    fs::write(&input_path, b"abcdefgh").expect("fixture");
+    fs::write(
+        &patch_path,
+        build_ebp_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 2,
+                data: b"XYZ".to_vec(),
+            }],
+            SNIFFED_EBP_METADATA,
+        ),
+    )
+    .expect("fixture");
+
+    IpsPatchHandler::new(&IPS)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 2),
+        )
+        .expect("an EBP patch applies even when it is handled as IPS");
+    assert_eq!(fs::read(output_path).expect("output"), b"abXYZfgh");
+}
+
+#[test]
+fn ips_parse_still_rejects_trailing_bytes_that_are_not_ebp_metadata() {
+    let mut patch = build_ips_patch(
+        vec![TestIpsRecord::Literal {
+            offset: 0,
+            data: b"A".to_vec(),
+        }],
+        None,
+    );
+    patch.extend_from_slice(b"{not json at all");
+    let error = parse_ips_bytes(&patch, IpsFlavor::Ips).expect_err("garbage trailer");
+    assert!(
+        error.to_string().contains("trailing byte(s) after EOF"),
+        "{error}"
+    );
+}
+
+/// Largest trailing block `sniff_ebp_metadata` is offered, mirrored from the parser.
+const EBP_SNIFF_LIMIT: usize = 64 * 1024;
+
+/// EBP JSON metadata padded with a string value so the block is exactly `total_len` bytes.
+fn padded_ebp_metadata(total_len: usize) -> String {
+    let prefix = r#"{"patcher":"EBPatcher","Description":""#;
+    let suffix = r#""}"#;
+    let pad = total_len
+        .checked_sub(prefix.len() + suffix.len())
+        .expect("total_len fits the JSON frame");
+    let json = format!("{prefix}{}{suffix}", "x".repeat(pad));
+    assert_eq!(json.len(), total_len);
+    json
+}
+
+fn one_record_ebp_patch(metadata_len: usize) -> Vec<u8> {
+    build_ebp_patch(
+        vec![TestIpsRecord::Literal {
+            offset: 2,
+            data: b"XYZ".to_vec(),
+        }],
+        &padded_ebp_metadata(metadata_len),
+    )
+}
+
+#[test]
+fn ips_parse_sniffs_ebp_metadata_larger_than_a_kilobyte_up_to_the_limit() {
+    for metadata_len in [2 * 1024, 32 * 1024, EBP_SNIFF_LIMIT - 1, EBP_SNIFF_LIMIT] {
+        let patch = one_record_ebp_patch(metadata_len);
+        let parsed = parse_ips_bytes(&patch, IpsFlavor::Ips)
+            .unwrap_or_else(|error| panic!("{metadata_len}-byte metadata should sniff: {error}"));
+        let metadata = parsed.metadata.expect("sniffed metadata");
+        assert_eq!(
+            metadata.get("patcher").and_then(JsonValue::as_str),
+            Some("EBPatcher")
+        );
+        assert!(parsed.warnings.is_empty(), "{:?}", parsed.warnings);
+    }
+}
+
+#[test]
+fn ips_parse_does_not_sniff_ebp_metadata_past_the_limit() {
+    let patch = one_record_ebp_patch(EBP_SNIFF_LIMIT + 1);
+
+    let error = parse_ips_bytes(&patch, IpsFlavor::Ips).expect_err("oversized trailer is rejected");
+    assert!(
+        error.to_string().contains(&format!(
+            "unexpected {} trailing byte(s) after EOF",
+            EBP_SNIFF_LIMIT + 1
+        )),
+        "{error}"
+    );
+
+    let parsed =
+        parse_ips_bytes_with_validation(&patch, IpsFlavor::Ips, PatchChecksumValidation::Ignore)
+            .expect("oversized trailer is tolerated when validation is ignored");
+    assert!(parsed.metadata.is_none());
+    assert_eq!(parsed.warnings.len(), 1, "{:?}", parsed.warnings);
+}
+
+#[test]
+fn ips_file_parse_sniffs_large_ebp_metadata_and_rejects_past_the_limit() {
+    let temp = TestDir::new();
+    let handler = IpsPatchHandler::new(&IPS);
+    let context = test_context_with_threads(&temp, 1);
+
+    let within = temp.child("within.patch");
+    fs::write(&within, one_record_ebp_patch(2 * 1024)).expect("fixture");
+    let report = handler.parse(&within, &context).expect("parse");
+    assert!(report.label.contains("and metadata"), "{}", report.label);
+
+    let exact = temp.child("exact.patch");
+    fs::write(&exact, one_record_ebp_patch(EBP_SNIFF_LIMIT)).expect("fixture");
+    let report = handler.parse(&exact, &context).expect("parse");
+    assert!(report.label.contains("and metadata"), "{}", report.label);
+
+    let over = temp.child("over.patch");
+    fs::write(&over, one_record_ebp_patch(EBP_SNIFF_LIMIT + 1)).expect("fixture");
+    let error = handler
+        .parse(&over, &context)
+        .expect_err("oversized trailer is rejected");
+    assert!(error.to_string().contains("trailing byte(s)"), "{error}");
+}

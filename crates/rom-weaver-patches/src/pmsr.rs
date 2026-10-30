@@ -103,6 +103,12 @@ impl PatchHandler for PmsrPatchHandler {
 
         let source_len = fs::metadata(&request.input)?.len();
         let output_len = patch.min_target_size.max(source_len);
+        crate::ensure_plausible_output_size(
+            self.descriptor.name,
+            output_len,
+            source_len,
+            patch_path,
+        )?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -193,6 +199,12 @@ impl PatchHandler for PmsrPatchHandler {
         }
         let source_len = fs::metadata(&request.input)?.len();
         let output_len = patch.min_target_size.max(source_len);
+        crate::ensure_plausible_output_size(
+            self.descriptor.name,
+            output_len,
+            source_len,
+            patch_path,
+        )?;
         let _ = pmsr_records_are_non_overlapping(&patch, output_len)?;
 
         Ok(crate::shared::labels::patch_validate_report(

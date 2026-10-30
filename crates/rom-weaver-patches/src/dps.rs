@@ -91,6 +91,12 @@ impl DpsPatchHandler {
             ));
         }
 
+        crate::ensure_plausible_output_size(
+            self.descriptor.name,
+            parsed.output_size,
+            source_len_u64,
+            patch_path,
+        )?;
         let output_len = usize::try_from(parsed.output_size).map_err(|_| {
             RomWeaverError::ValidationCode(
                 dps_validation_code("DPS_OUTPUT_SIZE_EXCEEDED_ADDRESSABLE_MEMORY")
