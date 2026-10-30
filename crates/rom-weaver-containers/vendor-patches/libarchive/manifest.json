@@ -257,6 +257,13 @@
       "reason": "Reject incomplete RAR5 headers and file data, require ENDARC, and reject unsupported multivolume archives.",
       "upstream": { "status": "local" },
       "tests": ["cargo test -p rom-weaver-cli --test integration extract_rar5_"]
+    },
+    {
+      "file": "0022-7zip-deflate64.patch",
+      "stage": "source",
+      "reason": "Decode 7z Deflate64 folders with the Rust streaming decoder.",
+      "upstream": { "status": "local" },
+      "tests": ["cargo test -p rom-weaver-cli --test integration deflate64", "node scripts/apply-matrix/cli/run.mjs --filter reference.7z.source.deflate64-codec"]
     }
   ],
   "materialized": false,
