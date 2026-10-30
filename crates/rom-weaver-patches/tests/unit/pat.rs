@@ -525,3 +525,78 @@ fn a_file_without_pat_records_has_no_pat_signature() {
     assert!(!has_pat_record_signature(&temp.child("missing.bin")));
     assert!(has_pat_record_signature(&records));
 }
+
+fn apply_pat_text(
+    patch_text: &[u8],
+) -> (
+    rom_weaver_core::Result<rom_weaver_core::OperationReport>,
+    TestDir,
+    std::path::PathBuf,
+) {
+    let temp = TestDir::new();
+    let source = temp.child("source.bin");
+    let patch = temp.child("candidate.pat");
+    let output = temp.child("output.bin");
+    fs::write(&source, b"abc").expect("fixture");
+    fs::write(&patch, patch_text).expect("fixture");
+    let result = PatPatchHandler::new(&PAT).apply(
+        &PatchApplyRequest {
+            input: source,
+            patches: vec![patch],
+            output: output.clone(),
+        },
+        &test_context_with_threads(&temp, 1),
+    );
+    (result, temp, output)
+}
+
+#[test]
+fn apply_rejects_a_patch_with_no_records() {
+    for (name, text) in [
+        ("empty", &b""[..]),
+        ("blank lines only", b"\n\n  \n"),
+        ("comment only", b"# nothing here\n"),
+        ("header-only fragment", b"000000"),
+    ] {
+        let (result, _temp, output) = apply_pat_text(text);
+        let error = result.expect_err(name);
+        assert!(
+            error.to_string().contains("PAT"),
+            "{name}: unexpected error {error}"
+        );
+        assert!(!output.exists(), "{name}: output must not be written");
+    }
+}
+
+#[test]
+fn apply_rejects_a_patch_with_a_damaged_record_line() {
+    for damaged in [
+        "00000001 6 42",
+        "00000001 6g 42",
+        "00000001 62",
+        "00000001 62 42 43",
+    ] {
+        let text = format!("00000000 61 41\n{damaged}\n00000002 63 43\n");
+        let (result, _temp, output) = apply_pat_text(text.as_bytes());
+        let error = result.expect_err(damaged);
+        assert!(
+            error.to_string().contains("line 2"),
+            "{damaged}: error should name the offending line: {error}"
+        );
+        assert!(!output.exists(), "{damaged}: no output may remain");
+    }
+}
+
+#[test]
+fn apply_tolerates_free_text_lines_between_records() {
+    let (result, _temp, output) = apply_pat_text(b"comment line\n00000001 62 42\n");
+    result.expect("free text is ignored when records exist");
+    assert_eq!(fs::read(output).expect("output"), b"aBc");
+}
+
+#[test]
+fn parse_still_tolerates_comments_and_blank_lines_beside_records() {
+    let (result, _temp, output) = apply_pat_text(b"\xef\xbb\xbf# bom comment\n\n00000001 62 42\n");
+    result.expect("comments and blank lines are allowed");
+    assert_eq!(fs::read(output).expect("output"), b"aBc");
+}

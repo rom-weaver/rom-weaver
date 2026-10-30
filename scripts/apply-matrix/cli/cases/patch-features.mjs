@@ -257,6 +257,58 @@ export const register = () => {
     ctx.failed(ctx.run(["tools", "ppf-undo", "--input", input, "--patch", ctx.fx("patches/ind/same.ppf"), "--output", ctx.tmp("restored.gb")]), { message: /undo/i, what: "ppf-undo without undo data" });
   });
 
+  add("ppf-undo.wrong-rom-warns", ["ppf", "tools"], (ctx) => {
+    // The restore still runs (a deliberately modified ROM can be undone) but the mismatch is reported.
+    const input = ctx.write("never-patched.gb", fs.readFileSync(ctx.fx("rom/base.bin")));
+    const restored = ctx.tmp("restored.gb");
+    const result = ctx.ok(ctx.run(["tools", "ppf-undo", "--input", input, "--patch", ctx.fx("patches/ind/v3-undo.ppf"), "--output", restored, "--no-compress", "--json"]), "ppf-undo on an unpatched ROM");
+    const doc = ctx.json(result);
+    check(Array.isArray(doc.warnings) && doc.warnings.some((warning) => /does not match the patched data/.test(warning)), () => `no mismatch warning in ${JSON.stringify(doc.warnings)}`);
+    const human = ctx.ok(ctx.run(["tools", "ppf-undo", "--input", input, "--patch", ctx.fx("patches/ind/v3-undo.ppf"), "--output", ctx.tmp("restored-human.gb"), "--no-compress"]), "ppf-undo human output");
+    check(/does not match the patched data/.test(human.all), () => `human output hides the warning: ${ctx.describe(human)}`);
+  });
+
+  // ------------------------------------------------------------ corrupt / ambiguous patch handling
+  add("patch.pat.bad-record-line", ["pat", "negative"], (ctx) => {
+    const patch = ctx.write("mixed.pat", "00000000 61 41\n00000001 6g 42\n");
+    const out = ctx.tmp("out.bin");
+    ctx.failed(ctx.apply(ctx.fx("rom/base.bin"), patch, out), { message: /PAT patch line 2/, what: "PAT with an unparseable record line" });
+    check(!ctx.exists(out), "failed PAT apply left an output file");
+  });
+  add("patch.pat.comments-and-blank-lines-allowed", ["pat"], (ctx) => {
+    const base = fs.readFileSync(ctx.fx("rom/base.bin"));
+    const hex = (byte) => byte.toString(16).padStart(2, "0");
+    const flipped = base[0] ^ 0xff;
+    const patch = ctx.write("commented.pat", `# comment\n\n00000000 ${hex(base[0])} ${hex(flipped)}\n`);
+    const out = ctx.tmp("out.bin");
+    ctx.ok(ctx.apply(ctx.fx("rom/base.bin"), patch, out), "PAT with comment and blank lines");
+    check(fs.readFileSync(out)[0] === flipped, "PAT record was not applied");
+  });
+  add("patch.ips32.implausible-output-size", ["ips32", "negative"], (ctx) => {
+    const bytes = Buffer.concat([Buffer.from("IPS32"), Buffer.from([0xff, 0x00, 0x00, 0x00, 0x00, 0x01, 0x5a]), Buffer.from("EEOF")]);
+    const patch = ctx.write("corrupt.ips32", bytes);
+    const out = ctx.tmp("out.bin");
+    const result = ctx.failed(ctx.apply(ctx.fx("rom/base.bin"), patch, out, ["--json"]), { message: /probably corrupt/, what: "IPS32 with a 4 GiB offset" });
+    check(/patch\.output_size_implausible/.test(result.all), () => `missing error code: ${ctx.describe(result)}`);
+    check(!ctx.exists(out), "rejected IPS32 apply left an output file");
+  });
+  add("patch.ebp.sniffed-without-ebp-extension", ["ebp"], (ctx) => {
+    const original = fs.readFileSync(ctx.fx("patches/rw/same.ebp"));
+    for (const name of ["sniffed.bin", "sniffed.patch", "sniffed.ips"]) {
+      const patch = ctx.write(name, original);
+      const out = ctx.tmp(`out-${name}`);
+      ctx.ok(ctx.apply(ctx.fx("rom/base.bin"), patch, out), `EBP patch named ${name}`);
+      ctx.same(out, ctx.fx("rom/same.bin"), `output of EBP patch named ${name}`);
+    }
+  });
+  add("diagnostics.select-help-says-folder-not-prefix", ["diagnostics", "select"], (ctx) => {
+    for (const args of [["patch", "apply", "--help"], ["extract", "--help"]]) {
+      const help = ctx.ok(ctx.run(args), args.join(" ")).stdout;
+      check(/exact name, folder, or glob/.test(help), () => `${args.join(" ")} help does not describe folder matching`);
+      check(!/prefix, or glob/.test(help), () => `${args.join(" ")} help still says prefix`);
+    }
+  });
+
   // ----------------------------------------------------------------- weave integration
   add("weave.create-then-apply", ["weave"], (ctx) => {
     ctx.write("rom.bin", fs.readFileSync(ctx.fx("rom/base.bin")));

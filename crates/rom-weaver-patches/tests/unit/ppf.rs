@@ -2693,3 +2693,38 @@ fn create_with_undo_round_trips_through_apply_and_undo() {
             .has_undo_data()
     );
 }
+
+#[test]
+fn apply_rejects_a_corrupt_ppf3_offset_that_would_write_terabytes() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let patch_path = temp.child("corrupt.ppf");
+    let output_path = temp.child("output.bin");
+    fs::write(&source_path, vec![0u8; 512]).expect("fixture");
+    fs::write(
+        &patch_path,
+        build_ppf3_patch(
+            "corrupt",
+            0,
+            false,
+            false,
+            None,
+            vec![V3Record {
+                offset: 0x0000_0100_0000_0000,
+                data: b"X".to_vec(),
+                undo: Vec::new(),
+            }],
+        ),
+    )
+    .expect("fixture");
+
+    let result = PpfPatchHandler::new(&PPF).apply(
+        &PatchApplyRequest {
+            input: source_path,
+            patches: vec![patch_path],
+            output: output_path.clone(),
+        },
+        &test_context_with_threads(&temp, 2),
+    );
+    crate::test_support::assert_implausible_output_rejected(result, &output_path);
+}

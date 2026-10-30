@@ -318,8 +318,12 @@ struct PreparedPatWrite {
     skipped: usize,
 }
 
+/// Content sniff for extension-less probing: any file with at least one record line counts, even
+/// when other lines would make a real parse fail, so the apply step can explain what is wrong.
 pub(crate) fn has_pat_record_signature(path: &Path) -> bool {
-    parse_pat_file(path)
+    File::open(path)
+        .map_err(RomWeaverError::from)
+        .and_then(|file| parse_pat_reader(BufReader::new(file), PatLineMode::Lenient))
         .map(|parsed| !parsed.records.is_empty())
         .unwrap_or(false)
 }
@@ -434,7 +438,16 @@ fn read_pat_group_input_bytes(
 fn parse_pat_file(path: &Path) -> Result<ParsedPatPatch> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
-    parse_pat_reader(reader)
+    parse_pat_reader(reader, PatLineMode::Strict)
+}
+
+/// How [`parse_pat_reader`] treats lines that are neither records, comments nor blank.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PatLineMode {
+    /// Reject damaged record-shaped lines, and a patch with no records at all.
+    Strict,
+    /// Count every non-record line as ignored (content sniffing only).
+    Lenient,
 }
 
 fn build_pat_parse_label(format_name: &str, parsed: &ParsedPatPatch) -> String {
@@ -452,17 +465,19 @@ fn build_pat_parse_label(format_name: &str, parsed: &ParsedPatPatch) -> String {
     )
 }
 
-fn parse_pat_reader<R: BufRead>(mut reader: R) -> Result<ParsedPatPatch> {
+fn parse_pat_reader<R: BufRead>(mut reader: R, mode: PatLineMode) -> Result<ParsedPatPatch> {
     let mut records = Vec::new();
     let mut ignored_lines = 0usize;
 
     let mut line = String::new();
+    let mut line_number = 0usize;
     loop {
         line.clear();
         let read = reader.read_line(&mut line)?;
         if read == 0 {
             break;
         }
+        line_number = line_number.saturating_add(1);
         if line.len() > PAT_LINE_MAX_BYTES {
             return Err(RomWeaverError::Validation(format!(
                 "PAT line exceeded maximum supported length of {PAT_LINE_MAX_BYTES} byte(s)"
@@ -470,26 +485,44 @@ fn parse_pat_reader<R: BufRead>(mut reader: R) -> Result<ParsedPatPatch> {
         }
 
         let trimmed = line.trim();
-        if trimmed.is_empty() {
+        let content = trimmed.strip_prefix('\u{feff}').unwrap_or(trimmed);
+        // Blank and `#` comment lines never parse as records, so they fall through to the
+        // free-text path below and are counted as ignored there.
+        let Some(record) = parse_pat_record(content) else {
+            // Free text (titles, notes) between records is tolerated, but a line that starts like
+            // a record yet does not parse is a damaged record and must not be skipped silently.
+            if mode == PatLineMode::Strict && looks_like_pat_record(content) {
+                trace!(line_number, "pat record-shaped line failed to parse");
+                return Err(RomWeaverError::Validation(format!(
+                    "PAT patch line {line_number} is not a valid record (expected `<8-digit hex offset> <source byte> <modified byte>`)"
+                )));
+            }
             ignored_lines = ignored_lines
                 .checked_add(1)
                 .ok_or_else(|| RomWeaverError::Validation("PAT line count overflowed".into()))?;
             continue;
-        }
+        };
+        records.push(record);
+    }
 
-        if let Some(record) = parse_pat_record(trimmed) {
-            records.push(record);
-        } else {
-            ignored_lines = ignored_lines
-                .checked_add(1)
-                .ok_or_else(|| RomWeaverError::Validation("PAT line count overflowed".into()))?;
-        }
+    if records.is_empty() && mode == PatLineMode::Strict {
+        return Err(RomWeaverError::Validation(
+            "PAT patch contains no records".into(),
+        ));
     }
 
     Ok(ParsedPatPatch {
         records,
         ignored_lines,
     })
+}
+
+/// Whether `line` begins with an 8-digit hex offset, the shape every record starts with.
+fn looks_like_pat_record(line: &str) -> bool {
+    line.split_whitespace()
+        .next()
+        .and_then(|field| field.get(..8))
+        .is_some_and(|offset| offset.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
 fn parse_pat_record(line: &str) -> Option<PatRecord> {

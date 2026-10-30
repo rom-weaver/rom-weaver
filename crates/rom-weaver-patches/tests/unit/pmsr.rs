@@ -930,3 +930,24 @@ fn create_thread_capability_scales_with_the_target_length() {
         }
     );
 }
+
+#[test]
+fn apply_rejects_a_corrupt_record_offset_that_would_write_gigabytes() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let patch_path = temp.child("corrupt.mod");
+    let output_path = temp.child("output.bin");
+    fs::write(&source_path, vec![0u8; 512]).expect("fixture");
+    fs::write(&patch_path, pmsr_patch_bytes(&[(0xF000_0000, b"X")])).expect("fixture");
+
+    let result = PmsrPatchHandler::new(&MOD).apply(
+        &PatchApplyRequest {
+            input: source_path,
+            patches: vec![patch_path],
+            output: output_path.clone(),
+        },
+        &test_context_with_threads(&temp, 2)
+            .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+    );
+    crate::test_support::assert_implausible_output_rejected(result, &output_path);
+}
