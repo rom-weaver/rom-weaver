@@ -91,6 +91,27 @@ impl PatchApplyRun {
         sources
     }
 
+    fn validate_output_destination(
+        &mut self,
+        steps: &[PatchApplyStep],
+    ) -> std::result::Result<(), Box<OperationReport>> {
+        if let Some(report) = CliApp::inferred_output_collision_report(
+            self.output_was_inferred,
+            &mut self.output,
+            &self.args.input,
+            self.context.single_thread_execution(),
+        ) {
+            return Err(Box::new(report));
+        }
+        let mut sources = self.source_paths();
+        for step in steps {
+            sources.extend([step.patch.source.clone(), step.patch.resolved.clone()]);
+        }
+        CliApp::ensure_patch_output_preserves_sources(&self.output, &sources)
+            .and_then(|()| ensure_output_available(&self.output, self.args.force))
+            .map_err(|error| self.fail_error("validate", error))
+    }
+
     fn cheat_patch_count(&self) -> usize {
         usize::from(!self.args.codes.is_empty())
     }
@@ -1125,13 +1146,10 @@ impl CliApp {
                 run.output = swapped_output;
                 chain.extension_swap_note = Some(note);
             }
-            if let Some(report) = Self::inferred_output_collision_report(
-                run.output_was_inferred,
-                &mut run.output,
-                &run.args.input,
-                run.context.single_thread_execution(),
-            ) {
-                return report;
+            if report.status == OperationStatus::Succeeded
+                && let Err(error_report) = run.validate_output_destination(&chain.patch_steps)
+            {
+                return *error_report;
             }
         }
         let mut paths = PatchApplyOutputPaths {
@@ -1215,14 +1233,7 @@ impl CliApp {
             run.output = swapped_output;
             extension_swap_note = Some(note);
         }
-        if let Some(report) = Self::inferred_output_collision_report(
-            run.output_was_inferred,
-            &mut run.output,
-            &run.args.input,
-            run.context.single_thread_execution(),
-        ) {
-            return Err(Box::new(report));
-        }
+        run.validate_output_destination(&[])?;
         // Disc inputs reject the header/N64 transforms and do their own
         // reassembly, so they skip the standard compat finalize; they always
         // stage the patched track before reassembling the full disc.
