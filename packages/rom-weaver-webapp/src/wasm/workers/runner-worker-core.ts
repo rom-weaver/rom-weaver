@@ -100,7 +100,8 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }: Runn
           const buffer = message.options?.__shutdownControl;
           if (buffer) {
             const control = new Int32Array(buffer);
-            // Once bootstrap was posted, only the proxy MAY acknowledge resource closure.
+            // Once bootstrap was posted, the proxy acknowledges closure itself; the runtime acknowledges
+            // only for a proxy that failed before it reported ready.
             if (Atomics.load(control, 1) === 0) acknowledgeOpfsShutdown(control);
             else requestOpfsShutdown(control);
           }

@@ -57,3 +57,22 @@ it("stops waiting for an acknowledgement that never comes once the timeout passe
     vi.useRealTimers();
   }
 });
+
+it("sees an acknowledgement stored without a notification within one recheck slice", async () => {
+  vi.useFakeTimers();
+  try {
+    const { waitForOpfsShutdownState } = await import("../../src/wasm/browser-opfs-shutdown.ts");
+    const control = new Int32Array(new SharedArrayBuffer(8));
+    const waited = vi.fn();
+    const waiting = waitForOpfsShutdownState(control, 2, 10_000).then(waited);
+    await vi.advanceTimersByTimeAsync(100);
+    // An engine that loses the notification never wakes the async wait, so only the recheck can notice this.
+    Atomics.store(control, 0, 2);
+    // The first recheck lands 250 ms after the wait began, so it must resolve by then, not at the 10 s timeout.
+    await vi.advanceTimersByTimeAsync(150);
+    expect(waited).toHaveBeenCalledOnce();
+    await waiting;
+  } finally {
+    vi.useRealTimers();
+  }
+});
