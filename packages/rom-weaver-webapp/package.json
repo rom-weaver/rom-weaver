@@ -95,6 +95,7 @@
     "test:browser:wasm:coverage": "cross-env ROM_WEAVER_COVERAGE=1 vitest --config ./vitest.wasm.browser.config.mjs run --coverage",
     "test:browser:wasm:exhaustive": "cross-env ROM_WEAVER_WASM_EXHAUSTIVE=1 vitest --config ./vitest.wasm.browser.config.mjs run -t \"exhaustive matrix\"",
     "test:browser:wasm:stress:1gb": "cross-env ROM_WEAVER_WASM_STRESS_1GB=1 vitest --config ./vitest.wasm.browser.config.mjs run -t \"survives 1 GiB compress extract checksum and 100MB-class xdelta apply workload\"",
+    "test:browser:wasm:stress:wbfs-4gb": "cross-env ROM_WEAVER_WASM_STRESS_WBFS_4GB=1 vitest --config ./vitest.wasm.browser.config.mjs run tests/wasm/wbfs-large.test.mjs",
     "test:browser:webkit": "npm run brand:check && cross-env ROM_WEAVER_BROWSER=webkit node scripts/run-browser-tests.mjs",
     "test:browser:webkit:smoke": "npm run brand:check && npm run icons:channels && cross-env ROM_WEAVER_BROWSER=webkit vitest --config ./vitest.browser.config.mjs run tests/browser/mobile-safari-runtime-smoke.browser.test.js",
     "test:e2e:a11y": "node scripts/run-webapp-e2e.mjs --a11y",
