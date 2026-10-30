@@ -26,6 +26,7 @@ import {
   describeArchiveFileForTrace,
   getCompressionFormat,
   listDroppedArchiveEntryNames,
+  probeDroppedInputKind,
   getCompressionRuntimeSource,
   isCompressionFile,
   resolveArchiveInput,
@@ -511,5 +512,37 @@ describe("nested archive drop classification", () => {
       ]);
     }
     expect(runtime.compression.extract).not.toHaveBeenCalled();
+  });
+});
+
+describe("probeDroppedInputKind", () => {
+  const ingestResult = (kind: "patch" | "rom", isRom: boolean, patches: unknown[]) => ({
+    outputs: [{ dispose: vi.fn(async () => undefined) }],
+    patchOutputs: [{ dispose: vi.fn(async () => undefined) }],
+    result: { assets: [], isRom, kind, patches },
+  });
+
+  it("reports a patch when ingest describes the payload as a patch, and releases the extracted leaves", async () => {
+    const ingested = ingestResult("patch", false, [{ format: "bps" }]);
+    runtime.ingest.run.mockResolvedValue(ingested);
+    const file = new File(["wrapped"], "patch.gz");
+    await expect(probeDroppedInputKind(file)).resolves.toBe("patch");
+    expect(runtime.ingest.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileName: "patch.gz",
+        identify: false,
+        interactiveSelectionEnabled: false,
+        source: file,
+      }),
+    );
+    expect(ingested.outputs[0]?.dispose).toHaveBeenCalledOnce();
+    expect(ingested.patchOutputs[0]?.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("reports a ROM for a ROM payload and when ingest fails", async () => {
+    runtime.ingest.run.mockResolvedValueOnce(ingestResult("rom", true, []));
+    await expect(probeDroppedInputKind(new File(["wrapped"], "rom.gz"))).resolves.toBe("rom");
+    runtime.ingest.run.mockRejectedValueOnce(new Error("boom"));
+    await expect(probeDroppedInputKind(new File(["wrapped"], "dump"))).resolves.toBeUndefined();
   });
 });

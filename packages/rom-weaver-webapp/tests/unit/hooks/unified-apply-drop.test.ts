@@ -3,18 +3,23 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadLocalWeaveSession } from "../../../src/lib/weave/local-weave-session.ts";
-import { listDroppedArchiveEntryNames } from "../../../src/lib/input/input-preparation-archive.ts";
+import {
+  listDroppedArchiveEntryNames,
+  probeDroppedInputKind,
+} from "../../../src/lib/input/input-preparation-archive.ts";
 import { useUnifiedApplyDrop } from "../../../src/public/react/use-unified-apply-drop.ts";
 
 // The drop router classifies a dropped archive by its entry names (a cheap content listing) to pick
 // its bucket before staging; stub that listing so routing is tested without the wasm runtime.
 vi.mock("../../../src/lib/input/input-preparation-archive.ts", () => ({
   listDroppedArchiveEntryNames: vi.fn(),
+  probeDroppedInputKind: vi.fn(),
 }));
 vi.mock("../../../src/lib/weave/local-weave-session.ts", () => ({
   loadLocalWeaveSession: vi.fn(),
 }));
 const mockedList = vi.mocked(listDroppedArchiveEntryNames);
+const mockedProbe = vi.mocked(probeDroppedInputKind);
 const mockedLoadWeave = vi.mocked(loadLocalWeaveSession);
 
 const file = (name: string) => new File([new Uint8Array([0])], name);
@@ -26,6 +31,7 @@ const makeController = () => ({
 
 beforeEach(() => {
   mockedList.mockReset();
+  mockedProbe.mockReset();
   mockedLoadWeave.mockReset();
 });
 
@@ -508,5 +514,157 @@ describe("useUnifiedApplyDrop", () => {
     unmount();
 
     expect(weaveSignal?.aborted).toBe(true);
+  });
+
+  describe("held-back drops", () => {
+    const setup = () => {
+      const controller = makeController();
+      const onRejected = vi.fn();
+      const selectFile = vi.fn(
+        async (_request: import("../../../src/types/selection.ts").CandidateSelectionRequest) => ({
+          id: "dropped-rom-0",
+        }),
+      );
+      const { result } = renderHook(() =>
+        useUnifiedApplyDrop(controller, undefined, undefined, selectFile, onRejected),
+      );
+      return { controller, onRejected, result, selectFile };
+    };
+
+    it("rejects split WBFS parts instead of offering them as alternative ROMs", async () => {
+      const { controller, onRejected, result, selectFile } = setup();
+      const patch = file("flip.bps");
+      act(() => result.current.onDrop([file("Disc.wbfs"), file("Disc.wbf1"), file("Disc.wbf2"), patch]));
+      await waitFor(() => expect(controller.providePatchInputFiles).toHaveBeenCalledExactlyOnceWith([patch]));
+      expect(onRejected).toHaveBeenCalledExactlyOnceWith({
+        kind: "splitWbfs",
+        names: ["Disc.wbfs", "Disc.wbf1", "Disc.wbf2"],
+      });
+      expect(mockedList).not.toHaveBeenCalled();
+      expect(selectFile).not.toHaveBeenCalled();
+      expect(controller.provideRomInputFiles).not.toHaveBeenCalled();
+    });
+
+    it("keeps a lone .wbfs routable", async () => {
+      mockedList.mockResolvedValue(["disc.iso"]);
+      const { controller, onRejected, result } = setup();
+      act(() => result.current.onDrop([file("Disc.wbfs")]));
+      await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledOnce());
+      expect(onRejected).not.toHaveBeenCalled();
+    });
+
+    it("holds back an archive with only unrecognised entries instead of offering it as a second ROM", async () => {
+      mockedList.mockResolvedValue(["readme.txt"]);
+      const { controller, onRejected, result, selectFile } = setup();
+      const rom = file("base.bin");
+      act(() => result.current.onDrop([rom, file("mystery.zip"), file("flip.bps")]));
+      await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledExactlyOnceWith([rom]));
+      expect(onRejected).toHaveBeenCalledExactlyOnceWith({ kind: "unsupportedPatch", names: ["mystery.zip"] });
+      expect(selectFile).not.toHaveBeenCalled();
+    });
+
+    it("routes an extension-less compressed payload that ingest reports as a patch to the patch bucket", async () => {
+      mockedList.mockResolvedValue(["patch"]);
+      mockedProbe.mockResolvedValue("patch");
+      const { controller, onRejected, result, selectFile } = setup();
+      const rom = file("base.bin");
+      const wrapped = file("patch.gz");
+      const flip = file("flip.bps");
+      act(() => result.current.onDrop([rom, wrapped, flip]));
+      await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledExactlyOnceWith([rom]));
+      expect(mockedProbe).toHaveBeenCalledExactlyOnceWith(wrapped, expect.any(AbortSignal));
+      expect(controller.providePatchInputFiles).toHaveBeenCalledExactlyOnceWith([flip, wrapped]);
+      expect(onRejected).not.toHaveBeenCalled();
+      expect(selectFile).not.toHaveBeenCalled();
+    });
+
+    it("offers an extension-less compressed payload that ingest reports as a ROM as a second ROM", async () => {
+      mockedList.mockResolvedValue(["rom"]);
+      mockedProbe.mockResolvedValue("rom");
+      const { controller, result, selectFile } = setup();
+      const rom = file("base.bin");
+      const wrapped = file("rom.gz");
+      act(() => result.current.onDrop([rom, wrapped]));
+      await waitFor(() => expect(selectFile).toHaveBeenCalledOnce());
+      expect(selectFile.mock.calls[0]?.[0].candidates.map((candidate) => candidate.fileName)).toEqual([
+        "base.bin",
+        "rom.gz",
+      ]);
+      await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledExactlyOnceWith([rom]));
+      expect(controller.providePatchInputFiles).not.toHaveBeenCalled();
+    });
+
+    it("routes a bare extension-less patch by ingest verdict, and keeps a bare dump a ROM candidate", async () => {
+      mockedProbe.mockImplementation(async (probed) => (probed.name === "patch" ? "patch" : "rom"));
+      const withPatch = setup();
+      const rom = file("base.bin");
+      const bare = file("patch");
+      act(() => withPatch.result.current.onDrop([rom, bare]));
+      await waitFor(() => expect(withPatch.controller.provideRomInputFiles).toHaveBeenCalledExactlyOnceWith([rom]));
+      expect(withPatch.controller.providePatchInputFiles).toHaveBeenCalledExactlyOnceWith([bare]);
+      expect(withPatch.selectFile).not.toHaveBeenCalled();
+
+      const withDump = setup();
+      act(() => withDump.result.current.onDrop([file("base.bin"), file("dump")]));
+      await waitFor(() => expect(withDump.selectFile).toHaveBeenCalledOnce());
+      expect(withDump.controller.providePatchInputFiles).not.toHaveBeenCalled();
+    });
+
+    it("keeps an extension-less candidate a ROM when the ingest probe is unavailable", async () => {
+      mockedProbe.mockResolvedValue(undefined);
+      const { controller, result, selectFile } = setup();
+      act(() => result.current.onDrop([file("base.bin"), file("dump")]));
+      await waitFor(() => expect(selectFile).toHaveBeenCalledOnce());
+      expect(controller.providePatchInputFiles).not.toHaveBeenCalled();
+    });
+
+    it("does not probe a lone extension-less candidate or named files", async () => {
+      mockedList.mockResolvedValue(["patch"]);
+      const lone = setup();
+      const wrapped = file("patch.gz");
+      act(() => lone.result.current.onDrop([wrapped]));
+      await waitFor(() => expect(lone.controller.provideRomInputFiles).toHaveBeenCalledExactlyOnceWith([wrapped]));
+
+      const named = setup();
+      act(() => named.result.current.onDrop([file("base.bin"), file("other.sfc")]));
+      await waitFor(() => expect(named.selectFile).toHaveBeenCalledOnce());
+      expect(mockedProbe).not.toHaveBeenCalled();
+    });
+
+    it("holds back a bare file with an unknown extension next to a recognised ROM", async () => {
+      const { controller, onRejected, result, selectFile } = setup();
+      const rom = file("base.bin");
+      act(() => result.current.onDrop([rom, file("ninja1.rnp")]));
+      await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledExactlyOnceWith([rom]));
+      expect(onRejected).toHaveBeenCalledExactlyOnceWith({ kind: "unsupportedPatch", names: ["ninja1.rnp"] });
+      expect(selectFile).not.toHaveBeenCalled();
+    });
+
+    it("still stages a lone extension-less compressed ROM or patch and offers extension-less bare files", async () => {
+      mockedList.mockResolvedValue(["rom"]);
+      const lone = setup();
+      const wrapped = file("rom.gz");
+      act(() => lone.result.current.onDrop([wrapped, file("flip.bps")]));
+      await waitFor(() => expect(lone.controller.provideRomInputFiles).toHaveBeenCalledExactlyOnceWith([wrapped]));
+      expect(lone.onRejected).not.toHaveBeenCalled();
+
+      mockedList.mockResolvedValue(["patch"]);
+      const loneWrappedPatch = setup();
+      const wrappedPatch = file("patch.gz");
+      act(() => loneWrappedPatch.result.current.onDrop([wrappedPatch]));
+      await waitFor(() =>
+        expect(loneWrappedPatch.controller.provideRomInputFiles).toHaveBeenCalledExactlyOnceWith([wrappedPatch]),
+      );
+      expect(loneWrappedPatch.onRejected).not.toHaveBeenCalled();
+
+      const bare = setup();
+      act(() => bare.result.current.onDrop([file("base.bin"), file("dump")]));
+      await waitFor(() => expect(bare.selectFile).toHaveBeenCalledOnce());
+      expect(bare.selectFile.mock.calls[0]?.[0].candidates.map((candidate) => candidate.fileName)).toEqual([
+        "base.bin",
+        "dump",
+      ]);
+      expect(bare.onRejected).not.toHaveBeenCalled();
+    });
   });
 });

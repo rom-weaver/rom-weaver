@@ -65,6 +65,16 @@ msgstr "{compressed} transferido · {uncompressed} almacenado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.unsupportedPatch"
+msgstr "{count, plural, one {{names} no es un formato de parche compatible y no se usó.} other {{names} no son formatos de parche compatibles y no se usaron.}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.splitWbfs"
+msgstr "{count, plural, one {{names} es parte de un disco WBFS dividido.} other {{names} son partes de un disco WBFS dividido.}} Aplicar no puede leer WBFS dividido. Une las partes con Extraer y luego suelta aquí el disco extraído."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.cheats.cheatCount"
 msgstr "{count, plural, one {# truco} other {# trucos}}"
 

@@ -318,4 +318,18 @@ describe("weave patch requirements", () => {
 
     expect(ingest).toHaveBeenCalledWith(expect.objectContaining({ identify: false }));
   });
+
+  it("accepts an extension-less patch that ingest classified by signature, and rejects one it did not", async () => {
+    const wrapped = createLazyExternalPatchFile("patch", { filePath: "/work/out/patch", size: 18 });
+    attachIngestPatchRequirements(
+      wrapped,
+      patchProbeRequirementsFromDescriptor({ fileName: "patch", format: "bps", sizeBytes: 18 }),
+    );
+    const parsed = await parsePatchForApply(wrapped as never);
+    expect(getPatchProbeRequirements(parsed)).toMatchObject({ format: "BPS" });
+    expect(parsed?.constructor.name).toBe("BPS");
+
+    const unknown = createLazyExternalPatchFile("dump", { filePath: "/work/out/dump", size: 18 });
+    expect(await parsePatchForApply(unknown as never)).toBeNull();
+  });
 });

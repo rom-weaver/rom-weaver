@@ -65,6 +65,16 @@ msgstr "{compressed} transferred, {uncompressed} stored"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.unsupportedPatch"
+msgstr "{count, plural, one {{names} is not a supported patch format and was not used.} other {{names} are not supported patch formats and were not used.}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.splitWbfs"
+msgstr "{count, plural, one {{names} is part of a split WBFS disc.} other {{names} are parts of a split WBFS disc.}} Apply cannot read split WBFS. Join the parts with Extract, then drop the extracted disc here."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.cheats.cheatCount"
 msgstr "{count, plural, one {# cheat} other {# cheats}}"
 

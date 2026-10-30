@@ -133,6 +133,11 @@ const discCase = ({ id, tags, title, buildFiles, everyFormat }) => ({
         if (out.pageErrors.length) fail(out, `page error ${out.pageErrors[0]}`);
         if (built.expectRefusal) {
           if (out.outcome === "download") fail(out, "expected refusal");
+          if (built.expectMessage) {
+            const visible = [...staged.notices, ...out.after.notices].map((notice) => notice.text).join(" ");
+            if (!built.expectMessage.test(visible))
+              fail(out, `refusal without ${built.expectMessage}: ${visible.slice(0, 200)}`);
+          }
           return `refused (${out.outcome})`;
         }
         if (out.outcome !== "download") fail(out, `no download for output format ${format}`);
@@ -196,15 +201,15 @@ export function discCases() {
       const { patch, target } = rawBpsFixture(payload, offset);
       void target;
       return {
+        expectMessage: /split WBFS/i,
         expectRefusal: true,
         files: [...parts, { buffer: patch, name: "flip.bps" }],
-        pick: ["Disc.wbfs"],
       };
     },
     id: "wbfs-split-3",
     tags: ["wbfs", "split", "error-ux"],
     title:
-      "WBFS split across Disc.wbfs/.wbf1/.wbf2 uploaded together: docs/reference/formats.md says only Extract reads split sets, so Apply must refuse with an error (never a wrong download)",
+      "WBFS split across Disc.wbfs/.wbf1/.wbf2 uploaded together: docs/reference/formats.md says only Extract reads split sets, so Apply must say so at staging, list no part as a ROM candidate, and never download",
   });
   add({
     buildFiles: () => {
@@ -215,11 +220,15 @@ export function discCases() {
         name: index === 0 ? "Disc.wbfs" : `Disc.wbf${index}`,
       }));
       const { patch } = rawBpsFixture(payload, offset);
-      return { expectRefusal: true, files: [...parts, { buffer: patch, name: "flip.bps" }] };
+      return {
+        expectMessage: /split WBFS/i,
+        expectRefusal: true,
+        files: [...parts, { buffer: patch, name: "flip.bps" }],
+      };
     },
     id: "wbfs-split-missing-part",
     tags: ["wbfs", "split", "error-ux"],
-    title: "WBFS split set with a missing middle part must be refused",
+    title: "WBFS split set with a missing middle part is refused at staging with the split-WBFS message",
   });
   add({
     buildFiles: () => {

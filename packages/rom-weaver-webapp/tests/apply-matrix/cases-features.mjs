@@ -50,7 +50,7 @@ async function downloadVia(page, h, trigger) {
   return { bytes: fs.readFileSync(saved), name: download.suggestedFilename(), saved };
 }
 
-const undoCase = ({ id, title, files, format = "none", expected, expectRefusal, expectUnverifiedRestore }) => ({
+const undoCase = ({ id, title, files, format = "none", expected, expectRefusal, expectMismatchWarning }) => ({
   group: "ppf-undo",
   id: `ppf-undo/${id}`,
   tags: ["ppf-undo", "ppf", format],
@@ -110,12 +110,15 @@ const undoCase = ({ id, title, files, format = "none", expected, expectRefusal, 
           return `refused; visible: ${/error|fail|cannot|undo/i.exec(text)?.[0] ?? "(no message)"}`;
         }
         if (out.outcome !== "download") throw new Error("PPF undo produced no download");
-        if (expectUnverifiedRestore) {
-          // By design (ppf.rs undo_ppf): the undo data is written without checking the ROM, so a ROM that was
-          // never patched still "restores". Only record that the bytes differ from the good original.
-          if (sha256(out.bytes) === sha256(expectUnverifiedRestore))
+        if (expectMismatchWarning) {
+          // The undo data is still written (ppf.rs undo_ppf), but the core warns that the ROM does not match.
+          if (sha256(out.bytes) === sha256(expectMismatchWarning))
             throw new Error("wrong ROM unexpectedly restored to the original");
-          return `${out.name}: restored without any check (by design); ${out.bytes.length} B`;
+          const warning = page.getByText(/does not match the patched data/i);
+          await warning.first().waitFor({ state: "visible", timeout: 10_000 });
+          await page.waitForTimeout(800);
+          await page.screenshot({ fullPage: true, path: path.join(h.caseDir, "undo-warning.png") });
+          return `${out.name}: restored with visible warning "${(await warning.first().innerText()).slice(0, 120)}"`;
         }
         if (format === "none") {
           if (sha256(out.bytes) !== sha256(expected)) throw new Error(`restored bytes differ (${out.bytes.length} B)`);
@@ -173,11 +176,11 @@ export function featureCases() {
   );
   cases.push(
     undoCase({
-      expectUnverifiedRestore: baseBytes,
+      expectMismatchWarning: baseBytes,
       files: [path.join(BLOBS, "other.bin"), ppfPath],
       id: "wrong-rom",
       title:
-        "undo against a ROM that was never patched: by design (ppf.rs) the restore still runs with no warning; output must not silently equal the original",
+        'undo against a ROM that was never patched: the restore still runs, the output differs from the original, and the "does not match the patched data" warning is shown',
     }),
   );
   cases.push(
