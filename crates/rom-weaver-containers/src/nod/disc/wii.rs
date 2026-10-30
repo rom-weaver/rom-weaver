@@ -366,6 +366,9 @@ impl PartitionReaderWii {
         if options.validate_hashes {
             // Ensure we cache the H3 table
             reader.meta()?;
+            // Metadata reads precede H3 availability, so the cached group MUST be reverified.
+            reader.sector_group = None;
+            reader.pos = 0;
         }
         Ok(Box::new(reader))
     }

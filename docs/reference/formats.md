@@ -10,6 +10,7 @@ The [feature map](features.md) explains the capabilities in plain words. [Cheat 
 - [Legend](#legend)
 - [Patch formats](#patch-formats)
 - [Container and compression formats](#container-and-compression-formats)
+  - [WIA payload integrity](#wia-payload-integrity)
   - [Z3DS filename variants](#z3ds-filename-variants)
 - [Create-time codecs](#create-time-codecs)
 - [Checksum support](#checksum-support)
@@ -122,6 +123,20 @@ The browser's Compress page offers CHD for optical inputs under the following ru
 Explicit CHD output on Apply and Weave accepts raw and hard-disk inputs. Valid disk headers take precedence over CD signatures, including inside archives. Raw and disk inputs use generic codecs from the DVD codec setting. A `.bin` name or sector alignment alone does not select CD codecs.
 
 A/V CHD creation needs the native CLI.
+
+### WIA payload integrity
+
+WIA stores SHA-1 hashes for its file header, disc header, and partition table. Those hashes are verified when opening the image. Raw-data and group tables contain offsets and sizes, without separate hashes for their contents or payloads.
+
+Extraction verifies Wii partition H0, H1, H2, and H3 hashes where present. Hash mismatches fail extraction, including hash errors already present in the source disc.
+
+WIA rebuilds sector hashes from partition data and applies stored hash exceptions; the H3 table provides the comparison against the original partition hashes. Verification reads the checked data before writing the extracted ISO.
+
+Optional NKit CRC32, MD5, SHA-1, and XXH64 image checksums are also verified when present.
+
+GameCube data and raw Wii regions have no WIA payload checksum by default. In particular, uncompressed (`none`) and raw LZMA/LZMA2 payloads can decode successfully after a bit flip and produce a different ISO with exit status 0.
+
+This is a format limit when no optional image checksum covers those bytes. Decoder errors still fail extraction, but successful decoding alone does not establish payload integrity. Purge compression is unsupported and fails when opening the image.
 
 ### Z3DS filename variants
 

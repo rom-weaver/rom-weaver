@@ -540,6 +540,9 @@ impl NodHandlerCore {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let mut plan = self.prepare_extract(request, context)?;
+        if self.nod_format == NodFormat::Wia {
+            crate::wia::validate_integrity(&plan.disc, context)?;
+        }
         let output = create_extract_output_file(&plan.output_path, request.overwrite)?;
         let progress_label = format!("extracting `{}`", self.format_name());
         let copied = (|| {

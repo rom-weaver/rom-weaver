@@ -166,6 +166,18 @@
       ]
     },
     {
+      "file": "0024-wii-initial-hash-validation.patch",
+      "stage": "source",
+      "reason": "Invalidate the first group read before H3 metadata exists and rewind new validating Wii partition readers, so the first group is verified on read.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib wia_extract",
+        "cargo test -p rom-weaver-containers --lib nod::disc::wii::tests::"
+      ]
+    },
+    {
       "file": "0013-rust-codec-backends.patch",
       "stage": "integration",
       "reason": "Select Rust AES/digest backends and flate2 zlib compression/decompression for the workspace WASM build; preserve bounded-output raw-block fallback and validate zlib levels.",
