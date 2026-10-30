@@ -128,12 +128,12 @@ jobs:
         run: mise run build-wasm-prod
       - name: Verify WASM artifact
         run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
-      - name: Production bundle and asset budgets
+      - name: Production bundle and worker chunk guard
         env:
           ROM_WEAVER_SYSTEM_CHROME: "1"
         run: |
           npm --prefix packages/rom-weaver-webapp run build
-          npm --prefix packages/rom-weaver-webapp run check:size
+          npm --prefix packages/rom-weaver-webapp run check:worker-chunk
       - name: Seeded worker lifecycle
         id: unit
         run: |

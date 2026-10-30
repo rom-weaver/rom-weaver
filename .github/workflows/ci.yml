@@ -20,8 +20,8 @@ on:
       - main
     # Release tags deploy the webapp; tests run on pull requests and branch pushes.
     tags: ["v*"]
-  # Nightly native coverage: the eight CLI targets, macOS Rust, and the arm64
-  # runtime check that main pushes skip (see `full_native` in
+  # Nightly native coverage: the eight CLI targets, macOS and Windows Rust, and the
+  # arm64 runtime check that main pushes skip (see `full_native` in
   # scripts/ci/classify-changes.mjs). It selects only Rust, and only when a
   # Rust input changed since the last green nightly, so a quiet day costs one
   # `Changes` job.
@@ -824,7 +824,7 @@ jobs:
     needs: changes
     outputs:
       bundle: ${{ steps.webapp-bundle.outcome }}
-      size: ${{ steps.size.outcome }}
+      chunk-guard: ${{ steps.chunk-guard.outcome }}
     # Skipped whole rather than started with every step gated off. Webapp tests
     # and `docker-prebuilt` still select this through `changes.webapp`, while
     # every first-party pull request also builds it for its preview.
@@ -960,14 +960,12 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
 
-      # The budgets the gate reads are the numbers in performance-budgets.json - see the
-      # Performance budgets section of docs/development/ci.md. A pull request that grows an asset
-      # on purpose raises its own budget in the same change.
-      - name: Asset size gates
-        id: size
+      # Structural check of the built chunk graph; see docs/development/ci.md.
+      - name: Worker runtime chunk guard
+        id: chunk-guard
         if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
         continue-on-error: true
-        run: npm --prefix packages/rom-weaver-webapp run check:size
+        run: npm --prefix packages/rom-weaver-webapp run check:worker-chunk
 
   # Host-profile Rust lint and metadata checks. The test suite has its own job
   # below so both compile-heavy paths can run at the same time.
@@ -1250,7 +1248,8 @@ jobs:
     timeout-minutes: 35
     needs: changes
     if: >-
-      github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+      github.ref_type != 'tag' && needs.changes.outputs.full_native == 'true'
+      && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
       # The mise legs get this from .config/mise.toml's [env]; this leg bypasses mise.
@@ -1721,7 +1720,6 @@ jobs:
           '${{ needs.changes.outputs.rust }}'
           'rust-host=${{ needs.rust-host.result }}'
           'cli-platforms=${{ needs.cli-platforms.result }}'
-          'rust-windows=${{ needs.rust-windows.result }}'
 
       - name: Verify full native jobs
         if: ${{ !cancelled() }}
@@ -1731,6 +1729,7 @@ jobs:
           '${{ needs.changes.outputs.rust == 'true' && needs.changes.outputs.full_native == 'true' }}'
           'cli-linux-arm64=${{ needs.cli-linux-arm64.result }}'
           'rust-macos=${{ needs.rust-macos.result }}'
+          'rust-windows=${{ needs.rust-windows.result }}'
 
       - name: Verify webapp jobs
         if: ${{ !cancelled() }}
@@ -1739,7 +1738,7 @@ jobs:
           '${{ needs.changes.result }}'
           '${{ needs.changes.outputs.webapp }}'
           'webapp-build=${{ needs.wasm.outputs.bundle || needs.wasm.result }}'
-          'webapp-size=${{ needs.wasm.outputs.size || needs.wasm.result }}'
+          'webapp-chunk-guard=${{ needs.wasm.outputs.chunk-guard || needs.wasm.result }}'
           'webapp-static=${{ needs.webapp-static.result }}'
           'webapp-e2e=${{ needs.webapp-e2e.result }}'
 

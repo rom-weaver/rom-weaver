@@ -9,7 +9,7 @@ const recordingRunner = (calls, failedName) => async (name, command, args, cwd, 
   return { code: name === failedName ? 1 : 0, durationMs: 1, name };
 };
 
-test("fast regression builds and checks production assets before running either browser suite", async () => {
+test("fast regression builds and checks the production build before running either browser suite", async () => {
   const calls = [];
   const environment = { ROM_WEAVER_CHANNEL: "dev", TEST_MARKER: "preserved" };
   const report = await runE2EProfile("fast", recordingRunner(calls), environment);
@@ -19,7 +19,7 @@ test("fast regression builds and checks production assets before running either 
     [
       ["run", "build-wasm-prod"],
       ["run", "build"],
-      ["run", "check:size"],
+      ["run", "check:worker-chunk"],
     ],
   );
   assert.deepEqual(
@@ -55,20 +55,20 @@ test("nightly retains its development module and exhaustive coverage", async () 
   assert.equal(calls.at(-1).environment.ROM_WEAVER_E2E_USE_PREBUILT_DIST, undefined);
 });
 
-test("reusing WASM still prepares identify data, rebuilds the webapp, and checks sizes", async () => {
+test("reusing WASM still prepares identify data, rebuilds the webapp, and checks the worker chunk guard", async () => {
   const calls = [];
   await runE2EProfile("fast", recordingRunner(calls), { ROM_WEAVER_E2E_SKIP_WASM_BUILD: "1" });
   assert.equal(calls[0].command, "node");
   assert.deepEqual(calls[0].args, ["scripts/ensure-identify-data.mjs"]);
   assert.deepEqual(calls[1].args, ["run", "build"]);
-  assert.deepEqual(calls[2].args, ["run", "check:size"]);
+  assert.deepEqual(calls[2].args, ["run", "check:worker-chunk"]);
 });
 
-test("failed build and size gates prevent tests from passing against old assets", async () => {
+test("failed build and chunk guard prevent tests from passing against old assets", async () => {
   for (const [failedName, count] of [
     ["WASM build", 1],
     ["production webapp build", 2],
-    ["asset size budgets", 3],
+    ["worker runtime chunk guard", 3],
   ]) {
     const calls = [];
     const report = await runE2EProfile("fast", recordingRunner(calls, failedName), {});

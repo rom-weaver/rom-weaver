@@ -418,8 +418,8 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
 // Which run-wide coverage tiers this event gets.
 // `fullMatrix` (macOS/arm64 Docker legs, prebuilt images) stays on for every
 // event but an ordinary pull request, because main's legs feed the nightly
-// manifest lists. `fullNative` - the eight non-Linux CLI targets, macOS Rust,
-// and the arm64 CLI runtime - also leaves main pushes: the nightly schedule
+// manifest lists. `fullNative` - the eight non-Linux CLI targets, macOS and Windows
+// Rust, and the arm64 CLI runtime - also leaves main pushes: the nightly schedule
 // and the release pull request cover it before anything ships, which keeps
 // four 15-19 minute Windows builds per merge out of the shared runner pool.
 // An absent event keeps both, the same fail-open default as the classifier.

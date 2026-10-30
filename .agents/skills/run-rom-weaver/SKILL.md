@@ -72,7 +72,7 @@ Environment overrides:
 
 ## Run the full regression gate
 
-Run `mise run test-e2e-fast` from the repository root. It builds production WASM and the webapp once, checks asset sizes, then runs the CLI, Chromium, WASM, and E2E suites against that one build. See [Run release regressions](../../../docs/development/reproduce-ci-locally.md#run-release-regressions) for coverage and the larger nightly matrix.
+Run `mise run test-e2e-fast` from the repository root. It builds production WASM and the webapp once, checks the worker chunk guard, then runs the CLI, Chromium, WASM, and E2E suites against that one build. See [Run release regressions](../../../docs/development/reproduce-ci-locally.md#run-release-regressions) for coverage and the larger nightly matrix.
 
 ## Troubleshooting
 

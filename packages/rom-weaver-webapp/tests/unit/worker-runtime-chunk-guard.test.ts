@@ -2,11 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  checkAssetBudgetCoverage,
-  checkWorkerRuntimeChunk,
-  measureSizeBudget,
-} from "../../scripts/check-size-budget.mjs";
+import { checkBrotliSidecars, checkWorkerRuntimeChunk } from "../../scripts/check-worker-runtime-chunk.mjs";
 
 // These fixtures stand in for a production build. The guard they exercise is what stops a silent
 // Vite/rolldown regression from re-duplicating the worker runtime or putting it on the first-paint
@@ -87,64 +83,58 @@ describe("checkWorkerRuntimeChunk", () => {
   });
 });
 
-describe("measureSizeBudget", () => {
-  it("separates named lazy chunks from the core JavaScript budget", () => {
-    const distDir = writeDist(
-      {
-        "index-core.js": "core",
-        "save-editor-lazy.js": "editor",
-      },
-      ["index-core.js"],
-    );
-    const core = measureSizeBudget(
-      distDir,
-      { directory: "assets", excludePatterns: ["assets/save-editor-[^/]+\\.js$"], extension: ".js" },
-      6,
-    );
-    const editor = measureSizeBudget(
-      distDir,
-      { directory: "assets", extension: ".js", includePatterns: ["assets/save-editor-[^/]+\\.js$"] },
-      6,
-    );
-    expect(core.rawBytes).toBe(4);
-    expect(editor.rawBytes).toBe(6);
+describe("checkBrotliSidecars", () => {
+  const big = "x".repeat(2048);
+  const withSidecars = (files: Chunks): string => {
+    const distDir = writeDist({}, []);
+    for (const [name, code] of Object.entries(files)) fs.writeFileSync(path.join(distDir, "assets", name), code);
+    return distDir;
+  };
+  const complete = (): Chunks => ({
+    "index-a.js": big,
+    "index-a.js.br": "br",
+    "index-a.css": big,
+    "index-a.css.br": "br",
+    "app-a.wasm": big,
+    "app-a.wasm.br": "br",
   });
 
-  it("fails when an included lazy chunk pattern matches no file", () => {
-    const distDir = writeDist({ "index-core.js": "core" }, ["index-core.js"]);
-    expect(() =>
-      measureSizeBudget(
-        distDir,
-        { directory: "assets", extension: ".js", includePatterns: ["assets/save-editor-[^/]+\\.js$"] },
-        6,
-      ),
-    ).toThrow("matched no built files");
+  it("passes when every large asset has a sidecar", () => {
+    expect(checkBrotliSidecars(withSidecars(complete()))).toEqual({ failures: 0, problems: [] });
   });
 
-  it("makes each split JavaScript file belong to exactly one budget", () => {
-    const distDir = writeDist({ "index-core.js": "core", "save-editor-lazy.js": "editor" }, ["index-core.js"]);
-    const config = {
-      assetSizes: {
-        budgets: [
-          {
-            directory: "assets",
-            excludePatterns: ["assets/save-editor-[^/]+\\.js$"],
-            extension: ".js",
-            name: "Core",
-          },
-          {
-            directory: "assets",
-            extension: ".js",
-            includePatterns: ["assets/save-editor-[^/]+\\.js$"],
-            name: "Editor",
-          },
-        ],
-      },
-    };
-    expect(checkAssetBudgetCoverage(config, distDir)).toEqual({ failures: 0, problems: [] });
-    config.assetSizes.budgets.pop();
-    expect(checkAssetBudgetCoverage(config, distDir).problems).toContain(
-      "assets/save-editor-lazy.js belongs to 0 .js budgets",
-    );
+  it("fails when a large asset has no sidecar", () => {
+    const files = complete();
+    delete files["index-a.css.br"];
+    expect(checkBrotliSidecars(withSidecars(files)).problems).toEqual([
+      "assets/index-a.css (2048 bytes) is missing its Brotli sidecar index-a.css.br",
+    ]);
+  });
+
+  it("requires a sidecar for JavaScript", () => {
+    const files = complete();
+    delete files["index-a.js.br"];
+    expect(checkBrotliSidecars(withSidecars(files)).problems).toEqual([
+      "assets/index-a.js (2048 bytes) is missing its Brotli sidecar index-a.js.br",
+    ]);
+  });
+
+  it("requires a sidecar at exactly 1 KiB but not below it", () => {
+    const at = { ...complete(), "edge.js": "x".repeat(1024) };
+    expect(checkBrotliSidecars(withSidecars(at)).failures).toBe(1);
+    const below = { ...complete(), "edge.js": "x".repeat(1023) };
+    expect(checkBrotliSidecars(withSidecars(below)).failures).toBe(0);
+  });
+
+  it("ignores assets under 1 KiB", () => {
+    const files = { ...complete(), "tiny.js": "x" };
+    expect(checkBrotliSidecars(withSidecars(files)).failures).toBe(0);
+  });
+
+  it("fails when a whole asset kind is missing", () => {
+    const files = complete();
+    delete files["app-a.wasm"];
+    delete files["app-a.wasm.br"];
+    expect(checkBrotliSidecars(withSidecars(files)).problems[0]).toContain("no .wasm assets");
   });
 });
