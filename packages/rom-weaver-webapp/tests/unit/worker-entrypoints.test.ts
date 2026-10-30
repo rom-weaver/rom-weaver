@@ -86,6 +86,7 @@ describe("OPFS proxy worker entrypoint", () => {
 
     send({
       channel: { globalControl: new SharedArrayBuffer(4), slotControls: [], slotData: [] },
+      shutdownControl: new SharedArrayBuffer(4),
       mounts: [{ mountPath: "/work", rootRelativeParts: ["roms", "work"], writableRoots: ["/work"] }],
       syncAccessMode: "readwrite",
       type: "bootstrap",
@@ -120,15 +121,19 @@ describe("OPFS proxy worker entrypoint", () => {
     });
     vi.spyOn(navigator.storage, "getDirectory").mockRejectedValue(new Error("storage unavailable"));
     await import("../../src/wasm/workers/browser-opfs-proxy-worker.ts");
+    const shutdownControl = new SharedArrayBuffer(4);
     scope.onmessage?.({
       data: {
         channel: { globalControl: new SharedArrayBuffer(4), slotControls: [], slotData: [] },
+        shutdownControl,
         mounts: [],
         type: "bootstrap",
       },
     });
     await flush();
     expect(posted).toEqual([{ message: "OPFS proxy bootstrap failed: Error: bad channel", type: "error" }]);
+    // A failed bootstrap still acknowledges shutdown so the client never waits on a proxy that has no server.
+    expect(Atomics.load(new Int32Array(shutdownControl), 0)).toBe(2);
   });
 });
 
