@@ -35,7 +35,7 @@ const groups = (option("group", "") || "")
 const workers = Number(option("workers", 2));
 const jsonOut = option("json", null);
 
-const manifest = generate();
+const manifest = generate({ writeManifest: false });
 const cases = buildCases({ manifest }).filter((entry) => {
   if (groups.length && !groups.includes(entry.group)) return false;
   if (!filters.length) return true;

@@ -136,7 +136,7 @@ const unavailable = (name, purpose, how, reason) => record({ name, dir: "cache",
 
 const sh = (cmd, args, options = {}) => execFileSync(cmd, args, { stdio: ["ignore", "pipe", "pipe"], ...options });
 
-export function generate() {
+export function generate({ writeManifest = true } = {}) {
   manifest.entries = [];
   // Raw sources and targets.
   putBlob("base.bin", BASE, "source ROM every patch applies to (8 KiB, xorshift32 seed 0x1badf00d)", "encoders.prng");
@@ -587,7 +587,7 @@ export function generate() {
     });
   }
 
-  fs.writeFileSync(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`);
+  if (writeManifest) fs.writeFileSync(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`);
   return manifest;
 }
 

@@ -52,7 +52,7 @@ for (let index = 0; index < args.length; index++) {
   }
 }
 
-const bin = [opt.bin, process.env.RW_BIN, path.join(root, "target/release/rom-weaver"), path.join(root, "target/debug/rom-weaver")].find((candidate) => candidate && fs.existsSync(candidate));
+const bin = [opt.bin && path.resolve(opt.bin), process.env.RW_BIN && path.resolve(process.env.RW_BIN), path.join(root, "target/release/rom-weaver"), path.join(root, "target/debug/rom-weaver")].find((candidate) => candidate && fs.existsSync(candidate));
 if (!bin && !opt.list) {
   console.error("no rom-weaver binary found; run: cargo build -p rom-weaver-cli --release");
   process.exit(2);
