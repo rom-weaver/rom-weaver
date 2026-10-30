@@ -422,6 +422,10 @@ impl BufRead for PartitionReaderWii {
                     array_ref![sector_group.data, 0, SECTOR_GROUP_SIZE],
                     group_idx,
                     h3_table,
+                    (self.partition.data_end_sector
+                        - self.partition.data_start_sector
+                        - group_idx * 64)
+                        .min(64) as usize,
                 )?;
             }
         }
@@ -468,8 +472,14 @@ impl Seek for PartitionReaderWii {
     }
 }
 
-fn verify_hashes(buf: &[u8; SECTOR_GROUP_SIZE], group_idx: u32, h3_table: &[u8]) -> io::Result<()> {
-    for sector in 0..64 {
+fn verify_hashes(
+    buf: &[u8; SECTOR_GROUP_SIZE],
+    group_idx: u32,
+    h3_table: &[u8],
+    sector_count: usize,
+) -> io::Result<()> {
+    // Synthesized tail sectors have no mastered hashes or exceptions to verify.
+    for sector in 0..sector_count {
         let buf = array_ref![buf, sector * SECTOR_SIZE, SECTOR_SIZE];
         let part_sector = group_idx * 64 + sector as u32;
         let (cluster, sector) = div_rem(part_sector as usize, 8);

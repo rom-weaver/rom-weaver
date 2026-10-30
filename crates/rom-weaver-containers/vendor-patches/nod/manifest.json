@@ -178,6 +178,28 @@
       ]
     },
     {
+      "file": "0025-wii-real-sector-hash-validation.patch",
+      "stage": "source",
+      "reason": "Verify only stored Wii sectors; synthesized final-group tail sectors have no mastered hash exceptions.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib wia_extract_preserves_partial_group_with_mastered_hash_exceptions"
+      ]
+    },
+    {
+      "file": "0026-apploader-size-safety.patch",
+      "stage": "source",
+      "reason": "Compute apploader sizes in u64, bound them by the partition extent, and check address-space conversion before allocation.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib wia_extract_rejects_overflowing_apploader_size"
+      ]
+    },
+    {
       "file": "0013-rust-codec-backends.patch",
       "stage": "integration",
       "reason": "Select Rust AES/digest backends and flate2 zlib compression/decompression for the workspace WASM build; preserve bounded-output raw-block fallback and validate zlib levels.",

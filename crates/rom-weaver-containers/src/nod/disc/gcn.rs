@@ -179,9 +179,29 @@ pub(crate) fn read_apploader(reader: &mut dyn PartitionReader) -> Result<Arc<[u8
         .context("Seeking to apploader offset")?;
     let apploader_header: ApploaderHeader =
         read_from(reader).context("Reading apploader header")?;
-    let apploader_size = size_of::<ApploaderHeader>()
-        + apploader_header.size.get() as usize
-        + apploader_header.trailer_size.get() as usize;
+    let apploader_size = size_of::<ApploaderHeader>() as u64
+        + u64::from(apploader_header.size.get())
+        + u64::from(apploader_header.trailer_size.get());
+    let payload_offset = reader
+        .stream_position()
+        .context("Reading apploader position")?;
+    let partition_size = reader
+        .seek(SeekFrom::End(0))
+        .context("Reading partition size")?;
+    let apploader_offset = (BOOT_SIZE + BI2_SIZE) as u64;
+    if apploader_size > partition_size.saturating_sub(apploader_offset) {
+        tracing::debug!(
+            apploader_size,
+            partition_size,
+            "apploader exceeds partition bounds"
+        );
+        return Err("Apploader size exceeds partition".into());
+    }
+    let apploader_size =
+        usize::try_from(apploader_size).map_err(|_| "Apploader size exceeds address space")?;
+    reader
+        .seek(SeekFrom::Start(payload_offset))
+        .context("Seeking to apploader payload")?;
     let mut raw_apploader = <[u8]>::new_box_zeroed_with_elems(apploader_size)?;
     raw_apploader[..size_of::<ApploaderHeader>()].copy_from_slice(apploader_header.as_bytes());
     reader

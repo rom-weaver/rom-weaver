@@ -1266,7 +1266,7 @@ index ec4816628..b4d34b4e7 100644
 +    }
  }
  
- fn verify_hashes(buf: &[u8; SECTOR_GROUP_SIZE], group_idx: u32, h3_table: &[u8]) -> io::Result<()> {
+ fn verify_hashes(
 @@ -487,7 +525,9 @@ fn verify_hashes(buf: &[u8; SECTOR_GROUP_SIZE], group_idx: u32, h3_table: &[u8])
  }
  

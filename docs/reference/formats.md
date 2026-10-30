@@ -128,7 +128,9 @@ A/V CHD creation needs the native CLI.
 
 WIA stores SHA-1 hashes for its file header, disc header, and partition table. Those hashes are verified when opening the image. Raw-data and group tables contain offsets and sizes, without separate hashes for their contents or payloads.
 
-Extraction verifies Wii partition H0, H1, H2, and H3 hashes where present. Hash mismatches fail extraction, including hash errors already present in the source disc.
+Extraction verifies Wii partition H0, H1, H2, and H3 hashes where present. Hash mismatches fail extraction, including hash errors already present in the source disc. For example, an H3 mismatch in partition 0, group 0 reports `validation failed: WIA partition 0 integrity check failed: Invalid H3 hash! (group 0)`. There is no extraction override for source hash errors.
+
+Commands with `--no-extract`, such as `checksum --no-extract`, operate on the raw WIA file. This bypasses ISO extraction entirely; it does not recover an ISO with invalid partition hashes.
 
 WIA rebuilds sector hashes from partition data and applies stored hash exceptions; the H3 table provides the comparison against the original partition hashes. Verification reads the checked data before writing the extracted ISO.
 

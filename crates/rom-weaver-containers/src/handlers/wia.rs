@@ -4,7 +4,10 @@ use super::*;
 nod_extract_only_handler!(WIA_NOD_CORE, WiaContainerHandler, &WIA, NodFormat::Wia);
 
 pub(crate) fn validate_integrity(disc: &NodDiscReader, context: &OperationContext) -> Result<()> {
-    use crate::nod::read::PartitionOptions;
+    use crate::nod::{
+        disc::{SECTOR_SIZE, wii::SECTOR_DATA_SIZE},
+        read::PartitionOptions,
+    };
     use digest::Digest;
     use tracing::debug;
 
@@ -17,6 +20,15 @@ pub(crate) fn validate_integrity(disc: &NodDiscReader, context: &OperationContex
         debug!(
             partition = partition.index,
             "verifying WIA Wii partition hashes"
+        );
+        let label = format!("verifying WIA partition {} hashes", partition.index);
+        emit_container_indeterminate_progress(
+            context,
+            "extract",
+            "wia",
+            "verify-partition",
+            &label,
+            None,
         );
         let mut reader = disc
             .open_partition(
@@ -31,6 +43,9 @@ pub(crate) fn validate_integrity(disc: &NodDiscReader, context: &OperationContex
                     partition.index
                 ))
             })?;
+        let mut completed = 0u64;
+        let progress_bucket = AtomicU8::new(0);
+        let data_size = partition.data_size() / SECTOR_SIZE as u64 * SECTOR_DATA_SIZE as u64;
         loop {
             context.cancel().check()?;
             let len = reader
@@ -46,6 +61,20 @@ pub(crate) fn validate_integrity(disc: &NodDiscReader, context: &OperationContex
                 break;
             }
             reader.consume(len);
+            completed += len as u64;
+            maybe_emit_container_byte_progress(
+                context,
+                completed,
+                data_size,
+                ContainerByteProgress {
+                    command: "extract",
+                    format: "wia",
+                    stage: "verify-partition",
+                    label: &label,
+                    thread_execution: None,
+                    emitted_progress_bucket: &progress_bucket,
+                },
+            );
         }
     }
 
@@ -59,8 +88,18 @@ pub(crate) fn validate_integrity(disc: &NodDiscReader, context: &OperationContex
     }
 
     debug!("verifying WIA NKit image checksums");
+    emit_container_indeterminate_progress(
+        context,
+        "extract",
+        "wia",
+        "verify-image",
+        "verifying WIA NKit image checksums",
+        None,
+    );
     let mut reader = disc.clone();
     let mut buffer = vec![0; copy_progress_buffer_size(reader.disc_size())];
+    let mut completed = 0u64;
+    let progress_bucket = AtomicU8::new(0);
     loop {
         context.cancel().check()?;
         let len = reader.read(&mut buffer)?;
@@ -80,6 +119,20 @@ pub(crate) fn validate_integrity(disc: &NodDiscReader, context: &OperationContex
         if let Some(hash) = &mut xxh64 {
             hash.update(data);
         }
+        completed += len as u64;
+        maybe_emit_container_byte_progress(
+            context,
+            completed,
+            reader.disc_size(),
+            ContainerByteProgress {
+                command: "extract",
+                format: "wia",
+                stage: "verify-image",
+                label: "verifying WIA NKit image checksums",
+                thread_execution: None,
+                emitted_progress_bucket: &progress_bucket,
+            },
+        );
     }
     let mismatch = if crc32.map(|hash| hash.finalize()) != meta.crc32 {
         Some("CRC32")

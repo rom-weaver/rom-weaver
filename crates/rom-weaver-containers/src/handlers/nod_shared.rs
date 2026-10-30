@@ -541,6 +541,7 @@ impl NodHandlerCore {
     ) -> Result<OperationReport> {
         let mut plan = self.prepare_extract(request, context)?;
         if self.nod_format == NodFormat::Wia {
+            rom_weaver_core::ensure_output_available(&plan.output_path, request.overwrite)?;
             crate::wia::validate_integrity(&plan.disc, context)?;
         }
         let output = create_extract_output_file(&plan.output_path, request.overwrite)?;
