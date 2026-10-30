@@ -1016,6 +1016,50 @@ round_trip_test!(
     }
 );
 #[test]
+fn patch_create_rejects_xdelta_secondary_for_formats_that_cannot_use_it() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    // Each case is `(--format, output name)`; `--format` is omitted when it is `None`.
+    for (format, name) in [
+        (Some("vcdiff"), "p.vcdiff"),
+        (None, "p.vcdiff"),
+        (Some("bps"), "p.bps"),
+    ] {
+        let destination = temp.child(name);
+        let mut args = vec![
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            destination.path().to_str().expect("path"),
+            "--xdelta-secondary",
+            "lzma",
+            "--jsonl",
+        ];
+        if let Some(format) = format {
+            args.extend(["--format", format]);
+        }
+        let json = run_single_json_event(&args, 1);
+        assert_eq!(json["status"], "failed", "{format:?} {name}: {json}");
+        assert_eq!(json["stage"], "validate", "{format:?} {name}");
+        assert!(
+            json["label"]
+                .as_str()
+                .expect("label")
+                .contains("--xdelta-secondary lzma requires --format xdelta"),
+            "{format:?} {name}: {json}"
+        );
+        assert!(!destination.path().exists(), "{format:?} {name}");
+    }
+}
+#[test]
 fn patch_create_vcdiff_flag_matches_the_vcdiff_extension() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");

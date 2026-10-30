@@ -687,6 +687,18 @@ impl CliApp {
                 "SOLID metadata options require --format solid or a .solid output".to_string(),
             ));
         }
+        if xdelta_secondary_mode != XdeltaSecondaryMode::None
+            && !requested_format.eq_ignore_ascii_case("xdelta")
+        {
+            return Err(fail(
+                Some(requested_format),
+                "validate",
+                format!(
+                    "--xdelta-secondary {} requires --format xdelta or a .xdelta output",
+                    args.xdelta_secondary
+                ),
+            ));
+        }
         if args.ppf_undo && !requested_format.eq_ignore_ascii_case("ppf") {
             return Err(fail(
                 Some(requested_format),
