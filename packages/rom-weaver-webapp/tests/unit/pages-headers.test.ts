@@ -54,6 +54,11 @@ describe("pages _headers matching", () => {
     expect(matchPagesHeaders(rules, "/index.html")["Cache-Control"]).toBeUndefined();
   });
 
+  it("captures only the first splat when a pattern has several", () => {
+    const [rule] = parsePagesHeaders("/a/*/b/*\n  X-Path: :splat\n");
+    expect(matchPagesHeaders([rule], "/a/one/b/two")).toEqual({ "X-Path": "one" });
+  });
+
   it("ignores comments, blank lines, and indented lines with no pattern", () => {
     expect(parsePagesHeaders("  Orphan: 1\n\n# comment\n/*\n  X: 2\n")).toEqual([
       { headers: [["X", "2"]], match: expect.any(RegExp) },

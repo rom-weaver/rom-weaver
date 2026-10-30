@@ -154,9 +154,9 @@ test("caps how many pre-mount clicks are replayed", () => {
 // the buffer shape and the replay cannot drift apart.
 const installRealCaptureScript = () => {
   window.ROM_WEAVER_SHELL_CLICKS?.stop();
-  const script = indexHtml.match(/<script>\s*\/\/ Buffer clicks[\s\S]*?<\/script>/)[0];
+  const script = indexHtml.match(/<script>\s*\/\/ Buffer clicks[\s\S]*?<\/script>/i)[0];
   const element = document.createElement("script");
-  element.textContent = script.replace(/^<script>|<\/script>$/g, "");
+  element.textContent = script.replace(/^<script>|<\/script>$/gi, "");
   document.head.append(element);
   element.remove();
 };

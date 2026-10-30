@@ -142,9 +142,9 @@ beforeEach(() => {
   appRoot = document.createElement("div");
   appRoot.innerHTML = MARKUP;
   document.body.append(appRoot);
-  const source = indexHtml.match(/<script>\s*\/\/ Buffer clicks[\s\S]*?<\/script>/)[0];
+  const source = indexHtml.match(/<script>\s*\/\/ Buffer clicks[\s\S]*?<\/script>/i)[0];
   const script = document.createElement("script");
-  script.textContent = source.replace(/^<script>|<\/script>$/g, "");
+  script.textContent = source.replace(/^<script>|<\/script>$/gi, "");
   document.head.append(script);
   script.remove();
 });
