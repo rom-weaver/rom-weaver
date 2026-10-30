@@ -53,6 +53,11 @@ destination = "/apply-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
+source = "/apply.md"
+destination = "/apply-rom-patches.md"
+kind = 301
+
+[[advanced.redirects]]
 source = "/apply-patch"
 destination = "/apply-rom-patches"
 kind = 301
@@ -70,6 +75,11 @@ kind = 301
 [[advanced.redirects]]
 source = "/apply-patch/index.html"
 destination = "/apply-rom-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/apply-patch.md"
+destination = "/apply-rom-patches.md"
 kind = 301
 
 [[advanced.redirects]]
@@ -93,6 +103,11 @@ destination = "/weave-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
+source = "/bundle.md"
+destination = "/weave-rom-patches.md"
+kind = 301
+
+[[advanced.redirects]]
 source = "/bundle-patches"
 destination = "/weave-rom-patches"
 kind = 301
@@ -113,6 +128,11 @@ destination = "/weave-rom-patches"
 kind = 301
 
 [[advanced.redirects]]
+source = "/bundle-patches.md"
+destination = "/weave-rom-patches.md"
+kind = 301
+
+[[advanced.redirects]]
 source = "/create"
 destination = "/create-rom-patch"
 kind = 301
@@ -130,6 +150,11 @@ kind = 301
 [[advanced.redirects]]
 source = "/create/index.html"
 destination = "/create-rom-patch"
+kind = 301
+
+[[advanced.redirects]]
+source = "/create.md"
+destination = "/create-rom-patch.md"
 kind = 301
 
 [[advanced.redirects]]
@@ -178,6 +203,11 @@ destination = "/identify-rom"
 kind = 301
 
 [[advanced.redirects]]
+source = "/identify.md"
+destination = "/identify-rom.md"
+kind = 301
+
+[[advanced.redirects]]
 source = "/test"
 destination = "/play-rom"
 kind = 301
@@ -195,6 +225,11 @@ kind = 301
 [[advanced.redirects]]
 source = "/test/index.html"
 destination = "/play-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/test.md"
+destination = "/play-rom.md"
 kind = 301
 
 [[advanced.redirects]]
@@ -235,6 +270,11 @@ kind = 301
 [[advanced.redirects]]
 source = "/weave/index.html"
 destination = "/weave-rom-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/weave.md"
+destination = "/weave-rom-patches.md"
 kind = 301
 
 [[advanced.redirects]]

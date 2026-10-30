@@ -213,16 +213,8 @@ async function redirects(origin, prefix) {
       "/",
       ".html",
       "/index.html",
-      ...([
-        "apply-patches",
-        "weave-patches",
-        "checksum",
-        "compress",
-        "extract",
-        "test-rom",
-      ].includes(old)
-        ? [".md"]
-        : []),
+      // Save Editor and Trim publish no Markdown, so they have no `.md` redirect.
+      ...(["save-editor", "trim"].includes(old) ? [] : [".md"]),
     ]) {
       for (const query of queries) {
         const response = await fetch(`${origin}${prefix}/${old}${suffix}${query}`, {

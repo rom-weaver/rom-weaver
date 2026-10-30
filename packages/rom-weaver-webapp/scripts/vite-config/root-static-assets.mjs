@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
+import { WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "../docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "../first-sample-assets.mjs";
 import { generatedChannelAssetPath, generatedSocialPreviewPath } from "../generated-icon-assets.mjs";
@@ -116,17 +117,6 @@ export const LEGACY_WORKFLOW_ROUTES = {
   "test-rom": "play-rom",
 };
 
-// Legacy names whose `.md` URL was published and has a `.md` redirect in `_redirects` and `sws.toml`; the rest never had one.
-export const LEGACY_MARKDOWN_ROUTES = new Set([
-  "create-patch",
-  "apply-patches",
-  "weave-patches",
-  "checksum",
-  "compress",
-  "extract",
-  "test-rom",
-]);
-
 const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel, siteOrigin) => {
   const rootStaticAssetSources = rootStaticAssetSourcesForChannel(channel);
   middlewares.use((req, res, next) => {
@@ -134,7 +124,7 @@ const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel, site
     const markdown = requestPath.endsWith(".md");
     const legacySlug = requestPath.replace(/^\//, "").replace(/(?:\/index\.html|\/|\.html|\.md)$/, "");
     const destination = Object.hasOwn(LEGACY_WORKFLOW_ROUTES, legacySlug) && LEGACY_WORKFLOW_ROUTES[legacySlug];
-    if (destination && (!markdown || LEGACY_MARKDOWN_ROUTES.has(legacySlug))) {
+    if (destination && (!markdown || Object.values(WORKFLOW_SEO_ROUTES).some(({ slug }) => slug === destination))) {
       res.writeHead(301, { Location: `/${destination}${markdown ? ".md" : ""}${req.url.slice(requestPath.length)}` });
       res.end();
       return;
