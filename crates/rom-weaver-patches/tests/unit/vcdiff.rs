@@ -1163,6 +1163,99 @@ fn create_vcdiff_patch_from_empty_source_round_trips() {
     assert_eq!(fs::read(output_path).expect("read output"), expected);
 }
 
+/// xdelta3 rejects a delta file with no windows ("nothing to output"), and
+/// its own encoder emits one empty window for an empty target, so the creator
+/// must too.
+fn create_empty_target_patch(
+    descriptor: &'static FormatDescriptor,
+    format: &str,
+    extension: &str,
+    original: &[u8],
+    threads: usize,
+) -> (Vec<u8>, PathBuf, PathBuf, TempGuard) {
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let modified_path = temp.join("modified.bin");
+    let patch_path = temp.join(format!("empty.{extension}"));
+    fs::write(&input_path, original).expect("write input");
+    fs::write(&modified_path, b"").expect("write empty modified");
+
+    let report = VcdiffPatchHandler::new(descriptor)
+        .create(
+            &PatchCreateRequest {
+                original: input_path.clone(),
+                modified: modified_path,
+                output: patch_path.clone(),
+                format: format.into(),
+            },
+            &test_context_with_threads(threads),
+        )
+        .expect("create empty-target patch");
+    assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+    let patch = fs::read(&patch_path).expect("read patch");
+    (patch, input_path, patch_path, temp)
+}
+
+#[test]
+fn create_patch_for_an_empty_target_emits_one_empty_window() {
+    for (descriptor, format, extension, checksummed) in [
+        (&crate::xdelta::VCDIFF, "VCDIFF", "vcdiff", false),
+        (&crate::xdelta::XDELTA, "xdelta", "xdelta", true),
+    ] {
+        for original in [&b""[..], &[0x44; 5000][..]] {
+            for threads in [1, 4] {
+                let label = format!("{format} original={} threads={threads}", original.len());
+                let (patch, input_path, patch_path, temp) =
+                    create_empty_target_patch(descriptor, format, extension, original, threads);
+
+                let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
+                assert_eq!(parsed.windows.len(), 1, "{label}: one window expected");
+                let window = &parsed.windows[0];
+                assert_eq!(window.target_window_size, 0, "{label}");
+                assert_eq!(window.source_kind, None, "{label}");
+                assert_eq!(
+                    window.checksum,
+                    checksummed.then_some(1),
+                    "{label}: adler32 of nothing is 1 and only xdelta writes it"
+                );
+
+                let output_path = temp.join("output.bin");
+                let report = VcdiffPatchHandler::new(descriptor)
+                    .apply(
+                        &PatchApplyRequest {
+                            input: input_path,
+                            patches: vec![patch_path],
+                            output: output_path.clone(),
+                        },
+                        &test_context(),
+                    )
+                    .expect("apply created patch");
+                assert!(
+                    !report.label.contains("no delta windows"),
+                    "{label}: a windowed patch must not warn: {}",
+                    report.label
+                );
+                assert_eq!(fs::read(output_path).expect("read output"), b"", "{label}");
+            }
+        }
+    }
+}
+
+#[test]
+fn create_vcdiff_patch_for_an_empty_target_matches_the_reference_window_bytes() {
+    // Header (no app header, no secondary), then xdelta3's empty window with
+    // the checksum flag cleared: win_indicator, delta length, target length,
+    // delta indicator and three empty section lengths.
+    let (patch, ..) =
+        create_empty_target_patch(&crate::xdelta::VCDIFF, "VCDIFF", "vcdiff", b"abc", 1);
+    assert_eq!(
+        patch,
+        [
+            0xD6, 0xC3, 0xC4, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00
+        ]
+    );
+}
+
 #[test]
 fn create_xdelta_large_streaming_patch_round_trips_with_stateful_lzma() {
     let (input, expected) = generated_large_streaming_source_and_target();

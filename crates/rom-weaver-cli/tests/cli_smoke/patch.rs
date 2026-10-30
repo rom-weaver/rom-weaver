@@ -13826,7 +13826,7 @@ fn zero_window_vcdiff_applies_and_validates_with_an_empty_rom_warning() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.bin");
     fs::write(rom.path(), [0x44_u8; 64]).expect("rom fixture");
-    // A VCDIFF header with no windows, as `patch create` writes for an empty target.
+    // A VCDIFF header with no windows, as older `patch create` builds wrote for an empty target.
     let patch = temp.child("empty.vcdiff");
     fs::write(patch.path(), [0xd6, 0xc3, 0xc4, 0x00, 0x00]).expect("vcdiff fixture");
     let output = temp.child("out.bin");
@@ -13863,6 +13863,65 @@ fn zero_window_vcdiff_applies_and_validates_with_an_empty_rom_warning() {
         );
     }
     assert_eq!(fs::metadata(output.path()).expect("output").len(), 0);
+}
+
+#[test]
+fn created_empty_target_vcdiff_and_xdelta_patches_carry_a_window_and_apply_without_warning() {
+    // xdelta3 rejects a window-less delta ("nothing to output"), so `patch create` writes the
+    // single empty window xdelta3 itself writes for an empty target.
+    for (format, extension) in [("vcdiff", "vcdiff"), ("xdelta", "xdelta")] {
+        let temp = setup_temp_dir();
+        let rom = temp.child("base.bin");
+        fs::write(rom.path(), [0x44_u8; 64]).expect("rom fixture");
+        let modified = temp.child("empty.bin");
+        fs::write(modified.path(), b"").expect("empty fixture");
+        let patch = temp.child(format!("empty.{extension}"));
+        let output = temp.child("out.bin");
+        let rom_arg = rom.path().to_str().expect("path");
+        let patch_arg = patch.path().to_str().expect("path");
+
+        command_stdout(
+            &[
+                "patch",
+                "create",
+                "--original",
+                rom_arg,
+                "--modified",
+                modified.path().to_str().expect("path"),
+                "--format",
+                format,
+                "--output",
+                patch_arg,
+            ],
+            0,
+        );
+        let bytes = fs::read(patch.path()).expect("patch bytes");
+        assert!(
+            bytes.len() > 5,
+            "{format}: the created patch must hold a window after its header: {bytes:02x?}"
+        );
+
+        let result = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args([
+                "patch",
+                "apply",
+                "--input",
+                rom_arg,
+                "--patch",
+                patch_arg,
+                "--output",
+                output.path().to_str().expect("path"),
+                "--no-compress",
+            ])
+            .assert()
+            .code(0)
+            .get_output()
+            .clone();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(!stderr.contains("no delta windows"), "{format}: {stderr}");
+        assert_eq!(fs::metadata(output.path()).expect("output").len(), 0);
+    }
 }
 
 /// Apply a structurally neutral IPS patch (one record deep inside the payload) whose file name
