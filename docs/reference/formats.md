@@ -132,7 +132,7 @@ Extraction verifies Wii partition H0, H1, H2, and H3 hashes where present. Hash 
 
 Commands with `--no-extract`, such as `checksum --no-extract`, operate on the raw WIA file. This bypasses ISO extraction entirely; it does not recover an ISO with invalid partition hashes.
 
-WIA rebuilds sector hashes from partition data and applies stored hash exceptions; the H3 table provides the comparison against the original partition hashes. Verification reads the checked data before writing the extracted ISO.
+WIA rebuilds sector hashes from partition data and applies stored hash exceptions; the H3 table provides the comparison against the original partition hashes. Verification reads the checked data before writing the extracted ISO. Hash verification reads the H3 table directly, without parsing the partition's apploader, DOL, or filesystem metadata.
 
 Optional NKit CRC32, MD5, SHA-1, and XXH64 image checksums are also verified when present.
 

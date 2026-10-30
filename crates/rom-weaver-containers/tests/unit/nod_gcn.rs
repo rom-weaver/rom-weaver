@@ -359,6 +359,46 @@ fn read_fst_reports_an_out_of_range_offset() {
 }
 
 #[test]
+fn partition_meta_rejects_dol_sections_beyond_disc() {
+    for (offset, size) in [
+        (0x100, None),
+        (0x100, Some(u32::MAX)),
+        (u32::MAX, Some(u32::MAX)),
+    ] {
+        let mut iso = gamecube_iso();
+        let boot =
+            BootHeader::read_from_bytes(&iso[BB2_OFFSET..BB2_OFFSET + size_of::<BootHeader>()])
+                .unwrap();
+        let dol_at = boot.dol_offset(false) as usize;
+        let size = size.unwrap_or((iso.len() - dol_at - 0x100 + 1) as u32);
+        let dol =
+            DolHeader::mut_from_bytes(&mut iso[dol_at..dol_at + size_of::<DolHeader>()]).unwrap();
+        dol.text_offs[0] = U32::new(offset);
+        dol.text_sizes[0] = U32::new(size);
+        let disc = open_disc(&iso, 0);
+        let error = open_partition(&disc).meta().expect_err("DOL exceeds disc");
+        assert!(
+            error.to_string().contains("DOL size exceeds partition"),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn partition_meta_accepts_dol_ending_at_disc_boundary() {
+    let mut iso = gamecube_iso();
+    let boot = BootHeader::read_from_bytes(&iso[BB2_OFFSET..BB2_OFFSET + size_of::<BootHeader>()])
+        .unwrap();
+    let dol_at = boot.dol_offset(false) as usize;
+    let dol_size = iso.len() - dol_at;
+    let dol = DolHeader::mut_from_bytes(&mut iso[dol_at..dol_at + size_of::<DolHeader>()]).unwrap();
+    dol.text_sizes[0] = U32::new((dol_size - size_of::<DolHeader>()) as u32);
+    let disc = open_disc(&iso, 0);
+    let meta = open_partition(&disc).meta().expect("DOL fits disc exactly");
+    assert_eq!(meta.raw_dol.as_ref(), &iso[dol_at..]);
+}
+
+#[test]
 fn read_part_meta_matches_the_partition_reader() {
     let iso = gamecube_iso();
     let disc = open_disc(&iso, 0);

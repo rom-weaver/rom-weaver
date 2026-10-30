@@ -622,16 +622,9 @@ fn wia_extract_preserves_partial_group_with_mastered_hash_exceptions() {
     assert!(!temp.join("out/disc.iso").exists());
 }
 
-#[test]
-fn wia_extract_rejects_overflowing_apploader_size() {
+fn wii_image_with_boot_change(change: impl FnOnce(&mut [u8])) -> Vec<u8> {
     let (mut group, _) = build_sector_group_plaintext();
-    let header_at = HASHES_SIZE + APPLOADER_OFFSET;
-    let header = ApploaderHeader::mut_from_bytes(
-        &mut group[header_at..header_at + size_of::<ApploaderHeader>()],
-    )
-    .unwrap();
-    header.size = U32::new(0xFFFF_FFFF);
-    header.trailer_size = U32::new(0xFFFF_FFE1);
+    change(&mut group[HASHES_SIZE..SECTOR_SIZE]);
     let hashes = hash_sector_group(group.as_slice().try_into().unwrap(), true);
     for sector in 0..DATA_SECTORS {
         hashes.apply(sector_mut(&mut group, sector), sector);
@@ -642,16 +635,62 @@ fn wia_extract_rejects_overflowing_apploader_size() {
     iso[data_at..data_at + DATA_LEN].copy_from_slice(&group[..DATA_LEN]);
     let h3_at = (PART_OFFSET + H3_OFF) as usize;
     iso[h3_at..h3_at + 20].copy_from_slice(&hashes.h3_hash);
-    let image = wia_image(&iso, crate::nod::common::Compression::None);
-    let (temp, result) = extract_wia_image(&image);
-    let error = result.expect_err("oversized apploader must fail before allocation");
+    iso
+}
+
+fn overflow_apploader(boot: &mut [u8]) {
+    let header = ApploaderHeader::mut_from_bytes(
+        &mut boot[APPLOADER_OFFSET..APPLOADER_OFFSET + size_of::<ApploaderHeader>()],
+    )
+    .unwrap();
+    header.size = U32::new(0xFFFF_FFFF);
+    header.trailer_size = U32::new(0xFFFF_FFE1);
+}
+
+#[test]
+fn partition_meta_rejects_overflowing_apploader_size() {
+    let iso = wii_image_with_boot_change(overflow_apploader);
+    let disc = open_wii_disc(&iso);
+    let error = open_wii_partition(&disc, false)
+        .meta()
+        .expect_err("oversized apploader must fail before allocation");
     assert!(
         error
             .to_string()
             .contains("Apploader size exceeds partition"),
         "{error}"
     );
-    assert!(!temp.join("out/disc.iso").exists());
+}
+
+#[test]
+fn wia_extract_preserves_unparseable_apploader() {
+    assert_wia_extract_preserves_unparseable_boot_area(overflow_apploader);
+}
+
+#[test]
+fn wia_extract_preserves_unparseable_dol() {
+    assert_wia_extract_preserves_unparseable_boot_area(|boot| {
+        let header = DolHeader::mut_from_bytes(
+            &mut boot[DOL_OFFSET as usize..DOL_OFFSET as usize + size_of::<DolHeader>()],
+        )
+        .unwrap();
+        header.text_sizes[0] = U32::new(DATA_LEN as u32);
+    });
+}
+
+fn assert_wia_extract_preserves_unparseable_boot_area(change: impl FnOnce(&mut [u8])) {
+    let iso = wii_image_with_boot_change(change);
+    let disc = open_wii_disc(&iso);
+    assert!(open_wii_partition(&disc, false).meta().is_err());
+    for compression in [
+        crate::nod::common::Compression::None,
+        crate::nod::common::Compression::Lzma2(6),
+    ] {
+        let image = wia_image(&iso, compression);
+        let (temp, result) = extract_wia_image(&image);
+        result.expect("hash verification must not parse boot metadata");
+        assert_eq!(std::fs::read(temp.join("out/disc.iso")).unwrap(), iso);
+    }
 }
 
 #[test]
@@ -1072,6 +1111,20 @@ fn hash_validation_accepts_a_correctly_hashed_partition() {
     let image = build_wii_image(true, Damage::None);
     let head = read_with_hash_validation(&image).expect("validated read");
     assert_eq!(&head[..6], b"RWIIT0");
+}
+
+#[test]
+fn hash_validation_checks_h3_table_bounds() {
+    let (group, h3) = build_sector_group_plaintext();
+    let mut table = vec![0; H3_TABLE_SIZE];
+    let last_group = H3_TABLE_SIZE / 20 - 1;
+    table[last_group * 20..(last_group + 1) * 20].copy_from_slice(&h3);
+    let group = group.as_slice().try_into().unwrap();
+    verify_hashes(group, last_group as u32, &table, DATA_SECTORS).expect("last H3 entry");
+    let error = verify_hashes(group, last_group as u32 + 1, &table, DATA_SECTORS)
+        .expect_err("group beyond H3 table");
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert_eq!(error.to_string(), "H3 table missing hash for group 4915");
 }
 
 #[test]

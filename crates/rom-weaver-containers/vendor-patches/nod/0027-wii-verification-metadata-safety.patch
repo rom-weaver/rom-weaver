@@ -1,0 +1,129 @@
+diff --git a/disc/gcn.rs b/disc/gcn.rs
+--- a/disc/gcn.rs
++++ b/disc/gcn.rs
+@@ -130,11 +130,23 @@
+     // header this function copies into it.
+     let dol_size = (dol_header.text_offs.iter().zip(&dol_header.text_sizes))
+         .chain(dol_header.data_offs.iter().zip(&dol_header.data_sizes))
+-        .map(|(offs, size)| offs.get().saturating_add(size.get()))
++        .map(|(offs, size)| u64::from(offs.get()) + u64::from(size.get()))
+         .max()
+         .unwrap_or(0)
+-        .max(size_of::<DolHeader>() as u32);
+-    let mut raw_dol = <[u8]>::new_box_zeroed_with_elems(dol_size as usize)?;
++        .max(size_of::<DolHeader>() as u64);
++    let payload_offset = reader.stream_position().context("Reading DOL position")?;
++    let partition_size = reader
++        .seek(SeekFrom::End(0))
++        .context("Reading partition size")?;
++    if dol_size > partition_size.saturating_sub(boot_header.dol_offset(is_wii)) {
++        tracing::debug!(dol_size, partition_size, "DOL exceeds partition bounds");
++        return Err("DOL size exceeds partition".into());
++    }
++    let dol_size = usize::try_from(dol_size).map_err(|_| "DOL size exceeds address space")?;
++    reader
++        .seek(SeekFrom::Start(payload_offset))
++        .context("Seeking to DOL payload")?;
++    let mut raw_dol = <[u8]>::new_box_zeroed_with_elems(dol_size)?;
+     raw_dol[..size_of::<DolHeader>()].copy_from_slice(dol_header.as_bytes());
+     reader.read_exact(&mut raw_dol[size_of::<DolHeader>()..]).context("Reading DOL")?;
+     Ok(Arc::from(raw_dol))
+diff --git a/disc/wii.rs b/disc/wii.rs
+--- a/disc/wii.rs
++++ b/disc/wii.rs
+@@ -305,6 +305,7 @@
+     options: PartitionOptions,
+     sector_group: Option<SectorGroup>,
+     meta: Option<PartitionMeta>,
++    h3_table: Option<Arc<[u8; H3_TABLE_SIZE]>>,
+ }
+ 
+ impl Clone for PartitionReaderWii {
+@@ -316,6 +317,7 @@
+             options: self.options.clone(),
+             sector_group: None,
+             meta: self.meta.clone(),
++            h3_table: self.h3_table.clone(),
+         }
+     }
+ }
+@@ -333,19 +335,31 @@
+             options: options.clone(),
+             sector_group: None,
+             meta: None,
++            h3_table: None,
+         };
+         if options.validate_hashes {
+-            // Ensure we cache the H3 table
+-            reader.meta()?;
+-            // Metadata reads precede H3 availability, so the cached group MUST be reverified.
+-            reader.sector_group = None;
+-            reader.pos = 0;
++            reader.read_h3_table()?;
+         }
+         Ok(Box::new(reader))
+     }
+ 
+     #[inline]
+     pub fn len(&self) -> u64 { self.partition.data_size() }
++
++    fn read_h3_table(&mut self) -> Result<Option<Arc<[u8; H3_TABLE_SIZE]>>> {
++        if self.partition.has_hashes && self.h3_table.is_none() {
++            let mut reader = PartitionReaderGC::new(self.preloader.clone(), u64::MAX)?;
++            let offset = self.partition.start_sector as u64 * SECTOR_SIZE as u64
++                + self.partition.header.h3_table_off();
++            tracing::debug!(offset, "Reading Wii partition H3 table");
++            reader
++                .seek(SeekFrom::Start(offset))
++                .context("Seeking to H3 table offset")?;
++            self.h3_table =
++                Some(read_arc::<[u8; H3_TABLE_SIZE], _>(&mut reader).context("Reading H3 table")?);
++        }
++        Ok(self.h3_table.clone())
++    }
+ }
+ 
+ impl BufRead for PartitionReaderWii {
+@@ -383,7 +397,7 @@
+         let (sector_group, updated) =
+             fetch_sector_group(request, max_groups, &mut self.sector_group, &self.preloader)?;
+         if updated && self.options.validate_hashes {
+-            if let Some(h3_table) = self.meta.as_ref().and_then(|m| m.raw_h3_table.as_deref()) {
++            if let Some(h3_table) = self.h3_table.as_deref() {
+                 verify_hashes(
+                     array_ref![sector_group.data, 0, SECTOR_GROUP_SIZE],
+                     group_idx,
+@@ -485,9 +499,14 @@
+ 
+         // H3 hash
+         {
+-            let expected = array_ref![h3_table, group * 20, 20];
++            let expected = h3_table.get(group * 20..group * 20 + 20).ok_or_else(|| {
++                io::Error::new(
++                    io::ErrorKind::InvalidData,
++                    format!("H3 table missing hash for group {group}"),
++                )
++            })?;
+             let output = sha1_hash(array_ref![buf, 0x340, 0xA0]);
+-            if output != *expected {
++            if output.as_slice() != expected {
+                 return Err(io::Error::new(
+                     io::ErrorKind::InvalidData,
+                     format!("Invalid H3 hash! (group {group})"),
+@@ -538,15 +557,7 @@
+         } else {
+             None
+         };
+-        meta.raw_h3_table = if self.partition.has_hashes {
+-            reader
+-                .seek(SeekFrom::Start(offset + self.partition.header.h3_table_off()))
+-                .context("Seeking to H3 table offset")?;
+-
+-            Some(read_arc::<[u8; H3_TABLE_SIZE], _>(&mut reader).context("Reading H3 table")?)
+-        } else {
+-            None
+-        };
++        meta.raw_h3_table = self.read_h3_table()?;
+ 
+         self.meta = Some(meta.clone());
+         Ok(meta)

@@ -196,7 +196,18 @@
         "status": "local"
       },
       "tests": [
-        "cargo test -p rom-weaver-containers --lib wia_extract_rejects_overflowing_apploader_size"
+        "cargo test -p rom-weaver-containers --lib partition_meta_rejects_overflowing_apploader_size"
+      ]
+    },
+    {
+      "file": "0027-wii-verification-metadata-safety.patch",
+      "stage": "source",
+      "reason": "Read only H3 metadata for Wii hash verification, reject missing H3 entries, and bound DOL section extents before allocation.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::disc::"
       ]
     },
     {

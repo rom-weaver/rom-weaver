@@ -142,11 +142,23 @@ pub(crate) fn read_dol(
     // header this function copies into it.
     let dol_size = (dol_header.text_offs.iter().zip(&dol_header.text_sizes))
         .chain(dol_header.data_offs.iter().zip(&dol_header.data_sizes))
-        .map(|(offs, size)| offs.get().saturating_add(size.get()))
+        .map(|(offs, size)| u64::from(offs.get()) + u64::from(size.get()))
         .max()
         .unwrap_or(0)
-        .max(size_of::<DolHeader>() as u32);
-    let mut raw_dol = <[u8]>::new_box_zeroed_with_elems(dol_size as usize)?;
+        .max(size_of::<DolHeader>() as u64);
+    let payload_offset = reader.stream_position().context("Reading DOL position")?;
+    let partition_size = reader
+        .seek(SeekFrom::End(0))
+        .context("Reading partition size")?;
+    if dol_size > partition_size.saturating_sub(boot_header.dol_offset(is_wii)) {
+        tracing::debug!(dol_size, partition_size, "DOL exceeds partition bounds");
+        return Err("DOL size exceeds partition".into());
+    }
+    let dol_size = usize::try_from(dol_size).map_err(|_| "DOL size exceeds address space")?;
+    reader
+        .seek(SeekFrom::Start(payload_offset))
+        .context("Seeking to DOL payload")?;
+    let mut raw_dol = <[u8]>::new_box_zeroed_with_elems(dol_size)?;
     raw_dol[..size_of::<DolHeader>()].copy_from_slice(dol_header.as_bytes());
     reader
         .read_exact(&mut raw_dol[size_of::<DolHeader>()..])
