@@ -1933,6 +1933,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       props.onError?.(error);
     },
     selectFile,
+    (rejection) => {
+      const message = localizer.messageCount(
+        rejection.kind === "splitWbfs" ? "ui.drop.splitWbfs" : "ui.drop.unsupportedPatch",
+        rejection.names.length,
+        { names: localizer.formatList(rejection.names) },
+      );
+      setDropError((current) => (current ? `${current} ${message}` : message));
+    },
   );
   const handleUnifiedDrop: typeof rawUnifiedDrop = (...args) => {
     setDropError(null);

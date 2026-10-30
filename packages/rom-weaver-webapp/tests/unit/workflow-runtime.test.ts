@@ -320,6 +320,28 @@ describe("browser ingest and weave runtime", () => {
     expect(state.resumeWarmup).toHaveBeenCalled();
   });
 
+  it.each(["rom.gz", "rom.xz", "rom.bz2", "rom.zst", "rom.lz4"])(
+    "ingests extension-less wrapper %s under its own name and reports the payload name",
+    async (fileName) => {
+      state.ingest.mockResolvedValueOnce({
+        assets: [{ checksums: {}, fileName: "rom", path: "/work/output-scope/rom", sizeBytes: 8 }],
+        patches: [],
+      });
+      const result = await browserRuntime.ingest.run({
+        fileName,
+        identify: false,
+        source: new File(["wrapped"], fileName),
+      } as never);
+      expect(state.workerIo.stageSource.mock.calls.at(-1)?.[0]).toMatchObject({ fallbackFileName: fileName });
+      expect(state.ingest).toHaveBeenLastCalledWith(
+        expect.objectContaining({ inputName: fileName }),
+        undefined,
+        undefined,
+      );
+      expect(result.outputs[0]).toMatchObject({ fileName: "rom" });
+    },
+  );
+
   it("continues ingest when probing and identify data fail, and cleans staged inputs", async () => {
     state.probe.mockRejectedValueOnce(new Error("probe failed"));
     state.identifySelection.mockRejectedValueOnce(new Error("packs offline"));

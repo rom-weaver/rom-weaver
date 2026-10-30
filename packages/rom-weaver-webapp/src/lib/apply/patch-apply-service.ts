@@ -113,19 +113,22 @@ const createParsedPatchProxy = async (
   probeRequirements?: PatchProbeRequirements,
 ): Promise<ParsedPatchLike | null> => {
   const extension = getPatchFileExtension(patchFile.fileName);
-  if (!extension) return null;
-  const expectedMagic = getExpectedPatchHeaderMagic(extension);
+  // An extension-less patch (`patch.gz` -> `patch`) has no name to judge. Rust ingest classifies it by
+  // signature, so a descriptor in the probe requirements is what marks it as a patch.
+  const ingestFormat = probeRequirements?.format;
+  if (!(extension || ingestFormat)) return null;
+  const expectedMagic = extension ? getExpectedPatchHeaderMagic(extension) : undefined;
   if (expectedMagic) {
     const header = await readPatchHeader(patchFile, Math.max(8, expectedMagic.length));
     if (header !== null && !header.startsWith(expectedMagic)) return null;
   }
   const parsedPatch = {
     _originalPatchFile: patchFile,
-    constructor: { name: getPatchSummaryFormatName(patchFile.fileName) },
+    constructor: { name: extension ? getPatchSummaryFormatName(patchFile.fileName) : (ingestFormat ?? "Patch") },
     description: null,
     getDescription: () => null,
     getValidationInfo: () => null,
-    isXdeltaPatch: isXdeltaPatchFileName(patchFile.fileName),
+    isXdeltaPatch: extension ? isXdeltaPatchFileName(patchFile.fileName) : ingestFormat === "VCDIFF",
   } as unknown as ParsedPatchWithProbeRequirements;
   if (probeRequirements) parsedPatch[PATCH_PROBE_REQUIREMENTS_KEY] = probeRequirements;
   return parsedPatch as ParsedPatchLike;

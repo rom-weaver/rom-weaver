@@ -69,7 +69,7 @@ const ipsApply = (source, record) => {
 };
 
 /** Run one containers scenario and verify the output (or a refusal). */
-const inContainer = ({ id, tags, title, files, expected, expectRefusal, configure, shot = "c" }) => ({
+const inContainer = ({ id, tags, title, files, expected, expectRefusal, expectMessage, configure, shot = "c" }) => ({
   group: "container-input",
   id,
   tags: ["container", ...tags],
@@ -97,6 +97,8 @@ const inContainer = ({ id, tags, title, files, expected, expectRefusal, configur
         ]
           .filter(Boolean)
           .join(" ");
+        if (expectMessage && !expectMessage.test(visible))
+          fail(out, `refusal without ${expectMessage}: ${visible.slice(0, 200)}`);
         return `refused (${out.outcome}): ${visible.slice(0, 160)}`;
       }
       expectDownload(out, expected);
@@ -137,6 +139,60 @@ export function containerCases({ manifest }) {
       ...(have(name) ? {} : { skip: `fixture ${name} unavailable: ${missing(name)}` }),
     });
   }
+  for (const name of ["rom.gz", "rom.xz", "rom.bz2", "rom.zst", "rom.lz4"]) {
+    cases.push({
+      ...inContainer({
+        expected: target(),
+        files: have(name) ? [{ buffer: read(cacheFile(name)), name: "rom" }, bps] : [bps],
+        id: `rom-in/bare-no-extension-${tagOf(name)}`,
+        tags: ["rom", "bare", "no-extension", tagOf(name)],
+        title: `a sole ${tagOf(name)}-compressed ROM named "rom" (no extension) plus a patch: staged with real checksums and applied`,
+      }),
+      ...(have(name) ? {} : { skip: `fixture ${name} unavailable: ${missing(name)}` }),
+    });
+  }
+  cases.push({
+    ...inContainer({
+      expected: target(),
+      files: [base, { buffer: read(bps), name: "patch" }],
+      id: "patch-in/bare-no-extension",
+      tags: ["patch", "bare", "no-extension"],
+      title: "a bare extension-less BPS patch next to base.bin: classified by signature, applied, no ROM picker",
+    }),
+  });
+  cases.push({
+    group: "container-input",
+    id: "rom-in/rom.gz+base.bin-picker",
+    tags: ["container", "rom", "gz", "multi-rom", "error-ux"],
+    title:
+      "base.bin + extension-less compressed ROM rom.gz: two ROMs, the ROM picker opens (rom.gz is not mistaken for a patch: no error, no patch card)",
+    async run(h) {
+      if (!have("rom.gz")) throw new Skip(`fixture rom.gz unavailable: ${missing("rom.gz")}`);
+      return drive(h, async (page, session) => {
+        await stage(page, [base, cacheFile("rom.gz")]);
+        const dialog = page.locator(".rw-modal[role=dialog]").first();
+        await dialog.waitFor({ state: "visible", timeout: 30_000 });
+        const picker = await dialog.innerText();
+        await page.screenshot({ fullPage: true, path: path.join(h.caseDir, "picker.png") });
+        assert(
+          /base\.bin/.test(picker) && /rom\.gz/.test(picker),
+          `picker does not offer both ROMs: ${picker.slice(0, 200)}`,
+        );
+        await choose(page, ["base.bin"]);
+        await page.waitForTimeout(2500);
+        const after = await snapshot(page);
+        await page.screenshot({ fullPage: true, path: path.join(h.caseDir, "after-pick.png") });
+        assert(!session.pageErrors.length, `page error ${session.pageErrors[0]}`);
+        const visible = after.notices.map((notice) => notice.text).join(" | ");
+        assert(
+          !/invalid_input|no extractable patch|not a recognised ROM or patch format/i.test(visible),
+          `unexpected notice: ${visible}`,
+        );
+        assert(!after.cards.some((card) => card.classes.includes("patch")), "a phantom patch card appeared");
+        return `picker offered base.bin and rom.gz; picked base.bin; notices=${JSON.stringify(after.notices.map((n) => n.text))}`;
+      });
+    },
+  });
   cases.push(
     inContainer({
       expected: target(),

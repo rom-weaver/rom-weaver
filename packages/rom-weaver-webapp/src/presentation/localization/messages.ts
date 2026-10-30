@@ -338,6 +338,16 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Select the patches you want to add, then choose Add patches.",
   }),
   "ui.select.romsTitle": msg({ id: "ui.select.romsTitle", message: "More than one ROM was dropped" }),
+  "ui.drop.splitWbfs": msg({
+    id: "ui.drop.splitWbfs",
+    message:
+      "{count, plural, one {{names} is part of a split WBFS disc.} other {{names} are parts of a split WBFS disc.}} Apply cannot read split WBFS. Join the parts with Extract, then drop the extracted disc here.",
+  }),
+  "ui.drop.unsupportedPatch": msg({
+    id: "ui.drop.unsupportedPatch",
+    message:
+      "{count, plural, one {{names} is not a recognised ROM or patch format and was not used.} other {{names} are not recognised ROM or patch formats and were not used.}}",
+  }),
   "ui.apply.add.replaceOrPatches": msg({
     id: "ui.apply.add.replaceOrPatches",
     message: "Replace the ROM or add patches",

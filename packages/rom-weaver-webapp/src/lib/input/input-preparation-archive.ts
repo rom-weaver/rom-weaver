@@ -219,6 +219,35 @@ const listDroppedArchiveEntryNames = async (source: SourceRef): Promise<string[]
   }
 };
 
+/**
+ * Ask Rust ingest what an ambiguous drop (an extension-less file, or a compressed wrapper whose payload
+ * has no extension) holds, before the drop is routed: "patch" when ingest describes it as a patch by
+ * signature, "rom" when it is a ROM candidate, `undefined` when ingest is unavailable or fails. The
+ * extracted leaves exist only for this answer and are released before returning.
+ */
+const probeDroppedInputKind = async (source: File, signal?: AbortSignal): Promise<"patch" | "rom" | undefined> => {
+  const runtime = await resolveInputPreparationRuntime(DEFAULT_INPUT_PREPARATION_RUNTIME);
+  if (!runtime.ingest?.run) return undefined;
+  let ingested: Awaited<ReturnType<NonNullable<typeof runtime.ingest.run>>>;
+  try {
+    ingested = await runtime.ingest.run({
+      checksumAlgorithms: ["crc32"],
+      fileName: source.name,
+      identify: false,
+      interactiveSelectionEnabled: false,
+      ...(signal ? { signal } : {}),
+      source,
+    });
+  } catch {
+    return undefined;
+  }
+  await Promise.all(
+    [...ingested.outputs, ...ingested.patchOutputs].map(async (output) => output.dispose().catch(() => undefined)),
+  );
+  const { isRom, kind, patches } = ingested.result;
+  return kind === "patch" && !isRom && patches.length > 0 ? "patch" : "rom";
+};
+
 // Cache immutable entry listings across routing, CHD mode, naming, and preflight
 // passes. Key the underlying File/Blob when wrappers differ; evict failures so
 // retries re-list.
@@ -868,6 +897,7 @@ export {
   getPatchLeafParentCompressionsForSelection,
   isCompressionFile,
   listDroppedArchiveEntryNames,
+  probeDroppedInputKind,
   resolveArchiveInput,
   resolveArchiveInputAssets,
   traceArchivePreparation,

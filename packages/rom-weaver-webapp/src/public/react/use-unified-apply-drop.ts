@@ -7,7 +7,7 @@ import {
   parseCueFileReferences,
   parseGdiFileReferences,
 } from "../../lib/input/archive.ts";
-import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
+import { listDroppedArchiveEntryNames, probeDroppedInputKind } from "../../lib/input/input-preparation-archive.ts";
 import { groupNfsFiles, isNfsPartName } from "../../lib/input/nfs-inputs.ts";
 import { createLogger } from "../../lib/logging.ts";
 import type { SelectFile, SelectionCandidate } from "../../types/selection.ts";
@@ -20,6 +20,12 @@ import {
   isWeaveFileName,
 } from "./file-classification.ts";
 import { ROM_WEAVER_WEAVE_FILE_NAMES } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import {
+  type DropRejection,
+  screenRomCandidates,
+  separateIngestPatches,
+  separateSplitWbfs,
+} from "./apply-drop-screening.ts";
 
 /**
  * Drop orchestration for the Apply tab.
@@ -72,6 +78,8 @@ type UnifiedApplyDrop = {
 };
 type ActiveDropKind = "weave" | "patch" | "rom" | "unknown";
 type DropRouteLifecycle = {
+  /** Files held back from routing, with the reason; delivery of the remaining files continues. */
+  onRejected?: (rejection: DropRejection) => void;
   beforeNonWeaveDelivery?: () => Promise<void>;
   onWeaveDetected?: () => void;
   rememberWeaveSourceCleanup?: (cleanup: () => Promise<void>) => void;
@@ -217,10 +225,32 @@ const routeUnifiedDrop = async (
   if (signal?.aborted || isCancelled?.()) return;
   await lifecycle?.beforeNonWeaveDelivery?.();
   if (signal?.aborted || isCancelled?.()) return;
-  const romArchives = archives.filter((_archive, index) => archiveBuckets[index] === "rom");
   const patchArchives = archives.filter((_archive, index) => archiveBuckets[index] === "patch");
-  const romInputs = [...inputs, ...romArchives];
-  const patchInputs = [...patches, ...patchArchives];
+  const romBucketArchives = new Map(
+    archives.flatMap((archive, index) =>
+      archiveBuckets[index] === "rom" ? [[archive, archiveEntries[index] || []] as const] : [],
+    ),
+  );
+  const screened = screenRomCandidates({
+    archives: romBucketArchives,
+    inputs,
+    sheetReferenced: new Set(
+      (await groupDirectDiscInputs(inputs)).filter((group) => group.files.length > 1).flatMap((group) => group.files),
+    ),
+  });
+  if (screened.rejection) lifecycle?.onRejected?.(screened.rejection);
+  const ingestRouted = await separateIngestPatches(
+    {
+      archives: new Map(screened.archives.map((archive) => [archive, romBucketArchives.get(archive) ?? []] as const)),
+      inputs: screened.inputs,
+    },
+    (file) => probeDroppedInputKind(file, signal),
+    () => !!signal?.aborted || !!isCancelled?.(),
+  );
+  if (signal?.aborted || isCancelled?.()) return;
+  const romArchives = ingestRouted.archives;
+  const romInputs = [...ingestRouted.inputs, ...romArchives];
+  const patchInputs = [...patches, ...patchArchives, ...ingestRouted.patches];
   logger.trace("unified apply drop routed files", {
     archiveCount: archives.length,
     fileCount: files.length,
@@ -328,6 +358,7 @@ const useUnifiedApplyDrop = (
   onWeaveSession?: (session: WeaveApplySession) => void,
   onError?: (error: Error) => void,
   selectFile?: SelectFile,
+  onRejected?: (rejection: DropRejection) => void,
 ): UnifiedApplyDrop => {
   const [pendingDrops, setPendingDrops] = useState<PendingDrop[]>([]);
   const nextIdRef = useRef(0);
@@ -369,7 +400,13 @@ const useUnifiedApplyDrop = (
     weaveSourceCleanupsRef.current.add(cleanup);
   }, []);
   const onDrop = useCallback(
-    (files: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal, onSettled?: () => void) => {
+    (droppedFiles: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal, onSettled?: () => void) => {
+      const { rejection: splitWbfsRejection, remaining: files } = separateSplitWbfs(droppedFiles);
+      if (splitWbfsRejection) onRejected?.(splitWbfsRejection);
+      if (!files.length) {
+        onSettled?.();
+        return;
+      }
       const classification = classifyDroppedFiles(files);
       // The classifier deliberately treats unknown bare extensions as ROM/input fallbacks. Use its
       // bucket here too so replacement/cancellation policy cannot disagree with the eventual route;
@@ -468,6 +505,7 @@ const useUnifiedApplyDrop = (
           {
             ...(mayContainWeave ? { beforeNonWeaveDelivery: () => previousRoute } : {}),
             rememberWeaveSourceCleanup,
+            onRejected,
             onWeaveDetected: promoteToWeave,
           },
           selectFile,
@@ -494,7 +532,7 @@ const useUnifiedApplyDrop = (
           onSettled?.();
         });
     },
-    [controller, onError, onWeaveSession, rememberWeaveSourceCleanup, selectFile],
+    [controller, onError, onRejected, onWeaveSession, rememberWeaveSourceCleanup, selectFile],
   );
 
   return { onDrop, pendingDrops };

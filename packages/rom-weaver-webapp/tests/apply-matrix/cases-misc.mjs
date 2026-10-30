@@ -102,28 +102,28 @@ export function miscCases() {
     group: "patch-unsupported",
     id: "unsupported/ninja1",
     tags: ["ninja1", "unsupported", "error-ux"],
-    title: "NINJA1 has no apply support; a .rnp file with a NINJA2 header but no body must be refused with a reason",
+    title:
+      "NINJA1 has no apply support; a .rnp file with a NINJA2 header but no body must be named as not a recognised ROM or patch format and never offered as a second ROM",
     async run(h) {
-      let picker = false;
       const out = await scenario(h, {
         files: [
           { buffer: read("call-return.in"), name: "input.bin" },
           { buffer: read("ninja1.rnp"), name: "ninja1.rnp" },
         ],
-        async configure(page) {
-          picker = (await page.getByText("More than one ROM was dropped").count()) > 0;
-        },
         shot: "ninja",
       });
       if (out.pageErrors?.length) fail(out, `page error ${out.pageErrors[0]}`);
       if (out.outcome === "download") fail(out, "malformed/unsupported patch produced a download");
-      // A file with an unknown extension is offered as a second ROM candidate instead of being named
-      // unsupported (observed UX gap, see report); the picker is the visible outcome.
-      if (picker)
-        return "no download; unknown .rnp offered as a ROM candidate in the 'More than one ROM was dropped' picker";
-      const reason = out.result?.text ?? out.staged.blockedReason ?? out.staged.notices[0]?.text;
-      assert(reason, "refused without a visible reason");
-      return `refused (${out.outcome}): ${String(reason).slice(0, 140)}`;
+      const visibleText = [
+        out.result?.text,
+        out.staged?.blockedReason,
+        ...(out.staged?.notices ?? []).map((notice) => notice.text),
+      ];
+      assert(
+        visibleText.some((text) => /ninja1\.rnp is not a recognised ROM or patch format/i.test(String(text ?? ""))),
+        `ninja1.rnp was not named as an unsupported patch: ${JSON.stringify(visibleText)}`,
+      );
+      return `refused (${out.outcome}): ninja1.rnp named as not a recognised ROM or patch format`;
     },
   });
   return cases;
