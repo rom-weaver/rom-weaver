@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { checkWorkerRuntimeChunk } from "../../scripts/check-worker-runtime-chunk.mjs";
+import { checkBrotliSidecars, checkWorkerRuntimeChunk } from "../../scripts/check-worker-runtime-chunk.mjs";
 
 // These fixtures stand in for a production build. The guard they exercise is what stops a silent
 // Vite/rolldown regression from re-duplicating the worker runtime or putting it on the first-paint
@@ -80,5 +80,46 @@ describe("checkWorkerRuntimeChunk", () => {
       `const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./${RUNTIME}"])))=>i.map(i=>d[i]);` +
       `import{a}from"./${SHARED}";const load=()=>import("./${RUNTIME}");`;
     expect(checkWorkerRuntimeChunk(writeDist(chunks, [INDEX, SHARED])).failures).toBe(0);
+  });
+});
+
+describe("checkBrotliSidecars", () => {
+  const big = "x".repeat(2048);
+  const withSidecars = (files: Chunks): string => {
+    const distDir = writeDist({}, []);
+    for (const [name, code] of Object.entries(files)) fs.writeFileSync(path.join(distDir, "assets", name), code);
+    return distDir;
+  };
+  const complete = (): Chunks => ({
+    "index-a.js": big,
+    "index-a.js.br": "br",
+    "index-a.css": big,
+    "index-a.css.br": "br",
+    "app-a.wasm": big,
+    "app-a.wasm.br": "br",
+  });
+
+  it("passes when every large asset has a sidecar", () => {
+    expect(checkBrotliSidecars(withSidecars(complete()))).toEqual({ failures: 0, problems: [] });
+  });
+
+  it("fails when a large asset has no sidecar", () => {
+    const files = complete();
+    delete files["index-a.css.br"];
+    expect(checkBrotliSidecars(withSidecars(files)).problems).toEqual([
+      "assets/index-a.css (2048 bytes) is missing its Brotli sidecar index-a.css.br",
+    ]);
+  });
+
+  it("ignores assets under 1 KiB", () => {
+    const files = { ...complete(), "tiny.js": "x" };
+    expect(checkBrotliSidecars(withSidecars(files)).failures).toBe(0);
+  });
+
+  it("fails when a whole asset kind is missing", () => {
+    const files = complete();
+    delete files["app-a.wasm"];
+    delete files["app-a.wasm.br"];
+    expect(checkBrotliSidecars(withSidecars(files)).problems[0]).toContain("no .wasm assets");
   });
 });

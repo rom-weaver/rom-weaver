@@ -117,8 +117,45 @@ export function reportWorkerRuntimeChunk(distDir = DIST_DIR) {
   return failures;
 }
 
+// `writeBrotliSidecars` (scripts/vite-config/brotli-sidecars.mjs) writes a `.br` sibling for every
+// large JS, CSS, and WASM asset; Pages and self-hosters serve those exact files. Nothing else notices
+// when a change to its candidate filter stops emitting them, so the build would stay green and the
+// assets would fall back to the host's own compression.
+const SIDECAR_EXTENSIONS = [".js", ".css", ".wasm"];
+const SIDECAR_MIN_BYTES = 1024;
+
+export function checkBrotliSidecars(distDir = DIST_DIR) {
+  const assetsDir = path.join(distDir, "assets");
+  const names = fs.readdirSync(assetsDir);
+  const problems = [];
+  for (const extension of SIDECAR_EXTENSIONS) {
+    const assets = names.filter((name) => name.endsWith(extension));
+    if (assets.length === 0) problems.push(`no ${extension} assets in ${assetsDir}`);
+    for (const name of assets) {
+      const size = fs.statSync(path.join(assetsDir, name)).size;
+      if (size >= SIDECAR_MIN_BYTES && !names.includes(`${name}.br`)) {
+        problems.push(`assets/${name} (${size} bytes) is missing its Brotli sidecar ${name}.br`);
+      }
+    }
+  }
+  return { failures: problems.length, problems };
+}
+
+export function reportBrotliSidecars(distDir = DIST_DIR) {
+  const { failures, problems } = checkBrotliSidecars(distDir);
+  if (failures === 0) {
+    process.stdout.write("PASS    Brotli sidecars: every JS, CSS, and WASM asset of 1 KiB or more has one\n");
+    return 0;
+  }
+  for (const problem of problems) {
+    process.stdout.write(`ERROR   Brotli sidecars: ${problem}\n`);
+    process.stdout.write(`::error title=Brotli sidecars::${problem}\n`);
+  }
+  return failures;
+}
+
 export function main() {
-  return reportWorkerRuntimeChunk() === 0 ? 0 : 1;
+  return reportWorkerRuntimeChunk() + reportBrotliSidecars() === 0 ? 0 : 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = main();
