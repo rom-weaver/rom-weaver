@@ -126,7 +126,17 @@ fn run_tui_paths(
         };
         // SAFETY: poll receives one valid pollfd and a bounded timeout.
         let ready = unsafe { libc::poll(&mut poll, 1, 100) };
-        assert!(ready >= 0, "poll: {}", std::io::Error::last_os_error());
+        if ready < 0 {
+            // assert_cmd's `timeout` installs a process-wide SIGCHLD handler, so another test's
+            // child exiting can interrupt this poll; poll is never restarted after a handler.
+            let error = std::io::Error::last_os_error();
+            assert_eq!(
+                error.kind(),
+                std::io::ErrorKind::Interrupted,
+                "poll: {error}"
+            );
+            continue;
+        }
         if ready == 0 {
             continue;
         }
@@ -134,6 +144,7 @@ fn run_tui_paths(
         match terminal.read(&mut buffer) {
             Ok(0) => break,
             Ok(count) => transcript.push_str(&String::from_utf8_lossy(&buffer[..count])),
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
             Err(error) if error.raw_os_error() == Some(libc::EIO) => break,
             Err(error) => panic!("read TUI: {error}: {transcript}"),
         }
