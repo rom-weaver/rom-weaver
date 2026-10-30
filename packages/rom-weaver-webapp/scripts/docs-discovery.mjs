@@ -22,6 +22,25 @@ export function createDocsMarkdown(source, markdown, siteOrigin = SITE_ORIGIN) {
     const origin = type === "image" ? "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main" : repositoryOrigin;
     return `${origin}${url.pathname}${url.search}${url.hash}`;
   };
+  // Raw HTML (screenshot <picture> blocks) ships verbatim, so its media URLs need the
+  // same rewrite as Markdown images; relative paths would resolve against the .md URL.
+  const resolveHtmlMedia = (html) =>
+    html.replace(/(\s(?:src|srcset|poster)\s*=\s*)(?:"([^"]*)"|'([^']*)')/gi, (match, prefix, double, single) => {
+      const quote = double === undefined ? "'" : '"';
+      const value = double ?? single;
+      const name = prefix.trim().toLowerCase();
+      const resolve = (candidate) => (candidate ? resolveHref(candidate, "image") : candidate);
+      const resolved = name.startsWith("srcset")
+        ? value
+            .split(",")
+            .map((candidate) => {
+              const [url = "", ...descriptor] = candidate.trim().split(/\s+/);
+              return [resolve(url), ...descriptor].join(" ");
+            })
+            .join(", ")
+        : resolve(value.trim());
+      return `${prefix}${quote}${resolved}${quote}`;
+    });
   const parser = new Marked();
   const tokens = parser.lexer(markdown);
   const replacements = new Map();
@@ -41,7 +60,8 @@ export function createDocsMarkdown(source, markdown, siteOrigin = SITE_ORIGIN) {
         token.raw.replace(SAMPLE_URL_PATTERN, (_match, name) => `${siteOrigin}/${name}`),
       );
     }
-    if (["codespan", "html"].includes(token.type)) replacements.set(token.raw, token.raw);
+    if (token.type === "html") replacements.set(token.raw, resolveHtmlMedia(token.raw));
+    if (token.type === "codespan") replacements.set(token.raw, token.raw);
   });
   // Longest matches MUST consume code samples before any links inside them.
   const patterns = [...replacements.keys()].filter(Boolean).sort((a, b) => b.length - a.length);

@@ -41,6 +41,38 @@ test("Markdown images link to image bytes while repository links keep their navi
   assert.ok(result.includes("`![Literal](../screenshots/ppf-undo-restored.webp)`"));
 });
 
+test("Markdown exports resolve HTML media URLs and keep other HTML intact", () => {
+  const raw = "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/screenshots";
+  const markdown = [
+    "<picture>",
+    '  <source media="(max-width: 520px)" srcset="../screenshots/a-mobile.avif 1x, ../screenshots/a-mobile@2x.avif 2x" width="10">',
+    '  <img src=\'../screenshots/a.webp\' alt="A" width="20">',
+    "</picture>",
+    "",
+    '<img src="https://example.com/remote.webp" alt="Remote">',
+    "",
+    "```html",
+    '<img src="../screenshots/a.webp">',
+    "```",
+  ].join("\n");
+  const result = createDocsMarkdown(source, markdown);
+  assert.ok(result.includes(`srcset="${raw}/a-mobile.avif 1x, ${raw}/a-mobile@2x.avif 2x" width="10"`));
+  assert.ok(result.includes(`<img src='${raw}/a.webp' alt="A" width="20">`));
+  assert.ok(result.includes('<img src="https://example.com/remote.webp" alt="Remote">'));
+  assert.ok(result.includes('```html\n<img src="../screenshots/a.webp">\n```'));
+});
+
+test("the Identify guide export has no relative HTML media URLs", () => {
+  const file = "how-to/identify-roms-browser.md";
+  const markdown = fs.readFileSync(new URL(`../../../docs/${file}`, import.meta.url), "utf8");
+  const result = createDocsMarkdown({ file, slug: "docs/identify-roms-browser" }, markdown);
+  const urls = [...result.matchAll(/\s(?:src|srcset)="([^"]*)"/g)].flatMap((match) =>
+    match[1].split(",").map((candidate) => candidate.trim().split(/\s+/)[0]),
+  );
+  assert.ok(urls.length > 0);
+  for (const url of urls) assert.match(url, /^https:\/\//, url);
+});
+
 test("lastmod is omitted for dirty files and missing history", (context) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "seo-history-"));
   context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
