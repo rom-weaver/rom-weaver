@@ -101,6 +101,9 @@
     "@rom-weaver/win32-x64-msvc": "0.23.0"
   },
   "overrides": {
+    "markdownlint": {
+      "re2js": "2.8.7"
+    },
     "markdownlint-cli2": {
       "smol-toml": "1.9.1"
     },
