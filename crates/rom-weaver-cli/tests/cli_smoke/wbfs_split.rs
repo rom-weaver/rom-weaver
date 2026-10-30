@@ -241,6 +241,36 @@ fn split_wbfs_first_part_alone_is_refused_for_generic_archives() {
 }
 
 #[test]
+fn split_wbfs_parts_missing_from_disk_are_refused_by_the_header_size() {
+    for format in ["zip", "7z"] {
+        let temp = setup_temp_dir();
+        write_split_wbfs(&temp, 0x20000, 3);
+        // The set was split in three, but only the first two parts reach the archive and the third
+        // is gone, so no sibling lookup can notice; the header size still does.
+        fs::remove_file(temp.child("disc.wbf2").path()).expect("remove last part");
+        let first = path_str(temp.child("disc.wbfs").path()).to_string();
+        let second = path_str(temp.child("disc.wbf1").path()).to_string();
+        let archive = temp.child(format!("out.{format}"));
+        for inputs in [vec![first.as_str()], vec![first.as_str(), second.as_str()]] {
+            let output =
+                command_stdout(&compress_args(&inputs, format, path_str(archive.path())), 1);
+            let last = parse_json_lines(&output).pop().expect("terminal event");
+            assert_eq!(last["status"], "failed", "{format}: {last}");
+            let label = last["label"].as_str().expect("label");
+            // The first part alone still trips the sibling lookup (disc.wbf1 is on disk); only the
+            // two-part input needs the header size to see the part that is gone.
+            let expected = if inputs.len() == 1 {
+                "disc.wbf1"
+            } else {
+                "header declares"
+            };
+            assert!(label.contains(expected), "{format}: {label}");
+            assert!(!archive.path().exists(), "{format}: archive was written");
+        }
+    }
+}
+
+#[test]
 fn split_wbfs_identifies_by_the_extracted_iso_hash() {
     let temp = setup_temp_dir();
     let iso = write_split_wbfs(&temp, 0x20000, 2);

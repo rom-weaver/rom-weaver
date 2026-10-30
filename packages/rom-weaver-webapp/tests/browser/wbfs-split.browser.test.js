@@ -26,13 +26,15 @@ const gamecubeIso = () => {
  * Builds a single-disc WBFS with the layout nod writes: header, disc table, disc header copy,
  * and block map in block 0, an NKit v2 header recording the ISO size, then one 2 MiB data block.
  */
-const wbfsFromIso = (iso) => {
+const wbfsFromIso = (iso, { extraDisc = false } = {}) => {
   const wbfs = new Uint8Array(BLOCK_SIZE * 2);
   const view = new DataView(wbfs.buffer);
   wbfs.set(new TextEncoder().encode("WBFS"));
   view.setUint32(4, wbfs.length / SECTOR_SIZE);
   wbfs.set([9, 21, 1], 8);
   wbfs[12] = 1;
+  // Disc table entry 1: a multi-game drive image.
+  if (extraDisc) wbfs[13] = 1;
   wbfs.set(iso.subarray(0, 0x100), SECTOR_SIZE);
   view.setUint16(SECTOR_SIZE + 0x100, 1);
   expect(SECTOR_SIZE + 0x100 + MAX_BLOCKS * 2).toBeLessThan(NKIT_HEADER_OFFSET);
@@ -79,6 +81,24 @@ test("WASM extracts a split WBFS set byte for byte and rejects a set with a miss
     await expect(extractAll(source, parts.slice(0, 1))).rejects.toThrow(
       /Invalid WBFS file size.*\[wbfs\.size_mismatch\] \(actual=\d+, expected=\d+\)/i,
     );
+  } finally {
+    await resetRomWeaverRunner();
+  }
+});
+
+test("WASM refuses a multi-disc WBFS with the single-disc error instead of extracting the first game", async () => {
+  await resetRomWeaverRunner();
+  try {
+    await warmupRomWeaverRunner();
+    const source = new File([wbfsFromIso(gamecubeIso(), { extraDisc: true })], "Multi.wbfs");
+    const error = await extractAll(source, []).then(
+      () => null,
+      (cause) => cause,
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain("Only single WBFS discs are supported");
+    // The size-mismatch advice in the extract form is for split sets; a multi-disc image must not get it.
+    expect(error.message).not.toContain("[wbfs.size_mismatch]");
   } finally {
     await resetRomWeaverRunner();
   }
@@ -133,7 +153,7 @@ const stagedPaths = async (runId, files) => {
 const hex = (digest) => Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 
 for (const format of ["zip", "7z"]) {
-  test(`WASM archives every part of a split WBFS to ${format}, archives a partial set as given, and the archive still extracts to the ISO`, async () => {
+  test(`WASM archives every part of a split WBFS to ${format}, refuses a partial set, and the archive still extracts to the ISO`, async () => {
     await resetRomWeaverRunner();
     const outputs = [];
     try {
@@ -143,24 +163,15 @@ for (const format of ["zip", "7z"]) {
       const { create, extract } = browserRuntime.compression;
       if (!(create && extract)) throw new Error("Runtime compression capabilities are unavailable");
       const entryOf = (file) => ({ file, fileName: file.name });
-      // Unlike the CLI, which refuses a partial set because it sees the missing sibling part on disk,
-      // browser entries are staged individually, so a partial set is archived as exactly the files given.
+      // Like the CLI, a partial set is refused rather than archived with parts silently left out.
       for (const partial of [files.slice(0, 1), files.slice(0, 2)]) {
-        const partialArchive = await create({
-          entries: partial.map(entryOf),
-          format,
-          options: { outputName: `Partial.${format}`, threads: 1 },
-        });
-        outputs.push(partialArchive.output);
-        const listed = await extract({
-          entries: [],
-          extractAll: true,
-          format,
-          options: { threads: 1 },
-          source: partialArchive.output,
-        });
-        outputs.push(...listed.outputs);
-        expect(listed.outputs.map((output) => output.fileName).sort()).toEqual(partial.map((file) => file.name).sort());
+        await expect(
+          create({
+            entries: partial.map(entryOf),
+            format,
+            options: { outputName: `Partial.${format}`, threads: 1 },
+          }),
+        ).rejects.toThrow(/is the first part of a split WBFS set.*header declares/is);
       }
       const archive = await create({
         entries: files.map(entryOf),
@@ -234,6 +245,120 @@ test("WASM checksums a split WBFS to the extracted ISO's hashes and probes its g
       ),
     ).toEqual(["Disc.iso"]);
     expect(details.container.recommended_compress_format).toBe("rvz");
+  } finally {
+    await Promise.all(paths.map((path) => browserRuntime.vfs.remove(path).catch(() => undefined)));
+    await resetRomWeaverRunner();
+  }
+});
+
+const varint = (value) => {
+  const bytes = [];
+  let rest = value;
+  do {
+    const low = rest & 0x7f;
+    rest = Math.floor(rest / 128);
+    bytes.push(rest > 0 ? low | 0x80 : low);
+  } while (rest > 0);
+  return bytes;
+};
+
+const hexBytes = (text) =>
+  Array.from({ length: text.length / 2 }, (_, i) => Number.parseInt(text.slice(i * 2, i * 2 + 2), 16));
+
+/** A one-game RWFP1 identify pack naming a disc by size, CRC32, MD5 and SHA-1 (layout of identify_pack_v1.rs). */
+const identifyPackForDisc = (name, size, crc32, md5, sha1) => {
+  const encoder = new TextEncoder();
+  const concat = (...parts) => {
+    const out = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
+    let at = 0;
+    for (const part of parts) {
+      out.set(part, at);
+      at += part.length;
+    }
+    return out;
+  };
+  const u32 = (value) => new Uint8Array([value & 255, (value >>> 8) & 255, (value >>> 16) & 255, (value >>> 24) & 255]);
+  const u64 = (value) => new Uint8Array([...u32(value), 0, 0, 0, 0]);
+  const nameBytes = encoder.encode(name);
+  const scope = encoder.encode("full_file");
+  const members = [
+    [
+      "strings.bin",
+      concat(
+        encoder.encode("RWS5"),
+        new Uint8Array([1, 2, nameBytes.length]),
+        nameBytes,
+        new Uint8Array([scope.length]),
+        scope,
+      ),
+    ],
+    [
+      "hashes.bin",
+      concat(
+        encoder.encode("RWH5"),
+        new Uint8Array([1, 1, ...varint(size), 0, 7, ...hexBytes(crc32), ...hexBytes(md5), ...hexBytes(sha1)]),
+      ),
+    ],
+    ["components.bin", concat(encoder.encode("RWC5"), new Uint8Array([1, 1, 0, 0, 0, 3]))],
+    ["games.bin", concat(encoder.encode("RWG5"), new Uint8Array([1, 1, 0, 0, 1, 0, 0]))],
+    ["owners.bin", concat(encoder.encode("RWO5"), new Uint8Array([1, 1, 1, 0]))],
+    ["routes.bin", concat(encoder.encode("RWR5"), new Uint8Array([1, 1, 0]))],
+    ["sets.bin", concat(encoder.encode("RWX5"), new Uint8Array([1, 1, 0, 1, 0]))],
+    [
+      "manifest.json",
+      encoder.encode(
+        '{"format":"rom-weaver-identify-system-pack-v1","platform":"Nintendo GameCube","source":"libretro","canonicalizationProfile":"full_file","canonicalizationVersion":1,"provenance":[]}',
+      ),
+    ],
+  ];
+  const directory = members.map(([member, bytes]) =>
+    concat(new Uint8Array([member.length & 255, member.length >>> 8]), u64(bytes.length), encoder.encode(member)),
+  );
+  return concat(encoder.encode("RWFP1\0\0\0"), u32(members.length), ...directory, ...members.map(([, bytes]) => bytes));
+};
+
+test("WASM identifies a split WBFS by the extracted ISO's hash, matching the same pack entry as the ISO", async () => {
+  await resetRomWeaverRunner();
+  const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const paths = [];
+  try {
+    await warmupRomWeaverRunner();
+    const iso = gamecubeIso();
+    const files = splitParts(wbfsFromIso(iso), 3);
+    paths.push(...(await stagedPaths(runId, files)));
+    const isoPath = (await stagedPaths(runId, [new File([iso], "raw.iso")]))[0];
+    paths.push(isoPath);
+
+    const checksum = await runRomWeaverJson(
+      { args: { algo: ["crc32", "md5", "sha1"], input: isoPath }, type: "checksum" },
+      { knownInputPaths: paths },
+    );
+    expect(checksum.exitCode).toBe(0);
+    const digests = checksum.events.at(-1)?.details;
+    const find = (algorithm) => String(digests.checksums[algorithm]).toLowerCase();
+    const pack = `${WORKER_OPFS_MOUNTPOINT}/wbfs-${runId}-test.pack`;
+    await browserRuntime.vfs.truncate(pack, 0);
+    await browserRuntime.vfs.write(
+      pack,
+      identifyPackForDisc("RW Test Disc", iso.length, find("crc32"), find("md5"), find("sha1")),
+      { fileOffset: 0 },
+    );
+    paths.push(pack);
+
+    const identify = async (input) => {
+      const result = await runRomWeaverJson(
+        { args: { database: [pack], input }, type: "identify" },
+        { knownInputPaths: paths },
+      );
+      expect(result.exitCode, JSON.stringify(result.events?.at(-1))).toBe(0);
+      return result.events.at(-1)?.details?.identify;
+    };
+    const fromIso = await identify(isoPath);
+    expect(fromIso.status).toBe("matched");
+    expect(fromIso.matches.map((match) => match.name)).toEqual(["RW Test Disc"]);
+    const fromWbfs = await identify(paths[0]);
+    expect(fromWbfs.status).toBe("matched");
+    expect(fromWbfs.matches.map((match) => match.name)).toEqual(["RW Test Disc"]);
   } finally {
     await Promise.all(paths.map((path) => browserRuntime.vfs.remove(path).catch(() => undefined)));
     await resetRomWeaverRunner();
