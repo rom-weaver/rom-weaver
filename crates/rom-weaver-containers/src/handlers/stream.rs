@@ -16,6 +16,32 @@ pub(crate) struct StreamContainerHandler {
     compression: StreamCompression,
 }
 
+/// True when `output` already exists and is the file `source` names (same path, canonical path, or
+/// device/inode). An extension-less wrapper extracts to its own name, so extracting into its own
+/// directory would truncate the stream being read.
+fn output_is_source(source: &Path, output: &Path) -> bool {
+    if source == output {
+        return true;
+    }
+    if !output.exists() {
+        return false;
+    }
+    if matches!(
+        (fs::canonicalize(source), fs::canonicalize(output)),
+        (Ok(left), Ok(right)) if left == right
+    ) {
+        return true;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        same_file::is_same_file(source, output).unwrap_or(false)
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        false
+    }
+}
+
 impl StreamContainerHandler {
     pub(crate) const fn new(
         descriptor: &'static FormatDescriptor,
@@ -321,6 +347,12 @@ impl ContainerHandlerOperations for StreamContainerHandler {
             "stream payload accepted by kind filter"
         );
         let output_path = request.out_dir.join(&output_name);
+        if output_is_source(&request.source, &output_path) {
+            return Err(RomWeaverError::Validation(format!(
+                "refusing to write the extracted payload over its own source file `{}`; choose a different output directory",
+                request.source.display()
+            )));
+        }
         let (written, checksum) = self.extract_with_libarchive(
             &request.source,
             &output_path,

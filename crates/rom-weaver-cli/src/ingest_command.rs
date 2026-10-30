@@ -641,6 +641,39 @@ impl CliApp {
             }
         };
         if !signature_patches.is_empty() {
+            if assets.is_empty() && patches.is_empty() {
+                let mut named_patches = Vec::new();
+                // The archive listing showed no patch, so the named-patch pass never ran; run it now
+                // so a named patch beside an extension-less one is not dropped.
+                for patch in self.ingest_patch_leaves(
+                    handler,
+                    IngestLeavesRequest {
+                        source,
+                        out_dir,
+                        raw_selections: &[],
+                        kind_filter: Self::archive_entry_kind_filter(false, true),
+                        no_ignore,
+                        no_nested_extract,
+                        preserve_nested_formats,
+                        split_bin: false,
+                        interactive: false,
+                        source_label: "ingest patch input",
+                        context,
+                    },
+                    None,
+                )? {
+                    if !signature_patches
+                        .iter()
+                        .any(|known| known.leaf_path == patch.leaf_path)
+                    {
+                        named_patches.push(patch);
+                    }
+                }
+                if !named_patches.is_empty() {
+                    self.emit_patch_manifest(source, &named_patches);
+                    patches.append(&mut named_patches);
+                }
+            }
             self.emit_patch_manifest(source, &signature_patches);
             patches.extend(signature_patches);
             if assets.is_empty() {

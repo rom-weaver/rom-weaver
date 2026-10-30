@@ -2473,6 +2473,76 @@ fn ingest_extensionless_compressed_patch_is_classified_by_signature() {
     }
 }
 
+/// A nested archive holding a named patch beside an extension-less compressed patch reports both.
+#[test]
+fn ingest_nested_named_and_extensionless_patches_are_both_reported() {
+    let temp = setup_temp_dir();
+    let members = temp.child("members");
+    fs::create_dir_all(members.path()).expect("members dir");
+    let named = members.path().join("hack.bps");
+    fs::write(&named, banded_bps()).expect("named patch");
+    let wrapped = write_wrapped(&temp, "members/hack.gz", "gz", &banded_bps());
+    let inner = temp.child("inner.zip");
+    zip_members(&temp, inner.path(), &[named.as_path(), wrapped.as_path()]);
+    let outer = temp.child("outer.zip");
+    zip_members(&temp, outer.path(), &[inner.path()]);
+    let terminal = ingest_json(&temp, outer.path(), "nested-out");
+    assert_eq!(terminal["status"], "succeeded", "{terminal}");
+    let ingest = &terminal["details"]["ingest"];
+    assert_eq!(ingest["kind"], "patch", "{ingest}");
+    let mut names: Vec<String> = patch_file_names(ingest)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    names.sort();
+    assert_eq!(names, ["hack", "hack.bps"], "{ingest}");
+}
+
+/// An extension-less compressed dump ingested with `--output` set to its own directory would
+/// extract onto the source path; ingest must refuse and leave the source untouched, for payloads
+/// below and above the 8 MiB mark.
+#[test]
+fn ingest_refuses_to_extract_an_extensionless_dump_over_its_own_source() {
+    for payload_len in [4 * 1024, 9 * 1024 * 1024] {
+        let temp = setup_temp_dir();
+        let mut state = 0x9E37_79B9_u32;
+        let payload: Vec<u8> = (0..payload_len)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                (state >> 8) as u8
+            })
+            .collect();
+        let source = write_wrapped(&temp, "dump", "gz", &payload);
+        let before = fs::read(&source).expect("source bytes");
+        let dir = source.parent().expect("source dir");
+        let terminal = isolated_json_event(
+            &temp,
+            &[
+                "ingest",
+                "--input",
+                source.to_str().expect("path"),
+                "--output",
+                dir.to_str().expect("path"),
+                "--json",
+            ],
+            1,
+        );
+        assert_eq!(terminal["status"], "failed", "{payload_len}: {terminal}");
+        let message = terminal.to_string();
+        assert!(
+            message.contains("refusing to write the extracted payload over its own source file"),
+            "{payload_len}: {message}"
+        );
+        assert_eq!(
+            fs::read(&source).expect("source after"),
+            before,
+            "{payload_len}: the source file must be left untouched"
+        );
+    }
+}
+
 /// An extension-less raw dump with no patch magic stays a ROM candidate, bare or compressed - even
 /// when it starts with the two bytes of the weakest patch magic (`SP`, SOLID), which is excluded.
 #[test]

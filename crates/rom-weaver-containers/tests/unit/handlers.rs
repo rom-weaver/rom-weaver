@@ -1586,6 +1586,61 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
+    /// An extension-less wrapper (`dump`) extracts to a payload named `dump`; with the output
+    /// directory equal to the source directory that path is the source itself, and opening it for
+    /// writing would truncate the file being decompressed.
+    #[test]
+    fn stream_extract_refuses_to_overwrite_its_own_source() {
+        let temp_dir = temp_dir_path("stream-extract-own-source");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let payload: Vec<u8> = (0..4096u32).map(|i| (i * 31 + (i >> 4)) as u8).collect();
+        let gzip = {
+            let mut encoder = flate2::write::GzEncoder::new(Vec::new(), DeflateCompression::new(6));
+            encoder.write_all(&payload).expect("gz encode payload");
+            encoder.finish().expect("gz finish")
+        };
+        let zstd = zstd::stream::encode_all(payload.as_slice(), 0).expect("zstd encode payload");
+        let registry = ContainerRegistry::new();
+        for (format, wrapped) in [("gz", gzip), ("zst", zstd)] {
+            let source = temp_dir.join(format!("dump-{format}"));
+            fs::write(&source, &wrapped).expect("write wrapped fixture");
+            let handler = registry.find_by_name(format).expect("stream handler");
+            // The same directory spelled directly and through `sub/..` names the source file by two
+            // different paths.
+            fs::create_dir_all(temp_dir.join("sub")).expect("sub dir");
+            for out_dir in [temp_dir.to_path_buf(), temp_dir.join("sub").join("..")] {
+                let error = handler
+                    .extract(
+                        &rom_weaver_core::ContainerExtractRequest {
+                            source: source.clone(),
+                            out_dir,
+                            selections: Vec::new(),
+                            kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                            containing_archive: None,
+                            split_bin: false,
+                            ignore_common_files: true,
+                            overwrite: true,
+                            parent: None,
+                        },
+                        &test_context(&temp_dir, 1),
+                    )
+                    .expect_err("extracting over the source must fail");
+                assert!(
+                    matches!(&error, RomWeaverError::Validation(message)
+                        if message.contains("refusing to write the extracted payload over its own source file")),
+                    "{format}: {error}"
+                );
+                assert_eq!(
+                    fs::read(&source).expect("read source"),
+                    wrapped,
+                    "{format}: source must be untouched"
+                );
+            }
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
     /// The payload name of a single-payload stream comes from the wrapper name, never from stored
     /// metadata, so an extension-less name (`rom.gz` -> `rom`) must pass every kind filter instead of
     /// being rejected as "no ROM found".
