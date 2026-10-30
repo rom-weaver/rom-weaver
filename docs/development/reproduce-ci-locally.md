@@ -264,7 +264,7 @@ Use only LCOV produced from the current candidate. `changed-lines.json` separate
 
 ### Prove a bug-fix regression test
 
-Invoke `quality-regression-proof` with a base ref, package, integration test target, exact test name, a specific behavioral diagnostic and one or more `--test-file` paths. It archives the merge base into task scratch, overlays only Rust tests, and builds base/candidate into separate target directories. Production files and manifests cannot be overlaid. Required fixture/data dependencies must already be available; their absence is an unproven setup failure, not proof.
+Invoke `quality-regression-proof` with a base ref, package, integration test target, exact test name, a specific behavioral diagnostic and one or more `--test-file` paths. It archives the merge base into task scratch, overlays only Rust tests, and builds base/candidate into separate target directories. Production files and manifests cannot be overlaid. A regression test in a new `tests/*.rs` file also needs its crate's `tests/integration.rs`, which declares it, as a `--test-file`. Required fixture/data dependencies must already be available; their absence is an unproven setup failure, not proof.
 
 For the CUE regression added by fuzzing, the arguments are:
 
