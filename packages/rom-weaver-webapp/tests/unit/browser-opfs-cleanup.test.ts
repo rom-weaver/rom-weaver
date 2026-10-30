@@ -8,6 +8,9 @@ const { requestBrowserOpfsStorage } = vi.hoisted(() => ({
   ),
 }));
 
+const { warn } = vi.hoisted(() => ({ warn: vi.fn() }));
+
+vi.mock("../../src/lib/logging.ts", () => ({ createLogger: () => ({ debug: vi.fn(), warn }) }));
 vi.mock("../../src/workers/protocol/browser-opfs-worker-client.ts", () => ({ requestBrowserOpfsStorage }));
 
 import {
@@ -18,6 +21,7 @@ import {
 describe("browser OPFS cleanup", () => {
   beforeEach(() => {
     requestBrowserOpfsStorage.mockReset();
+    warn.mockClear();
     requestBrowserOpfsStorage.mockResolvedValue({ success: true });
   });
 
@@ -92,6 +96,37 @@ describe("browser OPFS cleanup", () => {
     finishSlow();
     await reset;
     expect(settled).toBe(true);
+  });
+
+  describe("boot readiness wait with Web Locks present", () => {
+    const grantingLocks = (failLease = false) => ({
+      request: vi.fn(
+        async (_name: string, options: LockOptions, callback: (lock: { name: string } | null) => unknown) => {
+          if (options.mode === "shared" && failLease) throw new Error("lease failed");
+          return callback({ name: _name });
+        },
+      ),
+    });
+
+    it("resolves and logs the failure once when the sweep fails but the lease is taken", async () => {
+      vi.stubGlobal("navigator", { locks: grantingLocks() });
+      requestBrowserOpfsStorage.mockResolvedValue({ error: { message: "quota exceeded" }, success: false });
+      vi.resetModules();
+      const fresh = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+      await expect(fresh.waitForBrowserOpfsBootCleanup()).resolves.toBeUndefined();
+      await expect(fresh.waitForBrowserOpfsBootCleanup()).resolves.toBeUndefined();
+      await expect(fresh.waitForBrowserOpfsBootCleanup()).resolves.toBeUndefined();
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it("still rejects with the lease error when the lease cannot be taken", async () => {
+      vi.stubGlobal("navigator", { locks: grantingLocks(true) });
+      requestBrowserOpfsStorage.mockResolvedValue({ error: { message: "quota exceeded" }, success: false });
+      vi.resetModules();
+      const fresh = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+      await expect(fresh.waitForBrowserOpfsBootCleanup()).rejects.toThrow("lease failed");
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 
   it("preserves live-tab outputs and reclaims abandoned storage after the last tab closes", async () => {
@@ -173,6 +208,7 @@ describe("browser OPFS cleanup", () => {
     requestBrowserOpfsStorage.mockImplementation(async (request) =>
       request?.filePath === "/work/temp" ? busy : { success: true },
     );
+    vi.stubGlobal("navigator", {});
     vi.resetModules();
     const fresh = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
     await expect(fresh.startBrowserOpfsBootCleanup()).resolves.toBeUndefined();

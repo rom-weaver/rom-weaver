@@ -203,3 +203,24 @@ test("closed acknowledgement waits for deferred unlink completion", async () => 
   await server.done;
   expect(Atomics.load(shutdownControl, 0)).toBe(2);
 });
+
+test("the server loop stops and acknowledges on a shutdown request even when Atomics.waitAsync never resolves", async () => {
+  // Some engines leave waitAsync unresolved after a notification, so the loop must not depend on it to stop.
+  const waitAsync = vi
+    .spyOn(Atomics, "waitAsync")
+    .mockImplementation((() => ({ async: true, value: new Promise(() => undefined) })) as never);
+  try {
+    const channel = createOpfsProxyChannel(1);
+    const shutdownControl = new Int32Array(new SharedArrayBuffer(4));
+    const server = startOpfsProxyServer({
+      channel,
+      shutdownControl,
+      mounts: [{ directoryHandle: {}, mountPath: "/out", writableRoots: ["/out"] }] as never,
+    });
+    requestOpfsShutdown(shutdownControl);
+    await vi.waitFor(() => expect(Atomics.load(shutdownControl, 0)).toBe(2));
+    await server.done;
+  } finally {
+    waitAsync.mockRestore();
+  }
+});

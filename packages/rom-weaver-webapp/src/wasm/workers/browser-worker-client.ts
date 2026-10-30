@@ -42,7 +42,8 @@ const BROWSER_WORKER_TRANSPORT = createBrowserWorkerTransport();
 
 export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
   // Without cross-origin isolation SharedArrayBuffer is absent; keep construction from throwing so the runner can
-  // report the COOP/COEP requirement itself. The buffer is only handed to a worker that threaded wasm would start.
+  // report the COOP/COEP requirement itself. A plain ArrayBuffer would be cloned, not shared, with init, so the
+  // runner MUST fail the isolation check before it sends init on such a page.
   private readonly shutdownControl = new Int32Array(
     typeof SharedArrayBuffer === "function" ? new SharedArrayBuffer(8) : new ArrayBuffer(8),
   );
