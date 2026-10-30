@@ -41,7 +41,6 @@ export async function startOpfsProxyRuntime(options: StartOpfsProxyRuntimeOption
   const channel = createOpfsProxyChannel(options.slotCount);
   const shutdownControl = new Int32Array(options.shutdownControl ?? new SharedArrayBuffer(8));
   let stopPromise: Promise<void> | null = null;
-  let bootstrapPosted = false;
   const worker = new Worker(options.workerUrl ?? DEFAULT_OPFS_PROXY_WORKER_URL, {
     type: "module",
   });
@@ -82,7 +81,6 @@ export async function startOpfsProxyRuntime(options: StartOpfsProxyRuntimeOption
           syncAccessMode: options.syncAccessMode,
           type: "bootstrap",
         });
-        bootstrapPosted = true;
         Atomics.store(shutdownControl, 1, 1);
       } catch (error) {
         clearTimeout(timer);
@@ -91,8 +89,9 @@ export async function startOpfsProxyRuntime(options: StartOpfsProxyRuntimeOption
     });
   } catch (error) {
     requestOpfsShutdown(shutdownControl);
-    // Bootstrap failures MUST fail closed unless the proxy acknowledged closure or received no work.
-    if (Atomics.load(shutdownControl, 0) < 2) acknowledgeOpfsShutdown(shutdownControl, bootstrapPosted);
+    // A proxy that fails before it reports ready has served no request, so it owns no handle to close: acknowledge
+    // plainly, or one failed start would poison every later Reset, compress and cleanup for the page.
+    if (Atomics.load(shutdownControl, 0) < 2) acknowledgeOpfsShutdown(shutdownControl);
     worker.terminate();
     throw error;
   }

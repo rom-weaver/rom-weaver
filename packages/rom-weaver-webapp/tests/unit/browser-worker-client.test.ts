@@ -49,6 +49,38 @@ afterEach(() => {
 });
 
 describe("browser worker client", () => {
+  it("acknowledges closure when the worker script fails before it ever replies", async () => {
+    const client = createBrowserWorkerClient({ worker: worker as unknown as Worker });
+    const init = client.init();
+    const rejection = expect(init).rejects.toBeDefined();
+    for (const listener of worker.listeners.get("error") || [])
+      listener({ message: "script failed to load" } as ErrorEvent);
+    await rejection;
+    client.terminate();
+    await client.whenClosed();
+    expect(worker.terminated).toBe(true);
+  });
+
+  it("keeps waiting for closure when the worker errors after it has replied", async () => {
+    const client = createBrowserWorkerClient({ worker: worker as unknown as Worker });
+    const init = client.init();
+    const rejection = expect(init).rejects.toBeDefined();
+    worker.emit({ type: "event", requestId: -1, event: {} });
+    for (const listener of worker.listeners.get("error") || []) listener({ message: "late failure" } as ErrorEvent);
+    await rejection;
+    client.terminate();
+    expect(worker.terminated).toBe(false);
+  });
+
+  it("constructs without SharedArrayBuffer so the runner can report the isolation requirement", () => {
+    vi.stubGlobal("SharedArrayBuffer", undefined);
+    try {
+      expect(() => createBrowserWorkerClient({ worker: worker as unknown as Worker })).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("acknowledges closure synchronously when init cannot be posted", async () => {
     vi.spyOn(worker, "postMessage").mockImplementationOnce(() => {
       throw new DOMException("could not clone module", "DataCloneError");

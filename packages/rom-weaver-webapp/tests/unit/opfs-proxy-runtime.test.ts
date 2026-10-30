@@ -124,7 +124,8 @@ describe("OPFS proxy runtime", () => {
     const failedControl = new Int32Array(
       (failureWorker.messages[0] as { shutdownControl: SharedArrayBuffer }).shutdownControl,
     );
-    expect(Atomics.load(failedControl, 0)).toBe(3);
+    // A proxy that never started owns nothing, so its closure is acknowledged rather than marked failed.
+    expect(Atomics.load(failedControl, 0)).toBe(2);
     expect(failureWorker.terminated).toBe(true);
   });
 
@@ -139,7 +140,7 @@ describe("OPFS proxy runtime", () => {
     if (!worker) throw new Error("proxy worker was not created");
     expect(worker.terminated).toBe(true);
     const control = new Int32Array((worker.messages[0] as { shutdownControl: SharedArrayBuffer }).shutdownControl);
-    expect(Atomics.load(control, 0)).toBe(3);
+    expect(Atomics.load(control, 0)).toBe(2);
   });
 
   it("acknowledges closure when bootstrap cannot be posted", async () => {

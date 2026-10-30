@@ -40,7 +40,13 @@ export function createBrowserWorkerClient(options: BrowserWorkerClientOptions = 
 const BROWSER_WORKER_TRANSPORT = createBrowserWorkerTransport();
 
 export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
-  private readonly shutdownControl = new Int32Array(new SharedArrayBuffer(8));
+  // Without cross-origin isolation SharedArrayBuffer is absent; keep construction from throwing so the runner can
+  // report the COOP/COEP requirement itself. The buffer is only handed to a worker that threaded wasm would start.
+  private readonly shutdownControl = new Int32Array(
+    typeof SharedArrayBuffer === "function" ? new SharedArrayBuffer(8) : new ArrayBuffer(8),
+  );
+  private heardFromWorker = false;
+  private failedBeforeAnyReply = false;
   private shutdownPromise: Promise<void> | null = null;
   private stopped = false;
   private initialized = false;
@@ -50,6 +56,17 @@ export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
     options = options ?? {};
     super(worker, BROWSER_WORKER_TRANSPORT);
     this._defaultThreads = normalizeDefaultThreads(options.defaultThreads);
+  }
+
+  override _onMessage(rawMessage: Event) {
+    this.heardFromWorker = true;
+    super._onMessage(rawMessage);
+  }
+
+  override _onError(rawError: Event) {
+    // An error before the worker ever replied means its script never ran (failed load, CSP), so it owns nothing.
+    if (!this.heardFromWorker) this.failedBeforeAnyReply = true;
+    super._onError(rawError);
   }
 
   async init(options: RomWeaverBrowserOpfsOptions = {}): Promise<BrowserWorkerReadyResult> {
@@ -87,7 +104,7 @@ export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
     if (this.stopped) return;
     this.stopped = true;
     requestOpfsShutdown(this.shutdownControl);
-    if (!this.initialized) acknowledgeOpfsShutdown(this.shutdownControl);
+    if (!this.initialized || this.failedBeforeAnyReply) acknowledgeOpfsShutdown(this.shutdownControl);
     if (Atomics.load(this.shutdownControl, 0) >= 2) {
       this._terminateWorker();
     } else {
