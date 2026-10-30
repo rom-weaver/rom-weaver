@@ -55,7 +55,7 @@ mise run test-e2e-fast
 
 The gate builds production WASM and the webapp, then checks the worker runtime chunk guard. It runs CLI, Chromium, WASM, and E2E tests. E2E reuses the checked bundle.
 
-Build or size failures stop the gate. Its summary reports each stage and total time, including preparation.
+Build or chunk-guard failures stop the gate. Its summary reports each stage and total time, including preparation.
 
 | Behavior | Regression coverage |
 | --- | --- |
@@ -98,9 +98,9 @@ Fixtures cannot cover every input. Keep platform CI and [real-device checks](mob
 
 ## Prevent repeat failures
 
-Before pushing webapp or published-doc changes, check the generated bundle, even when lint and pre-commit hooks pass. Documentation changes can grow the search JavaScript and HTML; UI changes can grow shared CSS and JavaScript.
+Before pushing webapp or published-doc changes, check the generated bundle, even when lint and pre-commit hooks pass.
 
-1. Prepare the worktree with the [development guide](development.md#linked-worktrees). Use a production WASM build from the current sources (`mise run build-wasm-prod`) before measuring sizes; a development module is not comparable to CI's optimized artifact.
+1. Prepare the worktree with the [development guide](development.md#linked-worktrees). Use a production WASM build from the current sources (`mise run build-wasm-prod`); a development module is not comparable to CI's optimized artifact.
 2. From the repository root, build the production channel and check its chunk graph:
 
    ```bash
@@ -138,7 +138,7 @@ The accessibility shard also checks keyboard navigation at desktop and mobile wi
 
 Treat these as regression checks, not screen-reader certification. They do not run NVDA or VoiceOver or verify spoken live-region announcements. For those checks, use a real screen reader to import files, select and reorder patches, apply a patch, and confirm progress, errors, and completion announcements. Guidepup can automate real-reader journeys on Windows (NVDA) or macOS (VoiceOver) with a headed browser; it requires a separate platform runner.
 
-Use `test:e2e:webapp` for all Chromium E2E scenarios or `test:e2e:webapp:webkit` for WebKit with the same environment. Rebuild and recheck sizes after changes to build inputs; the prebuilt option validates the channel and required files, not source freshness. Do not reuse a bundle from an earlier revision. Running E2E without these variables builds again and defaults to the development channel.
+Use `test:e2e:webapp` for all Chromium E2E scenarios or `test:e2e:webapp:webkit` for WebKit with the same environment. Rebuild and recheck the chunk guard after changes to build inputs; the prebuilt option validates the channel and required files, not source freshness. Do not reuse a bundle from an earlier revision. Running E2E without these variables builds again and defaults to the development channel.
 
 For webapp build or tooling changes, run `npm run test:scripts` from the webapp directory. From the repository root, `node --test scripts/ci/*.test.mjs` checks the change classifier and its WASM dependency coverage without compiling Rust or launching browsers. The pre-commit hook runs these CI script tests when CI files, webapp JavaScript/TypeScript, or fixture trees change, including runtime imports outside `src/wasm`.
 

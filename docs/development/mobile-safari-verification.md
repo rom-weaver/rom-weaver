@@ -17,7 +17,7 @@ rom-weaver's browser runtime needs secure-context APIs, cross-origin isolation, 
 
 Use these checks from cheapest to most faithful:
 
-0. Fast local E2E gate: build production WASM and the webapp, check sizes, then run CLI, WASM, isolated Chromium files, and production webapp journeys:
+0. Fast local E2E gate: build production WASM and the webapp, check the worker chunk guard, then run CLI, WASM, isolated Chromium files, and production webapp journeys:
 
    ```bash
    mise run test-e2e-fast

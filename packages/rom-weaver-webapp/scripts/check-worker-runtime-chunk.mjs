@@ -13,7 +13,7 @@ const DIST_DIR = path.join(PACKAGE_ROOT, "dist");
 // hoist the modules only worker entries reach into one chunk both workers import. The grouping leans
 // on two rolldown behaviours that a Vite/rolldown upgrade can silently change: `ctx.getModuleInfo`
 // being usable inside a group `name` function, and `includeDependenciesRecursively` staying off. If
-// either breaks, the build still succeeds and only the size budget drifts - so assert the chunk graph
+// either breaks, the build still succeeds and only the first-paint bundle silently regresses - so assert the chunk graph
 // itself. See the "Workers share one runtime chunk" bullet in docs/development/ARCHITECTURE.md.
 const RUNTIME_CHUNK_PATTERN = /^wasm-runtime-[\w-]+\.js$/;
 const WORKER_ENTRY_CHUNK_PATTERNS = [/^browser-runner-worker-[\w-]+\.js$/, /^browser-wasi-thread-worker-[\w-]+\.js$/];

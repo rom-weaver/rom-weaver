@@ -20,8 +20,8 @@ on:
       - main
     # Release tags deploy the webapp; tests run on pull requests and branch pushes.
     tags: ["v*"]
-  # Nightly native coverage: the eight CLI targets, macOS Rust, and the arm64
-  # runtime check that main pushes skip (see `full_native` in
+  # Nightly native coverage: the eight CLI targets, macOS and Windows Rust, and the
+  # arm64 runtime check that main pushes skip (see `full_native` in
   # scripts/ci/classify-changes.mjs). It selects only Rust, and only when a
   # Rust input changed since the last green nightly, so a quiet day costs one
   # `Changes` job.
