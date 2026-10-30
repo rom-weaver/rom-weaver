@@ -195,6 +195,11 @@ class OpfsProxyServer {
     this.trace?.(`[browser-opfs] proxy server start slots=${slots.length} mounts=${this.mounts.length}`);
     try {
       while (this.running) {
+        // Notice a shutdown request here as well as through the async wait, which some engines leave unresolved.
+        if (this.shutdownControl && Atomics.load(this.shutdownControl, 0) > 0) {
+          this.stop();
+          break;
+        }
         if (this.doorbellWaitFailed) throw this.doorbellWaitError;
         const seen = Atomics.load(global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
         let servicedAny = false;

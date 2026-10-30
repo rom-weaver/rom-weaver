@@ -209,46 +209,46 @@ describe("browser runner lifecycle", () => {
 });
 
 describe("runRomWeaverJson", () => {
-  it.each(["success", "error", "cancel"])(
-    "waits for closure before strict compress scratch deletion (%s)",
-    async (outcome) => {
-      await warmupRomWeaverRunner();
-      state.createScratch.mockResolvedValue({});
-      let acknowledge!: () => void;
-      const closed = new Promise<void>((resolve) => {
-        acknowledge = resolve;
-      });
-      vi.mocked(state.clients[0]?.whenClosed as () => Promise<void>).mockReturnValue(closed);
-      const controller = new AbortController();
-      if (outcome === "error") state.run.mockRejectedValueOnce(new Error("compression failed"));
-      if (outcome === "cancel") state.run.mockReturnValueOnce(new Promise(() => undefined));
-      const pending = runRomWeaverJson(command("compress"), { signal: controller.signal }).then(
-        (result) => ({ result, error: undefined }),
-        (error: Error) => ({ result: undefined, error }),
-      );
-      await vi.waitFor(() => expect(state.run).toHaveBeenCalled());
-      if (outcome === "cancel") controller.abort();
-      try {
-        await vi.waitFor(() => expect(state.clients[0]?.terminate).toHaveBeenCalled());
-        expect(state.removeScratch).not.toHaveBeenCalled();
-      } finally {
-        acknowledge();
-      }
-      const settled = await pending;
-      expect(state.removeScratch).toHaveBeenCalledWith(expect.stringMatching(/^\/work\/rw-tmp-/), undefined, {
-        ignoreErrors: false,
-      });
-      if (outcome === "success") expect(settled.result).toEqual(success());
-      if (outcome === "error") expect(settled.error?.message).toBe("compression failed");
-      if (outcome === "cancel") expect(settled.error).toMatchObject({ name: "AbortError", code: "CANCELLED" });
-    },
-  );
+  it.each(["error", "cancel"])("waits for closure before strict compress scratch deletion (%s)", async (outcome) => {
+    await warmupRomWeaverRunner();
+    state.createScratch.mockResolvedValue({});
+    let acknowledge!: () => void;
+    const closed = new Promise<void>((resolve) => {
+      acknowledge = resolve;
+    });
+    vi.mocked(state.clients[0]?.whenClosed as () => Promise<void>).mockReturnValue(closed);
+    const controller = new AbortController();
+    if (outcome === "error") state.run.mockRejectedValueOnce(new Error("compression failed"));
+    if (outcome === "cancel") state.run.mockReturnValueOnce(new Promise(() => undefined));
+    const pending = runRomWeaverJson(command("compress"), { signal: controller.signal }).then(
+      (result) => ({ result, error: undefined }),
+      (error: Error) => ({ result: undefined, error }),
+    );
+    await vi.waitFor(() => expect(state.run).toHaveBeenCalled());
+    if (outcome === "cancel") controller.abort();
+    try {
+      await vi.waitFor(() => expect(state.clients[0]?.terminate).toHaveBeenCalled());
+      expect(state.removeScratch).not.toHaveBeenCalled();
+    } finally {
+      acknowledge();
+    }
+    const settled = await pending;
+    expect(state.removeScratch).toHaveBeenCalledWith(expect.stringMatching(/^\/work\/rw-tmp-/), undefined, {
+      ignoreErrors: false,
+    });
+    if (outcome === "error") expect(settled.error?.message).toBe("compression failed");
+    if (outcome === "cancel") expect(settled.error).toMatchObject({ name: "AbortError", code: "CANCELLED" });
+  });
 
-  it("propagates strict scratch removal failure after successful compression", async () => {
+  it("keeps the runner warm and removes the scratch in the background after a successful compress", async () => {
+    await warmupRomWeaverRunner();
     state.createScratch.mockResolvedValue({});
     state.removeScratch.mockRejectedValueOnce(new DOMException("still owned", "NoModificationAllowedError"));
-    await expect(runRomWeaverJson(command("compress"))).rejects.toThrow("still owned");
-    expect(state.removeScratch).toHaveBeenCalledTimes(1);
+    await expect(runRomWeaverJson(command("compress"))).resolves.toEqual(success());
+    expect(state.clients[0]?.terminate).not.toHaveBeenCalled();
+    expect(state.removeScratch).toHaveBeenCalledWith(expect.stringMatching(/^\/work\/rw-tmp-/), undefined, {
+      busyRetryDelaysMs: [50, 100, 200, 400, 800, 1600, 3200],
+    });
   });
 
   it("preserves the command error when strict scratch removal also fails", async () => {

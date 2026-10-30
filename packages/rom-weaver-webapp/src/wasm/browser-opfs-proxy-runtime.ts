@@ -1,4 +1,9 @@
-import { acknowledgeOpfsShutdown, requestOpfsShutdown, waitForOpfsShutdownState } from "./browser-opfs-shutdown.ts";
+import {
+  acknowledgeOpfsShutdown,
+  OPFS_SHUTDOWN_TIMEOUT_MS,
+  requestOpfsShutdown,
+  waitForOpfsShutdownState,
+} from "./browser-opfs-shutdown.ts";
 // Each runner owns one OPFS proxy worker and shares its channel with every WASI thread.
 // The proxy resolves mount paths from the OPFS root because nested workers cannot receive handles on Safari.
 
@@ -110,7 +115,9 @@ export async function startOpfsProxyRuntime(options: StartOpfsProxyRuntimeOption
     stop: () => {
       if (stopPromise) return stopPromise;
       requestOpfsShutdown(shutdownControl);
-      stopPromise = waitForOpfsShutdownState(shutdownControl, 2).finally(() => worker.terminate());
+      stopPromise = waitForOpfsShutdownState(shutdownControl, 2, OPFS_SHUTDOWN_TIMEOUT_MS).finally(() =>
+        worker.terminate(),
+      );
       return stopPromise;
     },
     transfer: channel.transfer,

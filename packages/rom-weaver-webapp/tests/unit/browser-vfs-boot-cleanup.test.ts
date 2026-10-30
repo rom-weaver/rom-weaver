@@ -72,7 +72,7 @@ describe("browser VFS boot readiness", () => {
     expect(requestLock).toHaveBeenCalledTimes(2);
   });
 
-  it.each(["cleanup", "lease"])("rejects staging and writes when %s fails", async (failure) => {
+  it.each(["cleanup", "lease"])("still stages and writes when %s fails", async (failure) => {
     vi.stubGlobal(
       "navigator",
       failure === "lease"
@@ -87,17 +87,19 @@ describe("browser VFS boot readiness", () => {
         : {},
     );
     if (failure === "cleanup")
-      state.request.mockResolvedValue({ error: { message: "cleanup failed" }, success: false });
+      state.request.mockImplementation(async (request: { action: string }) =>
+        request.action === "remove" ? { error: { message: "cleanup failed" }, success: false } : { success: true },
+      );
     const { createBrowserRuntimeVfsIo } = await import("../../src/platform/browser/browser-runtime-vfs.ts");
     const { createBrowserLargeFileVfs } = await import("../../src/storage/browser/browser-large-file-vfs.ts");
     const vfs = createBrowserLargeFileVfs();
+    vi.spyOn(vfs, "stat").mockResolvedValue({ path: "/work/input/rom.bin", size: 4 });
     const io = createBrowserRuntimeVfsIo({ vfs });
-    await expect(
-      io.stageSource({ fallbackFileName: "rom.bin", scope: "archive", source: new Blob(["ROM"]) }),
-    ).rejects.toThrow(`${failure} failed`);
-    await expect(vfs.write("/work/patches/patch.ips", new Uint8Array([1]))).rejects.toThrow(`${failure} failed`);
-    await expect(vfs.truncate("/work/operations/rom.bin", 4)).rejects.toThrow(`${failure} failed`);
-    expect(state.stage).not.toHaveBeenCalled();
-    expect(state.request.mock.calls.some(([request]) => ["write", "truncate"].includes(request.action))).toBe(false);
+    // A failed boot sweep only leaves stale scratch behind, so work proceeds instead of blocking until reload.
+    await io.stageSource({ fallbackFileName: "rom.bin", scope: "archive", source: new Blob(["ROM"]) });
+    await vfs.write("/work/patches/patch.ips", new Uint8Array([1]));
+    await vfs.truncate("/work/operations/rom.bin", 4);
+    expect(state.stage).toHaveBeenCalled();
+    expect(state.request.mock.calls.some(([request]) => ["write", "truncate"].includes(request.action))).toBe(true);
   });
 });

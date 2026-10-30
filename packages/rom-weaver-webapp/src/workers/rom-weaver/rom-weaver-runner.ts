@@ -450,6 +450,9 @@ const isRunnerUnrecoverableError = (error: unknown): boolean => {
   );
 };
 
+// A just-closed handle is released a moment later, so the background scratch removal retries while it is busy.
+const SCRATCH_REMOVE_BUSY_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600, 3200];
+
 const createRunnerAbortError = () => {
   const error = new Error("Workflow was cancelled") as Error & { code?: string };
   error.name = "AbortError";
@@ -614,7 +617,13 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
       removeAbortListener?.();
     }
     try {
-      if (scratchPath) {
+      if (scratchPath && "result" in outcome && outcome.result.ok) {
+        // A finished run closed its own temp files, so the runner stays warm and the scratch directory goes in the
+        // background, retrying while a just-closed handle is still being released.
+        void removeManagedOpfsPath(scratchPath, undefined, { busyRetryDelaysMs: SCRATCH_REMOVE_BUSY_RETRY_DELAYS_MS });
+      } else if (scratchPath) {
+        // A failed or cancelled run may leave unlinked spool files open, so end the runner and wait for its proxy
+        // to close them before removing the directory.
         lease.terminate();
         await waitForRomWeaverShutdown();
         await removeManagedOpfsPath(scratchPath, undefined, { ignoreErrors: false });

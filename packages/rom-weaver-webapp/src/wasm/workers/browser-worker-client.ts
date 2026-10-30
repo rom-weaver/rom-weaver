@@ -1,4 +1,5 @@
 import {
+  OPFS_SHUTDOWN_TIMEOUT_MS,
   acknowledgeOpfsShutdown,
   registerRomWeaverShutdown,
   requestOpfsShutdown,
@@ -96,7 +97,7 @@ export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
   }
 
   whenClosed(): Promise<void> {
-    this.shutdownPromise ??= waitForOpfsShutdownState(this.shutdownControl, 2);
+    this.shutdownPromise ??= waitForOpfsShutdownState(this.shutdownControl, 2, OPFS_SHUTDOWN_TIMEOUT_MS);
     return this.shutdownPromise;
   }
 

@@ -118,12 +118,17 @@ const startBrowserOpfsBootCleanup = (): Promise<void> => {
   return bootCleanupPromise;
 };
 
-// Starts the boot sweep when no caller has yet, then waits for it (rejecting with its error) and any in-flight
-// reset sweep. A reset sweep's own failure is reported to whoever started it, so it never rejects here.
+// Starts the boot sweep when no caller has yet, then waits for it and any in-flight reset sweep. A failed sweep
+// only leaves stale scratch behind, so it is logged and work proceeds; a reset sweep's own failure is reported
+// to whoever started it. The boot caller of `startBrowserOpfsBootCleanup` still sees the rejection.
 const waitForBrowserOpfsBootCleanup = async (): Promise<void> => {
   const resets = [...pendingResetSweeps].map((sweep) => sweep.catch(() => undefined));
   await Promise.all(resets);
-  await startBrowserOpfsBootCleanup();
+  await startBrowserOpfsBootCleanup().catch((error: unknown) => {
+    logger.warn("Boot OPFS cleanup failed; continuing without it", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
 };
 
 const listBrowserOpfs = async (): Promise<BrowserOpfsEntry[]> => {
