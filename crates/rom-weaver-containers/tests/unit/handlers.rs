@@ -1586,6 +1586,110 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
+    /// The payload name of a single-payload stream comes from the wrapper name, never from stored
+    /// metadata, so an extension-less name (`rom.gz` -> `rom`) must pass every kind filter instead of
+    /// being rejected as "no ROM found".
+    #[test]
+    fn stream_extract_accepts_extensionless_payload_under_kind_filters() {
+        let temp_dir = temp_dir_path("stream-extensionless-filter");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let payload: Vec<u8> = (0..4096u32).map(|i| (i * 31 + (i >> 4)) as u8).collect();
+        let gzip = {
+            let mut encoder = flate2::write::GzEncoder::new(Vec::new(), DeflateCompression::new(6));
+            encoder.write_all(&payload).expect("gz encode payload");
+            encoder.finish().expect("gz finish")
+        };
+        let zstd = zstd::stream::encode_all(payload.as_slice(), 0).expect("zstd encode payload");
+        let lz4 = {
+            // One uncompressed block: frame descriptor, block size with the high bit, data, end mark.
+            let mut frame = vec![0x04, 0x22, 0x4d, 0x18, 0x60, 0x40, 0x82];
+            frame.extend_from_slice(&(0x8000_0000 | payload.len() as u32).to_le_bytes());
+            frame.extend_from_slice(&payload);
+            frame.extend_from_slice(&[0; 4]);
+            frame
+        };
+        let registry = ContainerRegistry::new();
+        for (format, wrapped) in [("gz", gzip), ("zst", zstd), ("lz4", lz4)] {
+            for (label, filter) in [
+                (
+                    "rom",
+                    rom_weaver_core::ArchiveEntryKindFilter::new(true, false),
+                ),
+                (
+                    "patch",
+                    rom_weaver_core::ArchiveEntryKindFilter::new(false, true),
+                ),
+                (
+                    "rom+patch",
+                    rom_weaver_core::ArchiveEntryKindFilter::new(true, true),
+                ),
+            ] {
+                // The payload is named after the wrapper without its suffix: extension-less.
+                let source = temp_dir.join(format!("rom-{}.{format}", label.replace('+', "-")));
+                fs::write(&source, &wrapped).expect("write wrapped fixture");
+                let output_dir = temp_dir.join(format!("out-{format}-{label}"));
+                let handler = registry.find_by_name(format).expect("stream handler");
+                handler
+                    .extract(
+                        &rom_weaver_core::ContainerExtractRequest {
+                            source,
+                            out_dir: output_dir.clone(),
+                            selections: Vec::new(),
+                            kind_filter: filter,
+                            containing_archive: None,
+                            split_bin: false,
+                            ignore_common_files: true,
+                            overwrite: true,
+                            parent: None,
+                        },
+                        &test_context(&temp_dir, 1),
+                    )
+                    .unwrap_or_else(|error| panic!("{format} under --filter {label}: {error}"));
+                let extracted =
+                    fs::read(output_dir.join(format!("rom-{}", label.replace('+', "-"))))
+                        .expect("extracted payload");
+                assert_eq!(extracted, payload, "{format} under --filter {label}");
+            }
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    /// A named payload that no filter accepts is still rejected: only extension-less names relax.
+    #[test]
+    fn stream_extract_still_rejects_unrelated_named_payload_under_kind_filter() {
+        let temp_dir = temp_dir_path("stream-named-filter");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("notes.dat.txt.gz");
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), DeflateCompression::new(6));
+        encoder.write_all(b"not a rom").expect("gz encode payload");
+        fs::write(&source, encoder.finish().expect("gz finish")).expect("write fixture");
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("gz").expect("gz handler");
+        let error = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source,
+                    out_dir: temp_dir.join("out"),
+                    selections: Vec::new(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::new(true, false),
+                    containing_archive: None,
+                    split_bin: false,
+                    ignore_common_files: true,
+                    overwrite: true,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect_err("unrelated named payload must not match --filter rom");
+        assert!(
+            error.to_string().contains("matched --filter rom"),
+            "{error}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
     #[test]
     fn bz2_stream_capabilities_are_extract_only() {
         let registry = ContainerRegistry::new();
