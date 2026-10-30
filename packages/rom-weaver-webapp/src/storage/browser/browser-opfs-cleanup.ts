@@ -31,17 +31,26 @@ let bootSweepFailureLogged = false;
 let bootCleanupPromise: Promise<void> | null = null;
 // In-flight user-requested reset sweeps; commands wait for them like they wait for the boot sweep.
 const pendingResetSweeps = new Set<Promise<void>>();
+const ownedTransientOpfsPaths = new Set<string>();
 
-const removeTransientOpfs = async (options: { includeEmulator?: boolean; skipBusy?: boolean } = {}): Promise<void> => {
-  const paths = options.includeEmulator
-    ? [...TRANSIENT_OPFS_PATHS, EMULATOR_RETENTION_OPFS_PATH]
-    : TRANSIENT_OPFS_PATHS;
+// Callers MUST register only their own unique scratch directory, before writing into it.
+const registerBrowserTransientOpfsPath = (filePath: string): (() => void) => {
+  ownedTransientOpfsPaths.add(filePath);
+  return () => {
+    ownedTransientOpfsPaths.delete(filePath);
+  };
+};
+
+const removeTransientOpfs = async (paths: readonly string[], options: { skipBusy?: boolean } = {}): Promise<void> => {
   // Every removal MUST settle before this reports a failure, so work that proceeds after a failed sweep cannot
   // race a removal that is still deleting the same directory.
   const results = await Promise.allSettled(
     paths.map(async (filePath) => {
       const response = await requestBrowserOpfsStorage({ action: "remove", filePath });
-      if (response.success) return;
+      if (response.success) {
+        ownedTransientOpfsPaths.delete(filePath);
+        return;
+      }
       const message = response.error?.message || `Unable to remove OPFS path: ${filePath}`;
       const busy = response.error?.name === "NoModificationAllowedError" || BUSY_REMOVE_PATTERN.test(message);
       if (options.skipBusy && busy) {
@@ -55,8 +64,8 @@ const removeTransientOpfs = async (options: { includeEmulator?: boolean; skipBus
   if (failure) throw failure.reason;
 };
 
-const resetBrowserTransientOpfs = (options: { includeEmulator?: boolean; skipBusy?: boolean } = {}): Promise<void> => {
-  const sweep = removeTransientOpfs(options);
+const resetBrowserTransientOpfs = (options: { skipBusy?: boolean } = {}): Promise<void> => {
+  const sweep = removeTransientOpfs([...ownedTransientOpfsPaths], options);
   pendingResetSweeps.add(sweep);
   const settled = () => {
     pendingResetSweeps.delete(sweep);
@@ -92,7 +101,7 @@ const sweepStaleLibarchiveTemps = async (): Promise<void> => {
 const startBrowserOpfsBootCleanup = (): Promise<void> => {
   if (!bootCleanupPromise) {
     const cleanup = async () => {
-      await removeTransientOpfs({ includeEmulator: true, skipBusy: true });
+      await removeTransientOpfs([...TRANSIENT_OPFS_PATHS, EMULATOR_RETENTION_OPFS_PATH], { skipBusy: true });
       await sweepStaleLibarchiveTemps();
     };
     const locks = globalThis.navigator?.locks;
@@ -153,4 +162,10 @@ const listBrowserOpfs = async (): Promise<BrowserOpfsEntry[]> => {
   return response.entries || [];
 };
 
-export { listBrowserOpfs, resetBrowserTransientOpfs, startBrowserOpfsBootCleanup, waitForBrowserOpfsBootCleanup };
+export {
+  listBrowserOpfs,
+  registerBrowserTransientOpfsPath,
+  resetBrowserTransientOpfs,
+  startBrowserOpfsBootCleanup,
+  waitForBrowserOpfsBootCleanup,
+};

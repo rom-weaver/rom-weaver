@@ -88,6 +88,7 @@ describe("wasm commands vs the page-boot OPFS sweep", () => {
     });
     const cleanup = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
     const runtime = await import("../../src/lib/runtime/wasm-command-runtime.ts");
+    cleanup.registerBrowserTransientOpfsPath("/work/operations/reset-pending");
     const reset = cleanup.resetBrowserTransientOpfs();
     const parse = runtime
       .invokeRomWeaverWeaveParseWorker({
