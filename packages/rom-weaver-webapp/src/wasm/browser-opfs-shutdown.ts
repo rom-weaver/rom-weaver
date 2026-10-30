@@ -1,6 +1,8 @@
 // Shared control MUST keep state (0 live, 1 stopping, 2 closed, 3 failed) and proxy-bootstrap ownership in separate words.
 // Longest wait for the proxy to acknowledge closing its handles before the native worker is terminated anyway.
 export const OPFS_SHUTDOWN_TIMEOUT_MS = 10_000;
+// How often a timed wait re-reads the shutdown state instead of trusting the async notification alone.
+const OPFS_SHUTDOWN_RECHECK_MS = 250;
 const pendingShutdowns = new Set<Promise<void>>();
 
 export function registerRomWeaverShutdown(shutdown: Promise<void>): void {
@@ -41,11 +43,12 @@ export async function waitForOpfsShutdownState(control: Int32Array, state: numbe
       await wait.value;
       continue;
     }
+    // Re-read the state in short slices: an engine may lose the notification, and the state itself is authoritative.
     let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
       wait.value,
       new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, remaining);
+        timer = setTimeout(resolve, Math.min(remaining, OPFS_SHUTDOWN_RECHECK_MS));
       }),
     ]);
     clearTimeout(timer);

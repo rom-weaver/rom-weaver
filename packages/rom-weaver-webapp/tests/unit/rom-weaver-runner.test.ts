@@ -234,6 +234,7 @@ describe("runRomWeaverJson", () => {
     }
     const settled = await pending;
     expect(state.removeScratch).toHaveBeenCalledWith(expect.stringMatching(/^\/work\/rw-tmp-/), undefined, {
+      busyRetryDelaysMs: [50, 100, 200, 400, 800, 1600, 3200],
       ignoreErrors: false,
     });
     if (outcome === "error") expect(settled.error?.message).toBe("compression failed");

@@ -620,17 +620,23 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
       if (scratchPath && "result" in outcome && outcome.result.ok) {
         // A finished run closed its own temp files, so the runner stays warm and the scratch directory goes in the
         // background, retrying while a just-closed handle is still being released.
-        void removeManagedOpfsPath(scratchPath, undefined, { busyRetryDelaysMs: SCRATCH_REMOVE_BUSY_RETRY_DELAYS_MS });
+        void removeManagedOpfsPath(scratchPath, undefined, {
+          busyRetryDelaysMs: SCRATCH_REMOVE_BUSY_RETRY_DELAYS_MS,
+        }).catch((error: unknown) => {
+          logger.warn("compress scratch cleanup failed", { scratchPath, message: String(error) });
+        });
       } else if (scratchPath) {
         // A failed or cancelled run may leave unlinked spool files open, so end the runner and wait for its proxy
         // to close them before removing the directory.
         lease.terminate();
         await waitForRomWeaverShutdown();
-        await removeManagedOpfsPath(scratchPath, undefined, { ignoreErrors: false });
+        await removeManagedOpfsPath(scratchPath, undefined, {
+          busyRetryDelaysMs: SCRATCH_REMOVE_BUSY_RETRY_DELAYS_MS,
+          ignoreErrors: false,
+        });
       }
     } catch (error) {
-      if ("result" in outcome && outcome.result.ok) outcome = { error };
-      else logger.warn("compress scratch cleanup failed", { scratchPath, message: String(error) });
+      logger.warn("compress scratch cleanup failed", { scratchPath, message: String(error) });
     } finally {
       if (isMobileRuntime()) {
         // Mobile releases runners after heavy or threaded work. Light-operation runners remain for a short burst, then idle eviction releases them.

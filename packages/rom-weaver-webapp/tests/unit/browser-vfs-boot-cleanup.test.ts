@@ -72,24 +72,11 @@ describe("browser VFS boot readiness", () => {
     expect(requestLock).toHaveBeenCalledTimes(2);
   });
 
-  it.each(["cleanup", "lease"])("still stages and writes when %s fails", async (failure) => {
-    vi.stubGlobal(
-      "navigator",
-      failure === "lease"
-        ? {
-            locks: {
-              request: async (_name: string, options: LockOptions, callback: (lock: object) => unknown) => {
-                if (options.mode === "shared") throw new Error("lease failed");
-                return callback({});
-              },
-            },
-          }
-        : {},
+  it("still stages and writes when the boot sweep fails", async () => {
+    vi.stubGlobal("navigator", {});
+    state.request.mockImplementation(async (request: { action: string }) =>
+      request.action === "remove" ? { error: { message: "cleanup failed" }, success: false } : { success: true },
     );
-    if (failure === "cleanup")
-      state.request.mockImplementation(async (request: { action: string }) =>
-        request.action === "remove" ? { error: { message: "cleanup failed" }, success: false } : { success: true },
-      );
     const { createBrowserRuntimeVfsIo } = await import("../../src/platform/browser/browser-runtime-vfs.ts");
     const { createBrowserLargeFileVfs } = await import("../../src/storage/browser/browser-large-file-vfs.ts");
     const vfs = createBrowserLargeFileVfs();
@@ -101,5 +88,27 @@ describe("browser VFS boot readiness", () => {
     await vfs.truncate("/work/operations/rom.bin", 4);
     expect(state.stage).toHaveBeenCalled();
     expect(state.request.mock.calls.some(([request]) => ["write", "truncate"].includes(request.action))).toBe(true);
+  });
+
+  it("rejects staging and writes when the shared lifetime lease cannot be taken", async () => {
+    vi.stubGlobal("navigator", {
+      locks: {
+        request: async (_name: string, options: LockOptions, callback: (lock: object) => unknown) => {
+          if (options.mode === "shared") throw new Error("lease failed");
+          return callback({});
+        },
+      },
+    });
+    const { createBrowserRuntimeVfsIo } = await import("../../src/platform/browser/browser-runtime-vfs.ts");
+    const { createBrowserLargeFileVfs } = await import("../../src/storage/browser/browser-large-file-vfs.ts");
+    const vfs = createBrowserLargeFileVfs();
+    const io = createBrowserRuntimeVfsIo({ vfs });
+    await expect(
+      io.stageSource({ fallbackFileName: "rom.bin", scope: "archive", source: new Blob(["ROM"]) }),
+    ).rejects.toThrow("lease failed");
+    await expect(vfs.write("/work/patches/patch.ips", new Uint8Array([1]))).rejects.toThrow("lease failed");
+    await expect(vfs.truncate("/work/operations/rom.bin", 4)).rejects.toThrow("lease failed");
+    expect(state.stage).not.toHaveBeenCalled();
+    expect(state.request.mock.calls.some(([request]) => ["write", "truncate"].includes(request.action))).toBe(false);
   });
 });
