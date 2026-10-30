@@ -1388,3 +1388,33 @@ fn split_parallel_writes_preserve_source_ranges_and_overlapping_literals() {
     expected[0] = source[11];
     assert_eq!(fs::read(output_path).expect("output"), expected);
 }
+
+#[test]
+fn apply_rejects_a_corrupt_output_offset_that_would_write_gigabytes() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let patch_path = temp.child("corrupt.dps");
+    let output_path = temp.child("output.bin");
+    fs::write(&source_path, vec![0u8; 512]).expect("fixture");
+    let patch = encode_dps_patch(
+        &[DpsRecord::CopyFromSource {
+            output_offset: 0xF000_0000,
+            source_offset: 0,
+            length: 1,
+        }],
+        dps_metadata("corrupt.dps"),
+        512,
+    )
+    .expect("patch bytes");
+    fs::write(&patch_path, patch).expect("fixture");
+
+    let result = DpsPatchHandler::new(&DPS).apply(
+        &PatchApplyRequest {
+            input: source_path,
+            patches: vec![patch_path],
+            output: output_path.clone(),
+        },
+        &test_context_with_threads(&temp, 2),
+    );
+    crate::test_support::assert_implausible_output_rejected(result, &output_path);
+}

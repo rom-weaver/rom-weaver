@@ -116,7 +116,7 @@ Point it at an archive and it looks inside:
 rom-weaver probe --input games.zip
 ```
 
-`--select` picks one member by name, prefix, or glob. `--no-extract` treats the archive itself as the file to identify.
+`--select` picks one member by exact name, folder, or glob. `--no-extract` treats the archive itself as the file to identify.
 
 ## Hash a file
 

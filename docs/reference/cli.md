@@ -176,7 +176,7 @@ Examples are in [Use an archive pipeline](../how-to/work-with-archives.md#use-an
 
 `probe`, `extract`, `identify`, `checksum`, `trim`, `weave parse`, and the patching commands open archives automatically. Five flags control archive selection:
 
-- `-s`/`--select` picks which file to use, by exact name, prefix, or glob. On `patch apply` and `patch validate` it applies to the input and to every `--patch` archive alike.
+- `-s`/`--select` picks which file to use, by exact name, folder, or glob. On `patch apply` and `patch validate` it applies to the input and to every `--patch` archive alike.
 - `--patch-select` picks the file inside the `--patch` archive it follows, overriding `--select` for that patch. Repeat it once per `--patch`, in the same order. Only `patch apply` and `patch validate` take it, and it is the only way to select different files from an archive input and an archive patch in one command.
 - `--filter rom` considers only files that look like ROMs; `--filter patch` only patches. Both judge by extension, except that a single-file compressed stream whose payload name has no extension (`rom.gz` extracts to `rom`) passes both filters. `ingest` classifies it by its bytes after extraction; other commands accept it under either filter and treat it as you pass it. The flag is repeatable and comma-separable (`--filter rom,patch`).
 - `--no-ignore` also considers the files normally skipped: readmes, images, checksum sidecars, and OS clutter such as `.DS_Store`.

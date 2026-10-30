@@ -91,3 +91,6 @@ mod wbfs_split;
 
 #[path = "cli_smoke/pbp.rs"]
 mod pbp;
+
+#[path = "cli_smoke/patch_robustness.rs"]
+mod patch_robustness;

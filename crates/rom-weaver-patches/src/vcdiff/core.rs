@@ -1532,6 +1532,17 @@ pub(super) fn encode_patch_native(
     } else {
         encode_windows_sequential(&mut encoder, &inputs, progress)?;
     }
+    if target_len == 0 {
+        // A header with no windows is legal per RFC 3284, but xdelta3 refuses to decode it
+        // ("nothing to output"); its own encoder writes one empty window for an empty target.
+        debug!(
+            source_len,
+            checksum = options.checksum,
+            "VCDIFF create: writing one empty window for an empty target"
+        );
+        let empty_window = build_native_window(&[], 0, &[], &options)?;
+        encoder.write_raw_window(&empty_window)?;
+    }
 
     let writer = encoder.finish()?;
     let output = writer.into_inner().map_err(|error| {

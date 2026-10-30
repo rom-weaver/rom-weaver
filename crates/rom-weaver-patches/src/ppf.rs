@@ -174,11 +174,17 @@ impl PatchHandler for PpfPatchHandler {
             validate_blockcheck(&request.input, blockcheck)?;
         }
 
+        let ppf_output_len = ppf_required_output_len(input_len, &parsed.records);
+        crate::ensure_plausible_output_size(
+            self.descriptor.name,
+            ppf_output_len,
+            input_len,
+            patch_path,
+        )?;
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
         let thread_capability = parallel_per_record_capability(parsed.records.len());
-        let ppf_output_len = ppf_required_output_len(input_len, &parsed.records);
         let in_memory = crate::can_apply_sparse_in_memory(
             context,
             input_len,
@@ -240,6 +246,13 @@ impl PatchHandler for PpfPatchHandler {
                 "PPF2 input size invalid; expected {expected_len}, got {input_len}"
             )));
         }
+
+        crate::ensure_plausible_output_size(
+            self.descriptor.name,
+            ppf_required_output_len(input_len, &parsed.records),
+            input_len,
+            patch_path,
+        )?;
 
         if validate_checksums && let Some(blockcheck) = &parsed.blockcheck {
             validate_blockcheck(&request.input, blockcheck)?;
