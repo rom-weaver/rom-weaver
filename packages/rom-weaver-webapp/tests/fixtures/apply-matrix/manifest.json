@@ -1,0 +1,1237 @@
+{
+  "generatedBy": "tests/fixtures/apply-matrix/generate.mjs",
+  "entries": [
+    {
+      "name": "base.bin",
+      "dir": "blobs",
+      "purpose": "source ROM every patch applies to (8 KiB, xorshift32 seed 0x1badf00d)",
+      "sha256": "9742f97afd9539529aa8ab131ce9c1f29801b9882601940cd1c11ee635bff108",
+      "size": 8192,
+      "how": "encoders.prng"
+    },
+    {
+      "name": "other.bin",
+      "dir": "blobs",
+      "purpose": "wrong-source ROM: same size as base.bin, different bytes",
+      "sha256": "1febd39d2d618cbe2f80bbfbe62829a688fa9bce78151f0805c76abacc4498ac",
+      "size": 8192,
+      "how": "encoders.prng"
+    },
+    {
+      "name": "target-same.bin",
+      "dir": "blobs",
+      "purpose": "expected apply output (same)",
+      "sha256": "caabe42e52efcc71f44e7d94590fabab71de09450762e271fd1c5785af86355f",
+      "size": 8192,
+      "how": "base.bin with 4 edits (+1500 B appended | truncated to 6000 B)"
+    },
+    {
+      "name": "target-grow.bin",
+      "dir": "blobs",
+      "purpose": "expected apply output (grow)",
+      "sha256": "708a06189c7a2a8450837aafddefe474c4912de2b6fa416b1f6805bcb90b8aa1",
+      "size": 9692,
+      "how": "base.bin with 4 edits (+1500 B appended | truncated to 6000 B)"
+    },
+    {
+      "name": "target-shrink.bin",
+      "dir": "blobs",
+      "purpose": "expected apply output (shrink)",
+      "sha256": "a331a80df3e31b363367a5dfa5223c34b76f9872dcff64cdcb9565f94e979a6e",
+      "size": 6000,
+      "how": "base.bin with 4 edits (+1500 B appended | truncated to 6000 B)"
+    },
+    {
+      "name": "ips-same.ips",
+      "dir": "blobs",
+      "purpose": "ips same: base.bin -> target-same.bin",
+      "sha256": "70c05b8cc36c4d0e913163471e9621b431327e9f227378d0401b2d6cd7e644cf",
+      "size": 52,
+      "how": "encoders.ips (independent of the Rust implementation)"
+    },
+    {
+      "name": "ips-grow.ips",
+      "dir": "blobs",
+      "purpose": "ips grow: base.bin -> target-grow.bin",
+      "sha256": "bc6aaa5f52d8b34b7143a5df7c51bbf770d4f99f2b49a529a0335735c9c68d38",
+      "size": 1552,
+      "how": "encoders.ips (independent of the Rust implementation)"
+    },
+    {
+      "name": "ips-shrink.ips",
+      "dir": "blobs",
+      "purpose": "ips shrink: base.bin -> target-shrink.bin",
+      "sha256": "3a52f3485e316f15b01f57e2fbb8bfda77ef344734b88e50fa3c323f1d774adb",
+      "size": 34,
+      "how": "encoders.ips (independent of the Rust implementation)"
+    },
+    {
+      "name": "ips32-same.ips32",
+      "dir": "blobs",
+      "purpose": "ips32 same: base.bin -> target-same.bin",
+      "sha256": "8c0cfad561d0038394ed2b08f608287ea733e2fe59dfa332a7e0e0242bc65296",
+      "size": 57,
+      "how": "encoders.ips32 (independent of the Rust implementation)"
+    },
+    {
+      "name": "ips32-grow.ips32",
+      "dir": "blobs",
+      "purpose": "ips32 grow: base.bin -> target-grow.bin",
+      "sha256": "476abb0eef64c77c772d2e4d25a684da0a93e7b0802197eff694bb1f7e5d4758",
+      "size": 1557,
+      "how": "encoders.ips32 (independent of the Rust implementation)"
+    },
+    {
+      "name": "ebp-same.ebp",
+      "dir": "blobs",
+      "purpose": "ebp same: base.bin -> target-same.bin",
+      "sha256": "99b5167af6858f7a339a0d188b2f9eee8eeeb681b35c16a96f1488874571f2a8",
+      "size": 116,
+      "how": "encoders.ebp (independent of the Rust implementation)"
+    },
+    {
+      "name": "bps-same.bps",
+      "dir": "blobs",
+      "purpose": "bps same: base.bin -> target-same.bin",
+      "sha256": "ceae09da239a105e64afcde145c81a1079d2ad459e9b30bb3c6cfc41890afd83",
+      "size": 131,
+      "how": "encoders.bps (independent of the Rust implementation)"
+    },
+    {
+      "name": "bps-grow.bps",
+      "dir": "blobs",
+      "purpose": "bps grow: base.bin -> target-grow.bin",
+      "sha256": "34d9cd44eb9b53f27a56b704a0c923fc28129c02878a13a23c8054568e913208",
+      "size": 1620,
+      "how": "encoders.bps (independent of the Rust implementation)"
+    },
+    {
+      "name": "bps-shrink.bps",
+      "dir": "blobs",
+      "purpose": "bps shrink: base.bin -> target-shrink.bin",
+      "sha256": "28ba8ef91ff596c62f739f1f1b83f3a0c743bc2c0f515f8c93344b8a39ed4bd8",
+      "size": 101,
+      "how": "encoders.bps (independent of the Rust implementation)"
+    },
+    {
+      "name": "ups-same.ups",
+      "dir": "blobs",
+      "purpose": "ups same: base.bin -> target-same.bin",
+      "sha256": "01c27a41fcf161e3e6c5c445bfa63f19bdb6bea880f9675b4d73e3b2ba54287b",
+      "size": 116,
+      "how": "encoders.ups (independent of the Rust implementation)"
+    },
+    {
+      "name": "ups-grow.ups",
+      "dir": "blobs",
+      "purpose": "ups grow: base.bin -> target-grow.bin",
+      "sha256": "04b2890d64f1f6e1fb6b8e1c6336039475d27d7b8eadf415b2377a479c921612",
+      "size": 1624,
+      "how": "encoders.ups (independent of the Rust implementation)"
+    },
+    {
+      "name": "ups-shrink.ups",
+      "dir": "blobs",
+      "purpose": "ups shrink: base.bin -> target-shrink.bin",
+      "sha256": "2efe19febf13d97b6f315739acc185a89a0b7f867e241501f4b98d69a40e81fd",
+      "size": 2299,
+      "how": "encoders.ups (independent of the Rust implementation)"
+    },
+    {
+      "name": "xdelta-same.xdelta",
+      "dir": "blobs",
+      "purpose": "xdelta same: base.bin -> target-same.bin",
+      "sha256": "df97fc06590dcbc8a992eb2d86e41c512f87c237c811e0346d55ad47b31235ae",
+      "size": 126,
+      "how": "encoders.xdelta (independent of the Rust implementation)"
+    },
+    {
+      "name": "xdelta-grow.xdelta",
+      "dir": "blobs",
+      "purpose": "xdelta grow: base.bin -> target-grow.bin",
+      "sha256": "a043d1c89c379de31f3ee45110b5db6d0663bd605d3dd28e616a8b2ab332ef3f",
+      "size": 1629,
+      "how": "encoders.xdelta (independent of the Rust implementation)"
+    },
+    {
+      "name": "xdelta-shrink.xdelta",
+      "dir": "blobs",
+      "purpose": "xdelta shrink: base.bin -> target-shrink.bin",
+      "sha256": "b09ad0ffc20b37c00b8f39be1af8cc5138fb652b515004dcdc56d5d1d2e0cba0",
+      "size": 108,
+      "how": "encoders.xdelta (independent of the Rust implementation)"
+    },
+    {
+      "name": "vcdiff-same.vcdiff",
+      "dir": "blobs",
+      "purpose": "vcdiff same: base.bin -> target-same.bin",
+      "sha256": "df97fc06590dcbc8a992eb2d86e41c512f87c237c811e0346d55ad47b31235ae",
+      "size": 126,
+      "how": "encoders.vcdiff (independent of the Rust implementation)"
+    },
+    {
+      "name": "ppf3-same.ppf",
+      "dir": "blobs",
+      "purpose": "ppf3 same: base.bin -> target-same.bin",
+      "sha256": "79223abc0deb90f11dc931a15e58c9b8f6a7acbdd849167e831135bce6972542",
+      "size": 266,
+      "how": "encoders.ppf3 (independent of the Rust implementation)"
+    },
+    {
+      "name": "gdiff-same.gdiff",
+      "dir": "blobs",
+      "purpose": "gdiff same: base.bin -> target-same.bin",
+      "sha256": "609b04f88a1761f4815c7da993c7bf817abfc7469ffd4994296e0ef29511d108",
+      "size": 115,
+      "how": "encoders.gdiff (independent of the Rust implementation)"
+    },
+    {
+      "name": "gdiff-grow.gdiff",
+      "dir": "blobs",
+      "purpose": "gdiff grow: base.bin -> target-grow.bin",
+      "sha256": "3e7aa6f8469cf99c3ddd72f5439a1e76d89dd0442bf2ea4c7a1cf3aa0cbaa614",
+      "size": 1621,
+      "how": "encoders.gdiff (independent of the Rust implementation)"
+    },
+    {
+      "name": "gdiff-shrink.gdiff",
+      "dir": "blobs",
+      "purpose": "gdiff shrink: base.bin -> target-shrink.bin",
+      "sha256": "01d49eff3d73a67f3bdb9d81ec1c11118f16c8ad8f661af469b1d9aa52d722e9",
+      "size": 98,
+      "how": "encoders.gdiff (independent of the Rust implementation)"
+    },
+    {
+      "name": "ips-noop.ips",
+      "dir": "blobs",
+      "purpose": "valid IPS with zero records (identity patch): output must equal base.bin",
+      "sha256": "50f16c2cddd8ac7a8ef5fb70d2c66fd25d1d33a35ad10707ee464138368753ea",
+      "size": 8,
+      "how": "encoders.encodeIps(base, base)"
+    },
+    {
+      "name": "empty.ips",
+      "dir": "blobs",
+      "purpose": "zero-byte patch file (error UX)",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0,
+      "how": "empty"
+    },
+    {
+      "name": "chain-1-ips.ips",
+      "dir": "blobs",
+      "purpose": "chain step 1 (ips): c0 -> c1",
+      "sha256": "1242de7e6b374aba1884dc4c779c5dba3f78692a31d87454f430d95ee9582a55",
+      "size": 37,
+      "how": "encoders.ips"
+    },
+    {
+      "name": "chain-2-ips32.ips32",
+      "dir": "blobs",
+      "purpose": "chain step 2 (ips32): c1 -> c2",
+      "sha256": "0b95ebbb805bb68d40bed813b2aacec2ad06ba9c009d9cf8a0a5d60ec93996ea",
+      "size": 39,
+      "how": "encoders.ips32"
+    },
+    {
+      "name": "chain-3-ebp.ebp",
+      "dir": "blobs",
+      "purpose": "chain step 3 (ebp): c2 -> c3",
+      "sha256": "968f242bbd5e7f53639f748171df5fa0aa9052d43edac5693e9e1dc8e0805e9c",
+      "size": 101,
+      "how": "encoders.ebp"
+    },
+    {
+      "name": "chain-4-bps.bps",
+      "dir": "blobs",
+      "purpose": "chain step 4 (bps): c3 -> c4",
+      "sha256": "e5a0f13500a9361653f878efcd666d2ff208fbe0ef20a25ba471bc723f327dbb",
+      "size": 51,
+      "how": "encoders.bps"
+    },
+    {
+      "name": "chain-5-ups.ups",
+      "dir": "blobs",
+      "purpose": "chain step 5 (ups): c4 -> c5",
+      "sha256": "db7965cf7f48436a75aebe94c9b75a60abaf31051346847ac9102fd39cb0bd46",
+      "size": 47,
+      "how": "encoders.ups"
+    },
+    {
+      "name": "chain-6-xdelta.xdelta",
+      "dir": "blobs",
+      "purpose": "chain step 6 (xdelta): c5 -> c6",
+      "sha256": "5a7511a7764068134c6a94e8649a4797ea9db4e5fe779520bd71f1e631030ea9",
+      "size": 51,
+      "how": "encoders.xdelta"
+    },
+    {
+      "name": "chain-7-gdiff.gdiff",
+      "dir": "blobs",
+      "purpose": "chain step 7 (gdiff): c6 -> c7",
+      "sha256": "075ed744af353991c1dc585c83fd8c6c42eaf61174f50244420c40c8e3dcd72d",
+      "size": 41,
+      "how": "encoders.gdiff"
+    },
+    {
+      "name": "chain-final-minus1.bin",
+      "dir": "blobs",
+      "purpose": "expected result when the last chain step is switched off",
+      "sha256": "e5afb8fb5e42d726beec8789b18d46df342052be0768679c65cf7ce8466a3d21",
+      "size": 8192,
+      "how": "chain c7"
+    },
+    {
+      "name": "chain-8-vcdiff.vcdiff",
+      "dir": "blobs",
+      "purpose": "chain step 8 (vcdiff): c7 -> c8",
+      "sha256": "667b4dcf9ab9b594b17edc5526a0b1215b8b6781f021336e77fe00160545a163",
+      "size": 51,
+      "how": "encoders.vcdiff"
+    },
+    {
+      "name": "chain-final.bin",
+      "dir": "blobs",
+      "purpose": "expected result of the full 8-step chain",
+      "sha256": "9733735c78863af6b84fb1b3d2d4536f9a441ebd244cc70159d144a4be646188",
+      "size": 8192,
+      "how": "base.bin + 8 successive edits"
+    },
+    {
+      "name": "pair-1.bps",
+      "dir": "blobs",
+      "purpose": "order-detectable chain step 1: base -> p1 (bps)",
+      "sha256": "b93ffeb63baf43d4fc56099a6b43327c471dba7cce30071a95ff8c3391b60cac",
+      "size": 43,
+      "how": "encoders.bps"
+    },
+    {
+      "name": "pair-2.ups",
+      "dir": "blobs",
+      "purpose": "order-detectable chain step 2: p1 -> p2 (ups)",
+      "sha256": "55704bd7bd20298b4ae0b6bf4240f3799a5bcca2f9b4b5da49a84869e80269f8",
+      "size": 39,
+      "how": "encoders.ups"
+    },
+    {
+      "name": "pair-3.bps",
+      "dir": "blobs",
+      "purpose": "order-detectable chain step 3: p2 -> p3 (bps)",
+      "sha256": "87a06a3ca5375bb7f91cb38ffb24c11fdd673be6888843098b99b398301e7292",
+      "size": 43,
+      "how": "encoders.bps"
+    },
+    {
+      "name": "pair-final.bin",
+      "dir": "blobs",
+      "purpose": "expected result of pair-1..3",
+      "sha256": "e37c482593f65dd87e9ebf5d4d28a1d2d350c94df72e78205c47ef4ea7993ae1",
+      "size": 8192,
+      "how": "base + 3 edits"
+    },
+    {
+      "name": "hdiff-source.bin",
+      "dir": "blobs",
+      "purpose": "source for the upstream hdiffpatch fixtures (copied from crates/rom-weaver-patches/tests/fixtures/hdiffpatch)",
+      "sha256": "39e1c53811c9870a052ff6e98f8cb2f62c8563316c17bd17ba7abd57e5821791",
+      "size": 8960,
+      "how": "copy"
+    },
+    {
+      "name": "hdiff-target.bin",
+      "dir": "blobs",
+      "purpose": "expected output of the hdiffpatch fixtures",
+      "sha256": "41f90b5df9ff7f91c11a0064d1b1a16b058cbca8b84adc847edc04021da9f9a8",
+      "size": 13056,
+      "how": "copy"
+    },
+    {
+      "name": "hdiffpatch-hdiff13-bz2.hdiff",
+      "dir": "blobs",
+      "purpose": "upstream-produced upstream-hdiff13-bz2.hdiff",
+      "sha256": "359c3cfec21bcfbd9f1d814222307b3602c61d3a2088d86f8f9c6eed260c67fc",
+      "size": 741,
+      "how": "copy from crate fixtures"
+    },
+    {
+      "name": "hdiffpatch-hdiff13-lzma.hdiff",
+      "dir": "blobs",
+      "purpose": "upstream-produced upstream-hdiff13-lzma.hdiff",
+      "sha256": "541ec9efd942f4dd45c962afc585b5533e86a79cdd5c205ec8269ff77c585343",
+      "size": 347,
+      "how": "copy from crate fixtures"
+    },
+    {
+      "name": "hdiffpatch-hdiff13-lzma2.hdiff",
+      "dir": "blobs",
+      "purpose": "upstream-produced upstream-hdiff13-lzma2.hdiff",
+      "sha256": "234ed9cefda606cc37e782f688782af526470edbd67ef36033e43687fb70c59a",
+      "size": 352,
+      "how": "copy from crate fixtures"
+    },
+    {
+      "name": "hdiffpatch-hdiff13-zlib.hdiff",
+      "dir": "blobs",
+      "purpose": "upstream-produced upstream-hdiff13-zlib.hdiff",
+      "sha256": "e4db4b4b5999e83ba9a8ca2914c42adf26e693e73d61599974c6f79eefd65cfc",
+      "size": 384,
+      "how": "copy from crate fixtures"
+    },
+    {
+      "name": "hdiffpatch-hdiff13-zstd.hdiff",
+      "dir": "blobs",
+      "purpose": "upstream-produced upstream-hdiff13-zstd.hdiff",
+      "sha256": "0c677c7f7b4c65e5ca8b8b825ebff161316c54e198329790f3cb67c1c0901a1c",
+      "size": 353,
+      "how": "copy from crate fixtures"
+    },
+    {
+      "name": "hdiffpatch-hdiffsf20-zstd.hpatchz",
+      "dir": "blobs",
+      "purpose": "upstream-produced upstream-hdiffsf20-zstd.hpatchz",
+      "sha256": "56f35ead7ca3c0184ba4667e35a6bd8c7b5a00e6281aeb4d9dce2d5013d07609",
+      "size": 340,
+      "how": "copy from crate fixtures"
+    },
+    {
+      "name": "dps-same.dps",
+      "dir": "cache",
+      "purpose": "dps same-size patch created by the native CLI; apply must reproduce target-same.bin",
+      "sha256": "abba6e304387bce4fc255451847245a6bb5e3ed3d934d050e99e5f47e327dbcf",
+      "size": 371,
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output dps-same.dps"
+    },
+    {
+      "name": "rup-same.rup",
+      "dir": "cache",
+      "purpose": "rup same-size patch created by the native CLI; apply must reproduce target-same.bin",
+      "sha256": "9a68ca89ce63b376e0346f87ea3cf6115ba8ef209f0f9ed29dcd77484df93540",
+      "size": 2198,
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output rup-same.rup"
+    },
+    {
+      "name": "ppf-same.ppf",
+      "dir": "cache",
+      "purpose": "ppf same-size patch created by the native CLI; apply must reproduce target-same.bin",
+      "sha256": "765f1bc74f5ab8fa67f5394d3ccd446a2db7058d01e069a0625a7c95cd64a62f",
+      "size": 181,
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output ppf-same.ppf"
+    },
+    {
+      "name": "aps-same.aps",
+      "dir": "cache",
+      "purpose": "aps same-size patch created by the native CLI; apply must reproduce target-same.bin",
+      "sha256": "cf6a0d8dbf2ee4a393b6d575a1d49181aed0a13db64902cf86d73f6e7d7ccc1f",
+      "size": 104,
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output aps-same.aps"
+    },
+    {
+      "name": "apsgba-same.apsgba",
+      "dir": "cache",
+      "purpose": "apsgba same-size patch created by the native CLI; apply must reproduce target-same.bin",
+      "sha256": "ef52f79a1c9ae78b8bd763b589fc251647b981fa54927238b5d07b6395089fe7",
+      "size": 65556,
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output apsgba-same.apsgba"
+    },
+    {
+      "name": "pat-same.pat",
+      "dir": "cache",
+      "purpose": "pat same-size patch created by the native CLI; apply must reproduce target-same.bin",
+      "sha256": "2a1633cc00eefa410b5cbd789e2840f3d8524c10a016d7db6b5aed39786c230b",
+      "size": 1275,
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output pat-same.pat"
+    },
+    {
+      "name": "solid-same.solid",
+      "dir": "cache",
+      "purpose": "solid same-size patch created by the native CLI; apply must reproduce target-same.bin",
+      "sha256": "f941e940f4d2ccc975cfe91cd434fb91c0373127c087e748637319218791388f",
+      "size": 172,
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output solid-same.solid"
+    },
+    {
+      "name": "mod-same.mod",
+      "dir": "cache",
+      "purpose": "mod same-size patch created by the native CLI; apply must reproduce target-same.bin",
+      "sha256": "749d60aa8dc810f2e22300be406e5723e46e6a4c4e00b799ddab2da31242491f",
+      "size": 125,
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output mod-same.mod"
+    },
+    {
+      "name": "bdf-same.bdf",
+      "dir": "cache",
+      "purpose": "bdf same-size patch created by the native CLI; apply must reproduce target-same.bin",
+      "sha256": "dc75a7adaa5dda62b4cf43ed7b873f09a1e8eeb8f5eec6e859bcc67c0a0a2376",
+      "size": 278,
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output bdf-same.bdf"
+    },
+    {
+      "name": "cchain-1-dps.dps",
+      "dir": "cache",
+      "purpose": "native-chain step 1 (dps)",
+      "sha256": "74cd4ded2f8f5590fd21c76da1c36414c75183f7df19041462f2c4fe840ab9f4",
+      "size": 257,
+      "how": "rom-weaver patch create"
+    },
+    {
+      "name": "cchain-2-rup.rup",
+      "dir": "cache",
+      "purpose": "native-chain step 2 (rup)",
+      "sha256": "50fa7daa7f3e3ee270826f93130258c6290be6153e5e113869c1373272612af8",
+      "size": 2120,
+      "how": "rom-weaver patch create"
+    },
+    {
+      "name": "cchain-3-ppf.ppf",
+      "dir": "cache",
+      "purpose": "native-chain step 3 (ppf)",
+      "sha256": "530c7ae7d8abf3ef882b551ae608309f58a4b58a3c1832e01f1fdbcc366fd0d5",
+      "size": 93,
+      "how": "rom-weaver patch create"
+    },
+    {
+      "name": "cchain-4-aps.aps",
+      "dir": "cache",
+      "purpose": "native-chain step 4 (aps)",
+      "sha256": "6d402bc3f0f77942008f88e7d52356826ddc0d41df20bc4ddd2f160eb064d401",
+      "size": 90,
+      "how": "rom-weaver patch create"
+    },
+    {
+      "name": "cchain-5-pat.pat",
+      "dir": "cache",
+      "purpose": "native-chain step 5 (pat)",
+      "sha256": "bcf880b908d8fbfb4d31a6cd6065b07636288e3bf5b9d85bdd52baa8f7081d23",
+      "size": 360,
+      "how": "rom-weaver patch create"
+    },
+    {
+      "name": "cchain-6-solid.solid",
+      "dir": "cache",
+      "purpose": "native-chain step 6 (solid)",
+      "sha256": "0254bc9950c4d049894afc38e5f4688e56f139c888ec35313dabed85517fc9c1",
+      "size": 82,
+      "how": "rom-weaver patch create"
+    },
+    {
+      "name": "cchain-7-apsgba.apsgba",
+      "dir": "cache",
+      "purpose": "native-chain step 7 (apsgba)",
+      "sha256": "df63aae0a6adf1b677aeed5d2f2df756a36205d6f3409d80ca57b094c5838f7c",
+      "size": 65556,
+      "how": "rom-weaver patch create"
+    },
+    {
+      "name": "cchain-8-bdf.bdf",
+      "dir": "cache",
+      "purpose": "native-chain step 8 (bdf)",
+      "sha256": "18269a149f97c331738c396c9e849ef4890a9b38494db1b68c9888025214d58b",
+      "size": 191,
+      "how": "rom-weaver patch create"
+    },
+    {
+      "name": "cchain-final.bin",
+      "dir": "cache",
+      "purpose": "expected result of the 8-step native-format chain",
+      "sha256": "63c96c926de0dd9612655fcf12908411dd0d30d477ee58db6e30e36b72e94880",
+      "size": 8192,
+      "how": "base.bin + 8 edits"
+    },
+    {
+      "name": "pmsr-source.z64",
+      "dir": "cache",
+      "purpose": "synthetic 40 MiB Paper-Mario-USA-1.0 stand-in (CRC32 a7f5cd7e forged)",
+      "sha256": "c3d713ba5b46d28bbf65c58eb9eb06e6525d7217e0b44771b8544eea31bb411d",
+      "size": 41943040,
+      "how": "encoders.prng + forgeCrc32Tail"
+    },
+    {
+      "name": "pmsr-target.z64",
+      "dir": "cache",
+      "purpose": "expected output of pmsr-large.mod",
+      "sha256": "59d90b5ea096ff0c0730c5e6ec05f8179595883dd6ec51c806c00f13d11e024a",
+      "size": 41943040,
+      "how": "pmsr-source.z64 with 2 edits"
+    },
+    {
+      "name": "pmsr-large.mod",
+      "dir": "cache",
+      "purpose": "PMSR patch for the 40 MiB stand-in (native CLI)",
+      "sha256": "8e848d1bef29aba0fb7fb0d368b7681376359da30eebf6ccd21139ad3db4c1be",
+      "size": 96,
+      "how": "rom-weaver patch create"
+    },
+    {
+      "name": "rom.zip",
+      "dir": "cache",
+      "purpose": "rom inside a zip (deflate)",
+      "sha256": "996907a68dc7a7706f6028e5104f83571afc8c8b29526ead9e833cb381d3a07b",
+      "size": 8311,
+      "how": "encoders.zip"
+    },
+    {
+      "name": "rom-stored.zip",
+      "dir": "cache",
+      "purpose": "rom inside a zip (stored)",
+      "sha256": "ed57b9a1ddab3d5d4bd9dc2fac2ca68f573d9424939563411ac4ccb9fd3d34a5",
+      "size": 8306,
+      "how": "encoders.zip store"
+    },
+    {
+      "name": "rom.tar",
+      "dir": "cache",
+      "purpose": "rom inside a tar",
+      "sha256": "740fa65b56caf09562711c92beb20b7532fda21b32d34656dce6bb3e0537efa8",
+      "size": 9728,
+      "how": "encoders.tar"
+    },
+    {
+      "name": "base.bin.gz",
+      "dir": "cache",
+      "purpose": "rom gzip, conventional name <file>.gz (FNAME = base.bin)",
+      "sha256": "51f8500881dcdac0517e3f50b93c104890a3e40da69184576c542e189c7ecdc8",
+      "size": 8224,
+      "how": "encoders.gzip"
+    },
+    {
+      "name": "rom.gz",
+      "dir": "cache",
+      "purpose": "rom gzip named rom.gz (FNAME = base.bin, differs from the stem)",
+      "sha256": "51f8500881dcdac0517e3f50b93c104890a3e40da69184576c542e189c7ecdc8",
+      "size": 8224,
+      "how": "encoders.gzip"
+    },
+    {
+      "name": "rom-nofname.gz",
+      "dir": "cache",
+      "purpose": "rom gzip with no FNAME header",
+      "sha256": "52540463f376b397757fe67ba313aa4cf0e036126d5748f1e952e55b235e97eb",
+      "size": 8215,
+      "how": "encoders.gzip"
+    },
+    {
+      "name": "rom.xz",
+      "dir": "cache",
+      "purpose": "rom compressed with xz (extension-less payload name)",
+      "sha256": "d7e7caddd64dac09cb2439c27bf6f8ffc1282d187c8c17f059c5058ac45799e7",
+      "size": 8260,
+      "how": "xz -9e -k -c"
+    },
+    {
+      "name": "base.bin.xz",
+      "dir": "cache",
+      "purpose": "rom compressed with xz, conventional name <file>.xz",
+      "sha256": "d7e7caddd64dac09cb2439c27bf6f8ffc1282d187c8c17f059c5058ac45799e7",
+      "size": 8260,
+      "how": "xz -9e -k -c"
+    },
+    {
+      "name": "rom.bz2",
+      "dir": "cache",
+      "purpose": "rom compressed with bzip2 (extension-less payload name)",
+      "sha256": "f2e14eeda5863eeebbfe9b82e86c3f207476f36c30bb688356e0b8dfecab38f3",
+      "size": 8658,
+      "how": "bzip2 -9 -k -c"
+    },
+    {
+      "name": "base.bin.bz2",
+      "dir": "cache",
+      "purpose": "rom compressed with bzip2, conventional name <file>.bz2",
+      "sha256": "f2e14eeda5863eeebbfe9b82e86c3f207476f36c30bb688356e0b8dfecab38f3",
+      "size": 8658,
+      "how": "bzip2 -9 -k -c"
+    },
+    {
+      "name": "rom.zst",
+      "dir": "cache",
+      "purpose": "rom compressed with zstd (extension-less payload name)",
+      "sha256": "eeaa6d52fbef36ef5487a580196ed6193bd03e5e9dccf2a3f25b5779ca4f55a6",
+      "size": 8206,
+      "how": "zstd -19 -q -c"
+    },
+    {
+      "name": "base.bin.zst",
+      "dir": "cache",
+      "purpose": "rom compressed with zstd, conventional name <file>.zst",
+      "sha256": "eeaa6d52fbef36ef5487a580196ed6193bd03e5e9dccf2a3f25b5779ca4f55a6",
+      "size": 8206,
+      "how": "zstd -19 -q -c"
+    },
+    {
+      "name": "rom.lz4",
+      "dir": "cache",
+      "purpose": "rom compressed with lz4 (extension-less payload name)",
+      "sha256": "d3be39588bee02624bdf3a02dac11a7fc3e648455044cd307e1e92f83b052ba0",
+      "size": 8211,
+      "how": "lz4 -9 -q -c"
+    },
+    {
+      "name": "base.bin.lz4",
+      "dir": "cache",
+      "purpose": "rom compressed with lz4, conventional name <file>.lz4",
+      "sha256": "d3be39588bee02624bdf3a02dac11a7fc3e648455044cd307e1e92f83b052ba0",
+      "size": 8211,
+      "how": "lz4 -9 -q -c"
+    },
+    {
+      "name": "rom.tar.gz",
+      "dir": "cache",
+      "purpose": "rom in tar.gz",
+      "sha256": "acb0214a50cafa8b777f7e899fe925657c04c7c0e755db34d3fe07a923a2777f",
+      "size": 8328,
+      "how": "encoders.gzip(tar)"
+    },
+    {
+      "name": "rom.tar.xz",
+      "dir": "cache",
+      "purpose": "rom in .tar.xz",
+      "sha256": "a2ef573a05b32ca6510136e9b35612472dbcc92780c118a2e6766fcff935cc16",
+      "size": 8420,
+      "how": "tar | xz"
+    },
+    {
+      "name": "rom.tar.bz2",
+      "dir": "cache",
+      "purpose": "rom in .tar.bz2",
+      "sha256": "87491ed97ea6b17730d4d8b6be00d9a51d4a65cfe4013ea2bf739c989bd2675b",
+      "size": 8763,
+      "how": "tar | bzip2"
+    },
+    {
+      "name": "rom.7z",
+      "dir": "cache",
+      "purpose": "rom inside a 7z (lzma2)",
+      "sha256": "fc7805a0dc941a7037a454363c75c8cf0c4b73a0520fc82bd502ed684faf7ec1",
+      "size": 8292,
+      "how": "rom-weaver compress --input base.bin --output rom.7z"
+    },
+    {
+      "name": "patch.zip",
+      "dir": "cache",
+      "purpose": "patch inside a zip (deflate)",
+      "sha256": "b0fcab816e5cbd31f272646bcee50d33309eac0466f0f62648d89289e5f64dab",
+      "size": 184,
+      "how": "encoders.zip"
+    },
+    {
+      "name": "patch-stored.zip",
+      "dir": "cache",
+      "purpose": "patch inside a zip (stored)",
+      "sha256": "4c331160d3f2952e47242c6bf00696e9f265479a1635162589af374f19679027",
+      "size": 241,
+      "how": "encoders.zip store"
+    },
+    {
+      "name": "patch.tar",
+      "dir": "cache",
+      "purpose": "patch inside a tar",
+      "sha256": "1f4688c18e5c7e973143ebc77477eed51cddb0e9a584b157d09d1cc1ec5c47d0",
+      "size": 2048,
+      "how": "encoders.tar"
+    },
+    {
+      "name": "bps-same.bps.gz",
+      "dir": "cache",
+      "purpose": "patch gzip, conventional name <file>.gz (FNAME = bps-same.bps)",
+      "sha256": "5cccc6ae923581bb179e0ee92d3f46f7a3a03eb7497e78519dc2c6ea1f022870",
+      "size": 93,
+      "how": "encoders.gzip"
+    },
+    {
+      "name": "patch.gz",
+      "dir": "cache",
+      "purpose": "patch gzip named patch.gz (FNAME = bps-same.bps, differs from the stem)",
+      "sha256": "5cccc6ae923581bb179e0ee92d3f46f7a3a03eb7497e78519dc2c6ea1f022870",
+      "size": 93,
+      "how": "encoders.gzip"
+    },
+    {
+      "name": "patch-nofname.gz",
+      "dir": "cache",
+      "purpose": "patch gzip with no FNAME header",
+      "sha256": "bc82d10033f84887e42d2fff2269beb7aa48e0414b2af0adcf8db021e0251373",
+      "size": 80,
+      "how": "encoders.gzip"
+    },
+    {
+      "name": "patch.xz",
+      "dir": "cache",
+      "purpose": "patch compressed with xz (extension-less payload name)",
+      "sha256": "1ed8647663284e31e6baf94461ef3ec90eb2792c9af3ddb8e7959e19ee8b6c18",
+      "size": 136,
+      "how": "xz -9e -k -c"
+    },
+    {
+      "name": "bps-same.bps.xz",
+      "dir": "cache",
+      "purpose": "patch compressed with xz, conventional name <file>.xz",
+      "sha256": "1ed8647663284e31e6baf94461ef3ec90eb2792c9af3ddb8e7959e19ee8b6c18",
+      "size": 136,
+      "how": "xz -9e -k -c"
+    },
+    {
+      "name": "patch.bz2",
+      "dir": "cache",
+      "purpose": "patch compressed with bzip2 (extension-less payload name)",
+      "sha256": "c5edfc7c19a65e4aa5b66dc6846ae9b0d32e640dc059131f861f7896d3c7cbad",
+      "size": 122,
+      "how": "bzip2 -9 -k -c"
+    },
+    {
+      "name": "bps-same.bps.bz2",
+      "dir": "cache",
+      "purpose": "patch compressed with bzip2, conventional name <file>.bz2",
+      "sha256": "c5edfc7c19a65e4aa5b66dc6846ae9b0d32e640dc059131f861f7896d3c7cbad",
+      "size": 122,
+      "how": "bzip2 -9 -k -c"
+    },
+    {
+      "name": "patch.zst",
+      "dir": "cache",
+      "purpose": "patch compressed with zstd (extension-less payload name)",
+      "sha256": "2c87bedea57c082b81ed99532e0851b79f355bd6c59cf829b0c6c7c9a8006ccf",
+      "size": 76,
+      "how": "zstd -19 -q -c"
+    },
+    {
+      "name": "bps-same.bps.zst",
+      "dir": "cache",
+      "purpose": "patch compressed with zstd, conventional name <file>.zst",
+      "sha256": "2c87bedea57c082b81ed99532e0851b79f355bd6c59cf829b0c6c7c9a8006ccf",
+      "size": 76,
+      "how": "zstd -19 -q -c"
+    },
+    {
+      "name": "patch.lz4",
+      "dir": "cache",
+      "purpose": "patch compressed with lz4 (extension-less payload name)",
+      "sha256": "984f772c56f305245f5563e88bf333a8307f4cf694bc9196314c87ccc27a895c",
+      "size": 82,
+      "how": "lz4 -9 -q -c"
+    },
+    {
+      "name": "bps-same.bps.lz4",
+      "dir": "cache",
+      "purpose": "patch compressed with lz4, conventional name <file>.lz4",
+      "sha256": "984f772c56f305245f5563e88bf333a8307f4cf694bc9196314c87ccc27a895c",
+      "size": 82,
+      "how": "lz4 -9 -q -c"
+    },
+    {
+      "name": "patch.tar.gz",
+      "dir": "cache",
+      "purpose": "patch in tar.gz",
+      "sha256": "322473e2176fecea7d863d77e7d4b223b486979de58ce524e3530ffa97a9e933",
+      "size": 150,
+      "how": "encoders.gzip(tar)"
+    },
+    {
+      "name": "patch.tar.xz",
+      "dir": "cache",
+      "purpose": "patch in .tar.xz",
+      "sha256": "590d7fbc58c6e6173cf78b079ee0e13130e84b7e766e8b4ecdd6f9d24cc10d7d",
+      "size": 200,
+      "how": "tar | xz"
+    },
+    {
+      "name": "patch.tar.bz2",
+      "dir": "cache",
+      "purpose": "patch in .tar.bz2",
+      "sha256": "0474fa1da805f2462833095a462c1df567bfedad18a4386ba98c3a77c23d36f0",
+      "size": 193,
+      "how": "tar | bzip2"
+    },
+    {
+      "name": "patch.7z",
+      "dir": "cache",
+      "purpose": "patch inside a 7z (lzma2)",
+      "sha256": "715232167cd1fe840ea2d8fd03c0e4d5bbda153d95ea10d231eb2b85344deb48",
+      "size": 176,
+      "how": "rom-weaver compress --input bps-same.bps --output patch.7z"
+    },
+    {
+      "name": "multi-rom.zip",
+      "dir": "cache",
+      "purpose": "zip with two ROM candidates plus a text file (selection UI)",
+      "sha256": "04ff1a4b039b0698d2827993cf932fb4bc92f8571ac373852a26df5e5adf1060",
+      "size": 10560,
+      "how": "encoders.zip"
+    },
+    {
+      "name": "patch-and-rom.zip",
+      "dir": "cache",
+      "purpose": "one zip holding both ROM and patch",
+      "sha256": "b3f053a1f88e245a89b679d45ef151cc6ace43749ee7f88e349678fc399bbdff",
+      "size": 8473,
+      "how": "encoders.zip"
+    },
+    {
+      "name": "multi-patch.zip",
+      "dir": "cache",
+      "purpose": "zip with two patches (selection UI)",
+      "sha256": "417c6be5da41e7813faa91a4c03fc581908080be04b4acc710173a7bfa1ad382",
+      "size": 349,
+      "how": "encoders.zip"
+    },
+    {
+      "name": "nested.zip",
+      "dir": "cache",
+      "purpose": "zip within zip containing the ROM",
+      "sha256": "3334204634b3f941496de2218a30ec0ddf3b1baeaa8d5dcde9ce922d24bf2884",
+      "size": 8440,
+      "how": "encoders.zip"
+    },
+    {
+      "name": "unicode-ゲーム-é.zip",
+      "dir": "cache",
+      "purpose": "unicode archive name and member name",
+      "sha256": "6634f07216d6f8ec0d09ae4b0ed46a6faa1afeac1e6dfe6c9fc1dc9036c26045",
+      "size": 8327,
+      "how": "encoders.zip utf8"
+    },
+    {
+      "name": "noext-rom",
+      "dir": "cache",
+      "purpose": "ROM with no file extension",
+      "sha256": "9742f97afd9539529aa8ab131ce9c1f29801b9882601940cd1c11ee635bff108",
+      "size": 8192,
+      "how": "copy of base.bin"
+    },
+    {
+      "name": "empty-rom.bin",
+      "dir": "cache",
+      "purpose": "zero-byte ROM",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0,
+      "how": "empty"
+    },
+    {
+      "name": "truncated.zip",
+      "dir": "cache",
+      "purpose": "zip cut short (corrupt container)",
+      "sha256": "45d349a24f19fbecb3d09bb8803f70ba8eaf7deda1df441ab0f31a7d04ac6e3d",
+      "size": 700,
+      "how": "slice"
+    },
+    {
+      "name": "garbage.zip",
+      "dir": "cache",
+      "purpose": "random bytes named .zip",
+      "sha256": "5fa6c0db4deea566c0b010056eb7cf805c5548956d38d3892d1bf7c375fa4156",
+      "size": 512,
+      "how": "prng"
+    },
+    {
+      "name": "encrypted.zip",
+      "dir": "cache",
+      "purpose": "password-protected zip (ZipCrypto, password 'secret')",
+      "sha256": "7f2eedfd03c19f4085a533fed3fa72c251218fe408d02294095fa052a9b25087",
+      "size": 8334,
+      "how": "zip -P secret"
+    },
+    {
+      "name": "borrowed/bsppatch-nested.bsp",
+      "dir": "blobs",
+      "purpose": "BSP script patch (apply-only format)",
+      "sha256": "acd332857a389c2e403e83b397261084498994a70574b175717dcc82772c529c",
+      "size": 34,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/bsppatch-nested.in",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+      "size": 4,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/bsppatch-nested.out",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "5001dbf7a643f9c3bc0b65699580e5193397ebd469a0cd77036ddb44140bb27e",
+      "size": 4,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/call-return.bsp",
+      "dir": "blobs",
+      "purpose": "BSP script patch (apply-only format)",
+      "sha256": "dc0c3e4f889a54adfaae1d6dc4830d72797ef94a1a16fcee281484f2b0abcd29",
+      "size": 18,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/call-return.in",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+      "size": 3,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/call-return.out",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "c1b00fcd3a576723ccbf89b6ca8c0a10eeb162f8c0a90994e7e7e14f30f795e1",
+      "size": 3,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/conditional-ifeq.bsp",
+      "dir": "blobs",
+      "purpose": "BSP script patch (apply-only format)",
+      "sha256": "f83c2faa3e73fbbe1c597691a87571bca6ee61aee9ca3f40f0cf4dff46948d86",
+      "size": 33,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/conditional-ifeq.in",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+      "size": 3,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/conditional-ifeq.out",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "523a41df08f211f244c60592e026a25cfaf33e896cce81596a778f48671cb45f",
+      "size": 3,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/driver.dldi",
+      "dir": "blobs",
+      "purpose": "DLDI driver or DS ROM sample",
+      "sha256": "750804b852cfdde707f88119d354d214cb18c5118e663b8b8225a45842bb2557",
+      "size": 256,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/fillbyte-seekend.bsp",
+      "dir": "blobs",
+      "purpose": "BSP script patch (apply-only format)",
+      "sha256": "ca55d47e604799c3f49582d8f681afaa78e217ae8e4df28343f0f2bf96a64bc0",
+      "size": 16,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/fillbyte-seekend.in",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+      "size": 3,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/fillbyte-seekend.out",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "bcc9df88a874cb79d8b99d7fee4d60f4af715f3a1325bbe23770482b04bd8216",
+      "size": 5,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/lock-unlock-truncate.bsp",
+      "dir": "blobs",
+      "purpose": "BSP script patch (apply-only format)",
+      "sha256": "79642ea2a34e1c943874dc2c7a57669204c06f0df5506162e5318c23dd43873c",
+      "size": 24,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/lock-unlock-truncate.in",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "size": 5,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/lock-unlock-truncate.out",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "8a817bc42b2e2146dc4ca4dc686db0a4051d294463d774fdac35bd191ae4a3b5",
+      "size": 2,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/menu.bsp",
+      "dir": "blobs",
+      "purpose": "BSP script patch (apply-only format)",
+      "sha256": "226cc10a74ad830ff4bafcbf212adb1dab3beca947f63143f9a8fd4ee3b9a978",
+      "size": 84,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/ninja1.rnp",
+      "dir": "blobs",
+      "purpose": "DLDI driver or DS ROM sample",
+      "sha256": "67b3733c835c8cc63609709ab1dca30cbd3ef809c0b2f47a1904d3e98adc7b06",
+      "size": 70,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/nonslot.nds",
+      "dir": "blobs",
+      "purpose": "DLDI driver or DS ROM sample",
+      "sha256": "5228ac427cc4e72ef22a135813ee6f6e58d3b93399546861dd294e06adf2cc7f",
+      "size": 8192,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/nonzero-exit.bsp",
+      "dir": "blobs",
+      "purpose": "BSP script patch (apply-only format)",
+      "sha256": "2ef892261eb0f940cefe74d32569f7b7a45fe00a85a6a25c73312282a532166f",
+      "size": 5,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/nonzero-exit.in",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+      "size": 3,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/noop-exit.bsp",
+      "dir": "blobs",
+      "purpose": "BSP script patch (apply-only format)",
+      "sha256": "b45482224b439a3d548c65378929b7dcc16a42288530b7b20d5c8103cc879d10",
+      "size": 5,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/noop-exit.in",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+      "size": 3,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/noop-exit.out",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+      "size": 3,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/oversized.dldi",
+      "dir": "blobs",
+      "purpose": "DLDI driver or DS ROM sample",
+      "sha256": "33c0a43530b25371c33e54b1286e968493f2fd965f77863439c391cc7221194f",
+      "size": 8192,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/slot.nds",
+      "dir": "blobs",
+      "purpose": "DLDI driver or DS ROM sample",
+      "sha256": "41729bb7fdb995e8162e288f3914223b996a437053d3662225805d6e1a93afd8",
+      "size": 4992,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/stack-push-pop.bsp",
+      "dir": "blobs",
+      "purpose": "BSP script patch (apply-only format)",
+      "sha256": "7fc34105cfd0f0ec0564e2c6807e56b6b8fe8655a2923a2d208b837ec4a2e898",
+      "size": 56,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/stack-push-pop.in",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+      "size": 3,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/stack-push-pop.out",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "633c8cc839b67731ccabbf9b820e2bb39a015519ab240babbb804b9c1bc0622c",
+      "size": 3,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/writebyte-seek.bsp",
+      "dir": "blobs",
+      "purpose": "BSP script patch (apply-only format)",
+      "sha256": "b33db02befabdb12bbf2e12d7e91905c6634682b725ec96e5d8a875d7709601b",
+      "size": 12,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/writebyte-seek.in",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+      "size": 3,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/writebyte-seek.out",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "6e5668207495aa7e5599e1e71cad6ed76631337c567b7de9b70ff770b4ca92de",
+      "size": 3,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/writedata-label.bsp",
+      "dir": "blobs",
+      "purpose": "BSP script patch (apply-only format)",
+      "sha256": "e72ed6e89f091a636a07e04d26d37e9d720900d7202467996bad52f45ddb7909",
+      "size": 23,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/writedata-label.in",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+      "size": 4,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/writedata-label.out",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "f4e3f0b04771c047e227c9ecaba65d3fe2fd0e1eee0a7552b956d1a7c535a7cf",
+      "size": 4,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/xordata-mask.bsp",
+      "dir": "blobs",
+      "purpose": "BSP script patch (apply-only format)",
+      "sha256": "287e9f576c2dc27a85b258ee184a5d230b69790c63ef9ede407a9235fcc5c598",
+      "size": 22,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/xordata-mask.in",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "8e1336ab78ebe687fd8056a37f2d3b0c32f4cf8fa8b691b653800fa693d570b9",
+      "size": 3,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    },
+    {
+      "name": "borrowed/xordata-mask.out",
+      "dir": "blobs",
+      "purpose": "BSP script input/expected-output",
+      "sha256": "ed2d0718aa37cf7a04118aaaf33acf6481956f37f0e4f31cf669ed905f6bc361",
+      "size": 3,
+      "how": "copied verbatim from tests/fixtures/apply-matrix of the cli worker (hand-assembled)"
+    }
+  ]
+}
