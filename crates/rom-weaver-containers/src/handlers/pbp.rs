@@ -1,5 +1,5 @@
 use super::*;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 #[derive(Clone, Debug)]
 struct PbpIsoIndexEntry {
@@ -304,13 +304,14 @@ impl PbpContainerHandler {
             )));
         }
         if iso_indexes.len() > required_blocks {
-            return Err(RomWeaverError::Validation(format!(
-                "source `{}` disc {} index table has excess blocks ({} blocks required, {} present)",
-                source.display(),
+            // The selected extent is complete and usable, so the unused blocks past it are ignored.
+            warn!(
+                source = %source.display(),
                 disc_number,
                 required_blocks,
-                iso_indexes.len()
-            )));
+                index_blocks = iso_indexes.len(),
+                "PBP index table holds blocks past the disc extent; extracting the disc extent only"
+            );
         }
 
         Ok(PbpDiscEntry {

@@ -996,12 +996,12 @@ fn extract_rejects_a_kind_filter_that_matches_no_output() {
 }
 
 #[test]
-fn extract_rejects_populated_indexes_beyond_the_disc_extent() {
-    for (sectors, tracks, leadout, expected_blocks) in [
-        (32, vec![(0x41, 0)], 32, 2),
-        (33, vec![(0x41, 0)], 33, 3),
-        (32, vec![(0x41, 0), (0x01, 20)], 33, 3),
-        (32, vec![(0x41, 151), (0x01, 20)], 48, 2),
+fn extract_ignores_populated_indexes_beyond_the_disc_extent() {
+    for (sectors, tracks, leadout, extent_sectors, expected_blocks) in [
+        (32, vec![(0x41, 0)], 32, 32, 2),
+        (33, vec![(0x41, 0)], 33, 33, 3),
+        (32, vec![(0x41, 0), (0x01, 20)], 33, 33, 3),
+        (32, vec![(0x41, 151), (0x01, 20)], 48, 32, 2),
     ] {
         let temp = TempDir::new("extract-excess-indexes");
         let spec = DiscSpec {
@@ -1014,22 +1014,18 @@ fn extract_rejects_populated_indexes_beyond_the_disc_extent() {
         write_toc(&mut psar, &spec.tracks, leadout);
         let source = write_fixture(&temp, "game.pbp", &wrap_psar_in_pbp(&psar));
         let out_dir = temp.join("out");
-        let error = PbpContainerHandler
+        PbpContainerHandler
             .extract(
                 &extract_request(&source, &out_dir),
                 &test_context(temp.path()),
             )
-            .expect_err("extra populated indexes must not be silently omitted")
-            .to_string();
-        assert!(
-            error.contains(&format!(
-                "index table has excess blocks ({expected_blocks} blocks required, {} present)",
-                spec.block_count
-            )),
-            "{error}"
+            .expect("blocks past the disc extent are ignored, not an error");
+        assert_eq!(
+            fs::metadata(out_dir.join("game.bin"))
+                .expect("extracted bin")
+                .len(),
+            extent_sectors * SECTOR_BYTES as u64
         );
-        assert!(!out_dir.join("game.bin").exists());
-        assert!(!out_dir.join("game.cue").exists());
     }
 }
 
@@ -1414,22 +1410,12 @@ fn parse_trusts_the_leadout_only_for_packager_discs_with_audio() {
         write_toc(&mut psar, &tracks, leadout);
         let path = write_fixture(&temp, &format!("{label}.pbp"), &wrap_psar_in_pbp(&psar));
         let result = PbpContainerHandler.parse_archive(&path);
-        if sectors == 32 {
-            let error = result
-                .expect_err("populated indexes beyond the selected extent must be rejected")
-                .to_string();
-            assert!(
-                error.contains("index table has excess blocks (2 blocks required, 3 present)"),
-                "{label}: {error}"
-            );
-        } else {
-            let archive = result.unwrap_or_else(|error| panic!("{label} must parse: {error}"));
-            assert_eq!(
-                archive.discs[0].iso_size,
-                sectors * SECTOR_BYTES as u64,
-                "{label}"
-            );
-        }
+        let archive = result.unwrap_or_else(|error| panic!("{label} must parse: {error}"));
+        assert_eq!(
+            archive.discs[0].iso_size,
+            sectors * SECTOR_BYTES as u64,
+            "{label}"
+        );
     }
 }
 
@@ -1661,14 +1647,14 @@ fn probe_reports_stored_blocks_from_the_validated_disc_indexes() {
 }
 
 #[test]
-fn probe_rejects_unused_populated_index_blocks() {
+fn probe_ignores_unused_populated_index_blocks() {
     let temp = TempDir::new("probe-unused-blocks");
     let spec = DiscSpec {
         block_count: 3,
         ..DiscSpec::single_track()
     };
     let source = write_fixture(&temp, "unused.pbp", &single_disc_pbp(&spec));
-    let error = PbpContainerHandler
+    PbpContainerHandler
         .probe_details(
             &ContainerProbeRequest {
                 source,
@@ -1676,12 +1662,7 @@ fn probe_rejects_unused_populated_index_blocks() {
             },
             &test_context(temp.path()),
         )
-        .expect_err("a probe must reject populated indexes beyond the disc extent")
-        .to_string();
-    assert!(
-        error.contains("index table has excess blocks (2 blocks required, 3 present)"),
-        "{error}"
-    );
+        .expect("a probe tolerates populated indexes beyond the disc extent");
 }
 
 #[test]
