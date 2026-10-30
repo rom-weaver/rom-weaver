@@ -60,7 +60,7 @@
       },
       "tests": [
         "cargo test -p rom-weaver-containers --lib seven_z_short_period_matches_round_trip",
-        "cargo test -p rom-weaver-containers --test vendor_patch_queue"
+        "cargo test -p rom-weaver-containers --test integration vendor_patch_queue::"
       ]
     },
     {
@@ -72,7 +72,7 @@
       },
       "tests": [
         "cargo test -p rom-weaver-containers --lib seven_z_short_period_matches_round_trip",
-        "cargo test -p rom-weaver-containers --test vendor_patch_queue"
+        "cargo test -p rom-weaver-containers --test integration vendor_patch_queue::"
       ]
     }
   ],

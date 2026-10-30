@@ -10,6 +10,7 @@ readme = "README.md"
 repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
+autotests = false
 
 [features]
 typescript-types = ["dep:ts-rs"]
@@ -33,6 +34,10 @@ libc.workspace = true
 
 [dev-dependencies]
 assert_fs.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
 
 [lints]
 workspace = true

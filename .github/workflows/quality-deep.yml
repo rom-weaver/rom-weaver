@@ -71,9 +71,9 @@ jobs:
         env:
           PROPTEST_CASES: "256"
         run: |
-          cargo test --locked -p rom-weaver-patches --test behavior_properties
+          cargo test --locked -p rom-weaver-patches --test integration behavior_properties::
           cargo test --locked -p rom-weaver-checksum --lib edge_checksum_chunking_matches_independent_bitwise_oracles
-          cargo test --locked -p rom-weaver-containers --test behavior_properties
+          cargo test --locked -p rom-weaver-containers --test integration behavior_properties::
       - name: Report selected signal
         if: ${{ !cancelled() }}
         env:

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   dependencyViolations,
+  orphanTestFileViolations,
   browserViolations,
   rustErrorViolations,
   mainThreadViolations,
@@ -33,6 +34,58 @@ test("reverse and dev edges fail", () =>
   ));
 test("unclassified new workspace package fails closed", () =>
   assert.equal(dependencyViolations(metadata({ surprise: [] })).length, 1));
+const testLayout = (targets) => ({
+  workspace_members: ["cli"],
+  packages: [
+    {
+      id: "cli",
+      name: "cli",
+      manifest_path: "/ws/cli/Cargo.toml",
+      targets: [{ kind: ["lib"], src_path: "/ws/cli/src/lib.rs" }, ...targets],
+    },
+  ],
+});
+const listTests = () => ["integration.rs", "smoke.rs", "fixtures", "smoke"];
+test("tests files declared as modules of a test root pass", () =>
+  assert.deepEqual(
+    orphanTestFileViolations(
+      testLayout([{ kind: ["test"], src_path: "/ws/cli/tests/integration.rs" }]),
+      listTests,
+      () => "//! root\n#[cfg(unix)] mod smoke;\n",
+    ),
+    [],
+  ));
+test("auto-discovered test roots pass without declarations", () =>
+  assert.deepEqual(
+    orphanTestFileViolations(
+      testLayout(
+        ["integration", "smoke"].map((n) => ({ kind: ["test"], src_path: `/ws/cli/tests/${n}.rs` })),
+      ),
+      listTests,
+      () => "",
+    ),
+    [],
+  ));
+test("a tests file no target compiles is reported", () =>
+  assert.deepEqual(
+    orphanTestFileViolations(
+      testLayout([{ kind: ["test"], src_path: "/ws/cli/tests/integration.rs" }]),
+      listTests,
+      () => "// mod smoke;\nmod smoke_helpers;\n",
+    ),
+    ["cli: tests/smoke.rs is not compiled; declare it as a mod of a [[test]] root"],
+  ));
+test("a package without a tests directory passes", () =>
+  assert.deepEqual(
+    orphanTestFileViolations(
+      testLayout([]),
+      () => {
+        throw new Error("ENOENT");
+      },
+      () => "",
+    ),
+    [],
+  ));
 test("computed OPFS calls and aliases of dangerous members rejected", () => {
   assert.equal(
     browserViolations("webapp/a.ts", 'const open = h["createSyncAccessHandle"];').length,

@@ -112,7 +112,7 @@ Run the focused Rust suite and the CLI smoke tests:
 
 ```bash
 cargo test -p rom-weaver-core save
-cargo test -p rom-weaver-cli --test cli_smoke
+cargo test -p rom-weaver-cli --test integration cli_smoke::
 ```
 
 Run type generation when Rust command or metadata types changed:

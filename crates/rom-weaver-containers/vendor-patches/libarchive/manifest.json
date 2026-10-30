@@ -40,7 +40,7 @@
         "status": "fork",
         "url": "https://github.com/brandonocasey/libarchive/commit/3a49003a8e2b73ec456edf12755168263c54ff6e"
       },
-      "tests": ["cargo test -p rom-weaver-containers --test vendor_patch_queue"]
+      "tests": ["cargo test -p rom-weaver-containers --test integration vendor_patch_queue::"]
     },
     {
       "file": "0002-zip-zstd-compression-level.patch",
@@ -65,7 +65,7 @@
       },
       "tests": [
         "cargo test -p rom-weaver-containers --lib zip_zstd_create_single_threads_small_input",
-        "cargo test -p rom-weaver-cli --test cli_smoke zip_zstd_large_incompressible_payload_round_trips"
+        "cargo test -p rom-weaver-cli --test integration zip_zstd_large_incompressible_payload_round_trips"
       ]
     },
     {
@@ -99,7 +99,7 @@
         "url": "https://github.com/brandonocasey/libarchive/commit/c26207393a683710f99513fa321945d4da3dfe50"
       },
       "tests": [
-        "cargo test -p rom-weaver-cli --test cli_smoke seven_z_lzma2_threaded_single_chunk_emits_codec_progress"
+        "cargo test -p rom-weaver-cli --test integration seven_z_lzma2_threaded_single_chunk_emits_codec_progress"
       ]
     },
     {
@@ -111,7 +111,7 @@
         "url": "https://github.com/brandonocasey/libarchive/commit/18387bec75be283d34cd94af73dc217ec4ca26d4"
       },
       "tests": [
-        "cargo test -p rom-weaver-cli --test cli_smoke seven_z_lzma2_threaded_single_chunk_emits_codec_progress"
+        "cargo test -p rom-weaver-cli --test integration seven_z_lzma2_threaded_single_chunk_emits_codec_progress"
       ]
     },
     {
@@ -123,7 +123,7 @@
         "url": "https://github.com/brandonocasey/libarchive/commit/967bb0dfef336ce4f6de7f17623cd4a12fae5032"
       },
       "tests": [
-        "cargo test -p rom-weaver-cli --test cli_smoke seven_z_lzma2_threaded_single_chunk_emits_codec_progress"
+        "cargo test -p rom-weaver-cli --test integration seven_z_lzma2_threaded_single_chunk_emits_codec_progress"
       ]
     },
     {
@@ -144,7 +144,7 @@
       },
       "tests": [
         "cargo test -p rom-weaver-containers --lib seven_z_multi_block_seeded_create_round_trips",
-        "cargo test -p rom-weaver-cli --test cli_smoke seven_z_lzma2_threaded_single_chunk_emits_codec_progress"
+        "cargo test -p rom-weaver-cli --test integration seven_z_lzma2_threaded_single_chunk_emits_codec_progress"
       ]
     },
     {
@@ -155,7 +155,7 @@
         "status": "local"
       },
       "tests": [
-        "cargo test -p rom-weaver-cli --test cli_smoke zip_zstd_large_incompressible_payload_round_trips"
+        "cargo test -p rom-weaver-cli --test integration zip_zstd_large_incompressible_payload_round_trips"
       ]
     },
     {
@@ -175,7 +175,7 @@
         "status": "local"
       },
       "tests": [
-        "cargo test -p rom-weaver-cli --test cli_smoke gzip_concatenated_members_validate_each_crc_and_size"
+        "cargo test -p rom-weaver-cli --test integration gzip_concatenated_members_validate_each_crc_and_size"
       ]
     },
     {
@@ -186,7 +186,7 @@
         "status": "local"
       },
       "tests": [
-        "cargo test -p rom-weaver-cli --test cli_smoke padded_gzip_tar_validates_unread_members_before_emitting_output"
+        "cargo test -p rom-weaver-cli --test integration padded_gzip_tar_validates_unread_members_before_emitting_output"
       ]
     },
     {
@@ -196,7 +196,7 @@
       "upstream": {
         "status": "local"
       },
-      "tests": ["cargo test -p rom-weaver-containers --test vendor_patch_queue"]
+      "tests": ["cargo test -p rom-weaver-containers --test integration vendor_patch_queue::"]
     },
     {
       "file": "0018-7zip-dictionary-cap.patch",
@@ -206,8 +206,8 @@
         "status": "local"
       },
       "tests": [
-        "cargo test -p rom-weaver-cli --test cli_smoke extract_7z_with_a_dictionary_larger_than_the_address_space_limit",
-        "cargo test -p rom-weaver-cli --test cli_smoke extract_7z_runs_only_as_many_folder_decoders_as_the_memory_limit_fits"
+        "cargo test -p rom-weaver-cli --test integration extract_7z_with_a_dictionary_larger_than_the_address_space_limit",
+        "cargo test -p rom-weaver-cli --test integration extract_7z_runs_only_as_many_folder_decoders_as_the_memory_limit_fits"
       ]
     },
     {
@@ -235,28 +235,28 @@
       "upstream": {
         "status": "local"
       },
-      "tests": ["cargo test -p rom-weaver-cli --test cli_smoke extract_7z_reads_the_folder_after_one_that_ends_on_a_full_buffer"]
+      "tests": ["cargo test -p rom-weaver-cli --test integration extract_7z_reads_the_folder_after_one_that_ends_on_a_full_buffer"]
     },
     {
       "file": "0019-preserve-unicode-normalization.patch",
       "stage": "source",
       "reason": "Preserve exact Unicode normalization sequences across UTF-8 archive boundaries.",
       "upstream": { "status": "local" },
-      "tests": ["cargo test -p rom-weaver-cli --test unicode_extract"]
+      "tests": ["cargo test -p rom-weaver-cli --test integration unicode_extract::"]
     },
     {
       "file": "0020-zip-keep-legacy-name-bytes.patch",
       "stage": "source",
       "reason": "Keep the stored bytes of ZIP names without the UTF-8 flag so the caller can decode legacy charsets; skip the locale-dependent wide-form backslash rewrite for them.",
       "upstream": { "status": "local" },
-      "tests": ["cargo test -p rom-weaver-cli --test unicode_extract"]
+      "tests": ["cargo test -p rom-weaver-cli --test integration unicode_extract::"]
     },
     {
       "file": "0021-rar5-incomplete-archives.patch",
       "stage": "source",
       "reason": "Reject incomplete RAR5 headers and file data, require ENDARC, and reject unsupported multivolume archives.",
       "upstream": { "status": "local" },
-      "tests": ["cargo test -p rom-weaver-cli --test cli_smoke extract_rar5_"]
+      "tests": ["cargo test -p rom-weaver-cli --test integration extract_rar5_"]
     }
   ],
   "materialized": false,

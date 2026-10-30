@@ -11,6 +11,7 @@ readme = "README.md"
 repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
+autotests = false
 include = [
   "src/**",
   "tests/**",
@@ -110,6 +111,10 @@ required-features = ["typescript-types"]
 # to run the `#[cfg(test)]` module pinning the generator's output; see
 # tests/unit/typegen_main.rs.
 test = true
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
 
 [package.metadata.binstall]
 pkg-fmt = "tgz"

@@ -211,8 +211,8 @@ Inspect `.agent/quality-mutation/summary.json` and `mutants.out` for surviving l
 Run the independent property checks:
 
 ```bash
-cargo test -p rom-weaver-patches --test behavior_properties
-cargo test -p rom-weaver-containers --test behavior_properties
+cargo test -p rom-weaver-patches --test integration behavior_properties::
+cargo test -p rom-weaver-containers --test integration behavior_properties::
 cargo test -p rom-weaver-checksum edge_checksum_chunking
 cargo test -p rom-weaver-core single_money_edit_preserves
 ```
@@ -271,8 +271,8 @@ For the CUE regression added by fuzzing, the arguments are:
 ```text
 --base main
 --package rom-weaver-core
---target disc_sheet_regressions
---test empty_quoted_disc_sheet_filename_is_rejected
+--target integration
+--test disc_sheet_regressions::empty_quoted_disc_sheet_filename_is_rejected
 --diagnostic "empty filename must be a validation error"
 --test-file crates/rom-weaver-core/tests/disc_sheet_regressions.rs
 ```
