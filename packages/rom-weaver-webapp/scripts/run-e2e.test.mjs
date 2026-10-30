@@ -47,7 +47,7 @@ test("nightly retains its development module and exhaustive coverage", async () 
     calls.map(({ args }) => args),
     [
       ["run", "build-wasm"],
-      ["test", "-p", "rom-weaver-cli", "--test", "cli_smoke"],
+      ["test", "-p", "rom-weaver-cli", "--test", "integration", "cli_smoke::"],
       ["run", "test:browser:wasm:exhaustive"],
       ["run", "test:e2e:webapp"],
     ],
