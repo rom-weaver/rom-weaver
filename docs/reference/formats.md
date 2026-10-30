@@ -221,6 +221,8 @@ The Test page supports these platforms:
 - Sony PlayStation
 - Sony PSP
 
+PBP boot is verified with the real cores on legal homebrew: single-disc and two-disc PS1 PBPs (including disc switching through the core's disc menu) and an empty-`DATA.PSAR` PSP `EBOOT.PBP`. The run used headless Chromium on Linux. [PBP emulator verification](../development/emulator-pbp-verification.md) lists the fixtures, revisions, and observed limits.
+
 A PlayStation PBP is opened like an archive of disc images. A single-disc PBP extracts to `<name>.cue` and `<name>.bin`; a multi-disc PBP extracts every disc as `<name>.disc01.cue` and `<name>.disc01.bin`, `<name>.disc02.cue`, and so on. BIN sizing depends on the producer's TOC convention.
 
 Audio beyond the ISO volume is retained when the TOC describes audio, its first track starts at `00:00:00`, and the leadout fits the ISO volume and validated index table. This follows PSXPackager's full-BIN leadout convention. Other layouts use the ISO volume.

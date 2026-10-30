@@ -399,7 +399,8 @@
       "purpose": "dps same-size patch created by the native CLI; apply must reproduce target-same.bin",
       "sha256": "abba6e304387bce4fc255451847245a6bb5e3ed3d934d050e99e5f47e327dbcf",
       "size": 371,
-      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output dps-same.dps"
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output dps-same.dps",
+      "hostDependent": true
     },
     {
       "name": "rup-same.rup",
@@ -407,7 +408,8 @@
       "purpose": "rup same-size patch created by the native CLI; apply must reproduce target-same.bin",
       "sha256": "9a68ca89ce63b376e0346f87ea3cf6115ba8ef209f0f9ed29dcd77484df93540",
       "size": 2198,
-      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output rup-same.rup"
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output rup-same.rup",
+      "hostDependent": true
     },
     {
       "name": "ppf-same.ppf",
@@ -415,7 +417,8 @@
       "purpose": "ppf same-size patch created by the native CLI; apply must reproduce target-same.bin",
       "sha256": "765f1bc74f5ab8fa67f5394d3ccd446a2db7058d01e069a0625a7c95cd64a62f",
       "size": 181,
-      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output ppf-same.ppf"
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output ppf-same.ppf",
+      "hostDependent": true
     },
     {
       "name": "aps-same.aps",
@@ -423,7 +426,8 @@
       "purpose": "aps same-size patch created by the native CLI; apply must reproduce target-same.bin",
       "sha256": "cf6a0d8dbf2ee4a393b6d575a1d49181aed0a13db64902cf86d73f6e7d7ccc1f",
       "size": 104,
-      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output aps-same.aps"
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output aps-same.aps",
+      "hostDependent": true
     },
     {
       "name": "apsgba-same.apsgba",
@@ -431,7 +435,8 @@
       "purpose": "apsgba same-size patch created by the native CLI; apply must reproduce target-same.bin",
       "sha256": "ef52f79a1c9ae78b8bd763b589fc251647b981fa54927238b5d07b6395089fe7",
       "size": 65556,
-      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output apsgba-same.apsgba"
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output apsgba-same.apsgba",
+      "hostDependent": true
     },
     {
       "name": "pat-same.pat",
@@ -439,7 +444,8 @@
       "purpose": "pat same-size patch created by the native CLI; apply must reproduce target-same.bin",
       "sha256": "2a1633cc00eefa410b5cbd789e2840f3d8524c10a016d7db6b5aed39786c230b",
       "size": 1275,
-      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output pat-same.pat"
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output pat-same.pat",
+      "hostDependent": true
     },
     {
       "name": "solid-same.solid",
@@ -447,7 +453,8 @@
       "purpose": "solid same-size patch created by the native CLI; apply must reproduce target-same.bin",
       "sha256": "f941e940f4d2ccc975cfe91cd434fb91c0373127c087e748637319218791388f",
       "size": 172,
-      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output solid-same.solid"
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output solid-same.solid",
+      "hostDependent": true
     },
     {
       "name": "mod-same.mod",
@@ -455,7 +462,8 @@
       "purpose": "mod same-size patch created by the native CLI; apply must reproduce target-same.bin",
       "sha256": "749d60aa8dc810f2e22300be406e5723e46e6a4c4e00b799ddab2da31242491f",
       "size": 125,
-      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output mod-same.mod"
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output mod-same.mod",
+      "hostDependent": true
     },
     {
       "name": "bdf-same.bdf",
@@ -463,7 +471,8 @@
       "purpose": "bdf same-size patch created by the native CLI; apply must reproduce target-same.bin",
       "sha256": "dc75a7adaa5dda62b4cf43ed7b873f09a1e8eeb8f5eec6e859bcc67c0a0a2376",
       "size": 278,
-      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output bdf-same.bdf"
+      "how": "rom-weaver patch create --original base.bin --modified target-same.bin --output bdf-same.bdf",
+      "hostDependent": true
     },
     {
       "name": "cchain-1-dps.dps",
@@ -471,7 +480,8 @@
       "purpose": "native-chain step 1 (dps)",
       "sha256": "74cd4ded2f8f5590fd21c76da1c36414c75183f7df19041462f2c4fe840ab9f4",
       "size": 257,
-      "how": "rom-weaver patch create"
+      "how": "rom-weaver patch create",
+      "hostDependent": true
     },
     {
       "name": "cchain-2-rup.rup",
@@ -479,7 +489,8 @@
       "purpose": "native-chain step 2 (rup)",
       "sha256": "50fa7daa7f3e3ee270826f93130258c6290be6153e5e113869c1373272612af8",
       "size": 2120,
-      "how": "rom-weaver patch create"
+      "how": "rom-weaver patch create",
+      "hostDependent": true
     },
     {
       "name": "cchain-3-ppf.ppf",
@@ -487,7 +498,8 @@
       "purpose": "native-chain step 3 (ppf)",
       "sha256": "530c7ae7d8abf3ef882b551ae608309f58a4b58a3c1832e01f1fdbcc366fd0d5",
       "size": 93,
-      "how": "rom-weaver patch create"
+      "how": "rom-weaver patch create",
+      "hostDependent": true
     },
     {
       "name": "cchain-4-aps.aps",
@@ -495,7 +507,8 @@
       "purpose": "native-chain step 4 (aps)",
       "sha256": "6d402bc3f0f77942008f88e7d52356826ddc0d41df20bc4ddd2f160eb064d401",
       "size": 90,
-      "how": "rom-weaver patch create"
+      "how": "rom-weaver patch create",
+      "hostDependent": true
     },
     {
       "name": "cchain-5-pat.pat",
@@ -503,7 +516,8 @@
       "purpose": "native-chain step 5 (pat)",
       "sha256": "bcf880b908d8fbfb4d31a6cd6065b07636288e3bf5b9d85bdd52baa8f7081d23",
       "size": 360,
-      "how": "rom-weaver patch create"
+      "how": "rom-weaver patch create",
+      "hostDependent": true
     },
     {
       "name": "cchain-6-solid.solid",
@@ -511,7 +525,8 @@
       "purpose": "native-chain step 6 (solid)",
       "sha256": "0254bc9950c4d049894afc38e5f4688e56f139c888ec35313dabed85517fc9c1",
       "size": 82,
-      "how": "rom-weaver patch create"
+      "how": "rom-weaver patch create",
+      "hostDependent": true
     },
     {
       "name": "cchain-7-apsgba.apsgba",
@@ -519,7 +534,8 @@
       "purpose": "native-chain step 7 (apsgba)",
       "sha256": "df63aae0a6adf1b677aeed5d2f2df756a36205d6f3409d80ca57b094c5838f7c",
       "size": 65556,
-      "how": "rom-weaver patch create"
+      "how": "rom-weaver patch create",
+      "hostDependent": true
     },
     {
       "name": "cchain-8-bdf.bdf",
@@ -527,7 +543,8 @@
       "purpose": "native-chain step 8 (bdf)",
       "sha256": "18269a149f97c331738c396c9e849ef4890a9b38494db1b68c9888025214d58b",
       "size": 191,
-      "how": "rom-weaver patch create"
+      "how": "rom-weaver patch create",
+      "hostDependent": true
     },
     {
       "name": "cchain-final.bin",
@@ -559,7 +576,8 @@
       "purpose": "PMSR patch for the 40 MiB stand-in (native CLI)",
       "sha256": "8e848d1bef29aba0fb7fb0d368b7681376359da30eebf6ccd21139ad3db4c1be",
       "size": 96,
-      "how": "rom-weaver patch create"
+      "how": "rom-weaver patch create",
+      "hostDependent": true
     },
     {
       "name": "rom.zip",
@@ -615,7 +633,8 @@
       "purpose": "rom compressed with xz (extension-less payload name)",
       "sha256": "d7e7caddd64dac09cb2439c27bf6f8ffc1282d187c8c17f059c5058ac45799e7",
       "size": 8260,
-      "how": "xz -9e -k -c"
+      "how": "xz -9e -k -c",
+      "hostDependent": true
     },
     {
       "name": "base.bin.xz",
@@ -623,7 +642,8 @@
       "purpose": "rom compressed with xz, conventional name <file>.xz",
       "sha256": "d7e7caddd64dac09cb2439c27bf6f8ffc1282d187c8c17f059c5058ac45799e7",
       "size": 8260,
-      "how": "xz -9e -k -c"
+      "how": "xz -9e -k -c",
+      "hostDependent": true
     },
     {
       "name": "rom.bz2",
@@ -631,7 +651,8 @@
       "purpose": "rom compressed with bzip2 (extension-less payload name)",
       "sha256": "f2e14eeda5863eeebbfe9b82e86c3f207476f36c30bb688356e0b8dfecab38f3",
       "size": 8658,
-      "how": "bzip2 -9 -k -c"
+      "how": "bzip2 -9 -k -c",
+      "hostDependent": true
     },
     {
       "name": "base.bin.bz2",
@@ -639,7 +660,8 @@
       "purpose": "rom compressed with bzip2, conventional name <file>.bz2",
       "sha256": "f2e14eeda5863eeebbfe9b82e86c3f207476f36c30bb688356e0b8dfecab38f3",
       "size": 8658,
-      "how": "bzip2 -9 -k -c"
+      "how": "bzip2 -9 -k -c",
+      "hostDependent": true
     },
     {
       "name": "rom.zst",
@@ -647,7 +669,8 @@
       "purpose": "rom compressed with zstd (extension-less payload name)",
       "sha256": "eeaa6d52fbef36ef5487a580196ed6193bd03e5e9dccf2a3f25b5779ca4f55a6",
       "size": 8206,
-      "how": "zstd -19 -q -c"
+      "how": "zstd -19 -q -c",
+      "hostDependent": true
     },
     {
       "name": "base.bin.zst",
@@ -655,7 +678,8 @@
       "purpose": "rom compressed with zstd, conventional name <file>.zst",
       "sha256": "eeaa6d52fbef36ef5487a580196ed6193bd03e5e9dccf2a3f25b5779ca4f55a6",
       "size": 8206,
-      "how": "zstd -19 -q -c"
+      "how": "zstd -19 -q -c",
+      "hostDependent": true
     },
     {
       "name": "rom.lz4",
@@ -663,7 +687,8 @@
       "purpose": "rom compressed with lz4 (extension-less payload name)",
       "sha256": "d3be39588bee02624bdf3a02dac11a7fc3e648455044cd307e1e92f83b052ba0",
       "size": 8211,
-      "how": "lz4 -9 -q -c"
+      "how": "lz4 -9 -q -c",
+      "hostDependent": true
     },
     {
       "name": "base.bin.lz4",
@@ -671,7 +696,8 @@
       "purpose": "rom compressed with lz4, conventional name <file>.lz4",
       "sha256": "d3be39588bee02624bdf3a02dac11a7fc3e648455044cd307e1e92f83b052ba0",
       "size": 8211,
-      "how": "lz4 -9 -q -c"
+      "how": "lz4 -9 -q -c",
+      "hostDependent": true
     },
     {
       "name": "rom.tar.gz",
@@ -703,7 +729,8 @@
       "purpose": "rom inside a 7z (lzma2)",
       "sha256": "fc7805a0dc941a7037a454363c75c8cf0c4b73a0520fc82bd502ed684faf7ec1",
       "size": 8292,
-      "how": "rom-weaver compress --input base.bin --output rom.7z"
+      "how": "rom-weaver compress --input base.bin --output rom.7z",
+      "hostDependent": true
     },
     {
       "name": "patch.zip",
@@ -759,7 +786,8 @@
       "purpose": "patch compressed with xz (extension-less payload name)",
       "sha256": "1ed8647663284e31e6baf94461ef3ec90eb2792c9af3ddb8e7959e19ee8b6c18",
       "size": 136,
-      "how": "xz -9e -k -c"
+      "how": "xz -9e -k -c",
+      "hostDependent": true
     },
     {
       "name": "bps-same.bps.xz",
@@ -767,7 +795,8 @@
       "purpose": "patch compressed with xz, conventional name <file>.xz",
       "sha256": "1ed8647663284e31e6baf94461ef3ec90eb2792c9af3ddb8e7959e19ee8b6c18",
       "size": 136,
-      "how": "xz -9e -k -c"
+      "how": "xz -9e -k -c",
+      "hostDependent": true
     },
     {
       "name": "patch.bz2",
@@ -775,7 +804,8 @@
       "purpose": "patch compressed with bzip2 (extension-less payload name)",
       "sha256": "c5edfc7c19a65e4aa5b66dc6846ae9b0d32e640dc059131f861f7896d3c7cbad",
       "size": 122,
-      "how": "bzip2 -9 -k -c"
+      "how": "bzip2 -9 -k -c",
+      "hostDependent": true
     },
     {
       "name": "bps-same.bps.bz2",
@@ -783,7 +813,8 @@
       "purpose": "patch compressed with bzip2, conventional name <file>.bz2",
       "sha256": "c5edfc7c19a65e4aa5b66dc6846ae9b0d32e640dc059131f861f7896d3c7cbad",
       "size": 122,
-      "how": "bzip2 -9 -k -c"
+      "how": "bzip2 -9 -k -c",
+      "hostDependent": true
     },
     {
       "name": "patch.zst",
@@ -791,7 +822,8 @@
       "purpose": "patch compressed with zstd (extension-less payload name)",
       "sha256": "2c87bedea57c082b81ed99532e0851b79f355bd6c59cf829b0c6c7c9a8006ccf",
       "size": 76,
-      "how": "zstd -19 -q -c"
+      "how": "zstd -19 -q -c",
+      "hostDependent": true
     },
     {
       "name": "bps-same.bps.zst",
@@ -799,7 +831,8 @@
       "purpose": "patch compressed with zstd, conventional name <file>.zst",
       "sha256": "2c87bedea57c082b81ed99532e0851b79f355bd6c59cf829b0c6c7c9a8006ccf",
       "size": 76,
-      "how": "zstd -19 -q -c"
+      "how": "zstd -19 -q -c",
+      "hostDependent": true
     },
     {
       "name": "patch.lz4",
@@ -807,7 +840,8 @@
       "purpose": "patch compressed with lz4 (extension-less payload name)",
       "sha256": "984f772c56f305245f5563e88bf333a8307f4cf694bc9196314c87ccc27a895c",
       "size": 82,
-      "how": "lz4 -9 -q -c"
+      "how": "lz4 -9 -q -c",
+      "hostDependent": true
     },
     {
       "name": "bps-same.bps.lz4",
@@ -815,7 +849,8 @@
       "purpose": "patch compressed with lz4, conventional name <file>.lz4",
       "sha256": "984f772c56f305245f5563e88bf333a8307f4cf694bc9196314c87ccc27a895c",
       "size": 82,
-      "how": "lz4 -9 -q -c"
+      "how": "lz4 -9 -q -c",
+      "hostDependent": true
     },
     {
       "name": "patch.tar.gz",
@@ -847,7 +882,8 @@
       "purpose": "patch inside a 7z (lzma2)",
       "sha256": "715232167cd1fe840ea2d8fd03c0e4d5bbda153d95ea10d231eb2b85344deb48",
       "size": 176,
-      "how": "rom-weaver compress --input bps-same.bps --output patch.7z"
+      "how": "rom-weaver compress --input bps-same.bps --output patch.7z",
+      "hostDependent": true
     },
     {
       "name": "multi-rom.zip",
@@ -882,7 +918,7 @@
       "how": "encoders.zip"
     },
     {
-      "name": "unicode-ゲーム-é.zip",
+      "name": "unicode-\u30b2\u30fc\u30e0-\u00e9.zip",
       "dir": "cache",
       "purpose": "unicode archive name and member name",
       "sha256": "6634f07216d6f8ec0d09ae4b0ed46a6faa1afeac1e6dfe6c9fc1dc9036c26045",
@@ -927,7 +963,8 @@
       "purpose": "password-protected zip (ZipCrypto, password 'secret')",
       "sha256": "7f2eedfd03c19f4085a533fed3fa72c251218fe408d02294095fa052a9b25087",
       "size": 8334,
-      "how": "zip -P secret"
+      "how": "zip -P secret",
+      "volatile": true
     },
     {
       "name": "borrowed/bsppatch-nested.bsp",

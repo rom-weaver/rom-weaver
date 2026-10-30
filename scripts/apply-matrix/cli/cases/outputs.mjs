@@ -88,7 +88,10 @@ export const register = () => {
     const { spawnSync } = await import("node:child_process");
     const useUnzip = kind === "zip" && !/zstd/.test(codec ?? "");
     const args = useUnzip ? ["unzip", ["-p", out]] : ["bsdtar", ["-xOf", out]];
-    if (!have(args[0])) return "skipped-independent";
+    if (!have(args[0])) {
+      ctx.note(`independent ${kind}${codec ? `/${codec}` : ""} oracle skipped: ${args[0]} not installed; only the rom-weaver round-trip was verified`);
+      return "skipped-independent";
+    }
     const result = spawnSync(args[0], args[1], { maxBuffer: 1 << 28 });
     check(result.status === 0, () => `${args[0]} could not read the archive: ${result.stderr?.toString().slice(0, 200)}`);
     check(Buffer.from(result.stdout).equals(fs.readFileSync(ctx.fx(TARGET))), `${args[0]} extracted bytes differ from the patched ROM`);
@@ -192,8 +195,9 @@ export const register = () => {
   add("output.chd.cd-codec-on-raw-media-rejected", ["output", "chd", "negative"], (ctx) => {
     ctx.failed(compressed(ctx, ctx.tmp("out.chd"), ["--compress-codec", "cdzs"]), { message: /codec|raw/i, what: "cdzs for raw media" });
   });
+  // quality-reason: this harness never drives chdman; parity is asserted by Rust cli_smoke chd.rs and `mise run quality-reference`.
   add("output.chd.reference-chdman", ["output", "chd", "reference"], () => {
-    if (!have("chdman")) skip("chdman not installed on this host; parity vs chdman is asserted by Rust cli_smoke chd.rs and `mise run quality-reference` where chdman exists");
+    skip("parity vs chdman is not driven by this harness; see Rust cli_smoke chd.rs and `mise run quality-reference`");
   });
 
   // ------------------------------------------------------------------- z3ds / rvz outputs
@@ -253,8 +257,9 @@ export const register = () => {
     }
     for (const out of outputs.slice(1)) ctx.same(out, outputs[0], `${path.relative(ctx.work, out)} vs first`);
   });
+  // quality-reason: this harness never drives dolphin-tool; parity is asserted by Rust rvz_z3ds.rs and `mise run quality-reference`.
   add("output.rvz.reference-dolphin-tool", ["output", "rvz", "reference"], () => {
-    if (!have("dolphin-tool")) skip("dolphin-tool not installed on this host; RVZ parity vs dolphin-tool is asserted by Rust rvz_z3ds.rs and `mise run quality-reference` where available");
+    skip("parity vs dolphin-tool is not driven by this harness; see Rust rvz_z3ds.rs and `mise run quality-reference`");
   });
   add("output.disc.default-output-is-raw-iso", ["output", "disc"], (ctx) => {
     const input = ctx.write("in.wbfs", fs.readFileSync(ctx.fx("disc/wbfs.wbfs")));
@@ -270,6 +275,7 @@ export const register = () => {
       ctx.same(ctx.write("rb.iso", readBack(ctx, out)), ctx.fx("disc/wbfs.target.iso"), `${ext} round-trip`);
     });
   }
+  // quality-reason: patch apply has no split-output option to test; split WBFS input is covered by container.disc.wbfs-split*.
   add("output.split.not-offered-by-patch-apply", ["output", "split"], () => {
     skip("patch apply has no split-output option (split WBFS is covered as an input in container.disc.wbfs-split*)");
   });
@@ -411,6 +417,7 @@ export const register = () => {
     check(fs.lstatSync(link).isSymbolicLink(), "symlink was replaced by a regular file");
   });
   add("output-path.read-only-directory", ["output-path", "permissions", "negative"], (ctx) => {
+    // quality-reason: root bypasses directory permissions so the read-only directory cannot be forced; path_access.rs unit tests in crates/rom-weaver-cli/tests/unit cover the permission errors.
     if (process.getuid?.() === 0) skip("running as root: directory permissions are not enforced");
     const dir = ctx.tmp("ro");
     fs.mkdirSync(dir);
@@ -423,6 +430,7 @@ export const register = () => {
     }
   });
   add("output-path.read-only-existing-output-with-force", ["output-path", "permissions"], (ctx) => {
+    // quality-reason: root bypasses file write permissions so the read-only output cannot be forced; path_access.rs unit tests in crates/rom-weaver-cli/tests/unit cover the permission errors.
     if (process.getuid?.() === 0) skip("running as root: file permissions are not enforced");
     const out = ctx.write("ro.bin", "old");
     fs.chmodSync(out, 0o444);
@@ -431,6 +439,7 @@ export const register = () => {
     if (result.code === 0) ctx.same(out, ctx.fx(TARGET), "forced over read-only");
     else ctx.failed(result, { message: /permission|denied|read-only/i, what: "read-only output" });
   });
+  // quality-reason: root bypasses file read permissions so the unreadable input cannot be forced; path_access.rs unit tests in crates/rom-weaver-cli/tests/unit cover the permission errors.
   add("output-path.unreadable-input", ["output-path", "permissions", "negative"], (ctx) => {
     if (process.getuid?.() === 0) skip("running as root: file permissions are not enforced");
     const rom = ctx.write("secret.bin", fs.readFileSync(ctx.fx(ROM)));

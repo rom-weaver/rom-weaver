@@ -2164,10 +2164,24 @@ pub(super) fn recode_delta_indicator(
     indicator
 }
 
+/// Separates the xdelta3 `target//source/` filename fields from the rom-weaver tag. When decoding,
+/// xdelta3 copies the header into a NUL-terminated string, so everything after the NUL is ignored;
+/// a visible fifth field would instead make it warn about an unrecognized external compression ID
+/// on every decode. `xdelta3 printhdr` still writes the raw header bytes, tag included.
+pub(super) const XDELTA_APP_HEADER_TAG_SEPARATOR: u8 = 0;
+
+/// Producer tag appended to the xdelta app header, e.g. `rom-weaver 0.23.0`.
+pub(super) fn xdelta_app_header_producer_tag() -> String {
+    format!("rom-weaver {}", env!("CARGO_PKG_VERSION"))
+}
+
 pub(super) fn build_default_xdelta_app_header(source_path: &Path, target_path: &Path) -> Vec<u8> {
     let source = xdelta_app_header_name_component(source_path);
     let target = xdelta_app_header_name_component(target_path);
-    format!("{target}//{source}/").into_bytes()
+    let mut header = format!("{target}//{source}/").into_bytes();
+    header.push(XDELTA_APP_HEADER_TAG_SEPARATOR);
+    header.extend_from_slice(xdelta_app_header_producer_tag().as_bytes());
+    header
 }
 
 pub(super) fn xdelta_app_header_name_component(path: &Path) -> String {

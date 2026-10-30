@@ -230,9 +230,9 @@ test.each(["pick", "drop"])("Home queues newer %s arrivals while the destination
 test.each(["pick", "drop"])("Home replay waits for routing and includes newer buffered %s selections", async (kind) => {
   mountWebappRoot({ initialView: "home" });
   await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
-  const source = indexHtml.match(/<script>\s*\/\/ Buffer clicks[\s\S]*?<\/script>/)[0];
+  const source = indexHtml.match(/<script>\s*\/\/ Buffer clicks[\s\S]*?<\/script>/i)[0];
   const script = document.createElement("script");
-  script.textContent = source.replace(/^<script>|<\/script>$/g, "");
+  script.textContent = source.replace(/^<script>|<\/script>$/gi, "");
   document.head.append(script);
   script.remove();
   captureShellClicks();

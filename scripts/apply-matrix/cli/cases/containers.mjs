@@ -16,7 +16,8 @@ const viaContainer = (ctx, input, { patch = IPS, expect = "rom/same.bin", extra 
   return { result, output, expected: ctx.fx(expect) };
 };
 const needTool = (tool) => {
-  if (!have(tool)) skip(`${tool} not installed on this host`);
+  // quality-reason: the case authors its archive with the named host tool, so it cannot run without it; the extractor itself is covered by Rust tests in crates/rom-weaver-containers.
+  for (const name of [tool].flat()) if (!have(name)) skip(`${name} not installed on this host`);
 };
 
 export const register = async ({ root, fixtures }) => {
@@ -33,16 +34,16 @@ export const register = async ({ root, fixtures }) => {
     ["tar", "plain.tar", "tar"],
     ["tar.gz", "plain.tar.gz", "tar"],
     ["tgz", "plain.tgz", "tar"],
-    ["tar.bz2", "plain.tar.bz2", "tar"],
-    ["tbz2", "plain.tbz2", "tar"],
-    ["tar.xz", "plain.tar.xz", "tar"],
-    ["txz", "plain.txz", "tar"],
+    ["tar.bz2", "plain.tar.bz2", ["tar", "bzip2"]],
+    ["tbz2", "plain.tbz2", ["tar", "bzip2"]],
+    ["tar.xz", "plain.tar.xz", ["tar", "xz"]],
+    ["txz", "plain.txz", ["tar", "xz"]],
     ["gz", "game.bin.gz", "gzip"],
     ["bz2", "game.bin.bz2", "bzip2"],
     ["xz", "game.bin.xz", "xz"],
     ["zst", "game.bin.zst", "zstd"],
     ["nested-zip-in-zip", "nested-outer.zip", "zip"],
-    ["nested-7z-in-tgz", "nested-tgz-7z.tgz", "bsdtar"],
+    ["nested-7z-in-tgz", "nested-tgz-7z.tgz", ["bsdtar", "tar"]],
     ["subdir-unicode-names", "subdir.zip", "zip"],
     ["rom-plus-readme", "rom-plus-readme.zip", "zip"],
   ];
@@ -179,6 +180,7 @@ export const register = async ({ root, fixtures }) => {
   });
 
   add("container.safety.zip-slip-member-name", ["container", "negative", "safety"], (ctx) => {
+    // quality-reason: python3 is the only writer of a ../ member name here (system zip refuses to); path-traversal rejection is also covered by Rust tests in crates/rom-weaver-containers/tests/unit/archive_entries.rs.
     if (!have("python3")) skip("python3 not installed (used only to write a ../ member name)");
     const zip = ctx.tmp("slip.zip");
     const script = "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1],'w'); z.writestr('../../escaped.bin', open(sys.argv[2],'rb').read()); z.close()";
@@ -259,6 +261,7 @@ export const register = async ({ root, fixtures }) => {
     const nfs = await import(pathToFileURL(path.join(fixturesDir, "synthetic-nfs.mjs")).href);
     discs = { mod, nfs };
   } catch (error) {
+    // quality-reason: importing the webapp disc fixture builders fails only when that package is not installed; the disc containers are then covered by the Rust crates/rom-weaver-containers tests.
     add("container.disc.fixture-builders-unavailable", ["container", "disc"], () => skip(`webapp fixture builders could not be imported: ${error.message}`));
     return;
   }
@@ -345,7 +348,8 @@ export const register = async ({ root, fixtures }) => {
     ctx.ok(ctx.apply(ctx.tmp("hif_000000.nfs"), patch, out), "apply to nfs");
     check(fs.readFileSync(out).equals(target), "nfs output mismatch");
   });
-  add("container.disc.wia-gcz", ["container", "disc", "wia", "gcz"], () => skip("no local WIA/GCZ writer (dolphin-tool absent); read paths covered by Rust tests rvz_z3ds.rs / shared.rs write_wia_fixture_from_iso"));
+  // quality-reason: rom-weaver has no WIA/GCZ writer and this harness does not drive dolphin-tool; read paths are covered by Rust tests rvz_z3ds.rs / shared.rs write_wia_fixture_from_iso.
+  add("container.disc.wia-gcz", ["container", "disc", "wia", "gcz"], () => skip("no WIA/GCZ writer in this harness; read paths covered by Rust tests rvz_z3ds.rs / shared.rs write_wia_fixture_from_iso"));
 
   // RVZ / CHD / Z3DS inputs made by rom-weaver compress from the wbfs payload
   const wbfsPayload = "disc/wbfs.payload.iso";

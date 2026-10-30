@@ -2,7 +2,8 @@
 // Regenerates the apply-matrix fixtures. Idempotent: existing files whose sha256 already matches the
 // deterministic expectation are left alone; missing or stale ones are rewritten.
 //
-//   node generate.mjs                 # build everything that can be built, write manifest.json
+//   node generate.mjs                 # build everything that can be built; manifest.json is left untouched
+//   node generate.mjs --update-manifest  # also rewrite manifest.json (recorded entries are never replaced by "unavailable" ones or dropped)
 //   node generate.mjs --check         # verify files against manifest.json, exit 1 on drift
 //
 // Layout:
@@ -28,13 +29,17 @@ const MANIFEST = path.join(HERE, "manifest.json");
 const CRATE_FIXTURES = path.join(REPO, "crates/rom-weaver-patches/tests/fixtures/hdiffpatch");
 
 export const cliPath = () => {
-  const candidates = [
-    process.env.RW_BIN,
-    path.join(REPO, "target/release/rom-weaver"),
-    path.join(REPO, "target/debug/rom-weaver"),
-  ];
-  return candidates.find((candidate) => candidate && fs.existsSync(candidate)) || null;
+  if (process.env.RW_BIN) {
+    const explicit = path.resolve(process.env.RW_BIN);
+    if (!fs.existsSync(explicit)) throw new Error(`RW_BIN does not exist: ${explicit}`);
+    return explicit;
+  }
+  const candidates = [path.join(REPO, "target/release/rom-weaver"), path.join(REPO, "target/debug/rom-weaver")];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
 };
+
+// Output depends on a host tool version or the rom-weaver build, so --check only requires the file to exist.
+const HOST_DEPENDENT = { hostDependent: true };
 
 const hostTool = (name) => spawnSync("sh", ["-c", `command -v ${name}`], { encoding: "utf8" }).stdout.trim() || null;
 
@@ -120,7 +125,7 @@ const writeIfChanged = (file, bytes) => {
   fs.writeFileSync(file, bytes);
 };
 
-const putBlob = (name, bytes, purpose, how, dir = BLOBS) => {
+const putBlob = (name, bytes, purpose, how, dir = BLOBS, extra = {}) => {
   writeIfChanged(path.join(dir, name), bytes);
   return record({
     name,
@@ -129,6 +134,7 @@ const putBlob = (name, bytes, purpose, how, dir = BLOBS) => {
     sha256: sha(bytes),
     size: bytes.length,
     how,
+    ...extra,
   });
 };
 
@@ -136,7 +142,7 @@ const unavailable = (name, purpose, how, reason) => record({ name, dir: "cache",
 
 const sh = (cmd, args, options = {}) => execFileSync(cmd, args, { stdio: ["ignore", "pipe", "pipe"], ...options });
 
-export function generate() {
+export function generate({ writeManifest = true } = {}) {
   manifest.entries = [];
   // Raw sources and targets.
   putBlob("base.bin", BASE, "source ROM every patch applies to (8 KiB, xorshift32 seed 0x1badf00d)", "encoders.prng");
@@ -282,6 +288,7 @@ export function generate() {
         `${format} same-size patch created by the native CLI; apply must reproduce target-same.bin`,
         how,
         CACHE,
+        HOST_DEPENDENT,
       );
     }
 
@@ -329,6 +336,7 @@ export function generate() {
         `native-chain step ${index + 1} (${format})`,
         "rom-weaver patch create",
         CACHE,
+        HOST_DEPENDENT,
       );
       if (index === cliChain.length - 1)
         putBlob(
@@ -455,6 +463,7 @@ export function generate() {
           `${kind} compressed with ${tool} (extension-less payload name)`,
           `${tool} ${args.slice(0, -1).join(" ")}`,
           CACHE,
+          HOST_DEPENDENT,
         );
         putBlob(
           `${fileName}${ext}`,
@@ -462,6 +471,7 @@ export function generate() {
           `${kind} compressed with ${tool}, conventional name <file>${ext}`,
           `${tool} ${args.slice(0, -1).join(" ")}`,
           CACHE,
+          HOST_DEPENDENT,
         );
       }
       const tarBytes = enc.tar([{ name: fileName, data: bytes }]);
@@ -494,6 +504,7 @@ export function generate() {
             `${kind} inside a 7z (lzma2)`,
             `rom-weaver compress --input ${fileName} --output ${kind}.7z`,
             CACHE,
+            HOST_DEPENDENT,
           );
         else
           unavailable(
@@ -562,6 +573,8 @@ export function generate() {
         "password-protected zip (ZipCrypto, password 'secret')",
         "zip -P secret",
         CACHE,
+        // ZipCrypto writes random header bytes, so the hash differs on every build.
+        { volatile: true },
       );
     } else unavailable("encrypted.zip", "encrypted zip", "zip -P", "host tool zip missing");
   } finally {
@@ -587,7 +600,27 @@ export function generate() {
     });
   }
 
-  fs.writeFileSync(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`);
+  if (writeManifest) {
+    // A host without the native CLI or a tool must not erase entries recorded on a host that had it.
+    const recorded = new Map(
+      (fs.existsSync(MANIFEST) ? JSON.parse(fs.readFileSync(MANIFEST, "utf8")).entries : []).map((entry) => [
+        entry.name,
+        entry,
+      ]),
+    );
+    const seen = new Set(manifest.entries.map((entry) => entry.name));
+    const merged = {
+      ...manifest,
+      entries: [
+        ...manifest.entries.map((entry) => {
+          const previous = recorded.get(entry.name);
+          return entry.unavailable && previous && !previous.unavailable ? previous : entry;
+        }),
+        ...[...recorded.values()].filter((entry) => !seen.has(entry.name)),
+      ],
+    };
+    fs.writeFileSync(MANIFEST, `${JSON.stringify(merged, null, 2)}\n`);
+  }
   return manifest;
 }
 
@@ -597,14 +630,19 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     let drift = 0;
     for (const entry of saved.entries.filter((candidate) => !candidate.unavailable)) {
       const file = path.join(entry.dir === "blobs" ? BLOBS : CACHE, entry.name);
-      if (!fs.existsSync(file) || sha(fs.readFileSync(file)) !== entry.sha256) {
+      const stale =
+        !fs.existsSync(file) ||
+        (entry.volatile
+          ? fs.statSync(file).size !== entry.size
+          : !entry.hostDependent && sha(fs.readFileSync(file)) !== entry.sha256);
+      if (stale) {
         console.error(`DRIFT ${entry.name}`);
         drift++;
       }
     }
     process.exit(drift ? 1 : 0);
   }
-  const result = generate();
+  const result = generate({ writeManifest: process.argv.includes("--update-manifest") });
   const ok = result.entries.filter((entry) => !entry.unavailable).length;
   const missing = result.entries.filter((entry) => entry.unavailable);
   console.log(`fixtures: ${ok} ready, ${missing.length} unavailable`);
