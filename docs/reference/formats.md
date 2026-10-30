@@ -223,7 +223,9 @@ The Test page supports these platforms:
 
 A PlayStation PBP is opened like an archive of disc images. A single-disc PBP extracts to `<name>.cue` and `<name>.bin`; a multi-disc PBP extracts every disc as `<name>.disc01.cue` and `<name>.disc01.bin`, `<name>.disc02.cue`, and so on. BIN sizing depends on the producer's TOC convention.
 
-Audio beyond the ISO volume is retained when the TOC describes audio, its first track starts at `00:00:00`, and the leadout fits the ISO volume and validated index table. This follows PSXPackager's full-BIN leadout convention. Other layouts use the ISO volume; when an audio disc has validated index blocks beyond that volume, extraction warns that trailing audio cannot be sized reliably.
+Audio beyond the ISO volume is retained when the TOC describes audio, its first track starts at `00:00:00`, and the leadout fits the ISO volume and validated index table. This follows PSXPackager's full-BIN leadout convention. Other layouts use the ISO volume.
+
+The populated index count must cover the block count required by the selected disc extent; missing blocks are rejected. Surplus blocks past the extent are ignored with a warning. Each decoded block must cover its own extent; the final block may be short or padded.
 
 `checksum` and `identify` hash one extracted file, so they need `--select <name>.bin`, or `--select <name>.discNN.bin` for a multi-disc PBP. A CHD holds a single disc, so CHD conversion takes one disc's cue sheet per run; with several discs selected, the Compress page offers only ZIP and 7z, which keep every selected cue and bin file in one archive. The CLI `compress` command does not open a PBP: it stores the `.pbp` file as is.
 
