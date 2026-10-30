@@ -377,6 +377,8 @@ Duplicated CI logic lives in one place. Changing one of these changes every cons
 
 Every toolchain concern, each opt-in so a job installs only what it runs: apt packages, mise-pinned tools, Rust components and targets, the cargo cache, the WASI SDK, webapp `node_modules`, and Playwright browsers.
 
+The mise binary itself is pinned in the action (`version:` on `jdx/mise-action`), so a new mise release cannot change how `.config/mise.toml` parses mid-week; bump it on purpose and check the `[tools]` options still load.
+
 On Linux, system dependencies and enabled compiler-cache tools share one APT pass. Compatible build tools (including CMake ≥3.17) and a loadable libclang satisfy their requirements before package installation; missing requirements retain their explicit package fallback. APT uses Ubuntu sources with bounded retries, network and lock waits, and a five-minute timeout per command.
 
 The `tools:` input is a **positive** list of short tool names (`tools: node rust nextest`). mise offers no allowlist - `MISE_DISABLE_TOOLS` is the only lever - so `scripts/ci/mise-disable-tools.mjs` reads the `[tools]` table of `.config/mise.toml` and computes the complement. Two consequences worth knowing:
