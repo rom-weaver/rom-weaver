@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -28,6 +28,14 @@ export function primeHookTargets(root, primes = HOOK_CARGO_PRIMES) {
       done();
     }).stderr?.pipe(process.stderr);
   })));
+}
+
+// Detached checkouts are review checkouts that rarely commit, so they skip the
+// prime; the hooks still build their target dirs on the first Rust commit.
+export function shouldPrime(cwd, argv) {
+  if (argv.includes("--no-prime")) return false;
+  if (argv.includes("--prime")) return true;
+  return spawnSync("git", ["symbolic-ref", "-q", "HEAD"], { cwd }).status === 0;
 }
 
 export function worktreePaths(cwd = process.cwd()) {
@@ -66,11 +74,13 @@ export async function main(cwd = process.cwd(), { prime = true } = {}) {
   if (prime) {
     process.stdout.write("setup-worktree: priming pre-commit cargo target dirs (minutes; --no-prime to skip)\n");
     await primeHookTargets(root);
+  } else {
+    process.stdout.write("setup-worktree: skipped priming pre-commit cargo target dirs (--prime to force)\n");
   }
   process.stdout.write(`setup-worktree: done for ${root}\n`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main(process.cwd(), { prime: !process.argv.includes("--no-prime") })
+  main(process.cwd(), { prime: shouldPrime(process.cwd(), process.argv) })
     .catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
 }

@@ -211,7 +211,7 @@ After creating a linked worktree, run its setup helper before building or testin
 node scripts/setup-worktree.mjs
 ```
 
-The helper installs package dependencies, copies available WASM artifacts, and primes the pre-commit Cargo directories `target/hook-typegen` and `target/hook-wasm`. Pass `--no-prime` to leave those builds to the first Rust commit. Each worktree must use its own Cargo target directories; sharing them between checkouts can reuse stale staged C sources.
+The helper installs package dependencies, copies available WASM artifacts, and, on a branch checkout, primes the pre-commit Cargo directories `target/hook-typegen` and `target/hook-wasm`. A detached checkout, such as a pull-request review, skips priming. Pass `--prime` or `--no-prime` to override; unprimed builds happen on the first Rust commit. Each worktree must use its own Cargo target directories; sharing them between checkouts can reuse stale staged C sources.
 
 After verifying that a worktree has no real changes, remove it from the main checkout with:
 
