@@ -49,7 +49,7 @@ function history(t) {
   return { cwd, base, prior, head };
 }
 
-function classify({ cwd, base, head, usePrior = "" }) {
+function classify({ cwd, base, head, usePrior = "", eventName = "pull_request" }) {
   const output = join(cwd, "github-output.txt");
   writeFileSync(output, "");
   const result = spawnSync("node", [SCRIPT], {
@@ -57,7 +57,7 @@ function classify({ cwd, base, head, usePrior = "" }) {
     encoding: "utf8",
     env: isolatedEnv({
       GITHUB_OUTPUT: output,
-      EVENT_NAME: "pull_request",
+      EVENT_NAME: eventName,
       HEAD_REF: "fix/x",
       BASE_SHA: base,
       HEAD_SHA: head,
@@ -126,4 +126,12 @@ test("a push touching only a changelog does not reselect Rust", (t) => {
   const { outputs } = classify({ ...repo, usePrior: repo.prior });
   assert.equal(outputs.rust, "false");
   assert.equal(outputs.webapp, "false");
+});
+
+test("a push selects every stack whatever the diff", (t) => {
+  const repo = history(t);
+  const { outputs } = classify({ ...repo, base: repo.prior, eventName: "push" });
+  for (const key of ["rust", "rust_lint", "fuzz", "webapp", "webapp_browser", "docker_prebuilt"]) {
+    assert.equal(outputs[key], "true", key);
+  }
 });

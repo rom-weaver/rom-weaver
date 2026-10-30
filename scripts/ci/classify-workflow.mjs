@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Manual dispatches and unavailable base commits MUST select every stack to preserve CI coverage.
+// Manual dispatches, pushes (to main and release tags), and unavailable base commits MUST select every stack to preserve CI coverage.
 
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -20,7 +20,8 @@ import { isReleasePullRequest } from "./release-pr.mjs";
 const EMPTY_SHA = "0".repeat(40);
 
 function changedPaths({ eventName, baseSha, headSha, quiet = false }) {
-  if (eventName === "workflow_dispatch" || !baseSha || baseSha === EMPTY_SHA) return null;
+  if (eventName === "workflow_dispatch" || eventName === "push") return null;
+  if (!baseSha || baseSha === EMPTY_SHA) return null;
   try {
     return execFileSync("git", ["diff", "--name-only", "--no-renames", baseSha, headSha], {
       encoding: "utf8",
