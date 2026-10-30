@@ -360,6 +360,14 @@ describe("prepareInputAssets", () => {
     },
   );
 
+  it("stages a dotted extension-less gzip ROM name whose tail is not an extension", async () => {
+    const source = new File([new Uint8Array([0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0])], "Game (Rev 1.1)");
+
+    const file = await prepareInput(source, "rom", NO_CONTAINER_OPTIONS as never, runtime);
+
+    expect(file.fileName).toBe("Game (Rev 1.1).gz");
+  });
+
   it("resolves a bare (non-container) ROM file into a single rom asset", async () => {
     const source = makeFile("rom-bytes", "game.bin");
 

@@ -14,7 +14,7 @@ import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import { ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS } from "../compression/rom-specific-format-support.ts";
 import { inheritIngestPatchRequirements } from "../apply/patch-apply-service.ts";
 import { emitTraceLog } from "../logging.ts";
-import { getFileNameExtension, hasFileNameExtension, replaceFileNameExtension } from "../path-utils.ts";
+import { getFileNameExtension, hasConventionalFileNameExtension, replaceFileNameExtension } from "../path-utils.ts";
 import { isCueEntryFileName, isGdiEntryFileName, parseCueFileReferences, parseGdiFileReferences } from "./archive.ts";
 import {
   attachPatchFileSourceRef,
@@ -230,7 +230,7 @@ const getLazyBrowserSource = async (
     // its signature proves; staging then extracts it like `game.gz`. Types without a recognised
     // archive extension stay rejected.
     const magicFileName = `${fileName}.${archiveMagicType}`;
-    if (getArchiveType({ fileName: magicFileName }) && !hasFileNameExtension(fileName)) {
+    if (getArchiveType({ fileName: magicFileName }) && !hasConventionalFileNameExtension(fileName)) {
       emitInputPreparationTrace(options, "lazy browser source accepted by archive magic", {
         archiveMagicType,
         fileName,

@@ -53,6 +53,15 @@ const getPathBaseName = (value: FileNameValue, fallback = ""): string => {
   return parts.at(-1) || fallback;
 };
 
+const CONVENTIONAL_EXTENSION_REGEX = /\.[a-z0-9]{1,8}$/i;
+
+/**
+ * Whether the name ends in a real file extension (a dot and 1-8 letters or digits). Unlike
+ * {@link hasFileNameExtension}, a release tag such as `Game (Rev 1.1)` has none.
+ */
+const hasConventionalFileNameExtension = (fileName: FileNameValue): boolean =>
+  CONVENTIONAL_EXTENSION_REGEX.test(String(fileName || ""));
+
 const hasFileNameExtension = (fileName: FileNameValue): boolean => findExtensionDotIndex(String(fileName || "")) >= 0;
 
 const getFileNameExtension = (
@@ -133,6 +142,7 @@ export {
   getFileNameParts,
   getFileNameWithoutExtension,
   getPathBaseName,
+  hasConventionalFileNameExtension,
   hasFileNameExtension,
   isCompressionLevelProfile,
   joinPath,

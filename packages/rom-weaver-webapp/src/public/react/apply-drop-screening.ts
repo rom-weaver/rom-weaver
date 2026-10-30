@@ -1,3 +1,4 @@
+import { hasConventionalFileNameExtension as hasExtension } from "../../lib/path-utils.ts";
 import { isArchiveFileName, isPatchFileName, isRomFileName, isWeaveFileName } from "./file-classification.ts";
 
 /**
@@ -11,7 +12,6 @@ type DropRejection = {
 };
 
 const SPLIT_WBFS_PART_REGEX = /\.wbf[1-9]\d*$/i;
-const FILE_EXTENSION_REGEX = /\.[a-z0-9]{1,8}$/i;
 const JSON_NAME_REGEX = /\.json$/i;
 
 const stemOf = (name: string) => name.replace(/\.[^./\\]*$/, "").toLowerCase();
@@ -48,8 +48,6 @@ type RomCandidates = {
   /** Bare files a dropped disc sheet references as tracks; never screened out whatever their name. */
   sheetReferenced?: ReadonlySet<File>;
 };
-
-const hasExtension = (name: string) => FILE_EXTENSION_REGEX.test(name);
 
 /**
  * Sort the ROM-bucket candidates of a drop that already holds a recognised ROM. Held back: a candidate
