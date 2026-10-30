@@ -73,7 +73,7 @@ const fixtureRun = (runArgs) => {
 const fixtures = new Fixtures({
   root,
   repoDir: path.join(root, "tests/fixtures/apply-matrix"),
-  cacheDir: defaultCacheDir(),
+  cacheDir: path.resolve(defaultCacheDir()),
   manifestPath: path.join(root, "tests/fixtures/apply-matrix/manifest.json"),
   run: fixtureRun,
   quiet: !opt.verbose,

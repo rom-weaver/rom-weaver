@@ -164,7 +164,7 @@ export const register = ({ fixtures }) => {
         return;
       }
       check(result.code === 130 || result.signal === "SIGINT", () => `expected exit 130 after SIGINT, got ${ctx.describe(result)}`);
-      const leftovers = fs.readdirSync(ctx.work).filter((name) => name.startsWith("out"));
+      const leftovers = fs.readdirSync(ctx.work).filter((name) => /^(out|rom-weaver-out)/.test(name));
       check(leftovers.length === 0, () => `cancelled apply left files behind: ${leftovers.join(",")}`);
     });
   }

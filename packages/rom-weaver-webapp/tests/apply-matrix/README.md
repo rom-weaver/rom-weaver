@@ -8,7 +8,7 @@ It drives the real UI in headless Chromium (Playwright from the webapp package),
 2. the native CLI (`target/release/rom-weaver`, or `RW_BIN`) as a differential oracle when it is built,
 3. invariants (no page error, no hang, no silent success on a corrupt patch).
 
-Missing tools or fixtures turn a case into `skip` with a printed reason; nothing is skipped silently. Disc outputs in a container format that need the native CLI to open them, when none is built, pass with the note `unverified (no native CLI)` in the case detail; raw (`none`) outputs always need an exact byte match.
+Missing tools or fixtures turn a case into `skip` with a printed reason; nothing is skipped silently. Disc outputs in a container format that need the native CLI to open them, when none is built, pass with the note `unverified (no native CLI)` in the case detail; single-file raw (`none`) outputs always need an exact byte match.
 
 ## Run
 
