@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { HOOK_CARGO_PRIMES, primeHookTargets } from "./setup-worktree.mjs";
+import { HOOK_CARGO_PRIMES, primeHookTargets, shouldPrime } from "./setup-worktree.mjs";
 
 const hook = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../.config/lefthook.yml"), "utf8");
 
@@ -39,4 +41,19 @@ test("no hook cargo command overrides RUSTFLAGS", () => {
 
 test("a prime that cannot run is advisory, not fatal", async () => {
   await primeHookTargets(process.cwd(), [{ task: "no-such-task-9f3d", targetDir: "target/none", rustflags: "" }]);
+});
+
+test("branch checkouts prime and detached review checkouts skip unless forced", (t) => {
+  const repo = mkdtempSync(join(tmpdir(), "setup-worktree-"));
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+  const git = (...args) => execFileSync("git", ["-C", repo, ...args], { env, stdio: "ignore" });
+  git("init", "-q", "-b", "main");
+  assert.equal(shouldPrime(repo, []), true, "an unborn branch is still a branch");
+  git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "base");
+  assert.equal(shouldPrime(repo, []), true);
+  assert.equal(shouldPrime(repo, ["--no-prime"]), false);
+  git("checkout", "-q", "--detach");
+  assert.equal(shouldPrime(repo, []), false);
+  assert.equal(shouldPrime(repo, ["--prime"]), true);
 });

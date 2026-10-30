@@ -305,7 +305,7 @@ description = "Benchmark zip deflate compress/extract against Info-ZIP (needs BE
 run = "node {{ config_root }}/scripts/bench-disc-tools.mjs --suite zip --corpus '{{ env.BENCH_CORPUS }}'"
 
 [tasks.quality-architecture]
-description = "Check Cargo direction, shared errors and browser ownership"
+description = "Check Cargo direction, test targets, shared errors and browser ownership"
 run = "node {{ config_root }}/scripts/quality-architecture.mjs"
 
 [tasks.quality-guardrails]

@@ -211,8 +211,8 @@ Inspect `.agent/quality-mutation/summary.json` and `mutants.out` for surviving l
 Run the independent property checks:
 
 ```bash
-cargo test -p rom-weaver-patches --test behavior_properties
-cargo test -p rom-weaver-containers --test behavior_properties
+cargo test -p rom-weaver-patches --test integration behavior_properties::
+cargo test -p rom-weaver-containers --test integration behavior_properties::
 cargo test -p rom-weaver-checksum edge_checksum_chunking
 cargo test -p rom-weaver-core single_money_edit_preserves
 ```
@@ -264,15 +264,15 @@ Use only LCOV produced from the current candidate. `changed-lines.json` separate
 
 ### Prove a bug-fix regression test
 
-Invoke `quality-regression-proof` with a base ref, package, integration test target, exact test name, a specific behavioral diagnostic and one or more `--test-file` paths. It archives the merge base into task scratch, overlays only Rust tests, and builds base/candidate into separate target directories. Production files and manifests cannot be overlaid. Required fixture/data dependencies must already be available; their absence is an unproven setup failure, not proof.
+Invoke `quality-regression-proof` with a base ref, package, integration test target, exact test name, a specific behavioral diagnostic and one or more `--test-file` paths. It archives the merge base into task scratch, overlays only Rust tests, and builds base/candidate into separate target directories. Production files and manifests cannot be overlaid. A regression test in a new `tests/*.rs` file also needs its crate's `tests/integration.rs`, which declares it, as a `--test-file`. Required fixture/data dependencies must already be available; their absence is an unproven setup failure, not proof.
 
 For the CUE regression added by fuzzing, the arguments are:
 
 ```text
 --base main
 --package rom-weaver-core
---target disc_sheet_regressions
---test empty_quoted_disc_sheet_filename_is_rejected
+--target integration
+--test disc_sheet_regressions::empty_quoted_disc_sheet_filename_is_rejected
 --diagnostic "empty filename must be a validation error"
 --test-file crates/rom-weaver-core/tests/disc_sheet_regressions.rs
 ```

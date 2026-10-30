@@ -175,7 +175,7 @@
       },
       "tests": [
         "cargo test -p rom-weaver-containers --lib nod::util::compress::tests::",
-        "cargo test -p rom-weaver-cli --test cli_smoke"
+        "cargo test -p rom-weaver-cli --test integration cli_smoke::"
       ]
     },
     {
@@ -261,7 +261,7 @@
       },
       "tests": [
         "cargo test -p rom-weaver-containers --lib",
-        "cargo test -p rom-weaver-cli --test cli_smoke"
+        "cargo test -p rom-weaver-cli --test integration cli_smoke::"
       ]
     },
     {
@@ -284,7 +284,7 @@
       },
       "tests": [
         "cargo test -p rom-weaver-containers nod",
-        "cargo test -p rom-weaver-cli --test cli_smoke rvz"
+        "cargo test -p rom-weaver-cli --test integration rvz"
       ]
     },
     {

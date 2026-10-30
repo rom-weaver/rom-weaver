@@ -11,6 +11,7 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 links = "archive"
+autotests = false
 
 [features]
 default = [
@@ -118,6 +119,10 @@ diffy = { version = "0.5.2", default-features = false }
 proptest = "1.6.0"
 rand.workspace = true
 tar.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
 
 [package.metadata.cargo-machete]
 # maybe-async expands its async traits to async-trait at macro expansion time.

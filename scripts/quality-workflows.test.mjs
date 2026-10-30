@@ -65,7 +65,7 @@ test("deep browser verification executes real runtime files and uploads failure 
   assert.ok(
     deep.jobs.assurance.steps
       .find((s) => s.id === "properties")
-      .run.includes("rom-weaver-containers --test behavior_properties"),
+      .run.includes("rom-weaver-containers --test integration behavior_properties::"),
   );
 });
 

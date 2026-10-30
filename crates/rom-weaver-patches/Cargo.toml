@@ -10,6 +10,7 @@ readme = "README.md"
 repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
+autotests = false
 
 [dependencies]
 bzip2.workspace = true
@@ -37,3 +38,7 @@ workspace = true
 
 [dev-dependencies]
 proptest = "1.6.0"
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

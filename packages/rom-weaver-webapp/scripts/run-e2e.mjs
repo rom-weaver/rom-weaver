@@ -12,7 +12,7 @@ const PROFILES = {
   fast: {
     batches: [
       [
-        ["CLI", "cargo", ["test", "-p", "rom-weaver-cli", "--test", "cli_smoke"], REPO_ROOT],
+        ["CLI", "cargo", ["test", "-p", "rom-weaver-cli", "--test", "integration", "cli_smoke::"], REPO_ROOT],
         ["browser", "npm", ["run", "test:browser"], PACKAGE_DIR],
       ],
       [
@@ -25,7 +25,7 @@ const PROFILES = {
   nightly: {
     batches: [
       [
-        ["CLI matrix", "cargo", ["test", "-p", "rom-weaver-cli", "--test", "cli_smoke"], REPO_ROOT],
+        ["CLI matrix", "cargo", ["test", "-p", "rom-weaver-cli", "--test", "integration", "cli_smoke::"], REPO_ROOT],
         ["exhaustive WASM matrix", "npm", ["run", "test:browser:wasm:exhaustive"], PACKAGE_DIR],
         ["webapp E2E", "npm", ["run", "test:e2e:webapp"], PACKAGE_DIR],
       ],

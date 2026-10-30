@@ -112,6 +112,15 @@ zeekstd = "0.6.2"
 zstd-sys = { version = "2.0.16", default-features = false }
 zstd = "0.14.0"
 
+# Full debuginfo is most of a dev/test target/ and its link time. Line tables keep
+# file:line in panics and test backtraces. For a debugger session, pass
+# `--config profile.dev.debug=true --config 'profile.dev.package."*".debug=true'`.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 [profile.release]
 lto = "fat"
 strip = true

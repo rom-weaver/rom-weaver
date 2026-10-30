@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
-import { resolve, posix } from "node:path";
+import { dirname, resolve, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 const require = createRequire(resolve(process.cwd(), "packages/rom-weaver-webapp/package.json"));
 const { parseSync } = require("oxc-parser");
@@ -32,6 +32,36 @@ export function dependencyViolations(metadata) {
           `${p.name} -> ${d.name} (${d.kind ?? "normal"} dependency) violates dependency direction`,
       );
   });
+}
+// With `autotests = false`, Cargo silently skips a tests/*.rs file that no target names, so
+// each one MUST be a test target root or a `mod` of one.
+export function orphanTestFileViolations(
+  metadata,
+  listDir = readdirSync,
+  readSource = (path) => readFileSync(path, "utf8"),
+) {
+  return metadata.packages
+    .filter((p) => metadata.workspace_members.includes(p.id))
+    .flatMap((p) => {
+      const dir = resolve(dirname(p.manifest_path), "tests");
+      let names;
+      try {
+        names = listDir(dir);
+      } catch {
+        return [];
+      }
+      const roots = p.targets
+        .filter((t) => t.kind.includes("test"))
+        .map((t) => resolve(t.src_path));
+      const declared = new Set(
+        roots.flatMap((root) =>
+          [...readSource(root).matchAll(/^\s*(?:#\[[^\]]*\]\s*)*(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+)\s*;/gm)].map((m) => `${m[1]}.rs`),
+        ),
+      );
+      return names
+        .filter((n) => n.endsWith(".rs") && !roots.includes(resolve(dir, n)) && !declared.has(n))
+        .map((n) => `${p.name}: tests/${n} is not compiled; declare it as a mod of a [[test]] root`);
+    });
 }
 const rootOwners = new Map([
   ["storage/browser/browser-large-file-vfs.ts", "Storage facade owns async root access."],
@@ -298,7 +328,7 @@ export function checkArchitecture(cwd = process.cwd()) {
       encoding: "utf8",
     }),
   );
-  const violations = dependencyViolations(metadata);
+  const violations = [...dependencyViolations(metadata), ...orphanTestFileViolations(metadata)];
   const prefix = "packages/rom-weaver-webapp/src/";
   const sources = files(resolve(cwd, prefix)).filter((path) => /\.[cm]?[jt]sx?$/.test(path));
   const modules = new Map(
