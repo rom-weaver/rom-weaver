@@ -179,12 +179,16 @@ Examples are in [Use an archive pipeline](../how-to/work-with-archives.md#use-an
 - `-s`/`--select` picks which file to use, by exact name, folder, or glob. On `patch apply` and `patch validate` it applies to the input and to every `--patch` archive alike.
 - `--patch-select` picks the file inside the `--patch` archive it follows, overriding `--select` for that patch. Repeat it once per `--patch`, in the same order. Only `patch apply` and `patch validate` take it, and it is the only way to select different files from an archive input and an archive patch in one command.
 - `--filter rom` selects ROM candidates; `--filter patch` selects patches. Known extensions determine candidates; stream wrappers use their inferred payload names. The flag accepts repeated or comma-separated values (`--filter rom,patch`).
-- `--no-ignore` also considers the files normally skipped: readmes, images, checksum sidecars, and OS clutter such as `.DS_Store`.
+- `--no-ignore` also considers the files normally skipped: text documents with extensions such as `.txt` and `.nfo`, images, checksum sidecars, and OS clutter such as `.DS_Store`.
 - `--no-extract` skips all of this and works on the file itself.
 
 Extension-less payload names and dotted names without a plausible extension pass both name filters. A plausible extension is a final dotted token of 1–8 ASCII alphanumeric characters, starting with a letter. Numeric tails (`Hack v1.1`), empty tails (`Game.`), and tails containing whitespace, parentheses, commas, or other characters (`Dr. Mario (Japan, USA)`) qualify for content classification. Known ROM, patch, container, and ignored common-file extensions retain their existing rules.
 
 `ingest` and commands resolving one extracted payload classify eligible names using reliable patch signatures. Other bytes remain ROM candidates; `extract` keeps eligible names under either filter. Stream wrappers apply these rules to the inferred payload name: `rom.gz`, `Hack v1.1.gz`, and `Dr. Mario (Japan, USA).gz` qualify. Real-looking extensions such as `.exe`, `.msu`, `.pcm`, and `.srm` do not become ROM or patch candidates. Directory entries never become payload candidates.
+
+Interactive `ingest` resolves ROM choices after extraction when archives contain eligible unnamed payloads. Signature-classified patches stay outside ROM prompts and remain sidecars when a ROM is selected.
+
+The ignore rules do not recognize `README`, `LICENSE`, or `README.1ST` by name. These files, and unignored extension-less tools such as `xdelta3`, remain ROM candidates without a reliable patch signature. They can cause ROM ambiguity or classify an otherwise patch-only archive as a ROM source. `--no-ignore` does not change this limitation.
 
 Not every command takes all five. `extract` has no `--no-extract`, since unpacking is the whole job. `trim` spells its filter `--no-filter`, because it filters to ROMs by default. `rom-weaver <command> --help` is authoritative.
 

@@ -3020,6 +3020,54 @@ fn ingest_review_complete_sidecar_manifest() {
 }
 
 #[test]
+fn ingest_review_disc_sidecar_manifest_precedes_rom_extraction() {
+    for extension in ["chd", "rvz", "cso"] {
+        let temp = setup_temp_dir();
+        let disc = temp.child(format!("game.{extension}"));
+        fs::write(disc.path(), banded_rom()).unwrap();
+        let patch = temp.child("hack.bps");
+        fs::write(patch.path(), banded_bps()).unwrap();
+        let archive = temp.child("disc.zip");
+        zip_members(&temp, archive.path(), &[disc.path(), patch.path()]);
+        let out = temp.child("out");
+        let events = run_json_events(
+            &[
+                "ingest",
+                "--input",
+                archive.path().to_str().unwrap(),
+                "--output",
+                out.path().to_str().unwrap(),
+                "--no-nested-extract",
+                "--jsonl",
+            ],
+            0,
+        );
+        let manifest_index = events
+            .iter()
+            .position(|event| event["stage"] == "patch-manifest")
+            .unwrap();
+        let extraction_starts: Vec<_> = events
+            .iter()
+            .enumerate()
+            .filter(|(_, event)| event["command"] == "ingest" && event["stage"] == "extract")
+            .map(|(index, _)| index)
+            .collect();
+        assert_eq!(extraction_starts.len(), 2, "{events:?}");
+        assert!(
+            manifest_index < extraction_starts[1],
+            "{extension}: patch dialog must be available before ROM extraction: {events:?}"
+        );
+        assert_eq!(
+            events.last().unwrap()["details"]["ingest"]["patches"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+}
+
+#[test]
 fn ingest_review_named_stream_patch_beside_rom() {
     for codec in STREAM_CODECS {
         let temp = setup_temp_dir();

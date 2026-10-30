@@ -347,12 +347,21 @@ impl CliApp {
                     handler.descriptor().name
                 ))
             })?;
+        self.resolve_listed_payload_selections(&entries, source, options)
+    }
+
+    pub(super) fn resolve_listed_payload_selections(
+        &self,
+        entries: &[ContainerListEntry],
+        source: &Path,
+        options: SelectionResolutionOptions<'_>,
+    ) -> Result<Vec<String>> {
         // Collapse the container's entries into the LOGICAL ROMs it carries: a CD/GD-ROM disc
         // (its `.cue`/`.gdi` sheet plus every track) becomes one unit, while each loose ROM stays
         // its own unit. A disc must extract as a whole - sheet + all tracks together - so a chosen
         // unit expands back to every member file.
         let groups = Self::build_logical_payload_groups(
-            &entries,
+            entries,
             options.kind_filter,
             options.ignore_common_files,
         );

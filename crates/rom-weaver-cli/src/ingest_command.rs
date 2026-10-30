@@ -549,7 +549,8 @@ impl CliApp {
         // Hosts MUST see signature-classified and named patches together in their first manifest.
         let defer_patch_manifest = entries.iter().any(|entry| {
             rom_weaver_core::payload_name_needs_content_classification(&entry.path)
-                || rom_weaver_core::is_container_filter_passthrough_candidate_name(&entry.path)
+                || (rom_weaver_core::is_container_filter_passthrough_candidate_name(&entry.path)
+                    && !rom_weaver_core::is_rom_filter_candidate_name(&entry.path))
         });
         // Sidecars MUST remain independent of ROM selection; derive ordering from ROM names.
         let mut patches = if has_patch {
@@ -598,6 +599,7 @@ impl CliApp {
                 context,
             },
             algorithms,
+            defer_patch_manifest,
         ) {
             Ok(assets) => assets,
             Err(rom_error) => {
@@ -905,6 +907,7 @@ impl CliApp {
         handler: &dyn ContainerHandler,
         request: IngestLeavesRequest<'_>,
         algorithms: &[String],
+        classify_before_selection: bool,
     ) -> Result<(Vec<IngestRomAsset>, Vec<PatchDescriptor>)> {
         let IngestLeavesRequest {
             source,
@@ -919,7 +922,11 @@ impl CliApp {
             source_label,
             context,
         } = request;
-        let leaves = self.ingest_extract_leaves(
+        let select_classified_leaves = classify_before_selection
+            && interactive
+            && self.interactive_selection_enabled
+            && raw_selections.is_empty();
+        let mut leaves = self.ingest_extract_leaves(
             handler,
             IngestLeavesRequest {
                 source,
@@ -930,11 +937,58 @@ impl CliApp {
                 no_nested_extract,
                 preserve_nested_formats,
                 split_bin,
-                interactive,
+                interactive: interactive && !select_classified_leaves,
                 source_label,
                 context,
             },
         )?;
+        if select_classified_leaves {
+            let selection_name = |path: &str| {
+                normalize_archive_name(
+                    &Path::new(path)
+                        .strip_prefix(out_dir)
+                        .unwrap_or(Path::new(path))
+                        .to_string_lossy(),
+                )
+            };
+            let entries = leaves
+                .iter()
+                .filter_map(|leaf| {
+                    let path = leaf.get("path")?.as_str()?;
+                    (!self.is_patch_payload(Path::new(path))).then(|| ContainerListEntry {
+                        path: selection_name(path),
+                        size: leaf.get("size_bytes").and_then(Value::as_u64),
+                    })
+                })
+                .collect::<Vec<_>>();
+            trace!(
+                source = %source.display(),
+                leaf_count = leaves.len(),
+                rom_count = entries.len(),
+                "classifying ingest leaves before ROM selection"
+            );
+            let selections = self.resolve_listed_payload_selections(
+                &entries,
+                source,
+                SelectionResolutionOptions {
+                    kind_filter,
+                    split_bin,
+                    ignore_common_files: !no_ignore,
+                    source_label,
+                },
+            )?;
+            if !selections.is_empty() {
+                let selected = selections.into_iter().collect::<HashSet<_>>();
+                leaves.retain(|leaf| {
+                    leaf.get("path")
+                        .and_then(Value::as_str)
+                        .is_some_and(|path| {
+                            self.is_patch_payload(Path::new(path))
+                                || selected.contains(&selection_name(path))
+                        })
+                });
+            }
+        }
         let mut assets = Vec::with_capacity(leaves.len());
         let mut signature_patches = Vec::new();
         for leaf in &leaves {

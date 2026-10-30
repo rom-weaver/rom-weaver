@@ -1561,3 +1561,146 @@ fn extract_payload_selection_ignores_directory_entries_without_prompting() {
         "unexpected prompt selection: {selected:?}"
     );
 }
+
+fn check_ingest_interactive_signature_sidecar(rom_names: &[&str], selected: Option<usize>) {
+    struct JsonLines(Mutex<String>);
+    impl rom_weaver_core::ProgressSink for JsonLines {
+        fn emit(&self, event: rom_weaver_core::ProgressEvent) {
+            let mut lines = self.0.lock().unwrap();
+            lines.push_str(&serde_json::to_string(&event).unwrap());
+            lines.push('\n');
+        }
+    }
+    struct Prompt {
+        selected: Option<usize>,
+        calls: Mutex<Vec<Vec<String>>>,
+    }
+    impl SelectionPrompter for Prompt {
+        fn select(&self, _heading: &str, candidates: &[PromptCandidate]) -> Selection {
+            self.calls.lock().unwrap().push(
+                candidates
+                    .iter()
+                    .map(|candidate| candidate.value.clone())
+                    .collect(),
+            );
+            self.selected
+                .map(Selection::Selected)
+                .unwrap_or(Selection::Cancelled)
+        }
+        fn select_many(&self, _heading: &str, _candidates: &[PromptCandidate]) -> SelectionList {
+            panic!("ROM selection must be single-select");
+        }
+        fn confirm(&self, _heading: &str, _details: &[String]) -> bool {
+            false
+        }
+    }
+    let temp = assert_fs::TempDir::new().unwrap();
+    let events = Arc::new(JsonLines(Mutex::new(String::new())));
+    let prompt = Arc::new(Prompt {
+        selected,
+        calls: Mutex::new(Vec::new()),
+    });
+    let app = CliApp::new(events.clone(), prompt.clone(), true, true, false);
+    let mut members = Vec::new();
+    for name in rom_names {
+        let path = temp.path().join(name);
+        let bytes: &[u8] = if name.ends_with(".cue") {
+            b"FILE \"game.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n"
+        } else if *name == "raw" {
+            b"PAT weak signature raw ROM payload"
+        } else {
+            b"raw ROM payload"
+        };
+        std::fs::write(&path, bytes).unwrap();
+        members.push(path);
+    }
+    let patch = temp.path().join("patch");
+    let patch_bytes = b"PATCH\x00\x00\x00\x00\x01\x01EOF";
+    std::fs::write(&patch, patch_bytes).unwrap();
+    members.push(patch);
+    let archive = temp.path().join("mixed.zip");
+    compress_zip_fixture(&app, &members, &archive);
+    events.0.lock().unwrap().clear();
+    let outcome = app.run(Commands::Ingest(super::IngestCommand {
+        input: archive,
+        output: temp.path().join("out"),
+        database: Vec::new(),
+        select: Vec::new(),
+        sidecar_names: Vec::new(),
+        sidecar_only: false,
+        input_name: None,
+        no_ignore: false,
+        no_nested_extract: false,
+        preserve_nested_formats: Vec::new(),
+        split_bin: None,
+        checksum: vec!["crc32".to_string()],
+        threads: ThreadBudget::Fixed(1),
+    }));
+    let calls = prompt.calls.lock().unwrap();
+    if rom_names.len() <= 1 || rom_names.contains(&"game.cue") {
+        assert!(calls.is_empty(), "unexpected ROM prompt: {calls:?}");
+    } else {
+        assert_eq!(calls.len(), 1, "ROMs must still prompt");
+        assert_eq!(calls[0].len(), rom_names.len());
+        assert!(
+            calls[0].iter().all(|name| !name.ends_with("patch")),
+            "{calls:?}"
+        );
+    }
+    let lines = events.0.lock().unwrap();
+    let events: Vec<serde_json::Value> = lines
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    if selected.is_none() && !calls.is_empty() {
+        assert_ne!(outcome.exit_code, 0);
+        assert!(events.last().unwrap()["details"].get("ingest").is_none());
+        return;
+    }
+    assert_eq!(outcome.exit_code, 0, "{events:?}");
+    let ingest = &events.last().unwrap()["details"]["ingest"];
+    assert_eq!(ingest["kind"], "rom");
+    let expected_assets = if calls.is_empty() { rom_names.len() } else { 1 };
+    assert_eq!(ingest["assets"].as_array().unwrap().len(), expected_assets);
+    if let Some(index) = selected {
+        assert_eq!(ingest["assets"][0]["file_name"], rom_names[index]);
+    }
+    let manifests: Vec<_> = events
+        .iter()
+        .filter(|event| event["stage"] == "patch-manifest")
+        .collect();
+    assert_eq!(manifests.len(), 1);
+    assert_eq!(
+        manifests[0]["details"]["patch_manifest"]["patches"],
+        ingest["patches"]
+    );
+    assert_eq!(ingest["patches"].as_array().unwrap().len(), 1);
+    assert_eq!(ingest["patches"][0]["file_name"], "patch");
+    assert_eq!(ingest["patches"][0]["is_valid_patch"], true);
+    assert_eq!(
+        std::fs::read(ingest["patches"][0]["leaf_path"].as_str().unwrap()).unwrap(),
+        patch_bytes
+    );
+    eprintln!(
+        "interactive JSONL: {} ROM assets, 1 valid sidecar, {} prompts",
+        expected_assets,
+        calls.len()
+    );
+}
+
+#[test]
+fn ingest_interactive_signature_sidecar_does_not_prompt_for_one_rom() {
+    check_ingest_interactive_signature_sidecar(&["game.bin"], None);
+}
+
+#[test]
+fn ingest_interactive_signature_sidecar_keeps_disc_together() {
+    check_ingest_interactive_signature_sidecar(&["game.cue", "game.bin"], None);
+}
+
+#[test]
+fn ingest_interactive_signature_sidecar_survives_rom_choice_and_cancellation() {
+    check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], Some(1));
+    check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], None);
+    check_ingest_interactive_signature_sidecar(&["game.bin", "raw"], Some(1));
+}
