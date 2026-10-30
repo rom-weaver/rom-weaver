@@ -113,7 +113,7 @@ changes ── changed paths -> rust / rust_lint / webapp / webapp_browser / was
              ┌── rust-host ─────┐
              ├── rust-lint ─────┤   (+ fuzz workspace build on fuzz/ changes)
  changes ─────┼── rust-macos ────┼── gate (`CI gate`, the one required check)
-             ├── rust-windows ──┤   (Windows on Rust PRs; macOS on full native runs)
+             ├── rust-windows ──┤   (macOS and Windows on full native runs)
              └── cli-platforms ─┘   (9 release targets nightly; 1 on PRs and main pushes)
 
          ┌── webapp-static ───────┐
@@ -153,7 +153,7 @@ security ── advisories (warn only, always green)
 | `wasm` | Builds the production WASM module and webapp bundle, then runs the worker runtime chunk guard | `CI gate` |
 | `rust-lint` | fmt, clippy, typegen drift, thread guards, licenses, dependency policy, fuzz build | `CI gate` |
 | `rust-host` | Linux Rust tests and `cargo publish --dry-run` | `CI gate` |
-| `rust-macos`, `rust-windows` | Rust tests on macOS and Windows | `CI gate` |
+| `rust-macos`, `rust-windows` | Rust tests on macOS and Windows (full native runs only) | `CI gate` |
 | `cli-platforms` | Builds and smoke-tests the native release targets | `CI gate` |
 | `cli-linux-arm64` | Runs the cross-built arm64 musl binary on a native arm64 runner | `CI gate` |
 | `quality-fast`, `quality-reference` | Nightly architecture, verification, and pinned-reference checks | `CI gate` (nightly) |
@@ -213,7 +213,7 @@ security ── advisories (warn only, always green)
 - **`rust-lint`** runs the Linux lint and metadata checks: fmt, clippy, typegen drift, whitespace, thread guards, license attribution, `cargo deny` licenses/sources, and unused dependencies. When `fuzz/` changed it also runs `cargo check` on the fuzz workspace, which no other job compiles. It has its own `rust_lint` flag, which a fuzz change selects without the rest of the Rust group. **`rust-host`** runs the Linux Rust test suite and `cargo publish --dry-run` in parallel with it. Both download the shared identify-data artifact before a task can request the packs.
 - **`cli-platforms`** builds and packages the native release targets before release day: macOS arm64/x86-64; Linux x86-64 GNU plus arm64/i686/x86-64 musl; and Windows arm64/x86/x86-64 MSVC. Every binary verifies a SHA-256; round-trips ZIP, 7z, and Z3DS; extracts fixed CHD, RVZ, TAR, and RAR fixtures; and creates/applies fourteen patch formats on its target architecture. Native arm64 runners and OS emulation cover the 32-bit x86 targets. The matrix runs only when Rust or native-package inputs change.
 
-  **Tiers.** **Pull requests and pushes to `main` build only `linux-x64-gnu`** - the entry marked `pr` in [`.github/cli-platforms.json`](#githubcli-platformsjson). The other eight, the native arm64 runtime check (`cli-linux-arm64`), and `rust-macos` form the `full_native` tier. That tier runs on the **nightly schedule**, on manual dispatches, and on every release pull request update, so full coverage still lands before anything ships. It left the pull-request path because four Windows legs at 15-19 minutes each held runners that pull requests were queueing for on every merge.
+  **Tiers.** **Pull requests and pushes to `main` build only `linux-x64-gnu`** - the entry marked `pr` in [`.github/cli-platforms.json`](#githubcli-platformsjson). The other eight, the native arm64 runtime check (`cli-linux-arm64`), `rust-macos`, and `rust-windows` form the `full_native` tier. That tier runs on the **nightly schedule**, on manual dispatches, and on every release pull request update, so full coverage still lands before anything ships. It left the pull-request path because four Windows legs at 15-19 minutes each held runners that pull requests were queueing for on every merge.
 
   **Nightly.** The nightly diffs against the last green nightly and selects only Rust, so a day with no Rust input change starts nothing past `Changes`. It has its own concurrency group so a push to `main` cannot replace it while it is pending. Its result is the README's `nightly` badge, and GitHub emails a failed scheduled run to whoever last edited the `cron` line. The nightly also refreshes the per-platform caches the release fan-out restores; a week without a Rust change lets GitHub evict them, which makes the next release build cold rather than wrong.
 
@@ -223,7 +223,7 @@ security ── advisories (warn only, always green)
 - **`cli-linux-arm64`** runs the release CLI verification against the `linux-arm64-musl` binary that `cli-platforms` cross-builds, on a native `ubuntu-24.04-arm` runner. It runs only in the `full_native` tier.
 - There is **no separate `wasm-check` job**. It ran `cargo check -p rom-weaver-containers --lib` against `wasm32-wasip1-threads`, which `wasm` already compiles as a strict subset (the app build pulls `containers` in with default features), and whose cache key covers every input that could break it - so a cache hit means nothing checkable changed. The check remains part of the broad local `mise run ci` gate.
 - **`rust-macos`** runs the Rust test suite on `macos-15` (arm64) after merge to `main` (and on manual runs) - the platform the release fan-out ships CLI binaries for, but that nothing previously tested. The fan-out builds the shipped `darwin-arm64` binary on a newer image than this leg tests on (`.github/cli-platforms.json`); what keeps the shipped minimum below both is `MACOSX_DEPLOYMENT_TARGET`, not the runner version - see [macOS support floor](#macos-support-floor). It uses the same mise/setup-build-env path as the Linux jobs. fmt, clippy, typegen, and the policy checks are platform-independent and already gate in `rust-lint`.
-- **`rust-windows`** runs the Rust test suite on `windows-2025` whenever Rust checks are selected, including ordinary pull requests. The gate rejects failed or skipped Windows tests on these changes; docs and UI-only changes still skip the suite.
+- **`rust-windows`** runs the Rust test suite on `windows-2025` in the `full_native` tier only: the nightly schedule, manual dispatches, and release pull requests. Ordinary pull requests and `main` pushes skip it, because it never failed in the 48 pull-request and `main` runs sampled in October 2026 and was on the critical path of CI. The gate rejects failed or skipped Windows tests on full native runs.
 
   It installs the toolchain with `dtolnay/rust-toolchain` (pin read from `.config/mise.toml`) rather than mise, whose `[env]` exec templates assume a POSIX shell; the release jobs already prove this route on the same image. Because it bypasses mise it re-declares `CARGO_INCREMENTAL=0` itself, and it trims MSVC debug info to line tables (`CARGO_PROFILE_DEV_DEBUG=line-tables-only`) - PDB generation is the priciest part of a Windows debug build. No wasm leg: building the wasm module on Windows is unsupported until the bash compiler shims have a native counterpart.
 

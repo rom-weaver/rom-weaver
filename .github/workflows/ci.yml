@@ -1259,7 +1259,8 @@ jobs:
     timeout-minutes: 35
     needs: changes
     if: >-
-      github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+      github.ref_type != 'tag' && needs.changes.outputs.full_native == 'true'
+      && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
       # The mise legs get this from .config/mise.toml's [env]; this leg bypasses mise.
@@ -1735,7 +1736,6 @@ jobs:
           '${{ needs.changes.outputs.rust }}'
           'rust-host=${{ needs.rust-host.result }}'
           'cli-platforms=${{ needs.cli-platforms.result }}'
-          'rust-windows=${{ needs.rust-windows.result }}'
 
       - name: Verify full native jobs
         if: ${{ !cancelled() }}
@@ -1745,6 +1745,7 @@ jobs:
           '${{ needs.changes.outputs.rust == 'true' && needs.changes.outputs.full_native == 'true' }}'
           'cli-linux-arm64=${{ needs.cli-linux-arm64.result }}'
           'rust-macos=${{ needs.rust-macos.result }}'
+          'rust-windows=${{ needs.rust-windows.result }}'
 
       - name: Verify webapp jobs
         if: ${{ !cancelled() }}
