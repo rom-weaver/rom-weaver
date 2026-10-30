@@ -343,6 +343,23 @@ describe("prepareInputAssets", () => {
     expect(readPrefix.mock.calls.length).toBe(calls);
   });
 
+  it.each([
+    ["gz", [0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0]],
+    ["xz", [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0, 0]],
+    ["bz2", [0x42, 0x5a, 0x68, 0x39, 0x31, 0x41, 0x59, 0x26]],
+    ["zst", [0x28, 0xb5, 0x2f, 0xfd, 0, 0, 0, 0]],
+    ["lz4", [0x04, 0x22, 0x4d, 0x18, 0, 0, 0, 0]],
+  ])(
+    "stages an extension-less %s-compressed ROM instead of rejecting it as not path-backed",
+    async (extension, magic) => {
+      const source = new File([new Uint8Array(magic)], "game");
+
+      const file = await prepareInput(source, "rom", NO_CONTAINER_OPTIONS as never, runtime);
+
+      expect(file.fileName).toBe(`game.${extension}`);
+    },
+  );
+
   it("resolves a bare (non-container) ROM file into a single rom asset", async () => {
     const source = makeFile("rom-bytes", "game.bin");
 
