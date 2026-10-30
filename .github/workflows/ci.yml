@@ -979,13 +979,6 @@ jobs:
     if: github.ref_type != 'tag' && needs.changes.outputs.rust_lint == 'true'
     env:
       CARGO_TERM_COLOR: always
-      # Full debuginfo is the bulk of a dev-profile target/, which is what this
-      # job's rust-cache entry stores against the shared 10 GiB budget. Line
-      # tables keep file:line in test backtraces while dropping the rest; the
-      # Windows leg has run this way from the start (see its env for the
-      # original reasoning). Applies to the test profile via dev-profile
-      # inheritance; local builds are untouched.
-      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -1064,7 +1057,6 @@ jobs:
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
-      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -1231,9 +1223,6 @@ jobs:
       && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
-      # Same trade as the Linux Rust jobs above: test backtraces keep file:line while
-      # the cache entry and compile shed the bulk of the debuginfo.
-      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -1267,11 +1256,6 @@ jobs:
       # The mise legs get this from .config/mise.toml's [env]; this leg bypasses mise.
       # Incremental artifacts only bloat the rust-cache save.
       CARGO_INCREMENTAL: "0"
-      # MSVC debug info (PDBs, link.exe /DEBUG) is the priciest part of a
-      # Windows debug build. Line tables keep file:line in test backtraces
-      # while skipping the bulk of it. Applies to the test profile via its
-      # dev-profile inheritance; local builds are untouched.
-      CARGO_PROFILE_DEV_DEBUG: line-tables-only
       # rust-lld (lld-link flavor, ships with the toolchain) links large test
       # binaries markedly faster than MSVC link.exe, and this workspace
       # produces many of them. Safe here (unlike the wasm job) because this
