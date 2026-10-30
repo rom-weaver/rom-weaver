@@ -743,7 +743,7 @@ struct RoundTrip {
     /// `--format` flag passed to `patch create`.
     format: &'static str,
     /// Expected JSON `format` value (uppercased; some formats normalise,
-    /// e.g. "vcdiff" -> "xdelta").
+    /// e.g. "xdelta3" -> "xdelta").
     expect_format: &'static str,
     /// Extension for the generated patch file.
     patch_ext: &'static str,
@@ -983,17 +983,75 @@ fn patch_create_rejects_solid_metadata_when_it_cannot_be_used() {
     );
 }
 round_trip_test!(
-    patch_create_treats_vcdiff_as_xdelta_and_round_trips,
+    patch_create_succeeds_for_vcdiff_and_round_trips,
     RoundTrip {
         format: "vcdiff",
+        expect_format: "VCDIFF",
+        patch_ext: "vcdiff",
+        original: b"hello old world",
+        modified: b"hello new world",
+        apply_extra: &[],
+        // Plain VCDIFF carries no application header, secondary compression, or code table.
+        patch_assert: Some(|bytes| assert_eq!(bytes[4], 0, "Hdr_Indicator of {bytes:02x?}")),
+    }
+);
+round_trip_test!(
+    patch_create_succeeds_for_xdelta_and_round_trips,
+    RoundTrip {
+        format: "xdelta",
         expect_format: "xdelta",
         patch_ext: "xdelta",
         original: b"hello old world",
         modified: b"hello new world",
         apply_extra: &[],
-        patch_assert: None,
+        // xdelta declares an application header: `new//old/`, a NUL, then the rom-weaver tag.
+        patch_assert: Some(|bytes| {
+            assert_eq!(bytes[4] & 0x04, 0x04, "Hdr_Indicator of {bytes:02x?}");
+            let header = String::from_utf8_lossy(&bytes[6..]);
+            assert!(
+                header.starts_with("new.bin//old.bin/\0rom-weaver "),
+                "{header:?}"
+            );
+        }),
     }
 );
+#[test]
+fn patch_create_vcdiff_flag_matches_the_vcdiff_extension() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    let create = |name: &str, format: Option<&str>| {
+        let destination = temp.child(name);
+        let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+        command.args([
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            destination.path().to_str().expect("path"),
+        ]);
+        if let Some(format) = format {
+            command.args(["--format", format]);
+        }
+        let output = command.assert().success().get_output().clone();
+        let stderr = String::from_utf8(output.stderr).expect("diagnostic");
+        (fs::read(destination.path()).expect("patch bytes"), stderr)
+    };
+
+    let (by_extension, _) = create("by-extension.vcdiff", None);
+    for format in ["vcdiff", "VCDIFF"] {
+        let (by_flag, stderr) = create("by-flag.vcdiff", Some(format));
+        assert!(!stderr.contains("does not match"), "{format}: {stderr}");
+        assert_eq!(by_flag, by_extension, "--format {format}");
+        fs::remove_file(temp.child("by-flag.vcdiff").path()).expect("remove patch");
+    }
+}
 round_trip_test!(
     patch_create_succeeds_for_bps_and_round_trips,
     RoundTrip {

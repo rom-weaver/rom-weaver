@@ -206,14 +206,8 @@ const PATCH_ROUND_TRIP: &[(&str, &str)] = &[
     ("SOLID", "patch_create_succeeds_for_solid_and_round_trips"),
     ("BPS", "patch_create_succeeds_for_bps_and_round_trips"),
     ("UPS", "patch_create_succeeds_for_ups_and_round_trips"),
-    (
-        "VCDIFF",
-        "patch_create_treats_vcdiff_as_xdelta_and_round_trips",
-    ),
-    (
-        "xdelta",
-        "patch_create_treats_vcdiff_as_xdelta_and_round_trips",
-    ),
+    ("VCDIFF", "patch_create_succeeds_for_vcdiff_and_round_trips"),
+    ("xdelta", "patch_create_succeeds_for_xdelta_and_round_trips"),
     ("GDIFF", "patch_create_succeeds_for_gdiff_and_round_trips"),
     ("APS", "patch_create_succeeds_for_aps_and_round_trips"),
     ("APSGBA", "patch_create_succeeds_for_apsgba_and_round_trips"),

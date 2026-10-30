@@ -81,7 +81,6 @@ pub(super) const LIBRETRO_PATCH_ORDER_EXTENSIONS: &[&str] = &[
     ".xdelta", ".delta", ".dat", ".vcdiff",
 ];
 pub(super) const CREATE_PATCH_FORMAT_ALIASES: &[(&str, &str)] = &[
-    ("vcdiff", "xdelta"),
     ("xdelta3", "xdelta"),
     ("mod", "pmsr"),
     ("bdf/bsdiff40", "bdf"),

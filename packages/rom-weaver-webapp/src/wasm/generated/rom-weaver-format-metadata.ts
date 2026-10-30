@@ -7,7 +7,6 @@ export const ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY = {
     "bsdiff": "bdf",
     "bsdiff40": "bdf",
     "mod": "pmsr",
-    "vcdiff": "xdelta",
     "xdelta3": "xdelta"
   },
   "defaultFormat": "bps",
