@@ -9,7 +9,7 @@ node = "24.18.0"
 # Fresh toolchains need these components for formatting and Clippy checks.
 rust = { version = "1.97.1", components = "rustfmt,clippy" }
 # The GitHub backend includes Binaryen's Linux arm64 release assets.
-"github:WebAssembly/binaryen" = { version = "version_129", exe = "wasm-opt" }
+"github:WebAssembly/binaryen" = "version_129"
 "aqua:EmbarkStudios/cargo-deny" = "0.20.2"
 "ubi:bnjbvr/cargo-machete" = "0.9.1"
 # Version is the release tag: nextest's repo prefixes tags with the crate name.
