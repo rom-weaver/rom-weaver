@@ -529,6 +529,7 @@ impl CliApp {
                     context,
                 },
                 None,
+                true,
             )?;
             return Ok(IngestOutcome {
                 kind: IngestKind::Patch,
@@ -569,6 +570,7 @@ impl CliApp {
                     context,
                 },
                 rom_hint.as_deref(),
+                false,
             )?;
             self.emit_patch_manifest(source, &patches);
             patches
@@ -621,6 +623,7 @@ impl CliApp {
                                 context,
                             },
                             None,
+                            true,
                         )
                         .unwrap_or_default();
                 }
@@ -644,8 +647,7 @@ impl CliApp {
             let named_pass_ran = assets.is_empty() && patches.is_empty();
             if named_pass_ran {
                 // The archive listing showed no patch, so the named-patch pass never ran; run it now
-                // so a named patch beside an extension-less one is not dropped. That pass filters by
-                // patch name, so it never returns an extension-less signature leaf.
+                // so a named patch beside an unnamed one is not dropped.
                 patches = self.ingest_patch_leaves(
                     handler,
                     IngestLeavesRequest {
@@ -662,6 +664,7 @@ impl CliApp {
                         context,
                     },
                     None,
+                    false,
                 )?;
             }
             // Named patches found by the pass above have not been announced yet; send them with the
@@ -696,13 +699,13 @@ impl CliApp {
         })
     }
 
-    /// True when `path` has no extension and its leading magic positively identifies a patch.
-    ///
-    /// Only for names that carry no kind information; a named file keeps its name-based
-    /// classification. Short or heuristic signatures (SOLID's two-byte `SP`, the PAT record
-    /// heuristic) are excluded so a raw dump is never mistaken for a patch.
-    fn is_extensionless_signature_patch(&self, path: &Path) -> bool {
-        if path.extension().is_some() {
+    /// Unnamed payloads MUST use reliable signatures; weak patch magic can match raw dumps.
+    pub(super) fn is_patch_payload(&self, path: &Path) -> bool {
+        let name = path.to_string_lossy();
+        if is_patch_filter_candidate_name(&name) {
+            return true;
+        }
+        if !rom_weaver_core::payload_name_needs_content_classification(&name) {
             return false;
         }
         let Some(handler) = self.patches.probe_signature(path) else {
@@ -716,7 +719,7 @@ impl CliApp {
             path = %path.display(),
             format,
             reliable,
-            "extension-less file matched a patch signature"
+            "unnamed payload matched a patch signature"
         );
         reliable
     }
@@ -834,9 +837,7 @@ impl CliApp {
         if let Some(outcome) = self.ingest_bare_disc_sheet(source, algorithms, context)? {
             return Ok(outcome);
         }
-        if is_patch_filter_candidate_name(&source.to_string_lossy())
-            || self.is_extensionless_signature_patch(source)
-        {
+        if self.is_patch_payload(source) {
             let descriptor = self.build_patch_descriptor(source, input_name, None, context)?;
             return Ok(IngestOutcome {
                 kind: IngestKind::Patch,
@@ -938,14 +939,9 @@ impl CliApp {
             let Some(path) = map.get("path").and_then(Value::as_str) else {
                 continue;
             };
-            // An extension-less leaf (e.g. `patch.gz` -> `patch`) has no name to classify it by, so
-            // its leading magic decides: a patch signature makes it a patch, anything else stays a
-            // ROM candidate (raw dump).
-            if self.is_extensionless_signature_patch(Path::new(path)) {
-                trace!(
-                    leaf = path,
-                    "extension-less ingest leaf matched a patch signature"
-                );
+            // Unnamed leaves MUST use patch signatures; other bytes remain raw ROM candidates.
+            if self.is_patch_payload(Path::new(path)) {
+                trace!(leaf = path, "ingest leaf classified as a patch");
                 signature_patches.push(self.build_patch_descriptor(
                     Path::new(path),
                     None,
@@ -1050,6 +1046,7 @@ impl CliApp {
         handler: &dyn ContainerHandler,
         request: IngestLeavesRequest<'_>,
         rom_hint: Option<&str>,
+        include_signature_patches: bool,
     ) -> Result<Vec<PatchDescriptor>> {
         let IngestLeavesRequest {
             source,
@@ -1090,7 +1087,10 @@ impl CliApp {
                 continue;
             };
             let leaf_path = Path::new(path);
-            if !is_patch_filter_candidate_name(path) {
+            // Mixed enumeration MUST leave unnamed patches to the ROM pass, avoiding duplicate copies.
+            if !self.is_patch_payload(leaf_path)
+                || (!include_signature_patches && !is_patch_filter_candidate_name(path))
+            {
                 continue;
             }
             patches.push(self.build_patch_descriptor(leaf_path, None, rom_hint, context)?);

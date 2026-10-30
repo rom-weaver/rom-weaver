@@ -178,9 +178,11 @@ Examples are in [Use an archive pipeline](../how-to/work-with-archives.md#use-an
 
 - `-s`/`--select` picks which file to use, by exact name, folder, or glob. On `patch apply` and `patch validate` it applies to the input and to every `--patch` archive alike.
 - `--patch-select` picks the file inside the `--patch` archive it follows, overriding `--select` for that patch. Repeat it once per `--patch`, in the same order. Only `patch apply` and `patch validate` take it, and it is the only way to select different files from an archive input and an archive patch in one command.
-- `--filter rom` considers only files that look like ROMs; `--filter patch` only patches. Both judge by extension, except that a single-file compressed stream whose payload name has no extension (`rom.gz` extracts to `rom`) passes both filters. `ingest` classifies it by its bytes after extraction; other commands accept it under either filter and treat it as you pass it. The flag is repeatable and comma-separable (`--filter rom,patch`).
+- `--filter rom` selects ROM candidates; `--filter patch` selects patches. Known extensions determine candidates; stream wrappers use their inferred payload names. The flag accepts repeated or comma-separated values (`--filter rom,patch`).
 - `--no-ignore` also considers the files normally skipped: readmes, images, checksum sidecars, and OS clutter such as `.DS_Store`.
 - `--no-extract` skips all of this and works on the file itself.
+
+Unknown payload names, including `patch` and `Hack v1.1`, pass both name filters. `ingest` and commands resolving one extracted payload classify them using reliable patch signatures. Other bytes remain ROM candidates; `extract` keeps unknown candidates under either filter.
 
 Not every command takes all five. `extract` has no `--no-extract`, since unpacking is the whole job. `trim` spells its filter `--no-filter`, because it filters to ROMs by default. `rom-weaver <command> --help` is authoritative.
 

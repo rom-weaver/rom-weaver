@@ -293,6 +293,13 @@ impl CliApp {
                 .filter_map(|(name, (index, ignored))| (!ignored).then_some((name, index)))
                 .collect::<Vec<_>>()
         };
+        if kind_filter.enabled()
+            && selected
+                .iter()
+                .any(|(name, _)| rom_weaver_core::payload_name_needs_content_classification(name))
+        {
+            return Ok(None);
+        }
         let selected = if kind_filter.enabled() {
             let mut payload_matches = Vec::new();
             let mut container_fallback_matches = Vec::new();
@@ -351,7 +358,9 @@ impl CliApp {
             Self::inferred_stream_extract_output_path(source, stream_format)
         {
             if kind_filter.enabled()
-                && !kind_filter.matches_payload_name(&inferred_output.to_string_lossy())
+                && (rom_weaver_core::payload_name_needs_content_classification(
+                    &inferred_output.to_string_lossy(),
+                ) || !kind_filter.matches_payload_name(&inferred_output.to_string_lossy()))
             {
                 return None;
             }

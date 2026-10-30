@@ -2681,3 +2681,250 @@ fn patch_apply_accepts_extensionless_compressed_rom_and_patch() {
         );
     }
 }
+
+fn assert_ingest_unnamed_archive_leaves(format: &str) {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    let raw = temp.child("dump");
+    let patch = temp.child("patch");
+    fs::write(rom.path(), banded_rom()).unwrap();
+    let mut raw_bytes = banded_rom();
+    raw_bytes[..2].copy_from_slice(b"SP");
+    fs::write(raw.path(), &raw_bytes).unwrap();
+    fs::write(patch.path(), banded_bps()).unwrap();
+    let archive = temp.child(format!("bundle.{format}"));
+    if format == "tar" {
+        let mut builder = tar::Builder::new(File::create(archive.path()).unwrap());
+        for path in [rom.path(), raw.path(), patch.path()] {
+            builder
+                .append_path_with_name(path, path.file_name().unwrap())
+                .unwrap();
+        }
+        builder.finish().unwrap();
+    } else {
+        isolated_json_event(
+            &temp,
+            &[
+                "compress",
+                "--format",
+                format,
+                "--input",
+                rom.path().to_str().unwrap(),
+                "--input",
+                raw.path().to_str().unwrap(),
+                "--input",
+                patch.path().to_str().unwrap(),
+                "--output",
+                archive.path().to_str().unwrap(),
+                "--json",
+            ],
+            0,
+        );
+    }
+    let result = ingest_json(&temp, archive.path(), "out");
+    let ingest = &result["details"]["ingest"];
+    let assets = ingest["assets"].as_array().unwrap();
+    assert_eq!(assets.len(), 2, "{format}: {ingest}");
+    assert!(assets.iter().any(|asset| asset["file_name"] == "dump"));
+    let patches = ingest["patches"].as_array().unwrap();
+    assert_eq!(patches.len(), 1, "{format}: {ingest}");
+    assert_eq!(patches[0]["file_name"], "patch");
+    assert_eq!(patches[0]["format"], "BPS");
+    assert_eq!(
+        fs::read(patches[0]["leaf_path"].as_str().unwrap()).unwrap(),
+        banded_bps()
+    );
+}
+
+#[test]
+fn ingest_classification_extensionless_zip_patch_and_raw_dump() {
+    assert_ingest_unnamed_archive_leaves("zip");
+}
+
+#[test]
+fn ingest_classification_extensionless_tar_patch_and_raw_dump() {
+    assert_ingest_unnamed_archive_leaves("tar");
+}
+
+#[test]
+fn ingest_classification_extensionless_7z_patch_and_raw_dump() {
+    assert_ingest_unnamed_archive_leaves("7z");
+}
+
+#[test]
+fn ingest_classification_patch_only_zip_keeps_extensionless_compressed_patch() {
+    let temp = setup_temp_dir();
+    let named = temp.child("a.bps");
+    fs::write(named.path(), banded_bps()).unwrap();
+    let wrapped = write_wrapped(&temp, "b.gz", "gz", &banded_bps());
+    let archive = temp.child("patches.zip");
+    zip_members(&temp, archive.path(), &[named.path(), &wrapped]);
+    let result = ingest_json(&temp, archive.path(), "out");
+    let ingest = &result["details"]["ingest"];
+    assert_eq!(ingest["kind"], "patch");
+    let mut names: Vec<_> = patch_file_names(ingest)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    names.sort();
+    assert_eq!(names, ["a.bps", "b"], "{ingest}");
+}
+
+#[test]
+fn ingest_classification_dotted_gzip_payload_names() {
+    for (name, bytes, kind) in [
+        ("Dr. Mario (Japan, USA)", banded_rom(), "rom"),
+        ("Hack v1.1", banded_bps(), "patch"),
+    ] {
+        let temp = setup_temp_dir();
+        let source = write_wrapped(&temp, &format!("{name}.gz"), "gz", &bytes);
+        let result = ingest_json(&temp, &source, "out");
+        let ingest = &result["details"]["ingest"];
+        assert_eq!(ingest["kind"], kind, "{ingest}");
+        let leaves = ingest[if kind == "rom" { "assets" } else { "patches" }]
+            .as_array()
+            .unwrap();
+        assert_eq!(leaves.len(), 1, "{ingest}");
+        assert_eq!(leaves[0]["file_name"], name);
+        assert_eq!(
+            fs::read(
+                leaves[0][if kind == "rom" { "path" } else { "leaf_path" }]
+                    .as_str()
+                    .unwrap()
+            )
+            .unwrap(),
+            bytes
+        );
+    }
+}
+
+#[test]
+fn ingest_classification_dotted_and_extensionless_gzip_non_ingest_commands() {
+    for (rom_name, patch_name) in [("rom", "patch"), ("Dr. Mario (Japan, USA)", "Hack v1.1")] {
+        let temp = setup_temp_dir();
+        let rom = write_wrapped(&temp, &format!("{rom_name}.gz"), "gz", &banded_rom());
+        let patch = write_wrapped(&temp, &format!("{patch_name}.gz"), "gz", &banded_bps());
+        let applied = temp.child("applied.bin");
+        isolated_json_event(
+            &temp,
+            &[
+                "checksum",
+                "--input",
+                rom.to_str().unwrap(),
+                "--filter",
+                "rom",
+                "--jsonl",
+            ],
+            0,
+        );
+        isolated_json_event(
+            &temp,
+            &[
+                "patch",
+                "apply",
+                "--input",
+                rom.to_str().unwrap(),
+                "--patch",
+                patch.to_str().unwrap(),
+                "--output",
+                applied.path().to_str().unwrap(),
+                "--no-compress",
+                "--filter",
+                "rom",
+                "--filter",
+                "patch",
+                "--jsonl",
+            ],
+            0,
+        );
+        isolated_json_event(
+            &temp,
+            &[
+                "patch",
+                "validate",
+                "--input",
+                rom.to_str().unwrap(),
+                "--patch",
+                patch.to_str().unwrap(),
+                "--filter",
+                "rom",
+                "--filter",
+                "patch",
+                "--jsonl",
+            ],
+            0,
+        );
+        assert_eq!(fs::read(applied.path()).unwrap(), banded_rom_patched());
+    }
+}
+
+#[test]
+fn ingest_classification_named_and_unnamed_patches_are_unique() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    let named = temp.child("a.bps");
+    let unnamed = temp.child("patch");
+    fs::write(rom.path(), banded_rom()).unwrap();
+    fs::write(named.path(), banded_bps()).unwrap();
+    fs::write(unnamed.path(), banded_bps()).unwrap();
+    let wrapped = write_wrapped(&temp, "compressed.gz", "gz", &banded_bps());
+    let archive = temp.child("mixed.zip");
+    zip_members(
+        &temp,
+        archive.path(),
+        &[rom.path(), named.path(), unnamed.path(), &wrapped],
+    );
+    let result = ingest_json(&temp, archive.path(), "out");
+    let ingest = &result["details"]["ingest"];
+    assert_eq!(ingest["assets"].as_array().unwrap().len(), 1, "{ingest}");
+    let mut names: Vec<_> = patch_file_names(ingest)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    names.sort();
+    assert_eq!(names, ["a.bps", "compressed", "patch"], "{ingest}");
+}
+
+#[test]
+fn ingest_classification_unnamed_raw_dump_beside_named_patch_stays_rom() {
+    let temp = setup_temp_dir();
+    let raw = temp.child("dump");
+    let named = temp.child("a.bps");
+    fs::write(raw.path(), banded_rom()).unwrap();
+    fs::write(named.path(), banded_bps()).unwrap();
+    let archive = temp.child("mixed.zip");
+    zip_members(&temp, archive.path(), &[raw.path(), named.path()]);
+    let result = ingest_json(&temp, archive.path(), "out");
+    let ingest = &result["details"]["ingest"];
+    assert_eq!(ingest["kind"], "rom", "{ingest}");
+    assert_eq!(ingest["assets"].as_array().unwrap().len(), 1, "{ingest}");
+    assert_eq!(ingest["patches"].as_array().unwrap().len(), 1, "{ingest}");
+}
+
+#[test]
+fn ingest_classification_wrong_kind_uses_consistent_filter_error() {
+    let temp = setup_temp_dir();
+    for name in ["patch.gz", "Hack v1.1.gz", "patch.bps.gz"] {
+        let source = write_wrapped(&temp, name, "gz", &banded_bps());
+        let result = isolated_json_event(
+            &temp,
+            &[
+                "checksum",
+                "--input",
+                source.to_str().unwrap(),
+                "--filter",
+                "rom",
+                "--json",
+            ],
+            1,
+        );
+        let error = result["error"]["message"].as_str().unwrap();
+        assert!(
+            error.starts_with(&format!(
+                "validation failed: no extract entries from `{}` matched --filter rom",
+                source.display()
+            )),
+            "{result}"
+        );
+    }
+}

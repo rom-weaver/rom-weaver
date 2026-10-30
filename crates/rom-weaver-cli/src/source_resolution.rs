@@ -460,6 +460,11 @@ impl CliApp {
                 context,
             )
             .map_err(|error| {
+                if matches!(&error, RomWeaverError::Validation(message)
+                    if message.starts_with("no extract entries from "))
+                {
+                    return error;
+                }
                 RomWeaverError::Validation(format!(
                     "{} payload extraction failed for `{}` ({}): {error}",
                     labels.source_label,
@@ -547,10 +552,9 @@ impl CliApp {
         let candidates = if ignored_candidate_selected {
             candidates
         } else {
-            Self::filter_kind_auto_extract_candidates(
+            self.filter_kind_auto_extract_candidates(
                 current_source,
                 candidates,
-                labels.source_label,
                 options.kind_filter,
             )?
         };
@@ -643,9 +647,9 @@ impl CliApp {
     }
 
     fn filter_kind_auto_extract_candidates(
+        &self,
         current_source: &Path,
         candidates: Vec<ChecksumExtractCandidate>,
-        source_label: &str,
         kind_filter: ArchiveEntryKindFilter,
     ) -> Result<Vec<ChecksumExtractCandidate>> {
         if !kind_filter.enabled() {
@@ -654,7 +658,15 @@ impl CliApp {
         let mut payload_matches = Vec::new();
         let mut container_fallback_matches = Vec::new();
         for candidate in &candidates {
-            if kind_filter.matches_payload_name(&candidate.display_name) {
+            let matches_payload = if rom_weaver_core::payload_name_needs_content_classification(
+                &candidate.display_name,
+            ) {
+                let is_patch = self.is_patch_payload(&candidate.source);
+                (kind_filter.patch && is_patch) || (kind_filter.rom && !is_patch)
+            } else {
+                kind_filter.matches_payload_name(&candidate.display_name)
+            };
+            if matches_payload {
                 payload_matches.push(candidate.clone());
             } else if kind_filter.matches_container_fallback_name(&candidate.display_name) {
                 container_fallback_matches.push(candidate.clone());
@@ -675,7 +687,7 @@ impl CliApp {
         if filtered.is_empty() {
             let choices = Self::render_checksum_candidate_choices(&candidates);
             return Err(RomWeaverError::Validation(format!(
-                "no extracted {source_label} candidates from `{}` matched {}; candidates: {choices}",
+                "no extract entries from `{}` matched {}; candidates: {choices}",
                 current_source.display(),
                 kind_filter.flag_label()
             )));

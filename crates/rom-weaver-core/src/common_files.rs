@@ -164,7 +164,19 @@ impl ArchiveEntryKindFilter {
         if self.disabled() {
             return true;
         }
-        (self.rom && is_rom_filter_candidate_name(candidate_name))
+        let lower = candidate_name.to_ascii_lowercase();
+        let mut payload_name = lower.as_str();
+        while let Some(stripped) = [".gz", ".bz2", ".xz", ".zst", ".lz4"]
+            .iter()
+            .find_map(|suffix| payload_name.strip_suffix(suffix))
+        {
+            payload_name = stripped;
+        }
+        if payload_name != lower {
+            return self.matches_payload_name(payload_name);
+        }
+        payload_name_needs_content_classification(candidate_name)
+            || (self.rom && is_rom_filter_candidate_name(candidate_name))
             || (self.patch && is_patch_filter_candidate_name(candidate_name))
     }
 
@@ -232,6 +244,14 @@ pub fn is_rom_filter_candidate_name(candidate_name: &str) -> bool {
 
 pub fn is_container_filter_passthrough_candidate_name(candidate_name: &str) -> bool {
     has_extension(candidate_name, CONTAINER_FILTER_FILE_EXTENSIONS)
+}
+
+/// Name filters MUST defer unknown suffixes to content checks after extraction.
+pub fn payload_name_needs_content_classification(candidate_name: &str) -> bool {
+    !is_rom_filter_candidate_name(candidate_name)
+        && !is_patch_filter_candidate_name(candidate_name)
+        && !is_container_filter_passthrough_candidate_name(candidate_name)
+        && !should_ignore_common_container_file(candidate_name)
 }
 
 fn has_extension(candidate_name: &str, extensions: &[&str]) -> bool {

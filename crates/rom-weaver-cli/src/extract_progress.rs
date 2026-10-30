@@ -116,7 +116,9 @@ impl CliApp {
                     ignore_common_files && should_ignore_common_container_file(&entry.path);
                 let kind = if is_common {
                     "common"
-                } else if is_rom_filter_candidate_name(&entry.path) {
+                } else if is_rom_filter_candidate_name(&entry.path)
+                    || rom_weaver_core::payload_name_needs_content_classification(&entry.path)
+                {
                     has_rom = true;
                     "rom"
                 } else if is_patch_filter_candidate_name(&entry.path) {

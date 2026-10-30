@@ -360,13 +360,13 @@ fn nesting_deeper_than_the_depth_limit_is_refused() {
 
 #[test]
 fn a_kind_filter_that_matches_nothing_lists_the_rejected_candidates() {
-    let error = CliApp::filter_kind_auto_extract_candidates(
-        Path::new("/games/archive.zip"),
-        vec![candidate("notes.txt", false), candidate("cover.png", false)],
-        "checksum input",
-        ArchiveEntryKindFilter::new(true, false),
-    )
-    .expect_err("nothing matches --filter rom");
+    let error = noninteractive_app()
+        .filter_kind_auto_extract_candidates(
+            Path::new("/games/archive.zip"),
+            vec![candidate("notes.txt", false), candidate("cover.png", false)],
+            ArchiveEntryKindFilter::new(true, false),
+        )
+        .expect_err("nothing matches --filter rom");
     let message = error.to_string();
     assert!(message.contains("--filter rom"), "{message}");
     assert!(
@@ -378,29 +378,29 @@ fn a_kind_filter_that_matches_nothing_lists_the_rejected_candidates() {
 #[test]
 fn a_disabled_kind_filter_keeps_every_candidate() {
     let candidates = vec![candidate("notes.txt", false), candidate("game.nes", false)];
-    let kept = CliApp::filter_kind_auto_extract_candidates(
-        Path::new("/games/archive.zip"),
-        candidates.clone(),
-        "checksum input",
-        no_filter(),
-    )
-    .expect("a disabled filter keeps everything");
+    let kept = noninteractive_app()
+        .filter_kind_auto_extract_candidates(
+            Path::new("/games/archive.zip"),
+            candidates.clone(),
+            no_filter(),
+        )
+        .expect("a disabled filter keeps everything");
     assert_eq!(kept.len(), candidates.len());
 }
 
 #[test]
 fn a_kind_filter_prefers_payloads_over_the_container_fallback() {
-    let kept = CliApp::filter_kind_auto_extract_candidates(
-        Path::new("/games/archive.zip"),
-        vec![
-            candidate("game.nes", false),
-            candidate("inner.zip", false),
-            candidate("notes.txt", false),
-        ],
-        "checksum input",
-        ArchiveEntryKindFilter::new(true, false),
-    )
-    .expect("rom payload matches");
+    let kept = noninteractive_app()
+        .filter_kind_auto_extract_candidates(
+            Path::new("/games/archive.zip"),
+            vec![
+                candidate("game.nes", false),
+                candidate("inner.zip", false),
+                candidate("notes.txt", false),
+            ],
+            ArchiveEntryKindFilter::new(true, false),
+        )
+        .expect("rom payload matches");
     let names: Vec<&str> = kept
         .iter()
         .map(|candidate| candidate.display_name.as_str())
@@ -410,13 +410,13 @@ fn a_kind_filter_prefers_payloads_over_the_container_fallback() {
 
 #[test]
 fn a_kind_filter_falls_back_to_nested_containers_when_no_payload_matches() {
-    let kept = CliApp::filter_kind_auto_extract_candidates(
-        Path::new("/games/archive.zip"),
-        vec![candidate("inner.zip", false), candidate("notes.txt", false)],
-        "checksum input",
-        ArchiveEntryKindFilter::new(true, false),
-    )
-    .expect("container fallback matches");
+    let kept = noninteractive_app()
+        .filter_kind_auto_extract_candidates(
+            Path::new("/games/archive.zip"),
+            vec![candidate("inner.zip", false), candidate("notes.txt", false)],
+            ArchiveEntryKindFilter::new(true, false),
+        )
+        .expect("container fallback matches");
     let names: Vec<&str> = kept
         .iter()
         .map(|candidate| candidate.display_name.as_str())
