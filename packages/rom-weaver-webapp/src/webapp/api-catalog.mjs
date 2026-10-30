@@ -28,7 +28,7 @@ const createOpenApiDocument = (siteOrigin) => ({
   // The routes are public: no authentication, cookies, or tokens.
   security: [],
   paths: {
-    "/apply-patches": {
+    "/apply-rom-patches": {
       get: {
         operationId: "openApplyWorkflow",
         description:
@@ -61,7 +61,7 @@ const createOpenApiDocument = (siteOrigin) => ({
         summary: "Open the Apply workflow with preloaded inputs",
       },
     },
-    "/weave-patches": {
+    "/weave-rom-patches": {
       get: {
         operationId: "openWeaveWorkflow",
         description:

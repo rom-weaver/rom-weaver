@@ -80,7 +80,7 @@ describe("the navigation both layouts share", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
 
     const side = container.querySelector(".side-nav") as HTMLElement;
-    expect(rowNamed(side, "Back to tools").getAttribute("href")).toBe("/apply-patches");
+    expect(rowNamed(side, "Back to tools").getAttribute("href")).toBe("/apply-rom-patches");
     expect(rowNamed(side, "Overview").getAttribute("href")).toBe("/docs");
     expect(side.querySelector(".guide-nav")).not.toBeNull();
     expect(side.querySelectorAll(".nav-row")).toHaveLength(1);

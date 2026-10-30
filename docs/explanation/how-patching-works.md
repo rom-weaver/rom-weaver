@@ -2,7 +2,7 @@
 
 A ROM patch only works on the exact file it was made for. The file version, checksum, and patch order decide whether the patched game comes out right.
 
-The [online ROM patcher](https://rom-weaver.com/apply-patches) checks them before it writes a file.
+The [online ROM patcher](https://rom-weaver.com/apply-rom-patches) checks them before it writes a file.
 
 <a id="how-rom-patching-works"></a>
 

@@ -17,7 +17,7 @@ Compress `.3ds`, `.cci`, `.cxi`, `.cia`, `.3dsx`, or `.app` files locally in you
 
 ## Add the Nintendo 3DS file
 
-1. Open [Compress](https://rom-weaver.com/compress).
+1. Open [Compress](https://rom-weaver.com/compress-files).
 2. Add one `.3ds`, `.cci`, `.cxi`, `.cia`, `.3dsx`, or `.app` file to **Inputs**.
 3. Remove other files before choosing the output format.
 

@@ -15,7 +15,7 @@ To identify your file, use [Identify a ROM by checksum](identify-roms-browser.md
 
 ## Calculate checksums
 
-1. Open [Checksum file](https://rom-weaver.com/checksum).
+1. Open [Checksum file](https://rom-weaver.com/file-checksum).
 2. Select the algorithms in **Options**. CRC32, MD5, and SHA-1 are selected by default.
 3. Leave **Auto extract** checked to open archives and containers. Clear it to checksum the original file.
 4. Add one or more files. If an archive contains several files, choose the file to check.

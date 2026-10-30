@@ -113,7 +113,7 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 >
 > ⁵ GameCube CISO shares the `CISO` magic and `.ciso` extension with PSP CSO. The value at bytes 4..8 separates them: 24 (any version) or 0 (v1 and earlier) is PSP CSO, a non-zero multiple of 32 KiB is the GameCube block size. GameCube CISO is extract-only, decoded by the same disc reader as GCZ and WBFS; extract writes an ISO, which `compress` accepts for RVZ, ZIP, or 7z. Creating `.ciso` is not supported.
 
-Archive member names keep their exact Unicode spelling. A name that is not valid UTF-8 and carries no charset marker, as in older ZIP and tar files, is decoded as Shift-JIS when it reads as Japanese text, otherwise as CP437 for ZIP, RAR, CAB, and LHA and as Windows-1252 for tar and other Unix formats. For ZIP and tar, the result does not depend on the platform, locale, or code page.
+Archive member names keep their exact Unicode spelling. A name that is not valid UTF-8 and carries no charset marker, as in older ZIP and tar files, is decoded as Shift-JIS when it reads as Japanese text, otherwise as CP437 for ZIP, RAR, CAB, and LHA and as Windows-1252 for tar and other Unix formats. For ZIP and tar, the result does not depend on the platform, locale, or code page. RAR5 stores names as UTF-8 and always reads them that way, so a RAR5 member name that is not valid UTF-8 is rejected as invalid data, except for a skipped link, whose name is only logged.
 
 When `compress` creates a CHD from a `.bin` or extensionless file, recognized disk headers take precedence. Other inputs use the CD layout only on content evidence: a whole number of 2352-byte sectors that starts with the CD sync header or has an ISO9660 descriptor at sector 16, or a whole number of 2048-byte sectors, at most 450,000 of them, with an ISO9660 descriptor at sector 16 and no UDF descriptor. A whole number of 2048-byte sectors with a UDF `NSR02` or `NSR03` descriptor in sectors 16 to 31, or with an ISO9660 descriptor and more than 450,000 sectors, uses the DVD layout. `chav` streams use A/V CHD layout; remaining files use raw CHD layout. An `.iso` with a UDF descriptor also uses the DVD layout at any size.
 
@@ -223,7 +223,9 @@ The Test page supports these platforms:
 
 A PlayStation PBP is opened like an archive of disc images. A single-disc PBP extracts to `<name>.cue` and `<name>.bin`; a multi-disc PBP extracts every disc as `<name>.disc01.cue` and `<name>.disc01.bin`, `<name>.disc02.cue`, and so on. BIN sizing depends on the producer's TOC convention.
 
-Audio beyond the ISO volume is retained when the TOC describes audio, its first track starts at `00:00:00`, and the leadout fits the ISO volume and validated index table. This follows PSXPackager's full-BIN leadout convention. Other layouts use the ISO volume; when an audio disc has validated index blocks beyond that volume, extraction warns that trailing audio cannot be sized reliably.
+Audio beyond the ISO volume is retained when the TOC describes audio, its first track starts at `00:00:00`, and the leadout fits the ISO volume and validated index table. This follows PSXPackager's full-BIN leadout convention. Other layouts use the ISO volume.
+
+The populated index count must cover the block count required by the selected disc extent; missing blocks are rejected. Surplus blocks past the extent are ignored with a warning. Each decoded block must cover its own extent; the final block may be short or padded.
 
 `checksum` and `identify` hash one extracted file, so they need `--select <name>.bin`, or `--select <name>.discNN.bin` for a multi-disc PBP. A CHD holds a single disc, so CHD conversion takes one disc's cue sheet per run; with several discs selected, the Compress page offers only ZIP and 7z, which keep every selected cue and bin file in one archive. The CLI `compress` command does not open a PBP: it stores the `.pbp` file as is.
 

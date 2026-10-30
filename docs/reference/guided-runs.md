@@ -16,12 +16,12 @@ A guided run is a card that walks one browser workflow step by step on homebrew 
 
 | Run                                                                          | Steps | Files                                                            |
 | ---------------------------------------------------------------------------- | ----- | ---------------------------------------------------------------- |
-| [Apply](https://rom-weaver.com/apply-patches?guide=apply)                    | 5     | Waits for you to add files; **Continue** loads `first-weave.zip` |
-| [Apply cheats](https://rom-weaver.com/apply-patches?guide=apply-cheats)      | 4     | Loads `hello-world.nes`                                          |
-| [Weave](https://rom-weaver.com/weave-patches?guide=weave)                    | 4     | Loads `first-weave.zip`                                          |
+| [Apply](https://rom-weaver.com/apply-rom-patches?guide=apply)                    | 5     | Waits for you to add files; **Continue** loads `first-weave.zip` |
+| [Apply cheats](https://rom-weaver.com/apply-rom-patches?guide=apply-cheats)      | 4     | Loads `hello-world.nes`                                          |
+| [Weave](https://rom-weaver.com/weave-rom-patches?guide=weave)                    | 4     | Loads `first-weave.zip`                                          |
 | [Create](https://rom-weaver.com/create-rom-patch?guide=create)               | 5     | Loads `hello-world.nes` and `modified-world.nes`                 |
 | [Create cheats](https://rom-weaver.com/create-rom-patch?guide=create-cheats) | 4     | Loads `hello-world.nes`                                          |
-| [Test](https://rom-weaver.com/test-rom?guide=test)                           | 2     | Loads `hello-world.nes`                                          |
+| [Test](https://rom-weaver.com/play-rom?guide=test)                           | 2     | Loads `hello-world.nes`                                          |
 
 Guided Apply's steps are add your files, or identify the original ROM by game name or checksum instead, then check your original ROM (with the Simple and Detailed views), patches and cheats, and apply. **Continue** on the first step moves to the Identify search under the empty drop zone; there, **Continue** with no files in loads `first-weave.zip`. Once a ROM is added or the patches supply the ROM checks, the page hides the search, and **Continue** and **Back** pass over it; with a ROM but no patch yet, **Continue** on the first step loads `first-weave.zip` instead. [Your first patch in the browser](../tutorials/first-patch.md) follows it to a verified checksum.
 

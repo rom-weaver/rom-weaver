@@ -19,13 +19,13 @@ Preload rom-weaver with remote files or same-origin Origin Private File System (
 Host the archive at a versioned public HTTPS URL with CORS enabled. Replace the encoded example URL in this release-page link:
 
 ```html
-<a href="https://rom-weaver.com/weave-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip">Apply this recipe</a>
+<a href="https://rom-weaver.com/weave-rom-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip">Apply this recipe</a>
 ```
 
 For a Markdown release page or README, use:
 
 ```md
-[Apply this recipe](https://rom-weaver.com/weave-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip)
+[Apply this recipe](https://rom-weaver.com/weave-rom-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip)
 ```
 
 The link opens **Weave** with the recipe preloaded. Tell readers to add their matching ROM, review the patches, expand **Download this ROM**, and choose **APPLY & DOWNLOAD**. Opening the link does not apply patches automatically.
@@ -39,14 +39,14 @@ Open the published link in a fresh browser without signing into the host. Check 
 Use `weave` for a recipe or archive. For individual patches, repeat `patch` and omit `rom` when readers supply their own ROM:
 
 ```text
-https://rom-weaver.com/weave-patches?weave=https://example.com/release.zip
-https://rom-weaver.com/apply-patches?patch=https://example.com/first.bps&patch=https://example.com/second.bps
+https://rom-weaver.com/weave-rom-patches?weave=https://example.com/release.zip
+https://rom-weaver.com/apply-rom-patches?patch=https://example.com/first.bps&patch=https://example.com/second.bps
 ```
 
 Encode complete remote URLs, including their query strings:
 
 ```js
-const link = new URL("https://rom-weaver.com/weave-patches");
+const link = new URL("https://rom-weaver.com/weave-rom-patches");
 link.searchParams.set("weave", "https://example.com/release.zip");
 ```
 

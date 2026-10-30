@@ -805,7 +805,32 @@ describe("automatic update apply", () => {
     expect(harness.reload).not.toHaveBeenCalled();
   });
 
-  it("reloads when the page still runs the outgoing controller's code", async () => {
+  it("shows the update prompt instead of reloading when the page still runs the outgoing controller's code", async () => {
+    const onBeforeReload = vi.fn();
+    let idle = true;
+    const harness = createHarness({
+      appVersion: "test",
+      controller: createController(),
+      onBeforeReload,
+      shouldAutoApplyUpdate: () => idle,
+    });
+    harness.client.initialize();
+    await flush();
+
+    harness.registerOptions().onNeedRefresh?.();
+
+    expect(harness.client.getState().updateReady).toBe(true);
+    expect(harness.updateServiceWorker).not.toHaveBeenCalled();
+    expect(onBeforeReload).not.toHaveBeenCalled();
+    expect(harness.sessionStorage.state.get("rom-weaver-sw-auto-apply-reloads")).toBeUndefined();
+    // Work started in the meantime, so a worker activated elsewhere does not reload this tab.
+    idle = false;
+    harness.fireDocument("controllerchange");
+    expect(harness.reload).not.toHaveBeenCalled();
+    expect(onBeforeReload).not.toHaveBeenCalled();
+  });
+
+  it("reloads a waiting tab once when a sibling tab applies the update and this tab is idle", async () => {
     const onBeforeReload = vi.fn();
     const harness = createHarness({
       appVersion: "test",
@@ -815,10 +840,15 @@ describe("automatic update apply", () => {
     });
     harness.client.initialize();
     await flush();
-
     harness.registerOptions().onNeedRefresh?.();
 
+    harness.fireDocument("controllerchange");
+
     expect(onBeforeReload).toHaveBeenCalledTimes(1);
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+    // A user's accept in another tab does not spend this tab's auto-apply budget.
+    expect(harness.sessionStorage.state.get("rom-weaver-sw-auto-apply-reloads")).toBeUndefined();
+
     harness.registerOptions().onNeedReload?.();
     expect(harness.reload).toHaveBeenCalledTimes(1);
   });

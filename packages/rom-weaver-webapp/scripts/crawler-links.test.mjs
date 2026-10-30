@@ -23,9 +23,9 @@ const page = (links, head = "") =>
 
 test("maps built files to the clean URL they are served at", () => {
   assert.equal(pageUrlPath("/d", "/d/index.html"), "/");
-  assert.equal(pageUrlPath("/d", "/d/apply-patches.html"), "/apply-patches");
+  assert.equal(pageUrlPath("/d", "/d/apply-rom-patches.html"), "/apply-rom-patches");
   assert.equal(pageUrlPath("/d", "/d/docs/guide/index.html"), "/docs/guide/");
-  assert.equal(pageUrlPath("/d", "/d/apply-patches/index.html"), "/apply-patches/");
+  assert.equal(pageUrlPath("/d", "/d/apply-rom-patches/index.html"), "/apply-rom-patches/");
 });
 
 test("skips external, hash-only, and scheme links", () => {
@@ -38,13 +38,13 @@ test("skips external, hash-only, and scheme links", () => {
 test("flags a bare slug on a nested page even when <base href> would fix it", () => {
   withDist(
     {
-      "apply-patches.html": page([]),
-      "docs/guide.html": page(["apply-patches", "/apply-patches"], '<base href="/" />'),
+      "apply-rom-patches.html": page([]),
+      "docs/guide.html": page(["apply-rom-patches", "/apply-rom-patches"], '<base href="/" />'),
       "index.html": page([]),
     },
     (dist) => {
       assert.deepEqual(findCrawlerBrokenLinks(dist), [
-        { href: "apply-patches", page: "/docs/guide", pathname: "/docs/apply-patches" },
+        { href: "apply-rom-patches", page: "/docs/guide", pathname: "/docs/apply-rom-patches" },
       ]);
     },
   );
@@ -53,9 +53,9 @@ test("flags a bare slug on a nested page even when <base href> would fix it", ()
 test("accepts root links, directory indexes, and bare slugs on root pages", () => {
   withDist(
     {
-      "apply-patches.html": page(["docs/guide", "/docs/guide#a", "/"]),
-      "docs/guide/index.html": page(["/apply-patches"]),
-      "index.html": page(["apply-patches"]),
+      "apply-rom-patches.html": page(["docs/guide", "/docs/guide#a", "/"]),
+      "docs/guide/index.html": page(["/apply-rom-patches"]),
+      "index.html": page(["apply-rom-patches"]),
     },
     (dist) => assert.deepEqual(findCrawlerBrokenLinks(dist), []),
   );
@@ -69,7 +69,7 @@ test("allowed paths are served by functions, not files", () => {
 });
 
 test("a malformed percent escape is a broken link, not a crash", () => {
-  withDist({ "index.html": page(["/apply-patches%E0%A4%A"]) }, (dist) => {
+  withDist({ "index.html": page(["/apply-rom-patches%E0%A4%A"]) }, (dist) => {
     assert.equal(findCrawlerBrokenLinks(dist).length, 1);
   });
 });
@@ -91,13 +91,13 @@ test("paths the host redirects are not broken", () => {
 test("flags a bare slug on a directory-index copy that only its <base> would fix", () => {
   withDist(
     {
-      "apply-patches/index.html": page(["compress"], '<base href="../" />'),
+      "apply-rom-patches/index.html": page(["compress"], '<base href="../" />'),
       "compress.html": page([]),
       "index.html": page([]),
     },
     (dist) => {
       assert.deepEqual(findCrawlerBrokenLinks(dist), [
-        { href: "compress", page: "/apply-patches/", pathname: "/apply-patches/compress" },
+        { href: "compress", page: "/apply-rom-patches/", pathname: "/apply-rom-patches/compress" },
       ]);
     },
   );

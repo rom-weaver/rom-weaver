@@ -8,7 +8,7 @@ import { createDocsMarkdown } from "./docs-discovery.mjs";
 import { PRODUCTION_SITE_ORIGIN, resolveSiteOrigin } from "./vite-config/channel.mjs";
 import { createLlmsSource, rootStaticAssetSourcesForChannel } from "./vite-config/root-static-assets.mjs";
 import { createWorkflowMarkdown } from "./vite-config/seo-html.mjs";
-import { WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
+import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
 
 const NIGHTLY = "https://nightly.rom-weaver.com";
 const llmsPath = rootStaticAssetSourcesForChannel("nightly")["/llms.txt"];
@@ -27,7 +27,7 @@ test("a site origin is normalized and must be a bare http(s) origin", () => {
 
 test("llms.txt built for the nightly channel names nightly and no production host", () => {
   const llms = createLlmsSource(llmsPath, NIGHTLY);
-  assert.ok(llms.includes(`](${NIGHTLY}/apply-patches)`));
+  assert.ok(llms.includes(`](${NIGHTLY}/apply-rom-patches)`));
   assert.ok(llms.includes(`](${NIGHTLY}/index.md)`));
   assert.equal(llms.includes(SITE_ORIGIN), false);
   assert.ok(llms.includes("https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/README.md"));
@@ -49,21 +49,30 @@ test("openapi and api-catalog name the serving origin", () => {
 
 test("Markdown alternates link to the serving origin and keep the production canonical", () => {
   const source = { file: "how-to/apply-rom-patches.md", slug: "docs/apply-rom-patches" };
-  const docs = createDocsMarkdown(source, "# Guide\n\n[CLI](../reference/cli.md) [App](/compress)\n", NIGHTLY);
+  const docs = createDocsMarkdown(source, "# Guide\n\n[CLI](../reference/cli.md) [App](/compress-files)\n", NIGHTLY);
   assert.ok(docs.startsWith(`Canonical: ${SITE_ORIGIN}/docs/apply-rom-patches\n`));
   assert.ok(docs.includes(`[CLI](<${NIGHTLY}/docs/cli.md>)`));
-  assert.ok(docs.includes(`[App](<${NIGHTLY}/compress>)`));
+  assert.ok(docs.includes(`[App](<${NIGHTLY}/compress-files>)`));
   const absolute = createDocsMarkdown(
     source,
-    `[Apply](${SITE_ORIGIN}/apply-patches?mode=rom#top) [Other](https://rom-weaver.com.example/x)\n`,
+    `[Apply](${SITE_ORIGIN}/apply-rom-patches?mode=rom#top) [Other](https://rom-weaver.com.example/x)\n`,
     NIGHTLY,
   );
-  assert.ok(absolute.includes(`[Apply](<${NIGHTLY}/apply-patches?mode=rom#top>)`));
+  assert.ok(absolute.includes(`[Apply](<${NIGHTLY}/apply-rom-patches?mode=rom#top>)`));
   assert.ok(absolute.includes("[Other](<https://rom-weaver.com.example/x>)"));
   const workflow = createWorkflowMarkdown(WORKFLOW_SEO_ROUTES.compress, NIGHTLY);
-  assert.ok(workflow.startsWith(`Canonical: ${SITE_ORIGIN}/compress\n`));
-  assert.ok(workflow.includes(`[Open in browser](${NIGHTLY}/compress)`));
+  assert.ok(workflow.startsWith(`Canonical: ${SITE_ORIGIN}/compress-files\n`));
+  assert.ok(workflow.includes(`[Open in browser](${NIGHTLY}/compress-files)`));
   assert.ok(workflow.includes(`[Documentation](${NIGHTLY}/docs.md)`));
+  for (const route of [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]) {
+    const expanded = createWorkflowMarkdown(route, NIGHTLY);
+    assert.ok(expanded.startsWith(`Canonical: ${SITE_ORIGIN}/${route.slug}\n`));
+    assert.equal(expanded.includes(`](<${SITE_ORIGIN}`), false, `${route.slug} guide links to production`);
+    assert.ok(expanded.includes(`[Full guide](${NIGHTLY}/docs/`), `${route.slug} guide origin`);
+  }
+  assert.ok(
+    workflow.includes(`[container table](<${NIGHTLY}/docs/supported-formats.md#container-and-compression-formats>)`),
+  );
 });
 
 test("no published Markdown alternate links to production from another origin", () => {

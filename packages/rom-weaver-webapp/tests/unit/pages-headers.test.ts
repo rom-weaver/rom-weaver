@@ -84,8 +84,8 @@ describe("pages _headers matching", () => {
     );
     expect(matchPagesHeaders(markdown, "/index.md").Link).toEqual(['<https://rom-weaver.com/>; rel="canonical"']);
     expect(matchPagesHeaders(markdown, "/auth.md").Link).toBeUndefined();
-    expect(matchPagesHeaders(markdown, "/checksum.md").Link).toEqual([
-      '<https://rom-weaver.com/checksum>; rel="canonical"',
+    expect(matchPagesHeaders(markdown, "/file-checksum.md").Link).toEqual([
+      '<https://rom-weaver.com/file-checksum>; rel="canonical"',
     ]);
   });
 

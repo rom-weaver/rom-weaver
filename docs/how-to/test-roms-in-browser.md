@@ -1,12 +1,12 @@
 # ROM tester online: play and test a patched ROM
 
-Use rom-weaver's ROM tester online to test a patched ROM before downloading it. Open [Test](https://rom-weaver.com/test-rom) to play local games through EmulatorJS. Play NES, SNES, Game Boy, GBA, Nintendo 64, Nintendo DS, and PlayStation games.
+Use rom-weaver's ROM tester online to test a patched ROM before downloading it. Open [Test](https://rom-weaver.com/play-rom) to play local games through EmulatorJS. Play NES, SNES, Game Boy, GBA, Nintendo 64, Nintendo DS, and PlayStation games.
 
 Your ROM stays on your device; no upload or account is required.
 
 To verify the exact file a patch requires, use [Checksum](checksum-roms-browser.md) to compare its hash with the author's expected value, or [Identify](identify-roms-browser.md) to look up a known game, region, and revision. Playing a game successfully does not verify its checksum.
 
-If you need a practice file, open [guided Test](https://rom-weaver.com/test-rom?guide=test). It loads a tiny homebrew NES ROM from this project.
+If you need a practice file, open [guided Test](https://rom-weaver.com/play-rom?guide=test). It loads a tiny homebrew NES ROM from this project.
 
 <a id="play-and-test-a-rom-in-your-browser"></a>
 
@@ -32,7 +32,7 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/test-rom?
 
 ## Load a ROM
 
-1. Open [Test](https://rom-weaver.com/test-rom).
+1. Open [Test](https://rom-weaver.com/play-rom).
 2. Drop a ROM onto **0x01 Load a game**, or select that area to choose a file.
 3. If the player shows **START GAME**, select it. Touch devices can require this tap before playback starts.
 4. Use the controls inside the emulator player.
@@ -63,7 +63,7 @@ A CHD that rom-weaver identifies as Sony PlayStation or Sega Mega Drive or Genes
 
 To test a patched ROM online, send the Apply result directly to the browser player:
 
-1. Load your ROM and patches on the [Apply Patches page](https://rom-weaver.com/apply-patches).
+1. Load your ROM and patches on the [Apply Patches page](https://rom-weaver.com/apply-rom-patches).
 2. Set **Open Test after patching** under **Options**, then apply the patches. If the option warns that the platform cannot be tested, use another emulator or the target hardware.
 3. Select **Open in the Test tab** after Apply finishes.
 4. Play far enough to exercise the patched content.
@@ -97,7 +97,7 @@ Use the fullscreen button above the player to enter or leave fullscreen. On iPho
 
 Export a save before you clear browser data or move to another browser.
 
-1. Load the ROM on the [Test page](https://rom-weaver.com/test-rom).
+1. Load the ROM on the [Test page](https://rom-weaver.com/play-rom).
 2. Create a save state or save the game's SRAM from the emulator menu.
 3. Open **Settings**, then select **Saves & storage**.
 4. Find the ROM under **Emulator saves**.

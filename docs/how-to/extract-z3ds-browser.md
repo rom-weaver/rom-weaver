@@ -17,7 +17,7 @@ Decompress `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, or `.z3dsx` files locally in your
 
 ## Decompress the Nintendo 3DS file
 
-1. Open [Extract](https://rom-weaver.com/extract).
+1. Open [Extract](https://rom-weaver.com/extract-files).
 2. Add one `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, or `.z3dsx` file to **Archive**.
 3. Wait until the uncompressed file appears in **Files**.
 4. Keep that file selected, then select **Download 1 file**.

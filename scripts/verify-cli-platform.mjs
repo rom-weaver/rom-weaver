@@ -88,6 +88,10 @@ const extractionCases = [
     "packages/rom-weaver-webapp/tests/fixtures/archives/one-rom.rar",
     [["game.bin", "6a28d704f1664ccf3174c488795340bdb14598766c7e4c39d9967ed4b0e6e0c8"]],
   ],
+  [
+    "tests/fixtures/rar/rar5-unicode.rar",
+    [["\u{1F44B}\u{1F30E}.txt", "315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3"]],
+  ],
 ];
 
 try {
@@ -136,7 +140,7 @@ try {
   for (const [fixture, outputs] of extractionCases) {
     const fixturePath = path.join(repo, fixture);
     const output = path.join(temp, `extract-${path.basename(fixture)}`);
-    run(["extract", "--input", fixturePath, "--output", output]);
+    run(["extract", "--input", fixturePath, "--output", output, "--no-ignore"]);
     for (const [name, expectedHash] of outputs) {
       assert.equal(sha256(fs.readFileSync(path.join(output, name))), expectedHash, fixture);
     }

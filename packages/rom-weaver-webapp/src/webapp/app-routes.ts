@@ -1,24 +1,31 @@
 import type { WebappView } from "./webapp-state-types.ts";
 
 const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
-  weave: "weave-patches",
+  weave: "weave-rom-patches",
   creator: "create-rom-patch",
-  checksum: "checksum",
-  compress: "compress",
+  checksum: "file-checksum",
+  compress: "compress-files",
   // The landing page is the app base itself, so its slug is empty and
   // writeWorkflowViewToPath resolves it back to readAppBaseUrl.
   home: "",
   docs: "docs",
-  extract: "extract",
+  extract: "extract-files",
   identify: "identify-rom",
-  patcher: "apply-patches",
+  patcher: "apply-rom-patches",
   "ppf-undo": "ppf-undo",
-  "save-editor": "save-editor",
-  test: "test-rom",
+  "save-editor": "rom-save-editor",
+  test: "play-rom",
   trim: "trim-rom",
   "whats-new": "whats-new",
 };
 const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
+  "apply-rom-patches": "patcher",
+  "weave-rom-patches": "weave",
+  "rom-save-editor": "save-editor",
+  "file-checksum": "checksum",
+  "compress-files": "compress",
+  "extract-files": "extract",
+  "play-rom": "test",
   "apply-cheats": "patcher",
   "create-rom-cheat-patch": "creator",
   "create-rom-patch": "creator",
@@ -51,7 +58,7 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
 const lookupWorkflowRoute = (slug: string): WebappView | null => {
   if (slug.endsWith(".html")) {
     slug = slug.slice(0, -5);
-    if (slug === "ppf-undo" || slug === "save-editor" || slug === "tools") return null;
+    if (slug === "ppf-undo" || slug === "tools") return null;
   }
   return Object.hasOwn(ROUTE_SLUG_TO_VIEW, slug) ? (ROUTE_SLUG_TO_VIEW[slug] ?? null) : null;
 };

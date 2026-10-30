@@ -104,7 +104,7 @@ PBP_PREVIEW_PID=$!
 trap 'kill "$PBP_PREVIEW_PID" 2>/dev/null || true' EXIT HUP INT TERM
 printf '%s\n' "$PBP_PREVIEW_PID" > "$PBP_ROOT/preview.pid"
 PBP_URL="https://127.0.0.1:$PBP_PORT"
-curl -fk --retry 30 --retry-connrefused --retry-delay 1 "$PBP_URL/test-rom" -o "$PBP_ROOT/preview.html"
+curl -fk --retry 30 --retry-connrefused --retry-delay 1 "$PBP_URL/play-rom" -o "$PBP_ROOT/preview.html"
 ROM_WEAVER_PBP_BOOT_URL="$PBP_URL" ROM_WEAVER_PBP_BOOT_REVISION="$PBP_REVISION" ROM_WEAVER_PBP_BOOT_WASM_SHA256="$PBP_WASM_SHA256" ROM_WEAVER_PBP_BOOT_FIXTURES="$PBP_ROOT/fixtures" ROM_WEAVER_PBP_BOOT_ARTIFACTS="$PBP_ROOT/artifacts" node --test packages/rom-weaver-webapp/tests/e2e/pbp-boot.test.mjs
 kill "$PBP_PREVIEW_PID"
 trap - EXIT HUP INT TERM
@@ -116,7 +116,7 @@ The cube's saturated pixels and the PS1 demo's brown framebuffer distinguish the
 
 The application prepares every PS1 PBP as a complete CUE/BIN playlist bundle through the shared Rust reader. It loads the reader's extracted discs across layouts the pinned native PBP reader cannot parse. The test checks every PS1 BIN's complete bytes inside the native core's file system; stored audio fixtures also require the CUE audio track and index markers. Preparing these bundles needs temporary storage for expanded discs and memory for the emulator's unpacked files.
 
-Audio retention follows the [TOC sizing rules](../reference/formats.md#browser-emulator-support). Other producer layouts use the ISO volume, so audio beyond that volume may be omitted.
+Audio retention follows the [TOC sizing rules](../reference/formats.md#browser-emulator-support). Other producer layouts use the ISO volume, so audio beyond that volume is omitted with a warning.
 
 The PSP cube must fail the purple-scene threshold before Start. After Start, purple pixels must exceed 150,000 and ten times their initial count.
 

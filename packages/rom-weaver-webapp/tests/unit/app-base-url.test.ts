@@ -81,7 +81,7 @@ describe("resolveAssetUrl", () => {
 
 describe("resolveGuidedSampleHref", () => {
   test("keeps root-host guide links root-relative", () => {
-    expect(resolveGuidedSampleHref("https://weaver.example/", "apply")).toBe("/apply-patches?guide=apply");
+    expect(resolveGuidedSampleHref("https://weaver.example/", "apply")).toBe("/apply-rom-patches?guide=apply");
   });
 
   test("keeps guide links inside a sub-path deployment", () => {
@@ -91,7 +91,7 @@ describe("resolveGuidedSampleHref", () => {
   });
 
   test("keeps the authored link when the base is invalid", () => {
-    expect(resolveGuidedSampleHref("not a url", "test")).toBe("/test-rom?guide=test");
+    expect(resolveGuidedSampleHref("not a url", "test")).toBe("/play-rom?guide=test");
   });
 });
 

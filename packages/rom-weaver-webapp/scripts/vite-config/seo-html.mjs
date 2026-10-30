@@ -1,5 +1,7 @@
+import fs from "node:fs";
 import path from "node:path";
-import { readDocLastmod } from "../docs-discovery.mjs";
+import { Lexer } from "marked";
+import { createDocsMarkdown, readDocLastmod } from "../docs-discovery.mjs";
 import { readNoticesLastmod } from "../notices-lastmod.mjs";
 import { docSourcePath } from "../../src/webapp/docs-pages.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
@@ -160,5 +162,84 @@ ${DOC_SOURCES.map((source) => {
 `;
 
 // The Canonical line names production; the links name the serving deployment.
-export const createWorkflowMarkdown = (route, siteOrigin = "https://rom-weaver.com") =>
-  `Canonical: https://rom-weaver.com/${route.slug}\n\n# ${route.title}\n\n${route.description}\n\n[Open in browser](${siteOrigin}/${route.slug})\n\n[Documentation](${siteOrigin}/docs.md)\n`;
+const WORKFLOW_MARKDOWN_GUIDES = {
+  "": {
+    slug: "docs/features",
+    sections: ["Change a game", "Check and prepare files", "Play and manage saves"],
+  },
+  "apply-rom-patches": {
+    slug: "docs/apply-rom-patches",
+    sections: [
+      "Patch a ROM in four steps",
+      "What do you need?",
+      "Dreamcast DCP patches need the CLI",
+      "If the ROM does not match",
+    ],
+  },
+  "create-rom-patch": {
+    slug: "docs/create-rom-patches",
+    sections: ["Add Original and Modified", "Choose a patch format", "Create and download the patch"],
+  },
+  "weave-rom-patches": {
+    slug: "docs/create-bundles",
+    sections: ["Choose what to include", "Build the patch recipe", "Turn on weave output and download it"],
+  },
+  "file-checksum": {
+    slug: "docs/checksum-roms-browser",
+    sections: ["Calculate checksums", "Add an algorithm", "Compare with an expected checksum"],
+  },
+  "compress-files": {
+    slug: "docs/convert-roms-browser",
+    sections: ["Add files", "Choose an output", "Check the result"],
+  },
+  "extract-files": {
+    slug: "docs/extract-files-browser",
+    sections: ["Extract an archive", "Download the files", "Convert CHD to ISO or BIN/CUE"],
+  },
+  "identify-rom": {
+    slug: "docs/identify-roms-browser",
+    sections: ["Identify a file", "Search without a file", "Compare a checksum"],
+  },
+  "ppf-undo": {
+    slug: "docs/undo-ppf-browser",
+    sections: ["Restore the saved bytes", "Check the restored copy"],
+  },
+  "play-rom": {
+    slug: "docs/test-roms",
+    sections: ["Check platform support", "Load a ROM", "Fix a game that does not start"],
+  },
+  "apply-cheats": {
+    slug: "docs/use-cheats",
+    sections: ["Add cheats to a ROM", "Add a code manually"],
+  },
+  "create-rom-cheat-patch": {
+    slug: "docs/create-rom-patches",
+    sections: ["Build from patches and cheats"],
+  },
+};
+
+export const createWorkflowMarkdown = (route, siteOrigin = "https://rom-weaver.com") => {
+  const guide = WORKFLOW_MARKDOWN_GUIDES[route.slug];
+  if (!guide) throw new Error(`No Markdown guide for workflow: ${route.slug}`);
+  const source = DOC_SOURCES.find(({ slug }) => slug === guide.slug);
+  if (!source) throw new Error(`No documentation source for workflow guide: ${guide.slug}`);
+  const sections = new Set(guide.sections);
+  const found = new Set();
+  let include = false;
+  const excerpt = Lexer.lex(fs.readFileSync(docSourcePath(source), "utf8"))
+    .filter((token) => {
+      if (token.type === "heading" && token.depth === 2) {
+        include = sections.has(token.text);
+        if (include) found.add(token.text);
+      }
+      return include && token.type !== "html";
+    })
+    .map(({ raw }) => raw)
+    .join("");
+  for (const section of sections) {
+    if (!found.has(section)) throw new Error(`Missing workflow guide section in ${source.file}: ${section}`);
+  }
+  const markdown = createDocsMarkdown({ ...source, slug: route.slug }, excerpt, siteOrigin);
+  const body = markdown.slice(markdown.indexOf("\n\n") + 2).trim();
+  return `Canonical: https://rom-weaver.com/${route.slug}\n\n# ${route.title}\n\n${route.description}\n\n[Open in browser](${siteOrigin}/${route.slug})\n\n[Documentation](${siteOrigin}/docs.md)\n\n[Full guide](${siteOrigin}/${guide.slug}.md)\n\n${body}\n`;
+};

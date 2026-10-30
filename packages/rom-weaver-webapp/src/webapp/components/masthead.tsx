@@ -437,7 +437,7 @@ const Masthead = ({
         {
           id: "back-to-tools",
           label: localizer.message("ui.docs.backToTools"),
-          href: "/apply-patches",
+          href: "/apply-rom-patches",
           icon: <ArrowLeft aria-hidden="true" />,
         },
       ],

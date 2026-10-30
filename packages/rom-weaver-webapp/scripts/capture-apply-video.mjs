@@ -39,9 +39,12 @@ try {
     errors = [],
     frames = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto(new URL("/apply-patches", process.env.ROM_WEAVER_VIDEO_BASE_URL || "https://localhost:4173/").href, {
-    waitUntil: "networkidle",
-  });
+  await page.goto(
+    new URL("/apply-rom-patches", process.env.ROM_WEAVER_VIDEO_BASE_URL || "https://localhost:4173/").href,
+    {
+      waitUntil: "networkidle",
+    },
+  );
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(() => {
     const c = document.createElement("div");

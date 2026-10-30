@@ -288,7 +288,7 @@ const recordDownloadNames = () => {
 
 /** Mounts the practice ROM with one cheat on and waits for the cheat-labelled automatic name. */
 const mountCheatedRom = async () => {
-  window.history.replaceState(null, "", "/apply-patches?guide=apply");
+  window.history.replaceState(null, "", "/apply-rom-patches?guide=apply");
   mount(
     createElement(ApplyPatchForm, {
       cheatsPage: true,

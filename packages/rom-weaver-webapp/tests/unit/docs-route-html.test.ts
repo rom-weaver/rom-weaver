@@ -109,10 +109,10 @@ describe("documentation sample links", () => {
   it("keeps generated practice files and app routes on the current deployment", () => {
     const { html } = createDocRoute(
       source,
-      "# Example\n\nIntro.\n\n[zip](https://rom-weaver.com/first-weave.zip)\n[app](https://rom-weaver.com/compress)\n",
+      "# Example\n\nIntro.\n\n[zip](https://rom-weaver.com/first-weave.zip)\n[app](https://rom-weaver.com/compress-files)\n",
     );
     expect(html).toContain('href="/first-weave.zip"');
-    expect(html).toContain('href="/compress"');
+    expect(html).toContain('href="/compress-files"');
     expect(html).not.toContain("https://rom-weaver.com");
   });
 });

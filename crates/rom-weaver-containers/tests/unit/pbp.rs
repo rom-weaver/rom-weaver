@@ -542,7 +542,9 @@ fn decode_disc_extract_task_rejects_a_block_shorter_than_its_task() {
         .to_string();
 
     assert!(
-        error.contains(&format!("wrote 100 bytes but expected {BLOCK_BYTES}")),
+        error.contains(&format!(
+            "ISO block 0 decoded 100 bytes but expected at least {BLOCK_BYTES}"
+        )),
         "unexpected error: {error}"
     );
 }
@@ -994,6 +996,121 @@ fn extract_rejects_a_kind_filter_that_matches_no_output() {
 }
 
 #[test]
+fn extract_ignores_populated_indexes_beyond_the_disc_extent() {
+    for (sectors, tracks, leadout, extent_sectors, expected_blocks) in [
+        (32, vec![(0x41, 0)], 32, 32, 2),
+        (33, vec![(0x41, 0)], 33, 33, 3),
+        (32, vec![(0x41, 0), (0x01, 20)], 33, 33, 3),
+        (32, vec![(0x41, 151), (0x01, 20)], 48, 32, 2),
+    ] {
+        let temp = TempDir::new("extract-excess-indexes");
+        let spec = DiscSpec {
+            tracks,
+            sector_count: sectors,
+            block_count: expected_blocks + 1,
+            ..DiscSpec::single_track()
+        };
+        let mut psar = build_disc_psar(&spec);
+        write_toc(&mut psar, &spec.tracks, leadout);
+        let source = write_fixture(&temp, "game.pbp", &wrap_psar_in_pbp(&psar));
+        let out_dir = temp.join("out");
+        PbpContainerHandler
+            .extract(
+                &extract_request(&source, &out_dir),
+                &test_context(temp.path()),
+            )
+            .expect("blocks past the disc extent are ignored, not an error");
+        assert_eq!(
+            fs::metadata(out_dir.join("game.bin"))
+                .expect("extracted bin")
+                .len(),
+            extent_sectors * SECTOR_BYTES as u64
+        );
+    }
+}
+
+#[test]
+fn extract_rejects_short_non_final_blocks_and_removes_output() {
+    for short_index in [0, 1, 2, 127, 128] {
+        for threads in [1, 2] {
+            let temp = TempDir::new("extract-short-non-final");
+            let spec = DiscSpec {
+                sector_count: (short_index.max(2) as u32 + 1) * 16 + 1,
+                block_count: short_index.max(2) + 2,
+                ..DiscSpec::single_track()
+            };
+            let mut blocks = default_stored_blocks(&spec);
+            blocks[short_index] = raw_deflate(&blocks[short_index][..BLOCK_BYTES - 1]);
+            let source = write_fixture(
+                &temp,
+                "game.pbp",
+                &wrap_psar_in_pbp(&build_disc_psar_with_blocks(&spec, &blocks)),
+            );
+            let out_dir = temp.join("out");
+            let context = OperationContext::new(
+                ThreadBudget::Fixed(threads),
+                temp.path().to_path_buf(),
+                Arc::new(NoopProgressSink),
+                CancellationToken::new(),
+            );
+            let error = PbpContainerHandler
+                .extract(&extract_request(&source, &out_dir), &context)
+                .expect_err("a short non-final block must not shift later disc data")
+                .to_string();
+            assert!(
+                error.contains(&format!(
+                    "ISO block {short_index} decoded {} bytes but expected at least {BLOCK_BYTES}",
+                    BLOCK_BYTES - 1
+                )),
+                "{error}"
+            );
+            assert!(!out_dir.join("game.bin").exists());
+            assert!(!out_dir.join("game.cue").exists());
+        }
+    }
+}
+
+#[test]
+fn extract_accepts_a_short_final_block_or_final_block_padding() {
+    for sectors in [17, 31, 32, 33] {
+        for padded in [false, true] {
+            let temp = TempDir::new("extract-final-block");
+            let spec = DiscSpec {
+                sector_count: sectors,
+                block_count: (sectors as usize).div_ceil(16),
+                ..DiscSpec::single_track()
+            };
+            let mut blocks = default_stored_blocks(&spec);
+            let expected = blocks.concat()[..sectors as usize * SECTOR_BYTES].to_vec();
+            if !padded {
+                blocks
+                    .last_mut()
+                    .expect("final block")
+                    .truncate(expected.len() - (spec.block_count - 1) * BLOCK_BYTES);
+            }
+            let stored: Vec<_> = blocks.iter().map(|block| raw_deflate(block)).collect();
+            let source = write_fixture(
+                &temp,
+                "game.pbp",
+                &wrap_psar_in_pbp(&build_disc_psar_with_blocks(&spec, &stored)),
+            );
+            let out_dir = temp.join("out");
+            PbpContainerHandler
+                .extract(
+                    &extract_request(&source, &out_dir),
+                    &test_context(temp.path()),
+                )
+                .expect("a complete final extent must extract with or without padding");
+            assert_eq!(
+                fs::read(out_dir.join("game.bin")).expect("read bin"),
+                expected
+            );
+            assert!(out_dir.join("game.cue").is_file());
+        }
+    }
+}
+
+#[test]
 fn extract_removes_the_bin_when_a_block_fails_to_decode() {
     let temp = TempDir::new("extract-bad-block");
     let spec = DiscSpec::single_track();
@@ -1272,7 +1389,6 @@ fn parse_ignores_a_leadout_that_disagrees_with_the_volume_or_index_table() {
 #[test]
 fn parse_trusts_the_leadout_only_for_packager_discs_with_audio() {
     let temp = TempDir::new("leadout-writers");
-    let volume_bytes = 32 * SECTOR_BYTES as u64;
     // (label, tracks, leadout, expected sectors): block_count 3 holds 48 sectors.
     for (label, tracks, leadout, sectors) in [
         // PSXPackager: first track at 00:00:00 and audio, A2 is the full BIN.
@@ -1293,15 +1409,13 @@ fn parse_trusts_the_leadout_only_for_packager_discs_with_audio() {
         let mut psar = build_disc_psar(&spec);
         write_toc(&mut psar, &tracks, leadout);
         let path = write_fixture(&temp, &format!("{label}.pbp"), &wrap_psar_in_pbp(&psar));
-        let archive = PbpContainerHandler
-            .parse_archive(&path)
-            .unwrap_or_else(|error| panic!("{label} must parse: {error}"));
-        let expected = if sectors == 32 {
-            volume_bytes
-        } else {
-            sectors * SECTOR_BYTES as u64
-        };
-        assert_eq!(archive.discs[0].iso_size, expected, "{label}");
+        let result = PbpContainerHandler.parse_archive(&path);
+        let archive = result.unwrap_or_else(|error| panic!("{label} must parse: {error}"));
+        assert_eq!(
+            archive.discs[0].iso_size,
+            sectors * SECTOR_BYTES as u64,
+            "{label}"
+        );
     }
 }
 
@@ -1342,7 +1456,7 @@ fn extract_rejects_a_short_payload_beyond_the_iso_volume() {
         .expect_err("the full-disc extent must be backed by decoded sectors")
         .to_string();
     assert!(
-        error.contains("wrote 77615 bytes but expected 77616"),
+        error.contains("ISO block 2 decoded 2351 bytes but expected at least 2352"),
         "{error}"
     );
     assert!(!out_dir.join("game.bin").exists());
@@ -1533,14 +1647,14 @@ fn probe_reports_stored_blocks_from_the_validated_disc_indexes() {
 }
 
 #[test]
-fn probe_does_not_count_unused_stored_index_blocks() {
+fn probe_ignores_unused_populated_index_blocks() {
     let temp = TempDir::new("probe-unused-blocks");
     let spec = DiscSpec {
         block_count: 3,
         ..DiscSpec::single_track()
     };
     let source = write_fixture(&temp, "unused.pbp", &single_disc_pbp(&spec));
-    let report = PbpContainerHandler
+    PbpContainerHandler
         .probe_details(
             &ContainerProbeRequest {
                 source,
@@ -1548,11 +1662,7 @@ fn probe_does_not_count_unused_stored_index_blocks() {
             },
             &test_context(temp.path()),
         )
-        .expect("probe disc with unused block");
-    assert_eq!(
-        report.details.expect("probe details")["pbp"]["stored_block_count"],
-        2
-    );
+        .expect("a probe tolerates populated indexes beyond the disc extent");
 }
 
 #[test]

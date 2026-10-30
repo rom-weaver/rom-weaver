@@ -27,7 +27,7 @@ Keep the original CHD. Each patch changes the same 16-byte region in its extract
 
 ## Step 2: add the compressed input and patches
 
-1. Open [Apply Patches](https://rom-weaver.com/apply-patches).
+1. Open [Apply Patches](https://rom-weaver.com/apply-rom-patches).
 2. Add the CHD and both BPS files to **Inputs**.
 3. Wait for reading and checksumming to finish. If asked to choose a file from the CHD, select its `.bin` entry.
 4. Open **Checks** on the ROM card. The extracted BIN's SHA-1 should be `ba1af47af57aed5590c30358f4b7dc247cf26e94`.
@@ -54,10 +54,10 @@ Keep the default compression settings. The compressed file's checksum is not the
 
 ## Step 5: verify the result
 
-1. Open [Extract](https://rom-weaver.com/extract) and add `practice-patched.chd`.
+1. Open [Extract](https://rom-weaver.com/extract-files) and add `practice-patched.chd`.
 2. If offered a track layout, choose **One BIN file**.
 3. In **Files**, choose **Clear all**, select only the `.bin` file, then choose **Download 1 file**.
-4. Open [Checksum file](https://rom-weaver.com/checksum) and add that BIN.
+4. Open [Checksum file](https://rom-weaver.com/file-checksum) and add that BIN.
 5. Select SHA-1 and compare it with `ebce631d802abe7c450e3f6cb658f9679701fdd6`.
 
 The extracted BIN is 32,768 bytes. A matching SHA-1 confirms the supplied patches produced the expected disc data after decompression.

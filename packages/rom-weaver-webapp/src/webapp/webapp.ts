@@ -229,8 +229,8 @@ const replaceLegacyWeaveRoute = (): boolean => {
   if (isNotFoundPage) return false;
   let currentUrl = new URL(window.location.href);
   const renamedPath = currentUrl.pathname
-    .replace(/\/apply-patch(?:\.html|\/index\.html|\/)?$/iu, "/apply-patches")
-    .replace(/\/(?:bundle-patches|bundle|weave)(?:\.html|\/index\.html|\/)?$/iu, "/weave-patches");
+    .replace(/\/(?:apply-patches|apply-patch)(?:\.html|\/index\.html|\/)?$/iu, "/apply-rom-patches")
+    .replace(/\/(?:weave-patches|bundle-patches|bundle|weave)(?:\.html|\/index\.html|\/)?$/iu, "/weave-rom-patches");
   const routeWasRenamed = renamedPath !== currentUrl.pathname;
   if (routeWasRenamed) {
     currentUrl.pathname = renamedPath;
@@ -246,7 +246,7 @@ const replaceLegacyWeaveRoute = (): boolean => {
   const targetView =
     hasWeaveSession || hasLegacyWeaveGuide || hasLegacyWeaveHash ? "weave" : hasDirectSession ? "patcher" : null;
   if (!targetView || currentView === targetView) return routeWasRenamed;
-  const nextUrl = new URL(targetView === "weave" ? "weave-patches" : "apply-patches", readAppBaseUrl());
+  const nextUrl = new URL(targetView === "weave" ? "weave-rom-patches" : "apply-rom-patches", readAppBaseUrl());
   nextUrl.search = currentUrl.search;
   window.history.replaceState(window.history.state, "", nextUrl);
   return true;

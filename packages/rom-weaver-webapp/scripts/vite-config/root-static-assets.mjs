@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
+import { WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "../docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "../first-sample-assets.mjs";
 import { generatedChannelAssetPath, generatedSocialPreviewPath } from "../generated-icon-assets.mjs";
@@ -84,27 +85,47 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   }
 };
 
+// Request paths the host answers with a redirect (`_redirects` rules with a 30x status). The service
+// worker keeps these on the network: a prerendered legacy document exists for several of them, but
+// serving it from the precache would skip the redirect.
+export const redirectSourcePaths = () => {
+  const paths = [];
+  for (const line of fs.readFileSync(path.join(rootAssetDir, "_redirects"), "utf8").split("\n")) {
+    const match = /^(\/\S*)\s+\S+\s+30[1278]\s*$/.exec(line.trim());
+    if (match && !/[*:]/.test(match[1])) paths.push(match[1]);
+  }
+  return paths;
+};
+
 export const LEGACY_WORKFLOW_ROUTES = {
-  apply: "apply-patches",
-  "apply-patch": "apply-patches",
-  bundle: "weave-patches",
-  "bundle-patches": "weave-patches",
+  apply: "apply-rom-patches",
+  "apply-patch": "apply-rom-patches",
+  bundle: "weave-rom-patches",
+  "bundle-patches": "weave-rom-patches",
   create: "create-rom-patch",
   "create-patch": "create-rom-patch",
   identify: "identify-rom",
-  test: "test-rom",
+  test: "play-rom",
   trim: "trim-rom",
-  weave: "weave-patches",
+  weave: "weave-rom-patches",
+  "apply-patches": "apply-rom-patches",
+  "weave-patches": "weave-rom-patches",
+  "save-editor": "rom-save-editor",
+  checksum: "file-checksum",
+  compress: "compress-files",
+  extract: "extract-files",
+  "test-rom": "play-rom",
 };
 
 const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel, siteOrigin) => {
   const rootStaticAssetSources = rootStaticAssetSourcesForChannel(channel);
   middlewares.use((req, res, next) => {
     const requestPath = req.url ? req.url.split("?")[0] : "";
-    const legacySlug = requestPath.replace(/^\//, "").replace(/(?:\/index\.html|\/|\.html)$/, "");
+    const markdown = requestPath.endsWith(".md");
+    const legacySlug = requestPath.replace(/^\//, "").replace(/(?:\/index\.html|\/|\.html|\.md)$/, "");
     const destination = Object.hasOwn(LEGACY_WORKFLOW_ROUTES, legacySlug) && LEGACY_WORKFLOW_ROUTES[legacySlug];
-    if (destination) {
-      res.writeHead(301, { Location: `/${destination}${req.url.slice(requestPath.length)}` });
+    if (destination && (!markdown || Object.values(WORKFLOW_SEO_ROUTES).some(({ slug }) => slug === destination))) {
+      res.writeHead(301, { Location: `/${destination}${markdown ? ".md" : ""}${req.url.slice(requestPath.length)}` });
       res.end();
       return;
     }

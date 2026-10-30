@@ -4,8 +4,8 @@ import { rootRelativeAnchors } from "./vite-config/route-copy-html.mjs";
 
 test("roots bare and nested anchor hrefs", () => {
   assert.equal(
-    rootRelativeAnchors('<a class="nav-row" href="compress">x</a><a href="docs/apply-rom-patches#a">y</a>'),
-    '<a class="nav-row" href="/compress">x</a><a href="/docs/apply-rom-patches#a">y</a>',
+    rootRelativeAnchors('<a class="nav-row" href="compress-files">x</a><a href="docs/apply-rom-patches#a">y</a>'),
+    '<a class="nav-row" href="/compress-files">x</a><a href="/docs/apply-rom-patches#a">y</a>',
   );
 });
 

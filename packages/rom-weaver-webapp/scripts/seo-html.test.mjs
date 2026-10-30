@@ -91,7 +91,7 @@ test("workflow pages take their lastmod from the newest commit of their text sou
   }
   assert.doesNotMatch(
     createSitemapSource({ root: directory, repo: directory }),
-    /<loc>https:\/\/rom-weaver.com\/compress<\/loc><lastmod>/,
+    /<loc>https:\/\/rom-weaver.com\/compress-files<\/loc><lastmod>/,
   );
   git("2026-01-01T00:00:00Z", "init");
   git("2026-01-01T00:00:00Z", "add", ".");
@@ -106,7 +106,7 @@ test("workflow pages take their lastmod from the newest commit of their text sou
     assert.match(lastmodOf(route.slug) ?? "", /^\d{4}-\d{2}-\d{2}T/, route.slug || "home");
   }
   // The landing change is newer than the shared sources, so only the apex follows it.
-  assert.ok(lastmodOf("") > lastmodOf("compress"));
+  assert.ok(lastmodOf("") > lastmodOf("compress-files"));
 });
 
 test("the Notices entry takes the injected generated-page date, and none when it is unknown", () => {
@@ -118,25 +118,25 @@ test("the Notices entry takes the injected generated-page date, and none when it
 
 test("the sitemap includes the public compression workflow", () => {
   const sitemap = createSitemapSource();
-  assert.ok(sitemap.includes("<loc>https://rom-weaver.com/compress</loc>"));
+  assert.ok(sitemap.includes("<loc>https://rom-weaver.com/compress-files</loc>"));
 });
 
 test("the sitemap contains each indexable workflow once and excludes beta tools", () => {
   const locations = [...createSitemapSource().matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1]);
   assert.equal(locations.length, new Set(locations).size);
   for (const slug of [
-    "apply-patches",
-    "weave-patches",
-    "checksum",
+    "apply-rom-patches",
+    "weave-rom-patches",
+    "file-checksum",
     "create-rom-patch",
-    "extract",
+    "extract-files",
     "identify-rom",
     "ppf-undo",
-    "test-rom",
+    "play-rom",
   ]) {
     assert.ok(locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
-  for (const slug of ["trim-rom", "save-editor"]) {
+  for (const slug of ["trim-rom", "rom-save-editor"]) {
     assert.ok(!locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
 });
@@ -184,10 +184,42 @@ test("workflow Markdown and discovery reuse each route's SEO metadata", () => {
   }
 });
 
+test("workflow Markdown includes task instructions and limits from the published guides", () => {
+  const cases = [
+    [WORKFLOW_SEO_ROUTES.home, "Change a game", "Codes that need live game memory cannot be baked."],
+    [WORKFLOW_SEO_ROUTES.patcher, "Patch a ROM in four steps", "Dreamcast DCP patches need the CLI"],
+    [WORKFLOW_SEO_ROUTES.creator, "Add Original and Modified", "formats that cannot shrink a file"],
+    [WORKFLOW_SEO_ROUTES.weave, "Build the patch recipe", "Choose what to include"],
+    [WORKFLOW_SEO_ROUTES.checksum, "Calculate checksums", "If no checksum matches"],
+    [WORKFLOW_SEO_ROUTES.compress, "Choose an output", "A supported input is not necessarily a supported output."],
+    [WORKFLOW_SEO_ROUTES.extract, "Extract an archive", "Extract opens one archive per run."],
+    [WORKFLOW_SEO_ROUTES.identify, "Identify a file", "It does not prove that your file is corrupt."],
+    [WORKFLOW_SEO_ROUTES["ppf-undo"], "Restore the saved bytes", "If the patch lacks undo data"],
+    [WORKFLOW_SEO_ROUTES.test, "Load a ROM", "Converting, patching, or identifying a ROM"],
+    [WORKFLOW_ENTRY_ROUTES["apply-cheats"], "Add cheats to a ROM", "Codes that need live game memory"],
+    [
+      WORKFLOW_ENTRY_ROUTES["create-rom-cheat-patch"],
+      "Build from patches and cheats",
+      "multi-file ROMs are unsupported",
+    ],
+  ];
+  for (const [route, heading, limitation] of cases) {
+    const markdown = createWorkflowMarkdown(route);
+    assert.ok(markdown.includes(`## ${String(heading)}\n`), `${route.slug} instructions`);
+    assert.ok(markdown.includes(limitation), `${route.slug} limits`);
+    assert.match(markdown, /\[Full guide\]\(https:\/\/rom-weaver.com\/docs\/[\w-]+\.md\)/);
+    assert.doesNotMatch(markdown, /doctoc|## Table of contents|<figure|<picture|src="\.\.\//);
+  }
+  assert.match(
+    createWorkflowMarkdown(WORKFLOW_SEO_ROUTES.compress),
+    /\[container table\]\(<https:\/\/rom-weaver.com\/docs\/supported-formats.md#container-and-compression-formats>\)/,
+  );
+});
+
 test("beta tool pages get their own title, social titles, and channel badge", () => {
   const shell = `${routeShell.replace("</head>", '<meta name="robots" content="index, follow" />\n</head>')}`;
   for (const [slug, name] of [
-    ["save-editor", "Save Editor"],
+    ["rom-save-editor", "Save Editor"],
     ["trim-rom", "Trim ROM"],
     ["whats-new", "What's new"],
   ]) {
@@ -213,4 +245,22 @@ test("task entries resolve static-host variants and avoid documentation paths", 
     assert.ok(html.includes(`href="https://rom-weaver.com/${slug}"`));
   }
   assert.equal(readWorkflowEntryFromPathname("/create-rom-patch"), null);
+});
+
+test("renamed workflows emit only descriptive canonical URLs", () => {
+  for (const [view, slug, legacy] of [
+    ["patcher", "apply-rom-patches", "apply-patches"],
+    ["weave", "weave-rom-patches", "weave-patches"],
+    ["checksum", "file-checksum", "checksum"],
+    ["compress", "compress-files", "compress"],
+    ["extract", "extract-files", "extract"],
+    ["test", "play-rom", "test-rom"],
+  ]) {
+    const route = WORKFLOW_SEO_ROUTES[view];
+    assert.equal(route.slug, slug);
+    const html = createWorkflowRouteHtml(routeShell, route, "prod", "Production");
+    assert.ok(html.includes(`rel="canonical" href="https://rom-weaver.com/${slug}"`), view);
+    assert.ok(!createSitemapSource().includes(`<loc>https://rom-weaver.com/${legacy}</loc>`), legacy);
+    assert.ok(createWorkflowMarkdown(route).startsWith(`Canonical: https://rom-weaver.com/${slug}\n`), view);
+  }
 });

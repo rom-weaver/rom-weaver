@@ -41,9 +41,10 @@ type CreatePwaServiceWorkerClientOptions = {
   registerServiceWorker?: RegisterServiceWorker;
   sessionStorage?: SessionStorageLike | undefined;
   // Return true to apply an update as soon as it's detected instead of prompting. Called when an update
-  // is detected, while there's no in-progress work. Applied silently (skipWaiting, no reload) when the
-  // page already runs the incoming version, or with a reload when the running code is the outgoing
-  // controller's (see the appVersion comparison in onNeedRefresh).
+  // is detected, while there's no in-progress work. Applied silently (skipWaiting, no reload) only when
+  // the page already runs the incoming version; when the running code is the outgoing controller's, the
+  // prompt shows instead (see the appVersion comparison in onNeedRefresh). Also checked before a
+  // sibling-triggered reload.
   shouldAutoApplyUpdate?: () => boolean;
   updateIntervalMs: number;
   window: WindowLike | undefined;
@@ -137,14 +138,26 @@ const createPwaServiceWorkerClient = ({
   // the registrar reloads unconditionally unless we supply that callback, so this flag is the only
   // thing standing between a silent activation and a surprise reload.
   let reloadOnIncomingControl = false;
+  // Set when the update banner was shown for a page running the outgoing controller's code. If another
+  // tab applies the update (the user accepted there, or that tab already ran the new build and applied it
+  // silently) and the new worker takes control here, this tab is still on the old build
+  // (its lazy chunks can 404 after a deploy), so it reloads once, provided it has no in-progress work.
+  let waitingOnOutgoingBuild = false;
   // Applies a reload the incoming worker's control was asked for, once. Both controllerchange and
   // onNeedReload call it: the registrar's callback alone misses pages first loaded without a
   // controller, because workbox-window decides whether a change is an update when it registers.
   const reloadForIncomingControl = (source: string) => {
     const reload = reloadOnIncomingControl;
     reloadOnIncomingControl = false;
-    logServiceWorkerClient("incoming service worker took control", { reload, source });
-    return reload && reloadPage("reloading page to apply service worker update", "swupdate");
+    const siblingAccepted = waitingOnOutgoingBuild;
+    waitingOnOutgoingBuild = false;
+    logServiceWorkerClient("incoming service worker took control", { reload, siblingAccepted, source });
+    if (reload) return reloadPage("reloading page to apply service worker update", "swupdate");
+    // Another tab applied the update, and that tab's own budget bounds silent applies, so this reload
+    // does not count against this tab's auto-apply budget.
+    if (!(siblingAccepted && shouldAutoApplyUpdate?.())) return false;
+    onBeforeReload?.();
+    return reloadPage("reloading page; a sibling tab applied the service worker update", "swupdate-sibling");
   };
 
   const setSessionStorageItem = (key: string, value: string) => {
@@ -584,24 +597,36 @@ const createPwaServiceWorkerClient = ({
       onNeedRefresh: () => {
         logServiceWorkerClient("service worker update ready");
         const autoApplyReloads = Number.parseInt(getSessionStorageItem(AUTO_APPLY_RELOAD_COUNT_KEY), 10) || 0;
-        if (shouldAutoApplyUpdate?.() && updateServiceWorker && autoApplyReloads < AUTO_APPLY_RELOAD_BUDGET) {
-          // Reload only when the page is still running the code the outgoing controller cached. When the
-          // running version is already ahead of that controller: the shell was served fresh from the
-          // network, so the page IS the incoming version and a reload would swap in nothing; activate via
-          // skipWaiting silently and let the controllerchange handler re-sync COEP and the cache version.
-          const reloadToApply = controllerVersion === appVersion;
+        // The page is still running the code the outgoing controller cached (it served its own shell),
+        // so applying the update means reloading it. That reload would land seconds after the visit,
+        // so leave the new worker waiting and show the update prompt: the user picks when to reload,
+        // and the worker otherwise activates on the next visit once no client uses the old one.
+        const reloadToApply = controllerVersion === appVersion;
+        if (
+          shouldAutoApplyUpdate?.() &&
+          updateServiceWorker &&
+          autoApplyReloads < AUTO_APPLY_RELOAD_BUDGET &&
+          !reloadToApply
+        ) {
+          // The running version is already ahead of the controller: the shell was served fresh from the
+          // network, so a reload would swap in nothing. Activate via skipWaiting silently and let the
+          // controllerchange handler re-sync COEP and the cache version.
           logServiceWorkerClient("auto-applying service worker update; no in-progress work", {
             autoApplyReloads,
             controllerVersion,
-            reloadToApply,
             runningVersion: appVersion,
           });
           setSessionStorageItem(AUTO_APPLY_RELOAD_COUNT_KEY, String(autoApplyReloads + 1));
           clearUpdateReady();
-          reloadOnIncomingControl = reloadToApply;
-          if (reloadToApply) onBeforeReload?.();
+          reloadOnIncomingControl = false;
           void updateServiceWorker();
           return;
+        }
+        if (reloadToApply) waitingOnOutgoingBuild = true;
+        if (reloadToApply && shouldAutoApplyUpdate?.()) {
+          logServiceWorkerClient("service worker update waiting; page runs the controller's version", {
+            controllerVersion,
+          });
         }
         if (autoApplyReloads >= AUTO_APPLY_RELOAD_BUDGET) {
           logServiceWorkerClient("auto-apply budget exhausted; deferring to manual update prompt", {
