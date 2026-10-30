@@ -1,6 +1,6 @@
 # How to apply a BPS, IPS, UPS, or xdelta patch to a ROM
 
-Apply an IPS, BPS, UPS, or xdelta patch to your ROM with the free [online ROM patcher](https://rom-weaver.com/apply-patches), then download the patched game. No uploads or account.
+Apply an IPS, BPS, UPS, or xdelta patch to your ROM with the free [online ROM patcher](https://rom-weaver.com/apply-rom-patches), then download the patched game. No uploads or account.
 
 <a id="how-to-apply-bps-ips-ups-and-xdelta-patches"></a>
 
@@ -35,7 +35,7 @@ Apply an IPS, BPS, UPS, or xdelta patch to your ROM with the free [online ROM pa
 
 ## Patch a ROM in four steps
 
-1. Open the [online ROM patcher](https://rom-weaver.com/apply-patches).
+1. Open the [online ROM patcher](https://rom-weaver.com/apply-rom-patches).
 2. Drop your clean ROM and the IPS, BPS, UPS, or xdelta patch into **0x01 Inputs**.
 3. Wait for checksumming, then open **Checks**. If the source does not match, [fix the checksum mismatch](fix-checksum-errors.md) first.
 4. Select **APPLY & DOWNLOAD** and save the patched ROM. Your original stays untouched.
@@ -67,7 +67,7 @@ Keep one clean original somewhere safe. rom-weaver writes a separate result, but
 
 ## Add the files
 
-1. Open [Apply](https://rom-weaver.com/apply-patches).
+1. Open [Apply](https://rom-weaver.com/apply-rom-patches).
 2. Drop the ROM and patch into **0x01 Inputs**, or choose **Add files**. A folder or [supported archive](../reference/formats.md#container-and-compression-formats) also works; nested archives, CHD, and RVZ are unpacked.
 3. Wait for **Reading** and **Checksumming**. If asked, choose the entry the author named.
 
@@ -75,7 +75,7 @@ Files dropped on Home, Docs, or What's New offer matching workflows.
 
 The resulting cards separate **ROM**, **Patches & Cheats**, and **Apply** controls. To change only the container, use [Compress](convert-roms-browser.md).
 
-New here? [Your first patch](../tutorials/first-patch.md) supplies homebrew files. [Guided Apply](https://rom-weaver.com/apply-patches?guide=apply) waits for your files; **Continue** with none, past the Identify search, loads samples. The [cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats) supplies a sample code. [Input routes](../reference/guided-runs.md#ways-files-get-into-apply) lists other ways to add files.
+New here? [Your first patch](../tutorials/first-patch.md) supplies homebrew files. [Guided Apply](https://rom-weaver.com/apply-rom-patches?guide=apply) waits for your files; **Continue** with none, past the Identify search, loads samples. The [cheats tour](https://rom-weaver.com/apply-rom-patches?guide=apply-cheats) supplies a sample code. [Input routes](../reference/guided-runs.md#ways-files-get-into-apply) lists other ways to add files.
 
 ## Apply a BPS patch
 

@@ -62,7 +62,7 @@ describe("retargetSampleUrls", () => {
 <a href="${PRODUCTION}.example/compress">lookalike suffix</a>
 <a href="https://rom-weaver.com.example/compress">lookalike host</a>
 <a href="https://rom-weaver.com@example.test/compress">userinfo lookalike</a>
-<a href="http://rom-weaver.com/compress">other scheme</a>
+<a href="http://rom-weaver.com/compress-files">other scheme</a>
 <a href="/docs/faq">relative</a>
 <a href="https://example.test/docs">elsewhere</a></p>`;
 
@@ -86,7 +86,7 @@ describe("retargetSampleUrls", () => {
         `${PRODUCTION}.example/compress`,
         "https://rom-weaver.com.example/compress",
         "https://rom-weaver.com@example.test/compress",
-        "http://rom-weaver.com/compress",
+        "http://rom-weaver.com/compress-files",
         'href="/docs/faq"',
         "https://example.test/docs",
       ]) {

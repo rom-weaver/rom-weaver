@@ -71,11 +71,11 @@ test("the weave guide teaches current controls without the obsolete Bundle scree
   const guide = readFileSync(new URL("../../../docs/how-to/create-bundles.md", import.meta.url), "utf8");
   const capture = DOCS_SCREENSHOT_CASES.find(({ name }) => name === "bundle-output");
   assert.ok(capture, "keep the capture recipe for the next screenshot refresh");
-  assert.equal(capture.route, "/weave-patches?guide=weave");
+  assert.equal(capture.route, "/weave-rom-patches?guide=weave");
   assert.equal(capture.target, "#rom-weaver-weave-job");
   assert.equal(capture.docsRoute, undefined);
   assert.ok(!guide.includes("../screenshots/bundle-output-"), "do not publish the obsolete instructional image");
   assert.ok(guide.includes("In the main **Weave** output step"));
-  assert.ok(guide.includes("https://rom-weaver.com/weave-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip"));
+  assert.ok(guide.includes("https://rom-weaver.com/weave-rom-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip"));
   assert.ok(guide.includes("expand **Download this ROM**, and choose **APPLY & DOWNLOAD**"));
 });

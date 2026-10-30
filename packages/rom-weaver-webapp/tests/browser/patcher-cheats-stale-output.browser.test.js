@@ -39,7 +39,7 @@ const addPracticeCheat = async (name) => {
 
 test("changing the cheat list retires a finished apply result", async () => {
   // The guided Apply flow unlocks the practice cheat catalog for the practice ROM.
-  window.history.replaceState(null, "", "/apply-patches?guide=apply");
+  window.history.replaceState(null, "", "/apply-rom-patches?guide=apply");
   mount(
     createElement(ApplyPatchForm, {
       cheatsPage: true,
@@ -66,7 +66,7 @@ test("changing the cheat list retires a finished apply result", async () => {
 });
 
 test("one enabled patch or cheat allows Apply and off entries leave the output unchanged", async () => {
-  window.history.replaceState(null, "", "/apply-patches?guide=apply");
+  window.history.replaceState(null, "", "/apply-rom-patches?guide=apply");
   const rom = await loadFixtureFile(NES_ROM);
   const original = new Uint8Array(await rom.arrayBuffer());
   const patch = new File(
@@ -113,7 +113,7 @@ test("one enabled patch or cheat allows Apply and off entries leave the output u
 });
 
 test("removing cheat controls preserves ROM-only batch queueing", async () => {
-  window.history.replaceState(null, "", "/apply-patches?guide=apply");
+  window.history.replaceState(null, "", "/apply-rom-patches?guide=apply");
   const rom = await loadFixtureFile(NES_ROM);
   const second = new File([rom], "second.nes");
   const Harness = () => {

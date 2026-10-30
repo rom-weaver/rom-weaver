@@ -19,7 +19,7 @@ To decompress images, use [CHD to ISO, BIN/CUE, or GDI](extract-chd-browser.md),
 
 ## Add files
 
-1. Open [Compress](https://rom-weaver.com/compress).
+1. Open [Compress](https://rom-weaver.com/compress-files).
 2. Add the files that you want to package or compress.
 3. For a CUE disc, add the CUE file and every referenced track file.
 4. When you add an archive or a compressed disc image, Compress lists the files inside it. Select the files to add, then select **Add N files**. Compress extracts only the selected files.

@@ -28,7 +28,7 @@ test.each(["document", "navigator"])("registers usable tools through %s and clea
   const cleanup = installWebMcp();
   expect([...registered.keys()]).toEqual(["search_site", "navigate_site", "get_supported_formats"]);
   expect(registered.get("search_site")?.execute({ query: "patch" })).toEqual(
-    expect.arrayContaining([expect.objectContaining({ slug: "apply-patches" })]),
+    expect.arrayContaining([expect.objectContaining({ slug: "apply-rom-patches" })]),
   );
   expect(registered.get("get_supported_formats")?.execute({})).toBeTruthy();
   expect(() => registered.get("navigate_site")?.execute({ slug: "https://evil.example" })).toThrow("Unknown page slug");

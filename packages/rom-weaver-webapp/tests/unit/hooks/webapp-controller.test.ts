@@ -143,15 +143,15 @@ describe("createWebappRootController over the vanilla store", () => {
   });
 
   it("routes the Test workflow", () => {
-    window.history.replaceState({}, "", "/test-rom");
+    window.history.replaceState({}, "", "/play-rom");
     const controller = createController();
 
     expect(controller.getState().currentView).toBe("test");
     expect(readWorkflowViewFromPath()).toBe("test");
     expect(controller.selectView("patcher")).toBe("patcher");
-    expect(window.location.pathname).toBe("/apply-patches");
+    expect(window.location.pathname).toBe("/apply-rom-patches");
     expect(controller.selectView("test")).toBe("test");
-    expect(window.location.pathname).toBe("/test-rom");
+    expect(window.location.pathname).toBe("/play-rom");
   });
 
   it("resolves a candidate URL without changing the current browser path", () => {
@@ -166,7 +166,7 @@ describe("createWebappRootController over the vanilla store", () => {
     const controller = createController();
     expect(controller.getState().currentView).toBe("creator");
     controller.selectView("patcher");
-    expect(window.location.pathname).toBe("/rom-weaver/apply-patches");
+    expect(window.location.pathname).toBe("/rom-weaver/apply-rom-patches");
   });
 
   it("normalizes a static-host index page to its clean route", () => {
@@ -174,7 +174,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(readWorkflowViewFromPath()).toBe("weave");
     const controller = createController();
     expect(controller.getState().currentView).toBe("weave");
-    expect(window.location.pathname).toBe("/rom-weaver/weave-patches");
+    expect(window.location.pathname).toBe("/rom-weaver/weave-rom-patches");
   });
 
   it.each(["bundle", "bundle-patches", "bundle.html", "bundle-patches/index.html"])(
@@ -183,7 +183,7 @@ describe("createWebappRootController over the vanilla store", () => {
       window.history.replaceState({}, "", `/rom-weaver/${route}?bundle=old.json`);
       const controller = createController();
       expect(controller.getState().currentView).toBe("weave");
-      expect(window.location.pathname).toBe("/rom-weaver/weave-patches");
+      expect(window.location.pathname).toBe("/rom-weaver/weave-rom-patches");
       expect(window.location.search).toBe("?bundle=old.json");
     },
   );
@@ -229,7 +229,7 @@ describe("createWebappRootController over the vanilla store", () => {
     controller.updateDraftSetting("betaToolsEnabled", true);
     expect(controller.saveDraftSettings()).toBe(true);
     expect(controller.selectView("save-editor")).toBe("save-editor");
-    expect(window.location.pathname).toBe("/save-editor");
+    expect(window.location.pathname).toBe("/rom-save-editor");
     controller.setSaveEditorSessionState(true);
     expect(controller.getState().saveEditorSession.active).toBe(true);
   });

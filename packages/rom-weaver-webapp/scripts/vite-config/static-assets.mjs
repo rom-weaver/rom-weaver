@@ -175,7 +175,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         WORKFLOW_SEO_ROUTES["ppf-undo"],
       );
       const saveEditorHtml = withRoutePreloadLinks(
-        makeBetaRouteNoindex(withShell("save-editor"), "save-editor", channel, channelLabel),
+        makeBetaRouteNoindex(withShell("save-editor"), "rom-save-editor", channel, channelLabel),
         routePreloadLinks.get("save-editor"),
       );
       const whatsNewHtml = withRoutePreloadLinks(
@@ -207,21 +207,21 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
             route,
           ),
         ]),
-        ["apply-patches", applyHtml],
-        ["weave-patches", weaveHtml],
+        ["apply-rom-patches", applyHtml],
+        ["weave-rom-patches", weaveHtml],
         ["create-rom-patch", createHtml],
-        ["checksum", checksumHtml],
-        ["compress", compressHtml],
-        ["extract", extractHtml],
+        ["file-checksum", checksumHtml],
+        ["compress-files", compressHtml],
+        ["extract-files", extractHtml],
         ["identify-rom", identifyHtml],
-        ["test-rom", testHtml],
+        ["play-rom", testHtml],
         ["trim-rom", trimHtml],
         ["ppf-undo", ppfUndoHtml],
         // What's new needs a document of its own or the host serves 404.html,
         // whose not-found flag hides the route on a direct load or reload. Its
         // content is fetched release notes, so it stays out of the index.
         ["whats-new", whatsNewHtml],
-        ["save-editor", saveEditorHtml],
+        ["rom-save-editor", saveEditorHtml],
         // The old /tools/ URL stays reachable; it canonicalizes to /ppf-undo.
         ["tools", makeBetaRouteNoindex(ppfUndoHtml, "ppf-undo")],
       ]) {
@@ -248,6 +248,10 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
           path.join(distDir, `${legacy}.html`),
           legacyHtml.replace('<base href="../" />', '<base href="./" />'),
         );
+        const canonicalMarkdown = path.join(distDir, `${destination}.md`);
+        if (fs.existsSync(canonicalMarkdown)) {
+          fs.copyFileSync(canonicalMarkdown, path.join(distDir, `${legacy}.md`));
+        }
       }
       if (channel === "prod") fs.writeFileSync(path.join(distDir, "sitemap.xml"), createSitemapSource());
       // Every channel serves the catalog. Its links use the origin the build is

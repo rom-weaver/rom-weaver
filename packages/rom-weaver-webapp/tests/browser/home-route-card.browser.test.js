@@ -45,5 +45,5 @@ test("a route card opens its workflow from anywhere on the card", async () => {
   await userEvent.click(card, {
     position: { x: body.left - cardBox.left + 10, y: body.top - cardBox.top + body.height / 2 },
   });
-  expect(opened).toEqual(["/apply-patches"]);
+  expect(opened).toEqual(["/apply-rom-patches"]);
 });

@@ -92,7 +92,7 @@
       },
       {
         "name": "Apply",
-        "path": "/apply-patches/"
+        "path": "/apply-rom-patches/"
       },
       {
         "name": "Create",

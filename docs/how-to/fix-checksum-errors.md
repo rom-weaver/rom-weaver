@@ -25,7 +25,7 @@ Find the cause, then fix the input. An override skips the check; it does not rep
 
 Apply reports it as **Not the expected ROM**. Other patchers word it differently: RomPatcher.js shows `Source ROM checksum mismatch`, and xdelta3 shows `target window checksum mismatch`. Each usually means the wrong starting file.
 
-The checked bytes differ from the expected file. Compare the same algorithm in [Checksum file](https://rom-weaver.com/checksum). BPS/UPS carry checks; for IPS, use the author's notes. [Checksums versus filenames](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains the evidence.
+The checked bytes differ from the expected file. Compare the same algorithm in [Checksum file](https://rom-weaver.com/file-checksum). BPS/UPS carry checks; for IPS, use the author's notes. [Checksums versus filenames](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains the evidence.
 
 ## Which messages are strict?
 
@@ -62,4 +62,4 @@ If the first patch passes but the next fails, check each input selector and **Ch
 
 Return to the clean copy unless the release explicitly requires an incremental input. Patched, trained, trimmed, or edited files can still boot while having wrong bytes. If needed, repeat your legal dumping process.
 
-Once checks match, return to [Apply](https://rom-weaver.com/apply-patches). See [why forcing a mismatch is risky](../explanation/how-patching-works.md#why-forcing-past-a-mismatch-is-risky) or [CLI validation](cli-apply.md#check-patches-without-writing-anything) for further diagnostics.
+Once checks match, return to [Apply](https://rom-weaver.com/apply-rom-patches). See [why forcing a mismatch is risky](../explanation/how-patching-works.md#why-forcing-past-a-mismatch-is-risky) or [CLI validation](cli-apply.md#check-patches-without-writing-anything) for further diagnostics.

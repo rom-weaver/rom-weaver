@@ -367,7 +367,7 @@ test("disc conversion and extraction have independent hit targets on mobile", as
   const actions = document.querySelector(".home-route-actions");
   const links = Array.from(actions.querySelectorAll("a"));
   expect(links.map((link) => link.textContent)).toEqual(["Compress", "Extract files"]);
-  expect(links.map((link) => new URL(link.href).pathname)).toEqual(["/compress", "/extract"]);
+  expect(links.map((link) => new URL(link.href).pathname)).toEqual(["/compress-files", "/extract-files"]);
   for (const link of links) {
     link.scrollIntoView({ block: "center" });
     const rect = link.getBoundingClientRect();
@@ -535,7 +535,7 @@ test("mobile Docs docks one docs bar on the workflow dock and opens everything f
   await page.viewport(1000, 844);
   // Desktop keeps the rails: the bar's layer leaves the layout entirely.
   await expect.poll(() => bar.getClientRects().length).toBe(0);
-  expect(document.querySelector('.side-nav a[href="/apply-patches"]')?.textContent).toBe("Back to tools");
+  expect(document.querySelector('.side-nav a[href="/apply-rom-patches"]')?.textContent).toBe("Back to tools");
   await page.viewport(1280, 900);
 });
 
@@ -872,9 +872,9 @@ test("a settled Apply bench keeps no mobile scroll reserve until it holds a card
 });
 
 test.each([
-  ["patcher", "/apply-patches?guide=apply", "/docs/apply-rom-patches"],
+  ["patcher", "/apply-rom-patches?guide=apply", "/docs/apply-rom-patches"],
   ["creator", "/create-rom-patch?guide=create", "/docs/create-rom-patches"],
-  ["weave", "/weave-patches?guide=weave", "/docs/create-bundles"],
+  ["weave", "/weave-rom-patches?guide=weave", "/docs/create-bundles"],
 ])("the %s sample link carries its own guide and the download", async (initialView, guideHref, docsPath) => {
   await page.viewport(1024, 900);
   mountWebappRoot({ initialView });
@@ -901,7 +901,7 @@ test.each([
 
   chip.click();
   const secondaryHrefs = {
-    patcher: "/apply-patches?guide=apply-cheats",
+    patcher: "/apply-rom-patches?guide=apply-cheats",
     creator: "/create-rom-patch?guide=create-cheats",
   };
   const secondaryHref = secondaryHrefs[initialView] || null;

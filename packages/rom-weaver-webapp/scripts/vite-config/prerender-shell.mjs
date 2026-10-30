@@ -53,6 +53,7 @@ const devPrerenderRoute = (url) => {
   const directView = {
     "ppf-undo": "ppf-undo",
     "save-editor": "save-editor",
+    "rom-save-editor": "save-editor",
     tools: "ppf-undo",
     "trim-rom": "trim",
     "whats-new": "whats-new",

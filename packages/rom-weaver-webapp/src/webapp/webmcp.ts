@@ -19,20 +19,20 @@ const logger = createLogger("webmcp");
 const progressKeys = new Set(["progress", "percent", "timingText", "throughputText"]);
 const approvalSnapshotReplacer = (key: string, value: unknown) => (progressKeys.has(key) ? undefined : value);
 const workflowPages = {
-  patcher: "apply-patches",
+  patcher: "apply-rom-patches",
   creator: "create-rom-patch",
-  weave: "weave-patches",
-  compress: "compress",
-  extract: "extract",
-  checksum: "checksum",
+  weave: "weave-rom-patches",
+  compress: "compress-files",
+  extract: "extract-files",
+  checksum: "file-checksum",
   identify: "identify-rom",
   trim: "trim-rom",
   "ppf-undo": "ppf-undo",
-  "save-editor": "save-editor",
-  test: "test-rom",
+  "save-editor": "rom-save-editor",
+  test: "play-rom",
 };
 const routes = [
-  ...["trim-rom", "save-editor"].map((slug) => ({
+  ...["trim-rom", "rom-save-editor"].map((slug) => ({
     slug,
     title: slug,
     description: "Beta browser workflow",

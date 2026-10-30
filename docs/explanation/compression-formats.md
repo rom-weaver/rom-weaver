@@ -1,6 +1,6 @@
 # ROM compression formats: CHD, RVZ, Z3DS, ZIP and 7z
 
-Compare ROM compression formats by their inputs, emulator compatibility, and extraction requirements: CHD and RVZ for disc images, Z3DS for Nintendo 3DS files, and ZIP or 7z for general archives. [Compress](https://rom-weaver.com/compress) creates each of them in the browser.
+Compare ROM compression formats by their inputs, emulator compatibility, and extraction requirements: CHD and RVZ for disc images, Z3DS for Nintendo 3DS files, and ZIP or 7z for general archives. [Compress](https://rom-weaver.com/compress-files) creates each of them in the browser.
 
 <!-- START doctoc -->
 ## Table of contents

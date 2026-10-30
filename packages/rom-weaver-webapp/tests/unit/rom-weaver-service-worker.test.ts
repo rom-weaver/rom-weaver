@@ -963,13 +963,13 @@ describe("navigation requests", () => {
     setPrecache({ "apply/index.html": () => new Response("legacy", { status: 200 }) });
     harness.fetchStub.handlers.set(
       `${APP_ORIGIN}/apply/`,
-      () => new Response(null, { headers: { location: "/apply-patches" }, status: 301 }),
+      () => new Response(null, { headers: { location: "/apply-rom-patches" }, status: 301 }),
     );
 
     const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/apply/`));
 
     expect(response.status).toBe(301);
-    expect(response.headers.get("location")).toBe("/apply-patches");
+    expect(response.headers.get("location")).toBe("/apply-rom-patches");
     expect(harness.fetchStub.calls).toHaveLength(1);
   });
 

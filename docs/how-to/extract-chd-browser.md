@@ -15,7 +15,7 @@ Decompress CHD locally in your browser with this CHD to ISO converter, without u
 
 ## Extract the disc
 
-1. Open [Extract](https://rom-weaver.com/extract).
+1. Open [Extract](https://rom-weaver.com/extract-files).
 2. Add one `.chd` file to **Archive**.
 3. For a multi-track CD, choose **One BIN file** or **One BIN file per track**.
 4. Wait until the extracted files appear in **Files**.
@@ -35,7 +35,7 @@ Keep the CUE or GDI sheet and tracks together with their original filenames. Use
 
 Allow space for the uncompressed disc, browser working storage, and download. Quotas and memory vary by device. Keep this page open until downloading finishes; for repeated storage/memory failures, use [native extraction](work-with-archives.md).
 
-The [synthetic disc tutorial](../tutorials/patch-compressed-disc.md) supplies a safe example: after its two patches, **One BIN file** yields 32,768 bytes with SHA-1 `ebce631d802abe7c450e3f6cb658f9679701fdd6`. Check the extracted BIN using [Checksum file](https://rom-weaver.com/checksum), not the CHD or CUE. This tiny example does not test multi-gigabyte capacity.
+The [synthetic disc tutorial](../tutorials/patch-compressed-disc.md) supplies a safe example: after its two patches, **One BIN file** yields 32,768 bytes with SHA-1 `ebce631d802abe7c450e3f6cb658f9679701fdd6`. Check the extracted BIN using [Checksum file](https://rom-weaver.com/file-checksum), not the CHD or CUE. This tiny example does not test multi-gigabyte capacity.
 
 For your disc, confirm all tracks are present and test the emulator before removing the CHD. A CD yielding BIN/CUE rather than ISO is expected.
 

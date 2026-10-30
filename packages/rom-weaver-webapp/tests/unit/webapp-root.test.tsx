@@ -232,7 +232,7 @@ describe("the workbench shell", () => {
 
     expect(container.querySelector(".not-found-page")).not.toBeNull();
     expect(container.querySelector("footer.page-footer")).not.toBeNull();
-    expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/apply-patches");
+    expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/apply-rom-patches");
     expect(container.querySelector("#panel-patcher")).toBeNull();
     expect(container.querySelector(".workbench")?.className).toContain("is-not-found");
   });
@@ -241,10 +241,10 @@ describe("the workbench shell", () => {
     const { container } = await renderRoot({ currentView: "docs" });
 
     // A bare slug would resolve under /docs/<guide> and 404.
-    for (const href of ["/apply-patches", "/create-rom-patch", "/identify-rom", "/test-rom"]) {
+    for (const href of ["/apply-rom-patches", "/create-rom-patch", "/identify-rom", "/play-rom"]) {
       expect(container.querySelector(`a[href="${href}"]`), href).not.toBeNull();
     }
-    expect(container.querySelector('a[href="apply-patches"]')).toBeNull();
+    expect(container.querySelector('a[href="apply-rom-patches"]')).toBeNull();
   });
 
   it("renders the not-found page in the browser locale", async () => {
@@ -277,7 +277,7 @@ describe("the workbench shell", () => {
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
     const { container } = await renderRoot({ assetBaseUrl: "https://example.test/rom-weaver/", notFound: true });
 
-    expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/rom-weaver/apply-patches");
+    expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/rom-weaver/apply-rom-patches");
     expect(container.querySelector(".not-found-docs")?.getAttribute("href")).toBe("/rom-weaver/docs");
     const tabHrefs = [...container.querySelectorAll(".side-nav a[href^='/']")].map((link) => link.getAttribute("href"));
     expect(tabHrefs).toContain("/rom-weaver/docs");
@@ -808,7 +808,7 @@ describe("page metadata per view", () => {
     document.head.append(canonical, description);
     try {
       const root = await renderRoot({ currentView: "patcher" });
-      expect(canonical.href).toBe("https://rom-weaver.com/apply-patches");
+      expect(canonical.href).toBe("https://rom-weaver.com/apply-rom-patches");
       root.unmount();
       await renderRoot({ currentView: "ppf-undo" });
       expect(canonical.href).toBe("https://rom-weaver.com/ppf-undo");

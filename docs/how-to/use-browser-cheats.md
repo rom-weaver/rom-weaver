@@ -18,7 +18,7 @@ The same cheat picker is available in Apply and Create. Identify lets you inspec
 
 ## Add cheats to a ROM
 
-The [guided Apply cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats) uses a supplied homebrew ROM and a working practice code.
+The [guided Apply cheats tour](https://rom-weaver.com/apply-rom-patches?guide=apply-cheats) uses a supplied homebrew ROM and a working practice code.
 
 The picker includes **Make the greeting start with M** (`80970D`) and **Change the background color** (`8077300F`). These are practice codes for the supplied homebrew ROM only.
 

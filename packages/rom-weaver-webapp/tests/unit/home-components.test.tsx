@@ -51,8 +51,8 @@ describe("HomePage", () => {
     const disc = Array.from(container.querySelectorAll(".home-route")).find((row) =>
       row.textContent?.includes("game.chd"),
     );
-    expect(disc?.querySelector("a[href='/tools/compress']")?.textContent).toBe("Compress");
-    expect(disc?.querySelector("a[href='/tools/extract']")?.textContent).toBe("Extract files");
+    expect(disc?.querySelector("a[href='/tools/compress-files']")?.textContent).toBe("Compress");
+    expect(disc?.querySelector("a[href='/tools/extract-files']")?.textContent).toBe("Extract files");
     expect(disc?.textContent).toContain("ISO or BIN/CUE");
     expect(disc?.querySelector("a[href='/tools/docs/extract-chd']")?.textContent).toBe("CHD to ISO guide");
     expect(disc?.querySelector("a[href='/tools/docs/convert-rvz-to-iso']")?.textContent).toBe("RVZ to ISO guide");
@@ -69,15 +69,15 @@ describe("HomePage", () => {
     );
     expect(container.querySelector(".home-practice a")?.getAttribute("href")).toMatch(/^\/tools\//);
     expect(Array.from(container.querySelectorAll(".home-route-go"), (link) => link.getAttribute("href"))).toEqual([
-      "/tools/apply-patches",
-      "/tools/compress",
-      "/tools/extract",
+      "/tools/apply-rom-patches",
+      "/tools/compress-files",
+      "/tools/extract-files",
       "/tools/identify-rom",
       "/tools/create-rom-patch",
-      "/tools/apply-patches",
-      "/tools/test-rom",
-      "/tools/checksum",
-      "/tools/weave-patches",
+      "/tools/apply-rom-patches",
+      "/tools/play-rom",
+      "/tools/file-checksum",
+      "/tools/weave-rom-patches",
     ]);
     expect(container.querySelector("#home-title")?.textContent).toContain("Online ROM patcher.");
     expect(container.textContent).toContain("Keep your files on your device.");
@@ -154,7 +154,7 @@ describe("HomePage", () => {
         <HomePage baseUrl="https://rom-weaver.com/" />
       </RomWeaverSettingsProvider>,
     );
-    expect(html).toContain('class="btn ghost slim home-route-go" href="/apply-patches"');
+    expect(html).toContain('class="btn ghost slim home-route-go" href="/apply-rom-patches"');
     expect(html).toContain('id="home-file-input"');
   });
 
@@ -178,7 +178,7 @@ describe("HomePage", () => {
         <HomePage baseUrl="not a URL" />
       </RomWeaverSettingsProvider>,
     );
-    expect(container.querySelector(".home-route-go")?.getAttribute("href")).toBe("/apply-patches");
+    expect(container.querySelector(".home-route-go")?.getAttribute("href")).toBe("/apply-rom-patches");
     expect(container.querySelector("a[href='/create-rom-patch']")).toBeTruthy();
   });
 

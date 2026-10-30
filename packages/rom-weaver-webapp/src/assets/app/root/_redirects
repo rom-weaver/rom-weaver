@@ -26,22 +26,26 @@
 # file instead.
 
 # Legacy workflow links MUST retain query strings and redirect directly.
-/apply /apply-patches 301
-/apply/ /apply-patches 301
-/apply.html /apply-patches 301
-/apply/index.html /apply-patches 301
-/apply-patch /apply-patches 301
-/apply-patch/ /apply-patches 301
-/apply-patch.html /apply-patches 301
-/apply-patch/index.html /apply-patches 301
-/weave /weave-patches 301
-/weave/ /weave-patches 301
-/weave.html /weave-patches 301
-/weave/index.html /weave-patches 301
+/apply /apply-rom-patches 301
+/apply/ /apply-rom-patches 301
+/apply.html /apply-rom-patches 301
+/apply/index.html /apply-rom-patches 301
+/apply.md /apply-rom-patches.md 301
+/apply-patch /apply-rom-patches 301
+/apply-patch/ /apply-rom-patches 301
+/apply-patch.html /apply-rom-patches 301
+/apply-patch/index.html /apply-rom-patches 301
+/apply-patch.md /apply-rom-patches.md 301
+/weave /weave-rom-patches 301
+/weave/ /weave-rom-patches 301
+/weave.html /weave-rom-patches 301
+/weave/index.html /weave-rom-patches 301
+/weave.md /weave-rom-patches.md 301
 /create /create-rom-patch 301
 /create/ /create-rom-patch 301
 /create.html /create-rom-patch 301
 /create/index.html /create-rom-patch 301
+/create.md /create-rom-patch.md 301
 /create-patch /create-rom-patch 301
 /create-patch/ /create-rom-patch 301
 /create-patch.html /create-rom-patch 301
@@ -51,18 +55,21 @@
 /identify/ /identify-rom 301
 /identify.html /identify-rom 301
 /identify/index.html /identify-rom 301
-/test /test-rom 301
-/test/ /test-rom 301
-/test.html /test-rom 301
-/test/index.html /test-rom 301
+/identify.md /identify-rom.md 301
+/test /play-rom 301
+/test/ /play-rom 301
+/test.html /play-rom 301
+/test/index.html /play-rom 301
+/test.md /play-rom.md 301
 /trim /trim-rom 301
 /trim/ /trim-rom 301
 /trim.html /trim-rom 301
 /trim/index.html /trim-rom 301
-/bundle /weave-patches 301
-/bundle/ /weave-patches 301
-/bundle.html /weave-patches 301
-/bundle/index.html /weave-patches 301
+/bundle /weave-rom-patches 301
+/bundle/ /weave-rom-patches 301
+/bundle.html /weave-rom-patches 301
+/bundle/index.html /weave-rom-patches 301
+/bundle.md /weave-rom-patches.md 301
 
 # `how-to/work-with-archives.md` was published at /docs/formats, one letter away
 # from the reference page at /docs/supported-formats. The guide now matches its
@@ -71,7 +78,44 @@
 /docs/formats/ /docs/work-with-archives 301
 /docs/formats.html /docs/work-with-archives 301
 
-/bundle-patches /weave-patches 301
-/bundle-patches/ /weave-patches 301
-/bundle-patches.html /weave-patches 301
-/bundle-patches/index.html /weave-patches 301
+/bundle-patches /weave-rom-patches 301
+/bundle-patches/ /weave-rom-patches 301
+/bundle-patches.html /weave-rom-patches 301
+/bundle-patches/index.html /weave-rom-patches 301
+/bundle-patches.md /weave-rom-patches.md 301
+
+# Renamed tool URLs MUST redirect to their canonical destinations.
+/apply-patches /apply-rom-patches 301
+/apply-patches/ /apply-rom-patches 301
+/apply-patches.html /apply-rom-patches 301
+/apply-patches/index.html /apply-rom-patches 301
+/apply-patches.md /apply-rom-patches.md 301
+/weave-patches /weave-rom-patches 301
+/weave-patches/ /weave-rom-patches 301
+/weave-patches.html /weave-rom-patches 301
+/weave-patches/index.html /weave-rom-patches 301
+/weave-patches.md /weave-rom-patches.md 301
+/save-editor /rom-save-editor 301
+/save-editor/ /rom-save-editor 301
+/save-editor.html /rom-save-editor 301
+/save-editor/index.html /rom-save-editor 301
+/checksum /file-checksum 301
+/checksum/ /file-checksum 301
+/checksum.html /file-checksum 301
+/checksum/index.html /file-checksum 301
+/checksum.md /file-checksum.md 301
+/compress /compress-files 301
+/compress/ /compress-files 301
+/compress.html /compress-files 301
+/compress/index.html /compress-files 301
+/compress.md /compress-files.md 301
+/extract /extract-files 301
+/extract/ /extract-files 301
+/extract.html /extract-files 301
+/extract/index.html /extract-files 301
+/extract.md /extract-files.md 301
+/test-rom /play-rom 301
+/test-rom/ /play-rom 301
+/test-rom.html /play-rom 301
+/test-rom/index.html /play-rom 301
+/test-rom.md /play-rom.md 301

@@ -105,7 +105,7 @@ test("legal PBP programs render through the application and native disk control"
         });
         page.on("pageerror", (error) => errors.push(error.message));
         try {
-          await page.goto(new URL("test-rom", base).href, { waitUntil: "domcontentloaded" });
+          await page.goto(new URL("play-rom", base).href, { waitUntil: "domcontentloaded" });
           await page
             .locator("#emulator-test-file-input")
             .setInputFiles({ name, mimeType: "application/octet-stream", buffer: bytes });

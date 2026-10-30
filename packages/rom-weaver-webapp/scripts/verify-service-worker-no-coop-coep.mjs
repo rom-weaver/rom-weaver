@@ -13,9 +13,9 @@ const STARTUP_TIMEOUT_MS = Number(process.env.ROM_WEAVER_VERIFY_STARTUP_TIMEOUT_
 const PAGE_TIMEOUT_MS = 20000;
 const OFFLINE_PAGES = [
   { expectedView: "home", label: "apex", path: "" },
-  { expectedView: "patcher", label: "apply canonical", path: "apply-patches" },
-  { expectedView: "patcher", label: "apply canonical directory", path: "apply-patches/" },
-  { expectedView: "patcher", label: "apply canonical document", path: "apply-patches/index.html" },
+  { expectedView: "patcher", label: "apply canonical", path: "apply-rom-patches" },
+  { expectedView: "patcher", label: "apply canonical directory", path: "apply-rom-patches/" },
+  { expectedView: "patcher", label: "apply canonical document", path: "apply-rom-patches/index.html" },
   { expectedView: "patcher", label: "apply slashless", path: "apply.html" },
   { expectedView: "patcher", label: "apply directory", path: "apply/" },
   { expectedView: "patcher", label: "apply directory document", path: "apply/index.html" },
@@ -34,16 +34,16 @@ const OFFLINE_PAGES = [
   { expectedView: "trim", label: "trim canonical document", path: "trim-rom/index.html" },
   { expectedView: "ppf-undo", label: "ppf-undo directory", path: "ppf-undo/" },
   { expectedView: "ppf-undo", label: "ppf-undo directory document", path: "ppf-undo/index.html" },
-  { expectedView: "save-editor", label: "save-editor directory", path: "save-editor/" },
-  { expectedView: "save-editor", label: "save-editor directory document", path: "save-editor/index.html" },
+  { expectedView: "save-editor", label: "save-editor directory", path: "rom-save-editor/" },
+  { expectedView: "save-editor", label: "save-editor directory document", path: "rom-save-editor/index.html" },
   // The retired /tools/ slug still serves the PPF undo page.
   { expectedView: "ppf-undo", label: "tools legacy directory", path: "tools/" },
   { expectedView: "ppf-undo", label: "tools legacy directory document", path: "tools/index.html" },
   { expectedView: "test", label: "test directory", path: "test/" },
   { expectedView: "test", label: "test directory document", path: "test/index.html" },
-  { expectedView: "test", label: "test canonical", path: "test-rom" },
-  { expectedView: "test", label: "test canonical directory", path: "test-rom/" },
-  { expectedView: "test", label: "test canonical document", path: "test-rom/index.html" },
+  { expectedView: "test", label: "test canonical", path: "play-rom" },
+  { expectedView: "test", label: "test canonical directory", path: "play-rom/" },
+  { expectedView: "test", label: "test canonical document", path: "play-rom/index.html" },
   { expectedNotFound: true, label: "not found", path: "404.html" },
 ];
 const OFFLINE_ONLY_PAGES = [{ expectedNotFound: true, label: "unknown first offline visit", path: "not-a-real-route" }];
