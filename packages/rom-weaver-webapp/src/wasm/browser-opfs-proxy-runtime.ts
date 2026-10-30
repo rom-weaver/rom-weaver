@@ -1,3 +1,9 @@
+import {
+  acknowledgeOpfsShutdown,
+  OPFS_SHUTDOWN_TIMEOUT_MS,
+  requestOpfsShutdown,
+  waitForOpfsShutdownState,
+} from "./browser-opfs-shutdown.ts";
 // Each runner owns one OPFS proxy worker and shares its channel with every WASI thread.
 // The proxy resolves mount paths from the OPFS root because nested workers cannot receive handles on Safari.
 
@@ -23,6 +29,7 @@ export interface OpfsProxyRuntime {
 }
 
 export interface StartOpfsProxyRuntimeOptions {
+  shutdownControl?: SharedArrayBuffer;
   mounts: OpfsProxyMountBootstrap[];
   slotCount: number;
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;
@@ -37,6 +44,8 @@ export async function startOpfsProxyRuntime(options: StartOpfsProxyRuntimeOption
   // runner-creation latency (it precedes every op, so it is not counted in a run's setupMs).
   const spawnStartedAtMs = typeof performance === "undefined" ? 0 : performance.now();
   const channel = createOpfsProxyChannel(options.slotCount);
+  const shutdownControl = new Int32Array(options.shutdownControl ?? new SharedArrayBuffer(8));
+  let stopPromise: Promise<void> | null = null;
   const worker = new Worker(options.workerUrl ?? DEFAULT_OPFS_PROXY_WORKER_URL, {
     type: "module",
   });
@@ -45,36 +54,52 @@ export async function startOpfsProxyRuntime(options: StartOpfsProxyRuntimeOption
   // is no run trace at construction; setTrace() updates it per run.
   let activeTrace = options.trace ?? null;
 
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error("OPFS proxy worker did not become ready in time")),
-      PROXY_READY_TIMEOUT_MS,
-    );
-    worker.onmessage = (event: MessageEvent<{ line?: string; message?: string; type?: string }>) => {
-      const data = event.data;
-      if (data?.type === "ready") {
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error("OPFS proxy worker did not become ready in time")),
+        PROXY_READY_TIMEOUT_MS,
+      );
+      worker.onmessage = (event: MessageEvent<{ line?: string; message?: string; type?: string }>) => {
+        const data = event.data;
+        if (data?.type === "ready") {
+          clearTimeout(timer);
+          resolve();
+          return;
+        }
+        if (data?.type === "error") {
+          clearTimeout(timer);
+          reject(new Error(data.message ?? "OPFS proxy worker failed to bootstrap"));
+          return;
+        }
+        if (data?.type === "trace" && data.line) activeTrace?.(data.line);
+      };
+      worker.onerror = (event) => {
         clearTimeout(timer);
-        resolve();
-        return;
-      }
-      if (data?.type === "error") {
+        reject(new Error(`OPFS proxy worker failed to start: ${event.message ?? "unknown error"}`));
+      };
+      try {
+        worker.postMessage({
+          channel: channel.transfer,
+          shutdownControl: shutdownControl.buffer,
+          mounts: options.mounts,
+          syncAccessMode: options.syncAccessMode,
+          type: "bootstrap",
+        });
+        Atomics.store(shutdownControl, 1, 1);
+      } catch (error) {
         clearTimeout(timer);
-        reject(new Error(data.message ?? "OPFS proxy worker failed to bootstrap"));
-        return;
+        reject(error);
       }
-      if (data?.type === "trace" && data.line) activeTrace?.(data.line);
-    };
-    worker.onerror = (event) => {
-      clearTimeout(timer);
-      reject(new Error(`OPFS proxy worker failed to start: ${event.message ?? "unknown error"}`));
-    };
-    worker.postMessage({
-      channel: channel.transfer,
-      mounts: options.mounts,
-      syncAccessMode: options.syncAccessMode,
-      type: "bootstrap",
     });
-  });
+  } catch (error) {
+    requestOpfsShutdown(shutdownControl);
+    // A proxy that fails before it reports ready has served no request, so it owns no handle to close: acknowledge
+    // plainly, or one failed start would poison every later Reset, compress and cleanup for the page.
+    if (Atomics.load(shutdownControl, 0) < 2) acknowledgeOpfsShutdown(shutdownControl);
+    worker.terminate();
+    throw error;
+  }
   const spawnMs = (typeof performance === "undefined" ? 0 : performance.now()) - spawnStartedAtMs;
   activeTrace?.(
     `[browser-opfs] proxy runtime ready slots=${channel.slots.length} mounts=${options.mounts.length} spawnMs=${spawnMs.toFixed(1)}`,
@@ -87,21 +112,14 @@ export async function startOpfsProxyRuntime(options: StartOpfsProxyRuntimeOption
     setTrace: (fn) => {
       activeTrace = fn;
     },
-    stop: () =>
-      new Promise<void>((resolve) => {
-        const settle = () => {
-          worker.terminate();
-          resolve();
-        };
-        const timer = setTimeout(settle, 5_000);
-        worker.onmessage = (event: MessageEvent<{ type?: string }>) => {
-          if (event.data?.type === "stopped") {
-            clearTimeout(timer);
-            settle();
-          }
-        };
-        worker.postMessage({ type: "stop" });
-      }),
+    stop: () => {
+      if (stopPromise) return stopPromise;
+      requestOpfsShutdown(shutdownControl);
+      stopPromise = waitForOpfsShutdownState(shutdownControl, 2, OPFS_SHUTDOWN_TIMEOUT_MS).finally(() =>
+        worker.terminate(),
+      );
+      return stopPromise;
+    },
     transfer: channel.transfer,
     unregisterBlobSource: (path) => worker.postMessage({ path, type: "unregister-blob-source" }),
   };

@@ -13,7 +13,7 @@ interface RomWeaverWorkerStreamChannelOptions {
   __streamRequestId?: number;
 }
 
-export type RomWeaverWorkerInitOptions = RomWeaverBrowserOpfsOptions;
+export type RomWeaverWorkerInitOptions = RomWeaverBrowserOpfsOptions & { __shutdownControl?: SharedArrayBuffer };
 
 export type RomWeaverWorkerRunOptions = RomWeaverBrowserOpfsRunOptions & RomWeaverWorkerStreamChannelOptions;
 

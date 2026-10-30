@@ -54,6 +54,12 @@ export async function withTempFixture(run, options = {}) {
   const fixtureHandle = await root.getDirectoryHandle(fixtureName, { create: true });
   const worker = wrapTypedTestWorker(createBrowserWorkerClient(clientOptions));
 
+  const cleanup = async () => {
+    worker.terminate();
+    await worker.whenClosed();
+    await removeFixtureDirectory(root, fixtureName);
+  };
+  let failed = false;
   try {
     const init = await worker.init({
       opfsHandle: fixtureHandle,
@@ -97,13 +103,13 @@ export async function withTempFixture(run, options = {}) {
       workDir: OPFS_GUEST_ROOT,
       worker,
     });
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
-    try {
-      worker.terminate();
-    } catch {
-      // ignore best-effort cleanup failures
-    }
-    await removeFixtureDirectory(root, fixtureName);
+    await cleanup().catch((error) => {
+      if (!failed) throw error;
+    });
   }
 }
 

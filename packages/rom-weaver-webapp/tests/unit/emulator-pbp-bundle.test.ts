@@ -15,6 +15,9 @@ const state = vi.hoisted(() => ({
   count: 2,
   scopes: 0,
 }));
+vi.mock("../../src/storage/browser/browser-opfs-cleanup.ts", () => ({
+  waitForBrowserOpfsBootCleanup: vi.fn(async () => undefined),
+}));
 vi.mock("../../src/lib/runtime/run-output-paths.ts", () => ({
   createRomWeaverOutputScope: () => {
     const rootPath = `/work/operations/pbp-${++state.scopes}`;

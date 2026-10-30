@@ -52,6 +52,7 @@ let workerClient: {
   init: ReturnType<typeof vi.fn>;
   runJson: ReturnType<typeof vi.fn>;
   terminate: ReturnType<typeof vi.fn>;
+  whenClosed: ReturnType<typeof vi.fn>;
 };
 let localStorageBacking: Map<string, string>;
 
@@ -117,6 +118,7 @@ beforeEach(() => {
     init: vi.fn(() => Promise.resolve({ ok: true })),
     runJson: vi.fn(),
     terminate: vi.fn(),
+    whenClosed: vi.fn(() => Promise.resolve()),
   };
   mocks.createBrowserWorkerClient.mockReturnValue(workerClient);
 });
@@ -207,6 +209,39 @@ describe("runBrowserArchiveStress preflight", () => {
 });
 
 describe("runBrowserArchiveStress run", () => {
+  it("waits for closure before deleting its fixture", async () => {
+    setManifest({ cases: [createCase({ entryCount: 1, uncompressedBytes: 10 })], generatedAt: "", version: 1 });
+    runWithEvents([createTerminalEvent()]);
+    let release!: () => void;
+    workerClient.whenClosed.mockReturnValue(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const run = runBrowserArchiveStress();
+    await vi.waitFor(() => expect(workerClient.whenClosed).toHaveBeenCalled());
+    expect(store.removed).toHaveLength(0);
+    release();
+    await run;
+    expect(store.removed).toHaveLength(1);
+  });
+
+  it("retains fixtures and preserves a command failure when closure fails", async () => {
+    setManifest({ cases: [createCase()], generatedAt: "", version: 1 });
+    workerClient.runJson.mockRejectedValue(new Error("command failed"));
+    workerClient.whenClosed.mockRejectedValue(new Error("closure failed"));
+    await expect(runBrowserArchiveStress()).rejects.toThrow("command failed");
+    expect(store.removed).toHaveLength(0);
+  });
+
+  it("reports closure failure after a successful command without deleting fixtures", async () => {
+    setManifest({ cases: [createCase({ entryCount: 1, uncompressedBytes: 10 })], generatedAt: "", version: 1 });
+    runWithEvents([createTerminalEvent()]);
+    workerClient.whenClosed.mockRejectedValue(new Error("closure failed"));
+    await expect(runBrowserArchiveStress()).rejects.toThrow("closure failed");
+    expect(store.removed).toHaveLength(0);
+  });
+
   it("stages the fixture, extracts it, and reports a passing step", async () => {
     setManifest({ cases: [createCase({ entryCount: 1, uncompressedBytes: 10 })], generatedAt: "", version: 1 });
     const terminal = createTerminalEvent();

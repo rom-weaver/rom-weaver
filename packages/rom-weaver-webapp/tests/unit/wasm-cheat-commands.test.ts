@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invokeRomWeaverCheatWorker } from "../../src/lib/runtime/wasm-cheat-commands.ts";
 
 const { runJson } = vi.hoisted(() => ({ runJson: vi.fn() }));
+vi.mock("../../src/storage/browser/browser-opfs-cleanup.ts", () => ({
+  waitForBrowserOpfsBootCleanup: vi.fn(async () => undefined),
+}));
 vi.mock("../../src/workers/rom-weaver/rom-weaver-runner.ts", () => ({ runRomWeaverJson: runJson }));
 
 const response = (patches?: unknown) => ({

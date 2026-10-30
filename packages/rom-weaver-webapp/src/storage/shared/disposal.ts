@@ -3,7 +3,13 @@ const createCleanupOnce = (cleanup?: () => Promise<void> | void) => {
 
   let cleanupPromise: Promise<void> | null = null;
   return () => {
-    cleanupPromise ??= Promise.resolve(cleanup()).then(() => undefined);
+    cleanupPromise ??= Promise.resolve()
+      .then(cleanup)
+      .then(() => undefined)
+      .catch((error) => {
+        cleanupPromise = null;
+        throw error;
+      });
     return cleanupPromise;
   };
 };

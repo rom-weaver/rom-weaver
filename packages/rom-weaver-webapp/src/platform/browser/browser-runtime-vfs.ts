@@ -1,3 +1,4 @@
+import { waitForBrowserOpfsBootCleanup } from "../../storage/browser/browser-opfs-cleanup.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import { releaseBrowserSource, retainBrowserSource } from "../../storage/browser/browser-source-primitives.ts";
 import { getNamedSource } from "../../storage/shared/binary/source-file-utils.ts";
@@ -196,6 +197,7 @@ const createBrowserRuntimeVfsIo = ({
         filePath: directVfsSource.path,
         scope,
       });
+      await waitForBrowserOpfsBootCleanup();
       const stat = await assertStagedPath(directVfsSource.path);
       return {
         cleanup: async () => undefined,
@@ -204,14 +206,18 @@ const createBrowserRuntimeVfsIo = ({
         size: stat?.size,
       };
     }
-    const stageFromSource = () =>
-      createBrowserOpfsSourceRef(source, fallbackFileName, {
+    // The wait lives here, not at the top of stageSource, so the in-flight stage is still published
+    // synchronously and a concurrent release or same-source stage sees it while the sweep finishes.
+    const stageFromSource = async () => {
+      await waitForBrowserOpfsBootCleanup();
+      return createBrowserOpfsSourceRef(source, fallbackFileName, {
         bucket: pathBucket,
         mountPoint,
         pathPrefix: pathPrefix || scope,
         pathPrefixInPath,
         trace,
       });
+    };
     emitBrowserRuntimeVfsTrace(trace, "stageSource creating source ref", {
       fallbackFileName,
       pathBucket,

@@ -323,6 +323,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
   }
   const opfsProxy = await startOpfsProxyRuntime({
     mounts: proxyMounts,
+    shutdownControl: options.__shutdownControl,
     slotCount: resolveBrowserThreadPoolSizeFromCount(baseDefaultThreads ?? resolveBrowserDefaultThreads()) + 4,
     syncAccessMode: baseSyncAccessMode,
     workerUrl: options.opfsProxyWorkerUrl,

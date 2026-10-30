@@ -20,7 +20,7 @@ export type FileReaderSyncLike = {
   readAsArrayBuffer(blob: Blob): ArrayBuffer;
 };
 
-export type BrowserOpfsCreateOptions = RomWeaverBrowserOpfsOptions;
+export type BrowserOpfsCreateOptions = RomWeaverBrowserOpfsOptions & { __shutdownControl?: SharedArrayBuffer };
 export type BrowserOpfsRunOptions = RomWeaverBrowserOpfsRunOptions &
   RomWeaverRunJsonOptions<RomWeaverRunJsonEvent, unknown> & {
     __streamBroadcastChannelName?: string;

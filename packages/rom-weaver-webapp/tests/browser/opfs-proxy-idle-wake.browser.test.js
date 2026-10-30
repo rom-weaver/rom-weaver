@@ -59,6 +59,7 @@ test("serves real OPFS requests and stops after its doorbell has been idle", asy
   try {
     worker.postMessage({
       channel: channel.transfer,
+      shutdownControl: new SharedArrayBuffer(4),
       mounts: [{ mountPath: "/work", rootRelativeParts: [], writableRoots: ["/work"] }],
       syncAccessMode: "readwrite-unsafe",
       type: "bootstrap",

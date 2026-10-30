@@ -1,3 +1,4 @@
+import { requestOpfsShutdown, waitForOpfsShutdownState } from "../../src/wasm/browser-opfs-shutdown.ts";
 import { afterEach, expect, test, vi } from "vitest";
 import {
   createOpfsProxyChannel,
@@ -110,4 +111,95 @@ test("traces a missing unlink target as a miss rather than a failure", async () 
   } finally {
     server.stop();
   }
+});
+
+test.each([false, true])("shared stop waits for blocked open and reports close failure=%s", async (closeFailure) => {
+  const channel = createOpfsProxyChannel(1);
+  const shutdownControl = new Int32Array(new SharedArrayBuffer(4));
+  let finishOpen!: (handle: unknown) => void;
+  const close = vi.fn(() => {
+    if (closeFailure) throw new Error("handle close failed");
+  });
+  const createSyncAccessHandle = vi.fn(
+    () =>
+      new Promise((resolve) => {
+        finishOpen = resolve;
+      }),
+  );
+  const directoryHandle = {
+    getDirectoryHandle: vi.fn(),
+    getFileHandle: vi.fn().mockResolvedValue({ createSyncAccessHandle }),
+  };
+  const server = startOpfsProxyServer({
+    channel,
+    shutdownControl,
+    mounts: [{ directoryHandle, mountPath: "/out", writableRoots: ["/out"] }] as never,
+  });
+  const slot = channel.slots[0];
+  if (!slot) throw new Error("Proxy channel has no request slot");
+  const path = new TextEncoder().encode("/out/late.bin");
+  slot.data.set(path);
+  Atomics.store(slot.control, OPFS_PROXY_CONTROL_OPCODE_INDEX, OPFS_PROXY_OP_OPEN);
+  Atomics.store(slot.control, OPFS_PROXY_CONTROL_LENGTH_INDEX, path.byteLength);
+  Atomics.store(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX, OPFS_PROXY_STATE_REQUESTED);
+  Atomics.add(channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX, 1);
+  Atomics.notify(channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
+  await vi.waitFor(() => expect(createSyncAccessHandle).toHaveBeenCalled());
+  requestOpfsShutdown(shutdownControl);
+  await vi.waitFor(() => expect(Atomics.load(channel.global, OPFS_PROXY_GLOBAL_POISONED_INDEX)).toBe(1));
+  expect(Atomics.load(shutdownControl, 0)).toBe(1);
+  expect(close).not.toHaveBeenCalled();
+  finishOpen({ close, getSize: () => 0 });
+  await server.done;
+  if (closeFailure) await expect(waitForOpfsShutdownState(shutdownControl, 2)).rejects.toThrow("failed to close");
+  else await waitForOpfsShutdownState(shutdownControl, 2);
+  expect(close).toHaveBeenCalledOnce();
+});
+
+test("closed acknowledgement waits for deferred unlink completion", async () => {
+  const channel = createOpfsProxyChannel(1);
+  const shutdownControl = new Int32Array(new SharedArrayBuffer(4));
+  let finishRemoval!: () => void;
+  const close = vi.fn();
+  const removeEntry = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        finishRemoval = resolve;
+      }),
+  );
+  const directoryHandle = {
+    getDirectoryHandle: vi.fn(),
+    removeEntry,
+    getFileHandle: vi
+      .fn()
+      .mockResolvedValue({ createSyncAccessHandle: vi.fn().mockResolvedValue({ close, getSize: () => 0 }) }),
+  };
+  const server = startOpfsProxyServer({
+    channel,
+    shutdownControl,
+    mounts: [{ directoryHandle, mountPath: "/out", writableRoots: ["/out"] }] as never,
+  });
+  const slot = channel.slots[0];
+  if (!slot) throw new Error("Proxy channel has no request slot");
+  const path = new TextEncoder().encode("/out/removed.bin");
+  const send = async (opcode: number) => {
+    slot.data.set(path);
+    Atomics.store(slot.control, OPFS_PROXY_CONTROL_OPCODE_INDEX, opcode);
+    Atomics.store(slot.control, OPFS_PROXY_CONTROL_LENGTH_INDEX, path.byteLength);
+    Atomics.store(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX, OPFS_PROXY_STATE_REQUESTED);
+    Atomics.add(channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX, 1);
+    Atomics.notify(channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
+    await vi.waitFor(() =>
+      expect(Atomics.load(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX)).toBe(OPFS_PROXY_STATE_DONE),
+    );
+  };
+  await send(OPFS_PROXY_OP_OPEN);
+  await send(OPFS_PROXY_OP_UNLINK);
+  requestOpfsShutdown(shutdownControl);
+  await vi.waitFor(() => expect(removeEntry).toHaveBeenCalled());
+  expect(close).toHaveBeenCalledOnce();
+  expect(Atomics.load(shutdownControl, 0)).toBe(1);
+  finishRemoval();
+  await server.done;
+  expect(Atomics.load(shutdownControl, 0)).toBe(2);
 });

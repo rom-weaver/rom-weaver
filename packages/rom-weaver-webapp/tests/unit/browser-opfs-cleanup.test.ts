@@ -13,7 +13,6 @@ vi.mock("../../src/workers/protocol/browser-opfs-worker-client.ts", () => ({ req
 import {
   resetBrowserTransientOpfs,
   startBrowserOpfsBootCleanup,
-  waitForBrowserOpfsBootCleanup,
 } from "../../src/storage/browser/browser-opfs-cleanup.ts";
 
 describe("browser OPFS cleanup", () => {
@@ -40,25 +39,59 @@ describe("browser OPFS cleanup", () => {
   });
 
   it("makes the boot-cleanup wait cover an in-flight reset sweep without rejecting on its failure", async () => {
-    let release: () => void = () => undefined;
+    // The wait now starts the boot sweep, so use a fresh module with a finished boot sweep and no real Web
+    // Lock, whose page lifetime lease would otherwise stay held for the rest of the file.
+    vi.stubGlobal("navigator", {});
+    vi.resetModules();
+    const fresh = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    await fresh.startBrowserOpfsBootCleanup();
+    // The sweep removes several paths at once and reports only after all have settled.
+    const releases: Array<() => void> = [];
     requestBrowserOpfsStorage.mockImplementation(
       () =>
         new Promise((resolve) => {
-          release = () => resolve({ error: { message: "quota exceeded" }, success: false });
+          releases.push(() => resolve({ error: { message: "quota exceeded" }, success: false }));
         }),
     );
-    const reset = resetBrowserTransientOpfs();
+    const reset = fresh.resetBrowserTransientOpfs();
     const rejection = expect(reset).rejects.toThrow("quota exceeded");
     let waited = false;
-    const waiting = waitForBrowserOpfsBootCleanup().then(() => {
+    const waiting = fresh.waitForBrowserOpfsBootCleanup().then(() => {
       waited = true;
     });
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(waited).toBe(false);
-    release();
+    for (const release of releases) release();
     await rejection;
     await waiting;
     expect(waited).toBe(true);
+  });
+
+  it("reports a failed sweep only after every sibling removal has settled", async () => {
+    let finishSlow: () => void = () => undefined;
+    requestBrowserOpfsStorage.mockImplementation((request) =>
+      request?.filePath === "/work/output"
+        ? Promise.resolve({ error: { message: "quota exceeded" }, success: false })
+        : request?.filePath === "/work/input"
+          ? new Promise((resolve) => {
+              finishSlow = () => resolve({ success: true });
+            })
+          : Promise.resolve({ success: true }),
+    );
+    let settled = false;
+    const reset = resetBrowserTransientOpfs().then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(settled).toBe(false);
+    finishSlow();
+    await reset;
+    expect(settled).toBe(true);
   });
 
   it("preserves live-tab outputs and reclaims abandoned storage after the last tab closes", async () => {

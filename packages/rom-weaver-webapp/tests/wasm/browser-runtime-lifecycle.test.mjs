@@ -93,6 +93,7 @@ async function childNames(root, name) {
 afterEach(async () => {
   setInputSelectionHandler();
   for (const client of clients) client.terminate();
+  await Promise.all([...clients].map((client) => client.whenClosed()));
   clients.clear();
   await resetRomWeaverRunner({ terminate: true });
   const root = await navigator.storage.getDirectory();
@@ -175,6 +176,7 @@ it(
       worker.removeEventListener("message", capture);
       client.terminate();
       client.terminate();
+      await client.whenClosed();
       expect(worker.listenerCount).toBe(0);
       expect(worker.terminated).toBe(true);
       await expect(client.runJson(toTypedRunInput(["probe", "--input", "/work/source.bin"]))).rejects.toThrow(
@@ -227,6 +229,7 @@ it(
       expect(Atomics.load(selectionControl, SELECT_REQUEST_COUNT_INDEX)).toBeLessThan(0);
       expect(replacement.client._pending.size).toBe(0);
       expect(replacement.client._openSelectResponders.size).toBe(0);
+      await replacement.client.whenClosed();
       expect(replacement.worker.listenerCount).toBe(0);
       expect(await childNames(handle, "cancelled")).toEqual([]);
       const archiveHandle = await handle.getFileHandle("archive.zip");

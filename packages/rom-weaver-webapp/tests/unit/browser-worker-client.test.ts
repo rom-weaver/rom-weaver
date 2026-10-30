@@ -49,6 +49,63 @@ afterEach(() => {
 });
 
 describe("browser worker client", () => {
+  it("acknowledges closure when the worker script fails before it ever replies", async () => {
+    const client = createBrowserWorkerClient({ worker: worker as unknown as Worker });
+    const init = client.init();
+    const rejection = expect(init).rejects.toBeDefined();
+    for (const listener of worker.listeners.get("error") || [])
+      listener({ message: "script failed to load" } as ErrorEvent);
+    await rejection;
+    client.terminate();
+    await client.whenClosed();
+    expect(worker.terminated).toBe(true);
+  });
+
+  it("keeps waiting for closure when the worker errors after it has replied", async () => {
+    const client = createBrowserWorkerClient({ worker: worker as unknown as Worker });
+    const init = client.init();
+    const rejection = expect(init).rejects.toBeDefined();
+    worker.emit({ type: "event", requestId: -1, event: {} });
+    for (const listener of worker.listeners.get("error") || []) listener({ message: "late failure" } as ErrorEvent);
+    await rejection;
+    client.terminate();
+    expect(worker.terminated).toBe(false);
+  });
+
+  it("constructs without SharedArrayBuffer so the runner can report the isolation requirement", () => {
+    vi.stubGlobal("SharedArrayBuffer", undefined);
+    try {
+      expect(() => createBrowserWorkerClient({ worker: worker as unknown as Worker })).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("acknowledges closure synchronously when init cannot be posted", async () => {
+    vi.spyOn(worker, "postMessage").mockImplementationOnce(() => {
+      throw new DOMException("could not clone module", "DataCloneError");
+    });
+    const client = createBrowserWorkerClient({ worker: worker as unknown as Worker });
+    await expect(client.init()).rejects.toMatchObject({ name: "DataCloneError" });
+    client.terminate();
+    expect(worker.terminated).toBe(true);
+    await client.whenClosed();
+  });
+
+  it("terminates synchronously when proxy closure is already acknowledged", async () => {
+    const client = createBrowserWorkerClient({ worker: worker as unknown as Worker });
+    const ready = client.init();
+    worker.emit({ requestId: 1, type: "ready", mode: "browser-opfs", threaded: false });
+    await ready;
+    const control = new Int32Array(
+      (worker.posted[0] as { options: { __shutdownControl: SharedArrayBuffer } }).options.__shutdownControl,
+    );
+    Atomics.store(control, 0, 2);
+    client.terminate();
+    expect(worker.terminated).toBe(true);
+    await client.whenClosed();
+  });
+
   it("creates a client with an explicit default and sends init options", async () => {
     const client = createBrowserWorkerClient({ defaultThreads: 4, worker: worker as unknown as Worker });
     expect(client).toBeInstanceOf(BrowserRomWeaverWorkerClient);
@@ -76,8 +133,21 @@ describe("browser worker client", () => {
     const created = (client as unknown as { worker: FakeWorker }).worker;
     expect(created).toBeInstanceOf(FakeWorker);
     const pending = client.init();
+    const control = new Int32Array(
+      (created.posted[0] as { options: { __shutdownControl: SharedArrayBuffer } }).options.__shutdownControl,
+    );
+    const stopped = client.whenClosed();
+    expect(client.terminate()).toBeUndefined();
     client.terminate();
+    expect(client.whenClosed()).toBe(stopped);
+    expect(created.terminated).toBe(false);
     await expect(pending).rejects.toMatchObject({ message: "worker terminated" });
+    expect(Atomics.load(control, 0)).toBe(1);
+    created.emit({ requestId: 1, type: "ready", mode: "browser-opfs", threaded: true });
+    expect(created.terminated).toBe(false);
+    Atomics.store(control, 0, 2);
+    Atomics.notify(control, 0);
+    await stopped;
     expect(created.terminated).toBe(true);
   });
 });

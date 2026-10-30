@@ -2,12 +2,11 @@ import { createCleanupOnce } from "../../storage/shared/disposal.ts";
 import { joinVfsPath } from "../../storage/vfs/path.ts";
 import { createVfsPathId } from "../../storage/vfs/path-id.ts";
 import { removeManagedOpfsPath } from "../../workers/protocol/opfs-path.ts";
+import { waitForRomWeaverShutdown } from "../../workers/rom-weaver/runner-control.ts";
 import { getFileNameParts, getPathBaseName, joinPath } from "../path-utils.ts";
 
 const WORK_ROOT_PATH = "/work";
 const OPERATION_ROOT_NAME = "operations";
-// A cancelled run terminates its worker, whose OPFS handles are released shortly after.
-const SCOPE_REMOVE_BUSY_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600];
 
 // A `createVfsPathId()` segment: a `crypto.randomUUID()` (dashed) or the 32-hex fallback.
 const VFS_PATH_ID_REGEX = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})$/i;
@@ -48,9 +47,10 @@ type RomWeaverOutputScope = {
 
 const createRomWeaverOutputScope = (): RomWeaverOutputScope => {
   const rootPath = joinVfsPath(WORK_ROOT_PATH, OPERATION_ROOT_NAME, createVfsPathId());
-  const cleanup = createCleanupOnce(() =>
-    removeManagedOpfsPath(rootPath, undefined, { busyRetryDelaysMs: SCOPE_REMOVE_BUSY_RETRY_DELAYS_MS }),
-  );
+  const cleanup = createCleanupOnce(async () => {
+    await waitForRomWeaverShutdown();
+    await removeManagedOpfsPath(rootPath, undefined, { ignoreErrors: false });
+  });
   const createOutputCleanups: RomWeaverOutputScope["createOutputCleanups"] = async (outputPaths, removeOutputPath) => {
     if (!outputPaths.length) {
       await cleanup();
@@ -61,19 +61,26 @@ const createRomWeaverOutputScope = (): RomWeaverOutputScope => {
     for (const filePath of outputPaths) {
       remainingPathReferences.set(filePath, (remainingPathReferences.get(filePath) || 0) + 1);
     }
-    return outputPaths.map((filePath) =>
-      createCleanupOnce(async () => {
-        const remainingPathReferencesCount = (remainingPathReferences.get(filePath) || 1) - 1;
-        if (remainingPathReferencesCount) remainingPathReferences.set(filePath, remainingPathReferencesCount);
-        else remainingPathReferences.delete(filePath);
-        try {
-          if (!remainingPathReferencesCount) await removeOutputPath(filePath);
-        } finally {
-          remainingOutputs -= 1;
-          if (!remainingOutputs) await cleanup();
+    return outputPaths.map((filePath) => {
+      let releasedReference = false;
+      let removePath = false;
+      let removedOutput = false;
+      return createCleanupOnce(async () => {
+        if (!releasedReference) {
+          const remainingPathReferencesCount = (remainingPathReferences.get(filePath) || 1) - 1;
+          if (remainingPathReferencesCount) remainingPathReferences.set(filePath, remainingPathReferencesCount);
+          else remainingPathReferences.delete(filePath);
+          removePath = !remainingPathReferencesCount;
+          releasedReference = true;
         }
-      }),
-    );
+        if (!removedOutput) {
+          if (removePath) await removeOutputPath(filePath);
+          remainingOutputs -= 1;
+          removedOutput = true;
+        }
+        if (!remainingOutputs) await cleanup();
+      });
+    });
   };
   const selectOutputPath: RomWeaverOutputScope["selectOutputPath"] = (
     sourcePath,

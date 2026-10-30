@@ -197,6 +197,17 @@ export async function runBrowserFullFormatMatrix(options: BrowserFormatMatrixOpt
   const sharedMemoryMaximumPages = resolveAppleMobileSharedMemoryMaximumPages();
   const wasmUrl = options.wasmUrl || new URL("./rom-weaver-app.wasm", import.meta.url).href;
   let sharedWorker: ReturnType<typeof createBrowserWorkerClient> | null = null;
+  let failed = false;
+  let closureFailed = false;
+  const closeWorker = async (worker: ReturnType<typeof createBrowserWorkerClient>) => {
+    try {
+      worker.terminate();
+      await worker.whenClosed();
+    } catch (error) {
+      closureFailed = true;
+      throw error;
+    }
+  };
 
   try {
     const mobileModule = sharedMemoryMaximumPages
@@ -218,7 +229,7 @@ export async function runBrowserFullFormatMatrix(options: BrowserFormatMatrixOpt
         assert(init?.mode === "browser-opfs", `expected browser-opfs init mode, got ${String(init?.mode)}`);
         return worker;
       } catch (error) {
-        worker.terminate();
+        await closeWorker(worker).catch(() => undefined);
         throw error;
       }
     };
@@ -253,21 +264,31 @@ export async function runBrowserFullFormatMatrix(options: BrowserFormatMatrixOpt
       runJson: async (command, runOptions) => {
         if (sharedWorker) return sharedWorker.runJson(command, runOptions);
         const worker = await createWorker();
+        let commandFailed = false;
         try {
           return await worker.runJson(command, runOptions);
+        } catch (error) {
+          commandFailed = true;
+          throw error;
         } finally {
-          worker.terminate();
+          await closeWorker(worker).catch((error: unknown) => {
+            if (!commandFailed) throw error;
+          });
         }
       },
       sourcePath,
     });
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
-    try {
-      sharedWorker?.terminate();
-    } catch {
-      // Best-effort cleanup; the original matrix error is more relevant.
-    }
-    await removeFixtureDirectory(root, fixtureName);
+    await (sharedWorker ? closeWorker(sharedWorker) : Promise.resolve())
+      .then(async () => {
+        if (!closureFailed) await removeFixtureDirectory(root, fixtureName);
+      })
+      .catch((error: unknown) => {
+        if (!failed) throw error;
+      });
   }
 }
 

@@ -42,9 +42,9 @@ describe("wasm commands vs the page-boot OPFS sweep", () => {
     expect(mocks.runRomWeaverJson).toHaveBeenCalledTimes(1);
   });
 
-  it("still runs a command when the boot sweep fails", async () => {
+  it("runs a command after the boot sweep fails", async () => {
     // A fresh module graph and no Web Locks, so the sweep runs once more and its failure is not masked by the
-    // first test's lifetime lease.
+    // first test's lifetime lease. A failed sweep only leaves stale scratch, so the command still runs.
     vi.resetModules();
     vi.stubGlobal("navigator", { locks: undefined });
     mocks.runRomWeaverJson.mockClear();
@@ -58,6 +58,7 @@ describe("wasm commands vs the page-boot OPFS sweep", () => {
     const cleanup = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
     const runtime = await import("../../src/lib/runtime/wasm-command-runtime.ts");
     await expect(cleanup.startBrowserOpfsBootCleanup()).rejects.toThrow("quota exceeded");
+    // The mocked result is not a real weave parse; only that the command was started matters here.
     await runtime
       .invokeRomWeaverWeaveParseWorker({
         extractDirPath: "/work/weave-parse/id",

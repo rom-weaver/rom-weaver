@@ -1,8 +1,10 @@
+import { waitForRomWeaverShutdown } from "../../workers/rom-weaver/runner-control.ts";
 import { triggerBrowserDownload } from "../../platform/browser/browser-download.ts";
 import { requestBrowserOpfsStorage } from "../../workers/protocol/browser-opfs-worker-client.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { getVfsRelativePath, normalizeAbsoluteVfsPath, normalizeVfsRoot } from "../vfs/path.ts";
 import type { LargeFileVfs, VfsOutputRef, VfsStat } from "../vfs/types.ts";
+import { waitForBrowserOpfsBootCleanup } from "./browser-opfs-cleanup.ts";
 import { writeBlobToFileHandle } from "./file-handle-write.ts";
 
 type BrowserLargeFileVfsOptions = {
@@ -243,6 +245,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
       return bytes.byteLength;
     },
     remove: async (filePath) => {
+      await waitForRomWeaverShutdown();
       invalidateReadCache(normalizeAbsoluteVfsPath(filePath, rootPath));
       const relativePath = getVfsRelativePath(filePath, rootPath);
       const segments = relativePath ? relativePath.split("/") : [];
@@ -267,6 +270,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
       };
     },
     truncate: async (filePath, size) => {
+      await waitForBrowserOpfsBootCleanup();
       const normalizedPath = normalizeAbsoluteVfsPath(filePath, rootPath);
       invalidateReadCache(normalizedPath);
       logger.debug("OPFS path create requested", {
@@ -292,6 +296,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
       const byteLength = data.byteLength;
       const payload = new Uint8Array(byteLength);
       payload.set(data);
+      await waitForBrowserOpfsBootCleanup();
       const fileOffset =
         typeof options?.fileOffset === "number" && options.fileOffset > 0 ? Math.floor(options.fileOffset) : 0;
       logger.debug("OPFS path write requested", {

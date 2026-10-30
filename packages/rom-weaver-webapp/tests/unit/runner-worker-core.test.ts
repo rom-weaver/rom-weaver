@@ -64,6 +64,35 @@ async function initialized() {
 }
 
 describe("runner worker init", () => {
+  it("acknowledges shutdown when initialization fails before a proxy owns resources", async () => {
+    const shutdownControl = new Int32Array(new SharedArrayBuffer(8));
+    const queue = makeQueue();
+    initRunner.mockRejectedValueOnce(new Error("compile failed"));
+    queue.enqueue({ options: { __shutdownControl: shutdownControl.buffer }, requestId: 1, type: "init" } as never);
+    await settle();
+    expect(messagesOfType("error")[0]).toMatchObject({ error: { message: "compile failed" } });
+    expect(Atomics.load(shutdownControl, 0)).toBe(2);
+  });
+
+  it.each([0, 2, 3])(
+    "leaves proxy-owned initialization failure acknowledgement to the proxy (state %i)",
+    async (state) => {
+      const shutdownControl = new Int32Array(new SharedArrayBuffer(8));
+      Atomics.store(shutdownControl, 0, state);
+      Atomics.store(shutdownControl, 1, 1);
+      initRunner.mockRejectedValueOnce(new Error("thread pool failed after proxy bootstrap"));
+      makeQueue().enqueue({
+        options: { __shutdownControl: shutdownControl.buffer },
+        requestId: 1,
+        type: "init",
+      } as never);
+      await settle();
+      expect(Atomics.load(shutdownControl, 0)).toBe(state === 0 ? 1 : state);
+      expect(messagesOfType("error")[0]).toMatchObject({
+        error: { message: "thread pool failed after proxy bootstrap" },
+      });
+    },
+  );
   it("builds the runner and answers with its mode and threading flags", async () => {
     const queue = makeQueue();
     queue.enqueue({ mode: "browser-opfs", options: { wasmUrl: "/app.wasm" }, requestId: 7, type: "init" } as never);

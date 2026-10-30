@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { registerRomWeaverShutdown } from "../../src/wasm/browser-opfs-shutdown.ts";
+
+vi.mock("../../src/storage/browser/browser-opfs-cleanup.ts", () => ({
+  waitForBrowserOpfsBootCleanup: vi.fn(async () => undefined),
+}));
 
 const state = vi.hoisted(() => ({
   downloadCalls: [] as Array<{ fileName: string; interactive: boolean; size: number }>,
@@ -137,6 +142,25 @@ afterEach(() => {
 });
 
 describe("browser large-file VFS paths and protocol", () => {
+  it("waits for writer shutdown before resolving a removable entry", async () => {
+    let finish!: () => void;
+    registerRomWeaverShutdown(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const getDirectory = vi.spyOn(root, "getDirectoryHandle");
+    const removing = vfs.remove("/work/late/file.bin");
+    await Promise.resolve();
+    expect(getDirectory).not.toHaveBeenCalled();
+    await ensureFile("/work/late/file.bin");
+    const parent = root.directories.get("late");
+    if (!parent) throw new Error("late writer did not create its directory");
+    expect(parent.files.has("file.bin")).toBe(true);
+    finish();
+    await removing;
+    expect(parent.files.has("file.bin")).toBe(false);
+  });
   it("normalizes paths, writes and truncates through the OPFS worker, then reads bytes", async () => {
     expect(vfs.normalizePath("/work/relative.bin")).toBe("/work/relative.bin");
     await vfs.truncate("/work/nested/data.bin", 3);

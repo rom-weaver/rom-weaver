@@ -1,3 +1,10 @@
+import {
+  OPFS_SHUTDOWN_TIMEOUT_MS,
+  acknowledgeOpfsShutdown,
+  registerRomWeaverShutdown,
+  requestOpfsShutdown,
+  waitForOpfsShutdownState,
+} from "../browser-opfs-shutdown.ts";
 import type { RomWeaverBrowserOpfsOptions, RomWeaverDefaultThreads } from "../rom-weaver-types.d.ts";
 import { normalizeDefaultThreads, resolveBrowserDefaultThreads } from "./browser-thread-budget.ts";
 import { createBrowserWorkerTransport, RomWeaverWorkerClientCore } from "./worker-client-core.ts";
@@ -34,12 +41,33 @@ export function createBrowserWorkerClient(options: BrowserWorkerClientOptions = 
 const BROWSER_WORKER_TRANSPORT = createBrowserWorkerTransport();
 
 export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
+  // Without cross-origin isolation SharedArrayBuffer is absent; keep construction from throwing so the runner can
+  // report the COOP/COEP requirement itself. The buffer is only handed to a worker that threaded wasm would start.
+  private readonly shutdownControl = new Int32Array(
+    typeof SharedArrayBuffer === "function" ? new SharedArrayBuffer(8) : new ArrayBuffer(8),
+  );
+  private heardFromWorker = false;
+  private failedBeforeAnyReply = false;
+  private shutdownPromise: Promise<void> | null = null;
+  private stopped = false;
+  private initialized = false;
   private _defaultThreads: number | null;
 
   constructor(worker: Worker, options: Pick<BrowserWorkerClientOptions, "defaultThreads"> = {}) {
     options = options ?? {};
     super(worker, BROWSER_WORKER_TRANSPORT);
     this._defaultThreads = normalizeDefaultThreads(options.defaultThreads);
+  }
+
+  override _onMessage(rawMessage: Event) {
+    this.heardFromWorker = true;
+    super._onMessage(rawMessage);
+  }
+
+  override _onError(rawError: Event) {
+    // An error before the worker ever replied means its script never ran (failed load, CSP), so it owns nothing.
+    if (!this.heardFromWorker) this.failedBeforeAnyReply = true;
+    super._onError(rawError);
   }
 
   async init(options: RomWeaverBrowserOpfsOptions = {}): Promise<BrowserWorkerReadyResult> {
@@ -57,15 +85,37 @@ export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
   }
 
   _sendInit(options: RomWeaverBrowserOpfsOptions): Promise<BrowserWorkerReadyResult> {
-    return this._send<BrowserWorkerReadyResult>({
+    const requestId = this._nextRequestId;
+    const pending = this._send<BrowserWorkerReadyResult>({
       mode: "browser-opfs",
-      options,
+      options: { ...options, __shutdownControl: this.shutdownControl.buffer as SharedArrayBuffer },
       type: "init",
     });
+    // Worker replies MUST arrive asynchronously; a missing request here means postMessage failed synchronously.
+    this.initialized ||= this._pending.has(requestId);
+    return pending;
   }
 
-  terminate() {
+  whenClosed(): Promise<void> {
+    this.shutdownPromise ??= waitForOpfsShutdownState(this.shutdownControl, 2, OPFS_SHUTDOWN_TIMEOUT_MS);
+    return this.shutdownPromise;
+  }
+
+  terminate(): void {
+    if (this.stopped) return;
+    this.stopped = true;
+    requestOpfsShutdown(this.shutdownControl);
+    if (!this.initialized || this.failedBeforeAnyReply) acknowledgeOpfsShutdown(this.shutdownControl);
+    if (Atomics.load(this.shutdownControl, 0) >= 2) {
+      this._terminateWorker();
+    } else {
+      // Resource closure MUST precede native worker termination; failed closure still stops computation.
+      void this.whenClosed().then(
+        () => this._terminateWorker(),
+        () => this._terminateWorker(),
+      );
+    }
+    registerRomWeaverShutdown(this.whenClosed());
     this._shutdown("worker terminated");
-    this._terminateWorker();
   }
 }
