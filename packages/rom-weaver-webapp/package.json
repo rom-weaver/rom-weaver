@@ -84,6 +84,7 @@
     "preview": "node scripts/ensure-preview-build.mjs && node scripts/dev-server.mjs preview",
     "samples:generate": "node scripts/first-sample-assets.mjs",
     "test": "run-s test:scripts test:browser",
+    "test:apply-matrix": "node tests/apply-matrix/run.mjs",
     "test:browser": "npm run accents:generate && npm run brand:check && node scripts/run-browser-tests.mjs",
     "test:browser:chromium": "npm run brand:check && cross-env ROM_WEAVER_BROWSER=chromium node scripts/run-browser-tests.mjs",
     "test:browser:coverage": "npm run brand:check && cross-env ROM_WEAVER_COVERAGE=1 node scripts/run-browser-tests.mjs",

@@ -1,0 +1,2327 @@
+{
+  "note": "Regenerate with: node scripts/apply-matrix/cli/run.mjs --gen-fixtures --update-manifest. location=repo files live under tests/fixtures/apply-matrix/, location=cache files under ~/.cache/agents/apply-matrix-fixtures/ (override with APPLY_MATRIX_CACHE). deterministic=false entries come from external tools or the rom-weaver binary, so their sha256 is informational and is not enforced.",
+  "fixtures": [
+    {
+      "name": "chain/1-base-to-same.ips",
+      "location": "repo",
+      "purpose": "chain step 1 (IPS, base -> same)",
+      "how": "encodeIps",
+      "deterministic": true,
+      "bytes": 925,
+      "sha256": "ae9362fab650656f204346b61db1010980ce103a4f9cbeec30c6238b54c58384"
+    },
+    {
+      "name": "chain/2-same-to-grow.bps",
+      "location": "repo",
+      "purpose": "chain step 2 (BPS, same -> grow)",
+      "how": "encodeBps",
+      "deterministic": true,
+      "bytes": 328,
+      "sha256": "8b9048462c960eba9eb587b278a9f4be589d19b74eb96d02a9f544e56d0a11dd"
+    },
+    {
+      "name": "chain/2b-base-to-grow.bps",
+      "location": "repo",
+      "purpose": "BPS authored against the ORIGINAL ROM (base -> grow)",
+      "how": "encodeBps",
+      "deterministic": true,
+      "bytes": 1223,
+      "sha256": "69bd8a11b413c123f00affaa7ecca354c417b58cb79663d111e49ad72fb64dcf"
+    },
+    {
+      "name": "chain/3-grow-to-shrink.ups",
+      "location": "repo",
+      "purpose": "chain step 3 (UPS, grow -> shrink)",
+      "how": "encodeUps",
+      "deterministic": true,
+      "bytes": 22,
+      "sha256": "4493a7d819846f4b20f68909f89947404eb60de54b26bd739cc50f2ca8c47962"
+    },
+    {
+      "name": "cheats/nes32.nes",
+      "location": "repo",
+      "purpose": "iNES ROM, 32 KiB PRG of zeros (cheat offset arithmetic)",
+      "how": "port of cheats.rs nes_rom",
+      "deterministic": true,
+      "bytes": 32784,
+      "sha256": "cee6dfae83d8769f969127aa9ca6b0915cb6392ff233024024700ced6e8d55fe"
+    },
+    {
+      "name": "cheats/snes4m.sfc",
+      "location": "cache",
+      "purpose": "4 MiB zero headerless LoROM image for SNES Game Genie offsets",
+      "how": "zeros",
+      "deterministic": true,
+      "bytes": 4194304,
+      "sha256": "bb9f8df61474d25e71fa00722318cd387396ca1736605e1248821cc0de3d3af8"
+    },
+    {
+      "name": "ctr/bsdtar.7z",
+      "location": "cache",
+      "purpose": "7z from bsdtar (independent of rom-weaver)",
+      "how": "bsdtar --format 7zip",
+      "deterministic": false,
+      "bytes": 41667,
+      "sha256": "74f53026fe0dac276f297ff4e2cbbc045fab5f0b2da2fa6cd2c0562727ebc098"
+    },
+    {
+      "name": "ctr/bsdtar.zip",
+      "location": "cache",
+      "purpose": "zip from bsdtar",
+      "how": "bsdtar --format zip",
+      "deterministic": false,
+      "bytes": 41161,
+      "sha256": "f0090007aeccb9e0ccded8520262aa7d575d88aff3108eba99b4a98ddfbba501"
+    },
+    {
+      "name": "ctr/empty.zip",
+      "location": "cache",
+      "purpose": "zip with zero entries",
+      "how": "zip then zip -d",
+      "deterministic": false,
+      "bytes": 22,
+      "sha256": "8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85"
+    },
+    {
+      "name": "ctr/encrypted.zip",
+      "location": "cache",
+      "purpose": "password-protected zip (ZipCrypto)",
+      "how": "zip -P secret",
+      "deterministic": false,
+      "bytes": 41164,
+      "sha256": "6d9029f8ed574ea9f113fb21d5ef43973277ce9de973b01a15da218409138502"
+    },
+    {
+      "name": "ctr/game.bin.bz2",
+      "location": "cache",
+      "purpose": "bzip2 single payload",
+      "how": "bzip2 -c",
+      "deterministic": false,
+      "bytes": 41495,
+      "sha256": "084bb85c85d4c0bb134d6677f97b4ac806bb996c107bd21adffbd99eb241d364"
+    },
+    {
+      "name": "ctr/game.bin.gz",
+      "location": "cache",
+      "purpose": "gzip single payload",
+      "how": "gzip -n -c",
+      "deterministic": false,
+      "bytes": 40988,
+      "sha256": "027ca12d8f1a377126e6688e775a6206c5dbf41d793e26d83dccfdc583058ab9"
+    },
+    {
+      "name": "ctr/game.bin.lzma",
+      "location": "cache",
+      "purpose": "legacy lzma-alone payload (not a registered format)",
+      "how": "lzma -c",
+      "deterministic": false,
+      "bytes": 41540,
+      "sha256": "2be58d0feb771d3ddd6f60efe66e55222eeffa1bcb05c40d73100f3deba2021a"
+    },
+    {
+      "name": "ctr/game.bin.xz",
+      "location": "cache",
+      "purpose": "xz single payload",
+      "how": "xz -c",
+      "deterministic": false,
+      "bytes": 41028,
+      "sha256": "0742948393ef024f7925d559122f3f95d84b44b8f0a17e9776653c6ad872dceb"
+    },
+    {
+      "name": "ctr/game.bin.zst",
+      "location": "cache",
+      "purpose": "zstd single payload",
+      "how": "zstd -c",
+      "deterministic": false,
+      "bytes": 40974,
+      "sha256": "d82e6c70427ffb9786d9d85f6d078a74bbd15ede72dbaef9b1c71d695575f928"
+    },
+    {
+      "name": "ctr/garbage.7z",
+      "location": "cache",
+      "purpose": "random bytes named .7z",
+      "how": "xorshift",
+      "deterministic": false,
+      "bytes": 4096,
+      "sha256": "e97d0276dbd6fedb11613876b5c99a65a0095005330655b278d0302bc01f4832"
+    },
+    {
+      "name": "ctr/garbage.zip",
+      "location": "cache",
+      "purpose": "random bytes named .zip",
+      "how": "xorshift",
+      "deterministic": false,
+      "bytes": 4096,
+      "sha256": "f2fb53d6eac2de90a23912750d4c68dfd571f54e86a99f2bad91e8c1f40f9399"
+    },
+    {
+      "name": "ctr/nested-inner.zip",
+      "location": "cache",
+      "purpose": "inner zip holding game.bin",
+      "how": "zip",
+      "deterministic": false,
+      "bytes": 41136,
+      "sha256": "5ec0b5b79c79be8d2e3fb6a993ad678286aca074c6cbaf077fd9229384812856"
+    },
+    {
+      "name": "ctr/nested-outer.zip",
+      "location": "cache",
+      "purpose": "zip containing a zip containing game.bin",
+      "how": "zip of nested-inner.zip",
+      "deterministic": false,
+      "bytes": 41304,
+      "sha256": "62c563de6aa9e979cdf1b87d481044459d8c20a4cee8175f50d8c2b2f91e841f"
+    },
+    {
+      "name": "ctr/nested-tgz-7z.tgz",
+      "location": "cache",
+      "purpose": "tar.gz containing a 7z containing game.bin",
+      "how": "tar czf of bsdtar.7z",
+      "deterministic": false,
+      "bytes": 41889,
+      "sha256": "55d7d4e01675ae8ed65b822bc1bb8682ab57a2a47e50739237bf355ec93b14d5"
+    },
+    {
+      "name": "ctr/patch-encrypted.zip",
+      "location": "cache",
+      "purpose": "password-protected zip holding a patch",
+      "how": "zip -P",
+      "deterministic": false,
+      "bytes": 553,
+      "sha256": "8b9c8563e1a1026ab4a0c43922f01fae1451f2a024c0d24da04994473764dbbb"
+    },
+    {
+      "name": "ctr/patch.bps.7z",
+      "location": "cache",
+      "purpose": "7z holding same.bps",
+      "how": "bsdtar 7zip",
+      "deterministic": false,
+      "bytes": 502,
+      "sha256": "632074676dad099cb5bf4f74af8f3f1f67911d8c6f02606ad1e6011b289b968a"
+    },
+    {
+      "name": "ctr/patch.bps.bz2",
+      "location": "cache",
+      "purpose": "bzip2 of same.bps",
+      "how": "bzip2",
+      "deterministic": false,
+      "bytes": 501,
+      "sha256": "00607e6256f1d22e638c99b29feaec9c3660a1c0fefc7db7aee3269898ee1618"
+    },
+    {
+      "name": "ctr/patch.bps.gz",
+      "location": "cache",
+      "purpose": "gzip of same.bps",
+      "how": "gzip -n",
+      "deterministic": false,
+      "bytes": 377,
+      "sha256": "b54af04093d266b61d1814938d27b8734810aa468874f8d75915579036a28620"
+    },
+    {
+      "name": "ctr/patch.bps.tar.gz",
+      "location": "cache",
+      "purpose": "tar.gz holding same.bps",
+      "how": "tar czf",
+      "deterministic": false,
+      "bytes": 511,
+      "sha256": "5f297442989e2968ad47e44a8f96b7c80c922ae2b13fb14377cfbaeb1e6a6c8a"
+    },
+    {
+      "name": "ctr/patch.bps.xz",
+      "location": "cache",
+      "purpose": "xz of same.bps",
+      "how": "xz",
+      "deterministic": false,
+      "bytes": 432,
+      "sha256": "b9449d8c8a711a2c5b9ed59e28a1924c0387b91a768d23300f8f5a1386fb7062"
+    },
+    {
+      "name": "ctr/patch.bps.zip",
+      "location": "cache",
+      "purpose": "zip holding same.bps",
+      "how": "zip",
+      "deterministic": false,
+      "bytes": 525,
+      "sha256": "7e78d9ab74822acc3df6f53c495c77f3203dfe501be79e3095105612dcec933e"
+    },
+    {
+      "name": "ctr/patch.bps.zst",
+      "location": "cache",
+      "purpose": "zstd of same.bps",
+      "how": "zstd",
+      "deterministic": false,
+      "bytes": 370,
+      "sha256": "73432b1109171cc7c1f5f56a0cfa24f8e7356b348303935cc32807b8ba088689"
+    },
+    {
+      "name": "ctr/patches-multi.zip",
+      "location": "cache",
+      "purpose": "zip with two patches (same.bps, other.ips) and a readme",
+      "how": "zip",
+      "deterministic": false,
+      "bytes": 1499,
+      "sha256": "ab4ef725e19474e0dc3e39c9feb9ad9ff53ad4d25b28a87fd6a6db5b5446ca07"
+    },
+    {
+      "name": "ctr/plain.tar",
+      "location": "cache",
+      "purpose": "tar",
+      "how": "tar cf",
+      "deterministic": false,
+      "bytes": 51200,
+      "sha256": "aa5ce484c6b9a8802cef28dda0f4e55496c69a80b7a800c8f668405049bb5b6a"
+    },
+    {
+      "name": "ctr/plain.tar.bz2",
+      "location": "cache",
+      "purpose": "tar.bz2",
+      "how": "tar cjf",
+      "deterministic": false,
+      "bytes": 41615,
+      "sha256": "926113782a6260eb2ff6ca6485748a26f68cb40db9529f5a7c7aced14ad7dba7"
+    },
+    {
+      "name": "ctr/plain.tar.gz",
+      "location": "cache",
+      "purpose": "tar.gz",
+      "how": "tar czf",
+      "deterministic": false,
+      "bytes": 41214,
+      "sha256": "1505a0db4656e936d6955c00eb69942c22003d0ac9a07b81de505cc98ce46a4c"
+    },
+    {
+      "name": "ctr/plain.tar.xz",
+      "location": "cache",
+      "purpose": "tar.xz",
+      "how": "tar cJf",
+      "deterministic": false,
+      "bytes": 41708,
+      "sha256": "edc3d3aa2a92a4d815ed2268c25bcc30e04a398808d22bf493bc053e9baa3d63"
+    },
+    {
+      "name": "ctr/plain.tbz2",
+      "location": "cache",
+      "purpose": "tbz2",
+      "how": "tar cjf",
+      "deterministic": false,
+      "bytes": 41615,
+      "sha256": "926113782a6260eb2ff6ca6485748a26f68cb40db9529f5a7c7aced14ad7dba7"
+    },
+    {
+      "name": "ctr/plain.tgz",
+      "location": "cache",
+      "purpose": "tgz",
+      "how": "tar czf",
+      "deterministic": false,
+      "bytes": 41214,
+      "sha256": "1505a0db4656e936d6955c00eb69942c22003d0ac9a07b81de505cc98ce46a4c"
+    },
+    {
+      "name": "ctr/plain.txz",
+      "location": "cache",
+      "purpose": "txz",
+      "how": "tar cJf",
+      "deterministic": false,
+      "bytes": 41708,
+      "sha256": "edc3d3aa2a92a4d815ed2268c25bcc30e04a398808d22bf493bc053e9baa3d63"
+    },
+    {
+      "name": "ctr/rom-plus-patch.zip",
+      "location": "cache",
+      "purpose": "RetroArch layout: game.bin + game.ips in one zip",
+      "how": "zip",
+      "deterministic": false,
+      "bytes": 41638,
+      "sha256": "d9be9ff096dcd335a221db4af147c4a7ce479bc8ffce9346b0a099ae90a1a7e1"
+    },
+    {
+      "name": "ctr/rom-plus-readme.zip",
+      "location": "cache",
+      "purpose": "zip with a ROM plus readme/sidecars",
+      "how": "zip",
+      "deterministic": false,
+      "bytes": 41440,
+      "sha256": "e83234764cea4cc55d8fc99ea759f5a8cfa5a4d08e2a0b2cebebc823d48a2dff"
+    },
+    {
+      "name": "ctr/rw-store.zip",
+      "location": "cache",
+      "purpose": "zip (store codec) from rom-weaver",
+      "how": "rom-weaver compress --codec store",
+      "deterministic": false,
+      "bytes": 41090,
+      "sha256": "5f0022855a02811384a0bd176fc8953d00be0ad9b45c812cb3eb07eec913c13d"
+    },
+    {
+      "name": "ctr/rw-zstd.zip",
+      "location": "cache",
+      "purpose": "zip (zstd codec) from rom-weaver",
+      "how": "rom-weaver compress --codec zstd",
+      "deterministic": false,
+      "bytes": 41100,
+      "sha256": "e30bb291c817e756d2a7adbde2beaa89c017bb0824415b3e5e8681e80ef0dd4b"
+    },
+    {
+      "name": "ctr/rw.7z",
+      "location": "cache",
+      "purpose": "7z from rom-weaver compress",
+      "how": "rom-weaver compress",
+      "deterministic": false,
+      "bytes": 41062,
+      "sha256": "f144b1188ef468535ab54908fe84ab334b5abce2279d0aa2e895b34d241420d4"
+    },
+    {
+      "name": "ctr/rw.zip",
+      "location": "cache",
+      "purpose": "zip from rom-weaver compress",
+      "how": "rom-weaver compress",
+      "deterministic": false,
+      "bytes": 41105,
+      "sha256": "d33c151dd05bd395e71d9da0b3e4c7db3cf8708368d7fa0cfb3b0a4a4a160512"
+    },
+    {
+      "name": "ctr/subdir.zip",
+      "location": "cache",
+      "purpose": "ROM inside nested directories with spaces/unicode",
+      "how": "zip",
+      "deterministic": false,
+      "bytes": 41492,
+      "sha256": "77cfae7fb3e6f55fc86e141c2f45a6875424dcc331443fe3ea2be9879aae0867"
+    },
+    {
+      "name": "ctr/truncated.7z",
+      "location": "cache",
+      "purpose": "7z cut to half its length",
+      "how": "head -c of rw.7z",
+      "deterministic": false,
+      "bytes": 20531,
+      "sha256": "133b3de250dea752a79ca9ca3d337634b4eded6fe623d9eb12ef6d2ad250ad44"
+    },
+    {
+      "name": "ctr/truncated.tar.gz",
+      "location": "cache",
+      "purpose": "tar.gz cut to half its length",
+      "how": "head -c of plain.tar.gz",
+      "deterministic": false,
+      "bytes": 20607,
+      "sha256": "0a215a89b6b588c07f9b0dd1c11f07a1b304c41889324e3325300e747f9a1a75"
+    },
+    {
+      "name": "ctr/truncated.zip",
+      "location": "cache",
+      "purpose": "zip cut to half its length",
+      "how": "head -c of zip-deflate.zip",
+      "deterministic": false,
+      "bytes": 20000,
+      "sha256": "221e565e9d2537034f9313c75ed711c1ce5cd328320157e68623e7517916ba60"
+    },
+    {
+      "name": "ctr/two-roms.zip",
+      "location": "cache",
+      "purpose": "zip with game.bin and other.bin",
+      "how": "zip",
+      "deterministic": false,
+      "bytes": 82252,
+      "sha256": "2041194a9c690f5a867956fa0793a20de7dbf42a29ecb073cca5a2a5d323d42a"
+    },
+    {
+      "name": "ctr/zip-deflate.zip",
+      "location": "cache",
+      "purpose": "zip(deflate) from Info-ZIP",
+      "how": "zip -9",
+      "deterministic": false,
+      "bytes": 41136,
+      "sha256": "361c36efa4c21999169f63b50a3c95caa0198d73cda19bc21cc46ed4d8cfebab"
+    },
+    {
+      "name": "ctr/zip-store.zip",
+      "location": "cache",
+      "purpose": "zip(stored) from Info-ZIP",
+      "how": "zip -0",
+      "deterministic": false,
+      "bytes": 41126,
+      "sha256": "fed0b1b22500839695e637ecbc411ab3cab034f0e684324633f6002dc1043e53"
+    },
+    {
+      "name": "disc/ciso.ciso",
+      "location": "cache",
+      "purpose": "ciso container from the webapp synthetic builders",
+      "how": "packages/rom-weaver-webapp/tests/fixtures/synthetic-patch-containers.mjs",
+      "deterministic": true,
+      "bytes": 2130944,
+      "sha256": "0659621f5055a7497ddceb76e0058042a6dacfe74139f99da253dc78f885305c"
+    },
+    {
+      "name": "disc/ciso.ips",
+      "location": "cache",
+      "purpose": "ciso IPS",
+      "how": "encodeIps(payload, target)",
+      "deterministic": true,
+      "bytes": 15,
+      "sha256": "a5b2f1d1d427a14a08f066c2c071efbc586333ca4972199bde97af72144ba231"
+    },
+    {
+      "name": "disc/ciso.payload.iso",
+      "location": "cache",
+      "purpose": "ciso payload",
+      "how": "same builder",
+      "deterministic": true,
+      "bytes": 2097152,
+      "sha256": "759a4453a27dfbe714255f4de3ea23b3a914a0853405ecd6a5c04d8225a222b8"
+    },
+    {
+      "name": "disc/ciso.target.iso",
+      "location": "cache",
+      "purpose": "ciso patched payload",
+      "how": "payload with two bytes edited",
+      "deterministic": true,
+      "bytes": 2097152,
+      "sha256": "bb8ca53a89368fd501d4c85b56bfd079ef3808ba88716fa2aa962bccafa90740"
+    },
+    {
+      "name": "disc/cso.cso",
+      "location": "cache",
+      "purpose": "cso container from the webapp synthetic builders",
+      "how": "packages/rom-weaver-webapp/tests/fixtures/synthetic-patch-containers.mjs",
+      "deterministic": true,
+      "bytes": 32860,
+      "sha256": "6e1e76d4690bb933153ec9ef39d0ce2993cd613c77f7dc6fb067e6fef197335f"
+    },
+    {
+      "name": "disc/cso.ips",
+      "location": "cache",
+      "purpose": "cso IPS",
+      "how": "encodeIps(payload, target)",
+      "deterministic": true,
+      "bytes": 15,
+      "sha256": "a5b2f1d1d427a14a08f066c2c071efbc586333ca4972199bde97af72144ba231"
+    },
+    {
+      "name": "disc/cso.payload.iso",
+      "location": "cache",
+      "purpose": "cso payload",
+      "how": "same builder",
+      "deterministic": true,
+      "bytes": 32768,
+      "sha256": "605a030879248b934b6c40218e1356414cf7520d43f3f33e74f0bf982254e138"
+    },
+    {
+      "name": "disc/cso.target.iso",
+      "location": "cache",
+      "purpose": "cso patched payload",
+      "how": "payload with two bytes edited",
+      "deterministic": true,
+      "bytes": 32768,
+      "sha256": "b8d57ddee610e82d568ea98859481246a1411d4edb29fe1f18c73b4300c89a62"
+    },
+    {
+      "name": "disc/made.chd",
+      "location": "cache",
+      "purpose": "chd made by rom-weaver compress from the wbfs payload",
+      "how": "rom-weaver compress --output made.chd",
+      "deterministic": false,
+      "bytes": 389,
+      "sha256": "bf1ea94cf3ac62d809bd174038491222d03cb2b49f790e03accd911b466c6190"
+    },
+    {
+      "name": "disc/made.rvz",
+      "location": "cache",
+      "purpose": "rvz made by rom-weaver compress from the wbfs payload",
+      "how": "rom-weaver compress --output made.rvz",
+      "deterministic": false,
+      "bytes": 632,
+      "sha256": "cffa54e55fb67d30c765b8dff1d226beafc69b843dab04a32bf4dbfe78e5abac"
+    },
+    {
+      "name": "disc/made.z3ds",
+      "location": "cache",
+      "purpose": "z3ds made by rom-weaver compress from the wbfs payload",
+      "how": "rom-weaver compress --output made.z3ds",
+      "deterministic": false,
+      "bytes": 262,
+      "sha256": "5a80ddb25e7ece7c8424f9a8f91d2497281afd6804871e02bffa53843209e8e1"
+    },
+    {
+      "name": "disc/nfs/hif_000000.nfs",
+      "location": "cache",
+      "purpose": "synthetic encrypted NFS",
+      "how": "synthetic-nfs.mjs",
+      "deterministic": true,
+      "bytes": 131584,
+      "sha256": "b15f92e741b3f8b202c8c66212bee1f46b49c08ca4d96a68662ea1e2686dab59"
+    },
+    {
+      "name": "disc/nfs/htk.bin",
+      "location": "cache",
+      "purpose": "NFS key",
+      "how": "synthetic-nfs.mjs",
+      "deterministic": true,
+      "bytes": 16,
+      "sha256": "ab93b1d6ffa6bd2a9081fcf6439b6bbe41f42fc3c480fca4b63f21e402849d9d"
+    },
+    {
+      "name": "disc/pbp.ips",
+      "location": "cache",
+      "purpose": "pbp IPS",
+      "how": "encodeIps(payload, target)",
+      "deterministic": true,
+      "bytes": 15,
+      "sha256": "97606dd9535723ddf15103616baf762c4a2391ea8f136c13af0252afd1cb8e03"
+    },
+    {
+      "name": "disc/pbp.payload.bin",
+      "location": "cache",
+      "purpose": "pbp payload",
+      "how": "same builder",
+      "deterministic": true,
+      "bytes": 75264,
+      "sha256": "fc35c0577b12810557554d180c7314994a2c4d016068f6e96535874accdd7b9a"
+    },
+    {
+      "name": "disc/pbp.pbp",
+      "location": "cache",
+      "purpose": "pbp container from the webapp synthetic builders",
+      "how": "packages/rom-weaver-webapp/tests/fixtures/synthetic-patch-containers.mjs",
+      "deterministic": true,
+      "bytes": 1124096,
+      "sha256": "ac0637e34361372c9ef08d19e731504cc389e86587c39a6a3b0c8c78ac9a5432"
+    },
+    {
+      "name": "disc/pbp.target.bin",
+      "location": "cache",
+      "purpose": "pbp patched payload",
+      "how": "payload with two bytes edited",
+      "deterministic": true,
+      "bytes": 75264,
+      "sha256": "126ba01dfa5bb54b8ea21efaf83f5c4b41271b9055ef6ddd95ab44ac1d1a7b04"
+    },
+    {
+      "name": "disc/split-missing/disc.wbfs",
+      "location": "cache",
+      "purpose": "first part only (missing .wbf1)",
+      "how": "slice",
+      "deterministic": true,
+      "bytes": 2097152,
+      "sha256": "1f642ef7debe3bd1fe3529e56f6ec48dce59d261cb39bc3e0c9f9d523a1025c6"
+    },
+    {
+      "name": "disc/split/disc.wbf1",
+      "location": "cache",
+      "purpose": "second half of a split WBFS",
+      "how": "slice",
+      "deterministic": true,
+      "bytes": 2097152,
+      "sha256": "759a4453a27dfbe714255f4de3ea23b3a914a0853405ecd6a5c04d8225a222b8"
+    },
+    {
+      "name": "disc/split/disc.wbfs",
+      "location": "cache",
+      "purpose": "first half of a split WBFS",
+      "how": "slice",
+      "deterministic": true,
+      "bytes": 2097152,
+      "sha256": "1f642ef7debe3bd1fe3529e56f6ec48dce59d261cb39bc3e0c9f9d523a1025c6"
+    },
+    {
+      "name": "disc/tgc.ips",
+      "location": "cache",
+      "purpose": "tgc IPS",
+      "how": "encodeIps(payload, target)",
+      "deterministic": true,
+      "bytes": 15,
+      "sha256": "a5b2f1d1d427a14a08f066c2c071efbc586333ca4972199bde97af72144ba231"
+    },
+    {
+      "name": "disc/tgc.payload.iso",
+      "location": "cache",
+      "purpose": "tgc payload",
+      "how": "same builder",
+      "deterministic": true,
+      "bytes": 1048576,
+      "sha256": "8f4fb0fdf0b753b4c801c7c28c705331cc868cd601af39af636e845014a61784"
+    },
+    {
+      "name": "disc/tgc.target.iso",
+      "location": "cache",
+      "purpose": "tgc patched payload",
+      "how": "payload with two bytes edited",
+      "deterministic": true,
+      "bytes": 1048576,
+      "sha256": "88433e35d384313ffbaf7cf19aa1e5814b6f7dbd6fb4ef9d625b9fa6b692d6f3"
+    },
+    {
+      "name": "disc/tgc.tgc",
+      "location": "cache",
+      "purpose": "tgc container from the webapp synthetic builders",
+      "how": "packages/rom-weaver-webapp/tests/fixtures/synthetic-patch-containers.mjs",
+      "deterministic": true,
+      "bytes": 1114112,
+      "sha256": "69466e8bba1ce0b60ebc99442c5172254f272c34eb481290cf65c4a219c35614"
+    },
+    {
+      "name": "disc/wbfs.ips",
+      "location": "cache",
+      "purpose": "wbfs IPS",
+      "how": "encodeIps(payload, target)",
+      "deterministic": true,
+      "bytes": 15,
+      "sha256": "a5b2f1d1d427a14a08f066c2c071efbc586333ca4972199bde97af72144ba231"
+    },
+    {
+      "name": "disc/wbfs.payload.iso",
+      "location": "cache",
+      "purpose": "wbfs payload",
+      "how": "same builder",
+      "deterministic": true,
+      "bytes": 2097152,
+      "sha256": "759a4453a27dfbe714255f4de3ea23b3a914a0853405ecd6a5c04d8225a222b8"
+    },
+    {
+      "name": "disc/wbfs.target.iso",
+      "location": "cache",
+      "purpose": "wbfs patched payload",
+      "how": "payload with two bytes edited",
+      "deterministic": true,
+      "bytes": 2097152,
+      "sha256": "bb8ca53a89368fd501d4c85b56bfd079ef3808ba88716fa2aa962bccafa90740"
+    },
+    {
+      "name": "disc/wbfs.wbfs",
+      "location": "cache",
+      "purpose": "wbfs container from the webapp synthetic builders",
+      "how": "packages/rom-weaver-webapp/tests/fixtures/synthetic-patch-containers.mjs",
+      "deterministic": true,
+      "bytes": 4194304,
+      "sha256": "66228e459f6be60bc2590d167e8bf41b263a7192dff3f6765b5e0593e0dd0350"
+    },
+    {
+      "name": "disc/xiso.xiso",
+      "location": "cache",
+      "purpose": "synthetic XDVDFS image",
+      "how": "synthetic-patch-containers.mjs xisoFixture",
+      "deterministic": true,
+      "bytes": 131072,
+      "sha256": "90c6bb6d6f1b6037ae7d49fa9f2d29d33743dcc0c4da9aceaab888c29f5c35f2"
+    },
+    {
+      "name": "dldi/driver.dldi",
+      "location": "repo",
+      "purpose": "256-byte DLDI driver (patch)",
+      "how": "port of build_dldi_driver",
+      "deterministic": true,
+      "bytes": 256,
+      "sha256": "750804b852cfdde707f88119d354d214cb18c5118e663b8b8225a45842bb2557"
+    },
+    {
+      "name": "dldi/nonslot.nds",
+      "location": "repo",
+      "purpose": "File with no DLDI section",
+      "how": "0xCD fill",
+      "deterministic": true,
+      "bytes": 8192,
+      "sha256": "5228ac427cc4e72ef22a135813ee6f6e58d3b93399546861dd294e06adf2cc7f"
+    },
+    {
+      "name": "dldi/oversized.dldi",
+      "location": "repo",
+      "purpose": "8 KiB DLDI driver, larger than the 4 KiB slot",
+      "how": "port of build_dldi_driver",
+      "deterministic": true,
+      "bytes": 8192,
+      "sha256": "33c0a43530b25371c33e54b1286e968493f2fd965f77863439c391cc7221194f"
+    },
+    {
+      "name": "dldi/slot.nds",
+      "location": "repo",
+      "purpose": "NDS-like file with a 4 KiB DLDI slot at 0x300",
+      "how": "port of build_nds_with_dldi_slot",
+      "deterministic": true,
+      "bytes": 4992,
+      "sha256": "41729bb7fdb995e8162e288f3914223b996a437053d3662225805d6e1a93afd8"
+    },
+    {
+      "name": "fuzz/base.bin",
+      "location": "repo",
+      "purpose": "512-byte fuzz source",
+      "how": "xorshift",
+      "deterministic": true,
+      "bytes": 512,
+      "sha256": "7e43406ccadd6d0072d6a6f974834468e044e3cc5bec1ce00a8f776e77e144ee"
+    },
+    {
+      "name": "fuzz/p-ind.bps",
+      "location": "repo",
+      "purpose": "independent BPS for the fuzz pair",
+      "how": "encodeBps",
+      "deterministic": true,
+      "bytes": 72,
+      "sha256": "a3556d3b1263459bdf790d1df5c24d74b1009a42f8f9fa42691aa06173c19ed8"
+    },
+    {
+      "name": "fuzz/p-ind.vcdiff",
+      "location": "repo",
+      "purpose": "independent VCDIFF+adler for the fuzz pair",
+      "how": "encodeVcdiff",
+      "deterministic": true,
+      "bytes": 40,
+      "sha256": "42106873a0825596c0136c39a64eb531483a7b9cf7312b9a78ac725c4b38cc7e"
+    },
+    {
+      "name": "fuzz/p.aps",
+      "location": "cache",
+      "purpose": "aps patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 80,
+      "sha256": "928eaabc5b0a2fe7663fab640e06ec61d38109ec4f348a66555c148a033583bd"
+    },
+    {
+      "name": "fuzz/p.apsgba",
+      "location": "cache",
+      "purpose": "apsgba patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 65556,
+      "sha256": "6a647667ce51371739a49543a02d70bd3300f6a947a4dc45c67e859d5a4b98ba"
+    },
+    {
+      "name": "fuzz/p.bdf",
+      "location": "cache",
+      "purpose": "bdf patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 210,
+      "sha256": "4e52051277ea15943f209195e8d961c23364accf0c30b0669bc3b46aad57c72d"
+    },
+    {
+      "name": "fuzz/p.bps",
+      "location": "cache",
+      "purpose": "bps patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 36,
+      "sha256": "33f4548faf342a1faa6c8e6430bcd029f44da6e3436bcece49279ce26a02795d"
+    },
+    {
+      "name": "fuzz/p.dps",
+      "location": "cache",
+      "purpose": "dps patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 306,
+      "sha256": "18766db4184592f6c0b398ae5274070e945ca7f4c70da8a5a8e0184996045bb6"
+    },
+    {
+      "name": "fuzz/p.ebp",
+      "location": "cache",
+      "purpose": "ebp patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 120,
+      "sha256": "f2d65c1df27e3ecd91bb43ae374f060d72303ac7f69955bf2971109f22a74207"
+    },
+    {
+      "name": "fuzz/p.gdiff",
+      "location": "cache",
+      "purpose": "gdiff patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 521,
+      "sha256": "d3d63a68b84974d202c07ac7e8284fb23d37eb758ef06f11bcbfa5f52f3ded21"
+    },
+    {
+      "name": "fuzz/p.ips",
+      "location": "cache",
+      "purpose": "ips patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 28,
+      "sha256": "1080fc557bf2d8304dac6b2c725ef27cc5a2c186b57417d693f41c8ba7d016ab"
+    },
+    {
+      "name": "fuzz/p.ips32",
+      "location": "cache",
+      "purpose": "ips32 patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 32,
+      "sha256": "373f8bf02c48fda9b78e77b5332ec9c08ca2a7132b760c43627bb1af3d761f82"
+    },
+    {
+      "name": "fuzz/p.mod",
+      "location": "cache",
+      "purpose": "mod patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 74,
+      "sha256": "0fcd4a9bac405bbf622dd0affd0d564f56f3fa8f7da504c16ee4095b9618e2ed"
+    },
+    {
+      "name": "fuzz/p.pat",
+      "location": "cache",
+      "purpose": "pat patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 630,
+      "sha256": "29ed968d7f6c719e691f305eb7406ae06d05e0167e8ab723665844d18452c308"
+    },
+    {
+      "name": "fuzz/p.ppf",
+      "location": "cache",
+      "purpose": "ppf patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 129,
+      "sha256": "2fce81af7718f760e89b7df5cd24cb9de8408da39a7a3e3aa9058b0b60879ffe"
+    },
+    {
+      "name": "fuzz/p.rup",
+      "location": "cache",
+      "purpose": "rup patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 2148,
+      "sha256": "9254de07cc59900e26ce44abeee5a6293074cb34afd64140ca9ab6b8e7a1ca9d"
+    },
+    {
+      "name": "fuzz/p.solid",
+      "location": "cache",
+      "purpose": "solid patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 110,
+      "sha256": "b827fdd833cc12fdbf0a429febcf76344fbf8e21e49be262c51eb65c1f5a1744"
+    },
+    {
+      "name": "fuzz/p.ups",
+      "location": "cache",
+      "purpose": "ups patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 69,
+      "sha256": "a2e7dc409acc6e0eb55169825267fdd3b6cca7b98c9890c4a4c99c9c94964a7b"
+    },
+    {
+      "name": "fuzz/p.vcdiff",
+      "location": "cache",
+      "purpose": "vcdiff patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 34,
+      "sha256": "9c7b18c901ddf421a24d20bd5f33efa04836c84f12e5cfb2c2dfe1bf6659a944"
+    },
+    {
+      "name": "fuzz/p.xdelta",
+      "location": "cache",
+      "purpose": "xdelta patch for the 512-byte fuzz pair",
+      "how": "rom-weaver patch create",
+      "deterministic": false,
+      "bytes": 60,
+      "sha256": "75f5b84cdfecd75d9331d3b2768d84cb36c9a7fbded81db783160974bf2af528"
+    },
+    {
+      "name": "fuzz/target.bin",
+      "location": "repo",
+      "purpose": "512-byte fuzz target",
+      "how": "edited base",
+      "deterministic": true,
+      "bytes": 512,
+      "sha256": "d9cd22c1ec88eeebf75d46633fec8da9b73a68358d25b37f9348caa41600f137"
+    },
+    {
+      "name": "gb/edit.ips",
+      "location": "repo",
+      "purpose": "IPS editing two data bytes (leaves GB checksums stale)",
+      "how": "encodeIps",
+      "deterministic": true,
+      "bytes": 20,
+      "sha256": "79f185e031f1229e96b02e51dcaf64100b5a1a3bfc657b79666d0731e1e448d0"
+    },
+    {
+      "name": "gb/game.gb",
+      "location": "repo",
+      "purpose": "32 KiB Game Boy ROM with valid header + global checksums",
+      "how": "synthetic",
+      "deterministic": true,
+      "bytes": 32768,
+      "sha256": "ca49a3566a1e0a94e188833e87a372aa5a448b2439f9cd90a50c18ba7be2105c"
+    },
+    {
+      "name": "hdr/n64-patched.n64",
+      "location": "repo",
+      "purpose": "N64 target, little-endian",
+      "how": "swap words",
+      "deterministic": true,
+      "bytes": 65536,
+      "sha256": "4d7f01ed5487baaf1ce516de7c5de0e1cf1f006ed4523ffed5d812614f0f0d9a"
+    },
+    {
+      "name": "hdr/n64-patched.v64",
+      "location": "repo",
+      "purpose": "N64 target, byte-swapped",
+      "how": "swap pairs",
+      "deterministic": true,
+      "bytes": 65536,
+      "sha256": "50a259a9316481487c9f77b3ad379beef08e0ad2b1f5059d65a5d6c6e8d17fc1"
+    },
+    {
+      "name": "hdr/n64-patched.z64",
+      "location": "repo",
+      "purpose": "N64 target, big-endian",
+      "how": "synthetic",
+      "deterministic": true,
+      "bytes": 65536,
+      "sha256": "85e14cbc74df824bab5122003c6573a7a2425e8ed237ee68b6df3ad7b5d5bb98"
+    },
+    {
+      "name": "hdr/n64.bps",
+      "location": "repo",
+      "purpose": "BPS made against the big-endian ROM",
+      "how": "encodeBps",
+      "deterministic": true,
+      "bytes": 34,
+      "sha256": "b7fef9604e863138c41b336042c721fe605c408f79a8758c9a37ce1c2ec4be56"
+    },
+    {
+      "name": "hdr/n64.n64",
+      "location": "repo",
+      "purpose": "n64.z64 little-endian (.n64)",
+      "how": "swap words",
+      "deterministic": true,
+      "bytes": 65536,
+      "sha256": "bdb0d49f059fa62ea7a0fbb6c21f33487e98dd881f17d8c33cc586126d74266e"
+    },
+    {
+      "name": "hdr/n64.v64",
+      "location": "repo",
+      "purpose": "n64.z64 byte-swapped (.v64)",
+      "how": "swap pairs",
+      "deterministic": true,
+      "bytes": 65536,
+      "sha256": "25ecc912c9c33b2eb7bbf000dde5c46bd702834cac03813beffa185b0c9974ce"
+    },
+    {
+      "name": "hdr/n64.z64",
+      "location": "repo",
+      "purpose": "64 KiB N64 ROM, big-endian (.z64)",
+      "how": "synthetic",
+      "deterministic": true,
+      "bytes": 65536,
+      "sha256": "5d2d96e08b099d4bf890ef9cc8bb47093a469b60865b57646931d4f76a702c52"
+    },
+    {
+      "name": "hdr/nes-headerless.bps",
+      "location": "repo",
+      "purpose": "BPS against the iNES body without header",
+      "how": "encodeBps",
+      "deterministic": true,
+      "bytes": 34,
+      "sha256": "110196cc0a04557e4067517c36a148afad6eeec828a6c28d5ef759086d0ef4c4"
+    },
+    {
+      "name": "hdr/nes-patched.nes",
+      "location": "repo",
+      "purpose": "iNES target",
+      "how": "nes.nes edited",
+      "deterministic": true,
+      "bytes": 24592,
+      "sha256": "52039f9c390232316d01c1b1aedc72c1da36fc914925d0f63736a519d78a1492"
+    },
+    {
+      "name": "hdr/nes.bps",
+      "location": "repo",
+      "purpose": "BPS against the whole iNES file",
+      "how": "encodeBps",
+      "deterministic": true,
+      "bytes": 34,
+      "sha256": "6be47b30eb9966cd784e95f78411557b7d31776a0932f0409ce870b214506668"
+    },
+    {
+      "name": "hdr/nes.nes",
+      "location": "repo",
+      "purpose": "iNES ROM, 16 KiB PRG + 8 KiB CHR",
+      "how": "synthetic",
+      "deterministic": true,
+      "bytes": 24592,
+      "sha256": "f937d81ed60f80187a5c787bf79f49355f4870dce837dd178fa2efc4f1fa1790"
+    },
+    {
+      "name": "hdr/snes-hdr.bps",
+      "location": "repo",
+      "purpose": "BPS made against the headered ROM",
+      "how": "encodeBps",
+      "deterministic": true,
+      "bytes": 33,
+      "sha256": "af4b37e7165aedb7e2a07a9978b8c311cf14152db10339e9806a1913a5403fc4"
+    },
+    {
+      "name": "hdr/snes-patched.sfc",
+      "location": "repo",
+      "purpose": "headerless SNES target",
+      "how": "snes.sfc with 2 bytes edited",
+      "deterministic": true,
+      "bytes": 32768,
+      "sha256": "c719f22d599927b8aa467032d711c8d380ea6f081016470664c527aa1979be8a"
+    },
+    {
+      "name": "hdr/snes-patched.smc",
+      "location": "repo",
+      "purpose": "headered target (header kept)",
+      "how": "512 zero bytes + snes-patched.sfc",
+      "deterministic": true,
+      "bytes": 33280,
+      "sha256": "9b3faf602616093ccbd264dccb07c7371ad21bf720c5acf88e0bf51bd2663239"
+    },
+    {
+      "name": "hdr/snes.bps",
+      "location": "repo",
+      "purpose": "BPS made against the headerless ROM (carries crc32 proof)",
+      "how": "encodeBps",
+      "deterministic": true,
+      "bytes": 33,
+      "sha256": "431aa9e24daccd21887bb8f11ff430e2982bef391b63ad40d03fde6f2edbb678"
+    },
+    {
+      "name": "hdr/snes.ips",
+      "location": "repo",
+      "purpose": "IPS made against the headerless ROM (no proof)",
+      "how": "encodeIps",
+      "deterministic": true,
+      "bytes": 20,
+      "sha256": "8da3b73f707fefc22c24f81fd23e702ea10a3e793ea2943d9cd6fbd8c75b7b3f"
+    },
+    {
+      "name": "hdr/snes.sfc",
+      "location": "repo",
+      "purpose": "32 KiB headerless SNES-sized ROM",
+      "how": "xorshift",
+      "deterministic": true,
+      "bytes": 32768,
+      "sha256": "4a0894bf8239fcc247638de9ce19767fb2c5bb0334cf5516d50d6dfd3fa75bbd"
+    },
+    {
+      "name": "hdr/snes.smc",
+      "location": "repo",
+      "purpose": "snes.sfc behind a 512-byte zero copier header (len % 1024 == 512)",
+      "how": "512 zero bytes + snes.sfc",
+      "deterministic": true,
+      "bytes": 33280,
+      "sha256": "cf952cace2f04d581fabbb2a09a9c9e9936748ca7e7c17f1cde2bcd4baae828b"
+    },
+    {
+      "name": "ips-eof/base.bin",
+      "location": "cache",
+      "purpose": "5 MiB ROM for the IPS EOF-offset collision",
+      "how": "xorshift",
+      "deterministic": true,
+      "bytes": 5242880,
+      "sha256": "684222906710c54cf9da8590d7be9449ace58e1a0a910e9b8203e07b56c3c743"
+    },
+    {
+      "name": "ips-eof/independent.ips",
+      "location": "cache",
+      "purpose": "IPS from the independent encoder (records straddle the EOF offset)",
+      "how": "encodeIps",
+      "deterministic": true,
+      "bytes": 22,
+      "sha256": "d78084859fc5646766243587b30cd46a5bfd87649e58950cbbe50782ba96829b"
+    },
+    {
+      "name": "ips-eof/target.bin",
+      "location": "cache",
+      "purpose": "base with edits straddling offset 0x454F46",
+      "how": "edit",
+      "deterministic": true,
+      "bytes": 5242880,
+      "sha256": "f79c8db718cce95dc41d0e534b592ced2cea9a8f10c819a2b5e3abaffdf3b28d"
+    },
+    {
+      "name": "large/source.bin",
+      "location": "cache",
+      "purpose": "34 MiB repeating-block ROM (crosses the 32 MiB sparse-streaming apply threshold)",
+      "how": "lib/../cases/misc.mjs largeSource()",
+      "deterministic": true,
+      "bytes": 35651584,
+      "sha256": "7a9de4f663605539c1f9b98d79dba85fbccb149f6fc6b4afad28c7b483e7d951"
+    },
+    {
+      "name": "large/sparse.bps",
+      "location": "cache",
+      "purpose": "BPS for the large ROM",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 6895,
+      "sha256": "2513b1aea00975cda5f1129835c4f416aea62aa1527056913af1115bd7ca0b86"
+    },
+    {
+      "name": "large/sparse.gdiff",
+      "location": "cache",
+      "purpose": "GDIFF for the large ROM",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 11712,
+      "sha256": "5a30fd142d1f9576ba07979c3f6833af21e51d77cdde883b6830b904f3a08552"
+    },
+    {
+      "name": "large/sparse.ips32",
+      "location": "cache",
+      "purpose": "IPS32 for the large ROM",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 9282,
+      "sha256": "1baf6a5ca20a07efa00ee740460559b2c9108b03ba0b3c06dbbd105089ef8d7a"
+    },
+    {
+      "name": "large/sparse.ppf",
+      "location": "cache",
+      "purpose": "PPF3 for the large ROM",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 11235,
+      "sha256": "61db44a86ba28d53d6bb4d8ca91f8edb4ba50814f6e798fe1a770561a34eac0c"
+    },
+    {
+      "name": "large/sparse.ups",
+      "location": "cache",
+      "purpose": "UPS for the large ROM",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 6875,
+      "sha256": "ddc4fc96a7d6c6ad352d3fdd1fef6ca26b5a4dc9b83a33379045e53510038601"
+    },
+    {
+      "name": "large/sparse.vcdiff",
+      "location": "cache",
+      "purpose": "VCDIFF for the large ROM",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 5504,
+      "sha256": "5777c7e1a6defa26dd503aadff1ba562fd7b4028fb35cd13cde3b10a0d04324a"
+    },
+    {
+      "name": "large/target.bin",
+      "location": "cache",
+      "purpose": "large source with sparse edits at start/middle/end",
+      "how": "largeTarget()",
+      "deterministic": true,
+      "bytes": 35651584,
+      "sha256": "5ae20f1ff74a517ff7e1e399a2874464501034a6e022b60ddf2ebf99b4e8d737"
+    },
+    {
+      "name": "patches/bsp/bsppatch-nested.bsp",
+      "location": "repo",
+      "purpose": "BSP script vector bsppatch-nested",
+      "how": "hex from crates/rom-weaver-patches/tests/unit/bsp.rs",
+      "deterministic": true,
+      "bytes": 34,
+      "sha256": "acd332857a389c2e403e83b397261084498994a70574b175717dcc82772c529c"
+    },
+    {
+      "name": "patches/bsp/bsppatch-nested.in",
+      "location": "repo",
+      "purpose": "BSP vector input bsppatch-nested",
+      "how": "hex",
+      "deterministic": true,
+      "bytes": 4,
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+    },
+    {
+      "name": "patches/bsp/bsppatch-nested.out",
+      "location": "repo",
+      "purpose": "BSP vector expected output bsppatch-nested",
+      "how": "upstream bsppatch.js oracle (lib/bsp-reference.mjs)",
+      "deterministic": true,
+      "bytes": 4,
+      "sha256": "5001dbf7a643f9c3bc0b65699580e5193397ebd469a0cd77036ddb44140bb27e"
+    },
+    {
+      "name": "patches/bsp/call-return.bsp",
+      "location": "repo",
+      "purpose": "BSP script vector call-return",
+      "how": "hex from crates/rom-weaver-patches/tests/unit/bsp.rs",
+      "deterministic": true,
+      "bytes": 18,
+      "sha256": "dc0c3e4f889a54adfaae1d6dc4830d72797ef94a1a16fcee281484f2b0abcd29"
+    },
+    {
+      "name": "patches/bsp/call-return.in",
+      "location": "repo",
+      "purpose": "BSP vector input call-return",
+      "how": "hex",
+      "deterministic": true,
+      "bytes": 3,
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81"
+    },
+    {
+      "name": "patches/bsp/call-return.out",
+      "location": "repo",
+      "purpose": "BSP vector expected output call-return",
+      "how": "upstream bsppatch.js oracle (lib/bsp-reference.mjs)",
+      "deterministic": true,
+      "bytes": 3,
+      "sha256": "c1b00fcd3a576723ccbf89b6ca8c0a10eeb162f8c0a90994e7e7e14f30f795e1"
+    },
+    {
+      "name": "patches/bsp/conditional-ifeq.bsp",
+      "location": "repo",
+      "purpose": "BSP script vector conditional-ifeq",
+      "how": "hex from crates/rom-weaver-patches/tests/unit/bsp.rs",
+      "deterministic": true,
+      "bytes": 33,
+      "sha256": "f83c2faa3e73fbbe1c597691a87571bca6ee61aee9ca3f40f0cf4dff46948d86"
+    },
+    {
+      "name": "patches/bsp/conditional-ifeq.in",
+      "location": "repo",
+      "purpose": "BSP vector input conditional-ifeq",
+      "how": "hex",
+      "deterministic": true,
+      "bytes": 3,
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81"
+    },
+    {
+      "name": "patches/bsp/conditional-ifeq.out",
+      "location": "repo",
+      "purpose": "BSP vector expected output conditional-ifeq",
+      "how": "upstream bsppatch.js oracle (lib/bsp-reference.mjs)",
+      "deterministic": true,
+      "bytes": 3,
+      "sha256": "523a41df08f211f244c60592e026a25cfaf33e896cce81596a778f48671cb45f"
+    },
+    {
+      "name": "patches/bsp/fillbyte-seekend.bsp",
+      "location": "repo",
+      "purpose": "BSP script vector fillbyte-seekend",
+      "how": "hex from crates/rom-weaver-patches/tests/unit/bsp.rs",
+      "deterministic": true,
+      "bytes": 16,
+      "sha256": "ca55d47e604799c3f49582d8f681afaa78e217ae8e4df28343f0f2bf96a64bc0"
+    },
+    {
+      "name": "patches/bsp/fillbyte-seekend.in",
+      "location": "repo",
+      "purpose": "BSP vector input fillbyte-seekend",
+      "how": "hex",
+      "deterministic": true,
+      "bytes": 3,
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81"
+    },
+    {
+      "name": "patches/bsp/fillbyte-seekend.out",
+      "location": "repo",
+      "purpose": "BSP vector expected output fillbyte-seekend",
+      "how": "upstream bsppatch.js oracle (lib/bsp-reference.mjs)",
+      "deterministic": true,
+      "bytes": 5,
+      "sha256": "bcc9df88a874cb79d8b99d7fee4d60f4af715f3a1325bbe23770482b04bd8216"
+    },
+    {
+      "name": "patches/bsp/lock-unlock-truncate.bsp",
+      "location": "repo",
+      "purpose": "BSP script vector lock-unlock-truncate",
+      "how": "hex from crates/rom-weaver-patches/tests/unit/bsp.rs",
+      "deterministic": true,
+      "bytes": 24,
+      "sha256": "79642ea2a34e1c943874dc2c7a57669204c06f0df5506162e5318c23dd43873c"
+    },
+    {
+      "name": "patches/bsp/lock-unlock-truncate.in",
+      "location": "repo",
+      "purpose": "BSP vector input lock-unlock-truncate",
+      "how": "hex",
+      "deterministic": true,
+      "bytes": 5,
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0"
+    },
+    {
+      "name": "patches/bsp/lock-unlock-truncate.out",
+      "location": "repo",
+      "purpose": "BSP vector expected output lock-unlock-truncate",
+      "how": "upstream bsppatch.js oracle (lib/bsp-reference.mjs)",
+      "deterministic": true,
+      "bytes": 2,
+      "sha256": "8a817bc42b2e2146dc4ca4dc686db0a4051d294463d774fdac35bd191ae4a3b5"
+    },
+    {
+      "name": "patches/bsp/menu.bsp",
+      "location": "repo",
+      "purpose": "BSP with a nonempty menu (interactive, unsupported)",
+      "how": "hex from tests/cli_smoke/patch.rs",
+      "deterministic": true,
+      "bytes": 84,
+      "sha256": "226cc10a74ad830ff4bafcbf212adb1dab3beca947f63143f9a8fd4ee3b9a978"
+    },
+    {
+      "name": "patches/bsp/nonzero-exit.bsp",
+      "location": "repo",
+      "purpose": "BSP script vector nonzero-exit",
+      "how": "hex from crates/rom-weaver-patches/tests/unit/bsp.rs",
+      "deterministic": true,
+      "bytes": 5,
+      "sha256": "2ef892261eb0f940cefe74d32569f7b7a45fe00a85a6a25c73312282a532166f"
+    },
+    {
+      "name": "patches/bsp/nonzero-exit.in",
+      "location": "repo",
+      "purpose": "BSP vector input nonzero-exit",
+      "how": "hex",
+      "deterministic": true,
+      "bytes": 3,
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81"
+    },
+    {
+      "name": "patches/bsp/noop-exit.bsp",
+      "location": "repo",
+      "purpose": "BSP script vector noop-exit",
+      "how": "hex from crates/rom-weaver-patches/tests/unit/bsp.rs",
+      "deterministic": true,
+      "bytes": 5,
+      "sha256": "b45482224b439a3d548c65378929b7dcc16a42288530b7b20d5c8103cc879d10"
+    },
+    {
+      "name": "patches/bsp/noop-exit.in",
+      "location": "repo",
+      "purpose": "BSP vector input noop-exit",
+      "how": "hex",
+      "deterministic": true,
+      "bytes": 3,
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81"
+    },
+    {
+      "name": "patches/bsp/noop-exit.out",
+      "location": "repo",
+      "purpose": "BSP vector expected output noop-exit",
+      "how": "upstream bsppatch.js oracle (lib/bsp-reference.mjs)",
+      "deterministic": true,
+      "bytes": 3,
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81"
+    },
+    {
+      "name": "patches/bsp/stack-push-pop.bsp",
+      "location": "repo",
+      "purpose": "BSP script vector stack-push-pop",
+      "how": "hex from crates/rom-weaver-patches/tests/unit/bsp.rs",
+      "deterministic": true,
+      "bytes": 56,
+      "sha256": "7fc34105cfd0f0ec0564e2c6807e56b6b8fe8655a2923a2d208b837ec4a2e898"
+    },
+    {
+      "name": "patches/bsp/stack-push-pop.in",
+      "location": "repo",
+      "purpose": "BSP vector input stack-push-pop",
+      "how": "hex",
+      "deterministic": true,
+      "bytes": 3,
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81"
+    },
+    {
+      "name": "patches/bsp/stack-push-pop.out",
+      "location": "repo",
+      "purpose": "BSP vector expected output stack-push-pop",
+      "how": "upstream bsppatch.js oracle (lib/bsp-reference.mjs)",
+      "deterministic": true,
+      "bytes": 3,
+      "sha256": "633c8cc839b67731ccabbf9b820e2bb39a015519ab240babbb804b9c1bc0622c"
+    },
+    {
+      "name": "patches/bsp/writebyte-seek.bsp",
+      "location": "repo",
+      "purpose": "BSP script vector writebyte-seek",
+      "how": "hex from crates/rom-weaver-patches/tests/unit/bsp.rs",
+      "deterministic": true,
+      "bytes": 12,
+      "sha256": "b33db02befabdb12bbf2e12d7e91905c6634682b725ec96e5d8a875d7709601b"
+    },
+    {
+      "name": "patches/bsp/writebyte-seek.in",
+      "location": "repo",
+      "purpose": "BSP vector input writebyte-seek",
+      "how": "hex",
+      "deterministic": true,
+      "bytes": 3,
+      "sha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81"
+    },
+    {
+      "name": "patches/bsp/writebyte-seek.out",
+      "location": "repo",
+      "purpose": "BSP vector expected output writebyte-seek",
+      "how": "upstream bsppatch.js oracle (lib/bsp-reference.mjs)",
+      "deterministic": true,
+      "bytes": 3,
+      "sha256": "6e5668207495aa7e5599e1e71cad6ed76631337c567b7de9b70ff770b4ca92de"
+    },
+    {
+      "name": "patches/bsp/writedata-label.bsp",
+      "location": "repo",
+      "purpose": "BSP script vector writedata-label",
+      "how": "hex from crates/rom-weaver-patches/tests/unit/bsp.rs",
+      "deterministic": true,
+      "bytes": 23,
+      "sha256": "e72ed6e89f091a636a07e04d26d37e9d720900d7202467996bad52f45ddb7909"
+    },
+    {
+      "name": "patches/bsp/writedata-label.in",
+      "location": "repo",
+      "purpose": "BSP vector input writedata-label",
+      "how": "hex",
+      "deterministic": true,
+      "bytes": 4,
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+    },
+    {
+      "name": "patches/bsp/writedata-label.out",
+      "location": "repo",
+      "purpose": "BSP vector expected output writedata-label",
+      "how": "upstream bsppatch.js oracle (lib/bsp-reference.mjs)",
+      "deterministic": true,
+      "bytes": 4,
+      "sha256": "f4e3f0b04771c047e227c9ecaba65d3fe2fd0e1eee0a7552b956d1a7c535a7cf"
+    },
+    {
+      "name": "patches/bsp/xordata-mask.bsp",
+      "location": "repo",
+      "purpose": "BSP script vector xordata-mask",
+      "how": "hex from crates/rom-weaver-patches/tests/unit/bsp.rs",
+      "deterministic": true,
+      "bytes": 22,
+      "sha256": "287e9f576c2dc27a85b258ee184a5d230b69790c63ef9ede407a9235fcc5c598"
+    },
+    {
+      "name": "patches/bsp/xordata-mask.in",
+      "location": "repo",
+      "purpose": "BSP vector input xordata-mask",
+      "how": "hex",
+      "deterministic": true,
+      "bytes": 3,
+      "sha256": "8e1336ab78ebe687fd8056a37f2d3b0c32f4cf8fa8b691b653800fa693d570b9"
+    },
+    {
+      "name": "patches/bsp/xordata-mask.out",
+      "location": "repo",
+      "purpose": "BSP vector expected output xordata-mask",
+      "how": "upstream bsppatch.js oracle (lib/bsp-reference.mjs)",
+      "deterministic": true,
+      "bytes": 3,
+      "sha256": "ed2d0718aa37cf7a04118aaaf33acf6481956f37f0e4f31cf669ed905f6bc361"
+    },
+    {
+      "name": "patches/garbage.bin",
+      "location": "repo",
+      "purpose": "512 pseudo-random bytes: not a patch in any format",
+      "how": "xorshift",
+      "deterministic": true,
+      "bytes": 512,
+      "sha256": "31048a869372b2e0945c575d51aa1fcd49583b2a9a1bbeb495570f364f8db58d"
+    },
+    {
+      "name": "patches/hdiff19.hdiff",
+      "location": "repo",
+      "purpose": "HDIFF19 directory-patch magic (unsupported)",
+      "how": "ascii header",
+      "deterministic": true,
+      "bytes": 72,
+      "sha256": "b62f2fda67d627a9deeb3f636220766e960c95f14ddf4b5b2c8635b41220e015"
+    },
+    {
+      "name": "patches/ind/adler.vcdiff",
+      "location": "repo",
+      "purpose": "VCDIFF with xdelta3 Adler-32 window checksum",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 373,
+      "sha256": "e543b4b40b228df0946b2cb013d33f6e5e9f149bb0243543f8cee5e31cd0c834"
+    },
+    {
+      "name": "patches/ind/grow.bps",
+      "location": "repo",
+      "purpose": "BPS grow",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 1223,
+      "sha256": "69bd8a11b413c123f00affaa7ecca354c417b58cb79663d111e49ad72fb64dcf"
+    },
+    {
+      "name": "patches/ind/grow.gdiff",
+      "location": "repo",
+      "purpose": "GDIFF grow",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 1275,
+      "sha256": "77582a0aa867aaa66f6270df53c800cc2f81f191c55b342a402f3df78853262a"
+    },
+    {
+      "name": "patches/ind/grow.ips",
+      "location": "repo",
+      "purpose": "IPS grow",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 1225,
+      "sha256": "220d88731690da91932db47ecec8b6478395d129d4b70d58f002ae1c1a3b5660"
+    },
+    {
+      "name": "patches/ind/grow.ips32",
+      "location": "repo",
+      "purpose": "IPS32 grow",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 1236,
+      "sha256": "b048b9c395c1830ed97a5a4faca4b81ee9e8f9b6ec5cdb61dfebe0bde8fb2ff3"
+    },
+    {
+      "name": "patches/ind/grow.ppf",
+      "location": "repo",
+      "purpose": "PPF3 grow",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 1326,
+      "sha256": "cb97b7a5c73600b465192adea8787b120f4caa7875f1d5f57e8b3f2617db4c8f"
+    },
+    {
+      "name": "patches/ind/grow.ups",
+      "location": "repo",
+      "purpose": "UPS grow",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 1214,
+      "sha256": "67ff1e009f417d9b9d2fb191258e1b68ab78b01f47fcc2ad929ee7cf1f090f59"
+    },
+    {
+      "name": "patches/ind/grow.vcdiff",
+      "location": "repo",
+      "purpose": "VCDIFF grow (no adler)",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 670,
+      "sha256": "1202d725073722bf7e300ac0041d6f9ae2f676ec6e4f3f3e8e2fa12e9f55399c"
+    },
+    {
+      "name": "patches/ind/meta.bps",
+      "location": "repo",
+      "purpose": "BPS with metadata string",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 1257,
+      "sha256": "64440ea9a8794933a19bcc81359284007b62174ceaa96977a8d6ddcecf9723d2"
+    },
+    {
+      "name": "patches/ind/norun.vcdiff",
+      "location": "repo",
+      "purpose": "VCDIFF without RUN instructions",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 958,
+      "sha256": "8dae5962dc8702b311a6e242c224eeb604c87ad9804a152fa155e28942e777d1"
+    },
+    {
+      "name": "patches/ind/rle.aps",
+      "location": "repo",
+      "purpose": "APS (N64) with an RLE record",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 85,
+      "sha256": "d8fcc9fc6f76d6e337441378985a70d13a8c7a500c1b50b173947e7254711778"
+    },
+    {
+      "name": "patches/ind/rle.ips",
+      "location": "repo",
+      "purpose": "IPS with an RLE record (200 x 0xAA at 0x2000)",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 16,
+      "sha256": "2b376c75a1a1d03446be478026c97f4bee8280a45d0854d5261a773b682f109d"
+    },
+    {
+      "name": "patches/ind/same.aps",
+      "location": "repo",
+      "purpose": "APS (N64) simple records",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 995,
+      "sha256": "5e836e155437787e16ab65608516dbf20167b7b3739f4c86253a47d39b53aba8"
+    },
+    {
+      "name": "patches/ind/same.bps",
+      "location": "repo",
+      "purpose": "BPS same",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 922,
+      "sha256": "6fda46eb5daa80cb6ac41c26765cd4fa4f5b38eb66085ad417bfb2bc7a9594a0"
+    },
+    {
+      "name": "patches/ind/same.gdiff",
+      "location": "repo",
+      "purpose": "GDIFF same",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 973,
+      "sha256": "57f117ed89ad1c4743703e7f25810f556ee357dc5e09a011db1908336abaaf15"
+    },
+    {
+      "name": "patches/ind/same.ips",
+      "location": "repo",
+      "purpose": "IPS same",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 925,
+      "sha256": "ae9362fab650656f204346b61db1010980ce103a4f9cbeec30c6238b54c58384"
+    },
+    {
+      "name": "patches/ind/same.ips32",
+      "location": "repo",
+      "purpose": "IPS32 same",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 936,
+      "sha256": "58a5cd4bba5d466c93153edcdd06889287ee30f4836ec09820719de394d7c48c"
+    },
+    {
+      "name": "patches/ind/same.noeof.ips",
+      "location": "repo",
+      "purpose": "IPS lacking the EOF marker (tolerance probe)",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 922,
+      "sha256": "7b2e1f2091f8769066b5335dbe5369d0cf183e66e4c83f7637f11c3b03db9253"
+    },
+    {
+      "name": "patches/ind/same.ppf",
+      "location": "repo",
+      "purpose": "PPF3 same",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 1017,
+      "sha256": "703eadf2e5565362676e8d860d4c5cc9a7f7bd817a8ef491bdb89ba0e59ec57b"
+    },
+    {
+      "name": "patches/ind/same.ups",
+      "location": "repo",
+      "purpose": "UPS same",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 913,
+      "sha256": "2b4497cfc1838753d96cb95f45b3c130461eefa87dfad04f76b068f817f48679"
+    },
+    {
+      "name": "patches/ind/same.vcdiff",
+      "location": "repo",
+      "purpose": "VCDIFF same (no adler)",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 369,
+      "sha256": "f0f22c74749f22843a79a617d93e849300729cf52b5f530dc4c62dfaf9162e12"
+    },
+    {
+      "name": "patches/ind/shrink.bps",
+      "location": "repo",
+      "purpose": "BPS shrink",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 920,
+      "sha256": "029c8734dc15d96bad55a9db9eb6e8b76f837f534256f020e423f024e7bdc445"
+    },
+    {
+      "name": "patches/ind/shrink.gdiff",
+      "location": "repo",
+      "purpose": "GDIFF shrink",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 971,
+      "sha256": "18101b391c64bae56a33badb455bea025b481c96130e193370cad8991a700724"
+    },
+    {
+      "name": "patches/ind/shrink.ips",
+      "location": "repo",
+      "purpose": "IPS shrink",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 922,
+      "sha256": "566235672612721d8bb9fbf8f88a7fcd27bc6968c0c5c805bed7b44a7c2f2817"
+    },
+    {
+      "name": "patches/ind/shrink.ups",
+      "location": "repo",
+      "purpose": "UPS shrink",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 908,
+      "sha256": "0838c3bd7472c0d3faa359c2889aafad78ee2d14e1d8bec4b44b85b54be7700d"
+    },
+    {
+      "name": "patches/ind/shrink.vcdiff",
+      "location": "repo",
+      "purpose": "VCDIFF shrink (no adler)",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 366,
+      "sha256": "7241678317252ea051e42e668f179610c8278b23a91921c88cbf2711eeb4b40b"
+    },
+    {
+      "name": "patches/ind/targetcopy.bps",
+      "location": "repo",
+      "purpose": "BPS using TargetCopy actions",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 347,
+      "sha256": "601ee8387d06f697e054bca359e8b1cc3695f32083df753b01be4a558c034541"
+    },
+    {
+      "name": "patches/ind/v1.ppf",
+      "location": "repo",
+      "purpose": "PPF 1.0",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 973,
+      "sha256": "ce4dee6c8549a5bb3c9dea609df31341dc09f58fb6d00c8475f033c1cb5e175c"
+    },
+    {
+      "name": "patches/ind/v2.ppf",
+      "location": "repo",
+      "purpose": "PPF 2.0 with size + 1 KiB block check",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 2001,
+      "sha256": "e0b6f0061d0f12fcbb859cbfc1d591eaf088eb6744760b10e19a7fcb492489c0"
+    },
+    {
+      "name": "patches/ind/v3-blockcheck.ppf",
+      "location": "repo",
+      "purpose": "PPF 3.0 with block check",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 2041,
+      "sha256": "fdfae5419119397a50ac368f71844a7329033d7ed9f4a5bd8c6270e32e5f10cb"
+    },
+    {
+      "name": "patches/ind/v3-undo.ppf",
+      "location": "repo",
+      "purpose": "PPF 3.0 with undo data",
+      "how": "independent encoder in lib/encoders.mjs",
+      "deterministic": true,
+      "bytes": 1884,
+      "sha256": "85eeb6ffa304ce3fc4d9b613f8c1ccc6085e6c84ef68b61482c5e30f3940d7db"
+    },
+    {
+      "name": "patches/ninja1.rnp",
+      "location": "repo",
+      "purpose": "NINJA1 header only: recognized but not applicable",
+      "how": "ascii header",
+      "deterministic": true,
+      "bytes": 70,
+      "sha256": "67b3733c835c8cc63609709ab1dca30cbd3ef809c0b2f47a1904d3e98adc7b06"
+    },
+    {
+      "name": "patches/rw/grow.aps",
+      "location": "cache",
+      "purpose": "aps grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.aps",
+      "deterministic": false,
+      "bytes": 699,
+      "sha256": "9fcbde0ae29d0a58e7f9d52f97a5d82c1b53b6ea9ba491dba21fd4ab7df8de33"
+    },
+    {
+      "name": "patches/rw/grow.apsgba",
+      "location": "cache",
+      "purpose": "apsgba grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.apsgba",
+      "deterministic": false,
+      "bytes": 65556,
+      "sha256": "c506c6ea0c744579b4cdded565e895751b6840bd1d4a4d94b288ad6ecea02a6c"
+    },
+    {
+      "name": "patches/rw/grow.bdf",
+      "location": "cache",
+      "purpose": "bdf grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.bdf",
+      "deterministic": false,
+      "bytes": 1736,
+      "sha256": "3ade15818926ac729be0e5ce2ef084dd053bd172e2e80b0a17e2d751509f9f1d"
+    },
+    {
+      "name": "patches/rw/grow.bps",
+      "location": "cache",
+      "purpose": "bps grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.bps",
+      "deterministic": false,
+      "bytes": 617,
+      "sha256": "2e27d21720ee056e0e330227b4bb9ea05068f1aadb0c40f675465663f9a8fa9f"
+    },
+    {
+      "name": "patches/rw/grow.dps",
+      "location": "cache",
+      "purpose": "dps grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.dps",
+      "deterministic": false,
+      "bytes": 1585,
+      "sha256": "9cf21cc1817b6796ae282bb12f5aa74217707825ac0bffb744b4110d48af96f1"
+    },
+    {
+      "name": "patches/rw/grow.ebp",
+      "location": "cache",
+      "purpose": "ebp grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.ebp",
+      "deterministic": false,
+      "bytes": 696,
+      "sha256": "4e809c3ed539619872584239d2cf8c3bfc7558ef7f207204b227f689eef5ed2a"
+    },
+    {
+      "name": "patches/rw/grow.gdiff",
+      "location": "cache",
+      "purpose": "gdiff grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.gdiff",
+      "deterministic": false,
+      "bytes": 41269,
+      "sha256": "fc79874264af1e9ebed9eb7436bdbbbc2bc830d831f1211a20fa7d77dab9ad94"
+    },
+    {
+      "name": "patches/rw/grow.ips",
+      "location": "cache",
+      "purpose": "ips grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.ips",
+      "deterministic": false,
+      "bytes": 604,
+      "sha256": "4432e0220122ffc02e1db2b824b211b98740faf8994c2b8685820c32103f7fd9"
+    },
+    {
+      "name": "patches/rw/grow.ips32",
+      "location": "cache",
+      "purpose": "ips32 grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.ips32",
+      "deterministic": false,
+      "bytes": 609,
+      "sha256": "1d9d33d73f4b9fbfe7a254af8e237556a6c88317ace388080bba126f9df9c47c"
+    },
+    {
+      "name": "patches/rw/grow.mod",
+      "location": "cache",
+      "purpose": "mod grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.mod",
+      "deterministic": false,
+      "bytes": 1262,
+      "sha256": "4ff2bf650f84186963ae599613c956a29b6a67558eb07bbc82ab481a701eaf19"
+    },
+    {
+      "name": "patches/rw/grow.ppf",
+      "location": "cache",
+      "purpose": "ppf grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.ppf",
+      "deterministic": false,
+      "bytes": 2350,
+      "sha256": "85fd94d27cd11a40ffee3db70d497052bafe535c68fec0e449a1db28c0d66ad1"
+    },
+    {
+      "name": "patches/rw/grow.rup",
+      "location": "cache",
+      "purpose": "rup grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.rup",
+      "deterministic": false,
+      "bytes": 3320,
+      "sha256": "b7225807bd45b2037af8e0aed56fedf44c4439791490905722a90526fb87ce63"
+    },
+    {
+      "name": "patches/rw/grow.solid",
+      "location": "cache",
+      "purpose": "solid grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.solid",
+      "deterministic": false,
+      "bytes": 1316,
+      "sha256": "8797919c2a3197aebd13a526633f8b6785cc5a099df3f29bcef47af71868c163"
+    },
+    {
+      "name": "patches/rw/grow.ups",
+      "location": "cache",
+      "purpose": "ups grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.ups",
+      "deterministic": false,
+      "bytes": 1214,
+      "sha256": "67ff1e009f417d9b9d2fb191258e1b68ab78b01f47fcc2ad929ee7cf1f090f59"
+    },
+    {
+      "name": "patches/rw/grow.vcdiff",
+      "location": "cache",
+      "purpose": "vcdiff grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.vcdiff",
+      "deterministic": false,
+      "bytes": 621,
+      "sha256": "c7c1fa0feb8fcc6733703631a2b1d4ceb7e2f8e2e5451e1aeb8c50178734d4fd"
+    },
+    {
+      "name": "patches/rw/grow.xdelta",
+      "location": "cache",
+      "purpose": "xdelta grow patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified grow.bin -o grow.xdelta",
+      "deterministic": false,
+      "bytes": 645,
+      "sha256": "192922cd77c16fa02ed87435ec334e6c2f655b07ce0ff1cde5008eebcd6d642a"
+    },
+    {
+      "name": "patches/rw/same.aps",
+      "location": "cache",
+      "purpose": "aps same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.aps",
+      "deterministic": false,
+      "bytes": 395,
+      "sha256": "62face6fe88fb8483ab5cf7c3ca11ed4a454053e10b04ce65a8ab43dc4922ae5"
+    },
+    {
+      "name": "patches/rw/same.apsgba",
+      "location": "cache",
+      "purpose": "apsgba same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.apsgba",
+      "deterministic": false,
+      "bytes": 65556,
+      "sha256": "9b5dcd4b2078fff19d0d24eb860b9220d9777fc3b87cb55db3a889f435785ade"
+    },
+    {
+      "name": "patches/rw/same.bdf",
+      "location": "cache",
+      "purpose": "bdf same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.bdf",
+      "deterministic": false,
+      "bytes": 1304,
+      "sha256": "45cd954f271d568b304cb51b784bf812b766c03aa98c19e971a767e6a8915b70"
+    },
+    {
+      "name": "patches/rw/same.bps",
+      "location": "cache",
+      "purpose": "bps same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.bps",
+      "deterministic": false,
+      "bytes": 316,
+      "sha256": "4c806dde80df572fcd6cc727f3e7a477923729d52141a7eef02b46956f458abe"
+    },
+    {
+      "name": "patches/rw/same.dps",
+      "location": "cache",
+      "purpose": "dps same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.dps",
+      "deterministic": false,
+      "bytes": 1285,
+      "sha256": "c225ce0ea7c9595e33427fecc74aa6de4c0b967548e61e159fd280c2c08ad041"
+    },
+    {
+      "name": "patches/rw/same.ebp",
+      "location": "cache",
+      "purpose": "ebp same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.ebp",
+      "deterministic": false,
+      "bytes": 396,
+      "sha256": "ae4c0d5cb95557ba0d361d36c7908bd28f7833d7b54c59e6071ce52429313eef"
+    },
+    {
+      "name": "patches/rw/same.gdiff",
+      "location": "cache",
+      "purpose": "gdiff same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.gdiff",
+      "deterministic": false,
+      "bytes": 40969,
+      "sha256": "178f2d80710d1b9fb7f1fd4de34eca3b938e27bb0cbce24cdc8c30848285882a"
+    },
+    {
+      "name": "patches/rw/same.ips",
+      "location": "cache",
+      "purpose": "ips same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.ips",
+      "deterministic": false,
+      "bytes": 304,
+      "sha256": "54dfa0bd8c3193d318a9429e3aa62f50907b662cdfffd233f32407e603a0324d"
+    },
+    {
+      "name": "patches/rw/same.ips32",
+      "location": "cache",
+      "purpose": "ips32 same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.ips32",
+      "deterministic": false,
+      "bytes": 309,
+      "sha256": "88090ff20c8a4bf38ff0377d0a2f1f87195d94a7321f743e348f41d9d50213b2"
+    },
+    {
+      "name": "patches/rw/same.mod",
+      "location": "cache",
+      "purpose": "mod same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.mod",
+      "deterministic": false,
+      "bytes": 955,
+      "sha256": "27a92ed785f310463024e6c8750d9061e5a810ce186903a7651e84aa34a036f3"
+    },
+    {
+      "name": "patches/rw/same.pat",
+      "location": "cache",
+      "purpose": "pat same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.pat",
+      "deterministic": false,
+      "bytes": 13005,
+      "sha256": "839e897f217baec9b6fe0d3fd1e345009ccf020e30f77a56283bd7f0ee727a35"
+    },
+    {
+      "name": "patches/rw/same.ppf",
+      "location": "cache",
+      "purpose": "ppf same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.ppf",
+      "deterministic": false,
+      "bytes": 2041,
+      "sha256": "68e0d512ae7dfbce45f88030ea6077b76faf02fdaf64cda643ae59d3dcddb1c0"
+    },
+    {
+      "name": "patches/rw/same.rup",
+      "location": "cache",
+      "purpose": "rup same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.rup",
+      "deterministic": false,
+      "bytes": 3016,
+      "sha256": "1ca016856b0abf174769efacda7508b2436fb0f0fa5e4c8cceb7cba1e8f3c621"
+    },
+    {
+      "name": "patches/rw/same.solid",
+      "location": "cache",
+      "purpose": "solid same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.solid",
+      "deterministic": false,
+      "bytes": 1008,
+      "sha256": "dac6e9ca55a94db208e98f6f7a95d996419a34b56ac09022c2ab90e7b840a4fd"
+    },
+    {
+      "name": "patches/rw/same.ups",
+      "location": "cache",
+      "purpose": "ups same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.ups",
+      "deterministic": false,
+      "bytes": 913,
+      "sha256": "2b4497cfc1838753d96cb95f45b3c130461eefa87dfad04f76b068f817f48679"
+    },
+    {
+      "name": "patches/rw/same.vcdiff",
+      "location": "cache",
+      "purpose": "vcdiff same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.vcdiff",
+      "deterministic": false,
+      "bytes": 319,
+      "sha256": "b990c29e9617e898ed666d1797aac45d45950839f3916216469ef04aea934a54"
+    },
+    {
+      "name": "patches/rw/same.xdelta",
+      "location": "cache",
+      "purpose": "xdelta same patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified same.bin -o same.xdelta",
+      "deterministic": false,
+      "bytes": 343,
+      "sha256": "19bbdc8712bfdcf62b4d5fcde33a6f9aba67dbe69ec67d6e14fd4c5f987c0c67"
+    },
+    {
+      "name": "patches/rw/secondary-auto.xdelta",
+      "location": "cache",
+      "purpose": "xdelta with --xdelta-secondary auto",
+      "how": "rom-weaver patch create --xdelta-secondary",
+      "deterministic": false,
+      "bytes": 343,
+      "sha256": "19bbdc8712bfdcf62b4d5fcde33a6f9aba67dbe69ec67d6e14fd4c5f987c0c67"
+    },
+    {
+      "name": "patches/rw/secondary-djw.xdelta",
+      "location": "cache",
+      "purpose": "xdelta with --xdelta-secondary djw",
+      "how": "rom-weaver patch create --xdelta-secondary",
+      "deterministic": false,
+      "bytes": 343,
+      "sha256": "19bbdc8712bfdcf62b4d5fcde33a6f9aba67dbe69ec67d6e14fd4c5f987c0c67"
+    },
+    {
+      "name": "patches/rw/secondary-fgk.xdelta",
+      "location": "cache",
+      "purpose": "xdelta with --xdelta-secondary fgk",
+      "how": "rom-weaver patch create --xdelta-secondary",
+      "deterministic": false,
+      "bytes": 343,
+      "sha256": "19bbdc8712bfdcf62b4d5fcde33a6f9aba67dbe69ec67d6e14fd4c5f987c0c67"
+    },
+    {
+      "name": "patches/rw/secondary-lzma.xdelta",
+      "location": "cache",
+      "purpose": "xdelta with --xdelta-secondary lzma",
+      "how": "rom-weaver patch create --xdelta-secondary",
+      "deterministic": false,
+      "bytes": 343,
+      "sha256": "19bbdc8712bfdcf62b4d5fcde33a6f9aba67dbe69ec67d6e14fd4c5f987c0c67"
+    },
+    {
+      "name": "patches/rw/shrink.aps",
+      "location": "cache",
+      "purpose": "aps shrink patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified shrink.bin -o shrink.aps",
+      "deterministic": false,
+      "bytes": 389,
+      "sha256": "13afd3d91e2ebe9d344e3f50ceeaf7fc2d0da3c9e7059aa74f638757b940c26e"
+    },
+    {
+      "name": "patches/rw/shrink.apsgba",
+      "location": "cache",
+      "purpose": "apsgba shrink patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified shrink.bin -o shrink.apsgba",
+      "deterministic": false,
+      "bytes": 65556,
+      "sha256": "65039176c112317679335976bdaa770c9e3541084fe58ab413b8a7da6dc00eb4"
+    },
+    {
+      "name": "patches/rw/shrink.bdf",
+      "location": "cache",
+      "purpose": "bdf shrink patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified shrink.bin -o shrink.bdf",
+      "deterministic": false,
+      "bytes": 1313,
+      "sha256": "abcf9398a9e4d4827a79f4522c255bbb38c2e92dff2271c7589f6b60c44695db"
+    },
+    {
+      "name": "patches/rw/shrink.bps",
+      "location": "cache",
+      "purpose": "bps shrink patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified shrink.bin -o shrink.bps",
+      "deterministic": false,
+      "bytes": 314,
+      "sha256": "8f27d596b11f9192b04016a3adac40ca20392e6a2fc30bf23b1227986bf343b0"
+    },
+    {
+      "name": "patches/rw/shrink.dps",
+      "location": "cache",
+      "purpose": "dps shrink patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified shrink.bin -o shrink.dps",
+      "deterministic": false,
+      "bytes": 1275,
+      "sha256": "8616d18f99abdd01da6045466ec083ea987a9bf00e9eafde6fc580e36f6b7d9f"
+    },
+    {
+      "name": "patches/rw/shrink.gdiff",
+      "location": "cache",
+      "purpose": "gdiff shrink patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified shrink.bin -o shrink.gdiff",
+      "deterministic": false,
+      "bytes": 39969,
+      "sha256": "2d68aea1ddd25826ef003d08bd0683a54a9fa71bf636befaafa40aad57a04edf"
+    },
+    {
+      "name": "patches/rw/shrink.ips",
+      "location": "cache",
+      "purpose": "ips shrink patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified shrink.bin -o shrink.ips",
+      "deterministic": false,
+      "bytes": 301,
+      "sha256": "85b4cfd7f90dca22d9239c5e7beb8b5c29a5ed654f6692b9c1a16209063a1f2d"
+    },
+    {
+      "name": "patches/rw/shrink.rup",
+      "location": "cache",
+      "purpose": "rup shrink patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified shrink.bin -o shrink.rup",
+      "deterministic": false,
+      "bytes": 4013,
+      "sha256": "b53a99963bbf4e65aaf7cbc1f29815592e504356eae96a12f2d13f5c8a318774"
+    },
+    {
+      "name": "patches/rw/shrink.solid",
+      "location": "cache",
+      "purpose": "solid shrink patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified shrink.bin -o shrink.solid",
+      "deterministic": false,
+      "bytes": 1003,
+      "sha256": "e2bfa8478ea62b426bf3f2a2a8a2018d4d8446359fb037b125b2d5dcc350a97a"
+    },
+    {
+      "name": "patches/rw/shrink.ups",
+      "location": "cache",
+      "purpose": "ups shrink patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified shrink.bin -o shrink.ups",
+      "deterministic": false,
+      "bytes": 1916,
+      "sha256": "7762d2b3635a80ea4dd542f47086828c1eb1c0b4b1f307a2d2e56a1abb05493a"
+    },
+    {
+      "name": "patches/rw/shrink.vcdiff",
+      "location": "cache",
+      "purpose": "vcdiff shrink patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified shrink.bin -o shrink.vcdiff",
+      "deterministic": false,
+      "bytes": 317,
+      "sha256": "2e8d0a495c80512abb7ec406fc6cd041711e7b10dee05bc6ec0d9a3dfe22b7e6"
+    },
+    {
+      "name": "patches/rw/shrink.xdelta",
+      "location": "cache",
+      "purpose": "xdelta shrink patch authored by 'rom-weaver patch create'",
+      "how": "rom-weaver patch create --original base.bin --modified shrink.bin -o shrink.xdelta",
+      "deterministic": false,
+      "bytes": 343,
+      "sha256": "9639f929a5828e1e31b42cfaaadda317bb4718dbe1717b05508664e7a7c624a1"
+    },
+    {
+      "name": "patches/rw/undo.ppf",
+      "location": "cache",
+      "purpose": "PPF made with --ppf-undo",
+      "how": "rom-weaver patch create --ppf-undo",
+      "deterministic": false,
+      "bytes": 2908,
+      "sha256": "0faaa43a32aac785c392da3a27e9190b36a275894dcdb2b4826d3d8b7f511877"
+    },
+    {
+      "name": "rom/base.bin",
+      "location": "repo",
+      "purpose": "40 KiB pseudo-random source ROM (xorshift32 seed 0x524f4d21)",
+      "how": "lib/fixture-defs.mjs baseRom()",
+      "deterministic": true,
+      "bytes": 40960,
+      "sha256": "2ca2298323df5bd7954b0eed298553d63dcce622b3e50e23c556f12d7ddd30c3"
+    },
+    {
+      "name": "rom/grow.bin",
+      "location": "repo",
+      "purpose": "Target = same.bin plus 300 random trailing bytes",
+      "how": "growRom()",
+      "deterministic": true,
+      "bytes": 41260,
+      "sha256": "d8fc373d63d2481fd2d58450fdb813e807e38be257ba1dfd516bce6971ebbd2e"
+    },
+    {
+      "name": "rom/rle.bin",
+      "location": "repo",
+      "purpose": "Target = base with 200 bytes of 0xAA at 0x2000 (RLE record carrier)",
+      "how": "rleRom()",
+      "deterministic": true,
+      "bytes": 40960,
+      "sha256": "ce94662f897205dde9d5f3c329686e28f7a5c38886b576a8fba7a5bb7018cc30"
+    },
+    {
+      "name": "rom/same.bin",
+      "location": "repo",
+      "purpose": "Same-size target: header bytes xored, random block, 600-byte zero run, last byte flipped",
+      "how": "withEdits(base)",
+      "deterministic": true,
+      "bytes": 40960,
+      "sha256": "03a5aaad85ba34b89205a79a8ea129f4a3e686f3c46132786c0f51e0874a910d"
+    },
+    {
+      "name": "rom/shrink.bin",
+      "location": "repo",
+      "purpose": "Target = same.bin truncated by 1000 bytes",
+      "how": "shrinkRom()",
+      "deterministic": true,
+      "bytes": 39960,
+      "sha256": "81bb5cc9c0e113973d1325dd66b53837d021ef66df47aeb0b8f5efe0e28800f3"
+    },
+    {
+      "name": "rom/wrong-size.bin",
+      "location": "repo",
+      "purpose": "base.bin plus 16 trailing bytes: wrong-size input",
+      "how": "base + 16 bytes",
+      "deterministic": true,
+      "bytes": 40976,
+      "sha256": "2ac642f5dd680ca30e8772cbddabe6c5f3f69c0e91b80d8cbac60d44fa8feb14"
+    },
+    {
+      "name": "rom/wrong.bin",
+      "location": "repo",
+      "purpose": "base.bin with byte 100 flipped: wrong-source input",
+      "how": "base[100]^=0xff",
+      "deterministic": true,
+      "bytes": 40960,
+      "sha256": "1814d0319551cafdeba5e7c057562987f5ecd244d61a765578b474f0b77c4d77"
+    }
+  ]
+}
