@@ -262,6 +262,12 @@ impl PatchHandler for PatPatchHandler {
             &pool,
             execution.used_parallelism,
         )?;
+        if created.records.is_empty() {
+            // `apply` rejects a record-less PAT, so writing one would only produce an unusable file.
+            return Err(RomWeaverError::Validation(
+                "PAT cannot represent identical files: the two inputs have no differences".into(),
+            ));
+        }
 
         let mut output = crate::create_buffered_output(&request.output)?;
         for record in &created.records {

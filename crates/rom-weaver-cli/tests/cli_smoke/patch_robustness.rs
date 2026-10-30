@@ -95,6 +95,81 @@ fn corrupt_offsets_that_imply_gigabyte_outputs_are_rejected_without_output() {
 }
 
 #[test]
+fn implausible_output_size_patch_is_reported_unreadable_in_the_plan() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("base.bin");
+    fs::write(rom.path(), [0_u8; 512]).expect("rom fixture");
+    let patch = temp.child("corrupt.ips32");
+    let mut bytes = b"IPS32".to_vec();
+    bytes.extend_from_slice(&0xFF00_0000_u32.to_be_bytes());
+    bytes.extend_from_slice(&1_u16.to_be_bytes());
+    bytes.push(b'Z');
+    bytes.extend_from_slice(b"EEOF");
+    fs::write(patch.path(), bytes).expect("patch fixture");
+
+    let events = run_json_events(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            path_str(rom.path()),
+            "--patch",
+            path_str(patch.path()),
+            "--plan",
+            "--jsonl",
+        ],
+        0,
+    );
+    let verdicts = events
+        .iter()
+        .filter_map(|event| event["details"]["patch_validation"]["per_patch"].as_array())
+        .flatten()
+        .collect::<Vec<_>>();
+    assert_eq!(verdicts.len(), 1, "{events:?}");
+    let verdict = verdicts[0];
+    assert_eq!(verdict["input_verdict"], "failed", "{verdict}");
+    assert_eq!(verdict["unreadable"], true, "{verdict}");
+    assert!(
+        verdict["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("probably corrupt")),
+        "{verdict}"
+    );
+}
+
+#[test]
+fn pat_create_from_identical_inputs_fails_without_output() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("a.bin");
+    fs::write(rom.path(), [0x61_u8; 16]).expect("rom fixture");
+    let output = temp.child("x.pat");
+
+    let json = terminal_event(
+        &[
+            "patch",
+            "create",
+            "--original",
+            path_str(rom.path()),
+            "--modified",
+            path_str(rom.path()),
+            "--output",
+            path_str(output.path()),
+            "--json",
+        ],
+        1,
+    );
+
+    assert_eq!(json["status"], "failed", "{json}");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("have no differences")),
+        "{json}"
+    );
+    assert!(!output.path().exists(), "no output may remain");
+}
+
+#[test]
 fn ebp_patches_apply_under_a_non_ebp_extension() {
     let temp = setup_temp_dir();
     let rom = temp.child("base.bin");

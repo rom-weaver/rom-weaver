@@ -184,6 +184,38 @@ fn create_rejects_mismatched_lengths() {
 }
 
 #[test]
+fn create_rejects_identical_inputs_and_leaves_no_output() {
+    let temp = TestDir::new();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.pat");
+    fs::write(&original, b"abcd").expect("fixture");
+    fs::write(&modified, b"abcd").expect("fixture");
+
+    let handler = PatPatchHandler::new(&PAT);
+    for threads in [1, 4] {
+        let error = handler
+            .create(
+                &PatchCreateRequest {
+                    original: original.clone(),
+                    modified: modified.clone(),
+                    output: patch.clone(),
+                    format: "pat".into(),
+                },
+                &test_context_with_threads(&temp, threads),
+            )
+            .expect_err("identical inputs should fail");
+        assert!(
+            error.to_string().contains(
+                "PAT cannot represent identical files: the two inputs have no differences"
+            ),
+            "{error}"
+        );
+        assert!(!patch.exists(), "no output may remain");
+    }
+}
+
+#[test]
 fn create_and_apply_round_trip() {
     let temp = TestDir::new();
     let original = temp.child("old.bin");
