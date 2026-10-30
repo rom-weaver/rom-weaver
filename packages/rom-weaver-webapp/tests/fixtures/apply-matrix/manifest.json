@@ -927,7 +927,8 @@
       "purpose": "password-protected zip (ZipCrypto, password 'secret')",
       "sha256": "7f2eedfd03c19f4085a533fed3fa72c251218fe408d02294095fa052a9b25087",
       "size": 8334,
-      "how": "zip -P secret"
+      "how": "zip -P secret",
+      "volatile": true
     },
     {
       "name": "borrowed/bsppatch-nested.bsp",

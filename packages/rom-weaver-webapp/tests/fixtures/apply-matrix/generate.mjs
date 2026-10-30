@@ -120,7 +120,7 @@ const writeIfChanged = (file, bytes) => {
   fs.writeFileSync(file, bytes);
 };
 
-const putBlob = (name, bytes, purpose, how, dir = BLOBS) => {
+const putBlob = (name, bytes, purpose, how, dir = BLOBS, extra = {}) => {
   writeIfChanged(path.join(dir, name), bytes);
   return record({
     name,
@@ -129,6 +129,7 @@ const putBlob = (name, bytes, purpose, how, dir = BLOBS) => {
     sha256: sha(bytes),
     size: bytes.length,
     how,
+    ...extra,
   });
 };
 
@@ -562,6 +563,8 @@ export function generate({ writeManifest = true } = {}) {
         "password-protected zip (ZipCrypto, password 'secret')",
         "zip -P secret",
         CACHE,
+        // ZipCrypto writes random header bytes, so the hash differs on every build.
+        { volatile: true },
       );
     } else unavailable("encrypted.zip", "encrypted zip", "zip -P", "host tool zip missing");
   } finally {
@@ -597,7 +600,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     let drift = 0;
     for (const entry of saved.entries.filter((candidate) => !candidate.unavailable)) {
       const file = path.join(entry.dir === "blobs" ? BLOBS : CACHE, entry.name);
-      if (!fs.existsSync(file) || sha(fs.readFileSync(file)) !== entry.sha256) {
+      const stale =
+        !fs.existsSync(file) ||
+        (entry.volatile ? fs.statSync(file).size !== entry.size : sha(fs.readFileSync(file)) !== entry.sha256);
+      if (stale) {
         console.error(`DRIFT ${entry.name}`);
         drift++;
       }
