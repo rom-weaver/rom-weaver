@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { createDocsMarkdown, readDocLastmod } from "./docs-discovery.mjs";
+import { DOCS_SCREENSHOT_NAMES } from "./docs-screenshot-manifest.mjs";
 
 const source = { file: "how-to/apply-rom-patches.md", slug: "docs/apply-rom-patches" };
 
@@ -39,6 +40,46 @@ test("Markdown images link to image bytes while repository links keep their navi
   );
   assert.ok(result.includes("![Remote](<https://example.com/image.webp>)"));
   assert.ok(result.includes("`![Literal](../screenshots/ppf-undo-restored.webp)`"));
+});
+
+test("Markdown exports point HTML screenshots at the serving deployment and keep other HTML intact", () => {
+  const site = "https://nightly.rom-weaver.com";
+  const raw = "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs";
+  const markdown = [
+    "<picture>",
+    '  <source media="(max-width: 520px)" srcset="../screenshots/ppf-undo-restored.webp 1x, ../screenshots/ppf-undo-restored.webp 2x" width="10">',
+    '  <img src=\'../screenshots/ppf-undo-restored.webp\' alt="A" width="20">',
+    "</picture>",
+    "",
+    '<img src="../screenshots/not-served.webp" alt="Unserved">',
+    '<img src="https://example.com/remote.webp" alt="Remote">',
+    "",
+    "```html",
+    '<img src="../screenshots/ppf-undo-restored.webp">',
+    "```",
+  ].join("\n");
+  const result = createDocsMarkdown(source, markdown, site);
+  const served = `${site}/docs/screenshots/ppf-undo-restored.webp`;
+  assert.ok(result.includes(`srcset="${served} 1x, ${served} 2x" width="10"`));
+  assert.ok(result.includes(`<img src='${served}' alt="A" width="20">`));
+  assert.ok(result.includes(`<img src="${raw}/screenshots/not-served.webp" alt="Unserved">`));
+  assert.ok(result.includes('<img src="https://example.com/remote.webp" alt="Remote">'));
+  assert.ok(result.includes('```html\n<img src="../screenshots/ppf-undo-restored.webp">\n```'));
+});
+
+test("the Identify guide export points every HTML screenshot at a file the site serves", () => {
+  const file = "how-to/identify-roms-browser.md";
+  const markdown = fs.readFileSync(new URL(`../../../docs/${file}`, import.meta.url), "utf8");
+  const site = "https://nightly.rom-weaver.com";
+  const result = createDocsMarkdown({ file, slug: "docs/identify-roms-browser" }, markdown, site);
+  const urls = [...result.matchAll(/\s(?:src|srcset)="([^"]*)"/g)].flatMap((match) =>
+    match[1].split(",").map((candidate) => candidate.trim().split(/\s+/)[0]),
+  );
+  assert.ok(urls.length > 0);
+  for (const url of urls) {
+    assert.ok(url.startsWith(`${site}/docs/screenshots/`), url);
+    assert.ok(DOCS_SCREENSHOT_NAMES.includes(url.slice(`${site}/docs/screenshots/`.length)), url);
+  }
 });
 
 test("lastmod is omitted for dirty files and missing history", (context) => {

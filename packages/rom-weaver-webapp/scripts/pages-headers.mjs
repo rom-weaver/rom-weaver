@@ -9,10 +9,14 @@
 
 const PATTERN_ESCAPE = /[.+?^${}()|[\]\\]/g;
 const PLACEHOLDER = /:([A-Za-z]\w*)/g;
+const WILDCARD = /\*/g;
+
+// Only the first `*` is the named `splat` group; a repeated group name is a RegExp syntax error.
+const wildcardToRegExp = (_match, offset, pattern) => (pattern.indexOf("*") === offset ? "(?<splat>.*)" : ".*");
 
 const patternToRegExp = (pattern) =>
   new RegExp(
-    `^${pattern.replace(PATTERN_ESCAPE, "\\$&").replace("*", "(?<splat>.*)").replace(PLACEHOLDER, "(?<$1>[^/]+)")}$`,
+    `^${pattern.replace(PATTERN_ESCAPE, "\\$&").replace(WILDCARD, wildcardToRegExp).replace(PLACEHOLDER, "(?<$1>[^/]+)")}$`,
   );
 
 // Each rule keeps its header operations in file order; a `null` value is a `! Name` unset.

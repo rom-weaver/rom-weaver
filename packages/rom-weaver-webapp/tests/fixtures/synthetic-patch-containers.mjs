@@ -142,6 +142,8 @@ export const rawCrc32 = (bytes) => {
 
 // This independent BPS encoder MUST use the raw source, without workflow preparation.
 export const rawBpsFixture = (source, offset) => {
+  if (offset >= source.length)
+    throw new Error(`rawBpsFixture: offset ${offset} is outside a ${source.length}-byte source`);
   const target = source.slice();
   target[offset] ^= 1;
   const patch = [...text("BPS1")];

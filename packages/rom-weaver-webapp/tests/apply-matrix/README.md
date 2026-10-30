@@ -8,7 +8,7 @@ It drives the real UI in headless Chromium (Playwright from the webapp package),
 2. the native CLI (`target/release/rom-weaver`, or `RW_BIN`) as a differential oracle when it is built,
 3. invariants (no page error, no hang, no silent success on a corrupt patch).
 
-Missing tools or fixtures turn a case into `skip` with a printed reason; nothing is skipped silently.
+Missing tools or fixtures turn a case into `skip` with a printed reason; nothing is skipped silently. Disc outputs in a container format that need the native CLI to open them, when none is built, pass with the note `unverified (no native CLI)` in the case detail; single-file raw (`none`) outputs always need an exact byte match.
 
 ## Run
 
@@ -35,7 +35,7 @@ Known failures (product behavior, see the report): `rom-in/rom.{gz,xz,bz2,zst,lz
 
 ## Fixtures
 
-`../fixtures/apply-matrix/generate.mjs` (called by the runner, also runnable alone; `--check` verifies hashes) builds everything deterministically and records `manifest.json` (name, purpose, sha256, how generated):
+`../fixtures/apply-matrix/generate.mjs` (called by the runner, also runnable alone; `--check` verifies hashes) builds everything deterministically. Neither the runner nor a plain run rewrites the tracked `manifest.json`; only `node generate.mjs --update-manifest` does, and it keeps recorded entries instead of replacing them with `unavailable` ones. The manifest records (name, purpose, sha256, how generated):
 
 - `blobs/` - small pure-Node fixtures (patches for 9 formats, hdiffpatch copies), committed; `blobs/borrowed/` holds hand-assembled BSP scripts and DLDI/DS samples copied verbatim from the cli worker.
 - `$RW_MATRIX_CACHE` (default `~/.cache/agents/apply-matrix-fixtures/webapp`) - archives built with host `xz`/`bzip2`/`zstd`/`lz4`/`zip` and formats only the native CLI writes (dps, rup, ppf, aps, apsgba, pat, solid, mod, bdf, 7z), plus a 40 MiB PMSR stand-in. Regenerated on demand.

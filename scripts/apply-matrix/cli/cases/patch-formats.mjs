@@ -97,7 +97,7 @@ export const registerPatchFormats = () => {
       const result = ctx.ok(run(ctx, first, ctx.tmp("out.bin"), ["--json"]), "apply --json");
       const doc = ctx.json(result);
       check(doc.status === "succeeded" || doc.status === "success" || doc.exit_code === 0, () => `unexpected status ${JSON.stringify(doc.status)}`);
-      check(JSON.stringify(doc).toLowerCase().includes(format.label.toLowerCase().split("/")[0]), () => `report does not mention format ${format.label}`);
+      check(String(doc.format).toLowerCase().includes(format.label.toLowerCase().split("/")[0]), () => `report format ${JSON.stringify(doc.format)} does not match ${format.label}`);
     });
     add(`${group}.report.jsonl`, [format.name, "report"], (ctx) => {
       const result = ctx.ok(run(ctx, first, ctx.tmp("out.bin"), ["--jsonl"]), "apply --jsonl");
@@ -323,6 +323,7 @@ export const registerPatchFormats = () => {
     ctx.failed(result, { message: /HDIFF19|directory/i, what: "HDIFF19" });
     check(!ctx.exists(out), "HDIFF19 left an output file");
   });
+  // quality-reason: authoring a GD-ROM data track is out of scope for this harness; covered by Rust patch_apply_dcp_* tests.
   add("patch.dcp.apply.positive-rebuild", ["dcp", "apply"], () => {
     skip("DCP needs a GD-ROM data track (ISO9660 + MODE1 EDC/ECC authoring); covered by Rust tests patch_apply_dcp_* in patch_disc.rs");
   });

@@ -35,7 +35,7 @@ const groups = (option("group", "") || "")
 const workers = Number(option("workers", 2));
 const jsonOut = option("json", null);
 
-const manifest = generate();
+const manifest = generate({ writeManifest: false });
 const cases = buildCases({ manifest }).filter((entry) => {
   if (groups.length && !groups.includes(entry.group)) return false;
   if (!filters.length) return true;
@@ -51,7 +51,7 @@ if (flag("list")) {
 
 fs.mkdirSync(outDir, { recursive: true });
 const server = await ensureServer(baseUrl, port);
-const browser = await chromium.launch({ headless: true });
+let browser;
 const results = [];
 let next = 0;
 
@@ -78,6 +78,10 @@ const runOne = async (entry) => {
         status: "fail",
       };
   }
+  // Keep a failing case's downloads for debugging; drop the rest so a run does not fill $TMPDIR.
+  if (result.status !== "fail")
+    for (const name of fs.readdirSync(caseDir))
+      if (/^\d{13}-/.test(name)) fs.rmSync(path.join(caseDir, name), { force: true });
   result = { ...entry, ...result, run: undefined, ms: Date.now() - started };
   results.push(result);
   const mark = { fail: "FAIL", pass: "pass", skip: "skip" }[result.status];
@@ -88,9 +92,10 @@ const worker = async () => {
   while (next < cases.length) await runOne(cases[next++]);
 };
 try {
+  browser = await chromium.launch({ headless: true });
   await Promise.all(Array.from({ length: Math.max(1, workers) }, worker));
 } finally {
-  await browser.close();
+  await browser?.close();
   await server.close();
 }
 
