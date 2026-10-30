@@ -117,10 +117,11 @@ export function reportWorkerRuntimeChunk(distDir = DIST_DIR) {
   return failures;
 }
 
-// `writeBrotliSidecars` (scripts/vite-config/brotli-sidecars.mjs) writes a `.br` sibling for every
-// large JS, CSS, and WASM asset; Pages and self-hosters serve those exact files. Nothing else notices
-// when a change to its candidate filter stops emitting them, so the build would stay green and the
-// assets would fall back to the host's own compression.
+// `writeBrotliSidecars` (scripts/vite-config/brotli-sidecars.mjs) writes `.br` siblings that Pages and
+// self-hosters serve. Nothing else notices when a change to its candidate filter stops emitting them,
+// so the build would stay green and the assets would fall back to the host's own compression. This
+// check is deliberately stricter than the writer, as an alarm: it expects one for every JS, CSS, and
+// WASM asset of 1 KiB or more, so a second `.wasm` asset needs an exemption here.
 const SIDECAR_EXTENSIONS = [".js", ".css", ".wasm"];
 const SIDECAR_MIN_BYTES = 1024;
 
@@ -151,6 +152,7 @@ export function reportBrotliSidecars(distDir = DIST_DIR) {
     process.stdout.write(`ERROR   Brotli sidecars: ${problem}\n`);
     process.stdout.write(`::error title=Brotli sidecars::${problem}\n`);
   }
+  process.stdout.write("        See scripts/vite-config/brotli-sidecars.mjs.\n");
   return failures;
 }
 

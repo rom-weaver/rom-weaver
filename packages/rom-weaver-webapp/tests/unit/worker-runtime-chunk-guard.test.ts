@@ -111,6 +111,21 @@ describe("checkBrotliSidecars", () => {
     ]);
   });
 
+  it("requires a sidecar for JavaScript", () => {
+    const files = complete();
+    delete files["index-a.js.br"];
+    expect(checkBrotliSidecars(withSidecars(files)).problems).toEqual([
+      "assets/index-a.js (2048 bytes) is missing its Brotli sidecar index-a.js.br",
+    ]);
+  });
+
+  it("requires a sidecar at exactly 1 KiB but not below it", () => {
+    const at = { ...complete(), "edge.js": "x".repeat(1024) };
+    expect(checkBrotliSidecars(withSidecars(at)).failures).toBe(1);
+    const below = { ...complete(), "edge.js": "x".repeat(1023) };
+    expect(checkBrotliSidecars(withSidecars(below)).failures).toBe(0);
+  });
+
   it("ignores assets under 1 KiB", () => {
     const files = { ...complete(), "tiny.js": "x" };
     expect(checkBrotliSidecars(withSidecars(files)).failures).toBe(0);

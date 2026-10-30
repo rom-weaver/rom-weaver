@@ -101,14 +101,14 @@ Fixtures cannot cover every input. Keep platform CI and [real-device checks](mob
 Before pushing webapp or published-doc changes, check the generated bundle, even when lint and pre-commit hooks pass.
 
 1. Prepare the worktree with the [development guide](development.md#linked-worktrees). Use a production WASM build from the current sources (`mise run build-wasm-prod`); a development module is not comparable to CI's optimized artifact.
-2. From the repository root, build the production channel and check its chunk graph:
+2. From the repository root, build the production channel and run the chunk and Brotli sidecar guard:
 
    ```bash
    ROM_WEAVER_CHANNEL=prod npm --prefix packages/rom-weaver-webapp run build
    npm --prefix packages/rom-weaver-webapp run check:worker-chunk
    ```
 
-3. If the guard fails, follow the error: it names the chunk and the `ARCHITECTURE.md` bullet that explains the invariant. Rerun it after the fix.
+3. If the guard fails, follow the error. A chunk error names the chunk and the `ARCHITECTURE.md` bullet that explains the invariant; a missing `.br` file points to `scripts/vite-config/brotli-sidecars.mjs`. Rerun it after the fix.
 4. For UI changes, also run the affected browser tests and `test:e2e:a11y`. Run `test:e2e:webapp:webkit` for Safari-sensitive behavior. Reproduce failures against the same production channel as CI. When changing tutorial steps, Settings controls, or navigation, check the browser assertions, E2E locators, and screenshot targets together. Prefer stable state attributes for readiness; keep assertions for intended step counts and content.
 
 Choose browser test files from the behavior you changed. These are starting points, not an exhaustive dependency map; include other affected tests and run the full browser suite when shared behavior makes the selection unclear. Paths below are relative to `packages/rom-weaver-webapp/tests/browser/`.
