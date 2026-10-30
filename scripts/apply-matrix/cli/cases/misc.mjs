@@ -168,7 +168,10 @@ export const register = ({ fixtures }) => {
       check(leftovers.length === 0, () => `cancelled apply left files behind: ${leftovers.join(",")}`);
     });
   }
+  // quality-reason: --tui needs an interactive terminal, which a spawned process cannot provide; covered by Rust tui.rs.
   add("diagnostics.tui", ["diagnostics", "tui"], () => skip("--tui needs an interactive terminal; covered by Rust tests tui.rs"));
+  // quality-reason: placeholder that points at the real DCP case patch.dcp.apply.positive-rebuild.
   add("diagnostics.dcp-positive", ["diagnostics", "dcp"], () => skip("see patch.dcp.apply.positive-rebuild"));
-  add("diagnostics.reference-xdelta3-flips", ["diagnostics", "reference"], () => skip("xdelta3 and flips are not installed on this host; cross-checks use independent encoders in lib/encoders.mjs and the vendored bsppatch.js oracle instead"));
+  // quality-reason: this harness never drives xdelta3 or flips; cross-checks use the independent encoders in lib/encoders.mjs and the vendored bsppatch.js oracle.
+  add("diagnostics.reference-xdelta3-flips", ["diagnostics", "reference"], () => skip("xdelta3 and flips are not driven by this harness; cross-checks use independent encoders in lib/encoders.mjs and the vendored bsppatch.js oracle instead"));
 };

@@ -16,7 +16,7 @@ const viaContainer = (ctx, input, { patch = IPS, expect = "rom/same.bin", extra 
   return { result, output, expected: ctx.fx(expect) };
 };
 const needTool = (tool) => {
-  if (!have(tool)) skip(`${tool} not installed on this host`);
+  for (const name of [tool].flat()) if (!have(name)) skip(`${name} not installed on this host`);
 };
 
 export const register = async ({ root, fixtures }) => {
@@ -33,16 +33,16 @@ export const register = async ({ root, fixtures }) => {
     ["tar", "plain.tar", "tar"],
     ["tar.gz", "plain.tar.gz", "tar"],
     ["tgz", "plain.tgz", "tar"],
-    ["tar.bz2", "plain.tar.bz2", "tar"],
-    ["tbz2", "plain.tbz2", "tar"],
-    ["tar.xz", "plain.tar.xz", "tar"],
-    ["txz", "plain.txz", "tar"],
+    ["tar.bz2", "plain.tar.bz2", ["tar", "bzip2"]],
+    ["tbz2", "plain.tbz2", ["tar", "bzip2"]],
+    ["tar.xz", "plain.tar.xz", ["tar", "xz"]],
+    ["txz", "plain.txz", ["tar", "xz"]],
     ["gz", "game.bin.gz", "gzip"],
     ["bz2", "game.bin.bz2", "bzip2"],
     ["xz", "game.bin.xz", "xz"],
     ["zst", "game.bin.zst", "zstd"],
     ["nested-zip-in-zip", "nested-outer.zip", "zip"],
-    ["nested-7z-in-tgz", "nested-tgz-7z.tgz", "bsdtar"],
+    ["nested-7z-in-tgz", "nested-tgz-7z.tgz", ["bsdtar", "tar"]],
     ["subdir-unicode-names", "subdir.zip", "zip"],
     ["rom-plus-readme", "rom-plus-readme.zip", "zip"],
   ];
@@ -345,7 +345,8 @@ export const register = async ({ root, fixtures }) => {
     ctx.ok(ctx.apply(ctx.tmp("hif_000000.nfs"), patch, out), "apply to nfs");
     check(fs.readFileSync(out).equals(target), "nfs output mismatch");
   });
-  add("container.disc.wia-gcz", ["container", "disc", "wia", "gcz"], () => skip("no local WIA/GCZ writer (dolphin-tool absent); read paths covered by Rust tests rvz_z3ds.rs / shared.rs write_wia_fixture_from_iso"));
+  // quality-reason: rom-weaver has no WIA/GCZ writer and this harness does not drive dolphin-tool; read paths are covered by Rust tests rvz_z3ds.rs / shared.rs write_wia_fixture_from_iso.
+  add("container.disc.wia-gcz", ["container", "disc", "wia", "gcz"], () => skip("no WIA/GCZ writer in this harness; read paths covered by Rust tests rvz_z3ds.rs / shared.rs write_wia_fixture_from_iso"));
 
   // RVZ / CHD / Z3DS inputs made by rom-weaver compress from the wbfs payload
   const wbfsPayload = "disc/wbfs.payload.iso";

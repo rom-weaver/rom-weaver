@@ -28,13 +28,17 @@ const MANIFEST = path.join(HERE, "manifest.json");
 const CRATE_FIXTURES = path.join(REPO, "crates/rom-weaver-patches/tests/fixtures/hdiffpatch");
 
 export const cliPath = () => {
-  const candidates = [
-    process.env.RW_BIN,
-    path.join(REPO, "target/release/rom-weaver"),
-    path.join(REPO, "target/debug/rom-weaver"),
-  ];
-  return candidates.find((candidate) => candidate && fs.existsSync(candidate)) || null;
+  if (process.env.RW_BIN) {
+    const explicit = path.resolve(process.env.RW_BIN);
+    if (!fs.existsSync(explicit)) throw new Error(`RW_BIN does not exist: ${explicit}`);
+    return explicit;
+  }
+  const candidates = [path.join(REPO, "target/release/rom-weaver"), path.join(REPO, "target/debug/rom-weaver")];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
 };
+
+// Output depends on a host tool version or the rom-weaver build, so --check only requires the file to exist.
+const HOST_DEPENDENT = { hostDependent: true };
 
 const hostTool = (name) => spawnSync("sh", ["-c", `command -v ${name}`], { encoding: "utf8" }).stdout.trim() || null;
 
@@ -283,6 +287,7 @@ export function generate({ writeManifest = true } = {}) {
         `${format} same-size patch created by the native CLI; apply must reproduce target-same.bin`,
         how,
         CACHE,
+        HOST_DEPENDENT,
       );
     }
 
@@ -330,6 +335,7 @@ export function generate({ writeManifest = true } = {}) {
         `native-chain step ${index + 1} (${format})`,
         "rom-weaver patch create",
         CACHE,
+        HOST_DEPENDENT,
       );
       if (index === cliChain.length - 1)
         putBlob(
@@ -456,6 +462,7 @@ export function generate({ writeManifest = true } = {}) {
           `${kind} compressed with ${tool} (extension-less payload name)`,
           `${tool} ${args.slice(0, -1).join(" ")}`,
           CACHE,
+          HOST_DEPENDENT,
         );
         putBlob(
           `${fileName}${ext}`,
@@ -463,6 +470,7 @@ export function generate({ writeManifest = true } = {}) {
           `${kind} compressed with ${tool}, conventional name <file>${ext}`,
           `${tool} ${args.slice(0, -1).join(" ")}`,
           CACHE,
+          HOST_DEPENDENT,
         );
       }
       const tarBytes = enc.tar([{ name: fileName, data: bytes }]);
@@ -495,6 +503,7 @@ export function generate({ writeManifest = true } = {}) {
             `${kind} inside a 7z (lzma2)`,
             `rom-weaver compress --input ${fileName} --output ${kind}.7z`,
             CACHE,
+            HOST_DEPENDENT,
           );
         else
           unavailable(
@@ -602,7 +611,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       const file = path.join(entry.dir === "blobs" ? BLOBS : CACHE, entry.name);
       const stale =
         !fs.existsSync(file) ||
-        (entry.volatile ? fs.statSync(file).size !== entry.size : sha(fs.readFileSync(file)) !== entry.sha256);
+        (entry.volatile
+          ? fs.statSync(file).size !== entry.size
+          : !entry.hostDependent && sha(fs.readFileSync(file)) !== entry.sha256);
       if (stale) {
         console.error(`DRIFT ${entry.name}`);
         drift++;

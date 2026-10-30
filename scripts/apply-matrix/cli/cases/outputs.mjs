@@ -192,8 +192,9 @@ export const register = () => {
   add("output.chd.cd-codec-on-raw-media-rejected", ["output", "chd", "negative"], (ctx) => {
     ctx.failed(compressed(ctx, ctx.tmp("out.chd"), ["--compress-codec", "cdzs"]), { message: /codec|raw/i, what: "cdzs for raw media" });
   });
+  // quality-reason: this harness never drives chdman; parity is asserted by Rust cli_smoke chd.rs and `mise run quality-reference`.
   add("output.chd.reference-chdman", ["output", "chd", "reference"], () => {
-    if (!have("chdman")) skip("chdman not installed on this host; parity vs chdman is asserted by Rust cli_smoke chd.rs and `mise run quality-reference` where chdman exists");
+    skip("parity vs chdman is not driven by this harness; see Rust cli_smoke chd.rs and `mise run quality-reference`");
   });
 
   // ------------------------------------------------------------------- z3ds / rvz outputs
@@ -253,8 +254,9 @@ export const register = () => {
     }
     for (const out of outputs.slice(1)) ctx.same(out, outputs[0], `${path.relative(ctx.work, out)} vs first`);
   });
+  // quality-reason: this harness never drives dolphin-tool; parity is asserted by Rust rvz_z3ds.rs and `mise run quality-reference`.
   add("output.rvz.reference-dolphin-tool", ["output", "rvz", "reference"], () => {
-    if (!have("dolphin-tool")) skip("dolphin-tool not installed on this host; RVZ parity vs dolphin-tool is asserted by Rust rvz_z3ds.rs and `mise run quality-reference` where available");
+    skip("parity vs dolphin-tool is not driven by this harness; see Rust rvz_z3ds.rs and `mise run quality-reference`");
   });
   add("output.disc.default-output-is-raw-iso", ["output", "disc"], (ctx) => {
     const input = ctx.write("in.wbfs", fs.readFileSync(ctx.fx("disc/wbfs.wbfs")));
@@ -270,6 +272,7 @@ export const register = () => {
       ctx.same(ctx.write("rb.iso", readBack(ctx, out)), ctx.fx("disc/wbfs.target.iso"), `${ext} round-trip`);
     });
   }
+  // quality-reason: patch apply has no split-output option to test; split WBFS input is covered by container.disc.wbfs-split*.
   add("output.split.not-offered-by-patch-apply", ["output", "split"], () => {
     skip("patch apply has no split-output option (split WBFS is covered as an input in container.disc.wbfs-split*)");
   });

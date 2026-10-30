@@ -214,6 +214,7 @@ export function discCases() {
   });
   add({
     buildFiles: () => {
+      // quality-reason: NFS expands to a 1.4 GB GameCube image, too large for a unit-sized patch; covered by tests/e2e/nfs-apply.test.mjs.
       throw new Skip(
         "NFS expands to a 1,459,978,240-byte GameCube image, so a unit-sized patch cannot target it; covered by tests/e2e/nfs-apply.test.mjs (run once by this effort, see report)",
       );
@@ -265,12 +266,16 @@ export function discCases() {
       buildFiles: () => {
         const extracted = cliExtract(read(path.join(BROWSER_GENERATED, file)), file);
         if (!extracted) throw new Skip("needs the native CLI to learn the extracted payload bytes");
-        // Copy into a Uint8Array: Buffer#slice aliases memory and rawBpsFixture mutates its copy.
-        const payload = Uint8Array.from(
-          extracted.files.find((f) => f.name.endsWith(payloadName.split(".").pop()) && !f.name.endsWith(".cue"))
-            ?.bytes ?? [],
+        if (extracted.error) throw new Error(`native extract of ${file} failed: ${extracted.error}`);
+        const found = extracted.files.find(
+          (f) => f.name.endsWith(payloadName.split(".").pop()) && !f.name.endsWith(".cue"),
         );
-        if (!payload) throw new Error(`native extract of ${file} gave ${extracted.files.map((f) => f.name).join(",")}`);
+        // Copy into a Uint8Array: Buffer#slice aliases memory and rawBpsFixture mutates its copy.
+        const payload = found ? Uint8Array.from(found.bytes) : new Uint8Array(0);
+        if (payload.length <= offset)
+          throw new Error(
+            `native extract of ${file} gave ${extracted.files.map((f) => f.name).join(",") || "nothing"}`,
+          );
         const { patch, target } = rawBpsFixture(payload, offset);
         return {
           files: [path.join(BROWSER_GENERATED, file), { buffer: patch, name: "flip.bps" }],

@@ -157,7 +157,7 @@ export function chainCases({ manifest }) {
     group: "chain",
     id: "chain/js-8-formats/remove-and-reapply",
     tags: ["chain", "reapply", "remove"],
-    title: "apply the chain, remove the last patch card, apply again: second download is step 7",
+    title: "apply the full chain, then a fresh page with the first 7 patches: second download is step 7",
     async run(h) {
       const out = await scenario(h, {
         files: [base, ...jsChain],
@@ -165,7 +165,7 @@ export function chainCases({ manifest }) {
         applyTimeout: 180_000,
       });
       expectDownload(out, read(path.join(BLOBS, "chain-final.bin")), "first apply");
-      // Same page is gone after scenario(); drive a fresh one for the second half.
+      // scenario() closes its page, so this drives a fresh page; it does not remove a card on the same page.
       const second = await scenario(h, {
         files: [base, ...jsChain.slice(0, 7)],
         shot: "second",
