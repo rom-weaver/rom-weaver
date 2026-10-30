@@ -2355,3 +2355,329 @@ fn extract_keeps_raw_files_of_a_keyless_nfs_archive() {
 
     assert!(output.path().join("content/hif_000000.nfs").is_file());
 }
+
+/// Stream wrappers whose payload name is the wrapper name minus its suffix, so `rom.gz` holds `rom`.
+const STREAM_CODECS: [&str; 5] = ["gz", "xz", "bz2", "zst", "lz4"];
+
+/// A 1 KiB banded dump with no recognisable header (an extension-less raw ROM).
+fn banded_rom() -> Vec<u8> {
+    (0..1024u32).map(|i| ((i / 16) * 37 + 5) as u8).collect()
+}
+
+/// `banded_rom` with byte 100 flipped: the BPS below patches `banded_rom` into this.
+fn banded_rom_patched() -> Vec<u8> {
+    let mut bytes = banded_rom();
+    bytes[100] ^= 0x5a;
+    bytes
+}
+
+const BANDED_BPS_HEX: &str = "4250533100870087800c8281b9689bdc1420ebbd6966b0fe580177";
+/// `bz2` of `banded_rom` / `BANDED_BPS_HEX` (no bzip2 encoder is linked into the test build).
+const BANDED_ROM_BZ2_HEX: &str = "425a6839314159265359e7eb25ee0000007fff824d2492401249249000924924800492492400249249200124924900092492483000d581dfe950340d3268d1918462683106f4a1a609ea1993400099310601304c0011a3025fff95553002626040c00269a64c7ffaaa82607ea8208023802201df3ee9fbfebb6fc228a0926a74556eabb0cf6efe3cb4db8ebcfc10fa8a39259bac92cddbbf8f339a3d7bf947da6aaecb7f26709304608c11823049048048050c30c30c30c30c30c30c30c30c30c30c30c30c30c30c30c30c30c30c30c30c30e070381c0e070381c0e07e05dc914e142439fac97b80";
+const BANDED_BPS_BZ2_HEX: &str = "425a683931415926535946c4c088000003ffebe00404004000200010004840016000807080000840220004000800012000314000d03264140000d1932402baf4efbbe103c7ac100284490cd3e2ee48a70a1208d8981100";
+
+fn hex_bytes(hex: &str) -> Vec<u8> {
+    (0..hex.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&hex[index..index + 2], 16).expect("hex byte"))
+        .collect()
+}
+
+fn banded_bps() -> Vec<u8> {
+    hex_bytes(BANDED_BPS_HEX)
+}
+
+/// Wrap `payload` (`banded_rom` or `banded_bps`) in `codec` without storing any payload name.
+fn wrap_stream(codec: &str, payload: &[u8]) -> Vec<u8> {
+    match codec {
+        "gz" => {
+            let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::new(6));
+            encoder.write_all(payload).expect("gzip payload");
+            encoder.finish().expect("gzip finish")
+        }
+        "xz" => rom_weaver_core::codecs::encode_xz_preset(payload, 6).expect("xz payload"),
+        "zst" => zstd::stream::encode_all(payload, 0).expect("zstd payload"),
+        "lz4" => {
+            let mut encoder = lz4_flex::frame::FrameEncoder::new(Vec::new());
+            encoder.write_all(payload).expect("lz4 payload");
+            encoder.finish().expect("lz4 finish")
+        }
+        "bz2" if payload == banded_rom().as_slice() => hex_bytes(BANDED_ROM_BZ2_HEX),
+        "bz2" if payload == banded_bps().as_slice() => hex_bytes(BANDED_BPS_BZ2_HEX),
+        other => panic!("no fixture encoder for `{other}`"),
+    }
+}
+
+fn write_wrapped(temp: &TempDir, name: &str, codec: &str, payload: &[u8]) -> PathBuf {
+    let path = temp.child(name);
+    fs::write(path.path(), wrap_stream(codec, payload)).expect("wrapped fixture");
+    path.path().to_path_buf()
+}
+
+/// B1: a single-file compressed ROM whose payload name has no extension (`rom.gz` -> `rom`) is a
+/// ROM candidate, not "no ROM found".
+#[test]
+fn ingest_extensionless_compressed_rom_is_a_rom_candidate() {
+    for codec in STREAM_CODECS {
+        let temp = setup_temp_dir();
+        let source = write_wrapped(&temp, &format!("rom.{codec}"), codec, &banded_rom());
+        let output = temp.child("ingested");
+        let terminal = ingest_terminal(&[
+            "ingest",
+            "--input",
+            source.to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ]);
+        assert_eq!(terminal["status"], "succeeded", "{codec}: {terminal}");
+        let ingest = &terminal["details"]["ingest"];
+        assert_eq!(ingest["kind"], "rom", "{codec}");
+        assert_eq!(ingest["is_rom"], true, "{codec}");
+        let assets = ingest["assets"].as_array().expect("assets");
+        assert_eq!(assets.len(), 1, "{codec}: {ingest}");
+        assert_eq!(assets[0]["file_name"], "rom", "{codec}");
+        let extracted = assets[0]["path"].as_str().expect("asset path");
+        assert_eq!(
+            fs::read(extracted).expect("payload"),
+            banded_rom(),
+            "{codec}"
+        );
+        assert!(ingest["patches"].as_array().expect("patches").is_empty());
+    }
+}
+
+/// B2: an extension-less compressed patch (`patch.gz` -> `patch`) is recognised by its magic bytes.
+#[test]
+fn ingest_extensionless_compressed_patch_is_classified_by_signature() {
+    for codec in STREAM_CODECS {
+        let temp = setup_temp_dir();
+        let source = write_wrapped(&temp, &format!("patch.{codec}"), codec, &banded_bps());
+        let output = temp.child("ingested");
+        let terminal = ingest_terminal(&[
+            "ingest",
+            "--input",
+            source.to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ]);
+        assert_eq!(terminal["status"], "succeeded", "{codec}: {terminal}");
+        let ingest = &terminal["details"]["ingest"];
+        assert_eq!(ingest["kind"], "patch", "{codec}: {ingest}");
+        assert_eq!(ingest["is_rom"], false, "{codec}");
+        assert!(ingest["assets"].as_array().expect("assets").is_empty());
+        let patches = ingest["patches"].as_array().expect("patches");
+        assert_eq!(patches.len(), 1, "{codec}: {ingest}");
+        assert_eq!(patches[0]["format"], "BPS", "{codec}");
+    }
+}
+
+/// A nested archive holding a named patch beside an extension-less compressed patch reports both.
+#[test]
+fn ingest_nested_named_and_extensionless_patches_are_both_reported() {
+    let temp = setup_temp_dir();
+    let members = temp.child("members");
+    fs::create_dir_all(members.path()).expect("members dir");
+    let named = members.path().join("hack.bps");
+    fs::write(&named, banded_bps()).expect("named patch");
+    let wrapped = write_wrapped(&temp, "members/hack.gz", "gz", &banded_bps());
+    let inner = temp.child("inner.zip");
+    zip_members(&temp, inner.path(), &[named.as_path(), wrapped.as_path()]);
+    let outer = temp.child("outer.zip");
+    zip_members(&temp, outer.path(), &[inner.path()]);
+    let terminal = ingest_json(&temp, outer.path(), "nested-out");
+    assert_eq!(terminal["status"], "succeeded", "{terminal}");
+    let ingest = &terminal["details"]["ingest"];
+    assert_eq!(ingest["kind"], "patch", "{ingest}");
+    let mut names: Vec<String> = patch_file_names(ingest)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    names.sort();
+    assert_eq!(names, ["hack", "hack.bps"], "{ingest}");
+}
+
+/// Two named patches beside an extension-less compressed patch reach the host in ONE
+/// `patch-manifest` event: the webapp opens its dialog on the first manifest and ignores later ones.
+#[test]
+fn ingest_nested_named_and_extensionless_patches_share_one_manifest() {
+    let temp = setup_temp_dir();
+    let members = temp.child("members");
+    fs::create_dir_all(members.path()).expect("members dir");
+    let first = members.path().join("a.bps");
+    let second = members.path().join("b.bps");
+    fs::write(&first, banded_bps()).expect("first patch");
+    fs::write(&second, banded_bps()).expect("second patch");
+    let wrapped = write_wrapped(&temp, "members/hack.gz", "gz", &banded_bps());
+    let inner = temp.child("inner.zip");
+    zip_members(
+        &temp,
+        inner.path(),
+        &[first.as_path(), second.as_path(), wrapped.as_path()],
+    );
+    let outer = temp.child("outer.zip");
+    zip_members(&temp, outer.path(), &[inner.path()]);
+    let output = temp.child("nested-out");
+    let events = run_json_events(
+        &[
+            "ingest",
+            "--input",
+            outer.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let manifests: Vec<Vec<String>> = events
+        .iter()
+        .filter(|event| event["stage"] == "patch-manifest")
+        .map(|event| {
+            let mut names: Vec<String> = event["details"]["patch_manifest"]["patches"]
+                .as_array()
+                .expect("manifest patches")
+                .iter()
+                .map(|patch| patch["file_name"].as_str().expect("file_name").to_string())
+                .collect();
+            names.sort();
+            names
+        })
+        .collect();
+    assert_eq!(manifests, [["a.bps", "b.bps", "hack"]], "{events:?}");
+}
+
+/// An extension-less compressed dump ingested with `--output` set to its own directory would
+/// extract onto the source path; ingest must refuse and leave the source untouched, for payloads
+/// below and above the 8 MiB mark.
+#[test]
+fn ingest_refuses_to_extract_an_extensionless_dump_over_its_own_source() {
+    for payload_len in [4 * 1024, 9 * 1024 * 1024] {
+        let temp = setup_temp_dir();
+        let mut state = 0x9E37_79B9_u32;
+        let payload: Vec<u8> = (0..payload_len)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                (state >> 8) as u8
+            })
+            .collect();
+        let source = write_wrapped(&temp, "dump", "gz", &payload);
+        let before = fs::read(&source).expect("source bytes");
+        let dir = source.parent().expect("source dir");
+        let terminal = isolated_json_event(
+            &temp,
+            &[
+                "ingest",
+                "--input",
+                source.to_str().expect("path"),
+                "--output",
+                dir.to_str().expect("path"),
+                "--json",
+            ],
+            1,
+        );
+        assert_eq!(terminal["status"], "failed", "{payload_len}: {terminal}");
+        let message = terminal.to_string();
+        assert!(
+            message.contains("refusing to write the extracted payload over its own source file"),
+            "{payload_len}: {message}"
+        );
+        assert_eq!(
+            fs::read(&source).expect("source after"),
+            before,
+            "{payload_len}: the source file must be left untouched"
+        );
+    }
+}
+
+/// An extension-less raw dump with no patch magic stays a ROM candidate, bare or compressed - even
+/// when it starts with the two bytes of the weakest patch magic (`SP`, SOLID), which is excluded.
+#[test]
+fn ingest_extensionless_raw_dump_without_patch_signature_stays_a_rom() {
+    for prefix in [&b"\x00\x01"[..], &b"SP"[..]] {
+        let mut dump = banded_rom();
+        dump[..prefix.len()].copy_from_slice(prefix);
+        let temp = setup_temp_dir();
+        let bare = temp.child("dump");
+        fs::write(bare.path(), &dump).expect("bare dump");
+        let wrapped = temp.child("dump.gz");
+        let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::new(6));
+        encoder.write_all(&dump).expect("gzip payload");
+        fs::write(wrapped.path(), encoder.finish().expect("gzip finish")).expect("wrapped dump");
+        for source in [bare.path(), wrapped.path()] {
+            let output = temp.child(format!(
+                "ingested-{}",
+                source
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .expect("name")
+            ));
+            let terminal = ingest_terminal(&[
+                "ingest",
+                "--input",
+                source.to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--json",
+            ]);
+            let ingest = &terminal["details"]["ingest"];
+            assert_eq!(ingest["kind"], "rom", "{}: {ingest}", source.display());
+            assert_eq!(ingest["assets"].as_array().expect("assets").len(), 1);
+            assert!(ingest["patches"].as_array().expect("patches").is_empty());
+        }
+    }
+}
+
+/// A bare extension-less file carrying patch magic is a patch, not a ROM.
+#[test]
+fn ingest_bare_extensionless_patch_is_classified_by_signature() {
+    let temp = setup_temp_dir();
+    let bare = temp.child("patch");
+    fs::write(bare.path(), banded_bps()).expect("bare patch");
+    let output = temp.child("ingested");
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        bare.path().to_str().expect("path"),
+        "--output",
+        output.path().to_str().expect("path"),
+        "--json",
+    ]);
+    let ingest = &terminal["details"]["ingest"];
+    assert_eq!(ingest["kind"], "patch", "{ingest}");
+    assert_eq!(ingest["patches"][0]["format"], "BPS", "{ingest}");
+}
+
+/// `patch apply` with a compressed extension-less ROM and a compressed extension-less patch.
+#[test]
+fn patch_apply_accepts_extensionless_compressed_rom_and_patch() {
+    for codec in STREAM_CODECS {
+        let temp = setup_temp_dir();
+        let rom = write_wrapped(&temp, &format!("rom.{codec}"), codec, &banded_rom());
+        let patch = write_wrapped(&temp, &format!("patch.{codec}"), codec, &banded_bps());
+        let applied = temp.child("applied.bin");
+        let terminal = run_single_json_event(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                rom.to_str().expect("path"),
+                "--patch",
+                patch.to_str().expect("path"),
+                "--output",
+                applied.path().to_str().expect("path"),
+                "--no-compress",
+                "--jsonl",
+            ],
+            0,
+        );
+        assert_eq!(terminal["status"], "succeeded", "{codec}: {terminal}");
+        assert_eq!(
+            fs::read(applied.path()).expect("applied output"),
+            banded_rom_patched(),
+            "{codec}"
+        );
+    }
+}

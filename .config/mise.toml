@@ -9,7 +9,7 @@ node = "24.18.0"
 # Fresh toolchains need these components for formatting and Clippy checks.
 rust = { version = "1.97.1", components = "rustfmt,clippy" }
 # The GitHub backend includes Binaryen's Linux arm64 release assets.
-"github:WebAssembly/binaryen" = { version = "version_129", exe = "wasm-opt" }
+"github:WebAssembly/binaryen" = "version_129"
 "aqua:EmbarkStudios/cargo-deny" = "0.20.2"
 "ubi:bnjbvr/cargo-machete" = "0.9.1"
 # Version is the release tag: nextest's repo prefixes tags with the crate name.
@@ -63,7 +63,7 @@ CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
 RUSTC_WRAPPER = "{{ exec(command='command -v sccache || true') | trim }}"
 CARGO_INCREMENTAL = "{{ exec(command='test -n \"$CI\" || command -v sccache >/dev/null 2>&1 && echo 0 || echo 1') | trim }}"
 # Read the process value so parent worktree defaults cannot replace the limit.
-SCCACHE_CACHE_SIZE = "{{ get_env(name='SCCACHE_CACHE_SIZE', default='35G') }}"
+SCCACHE_CACHE_SIZE = "{{ get_env(name='SCCACHE_CACHE_SIZE', default='60G') }}"
 
 # cc-rs can inherit RUSTC_WRAPPER, but ccache reuses C objects across worktree paths.
 # Cross builds MUST set CC_<target>/CXX_<target> when the host compiler is unsuitable.

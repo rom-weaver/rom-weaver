@@ -1,7 +1,10 @@
 use std::{
+    io::Read,
     path::{Path, PathBuf},
     sync::Arc,
 };
+
+use tracing::debug;
 
 use crate::nod::read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader};
 use rom_weaver_core::{
@@ -879,8 +882,71 @@ pub fn ensure_split_wbfs_inputs_complete(inputs: &[PathBuf], format: &str) -> Re
                 missing.join("`, `")
             )));
         }
+        ensure_wbfs_parts_cover_header(input, inputs, format)?;
     }
     Ok(())
+}
+
+/// Rejects a `.wbfs` input whose given parts (`.wbfs` plus the consecutive `.wbfN` inputs) do not
+/// add up to the size its header declares. This catches an incomplete set whose missing parts are
+/// not on disk next to the input (the browser, which only sees the files it was handed), where
+/// the sibling lookup in [`split_wbfs_parts`] finds nothing.
+fn ensure_wbfs_parts_cover_header(input: &Path, inputs: &[PathBuf], format: &str) -> Result<()> {
+    let is_wbfs = input
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("wbfs"));
+    let Some(name) = input.to_str().filter(|_| is_wbfs) else {
+        return Ok(());
+    };
+    let mut header = [0u8; 9];
+    let Ok(()) = std::fs::File::open(input).and_then(|mut file| file.read_exact(&mut header))
+    else {
+        return Ok(());
+    };
+    if &header[..4] != b"WBFS" || header[8] >= 64 {
+        return Ok(());
+    }
+    let num_sectors = u64::from(u32::from_be_bytes([
+        header[4], header[5], header[6], header[7],
+    ]));
+    let expected = num_sectors << header[8];
+    let prefix = &name[..name.len() - 1];
+    let size_of = |path: &Path| std::fs::metadata(path).map_or(0, |metadata| metadata.len());
+    let mut actual = size_of(input);
+    for index in 1.. {
+        let part = PathBuf::from(format!("{prefix}{index}"));
+        // Parts of one set may differ in case (`Game.WBFS`, `Game.wbf1`); the browser compares
+        // names as strings, so match ignoring ASCII case and size the part that was given.
+        let Some(given) = inputs.iter().find(|given| {
+            same_file_path(given, &part)
+                || given
+                    .to_str()
+                    .is_some_and(|given| given.eq_ignore_ascii_case(&part.to_string_lossy()))
+        }) else {
+            break;
+        };
+        actual += size_of(given);
+    }
+    debug!(
+        "split WBFS `{}`: given parts total {actual} bytes, header declares {expected}",
+        input.display()
+    );
+    if actual < expected {
+        return Err(RomWeaverError::Validation(format!(
+            "`{}` is a WBFS file, or the first part of a split WBFS set; the parts given total \
+             {actual} bytes but its header declares {expected}, so the set is incomplete or the \
+             file is truncated and {format} output would leave out data. Compress to rvz, or pass \
+             every part as an input to a zip or 7z archive",
+            input.display()
+        )));
+    }
+    Ok(())
+}
+
+fn same_file_path(left: &Path, right: &Path) -> bool {
+    let canonical =
+        |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    canonical(left) == canonical(right)
 }
 
 /// Map a detected ROM identity (the `platform` label and optical-medium `disc_format`

@@ -29,6 +29,8 @@ For an NFS disc, add `hif_000000.nfs`, the remaining `hif_*.nfs` parts, and `htk
 
 For a WBFS disc split for FAT32, add the `.wbfs` file and every `.wbf1`, `.wbf2`, ... part together in the same file selection or drop.
 
+If a part is missing, Extract reports that the `.wbfs` file is shorter than its WBFS header says. A WBFS drive image that holds several games fails with "Only single WBFS discs are supported".
+
 To stop a long extraction, cancel it from the progress bar. Select **Extract again** to restart it.
 
 ## Download the files

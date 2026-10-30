@@ -1,0 +1,118 @@
+diff --git a/io/gcz.rs b/io/gcz.rs
+index 15e924ad0..878b765ef 100644
+--- a/io/gcz.rs
++++ b/io/gcz.rs
+@@ -74,7 +74,7 @@ impl BlockReaderGCZ {
+         }
+ 
+         let block_size = header.block_size.get();
+-        if block_size < SECTOR_SIZE as u32 || block_size % SECTOR_SIZE as u32 != 0 {
++        if !is_supported_block_size(block_size) {
+             return Err(Error::DiscFormat("Invalid block size for GCZ".to_string()));
+         }
+         let block_count = header.block_count.get();
+@@ -112,15 +112,77 @@ impl BlockReaderGCZ {
+     }
+ }
+ 
++/// Smallest GCZ block this reader accepts. Dolphin writes any power-of-two block size, but the
++/// block map costs 12 bytes per block, so anything below the 512 byte disc sector is rejected.
++const MIN_BLOCK_SIZE: u32 = 512;
++
++/// Block sizes are either whole sectors (any multiple of 32 KiB) or a power of two that divides a
++/// sector evenly, which dolphin-tool writes for sizes like 16 KiB down to 2 KiB.
++fn is_supported_block_size(block_size: u32) -> bool {
++    if block_size >= SECTOR_SIZE as u32 {
++        block_size % SECTOR_SIZE as u32 == 0
++    } else {
++        block_size >= MIN_BLOCK_SIZE && block_size.is_power_of_two()
++    }
++}
++
+ impl BlockReader for BlockReaderGCZ {
+     fn read_block(&mut self, out: &mut [u8], sector: u32) -> io::Result<Block> {
++        // The disc readers work in whole sectors, so blocks smaller than a sector are served as
++        // one sector made of several consecutive GCZ blocks.
+         let block_size = self.header.block_size.get();
+-        let block_idx = ((sector as u64 * SECTOR_SIZE as u64) / block_size as u64) as u32;
+-        if block_idx >= self.header.block_count.get() {
++        let group_size = self.block_size();
++        let group_idx = (sector as u64 * SECTOR_SIZE as u64) / group_size as u64;
++        let first_block = group_idx * (group_size / block_size) as u64;
++        if first_block >= self.header.block_count.get() as u64 {
+             // Out of bounds
+-            return Ok(Block::new(block_idx, block_size, BlockKind::None));
++            return Ok(Block::new(group_idx as u32, group_size, BlockKind::None));
+         }
+ 
++        let out = out.get_mut(..group_size as usize).ok_or_else(|| {
++            io::Error::new(
++                io::ErrorKind::InvalidInput,
++                format!("GCZ output buffer is smaller than {group_size} bytes"),
++            )
++        })?;
++        if group_size != block_size {
++            trace!(
++                sector,
++                first_block, block_size, "reading GCZ sector from sub-sector blocks"
++            );
++        }
++        for (i, chunk) in out.chunks_mut(block_size as usize).enumerate() {
++            let block_idx = first_block + i as u64;
++            if block_idx >= self.header.block_count.get() as u64 {
++                // The disc ends inside this sector: the map has no more blocks to read.
++                chunk.fill(0);
++            } else {
++                self.read_gcz_block(chunk, block_idx as u32)?;
++            }
++        }
++        Ok(Block::new(group_idx as u32, group_size, BlockKind::Raw))
++    }
++
++    fn block_size(&self) -> u32 {
++        self.header.block_size.get().max(SECTOR_SIZE as u32)
++    }
++
++    fn meta(&self) -> DiscMeta {
++        DiscMeta {
++            format: Format::Gcz,
++            compression: Compression::Deflate(0),
++            block_size: Some(self.header.block_size.get()),
++            lossless: true,
++            disc_size: Some(self.header.disc_size.get()),
++            ..Default::default()
++        }
++    }
++}
++
++impl BlockReaderGCZ {
++    /// Reads, verifies and decompresses one GCZ block into `out`, which is exactly one block.
++    fn read_gcz_block(&mut self, out: &mut [u8], block_idx: u32) -> io::Result<()> {
++        let block_size = self.header.block_size.get();
+         // Find block offset and size
+         let mut file_offset = self.block_map[block_idx as usize].get();
+         let mut compressed = true;
+@@ -190,22 +252,7 @@ impl BlockReader for BlockReaderGCZ {
+             out.copy_from_slice(self.block_buf.as_ref());
+         }
+ 
+-        Ok(Block::new(block_idx, block_size, BlockKind::Raw))
+-    }
+-
+-    fn block_size(&self) -> u32 {
+-        self.header.block_size.get()
+-    }
+-
+-    fn meta(&self) -> DiscMeta {
+-        DiscMeta {
+-            format: Format::Gcz,
+-            compression: Compression::Deflate(0),
+-            block_size: Some(self.header.block_size.get()),
+-            lossless: true,
+-            disc_size: Some(self.header.disc_size.get()),
+-            ..Default::default()
+-        }
++        Ok(())
+     }
+ }
+ 

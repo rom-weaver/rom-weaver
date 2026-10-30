@@ -288,3 +288,22 @@ pub(crate) fn assert_read_only_input_apply(
         }
     }
 }
+
+/// Asserts that `result` failed with the "implausible output size" validation
+/// code (the guard against corrupt offset/size fields) and left no output file.
+pub(crate) fn assert_implausible_output_rejected(
+    result: rom_weaver_core::Result<OperationReport>,
+    output: &Path,
+) {
+    match result {
+        Err(rom_weaver_core::RomWeaverError::ValidationCode(error)) => {
+            assert_eq!(error.code(), "patch.output_size_implausible", "{error}");
+            assert!(
+                error.to_string().contains("probably corrupt"),
+                "unclear message: {error}"
+            );
+        }
+        other => panic!("expected the implausible-output validation error, got {other:?}"),
+    }
+    assert!(!output.exists(), "no output may be left behind");
+}

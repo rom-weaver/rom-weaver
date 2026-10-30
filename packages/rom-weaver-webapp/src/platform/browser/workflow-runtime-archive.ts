@@ -44,6 +44,8 @@ import {
 } from "./workflow-runtime-vfs-cleanup.ts";
 
 const ZIP_LIKE_EXTENSION_REGEX = /\.(zip|jar|apk|cbz|epub|xpi)$/i;
+// First part (`.wbfs`) or continuation (`.wbf1`, `.wbf2`, ...) of a split WBFS set; group 1 is the shared stem.
+const SPLIT_WBFS_PART_REGEX = /^(.+)\.wbf(?:s|\d+)$/i;
 const zipAliasFiles = new WeakMap<File, File>();
 
 const normalizeArchiveRelativePath = (value: string): string => {
@@ -184,13 +186,21 @@ const stageBrowserCompressionEntries = async (
     const fileName = entry.fileName || entry.filename || entry.name || `entry-${index + 1}.bin`;
     const source = createArchiveEntrySource(entry, fileName);
     if (!source) throw new Error(`Archive entry data was not provided: ${fileName}`);
+    // Split WBFS parts (`Game.wbfs`, `Game.wbf1`, ...) are staged side by side: the Rust create guard
+    // (`ensure_split_wbfs_inputs_complete`) pairs a set's parts by their shared directory and name, so
+    // parts staged in separate directories would each look like an incomplete set.
+    const wbfsStem = SPLIT_WBFS_PART_REGEX.exec(getPathBaseName(normalizeArchiveRelativePath(fileName)))?.[1];
+    const entryDirectory =
+      wbfsStem === undefined ? `archive-entry-${index + 1}` : `archive-wbfs-${wbfsStem.toLowerCase()}`;
     return [
       {
         fallbackFileName: fileName,
-        pathPrefix: `${pathPrefixRoot}/archive-entry-${index + 1}`,
+        pathPrefix: `${pathPrefixRoot}/${entryDirectory}`,
         pathPrefixInPath: true,
         scope: "archive" as const,
-        source,
+        // A File already staged for an earlier create keeps its old directory (the stage cache is keyed
+        // by File identity), which would split the set across directories; a fresh File restages it here.
+        source: wbfsStem !== undefined && source instanceof File ? new File([source], source.name) : source,
       },
     ];
   });

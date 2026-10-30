@@ -114,10 +114,16 @@ impl PatchHandler for ApsN64PatchHandler {
             validate_n64_source(&request.input, n64_header)?;
         }
 
+        let input_size = fs::metadata(&request.input)?.len();
+        crate::ensure_plausible_output_size(
+            self.descriptor.name,
+            patch.output_size,
+            input_size,
+            patch_path,
+        )?;
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        let input_size = fs::metadata(&request.input)?.len();
         let thread_capability = parallel_per_record_capability(patch.records.len());
         let in_memory = crate::can_apply_sparse_in_memory(
             context,
@@ -191,6 +197,12 @@ impl PatchHandler for ApsN64PatchHandler {
         {
             validate_n64_source(&request.input, n64_header)?;
         }
+        crate::ensure_plausible_output_size(
+            self.descriptor.name,
+            patch.output_size,
+            fs::metadata(&request.input)?.len(),
+            patch_path,
+        )?;
         for record in &patch.records {
             context.cancel().check()?;
             let _ = prepare_aps_write(record, patch.output_size)?;

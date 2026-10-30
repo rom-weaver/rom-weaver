@@ -888,3 +888,85 @@ fn sparse_apply_defaults_preserve_untouched_bytes() {
         fs::set_permissions(&input, original_permissions).expect("restore input permissions");
     }
 }
+
+mod plausible_output_size {
+    use super::super::{ensure_plausible_output_size, plausible_output_limit};
+    use crate::test_support::TestDir;
+    use rom_weaver_core::RomWeaverError;
+
+    const FLOOR: u64 = 1 << 30;
+
+    /// A patch file of exactly `len` bytes; the guard reads its size from disk.
+    fn patch_of_len(temp: &TestDir, len: usize) -> std::path::PathBuf {
+        let path = temp.child("guard.patch");
+        std::fs::write(&path, vec![0_u8; len]).expect("patch fixture");
+        path
+    }
+
+    fn check(output: u64, source: u64, patch: &std::path::Path) -> Result<(), RomWeaverError> {
+        ensure_plausible_output_size("IPS32", output, source, patch)
+    }
+
+    #[test]
+    fn floor_applies_when_source_and_patch_are_small() {
+        let temp = TestDir::new();
+        let patch = patch_of_len(&temp, 16);
+        assert_eq!(plausible_output_limit(512, 16), FLOOR);
+        check(FLOOR, 512, &patch).expect("exactly the floor is plausible");
+        let error = check(FLOOR + 1, 512, &patch).expect_err("one byte past the floor");
+        assert!(
+            matches!(error, RomWeaverError::ValidationCode(_)),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn scaled_limit_applies_when_it_exceeds_the_floor() {
+        let temp = TestDir::new();
+        let patch = patch_of_len(&temp, 16);
+        let source = 20_000_000_u64;
+        let limit = 64 * (source + 16);
+        assert!(limit > FLOOR);
+        assert_eq!(plausible_output_limit(source, 16), limit);
+        check(limit, source, &patch).expect("exactly the scaled limit");
+        check(FLOOR + 1, source, &patch).expect("above the floor but within the scaled limit");
+        check(limit + 1, source, &patch).expect_err("one byte past the scaled limit");
+    }
+
+    #[test]
+    fn rejection_carries_the_stable_code_and_size_fields() {
+        let temp = TestDir::new();
+        let patch = patch_of_len(&temp, 16);
+        let output = FLOOR + 5;
+        let error = check(output, 512, &patch).expect_err("implausible");
+        let RomWeaverError::ValidationCode(coded) = &error else {
+            panic!("expected a coded validation error: {error}");
+        };
+        assert_eq!(coded.code(), "patch.output_size_implausible");
+        let message = error.to_string();
+        for expected in [
+            format!("IPS32 patch would write a {output} byte output"),
+            format!("more than the {FLOOR} byte limit for a 512 byte source and 16 byte patch"),
+            "probably corrupt".to_string(),
+            "format=IPS32".to_string(),
+            format!("output_size={output}"),
+            format!("limit={FLOOR}"),
+            "source_size=512".to_string(),
+            "patch_size=16".to_string(),
+        ] {
+            assert!(
+                message.contains(&expected),
+                "{expected} missing from {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn zero_and_small_outputs_are_plausible() {
+        let temp = TestDir::new();
+        let patch = patch_of_len(&temp, 0);
+        check(0, 0, &patch).expect("empty output");
+        check(1, 0, &patch).expect("tiny output");
+        check(4096, 512, &patch).expect("small output");
+    }
+}

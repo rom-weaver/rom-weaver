@@ -159,13 +159,12 @@ export const registerPatchFormats = () => {
       const result = ctx.apply(sourceOf(ctx, first), patch, out, [...extra, ...(first[3] ?? [])]);
       return { result, out };
     };
-    const patBug = format.name === "pat" ? { knownBug: "BUG-PAT-LENIENT-PARSE" } : {};
     add(`${group}.bad-patch.empty`, [format.name, "negative"], (ctx) => {
       const patch = ctx.write(`empty.${ext}`, new Uint8Array(0));
       const { result, out } = cleanFailure(ctx, patch, "empty");
       ctx.failed(result, { what: "empty patch" });
       check(!ctx.exists(out), "empty patch left an output file");
-    }, patBug);
+    });
     add(`${group}.bad-patch.garbage`, [format.name, "negative"], (ctx) => {
       const patch = ctx.write(`garbage.${ext}`, fs.readFileSync(ctx.fx("patches/garbage.bin")));
       const { result, out } = cleanFailure(ctx, patch, "garbage");
@@ -183,7 +182,7 @@ export const registerPatchFormats = () => {
         }
         ctx.failed(result, { what: `patch truncated (${label})` });
         check(!ctx.exists(out), "truncated patch left an output file");
-      }, label === "header-only" ? patBug : {});
+      });
     }
     add(`${group}.bad-patch.corrupt-middle`, [format.name, "negative"], (ctx) => {
       const patch = mutate(ctx, `corrupt.${ext}`, (bytes) => {

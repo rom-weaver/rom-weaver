@@ -201,7 +201,7 @@ GameCube and Wii disc support comes from [encounter/nod](https://github.com/enco
 
 The inlined copy is adapted from [encounter/nod](https://github.com/encounter/nod) and is intentionally self-contained; no nod checkout is required to build or publish rom-weaver.
 
-`src/nod/NOD_VERSION` points to `vendor-patches/nod/manifest.json`. That manifest pins the upstream source and both license files. Its source patches capture the local behavior, including preloader read-ahead, Wii FST alignment, partition bounds, DOL/FST arithmetic, GCZ geometry, and NFS sparse-sector handling.
+`src/nod/NOD_VERSION` points to `vendor-patches/nod/manifest.json`. That manifest pins the upstream source and both license files. Its source patches capture the local behavior, including preloader read-ahead, Wii FST alignment, partition bounds, DOL/FST arithmetic, GCZ geometry (including sub-sector block sizes, which are read as whole sectors), and NFS sparse-sector handling.
 
 The last six integration patches adapt nod to this workspace, one concern each: Python binding removal, crate and doctest paths, rustfmt, lint allowances, dead-code cleanup, and test hooks. Generic changes are kept before them, so formatting and inlining do not obscure the fixes.
 

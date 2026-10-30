@@ -151,6 +151,12 @@ impl PatchHandler for IpsPatchHandler {
         let patch = parse_ips_file(patch_path, self.flavor, context.patch_checksum_validation())?;
         let input_len = fs::metadata(&request.input)?.len();
         let output_size = patch.resolved_output_size(input_len);
+        crate::ensure_plausible_output_size(
+            self.descriptor.name,
+            output_size,
+            input_len,
+            patch_path,
+        )?;
         trace!(
             format = self.descriptor.name,
             records = patch.records.len(),
@@ -229,6 +235,12 @@ impl PatchHandler for IpsPatchHandler {
         let patch = parse_ips_file(patch_path, self.flavor, context.patch_checksum_validation())?;
         let input_len = fs::metadata(&request.input)?.len();
         let output_size = patch.resolved_output_size(input_len);
+        crate::ensure_plausible_output_size(
+            self.descriptor.name,
+            output_size,
+            input_len,
+            patch_path,
+        )?;
         let _ = max_parallel_chunks(output_size)?;
 
         Ok(crate::patch_success_report(
@@ -454,12 +466,24 @@ fn parse_ips_file(
                     0 => (None, None),
                     3 => (Some(u64::from(parser.read_u24()?)), None),
                     _ => {
-                        handle_unexpected_ips_trailing_bytes(
-                            trailing_len,
-                            validation,
-                            &mut warnings,
-                        )?;
-                        (None, None)
+                        let sniffed = if trailing_len <= EBP_SNIFF_MAX_BYTES {
+                            let len = usize::try_from(trailing_len).map_err(|_| {
+                                RomWeaverError::Validation(
+                                    "IPS trailing data exceeded addressable memory".into(),
+                                )
+                            })?;
+                            sniff_ebp_metadata(parser.read_exact(len)?.as_slice())
+                        } else {
+                            None
+                        };
+                        if sniffed.is_none() {
+                            handle_unexpected_ips_trailing_bytes(
+                                trailing_len,
+                                validation,
+                                &mut warnings,
+                            )?;
+                        }
+                        (None, sniffed)
                     }
                 },
                 IpsFlavor::Ips32 => match trailing_len {
@@ -707,12 +731,19 @@ fn parse_ips_bytes_with_validation(
                     0 => (None, None),
                     3 => (Some(u64::from(parser.read_u24()?)), None),
                     trailing_len => {
-                        handle_unexpected_ips_trailing_bytes(
-                            trailing_len as u64,
-                            validation,
-                            &mut warnings,
-                        )?;
-                        (None, None)
+                        let sniffed = if trailing_len as u64 <= EBP_SNIFF_MAX_BYTES {
+                            sniff_ebp_metadata(parser.read_exact(trailing_len)?)
+                        } else {
+                            None
+                        };
+                        if sniffed.is_none() {
+                            handle_unexpected_ips_trailing_bytes(
+                                trailing_len as u64,
+                                validation,
+                                &mut warnings,
+                            )?;
+                        }
+                        (None, sniffed)
                     }
                 },
                 IpsFlavor::Ips32 => match parser.remaining() {
@@ -780,6 +811,21 @@ fn parse_label(format_name: &str, patch: &ParsedIpsPatch) -> String {
         label.push_str(" and metadata");
     }
     append_warning_labels(label, &patch.warnings)
+}
+
+/// Largest trailing block checked for EBP metadata when a patch is parsed as plain IPS.
+const EBP_SNIFF_MAX_BYTES: u64 = 64 * 1024;
+
+/// EBP shares IPS's magic and records, so an EBP patch under a non-`.ebp` name parses as IPS and
+/// meets its JSON metadata as trailing bytes after EOF. Metadata that parses as an EBP object
+/// identifies it, so the patch is applied as EBP instead of failing or ignoring the bytes.
+fn sniff_ebp_metadata(trailing: &[u8]) -> Option<JsonMap<String, JsonValue>> {
+    let metadata = parse_ebp_metadata(trailing).ok()?;
+    debug!(
+        trailing_len = trailing.len(),
+        "IPS patch carries EBP metadata after EOF; applying it as EBP"
+    );
+    Some(metadata)
 }
 
 fn handle_unexpected_ips_trailing_bytes(

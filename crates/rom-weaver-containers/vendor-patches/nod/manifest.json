@@ -286,6 +286,17 @@
         "cargo test -p rom-weaver-containers nod",
         "cargo test -p rom-weaver-cli --test integration rvz"
       ]
+    },
+    {
+      "file": "0023-gcz-sub-sector-blocks.patch",
+      "stage": "integration",
+      "reason": "Read GCZ files whose block size is a power of two from 512 B to 16 KiB (dolphin-tool writes them): report a whole-sector block size to the disc readers and assemble each sector from consecutive GCZ blocks, zero-filling blocks past the map.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::io::gcz::tests::"
+      ]
     }
   ],
   "materialized": true,
