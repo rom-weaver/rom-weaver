@@ -463,7 +463,7 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 
 `--ppf-undo` writes PPF3 undo data (the original bytes under every record) so `tools ppf-undo` can revert the patch. It requires PPF output. Bytes the modified file adds past the original's end are restored as zeros, because PPF cannot shrink a file.
 
-`--xdelta-secondary none|lzma|djw|fgk|auto` compresses an xdelta patch's own contents with one of xdelta3's secondary compressors. The default is `none`; `auto` keeps whichever of `djw`, `lzma`, and `fgk` is smallest.
+`--xdelta-secondary none|lzma|djw|fgk|auto` compresses an xdelta patch's own contents with one of xdelta3's secondary compressors. The default is `none`; `auto` keeps whichever of `djw`, `lzma`, and `fgk` is smallest. It applies to xdelta output only: with `--format vcdiff` or any other format, a value other than `none` is an error, because plain VCDIFF has no secondary compression.
 
 [Create patches from the CLI](../how-to/cli-create.md) provides a metadata example and reconstruction check.
 

@@ -182,11 +182,11 @@ pub(super) fn create_patch_format_size_error_message(
         ));
     }
     if max_size > CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES
-        && !matches!(normalized_format.as_str(), "xdelta" | "ppf")
+        && !matches!(normalized_format.as_str(), "xdelta" | "vcdiff" | "ppf")
     {
         let limit = format_human_bytes(CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES);
         return Some(format!(
-            "Create inputs above {limit} require xdelta or PPF patches; selected patch type: {normalized_format}"
+            "Create inputs above {limit} require xdelta, VCDIFF, or PPF patches; selected patch type: {normalized_format}"
         ));
     }
     None
@@ -687,6 +687,18 @@ impl CliApp {
                 "SOLID metadata options require --format solid or a .solid output".to_string(),
             ));
         }
+        if xdelta_secondary_mode != XdeltaSecondaryMode::None
+            && !requested_format.eq_ignore_ascii_case("xdelta")
+        {
+            return Err(fail(
+                Some(requested_format),
+                "validate",
+                format!(
+                    "--xdelta-secondary {} requires --format xdelta or a .xdelta output",
+                    args.xdelta_secondary
+                ),
+            ));
+        }
         if args.ppf_undo && !requested_format.eq_ignore_ascii_case("ppf") {
             return Err(fail(
                 Some(requested_format),
@@ -978,4 +990,32 @@ struct PatchCreateModifiedSource {
     modified_path: PathBuf,
     cheat_summary: Option<crate::cheats_apply::CheatApplySummary>,
     skipped_cheats: Vec<String>,
+}
+
+#[cfg(test)]
+mod create_format_tests {
+    use super::*;
+
+    #[test]
+    fn vcdiff_is_its_own_create_format_and_xdelta3_is_an_xdelta_alias() {
+        assert_eq!(normalize_create_patch_format("vcdiff"), "vcdiff");
+        assert_eq!(normalize_create_patch_format(" VCDIFF "), "vcdiff");
+        assert_eq!(normalize_create_patch_format("xdelta3"), "xdelta");
+    }
+
+    #[test]
+    fn inputs_above_the_legacy_limit_may_use_vcdiff_but_not_bps() {
+        let sizes = PatchCreateInputSizes {
+            original: CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES + 1,
+            modified: CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES + 1,
+        };
+        for format in ["xdelta", "VCDIFF", "ppf"] {
+            assert_eq!(
+                create_patch_format_size_error_message(format, sizes),
+                None,
+                "{format}"
+            );
+        }
+        assert!(create_patch_format_size_error_message("bps", sizes).is_some());
+    }
 }

@@ -46,7 +46,8 @@ const patchCases = [
   ["ips", "ips", Buffer.from("abcdefgh"), Buffer.from("a1XYZf!!!"), true],
   ["ebp", "ebp", Buffer.from("abcdefgh"), Buffer.from("a1XYZf!!")],
   ["solid", "solid", Buffer.from("1234567890abcdef"), Buffer.from("1234XY7890abc!")],
-  ["vcdiff", "xdelta", Buffer.from("hello old world"), Buffer.from("hello new world")],
+  ["vcdiff", "vcdiff", Buffer.from("hello old world"), Buffer.from("hello new world")],
+  ["xdelta", "xdelta", Buffer.from("hello old world"), Buffer.from("hello new world")],
   ["bps", "bps", Buffer.from("hello old world"), Buffer.from("hello new world")],
   [
     "bdf",

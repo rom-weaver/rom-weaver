@@ -14,7 +14,12 @@ const CREATE_IPS_SIZE_LIMIT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits
 const CREATE_BPS_DEFAULT_LIMIT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits.bpsDefaultSizeBytes;
 const CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits.legacySizeLimitBytes;
 const CREATE_PATCH_DEFAULT_FORMAT = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.defaultFormat;
-const CREATE_PATCH_FORMAT_ALIASES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.aliases as Readonly<Record<string, string>>;
+// The CLI treats `vcdiff` as plain VCDIFF, but browser Create only offers xdelta, so a caller-supplied
+// `vcdiff` still means xdelta here.
+const CREATE_PATCH_FORMAT_ALIASES: Readonly<Record<string, string>> = {
+  ...(ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.aliases as Readonly<Record<string, string>>),
+  vcdiff: "xdelta",
+};
 
 const NO_SHRINK_CREATE_PATCH_FORMATS: readonly string[] = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.noShrinkFormats;
 const SOURCE_RESTRICTED_CREATE_PATCH_FORMATS: readonly string[] =

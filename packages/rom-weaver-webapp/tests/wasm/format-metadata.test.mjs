@@ -38,7 +38,7 @@ describe("generated format metadata parity", () => {
     expect(coverage.patchFormats).toContain("pmsr");
     expect(coverage.patchFormats).toContain("xdelta");
     expect(coverage.patchFormats).not.toContain("mod");
-    expect(coverage.patchFormats).not.toContain("vcdiff");
+    expect(coverage.patchFormats).toContain("vcdiff");
   });
 
   it("declares which create formats cannot shrink a target or need a specific source", () => {
