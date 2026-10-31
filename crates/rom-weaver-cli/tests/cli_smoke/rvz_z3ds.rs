@@ -808,6 +808,88 @@ fn wia_rvz_extract_nkit_warnings_in_human_json_and_jsonl() {
     }
 }
 
+#[test]
+fn nested_extract_keeps_nkit_warnings_of_each_disc_distinct() {
+    let temp = setup_temp_dir();
+    let iso = build_test_gamecube_iso(0x20000);
+    let input = temp.child("disc.iso");
+    fs::write(input.path(), &iso).unwrap();
+    let mut discs = Vec::new();
+    for name in ["disc1.rvz", "disc2.rvz"] {
+        let disc = NodDiscReader::new(input.path(), &NodDiscOptions::default()).unwrap();
+        let writer = NodDiscWriter::new(
+            disc,
+            &NodFormatOptions {
+                format: NodFormat::Rvz,
+                compression: NodCompression::None,
+                block_size: NodFormat::Rvz.default_block_size(),
+            },
+        )
+        .unwrap();
+        let mut image = Vec::new();
+        let finalization = writer
+            .process(
+                |data, _, _| {
+                    image.extend_from_slice(&data);
+                    Ok(())
+                },
+                &NodProcessOptions {
+                    digest_sha1: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        image[..finalization.header.len()].copy_from_slice(&finalization.header);
+        // NKit v2's size field precedes the only requested digest, SHA-1.
+        image[0x124 + 12 + 8] ^= 1;
+        let path = temp.child(name);
+        fs::write(path.path(), &image).unwrap();
+        discs.push((path, name));
+    }
+    let archive = temp.child("discs.tar.gz");
+    let entries: Vec<(&Path, &str)> = discs
+        .iter()
+        .map(|(path, name)| (path.path(), *name))
+        .collect();
+    write_tar_gz_fixture(&entries, archive.path());
+    let out = temp.child("out");
+    let output = Command::cargo_bin("rom-weaver")
+        .unwrap()
+        .args([
+            "extract",
+            "--input",
+            archive.path().to_str().unwrap(),
+            "--output",
+            out.path().to_str().unwrap(),
+            "--threads",
+            "1",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let report: Value = serde_json::from_slice(&output).unwrap();
+    let warnings: Vec<&str> = report["warnings"]
+        .as_array()
+        .expect("warnings of both discs must be reported")
+        .iter()
+        .map(|warning| warning.as_str().unwrap())
+        .collect();
+    assert_eq!(warnings.len(), 2, "{report}");
+    for output_name in ["disc1.iso", "disc2.iso"] {
+        assert_eq!(
+            warnings
+                .iter()
+                .filter(|warning| warning.contains(&format!("(output `{output_name}`)")))
+                .count(),
+            1,
+            "{report}"
+        );
+    }
+}
+
 fn write_hash_mismatching_wii_wia(temp: &TempDir) -> (PathBuf, Vec<u8>) {
     let mut iso = vec![0; 0x90000];
     iso[..6].copy_from_slice(b"RWIIT0");

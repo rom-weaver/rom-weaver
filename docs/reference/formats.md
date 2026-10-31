@@ -133,13 +133,13 @@ Extraction verifies Wii partition H0, H1, H2, and H3 hashes where present. Only 
 Wii hash mismatches are warnings. Extraction writes the decoded ISO as-is and exits with status 0. Each affected partition produces one summary with the first failing group and partition-relative sector, the first hash error, and counts of failed hash comparisons, affected sectors, and affected groups. For example:
 
 ```text
-wia partition 0 hash mismatch: first group 0, sector 0: Invalid H3 hash! (group 0); 4 hashes in 4 sectors across 1 groups; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished
+wia partition 0 hash mismatch: first group 0, sector 0: Invalid H3 hash! (group 0); 4 hashes in 4 sectors across 1 groups; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished (output `disc.iso`)
 ```
 
-RVZ summaries use the `rvz` prefix. Optional NKit CRC32, MD5, SHA-1, and XXH64 image digests are also checked. Each mismatching digest produces this warning, with the format and algorithm substituted:
+RVZ summaries use the `rvz` prefix. Optional NKit CRC32, MD5, SHA-1, and XXH64 image digests are also checked. Each mismatching digest produces this warning, with the format, algorithm, and output file name substituted. The output file name keeps warnings from several discs in one command distinct:
 
 ```text
-wia NKit SHA-1 checksum mismatch; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished
+wia NKit SHA-1 checksum mismatch; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished (output `disc.iso`)
 ```
 
 Warnings appear on stderr as `warning:` lines in human-readable output and in the command report's `details.warnings` in JSON and JSONL output. JSON also includes a top-level `warnings` array. This applies to explicit extraction, automatic extraction by other commands, and nested archives. Hash mismatches cannot distinguish source-disc errors from payload corruption. These mismatches appear in warnings while extraction succeeds; exit status alone does not identify them.

@@ -971,6 +971,7 @@ fn finish_integrity(
     integrity: Option<IntegrityCheck>,
     digests: Option<ImageDigests>,
     disc: &NodDiscReader,
+    output_name: &str,
     context: &OperationContext,
 ) -> Result<Vec<String>> {
     use crate::nod::{disc::wii::SECTOR_DATA_SIZE, read::PartitionOptions};
@@ -1036,7 +1037,7 @@ fn finish_integrity(
         }
         if let Some(first) = &summary.first {
             let warning = format!(
-                "{format} partition {index} hash mismatch: {first}; {} hashes in {} sectors across {} groups; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished",
+                "{format} partition {index} hash mismatch: {first}; {} hashes in {} sectors across {} groups; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished (output `{output_name}`)",
                 summary.hashes, summary.sectors, summary.groups
             );
             warn!(format, partition = index, %warning, "Wii partition hash mismatch");
@@ -1047,7 +1048,7 @@ fn finish_integrity(
     if let Some(digests) = digests {
         for algorithm in digests.mismatches(&disc.meta()) {
             let warning = format!(
-                "{format} NKit {algorithm} checksum mismatch; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished"
+                "{format} NKit {algorithm} checksum mismatch; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished (output `{output_name}`)"
             );
             warn!(format, algorithm, %warning, "NKit image checksum mismatch");
             warnings.push(warning);
@@ -1280,7 +1281,17 @@ impl NodHandlerCore {
         digests: Option<ImageDigests>,
         context: &OperationContext,
     ) -> Result<Vec<String>> {
-        finish_integrity(plan.integrity.take(), digests, &plan.disc, context)
+        let output_name = plan
+            .output_path
+            .file_name()
+            .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+        finish_integrity(
+            plan.integrity.take(),
+            digests,
+            &plan.disc,
+            &output_name,
+            context,
+        )
     }
 }
 

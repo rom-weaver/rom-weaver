@@ -1058,7 +1058,7 @@ fn wia_extract_replays_later_group_exceptions_in_order_across_threads() {
     );
     assert_eq!((summary.hashes, summary.sectors, summary.groups), (4, 2, 2));
     let expected = format!(
-        "wia partition 0 hash mismatch: {}; 4 hashes in 2 sectors across 2 groups; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished",
+        "wia partition 0 hash mismatch: {}; 4 hashes in 2 sectors across 2 groups; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished (output `disc.iso`)",
         summary.first.as_ref().unwrap(),
     );
     let mut warnings = Vec::new();
