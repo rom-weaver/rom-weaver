@@ -1,0 +1,646 @@
+diff --git a/disc/gcn.rs b/disc/gcn.rs
+index 9c50a5d1d..5b0c5866e 100644
+--- a/disc/gcn.rs
++++ b/disc/gcn.rs
+@@ -67,6 +67,7 @@ impl BufRead for PartitionReaderGC {
+             partition_idx: None,
+             mode: PartitionEncryption::Original,
+             force_rehash: false,
++            verify_hashes: false,
+         };
+ 
+         // Load sector group
+diff --git a/disc/preloader.rs b/disc/preloader.rs
+index 75f2eaec8..0adfcbe65 100644
+--- a/disc/preloader.rs
++++ b/disc/preloader.rs
+@@ -26,7 +26,9 @@ use crate::nod::{
+     IoResultContext,
+     common::PartitionInfo,
+     disc::{
+-        DiscHeader, SECTOR_GROUP_SIZE, SECTOR_SIZE, hashes::hash_sector_group, wii::HASHES_SIZE,
++        DiscHeader, SECTOR_GROUP_SIZE, SECTOR_SIZE,
++        hashes::hash_sector_group,
++        wii::{H3_TABLE_SIZE, HASHES_SIZE, HashMismatch, verify_hashes_with},
+     },
+     io::{
+         block::{Block, BlockKind, BlockReader},
+@@ -45,6 +47,8 @@ pub struct SectorGroupRequest {
+     pub partition_idx: Option<u8>,
+     pub mode: PartitionEncryption,
+     pub force_rehash: bool,
++    /// Verify H0-H3 hashes of real sectors against a registered H3 table before re-encrypting.
++    pub verify_hashes: bool,
+ }
+ 
+ impl Display for SectorGroupRequest {
+@@ -63,6 +67,8 @@ pub struct SectorGroup {
+     pub data: Bytes,
+     pub sector_bitmap: u64,
+     pub io_duration: Option<Duration>,
++    /// Hash mismatches found when `request.verify_hashes` was set, in sector order.
++    pub hash_mismatches: Option<Arc<[HashMismatch]>>,
+ }
+ 
+ impl SectorGroup {
+@@ -75,6 +81,10 @@ impl SectorGroup {
+ 
+ pub type SectorGroupResult = io::Result<SectorGroup>;
+ 
++/// H3 tables registered for loader-side hash verification, indexed by partition index.
++/// Shared by every loader clone, including the preloader threads.
++pub type SharedH3Tables = Arc<Mutex<Vec<Option<Arc<[u8; H3_TABLE_SIZE]>>>>>;
++
+ pub struct Preloader {
+     #[cfg(feature = "threading")]
+     request_tx: Sender<SectorGroupRequest>,
+@@ -85,6 +95,7 @@ pub struct Preloader {
+     cache: Arc<Mutex<PreloaderCache>>,
+     // Fallback single-threaded loader
+     loader: Mutex<SectorGroupLoader>,
++    h3_tables: SharedH3Tables,
+ }
+ 
+ #[cfg(feature = "threading")]
+@@ -268,6 +279,7 @@ impl Preloader {
+             ));
+         }
+         let threads = Mutex::new(PreloaderThreads::new(join_handles));
++        let h3_tables = loader.h3_tables.clone();
+         let loader = Mutex::new(loader);
+         Arc::new(Self {
+             request_tx,
+@@ -275,6 +287,7 @@ impl Preloader {
+             threads,
+             cache,
+             loader,
++            h3_tables,
+         })
+     }
+ 
+@@ -282,8 +295,13 @@ impl Preloader {
+     pub fn new(loader: SectorGroupLoader) -> Arc<Self> {
+         debug!("Creating single-threaded preloader");
+         let cache = Arc::new(Mutex::new(PreloaderCache::default()));
++        let h3_tables = loader.h3_tables.clone();
+         let loader = Mutex::new(loader);
+-        Arc::new(Self { cache, loader })
++        Arc::new(Self {
++            cache,
++            loader,
++            h3_tables,
++        })
+     }
+ 
+     #[instrument(name = "Preloader::fetch", skip_all)]
+@@ -354,6 +372,26 @@ impl Preloader {
+     }
+ }
+ 
++impl Preloader {
++    /// Registers the H3 table that verifying requests for `partition_idx` check against.
++    pub fn register_h3_table(
++        &self,
++        partition_idx: usize,
++        h3_table: Arc<[u8; H3_TABLE_SIZE]>,
++    ) -> io::Result<()> {
++        let mut tables = self.h3_tables.lock().map_err(map_poisoned)?;
++        if tables.len() <= partition_idx {
++            tables.resize(partition_idx + 1, None);
++        }
++        tables[partition_idx] = Some(h3_table);
++        debug!(
++            partition_idx,
++            "Registered H3 table for loader hash verification"
++        );
++        Ok(())
++    }
++}
++
+ #[inline]
+ fn map_poisoned<T>(_: std::sync::PoisonError<T>) -> io::Error {
+     io::Error::other("Mutex poisoned")
+@@ -365,6 +403,7 @@ pub struct SectorGroupLoader {
+     partitions: Arc<[PartitionInfo]>,
+     block: Block,
+     block_buf: Box<[u8]>,
++    h3_tables: SharedH3Tables,
+ }
+ 
+ impl Clone for SectorGroupLoader {
+@@ -376,6 +415,7 @@ impl Clone for SectorGroupLoader {
+             partitions: self.partitions.clone(),
+             block: Block::default(),
+             block_buf: <[u8]>::new_box_zeroed_with_elems(block_size).unwrap(),
++            h3_tables: self.h3_tables.clone(),
+         }
+     }
+ }
+@@ -388,6 +428,8 @@ struct LoadedSectorGroup {
+     sector_bitmap: u64,
+     /// Total duration of I/O operations
+     io_duration: Option<Duration>,
++    /// Hash mismatches found by loader-side verification
++    hash_mismatches: Option<Arc<[HashMismatch]>>,
+ }
+ 
+ impl SectorGroupLoader {
+@@ -403,6 +445,7 @@ impl SectorGroupLoader {
+             partitions,
+             block: Block::default(),
+             block_buf,
++            h3_tables: Arc::default(),
+         }
+     }
+ 
+@@ -415,6 +458,7 @@ impl SectorGroupLoader {
+             start_sector,
+             sector_bitmap,
+             io_duration,
++            hash_mismatches,
+         } = if request.partition_idx.is_some() {
+             self.load_partition_group(request, out)?
+         } else {
+@@ -427,6 +471,7 @@ impl SectorGroupLoader {
+             data: sector_group_buf.freeze(),
+             sector_bitmap,
+             io_duration,
++            hash_mismatches,
+         })
+     }
+ 
+@@ -564,6 +609,15 @@ impl SectorGroupLoader {
+             }
+         }
+ 
++        // Verify the plaintext with rebuilt hashes and exceptions, as a validating partition reader
++        // would see it, before re-encrypting.
++        let hash_mismatches = self.verify_partition_group(
++            request,
++            partition,
++            sector_group_buf,
++            &mut decrypted_sectors,
++        )?;
++
+         // Encrypt/decrypt sectors
+         if match request.mode {
+             PartitionEncryption::Original => partition.has_encryption,
+@@ -600,9 +654,65 @@ impl SectorGroupLoader {
+             start_sector: abs_group_sector,
+             sector_bitmap,
+             io_duration,
++            hash_mismatches,
+         })
+     }
+ 
++    /// For verifying requests on hashed partitions, checks H0-H3 hashes of the group's real sectors against the partition's registered H3
++    /// table, decrypting any still-encrypted sectors first (they are re-encrypted afterwards when
++    /// the mode requires it). Returns `None` when no table is registered or nothing mismatched.
++    fn verify_partition_group(
++        &self,
++        request: SectorGroupRequest,
++        partition: &PartitionInfo,
++        sector_group_buf: &mut [u8; SECTOR_GROUP_SIZE],
++        decrypted_sectors: &mut u64,
++    ) -> io::Result<Option<Arc<[HashMismatch]>>> {
++        if !request.verify_hashes
++            || !partition.has_hashes
++            || request.mode == PartitionEncryption::ForceDecryptedNoHashes
++        {
++            return Ok(None);
++        }
++        let Some(h3_table) = self
++            .h3_tables
++            .lock()
++            .map_err(map_poisoned)?
++            .get(partition.index)
++            .cloned()
++            .flatten()
++        else {
++            debug!(%request, "No H3 table registered; skipping loader hash verification");
++            return Ok(None);
++        };
++        if *decrypted_sectors != u64::MAX {
++            for sector in 0..64 {
++                if (*decrypted_sectors >> sector) & 1 == 0 {
++                    let sector_data =
++                        array_ref_mut![sector_group_buf, sector * SECTOR_SIZE, SECTOR_SIZE];
++                    decrypt_sector(sector_data, &partition.key);
++                }
++            }
++            *decrypted_sectors = u64::MAX;
++        }
++        let sector_count =
++            (partition.data_end_sector - partition.data_start_sector - request.group_idx * 64)
++                .min(64) as usize;
++        let mut mismatches = Vec::new();
++        verify_hashes_with(
++            sector_group_buf,
++            request.group_idx,
++            h3_table.as_slice(),
++            sector_count,
++            |sector, kind| {
++                mismatches.push(HashMismatch { sector, kind });
++                Ok(())
++            },
++        )?;
++        tracing::trace!(%request, sector_count, mismatches = mismatches.len(), "Verified sector group hashes");
++        Ok((!mismatches.is_empty()).then(|| Arc::from(mismatches)))
++    }
++
+     /// Loads a non-partition sector group.
+     fn load_raw_group(
+         &mut self,
+@@ -659,6 +769,7 @@ impl SectorGroupLoader {
+             start_sector: abs_group_sector,
+             sector_bitmap,
+             io_duration,
++            hash_mismatches: None,
+         })
+     }
+ }
+diff --git a/disc/reader.rs b/disc/reader.rs
+index 0398806e7..0090c36de 100644
+--- a/disc/reader.rs
++++ b/disc/reader.rs
+@@ -6,7 +6,7 @@ use std::{
+ 
+ use bytes::Bytes;
+ use polonius_the_crab::{polonius, polonius_return};
+-use tracing::warn;
++use tracing::{debug, trace, warn};
+ use zerocopy::{FromBytes, IntoBytes};
+ 
+ use crate::nod::{
+@@ -27,7 +27,10 @@ use crate::nod::{
+         },
+     },
+     io::block::BlockReader,
+-    read::{DiscMeta, DiscOptions, PartitionEncryption, PartitionOptions, PartitionReader},
++    read::{
++        DiscMeta, DiscOptions, HashMismatchSummary, PartitionEncryption, PartitionOptions,
++        PartitionReader,
++    },
+     util::{
+         array_ref, impl_read_for_bufread,
+         read::{read_arc, read_from, read_vec},
+@@ -44,6 +47,16 @@ pub struct DiscReader {
+     alt_disc_header: Option<Arc<DiscHeader>>,
+     disc_data: DiscReaderData,
+     sector_group: Option<SectorGroup>,
++    /// Copy-pass hash verification state, indexed by partition index.
++    hash_verification: Vec<Option<PartitionHashVerification>>,
++}
++
++/// Hash verification of one Wii partition during a sequential read.
++#[derive(Clone, Default)]
++struct PartitionHashVerification {
++    summary: HashMismatchSummary,
++    /// Next group the sequential read records; groups it never reaches are left to the caller.
++    next_group: u32,
+ }
+ 
+ #[derive(Clone)]
+@@ -70,6 +83,11 @@ impl Clone for DiscReader {
+             alt_disc_header: self.alt_disc_header.clone(),
+             disc_data: self.disc_data.clone(),
+             sector_group: None,
++            hash_verification: self
++                .hash_verification
++                .iter()
++                .map(|state| state.as_ref().map(|_| PartitionHashVerification::default()))
++                .collect(),
+         }
+     }
+ }
+@@ -174,6 +192,7 @@ impl DiscReader {
+             disc_data,
+             sector_group: None,
+             alt_disc_header,
++            hash_verification: Vec::new(),
+         })
+     }
+ 
+@@ -337,6 +356,61 @@ impl DiscReader {
+         }
+     }
+ 
++    /// Verifies the H0-H3 hashes of partition `index` while it is read through this reader.
++    ///
++    /// Reads the partition's H3 table now (failing like a validating partition reader would);
++    /// each group loaded afterwards is checked by the sector-group loader before it is
++    /// re-encrypted. Mismatches from the sequential read collect into
++    /// [`Self::hash_mismatches`]; groups the read never reaches start at
++    /// [`Self::next_unverified_group`].
++    pub fn enable_hash_verification(&mut self, index: usize) -> Result<()> {
++        let DiscReaderData::Wii { partitions, .. } = &self.disc_data else {
++            return Err(Error::DiscFormat(
++                "GameCube discs have no partition hashes".to_string(),
++            ));
++        };
++        let Some(partition) = partitions.get(index) else {
++            return Err(Error::DiscFormat(format!("Partition {index} not found")));
++        };
++        let reader = PartitionReaderWii::new(
++            self.preloader.clone(),
++            partition,
++            &PartitionOptions {
++                validate_hashes: true,
++                hash_mismatch_warnings: true,
++            },
++        )?;
++        let Some(h3_table) = reader.h3_table() else {
++            debug!(index, "Partition has no hashes; nothing to verify");
++            return Ok(());
++        };
++        self.preloader
++            .register_h3_table(partition.index, h3_table)
++            .context("Registering H3 table")?;
++        if self.hash_verification.len() <= partition.index {
++            self.hash_verification.resize(partition.index + 1, None);
++        }
++        self.hash_verification[partition.index] = Some(PartitionHashVerification::default());
++        debug!(index, "Enabled copy-pass hash verification");
++        Ok(())
++    }
++
++    /// Hash mismatches recorded by the sequential read of partition `index`, if verified.
++    pub fn hash_mismatches(&self, index: usize) -> Option<&HashMismatchSummary> {
++        self.hash_verification
++            .get(index)?
++            .as_ref()
++            .map(|state| &state.summary)
++    }
++
++    /// First group of partition `index` that the sequential read has not verified, if verified.
++    pub fn next_unverified_group(&self, index: usize) -> Option<u32> {
++        self.hash_verification
++            .get(index)?
++            .as_ref()
++            .map(|state| state.next_group)
++    }
++
+     pub fn load_sector_group(
+         &mut self,
+         abs_sector: u32,
+@@ -354,6 +428,10 @@ impl DiscReader {
+                 partition_idx: Some(partition.index as u8),
+                 mode: self.mode,
+                 force_rehash,
++                verify_hashes: self
++                    .hash_verification
++                    .get(partition.index)
++                    .is_some_and(Option::is_some),
+             };
+             (request, max_groups)
+         } else {
+@@ -364,6 +442,7 @@ impl DiscReader {
+                 partition_idx: None,
+                 mode: self.mode,
+                 force_rehash,
++                verify_hashes: false,
+             };
+             (request, max_groups)
+         };
+@@ -371,6 +450,14 @@ impl DiscReader {
+         // Load sector group
+         let (sector_group, updated) =
+             fetch_sector_group(request, max_groups, &mut self.sector_group, &self.preloader)?;
++        if updated && request.verify_hashes {
++            if let Some(Some(state)) = request
++                .partition_idx
++                .and_then(|idx| self.hash_verification.get_mut(idx as usize))
++            {
++                record_verified_group(state, request.group_idx, sector_group);
++            }
++        }
+ 
+         Ok((sector_group, updated))
+     }
+@@ -472,6 +559,31 @@ impl Seek for DiscReader {
+     }
+ }
+ 
++/// Adds a loader-verified group's mismatches to the partition summary in sequential order.
++/// Out-of-order groups (after a seek) are not recorded, so no group is counted twice.
++fn record_verified_group(
++    state: &mut PartitionHashVerification,
++    group_idx: u32,
++    sector_group: &SectorGroup,
++) {
++    if group_idx != state.next_group {
++        trace!(
++            group_idx,
++            next_group = state.next_group,
++            "Skipping out-of-order group for hash summary"
++        );
++        return;
++    }
++    if let Some(mismatches) = &sector_group.hash_mismatches {
++        for mismatch in mismatches.iter() {
++            state
++                .summary
++                .record(group_idx, mismatch.sector, || mismatch.kind.to_string());
++        }
++    }
++    state.next_group += 1;
++}
++
+ fn read_partition_info(
+     reader: &mut DirectDiscReader,
+     disc_header: Arc<DiscHeader>,
+diff --git a/disc/wii.rs b/disc/wii.rs
+index 59bb3ee0b..a08108575 100644
+--- a/disc/wii.rs
++++ b/disc/wii.rs
+@@ -396,6 +396,11 @@ impl PartitionReaderWii {
+         }
+         Ok(self.h3_table.clone())
+     }
++
++    /// The H3 table read when the reader was opened with hash validation.
++    pub(crate) fn h3_table(&self) -> Option<Arc<[u8; H3_TABLE_SIZE]>> {
++        self.h3_table.clone()
++    }
+ }
+ 
+ impl BufRead for PartitionReaderWii {
+@@ -430,6 +435,7 @@ impl BufRead for PartitionReaderWii {
+                 PartitionEncryption::ForceDecryptedNoHashes
+             },
+             force_rehash: false,
++            verify_hashes: false,
+         };
+ 
+         // Load sector group
+@@ -494,6 +500,33 @@ impl Seek for PartitionReaderWii {
+     }
+ }
+ 
++/// One failed H0-H3 comparison found while verifying a sector group.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub(crate) enum HashMismatchKind {
++    H0 { block: usize },
++    H1 { sector: usize },
++    H2 { sub_group: usize },
++    H3 { group: usize },
++}
++
++impl std::fmt::Display for HashMismatchKind {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        match self {
++            Self::H0 { block } => write!(f, "Invalid H0 hash! (block {block})"),
++            Self::H1 { sector } => write!(f, "Invalid H1 hash! (sector {sector})"),
++            Self::H2 { sub_group } => write!(f, "Invalid H2 hash! (subgroup {sub_group})"),
++            Self::H3 { group } => write!(f, "Invalid H3 hash! (group {group})"),
++        }
++    }
++}
++
++/// A hash mismatch at a partition-relative sector, recorded by the sector-group loader.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub(crate) struct HashMismatch {
++    pub sector: u32,
++    pub kind: HashMismatchKind,
++}
++
+ fn verify_hashes(
+     buf: &[u8; SECTOR_GROUP_SIZE],
+     group_idx: u32,
+@@ -501,14 +534,32 @@ fn verify_hashes(
+     sector_count: usize,
+     mut warnings: Option<&mut HashMismatchSummary>,
+ ) -> io::Result<()> {
+-    let mut mismatch = |group, sector, message: &dyn Fn() -> String| {
+-        if let Some(summary) = warnings.as_deref_mut() {
+-            summary.record(group, sector, message);
+-            Ok(())
+-        } else {
+-            Err(io::Error::new(io::ErrorKind::InvalidData, message()))
+-        }
+-    };
++    verify_hashes_with(
++        buf,
++        group_idx,
++        h3_table,
++        sector_count,
++        |part_sector, kind| {
++            if let Some(summary) = warnings.as_deref_mut() {
++                summary.record(group_idx, part_sector, || kind.to_string());
++                Ok(())
++            } else {
++                Err(io::Error::new(io::ErrorKind::InvalidData, kind.to_string()))
++            }
++        },
++    )
++}
++
++/// Checks the H0-H3 hashes of a decrypted sector group with rebuilt hashes, reporting each
++/// failed comparison (partition-relative sector and kind) to `mismatch`. A missing H3 entry is
++/// a structural error.
++pub(crate) fn verify_hashes_with(
++    buf: &[u8; SECTOR_GROUP_SIZE],
++    group_idx: u32,
++    h3_table: &[u8],
++    sector_count: usize,
++    mut mismatch: impl FnMut(u32, HashMismatchKind) -> io::Result<()>,
++) -> io::Result<()> {
+     // Synthesized tail sectors have no mastered hashes or exceptions to verify.
+     for sector in 0..sector_count {
+         let buf = array_ref![buf, sector * SECTOR_SIZE, SECTOR_SIZE];
+@@ -521,9 +572,7 @@ fn verify_hashes(
+             let expected = array_ref![buf, i * 20, 20];
+             let output = sha1_hash(array_ref![buf, (i + 1) * 0x400, 0x400]);
+             if output != *expected {
+-                mismatch(group_idx, part_sector, &|| {
+-                    format!("Invalid H0 hash! (block {i})")
+-                })?;
++                mismatch(part_sector, HashMismatchKind::H0 { block: i })?;
+             }
+         }
+ 
+@@ -532,9 +581,7 @@ fn verify_hashes(
+             let expected = array_ref![buf, 0x280 + sector * 20, 20];
+             let output = sha1_hash(array_ref![buf, 0, 0x26C]);
+             if output != *expected {
+-                mismatch(group_idx, part_sector, &|| {
+-                    format!("Invalid H1 hash! (sector {sector})",)
+-                })?;
++                mismatch(part_sector, HashMismatchKind::H1 { sector })?;
+             }
+         }
+ 
+@@ -543,9 +590,7 @@ fn verify_hashes(
+             let expected = array_ref![buf, 0x340 + sub_group * 20, 20];
+             let output = sha1_hash(array_ref![buf, 0x280, 0xA0]);
+             if output != *expected {
+-                mismatch(group_idx, part_sector, &|| {
+-                    format!("Invalid H2 hash! (subgroup {sub_group})")
+-                })?;
++                mismatch(part_sector, HashMismatchKind::H2 { sub_group })?;
+             }
+         }
+ 
+@@ -559,9 +604,7 @@ fn verify_hashes(
+             })?;
+             let output = sha1_hash(array_ref![buf, 0x340, 0xA0]);
+             if output.as_slice() != expected {
+-                mismatch(group_idx, part_sector, &|| {
+-                    format!("Invalid H3 hash! (group {group})")
+-                })?;
++                mismatch(part_sector, HashMismatchKind::H3 { group })?;
+             }
+         }
+     }
+diff --git a/read.rs b/read.rs
+index 3c20c4e94..05ae0527c 100644
+--- a/read.rs
++++ b/read.rs
+@@ -99,6 +99,20 @@ impl HashMismatchSummary {
+             self.last_group = Some(group);
+         }
+     }
++
++    /// Appends a summary of later groups of the same sequential read.
++    pub fn append(&mut self, later: &HashMismatchSummary) {
++        if self.first.is_none() {
++            self.first.clone_from(&later.first);
++        }
++        self.hashes += later.hashes;
++        self.sectors += later.sectors;
++        self.groups += later.groups;
++        if later.last_sector.is_some() {
++            self.last_sector = later.last_sector;
++            self.last_group = later.last_group;
++        }
++    }
+ }
+ 
+ /// Trait for reading disc images.
+@@ -338,6 +352,26 @@ impl DiscReader {
+         self.0.open_partition_kind(kind, options)
+     }
+ 
++    /// Verifies Wii partition `index`'s H0-H3 hashes while this reader is read sequentially in
++    /// [`PartitionEncryption::Original`] mode. Reads the partition's H3 table now; the
++    /// sector-group loader checks each later group before re-encrypting it.
++    #[inline]
++    pub fn enable_hash_verification(&mut self, index: usize) -> Result<()> {
++        self.0.enable_hash_verification(index)
++    }
++
++    /// Hash mismatches recorded so far for verified partition `index`.
++    #[inline]
++    pub fn hash_mismatches(&self, index: usize) -> Option<&HashMismatchSummary> {
++        self.0.hash_mismatches(index)
++    }
++
++    /// First group of verified partition `index` the sequential read has not checked yet.
++    #[inline]
++    pub fn next_unverified_group(&self, index: usize) -> Option<u32> {
++        self.0.next_unverified_group(index)
++    }
++
+     pub(crate) fn into_inner(self) -> disc::reader::DiscReader {
+         self.0
+     }

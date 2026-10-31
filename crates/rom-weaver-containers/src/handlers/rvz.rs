@@ -149,7 +149,7 @@ impl RvzContainerHandler {
     fn copy_extract_with_progress<R: Read>(
         &self,
         reader: &mut R,
-        writer: &mut BufWriter<File>,
+        writer: &mut BufWriter<crate::nod_shared::ExtractOutput>,
         total_bytes: u64,
         context: &OperationContext,
         execution: &ThreadExecution,
@@ -350,7 +350,10 @@ impl ContainerHandlerOperations for RvzContainerHandler {
         if plan.disc_size > 0 {
             output_file.seek(SeekFrom::Start(0))?;
         }
-        let mut output = BufWriter::new(output_file);
+        let mut output = BufWriter::new(crate::nod_shared::ExtractOutput::new(
+            output_file,
+            &mut plan.integrity,
+        ));
         let extension = plan
             .output_path
             .extension()
@@ -365,11 +368,18 @@ impl ContainerHandlerOperations for RvzContainerHandler {
                 extension.as_deref(),
             )
             .and_then(|copied| Ok(output.flush().map(|()| copied)?));
-        let (bytes_written, checksums, identity) = match copied {
-            Ok(copied) => copied,
+        // The flush above already surfaced write errors; `into_parts` cannot fail.
+        let (output, _) = output.into_parts();
+        let digests = output.finish();
+        let finished = copied.and_then(|copied| {
+            let warnings = RVZ_NOD_CORE.finish_extract_integrity(&mut plan, digests, context)?;
+            Ok((copied, warnings))
+        });
+        let ((bytes_written, checksums, identity), warnings) = match finished {
+            Ok(finished) => finished,
             Err(error) => {
-                // A failed or cancelled copy leaves a partial disc image.
-                drop(output);
+                // A failed or cancelled copy or verification leaves a partial or unverified
+                // disc image; the output is already closed.
                 let _ = fs::remove_file(&plan.output_path);
                 return Err(error);
             }
@@ -384,7 +394,7 @@ impl ContainerHandlerOperations for RvzContainerHandler {
             &plan.compression_label,
             plan.execution,
         );
-        crate::nod_shared::attach_integrity_warnings(&mut report, plan.warnings);
+        crate::nod_shared::attach_integrity_warnings(&mut report, warnings);
         Ok(match checksums {
             Some(values) => attach_extract_checksum_details(
                 report,

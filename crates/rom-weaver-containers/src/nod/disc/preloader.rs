@@ -26,7 +26,9 @@ use crate::nod::{
     IoResultContext,
     common::PartitionInfo,
     disc::{
-        DiscHeader, SECTOR_GROUP_SIZE, SECTOR_SIZE, hashes::hash_sector_group, wii::HASHES_SIZE,
+        DiscHeader, SECTOR_GROUP_SIZE, SECTOR_SIZE,
+        hashes::hash_sector_group,
+        wii::{H3_TABLE_SIZE, HASHES_SIZE, HashMismatch, verify_hashes_with},
     },
     io::{
         block::{Block, BlockKind, BlockReader},
@@ -45,6 +47,8 @@ pub struct SectorGroupRequest {
     pub partition_idx: Option<u8>,
     pub mode: PartitionEncryption,
     pub force_rehash: bool,
+    /// Verify H0-H3 hashes of real sectors against a registered H3 table before re-encrypting.
+    pub verify_hashes: bool,
 }
 
 impl Display for SectorGroupRequest {
@@ -63,6 +67,8 @@ pub struct SectorGroup {
     pub data: Bytes,
     pub sector_bitmap: u64,
     pub io_duration: Option<Duration>,
+    /// Hash mismatches found when `request.verify_hashes` was set, in sector order.
+    pub hash_mismatches: Option<Arc<[HashMismatch]>>,
 }
 
 impl SectorGroup {
@@ -75,6 +81,10 @@ impl SectorGroup {
 
 pub type SectorGroupResult = io::Result<SectorGroup>;
 
+/// H3 tables registered for loader-side hash verification, indexed by partition index.
+/// Shared by every loader clone, including the preloader threads.
+pub type SharedH3Tables = Arc<Mutex<Vec<Option<Arc<[u8; H3_TABLE_SIZE]>>>>>;
+
 pub struct Preloader {
     #[cfg(feature = "threading")]
     request_tx: Sender<SectorGroupRequest>,
@@ -85,6 +95,7 @@ pub struct Preloader {
     cache: Arc<Mutex<PreloaderCache>>,
     // Fallback single-threaded loader
     loader: Mutex<SectorGroupLoader>,
+    h3_tables: SharedH3Tables,
 }
 
 #[cfg(feature = "threading")]
@@ -268,6 +279,7 @@ impl Preloader {
             ));
         }
         let threads = Mutex::new(PreloaderThreads::new(join_handles));
+        let h3_tables = loader.h3_tables.clone();
         let loader = Mutex::new(loader);
         Arc::new(Self {
             request_tx,
@@ -275,6 +287,7 @@ impl Preloader {
             threads,
             cache,
             loader,
+            h3_tables,
         })
     }
 
@@ -282,8 +295,13 @@ impl Preloader {
     pub fn new(loader: SectorGroupLoader) -> Arc<Self> {
         debug!("Creating single-threaded preloader");
         let cache = Arc::new(Mutex::new(PreloaderCache::default()));
+        let h3_tables = loader.h3_tables.clone();
         let loader = Mutex::new(loader);
-        Arc::new(Self { cache, loader })
+        Arc::new(Self {
+            cache,
+            loader,
+            h3_tables,
+        })
     }
 
     #[instrument(name = "Preloader::fetch", skip_all)]
@@ -354,6 +372,26 @@ impl Preloader {
     }
 }
 
+impl Preloader {
+    /// Registers the H3 table that verifying requests for `partition_idx` check against.
+    pub fn register_h3_table(
+        &self,
+        partition_idx: usize,
+        h3_table: Arc<[u8; H3_TABLE_SIZE]>,
+    ) -> io::Result<()> {
+        let mut tables = self.h3_tables.lock().map_err(map_poisoned)?;
+        if tables.len() <= partition_idx {
+            tables.resize(partition_idx + 1, None);
+        }
+        tables[partition_idx] = Some(h3_table);
+        debug!(
+            partition_idx,
+            "Registered H3 table for loader hash verification"
+        );
+        Ok(())
+    }
+}
+
 #[inline]
 fn map_poisoned<T>(_: std::sync::PoisonError<T>) -> io::Error {
     io::Error::other("Mutex poisoned")
@@ -365,6 +403,7 @@ pub struct SectorGroupLoader {
     partitions: Arc<[PartitionInfo]>,
     block: Block,
     block_buf: Box<[u8]>,
+    h3_tables: SharedH3Tables,
 }
 
 impl Clone for SectorGroupLoader {
@@ -376,6 +415,7 @@ impl Clone for SectorGroupLoader {
             partitions: self.partitions.clone(),
             block: Block::default(),
             block_buf: <[u8]>::new_box_zeroed_with_elems(block_size).unwrap(),
+            h3_tables: self.h3_tables.clone(),
         }
     }
 }
@@ -388,6 +428,8 @@ struct LoadedSectorGroup {
     sector_bitmap: u64,
     /// Total duration of I/O operations
     io_duration: Option<Duration>,
+    /// Hash mismatches found by loader-side verification
+    hash_mismatches: Option<Arc<[HashMismatch]>>,
 }
 
 impl SectorGroupLoader {
@@ -403,6 +445,7 @@ impl SectorGroupLoader {
             partitions,
             block: Block::default(),
             block_buf,
+            h3_tables: Arc::default(),
         }
     }
 
@@ -415,6 +458,7 @@ impl SectorGroupLoader {
             start_sector,
             sector_bitmap,
             io_duration,
+            hash_mismatches,
         } = if request.partition_idx.is_some() {
             self.load_partition_group(request, out)?
         } else {
@@ -427,6 +471,7 @@ impl SectorGroupLoader {
             data: sector_group_buf.freeze(),
             sector_bitmap,
             io_duration,
+            hash_mismatches,
         })
     }
 
@@ -564,6 +609,15 @@ impl SectorGroupLoader {
             }
         }
 
+        // Verify the plaintext with rebuilt hashes and exceptions, as a validating partition reader
+        // would see it, before re-encrypting.
+        let hash_mismatches = self.verify_partition_group(
+            request,
+            partition,
+            sector_group_buf,
+            &mut decrypted_sectors,
+        )?;
+
         // Encrypt/decrypt sectors
         if match request.mode {
             PartitionEncryption::Original => partition.has_encryption,
@@ -600,7 +654,63 @@ impl SectorGroupLoader {
             start_sector: abs_group_sector,
             sector_bitmap,
             io_duration,
+            hash_mismatches,
         })
+    }
+
+    /// For verifying requests on hashed partitions, checks H0-H3 hashes of the group's real sectors against the partition's registered H3
+    /// table, decrypting any still-encrypted sectors first (they are re-encrypted afterwards when
+    /// the mode requires it). Returns `None` when no table is registered or nothing mismatched.
+    fn verify_partition_group(
+        &self,
+        request: SectorGroupRequest,
+        partition: &PartitionInfo,
+        sector_group_buf: &mut [u8; SECTOR_GROUP_SIZE],
+        decrypted_sectors: &mut u64,
+    ) -> io::Result<Option<Arc<[HashMismatch]>>> {
+        if !request.verify_hashes
+            || !partition.has_hashes
+            || request.mode == PartitionEncryption::ForceDecryptedNoHashes
+        {
+            return Ok(None);
+        }
+        let Some(h3_table) = self
+            .h3_tables
+            .lock()
+            .map_err(map_poisoned)?
+            .get(partition.index)
+            .cloned()
+            .flatten()
+        else {
+            debug!(%request, "No H3 table registered; skipping loader hash verification");
+            return Ok(None);
+        };
+        if *decrypted_sectors != u64::MAX {
+            for sector in 0..64 {
+                if (*decrypted_sectors >> sector) & 1 == 0 {
+                    let sector_data =
+                        array_ref_mut![sector_group_buf, sector * SECTOR_SIZE, SECTOR_SIZE];
+                    decrypt_sector(sector_data, &partition.key);
+                }
+            }
+            *decrypted_sectors = u64::MAX;
+        }
+        let sector_count =
+            (partition.data_end_sector - partition.data_start_sector - request.group_idx * 64)
+                .min(64) as usize;
+        let mut mismatches = Vec::new();
+        verify_hashes_with(
+            sector_group_buf,
+            request.group_idx,
+            h3_table.as_slice(),
+            sector_count,
+            |sector, kind| {
+                mismatches.push(HashMismatch { sector, kind });
+                Ok(())
+            },
+        )?;
+        tracing::trace!(%request, sector_count, mismatches = mismatches.len(), "Verified sector group hashes");
+        Ok((!mismatches.is_empty()).then(|| Arc::from(mismatches)))
     }
 
     /// Loads a non-partition sector group.
@@ -659,6 +769,7 @@ impl SectorGroupLoader {
             start_sector: abs_group_sector,
             sector_bitmap,
             io_duration,
+            hash_mismatches: None,
         })
     }
 }

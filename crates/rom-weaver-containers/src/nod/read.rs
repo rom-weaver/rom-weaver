@@ -99,6 +99,20 @@ impl HashMismatchSummary {
             self.last_group = Some(group);
         }
     }
+
+    /// Appends a summary of later groups of the same sequential read.
+    pub fn append(&mut self, later: &HashMismatchSummary) {
+        if self.first.is_none() {
+            self.first.clone_from(&later.first);
+        }
+        self.hashes += later.hashes;
+        self.sectors += later.sectors;
+        self.groups += later.groups;
+        if later.last_sector.is_some() {
+            self.last_sector = later.last_sector;
+            self.last_group = later.last_group;
+        }
+    }
 }
 
 /// Trait for reading disc images.
@@ -336,6 +350,26 @@ impl DiscReader {
         options: &PartitionOptions,
     ) -> Result<Box<dyn PartitionReader>> {
         self.0.open_partition_kind(kind, options)
+    }
+
+    /// Verifies Wii partition `index`'s H0-H3 hashes while this reader is read sequentially in
+    /// [`PartitionEncryption::Original`] mode. Reads the partition's H3 table now; the
+    /// sector-group loader checks each later group before re-encrypting it.
+    #[inline]
+    pub fn enable_hash_verification(&mut self, index: usize) -> Result<()> {
+        self.0.enable_hash_verification(index)
+    }
+
+    /// Hash mismatches recorded so far for verified partition `index`.
+    #[inline]
+    pub fn hash_mismatches(&self, index: usize) -> Option<&HashMismatchSummary> {
+        self.0.hash_mismatches(index)
+    }
+
+    /// First group of verified partition `index` the sequential read has not checked yet.
+    #[inline]
+    pub fn next_unverified_group(&self, index: usize) -> Option<u32> {
+        self.0.next_unverified_group(index)
     }
 
     pub(crate) fn into_inner(self) -> disc::reader::DiscReader {

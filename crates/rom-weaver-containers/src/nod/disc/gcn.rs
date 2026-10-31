@@ -67,6 +67,7 @@ impl BufRead for PartitionReaderGC {
             partition_idx: None,
             mode: PartitionEncryption::Original,
             force_rehash: false,
+            verify_hashes: false,
         };
 
         // Load sector group

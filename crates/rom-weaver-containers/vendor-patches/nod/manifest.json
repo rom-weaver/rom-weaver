@@ -354,6 +354,19 @@
         "cargo test -p rom-weaver-containers --lib hash_warning",
         "cargo test -p rom-weaver-containers --lib wia_rvz_extract"
       ]
+    },
+    {
+      "file": "0029-wii-copy-pass-hash-verification.patch",
+      "stage": "integration",
+      "reason": "Let the sector-group loader verify Wii H0-H3 hashes of real sectors against a registered H3 table before re-encrypting, so WIA/RVZ extraction checks hashes in its single Original-mode copy; the disc reader replays per-group mismatches into the sequential-read summary.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib wia_rvz",
+        "cargo test -p rom-weaver-containers --lib hash_warning",
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
     }
   ],
   "materialized": true,

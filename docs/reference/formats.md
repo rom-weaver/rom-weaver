@@ -144,7 +144,7 @@ wia NKit SHA-1 checksum mismatch; ISO extracted as-is; source-disc errors and pa
 
 Warnings appear on stderr as `warning:` lines in human-readable output and in the command report's `details.warnings` in JSON and JSONL output. JSON also includes a top-level `warnings` array. This applies to explicit extraction, automatic extraction by other commands, and nested archives. Hash mismatches cannot distinguish source-disc errors from payload corruption. These mismatches appear in warnings while extraction succeeds; exit status alone does not identify them.
 
-Verification uses one hash-checking read of each hashed partition and, when NKit digests exist, one image read computing all requested digests together. These precede the output copy. Valid-file output bytes remain unchanged.
+Verification runs during the single output copy: each hashed partition's H3 table is read and checked against the partition size before the output is created, the decoder checks each sector group's hashes before re-encrypting it, and NKit digests are computed over the bytes as they are written. Warnings are reported after the copy finishes. Errors found during the copy remove the partial ISO. Valid-file output bytes remain unchanged.
 
 GameCube data and raw Wii regions have no default payload checksum. Uncompressed (`none`) and raw LZMA/LZMA2 payloads can decode after a bit flip and produce a different ISO with exit status 0 and no warning when no NKit digest covers them. Successful decoding alone does not establish integrity. Purge compression is unsupported and fails when opening the image.
 

@@ -501,6 +501,18 @@ fn extract_wia_image_with_output(
     rom_weaver_core::Result<rom_weaver_core::OperationReport>,
     Arc<rom_weaver_core::RecordingProgressSink>,
 ) {
+    extract_wia_image_with_threads(image, existing_output, 1)
+}
+
+fn extract_wia_image_with_threads(
+    image: &[u8],
+    existing_output: Option<&[u8]>,
+    threads: usize,
+) -> (
+    crate::test_support::TempPath,
+    rom_weaver_core::Result<rom_weaver_core::OperationReport>,
+    Arc<rom_weaver_core::RecordingProgressSink>,
+) {
     use rom_weaver_core::{
         CancellationToken, ContainerExtractRequest, OperationContext, RecordingProgressSink,
         ThreadBudget,
@@ -537,7 +549,7 @@ fn extract_wia_image_with_output(
     };
     let sink = Arc::new(RecordingProgressSink::default());
     let context = OperationContext::new(
-        ThreadBudget::Fixed(1),
+        ThreadBudget::Fixed(threads),
         temp.join("scratch"),
         sink.clone(),
         CancellationToken::new(),
@@ -819,13 +831,115 @@ fn wia_extract_reports_verification_progress() {
         "{report:?}"
     );
     assert_eq!(std::fs::read(temp.join("out/disc.iso")).unwrap(), iso);
-    for stage in ["verify-partition", "verify-image"] {
-        assert!(
-            sink.snapshot()
+    // Hash and digest verification run inside the single output copy, so its progress covers
+    // them; there are no separate verification passes.
+    let events = sink.snapshot();
+    assert!(
+        events
+            .iter()
+            .any(|event| event.stage == "extract" && event.percent == Some(100.0)),
+        "missing extract completion"
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| event.stage.starts_with("verify-")),
+        "unexpected separate verification pass"
+    );
+}
+
+/// A WIA/RVZ image of a Wii disc with a damaged H3 table and all four NKit digests, with one
+/// raw-data byte flipped so every digest mismatches as well.
+fn wii_image_with_hash_and_digest_damage(format: crate::nod::common::Format) -> Vec<u8> {
+    use crate::nod::io::wia::{WIADisc, WIAFileHeader, WIAGroup, WIARawData};
+    let mut image = disc_image_with_options(
+        &build_wii_image(true, Damage::H3Table),
+        format,
+        crate::nod::common::Compression::None,
+        &crate::nod::write::ProcessOptions {
+            digest_crc32: true,
+            digest_md5: true,
+            digest_sha1: true,
+            digest_xxh64: true,
+            ..Default::default()
+        },
+    );
+    let disc = WIADisc::read_from_bytes(
+        &image[size_of::<WIAFileHeader>()..size_of::<WIAFileHeader>() + size_of::<WIADisc>()],
+    )
+    .unwrap();
+    let raw_at = disc.raw_data_offset.get() as usize;
+    let raw =
+        WIARawData::read_from_bytes(&image[raw_at..raw_at + size_of::<WIARawData>()]).unwrap();
+    let group_size = if format == crate::nod::common::Format::Rvz {
+        size_of::<crate::nod::io::wia::RVZGroup>()
+    } else {
+        size_of::<WIAGroup>()
+    };
+    let group_at = disc.group_offset.get() as usize + raw.group_index.get() as usize * group_size;
+    let group =
+        WIAGroup::read_from_bytes(&image[group_at..group_at + size_of::<WIAGroup>()]).unwrap();
+    image[group.data_offset.get() as usize * 4 + 0x10000] ^= 1;
+    image
+}
+
+#[test]
+fn wia_rvz_copy_pass_verification_matches_across_thread_budgets() {
+    for format in [
+        crate::nod::common::Format::Wia,
+        crate::nod::common::Format::Rvz,
+    ] {
+        let image = wii_image_with_hash_and_digest_damage(format);
+        let mut expected = Vec::new();
+        DiscReader::new_stream(
+            Box::new(CloneableStream::new(Cursor::new(image.clone()))),
+            &DiscOptions::default(),
+        )
+        .unwrap()
+        .read_to_end(&mut expected)
+        .unwrap();
+        let mut reports = Vec::new();
+        for threads in [1, 4] {
+            let (temp, result, _) = extract_wia_image_with_threads(&image, None, threads);
+            let report = result.expect("hash and digest mismatches must warn");
+            let warnings: Vec<String> = report.details.as_ref().unwrap()["warnings"]
+                .as_array()
+                .unwrap()
                 .iter()
-                .any(|event| { event.stage == stage && event.percent == Some(100.0) }),
-            "missing completion for {stage}"
-        );
+                .map(|warning| warning.as_str().unwrap().to_string())
+                .collect();
+            assert_eq!(warnings.len(), 5, "{warnings:?}");
+            assert!(
+                warnings[0].contains("partition 0 hash mismatch"),
+                "{warnings:?}"
+            );
+            for (warning, algorithm) in warnings[1..].iter().zip(["CRC32", "MD5", "SHA-1", "XXH64"])
+            {
+                assert!(
+                    warning.contains(&format!("NKit {algorithm} checksum mismatch")),
+                    "{warning}"
+                );
+            }
+            assert!(std::fs::read(temp.join("out/disc.iso")).unwrap() == expected);
+            reports.push(warnings);
+        }
+        assert_eq!(reports[0], reports[1]);
+    }
+}
+
+#[test]
+fn wia_rvz_extract_removes_partial_output_when_decoding_fails_after_hash_warnings() {
+    for format in [
+        crate::nod::common::Format::Wia,
+        crate::nod::common::Format::Rvz,
+    ] {
+        let mut image = wii_image_with_hash_and_digest_damage(format);
+        // The partition group payload is stored last; losing its tail fails mid-copy, after the
+        // output exists, so the partial ISO must be removed.
+        image.truncate(image.len() - 0x100);
+        let (temp, result) = extract_wia_image(&image);
+        result.expect_err("a truncated payload must fail extraction");
+        assert!(!temp.join("out/disc.iso").exists());
     }
 }
 
@@ -1351,6 +1465,7 @@ fn partition_group_request(
         partition_idx,
         mode,
         force_rehash,
+        verify_hashes: false,
     }
 }
 

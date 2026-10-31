@@ -396,6 +396,11 @@ impl PartitionReaderWii {
         }
         Ok(self.h3_table.clone())
     }
+
+    /// The H3 table read when the reader was opened with hash validation.
+    pub(crate) fn h3_table(&self) -> Option<Arc<[u8; H3_TABLE_SIZE]>> {
+        self.h3_table.clone()
+    }
 }
 
 impl BufRead for PartitionReaderWii {
@@ -430,6 +435,7 @@ impl BufRead for PartitionReaderWii {
                 PartitionEncryption::ForceDecryptedNoHashes
             },
             force_rehash: false,
+            verify_hashes: false,
         };
 
         // Load sector group
@@ -494,6 +500,33 @@ impl Seek for PartitionReaderWii {
     }
 }
 
+/// One failed H0-H3 comparison found while verifying a sector group.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HashMismatchKind {
+    H0 { block: usize },
+    H1 { sector: usize },
+    H2 { sub_group: usize },
+    H3 { group: usize },
+}
+
+impl std::fmt::Display for HashMismatchKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::H0 { block } => write!(f, "Invalid H0 hash! (block {block})"),
+            Self::H1 { sector } => write!(f, "Invalid H1 hash! (sector {sector})"),
+            Self::H2 { sub_group } => write!(f, "Invalid H2 hash! (subgroup {sub_group})"),
+            Self::H3 { group } => write!(f, "Invalid H3 hash! (group {group})"),
+        }
+    }
+}
+
+/// A hash mismatch at a partition-relative sector, recorded by the sector-group loader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct HashMismatch {
+    pub sector: u32,
+    pub kind: HashMismatchKind,
+}
+
 fn verify_hashes(
     buf: &[u8; SECTOR_GROUP_SIZE],
     group_idx: u32,
@@ -501,14 +534,32 @@ fn verify_hashes(
     sector_count: usize,
     mut warnings: Option<&mut HashMismatchSummary>,
 ) -> io::Result<()> {
-    let mut mismatch = |group, sector, message: &dyn Fn() -> String| {
-        if let Some(summary) = warnings.as_deref_mut() {
-            summary.record(group, sector, message);
-            Ok(())
-        } else {
-            Err(io::Error::new(io::ErrorKind::InvalidData, message()))
-        }
-    };
+    verify_hashes_with(
+        buf,
+        group_idx,
+        h3_table,
+        sector_count,
+        |part_sector, kind| {
+            if let Some(summary) = warnings.as_deref_mut() {
+                summary.record(group_idx, part_sector, || kind.to_string());
+                Ok(())
+            } else {
+                Err(io::Error::new(io::ErrorKind::InvalidData, kind.to_string()))
+            }
+        },
+    )
+}
+
+/// Checks the H0-H3 hashes of a decrypted sector group with rebuilt hashes, reporting each
+/// failed comparison (partition-relative sector and kind) to `mismatch`. A missing H3 entry is
+/// a structural error.
+pub(crate) fn verify_hashes_with(
+    buf: &[u8; SECTOR_GROUP_SIZE],
+    group_idx: u32,
+    h3_table: &[u8],
+    sector_count: usize,
+    mut mismatch: impl FnMut(u32, HashMismatchKind) -> io::Result<()>,
+) -> io::Result<()> {
     // Synthesized tail sectors have no mastered hashes or exceptions to verify.
     for sector in 0..sector_count {
         let buf = array_ref![buf, sector * SECTOR_SIZE, SECTOR_SIZE];
@@ -521,9 +572,7 @@ fn verify_hashes(
             let expected = array_ref![buf, i * 20, 20];
             let output = sha1_hash(array_ref![buf, (i + 1) * 0x400, 0x400]);
             if output != *expected {
-                mismatch(group_idx, part_sector, &|| {
-                    format!("Invalid H0 hash! (block {i})")
-                })?;
+                mismatch(part_sector, HashMismatchKind::H0 { block: i })?;
             }
         }
 
@@ -532,9 +581,7 @@ fn verify_hashes(
             let expected = array_ref![buf, 0x280 + sector * 20, 20];
             let output = sha1_hash(array_ref![buf, 0, 0x26C]);
             if output != *expected {
-                mismatch(group_idx, part_sector, &|| {
-                    format!("Invalid H1 hash! (sector {sector})",)
-                })?;
+                mismatch(part_sector, HashMismatchKind::H1 { sector })?;
             }
         }
 
@@ -543,9 +590,7 @@ fn verify_hashes(
             let expected = array_ref![buf, 0x340 + sub_group * 20, 20];
             let output = sha1_hash(array_ref![buf, 0x280, 0xA0]);
             if output != *expected {
-                mismatch(group_idx, part_sector, &|| {
-                    format!("Invalid H2 hash! (subgroup {sub_group})")
-                })?;
+                mismatch(part_sector, HashMismatchKind::H2 { sub_group })?;
             }
         }
 
@@ -559,9 +604,7 @@ fn verify_hashes(
             })?;
             let output = sha1_hash(array_ref![buf, 0x340, 0xA0]);
             if output.as_slice() != expected {
-                mismatch(group_idx, part_sector, &|| {
-                    format!("Invalid H3 hash! (group {group})")
-                })?;
+                mismatch(part_sector, HashMismatchKind::H3 { group })?;
             }
         }
     }
