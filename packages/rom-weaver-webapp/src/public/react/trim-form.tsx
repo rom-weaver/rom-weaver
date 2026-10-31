@@ -630,10 +630,13 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     },
     ...(typeof sourceState?.size === "number" ? { size: sourceState.size } : {}),
   };
+  // A GameCube/Wii disc is converted to RVZ and the result is not a CD/DVD image, so RVZ is the only
+  // rom-specific container offered for it (a CHD would wrap the RVZ file as raw data).
   const isOfferedOutputFormat = (format: string) =>
     !(CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS as readonly string[]).includes(format) ||
-    (losslessDiscConversion && format === "rvz") ||
-    OutputCompressionManager.supportsOutputCompression(formatSource, format);
+    (losslessDiscConversion
+      ? format === "rvz"
+      : OutputCompressionManager.supportsOutputCompression(formatSource, format));
   const requestedConfiguredFormat = props.outputFormat ?? (outputFormatEdited ? internalOutputFormat : "");
   const configuredOutputFormat = isOfferedOutputFormat(requestedConfiguredFormat) ? requestedConfiguredFormat : "";
   const automaticCompressionFormat = resolveAutomaticCompressionFormat({
@@ -651,7 +654,10 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   });
   const requestedOutputFormat = configuredOutputFormat || automaticOutputFormat;
   const resolvedOutputFormat =
-    losslessDiscConversion && (requestedOutputFormat === rawOutputFormat || requestedOutputFormat === "none")
+    losslessDiscConversion &&
+    (requestedOutputFormat === rawOutputFormat ||
+      requestedOutputFormat === "none" ||
+      !isOfferedOutputFormat(requestedOutputFormat))
       ? "rvz"
       : requestedOutputFormat;
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);

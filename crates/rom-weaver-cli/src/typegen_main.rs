@@ -512,6 +512,7 @@ fn create_patch_format_policy_value() -> Value {
         "limits": {
             "archiveDefaultSizeBytes": metadata.archive_default_size_limit_bytes,
             "bpsDefaultSizeBytes": metadata.bps_default_size_limit_bytes,
+            "bpsMaxCombinedInputBytes": metadata.bps_max_combined_input_bytes,
             "ipsSizeLimitBytes": metadata.ips_size_limit_bytes,
             "legacySizeLimitBytes": metadata.legacy_size_limit_bytes,
         },

@@ -9,7 +9,10 @@ import {
   getCheatPatchStatus,
   getRomCheats,
 } from "../../src/public/react/cheat-patch-export-model.ts";
-import { getCreatePatchFormatsForSizes } from "../../src/lib/create/patch-format-limits.ts";
+import {
+  CREATE_BPS_MAX_COMBINED_INPUT_BYTES,
+  getCreatePatchFormatsForSizes,
+} from "../../src/lib/create/patch-format-limits.ts";
 import type { CheatRecord, ClassifiedCheatRecord } from "../../src/lib/cheats/index.ts";
 
 const cheatRecord = (id: string, description: string, rawCode: string): CheatRecord => ({
@@ -99,13 +102,20 @@ describe("getCheatPatchFormat", () => {
     expect(getCheatPatchFormat(undefined)).toBe("ips");
   });
 
+  // The patched ROM is as long as the original, so BPS must fit twice the ROM size.
+  it("switches to xdelta once the ROM twice over exceeds the BPS memory cap", () => {
+    const fits = Math.floor(CREATE_BPS_MAX_COMBINED_INPUT_BYTES / 2);
+    expect(getCheatPatchFormat(fits)).toBe("bps");
+    expect(getCheatPatchFormat(fits + 1)).toBe("xdelta");
+  });
+
   // Regression: past the legacy 256 MiB limit the create policy offers neither
   // IPS nor BPS, so hand-picking BPS made the run throw UNSUPPORTED_FORMAT.
   it("never returns a format the create policy excludes for that ROM size", () => {
     const huge = 500 * 1024 * 1024;
     expect(getCheatPatchFormat(huge)).toBe("xdelta");
     for (const size of [0, 1024, 16 * 1024 * 1024, 64 * 1024 * 1024, huge]) {
-      expect(getCreatePatchFormatsForSizes(size)).toContain(getCheatPatchFormat(size));
+      expect(getCreatePatchFormatsForSizes(size, size)).toContain(getCheatPatchFormat(size));
     }
   });
 });

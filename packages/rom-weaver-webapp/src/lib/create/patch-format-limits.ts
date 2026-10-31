@@ -2,6 +2,8 @@ import { ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY } from "../../wasm/generated/rom-
 
 type CreatePatchFormatPreferenceInput = {
   automaticFormatSelection?: boolean;
+  /** Modified size for the BPS pair cap when it differs from `modifiedSize`, e.g. an undeclared patch tail. */
+  bpsCapModifiedSize?: number | null;
   candidateDefaultFormat?: string | null;
   candidateFormats?: readonly string[] | null;
   modifiedSize?: number | null;
@@ -12,6 +14,7 @@ type CreatePatchFormatList = readonly [string, ...string[]];
 
 const CREATE_IPS_SIZE_LIMIT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits.ipsSizeLimitBytes;
 const CREATE_BPS_DEFAULT_LIMIT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits.bpsDefaultSizeBytes;
+const CREATE_BPS_MAX_COMBINED_INPUT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits.bpsMaxCombinedInputBytes;
 const CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits.legacySizeLimitBytes;
 const CREATE_PATCH_DEFAULT_FORMAT = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.defaultFormat;
 // The CLI treats `vcdiff` as plain VCDIFF, but browser Create only offers xdelta, so a caller-supplied
@@ -71,12 +74,36 @@ const withoutNoShrinkFormats = <T extends string>(
     ? formats.filter((format) => !NO_SHRINK_CREATE_PATCH_FORMATS.includes(format))
     : formats;
 
+/** BPS indexes both files in memory, so the cap applies to their combined size, not the larger one. */
+const withoutBpsAboveMemoryCap = <T extends string>(
+  formats: readonly T[],
+  originalSize?: number | null,
+  modifiedSize?: number | null,
+): readonly T[] =>
+  getFiniteCreateSourceSize(originalSize) + getFiniteCreateSourceSize(modifiedSize) >
+  CREATE_BPS_MAX_COMBINED_INPUT_BYTES
+    ? formats.filter((format) => format !== "bps")
+    : formats;
+
 /**
  * Formats Create accepts for the sizes (original first). Source-restricted formats stay allowed here
  * because only the resolved candidates can say whether the original is the one ROM they target.
  */
-const getCreatePatchFormatsForSizes = (originalSize?: number | null, modifiedSize?: number | null) =>
-  withoutNoShrinkFormats(getCreatePatchFormatsForSizeBucket(originalSize, modifiedSize), originalSize, modifiedSize);
+const getCreatePatchFormatsForSizes = (
+  originalSize?: number | null,
+  modifiedSize?: number | null,
+  {
+    applyBpsMemoryCap = true,
+    bpsCapModifiedSize = modifiedSize,
+  }: { applyBpsMemoryCap?: boolean; bpsCapModifiedSize?: number | null } = {},
+) => {
+  const formats = withoutNoShrinkFormats(
+    getCreatePatchFormatsForSizeBucket(originalSize, modifiedSize),
+    originalSize,
+    modifiedSize,
+  );
+  return applyBpsMemoryCap ? withoutBpsAboveMemoryCap(formats, originalSize, bpsCapModifiedSize) : formats;
+};
 
 const normalizeCandidateCreatePatchFormats = (formats?: readonly string[] | null): string[] => {
   const out: string[] = [];
@@ -96,16 +123,25 @@ const normalizeCandidateCreatePatchFormats = (formats?: readonly string[] | null
  * enforce shrinking restrictions even when the plan only measured compressed inputs.
  */
 const getSelectableCreatePatchFormats = ({
+  applyBpsMemoryCap,
+  bpsCapModifiedSize,
   candidateFormats,
   modifiedSize,
   originalSize,
 }: {
+  /** False when the sizes are not the original/modified pair Create would index, e.g. a bound on one side. */
+  applyBpsMemoryCap?: boolean;
+  /** Modified size for the BPS pair cap when it differs from `modifiedSize`, e.g. an undeclared patch tail. */
+  bpsCapModifiedSize?: number | null;
   candidateFormats?: readonly string[] | null;
   modifiedSize?: number | null;
   originalSize?: number | null;
 }): readonly string[] => {
   const candidates = normalizeCandidateCreatePatchFormats(candidateFormats);
-  const sizeFormats = getCreatePatchFormatsForSizes(originalSize, modifiedSize);
+  const sizeFormats = getCreatePatchFormatsForSizes(originalSize, modifiedSize, {
+    applyBpsMemoryCap,
+    bpsCapModifiedSize,
+  });
   const formats = candidates.length
     ? candidates.filter((format) => sizeFormats.includes(format))
     : sizeFormats.filter((format) => !SOURCE_RESTRICTED_CREATE_PATCH_FORMATS.includes(format));
@@ -114,13 +150,19 @@ const getSelectableCreatePatchFormats = ({
 
 const getPreferredCreatePatchFormat = ({
   automaticFormatSelection = true,
+  bpsCapModifiedSize,
   candidateDefaultFormat,
   candidateFormats,
   modifiedSize,
   originalSize,
   requestedFormat,
 }: CreatePatchFormatPreferenceInput) => {
-  const formats = getSelectableCreatePatchFormats({ candidateFormats, modifiedSize, originalSize });
+  const formats = getSelectableCreatePatchFormats({
+    bpsCapModifiedSize,
+    candidateFormats,
+    modifiedSize,
+    originalSize,
+  });
   const normalizedRequestedFormat = normalizeCreatePatchFormat(requestedFormat);
   const normalizedCandidateDefaultFormat = normalizeCreatePatchFormat(candidateDefaultFormat);
   // The default comes from Rust: the resolved candidate default already accounts
@@ -143,6 +185,7 @@ const getPreferredCreatePatchFormat = ({
 
 export {
   CREATE_BPS_DEFAULT_LIMIT_BYTES,
+  CREATE_BPS_MAX_COMBINED_INPUT_BYTES,
   CREATE_IPS_SIZE_LIMIT_BYTES,
   CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES,
   getCreatePatchFormatsForSizes,
