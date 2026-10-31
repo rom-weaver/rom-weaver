@@ -3149,6 +3149,41 @@ fn ingest_nested_patch_sources_do_not_open_a_sidecar_dialog() {
     }
 }
 
+/// A listing that already names patches and no ROM is a patch weave; signature-classifying its
+/// unnamed members MUST NOT turn it into a ROM-sidecar announcement.
+#[test]
+fn ingest_named_patch_weave_with_unnamed_patch_skips_sidecar_dialog() {
+    for wrapped in [true, false] {
+        let temp = setup_temp_dir();
+        let named = temp.child("a.bps");
+        fs::write(named.path(), banded_bps()).unwrap();
+        let unnamed = if wrapped {
+            write_wrapped(&temp, "b.gz", "gz", &banded_bps())
+        } else {
+            let path = temp.child("b");
+            fs::write(path.path(), banded_bps()).unwrap();
+            path.path().to_path_buf()
+        };
+        let archive = temp.child("patches.zip");
+        zip_members(&temp, archive.path(), &[named.path(), &unnamed]);
+        let events = review_ingest_events(&temp, archive.path());
+        let ingest = &events.last().unwrap()["details"]["ingest"];
+        assert_eq!(ingest["kind"], "patch", "wrapped={wrapped}: {ingest}");
+        let mut names: Vec<_> = patch_file_names(ingest)
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect();
+        names.sort();
+        assert_eq!(names, ["a.bps", "b"], "wrapped={wrapped}: {ingest}");
+        assert!(
+            events
+                .iter()
+                .all(|event| event["stage"] != "patch-manifest"),
+            "wrapped={wrapped}: patch sources must use terminal patch selection"
+        );
+    }
+}
+
 #[test]
 fn ingest_review_complete_sidecar_manifest() {
     for named_count in [1, 2] {

@@ -688,7 +688,9 @@ impl CliApp {
                     patch_count = patches.len(),
                     "ingest ROM branch found only signature-classified patches; routing as patch source"
                 );
-                if defer_patch_manifest {
+                // A listing that names patches was a patch-only weave before content classification;
+                // like that branch, it MUST NOT open a sidecar dialog that competes with patch selection.
+                if defer_patch_manifest && !has_patch {
                     self.emit_patch_manifest(source, &patches);
                 }
                 return Ok(IngestOutcome {
