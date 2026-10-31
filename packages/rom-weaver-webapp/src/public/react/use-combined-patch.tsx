@@ -37,6 +37,7 @@ const useCombinedPatch = ({
   patchTargetSize,
   lastDeclaredTargetSize,
   maxKnownTargetSize,
+  tailMaxWriteEnd,
   settings,
   onComplete,
   onError,
@@ -53,6 +54,7 @@ const useCombinedPatch = ({
   patchTargetSize?: number;
   lastDeclaredTargetSize?: number;
   maxKnownTargetSize?: number;
+  tailMaxWriteEnd?: number;
   settings?: CreateSettings;
   onComplete?: (result: BrowserCreateResult) => void;
   onError?: (error: Error) => void;
@@ -66,8 +68,15 @@ const useCombinedPatch = ({
     lastDeclaredTargetSize?: number;
     maxKnownTargetSize?: number;
     romSize?: number;
+    tailMaxWriteEnd?: number;
   } | null>(null);
-  const formatSizes = runSizes ?? { patchTargetSize, lastDeclaredTargetSize, maxKnownTargetSize, romSize };
+  const formatSizes = runSizes ?? {
+    patchTargetSize,
+    lastDeclaredTargetSize,
+    maxKnownTargetSize,
+    romSize,
+    tailMaxWriteEnd,
+  };
   // Known growth MUST still constrain format limits when another patch leaves shrinking uncertain.
   // The largest known size also sets the best-first order, so the fallback matches its size bucket.
   // It is not the pair Create indexes (an intermediate may shrink), so the BPS pair cap is left to the final size.
@@ -78,11 +87,17 @@ const useCombinedPatch = ({
   });
   // Format buckets and shrink limits keep using the largest known size for an undeclared final patch.
   const finalTargetSize = formatSizes.patchTargetSize ?? largestKnownSize;
-  // Only BPS, UPS and VCDIFF declare a target size. An undeclared final patch (IPS, PPF, BDF, APS, RUP, cheats)
-  // starts from the last declared target, or the ROM when none is declared. IPS records end within about
-  // 16 MiB + 64 KiB, and several of these formats can shrink the output without saying so; neither is known
-  // here, so the BPS pair cap uses that starting size rather than the largest size anywhere in the chain.
-  const bpsCapTargetSize = formatSizes.patchTargetSize ?? formatSizes.lastDeclaredTargetSize ?? formatSizes.romSize;
+  // BPS, UPS and VCDIFF report a target size; other headers declare one the engine does not report, and
+  // PPF, BDF, APS GBA, RUP and IPS32 can grow the output past its start. An undeclared tail starts from the
+  // last declared size (the ROM when none) only if every tail patch is bounded (24-bit IPS, EBP: no write
+  // ends past tailMaxWriteEnd); otherwise the final size is unknowable and the largest known size is
+  // assumed, since a wrongly offered BPS is only rejected after the whole chain has been applied.
+  const tailStartSize = formatSizes.lastDeclaredTargetSize ?? formatSizes.romSize ?? 0;
+  const bpsCapTargetSize =
+    formatSizes.patchTargetSize ??
+    (formatSizes.tailMaxWriteEnd === undefined
+      ? largestKnownSize
+      : Math.max(tailStartSize, formatSizes.tailMaxWriteEnd));
   const finalTargetFormats = getSelectableCreatePatchFormats({
     bpsCapModifiedSize: bpsCapTargetSize,
     originalSize: formatSizes.romSize,

@@ -287,21 +287,30 @@ describe("useCombinedPatch", () => {
 
   it("keeps known growth limits when another enabled target size is unknown", () => {
     const run = vi.fn<Options["run"]>();
-    const summary = getEnabledPatchTargetSizes([20 * 1024 * 1024, undefined], ["bps", "ips"], new Set());
+    const summary = getEnabledPatchTargetSizes([20 * 1024 * 1024, undefined], ["bps", "ips"], new Set(), [
+      "BPS",
+      "IPS",
+    ]);
     const { result, rerender } = renderHook((sizes: Partial<Options>) => useCombinedPatch(options(run, sizes)), {
       initialProps: { romSize: 4096, ...summary },
     });
     const formats = () => result.current.outputProps.formatOptions?.map((option) => option.value);
     expect(formats()).not.toContain("ips");
     expect(formats()).toContain("ppf");
-    rerender({ romSize: 4096, ...getEnabledPatchTargetSizes([0, undefined], ["empty", "ips"], new Set()) });
+    rerender({
+      romSize: 4096,
+      ...getEnabledPatchTargetSizes([0, undefined], ["empty", "ips"], new Set(), ["BPS", "IPS"]),
+    });
     expect(formats()).toEqual(expect.arrayContaining(["ebp", "ppf"]));
-    rerender({ romSize: 4096, ...getEnabledPatchTargetSizes([0, undefined], ["empty", "ips"], new Set(["ips"])) });
+    rerender({
+      romSize: 4096,
+      ...getEnabledPatchTargetSizes([0, undefined], ["empty", "ips"], new Set(["ips"]), ["BPS", "IPS"]),
+    });
     expect(formats()).not.toContain("ebp");
     expect(formats()).not.toContain("ppf");
     rerender({
       romSize: 4096,
-      ...getEnabledPatchTargetSizes([20 * 1024 * 1024, undefined], ["bps", "ips"], new Set(["bps"])),
+      ...getEnabledPatchTargetSizes([20 * 1024 * 1024, undefined], ["bps", "ips"], new Set(["bps"]), ["BPS", "IPS"]),
     });
     expect(formats()).toEqual(expect.arrayContaining(["ips", "ebp", "ppf"]));
   });
@@ -313,7 +322,7 @@ describe("useCombinedPatch", () => {
         options(run, {
           patchType: "ips",
           romSize: 20 * 1024 * 1024,
-          ...getEnabledPatchTargetSizes([200 * 1024 * 1024, undefined], ["bps", "ips"], new Set()),
+          ...getEnabledPatchTargetSizes([200 * 1024 * 1024, undefined], ["bps", "ips"], new Set(), ["BPS", "IPS"]),
         }),
       ),
     );
@@ -326,26 +335,32 @@ describe("useCombinedPatch", () => {
     const { result, rerender } = renderHook((sizes: Partial<Options>) => useCombinedPatch(options(run, sizes)), {
       initialProps: {
         romSize: 4096,
-        ...getEnabledPatchTargetSizes([undefined, 2048], ["ips", "bps"], new Set()),
+        ...getEnabledPatchTargetSizes([undefined, 2048], ["ips", "bps"], new Set(), ["IPS", "BPS"]),
       },
     });
     const formats = () => result.current.outputProps.formatOptions?.map((option) => option.value);
     expect(formats()).not.toContain("ebp");
     expect(formats()).not.toContain("ppf");
-    rerender({ romSize: 4096, ...getEnabledPatchTargetSizes([undefined, 0], ["ips", "bps"], new Set()) });
+    rerender({
+      romSize: 4096,
+      ...getEnabledPatchTargetSizes([undefined, 0], ["ips", "bps"], new Set(), ["IPS", "BPS"]),
+    });
     expect(formats()).not.toContain("ebp");
     expect(formats()).not.toContain("ppf");
-    rerender({ romSize: 4096, ...getEnabledPatchTargetSizes([2048, undefined], ["bps", "ips"], new Set()) });
+    rerender({
+      romSize: 4096,
+      ...getEnabledPatchTargetSizes([2048, undefined], ["bps", "ips"], new Set(), ["BPS", "IPS"]),
+    });
     expect(formats()).toEqual(expect.arrayContaining(["ebp", "ppf"]));
   });
 
   it.each([
-    ["an undeclared-target patch", 120, getEnabledPatchTargetSizes([undefined], ["ppf"], new Set())],
-    ["cheats only", 120, getEnabledPatchTargetSizes([], [], new Set())],
+    ["an undeclared-target patch", 120, getEnabledPatchTargetSizes([undefined], ["ppf"], new Set(), ["PPF"])],
+    ["cheats only", 120, getEnabledPatchTargetSizes([], [], new Set(), [])],
     [
       "an unknown final patch after a large target",
       20,
-      getEnabledPatchTargetSizes([200 * 1024 * 1024, undefined], ["bps", "ips"], new Set()),
+      getEnabledPatchTargetSizes([200 * 1024 * 1024, undefined], ["bps", "ips"], new Set(), ["BPS", "IPS"]),
     ],
   ])("drops and no longer defaults to BPS over the pair cap for %s", (_name, romMiB, sizes) => {
     const run = vi.fn<Options["run"]>();
@@ -363,7 +378,7 @@ describe("useCombinedPatch", () => {
         options(run, {
           defaultPatchType: "bps",
           romSize: 100 * 1024 * 1024,
-          ...getEnabledPatchTargetSizes([undefined], ["ppf"], new Set()),
+          ...getEnabledPatchTargetSizes([undefined], ["ppf"], new Set(), ["PPF"]),
         }),
       ),
     );
@@ -378,7 +393,7 @@ describe("useCombinedPatch", () => {
         options(run, {
           defaultPatchType: "bps",
           romSize: 120 * 1024 * 1024,
-          ...getEnabledPatchTargetSizes([60 * 1024 * 1024, undefined], ["bps", "ips"], new Set()),
+          ...getEnabledPatchTargetSizes([60 * 1024 * 1024, undefined], ["bps", "ips"], new Set(), ["BPS", "IPS"]),
         }),
       ),
     );
@@ -393,12 +408,70 @@ describe("useCombinedPatch", () => {
         options(run, {
           defaultPatchType: "bps",
           romSize: 120 * 1024 * 1024,
-          ...getEnabledPatchTargetSizes([100 * 1024 * 1024, undefined], ["bps", "ips"], new Set()),
+          ...getEnabledPatchTargetSizes([100 * 1024 * 1024, undefined], ["bps", "ips"], new Set(), ["BPS", "IPS"]),
         }),
       ),
     );
     expect(result.current.outputProps.formatOptions?.map((option) => option.value)).not.toContain("bps");
     expect(result.current.outputProps.format).not.toBe("bps");
+  });
+
+  const MIB = 1024 * 1024;
+  const bpsOffered = (romMiB: number, sizes: ReturnType<typeof getEnabledPatchTargetSizes>) => {
+    const run = vi.fn<Options["run"]>();
+    const { result } = renderHook(() =>
+      useCombinedPatch(options(run, { defaultPatchType: "bps", romSize: romMiB * MIB, ...sizes })),
+    );
+    const offered = !!result.current.outputProps.formatOptions?.some((option) => option.value === "bps");
+    expect(result.current.outputProps.format === "bps").toBe(offered);
+    return offered;
+  };
+
+  it.each(["BDF/BSDIFF40", "PPF", "IPS32", "APSGBA", "RUP"])(
+    "drops BPS when a growing %s tail follows a shrinking declared patch",
+    (format) => {
+      // 120 MiB ROM, a patch shrinking to 60 MiB, then a patch that can grow it to 100 MiB without declaring so.
+      expect(
+        bpsOffered(120, getEnabledPatchTargetSizes([60 * MIB, undefined], ["a", "b"], new Set(), ["BPS", format])),
+      ).toBe(false);
+    },
+  );
+
+  it("drops BPS when any patch in a two-patch undeclared tail can grow", () => {
+    const grows = getEnabledPatchTargetSizes([60 * MIB, undefined, undefined], ["a", "b", "c"], new Set(), [
+      "BPS",
+      "PPF",
+      "IPS",
+    ]);
+    expect(bpsOffered(120, grows)).toBe(false);
+    const growsLast = getEnabledPatchTargetSizes([60 * MIB, undefined, undefined], ["a", "b", "c"], new Set(), [
+      "BPS",
+      "IPS",
+      "BDF/BSDIFF40",
+    ]);
+    expect(bpsOffered(120, growsLast)).toBe(false);
+  });
+
+  it("keeps BPS for a bounded IPS and EBP tail after a shrinking declared patch", () => {
+    const bounded = getEnabledPatchTargetSizes([60 * MIB, undefined, undefined], ["a", "b", "c"], new Set(), [
+      "BPS",
+      "IPS",
+      "EBP",
+    ]);
+    expect(bpsOffered(120, bounded)).toBe(true);
+  });
+
+  it("starts a bounded tail from its 16 MiB write ceiling when the declared size is smaller", () => {
+    // 190 MiB ROM + 10 MiB declared fits the cap, but an IPS tail can write up to 16 MiB + 64 KiB.
+    const tail = getEnabledPatchTargetSizes([10 * MIB, undefined], ["a", "b"], new Set(), ["BPS", "IPS"]);
+    expect(bpsOffered(190, tail)).toBe(false);
+    expect(bpsOffered(180, tail)).toBe(true);
+  });
+
+  it("treats a tail patch of unknown format as able to grow", () => {
+    expect(
+      bpsOffered(120, getEnabledPatchTargetSizes([60 * MIB, undefined], ["a", "b"], new Set(), ["BPS", undefined])),
+    ).toBe(false);
   });
 
   it("keeps BPS when the declared final target shrinks below a larger intermediate", () => {
@@ -408,7 +481,10 @@ describe("useCombinedPatch", () => {
         options(run, {
           defaultPatchType: "bps",
           romSize: 20 * 1024 * 1024,
-          ...getEnabledPatchTargetSizes([210 * 1024 * 1024, 40 * 1024 * 1024], ["bps", "bps"], new Set()),
+          ...getEnabledPatchTargetSizes([210 * 1024 * 1024, 40 * 1024 * 1024], ["bps", "bps"], new Set(), [
+            "BPS",
+            "BPS",
+          ]),
         }),
       ),
     );

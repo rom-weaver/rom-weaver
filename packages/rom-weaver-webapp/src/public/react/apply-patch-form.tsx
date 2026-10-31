@@ -1899,7 +1899,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     defaultPatchType: props.defaultPatchType,
     onPatchTypeChange: props.onPatchTypeChange,
     romSize: workflowSnapshot.romSize,
-    ...getEnabledPatchTargetSizes(workflowSnapshot.patchTargetSizes, getPatchIds(), disabledPatchIds),
+    ...getEnabledPatchTargetSizes(
+      workflowSnapshot.patchTargetSizes,
+      getPatchIds(),
+      disabledPatchIds,
+      workflowSnapshot.patchFormats,
+    ),
     settings: props.createSettings,
     onComplete: props.onCreateComplete,
     onError: props.onError,
