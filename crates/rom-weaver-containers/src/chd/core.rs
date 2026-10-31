@@ -494,30 +494,28 @@ impl ChdContainerHandler {
         Ok(Some(codecs))
     }
 
+    /// Map a `--codec` entry to a CHD codec. Only the names in [`Self::SUPPORTED_CODEC_CLAUSE`]
+    /// are accepted: other formats' names (`deflate`, `lzma2`, `gzip`, ...) are not synonyms here.
     pub(super) fn map_codec(&self, codec: &str) -> Result<ChdCodec> {
         let normalized = codec.trim().to_ascii_lowercase();
-        match normalized.as_str() {
-            "huff" | "huffman" => return Ok(ChdCodec::HUFFMAN),
-            "flac" => return Ok(ChdCodec::FLAC),
-            "cdzl" => return Ok(ChdCodec::CD_ZLIB),
-            "cdzs" => return Ok(ChdCodec::CD_ZSTD),
-            "cdlz" => return Ok(ChdCodec::CD_LZMA),
-            "cdfl" => return Ok(ChdCodec::CD_FLAC),
-            "avhu" | "avhuff" => return Ok(ChdCodec::AVHUFF),
-            _ => {}
-        }
-
-        match parse_requested_codec(Some(codec)) {
-            RequestedCodec::Unspecified => Ok(ChdCodec::ZSTD),
-            RequestedCodec::Known(CanonicalCodec::Store) => Ok(ChdCodec::NONE),
-            RequestedCodec::Known(CanonicalCodec::Deflate) => Ok(ChdCodec::ZLIB),
-            RequestedCodec::Known(CanonicalCodec::Zstd) => Ok(ChdCodec::ZSTD),
-            RequestedCodec::Known(CanonicalCodec::Lzma)
-            | RequestedCodec::Known(CanonicalCodec::Lzma2) => Ok(ChdCodec::LZMA),
-            RequestedCodec::Known(CanonicalCodec::Huffman) => Ok(ChdCodec::HUFFMAN),
-            RequestedCodec::Known(codec) => Err(Self::unsupported_codec_error(codec.name())),
-            RequestedCodec::Unknown(name) => Err(Self::unsupported_codec_error(&name)),
-        }
+        let mapped = match normalized.as_str() {
+            "store" => ChdCodec::NONE,
+            "zlib" => ChdCodec::ZLIB,
+            "zstd" => ChdCodec::ZSTD,
+            "lzma" => ChdCodec::LZMA,
+            "huff" | "huffman" => ChdCodec::HUFFMAN,
+            "flac" => ChdCodec::FLAC,
+            "cdzl" => ChdCodec::CD_ZLIB,
+            "cdzs" => ChdCodec::CD_ZSTD,
+            "cdlz" => ChdCodec::CD_LZMA,
+            "cdfl" => ChdCodec::CD_FLAC,
+            "avhu" | "avhuff" => ChdCodec::AVHUFF,
+            _ => {
+                debug!(codec = %normalized, "chd rejected an unsupported codec name");
+                return Err(Self::unsupported_codec_error(&normalized));
+            }
+        };
+        Ok(mapped)
     }
 
     pub(super) fn unsupported_codec_error(codec_name: &str) -> RomWeaverError {

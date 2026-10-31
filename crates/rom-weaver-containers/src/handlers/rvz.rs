@@ -20,6 +20,24 @@ pub(crate) struct RvzContainerHandler;
 
 impl RvzContainerHandler {
     const SUPPORTED_CODECS: &[&str] = &["zstd"];
+    /// The zstd level range the format registry advertises for RVZ, same as zip and Z3DS.
+    const ZSTD_LEVEL_MIN: i32 = -7;
+    const ZSTD_LEVEL_MAX: i32 = 22;
+
+    pub(crate) fn validate_zstd_level(level: i32) -> Result<i8> {
+        if !(Self::ZSTD_LEVEL_MIN..=Self::ZSTD_LEVEL_MAX).contains(&level) {
+            debug!(level, "rvz rejected an out-of-range zstd level");
+            return Err(RomWeaverError::Validation(format!(
+                "level `{level}` is invalid for {} codec `zstd` (expected {}..={})",
+                RVZ.name,
+                Self::ZSTD_LEVEL_MIN,
+                Self::ZSTD_LEVEL_MAX
+            )));
+        }
+        i8::try_from(level).map_err(|_| {
+            RomWeaverError::Validation(format!("{} zstd level `{level}` is out of range", RVZ.name))
+        })
+    }
 
     pub(crate) fn extract_read_buffer_size(
         default_buffer_size: usize,
@@ -279,14 +297,13 @@ impl RvzContainerHandler {
             "zstd" if !explicit_codec => {
                 let mut compression = NodFormat::Rvz.default_compression();
                 if let Some(level) = level {
-                    compression =
-                        NodCompression::Zstandard(RVZ_NOD_CORE.validate_i8_level("zstd", level)?);
+                    compression = NodCompression::Zstandard(Self::validate_zstd_level(level)?);
                 }
                 Ok(compression)
             }
-            "zstd" => Ok(NodCompression::Zstandard(
-                RVZ_NOD_CORE.validate_i8_level("zstd", level.unwrap_or(0))?,
-            )),
+            "zstd" => Ok(NodCompression::Zstandard(Self::validate_zstd_level(
+                level.unwrap_or(0),
+            )?)),
             _ => unreachable!("validated rvz create codec"),
         }
     }

@@ -1763,11 +1763,45 @@ fn compress_rvz_rejects_non_disc_input_with_hint() {
     let json = parse_single_json_line(&output);
     let label = json["label"].as_str().expect("label");
     assert!(
-        label.contains("the input must be a GameCube or Wii disc image"),
+        label.contains("is not a GameCube or Wii disc image"),
         "{label}"
     );
+    assert!(
+        label.contains("rvz create only supports GameCube and Wii disc images"),
+        "{label}"
+    );
+    assert!(!label.contains("Unknown disc format"), "{label}");
     assert!(!label.contains("stream fallback failed"), "{label}");
     assert!(label.contains("`source.bin`"), "{label}");
+}
+
+#[test]
+fn compress_rvz_names_what_a_non_disc_input_was_detected_as() {
+    let temp = setup_temp_dir();
+    let mut nes = b"NES\x1a\x01\x01\x00\x00".to_vec();
+    nes.resize(40_000, 0);
+    fs::write(temp.child("game.nes").path(), nes).expect("fixture");
+    let output_path = temp.child("out.rvz");
+
+    let output = command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("game.nes").path().to_str().expect("path"),
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("`game.nes` is not a GameCube or Wii disc image (detected: Nintendo Entertainment System)"),
+        "{label}"
+    );
+    assert!(!output_path.path().exists());
 }
 
 #[test]

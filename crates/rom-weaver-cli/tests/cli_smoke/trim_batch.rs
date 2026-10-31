@@ -893,6 +893,66 @@ fn trim_wbfs_revert_is_rejected_for_rvz_convert() {
 }
 
 #[test]
+fn trim_gamecube_disc_rejects_non_rvz_container_outputs() {
+    let temp = setup_temp_dir();
+    let source = temp.child("disc.iso");
+    fs::write(source.path(), build_test_gamecube_iso(0x4000)).expect("iso fixture");
+
+    for (extension, label) in [("chd", "CHD"), ("zip", "ZIP"), ("7z", "7Z")] {
+        let output = temp.child(format!("trimmed.{extension}"));
+        let terminal = parse_single_json_line(&command_stdout(
+            &[
+                "trim",
+                "--input",
+                source.path().to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--json",
+            ],
+            1,
+        ));
+        assert_eq!(terminal["status"], "failed", "{extension}");
+        let message = terminal["label"].as_str().expect("label");
+        assert!(
+            message.contains(&format!(
+                "{label} is not a valid trim output for GameCube/Wii discs"
+            )),
+            "{extension}: {message}"
+        );
+        assert!(!output.path().exists(), "{extension} must not be written");
+    }
+
+    let dry_run = parse_single_json_line(&command_stdout(
+        &[
+            "trim",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--output",
+            temp.child("dry.chd").path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        1,
+    ));
+    assert_eq!(dry_run["status"], "failed");
+
+    let rvz = temp.child("trimmed.rvz");
+    let terminal = parse_single_json_line(&command_stdout(
+        &[
+            "trim",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--output",
+            rvz.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(terminal["status"], "succeeded");
+    assert!(rvz.path().exists());
+}
+
+#[test]
 fn trim_revert_restores_gba_to_next_power_of_two() {
     let temp = setup_temp_dir();
     let source = temp.child("sample.gba");

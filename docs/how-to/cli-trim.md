@@ -34,7 +34,7 @@ rom-weaver trim --input game.nds --output game-trimmed.nds
 rom-weaver trim --input game.nds --extension trimmed.nds
 ```
 
-For a GameCube or Wii disc, keep the default `.rvz` output name: this path converts the disc losslessly to RVZ without removing unused sectors. It requires a separate output and does not support restore markers.
+For a GameCube or Wii disc, keep the default `.rvz` output name: this path converts the disc losslessly to RVZ without removing unused sectors. It requires a separate output and does not support restore markers. An output name ending in another container's extension (`.chd`, `.zip`, `.7z`) is rejected, because CHD and the archives are not valid trim outputs for these discs.
 
 `--in-place` rewrites the source file. Use it instead of pointing `--output` at a symlink or hard link to the input; output aliases are rejected even with `--force`. Keep a known-good copy first; a trimmed ROM is not always the file a patch expects.
 

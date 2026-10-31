@@ -5,7 +5,7 @@ fn chd_compress_and_extract_raw_round_trip() {
     let source = (0..16_384)
         .map(|index| (index % 251) as u8)
         .collect::<Vec<_>>();
-    run_chd_round_trip("disc.bin", &source, "lzma2", "disc.bin");
+    run_chd_round_trip("disc.bin", &source, "lzma", "disc.bin");
 }
 
 #[test]
@@ -2241,6 +2241,40 @@ fn chd_compress_rejects_level_for_huffman_codec() {
             .expect("label")
             .contains("does not accept --level")
     );
+}
+
+#[test]
+fn chd_compress_rejects_other_formats_codec_names() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("disc.bin").path(), vec![7_u8; 16_384]).expect("fixture");
+
+    for codec in ["deflate", "lzma2", "gzip", "none"] {
+        let chd_path = temp.child(format!("{codec}.chd"));
+        let output = command_stdout(
+            &[
+                "compress",
+                "--input",
+                temp.child("disc.bin").path().to_str().expect("path"),
+                "--format",
+                "chd",
+                "--output",
+                chd_path.path().to_str().expect("path"),
+                "--codec",
+                codec,
+                "--jsonl",
+            ],
+            1,
+        );
+
+        let json = parse_single_json_line(&output);
+        assert_eq!(json["status"], "failed", "{codec}");
+        let label = json["label"].as_str().expect("label");
+        assert!(
+            label.contains(&format!("unsupported chd codec `{codec}`")),
+            "{codec}: {label}"
+        );
+        assert!(!chd_path.path().exists(), "{codec} must not write a CHD");
+    }
 }
 
 #[test]

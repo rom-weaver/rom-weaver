@@ -2394,6 +2394,124 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
+    /// Extracts `source` with `--checksum sha1` and returns the sha1 the report attached to the
+    /// emitted file named `output_name`, alongside the sha1 of that file read back from disk.
+    fn extract_reported_and_actual_sha1(
+        handler_name: &str,
+        source: PathBuf,
+        temp_dir: &Path,
+        output_name: &str,
+    ) -> (Option<String>, String) {
+        let out_dir = temp_dir.join("checksum-out");
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name(handler_name).expect("handler");
+        let context =
+            test_context(temp_dir, 2).with_extract_checksum_algorithms(vec!["sha1".to_string()]);
+        let report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source,
+                    out_dir: out_dir.clone(),
+                    selections: Vec::new(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    containing_archive: None,
+                    split_bin: false,
+                    ignore_common_files: false,
+                    overwrite: true,
+                    parent: None,
+                },
+                &context,
+            )
+            .expect("extract with checksum");
+        assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+        let actual = rom_weaver_checksum::checksum_file_values(
+            &out_dir.join(output_name),
+            &["sha1"],
+            &context,
+        )
+        .expect("hash extracted output")
+        .remove("sha1")
+        .expect("sha1 value");
+        let reported = report
+            .details
+            .as_ref()
+            .and_then(|details| details.get("emitted_files"))
+            .and_then(|files| files.as_array())
+            .and_then(|files| {
+                files.iter().find(|file| {
+                    file.get("path")
+                        .and_then(|path| path.as_str())
+                        .is_some_and(|path| path.ends_with(output_name))
+                })
+            })
+            .and_then(|file| file.get("checksums")?.get("sha1")?.as_str())
+            .map(str::to_string);
+        (reported, actual)
+    }
+
+    #[test]
+    fn nod_disc_extract_reports_requested_checksum() {
+        let temp_dir = temp_dir_path("nod-extract-checksum");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        fs::write(&input_iso, build_test_gamecube_iso(0x7000)).expect("write source fixture");
+        for (handler_name, writer) in [
+            ("wbfs", write_test_wbfs as fn(&Path, &Path)),
+            ("gc-ciso", write_test_gc_ciso),
+            ("wia", write_test_wia),
+        ] {
+            let source = temp_dir.join(format!("disc.{handler_name}"));
+            writer(&input_iso, &source);
+            let (reported, actual) =
+                extract_reported_and_actual_sha1(handler_name, source, &temp_dir, "disc.iso");
+            assert_eq!(reported.as_deref(), Some(actual.as_str()), "{handler_name}");
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn pbp_extract_reports_requested_checksum_for_the_bin_only() {
+        let temp_dir = temp_dir_path("pbp-extract-checksum");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("game.pbp");
+        fs::write(
+            &source,
+            build_test_pbp_fixture(vec![("SLUS00001", build_test_pbp_iso(64, 7))]),
+        )
+        .expect("pbp fixture");
+
+        let (reported, actual) =
+            extract_reported_and_actual_sha1("pbp", source.clone(), &temp_dir, "game.bin");
+        assert_eq!(reported.as_deref(), Some(actual.as_str()));
+        let (cue_reported, _) =
+            extract_reported_and_actual_sha1("pbp", source, &temp_dir, "game.cue");
+        assert_eq!(cue_reported, None);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn xiso_extract_reports_requested_checksum() {
+        let temp_dir = temp_dir_path("xiso-extract-checksum");
+        let tree = temp_dir.join("tree");
+        fs::create_dir_all(&tree).unwrap();
+        fs::write(tree.join("payload.bin"), b"source payload").unwrap();
+        let source = temp_dir.join("game.iso");
+        let mut image = File::create(&source).unwrap();
+        let mut source_fs = crate::xdvdfs::write::fs::StdFilesystem::create(&tree);
+        crate::xdvdfs::write::img::create_xdvdfs_image(&mut source_fs, &mut image, |_| {}).unwrap();
+        drop(image);
+        let xiso = temp_dir.join("game.xiso");
+        fs::rename(&source, &xiso).unwrap();
+
+        let (reported, actual) =
+            extract_reported_and_actual_sha1("xiso", xiso, &temp_dir, "game.iso");
+        assert_eq!(reported.as_deref(), Some(actual.as_str()));
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
     #[test]
     fn pbp_lists_and_extracts_single_disc_outputs() {
         let temp_dir = temp_dir_path("pbp-single");
@@ -6177,18 +6295,21 @@ mod tests {
     }
 
     #[test]
-    fn nod_validate_i8_level_rejects_overflowing_level() {
-        let core = NodHandlerCore::new(&RVZ, NodFormat::Rvz);
-        // Within i8 range round-trips unchanged.
-        assert_eq!(core.validate_i8_level("zstd", 19).expect("in range"), 19);
-        // Above i8::MAX (127) overflows the conversion guard.
-        let error = core
-            .validate_i8_level("zstd", 200)
-            .expect_err("level 200 should overflow i8");
-        assert!(
-            matches!(error, RomWeaverError::Validation(ref message) if message.contains("level `200` is out of range")),
-            "unexpected error: {error:?}"
-        );
+    fn rvz_validate_zstd_level_enforces_the_registry_range() {
+        for level in [-7, 0, 19, 22] {
+            assert_eq!(
+                i32::from(RvzContainerHandler::validate_zstd_level(level).expect("in range")),
+                level
+            );
+        }
+        for level in [-8, 23, 200, i32::MIN, i32::MAX] {
+            let error = RvzContainerHandler::validate_zstd_level(level)
+                .expect_err("level outside -7..=22 must be rejected");
+            assert!(
+                matches!(error, RomWeaverError::Validation(ref message) if message.contains(&format!("level `{level}` is invalid for rvz codec `zstd` (expected -7..=22)"))),
+                "unexpected error: {error:?}"
+            );
+        }
     }
 
     fn garbage_archive_bytes() -> Vec<u8> {

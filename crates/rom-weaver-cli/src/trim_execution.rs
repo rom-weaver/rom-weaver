@@ -356,6 +356,28 @@ impl CliApp {
         })
     }
 
+    /// A GameCube/Wii trim always writes an RVZ file, so a destination that carries another
+    /// container's extension (such as `.chd`) would be an RVZ file with a misleading name.
+    fn ensure_rvz_convert_destination(&self, destination: &Path) -> Result<()> {
+        let Some(handler) = self.containers.find_by_output_extension(destination) else {
+            return Ok(());
+        };
+        let format = handler.descriptor().name;
+        if format.eq_ignore_ascii_case("rvz") {
+            return Ok(());
+        }
+        debug!(
+            destination = %destination.display(),
+            format,
+            "rvz-convert trim rejected a non-rvz output extension"
+        );
+        Err(RomWeaverError::Validation(format!(
+            "{} is not a valid trim output for GameCube/Wii discs: trim converts them to RVZ, so `{}` must end in .rvz",
+            format.to_ascii_uppercase(),
+            destination.display()
+        )))
+    }
+
     pub(super) fn trim_rvz_convert_file(
         &self,
         source: &Path,
@@ -378,6 +400,8 @@ impl CliApp {
                     .to_string(),
             ));
         }
+
+        self.ensure_rvz_convert_destination(destination)?;
 
         let original_size = fs::metadata(source)?.len();
         if original_size == 0 {
