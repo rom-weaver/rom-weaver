@@ -1022,6 +1022,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
         );
 
         let mut produced_outputs = Vec::new();
+        let mut output_checksums = Vec::new();
         let mut total_written = 0u64;
 
         for (disc_index, write_cue, write_bin) in extract_plan {
@@ -1045,6 +1046,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
                 if let Some(parent) = bin_path.parent() {
                     fs::create_dir_all(parent)?;
                 }
+                let mut bin_hasher = ExtractHasher::new(context, None, &bin_path, 1)?;
                 let mut ordered_writer = OrderedChunkWriter::new(
                     BufWriter::new(create_extract_output_file(&bin_path, request.overwrite)?),
                     bounded_items_for_threads(execution.effective_threads),
@@ -1088,6 +1090,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
                                     "pbp extract chunk index overflowed".into(),
                                 )
                             })?;
+                            bin_hasher.update(&chunk.data)?;
                             ordered_writer.write_chunk(chunk_index, chunk.data)?;
                             if total_extract_bytes > 0 {
                                 let completed = extract_progress_bytes
@@ -1135,6 +1138,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
                         let chunk_index = u64::try_from(task.task_index).map_err(|_| {
                             RomWeaverError::Validation("pbp extract chunk index overflowed".into())
                         })?;
+                        bin_hasher.update(&chunk.data)?;
                         ordered_writer.write_chunk(chunk_index, chunk.data)?;
                         if total_extract_bytes > 0 {
                             let completed = extract_progress_bytes
@@ -1167,6 +1171,14 @@ impl ContainerHandlerOperations for PbpContainerHandler {
                 if let Err(error) = ordered_writer.finish() {
                     let _ = fs::remove_file(&bin_path);
                     return Err(error);
+                }
+
+                match bin_hasher.finish(&bin_path) {
+                    Ok(checksum) => output_checksums.extend(checksum),
+                    Err(error) => {
+                        let _ = fs::remove_file(&bin_path);
+                        return Err(error);
+                    }
                 }
 
                 total_written = total_written.saturating_add(disc.iso_size);
@@ -1229,6 +1241,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
             Some(100.0),
             Some(execution),
         );
+        let report = attach_extract_checksum_details(report, output_checksums);
         Ok(attach_emitted_file_paths(report, &produced_outputs))
     }
 

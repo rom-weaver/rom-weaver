@@ -91,6 +91,7 @@ pub(super) const CREATE_PATCH_FORMAT_ALIASES: &[(&str, &str)] = &[
 pub struct PatchCreateFormatPolicyMetadata {
     pub archive_default_size_limit_bytes: u64,
     pub bps_default_size_limit_bytes: u64,
+    pub bps_max_combined_input_bytes: u64,
     pub default_format: &'static str,
     pub ips_size_limit_bytes: u64,
     pub large_default_format: &'static str,
@@ -108,6 +109,7 @@ pub fn patch_create_format_policy_metadata() -> PatchCreateFormatPolicyMetadata 
     PatchCreateFormatPolicyMetadata {
         archive_default_size_limit_bytes: CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES,
         bps_default_size_limit_bytes: CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES,
+        bps_max_combined_input_bytes: rom_weaver_patches::BPS_CREATE_MAX_COMBINED_INPUT_BYTES,
         default_format: CREATE_PATCH_DEFAULT_FORMAT,
         ips_size_limit_bytes: CREATE_PATCH_IPS_SIZE_LIMIT_BYTES,
         large_default_format: CREATE_PATCH_LARGE_DEFAULT_FORMAT,
@@ -153,9 +155,9 @@ pub(super) struct PatchCreateInputInfo {
     pub(super) modified: PatchCreateSourceInfo,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct PatchCreateFormatCandidates {
-    pub(super) formats: &'static [&'static str],
+    pub(super) formats: Vec<&'static str>,
     pub(super) default_format: &'static str,
 }
 

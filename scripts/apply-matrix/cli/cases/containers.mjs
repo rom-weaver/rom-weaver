@@ -65,6 +65,38 @@ export const register = async ({ root, fixtures }) => {
       ctx.same(b.output, a.output, "-j8 vs -j1");
     });
   }
+  add("container.source.7z-split-volume", ["container", "7z", "negative"], (ctx) => {
+    needTool("7z");
+    const input = ctx.write("game.bin", fs.readFileSync(ctx.fx("rom/base.bin")));
+    const archive = ctx.tmp("split.7z");
+    const made = spawnSync("7z", ["a", "-t7z", "-mx=0", "-v16k", archive, input], { encoding: "utf8" });
+    check(made.status === 0, `7z split fixture: ${made.stderr}`);
+    for (const suffix of ["001", "002"]) {
+      const volume = `${archive}.${suffix}`;
+      const original = fs.readFileSync(volume);
+      const target = Buffer.from(original);
+      target[100] ^= 0xff;
+      const patch = ctx.write(`volume-${suffix}.bps`, E.encodeBps(original, target));
+      ctx.failed(ctx.run(["extract", "-i", volume, "-o", ctx.tmp(`extract-${suffix}`)]), { what: "extract split 7z" });
+      const out = ctx.tmp(`out-${suffix}.bin`);
+      ctx.failed(ctx.apply(volume, patch, out), { message: /7z|volume/i, what: "apply split 7z" });
+      check(!ctx.exists(out), "split 7z apply left an output");
+      check(fs.readFileSync(volume).equals(original), "split 7z apply changed its input");
+    }
+  });
+  add("reference.7z.source.deflate64-codec", ["reference", "7z", "deflate64"], (ctx) => {
+    needTool("7z");
+    const input = ctx.write("game.bin", fs.readFileSync(ctx.fx("rom/base.bin")));
+    const archive = ctx.tmp("deflate64.7z");
+    const made = spawnSync("7z", ["a", "-t7z", "-m0=Deflate64", archive, input], { encoding: "utf8" });
+    check(made.status === 0, `7z Deflate64 fixture: ${made.stderr}`);
+    const extracted = ctx.tmp("extracted");
+    ctx.ok(ctx.run(["extract", "-i", archive, "-o", extracted]), "extract Deflate64 7z");
+    ctx.same(path.join(extracted, "game.bin"), input, "extracted Deflate64 payload");
+    const out = ctx.tmp("out.bin");
+    ctx.ok(ctx.apply(archive, ctx.fx(IPS), out), "apply Deflate64 7z");
+    ctx.same(out, ctx.fx("rom/same.bin"), "Deflate64 patched output");
+  });
   add("container.source.lzma-alone-unregistered", ["container", "negative"], (ctx) => {
     needTool("lzma");
     const { result, output } = viaContainer(ctx, "ctr/game.bin.lzma");

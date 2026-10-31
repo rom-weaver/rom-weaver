@@ -540,6 +540,16 @@ struct ChdCompressionPlan {
     primary_codec: ChdCodec,
 }
 
+/// What a create request resolves to before any output is written.
+struct ChdCreatePlan {
+    create_kind: ChdCreateKind,
+    compression_plan: ChdCompressionPlan,
+    /// The level handed to the codec, or `None` when an auto-selected level-less codec drops it.
+    level_for_codec: Option<i32>,
+    compression_level: i32,
+    input_bytes: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RustMetadataEntry {
     tag: u32,

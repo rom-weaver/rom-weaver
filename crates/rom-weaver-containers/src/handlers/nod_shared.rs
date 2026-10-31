@@ -565,9 +565,10 @@ impl NodHandlerCore {
         let output = create_extract_output_file(&plan.output_path, request.overwrite)?;
         let mut output = ExtractOutput::new(output, &mut plan.integrity);
         let progress_label = format!("extracting `{}`", self.format_name());
+        let hasher = ExtractHasher::new(context, None, &plan.output_path, 1)?;
         let copied = (|| {
             output.set_len(plan.disc_size)?;
-            let mut output = BufWriter::new(&mut output);
+            let mut output = HashingWriter::new(BufWriter::new(&mut output), hasher);
             let bytes_written = copy_reader_with_progress(
                 &mut plan.disc,
                 &mut output,
@@ -582,14 +583,14 @@ impl NodHandlerCore {
                 &progress_label,
             )?;
             output.flush()?;
-            Ok(bytes_written)
+            Ok((bytes_written, output.into_hasher()))
         })();
         let digests = output.finish();
-        let finished = copied.and_then(|bytes_written| {
+        let finished = copied.and_then(|(bytes_written, hasher)| {
             let warnings = self.finish_extract_integrity(&mut plan, digests, context)?;
-            Ok((bytes_written, warnings))
+            Ok((bytes_written, hasher, warnings))
         });
-        let (bytes_written, warnings) = match finished {
+        let (bytes_written, hasher, warnings) = match finished {
             Ok(finished) => finished,
             Err(error) => {
                 // A failed or cancelled copy or verification leaves a partial or unverified
@@ -598,6 +599,18 @@ impl NodHandlerCore {
                 return Err(error);
             }
         };
+        let checksum = match hasher.finish(&plan.output_path) {
+            Ok(checksum) => checksum,
+            Err(error) => {
+                let _ = fs::remove_file(&plan.output_path);
+                return Err(error);
+            }
+        };
+        trace!(
+            format = self.format_name(),
+            checksummed = checksum.is_some(),
+            "nod disc extract copy finished"
+        );
 
         let mut report = self.extracted_report(
             &request.source,
@@ -608,7 +621,10 @@ impl NodHandlerCore {
             plan.execution,
         );
         attach_integrity_warnings(&mut report, warnings);
-        Ok(report)
+        Ok(attach_extract_checksum_details(
+            report,
+            checksum.into_iter().collect(),
+        ))
     }
 
     pub(crate) fn extracted_report(
@@ -659,6 +675,49 @@ impl NodHandlerCore {
         Ok(())
     }
 
+    /// The create-time failure for an input nod could not open. An unrecognized disc format
+    /// gets a plain "not a GameCube or Wii disc" message naming the file and, when the header
+    /// identifies it, what it is; the raw backend text carries nothing the user can act on.
+    fn create_open_error(&self, input: &Path, error: &str) -> RomWeaverError {
+        let name = display_input_name(input);
+        if !error.contains("Unknown disc format") {
+            return RomWeaverError::Validation(format!(
+                "failed to open input `{name}` for {} create: {error}",
+                self.format_name()
+            ));
+        }
+        let identity = rom_weaver_checksum::detect_rom_identity_for_path(input);
+        debug!(
+            format = self.format_name(),
+            input = %name,
+            platform = ?identity.platform,
+            disc_format = ?identity.disc_format,
+            "nod create input is not a GameCube or Wii disc"
+        );
+        let detected = match (identity.platform, identity.disc_format) {
+            (Some(platform), Some(disc)) => {
+                format!(" (detected: {platform}, {} disc)", disc.label())
+            }
+            (Some(platform), None) => format!(" (detected: {platform})"),
+            (None, Some(disc)) => format!(" (detected: {} disc)", disc.label()),
+            (None, None) => String::new(),
+        };
+        RomWeaverError::Validation(format!(
+            "`{name}` is not a GameCube or Wii disc image{detected}; {} create only supports GameCube and Wii disc images",
+            self.format_name()
+        ))
+    }
+
+    /// Open `input` as a disc image without reading its data, so a create request for a
+    /// non-GameCube/Wii input fails with the same error the real create reports.
+    pub(crate) fn validate_create_input(&self, input: &Path) -> Result<()> {
+        debug!(format = self.format_name(), input = %input.display(), "nod create input check");
+        let read_options = self.read_options(0);
+        self.open_disc_from_path_or_stream(input, &read_options)
+            .map(drop)
+            .map_err(|error| self.create_open_error(input, &error))
+    }
+
     pub(crate) fn process_create_with_progress<F>(
         &self,
         input: &Path,
@@ -682,14 +741,7 @@ impl NodHandlerCore {
         let read_options = self.read_options(thread_plan.preloader_threads);
         let input_disc = self
             .open_disc_from_path_or_stream(input, &read_options)
-            .map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to open input `{}` for {} create: {error}{}",
-                    display_input_name(input),
-                    self.format_name(),
-                    unknown_disc_hint(&error)
-                ))
-            })?;
+            .map_err(|error| self.create_open_error(input, &error))?;
 
         let writer = NodDiscWriter::new(input_disc, options).map_err(|error| {
             RomWeaverError::Validation(format!(
@@ -750,14 +802,7 @@ impl NodHandlerCore {
         let read_options = self.read_options(thread_plan.preloader_threads);
         let input_disc = self
             .open_disc_from_path_or_stream(input, &read_options)
-            .map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to open input `{}` for {} create: {error}{}",
-                    display_input_name(input),
-                    self.format_name(),
-                    unknown_disc_hint(&error)
-                ))
-            })?;
+            .map_err(|error| self.create_open_error(input, &error))?;
 
         let writer = NodDiscWriter::new(input_disc, options).map_err(|error| {
             RomWeaverError::Validation(format!(
@@ -791,15 +836,6 @@ impl NodHandlerCore {
             output_bytes = output_bytes.max(finalization.header.len() as u64);
         }
         Ok(output_bytes)
-    }
-
-    pub(crate) fn validate_i8_level(&self, codec: &str, level: i32) -> Result<i8> {
-        i8::try_from(level).map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "{} codec `{codec}` level `{level}` is out of range",
-                self.format_name()
-            ))
-        })
     }
 }
 
@@ -892,15 +928,6 @@ fn wbfs_size_mismatch(error: &crate::nod::Error) -> Option<(u64, u64)> {
     let sizes = message.strip_prefix("Invalid WBFS file size: ")?;
     let (actual, expected) = sizes.split_once(", expected ")?;
     Some((actual.parse().ok()?, expected.parse().ok()?))
-}
-
-/// Hint appended when a create input is not a disc image the nod reader recognizes.
-fn unknown_disc_hint(error: &str) -> &'static str {
-    if error.contains("Unknown disc format") {
-        "; the input must be a GameCube or Wii disc image"
-    } else {
-        ""
-    }
 }
 
 /// Checks that must pass before any WIA/RVZ output is written: each hashed Wii partition's H3

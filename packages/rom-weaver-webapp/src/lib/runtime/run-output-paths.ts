@@ -1,4 +1,5 @@
 import { createCleanupOnce } from "../../storage/shared/disposal.ts";
+import { registerBrowserTransientOpfsPath } from "../../storage/browser/browser-opfs-cleanup.ts";
 import { joinVfsPath } from "../../storage/vfs/path.ts";
 import { createVfsPathId } from "../../storage/vfs/path-id.ts";
 import { removeManagedOpfsPath } from "../../workers/protocol/opfs-path.ts";
@@ -47,9 +48,11 @@ type RomWeaverOutputScope = {
 
 const createRomWeaverOutputScope = (): RomWeaverOutputScope => {
   const rootPath = joinVfsPath(WORK_ROOT_PATH, OPERATION_ROOT_NAME, createVfsPathId());
+  const releaseOwnership = registerBrowserTransientOpfsPath(rootPath);
   const cleanup = createCleanupOnce(async () => {
     await waitForRomWeaverShutdown();
     await removeManagedOpfsPath(rootPath, undefined, { ignoreErrors: false });
+    releaseOwnership();
   });
   const createOutputCleanups: RomWeaverOutputScope["createOutputCleanups"] = async (outputPaths, removeOutputPath) => {
     if (!outputPaths.length) {

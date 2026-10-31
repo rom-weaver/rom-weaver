@@ -2618,3 +2618,284 @@ fn extract_7z_runs_only_as_many_folder_decoders_as_the_memory_limit_fits() {
         }
     }
 }
+
+#[test]
+fn patch_apply_rejects_split_7z_volumes() {
+    let temp = setup_temp_dir();
+    let full = temp.child("full.7z");
+    let payload = pseudo_random_bytes(64 * 1024, 19);
+    write_7z_lzma2_folders_fixture(full.path(), &[("game.bin", &payload)], 16);
+    let bytes = fs::read(full.path()).expect("7z bytes");
+    assert!(bytes.len() > 32 * 1024);
+    let patch = temp.child("change.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 100,
+                data: vec![42],
+            }],
+            None,
+        ),
+    )
+    .expect("patch");
+    for name in [
+        "split.7z.001",
+        "split.7z.002",
+        "split.7Z.001",
+        "split.7z.1000",
+    ] {
+        let volume = temp.child(name);
+        let start = if name.ends_with("002") { 16 * 1024 } else { 0 };
+        let original = &bytes[start..start + 16 * 1024];
+        fs::write(volume.path(), original).expect("volume");
+        let output = temp.child(format!("{name}.out.bin"));
+        let stderr = stderr_of_failed(&[
+            "patch",
+            "apply",
+            "-i",
+            volume.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "-o",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+        ]);
+        assert!(
+            stderr.contains("split 7z volume set")
+                && stderr.contains("join the volumes")
+                && stderr.contains("--no-extract")
+                && stderr.contains("payload extraction failed"),
+            "{stderr}"
+        );
+        assert!(!output.path().exists(), "left output for {name}");
+        assert_eq!(fs::read(volume.path()).expect("unchanged volume"), original);
+        command_stdout(
+            &[
+                "patch",
+                "apply",
+                "-i",
+                volume.path().to_str().expect("path"),
+                "--patch",
+                patch.path().to_str().expect("path"),
+                "-o",
+                output.path().to_str().expect("path"),
+                "--no-compress",
+                "--no-extract",
+            ],
+            0,
+        );
+        let mut expected = original.to_vec();
+        expected[100] = 42;
+        assert_eq!(
+            fs::read(output.path()).expect("patched raw volume"),
+            expected
+        );
+        assert_eq!(fs::read(volume.path()).expect("unchanged volume"), original);
+    }
+}
+
+#[test]
+fn checksum_and_probe_reject_split_7z_volumes_unless_no_extract() {
+    let temp = setup_temp_dir();
+    let volume = temp.child("split.7z.002");
+    let original = with_nes_header(&pseudo_random_bytes(1024, 19));
+    fs::write(volume.path(), &original).expect("volume");
+    for mut args in [vec!["checksum", "--algo", "crc32"], vec!["probe"]] {
+        args.extend(["-i", volume.path().to_str().expect("path")]);
+        let stderr = stderr_of_failed(&args);
+        assert!(
+            stderr.contains("split 7z volume set")
+                && stderr.contains("join the volumes")
+                && stderr.contains("--no-extract"),
+            "{stderr}"
+        );
+        args.push("--no-extract");
+        command_stdout(&args, 0);
+        assert_eq!(fs::read(volume.path()).expect("unchanged volume"), original);
+    }
+}
+
+#[test]
+fn extract_7z_deflate64_bcj_drains_buffered_output() {
+    let archive = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../rom-weaver-containers/tests/fixtures/7z/deflate64-bcj.7z");
+    let expected = (0..1024 * 1024)
+        .map(|i| (i % 251) as u8)
+        .collect::<Vec<_>>();
+    let temp = setup_temp_dir();
+    for threads in ["1", "2"] {
+        let out = temp.child(format!("out-{threads}"));
+        command_stdout(
+            &[
+                "extract",
+                "-i",
+                archive.to_str().expect("path"),
+                "-o",
+                out.path().to_str().expect("path"),
+                "-j",
+                threads,
+            ],
+            0,
+        );
+        assert_eq!(
+            fs::read(out.child("mixed.bin").path()).expect("payload"),
+            expected
+        );
+    }
+}
+
+#[test]
+fn extract_7z_deflate64_bcj_converts_calls_across_drain_boundaries() {
+    for (fixture, name, size, prefix, stride, filler) in [
+        ("calls", "calls.bin", 1024 * 1024, 0, 5, 0),
+        ("long-match", "long-match.bin", 851922, 7, 6, 0x90),
+    ] {
+        let archive = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
+            "../rom-weaver-containers/tests/fixtures/7z/deflate64-bcj-{fixture}.7z"
+        ));
+        let mut expected = vec![filler; size];
+        for offset in (prefix..expected.len() - 4).step_by(stride) {
+            expected[offset] = if (offset - prefix) % (stride * 2) == 0 {
+                0xe8
+            } else {
+                0xe9
+            };
+            let relative = 0x20_0000_i32 - offset as i32 - 5;
+            expected[offset + 1..offset + 5].copy_from_slice(&relative.to_le_bytes());
+        }
+        let temp = setup_temp_dir();
+        for threads in ["1", "2"] {
+            let out = temp.child(format!("out-{threads}"));
+            command_stdout(
+                &[
+                    "extract",
+                    "-i",
+                    archive.to_str().expect("path"),
+                    "-o",
+                    out.path().to_str().expect("path"),
+                    "-j",
+                    threads,
+                ],
+                0,
+            );
+            assert_eq!(fs::read(out.child(name).path()).expect("payload"), expected);
+        }
+    }
+}
+
+#[test]
+fn extract_7z_deflate64_solid_and_separate_folders() {
+    for solid in ["on", "off"] {
+        let archive = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
+            "../rom-weaver-containers/tests/fixtures/7z/deflate64-solid-{solid}.7z"
+        ));
+        let temp = setup_temp_dir();
+        for threads in ["1", "2"] {
+            let out = temp.child(format!("out-{threads}"));
+            command_stdout(
+                &[
+                    "extract",
+                    "-i",
+                    archive.to_str().expect("path"),
+                    "-o",
+                    out.path().to_str().expect("path"),
+                    "-j",
+                    threads,
+                ],
+                0,
+            );
+            assert_eq!(
+                fs::read(out.child("first.bin").path()).expect("first"),
+                (0..131072).map(|i| (i % 251) as u8).collect::<Vec<_>>()
+            );
+            assert_eq!(
+                fs::read(out.child("second.bin").path()).expect("second"),
+                vec![b'x'; 196609]
+            );
+            assert!(
+                fs::read(out.child("empty.bin").path())
+                    .expect("empty")
+                    .is_empty()
+            );
+        }
+    }
+}
+
+#[test]
+fn extract_7z_deflate64_rejects_corrupt_payload() {
+    let temp = setup_temp_dir();
+    let mut bytes =
+        include_bytes!("../../../rom-weaver-containers/tests/fixtures/7z/deflate64-solid-on.7z")
+            .to_vec();
+    bytes[32] = 0x07;
+    let archive = temp.child("corrupt.7z");
+    fs::write(archive.path(), &bytes).expect("corrupt archive");
+    let out = temp.child("out");
+    let stderr = stderr_of_failed(&[
+        "extract",
+        "-i",
+        archive.path().to_str().expect("path"),
+        "-o",
+        out.path().to_str().expect("path"),
+    ]);
+    assert!(
+        stderr.contains("Deflate64 decompression failed"),
+        "{stderr}"
+    );
+    assert!(!out.path().exists(), "corrupt extraction left output");
+    assert_eq!(fs::read(archive.path()).expect("unchanged archive"), bytes);
+}
+
+#[test]
+fn patch_apply_extracts_complete_7z_with_volume_name() {
+    let temp = setup_temp_dir();
+    let payload = pseudo_random_bytes(1024, 19);
+    let input = temp.child("complete.7z.001");
+    write_7z_lzma2_folders_fixture(input.path(), &[("game.bin", &payload)], 16);
+    let patch = temp.child("change.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 100,
+                data: vec![42],
+            }],
+            None,
+        ),
+    )
+    .expect("patch");
+    let out = temp.child("out.bin");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "-i",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "-o",
+            out.path().to_str().expect("path"),
+            "--no-compress",
+        ],
+        0,
+    );
+    let mut expected = payload;
+    expected[100] = 42;
+    assert_eq!(fs::read(out.path()).expect("patched payload"), expected);
+}
+
+#[test]
+fn extract_help_says_generated_disc_sheets_are_not_hashed() {
+    let help = String::from_utf8(command_stdout(&["extract", "--help"], 0)).expect("utf8 help");
+    let checksum = help
+        .split("--checksum <ALGO>")
+        .nth(1)
+        .expect("--checksum entry");
+    let entry = checksum.split("--checksum-rom").next().expect("entry text");
+    let flattened = entry.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        flattened.contains("A .cue or .gdi sheet generated for a disc is not hashed"),
+        "{flattened}"
+    );
+}

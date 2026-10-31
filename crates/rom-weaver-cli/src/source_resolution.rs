@@ -311,9 +311,21 @@ impl CliApp {
                 );
                 break;
             }
+            let is_7z_volume = current_source
+                .file_stem()
+                .is_some_and(|stem| stem.to_string_lossy().to_ascii_lowercase().ends_with(".7z"))
+                && current_source.extension().is_some_and(|extension| {
+                    let extension = extension.as_encoded_bytes();
+                    extension.len() >= 3 && extension.iter().all(u8::is_ascii_digit)
+                });
             let Some(handler) = self
                 .containers
                 .probe(&current_source)
+                .or_else(|| {
+                    is_7z_volume
+                        .then(|| self.containers.find_by_name("7z"))
+                        .flatten()
+                })
                 .filter(|handler| !handler.is_self_contained_rom(&current_source))
             else {
                 trace!(
@@ -351,7 +363,7 @@ impl CliApp {
                 // A short signature can match raw ROM bytes by chance. Only a
                 // file named as this container is a damaged archive; any
                 // other file is used as-is.
-                if !handler.descriptor().matches_path(&current_source) {
+                if !handler.descriptor().matches_path(&current_source) && !is_7z_volume {
                     debug!(
                         current_source = %current_source.display(),
                         format = handler.descriptor().name,
@@ -366,6 +378,13 @@ impl CliApp {
                     error = %error,
                     "auto-extract failed: handler probe failed"
                 );
+                if is_7z_volume && handler.descriptor().matches_name("7z") {
+                    return Err(RomWeaverError::Validation(format!(
+                        "{} payload extraction failed for `{}` (7z): split 7z volume sets are unsupported; join the volumes into one archive or use --no-extract to use this volume as raw input: {error}",
+                        labels.source_label,
+                        current_source.display(),
+                    )));
+                }
                 return Err(RomWeaverError::Validation(format!(
                     "{} payload extraction failed for `{}` ({}): {error}",
                     labels.source_label,

@@ -7,6 +7,7 @@ Cut the padding off a ROM with `rom-weaver trim`, check the saving before you co
 
 - [See what would change](#see-what-would-change)
 - [Write a trimmed copy](#write-a-trimmed-copy)
+- [Choose the output format](#choose-the-output-format)
 - [Make the trim reversible](#make-the-trim-reversible)
 - [Put the padding back](#put-the-padding-back)
 - [Trim files inside an archive](#trim-files-inside-an-archive)
@@ -35,6 +36,23 @@ rom-weaver trim --input game.nds --extension trimmed.nds
 ```
 
 For a GameCube or Wii disc, keep the default `.rvz` output name: this path converts the disc losslessly to RVZ without removing unused sectors. It requires a separate output and does not support restore markers.
+
+## Choose the output format
+
+`--output` (and `--extension`) follow the output name's extension, as `compress` and `patch apply` do. A container extension packs the trimmed file inside it; a name that matches no container writes the trimmed file itself.
+
+| Input | Output name | Result |
+| --- | --- | --- |
+| Any trimmable ROM or disc | `.zip`, `.7z` | The trimmed file inside the archive. |
+| XISO disc | `.chd` | The trimmed disc packed as a DVD CHD. |
+| 3DS ROM | `.z3ds` | The trimmed ROM packed as Z3DS. `.z3ds` always works; `.zcci` is also accepted for a cartridge image (NCSD) and `.zcxi` for an NCCH image, the name `extract` reads back as `.cci` or `.cxi`. The other Z3DS names (`.zcia`, `.z3dsx`, and the descriptor that does not match the file's payload) are an error. |
+| GameCube or Wii disc | `.rvz` | The RVZ conversion, written as the output. |
+| XISO disc | `.xiso`, `.xiso.iso` | The rebuilt XISO, written as the output. |
+| NDS, GBA, 3DS ROM or XISO | any extension that is not a container (such as `.nds` or `.iso`) | The trimmed file itself, as before. |
+| Anything | another container (`.chd` for a cartridge ROM, `.rvz` for an NDS ROM, `.tar.gz`, and so on) | An error; nothing is written. |
+| GameCube or Wii disc | any other extension (`.iso`, `.bin`, `.nds`, `.chd`, ...) | An error: trim writes RVZ, not a plain disc image. Use `extract` for that. A name with no extension is still accepted. |
+
+The file inside an archive carries the output name without the archive extension, ending in the trimmed file's own extension: `--output game.zip` for `game.nds` holds `game.nds`, `--output game.nds.zip` holds `game.nds`, and a disc converted to RVZ holds `game.rvz`. An existing output is kept unless you pass `--force`, and a failed pack leaves it as it was. `--dry-run` applies the same rules and reports the container as the file it would write.
 
 `--in-place` rewrites the source file. Use it instead of pointing `--output` at a symlink or hard link to the input; output aliases are rejected even with `--force`. Keep a known-good copy first; a trimmed ROM is not always the file a patch expects.
 

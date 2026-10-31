@@ -2,6 +2,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CompressForm } from "../../../src/webapp/components/compress-form.tsx";
+import { RvzInputNotDiscError } from "../../../src/webapp/compress-service.ts";
 import type { ApplyWorkflowOptions } from "../../../src/types/workflow-runtime-types.ts";
 
 const service = vi.hoisted(() => ({
@@ -64,6 +65,8 @@ describe("CompressForm", () => {
         }),
       }),
       expect.anything(),
+      // The staging probe result rides along so the run does not probe the files again.
+      expect.objectContaining({ files: expect.arrayContaining([expect.objectContaining({ name: "fix.bps" })]) }),
     );
     expect(output.dispose).not.toHaveBeenCalled();
     expect(onSessionChange).toHaveBeenLastCalledWith(true);
@@ -97,6 +100,21 @@ describe("CompressForm", () => {
     expect(late.dispose).toHaveBeenCalledOnce();
     expect(late.saveAs).not.toHaveBeenCalled();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("explains in plain words that RVZ cannot hold a non-GameCube/Wii input", async () => {
+    service.compressFiles.mockRejectedValue(
+      new RvzInputNotDiscError("dvd.iso", { cause: new Error("disc format error: Unknown disc format") }),
+    );
+    render(<CompressForm />);
+    addFiles([new File(["rom"], "game.sfc")]);
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Compress", exact: true }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain(
+      "RVZ only stores GameCube and Wii disc images, and dvd.iso is not one. Choose another output format.",
+    );
+    expect(alert.textContent).not.toContain("Unknown disc format");
   });
 
   it("aborts unmounted work and disposes its late result", async () => {

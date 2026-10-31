@@ -1,4 +1,3 @@
-import { attachPatchFileSourceRef } from "../../lib/input/binary-service.ts";
 import { getPrimaryInputAsset } from "../../lib/input/input-assets.ts";
 import { prepareInputAssets } from "../../lib/input/input-preparation-service.ts";
 import { getProgressEventPercent } from "../../presentation/workflow-presentation.ts";
@@ -114,6 +113,7 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
   const createCompressedTrimOutput = async (
     trimmedFile: PatchFileInstance,
     compression: CompressionFormat,
+    trimChdMode?: "cd" | "dvd",
   ): Promise<TrimResult["output"]> => {
     if (compression === "none") {
       traceWorkflowStage(options, "stage.skip", "compress", "output", { reason: "output compression disabled" });
@@ -139,7 +139,18 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
         () =>
           createSingleFileRomSpecificOutput({
             compression,
-            options,
+            // The engine's verdict for the trimmed image wins over `chdOutputMode`: a CD codec set
+            // cannot build the DVD CHD its structural mode asks for, and an XISO is never a CD.
+            options:
+              compression === "chd" && trimChdMode
+                ? {
+                    ...options,
+                    output: {
+                      ...options.output,
+                      container: { ...options.output?.container, chdOutputMode: trimChdMode },
+                    },
+                  }
+                : options,
             outputFile: trimmedFile,
             runtime,
           }),
@@ -218,20 +229,12 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
     materializeBlob: false,
     preferExternalFilePath: true,
   });
-  if (
-    isRomSpecificCompressionFormat(compression) &&
-    result.output.path &&
-    getFileNameExtension(result.output.fileName) === "rvz" &&
-    getFileNameExtension(result.output.path) !== "rvz"
-  ) {
-    const snapshot = await result.output.vfs.getFile?.(result.output.path);
-    if (!snapshot) throw new Error("Trim output cannot be staged with its actual format");
-    attachPatchFileSourceRef(trimmedFile, {
-      fileName: result.output.fileName,
-      source: new File([snapshot], result.output.fileName, { type: snapshot.type }),
-    });
-  }
-  const output = await createCompressedTrimOutput(trimmedFile, compression);
+  // The trimmed file's path has no extension to infer a CHD layout from, so the engine's verdict for
+  // it (an XISO is a DVD disc) is the structural mode the CHD step sends instead of `auto`.
+  const reportedChdMode = result.output.romType?.chdCreateMode;
+  const trimChdMode = reportedChdMode === "cd" || reportedChdMode === "dvd" ? reportedChdMode : undefined;
+  if (trimChdMode) trimmedFile.metadata = { ...trimmedFile.metadata, mode: trimChdMode };
+  const output = await createCompressedTrimOutput(trimmedFile, compression, trimChdMode);
   const compressionTimeMs = roundElapsedMs(output?.timing);
   return {
     output,

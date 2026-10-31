@@ -255,6 +255,22 @@ describe("create controller validation and source staging", () => {
     });
   });
 
+  it("counts the original twice for the BPS size cap in cheat-code mode", async () => {
+    const controller = makeController({ format: "bps", output: { outputName: "cheats.bps" } });
+    const old = stage("original", "game.sfc");
+    old.state.size = 150 * 1024 * 1024;
+    controller.originalSession = session("original", old);
+    const cheats = controller as unknown as {
+      run: () => Promise<unknown>;
+      setCheatCodes: (codes: string[]) => Promise<void>;
+    };
+    await cheats.setCheatCodes(["DEADBEEF"]);
+    await expect(cheats.run()).rejects.toMatchObject({
+      code: "UNSUPPORTED_FORMAT",
+      message: expect.stringContaining("not available for these input sizes"),
+    });
+  });
+
   it("stages a source through the shared source controller and cleans up failures", async () => {
     const controller = makeController({ workers: { threads: 2 } });
     const originalStage = stage("original", "old.sfc");

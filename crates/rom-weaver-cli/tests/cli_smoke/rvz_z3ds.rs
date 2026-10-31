@@ -202,6 +202,48 @@ fn rvz_compress_rejects_non_zstd_codec() {
 }
 
 #[test]
+fn rvz_compress_enforces_the_registry_zstd_level_range() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("disc.iso").path(),
+        build_test_gamecube_iso(0x4000),
+    )
+    .expect("iso fixture");
+
+    for (level, expected_code) in [(-8, 1), (-7, 0), (22, 0), (23, 1)] {
+        let rvz_path = temp.child(format!("disc{level}.rvz"));
+        let output = command_stdout(
+            &[
+                "compress",
+                "--input",
+                temp.child("disc.iso").path().to_str().expect("path"),
+                "--format",
+                "rvz",
+                "--output",
+                rvz_path.path().to_str().expect("path"),
+                "--codec",
+                &format!("zstd:{level}"),
+                "--jsonl",
+            ],
+            expected_code,
+        );
+        let json = parse_single_json_line(&output);
+        if expected_code == 0 {
+            assert_eq!(json["status"], "succeeded", "level {level}: {json}");
+        } else {
+            assert_eq!(json["status"], "failed", "level {level}");
+            assert!(
+                json["label"].as_str().expect("label").contains(&format!(
+                    "level `{level}` is invalid for rvz codec `zstd` (expected -7..=22)"
+                )),
+                "level {level}: {json}"
+            );
+            assert!(!rvz_path.path().exists(), "level {level} must not write");
+        }
+    }
+}
+
+#[test]
 fn rvz_extract_round_trips_to_iso() {
     let temp = setup_temp_dir();
     let iso_bytes = build_test_gamecube_iso(0x8000);

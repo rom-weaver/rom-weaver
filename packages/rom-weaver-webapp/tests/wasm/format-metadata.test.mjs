@@ -46,6 +46,14 @@ describe("generated format metadata parity", () => {
     expect(ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.sourceRestrictedFormats).toEqual(["pmsr"]);
   });
 
+  it("generates the BPS create cap from the Rust suffix-index estimate", () => {
+    // total + (total + 1) * 4 low-memory index bytes must fit the 1 GiB budget.
+    const cap = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits.bpsMaxCombinedInputBytes;
+    const estimate = (total) => total + (total + 1) * 4;
+    expect(estimate(cap)).toBeLessThanOrEqual(1024 ** 3);
+    expect(estimate(cap + 1)).toBeGreaterThan(1024 ** 3);
+  });
+
   it("keeps the exhaustive matrix covering every compression profile and thread mode", () => {
     const cases = createExhaustiveContainerCases();
     expect(sorted(unique(cases.map((entry) => entry.format)))).toEqual(["7z", "chd", "z3ds", "zip"]);

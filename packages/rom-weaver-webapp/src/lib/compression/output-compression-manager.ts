@@ -126,8 +126,6 @@ const OutputCompressionManager = (() => {
     hasRomSpecificExtension(Z3DS_DECOMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
   const _isChdCompressionInput = (source: CompressionSource | null | undefined) =>
     hasRomSpecificExtension(CHD_COMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
-  const _isRvzCompressionInput = (source: CompressionSource | null | undefined) =>
-    hasRomSpecificExtension(RVZ_COMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
   const _isZ3dsCompressionInput = (source: CompressionSource | null | undefined) =>
     hasRomSpecificExtension(Z3DS_COMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
   const _isUnambiguousChdCompressionInput = (source: CompressionSource | null | undefined) =>
@@ -204,10 +202,13 @@ const OutputCompressionManager = (() => {
         _isChdCompressionInput(source as CompressionSource | null | undefined) ||
         _isChdSource(source as CompressionSource | null | undefined)
       );
+    // RVZ only holds GameCube and Wii discs. A shared extension such as `.iso` also names DVDs and CDs, so
+    // it counts only with the engine's verdict above; `.gcm`/`.wbfs` and already-RVZ-family sources are
+    // GameCube/Wii by extension alone.
     if (selected === OUTPUT_COMPRESSION.RVZ)
       return (
         engineRecommended === OUTPUT_COMPRESSION.RVZ ||
-        _isRvzCompressionInput(source as CompressionSource | null | undefined) ||
+        _isUnambiguousRvzCompressionInput(source as CompressionSource | null | undefined) ||
         _isRvzSource(source as CompressionSource | null | undefined)
       );
     if (selected === OUTPUT_COMPRESSION.Z3DS)

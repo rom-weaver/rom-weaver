@@ -483,7 +483,7 @@ pub struct ExtractCommand {
             value_delimiter = ',',
             ignore_case = true,
             value_parser = checksum_algorithm_parser(),
-            help = "Also hash every extracted file (repeatable, comma-separable)"
+            help = "Also hash every file extracted from the input (repeatable, comma-separable). A .cue or .gdi sheet generated for a disc is not hashed"
         )
     )]
     #[serde(default)]

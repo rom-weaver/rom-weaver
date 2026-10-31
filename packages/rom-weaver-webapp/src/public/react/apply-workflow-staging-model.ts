@@ -11,6 +11,7 @@ import { formatIdentifyTitle, uniqueIdentifyDisplayNames } from "../../presentat
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import { createStageSettingsKey } from "./apply-session-settings.ts";
+import { isReverseUpsPatch } from "./apply-workflow-snapshot-store.ts";
 import { getBinarySourceFileName, getBinarySourceListStableIds, getBinarySourceSize } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { ApplyPatchFormSettings } from "./public-types.ts";
@@ -188,7 +189,7 @@ const getPatchValidationMessage = (status: string, deep: ApplyWorkflowPatchState
 };
 
 const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
-  const reverse = patch.requirements?.format === "UPS" && patch.chainVerdict?.direction === "reverse";
+  const reverse = isReverseUpsPatch(patch);
   const requirements = patch.requirements;
   const sourceTitleValues = (reverse ? [] : requirements?.sourceTitles || []).map((title) =>
     formatPatchValidationValue("in rom", formatIdentifyTitle(title)),
