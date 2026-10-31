@@ -117,7 +117,24 @@ fn map_codec_resolves_aliases_case_insensitively() {
     assert_eq!(handler.map_codec("cdfl").unwrap(), ChdCodec::CD_FLAC);
     assert_eq!(handler.map_codec("avhu").unwrap(), ChdCodec::AVHUFF);
     assert_eq!(handler.map_codec("store").unwrap(), ChdCodec::NONE);
+    assert_eq!(handler.map_codec("zlib").unwrap(), ChdCodec::ZLIB);
+    assert_eq!(handler.map_codec("zstd").unwrap(), ChdCodec::ZSTD);
+    assert_eq!(handler.map_codec("lzma").unwrap(), ChdCodec::LZMA);
     assert!(handler.map_codec("definitely-not-a-codec").is_err());
+}
+
+#[test]
+fn map_codec_rejects_other_formats_codec_names() {
+    let handler = ChdContainerHandler;
+    for name in [
+        "deflate", "lzma2", "gzip", "gz", "xz", "none", "bzip2", "lz4",
+    ] {
+        let error = handler.map_codec(name).expect_err(name).to_string();
+        assert!(
+            error.contains(&format!("unsupported chd codec `{name}`")),
+            "{name}: {error}"
+        );
+    }
 }
 
 #[test]

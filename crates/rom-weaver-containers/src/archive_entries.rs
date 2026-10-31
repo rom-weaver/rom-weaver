@@ -4,7 +4,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use rom_weaver_core::{Result, RomWeaverError};
+use rom_weaver_core::{ContainerCreateRequest, Result, RomWeaverError};
 
 #[derive(Clone, Debug)]
 pub(crate) struct ArchiveInputEntry {
@@ -78,6 +78,17 @@ pub(crate) fn collect_archive_inputs(inputs: &[PathBuf]) -> Result<Vec<ArchiveIn
         collect_archive_inputs_from_path(input, root, &mut entries)?;
     }
     Ok(entries)
+}
+
+/// The entries a zip or 7z create packs from `request`: the `--entry-name` names when given,
+/// else each input under its own name. Shared by `create` and `validate_create`.
+pub(crate) fn collect_create_entries(
+    request: &ContainerCreateRequest,
+) -> Result<Vec<ArchiveInputEntry>> {
+    match request.archive_names.as_deref() {
+        Some(names) => collect_named_archive_inputs(&request.inputs, names),
+        None => collect_archive_inputs(&request.inputs),
+    }
 }
 
 pub(crate) fn collect_named_archive_inputs(

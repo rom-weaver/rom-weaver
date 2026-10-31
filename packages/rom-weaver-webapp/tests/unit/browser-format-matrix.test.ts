@@ -379,7 +379,7 @@ describe("runBrowserFullFormatMatrix", () => {
       const inputPath = String((args as { input?: unknown }).input || "");
       let failureLabel: string | undefined;
       if (commandName === "compress" && containerFailures.has(format)) {
-        failureLabel = format === "rvz" ? "failed to open input" : "extract-only format";
+        failureLabel = format === "rvz" ? "not a GameCube or Wii disc image" : "extract-only format";
       } else if (commandName === "ingest" && inputPath.includes("extract-")) {
         const specialExtractFormat = ["gcz", "wbfs", "wia", "tgc", "nfs", "rvz"].find((name) =>
           inputPath.includes(`extract-${name}.`),

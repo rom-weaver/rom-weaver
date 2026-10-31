@@ -5,7 +5,7 @@ fn chd_compress_and_extract_raw_round_trip() {
     let source = (0..16_384)
         .map(|index| (index % 251) as u8)
         .collect::<Vec<_>>();
-    run_chd_round_trip("disc.bin", &source, "lzma2", "disc.bin");
+    run_chd_round_trip("disc.bin", &source, "lzma", "disc.bin");
 }
 
 #[test]
@@ -2244,6 +2244,40 @@ fn chd_compress_rejects_level_for_huffman_codec() {
 }
 
 #[test]
+fn chd_compress_rejects_other_formats_codec_names() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("disc.bin").path(), vec![7_u8; 16_384]).expect("fixture");
+
+    for codec in ["deflate", "lzma2", "gzip", "none"] {
+        let chd_path = temp.child(format!("{codec}.chd"));
+        let output = command_stdout(
+            &[
+                "compress",
+                "--input",
+                temp.child("disc.bin").path().to_str().expect("path"),
+                "--format",
+                "chd",
+                "--output",
+                chd_path.path().to_str().expect("path"),
+                "--codec",
+                codec,
+                "--jsonl",
+            ],
+            1,
+        );
+
+        let json = parse_single_json_line(&output);
+        assert_eq!(json["status"], "failed", "{codec}");
+        let label = json["label"].as_str().expect("label");
+        assert!(
+            label.contains(&format!("unsupported chd codec `{codec}`")),
+            "{codec}: {label}"
+        );
+        assert!(!chd_path.path().exists(), "{codec} must not write a CHD");
+    }
+}
+
+#[test]
 fn chd_compress_rejects_level_for_avhuff_codec() {
     let temp = setup_temp_dir();
     let source = build_test_chav_stream(4, 32, 16);
@@ -3329,4 +3363,61 @@ fn weave_create_resolves_cd_chd_track_member_with_split_bin_listing() {
     );
     assert_eq!(create["status"], "succeeded", "{create}");
     assert!(output.path().exists());
+}
+
+/// `extract --checksum` hashes the `.bin` payload of a CHD but not the `.cue` sheet written
+/// beside it: the sheet is generated text, not a file taken from the input.
+#[test]
+fn chd_extract_checksum_covers_the_bin_but_not_the_generated_cue() {
+    let temp = setup_temp_dir();
+    let payload = (0..16_384)
+        .map(|index| (index % 251) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("disc.bin").path(), &payload).expect("bin fixture");
+    fs::write(
+        temp.child("disc.cue").path(),
+        "FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n",
+    )
+    .expect("cue fixture");
+    let chd = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--output",
+            chd.path().to_str().expect("path"),
+        ],
+        0,
+    );
+
+    let terminal = parse_single_json_line(&command_stdout(
+        &[
+            "extract",
+            "--input",
+            chd.path().to_str().expect("path"),
+            "--output",
+            temp.child("out").path().to_str().expect("path"),
+            "--checksum",
+            "sha1",
+            "--json",
+        ],
+        0,
+    ));
+    let files = terminal["details"]["emitted_files"]
+        .as_array()
+        .expect("emitted files");
+    let bin = files
+        .iter()
+        .find(|file| file["kind"] == "bin")
+        .expect("bin");
+    assert_eq!(
+        bin["checksums"]["sha1"],
+        checksum_value(temp.child("out/disc.bin").path(), "sha1")
+    );
+    let cue = files
+        .iter()
+        .find(|file| file["kind"] == "cue")
+        .expect("cue");
+    assert!(cue.get("checksums").is_none(), "{cue}");
 }

@@ -9,7 +9,7 @@ import type {
 import { createRomWeaverCommand } from "../../wasm/index.ts";
 import { getRomWeaverRunEventDetails } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
 import { replaceFileNameExtension } from "../input/path-utils.ts";
-import { getPathBaseName } from "../path-utils.ts";
+import { getPathBaseName, joinPath } from "../path-utils.ts";
 import { toThreadBudget } from "./compression-thread-budget.ts";
 import { emitRuntimeTrace, toRomWeaverOptions } from "./run-options.ts";
 import { getTrimOutputFileName, runWithRomWeaverOutputScope } from "./run-output-paths.ts";
@@ -21,6 +21,7 @@ import {
   getEmittedFiles,
   getRunResultTiming,
   getTerminalEvent,
+  romTypeFromEmittedFile,
 } from "./run-result-parsing.ts";
 import { runRomWeaverJson, relaySimpleProgress } from "./wasm-command-shared.ts";
 
@@ -32,13 +33,20 @@ const invokeRomWeaverTrimWorker = async (
   const sourceFilePath = String(input.sourceFilePath || "").trim();
   if (!sourceFilePath) throw new Error("Trim source path is required");
   const outputFileName = getTrimOutputFileName(sourceFilePath, input.outputName);
-  return runWithRomWeaverOutputScope(sourceFilePath, outputFileName, [sourceFilePath], async (outputPath) => {
+  return runWithRomWeaverOutputScope(sourceFilePath, outputFileName, [sourceFilePath], async (scopePath) => {
     const normalizedExtension = typeof input.extension === "string" ? input.extension.trim() : "";
     const threadArg = toThreadBudget(input.threads);
+    const siblingPath = (fileName: string) => joinPath(scopePath.slice(0, scopePath.lastIndexOf("/")), fileName);
     // Matches the Rust `TrimCommand`: `source: Vec<PathBuf>` (required), `output: Option<PathBuf>`
     // (conflicts with `in_place`), `extension: Option<String>`, `in_place`, `dry_run`, `revert`,
     // `recursive` (defaults true), `threads`. We always write a new file (`in_place: false`), simulate
     // only for the staging support probe (`dryRun`), and never restore padding (`revert: false`).
+    //
+    // The engine writes a GameCube/Wii disc as RVZ and rejects any other output extension for it, but
+    // only it knows which inputs those are, and a trim is the heavy pass (an RVZ conversion or an XISO
+    // rebuild), so it runs once. Its output path is extensionless, which the engine accepts for every
+    // input; the user-visible name is chosen afterwards from the `output_format` that same run reports.
+    const outputPath = siblingPath("trim-output");
     const command = createRomWeaverCommand("trim", {
       dry_run: !!input.dryRun,
       in_place: false,
@@ -59,8 +67,6 @@ const invokeRomWeaverTrimWorker = async (
       }),
     );
     ensureRomWeaverSuccess(result, "Trim failed");
-
-    const emitted = getEmittedFileDetails(result);
     const terminal = getTerminalEvent(result);
     const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
     if (
@@ -70,14 +76,21 @@ const invokeRomWeaverTrimWorker = async (
     ) {
       throw new Error("This input does not support trimming");
     }
-    const sizeField = (value: unknown) =>
-      typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
     const actualFileName =
       details?.output_format === "rvz" ? replaceFileNameExtension(outputFileName, "rvz") : outputFileName;
+
+    const emitted = getEmittedFileDetails(result);
+    const sizeField = (value: unknown) =>
+      typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
     return {
       fileName: actualFileName,
       trimSizeSummary: { inputSize: sizeField(details?.input_size), rawSize: sizeField(details?.raw_size) },
       filePath: emitted?.path || outputPath,
+      // The extensionless output path says nothing about the file, so the engine's own verdict (an
+      // XISO is a DVD-class disc) rides along for the CHD step instead of being inferred from the name.
+      romType: romTypeFromEmittedFile({
+        chdCreateMode: typeof details?.chd_create_mode === "string" ? details.chd_create_mode : undefined,
+      }),
       size: emitted?.sizeBytes,
       timing: getRunResultTiming(result),
     };

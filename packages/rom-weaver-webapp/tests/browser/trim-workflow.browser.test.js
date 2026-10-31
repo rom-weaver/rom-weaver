@@ -5,6 +5,7 @@ import { TrimWorkflow } from "../../src/platform/browser/browser-api.ts";
 import { warmupBrowserRuntimeExtraction } from "../../src/platform/browser/browser-runtime-warmup.ts";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { readRuntimeOutputBytes } from "../../src/storage/vfs/runtime-output.ts";
+import { xisoFixture } from "../fixtures/synthetic-patch-containers.mjs";
 
 const ndsCrc16 = (bytes) => {
   let crc = 0xffff;
@@ -170,12 +171,16 @@ test("trim workflow sends extracted archive payload to the trim worker", async (
     expect(result.sizeSummary?.rawSize).toBe(0x3000);
     await result.output.dispose();
 
-    const trimDispatch = logs.find((entry) => String(entry?.message || "") === "runJson trim dispatch");
+    // The run starts the engine's trim once (the staging probe passes no log sink).
+    const trimDispatches = logs.filter((entry) => String(entry?.message || "").startsWith("runJson trim "));
+    expect(trimDispatches.map((entry) => entry?.details?.command?.args?.dry_run)).toEqual([false]);
+    const trimDispatch = trimDispatches.at(-1);
     const trimSource = trimDispatch?.details?.command?.args?.input?.[0] || "";
     const trimOutput = trimDispatch?.details?.command?.args?.output || "";
     expect(trimSource).toMatch(/game\.nds$/i);
     expect(trimSource).not.toMatch(/\.zip$/i);
-    expect(trimOutput).toMatch(/game \(trimmed\)\.nds$/i);
+    // The engine runs once, writing to an extensionless path; the output is named afterwards.
+    expect(trimOutput).toMatch(/\/[^./]+$/);
     expect(trimOutput).not.toMatch(/\/work\/game\.nds$/i);
 
     const ingestDispatches = logs.filter((entry) => String(entry?.message || "") === "runJson ingest dispatch");
@@ -228,6 +233,114 @@ test("disc trim names lossless RVZ honestly and converts the intermediate to CHD
       expect(new TextDecoder().decode(await blob.slice(0, 8).arrayBuffer())).toBe("MComprHD");
     } finally {
       await chd.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+// A trim is the heavy engine pass (an RVZ conversion, an XISO rebuild), so each real trim must start
+// the engine's `trim` command exactly once, with the output named after what that one run wrote.
+test.each([
+  ["game.nds", () => buildTestNdsRom(), "none", "trimmed.nds"],
+  ["game.nds", () => buildTestNdsRom(), "zip", "trimmed.zip"],
+  ["game.iso", () => buildAlignedGameCubeRom(), "none", "trimmed.rvz"],
+  ["game.iso", () => buildAlignedGameCubeRom(), "zip", "trimmed.zip"],
+  ["game.iso", () => buildAlignedGameCubeRom(), "7z", "trimmed.7z"],
+  ["game.iso", () => buildAlignedGameCubeRom(), "chd", "trimmed.chd"],
+  ["game.gcm", () => buildAlignedGameCubeRom(), "none", "trimmed.rvz"],
+])("trim %s with %s output runs the engine trim once", async (sourceName, buildBytes, compression, outputName) => {
+  const traces = [];
+  const workflow = new TrimWorkflow({
+    settings: {
+      logging: { level: "trace", sink: (log) => traces.push(log) },
+      output: {
+        compression,
+        outputName: sourceName.endsWith(".iso") || sourceName.endsWith(".gcm") ? "trimmed.iso" : "trimmed.nds",
+      },
+      workers: { threads: 1 },
+    },
+  });
+  try {
+    await workflow.setInput(new File([buildBytes()], sourceName));
+    if (compression !== "none") await workflow.setOutputName(outputName);
+    traces.length = 0;
+    const result = await workflow.run();
+    try {
+      expect(result.output.fileName).toBe(outputName);
+      expect(result.output.size).toBeGreaterThan(0);
+      const dispatches = traces.filter((log) => String(log?.message || "").startsWith("runJson trim "));
+      expect(dispatches.map((log) => log.details?.command?.args?.dry_run)).toEqual([false]);
+    } finally {
+      await result.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+// The trim writes to an extensionless path, so CHD cannot infer the disc type from a name or from the
+// file's bytes: an XISO has no ISO 9660/UDF descriptor. The first CHD v5 metadata entry (the header's
+// metadata offset is the big-endian u64 at 0x30) is "DVD " for a DVD CHD, "CHT2" for a CD, and absent for raw.
+const chdFirstMetadataTag = async (blob) => {
+  const header = new DataView(await blob.slice(0, 124).arrayBuffer());
+  const offset = Number(header.getBigUint64(0x30, false));
+  if (!offset) return "";
+  return new TextDecoder().decode(await blob.slice(offset, offset + 4).arrayBuffer());
+};
+
+test("trim of an XISO into CHD builds a DVD CHD from one engine trim", async () => {
+  const xiso = new Uint8Array(xisoFixture().length + 65536);
+  xiso.set(xisoFixture());
+  const traces = [];
+  const workflow = new TrimWorkflow({
+    settings: {
+      logging: { level: "trace", sink: (log) => traces.push(log) },
+      output: { compression: "chd", outputName: "game (trimmed).chd" },
+      workers: { threads: 1 },
+    },
+  });
+  try {
+    await workflow.setInput(new File([xiso], "game.iso"));
+    expect(workflow.getInput()?.trimSupported).toBe(true);
+    traces.length = 0;
+    const result = await workflow.run();
+    try {
+      expect(result.output.fileName).toBe("game (trimmed).chd");
+      expect(result.sizeSummary.rawSize).toBeLessThan(xiso.length);
+      const blob = await result.output.getBlob();
+      expect(new TextDecoder().decode(await blob.slice(0, 8).arrayBuffer())).toBe("MComprHD");
+      expect(await chdFirstMetadataTag(blob)).toBe("DVD ");
+      const dispatches = traces.filter((log) => String(log?.message || "").startsWith("runJson trim "));
+      expect(dispatches.map((log) => log.details?.command?.args?.dry_run)).toEqual([false]);
+    } finally {
+      await result.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+// `output.container.chdOutputMode` is public API; a forced "cd" must not turn an XISO trim into a
+// CD-codec / DVD-layout CHD that the engine rejects.
+test("trim of an XISO into CHD with chdOutputMode cd still builds a DVD CHD", async () => {
+  const xiso = new Uint8Array(xisoFixture().length + 65536);
+  xiso.set(xisoFixture());
+  const workflow = new TrimWorkflow({
+    settings: {
+      output: { compression: "chd", container: { chdOutputMode: "cd" }, outputName: "game (trimmed).chd" },
+      workers: { threads: 1 },
+    },
+  });
+  try {
+    await workflow.setInput(new File([xiso], "game.iso"));
+    const result = await workflow.run();
+    try {
+      const blob = await result.output.getBlob();
+      expect(new TextDecoder().decode(await blob.slice(0, 8).arrayBuffer())).toBe("MComprHD");
+      expect(await chdFirstMetadataTag(blob)).toBe("DVD ");
+    } finally {
+      await result.output.dispose();
     }
   } finally {
     await workflow.dispose();

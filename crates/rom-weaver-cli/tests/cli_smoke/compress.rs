@@ -1763,11 +1763,45 @@ fn compress_rvz_rejects_non_disc_input_with_hint() {
     let json = parse_single_json_line(&output);
     let label = json["label"].as_str().expect("label");
     assert!(
-        label.contains("the input must be a GameCube or Wii disc image"),
+        label.contains("is not a GameCube or Wii disc image"),
         "{label}"
     );
+    assert!(
+        label.contains("rvz create only supports GameCube and Wii disc images"),
+        "{label}"
+    );
+    assert!(!label.contains("Unknown disc format"), "{label}");
     assert!(!label.contains("stream fallback failed"), "{label}");
     assert!(label.contains("`source.bin`"), "{label}");
+}
+
+#[test]
+fn compress_rvz_names_what_a_non_disc_input_was_detected_as() {
+    let temp = setup_temp_dir();
+    let mut nes = b"NES\x1a\x01\x01\x00\x00".to_vec();
+    nes.resize(40_000, 0);
+    fs::write(temp.child("game.nes").path(), nes).expect("fixture");
+    let output_path = temp.child("out.rvz");
+
+    let output = command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("game.nes").path().to_str().expect("path"),
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("`game.nes` is not a GameCube or Wii disc image (detected: Nintendo Entertainment System)"),
+        "{label}"
+    );
+    assert!(!output_path.path().exists());
 }
 
 #[test]
@@ -2089,5 +2123,84 @@ fn compress_rvz_block_size_dry_run_matches_created_size() {
             fs::metadata(output.path()).expect("output metadata").len(),
             "dry run must use block size {size}"
         );
+    }
+}
+
+/// `compress --dry-run` runs the codec, level, and input-medium checks the real run runs, so a
+/// request the real run rejects fails the same way (same label, exit 1) instead of reporting
+/// "would write".
+#[test]
+fn compress_dry_run_fails_exactly_where_the_real_run_fails() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("data.bin").path(), vec![7_u8; 8192]).expect("bin fixture");
+    fs::write(
+        temp.child("data.cue").path(),
+        "FILE \"data.bin\" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n",
+    )
+    .expect("cue fixture");
+    fs::write(temp.child("gc.iso").path(), build_test_gamecube_iso(0x4000)).expect("gc fixture");
+    fs::write(temp.child("dvd.iso").path(), vec![0_u8; 0x10000]).expect("dvd fixture");
+
+    let cases: [(&str, &str, &[&str]); 12] = [
+        ("data.cue", "chd", &["--codec", "deflate"]),
+        ("gc.iso", "rvz", &["--codec", "zstd:-8"]),
+        ("data.bin", "zip", &["--codec", "bogus"]),
+        ("data.bin", "zip", &["--codec", "lzma2"]),
+        ("data.bin", "zip", &["--codec", "zstd:99"]),
+        ("data.bin", "7z", &["--codec", "bogus"]),
+        ("data.bin", "7z", &["--codec", "lzma2:99"]),
+        ("data.bin", "z3ds", &["--codec", "bogus"]),
+        ("data.bin", "z3ds", &["--codec", "zstd:99"]),
+        ("dvd.iso", "rvz", &[]),
+        ("data.bin", "rvz", &["--codec", "zstd"]),
+        ("data.bin", "rvz", &["--rvz-block-size", "1000"]),
+    ];
+    for (index, (input, extension, extra)) in cases.iter().enumerate() {
+        let run = |dry_run: bool| {
+            let output = temp.child(format!("out-{index}-{dry_run}.{extension}"));
+            let input_path = temp.child(input).path().to_str().expect("path").to_owned();
+            let output_path = output.path().to_str().expect("path").to_owned();
+            let mut args = vec!["compress", "--input", &input_path, "--output", &output_path];
+            args.extend_from_slice(extra);
+            if dry_run {
+                args.push("--dry-run");
+            }
+            args.push("--json");
+            let terminal = parse_single_json_line(&command_stdout(&args, 1));
+            assert!(
+                !output.path().exists(),
+                "{input} -> {extension} wrote output"
+            );
+            terminal
+        };
+        let real = run(false);
+        let dry = run(true);
+        let context = format!("{input} -> {extension} {extra:?}");
+        assert_eq!(real["status"], "failed", "{context}");
+        assert_eq!(dry["status"], "failed", "{context}: dry run accepted it");
+        assert_eq!(dry["label"], real["label"], "{context}");
+    }
+
+    for (input, extension, extra) in [
+        ("data.cue", "chd", &["--codec", "zlib"][..]),
+        ("data.bin", "zip", &["--codec", "deflate:6"][..]),
+        ("data.bin", "7z", &["--codec", "lzma2:5"][..]),
+        ("data.bin", "z3ds", &["--codec", "zstd:3"][..]),
+        ("gc.iso", "rvz", &["--codec", "zstd:-7"][..]),
+    ] {
+        let output = temp.child(format!("ok.{extension}"));
+        let input_path = temp.child(input).path().to_str().expect("path").to_owned();
+        let mut args = vec![
+            "compress",
+            "--input",
+            &input_path,
+            "--output",
+            output.path().to_str().expect("path"),
+        ];
+        args.extend_from_slice(extra);
+        args.extend(["--dry-run", "--json"]);
+        let terminal = parse_single_json_line(&command_stdout(&args, 0));
+        assert_eq!(terminal["status"], "succeeded", "{input} -> {extension}");
+        assert!(!output.path().exists());
     }
 }

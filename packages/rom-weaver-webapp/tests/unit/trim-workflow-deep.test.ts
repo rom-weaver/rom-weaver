@@ -27,7 +27,6 @@ vi.mock("../../src/lib/runtime/public-output-bin-file.ts", () => ({
 }));
 vi.mock("../../src/lib/apply/patch-apply-service.ts", () => ({ toPublicOutput: mocks.toPublicOutput }));
 
-import { getPatchFileExternalSource } from "../../src/lib/input/binary-service.ts";
 import { runTrimWorkflow } from "../../src/lib/trim/workflow.ts";
 
 const source = { fileName: "game.bin", fileSize: 100, getExtension: () => "bin" };
@@ -184,32 +183,6 @@ describe("runTrimWorkflow compressed outputs", () => {
     expect(result.sizeSummary).toMatchObject({ inputSize: 100, rawSize: 100, outputSize: 20 });
   });
 
-  it("remounts mislabeled disc paths from a disk-backed snapshot without reading bytes", async () => {
-    const snapshot = new File([new Uint8Array([82, 86, 90, 1])], "trimmed.iso");
-    const getFile = vi.fn(async () => snapshot);
-    const trimmedFile = { fileName: "trimmed.rvz", fileSize: 4, _lazyExternalSource: true };
-    mocks.createPatchFileFromPublicOutput.mockResolvedValue(trimmedFile);
-    mocks.romSpecificOutput.mockResolvedValue({ fileName: "trimmed.chd", size: 20 });
-    const runtime = {
-      ...baseRuntime,
-      trim: {
-        trim: vi.fn(async () => ({
-          output: { fileName: "trimmed.rvz", path: "/work/trimmed.iso", size: 4, vfs: { getFile } },
-          sizeSummary: { inputSize: 100, rawSize: 100 },
-        })),
-      },
-    };
-    await runTrimWorkflow(
-      { source: source as never, options: { output: { compression: "chd", outputName: "trimmed.chd" } } },
-      runtime as never,
-    );
-    expect(getFile).toHaveBeenCalledWith("/work/trimmed.iso");
-    const staged = getPatchFileExternalSource(trimmedFile as never);
-    expect(staged?.fileName).toBe("trimmed.rvz");
-    expect(staged?.source).toBeInstanceOf(File);
-    expect(staged?.source).toMatchObject({ name: "trimmed.rvz" });
-  });
-
   it("uses the lazy output path for ROM-specific compression", async () => {
     mocks.createPatchFileFromPublicOutput.mockResolvedValue({ fileName: "trimmed.iso", fileSize: 50 });
     mocks.romSpecificOutput.mockResolvedValue({ fileName: "trimmed.chd", size: 20, timing: { elapsedMs: 6 } });
@@ -229,6 +202,41 @@ describe("runTrimWorkflow compressed outputs", () => {
       output: { fileName: "trimmed.chd", size: 20 },
       sizeSummary: { compressionTimeMs: 6, outputSize: 20, rawSize: 50 },
     });
+  });
+
+  it("forces the CHD output mode to the engine's trim verdict so codecs and layout agree", async () => {
+    mocks.createPatchFileFromPublicOutput.mockResolvedValue({ fileName: "trimmed.bin", fileSize: 50 });
+    mocks.romSpecificOutput.mockResolvedValue({ fileName: "trimmed.chd", size: 20 });
+    const runtime = {
+      ...baseRuntime,
+      trim: {
+        trim: vi.fn(async (input) => ({
+          output: { fileName: input.outputName, path: "/work/raw", romType: { chdCreateMode: "dvd" }, size: 50 },
+          sizeSummary: { outputSize: 50 },
+        })),
+      },
+    };
+    await runTrimWorkflow(
+      {
+        options: {
+          output: { compression: "chd", container: { chdOutputMode: "cd", zipCodec: "store" }, outputName: "t.chd" },
+        },
+        source: source as never,
+      },
+      runtime as never,
+    );
+    const call = mocks.romSpecificOutput.mock.calls[0]?.[0];
+    expect(call.options.output.container).toEqual({ chdOutputMode: "dvd", zipCodec: "store" });
+    expect(call.options.output.outputName).toBe("t.chd");
+    expect(call.outputFile.metadata).toMatchObject({ mode: "dvd" });
+  });
+
+  it("leaves the configured CHD output mode alone when the trim reports no CHD mode", async () => {
+    mocks.createPatchFileFromPublicOutput.mockResolvedValue({ fileName: "trimmed.iso", fileSize: 50 });
+    mocks.romSpecificOutput.mockResolvedValue({ fileName: "trimmed.chd", size: 20 });
+    const options = { output: { compression: "chd", container: { chdOutputMode: "cd" }, outputName: "t.chd" } };
+    await runTrimWorkflow({ options: options as never, source: source as never }, baseRuntime as never);
+    expect(mocks.romSpecificOutput.mock.calls[0]?.[0].options.output.container.chdOutputMode).toBe("cd");
   });
 
   it("fails clearly when a ROM-specific compressor returns no output", async () => {

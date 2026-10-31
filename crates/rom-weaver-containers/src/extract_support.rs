@@ -547,6 +547,64 @@ impl ExtractHasher {
     }
 }
 
+/// A writer that folds every byte it accepts into an [`ExtractHasher`], so a handler whose output
+/// is produced sequentially can compute a requested `--checksum` during the copy instead of
+/// re-reading the output.
+pub(crate) struct HashingWriter<W> {
+    inner: W,
+    hasher: ExtractHasher,
+}
+
+impl<W: Write> HashingWriter<W> {
+    pub(crate) fn new(inner: W, hasher: ExtractHasher) -> Self {
+        Self { inner, hasher }
+    }
+
+    /// Hand back the hasher once the copy is done; the caller finishes it against the flushed output.
+    pub(crate) fn into_hasher(self) -> ExtractHasher {
+        self.hasher
+    }
+}
+
+impl<W: Write> Write for HashingWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let written = self.inner.write(buf)?;
+        self.hasher
+            .update(&buf[..written])
+            .map_err(std::io::Error::other)?;
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+/// Hash an already-written extract output with a second read. For handlers whose writer is not
+/// sequential (the XDVDFS rebuild seeks), so bytes cannot be hashed as they are written. Returns
+/// `None` when no `--checksum` was requested or the output is filtered out by `--checksum-rom`.
+pub(crate) fn hash_extracted_file(
+    context: &OperationContext,
+    output_path: &Path,
+) -> Result<Option<ExtractedFileChecksum>> {
+    let mut hasher = ExtractHasher::new(context, None, output_path, 1)?;
+    if matches!(hasher, ExtractHasher::None) {
+        return Ok(None);
+    }
+    trace!(path = %output_path.display(), "hashing extracted output with a second read");
+    let mut file = File::open(output_path)?;
+    let mut buffer = vec![0_u8; copy_progress_buffer_size(0)];
+    loop {
+        context.cancel().check()?;
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read])?;
+    }
+    hasher.finish(output_path)
+}
+
 pub(crate) fn attach_extract_checksum_details(
     mut report: OperationReport,
     checksums: Vec<ExtractedFileChecksum>,

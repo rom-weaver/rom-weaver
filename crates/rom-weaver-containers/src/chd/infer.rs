@@ -662,7 +662,7 @@ impl ChdContainerHandler {
         Ok(Self::create_kind_label(&create_kind))
     }
 
-    fn create_kind_label(create_kind: &ChdCreateKind) -> &'static str {
+    pub(super) fn create_kind_label(create_kind: &ChdCreateKind) -> &'static str {
         match create_kind {
             ChdCreateKind::Raw => "raw",
             ChdCreateKind::HardDisk(_) => "hd",

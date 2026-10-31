@@ -2884,3 +2884,18 @@ fn patch_apply_extracts_complete_7z_with_volume_name() {
     expected[100] = 42;
     assert_eq!(fs::read(out.path()).expect("patched payload"), expected);
 }
+
+#[test]
+fn extract_help_says_generated_disc_sheets_are_not_hashed() {
+    let help = String::from_utf8(command_stdout(&["extract", "--help"], 0)).expect("utf8 help");
+    let checksum = help
+        .split("--checksum <ALGO>")
+        .nth(1)
+        .expect("--checksum entry");
+    let entry = checksum.split("--checksum-rom").next().expect("entry text");
+    let flattened = entry.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        flattened.contains("A .cue or .gdi sheet generated for a disc is not hashed"),
+        "{flattened}"
+    );
+}

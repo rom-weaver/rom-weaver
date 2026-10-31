@@ -511,18 +511,23 @@ impl ContainerHandlerOperations for ZipContainerHandler {
 
     regular_archive_read_operations!(Zip, true);
 
+    fn validate_create(
+        &self,
+        request: &ContainerCreateRequest,
+        _context: &OperationContext,
+    ) -> Result<()> {
+        self.parse_codec(request.codec.as_deref(), request.level)?;
+        collect_create_entries(request)?;
+        Ok(())
+    }
+
     fn create(
         &self,
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let (method, level) = self.parse_codec(request.codec.as_deref(), request.level)?;
-        let entries = match request.archive_names.as_deref() {
-            Some(names) => {
-                crate::archive_entries::collect_named_archive_inputs(&request.inputs, names)?
-            }
-            None => collect_archive_inputs(&request.inputs)?,
-        };
+        let entries = collect_create_entries(request)?;
         let (logical_bytes, execution) =
             self.create_with_libarchive(request, &entries, method, level, context)?;
 

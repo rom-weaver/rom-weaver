@@ -263,6 +263,15 @@ impl ContainerHandlerOperations for ChdContainerHandler {
         Ok(attach_emitted_file_paths(report, &[output_path]))
     }
 
+    fn validate_create(
+        &self,
+        request: &ContainerCreateRequest,
+        _context: &OperationContext,
+    ) -> Result<()> {
+        self.resolve_create_plan(request)?;
+        Ok(())
+    }
+
     fn create(
         &self,
         request: &ContainerCreateRequest,
@@ -282,24 +291,16 @@ impl ContainerHandlerOperations for ChdContainerHandler {
 }
 
 impl ChdContainerHandler {
-    /// Shared body for [`Self::create`] and the override-aware trait entry.
-    /// Builds the create kind, redirects any overridden disc tracks in place
-    /// via `DiscLayout::apply_input_overrides` (untouched tracks keep reading
-    /// from the source disc), then streams compression. `overrides` is empty
-    /// for a plain `create`.
-    fn create_with_track_overrides(
-        &self,
-        request: &ContainerCreateRequest,
-        overrides: &[CreateInputOverride],
-        context: &OperationContext,
-    ) -> Result<OperationReport> {
+    /// Resolve the input media, codec chain, and level a create request asks for. `create`
+    /// and `validate_create` both run this, so a request that fails here fails the same way
+    /// in a dry run.
+    fn resolve_create_plan(&self, request: &ContainerCreateRequest) -> Result<ChdCreatePlan> {
         if request.inputs.len() != 1 {
             return Err(RomWeaverError::Validation(
                 "chd create currently requires exactly one input file; pass one .cue or .gdi sheet, or a single disc image or data file".into(),
             ));
         }
 
-        let execution = context.plan_threads(ThreadCapability::parallel(None));
         let input = &request.inputs[0];
         let input_bytes = fs::metadata(input)?.len();
         let mode_override = self.parse_create_mode_override(&request.format)?;
@@ -324,16 +325,6 @@ impl ChdContainerHandler {
         compression_plan = self.resolve_compression_plan(request.codec.as_deref(), &create_kind)?;
         compression_plan =
             self.normalize_compression_plan_for_create_kind(&create_kind, compression_plan);
-        // Redirect any overridden tracks to read in place / from memory. Source
-        // bytes change, not geometry, so the compression plan above still holds
-        // and output stays byte-identical to a fully staged disc.
-        if let ChdCreateKind::Disc(layout) = &mut create_kind {
-            layout.apply_input_overrides(overrides)?;
-        } else if !overrides.is_empty() {
-            return Err(RomWeaverError::Validation(
-                "chd create input overrides are only supported for disc layouts".into(),
-            ));
-        }
         // When the codec is auto-selected (no explicit `--codec`) and resolves to a
         // level-less codec such as avhuff (e.g. an auto-detected A/V stream), the
         // caller's default level profile does not apply - drop it rather than
@@ -347,6 +338,52 @@ impl ChdContainerHandler {
         };
         let compression_level =
             self.resolve_compression_level(compression_plan.primary_codec, level_for_codec)?;
+        debug!(
+            input = %input.display(),
+            codec = ?request.codec,
+            level = ?request.level,
+            kind = Self::create_kind_label(&create_kind),
+            "chd create plan resolved"
+        );
+        Ok(ChdCreatePlan {
+            create_kind,
+            compression_plan,
+            level_for_codec,
+            compression_level,
+            input_bytes,
+        })
+    }
+
+    /// Shared body for [`Self::create`] and the override-aware trait entry.
+    /// Builds the create kind, redirects any overridden disc tracks in place
+    /// via `DiscLayout::apply_input_overrides` (untouched tracks keep reading
+    /// from the source disc), then streams compression. `overrides` is empty
+    /// for a plain `create`.
+    fn create_with_track_overrides(
+        &self,
+        request: &ContainerCreateRequest,
+        overrides: &[CreateInputOverride],
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
+        let ChdCreatePlan {
+            mut create_kind,
+            compression_plan,
+            level_for_codec,
+            compression_level,
+            input_bytes,
+        } = self.resolve_create_plan(request)?;
+        let input = &request.inputs[0];
+        // Redirect any overridden tracks to read in place / from memory. Source
+        // bytes change, not geometry, so the compression plan above still holds
+        // and output stays byte-identical to a fully staged disc.
+        if let ChdCreateKind::Disc(layout) = &mut create_kind {
+            layout.apply_input_overrides(overrides)?;
+        } else if !overrides.is_empty() {
+            return Err(RomWeaverError::Validation(
+                "chd create input overrides are only supported for disc layouts".into(),
+            ));
+        }
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
