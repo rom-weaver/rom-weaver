@@ -2954,6 +2954,43 @@ fn review_ingest_events(temp: &TempDir, archive: &Path) -> Vec<Value> {
 }
 
 #[test]
+fn ingest_nested_patch_sources_do_not_open_a_sidecar_dialog() {
+    for (archive_name, expected_names) in [
+        (
+            "B_weave.zip",
+            vec!["patchB1.ips", "patchB2.ips", "patchB3.ips"],
+        ),
+        ("C_root.zip", vec!["deep.ips", "flat1.ips", "flat2.ips"]),
+    ] {
+        let temp = setup_temp_dir();
+        let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packages/rom-weaver-webapp/tests/fixtures/archives")
+            .join(archive_name);
+        let events = review_ingest_events(&temp, &archive);
+        let ingest = &events.last().unwrap()["details"]["ingest"];
+        assert_eq!(ingest["kind"], "patch", "{archive_name}: {ingest}");
+        assert!(ingest["assets"].as_array().unwrap().is_empty());
+        let patches = ingest["patches"].as_array().unwrap();
+        let mut names: Vec<_> = patches
+            .iter()
+            .map(|patch| {
+                assert_eq!(patch["is_valid_patch"], true, "{patch}");
+                assert!(Path::new(patch["leaf_path"].as_str().unwrap()).is_file());
+                patch["file_name"].as_str().unwrap()
+            })
+            .collect();
+        names.sort();
+        assert_eq!(names, expected_names, "{archive_name}");
+        assert!(
+            events
+                .iter()
+                .all(|event| event["stage"] != "patch-manifest"),
+            "{archive_name}: patch sources must use terminal patch selection, not a ROM sidecar dialog"
+        );
+    }
+}
+
+#[test]
 fn ingest_review_complete_sidecar_manifest() {
     for named_count in [1, 2] {
         let temp = setup_temp_dir();

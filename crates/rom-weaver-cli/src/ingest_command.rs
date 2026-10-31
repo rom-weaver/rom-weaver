@@ -647,9 +647,8 @@ impl CliApp {
                     patch_count = patches.len(),
                     "ingest ROM branch found no ROM; re-routed nested weave as patch source"
                 );
-                if defer_patch_manifest {
-                    self.emit_patch_manifest(source, &patches);
-                }
+                // Patch-source selection uses the terminal descriptors. A sidecar manifest here
+                // would open a competing ROM-sidecar dialog before that selection.
                 return Ok(IngestOutcome {
                     kind: IngestKind::Patch,
                     is_rom: false,
