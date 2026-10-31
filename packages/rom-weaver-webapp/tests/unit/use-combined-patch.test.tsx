@@ -371,6 +371,36 @@ describe("useCombinedPatch", () => {
     expect(result.current.outputProps.format).toBe("bps");
   });
 
+  it("keeps BPS and its default when an undeclared tail follows a smaller declared target", () => {
+    const run = vi.fn<Options["run"]>();
+    const { result } = renderHook(() =>
+      useCombinedPatch(
+        options(run, {
+          defaultPatchType: "bps",
+          romSize: 120 * 1024 * 1024,
+          ...getEnabledPatchTargetSizes([60 * 1024 * 1024, undefined], ["bps", "ips"], new Set()),
+        }),
+      ),
+    );
+    expect(result.current.outputProps.formatOptions?.map((option) => option.value)).toContain("bps");
+    expect(result.current.outputProps.format).toBe("bps");
+  });
+
+  it("drops BPS when an undeclared tail follows a large declared target", () => {
+    const run = vi.fn<Options["run"]>();
+    const { result } = renderHook(() =>
+      useCombinedPatch(
+        options(run, {
+          defaultPatchType: "bps",
+          romSize: 120 * 1024 * 1024,
+          ...getEnabledPatchTargetSizes([100 * 1024 * 1024, undefined], ["bps", "ips"], new Set()),
+        }),
+      ),
+    );
+    expect(result.current.outputProps.formatOptions?.map((option) => option.value)).not.toContain("bps");
+    expect(result.current.outputProps.format).not.toBe("bps");
+  });
+
   it("keeps BPS when the declared final target shrinks below a larger intermediate", () => {
     const run = vi.fn<Options["run"]>();
     const { result } = renderHook(() =>

@@ -80,4 +80,15 @@ describe("BPS create memory cap", () => {
       }),
     ).toBe("xdelta");
   });
+
+  it("measures the BPS pair with a separate cap size while other limits keep the modified size", () => {
+    const mib = 1024 * 1024;
+    const sizes = { originalSize: 120 * mib, modifiedSize: 120 * mib };
+    expect(getSelectableCreatePatchFormats(sizes)).not.toContain("bps");
+    expect(getSelectableCreatePatchFormats({ ...sizes, bpsCapModifiedSize: 60 * mib })).toContain("bps");
+    expect(getSelectableCreatePatchFormats({ ...sizes, bpsCapModifiedSize: 100 * mib })).not.toContain("bps");
+    expect(getPreferredCreatePatchFormat({ ...sizes, bpsCapModifiedSize: 60 * mib, requestedFormat: "bps" })).toBe(
+      "bps",
+    );
+  });
 });

@@ -46,7 +46,8 @@ const sameApplyWorkflowFormSnapshot = (left: ApplyWorkflowFormSnapshot, right: A
 
 /**
  * The final enabled patch determines the target size; an unknown intermediate MUST NOT erase it.
- * The largest known target independently constrains format size limits. Outside a run the workflow
+ * The largest known target independently constrains format size limits, and the last declared target
+ * is the size an undeclared tail of the chain starts from. Outside a run the workflow
  * stages disabled patches too, lined up with the slots; a filtered run stages
  * only enabled ones, so a list of another length has nothing to skip.
  */
@@ -57,13 +58,16 @@ const getEnabledPatchTargetSizes = (
 ) => {
   const aligned = sizes.length === slotIds.length;
   let maxKnownTargetSize: number | undefined;
+  let lastDeclaredTargetSize: number | undefined;
   let patchTargetSize: number | undefined;
   for (const [index, size] of sizes.entries()) {
     if (aligned && disabled.has(slotIds[index] || "")) continue;
     patchTargetSize = size;
-    if (size !== undefined) maxKnownTargetSize = Math.max(maxKnownTargetSize ?? 0, size);
+    if (size === undefined) continue;
+    lastDeclaredTargetSize = size;
+    maxKnownTargetSize = Math.max(maxKnownTargetSize ?? 0, size);
   }
-  return { maxKnownTargetSize, patchTargetSize };
+  return { lastDeclaredTargetSize, maxKnownTargetSize, patchTargetSize };
 };
 
 const createApplyWorkflowSnapshotStore = () => {

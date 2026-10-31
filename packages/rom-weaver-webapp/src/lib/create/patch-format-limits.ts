@@ -2,6 +2,8 @@ import { ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY } from "../../wasm/generated/rom-
 
 type CreatePatchFormatPreferenceInput = {
   automaticFormatSelection?: boolean;
+  /** Modified size for the BPS pair cap when it differs from `modifiedSize`, e.g. an undeclared patch tail. */
+  bpsCapModifiedSize?: number | null;
   candidateDefaultFormat?: string | null;
   candidateFormats?: readonly string[] | null;
   modifiedSize?: number | null;
@@ -90,14 +92,17 @@ const withoutBpsAboveMemoryCap = <T extends string>(
 const getCreatePatchFormatsForSizes = (
   originalSize?: number | null,
   modifiedSize?: number | null,
-  { applyBpsMemoryCap = true }: { applyBpsMemoryCap?: boolean } = {},
+  {
+    applyBpsMemoryCap = true,
+    bpsCapModifiedSize = modifiedSize,
+  }: { applyBpsMemoryCap?: boolean; bpsCapModifiedSize?: number | null } = {},
 ) => {
   const formats = withoutNoShrinkFormats(
     getCreatePatchFormatsForSizeBucket(originalSize, modifiedSize),
     originalSize,
     modifiedSize,
   );
-  return applyBpsMemoryCap ? withoutBpsAboveMemoryCap(formats, originalSize, modifiedSize) : formats;
+  return applyBpsMemoryCap ? withoutBpsAboveMemoryCap(formats, originalSize, bpsCapModifiedSize) : formats;
 };
 
 const normalizeCandidateCreatePatchFormats = (formats?: readonly string[] | null): string[] => {
@@ -119,18 +124,24 @@ const normalizeCandidateCreatePatchFormats = (formats?: readonly string[] | null
  */
 const getSelectableCreatePatchFormats = ({
   applyBpsMemoryCap,
+  bpsCapModifiedSize,
   candidateFormats,
   modifiedSize,
   originalSize,
 }: {
   /** False when the sizes are not the original/modified pair Create would index, e.g. a bound on one side. */
   applyBpsMemoryCap?: boolean;
+  /** Modified size for the BPS pair cap when it differs from `modifiedSize`, e.g. an undeclared patch tail. */
+  bpsCapModifiedSize?: number | null;
   candidateFormats?: readonly string[] | null;
   modifiedSize?: number | null;
   originalSize?: number | null;
 }): readonly string[] => {
   const candidates = normalizeCandidateCreatePatchFormats(candidateFormats);
-  const sizeFormats = getCreatePatchFormatsForSizes(originalSize, modifiedSize, { applyBpsMemoryCap });
+  const sizeFormats = getCreatePatchFormatsForSizes(originalSize, modifiedSize, {
+    applyBpsMemoryCap,
+    bpsCapModifiedSize,
+  });
   const formats = candidates.length
     ? candidates.filter((format) => sizeFormats.includes(format))
     : sizeFormats.filter((format) => !SOURCE_RESTRICTED_CREATE_PATCH_FORMATS.includes(format));
@@ -139,13 +150,19 @@ const getSelectableCreatePatchFormats = ({
 
 const getPreferredCreatePatchFormat = ({
   automaticFormatSelection = true,
+  bpsCapModifiedSize,
   candidateDefaultFormat,
   candidateFormats,
   modifiedSize,
   originalSize,
   requestedFormat,
 }: CreatePatchFormatPreferenceInput) => {
-  const formats = getSelectableCreatePatchFormats({ candidateFormats, modifiedSize, originalSize });
+  const formats = getSelectableCreatePatchFormats({
+    bpsCapModifiedSize,
+    candidateFormats,
+    modifiedSize,
+    originalSize,
+  });
   const normalizedRequestedFormat = normalizeCreatePatchFormat(requestedFormat);
   const normalizedCandidateDefaultFormat = normalizeCreatePatchFormat(candidateDefaultFormat);
   // The default comes from Rust: the resolved candidate default already accounts

@@ -215,6 +215,7 @@ describe("Apply workflow snapshot store", () => {
   it("skips disabled patches only while the staged patches line up with the slots", () => {
     const sizes = [64_000_000, 8_000_000];
     expect(getEnabledPatchTargetSizes(sizes, ["slot-1", "slot-2"], new Set())).toEqual({
+      lastDeclaredTargetSize: 8_000_000,
       maxKnownTargetSize: 64_000_000,
       patchTargetSize: 8_000_000,
     });
@@ -226,6 +227,15 @@ describe("Apply workflow snapshot store", () => {
       64_000_000,
     );
     expect(getEnabledPatchTargetSizes([], [], new Set()).patchTargetSize).toBeUndefined();
+    // An undeclared tail keeps the last declared target as its starting size.
+    expect(getEnabledPatchTargetSizes([64_000_000, undefined], ["slot-1", "slot-2"], new Set())).toEqual({
+      lastDeclaredTargetSize: 64_000_000,
+      maxKnownTargetSize: 64_000_000,
+      patchTargetSize: undefined,
+    });
+    expect(
+      getEnabledPatchTargetSizes([64_000_000, 8_000_000], ["slot-1", "slot-2"], new Set(["slot-2"])),
+    ).toMatchObject({ lastDeclaredTargetSize: 64_000_000 });
   });
   it("preserves unknown enabled sizes without confusing an empty target with unknown", () => {
     const store = createApplyWorkflowSnapshotStore();

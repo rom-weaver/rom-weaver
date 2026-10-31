@@ -13,7 +13,6 @@ import { Notice } from "./components/ds/feedback.tsx";
 import type { OutputCardProps } from "./components/ds/output-card.tsx";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { releaseLargeEntries } from "./emulator-session-store.ts";
-import { createCreatePatchFormatOptions } from "./output-view-model.ts";
 import { resolveCreateExecutionOutputName } from "./create-patch-output-model.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
 import { createWorkflowFormProgress, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
@@ -36,6 +35,7 @@ const useCombinedPatch = ({
   onPatchTypeChange,
   romSize,
   patchTargetSize,
+  lastDeclaredTargetSize,
   maxKnownTargetSize,
   settings,
   onComplete,
@@ -51,6 +51,7 @@ const useCombinedPatch = ({
   onPatchTypeChange?: (value: string) => void;
   romSize?: number;
   patchTargetSize?: number;
+  lastDeclaredTargetSize?: number;
   maxKnownTargetSize?: number;
   settings?: CreateSettings;
   onComplete?: (result: BrowserCreateResult) => void;
@@ -62,10 +63,11 @@ const useCombinedPatch = ({
   // Preparing the run re-stages its sources and briefly clears their sizes, so a running job MUST keep the sizes it started with.
   const [runSizes, setRunSizes] = useState<{
     patchTargetSize?: number;
+    lastDeclaredTargetSize?: number;
     maxKnownTargetSize?: number;
     romSize?: number;
   } | null>(null);
-  const formatSizes = runSizes ?? { patchTargetSize, maxKnownTargetSize, romSize };
+  const formatSizes = runSizes ?? { patchTargetSize, lastDeclaredTargetSize, maxKnownTargetSize, romSize };
   // Known growth MUST still constrain format limits when another patch leaves shrinking uncertain.
   // The largest known size also sets the best-first order, so the fallback matches its size bucket.
   // It is not the pair Create indexes (an intermediate may shrink), so the BPS pair cap is left to the final size.
@@ -74,10 +76,15 @@ const useCombinedPatch = ({
     applyBpsMemoryCap: false,
     modifiedSize: largestKnownSize,
   });
-  // Patches that declare no target (IPS, PPF, cheats) never shrink the ROM below what is known, so an
-  // undeclared final size counts as the largest known size; otherwise the BPS pair cap would see only the ROM.
+  // Format buckets and shrink limits keep using the largest known size for an undeclared final patch.
   const finalTargetSize = formatSizes.patchTargetSize ?? largestKnownSize;
+  // Only BPS, UPS and VCDIFF declare a target size. An undeclared final patch (IPS, PPF, BDF, APS, RUP, cheats)
+  // starts from the last declared target, or the ROM when none is declared. IPS records end within about
+  // 16 MiB + 64 KiB, and several of these formats can shrink the output without saying so; neither is known
+  // here, so the BPS pair cap uses that starting size rather than the largest size anywhere in the chain.
+  const bpsCapTargetSize = formatSizes.patchTargetSize ?? formatSizes.lastDeclaredTargetSize ?? formatSizes.romSize;
   const finalTargetFormats = getSelectableCreatePatchFormats({
+    bpsCapModifiedSize: bpsCapTargetSize,
     originalSize: formatSizes.romSize,
     modifiedSize: finalTargetSize,
   });
@@ -85,6 +92,7 @@ const useCombinedPatch = ({
   // Create rejects formats outside the size policy, so a choice that no longer fits falls back to the first that does.
   const format = getPreferredCreatePatchFormat({
     automaticFormatSelection: false,
+    bpsCapModifiedSize: bpsCapTargetSize,
     candidateFormats,
     modifiedSize: finalTargetSize,
     originalSize: formatSizes.romSize,
@@ -202,11 +210,8 @@ const useCombinedPatch = ({
     outputExtensions: [format],
     formatId: "rom-weaver-combined-patch-format",
     formatLabel: localizer.message("ui.combinedPatch.format"),
-    formatOptions: createCreatePatchFormatOptions({
-      candidateFormats,
-      modifiedSize: finalTargetSize,
-      originalSize: formatSizes.romSize,
-    }),
+    // candidateFormats already satisfy the final size policy, including the BPS pair cap.
+    formatOptions: candidateFormats.map((value) => ({ label: `.${value}`, value })),
     onFormatChange: setFormat,
     disabled: disabled || busy,
     action: (
