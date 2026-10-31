@@ -573,6 +573,7 @@ fn open_partition_validates_the_hash_tree_when_asked() {
             1,
             &PartitionOptions {
                 validate_hashes: true,
+                ..Default::default()
             },
         )
         .expect("data partition opens with hash validation");

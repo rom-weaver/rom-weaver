@@ -14,6 +14,15 @@ scripts/apply-matrix/cli/run.sh --gen-fixtures --update-manifest   # build missi
 
 Exit status is non-zero when any case fails (or, with `--strict`, any known bug reproduces). Options: `--bin PATH` (or `RW_BIN`), `--work DIR`, `--keep` (keep per-case dirs of passing cases), `--verbose` (print every invocation), `--fail-fast`, `--json FILE`.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [Case groups (`<group>.<feature>.<name>`)](#case-groups-groupfeaturename)
+- [Fixtures](#fixtures)
+- [Not covered here](#not-covered-here)
+
+<!-- END doctoc -->
+
 ## Case groups (`<group>.<feature>.<name>`)
 
 | group | covers |
@@ -40,9 +49,9 @@ Registered in `lib/fixture-defs.mjs`; generated lazily and verified against `man
 
 Oracles: independent Node encoders for IPS, IPS32, BPS, UPS, PPF1-3, APS (N64), GDIFF, VCDIFF; the vendored upstream `bsppatch.js` runtime for BSP; `unzip`/`bsdtar` for zip/7z outputs; system `zip`/`tar`/... for inputs; `node:crypto` for checksums. `chdman`, `dolphin-tool`, `xdelta3`, `flips` are used when present (cases skip with a reason otherwise) - `mise run quality-reference` and the Rust `cli_smoke` suite assert parity against them where installed.
 
-`container.disc.wia-bitflip.*` checks 40 positions for `none` and 13 for `lzma2` in each of three regions: hashed headers, unchecked raw payloads, and raw payloads covered by an optional NKit SHA-1. Header and NKit mismatches must fail cleanly.
+`container.disc.wia-bitflip.*` and `container.disc.rvz-bitflip.*` each check 40 positions for `none` and 13 for `lzma2` in each of three regions: hashed headers, unchecked raw payloads, and raw payloads covered by an optional NKit SHA-1. Header mismatches must fail cleanly without output. NKit-protected payload flips must extract with exit 0 and a checksum warning.
 
-Unchecked payload changes are reported as `documented-limit`, as described in [WIA payload integrity](../../../docs/reference/formats.md#wia-payload-integrity). Valid controls must extract byte for byte.
+Unchecked payload changes are reported as `documented-limit`, as described in [WIA and RVZ payload integrity](../../../docs/reference/formats.md#wia-and-rvz-payload-integrity). Valid controls must extract byte for byte.
 
 ## Not covered here
 

@@ -376,7 +376,7 @@ impl ContainerHandlerOperations for RvzContainerHandler {
         };
         let rom_identity = identity.detect(extension.as_deref());
 
-        let report = RVZ_NOD_CORE.extracted_report(
+        let mut report = RVZ_NOD_CORE.extracted_report(
             &request.source,
             &plan.output_path,
             bytes_written,
@@ -384,6 +384,7 @@ impl ContainerHandlerOperations for RvzContainerHandler {
             &plan.compression_label,
             plan.execution,
         );
+        crate::nod_shared::attach_integrity_warnings(&mut report, plan.warnings);
         Ok(match checksums {
             Some(values) => attach_extract_checksum_details(
                 report,

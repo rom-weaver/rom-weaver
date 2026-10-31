@@ -342,6 +342,18 @@
       "tests": [
         "cargo test -p rom-weaver-containers --lib nod::io::gcz::tests::"
       ]
+    },
+    {
+      "file": "0028-wii-hash-mismatch-warnings.patch",
+      "stage": "integration",
+      "reason": "Collect bounded Wii hash mismatch summaries for extraction warnings while retaining strict validation and structural errors.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib hash_warning",
+        "cargo test -p rom-weaver-containers --lib wia_rvz_extract"
+      ]
     }
   ],
   "materialized": true,

@@ -18,6 +18,7 @@ pub(crate) struct NodExtractPlan {
     pub(crate) disc_size: u64,
     pub(crate) compression_label: String,
     pub(crate) output_path: PathBuf,
+    pub(crate) warnings: Vec<String>,
 }
 
 /// Adds the disc header's game ID and title, and each Wii partition's kind and data size, to
@@ -515,12 +516,20 @@ impl NodHandlerCore {
         fs::create_dir_all(&request.out_dir)?;
         let output_path = request.out_dir.join(output_name);
 
+        let warnings = if matches!(self.nod_format, NodFormat::Wia | NodFormat::Rvz) {
+            rom_weaver_core::ensure_output_available(&output_path, request.overwrite)?;
+            validate_integrity(&disc, self.format_name(), context)?
+        } else {
+            Vec::new()
+        };
+
         Ok(NodExtractPlan {
             execution,
             disc,
             disc_size,
             compression_label,
             output_path,
+            warnings,
         })
     }
 
@@ -540,10 +549,6 @@ impl NodHandlerCore {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let mut plan = self.prepare_extract(request, context)?;
-        if self.nod_format == NodFormat::Wia {
-            rom_weaver_core::ensure_output_available(&plan.output_path, request.overwrite)?;
-            crate::wia::validate_integrity(&plan.disc, context)?;
-        }
         let output = create_extract_output_file(&plan.output_path, request.overwrite)?;
         let progress_label = format!("extracting `{}`", self.format_name());
         let copied = (|| {
@@ -575,14 +580,16 @@ impl NodHandlerCore {
             }
         };
 
-        Ok(self.extracted_report(
+        let mut report = self.extracted_report(
             &request.source,
             &plan.output_path,
             bytes_written,
             plan.disc_size,
             &plan.compression_label,
             plan.execution,
-        ))
+        );
+        attach_integrity_warnings(&mut report, plan.warnings);
+        Ok(report)
     }
 
     pub(crate) fn extracted_report(
@@ -874,5 +881,191 @@ fn unknown_disc_hint(error: &str) -> &'static str {
         "; the input must be a GameCube or Wii disc image"
     } else {
         ""
+    }
+}
+
+fn validate_integrity(
+    disc: &NodDiscReader,
+    format: &str,
+    context: &OperationContext,
+) -> Result<Vec<String>> {
+    use crate::nod::{
+        disc::{SECTOR_SIZE, wii::SECTOR_DATA_SIZE},
+        read::PartitionOptions,
+    };
+    use digest::Digest;
+    use tracing::debug;
+
+    let mut warnings = Vec::new();
+    for partition in disc
+        .partitions()
+        .iter()
+        .filter(|partition| partition.has_hashes)
+    {
+        context.cancel().check()?;
+        debug!(
+            partition = partition.index,
+            format, "verifying Wii partition hashes"
+        );
+        let label = format!("verifying {format} partition {} hashes", partition.index);
+        emit_container_indeterminate_progress(
+            context,
+            "extract",
+            format,
+            "verify-partition",
+            &label,
+            None,
+        );
+        let mut reader = disc
+            .open_partition(
+                partition.index,
+                &PartitionOptions {
+                    validate_hashes: true,
+                    hash_mismatch_warnings: true,
+                },
+            )
+            .map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{format} partition {} integrity check failed: {error}",
+                    partition.index
+                ))
+            })?;
+        let mut completed = 0u64;
+        let progress_bucket = AtomicU8::new(0);
+        let data_size = partition.data_size() / SECTOR_SIZE as u64 * SECTOR_DATA_SIZE as u64;
+        loop {
+            context.cancel().check()?;
+            let len = reader
+                .fill_buf()
+                .map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "{format} partition {} integrity check failed: {error}",
+                        partition.index
+                    ))
+                })?
+                .len();
+            if len == 0 {
+                break;
+            }
+            reader.consume(len);
+            completed += len as u64;
+            maybe_emit_container_byte_progress(
+                context,
+                completed,
+                data_size,
+                ContainerByteProgress {
+                    command: "extract",
+                    format,
+                    stage: "verify-partition",
+                    label: &label,
+                    thread_execution: None,
+                    emitted_progress_bucket: &progress_bucket,
+                },
+            );
+        }
+        if let Some(summary) = reader.hash_mismatches()
+            && let Some(first) = &summary.first
+        {
+            warnings.push(format!(
+                "{format} partition {} hash mismatch: {first}; {} hashes in {} sectors across {} groups; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished",
+                partition.index, summary.hashes, summary.sectors, summary.groups
+            ));
+        }
+    }
+
+    let meta = disc.meta();
+    let mut crc32 = meta.crc32.map(|_| crc32fast::Hasher::new());
+    let mut md5 = meta.md5.map(|_| md5::Md5::new());
+    let mut sha1 = meta.sha1.map(|_| sha1::Sha1::new());
+    let mut xxh64 = meta.xxh64.map(|_| xxhash_rust::xxh64::Xxh64::new(0));
+    if crc32.is_none() && md5.is_none() && sha1.is_none() && xxh64.is_none() {
+        return Ok(warnings);
+    }
+
+    debug!(format, "verifying NKit image checksums");
+    emit_container_indeterminate_progress(
+        context,
+        "extract",
+        format,
+        "verify-image",
+        format!("verifying {format} NKit image checksums"),
+        None,
+    );
+    let mut reader = disc.clone();
+    let mut buffer = vec![0; copy_progress_buffer_size(reader.disc_size())];
+    let mut completed = 0u64;
+    let progress_bucket = AtomicU8::new(0);
+    loop {
+        context.cancel().check()?;
+        let len = reader.read(&mut buffer)?;
+        if len == 0 {
+            break;
+        }
+        let data = &buffer[..len];
+        if let Some(hash) = &mut crc32 {
+            hash.update(data);
+        }
+        if let Some(hash) = &mut md5 {
+            hash.update(data);
+        }
+        if let Some(hash) = &mut sha1 {
+            hash.update(data);
+        }
+        if let Some(hash) = &mut xxh64 {
+            hash.update(data);
+        }
+        completed += len as u64;
+        maybe_emit_container_byte_progress(
+            context,
+            completed,
+            reader.disc_size(),
+            ContainerByteProgress {
+                command: "extract",
+                format,
+                stage: "verify-image",
+                label: &format!("verifying {format} NKit image checksums"),
+                thread_execution: None,
+                emitted_progress_bucket: &progress_bucket,
+            },
+        );
+    }
+    let mismatches = [
+        ("CRC32", crc32.map(|hash| hash.finalize()) != meta.crc32),
+        (
+            "MD5",
+            md5.map(|hash| <[u8; 16]>::from(hash.finalize())) != meta.md5,
+        ),
+        (
+            "SHA-1",
+            sha1.map(|hash| <[u8; 20]>::from(hash.finalize())) != meta.sha1,
+        ),
+        ("XXH64", xxh64.map(|hash| hash.digest()) != meta.xxh64),
+    ];
+    for (algorithm, mismatch) in mismatches {
+        if mismatch {
+            warnings.push(format!(
+                "{format} NKit {algorithm} checksum mismatch; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished"
+            ));
+        }
+    }
+    debug!(
+        format,
+        warnings = warnings.len(),
+        "disc integrity verification complete"
+    );
+    Ok(warnings)
+}
+
+pub(crate) fn attach_integrity_warnings(report: &mut OperationReport, warnings: Vec<String>) {
+    if warnings.is_empty() {
+        return;
+    }
+    for warning in &warnings {
+        report.label.push_str("; warning=");
+        report.label.push_str(warning);
+    }
+    let details = report.details.get_or_insert_with(|| serde_json::json!({}));
+    if let Some(details) = details.as_object_mut() {
+        details.insert("warnings".to_string(), serde_json::json!(warnings));
     }
 }

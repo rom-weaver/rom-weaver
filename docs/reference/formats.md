@@ -10,7 +10,7 @@ The [feature map](features.md) explains the capabilities in plain words. [Cheat 
 - [Legend](#legend)
 - [Patch formats](#patch-formats)
 - [Container and compression formats](#container-and-compression-formats)
-  - [WIA payload integrity](#wia-payload-integrity)
+  - [WIA and RVZ payload integrity](#wia-and-rvz-payload-integrity)
   - [Z3DS filename variants](#z3ds-filename-variants)
 - [Create-time codecs](#create-time-codecs)
 - [Checksum support](#checksum-support)
@@ -124,21 +124,31 @@ Explicit CHD output on Apply and Weave accepts raw and hard-disk inputs. Valid d
 
 A/V CHD creation needs the native CLI.
 
-### WIA payload integrity
+### WIA and RVZ payload integrity
 
-WIA stores SHA-1 hashes for its file header, disc header, and partition table. Those hashes are verified when opening the image. Raw-data and group tables contain offsets and sizes, without separate hashes for their contents or payloads.
+WIA and RVZ store SHA-1 hashes for the file header, disc header, and partition table. Opening verifies those hashes. Header or partition-table SHA-1 mismatches fail extraction. Decoder errors, invalid table bounds, and crafted-input bounds violations also fail extraction. Raw-data and group tables contain offsets and sizes without separate payload hashes.
 
-Extraction verifies Wii partition H0, H1, H2, and H3 hashes where present. Hash mismatches fail extraction, including hash errors already present in the source disc. For example, an H3 mismatch in partition 0, group 0 reports `validation failed: WIA partition 0 integrity check failed: Invalid H3 hash! (group 0)`. There is no extraction override for source hash errors.
+Extraction verifies Wii partition H0, H1, H2, and H3 hashes where present. Only real sectors are checked; synthesized tail sectors have no mastered hashes. WIA and RVZ rebuild sector hashes and apply stored hash exceptions. The original H3 table supplies the final comparison. Verification reads H3 directly without parsing apploader, DOL, or filesystem metadata.
 
-Commands with `--no-extract`, such as `checksum --no-extract`, operate on the raw WIA file. This bypasses ISO extraction entirely; it does not recover an ISO with invalid partition hashes.
+Wii hash mismatches are warnings. Extraction writes the decoded ISO as-is and exits with status 0. Each affected partition produces one summary with the first failing group and partition-relative sector, the first hash error, and counts of failed hash comparisons, affected sectors, and affected groups. For example:
 
-WIA rebuilds sector hashes from partition data and applies stored hash exceptions; the H3 table provides the comparison against the original partition hashes. Verification reads the checked data before writing the extracted ISO. Hash verification reads the H3 table directly, without parsing the partition's apploader, DOL, or filesystem metadata.
+```text
+wia partition 0 hash mismatch: first group 0, sector 0: Invalid H3 hash! (group 0); 4 hashes in 4 sectors across 1 groups; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished
+```
 
-Optional NKit CRC32, MD5, SHA-1, and XXH64 image checksums are also verified when present.
+RVZ summaries use the `rvz` prefix. Optional NKit CRC32, MD5, SHA-1, and XXH64 image digests are also checked. Each mismatching digest produces this warning, with the format and algorithm substituted:
 
-GameCube data and raw Wii regions have no WIA payload checksum by default. In particular, uncompressed (`none`) and raw LZMA/LZMA2 payloads can decode successfully after a bit flip and produce a different ISO with exit status 0.
+```text
+wia NKit SHA-1 checksum mismatch; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished
+```
 
-This is a format limit when no optional image checksum covers those bytes. Decoder errors still fail extraction, but successful decoding alone does not establish payload integrity. Purge compression is unsupported and fails when opening the image.
+Warnings appear in human-readable output and in `details.warnings` in JSON and JSONL output. Hash mismatches cannot distinguish source-disc errors from payload corruption. A corrupted payload that causes a Wii hash mismatch therefore extracts **with a warning**, rather than failing. Scripts must check warnings as well as exit status to detect these mismatches.
+
+Verification uses one hash-checking read of each hashed partition and, when NKit digests exist, one image read computing all requested digests together. These precede the output copy. Valid-file output bytes remain unchanged.
+
+GameCube data and raw Wii regions have no default payload checksum. Uncompressed (`none`) and raw LZMA/LZMA2 payloads can decode after a bit flip and produce a different ISO with exit status 0 and no warning when no NKit digest covers them. Successful decoding alone does not establish integrity. Purge compression is unsupported and fails when opening the image.
+
+Commands with `--no-extract`, such as `checksum --no-extract`, read the raw WIA or RVZ container and bypass ISO extraction and its source-hash warnings.
 
 ### Z3DS filename variants
 

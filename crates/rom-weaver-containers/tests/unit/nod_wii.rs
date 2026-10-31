@@ -427,8 +427,14 @@ fn open_wii_disc(image: &[u8]) -> DiscReader {
 }
 
 fn open_wii_partition(disc: &DiscReader, validate_hashes: bool) -> Box<dyn PartitionReader> {
-    disc.open_partition_kind(PartitionKind::Data, &PartitionOptions { validate_hashes })
-        .expect("open data partition")
+    disc.open_partition_kind(
+        PartitionKind::Data,
+        &PartitionOptions {
+            validate_hashes,
+            ..Default::default()
+        },
+    )
+    .expect("open data partition")
 }
 
 fn wia_image(iso: &[u8], compression: crate::nod::common::Compression) -> Vec<u8> {
@@ -444,16 +450,22 @@ fn wia_image_with_options(
     compression: crate::nod::common::Compression,
     options: &crate::nod::write::ProcessOptions,
 ) -> Vec<u8> {
-    use crate::nod::{
-        common::Format,
-        write::{DiscWriter, FormatOptions},
-    };
+    disc_image_with_options(iso, crate::nod::common::Format::Wia, compression, options)
+}
+
+fn disc_image_with_options(
+    iso: &[u8],
+    format: crate::nod::common::Format,
+    compression: crate::nod::common::Compression,
+    options: &crate::nod::write::ProcessOptions,
+) -> Vec<u8> {
+    use crate::nod::write::{DiscWriter, FormatOptions};
     let writer = DiscWriter::new(
         open_wii_disc(iso),
         &FormatOptions {
-            format: Format::Wia,
+            format,
             compression,
-            block_size: Format::Wia.default_block_size(),
+            block_size: format.default_block_size(),
         },
     )
     .expect("create WIA writer");
@@ -501,7 +513,12 @@ fn extract_wia_image_with_output(
         std::env::temp_dir().join(format!("wia-integrity-{}-{unique}", std::process::id())),
     );
     std::fs::create_dir_all(&temp).unwrap();
-    let source = temp.join("disc.wia");
+    let format = if image.starts_with(b"RVZ") {
+        "rvz"
+    } else {
+        "wia"
+    };
+    let source = temp.join(format!("disc.{format}"));
     std::fs::write(&source, image).unwrap();
     if let Some(bytes) = existing_output {
         std::fs::create_dir_all(temp.join("out")).unwrap();
@@ -527,23 +544,32 @@ fn extract_wia_image_with_output(
     );
     let registry = crate::ContainerRegistry::new();
     let result = registry
-        .find_by_name("wia")
+        .find_by_name(format)
         .unwrap()
         .extract(&request, &context);
     (temp, result, sink)
 }
 
 #[test]
-fn wia_extract_preserves_valid_wii_bytes() {
-    for compression in [
-        crate::nod::common::Compression::None,
-        crate::nod::common::Compression::Lzma2(6),
+fn wia_rvz_extract_preserves_valid_wii_bytes() {
+    for format in [
+        crate::nod::common::Format::Wia,
+        crate::nod::common::Format::Rvz,
     ] {
-        let iso = build_wii_image(true, Damage::None);
-        let image = wia_image(&iso, compression);
-        let (temp, result) = extract_wia_image(&image);
-        result.expect("extract valid WIA");
-        assert_eq!(std::fs::read(temp.join("out/disc.iso")).unwrap(), iso);
+        for compression in [
+            crate::nod::common::Compression::None,
+            crate::nod::common::Compression::Lzma2(6),
+        ] {
+            let iso = build_wii_image(true, Damage::None);
+            let image = disc_image_with_options(&iso, format, compression, &Default::default());
+            let (temp, result) = extract_wia_image(&image);
+            let report = result.expect("extract valid disc");
+            assert!(
+                report.details.as_ref().unwrap().get("warnings").is_none(),
+                "{report:?}"
+            );
+            assert_eq!(std::fs::read(temp.join("out/disc.iso")).unwrap(), iso);
+        }
     }
 }
 
@@ -611,15 +637,26 @@ fn wia_extract_preserves_partial_group_with_mastered_hash_exceptions() {
     header.wia_file_size = U64::new(image_size);
     header.file_head_hash = sha1_hash(&header.as_bytes()[..0x34]);
     let (temp, result) = extract_wia_image(&image);
-    result.expect("real sectors with valid mastered hashes must extract");
+    let report = result.expect("real sectors with valid mastered hashes must extract");
+    assert!(
+        report.details.as_ref().unwrap().get("warnings").is_none(),
+        "{report:?}"
+    );
     assert_eq!(std::fs::read(temp.join("out/disc.iso")).unwrap(), iso);
 
     let exception_hash_at = entry.data_offset.get() as usize * 4 + 4;
     image[exception_hash_at] ^= 1;
     let (temp, result) = extract_wia_image(&image);
-    let error = result.expect_err("hash exceptions on real sectors must still be checked");
-    assert!(error.to_string().contains("Invalid H1 hash"), "{error}");
-    assert!(!temp.join("out/disc.iso").exists());
+    let report = result.expect("hash exceptions on real sectors must warn");
+    let warning = report.details.as_ref().unwrap()["warnings"][0]
+        .as_str()
+        .unwrap();
+    assert!(warning.contains("Invalid H1 hash"), "{warning}");
+    assert!(
+        warning.contains("2 hashes in 1 sectors across 1 groups"),
+        "{warning}"
+    );
+    assert!(temp.join("out/disc.iso").exists());
 }
 
 fn wii_image_with_boot_change(change: impl FnOnce(&mut [u8])) -> Vec<u8> {
@@ -688,26 +725,55 @@ fn assert_wia_extract_preserves_unparseable_boot_area(change: impl FnOnce(&mut [
     ] {
         let image = wia_image(&iso, compression);
         let (temp, result) = extract_wia_image(&image);
-        result.expect("hash verification must not parse boot metadata");
+        let report = result.expect("hash verification must not parse boot metadata");
+        assert!(
+            report.details.as_ref().unwrap().get("warnings").is_none(),
+            "{report:?}"
+        );
         assert_eq!(std::fs::read(temp.join("out/disc.iso")).unwrap(), iso);
     }
 }
 
 #[test]
-fn wia_extract_rejects_wii_hash_mismatches() {
-    for damage in [Damage::SectorData, Damage::H3Table] {
-        let image = wia_image(
-            &build_wii_image(true, damage),
-            crate::nod::common::Compression::None,
-        );
-        let (temp, result) = extract_wia_image(&image);
-        let error = result.expect_err("WIA extraction must verify Wii hashes");
-        assert!(
-            matches!(error, rom_weaver_core::RomWeaverError::Validation(_)),
-            "{error}"
-        );
-        assert!(error.to_string().contains("hash"), "{error}");
-        assert!(!temp.join("out/disc.iso").exists());
+fn wia_rvz_extract_warns_on_wii_hash_mismatches() {
+    for format in [
+        crate::nod::common::Format::Wia,
+        crate::nod::common::Format::Rvz,
+    ] {
+        for damage in [Damage::SectorData, Damage::H3Table] {
+            let iso = build_wii_image(true, damage);
+            let image = disc_image_with_options(
+                &iso,
+                format,
+                crate::nod::common::Compression::None,
+                &Default::default(),
+            );
+            let mut expected = Vec::new();
+            DiscReader::new_stream(
+                Box::new(CloneableStream::new(Cursor::new(image.clone()))),
+                &DiscOptions::default(),
+            )
+            .unwrap()
+            .read_to_end(&mut expected)
+            .unwrap();
+            let (temp, result) = extract_wia_image(&image);
+            let report = result.expect("source hash mismatches must warn and extract");
+            let warnings = report.details.as_ref().unwrap()["warnings"]
+                .as_array()
+                .unwrap();
+            assert_eq!(warnings.len(), 1, "{report:?}");
+            let warning = warnings[0].as_str().unwrap();
+            assert!(warning.contains("partition 0 hash mismatch"), "{warning}");
+            assert!(warning.contains("first group 0, sector 0"), "{warning}");
+            assert!(
+                warning.contains(&format!(
+                    "{DATA_SECTORS} hashes in {DATA_SECTORS} sectors across 1 groups"
+                )),
+                "{warning}"
+            );
+            assert!(warning.contains("ISO extracted as-is"), "{warning}");
+            assert!(std::fs::read(temp.join("out/disc.iso")).unwrap() == expected);
+        }
     }
 }
 
@@ -747,7 +813,11 @@ fn wia_extract_reports_verification_progress() {
         },
     );
     let (temp, result, sink) = extract_wia_image_with_output(&image, None);
-    result.expect("verified extraction must succeed");
+    let report = result.expect("verified extraction must succeed");
+    assert!(
+        report.details.as_ref().unwrap().get("warnings").is_none(),
+        "{report:?}"
+    );
     assert_eq!(std::fs::read(temp.join("out/disc.iso")).unwrap(), iso);
     for stage in ["verify-partition", "verify-image"] {
         assert!(
@@ -760,36 +830,69 @@ fn wia_extract_reports_verification_progress() {
 }
 
 #[test]
-fn wia_extract_rejects_partition_payload_bitflip() {
-    use crate::nod::io::wia::{WIADisc, WIAFileHeader, WIAGroup, WIAPartition};
-    let mut image = wia_image(
-        &build_wii_image(true, Damage::None),
-        crate::nod::common::Compression::None,
-    );
-    let disc = WIADisc::read_from_bytes(
-        &image[size_of::<WIAFileHeader>()..size_of::<WIAFileHeader>() + size_of::<WIADisc>()],
-    )
-    .unwrap();
-    let partition_at = disc.partition_offset.get() as usize;
-    let partition = WIAPartition::read_from_bytes(
-        &image[partition_at..partition_at + size_of::<WIAPartition>()],
-    )
-    .unwrap();
-    let group_at = disc.group_offset.get() as usize
-        + partition.partition_data[0].group_index.get() as usize * size_of::<WIAGroup>();
-    let group =
-        WIAGroup::read_from_bytes(&image[group_at..group_at + size_of::<WIAGroup>()]).unwrap();
-    let payload_at = group.data_offset.get() as usize * 4;
-    assert_eq!(
-        &image[payload_at..payload_at + 2],
-        &[0, 0],
-        "no hash exceptions"
-    );
-    image[payload_at + 4 + SECTOR_DATA_SIZE] ^= 1;
-    let (temp, result) = extract_wia_image(&image);
-    let error = result.expect_err("partition payload corruption must fail");
-    assert!(error.to_string().contains("Invalid H3 hash"), "{error}");
-    assert!(!temp.join("out/disc.iso").exists());
+fn wia_rvz_extract_warns_on_partition_payload_bitflip() {
+    use crate::nod::io::wia::{RVZGroup, WIADisc, WIAFileHeader, WIAGroup, WIAPartition};
+    for format in [
+        crate::nod::common::Format::Wia,
+        crate::nod::common::Format::Rvz,
+    ] {
+        let mut image = disc_image_with_options(
+            &build_wii_image(true, Damage::None),
+            format,
+            crate::nod::common::Compression::None,
+            &Default::default(),
+        );
+        let disc = WIADisc::read_from_bytes(
+            &image[size_of::<WIAFileHeader>()..size_of::<WIAFileHeader>() + size_of::<WIADisc>()],
+        )
+        .unwrap();
+        let partition_at = disc.partition_offset.get() as usize;
+        let partition = WIAPartition::read_from_bytes(
+            &image[partition_at..partition_at + size_of::<WIAPartition>()],
+        )
+        .unwrap();
+        let group_size = if format == crate::nod::common::Format::Rvz {
+            size_of::<RVZGroup>()
+        } else {
+            size_of::<WIAGroup>()
+        };
+        let group_at = disc.group_offset.get() as usize
+            + partition.partition_data[0].group_index.get() as usize * group_size;
+        let group =
+            WIAGroup::read_from_bytes(&image[group_at..group_at + size_of::<WIAGroup>()]).unwrap();
+        let payload_at = group.data_offset.get() as usize * 4;
+        let mut data_at = payload_at + 4;
+        if format == crate::nod::common::Format::Rvz {
+            let group = RVZGroup::read_from_bytes(&image[group_at..group_at + group_size]).unwrap();
+            if group.rvz_packed_size.get() != 0 {
+                let literal_size =
+                    u32::from_be_bytes(image[data_at..data_at + 4].try_into().unwrap());
+                assert!(literal_size > 0x100 && literal_size < 0x80000000);
+                data_at += 4;
+            }
+        }
+        assert_eq!(
+            &image[payload_at..payload_at + 2],
+            &[0, 0],
+            "no hash exceptions"
+        );
+        image[data_at + 0x100] ^= 1;
+        let mut expected = Vec::new();
+        DiscReader::new_stream(
+            Box::new(CloneableStream::new(Cursor::new(image.clone()))),
+            &DiscOptions::default(),
+        )
+        .unwrap()
+        .read_to_end(&mut expected)
+        .unwrap();
+        let (temp, result) = extract_wia_image(&image);
+        let report = result.expect("partition payload corruption must warn");
+        let warning = report.details.as_ref().unwrap()["warnings"][0]
+            .as_str()
+            .unwrap();
+        assert!(warning.contains("Invalid H3 hash"), "{warning}");
+        assert!(std::fs::read(temp.join("out/disc.iso")).unwrap() == expected);
+    }
 }
 
 #[test]
@@ -799,62 +902,79 @@ fn wia_extract_checks_each_optional_nkit_digest() {
         write::ProcessOptions,
     };
     let iso = build_wii_image(false, Damage::None);
-    for (algorithm, options) in [
-        (
-            "CRC32",
-            ProcessOptions {
-                digest_crc32: true,
-                ..Default::default()
-            },
-        ),
-        (
-            "MD5",
-            ProcessOptions {
-                digest_md5: true,
-                ..Default::default()
-            },
-        ),
-        (
-            "SHA-1",
-            ProcessOptions {
-                digest_sha1: true,
-                ..Default::default()
-            },
-        ),
-        (
-            "XXH64",
-            ProcessOptions {
-                digest_xxh64: true,
-                ..Default::default()
-            },
-        ),
+    for format in [
+        crate::nod::common::Format::Wia,
+        crate::nod::common::Format::Rvz,
     ] {
-        let mut image =
-            wia_image_with_options(&iso, crate::nod::common::Compression::None, &options);
-        let (temp, result) = extract_wia_image(&image);
-        result.expect("matching NKit digest must extract");
-        assert_eq!(std::fs::read(temp.join("out/disc.iso")).unwrap(), iso);
-        let disc = WIADisc::read_from_bytes(
-            &image[size_of::<WIAFileHeader>()..size_of::<WIAFileHeader>() + size_of::<WIADisc>()],
-        )
-        .unwrap();
-        let raw_at = disc.raw_data_offset.get() as usize;
-        let raw =
-            WIARawData::read_from_bytes(&image[raw_at..raw_at + size_of::<WIARawData>()]).unwrap();
-        let group_at = disc.group_offset.get() as usize
-            + raw.group_index.get() as usize * size_of::<WIAGroup>();
-        let group =
-            WIAGroup::read_from_bytes(&image[group_at..group_at + size_of::<WIAGroup>()]).unwrap();
-        image[group.data_offset.get() as usize * 4 + 0x10000] ^= 1;
-        let (temp, result) = extract_wia_image(&image);
-        let error = result.expect_err("NKit digest mismatch must fail");
-        assert!(
-            error
-                .to_string()
-                .contains(&format!("WIA NKit {algorithm} checksum mismatch")),
-            "{error}"
-        );
-        assert!(!temp.join("out/disc.iso").exists());
+        for (algorithm, options) in [
+            (
+                "CRC32",
+                ProcessOptions {
+                    digest_crc32: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "MD5",
+                ProcessOptions {
+                    digest_md5: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "SHA-1",
+                ProcessOptions {
+                    digest_sha1: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "XXH64",
+                ProcessOptions {
+                    digest_xxh64: true,
+                    ..Default::default()
+                },
+            ),
+        ] {
+            let mut image = disc_image_with_options(
+                &iso,
+                format,
+                crate::nod::common::Compression::None,
+                &options,
+            );
+            let (temp, result) = extract_wia_image(&image);
+            let report = result.expect("matching NKit digest must extract");
+            assert!(
+                report.details.as_ref().unwrap().get("warnings").is_none(),
+                "{report:?}"
+            );
+            assert_eq!(std::fs::read(temp.join("out/disc.iso")).unwrap(), iso);
+            let disc = WIADisc::read_from_bytes(
+                &image
+                    [size_of::<WIAFileHeader>()..size_of::<WIAFileHeader>() + size_of::<WIADisc>()],
+            )
+            .unwrap();
+            let raw_at = disc.raw_data_offset.get() as usize;
+            let raw = WIARawData::read_from_bytes(&image[raw_at..raw_at + size_of::<WIARawData>()])
+                .unwrap();
+            let group_at = disc.group_offset.get() as usize
+                + raw.group_index.get() as usize * size_of::<WIAGroup>();
+            let group =
+                WIAGroup::read_from_bytes(&image[group_at..group_at + size_of::<WIAGroup>()])
+                    .unwrap();
+            image[group.data_offset.get() as usize * 4 + 0x10000] ^= 1;
+            let (temp, result) = extract_wia_image(&image);
+            let report = result.expect("NKit digest mismatch must warn");
+            let warning = report.details.as_ref().unwrap()["warnings"][0]
+                .as_str()
+                .unwrap();
+            assert!(
+                warning.contains(&format!("NKit {algorithm} checksum mismatch")),
+                "{warning}"
+            );
+            assert!(warning.contains("ISO extracted as-is"), "{warning}");
+            assert!(temp.join("out/disc.iso").exists());
+        }
     }
 }
 
@@ -1120,8 +1240,8 @@ fn hash_validation_checks_h3_table_bounds() {
     let last_group = H3_TABLE_SIZE / 20 - 1;
     table[last_group * 20..(last_group + 1) * 20].copy_from_slice(&h3);
     let group = group.as_slice().try_into().unwrap();
-    verify_hashes(group, last_group as u32, &table, DATA_SECTORS).expect("last H3 entry");
-    let error = verify_hashes(group, last_group as u32 + 1, &table, DATA_SECTORS)
+    verify_hashes(group, last_group as u32, &table, DATA_SECTORS, None).expect("last H3 entry");
+    let error = verify_hashes(group, last_group as u32 + 1, &table, DATA_SECTORS, None)
         .expect_err("group beyond H3 table");
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     assert_eq!(error.to_string(), "H3 table missing hash for group 4915");
@@ -1418,4 +1538,131 @@ fn a_failed_sector_read_propagates_out_of_the_preloader() {
         format!("{err}").contains("simulated read failure"),
         "unexpected error: {err}"
     );
+}
+
+#[test]
+fn hash_warning_mode_checks_h0_through_h3_once_per_sector() {
+    for (damage, hash, hashes, sectors) in [
+        (Damage::SectorData, "H0", 1, 1),
+        (Damage::H1Block, "H1", 2, 1),
+        (Damage::H2Block, "H2", 2, 1),
+        (
+            Damage::H3Table,
+            "H3",
+            DATA_SECTORS as u64,
+            DATA_SECTORS as u64,
+        ),
+    ] {
+        let image = build_wii_image(true, damage);
+        let disc = open_wii_disc(&image);
+        let mut reader = disc
+            .open_partition(
+                0,
+                &PartitionOptions {
+                    validate_hashes: true,
+                    hash_mismatch_warnings: true,
+                },
+            )
+            .unwrap();
+        reader.fill_buf().unwrap();
+        reader.fill_buf().unwrap();
+        let mut output = Vec::new();
+        reader.read_to_end(&mut output).unwrap();
+        let summary = reader.hash_mismatches().unwrap();
+        assert!(
+            summary.first.as_ref().unwrap().contains(hash),
+            "{summary:?}"
+        );
+        assert_eq!(
+            (summary.hashes, summary.sectors, summary.groups),
+            (hashes, sectors, 1)
+        );
+        assert_eq!(output.len(), DATA_SECTORS * SECTOR_DATA_SIZE);
+    }
+}
+
+#[test]
+fn wia_rvz_extract_summarizes_each_damaged_partition() {
+    for format in [
+        crate::nod::common::Format::Wia,
+        crate::nod::common::Format::Rvz,
+    ] {
+        let mut iso = build_wii_image(true, Damage::H3Table);
+        let second_offset = iso.len();
+        let partition = iso[PART_OFFSET as usize..].to_vec();
+        iso.extend_from_slice(&partition);
+        let table = WII_PART_GROUP_OFF as usize;
+        iso[table..table + 4].copy_from_slice(&2u32.to_be_bytes());
+        iso[table + 0x28..table + 0x2c]
+            .copy_from_slice(&((second_offset / 4) as u32).to_be_bytes());
+        let image = disc_image_with_options(
+            &iso,
+            format,
+            crate::nod::common::Compression::None,
+            &Default::default(),
+        );
+        let (temp, result) = extract_wia_image(&image);
+        let report = result.unwrap();
+        let warnings = report.details.as_ref().unwrap()["warnings"]
+            .as_array()
+            .unwrap();
+        assert_eq!(warnings.len(), 2, "{report:?}");
+        for (partition, warning) in warnings.iter().enumerate() {
+            assert!(
+                warning
+                    .as_str()
+                    .unwrap()
+                    .contains(&format!("partition {partition} hash mismatch"))
+            );
+        }
+        assert!(std::fs::read(temp.join("out/disc.iso")).unwrap() == iso);
+    }
+}
+
+#[test]
+fn hash_warning_summary_counts_ten_groups_and_rejects_missing_h3() {
+    let (group, _) = build_sector_group_plaintext();
+    let group = group.as_slice().try_into().unwrap();
+    let mut summary = HashMismatchSummary::default();
+    for index in 0..10 {
+        verify_hashes(group, index, &[0; 200], DATA_SECTORS, Some(&mut summary)).unwrap();
+    }
+    assert_eq!(
+        (summary.hashes, summary.sectors, summary.groups),
+        (40, 40, 10)
+    );
+    let error = verify_hashes(group, 10, &[0; 200], DATA_SECTORS, Some(&mut summary)).unwrap_err();
+    assert_eq!(error.to_string(), "H3 table missing hash for group 10");
+}
+
+#[test]
+fn wia_rvz_extract_still_rejects_structural_sha1_mismatches() {
+    use crate::nod::io::wia::{WIADisc, WIAFileHeader};
+    for format in [
+        crate::nod::common::Format::Wia,
+        crate::nod::common::Format::Rvz,
+    ] {
+        let iso = build_wii_image(true, Damage::None);
+        let image = disc_image_with_options(
+            &iso,
+            format,
+            crate::nod::common::Compression::None,
+            &Default::default(),
+        );
+        let disc = WIADisc::read_from_bytes(
+            &image[size_of::<WIAFileHeader>()..size_of::<WIAFileHeader>() + size_of::<WIADisc>()],
+        )
+        .unwrap();
+        for at in [0x10, 0x48 + 16, disc.partition_offset.get() as usize] {
+            let mut damaged = image.clone();
+            damaged[at] ^= 1;
+            let (temp, result) = extract_wia_image(&damaged);
+            let error = result.expect_err("structural SHA-1 mismatches remain fatal");
+            assert!(
+                error.to_string().contains("WIA/RVZ hash mismatch"),
+                "{error}"
+            );
+            assert!(!temp.join("out/disc.iso").exists());
+        }
+    }
 }

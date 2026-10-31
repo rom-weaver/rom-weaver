@@ -62,6 +62,43 @@ pub struct PartitionOptions {
     /// Wii: Validate data hashes while reading the partition, if available.
     /// This significantly slows down reading.
     pub validate_hashes: bool,
+    /// Collect source hash mismatches instead of failing; structural errors still fail.
+    pub hash_mismatch_warnings: bool,
+}
+
+/// Bounded summary of hash mismatches encountered during a sequential partition read.
+#[derive(Default, Debug, Clone)]
+pub struct HashMismatchSummary {
+    /// First mismatching hash, including group and partition-relative sector.
+    pub first: Option<String>,
+    /// Number of failed hash comparisons.
+    pub hashes: u64,
+    /// Number of affected sectors in the sequential read.
+    pub sectors: u64,
+    /// Number of affected sector groups in the sequential read.
+    pub groups: u64,
+    last_sector: Option<u32>,
+    last_group: Option<u32>,
+}
+
+impl HashMismatchSummary {
+    pub(crate) fn record(&mut self, group: u32, sector: u32, message: impl FnOnce() -> String) {
+        if self.first.is_none() {
+            self.first = Some(format!(
+                "first group {group}, sector {sector}: {}",
+                message()
+            ));
+        }
+        self.hashes += 1;
+        if self.last_sector != Some(sector) {
+            self.sectors += 1;
+            self.last_sector = Some(sector);
+        }
+        if self.last_group != Some(group) {
+            self.groups += 1;
+            self.last_group = Some(group);
+        }
+    }
 }
 
 /// Trait for reading disc images.
@@ -363,6 +400,11 @@ pub struct DiscMeta {
 pub trait PartitionReader: DynClone + BufRead + Seek + Send {
     /// Whether this is a Wii partition. (GameCube otherwise)
     fn is_wii(&self) -> bool;
+
+    /// Source hash mismatches collected when requested through partition options.
+    fn hash_mismatches(&self) -> Option<&HashMismatchSummary> {
+        None
+    }
 
     /// Reads the partition header and file system table.
     fn meta(&mut self) -> Result<PartitionMeta>;

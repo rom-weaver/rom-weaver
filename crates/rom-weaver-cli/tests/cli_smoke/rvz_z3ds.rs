@@ -724,3 +724,86 @@ fn rvz_compress_recovers_junk_seeds_when_game_id_differs() {
         iso_bytes
     );
 }
+
+#[test]
+fn wia_rvz_extract_nkit_warnings_in_human_json_and_jsonl() {
+    let temp = setup_temp_dir();
+    let iso = build_test_gamecube_iso(0x20000);
+    let input = temp.child("disc.iso");
+    fs::write(input.path(), &iso).unwrap();
+    for format in [NodFormat::Wia, NodFormat::Rvz] {
+        let name = if format == NodFormat::Wia {
+            "wia"
+        } else {
+            "rvz"
+        };
+        let disc = NodDiscReader::new(input.path(), &NodDiscOptions::default()).unwrap();
+        let writer = NodDiscWriter::new(
+            disc,
+            &NodFormatOptions {
+                format,
+                compression: NodCompression::None,
+                block_size: format.default_block_size(),
+            },
+        )
+        .unwrap();
+        let mut image = Vec::new();
+        let finalization = writer
+            .process(
+                |data, _, _| {
+                    image.extend_from_slice(&data);
+                    Ok(())
+                },
+                &NodProcessOptions {
+                    digest_sha1: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        image[..finalization.header.len()].copy_from_slice(&finalization.header);
+        assert_eq!(&image[0x124..0x12c], b"NKIT  v2");
+        // NKit v2's size field precedes the only requested digest, SHA-1.
+        image[0x124 + 12 + 8] ^= 1;
+        let source = temp.child(format!("disc.{name}"));
+        fs::write(source.path(), &image).unwrap();
+        for mode in ["human", "--json", "--jsonl"] {
+            let out = temp.child(format!("{name}-{mode}"));
+            let mut args = vec![
+                "extract",
+                "--input",
+                source.path().to_str().unwrap(),
+                "--output",
+                out.path().to_str().unwrap(),
+                "--threads",
+                "1",
+            ];
+            if mode != "human" {
+                args.push(mode);
+            }
+            let mut command = Command::cargo_bin("rom-weaver").unwrap();
+            command.args(&args);
+            let assertion = command.assert().code(0);
+            let output = assertion.get_output();
+            let text = format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(text.contains("NKit SHA-1 checksum mismatch"), "{text}");
+            assert!(text.contains("ISO extracted as-is"), "{text}");
+            if mode != "human" {
+                let report = if mode == "--jsonl" {
+                    parse_single_json_line(&output.stdout)
+                } else {
+                    serde_json::from_slice(&output.stdout).unwrap()
+                };
+                if mode == "--json" {
+                    assert_eq!(report["warnings"].as_array().unwrap().len(), 1);
+                }
+                assert_eq!(report["status"], "succeeded");
+                assert_eq!(report["details"]["warnings"].as_array().unwrap().len(), 1);
+            }
+            assert!(fs::read(out.child("disc.iso").path()).unwrap() == iso);
+        }
+    }
+}
