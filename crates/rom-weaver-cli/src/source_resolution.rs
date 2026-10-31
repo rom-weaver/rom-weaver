@@ -3,6 +3,7 @@ use rom_weaver_containers::libarchive::{RegularArchiveProbeFormat, probe_regular
 use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
 use super::weave_load::is_stream_codec_format_name;
 use super::*;
+use rom_weaver_core::KindFilterNameMatch;
 
 #[derive(Debug)]
 pub(super) struct ResolvedChecksumSource {
@@ -674,28 +675,27 @@ impl CliApp {
         if !kind_filter.enabled() {
             return Ok(candidates);
         }
-        let mut payload_matches = Vec::new();
-        let mut container_fallback_matches = Vec::new();
-        for candidate in &candidates {
-            let matches_payload = if rom_weaver_core::payload_name_needs_content_classification(
-                &candidate.display_name,
-            ) {
-                let is_patch = self.is_patch_payload(&candidate.source);
-                (kind_filter.patch && is_patch) || (kind_filter.rom && !is_patch)
-            } else {
-                kind_filter.matches_payload_name(&candidate.display_name)
-            };
-            if matches_payload {
-                payload_matches.push(candidate.clone());
-            } else if kind_filter.matches_container_fallback_name(&candidate.display_name) {
-                container_fallback_matches.push(candidate.clone());
-            }
-        }
-        let filtered = if payload_matches.is_empty() {
-            container_fallback_matches
-        } else {
-            payload_matches
-        };
+        let classified = candidates
+            .iter()
+            .map(|candidate| {
+                let kind = match kind_filter.classify_name(&candidate.display_name) {
+                    KindFilterNameMatch::Unnamed => {
+                        let is_patch = self.is_patch_payload(&candidate.source);
+                        if (kind_filter.patch && is_patch) || (kind_filter.rom && !is_patch) {
+                            KindFilterNameMatch::Unnamed
+                        } else {
+                            KindFilterNameMatch::Rejected
+                        }
+                    }
+                    // Resolving one candidate descends into a wrapper before reading its payload.
+                    KindFilterNameMatch::UnnamedStream => KindFilterNameMatch::Container,
+                    kind => kind,
+                };
+                trace!(candidate = %candidate.display_name, ?kind, "classified auto-extract candidate");
+                (kind, candidate.clone())
+            })
+            .collect();
+        let filtered = rom_weaver_core::select_kind_filter_matches(classified, false);
         trace!(
             source = %current_source.display(),
             candidate_count = candidates.len(),

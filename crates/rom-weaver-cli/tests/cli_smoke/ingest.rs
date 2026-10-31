@@ -2975,6 +2975,89 @@ fn ingest_classification_unnamed_entries_keep_nested_archive_descent() {
     }
 }
 
+/// A stream-wrapped unnamed payload cannot be classified without decompressing it, so it MUST NOT
+/// make a named payload ambiguous when one candidate is resolved.
+#[test]
+fn ingest_classification_unnamed_stream_does_not_shadow_named_payload() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    let named_patch = temp.child("a.bps");
+    let loose_patch = temp.child("hack.bps");
+    fs::write(rom.path(), banded_rom()).unwrap();
+    fs::write(named_patch.path(), banded_bps()).unwrap();
+    fs::write(loose_patch.path(), banded_bps()).unwrap();
+    let wrapped = write_wrapped(&temp, "compressed.gz", "gz", &banded_bps());
+    let roms = temp.child("mixed.zip");
+    zip_members(&temp, roms.path(), &[rom.path(), &wrapped]);
+    let patches = temp.child("patches.zip");
+    zip_members(&temp, patches.path(), &[named_patch.path(), &wrapped]);
+
+    let crc = |input: &Path| {
+        isolated_json_event(
+            &temp,
+            &[
+                "checksum",
+                "--input",
+                input.to_str().unwrap(),
+                "--filter",
+                "rom",
+                "--json",
+            ],
+            0,
+        )["details"]["checksums"]["crc32"]
+            .clone()
+    };
+    assert_eq!(crc(roms.path()), crc(rom.path()));
+    for (input, patch, name) in [
+        (roms.path(), loose_patch.path(), "rom-archive"),
+        (rom.path(), patches.path(), "patch-archive"),
+    ] {
+        let applied = temp.child(format!("{name}.bin"));
+        isolated_json_event(
+            &temp,
+            &[
+                "patch",
+                "apply",
+                "--input",
+                input.to_str().unwrap(),
+                "--patch",
+                patch.to_str().unwrap(),
+                "--output",
+                applied.path().to_str().unwrap(),
+                "--no-compress",
+                "--filter",
+                "rom",
+                "--filter",
+                "patch",
+                "--jsonl",
+            ],
+            0,
+        );
+        assert_eq!(
+            fs::read(applied.path()).unwrap(),
+            banded_rom_patched(),
+            "{name}"
+        );
+        isolated_json_event(
+            &temp,
+            &[
+                "patch",
+                "validate",
+                "--input",
+                input.to_str().unwrap(),
+                "--patch",
+                patch.to_str().unwrap(),
+                "--filter",
+                "rom",
+                "--filter",
+                "patch",
+                "--jsonl",
+            ],
+            0,
+        );
+    }
+}
+
 #[test]
 fn ingest_classification_wrong_kind_uses_consistent_filter_error() {
     let temp = setup_temp_dir();
