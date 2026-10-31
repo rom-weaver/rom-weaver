@@ -50,7 +50,8 @@ const CHEAT_PATCH_FORMAT_PREFERENCE = ["ips", "bps"] as const;
  * rejects excluded formats with UNSUPPORTED_FORMAT.
  */
 const getCheatPatchFormat = (romSize: number | undefined): CreatePatchFormat => {
-  const allowed = getCreatePatchFormatsForSizes(romSize);
+  // The patched ROM keeps the original's length, so the pair is the ROM twice.
+  const allowed = getCreatePatchFormatsForSizes(romSize, romSize);
   return (CHEAT_PATCH_FORMAT_PREFERENCE.find((format) => allowed.includes(format)) || allowed[0]) as CreatePatchFormat;
 };
 

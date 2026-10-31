@@ -39,6 +39,7 @@ use aps_n64::ApsN64PatchHandler;
 use apsgba::ApsGbaPatchHandler;
 use bdf::BdfPatchHandler;
 use bps::BpsPatchHandler;
+pub use bps::{BPS_CREATE_MAX_COMBINED_INPUT_BYTES, bps_create_inputs_fit};
 use bsp::BspPatchHandler;
 use dldi::DldiPatchHandler;
 use dps::DpsPatchHandler;

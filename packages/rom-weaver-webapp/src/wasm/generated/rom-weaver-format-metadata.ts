@@ -52,6 +52,7 @@ export const ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY = {
   "limits": {
     "archiveDefaultSizeBytes": 67108864,
     "bpsDefaultSizeBytes": 134217728,
+    "bpsMaxCombinedInputBytes": 214748364,
     "ipsSizeLimitBytes": 16777216,
     "legacySizeLimitBytes": 268435456
   },

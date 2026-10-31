@@ -40,6 +40,27 @@ const BPS_NO_OFFSET: u32 = u32::MAX;
 const BPS_MIN_COPY_LENGTH: usize = 4;
 const BPS_CREATE_INDEX_TAIL_BYTES: usize = 256;
 const BPS_CREATE_MEMORY_LIMIT_BYTES: u64 = 1024 * 1024 * 1024;
+/// Suffix-index bytes per input byte for the reverse-lookup index and for the lower-memory search.
+const BPS_CREATE_FAST_INDEX_BYTES_PER_SLOT: u64 = 8;
+const BPS_CREATE_LOW_MEMORY_INDEX_BYTES_PER_SLOT: u64 = 4;
+
+/// Largest combined original + modified size whose estimated suffix-index memory, using the
+/// lower-memory index, still fits [`BPS_CREATE_MEMORY_LIMIT_BYTES`]. Pairs above this fail
+/// `bps_create_suffix_index_mode`, so callers SHOULD offer another format for them.
+pub const BPS_CREATE_MAX_COMBINED_INPUT_BYTES: u64 =
+    bps_create_max_combined_input_bytes(BPS_CREATE_LOW_MEMORY_INDEX_BYTES_PER_SLOT);
+
+/// Inverts the estimate `total + (total + 1) * slot_bytes <= BPS_CREATE_MEMORY_LIMIT_BYTES`.
+const fn bps_create_max_combined_input_bytes(slot_bytes: u64) -> u64 {
+    (BPS_CREATE_MEMORY_LIMIT_BYTES - slot_bytes) / (1 + slot_bytes)
+}
+
+/// Whether BPS create can index an original and modified file of these sizes.
+pub fn bps_create_inputs_fit(original_len: u64, modified_len: u64) -> bool {
+    original_len
+        .checked_add(modified_len)
+        .is_some_and(|total| total <= BPS_CREATE_MAX_COMBINED_INPUT_BYTES)
+}
 
 pub struct BpsPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -1525,17 +1546,24 @@ fn bps_create_suffix_index_mode(source_len: u64, target_len: u64) -> Result<BpsS
     }
 
     Err(RomWeaverError::Validation(format!(
-        "BPS create requires an estimated {fast_estimated} bytes of fast suffix-index memory or {low_memory_estimated} bytes of lower-memory suffix-index memory; limit is {} bytes",
-        BPS_CREATE_MEMORY_LIMIT_BYTES
+        "BPS create requires an estimated {fast_estimated} bytes of fast suffix-index memory or {low_memory_estimated} bytes of lower-memory suffix-index memory; limit is {BPS_CREATE_MEMORY_LIMIT_BYTES} bytes, so the original and modified files can total at most {BPS_CREATE_MAX_COMBINED_INPUT_BYTES} bytes; use xdelta for larger inputs"
     )))
 }
 
 fn bps_create_estimated_suffix_memory_bytes(source_len: u64, target_len: u64) -> Result<u128> {
-    bps_create_estimated_suffix_memory_bytes_for_index(source_len, target_len, 8)
+    bps_create_estimated_suffix_memory_bytes_for_index(
+        source_len,
+        target_len,
+        u128::from(BPS_CREATE_FAST_INDEX_BYTES_PER_SLOT),
+    )
 }
 
 fn bps_create_estimated_low_memory_suffix_bytes(source_len: u64, target_len: u64) -> Result<u128> {
-    bps_create_estimated_suffix_memory_bytes_for_index(source_len, target_len, 4)
+    bps_create_estimated_suffix_memory_bytes_for_index(
+        source_len,
+        target_len,
+        u128::from(BPS_CREATE_LOW_MEMORY_INDEX_BYTES_PER_SLOT),
+    )
 }
 
 fn bps_create_estimated_suffix_memory_bytes_for_index(

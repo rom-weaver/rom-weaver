@@ -12,6 +12,7 @@ type CreatePatchFormatList = readonly [string, ...string[]];
 
 const CREATE_IPS_SIZE_LIMIT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits.ipsSizeLimitBytes;
 const CREATE_BPS_DEFAULT_LIMIT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits.bpsDefaultSizeBytes;
+const CREATE_BPS_MAX_COMBINED_INPUT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits.bpsMaxCombinedInputBytes;
 const CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits.legacySizeLimitBytes;
 const CREATE_PATCH_DEFAULT_FORMAT = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.defaultFormat;
 // The CLI treats `vcdiff` as plain VCDIFF, but browser Create only offers xdelta, so a caller-supplied
@@ -71,12 +72,27 @@ const withoutNoShrinkFormats = <T extends string>(
     ? formats.filter((format) => !NO_SHRINK_CREATE_PATCH_FORMATS.includes(format))
     : formats;
 
+/** BPS indexes both files in memory, so the cap applies to their combined size, not the larger one. */
+const withoutBpsAboveMemoryCap = <T extends string>(
+  formats: readonly T[],
+  originalSize?: number | null,
+  modifiedSize?: number | null,
+): readonly T[] =>
+  getFiniteCreateSourceSize(originalSize) + getFiniteCreateSourceSize(modifiedSize) >
+  CREATE_BPS_MAX_COMBINED_INPUT_BYTES
+    ? formats.filter((format) => format !== "bps")
+    : formats;
+
 /**
  * Formats Create accepts for the sizes (original first). Source-restricted formats stay allowed here
  * because only the resolved candidates can say whether the original is the one ROM they target.
  */
 const getCreatePatchFormatsForSizes = (originalSize?: number | null, modifiedSize?: number | null) =>
-  withoutNoShrinkFormats(getCreatePatchFormatsForSizeBucket(originalSize, modifiedSize), originalSize, modifiedSize);
+  withoutBpsAboveMemoryCap(
+    withoutNoShrinkFormats(getCreatePatchFormatsForSizeBucket(originalSize, modifiedSize), originalSize, modifiedSize),
+    originalSize,
+    modifiedSize,
+  );
 
 const normalizeCandidateCreatePatchFormats = (formats?: readonly string[] | null): string[] => {
   const out: string[] = [];
@@ -143,6 +159,7 @@ const getPreferredCreatePatchFormat = ({
 
 export {
   CREATE_BPS_DEFAULT_LIMIT_BYTES,
+  CREATE_BPS_MAX_COMBINED_INPUT_BYTES,
   CREATE_IPS_SIZE_LIMIT_BYTES,
   CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES,
   getCreatePatchFormatsForSizes,

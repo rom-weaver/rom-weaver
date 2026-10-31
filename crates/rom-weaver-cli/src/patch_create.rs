@@ -2,6 +2,7 @@ use super::cheats_apply::CheatApplySummary;
 use super::*;
 
 use rom_weaver_core::{PatchHandler, format_human_bytes};
+use rom_weaver_patches::{BPS_CREATE_MAX_COMBINED_INPUT_BYTES, bps_create_inputs_fit};
 
 use super::patch_commands::{
     CREATE_PATCH_ARCHIVE_DEFAULT_EXTENSIONS, CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES,
@@ -84,20 +85,23 @@ pub(super) fn create_patch_input_sizes(info: &PatchCreateInputInfo) -> PatchCrea
     }
 }
 
-pub(super) fn create_patch_formats_for_sizes(
-    sizes: PatchCreateInputSizes,
-) -> &'static [&'static str] {
+pub(super) fn create_patch_formats_for_sizes(sizes: PatchCreateInputSizes) -> Vec<&'static str> {
     let max_size = max_create_patch_input_size(sizes);
-    if max_size > CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES {
-        return LARGE_CREATE_PATCH_FORMATS;
+    let mut formats = if max_size > CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES {
+        LARGE_CREATE_PATCH_FORMATS
+    } else if max_size >= CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES {
+        MID_LARGE_CREATE_PATCH_FORMATS
+    } else if max_size >= CREATE_PATCH_IPS_SIZE_LIMIT_BYTES {
+        MEDIUM_CREATE_PATCH_FORMATS
+    } else {
+        SMALL_CREATE_PATCH_FORMATS
     }
-    if max_size >= CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES {
-        return MID_LARGE_CREATE_PATCH_FORMATS;
+    .to_vec();
+    if !bps_create_inputs_fit(sizes.original, sizes.modified) {
+        debug!("patch create formats drop bps: inputs exceed its suffix-index memory budget");
+        formats.retain(|format| *format != "bps");
     }
-    if max_size >= CREATE_PATCH_IPS_SIZE_LIMIT_BYTES {
-        return MEDIUM_CREATE_PATCH_FORMATS;
-    }
-    SMALL_CREATE_PATCH_FORMATS
+    formats
 }
 
 /// MOD (pmsr) patches can only apply to Paper Mario (USA) v1.0, so the plan lists the format
@@ -139,8 +143,9 @@ pub(super) fn create_patch_default_format_for_sources(info: &PatchCreateInputInf
     {
         return CREATE_PATCH_LARGE_DEFAULT_FORMAT;
     }
-    if max_create_patch_input_size(create_patch_input_sizes(info))
-        < CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES
+    let sizes = create_patch_input_sizes(info);
+    if max_create_patch_input_size(sizes) < CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES
+        && bps_create_inputs_fit(sizes.original, sizes.modified)
     {
         CREATE_PATCH_DEFAULT_FORMAT
     } else {
@@ -187,6 +192,14 @@ pub(super) fn create_patch_format_size_error_message(
         let limit = format_human_bytes(CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES);
         return Some(format!(
             "Create inputs above {limit} require xdelta, VCDIFF, or PPF patches; selected patch type: {normalized_format}"
+        ));
+    }
+    if normalized_format == "bps" && !bps_create_inputs_fit(sizes.original, sizes.modified) {
+        return Some(format!(
+            "BPS patches can be created only when the original and modified files total at most {BPS_CREATE_MAX_COMBINED_INPUT_BYTES} bytes; these total {} bytes (original: {}, modified: {}); use xdelta instead; selected patch type: {normalized_format}",
+            sizes.original.saturating_add(sizes.modified),
+            sizes.original,
+            sizes.modified
         ));
     }
     None
@@ -568,7 +581,7 @@ impl CliApp {
         };
         let sizes = create_patch_input_sizes(&input_info);
         let candidates = create_patch_format_candidates_for_sources(&input_info);
-        let mut formats = candidates.formats.to_vec();
+        let mut formats = candidates.formats;
         let input_sizes_are_raw = [&input_info.original, &input_info.modified]
             .iter()
             .all(|source| !source.archive && !source.special_compression);
@@ -1017,5 +1030,76 @@ mod create_format_tests {
             );
         }
         assert!(create_patch_format_size_error_message("bps", sizes).is_some());
+    }
+
+    fn sizes_totalling(combined: u64) -> PatchCreateInputSizes {
+        PatchCreateInputSizes {
+            original: combined / 2,
+            modified: combined - combined / 2,
+        }
+    }
+
+    fn info_totalling(combined: u64) -> PatchCreateInputInfo {
+        let sizes = sizes_totalling(combined);
+        let source = |size| PatchCreateSourceInfo {
+            archive: false,
+            size,
+            special_compression: false,
+        };
+        PatchCreateInputInfo {
+            original: source(sizes.original),
+            modified: source(sizes.modified),
+        }
+    }
+
+    #[test]
+    fn bps_is_offered_only_while_the_pair_fits_the_suffix_index_budget() {
+        let cap = BPS_CREATE_MAX_COMBINED_INPUT_BYTES;
+        // Both sides are below the per-side default limit, so only the combined cap can drop BPS.
+        assert!(cap / 2 < CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES);
+        assert!(create_patch_formats_for_sizes(sizes_totalling(cap)).contains(&"bps"));
+        assert!(!create_patch_formats_for_sizes(sizes_totalling(cap + 1)).contains(&"bps"));
+        // A skewed pair is bucketed by its larger side but capped by the total.
+        let skewed = PatchCreateInputSizes {
+            original: CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES,
+            modified: cap - CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES,
+        };
+        assert!(create_patch_formats_for_sizes(skewed).contains(&"bps"));
+        let skewed = PatchCreateInputSizes {
+            modified: skewed.modified + 1,
+            ..skewed
+        };
+        assert!(!create_patch_formats_for_sizes(skewed).contains(&"bps"));
+        assert!(create_patch_formats_for_sizes(skewed).contains(&"xdelta"));
+    }
+
+    #[test]
+    fn the_default_format_leaves_bps_when_the_pair_exceeds_the_cap() {
+        let cap = BPS_CREATE_MAX_COMBINED_INPUT_BYTES;
+        assert_eq!(
+            create_patch_default_format_for_sources(&info_totalling(cap)),
+            "bps"
+        );
+        assert_eq!(
+            create_patch_default_format_for_sources(&info_totalling(cap + 1)),
+            CREATE_PATCH_LARGE_DEFAULT_FORMAT
+        );
+    }
+
+    #[test]
+    fn explicit_bps_over_the_cap_names_the_cap_and_suggests_xdelta() {
+        let cap = BPS_CREATE_MAX_COMBINED_INPUT_BYTES;
+        assert_eq!(
+            create_patch_format_size_error_message("bps", sizes_totalling(cap)),
+            None
+        );
+        let message = create_patch_format_size_error_message("BPS", sizes_totalling(cap + 1))
+            .expect("one byte over the cap is rejected");
+        assert!(message.contains(&format!("{cap} bytes")), "{message}");
+        assert!(message.contains("use xdelta"), "{message}");
+        assert_eq!(
+            create_patch_format_size_error_message("xdelta", sizes_totalling(cap + 1)),
+            None
+        );
     }
 }
