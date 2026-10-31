@@ -894,7 +894,7 @@ fn validate_integrity(
         read::PartitionOptions,
     };
     use digest::Digest;
-    use tracing::debug;
+    use tracing::{debug, warn};
 
     let mut warnings = Vec::new();
     for partition in disc
@@ -966,10 +966,12 @@ fn validate_integrity(
         if let Some(summary) = reader.hash_mismatches()
             && let Some(first) = &summary.first
         {
-            warnings.push(format!(
+            let warning = format!(
                 "{format} partition {} hash mismatch: {first}; {} hashes in {} sectors across {} groups; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished",
                 partition.index, summary.hashes, summary.sectors, summary.groups
-            ));
+            );
+            warn!(format, partition = partition.index, %warning, "Wii partition hash mismatch");
+            warnings.push(warning);
         }
     }
 
@@ -1043,9 +1045,11 @@ fn validate_integrity(
     ];
     for (algorithm, mismatch) in mismatches {
         if mismatch {
-            warnings.push(format!(
+            let warning = format!(
                 "{format} NKit {algorithm} checksum mismatch; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished"
-            ));
+            );
+            warn!(format, algorithm, %warning, "NKit image checksum mismatch");
+            warnings.push(warning);
         }
     }
     debug!(

@@ -25,7 +25,7 @@ pub(super) struct NestedExtractOutcome {
 }
 
 impl CliApp {
-    pub(super) fn finish(&self, command: &str, report: OperationReport) -> AppRunOutcome {
+    pub(super) fn finish(&self, command: &str, mut report: OperationReport) -> AppRunOutcome {
         trace!(
             command,
             family = ?report.family,
@@ -36,6 +36,13 @@ impl CliApp {
             label = %report.label,
             "finishing command with terminal report"
         );
+        let warnings = std::mem::take(
+            &mut *self
+                .extraction_warnings
+                .lock()
+                .unwrap_or_else(|error| error.into_inner()),
+        );
+        Self::append_report_warnings(&mut report, warnings);
         let status = report.status;
         self.reporter.emit(report.into_event(command));
         AppRunOutcome {
@@ -202,17 +209,19 @@ impl CliApp {
                 thread_execution: step_threads.clone(),
             });
             let step_started = std::time::Instant::now();
-            let nested_report = handler.extract(&nested_request, context).map_err(|error| {
-                // A cancel stays a cancel, so the exit code and JSON report agree.
-                if matches!(error, RomWeaverError::Cancelled) {
-                    return error;
-                }
-                RomWeaverError::Validation(format!(
-                    "nested extract failed for `{}` ({}): {error}",
-                    source.display(),
-                    format_name
-                ))
-            })?;
+            let nested_report = self
+                .extract_container(handler.as_ref(), &nested_request, context)
+                .map_err(|error| {
+                    // A cancel stays a cancel, so the exit code and JSON report agree.
+                    if matches!(error, RomWeaverError::Cancelled) {
+                        return error;
+                    }
+                    RomWeaverError::Validation(format!(
+                        "nested extract failed for `{}` ({}): {error}",
+                        source.display(),
+                        format_name
+                    ))
+                })?;
             let step_elapsed_ms = step_started.elapsed().as_millis().min(u32::MAX as u128) as u32;
             descended.insert(canonical_source_key);
             nested_count = nested_count.saturating_add(1);

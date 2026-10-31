@@ -183,7 +183,8 @@ impl CliApp {
                 fs::create_dir_all(&out_dir)?;
                 cleanup_paths.push(out_dir.clone());
                 trace!(source = %current.display(), member, format = handler.descriptor().name, "extracting exact target member");
-                handler.extract(
+                self.extract_container(
+                    handler.as_ref(),
                     &ContainerExtractRequest {
                         source: current.clone(),
                         selections: vec![selection],

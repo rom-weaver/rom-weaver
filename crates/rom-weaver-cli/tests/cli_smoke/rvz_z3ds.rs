@@ -807,3 +807,335 @@ fn wia_rvz_extract_nkit_warnings_in_human_json_and_jsonl() {
         }
     }
 }
+
+fn write_hash_mismatching_wii_wia(temp: &TempDir) -> (PathBuf, Vec<u8>) {
+    let mut iso = vec![0; 0x90000];
+    iso[..6].copy_from_slice(b"RWIIT0");
+    iso[0x18..0x1c].copy_from_slice(&0x5d1c9ea3u32.to_be_bytes());
+    iso[0x61] = 1;
+    iso.copy_within(..0x400, 0x70400);
+    for sector in 0..4 {
+        iso[0x70000 + sector * 0x8000] = 1;
+    }
+    let issuer = b"Root-CA00000001-XS00000003";
+    iso[0x50140..0x50140 + issuer.len()].copy_from_slice(issuer);
+    for (offset, value) in [
+        (0x40000, 1u32),
+        (0x40004, 0x40020 >> 2),
+        (0x40020, 0x50000 >> 2),
+        (0x502b4, 0x8000 >> 2),
+        (0x502b8, 0x20000 >> 2),
+        (0x502bc, 0x20000 >> 2),
+        (0x70824, 0x2800 >> 2),
+        (0x70828, 12 >> 2),
+        (0x7082c, 12 >> 2),
+        (0x72c00, 0x01000000),
+        (0x72c08, 1),
+    ] {
+        iso[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
+    }
+    // The H3 table MUST remain incorrect to trigger partition warnings.
+    let source = temp.child("damaged.iso");
+    fs::write(source.path(), &iso).unwrap();
+    let wia = temp.child("damaged.wia");
+    write_wia_fixture_from_iso(source.path(), wia.path());
+    let mut reader = NodDiscReader::new(wia.path(), &NodDiscOptions::default()).unwrap();
+    let mut decoded = Vec::new();
+    std::io::Read::read_to_end(&mut reader, &mut decoded).unwrap();
+    (wia.path().to_path_buf(), decoded)
+}
+
+fn assert_auto_extract_hash_warning(command: &str) {
+    let temp = setup_temp_dir();
+    let (wia, iso) = write_hash_mismatching_wii_wia(&temp);
+    let patch = temp.child("update.ips");
+    fs::write(patch.path(), b"PATCH\x00\x00\x07\x00\x01XEOF").unwrap();
+    let weave = temp.child("rom-weaver-weave.json");
+    fs::write(
+        weave.path(),
+        r#"{"version":1,"rom":{"path":"damaged.wia"},"patches":[{"path":"update.ips"}]}"#,
+    )
+    .unwrap();
+    let nested = temp.child("damaged.tar.gz");
+    if command == "nested-extract" {
+        write_tar_gz_fixture(&[(&wia, "damaged.wia")], nested.path());
+    }
+    for mode in ["human", "--json", "--jsonl"] {
+        let out = temp.child(format!("patched-{mode}.iso"));
+        let mut args = match command {
+            "patch-apply" => vec![
+                "patch",
+                "apply",
+                "--input",
+                wia.to_str().unwrap(),
+                "--patch",
+                patch.path().to_str().unwrap(),
+                "--output",
+                out.path().to_str().unwrap(),
+                "--no-compress",
+            ],
+            "checksum" => vec![
+                "checksum",
+                "--input",
+                wia.to_str().unwrap(),
+                "--algo",
+                "sha1",
+            ],
+            "patch-validate" => vec![
+                "patch",
+                "validate",
+                "--input",
+                wia.to_str().unwrap(),
+                "--patch",
+                patch.path().to_str().unwrap(),
+            ],
+            "ingest" => vec![
+                "ingest",
+                "--input",
+                wia.to_str().unwrap(),
+                "--output",
+                out.path().to_str().unwrap(),
+            ],
+            "nested-extract" => vec![
+                "extract",
+                "--input",
+                nested.path().to_str().unwrap(),
+                "--output",
+                out.path().to_str().unwrap(),
+            ],
+            "weave-apply" => vec![
+                "patch",
+                "apply",
+                "--input",
+                wia.to_str().unwrap(),
+                "--weave",
+                weave.path().to_str().unwrap(),
+                "--output",
+                out.path().to_str().unwrap(),
+                "--no-compress",
+            ],
+            _ => unreachable!(),
+        };
+        args.extend(["--threads", "1"]);
+        if mode != "human" {
+            args.push(mode);
+        }
+        let mut process = Command::cargo_bin("rom-weaver").unwrap();
+        let root = temp.path();
+        process.env("HOME", root);
+        for name in [
+            "XDG_CACHE_HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_STATE_HOME",
+        ] {
+            process.env(name, root);
+        }
+        let assertion = process.args(args).assert().code(0);
+        let output = assertion.get_output();
+        if mode == "human" {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(
+                stderr
+                    .matches("warning: wia partition 0 hash mismatch")
+                    .count(),
+                1,
+                "{stderr}"
+            );
+        } else {
+            let report: Value = if mode == "--json" {
+                serde_json::from_slice(&output.stdout).unwrap()
+            } else {
+                parse_single_json_line(&output.stdout)
+            };
+            let warnings = report["details"]["warnings"]
+                .as_array()
+                .expect("warnings must survive auto-extraction");
+            assert_eq!(warnings.len(), 1, "{report}");
+            assert!(
+                warnings[0]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("wia partition 0 hash mismatch")
+            );
+            if mode == "--json" {
+                assert_eq!(report["warnings"], report["details"]["warnings"]);
+            }
+            assert_eq!(report["status"], "succeeded");
+        }
+        if matches!(command, "patch-apply" | "weave-apply") {
+            let mut expected = iso.clone();
+            expected[7] = b'X';
+            let actual = fs::read(out.path()).unwrap();
+            assert!(
+                actual == expected,
+                "patched ISO lengths {} vs {}; first differing offsets: {:?}",
+                actual.len(),
+                expected.len(),
+                actual
+                    .iter()
+                    .zip(&expected)
+                    .enumerate()
+                    .filter_map(|(index, (a, b))| (a != b).then_some(index))
+                    .take(8)
+                    .collect::<Vec<_>>()
+            );
+        }
+    }
+}
+
+#[test]
+fn patch_apply_preserves_wii_wia_hash_warnings() {
+    assert_auto_extract_hash_warning("patch-apply");
+}
+
+#[test]
+fn checksum_preserves_wii_wia_hash_warnings() {
+    assert_auto_extract_hash_warning("checksum");
+}
+
+#[test]
+fn patch_validate_preserves_wii_wia_hash_warnings() {
+    assert_auto_extract_hash_warning("patch-validate");
+}
+
+#[test]
+fn ingest_preserves_wii_wia_hash_warnings() {
+    assert_auto_extract_hash_warning("ingest");
+}
+
+#[test]
+fn nested_extract_preserves_wii_wia_hash_warnings() {
+    assert_auto_extract_hash_warning("nested-extract");
+}
+
+#[test]
+fn weave_apply_preserves_wii_wia_hash_warnings() {
+    assert_auto_extract_hash_warning("weave-apply");
+}
+
+#[test]
+fn concurrent_extract_keeps_wii_wia_hash_warnings_with_their_source() {
+    use rom_weaver_app::{ExtractBatchOptions, ExtractCommand, run_extract_batch};
+    use rom_weaver_core::{
+        NoninteractivePrompter, OperationStatus, ProgressEvent, ProgressSink, ThreadBudget,
+    };
+    use std::sync::{Arc, Barrier, Condvar, Mutex};
+
+    struct Reporter {
+        ready: Barrier,
+        clean_thread: Mutex<Option<std::thread::ThreadId>>,
+        clean_finished: (Mutex<bool>, Condvar),
+        reports: Mutex<Vec<ProgressEvent>>,
+    }
+    impl ProgressSink for Reporter {
+        fn emit(&self, event: ProgressEvent) {
+            if let Some(step) = event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("extract_step"))
+                && step["depth"] == 0
+                && step["status"] == "succeeded"
+            {
+                let clean = step["source_name"] == "clean.wia";
+                if clean {
+                    *self.clean_thread.lock().unwrap() = Some(std::thread::current().id());
+                }
+                // Both jobs MUST finish decoding before the clean job reports its result.
+                self.ready.wait();
+                if !clean {
+                    let (finished, condition) = &self.clean_finished;
+                    let (finished, _) = condition
+                        .wait_timeout_while(
+                            finished.lock().unwrap(),
+                            std::time::Duration::from_secs(5),
+                            |done| !*done,
+                        )
+                        .unwrap();
+                    assert!(*finished, "clean extraction did not finish");
+                }
+            }
+            if event.status == OperationStatus::Succeeded {
+                self.reports.lock().unwrap().push(event);
+                if *self.clean_thread.lock().unwrap() == Some(std::thread::current().id()) {
+                    let (finished, condition) = &self.clean_finished;
+                    *finished.lock().unwrap() = true;
+                    condition.notify_all();
+                }
+            }
+        }
+    }
+    let temp = setup_temp_dir();
+    let (damaged, _) = write_hash_mismatching_wii_wia(&temp);
+    let clean_iso = temp.child("clean.iso");
+    fs::write(clean_iso.path(), build_test_gamecube_iso(0x6000)).unwrap();
+    let clean = temp.child("clean.wia");
+    write_wia_fixture_from_iso(clean_iso.path(), clean.path());
+    let reporter = Arc::new(Reporter {
+        ready: Barrier::new(2),
+        clean_thread: Mutex::new(None),
+        clean_finished: (Mutex::new(false), Condvar::new()),
+        reports: Mutex::new(Vec::new()),
+    });
+    let jobs = [damaged, clean.path().to_path_buf()]
+        .into_iter()
+        .enumerate()
+        .map(|(index, input)| ExtractCommand {
+            input,
+            select: Vec::new(),
+            filter: Vec::new(),
+            output: temp.child(format!("out-{index}")).path().to_path_buf(),
+            split_bin: false,
+            no_ignore: false,
+            no_nested_extract: true,
+            force: false,
+            checksum: Vec::new(),
+            checksum_rom: Vec::new(),
+            probe: false,
+            threads: ThreadBudget::Fixed(1),
+        })
+        .collect();
+    let result = run_extract_batch(
+        jobs,
+        ExtractBatchOptions {
+            emit_progress_events: true,
+            interactive_selection_enabled: false,
+            threads: ThreadBudget::Fixed(2),
+            sequential: false,
+        },
+        reporter.clone(),
+        Arc::new(NoninteractivePrompter),
+    );
+    assert_eq!(result.waves, vec![vec![0, 1]]);
+    assert!(
+        result
+            .outcomes
+            .iter()
+            .all(|outcome| outcome.status == OperationStatus::Succeeded)
+    );
+    let reports = reporter.reports.lock().unwrap();
+    assert_eq!(reports.len(), 2);
+    let clean = reports
+        .iter()
+        .find(|report| {
+            report.details.as_ref().unwrap()["emitted_files"][0]["file_name"] == "clean.iso"
+        })
+        .unwrap();
+    assert!(
+        clean.details.as_ref().unwrap().get("warnings").is_none(),
+        "{clean:?}"
+    );
+    let damaged = reports
+        .iter()
+        .find(|report| {
+            report.details.as_ref().unwrap()["emitted_files"][0]["file_name"] == "damaged.iso"
+        })
+        .unwrap();
+    assert_eq!(
+        damaged.details.as_ref().unwrap()["warnings"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}

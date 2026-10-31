@@ -37,6 +37,7 @@ impl CliApp {
             containers: ContainerRegistry::new(),
             patches: PatchRegistry::new(),
             checksum: NativeChecksumEngine,
+            extraction_warnings: std::sync::Mutex::new(Vec::new()),
         }
     }
 

@@ -142,7 +142,7 @@ RVZ summaries use the `rvz` prefix. Optional NKit CRC32, MD5, SHA-1, and XXH64 i
 wia NKit SHA-1 checksum mismatch; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished
 ```
 
-Warnings appear in human-readable output and in `details.warnings` in JSON and JSONL output. Hash mismatches cannot distinguish source-disc errors from payload corruption. A corrupted payload that causes a Wii hash mismatch therefore extracts **with a warning**, rather than failing. Scripts must check warnings as well as exit status to detect these mismatches.
+Warnings appear on stderr as `warning:` lines in human-readable output and in the command report's `details.warnings` in JSON and JSONL output. JSON also includes a top-level `warnings` array. This applies to explicit extraction, automatic extraction by other commands, and nested archives. Hash mismatches cannot distinguish source-disc errors from payload corruption. These mismatches appear in warnings while extraction succeeds; exit status alone does not identify them.
 
 Verification uses one hash-checking read of each hashed partition and, when NKit digests exist, one image read computing all requested digests together. These precede the output copy. Valid-file output bytes remain unchanged.
 
