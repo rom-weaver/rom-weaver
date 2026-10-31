@@ -339,6 +339,53 @@ describe("useCombinedPatch", () => {
     expect(formats()).toEqual(expect.arrayContaining(["ebp", "ppf"]));
   });
 
+  it.each([
+    ["an undeclared-target patch", 120, getEnabledPatchTargetSizes([undefined], ["ppf"], new Set())],
+    ["cheats only", 120, getEnabledPatchTargetSizes([], [], new Set())],
+    [
+      "an unknown final patch after a large target",
+      20,
+      getEnabledPatchTargetSizes([200 * 1024 * 1024, undefined], ["bps", "ips"], new Set()),
+    ],
+  ])("drops and no longer defaults to BPS over the pair cap for %s", (_name, romMiB, sizes) => {
+    const run = vi.fn<Options["run"]>();
+    const { result } = renderHook(() =>
+      useCombinedPatch(options(run, { defaultPatchType: "bps", romSize: romMiB * 1024 * 1024, ...sizes })),
+    );
+    expect(result.current.outputProps.formatOptions?.map((option) => option.value)).not.toContain("bps");
+    expect(result.current.outputProps.format).not.toBe("bps");
+  });
+
+  it("keeps BPS when the unknown final size stays under the pair cap", () => {
+    const run = vi.fn<Options["run"]>();
+    const { result } = renderHook(() =>
+      useCombinedPatch(
+        options(run, {
+          defaultPatchType: "bps",
+          romSize: 100 * 1024 * 1024,
+          ...getEnabledPatchTargetSizes([undefined], ["ppf"], new Set()),
+        }),
+      ),
+    );
+    expect(result.current.outputProps.formatOptions?.map((option) => option.value)).toContain("bps");
+    expect(result.current.outputProps.format).toBe("bps");
+  });
+
+  it("keeps BPS when the declared final target shrinks below a larger intermediate", () => {
+    const run = vi.fn<Options["run"]>();
+    const { result } = renderHook(() =>
+      useCombinedPatch(
+        options(run, {
+          defaultPatchType: "bps",
+          romSize: 20 * 1024 * 1024,
+          ...getEnabledPatchTargetSizes([210 * 1024 * 1024, 40 * 1024 * 1024], ["bps", "bps"], new Set()),
+        }),
+      ),
+    );
+    expect(result.current.outputProps.formatOptions?.map((option) => option.value)).toContain("bps");
+    expect(result.current.outputProps.format).toBe("bps");
+  });
+
   it("keeps a running job's sizes while preparing the run clears them", async () => {
     const pending = deferred<BrowserCreateResult>();
     const patch = createdPatch();

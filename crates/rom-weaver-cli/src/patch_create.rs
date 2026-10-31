@@ -612,6 +612,7 @@ impl CliApp {
                 "limits": {
                     "archive_default_size_bytes": CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES,
                     "bps_default_size_bytes": CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES,
+                    "bps_max_combined_input_bytes": BPS_CREATE_MAX_COMBINED_INPUT_BYTES,
                     "ips_size_limit_bytes": CREATE_PATCH_IPS_SIZE_LIMIT_BYTES,
                     "legacy_size_limit_bytes": CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES,
                 },
@@ -744,6 +745,29 @@ impl CliApp {
             probe_threads.clone(),
         ) {
             return Err(Box::new(report));
+        }
+        // Cheat-derived creates read and copy the whole original before the diff handler runs, so reject
+        // a format the sizes already rule out first. The cheat-patched ROM keeps the original's length
+        // (cheats overwrite bytes in place), so the pair is the original twice.
+        if args.modified.is_none()
+            && !(args.codes.is_empty() && args.cheat_selection.cheats.is_empty())
+        {
+            let sizes = self.inspect_patch_create_input_sizes(
+                "patch-create",
+                Some(requested_format.clone()),
+                &args.original,
+                &args.original,
+                probe_threads.clone(),
+            )?;
+            if let Some(label) = create_patch_format_size_error_message(&requested_format, sizes) {
+                return Err(Box::new(OperationReport::failed(
+                    OperationFamily::Patch,
+                    Some(requested_format),
+                    "validate",
+                    label,
+                    probe_threads.clone(),
+                )));
+            }
         }
         Ok(PatchCreateSetup {
             output,

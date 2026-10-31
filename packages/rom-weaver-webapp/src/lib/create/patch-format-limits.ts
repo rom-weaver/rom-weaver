@@ -87,12 +87,18 @@ const withoutBpsAboveMemoryCap = <T extends string>(
  * Formats Create accepts for the sizes (original first). Source-restricted formats stay allowed here
  * because only the resolved candidates can say whether the original is the one ROM they target.
  */
-const getCreatePatchFormatsForSizes = (originalSize?: number | null, modifiedSize?: number | null) =>
-  withoutBpsAboveMemoryCap(
-    withoutNoShrinkFormats(getCreatePatchFormatsForSizeBucket(originalSize, modifiedSize), originalSize, modifiedSize),
+const getCreatePatchFormatsForSizes = (
+  originalSize?: number | null,
+  modifiedSize?: number | null,
+  { applyBpsMemoryCap = true }: { applyBpsMemoryCap?: boolean } = {},
+) => {
+  const formats = withoutNoShrinkFormats(
+    getCreatePatchFormatsForSizeBucket(originalSize, modifiedSize),
     originalSize,
     modifiedSize,
   );
+  return applyBpsMemoryCap ? withoutBpsAboveMemoryCap(formats, originalSize, modifiedSize) : formats;
+};
 
 const normalizeCandidateCreatePatchFormats = (formats?: readonly string[] | null): string[] => {
   const out: string[] = [];
@@ -112,16 +118,19 @@ const normalizeCandidateCreatePatchFormats = (formats?: readonly string[] | null
  * enforce shrinking restrictions even when the plan only measured compressed inputs.
  */
 const getSelectableCreatePatchFormats = ({
+  applyBpsMemoryCap,
   candidateFormats,
   modifiedSize,
   originalSize,
 }: {
+  /** False when the sizes are not the original/modified pair Create would index, e.g. a bound on one side. */
+  applyBpsMemoryCap?: boolean;
   candidateFormats?: readonly string[] | null;
   modifiedSize?: number | null;
   originalSize?: number | null;
 }): readonly string[] => {
   const candidates = normalizeCandidateCreatePatchFormats(candidateFormats);
-  const sizeFormats = getCreatePatchFormatsForSizes(originalSize, modifiedSize);
+  const sizeFormats = getCreatePatchFormatsForSizes(originalSize, modifiedSize, { applyBpsMemoryCap });
   const formats = candidates.length
     ? candidates.filter((format) => sizeFormats.includes(format))
     : sizeFormats.filter((format) => !SOURCE_RESTRICTED_CREATE_PATCH_FORMATS.includes(format));

@@ -3694,6 +3694,48 @@ fn patch_create_rejects_bps_beyond_the_combined_size_cap_before_reading_inputs()
 }
 
 #[test]
+fn patch_create_rejects_bps_beyond_the_size_cap_before_applying_cheat_codes() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.nes");
+    let patch = temp.child("output.bps");
+    // The cheat-patched ROM keeps the original's length, so 110 MiB twice exceeds the cap. The code is
+    // invalid on purpose: an early size check reports the cap, while reading the ROM first would
+    // report the bad code.
+    write_sparse_bytes(
+        original.path(),
+        110 * 1024 * 1024,
+        0,
+        b"NES\x1a\x01\x01\x00\x00",
+    );
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--code",
+            "NOT-A-CODE",
+            "--code-system",
+            "nes",
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        1,
+    );
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "failed");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("at most 214748364 bytes"), "{label}");
+    assert!(label.contains("use xdelta"), "{label}");
+    assert!(!patch.path().exists());
+}
+
+#[test]
 fn patch_create_candidates_default_to_xdelta_above_256_mib_while_allowing_ppf() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -3734,6 +3776,10 @@ fn patch_create_candidates_default_to_xdelta_above_256_mib_while_allowing_ppf() 
     assert_eq!(
         candidates["limits"]["legacy_size_limit_bytes"],
         256 * 1024 * 1024
+    );
+    assert_eq!(
+        candidates["limits"]["bps_max_combined_input_bytes"],
+        214_748_364
     );
 }
 

@@ -68,19 +68,25 @@ const useCombinedPatch = ({
   const formatSizes = runSizes ?? { patchTargetSize, maxKnownTargetSize, romSize };
   // Known growth MUST still constrain format limits when another patch leaves shrinking uncertain.
   // The largest known size also sets the best-first order, so the fallback matches its size bucket.
+  // It is not the pair Create indexes (an intermediate may shrink), so the BPS pair cap is left to the final size.
+  const largestKnownSize = Math.max(formatSizes.romSize ?? 0, formatSizes.maxKnownTargetSize ?? 0);
   const knownTargetFormats = getSelectableCreatePatchFormats({
-    modifiedSize: Math.max(formatSizes.romSize ?? 0, formatSizes.maxKnownTargetSize ?? 0),
+    applyBpsMemoryCap: false,
+    modifiedSize: largestKnownSize,
   });
+  // Patches that declare no target (IPS, PPF, cheats) never shrink the ROM below what is known, so an
+  // undeclared final size counts as the largest known size; otherwise the BPS pair cap would see only the ROM.
+  const finalTargetSize = formatSizes.patchTargetSize ?? largestKnownSize;
   const finalTargetFormats = getSelectableCreatePatchFormats({
     originalSize: formatSizes.romSize,
-    modifiedSize: formatSizes.patchTargetSize,
+    modifiedSize: finalTargetSize,
   });
   const candidateFormats = knownTargetFormats.filter((value) => finalTargetFormats.includes(value));
   // Create rejects formats outside the size policy, so a choice that no longer fits falls back to the first that does.
   const format = getPreferredCreatePatchFormat({
     automaticFormatSelection: false,
     candidateFormats,
-    modifiedSize: formatSizes.patchTargetSize,
+    modifiedSize: finalTargetSize,
     originalSize: formatSizes.romSize,
     requestedFormat: patchType || internalFormat,
   });
@@ -198,7 +204,7 @@ const useCombinedPatch = ({
     formatLabel: localizer.message("ui.combinedPatch.format"),
     formatOptions: createCreatePatchFormatOptions({
       candidateFormats,
-      modifiedSize: formatSizes.patchTargetSize,
+      modifiedSize: finalTargetSize,
       originalSize: formatSizes.romSize,
     }),
     onFormatChange: setFormat,
