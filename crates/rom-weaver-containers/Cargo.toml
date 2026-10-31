@@ -46,6 +46,7 @@ crc32fast.workspace = true
 crossbeam-channel = { workspace = true, optional = true }
 crossbeam-utils = { workspace = true, optional = true }
 crypto-common.workspace = true
+deflate64 = "0.1.12"
 digest.workspace = true
 dyn-clone.workspace = true
 encoding_rs.workspace = true

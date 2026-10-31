@@ -11,6 +11,7 @@ use std::{
 
 use rom_weaver_core::{Result, RomWeaverError};
 
+mod deflate64;
 pub mod sys;
 
 #[cfg(windows)]
