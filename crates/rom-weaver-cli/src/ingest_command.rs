@@ -546,12 +546,17 @@ impl CliApp {
         // patch dialog - the two single-modal prompts never overlap.
         let resolved_split_bin =
             self.resolve_ingest_split_bin(handler, source, split_bin, context)?;
-        // Hosts MUST see signature-classified and named patches together in their first manifest.
-        let defer_patch_manifest = entries.iter().any(|entry| {
-            rom_weaver_core::payload_name_needs_content_classification(&entry.path)
-                || (rom_weaver_core::is_container_filter_passthrough_candidate_name(&entry.path)
-                    && !rom_weaver_core::is_rom_filter_candidate_name(&entry.path))
+        let has_unnamed_payloads = entries
+            .iter()
+            .any(|entry| rom_weaver_core::payload_name_needs_content_classification(&entry.path));
+        let has_nested_containers = entries.iter().any(|entry| {
+            rom_weaver_core::is_container_filter_passthrough_candidate_name(&entry.path)
+                && !rom_weaver_core::is_rom_filter_candidate_name(&entry.path)
         });
+        // Hosts MUST see signature-classified and named patches together in their first manifest.
+        let defer_patch_manifest = has_unnamed_payloads || has_nested_containers;
+        // Nested containers MUST retain top-level selection and prompt-free descent.
+        let classify_before_selection = has_unnamed_payloads && !has_nested_containers;
         // Sidecars MUST remain independent of ROM selection; derive ordering from ROM names.
         let mut patches = if has_patch {
             let rom_hint = summaries
@@ -599,7 +604,7 @@ impl CliApp {
                 context,
             },
             algorithms,
-            defer_patch_manifest,
+            classify_before_selection,
         ) {
             Ok(assets) => assets,
             Err(rom_error) => {
@@ -943,10 +948,11 @@ impl CliApp {
             },
         )?;
         if select_classified_leaves {
+            let selection_root = Self::normalized_emitted_path_key(out_dir);
             let selection_name = |path: &str| {
                 normalize_archive_name(
                     &Path::new(path)
-                        .strip_prefix(out_dir)
+                        .strip_prefix(&selection_root)
                         .unwrap_or(Path::new(path))
                         .to_string_lossy(),
                 )

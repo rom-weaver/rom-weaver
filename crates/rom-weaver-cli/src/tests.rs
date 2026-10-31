@@ -1562,7 +1562,11 @@ fn extract_payload_selection_ignores_directory_entries_without_prompting() {
     );
 }
 
-fn check_ingest_interactive_signature_sidecar(rom_names: &[&str], selected: Option<usize>) {
+fn check_ingest_interactive_signature_sidecar(
+    rom_names: &[&str],
+    selected: Option<usize>,
+    output_mode: &str,
+) {
     struct JsonLines(Mutex<String>);
     impl rom_weaver_core::ProgressSink for JsonLines {
         fn emit(&self, event: rom_weaver_core::ProgressEvent) {
@@ -1594,6 +1598,7 @@ fn check_ingest_interactive_signature_sidecar(rom_names: &[&str], selected: Opti
             false
         }
     }
+    let cwd = std::env::current_dir().unwrap();
     let temp = assert_fs::TempDir::new().unwrap();
     let events = Arc::new(JsonLines(Mutex::new(String::new())));
     let prompt = Arc::new(Prompt {
@@ -1621,9 +1626,28 @@ fn check_ingest_interactive_signature_sidecar(rom_names: &[&str], selected: Opti
     let archive = temp.path().join("mixed.zip");
     compress_zip_fixture(&app, &members, &archive);
     events.0.lock().unwrap().clear();
+    let output = match output_mode {
+        "relative" => {
+            let root = cwd.ancestors().last().unwrap();
+            let parents: PathBuf = cwd.ancestors().skip(1).map(|_| "..").collect();
+            parents
+                .join(temp.path().strip_prefix(root).unwrap())
+                .join("out")
+        }
+        #[cfg(unix)]
+        "symlink" => {
+            let actual = temp.path().join("actual");
+            std::fs::create_dir(&actual).unwrap();
+            let link = temp.path().join("link");
+            std::os::unix::fs::symlink(actual, &link).unwrap();
+            link.join("out")
+        }
+        "absolute" => temp.path().join("out"),
+        mode => panic!("unexpected output mode: {mode}"),
+    };
     let outcome = app.run(Commands::Ingest(super::IngestCommand {
         input: archive,
-        output: temp.path().join("out"),
+        output,
         database: Vec::new(),
         select: Vec::new(),
         sidecar_names: Vec::new(),
@@ -1641,7 +1665,7 @@ fn check_ingest_interactive_signature_sidecar(rom_names: &[&str], selected: Opti
         assert!(calls.is_empty(), "unexpected ROM prompt: {calls:?}");
     } else {
         assert_eq!(calls.len(), 1, "ROMs must still prompt");
-        assert_eq!(calls[0].len(), rom_names.len());
+        assert_eq!(calls[0], rom_names, "prompt names must be archive-relative");
         assert!(
             calls[0].iter().all(|name| !name.ends_with("patch")),
             "{calls:?}"
@@ -1690,17 +1714,149 @@ fn check_ingest_interactive_signature_sidecar(rom_names: &[&str], selected: Opti
 
 #[test]
 fn ingest_interactive_signature_sidecar_does_not_prompt_for_one_rom() {
-    check_ingest_interactive_signature_sidecar(&["game.bin"], None);
+    check_ingest_interactive_signature_sidecar(&["game.bin"], None, "absolute");
 }
 
 #[test]
 fn ingest_interactive_signature_sidecar_keeps_disc_together() {
-    check_ingest_interactive_signature_sidecar(&["game.cue", "game.bin"], None);
+    check_ingest_interactive_signature_sidecar(&["game.cue", "game.bin"], None, "absolute");
 }
 
 #[test]
 fn ingest_interactive_signature_sidecar_survives_rom_choice_and_cancellation() {
-    check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], Some(1));
-    check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], None);
-    check_ingest_interactive_signature_sidecar(&["game.bin", "raw"], Some(1));
+    check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], Some(1), "absolute");
+    check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], None, "absolute");
+    check_ingest_interactive_signature_sidecar(&["game.bin", "raw"], Some(1), "absolute");
+}
+
+#[test]
+fn ingest_interactive_relative_output_uses_archive_names() {
+    check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], Some(1), "relative");
+}
+
+#[cfg(unix)]
+#[test]
+fn ingest_interactive_symlink_output_uses_archive_names() {
+    check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], Some(1), "symlink");
+}
+
+fn check_ingest_interactive_nested_archive(extra: Option<&'static str>, selected: Option<usize>) {
+    std::thread::Builder::new()
+        .stack_size(32 * 1024 * 1024)
+        .spawn(move || check_ingest_interactive_nested_archive_body(extra, selected))
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+fn check_ingest_interactive_nested_archive_body(extra: Option<&str>, selected: Option<usize>) {
+    struct JsonLines(Mutex<Vec<serde_json::Value>>);
+    impl rom_weaver_core::ProgressSink for JsonLines {
+        fn emit(&self, event: rom_weaver_core::ProgressEvent) {
+            self.0
+                .lock()
+                .unwrap()
+                .push(serde_json::to_value(event).unwrap());
+        }
+    }
+    struct Prompt {
+        calls: Mutex<Vec<Vec<String>>>,
+        selected: Option<usize>,
+        output: PathBuf,
+    }
+    impl SelectionPrompter for Prompt {
+        fn select(&self, _heading: &str, candidates: &[PromptCandidate]) -> Selection {
+            assert!(
+                !self.output.exists() || std::fs::read_dir(&self.output).unwrap().next().is_none(),
+                "ordinary archive prompts must precede extraction"
+            );
+            self.calls.lock().unwrap().push(
+                candidates
+                    .iter()
+                    .map(|candidate| candidate.label.clone())
+                    .collect(),
+            );
+            self.selected
+                .map(Selection::Selected)
+                .unwrap_or(Selection::Cancelled)
+        }
+        fn select_many(&self, _heading: &str, _candidates: &[PromptCandidate]) -> SelectionList {
+            panic!("ROM selection must be single-select");
+        }
+        fn confirm(&self, _heading: &str, _details: &[String]) -> bool {
+            false
+        }
+    }
+    let temp = assert_fs::TempDir::new().unwrap();
+    let output = temp.path().join("out");
+    let prompt = Arc::new(Prompt {
+        calls: Mutex::new(Vec::new()),
+        selected,
+        output: output.clone(),
+    });
+    let events = Arc::new(JsonLines(Mutex::new(Vec::new())));
+    let app = CliApp::new(events.clone(), prompt.clone(), true, true, false);
+    let roms = ["alpha.nes", "beta.nes"].map(|name| {
+        let path = temp.path().join(name);
+        std::fs::write(&path, b"raw ROM payload").unwrap();
+        path
+    });
+    let inner = temp.path().join("inner.zip");
+    compress_zip_fixture(&app, &roms, &inner);
+    let mut members = vec![inner];
+    if let Some(name) = extra {
+        let path = temp.path().join(name);
+        if name.ends_with(".zip") {
+            compress_zip_fixture(&app, &roms, &path);
+        } else {
+            std::fs::write(&path, b"license text").unwrap();
+        }
+        members.push(path);
+    }
+    let archive = temp.path().join("outer.zip");
+    compress_zip_fixture(&app, &members, &archive);
+    let outcome = app.run(Commands::Ingest(super::IngestCommand {
+        input: archive,
+        output,
+        database: Vec::new(),
+        select: Vec::new(),
+        sidecar_names: Vec::new(),
+        sidecar_only: false,
+        input_name: None,
+        no_ignore: false,
+        no_nested_extract: false,
+        preserve_nested_formats: Vec::new(),
+        split_bin: None,
+        checksum: vec!["crc32".to_string()],
+        threads: ThreadBudget::Fixed(1),
+    }));
+    let calls = prompt.calls.lock().unwrap();
+    if extra.is_none() {
+        assert!(
+            calls.is_empty(),
+            "nested descent must not prompt: {calls:?}"
+        );
+    } else {
+        assert_eq!(calls.len(), 1);
+    }
+    let events = events.0.lock().unwrap();
+    assert_eq!(outcome.exit_code, 0, "{events:?}");
+    let ingest = &events.last().unwrap()["details"]["ingest"];
+    assert_eq!(ingest["assets"].as_array().unwrap().len(), 2);
+    assert!(ingest["patches"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn ingest_interactive_nested_roms_do_not_prompt() {
+    check_ingest_interactive_nested_archive(None, None);
+}
+
+#[test]
+fn ingest_interactive_known_archives_prompt_before_extraction() {
+    check_ingest_interactive_nested_archive(Some("other.zip"), Some(0));
+}
+
+#[test]
+fn ingest_interactive_license_prompts_before_nested_extraction() {
+    check_ingest_interactive_nested_archive(Some("LICENSE"), Some(1));
 }

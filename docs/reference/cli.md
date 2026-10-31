@@ -186,7 +186,7 @@ Extension-less payload names and dotted names without a plausible extension pass
 
 `ingest` and commands resolving one extracted payload classify eligible names using reliable patch signatures. Other bytes remain ROM candidates; `extract` keeps eligible names under either filter. Stream wrappers apply these rules to the inferred payload name: `rom.gz`, `Hack v1.1.gz`, and `Dr. Mario (Japan, USA).gz` qualify. Real-looking extensions such as `.exe`, `.msu`, `.pcm`, and `.srm` do not become ROM or patch candidates. Directory entries never become payload candidates.
 
-Interactive `ingest` resolves ROM choices after extraction when archives contain eligible unnamed payloads. Signature-classified patches stay outside ROM prompts and remain sidecars when a ROM is selected.
+Interactive `ingest` resolves ROM choices after extraction for eligible unnamed entries without known nested containers. Known nested containers retain selection before extraction, with no further prompts during descent. Signature-classified patches stay outside post-extraction ROM prompts and remain sidecars after selection.
 
 The ignore rules do not recognize `README`, `LICENSE`, or `README.1ST` by name. These files, and unignored extension-less tools such as `xdelta3`, remain ROM candidates without a reliable patch signature. They can cause ROM ambiguity or classify an otherwise patch-only archive as a ROM source. `--no-ignore` does not change this limitation.
 
