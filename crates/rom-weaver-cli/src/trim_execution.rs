@@ -21,6 +21,9 @@ pub(super) enum TrimOutputPlan {
     Pack {
         handler: Arc<dyn ContainerHandler>,
         entry_name: String,
+        /// The format name passed to the container's `create`; a media-layout variant such as
+        /// `chd-dvd` where the container name alone would be inferred from the file.
+        create_format: &'static str,
     },
 }
 
@@ -381,8 +384,7 @@ impl CliApp {
         let subject = kind.output_subject();
         let extension = destination
             .extension()
-            .and_then(|extension| extension.to_str())
-            .map(str::to_ascii_lowercase);
+            .map(|extension| extension.to_string_lossy().to_ascii_lowercase());
         let Some(handler) = self.containers.find_by_output_extension(destination) else {
             // A GameCube/Wii trim writes RVZ, so any other extension would misname it. Only an
             // extensionless name (such as the staging file behind `--output -`) is left alone.
@@ -420,13 +422,24 @@ impl CliApp {
                 ?kind,
                 "trim rejected an output container that is not valid for the input"
             );
+            let plain_name = source
+                .extension()
+                .map(|extension| format!(" such as `.{}`", extension.to_string_lossy()))
+                .unwrap_or_default();
             return Err(RomWeaverError::Validation(format!(
-                "{} is not a valid trim output for {subject}: `{}` must end in one of {accepted}",
+                "{} is not a valid trim output for {subject}: `{}` must end in one of {accepted}, or be a plain name{plain_name} that writes the trimmed file itself",
                 format.to_ascii_uppercase(),
                 destination.display()
             )));
         }
         let entry_name = Self::trim_pack_entry_name(kind, source, destination);
+        // CHD infers its media from the packed file, which would build a CD or raw CHD for an
+        // XISO; it is a DVD-class disc, so ask for the DVD layout outright.
+        let create_format = if kind == TrimInputKind::Xiso && descriptor.matches_name("chd") {
+            "chd-dvd"
+        } else {
+            format
+        };
         debug!(
             destination = %destination.display(),
             format,
@@ -436,6 +449,7 @@ impl CliApp {
         Ok(TrimOutputPlan::Pack {
             handler,
             entry_name,
+            create_format,
         })
     }
 
@@ -446,15 +460,15 @@ impl CliApp {
     fn trim_pack_entry_name(kind: TrimInputKind, source: &Path, destination: &Path) -> String {
         let stem = destination
             .file_stem()
-            .and_then(|stem| stem.to_str())
+            .map(|stem| stem.to_string_lossy().into_owned())
             .filter(|stem| !stem.is_empty())
-            .unwrap_or("trimmed");
+            .unwrap_or_else(|| "trimmed".to_string());
         let payload_extension = if kind == TrimInputKind::RvzConvert {
-            Some("rvz")
+            Some("rvz".to_string())
         } else {
             source
                 .extension()
-                .and_then(|extension| extension.to_str())
+                .map(|extension| extension.to_string_lossy().into_owned())
                 .filter(|extension| !extension.is_empty())
         };
         match payload_extension {
@@ -465,13 +479,15 @@ impl CliApp {
             {
                 format!("{stem}.{extension}")
             }
-            _ => stem.to_string(),
+            _ => stem,
         }
     }
 
     /// Run [`Self::trim_file`] for a destination that may be a container. A packed output is
     /// trimmed into a scratch file named as it will be inside the container, then packed with
     /// the container's own `create`; a dry run only reports the container as the output.
+    /// For a completed GameCube/Wii conversion the second value is the disc's logical size,
+    /// read from the RVZ itself (before it is packed away from the scratch file).
     pub(super) fn trim_file_into_output(
         &self,
         source: &Path,
@@ -479,16 +495,24 @@ impl CliApp {
         plan: &TrimOutputPlan,
         request: TrimRequest,
         context: &OperationContext,
-    ) -> Result<NdsTrimOutcome> {
+    ) -> Result<(NdsTrimOutcome, Option<u64>)> {
+        let logical_size = |rvz: &Path| {
+            (request.kind == TrimInputKind::RvzConvert && !request.dry_run)
+                .then(|| self.rvz_logical_size(rvz, context))
+                .flatten()
+        };
         let TrimOutputPlan::Pack {
             handler,
             entry_name,
+            create_format,
         } = plan
         else {
-            return self.trim_file(source, destination, request, context);
+            let outcome = self.trim_file(source, destination, request, context)?;
+            let size = logical_size(&outcome.output_path);
+            return Ok((outcome, size));
         };
         if request.dry_run {
-            return self.trim_file(source, destination, request, context);
+            return Ok((self.trim_file(source, destination, request, context)?, None));
         }
         let scratch = context.temp_paths().next_path("trim-pack", None);
         fs::create_dir_all(&scratch)?;
@@ -496,15 +520,17 @@ impl CliApp {
         let result = self
             .trim_file(source, &trimmed, request, context)
             .and_then(|mut outcome| {
+                let size = logical_size(&trimmed);
                 Self::pack_trimmed_output(
                     handler.as_ref(),
                     entry_name,
+                    create_format,
                     &trimmed,
                     destination,
                     context,
                 )?;
                 outcome.output_path = destination.to_path_buf();
-                Ok(outcome)
+                Ok((outcome, size))
             });
         if let Err(error) = fs::remove_dir_all(&scratch) {
             debug!(scratch = %scratch.display(), %error, "trim pack scratch cleanup failed");
@@ -512,11 +538,27 @@ impl CliApp {
         result
     }
 
+    /// The uncompressed disc size recorded inside an RVZ, if it can be read.
+    fn rvz_logical_size(&self, rvz: &Path, context: &OperationContext) -> Option<u64> {
+        let handler = self.containers.find_by_name("rvz")?;
+        let entries = handler
+            .list_entry_records(
+                &ContainerProbeRequest {
+                    source: rvz.to_path_buf(),
+                    split_bin: false,
+                },
+                context,
+            )
+            .ok()?;
+        entries.first().and_then(|entry| entry.size)
+    }
+
     /// Pack `trimmed` into `destination` with `handler`, keeping an existing file at the
     /// destination if the pack fails (the same staging `compress` uses for `--force`).
     fn pack_trimmed_output(
         handler: &dyn ContainerHandler,
         entry_name: &str,
+        create_format: &str,
         trimmed: &Path,
         destination: &Path,
         context: &OperationContext,
@@ -544,7 +586,7 @@ impl CliApp {
                 archive_names: names_entries.then(|| vec![entry_name.to_string()]),
                 inputs: vec![trimmed.to_path_buf()],
                 output: staged.path().to_path_buf(),
-                format: format.to_string(),
+                format: create_format.to_string(),
                 codec: None,
                 level: None,
                 parent: None,

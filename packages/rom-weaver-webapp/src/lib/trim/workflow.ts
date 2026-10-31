@@ -1,4 +1,3 @@
-import { attachPatchFileSourceRef } from "../../lib/input/binary-service.ts";
 import { getPrimaryInputAsset } from "../../lib/input/input-assets.ts";
 import { prepareInputAssets } from "../../lib/input/input-preparation-service.ts";
 import { getProgressEventPercent } from "../../presentation/workflow-presentation.ts";
@@ -218,19 +217,6 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
     materializeBlob: false,
     preferExternalFilePath: true,
   });
-  if (
-    isRomSpecificCompressionFormat(compression) &&
-    result.output.path &&
-    getFileNameExtension(result.output.fileName) === "rvz" &&
-    getFileNameExtension(result.output.path) !== "rvz"
-  ) {
-    const snapshot = await result.output.vfs.getFile?.(result.output.path);
-    if (!snapshot) throw new Error("Trim output cannot be staged with its actual format");
-    attachPatchFileSourceRef(trimmedFile, {
-      fileName: result.output.fileName,
-      source: new File([snapshot], result.output.fileName, { type: snapshot.type }),
-    });
-  }
   const output = await createCompressedTrimOutput(trimmedFile, compression);
   const compressionTimeMs = roundElapsedMs(output?.timing);
   return {

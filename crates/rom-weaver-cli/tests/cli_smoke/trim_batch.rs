@@ -1819,6 +1819,12 @@ fn trim_output_container_must_be_valid_for_the_input_type() {
                 "{name}: {message}"
             );
             assert!(message.contains(".zip, .7z"), "{name}: {message}");
+            assert!(
+                message.contains(
+                    "or be a plain name such as `.nds` that writes the trimmed file itself"
+                ),
+                "{name}: {message}"
+            );
             assert!(!output.path().exists(), "{name} must not be written");
         }
     }
@@ -1894,12 +1900,16 @@ fn trim_output_z3ds_packs_a_3ds_rom_and_chd_packs_an_xiso() {
 fn trim_gamecube_disc_output_zip_packs_the_rvz_and_other_extensions_are_rejected() {
     let temp = setup_temp_dir();
     let source = temp.child("disc.iso");
-    fs::write(source.path(), build_test_gamecube_iso(0x4000)).expect("iso fixture");
+    let iso = build_test_gamecube_iso(0x4000);
+    fs::write(source.path(), &iso).expect("iso fixture");
 
     for (name, entry) in [("pack.zip", "pack.rvz"), ("pack.iso.7z", "pack.iso.rvz")] {
         let output = temp.child(name);
         let terminal = trim_to_output(source.path(), output.path(), &[], 0);
         assert_eq!(terminal["status"], "succeeded", "{name}");
+        // The logical sizes come from the RVZ before it is packed into the archive.
+        assert_eq!(terminal["details"]["input_size"], iso.len(), "{name}");
+        assert_eq!(terminal["details"]["raw_size"], iso.len(), "{name}");
         assert_eq!(
             terminal["details"]["output_format"],
             name.rsplit('.').next().expect("ext")
@@ -1937,4 +1947,96 @@ fn trim_gamecube_disc_output_zip_packs_the_rvz_and_other_extensions_are_rejected
             assert!(!output.path().exists(), "{name} must not be written");
         }
     }
+}
+
+/// CHD infers its media from the packed file's name and size, which turns a small XISO into a
+/// CD CHD and a `.xiso` into a raw one; an XISO is a DVD-class disc and must always be a DVD CHD.
+#[test]
+fn trim_xiso_into_chd_builds_a_dvd_chd_for_xiso_and_iso_sources() {
+    let temp = setup_temp_dir();
+    let source_tree = temp.child("xiso-source");
+    fs::create_dir_all(source_tree.path()).expect("source tree root");
+    fs::write(source_tree.child("default.xbe").path(), vec![7_u8; 4096]).expect("xbe");
+    for name in ["source.iso", "source.xiso"] {
+        let xiso = temp.child(name);
+        write_xiso_fixture_from_directory(source_tree.path(), xiso.path());
+        let chd = temp.child(format!("{name}.chd"));
+        let terminal = trim_to_output(xiso.path(), chd.path(), &[], 0);
+        assert_eq!(terminal["status"], "succeeded", "{name}");
+        let probe = parse_single_json_line(&command_stdout(
+            &[
+                "probe",
+                "--input",
+                chd.path().to_str().expect("path"),
+                "--json",
+            ],
+            0,
+        ));
+        assert_eq!(probe["details"]["chd"]["media_kind"], "dvd", "{name}");
+    }
+}
+
+/// A name that is not valid UTF-8 still has an extension: `.rvz` must be read as `.rvz`
+/// (not rejected as a non-rvz name) and `.zip` must pack rather than write a raw ROM.
+#[cfg(unix)]
+#[test]
+fn trim_reads_the_extension_of_a_non_utf8_file_name() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
+    let temp = setup_temp_dir();
+    let run = |args: &[&OsStr], code: i32| {
+        let output = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(args)
+            .assert()
+            .code(code)
+            .get_output()
+            .stdout
+            .clone();
+        parse_single_json_line(&output)
+    };
+    let name = |bytes: &[u8]| temp.path().join(OsStr::from_bytes(bytes));
+
+    let disc = name(b"disc\xe9.iso");
+    fs::write(&disc, build_test_gamecube_iso(0x4000)).expect("iso fixture");
+    let terminal = run(
+        &[OsStr::new("trim"), disc.as_os_str(), OsStr::new("--json")],
+        0,
+    );
+    assert_eq!(terminal["status"], "succeeded", "default destination");
+    assert!(name(b"disc\xe9.trim.rvz").exists());
+
+    let rvz = name(b"o\xe9.rvz");
+    let terminal = run(
+        &[
+            OsStr::new("trim"),
+            disc.as_os_str(),
+            OsStr::new("--output"),
+            rvz.as_os_str(),
+            OsStr::new("--json"),
+        ],
+        0,
+    );
+    assert_eq!(terminal["status"], "succeeded", "-o .rvz");
+    assert_eq!(&fs::read(&rvz).expect("rvz")[..3], b"RVZ");
+
+    let rom = name(b"x\xe9.nds");
+    fs::write(
+        &rom,
+        build_test_nds_rom(0x00, 0x2000, 0x2000, 0x4000, false),
+    )
+    .expect("nds fixture");
+    let zip = name(b"x\xe9.zip");
+    let terminal = run(
+        &[
+            OsStr::new("trim"),
+            rom.as_os_str(),
+            OsStr::new("--output"),
+            zip.as_os_str(),
+            OsStr::new("--json"),
+        ],
+        0,
+    );
+    assert_eq!(terminal["status"], "succeeded", "-o .zip");
+    assert_eq!(&fs::read(&zip).expect("zip")[..2], b"PK");
 }

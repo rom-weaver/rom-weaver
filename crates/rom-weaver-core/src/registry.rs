@@ -40,13 +40,12 @@ impl FormatDescriptor {
     }
 
     pub fn matches_path(&self, path: &Path) -> bool {
-        let file_name = path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .map(str::to_ascii_lowercase);
-        let Some(file_name) = file_name else {
+        let Some(file_name) = path.file_name() else {
             return false;
         };
+        // Lossy conversion keeps a non-UTF-8 name matchable: the extensions are ASCII, so
+        // the replacement character can only appear before the suffix being compared.
+        let file_name = file_name.to_string_lossy().to_ascii_lowercase();
         self.extensions
             .iter()
             .any(|extension| file_name.ends_with(&extension.to_ascii_lowercase()))

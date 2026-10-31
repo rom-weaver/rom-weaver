@@ -44,11 +44,11 @@ For a GameCube or Wii disc, keep the default `.rvz` output name: this path conve
 | Input | Output name | Result |
 | --- | --- | --- |
 | Any trimmable ROM or disc | `.zip`, `.7z` | The trimmed file inside the archive. |
-| XISO disc | `.chd` | The trimmed disc packed as a CHD. |
-| 3DS ROM | `.z3ds` | The trimmed ROM packed as Z3DS. |
+| XISO disc | `.chd` | The trimmed disc packed as a DVD CHD. |
+| 3DS ROM | `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, `.z3dsx` | The trimmed ROM packed as Z3DS. |
 | GameCube or Wii disc | `.rvz` | The RVZ conversion, written as the output. |
-| XISO disc | `.xiso` | The rebuilt XISO, written as the output. |
-| NDS, GBA, 3DS ROM or XISO | any extension that is not a container | The trimmed file itself, as before. |
+| XISO disc | `.xiso`, `.xiso.iso` | The rebuilt XISO, written as the output. |
+| NDS, GBA, 3DS ROM or XISO | any extension that is not a container (such as `.nds` or `.iso`) | The trimmed file itself, as before. |
 | Anything | another container (`.chd` for a cartridge ROM, `.rvz` for an NDS ROM, `.tar.gz`, and so on) | An error; nothing is written. |
 | GameCube or Wii disc | any other extension (`.iso`, `.bin`, `.nds`, `.chd`, ...) | An error: trim writes RVZ, not a plain disc image. Use `extract` for that. A name with no extension is still accepted. |
 

@@ -1064,6 +1064,10 @@ impl CliApp {
             },
             config.context,
         );
+        let (trim_result, logical_size) = match trim_result {
+            Ok((outcome, size)) => (Ok(outcome), size),
+            Err(error) => (Err(error), None),
+        };
         let trim_result = match (trim_result, repack_root) {
             (Ok(outcome), Some(repack_root)) if !config.dry_run => {
                 let archive = trim_source
@@ -1106,26 +1110,9 @@ impl CliApp {
                         "output_format".into(),
                         json!(packed_format.unwrap_or("rvz")),
                     );
-                    if !config.dry_run && packed_format.is_none() {
-                        let logical_size =
-                            self.containers.find_by_name("rvz").and_then(|handler| {
-                                handler
-                                    .list_entry_records(
-                                        &ContainerProbeRequest {
-                                            source: outcome.output_path.clone(),
-                                            split_bin: false,
-                                        },
-                                        config.context,
-                                    )
-                                    .ok()
-                                    .and_then(|entries| {
-                                        entries.first().and_then(|entry| entry.size)
-                                    })
-                            });
-                        if let Some(size) = logical_size {
-                            metadata.insert("input_size".into(), json!(size));
-                            metadata.insert("raw_size".into(), json!(size));
-                        }
+                    if let Some(size) = logical_size {
+                        metadata.insert("input_size".into(), json!(size));
+                        metadata.insert("raw_size".into(), json!(size));
                     }
                     state.single_metadata = Some(Value::Object(metadata));
                 }

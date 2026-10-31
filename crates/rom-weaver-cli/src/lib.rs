@@ -1417,14 +1417,14 @@ pub fn trim_input_extensions() -> Vec<&'static str> {
 
 impl TrimInputKind {
     fn from_path(path: &Path) -> Option<Self> {
-        let file_name = path.file_name()?.to_str()?.to_ascii_lowercase();
+        let file_name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
         for (extension, kind) in TRIM_PATH_EXTENSIONS {
             if *kind == Self::Xiso && file_name.ends_with(&format!(".{extension}")) {
                 return Some(*kind);
             }
         }
 
-        let path_extension = path.extension()?.to_str()?;
+        let path_extension = path.extension()?.to_string_lossy();
         TRIM_PATH_EXTENSIONS
             .iter()
             .find(|(extension, kind)| {

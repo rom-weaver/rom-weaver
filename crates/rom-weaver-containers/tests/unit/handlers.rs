@@ -6457,6 +6457,21 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
+    /// The default `validate_create` accepts everything, so a creatable handler that does not
+    /// override it silently skips `compress --dry-run` validation. Adding a creatable handler
+    /// fails this test until its `validate_create` is written and covered by the test above.
+    #[test]
+    fn every_creatable_format_is_covered_by_the_validate_create_test() {
+        let mut creatable: Vec<&str> = ContainerRegistry::new()
+            .handlers()
+            .iter()
+            .filter(|handler| handler.capabilities().create)
+            .map(|handler| handler.descriptor().name)
+            .collect();
+        creatable.sort_unstable();
+        assert_eq!(creatable, ["7z", "chd", "rvz", "z3ds", "zip"]);
+    }
+
     fn garbage_archive_bytes() -> Vec<u8> {
         // Deliberately not the magic of any container libarchive recognizes: a short run of
         // pseudo-random bytes. libarchive's format auto-detection rejects this, which the
