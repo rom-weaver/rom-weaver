@@ -31,7 +31,7 @@ For a disc inside ZIP, 7z, or another supported container, add the container to 
 
 Block size defaults to 131072 bytes. Enter a power of two from 32768 to 1073741824 bytes. Examples include 32768, 65536, and 1048576. Invalid values show an error before compression starts.
 
-If RVZ is unavailable, check that **Inputs** contains only one compatible disc image. Multiple files offer archive output instead.
+If RVZ is unavailable, check that **Inputs** contains only one compatible disc image. Multiple files offer archive output instead. An `.iso` that Rom Weaver does not recognise as a GameCube or Wii disc, such as a DVD image, is not offered RVZ.
 
 Keep the page open until compression and download finish. To stop compression, use the cancel control on the progress bar.
 

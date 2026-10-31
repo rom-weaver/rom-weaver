@@ -240,6 +240,15 @@ impl ContainerHandlerOperations for XisoContainerHandler {
             "xiso extract complete"
         );
 
+        // The XDVDFS rebuild writes at seeking offsets, so the bytes cannot be hashed in flight.
+        let checksum = match hash_extracted_file(context, &output_path) {
+            Ok(checksum) => checksum,
+            Err(error) => {
+                let _ = fs::remove_file(&output_path);
+                return Err(error);
+            }
+        };
+
         let report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(XISO.name.to_string()),
@@ -253,6 +262,7 @@ impl ContainerHandlerOperations for XisoContainerHandler {
             Some(100.0),
             Some(execution),
         );
+        let report = attach_extract_checksum_details(report, checksum.into_iter().collect());
         Ok(attach_emitted_file_paths(report, &[output_path]))
     }
 

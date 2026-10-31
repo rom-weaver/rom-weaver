@@ -64,7 +64,7 @@ use serde_json::{Map, Value, json};
 use zeekstd::{DecodeOptions as ZeekstdDecodeOptions, SeekTable as ZeekstdSeekTable};
 use zstd::bulk::Compressor as ZstdCompressor;
 
-use archive_entries::{ArchiveInputEntry, collect_archive_inputs, sum_input_file_bytes};
+use archive_entries::{ArchiveInputEntry, collect_create_entries, sum_input_file_bytes};
 pub use archive_formats::{
     ArchiveExtensionAlias, ArchiveFormatMetadata, ArchiveMagicSignature, archive_format_metadata,
 };
@@ -75,10 +75,11 @@ use constants::{
     Z3DS_MAX_COMPRESSION_LEVEL, Z3DS_MIN_COMPRESSION_LEVEL, copy_progress_buffer_size,
 };
 use extract_support::{
-    ContainerProgressContext, ExtractChunkWriter, ExtractedFileChecksum,
-    attach_extract_checksum_details, copy_reader_with_progress, create_extract_checksum,
-    decode_tasks_ordered, emit_container_indeterminate_progress, emit_container_step_progress,
-    ensure_extract_output_available, stream_extract_identity,
+    ContainerProgressContext, ExtractChunkWriter, ExtractHasher, ExtractedFileChecksum,
+    HashingWriter, attach_extract_checksum_details, copy_reader_with_progress,
+    create_extract_checksum, decode_tasks_ordered, emit_container_indeterminate_progress,
+    emit_container_step_progress, ensure_extract_output_available, hash_extracted_file,
+    stream_extract_identity,
 };
 #[cfg(test)]
 use formats::SEVEN_Z;

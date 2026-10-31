@@ -25,7 +25,7 @@ Convert a ROM patch to another format, such as BPS to IPS or IPS to BPS, with [C
 4. Choose the new format in **Patch format**.
 5. Choose **Create patch & download**.
 
-The format list here does not check file sizes. IPS stops at 16 MiB, and disc images need xdelta or PPF. If Create reports a size limit, choose BPS for a cartridge ROM or xdelta for a disc.
+The format list follows file sizes. IPS stops at 16 MiB, BPS stops when the original and modified files together exceed 214,748,364 bytes (about 204.8 MiB), and disc images need xdelta or PPF. If Create reports a size limit, choose xdelta, or BPS for a cartridge ROM small enough to fit.
 
 To merge several patches or add cheats, see [Build from patches and cheats](create-rom-patches.md#build-from-patches-and-cheats).
 

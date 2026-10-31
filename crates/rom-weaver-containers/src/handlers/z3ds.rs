@@ -466,6 +466,21 @@ impl Z3dsContainerHandler {
         RomWeaverError::Validation(format!("z3ds {stage} failed: {error}"))
     }
 
+    /// The single input and the compression level a create request resolves to; the checks
+    /// `create` and `validate_create` share.
+    fn resolve_create_input_and_level<'a>(
+        &self,
+        request: &'a ContainerCreateRequest,
+    ) -> Result<(&'a PathBuf, i32)> {
+        let [input_path] = request.inputs.as_slice() else {
+            return Err(RomWeaverError::Validation(
+                "z3ds create currently requires exactly one input file; pass one 3DS file (.3ds, .cia, .cci, .cxi, or .3dsx)".into(),
+            ));
+        };
+        let level = self.resolve_level(request.codec.as_deref(), request.level)?;
+        Ok((input_path, level))
+    }
+
     fn resolve_level(&self, codec: Option<&str>, level: Option<i32>) -> Result<i32> {
         let level = level.unwrap_or(Z3DS_DEFAULT_COMPRESSION_LEVEL);
         if !(Z3DS_MIN_COMPRESSION_LEVEL..=Z3DS_MAX_COMPRESSION_LEVEL).contains(&level) {
@@ -982,19 +997,21 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         Ok(attach_emitted_file_paths(report, &[output_path]))
     }
 
+    fn validate_create(
+        &self,
+        request: &ContainerCreateRequest,
+        _context: &OperationContext,
+    ) -> Result<()> {
+        self.resolve_create_input_and_level(request)?;
+        Ok(())
+    }
+
     fn create(
         &self,
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        if request.inputs.len() != 1 {
-            return Err(RomWeaverError::Validation(
-                "z3ds create currently requires exactly one input file; pass one 3DS file (.3ds, .cia, .cci, .cxi, or .3dsx)".into(),
-            ));
-        }
-
-        let input_path = &request.inputs[0];
-        let level = self.resolve_level(request.codec.as_deref(), request.level)?;
+        let (input_path, level) = self.resolve_create_input_and_level(request)?;
         let input_size = fs::metadata(input_path)?.len();
         let create_tasks = self.build_create_tasks(input_size)?;
         // Plan threads without building a shared pool: the scoped pipeline owns exactly the worker

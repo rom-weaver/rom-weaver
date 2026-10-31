@@ -43,7 +43,7 @@ That difference decides most of your choice. For cartridge releases, built-in va
 
 | Format | Built-in validation | Size and layout limits | Compatibility and common use |
 | --- | --- | --- | --- |
-| BPS | CRC32 for source, output, and patch | Variable-length sizes and offsets; creator memory limits still apply | Cartridge releases with a BPS-compatible patcher |
+| BPS | CRC32 for source, output, and patch | Variable-length sizes and offsets; rom-weaver creates BPS only when the original and modified files total at most 214,748,364 bytes (about 204.8 MiB) | Cartridge releases with a BPS-compatible patcher |
 | IPS / IPS32 | No source, output, or patch checksum | IPS record starts use 24-bit offsets, below 16 MiB; IPS32 uses 32-bit offsets | IPS for older patchers; IPS32 requires explicit tool support |
 | UPS | CRC32 for source, output, and patch | Variable-length sizes and offsets, without IPS's 24-bit boundary | Releases whose community tools expect UPS |
 | xdelta / VCDIFF | Checks vary by encoder and options; output-window checks are not a whole-source checksum | Windowed encoding supports large files; decoder limits and extensions vary | Large binaries and disc images with compatible VCDIFF tools |
@@ -57,7 +57,7 @@ No format records every human requirement. Region, revision, header state, patch
 
 BPS stores a checksum of the original, of the finished file, and of the patch itself. A patcher can therefore reject the wrong starting file, and confirm the result came out right.
 
-That makes it a strong default for cartridge games when your audience has a BPS-compatible patcher. rom-weaver applies and creates BPS; to publish one, see the [browser](../how-to/create-rom-patches.md) or [CLI](../how-to/cli-create.md) create guide.
+That makes it a strong default for cartridge games when your audience has a BPS-compatible patcher. rom-weaver applies BPS and creates it in memory, so the original and modified files together can total at most 214,748,364 bytes (about 204.8 MiB, so two 102.4 MiB files). Create stops offering BPS above that total and suggests xdelta; to publish one, see the [browser](../how-to/create-rom-patches.md) or [CLI](../how-to/cli-create.md) create guide.
 
 ## IPS and IPS32
 

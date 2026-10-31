@@ -1105,3 +1105,14 @@ fn rvz_block_size_validation_accepts_group_size_boundaries() {
     }
     ContainerCreateRequest::validate_rvz_block_size("zip", None).expect("no RVZ option");
 }
+
+#[cfg(unix)]
+#[test]
+fn format_descriptor_matches_a_non_utf8_file_name_by_its_ascii_extension() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
+    let matching = Path::new(OsStr::from_bytes(b"disc\xe9.7z"));
+    assert!(MATCH_DESCRIPTOR.matches_path(matching));
+    let other = Path::new(OsStr::from_bytes(b"disc\xe9.zip"));
+    assert!(!MATCH_DESCRIPTOR.matches_path(other));
+}

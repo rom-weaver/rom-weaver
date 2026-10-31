@@ -13,7 +13,6 @@ import { Notice } from "./components/ds/feedback.tsx";
 import type { OutputCardProps } from "./components/ds/output-card.tsx";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { releaseLargeEntries } from "./emulator-session-store.ts";
-import { createCreatePatchFormatOptions } from "./output-view-model.ts";
 import { resolveCreateExecutionOutputName } from "./create-patch-output-model.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
 import { createWorkflowFormProgress, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
@@ -36,7 +35,9 @@ const useCombinedPatch = ({
   onPatchTypeChange,
   romSize,
   patchTargetSize,
+  lastDeclaredTargetSize,
   maxKnownTargetSize,
+  tailMaxWriteEnd,
   settings,
   onComplete,
   onError,
@@ -51,7 +52,9 @@ const useCombinedPatch = ({
   onPatchTypeChange?: (value: string) => void;
   romSize?: number;
   patchTargetSize?: number;
+  lastDeclaredTargetSize?: number;
   maxKnownTargetSize?: number;
+  tailMaxWriteEnd?: number;
   settings?: CreateSettings;
   onComplete?: (result: BrowserCreateResult) => void;
   onError?: (error: Error) => void;
@@ -62,25 +65,51 @@ const useCombinedPatch = ({
   // Preparing the run re-stages its sources and briefly clears their sizes, so a running job MUST keep the sizes it started with.
   const [runSizes, setRunSizes] = useState<{
     patchTargetSize?: number;
+    lastDeclaredTargetSize?: number;
     maxKnownTargetSize?: number;
     romSize?: number;
+    tailMaxWriteEnd?: number;
   } | null>(null);
-  const formatSizes = runSizes ?? { patchTargetSize, maxKnownTargetSize, romSize };
+  const formatSizes = runSizes ?? {
+    patchTargetSize,
+    lastDeclaredTargetSize,
+    maxKnownTargetSize,
+    romSize,
+    tailMaxWriteEnd,
+  };
   // Known growth MUST still constrain format limits when another patch leaves shrinking uncertain.
   // The largest known size also sets the best-first order, so the fallback matches its size bucket.
+  // It is not the pair Create indexes (an intermediate may shrink), so the BPS pair cap is left to the final size.
+  const largestKnownSize = Math.max(formatSizes.romSize ?? 0, formatSizes.maxKnownTargetSize ?? 0);
   const knownTargetFormats = getSelectableCreatePatchFormats({
-    modifiedSize: Math.max(formatSizes.romSize ?? 0, formatSizes.maxKnownTargetSize ?? 0),
+    applyBpsMemoryCap: false,
+    modifiedSize: largestKnownSize,
   });
+  // Format buckets and shrink limits keep using the largest known size for an undeclared final patch.
+  const finalTargetSize = formatSizes.patchTargetSize ?? largestKnownSize;
+  // BPS, UPS and VCDIFF report a target size; other headers declare one the engine does not report, and
+  // PPF, BDF, APS GBA, RUP and IPS32 can grow the output past its start. An undeclared tail starts from the
+  // last declared size (the ROM when none) only if every tail patch is bounded (24-bit IPS, EBP: no write
+  // ends past tailMaxWriteEnd); otherwise the final size is unknowable and the largest known size is
+  // assumed, since a wrongly offered BPS is only rejected after the whole chain has been applied.
+  const tailStartSize = formatSizes.lastDeclaredTargetSize ?? formatSizes.romSize ?? 0;
+  const bpsCapTargetSize =
+    formatSizes.patchTargetSize ??
+    (formatSizes.tailMaxWriteEnd === undefined
+      ? largestKnownSize
+      : Math.max(tailStartSize, formatSizes.tailMaxWriteEnd));
   const finalTargetFormats = getSelectableCreatePatchFormats({
+    bpsCapModifiedSize: bpsCapTargetSize,
     originalSize: formatSizes.romSize,
-    modifiedSize: formatSizes.patchTargetSize,
+    modifiedSize: finalTargetSize,
   });
   const candidateFormats = knownTargetFormats.filter((value) => finalTargetFormats.includes(value));
   // Create rejects formats outside the size policy, so a choice that no longer fits falls back to the first that does.
   const format = getPreferredCreatePatchFormat({
     automaticFormatSelection: false,
+    bpsCapModifiedSize: bpsCapTargetSize,
     candidateFormats,
-    modifiedSize: formatSizes.patchTargetSize,
+    modifiedSize: finalTargetSize,
     originalSize: formatSizes.romSize,
     requestedFormat: patchType || internalFormat,
   });
@@ -196,11 +225,8 @@ const useCombinedPatch = ({
     outputExtensions: [format],
     formatId: "rom-weaver-combined-patch-format",
     formatLabel: localizer.message("ui.combinedPatch.format"),
-    formatOptions: createCreatePatchFormatOptions({
-      candidateFormats,
-      modifiedSize: formatSizes.patchTargetSize,
-      originalSize: formatSizes.romSize,
-    }),
+    // candidateFormats already satisfy the final size policy, including the BPS pair cap.
+    formatOptions: candidateFormats.map((value) => ({ label: `.${value}`, value })),
     onFormatChange: setFormat,
     disabled: disabled || busy,
     action: (

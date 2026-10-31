@@ -13,6 +13,20 @@ pub(super) struct TrimRequest {
     pub(super) revert_marker: bool,
 }
 
+/// Where a trim writes its result for a given destination path.
+pub(super) enum TrimOutputPlan {
+    /// The destination itself holds the trimmed file (or, for a GameCube/Wii disc, the RVZ).
+    Direct,
+    /// The result is packed inside the destination container under `entry_name`.
+    Pack {
+        handler: Arc<dyn ContainerHandler>,
+        entry_name: String,
+        /// The format name passed to the container's `create`; a media-layout variant such as
+        /// `chd-dvd` where the container name alone would be inferred from the file.
+        create_format: &'static str,
+    },
+}
+
 impl CliApp {
     pub(super) fn trim_file(
         &self,
@@ -354,6 +368,302 @@ impl CliApp {
             already_target_size: result_size == original_size,
             revert_supported: false,
         })
+    }
+
+    /// Decide what a trim destination asks for, from its extension, the way `compress` and
+    /// `patch apply` read an output name: an archive or container extension packs the result
+    /// inside it, but only a container valid for this kind of input; any other container name
+    /// is an error, so a trimmed file is never written under a name that misdescribes it.
+    /// Names that match no container write the trimmed file itself.
+    pub(super) fn plan_trim_output(
+        &self,
+        kind: TrimInputKind,
+        source: &Path,
+        destination: &Path,
+    ) -> Result<TrimOutputPlan> {
+        let subject = kind.output_subject();
+        let extension = destination
+            .extension()
+            .map(|extension| extension.to_string_lossy().to_ascii_lowercase());
+        let Some(handler) = self.containers.find_by_output_extension(destination) else {
+            // A GameCube/Wii trim writes RVZ, so any other extension would misname it. Only an
+            // extensionless name (such as the staging file behind `--output -`) is left alone.
+            if kind == TrimInputKind::RvzConvert && extension.is_some() {
+                debug!(destination = %destination.display(), "rvz-convert trim rejected a non-rvz output name");
+                return Err(RomWeaverError::Validation(format!(
+                    "`{}` is not a valid trim output for {subject}: trim converts them to RVZ, so the name must end in .rvz, .zip, or .7z; use `extract` to write the disc as a plain image",
+                    destination.display()
+                )));
+            }
+            return Ok(TrimOutputPlan::Direct);
+        };
+        let descriptor = handler.descriptor();
+        let format = descriptor.name;
+        if kind
+            .direct_output_format()
+            .is_some_and(|direct| descriptor.matches_name(direct))
+        {
+            return Ok(TrimOutputPlan::Direct);
+        }
+        if kind == TrimInputKind::ThreeDs && descriptor.matches_name("z3ds") {
+            Self::validate_three_ds_z3ds_name(source, destination, subject)?;
+        }
+        let packable = kind.packable_output_formats();
+        if !handler.capabilities().create
+            || !packable.iter().any(|name| descriptor.matches_name(name))
+        {
+            let accepted = kind
+                .direct_output_format()
+                .into_iter()
+                .chain(packable.iter().copied())
+                .map(|name| format!(".{name}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            debug!(
+                destination = %destination.display(),
+                format,
+                ?kind,
+                "trim rejected an output container that is not valid for the input"
+            );
+            // GameCube/Wii trims reject every plain extension, so only the other kinds can be
+            // told to use a plain name.
+            let plain_name = if kind == TrimInputKind::RvzConvert {
+                String::new()
+            } else {
+                let source_extension = source
+                    .extension()
+                    .map(|extension| format!(" such as `.{}`", extension.to_string_lossy()))
+                    .unwrap_or_default();
+                format!(
+                    ", or be a plain name{source_extension} that writes the trimmed file itself"
+                )
+            };
+            return Err(RomWeaverError::Validation(format!(
+                "{} is not a valid trim output for {subject}: `{}` must end in one of {accepted}{plain_name}",
+                format.to_ascii_uppercase(),
+                destination.display()
+            )));
+        }
+        let entry_name = Self::trim_pack_entry_name(kind, source, destination);
+        // CHD infers its media from the packed file, which would build a CD or raw CHD for an
+        // XISO; it is a DVD-class disc, so ask for the DVD layout outright.
+        let create_format = if kind == TrimInputKind::Xiso && descriptor.matches_name("chd") {
+            "chd-dvd"
+        } else {
+            format
+        };
+        debug!(
+            destination = %destination.display(),
+            format,
+            entry_name,
+            "trim output will be packed into a container"
+        );
+        Ok(TrimOutputPlan::Pack {
+            handler,
+            entry_name,
+            create_format,
+        })
+    }
+
+    /// A Z3DS name other than the generic `.z3ds` fixes the payload type, and `extract` writes
+    /// that type back (`.zcia` -> `.cia`). A trimmed `.3ds` keeps its NCSD or NCCH payload, so
+    /// only the descriptor for that payload (`.zcci` for NCSD, `.zcxi` for NCCH) may be used.
+    fn validate_three_ds_z3ds_name(source: &Path, destination: &Path, subject: &str) -> Result<()> {
+        let extension = destination
+            .extension()
+            .map(|extension| extension.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
+        if extension == "z3ds" {
+            return Ok(());
+        }
+        let payload_magic = Self::three_ds_payload_magic(source);
+        let payload_subtype = payload_magic.and_then(|magic| {
+            rom_weaver_containers::z3ds_subtype_metadata()
+                .iter()
+                .find(|subtype| subtype.underlying_magic == Some(magic))
+        });
+        if payload_subtype.is_some_and(|subtype| subtype.compressed_extension == extension) {
+            return Ok(());
+        }
+        debug!(
+            destination = %destination.display(),
+            extension,
+            payload_magic = ?payload_magic,
+            "3ds trim rejected a Z3DS descriptor extension that does not match the payload"
+        );
+        let accepted = match payload_subtype {
+            Some(subtype) => format!(
+                ".z3ds or .{} for the {} image in this file",
+                subtype.compressed_extension,
+                String::from_utf8_lossy(&subtype.underlying_magic.unwrap_or_default())
+            ),
+            None => ".z3ds".to_string(),
+        };
+        Err(RomWeaverError::Validation(format!(
+            "`{}` is not a valid trim output for {subject}: the Z3DS name `.{extension}` marks a different 3DS file type than this trimmed image, so a Z3DS output must end in {accepted}",
+            destination.display()
+        )))
+    }
+
+    /// The NCSD or NCCH magic at 0x100 of a 3DS image, which decides the Z3DS descriptor
+    /// extension; `None` for a file too short or without either magic.
+    fn three_ds_payload_magic(source: &Path) -> Option<[u8; 4]> {
+        let mut file = File::open(source).ok()?;
+        let mut header = [0_u8; 0x104];
+        file.read_exact(&mut header).ok()?;
+        let magic: [u8; 4] = header[0x100..0x104].try_into().ok()?;
+        matches!(&magic, b"NCSD" | b"NCCH").then_some(magic)
+    }
+
+    /// The name the trimmed file carries inside its container: the destination's name without
+    /// the container extension, ending in the extension the trimmed file has (`.rvz` for a
+    /// GameCube/Wii conversion, else the source's own). `game.zip` packs `game.nds`;
+    /// `game.nds.zip` packs `game.nds`; `v1.2.zip` packs `v1.2.nds`.
+    fn trim_pack_entry_name(kind: TrimInputKind, source: &Path, destination: &Path) -> String {
+        let stem = destination
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .filter(|stem| !stem.is_empty())
+            .unwrap_or_else(|| "trimmed".to_string());
+        let payload_extension = if kind == TrimInputKind::RvzConvert {
+            Some("rvz".to_string())
+        } else {
+            source
+                .extension()
+                .map(|extension| extension.to_string_lossy().into_owned())
+                .filter(|extension| !extension.is_empty())
+        };
+        match payload_extension {
+            Some(extension)
+                if !stem
+                    .to_ascii_lowercase()
+                    .ends_with(&format!(".{extension}").to_ascii_lowercase()) =>
+            {
+                format!("{stem}.{extension}")
+            }
+            _ => stem,
+        }
+    }
+
+    /// Run [`Self::trim_file`] for a destination that may be a container. A packed output is
+    /// trimmed into a scratch file named as it will be inside the container, then packed with
+    /// the container's own `create`; a dry run only reports the container as the output.
+    /// For a completed GameCube/Wii conversion the second value is the disc's logical size,
+    /// read from the RVZ itself (before it is packed away from the scratch file).
+    pub(super) fn trim_file_into_output(
+        &self,
+        source: &Path,
+        destination: &Path,
+        plan: &TrimOutputPlan,
+        request: TrimRequest,
+        context: &OperationContext,
+    ) -> Result<(NdsTrimOutcome, Option<u64>)> {
+        let logical_size = |rvz: &Path| {
+            (request.kind == TrimInputKind::RvzConvert && !request.dry_run)
+                .then(|| self.rvz_logical_size(rvz, context))
+                .flatten()
+        };
+        let TrimOutputPlan::Pack {
+            handler,
+            entry_name,
+            create_format,
+        } = plan
+        else {
+            let outcome = self.trim_file(source, destination, request, context)?;
+            let size = logical_size(&outcome.output_path);
+            return Ok((outcome, size));
+        };
+        if request.dry_run {
+            return Ok((self.trim_file(source, destination, request, context)?, None));
+        }
+        let scratch = context.temp_paths().next_path("trim-pack", None);
+        fs::create_dir_all(&scratch)?;
+        let trimmed = scratch.join(entry_name);
+        let result = self
+            .trim_file(source, &trimmed, request, context)
+            .and_then(|mut outcome| {
+                let size = logical_size(&trimmed);
+                Self::pack_trimmed_output(
+                    handler.as_ref(),
+                    entry_name,
+                    create_format,
+                    &trimmed,
+                    destination,
+                    context,
+                )?;
+                outcome.output_path = destination.to_path_buf();
+                Ok((outcome, size))
+            });
+        if let Err(error) = fs::remove_dir_all(&scratch) {
+            debug!(scratch = %scratch.display(), %error, "trim pack scratch cleanup failed");
+        }
+        result
+    }
+
+    /// The uncompressed disc size recorded inside an RVZ, if it can be read.
+    fn rvz_logical_size(&self, rvz: &Path, context: &OperationContext) -> Option<u64> {
+        let handler = self.containers.find_by_name("rvz")?;
+        let entries = handler
+            .list_entry_records(
+                &ContainerProbeRequest {
+                    source: rvz.to_path_buf(),
+                    split_bin: false,
+                },
+                context,
+            )
+            .ok()?;
+        entries.first().and_then(|entry| entry.size)
+    }
+
+    /// Pack `trimmed` into `destination` with `handler`, keeping an existing file at the
+    /// destination if the pack fails (the same staging `compress` uses for `--force`).
+    fn pack_trimmed_output(
+        handler: &dyn ContainerHandler,
+        entry_name: &str,
+        create_format: &str,
+        trimmed: &Path,
+        destination: &Path,
+        context: &OperationContext,
+    ) -> Result<()> {
+        let format = handler.descriptor().name;
+        let names_entries =
+            handler.descriptor().matches_name("zip") || handler.descriptor().matches_name("7z");
+        if let Some(parent) = destination
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
+            fs::create_dir_all(parent)?;
+        }
+        let staged = StagedOutput::new(destination)?;
+        trace!(
+            format,
+            entry_name,
+            trimmed = %trimmed.display(),
+            destination = %destination.display(),
+            "packing trimmed output"
+        );
+        let report = handler.create(
+            &ContainerCreateRequest {
+                rvz_block_size: None,
+                archive_names: names_entries.then(|| vec![entry_name.to_string()]),
+                inputs: vec![trimmed.to_path_buf()],
+                output: staged.path().to_path_buf(),
+                format: create_format.to_string(),
+                codec: None,
+                level: None,
+                parent: None,
+            },
+            context,
+        )?;
+        if report.status != OperationStatus::Succeeded {
+            return Err(RomWeaverError::Validation(format!(
+                "packing the trimmed output into {} failed: {}",
+                format.to_ascii_uppercase(),
+                report.label
+            )));
+        }
+        context.cancel().check()?;
+        staged.commit()
     }
 
     pub(super) fn trim_rvz_convert_file(

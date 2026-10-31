@@ -126,7 +126,9 @@ const DEFAULT_HDIFF_FIXTURE_URLS = {
   target: new URL("../../../../crates/rom-weaver-patches/tests/fixtures/hdiffpatch/target.bin", import.meta.url),
 };
 const PATCH_CREATE_FORMAT_ALIASES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.aliases as Readonly<Record<string, string>>;
-const CONTAINER_CREATE_SPECIAL_FAILURE_EXPECTATIONS = new Map<string, RegExp>([["rvz", /failed to open input/i]]);
+const CONTAINER_CREATE_SPECIAL_FAILURE_EXPECTATIONS = new Map<string, RegExp>([
+  ["rvz", /not a GameCube or Wii disc image/i],
+]);
 const BROWSER_FORMAT_MATRIX_CONTAINER_ROUND_TRIP_FORMATS = ROM_WEAVER_CONTAINER_FORMATS.filter(
   (format) => format.capabilities.create && !CONTAINER_CREATE_SPECIAL_FAILURE_EXPECTATIONS.has(format.name),
 ).map((format) => format.name);
@@ -150,7 +152,7 @@ export function createExhaustiveContainerCases(): ExhaustiveContainerCase[] {
   const formats = [
     { codecs: ROM_WEAVER_COMPRESSION_METADATA.codecFields.zipCodec.codecs, format: "zip" },
     { codecs: ROM_WEAVER_COMPRESSION_METADATA.codecFields.sevenZipCodec.codecs, format: "7z" },
-    { codecs: ["lzma2", "zlib", "huff", "flac", "zstd"], format: "chd" },
+    { codecs: ["lzma", "zlib", "huff", "flac", "zstd"], format: "chd" },
     { codecs: [ROM_WEAVER_COMPRESSION_METADATA.defaults.z3dsCodec], format: "z3ds" },
   ] as const;
   const cases: ExhaustiveContainerCase[] = [];

@@ -2434,6 +2434,124 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
+    /// Extracts `source` with `--checksum sha1` and returns the sha1 the report attached to the
+    /// emitted file named `output_name`, alongside the sha1 of that file read back from disk.
+    fn extract_reported_and_actual_sha1(
+        handler_name: &str,
+        source: PathBuf,
+        temp_dir: &Path,
+        output_name: &str,
+    ) -> (Option<String>, String) {
+        let out_dir = temp_dir.join("checksum-out");
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name(handler_name).expect("handler");
+        let context =
+            test_context(temp_dir, 2).with_extract_checksum_algorithms(vec!["sha1".to_string()]);
+        let report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source,
+                    out_dir: out_dir.clone(),
+                    selections: Vec::new(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    containing_archive: None,
+                    split_bin: false,
+                    ignore_common_files: false,
+                    overwrite: true,
+                    parent: None,
+                },
+                &context,
+            )
+            .expect("extract with checksum");
+        assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+        let actual = rom_weaver_checksum::checksum_file_values(
+            &out_dir.join(output_name),
+            &["sha1"],
+            &context,
+        )
+        .expect("hash extracted output")
+        .remove("sha1")
+        .expect("sha1 value");
+        let reported = report
+            .details
+            .as_ref()
+            .and_then(|details| details.get("emitted_files"))
+            .and_then(|files| files.as_array())
+            .and_then(|files| {
+                files.iter().find(|file| {
+                    file.get("path")
+                        .and_then(|path| path.as_str())
+                        .is_some_and(|path| path.ends_with(output_name))
+                })
+            })
+            .and_then(|file| file.get("checksums")?.get("sha1")?.as_str())
+            .map(str::to_string);
+        (reported, actual)
+    }
+
+    #[test]
+    fn nod_disc_extract_reports_requested_checksum() {
+        let temp_dir = temp_dir_path("nod-extract-checksum");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        fs::write(&input_iso, build_test_gamecube_iso(0x7000)).expect("write source fixture");
+        for (handler_name, writer) in [
+            ("wbfs", write_test_wbfs as fn(&Path, &Path)),
+            ("gc-ciso", write_test_gc_ciso),
+            ("wia", write_test_wia),
+        ] {
+            let source = temp_dir.join(format!("disc.{handler_name}"));
+            writer(&input_iso, &source);
+            let (reported, actual) =
+                extract_reported_and_actual_sha1(handler_name, source, &temp_dir, "disc.iso");
+            assert_eq!(reported.as_deref(), Some(actual.as_str()), "{handler_name}");
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn pbp_extract_reports_requested_checksum_for_the_bin_only() {
+        let temp_dir = temp_dir_path("pbp-extract-checksum");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("game.pbp");
+        fs::write(
+            &source,
+            build_test_pbp_fixture(vec![("SLUS00001", build_test_pbp_iso(64, 7))]),
+        )
+        .expect("pbp fixture");
+
+        let (reported, actual) =
+            extract_reported_and_actual_sha1("pbp", source.clone(), &temp_dir, "game.bin");
+        assert_eq!(reported.as_deref(), Some(actual.as_str()));
+        let (cue_reported, _) =
+            extract_reported_and_actual_sha1("pbp", source, &temp_dir, "game.cue");
+        assert_eq!(cue_reported, None);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn xiso_extract_reports_requested_checksum() {
+        let temp_dir = temp_dir_path("xiso-extract-checksum");
+        let tree = temp_dir.join("tree");
+        fs::create_dir_all(&tree).unwrap();
+        fs::write(tree.join("payload.bin"), b"source payload").unwrap();
+        let source = temp_dir.join("game.iso");
+        let mut image = File::create(&source).unwrap();
+        let mut source_fs = crate::xdvdfs::write::fs::StdFilesystem::create(&tree);
+        crate::xdvdfs::write::img::create_xdvdfs_image(&mut source_fs, &mut image, |_| {}).unwrap();
+        drop(image);
+        let xiso = temp_dir.join("game.xiso");
+        fs::rename(&source, &xiso).unwrap();
+
+        let (reported, actual) =
+            extract_reported_and_actual_sha1("xiso", xiso, &temp_dir, "game.iso");
+        assert_eq!(reported.as_deref(), Some(actual.as_str()));
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
     #[test]
     fn pbp_lists_and_extracts_single_disc_outputs() {
         let temp_dir = temp_dir_path("pbp-single");
@@ -6217,18 +6335,181 @@ mod tests {
     }
 
     #[test]
-    fn nod_validate_i8_level_rejects_overflowing_level() {
-        let core = NodHandlerCore::new(&RVZ, NodFormat::Rvz);
-        // Within i8 range round-trips unchanged.
-        assert_eq!(core.validate_i8_level("zstd", 19).expect("in range"), 19);
-        // Above i8::MAX (127) overflows the conversion guard.
-        let error = core
-            .validate_i8_level("zstd", 200)
-            .expect_err("level 200 should overflow i8");
+    fn rvz_validate_zstd_level_enforces_the_registry_range() {
+        for level in [-7, 0, 19, 22] {
+            assert_eq!(
+                i32::from(RvzContainerHandler::validate_zstd_level(level).expect("in range")),
+                level
+            );
+        }
+        for level in [-8, 23, 200, i32::MIN, i32::MAX] {
+            let error = RvzContainerHandler::validate_zstd_level(level)
+                .expect_err("level outside -7..=22 must be rejected");
+            assert!(
+                matches!(error, RomWeaverError::Validation(ref message) if message.contains(&format!("level `{level}` is invalid for rvz codec `zstd` (expected -7..=22)"))),
+                "unexpected error: {error:?}"
+            );
+        }
+    }
+
+    /// `validate_create` is what `compress --dry-run` runs: it rejects what `create` rejects
+    /// (codec, level, input medium) and accepts what `create` accepts, without writing.
+    #[test]
+    fn validate_create_rejects_what_create_rejects_for_every_creatable_format() {
+        let temp_dir = temp_dir_path("validate-create");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let payload = temp_dir.join("payload.bin");
+        fs::write(&payload, vec![7_u8; 8192]).expect("payload");
+        let gamecube = temp_dir.join("disc.iso");
+        fs::write(&gamecube, build_test_gamecube_iso(0x4000)).expect("gamecube fixture");
+        let registry = ContainerRegistry::new();
+        let context = test_context(&temp_dir, 1);
+        let request = |format: &str, input: &Path, codec: Option<&str>, level: Option<i32>| {
+            ContainerCreateRequest {
+                rvz_block_size: None,
+                archive_names: None,
+                inputs: vec![input.to_path_buf()],
+                output: temp_dir.join(format!("out.{format}")),
+                format: format.to_string(),
+                codec: codec.map(str::to_string),
+                level,
+                parent: None,
+            }
+        };
+        let validate = |format: &str, input: &Path, codec: Option<&str>, level: Option<i32>| {
+            registry
+                .find_by_name(format)
+                .expect("handler")
+                .validate_create(&request(format, input, codec, level), &context)
+        };
+
+        type Rejected<'a> = (&'a str, &'a Path, Option<&'a str>, Option<i32>, &'a str);
+        let rejected: [Rejected<'_>; 10] = [
+            (
+                "zip",
+                &payload,
+                Some("bogus"),
+                None,
+                "unsupported zip codec `bogus`",
+            ),
+            (
+                "zip",
+                &payload,
+                Some("zstd"),
+                Some(99),
+                "level `99` is invalid for zip codec `zstd`",
+            ),
+            (
+                "7z",
+                &payload,
+                Some("deflate"),
+                None,
+                "unsupported 7z codec `deflate`",
+            ),
+            (
+                "7z",
+                &payload,
+                Some("lzma2"),
+                Some(99),
+                "out of range for codec `lzma2`",
+            ),
+            (
+                "z3ds",
+                &payload,
+                Some("bogus"),
+                None,
+                "unsupported z3ds codec `bogus`",
+            ),
+            (
+                "z3ds",
+                &payload,
+                None,
+                Some(99),
+                "z3ds level `99` is out of range",
+            ),
+            (
+                "chd",
+                &payload,
+                Some("deflate"),
+                None,
+                "unsupported chd codec `deflate`",
+            ),
+            (
+                "rvz",
+                &gamecube,
+                Some("zstd"),
+                Some(-8),
+                "level `-8` is invalid for rvz codec `zstd`",
+            ),
+            (
+                "rvz",
+                &payload,
+                None,
+                None,
+                "is not a GameCube or Wii disc image",
+            ),
+            (
+                "rvz",
+                &gamecube,
+                Some("deflate"),
+                None,
+                "unsupported rvz codec `deflate`",
+            ),
+        ];
+        for (format, input, codec, level, expected) in rejected {
+            let error = validate(format, input, codec, level)
+                .expect_err(&format!("{format} {codec:?} {level:?}"))
+                .to_string();
+            assert!(error.contains(expected), "{format}: {error}");
+        }
+        for (format, input, codec, level) in [
+            ("zip", &payload, Some("deflate"), Some(6)),
+            ("7z", &payload, Some("lzma2"), Some(5)),
+            ("z3ds", &payload, Some("zstd"), Some(3)),
+            ("chd", &payload, Some("zlib"), None),
+            ("rvz", &gamecube, Some("zstd"), Some(-7)),
+            ("rvz", &gamecube, None, None),
+        ] {
+            validate(format, input, codec, level)
+                .unwrap_or_else(|error| panic!("{format} {codec:?} {level:?}: {error}"));
+        }
         assert!(
-            matches!(error, RomWeaverError::Validation(ref message) if message.contains("level `200` is out of range")),
-            "unexpected error: {error:?}"
+            !temp_dir.join("out.zip").exists() && !temp_dir.join("out.rvz").exists(),
+            "validate_create must not write"
         );
+
+        let mut named = request("zip", &payload, None, None);
+        named.archive_names = Some(vec!["../escape".to_string()]);
+        let error = registry
+            .find_by_name("zip")
+            .expect("zip")
+            .validate_create(&named, &context)
+            .expect_err("unsafe entry name");
+        assert!(matches!(error, RomWeaverError::Validation(_)), "{error:?}");
+
+        let error = registry
+            .find_by_name("cso")
+            .expect("cso")
+            .validate_create(&request("cso", &payload, None, None), &context)
+            .expect_err("extract-only format");
+        assert!(error.to_string().contains("extract-only"), "{error}");
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    /// The default `validate_create` accepts everything, so a creatable handler that does not
+    /// override it silently skips `compress --dry-run` validation. Adding a creatable handler
+    /// fails this test until its `validate_create` is written and covered by the test above.
+    #[test]
+    fn every_creatable_format_is_covered_by_the_validate_create_test() {
+        let mut creatable: Vec<&str> = ContainerRegistry::new()
+            .handlers()
+            .iter()
+            .filter(|handler| handler.capabilities().create)
+            .map(|handler| handler.descriptor().name)
+            .collect();
+        creatable.sort_unstable();
+        assert_eq!(creatable, ["7z", "chd", "rvz", "z3ds", "zip"]);
     }
 
     fn garbage_archive_bytes() -> Vec<u8> {

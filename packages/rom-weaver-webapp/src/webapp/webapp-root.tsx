@@ -921,12 +921,12 @@ function WebappRoot({
   // box) forwards it to the active tab's unified drop handler via `pageDrop`.
   useEffect(() => {
     const handlePageDragOver = (event: DragEvent) => {
-      if (isInsideLocalDropZone(event.target) || !isFileDragTransfer(event.dataTransfer)) return;
+      if (isInsideLocalDropZone(event) || !isFileDragTransfer(event.dataTransfer)) return;
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
     };
     const handlePageDrop = (event: DragEvent) => {
-      if (isInsideLocalDropZone(event.target) || !isFileDragTransfer(event.dataTransfer)) return;
+      if (isInsideLocalDropZone(event) || !isFileDragTransfer(event.dataTransfer)) return;
       event.preventDefault();
       event.stopPropagation();
       if (logOpen || state.settingsDialogOpen || confirmationDialog.open || agentApprovalDialog?.state.open) return;

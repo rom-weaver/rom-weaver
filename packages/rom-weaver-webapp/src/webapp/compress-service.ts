@@ -56,6 +56,27 @@ const ARCHIVE_FORMATS = ["zip", "7z"] as const;
 const ROM_SPECIFIC_FORMATS = ["chd", "rvz", "z3ds"] as const;
 const getExtension = (fileName: string) => fileName.match(/\.([^./\\]+)$/)?.[1]?.toLowerCase() || "";
 
+/** RVZ was requested for a file the engine does not recognise as a GameCube or Wii disc image. */
+class RvzInputNotDiscError extends Error {
+  readonly fileName: string;
+  constructor(fileName: string, options?: ErrorOptions) {
+    super(`RVZ can only store GameCube and Wii disc images, and ${fileName} is not one.`, options);
+    this.name = "RvzInputNotDiscError";
+    this.fileName = fileName;
+  }
+}
+
+// The engine rejects a non-GameCube/Wii disc with its disc-format diagnostics (`Unknown disc format`,
+// `the input must be a GameCube or Wii disc image`); those mean the input is not an RVZ candidate.
+const RVZ_NOT_A_DISC_REGEX = /unknown disc format|must be a gamecube or wii disc image/i;
+const isRvzNotADiscFailure = (error: unknown): boolean => {
+  for (let current = error, depth = 0; current instanceof Error && depth < 8; depth += 1) {
+    if (RVZ_NOT_A_DISC_REGEX.test(current.message)) return true;
+    current = current.cause;
+  }
+  return false;
+};
+
 const assertFiles = (files: File[]) => {
   if (files.length === 0) throw new Error("Select at least one file to compress");
   const names = new Set<string>();
@@ -83,16 +104,25 @@ const probeLooseImage = async (
   }
 };
 
-const validateInputs = async (files: File[], loadRuntime?: LoadCompressRuntime): Promise<ValidatedCompressInput> => {
+/**
+ * Validates a file set and probes a loose disc image once. Callers keep the result and pass it on, so the
+ * file is not probed again by the format list or the run.
+ */
+const validateCompressInputs = async (
+  files: File[],
+  loadRuntime?: LoadCompressRuntime,
+): Promise<ValidatedCompressInput> => {
   assertFiles(files);
   const sheetFiles = files.filter((file) => ["cue", "gdi"].includes(getExtension(file.name)));
   if (sheetFiles.length === 0) {
     const first = files[0];
+    // An `.iso` is probed whatever its size: a trimmed GameCube/Wii image need not be sector aligned,
+    // and the probe is the only evidence that RVZ applies to it.
     const probe =
-      first && /\.(bin|iso)$/i.test(first.name) && isLikelyDiscImageSize(first.size)
+      first && (/\.iso$/i.test(first.name) || (/\.bin$/i.test(first.name) && isLikelyDiscImageSize(first.size)))
         ? await probeLooseImage(first, loadRuntime)
         : undefined;
-    const chdCreateMode = probe?.chdCreateMode;
+    const chdCreateMode = isLikelyDiscImageSize(first?.size) ? probe?.chdCreateMode : undefined;
     return {
       files,
       ...(probe ? { probe } : {}),
@@ -146,11 +176,6 @@ const validateInputs = async (files: File[], loadRuntime?: LoadCompressRuntime):
   };
 };
 
-const getCompressSource = async (files: File[], loadRuntime?: LoadCompressRuntime): Promise<CompressSource | null> => {
-  if (files.length === 0) return null;
-  return (await validateInputs(files, loadRuntime)).source;
-};
-
 /**
  * Whether a single `.bin` shows CD-image evidence in its bytes: the engine probe reads the header and
  * recommends CHD or reports a CD medium for the CD sync header or an ISO9660 descriptor at sector 16. Other
@@ -160,16 +185,22 @@ const getCompressSource = async (files: File[], loadRuntime?: LoadCompressRuntim
 const hasBinDiscEvidence = (probe: CompressionProbeResult | undefined): boolean =>
   !!probe && (String(probe.recommendedFormat || "").toLowerCase() === "chd" || probe.discFormat === "CD");
 
-const getCompressFormats = async (
-  files: File[],
-  loadRuntime?: () => Promise<WorkflowRuntime>,
-): Promise<ConcreteCompressFormat[]> => {
-  if (files.length === 0) return [];
-  const input = await validateInputs(files, loadRuntime);
+/**
+ * The formats a validated file set can be compressed to. RVZ follows the engine verdict carried in the
+ * source metadata (see `OutputCompressionManager.supportsOutputCompression`): a bare `.iso` is offered RVZ
+ * only when the probe recognised a GameCube or Wii disc, never when there is no verdict.
+ */
+const getCompressFormats = (input: ValidatedCompressInput): ConcreteCompressFormat[] => {
   if (input.sheet) return input.sheetProblem ? [...ARCHIVE_FORMATS] : [...ARCHIVE_FORMATS, "chd"];
   if (input.files.length !== 1) return [...ARCHIVE_FORMATS];
 
-  const source = { ...input.source, metadata: { ...input.source.metadata } };
+  // Only the RVZ verdict is handed on: the run cannot name a Z3DS output for a `.bin` or `.iso` source, so a
+  // Z3DS verdict there would offer a format that fails.
+  const rvzVerdict = String(input.probe?.recommendedFormat || "").toLowerCase() === "rvz";
+  const source = {
+    ...input.source,
+    metadata: { ...input.source.metadata, ...(rvzVerdict ? { recommendedFormat: "rvz" } : {}) },
+  };
   const extension = getExtension(source.fileName);
   if (extension === "gdi" || ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS.includes(extension))
     return [...ARCHIVE_FORMATS];
@@ -410,10 +441,24 @@ const extractCompressEntries = async (
   }
 };
 
+/** Whether `validated` was produced from exactly these `File` objects, in this order. */
+const isValidationOf = (
+  validated: ValidatedCompressInput | undefined,
+  files: File[],
+): validated is ValidatedCompressInput =>
+  !!validated &&
+  validated.files.length === files.length &&
+  validated.files.every((file, index) => file === files[index]);
+
+/**
+ * `validated` is the staging result for these files. It is reused only when it covers the same `File`
+ * objects; any other file set is validated and probed again.
+ */
 const compressFiles = async (
   files: File[],
   options: ApplyWorkflowOptions,
   runtime: WorkflowRuntime,
+  validated?: ValidatedCompressInput,
 ): Promise<PublicOutput> => {
   assertFiles(files);
   if (options.signal?.aborted) throw new DOMException("Compression cancelled", "AbortError");
@@ -432,9 +477,9 @@ const compressFiles = async (
       runtime,
     });
   }
-  const input = await validateInputs(files, async () => runtime);
+  const input = isValidationOf(validated, files) ? validated : await validateCompressInputs(files, async () => runtime);
   if (compression === "chd" && input.sheetProblem) throw new Error(input.sheetProblem);
-  const supported = await getCompressFormats(files, async () => runtime);
+  const supported = getCompressFormats(input);
   if (!supported.includes(compression as ConcreteCompressFormat)) {
     throw new Error(`Compression format ${compression} does not support this file set`);
   }
@@ -459,17 +504,20 @@ const compressFiles = async (
     return output;
   } catch (error) {
     await Promise.resolve(outputFile ? getPatchFileCleanup(outputFile)?.() : undefined).catch(() => undefined);
+    if (compression === "rvz" && assets.length === 1 && isRvzNotADiscFailure(error))
+      throw new RvzInputNotDiscError(assets[0]?.fileName ?? files[0]?.name ?? "the input", { cause: error });
     throw error;
   }
 };
 
-export type { CompressSource, ListedCompressEntry, OpenedCompressEntry };
+export type { CompressSource, ListedCompressEntry, OpenedCompressEntry, ValidatedCompressInput };
 export {
+  RvzInputNotDiscError,
   compressFiles,
   disposeOpenedOutputs,
   getCompressFormats,
-  getCompressSource,
   extractCompressEntries,
   isOpenableCompressInput,
   listCompressInput,
+  validateCompressInputs,
 };

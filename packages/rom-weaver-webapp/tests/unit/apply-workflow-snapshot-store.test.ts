@@ -214,19 +214,76 @@ describe("Apply workflow snapshot store", () => {
 
   it("skips disabled patches only while the staged patches line up with the slots", () => {
     const sizes = [64_000_000, 8_000_000];
-    expect(getEnabledPatchTargetSizes(sizes, ["slot-1", "slot-2"], new Set())).toEqual({
+    expect(getEnabledPatchTargetSizes(sizes, ["slot-1", "slot-2"], new Set(), [])).toEqual({
+      lastDeclaredTargetSize: 8_000_000,
       maxKnownTargetSize: 64_000_000,
       patchTargetSize: 8_000_000,
+      tailMaxWriteEnd: 0,
     });
-    expect(getEnabledPatchTargetSizes(sizes, ["slot-1", "slot-2"], new Set(["slot-1"])).patchTargetSize).toBe(
+    expect(getEnabledPatchTargetSizes(sizes, ["slot-1", "slot-2"], new Set(["slot-1"]), []).patchTargetSize).toBe(
       8_000_000,
     );
     // A filtered run stages only the enabled patches, so none of them is skipped.
-    expect(getEnabledPatchTargetSizes([64_000_000], ["slot-1", "slot-2"], new Set(["slot-2"])).patchTargetSize).toBe(
-      64_000_000,
-    );
-    expect(getEnabledPatchTargetSizes([], [], new Set()).patchTargetSize).toBeUndefined();
+    expect(
+      getEnabledPatchTargetSizes([64_000_000], ["slot-1", "slot-2"], new Set(["slot-2"]), []).patchTargetSize,
+    ).toBe(64_000_000);
+    expect(getEnabledPatchTargetSizes([], [], new Set(), []).patchTargetSize).toBeUndefined();
+    // An undeclared tail keeps the last declared target as its starting size.
+    expect(getEnabledPatchTargetSizes([64_000_000, undefined], ["slot-1", "slot-2"], new Set(), [])).toEqual({
+      lastDeclaredTargetSize: 64_000_000,
+      maxKnownTargetSize: 64_000_000,
+      patchTargetSize: undefined,
+      tailMaxWriteEnd: undefined,
+    });
+    expect(
+      getEnabledPatchTargetSizes([64_000_000, 8_000_000], ["slot-1", "slot-2"], new Set(["slot-2"]), []),
+    ).toMatchObject({ lastDeclaredTargetSize: 64_000_000 });
   });
+  it("bounds an undeclared tail only by formats that cannot grow the output past their write ceiling", () => {
+    const ceiling = 0xff_ff_ff + 0xff_ff;
+    const tail = (formats: (string | undefined)[], disabled: string[] = []) =>
+      getEnabledPatchTargetSizes(
+        [60_000_000, ...formats.map(() => undefined)],
+        ["a", ...formats.map((_, index) => `t${index}`)],
+        new Set(disabled),
+        ["BPS", ...formats],
+      ).tailMaxWriteEnd;
+    expect(tail([])).toBe(0);
+    expect(tail(["IPS", "ebp"])).toBe(ceiling);
+    for (const format of ["IPS32", "PPF", "BDF/BSDIFF40", "APSGBA", "RUP", undefined]) {
+      expect(tail(["IPS", format])).toBeUndefined();
+      expect(tail([format, "IPS"])).toBeUndefined();
+    }
+    // A disabled growing patch does not count; a later declared patch resets the tail.
+    expect(tail(["PPF", "IPS"], ["t0"])).toBe(ceiling);
+    expect(
+      getEnabledPatchTargetSizes([undefined, 1000, undefined], ["a", "b", "c"], new Set(), ["PPF", "BPS", "IPS"])
+        .tailMaxWriteEnd,
+    ).toBe(ceiling);
+    expect(getEnabledPatchTargetSizes([undefined, 1000], ["a", "b"], new Set(), ["PPF", "BPS"]).tailMaxWriteEnd).toBe(
+      0,
+    );
+  });
+
+  it("publishes patch formats and sizes a reverse UPS patch by its source size", () => {
+    const store = createApplyWorkflowSnapshotStore();
+    const workflow = createWorkflow({
+      patches: [
+        { requirements: { format: "BPS", sourceSize: 10, targetSize: 20 } },
+        { chainVerdict: { direction: "reverse" }, requirements: { format: "UPS", sourceSize: 120, targetSize: 100 } },
+        { chainVerdict: { direction: "forward" }, requirements: { format: "UPS", sourceSize: 120, targetSize: 100 } },
+        { chainVerdict: { direction: "reverse" }, requirements: { format: "UPS", targetSize: 100 } },
+        { chainVerdict: { direction: "reverse" }, requirements: { format: "BPS", sourceSize: 7, targetSize: 8 } },
+        {},
+      ] as Snapshot["patches"],
+    });
+    store.setWorkflow(workflow);
+    expect(store.getSnapshot()).toMatchObject({
+      patchFormats: ["BPS", "UPS", "UPS", "UPS", "BPS", undefined],
+      patchTargetSizes: [20, 120, 100, undefined, 8, undefined],
+    });
+  });
+
   it("preserves unknown enabled sizes without confusing an empty target with unknown", () => {
     const store = createApplyWorkflowSnapshotStore();
     const workflow = createWorkflow({
@@ -238,18 +295,22 @@ describe("Apply workflow snapshot store", () => {
     const formats = (disabled: ReadonlySet<string>) =>
       getSelectableCreatePatchFormats({
         originalSize: 4096,
-        modifiedSize: getEnabledPatchTargetSizes(sizes, ["ips", "empty"], disabled).patchTargetSize,
+        modifiedSize: getEnabledPatchTargetSizes(sizes, ["ips", "empty"], disabled, []).patchTargetSize,
       });
     expect(formats(new Set())).not.toContain("ebp");
     expect(formats(new Set())).not.toContain("ppf");
     expect(formats(new Set(["ips"]))).not.toContain("ebp");
     expect(formats(new Set(["ips"]))).not.toContain("ppf");
-    expect(getEnabledPatchTargetSizes(sizes, ["ips", "empty"], new Set()).patchTargetSize).toBe(0);
-    expect(getEnabledPatchTargetSizes(sizes, ["ips", "empty"], new Set(["ips"])).patchTargetSize).toBe(0);
-    expect(getEnabledPatchTargetSizes(sizes, ["ips", "empty"], new Set(["empty"])).patchTargetSize).toBeUndefined();
+    expect(getEnabledPatchTargetSizes(sizes, ["ips", "empty"], new Set(), []).patchTargetSize).toBe(0);
+    expect(getEnabledPatchTargetSizes(sizes, ["ips", "empty"], new Set(["ips"]), []).patchTargetSize).toBe(0);
+    expect(getEnabledPatchTargetSizes(sizes, ["ips", "empty"], new Set(["empty"]), []).patchTargetSize).toBeUndefined();
     expect(formats(new Set(["empty"]))).toEqual(expect.arrayContaining(["ebp", "ppf"]));
-    expect(getEnabledPatchTargetSizes([4096, undefined], ["bps", "ips"], new Set()).patchTargetSize).toBeUndefined();
-    expect(getEnabledPatchTargetSizes([undefined], ["bps", "ips"], new Set(["ips"])).patchTargetSize).toBeUndefined();
-    expect(getEnabledPatchTargetSizes([0], ["empty"], new Set(["empty"])).patchTargetSize).toBeUndefined();
+    expect(
+      getEnabledPatchTargetSizes([4096, undefined], ["bps", "ips"], new Set(), []).patchTargetSize,
+    ).toBeUndefined();
+    expect(
+      getEnabledPatchTargetSizes([undefined], ["bps", "ips"], new Set(["ips"]), []).patchTargetSize,
+    ).toBeUndefined();
+    expect(getEnabledPatchTargetSizes([0], ["empty"], new Set(["empty"]), []).patchTargetSize).toBeUndefined();
   });
 });

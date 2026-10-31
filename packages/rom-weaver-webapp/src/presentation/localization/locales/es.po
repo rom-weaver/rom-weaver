@@ -4550,6 +4550,11 @@ msgstr "Códec RVZ"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.rvzNeedsDisc"
+msgstr "RVZ solo almacena imágenes de disco de GameCube y Wii, y {name} no es una. Elige otro formato de salida."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.guideRvz"
 msgstr "Guía de RVZ a ISO"
 

@@ -41,13 +41,12 @@ impl FormatDescriptor {
     }
 
     pub fn matches_path(&self, path: &Path) -> bool {
-        let file_name = path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .map(str::to_ascii_lowercase);
-        let Some(file_name) = file_name else {
+        let Some(file_name) = path.file_name() else {
             return false;
         };
+        // Lossy conversion keeps a non-UTF-8 name matchable: the extensions are ASCII, so
+        // the replacement character can only appear before the suffix being compared.
+        let file_name = file_name.to_string_lossy().to_ascii_lowercase();
         self.extensions
             .iter()
             .any(|extension| file_name.ends_with(&extension.to_ascii_lowercase()))
@@ -497,6 +496,18 @@ pub trait ContainerHandlerOperations: Send + Sync {
         let _ = overrides;
         self.create(request, context)
     }
+    /// Reject a create request that `create` would reject for its codec, level, entry
+    /// names, or input media, without writing anything. `compress --dry-run` runs this so a
+    /// dry run fails exactly where the real run would. The default accepts everything,
+    /// for formats whose create takes no such options.
+    fn validate_create(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<()> {
+        let _ = (request, context);
+        Ok(())
+    }
     fn create_dry_run_size(
         &self,
         request: &ContainerCreateRequest,
@@ -887,6 +898,36 @@ impl ContainerHandlerOperations for TracingContainerHandler {
             )),
         };
         trace_operation_result("create", descriptor, &result);
+        result
+    }
+
+    fn validate_create(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<()> {
+        ContainerCreateRequest::validate_rvz_block_size(
+            self.registration.descriptor.name,
+            request.rvz_block_size,
+        )?;
+        let result = match &self.registration.create_support {
+            CreateSupport::Supported => self.inner.validate_create(request, context),
+            CreateSupport::ExtractOnly {
+                supported_create_formats,
+            } => Err(RomWeaverError::Unsupported(
+                UnsupportedOp::ExtractOnlyCreate {
+                    format: request.format.clone(),
+                    supported_create_formats: supported_create_formats.clone(),
+                },
+            )),
+        };
+        trace!(
+            format = self.registration.descriptor.name,
+            codec = ?request.codec,
+            level = ?request.level,
+            ok = result.is_ok(),
+            "container create validation"
+        );
         result
     }
 
