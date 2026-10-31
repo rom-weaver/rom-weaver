@@ -336,7 +336,34 @@ impl CliApp {
             level: plan.level,
             parent: None,
         };
-        let estimated = plan.handler.create_dry_run_size(&request, context).ok();
+        // The real run's create fails on a bad codec, level, entry name, or input medium; a
+        // dry run must fail the same way instead of promising a write that cannot happen.
+        let failed = |error: RomWeaverError| {
+            debug!(
+                command = "compress",
+                format = %plan.resolved_format,
+                error = %error,
+                "compress dry run rejected the request"
+            );
+            OperationReport::failed_with_error(
+                OperationFamily::Container,
+                Some(plan.handler.descriptor().name.to_string()),
+                "create",
+                error,
+                context.single_thread_execution(),
+            )
+        };
+        if let Err(error) = plan.handler.validate_create(&request, context) {
+            return failed(error);
+        }
+        let estimated = match plan.handler.create_dry_run_size(&request, context) {
+            Ok(bytes) => Some(bytes),
+            Err(RomWeaverError::Unsupported(UnsupportedOp::FormatOperation {
+                operation: FormatOperationKind::CreateDryRunSize,
+                ..
+            })) => None,
+            Err(error) => return failed(error),
+        };
         let mut report = Self::compress_dry_run_report(
             input,
             output,
@@ -975,6 +1002,21 @@ impl CliApp {
         // --in-place and archive repack rewrite the source on purpose, so the
         // overwrite guard only covers the new files --output/--extension name.
         let writes_new_file = repack_root.is_none() && !config.in_place;
+        let output_plan = if writes_new_file {
+            match self.plan_trim_output(trim_source.kind, &trim_source.path, &output_path) {
+                Ok(plan) => plan,
+                Err(error) => {
+                    Self::record_trim_failure_with_kind(
+                        state,
+                        format!("{}: {error}", trim_source.path.display()),
+                        Some(error.kind()),
+                    );
+                    return;
+                }
+            }
+        } else {
+            TrimOutputPlan::Direct
+        };
         if writes_new_file
             && !config.dry_run
             && let Err(error) = ensure_output_available(&output_path, config.force)
@@ -1009,9 +1051,10 @@ impl CliApp {
             config.thread_execution.clone(),
         );
 
-        let trim_result = self.trim_file(
+        let trim_result = self.trim_file_into_output(
             &trim_source.path,
             &output_path,
+            &output_plan,
             TrimRequest {
                 in_place: config.in_place || repack_root.is_some(),
                 dry_run: config.dry_run,
@@ -1055,8 +1098,15 @@ impl CliApp {
                 }
                 if config.source_count == 1 && trim_source.kind == TrimInputKind::RvzConvert {
                     let mut metadata = serde_json::Map::new();
-                    metadata.insert("output_format".into(), json!("rvz"));
-                    if !config.dry_run {
+                    let packed_format = match &output_plan {
+                        TrimOutputPlan::Pack { handler, .. } => Some(handler.descriptor().name),
+                        TrimOutputPlan::Direct => None,
+                    };
+                    metadata.insert(
+                        "output_format".into(),
+                        json!(packed_format.unwrap_or("rvz")),
+                    );
+                    if !config.dry_run && packed_format.is_none() {
                         let logical_size =
                             self.containers.find_by_name("rvz").and_then(|handler| {
                                 handler

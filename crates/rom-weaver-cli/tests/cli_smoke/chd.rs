@@ -3364,3 +3364,60 @@ fn weave_create_resolves_cd_chd_track_member_with_split_bin_listing() {
     assert_eq!(create["status"], "succeeded", "{create}");
     assert!(output.path().exists());
 }
+
+/// `extract --checksum` hashes the `.bin` payload of a CHD but not the `.cue` sheet written
+/// beside it: the sheet is generated text, not a file taken from the input.
+#[test]
+fn chd_extract_checksum_covers_the_bin_but_not_the_generated_cue() {
+    let temp = setup_temp_dir();
+    let payload = (0..16_384)
+        .map(|index| (index % 251) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("disc.bin").path(), &payload).expect("bin fixture");
+    fs::write(
+        temp.child("disc.cue").path(),
+        "FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n",
+    )
+    .expect("cue fixture");
+    let chd = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--output",
+            chd.path().to_str().expect("path"),
+        ],
+        0,
+    );
+
+    let terminal = parse_single_json_line(&command_stdout(
+        &[
+            "extract",
+            "--input",
+            chd.path().to_str().expect("path"),
+            "--output",
+            temp.child("out").path().to_str().expect("path"),
+            "--checksum",
+            "sha1",
+            "--json",
+        ],
+        0,
+    ));
+    let files = terminal["details"]["emitted_files"]
+        .as_array()
+        .expect("emitted files");
+    let bin = files
+        .iter()
+        .find(|file| file["kind"] == "bin")
+        .expect("bin");
+    assert_eq!(
+        bin["checksums"]["sha1"],
+        checksum_value(temp.child("out/disc.bin").path(), "sha1")
+    );
+    let cue = files
+        .iter()
+        .find(|file| file["kind"] == "cue")
+        .expect("cue");
+    assert!(cue.get("checksums").is_none(), "{cue}");
+}

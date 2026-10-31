@@ -183,9 +183,11 @@ Checksums can target source bytes, selected container payloads, or byte ranges (
 - XISO images (`.xiso`, `.xiso.iso`, and probed XDVDFS `.iso` files)
 - GameCube/Wii disc candidates detected by the format recommendation: lossless RVZ conversion, without sector scrubbing
 
-A single disc conversion reports mode `rvz-convert` and `output_format: "rvz"`. Completed conversions also report logical disc byte counts in `input_size` and `raw_size`. The emitted file size is the compressed size. Separate output is required; sectors are not scrubbed.
+A single disc conversion reports mode `rvz-convert` and `output_format: "rvz"` (the container's name when `--output` packs it into a `.zip` or `.7z`). Completed conversions also report logical disc byte counts in `input_size` and `raw_size`. The emitted file size is the compressed size. Separate output is required; sectors are not scrubbed.
 
 `--in-place` rewrites the source file; `--output` or `--extension` write the trimmed copy elsewhere instead, and `-n`/`--dry-run` reports what would change without writing anything.
+
+A `--output` or `--extension` name that ends in a container extension packs the trimmed file inside it: `.zip` and `.7z` for every input, `.chd` for XISO, `.z3ds` for 3DS, and `.rvz` for the GameCube/Wii conversion (the one case where the trimmed file is the container). Any other container extension is rejected with nothing written, and so is any extension other than `.rvz`, `.zip`, or `.7z` for a GameCube/Wii disc (an extensionless name is accepted). See [choose the output format](../how-to/cli-trim.md#choose-the-output-format).
 
 `--revert` pads a trimmed file back out, and works for NDS, GBA, and 3DS. XISO trimming and RVZ conversion do not support this operation. It also answers to `--untrim` and `--restore`.
 

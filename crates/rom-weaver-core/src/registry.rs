@@ -483,6 +483,18 @@ pub trait ContainerHandlerOperations: Send + Sync {
         let _ = overrides;
         self.create(request, context)
     }
+    /// Reject a create request that `create` would reject for its codec, level, entry
+    /// names, or input media, without writing anything. `compress --dry-run` runs this so a
+    /// dry run fails exactly where the real run would. The default accepts everything,
+    /// for formats whose create takes no such options.
+    fn validate_create(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<()> {
+        let _ = (request, context);
+        Ok(())
+    }
     fn create_dry_run_size(
         &self,
         request: &ContainerCreateRequest,
@@ -833,6 +845,36 @@ impl ContainerHandlerOperations for TracingContainerHandler {
             )),
         };
         trace_operation_result("create", descriptor, &result);
+        result
+    }
+
+    fn validate_create(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<()> {
+        ContainerCreateRequest::validate_rvz_block_size(
+            self.registration.descriptor.name,
+            request.rvz_block_size,
+        )?;
+        let result = match &self.registration.create_support {
+            CreateSupport::Supported => self.inner.validate_create(request, context),
+            CreateSupport::ExtractOnly {
+                supported_create_formats,
+            } => Err(RomWeaverError::Unsupported(
+                UnsupportedOp::ExtractOnlyCreate {
+                    format: request.format.clone(),
+                    supported_create_formats: supported_create_formats.clone(),
+                },
+            )),
+        };
+        trace!(
+            format = self.registration.descriptor.name,
+            codec = ?request.codec,
+            level = ?request.level,
+            ok = result.is_ok(),
+            "container create validation"
+        );
         result
     }
 

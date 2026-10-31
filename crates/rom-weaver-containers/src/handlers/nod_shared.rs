@@ -679,6 +679,16 @@ impl NodHandlerCore {
         ))
     }
 
+    /// Open `input` as a disc image without reading its data, so a create request for a
+    /// non-GameCube/Wii input fails with the same error the real create reports.
+    pub(crate) fn validate_create_input(&self, input: &Path) -> Result<()> {
+        debug!(format = self.format_name(), input = %input.display(), "nod create input check");
+        let read_options = self.read_options(0);
+        self.open_disc_from_path_or_stream(input, &read_options)
+            .map(drop)
+            .map_err(|error| self.create_open_error(input, &error))
+    }
+
     pub(crate) fn process_create_with_progress<F>(
         &self,
         input: &Path,

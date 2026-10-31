@@ -63,8 +63,8 @@ pub use rom_weaver_core::N64ByteOrder;
 use rom_weaver_core::{
     ArchiveEntryKindFilter, ChecksumRequest, ContainerCreateRequest, ContainerExtractRequest,
     ContainerHandler, ContainerListEntry, ContainerProbeRequest, CreateInputOverride,
-    CreateInputSource, DiscSheetKind, OperationContext, OperationFamily, OperationReport,
-    OperationStatus, PatchApplyRequest, PatchCheckScopes, PatchChecksumValidation,
+    CreateInputSource, DiscSheetKind, FormatOperationKind, OperationContext, OperationFamily,
+    OperationReport, OperationStatus, PatchApplyRequest, PatchCheckScopes, PatchChecksumValidation,
     PatchCreateFormatOptions, PatchCreateRequest, PatchEndpointSelection, PatchValidateRequest,
     ProgressEvent, ProgressSink, PromptCandidate, Result, RomWeaverError, Selection, SelectionList,
     SelectionMatcher, SelectionPrompter, SolidPatchMetadata, StagedOutput, ThreadBudget,
@@ -1440,6 +1440,37 @@ impl TrimInputKind {
             Self::ThreeDs => "3ds",
             Self::Xiso => "xiso",
             Self::RvzConvert => "rvz-convert",
+        }
+    }
+
+    /// What a trim output of this kind is called in an error message.
+    const fn output_subject(self) -> &'static str {
+        match self {
+            Self::NdsFamily => "NDS/DSi ROMs",
+            Self::Gba => "GBA ROMs",
+            Self::ThreeDs => "3DS ROMs",
+            Self::Xiso => "Xbox XISO discs",
+            Self::RvzConvert => "GameCube/Wii discs",
+        }
+    }
+
+    /// The container format a trim writes straight to its destination, with no packing step:
+    /// an XISO rebuild is an XISO, a GameCube/Wii conversion is an RVZ.
+    const fn direct_output_format(self) -> Option<&'static str> {
+        match self {
+            Self::Xiso => Some("xiso"),
+            Self::RvzConvert => Some("rvz"),
+            Self::NdsFamily | Self::Gba | Self::ThreeDs => None,
+        }
+    }
+
+    /// The container formats a trimmed file of this kind can be packed into. Archives take any
+    /// kind; CHD is for disc images and Z3DS for 3DS ROMs.
+    const fn packable_output_formats(self) -> &'static [&'static str] {
+        match self {
+            Self::NdsFamily | Self::Gba | Self::RvzConvert => &["zip", "7z"],
+            Self::ThreeDs => &["zip", "7z", "z3ds"],
+            Self::Xiso => &["zip", "7z", "chd"],
         }
     }
 

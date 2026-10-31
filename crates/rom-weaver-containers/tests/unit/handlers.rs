@@ -6312,6 +6312,151 @@ mod tests {
         }
     }
 
+    /// `validate_create` is what `compress --dry-run` runs: it rejects what `create` rejects
+    /// (codec, level, input medium) and accepts what `create` accepts, without writing.
+    #[test]
+    fn validate_create_rejects_what_create_rejects_for_every_creatable_format() {
+        let temp_dir = temp_dir_path("validate-create");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let payload = temp_dir.join("payload.bin");
+        fs::write(&payload, vec![7_u8; 8192]).expect("payload");
+        let gamecube = temp_dir.join("disc.iso");
+        fs::write(&gamecube, build_test_gamecube_iso(0x4000)).expect("gamecube fixture");
+        let registry = ContainerRegistry::new();
+        let context = test_context(&temp_dir, 1);
+        let request = |format: &str, input: &Path, codec: Option<&str>, level: Option<i32>| {
+            ContainerCreateRequest {
+                rvz_block_size: None,
+                archive_names: None,
+                inputs: vec![input.to_path_buf()],
+                output: temp_dir.join(format!("out.{format}")),
+                format: format.to_string(),
+                codec: codec.map(str::to_string),
+                level,
+                parent: None,
+            }
+        };
+        let validate = |format: &str, input: &Path, codec: Option<&str>, level: Option<i32>| {
+            registry
+                .find_by_name(format)
+                .expect("handler")
+                .validate_create(&request(format, input, codec, level), &context)
+        };
+
+        type Rejected<'a> = (&'a str, &'a Path, Option<&'a str>, Option<i32>, &'a str);
+        let rejected: [Rejected<'_>; 10] = [
+            (
+                "zip",
+                &payload,
+                Some("bogus"),
+                None,
+                "unsupported zip codec `bogus`",
+            ),
+            (
+                "zip",
+                &payload,
+                Some("zstd"),
+                Some(99),
+                "level `99` is invalid for zip codec `zstd`",
+            ),
+            (
+                "7z",
+                &payload,
+                Some("deflate"),
+                None,
+                "unsupported 7z codec `deflate`",
+            ),
+            (
+                "7z",
+                &payload,
+                Some("lzma2"),
+                Some(99),
+                "out of range for codec `lzma2`",
+            ),
+            (
+                "z3ds",
+                &payload,
+                Some("bogus"),
+                None,
+                "unsupported z3ds codec `bogus`",
+            ),
+            (
+                "z3ds",
+                &payload,
+                None,
+                Some(99),
+                "z3ds level `99` is out of range",
+            ),
+            (
+                "chd",
+                &payload,
+                Some("deflate"),
+                None,
+                "unsupported chd codec `deflate`",
+            ),
+            (
+                "rvz",
+                &gamecube,
+                Some("zstd"),
+                Some(-8),
+                "level `-8` is invalid for rvz codec `zstd`",
+            ),
+            (
+                "rvz",
+                &payload,
+                None,
+                None,
+                "is not a GameCube or Wii disc image",
+            ),
+            (
+                "rvz",
+                &gamecube,
+                Some("deflate"),
+                None,
+                "unsupported rvz codec `deflate`",
+            ),
+        ];
+        for (format, input, codec, level, expected) in rejected {
+            let error = validate(format, input, codec, level)
+                .expect_err(&format!("{format} {codec:?} {level:?}"))
+                .to_string();
+            assert!(error.contains(expected), "{format}: {error}");
+        }
+        for (format, input, codec, level) in [
+            ("zip", &payload, Some("deflate"), Some(6)),
+            ("7z", &payload, Some("lzma2"), Some(5)),
+            ("z3ds", &payload, Some("zstd"), Some(3)),
+            ("chd", &payload, Some("zlib"), None),
+            ("rvz", &gamecube, Some("zstd"), Some(-7)),
+            ("rvz", &gamecube, None, None),
+        ] {
+            validate(format, input, codec, level)
+                .unwrap_or_else(|error| panic!("{format} {codec:?} {level:?}: {error}"));
+        }
+        assert!(
+            !temp_dir.join("out.zip").exists() && !temp_dir.join("out.rvz").exists(),
+            "validate_create must not write"
+        );
+
+        let mut named = request("zip", &payload, None, None);
+        named.archive_names = Some(vec!["../escape".to_string()]);
+        let error = registry
+            .find_by_name("zip")
+            .expect("zip")
+            .validate_create(&named, &context)
+            .expect_err("unsafe entry name");
+        assert!(matches!(error, RomWeaverError::Validation(_)), "{error:?}");
+
+        let error = registry
+            .find_by_name("cso")
+            .expect("cso")
+            .validate_create(&request("cso", &payload, None, None), &context)
+            .expect_err("extract-only format");
+        assert!(error.to_string().contains("extract-only"), "{error}");
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
     fn garbage_archive_bytes() -> Vec<u8> {
         // Deliberately not the magic of any container libarchive recognizes: a short run of
         // pseudo-random bytes. libarchive's format auto-detection rejects this, which the

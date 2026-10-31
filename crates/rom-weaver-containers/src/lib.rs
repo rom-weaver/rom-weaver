@@ -64,7 +64,7 @@ use serde_json::{Map, Value, json};
 use zeekstd::{DecodeOptions as ZeekstdDecodeOptions, SeekTable as ZeekstdSeekTable};
 use zstd::bulk::Compressor as ZstdCompressor;
 
-use archive_entries::{ArchiveInputEntry, collect_archive_inputs, sum_input_file_bytes};
+use archive_entries::{ArchiveInputEntry, collect_create_entries, sum_input_file_bytes};
 pub use archive_formats::{
     ArchiveExtensionAlias, ArchiveFormatMetadata, ArchiveMagicSignature, archive_format_metadata,
 };

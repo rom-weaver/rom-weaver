@@ -287,6 +287,28 @@ impl RvzContainerHandler {
         })
     }
 
+    /// The single input and nod options a create request resolves to; the checks `create`,
+    /// `create_dry_run_size`, and `validate_create` share.
+    fn resolve_create_options<'a>(
+        &self,
+        request: &'a ContainerCreateRequest,
+    ) -> Result<(&'a Path, NodFormatOptions)> {
+        ContainerCreateRequest::validate_rvz_block_size(RVZ.name, request.rvz_block_size)?;
+        let input = RVZ_NOD_CORE.ensure_single_create_input(request)?;
+        let compression =
+            self.resolve_create_compression(request.codec.as_deref(), request.level)?;
+        Ok((
+            input,
+            NodFormatOptions {
+                format: NodFormat::Rvz,
+                compression,
+                block_size: request
+                    .rvz_block_size
+                    .unwrap_or_else(|| NodFormat::Rvz.default_block_size()),
+            },
+        ))
+    }
+
     fn resolve_create_compression(
         &self,
         codec: Option<&str>,
@@ -310,6 +332,15 @@ impl RvzContainerHandler {
 }
 
 impl ContainerHandlerOperations for RvzContainerHandler {
+    fn validate_create(
+        &self,
+        request: &ContainerCreateRequest,
+        _context: &OperationContext,
+    ) -> Result<()> {
+        let (input, _) = self.resolve_create_options(request)?;
+        RVZ_NOD_CORE.validate_create_input(input)
+    }
+
     fn descriptor(&self) -> &'static FormatDescriptor {
         &RVZ
     }
@@ -423,18 +454,8 @@ impl ContainerHandlerOperations for RvzContainerHandler {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        ContainerCreateRequest::validate_rvz_block_size(RVZ.name, request.rvz_block_size)?;
-        let input = RVZ_NOD_CORE.ensure_single_create_input(request)?;
+        let (input, options) = self.resolve_create_options(request)?;
         let execution = context.plan_threads(ThreadCapability::parallel(None));
-        let compression =
-            self.resolve_create_compression(request.codec.as_deref(), request.level)?;
-        let options = NodFormatOptions {
-            format: NodFormat::Rvz,
-            compression,
-            block_size: request
-                .rvz_block_size
-                .unwrap_or_else(|| NodFormat::Rvz.default_block_size()),
-        };
         let input_bytes = fs::metadata(input)?.len();
         let compression_label = normalize_codec_label(&options.compression.to_string());
         let compression_level = match &options.compression {
@@ -501,18 +522,8 @@ impl ContainerHandlerOperations for RvzContainerHandler {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<u64> {
-        ContainerCreateRequest::validate_rvz_block_size(RVZ.name, request.rvz_block_size)?;
-        let input = RVZ_NOD_CORE.ensure_single_create_input(request)?;
+        let (input, options) = self.resolve_create_options(request)?;
         let execution = context.plan_threads(ThreadCapability::parallel(None));
-        let compression =
-            self.resolve_create_compression(request.codec.as_deref(), request.level)?;
-        let options = NodFormatOptions {
-            format: NodFormat::Rvz,
-            compression,
-            block_size: request
-                .rvz_block_size
-                .unwrap_or_else(|| NodFormat::Rvz.default_block_size()),
-        };
 
         let mut last_emitted_percent = 0_u8;
         RVZ_NOD_CORE.process_create_dry_run_size_with_progress(

@@ -898,7 +898,7 @@ fn trim_gamecube_disc_rejects_non_rvz_container_outputs() {
     let source = temp.child("disc.iso");
     fs::write(source.path(), build_test_gamecube_iso(0x4000)).expect("iso fixture");
 
-    for (extension, label) in [("chd", "CHD"), ("zip", "ZIP"), ("7z", "7Z")] {
+    for (extension, label) in [("chd", "CHD"), ("z3ds", "Z3DS"), ("tar.gz", "TAR.GZ")] {
         let output = temp.child(format!("trimmed.{extension}"));
         let terminal = parse_single_json_line(&command_stdout(
             &[
@@ -1671,5 +1671,270 @@ fn trim_extension_conflicts_with_output_and_in_place() {
         let mut args = vec!["trim", "--input", source, "--extension", "small.{ext}"];
         args.extend(conflicting);
         command_stdout(&args, 2);
+    }
+}
+
+/// Runs `trim --input <source> --output <output>` and returns the terminal report.
+fn trim_to_output(source: &Path, output: &Path, extra: &[&str], code: i32) -> Value {
+    let mut args = vec![
+        "trim",
+        "--input",
+        source.to_str().expect("path"),
+        "--output",
+        output.to_str().expect("path"),
+    ];
+    args.extend_from_slice(extra);
+    args.push("--json");
+    parse_single_json_line(&command_stdout(&args, code))
+}
+
+fn extracted_entries(archive: &Path, destination: &Path) -> Vec<String> {
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            archive.to_str().expect("path"),
+            "--output",
+            destination.to_str().expect("path"),
+            "--no-nested-extract",
+        ],
+        0,
+    );
+    let mut names = fs::read_dir(destination)
+        .expect("extract dir")
+        .map(|entry| {
+            entry
+                .expect("entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect::<Vec<_>>();
+    names.sort();
+    names
+}
+
+#[test]
+fn trim_output_zip_or_7z_packs_the_trimmed_rom_inside() {
+    let temp = setup_temp_dir();
+    let source = temp.child("game.nds");
+    let rom = build_test_nds_rom(0x00, 0x2000, 0x2000, 0x4000, false);
+    fs::write(source.path(), &rom).expect("fixture");
+
+    for (name, entry) in [
+        ("out.zip", "out.nds"),
+        ("out.7z", "out.nds"),
+        ("named.nds.zip", "named.nds"),
+        ("v1.2.zip", "v1.2.nds"),
+    ] {
+        let output = temp.child(name);
+        let terminal = trim_to_output(source.path(), output.path(), &[], 0);
+        assert_eq!(terminal["status"], "succeeded", "{name}");
+        let destination = temp.child(format!("unpacked-{name}"));
+        assert_eq!(
+            extracted_entries(output.path(), destination.path()),
+            vec![entry.to_string()],
+            "{name}"
+        );
+        assert_eq!(
+            fs::read(destination.child(entry).path()).expect("packed rom"),
+            &rom[..0x2000],
+            "{name}"
+        );
+    }
+    assert!(!temp.child("game.trim.nds").path().exists());
+}
+
+#[test]
+fn trim_output_archive_dry_run_reports_the_container_and_writes_nothing() {
+    let temp = setup_temp_dir();
+    let source = temp.child("game.nds");
+    fs::write(
+        source.path(),
+        build_test_nds_rom(0x00, 0x2000, 0x2000, 0x4000, false),
+    )
+    .expect("fixture");
+    let output = temp.child("out.zip");
+
+    let terminal = trim_to_output(source.path(), output.path(), &["--dry-run"], 0);
+
+    assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(
+        terminal["details"]["writes"],
+        serde_json::json!([output.path().display().to_string()])
+    );
+    assert!(!output.path().exists());
+}
+
+#[test]
+fn trim_output_archive_replaces_existing_file_only_with_force() {
+    let temp = setup_temp_dir();
+    let source = temp.child("game.nds");
+    fs::write(
+        source.path(),
+        build_test_nds_rom(0x00, 0x2000, 0x2000, 0x4000, false),
+    )
+    .expect("fixture");
+    let output = temp.child("out.zip");
+    fs::write(output.path(), b"keep me").expect("existing output");
+
+    let terminal = trim_to_output(source.path(), output.path(), &[], 1);
+    assert_eq!(terminal["status"], "failed");
+    assert_eq!(fs::read(output.path()).expect("output"), b"keep me");
+
+    let terminal = trim_to_output(source.path(), output.path(), &["--force"], 0);
+    assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(
+        extracted_entries(output.path(), temp.child("unpacked").path()),
+        vec!["out.nds".to_string()]
+    );
+}
+
+#[test]
+fn trim_output_container_must_be_valid_for_the_input_type() {
+    let temp = setup_temp_dir();
+    let source = temp.child("game.nds");
+    fs::write(
+        source.path(),
+        build_test_nds_rom(0x00, 0x2000, 0x2000, 0x4000, false),
+    )
+    .expect("fixture");
+
+    for (name, label) in [
+        ("out.chd", "CHD"),
+        ("out.z3ds", "Z3DS"),
+        ("out.rvz", "RVZ"),
+        ("out.tar.gz", "TAR.GZ"),
+    ] {
+        for dry_run in [false, true] {
+            let output = temp.child(name);
+            let extra: &[&str] = if dry_run { &["--dry-run"] } else { &[] };
+            let terminal = trim_to_output(source.path(), output.path(), extra, 1);
+            assert_eq!(terminal["status"], "failed", "{name} dry_run={dry_run}");
+            let message = terminal["label"].as_str().expect("label");
+            assert!(
+                message.contains(&format!(
+                    "{label} is not a valid trim output for NDS/DSi ROMs"
+                )),
+                "{name}: {message}"
+            );
+            assert!(message.contains(".zip, .7z"), "{name}: {message}");
+            assert!(!output.path().exists(), "{name} must not be written");
+        }
+    }
+
+    // A name that is not a container still writes the trimmed ROM itself.
+    let plain = temp.child("out.bin");
+    let terminal = trim_to_output(source.path(), plain.path(), &[], 0);
+    assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(
+        fs::metadata(plain.path()).expect("plain output").len(),
+        0x2000
+    );
+}
+
+#[test]
+fn trim_output_z3ds_packs_a_3ds_rom_and_chd_packs_an_xiso() {
+    let temp = setup_temp_dir();
+    let rom_3ds = temp.child("sample.3ds");
+    let mut rom = build_test_padded_rom(0x4567, 0x8000, 0xFF);
+    rom[0x100..0x104].copy_from_slice(b"NCCH");
+    rom[0x104..0x108].copy_from_slice(&0x22_u32.to_le_bytes());
+    rom[0x18E] = 0;
+    fs::write(rom_3ds.path(), &rom).expect("3ds fixture");
+    let z3ds = temp.child("out.z3ds");
+    let terminal = trim_to_output(rom_3ds.path(), z3ds.path(), &[], 0);
+    assert_eq!(terminal["status"], "succeeded");
+    let unpacked = temp.child("unpacked-3ds");
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            z3ds.path().to_str().expect("path"),
+            "--output",
+            unpacked.path().to_str().expect("path"),
+        ],
+        0,
+    );
+    let extracted = fs::read_dir(unpacked.path())
+        .expect("extract dir")
+        .next()
+        .expect("extracted file")
+        .expect("entry")
+        .path();
+    assert_eq!(fs::read(extracted).expect("3ds payload"), &rom[..0x4567]);
+
+    let source_tree = temp.child("xiso-source");
+    fs::create_dir_all(source_tree.path()).expect("source tree root");
+    let xiso = temp.child("source.iso");
+    write_xiso_fixture_from_directory(source_tree.path(), xiso.path());
+    let chd = temp.child("out.chd");
+    let terminal = trim_to_output(xiso.path(), chd.path(), &[], 0);
+    assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(&fs::read(chd.path()).expect("chd")[..8], b"MComprHD");
+
+    // An XISO is not a 3DS ROM, and a 3DS ROM is not a disc.
+    let terminal = trim_to_output(xiso.path(), temp.child("bad.z3ds").path(), &[], 1);
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("Z3DS is not a valid trim output for Xbox XISO discs")
+    );
+    let terminal = trim_to_output(rom_3ds.path(), temp.child("bad.chd").path(), &[], 1);
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("CHD is not a valid trim output for 3DS ROMs")
+    );
+}
+
+#[test]
+fn trim_gamecube_disc_output_zip_packs_the_rvz_and_other_extensions_are_rejected() {
+    let temp = setup_temp_dir();
+    let source = temp.child("disc.iso");
+    fs::write(source.path(), build_test_gamecube_iso(0x4000)).expect("iso fixture");
+
+    for (name, entry) in [("pack.zip", "pack.rvz"), ("pack.iso.7z", "pack.iso.rvz")] {
+        let output = temp.child(name);
+        let terminal = trim_to_output(source.path(), output.path(), &[], 0);
+        assert_eq!(terminal["status"], "succeeded", "{name}");
+        assert_eq!(
+            terminal["details"]["output_format"],
+            name.rsplit('.').next().expect("ext")
+        );
+        let destination = temp.child(format!("unpacked-{name}"));
+        assert_eq!(
+            extracted_entries(output.path(), destination.path()),
+            vec![entry.to_string()],
+            "{name}"
+        );
+        let packed = fs::read(destination.child(entry).path()).expect("packed rvz");
+        assert_eq!(&packed[..3], b"RVZ", "{name}");
+    }
+
+    for name in [
+        "plain.iso",
+        "plain.bin",
+        "plain.GCM",
+        "plain.img",
+        "plain.nds",
+        "plain.foo",
+        "trimmed.disc",
+    ] {
+        for dry_run in [false, true] {
+            let output = temp.child(name);
+            let extra: &[&str] = if dry_run { &["--dry-run"] } else { &[] };
+            let terminal = trim_to_output(source.path(), output.path(), extra, 1);
+            let message = terminal["label"].as_str().expect("label");
+            assert!(
+                message.contains("is not a valid trim output for GameCube/Wii discs"),
+                "{name}: {message}"
+            );
+            assert!(message.contains(".rvz, .zip, or .7z"), "{name}: {message}");
+            assert!(message.contains("`extract`"), "{name}: {message}");
+            assert!(!output.path().exists(), "{name} must not be written");
+        }
     }
 }
