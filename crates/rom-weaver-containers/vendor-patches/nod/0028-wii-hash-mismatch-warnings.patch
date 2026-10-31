@@ -1,0 +1,195 @@
+diff --git a/disc/wii.rs b/disc/wii.rs
+index f6c305cde..59bb3ee0b 100644
+--- a/disc/wii.rs
++++ b/disc/wii.rs
+@@ -18,7 +18,9 @@ use crate::nod::{
+         gcn::{PartitionReaderGC, read_part_meta},
+         preloader::{Preloader, SectorGroup, SectorGroupRequest, fetch_sector_group},
+     },
+-    read::{PartitionEncryption, PartitionMeta, PartitionOptions, PartitionReader},
++    read::{
++        HashMismatchSummary, PartitionEncryption, PartitionMeta, PartitionOptions, PartitionReader,
++    },
+     util::{
+         aes::aes_cbc_decrypt,
+         array_ref,
+@@ -332,6 +334,7 @@ pub(crate) struct PartitionReaderWii {
+     partition: PartitionInfo,
+     pos: u64,
+     options: PartitionOptions,
++    hash_mismatches: HashMismatchSummary,
+     sector_group: Option<SectorGroup>,
+     meta: Option<PartitionMeta>,
+     h3_table: Option<Arc<[u8; H3_TABLE_SIZE]>>,
+@@ -344,6 +347,7 @@ impl Clone for PartitionReaderWii {
+             partition: self.partition.clone(),
+             pos: 0,
+             options: self.options.clone(),
++            hash_mismatches: HashMismatchSummary::default(),
+             sector_group: None,
+             meta: self.meta.clone(),
+             h3_table: self.h3_table.clone(),
+@@ -362,6 +366,7 @@ impl PartitionReaderWii {
+             partition: partition.clone(),
+             pos: 0,
+             options: options.clone(),
++            hash_mismatches: HashMismatchSummary::default(),
+             sector_group: None,
+             meta: None,
+             h3_table: None,
+@@ -440,6 +445,9 @@ impl BufRead for PartitionReaderWii {
+                         - self.partition.data_start_sector
+                         - group_idx * 64)
+                         .min(64) as usize,
++                    self.options
++                        .hash_mismatch_warnings
++                        .then_some(&mut self.hash_mismatches),
+                 )?;
+             }
+         }
+@@ -491,7 +499,16 @@ fn verify_hashes(
+     group_idx: u32,
+     h3_table: &[u8],
+     sector_count: usize,
++    mut warnings: Option<&mut HashMismatchSummary>,
+ ) -> io::Result<()> {
++    let mut mismatch = |group, sector, message: &dyn Fn() -> String| {
++        if let Some(summary) = warnings.as_deref_mut() {
++            summary.record(group, sector, message);
++            Ok(())
++        } else {
++            Err(io::Error::new(io::ErrorKind::InvalidData, message()))
++        }
++    };
+     // Synthesized tail sectors have no mastered hashes or exceptions to verify.
+     for sector in 0..sector_count {
+         let buf = array_ref![buf, sector * SECTOR_SIZE, SECTOR_SIZE];
+@@ -504,10 +521,9 @@ fn verify_hashes(
+             let expected = array_ref![buf, i * 20, 20];
+             let output = sha1_hash(array_ref![buf, (i + 1) * 0x400, 0x400]);
+             if output != *expected {
+-                return Err(io::Error::new(
+-                    io::ErrorKind::InvalidData,
+-                    format!("Invalid H0 hash! (block {i})"),
+-                ));
++                mismatch(group_idx, part_sector, &|| {
++                    format!("Invalid H0 hash! (block {i})")
++                })?;
+             }
+         }
+ 
+@@ -516,10 +532,9 @@ fn verify_hashes(
+             let expected = array_ref![buf, 0x280 + sector * 20, 20];
+             let output = sha1_hash(array_ref![buf, 0, 0x26C]);
+             if output != *expected {
+-                return Err(io::Error::new(
+-                    io::ErrorKind::InvalidData,
+-                    format!("Invalid H1 hash! (sector {sector})",),
+-                ));
++                mismatch(group_idx, part_sector, &|| {
++                    format!("Invalid H1 hash! (sector {sector})",)
++                })?;
+             }
+         }
+ 
+@@ -528,10 +543,9 @@ fn verify_hashes(
+             let expected = array_ref![buf, 0x340 + sub_group * 20, 20];
+             let output = sha1_hash(array_ref![buf, 0x280, 0xA0]);
+             if output != *expected {
+-                return Err(io::Error::new(
+-                    io::ErrorKind::InvalidData,
+-                    format!("Invalid H2 hash! (subgroup {sub_group})"),
+-                ));
++                mismatch(group_idx, part_sector, &|| {
++                    format!("Invalid H2 hash! (subgroup {sub_group})")
++                })?;
+             }
+         }
+ 
+@@ -545,10 +559,9 @@ fn verify_hashes(
+             })?;
+             let output = sha1_hash(array_ref![buf, 0x340, 0xA0]);
+             if output.as_slice() != expected {
+-                return Err(io::Error::new(
+-                    io::ErrorKind::InvalidData,
+-                    format!("Invalid H3 hash! (group {group})"),
+-                ));
++                mismatch(group_idx, part_sector, &|| {
++                    format!("Invalid H3 hash! (group {group})")
++                })?;
+             }
+         }
+     }
+@@ -557,6 +570,12 @@ fn verify_hashes(
+ }
+ 
+ impl PartitionReader for PartitionReaderWii {
++    fn hash_mismatches(&self) -> Option<&HashMismatchSummary> {
++        self.options
++            .hash_mismatch_warnings
++            .then_some(&self.hash_mismatches)
++    }
++
+     fn is_wii(&self) -> bool {
+         true
+     }
+diff --git a/read.rs b/read.rs
+index b4ce953bd..3c20c4e94 100644
+--- a/read.rs
++++ b/read.rs
+@@ -62,6 +62,43 @@ pub struct PartitionOptions {
+     /// Wii: Validate data hashes while reading the partition, if available.
+     /// This significantly slows down reading.
+     pub validate_hashes: bool,
++    /// Collect source hash mismatches instead of failing; structural errors still fail.
++    pub hash_mismatch_warnings: bool,
++}
++
++/// Bounded summary of hash mismatches encountered during a sequential partition read.
++#[derive(Default, Debug, Clone)]
++pub struct HashMismatchSummary {
++    /// First mismatching hash, including group and partition-relative sector.
++    pub first: Option<String>,
++    /// Number of failed hash comparisons.
++    pub hashes: u64,
++    /// Number of affected sectors in the sequential read.
++    pub sectors: u64,
++    /// Number of affected sector groups in the sequential read.
++    pub groups: u64,
++    last_sector: Option<u32>,
++    last_group: Option<u32>,
++}
++
++impl HashMismatchSummary {
++    pub(crate) fn record(&mut self, group: u32, sector: u32, message: impl FnOnce() -> String) {
++        if self.first.is_none() {
++            self.first = Some(format!(
++                "first group {group}, sector {sector}: {}",
++                message()
++            ));
++        }
++        self.hashes += 1;
++        if self.last_sector != Some(sector) {
++            self.sectors += 1;
++            self.last_sector = Some(sector);
++        }
++        if self.last_group != Some(group) {
++            self.groups += 1;
++            self.last_group = Some(group);
++        }
++    }
+ }
+ 
+ /// Trait for reading disc images.
+@@ -364,6 +401,11 @@ pub trait PartitionReader: DynClone + BufRead + Seek + Send {
+     /// Whether this is a Wii partition. (GameCube otherwise)
+     fn is_wii(&self) -> bool;
+ 
++    /// Source hash mismatches collected when requested through partition options.
++    fn hash_mismatches(&self) -> Option<&HashMismatchSummary> {
++        None
++    }
++
+     /// Reads the partition header and file system table.
+     fn meta(&mut self) -> Result<PartitionMeta>;
+ }

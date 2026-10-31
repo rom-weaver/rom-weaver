@@ -6,7 +6,7 @@ use std::{
 
 use bytes::Bytes;
 use polonius_the_crab::{polonius, polonius_return};
-use tracing::warn;
+use tracing::{debug, trace, warn};
 use zerocopy::{FromBytes, IntoBytes};
 
 use crate::nod::{
@@ -27,7 +27,10 @@ use crate::nod::{
         },
     },
     io::block::BlockReader,
-    read::{DiscMeta, DiscOptions, PartitionEncryption, PartitionOptions, PartitionReader},
+    read::{
+        DiscMeta, DiscOptions, HashMismatchSummary, PartitionEncryption, PartitionOptions,
+        PartitionReader,
+    },
     util::{
         array_ref, impl_read_for_bufread,
         read::{read_arc, read_from, read_vec},
@@ -44,6 +47,16 @@ pub struct DiscReader {
     alt_disc_header: Option<Arc<DiscHeader>>,
     disc_data: DiscReaderData,
     sector_group: Option<SectorGroup>,
+    /// Copy-pass hash verification state, indexed by partition index.
+    hash_verification: Vec<Option<PartitionHashVerification>>,
+}
+
+/// Hash verification of one Wii partition during a sequential read.
+#[derive(Clone, Default)]
+struct PartitionHashVerification {
+    summary: HashMismatchSummary,
+    /// Next group the sequential read records; groups it never reaches are left to the caller.
+    next_group: u32,
 }
 
 #[derive(Clone)]
@@ -70,6 +83,11 @@ impl Clone for DiscReader {
             alt_disc_header: self.alt_disc_header.clone(),
             disc_data: self.disc_data.clone(),
             sector_group: None,
+            hash_verification: self
+                .hash_verification
+                .iter()
+                .map(|state| state.as_ref().map(|_| PartitionHashVerification::default()))
+                .collect(),
         }
     }
 }
@@ -174,6 +192,7 @@ impl DiscReader {
             disc_data,
             sector_group: None,
             alt_disc_header,
+            hash_verification: Vec::new(),
         })
     }
 
@@ -337,6 +356,61 @@ impl DiscReader {
         }
     }
 
+    /// Verifies the H0-H3 hashes of partition `index` while it is read through this reader.
+    ///
+    /// Reads the partition's H3 table now (failing like a validating partition reader would);
+    /// each group loaded afterwards is checked by the sector-group loader before it is
+    /// re-encrypted. Mismatches from the sequential read collect into
+    /// [`Self::hash_mismatches`]; groups the read never reaches start at
+    /// [`Self::next_unverified_group`].
+    pub fn enable_hash_verification(&mut self, index: usize) -> Result<()> {
+        let DiscReaderData::Wii { partitions, .. } = &self.disc_data else {
+            return Err(Error::DiscFormat(
+                "GameCube discs have no partition hashes".to_string(),
+            ));
+        };
+        let Some(partition) = partitions.get(index) else {
+            return Err(Error::DiscFormat(format!("Partition {index} not found")));
+        };
+        let reader = PartitionReaderWii::new(
+            self.preloader.clone(),
+            partition,
+            &PartitionOptions {
+                validate_hashes: true,
+                hash_mismatch_warnings: true,
+            },
+        )?;
+        let Some(h3_table) = reader.h3_table() else {
+            debug!(index, "Partition has no hashes; nothing to verify");
+            return Ok(());
+        };
+        self.preloader
+            .register_h3_table(partition.index, h3_table)
+            .context("Registering H3 table")?;
+        if self.hash_verification.len() <= partition.index {
+            self.hash_verification.resize(partition.index + 1, None);
+        }
+        self.hash_verification[partition.index] = Some(PartitionHashVerification::default());
+        debug!(index, "Enabled copy-pass hash verification");
+        Ok(())
+    }
+
+    /// Hash mismatches recorded by the sequential read of partition `index`, if verified.
+    pub fn hash_mismatches(&self, index: usize) -> Option<&HashMismatchSummary> {
+        self.hash_verification
+            .get(index)?
+            .as_ref()
+            .map(|state| &state.summary)
+    }
+
+    /// First group of partition `index` that the sequential read has not verified, if verified.
+    pub fn next_unverified_group(&self, index: usize) -> Option<u32> {
+        self.hash_verification
+            .get(index)?
+            .as_ref()
+            .map(|state| state.next_group)
+    }
+
     pub fn load_sector_group(
         &mut self,
         abs_sector: u32,
@@ -354,6 +428,10 @@ impl DiscReader {
                 partition_idx: Some(partition.index as u8),
                 mode: self.mode,
                 force_rehash,
+                verify_hashes: self
+                    .hash_verification
+                    .get(partition.index)
+                    .is_some_and(Option::is_some),
             };
             (request, max_groups)
         } else {
@@ -364,6 +442,7 @@ impl DiscReader {
                 partition_idx: None,
                 mode: self.mode,
                 force_rehash,
+                verify_hashes: false,
             };
             (request, max_groups)
         };
@@ -371,6 +450,14 @@ impl DiscReader {
         // Load sector group
         let (sector_group, updated) =
             fetch_sector_group(request, max_groups, &mut self.sector_group, &self.preloader)?;
+        if updated && request.verify_hashes {
+            if let Some(Some(state)) = request
+                .partition_idx
+                .and_then(|idx| self.hash_verification.get_mut(idx as usize))
+            {
+                record_verified_group(state, request.group_idx, sector_group);
+            }
+        }
 
         Ok((sector_group, updated))
     }
@@ -470,6 +557,31 @@ impl Seek for DiscReader {
         };
         Ok(self.pos)
     }
+}
+
+/// Adds a loader-verified group's mismatches to the partition summary in sequential order.
+/// Out-of-order groups (after a seek) are not recorded, so no group is counted twice.
+fn record_verified_group(
+    state: &mut PartitionHashVerification,
+    group_idx: u32,
+    sector_group: &SectorGroup,
+) {
+    if group_idx != state.next_group {
+        trace!(
+            group_idx,
+            next_group = state.next_group,
+            "Skipping out-of-order group for hash summary"
+        );
+        return;
+    }
+    if let Some(mismatches) = &sector_group.hash_mismatches {
+        for mismatch in mismatches.iter() {
+            state
+                .summary
+                .record(group_idx, mismatch.sector, || mismatch.kind.to_string());
+        }
+    }
+    state.next_group += 1;
 }
 
 fn read_partition_info(

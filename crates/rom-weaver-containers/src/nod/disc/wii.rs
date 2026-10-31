@@ -18,7 +18,9 @@ use crate::nod::{
         gcn::{PartitionReaderGC, read_part_meta},
         preloader::{Preloader, SectorGroup, SectorGroupRequest, fetch_sector_group},
     },
-    read::{PartitionEncryption, PartitionMeta, PartitionOptions, PartitionReader},
+    read::{
+        HashMismatchSummary, PartitionEncryption, PartitionMeta, PartitionOptions, PartitionReader,
+    },
     util::{
         aes::aes_cbc_decrypt,
         array_ref,
@@ -332,8 +334,10 @@ pub(crate) struct PartitionReaderWii {
     partition: PartitionInfo,
     pos: u64,
     options: PartitionOptions,
+    hash_mismatches: HashMismatchSummary,
     sector_group: Option<SectorGroup>,
     meta: Option<PartitionMeta>,
+    h3_table: Option<Arc<[u8; H3_TABLE_SIZE]>>,
 }
 
 impl Clone for PartitionReaderWii {
@@ -343,8 +347,10 @@ impl Clone for PartitionReaderWii {
             partition: self.partition.clone(),
             pos: 0,
             options: self.options.clone(),
+            hash_mismatches: HashMismatchSummary::default(),
             sector_group: None,
             meta: self.meta.clone(),
+            h3_table: self.h3_table.clone(),
         }
     }
 }
@@ -360,12 +366,13 @@ impl PartitionReaderWii {
             partition: partition.clone(),
             pos: 0,
             options: options.clone(),
+            hash_mismatches: HashMismatchSummary::default(),
             sector_group: None,
             meta: None,
+            h3_table: None,
         };
         if options.validate_hashes {
-            // Ensure we cache the H3 table
-            reader.meta()?;
+            reader.read_h3_table()?;
         }
         Ok(Box::new(reader))
     }
@@ -373,6 +380,26 @@ impl PartitionReaderWii {
     #[inline]
     pub fn len(&self) -> u64 {
         self.partition.data_size()
+    }
+
+    fn read_h3_table(&mut self) -> Result<Option<Arc<[u8; H3_TABLE_SIZE]>>> {
+        if self.partition.has_hashes && self.h3_table.is_none() {
+            let mut reader = PartitionReaderGC::new(self.preloader.clone(), u64::MAX)?;
+            let offset = self.partition.start_sector as u64 * SECTOR_SIZE as u64
+                + self.partition.header.h3_table_off();
+            tracing::debug!(offset, "Reading Wii partition H3 table");
+            reader
+                .seek(SeekFrom::Start(offset))
+                .context("Seeking to H3 table offset")?;
+            self.h3_table =
+                Some(read_arc::<[u8; H3_TABLE_SIZE], _>(&mut reader).context("Reading H3 table")?);
+        }
+        Ok(self.h3_table.clone())
+    }
+
+    /// The H3 table read when the reader was opened with hash validation.
+    pub(crate) fn h3_table(&self) -> Option<Arc<[u8; H3_TABLE_SIZE]>> {
+        self.h3_table.clone()
     }
 }
 
@@ -408,17 +435,25 @@ impl BufRead for PartitionReaderWii {
                 PartitionEncryption::ForceDecryptedNoHashes
             },
             force_rehash: false,
+            verify_hashes: false,
         };
 
         // Load sector group
         let (sector_group, updated) =
             fetch_sector_group(request, max_groups, &mut self.sector_group, &self.preloader)?;
         if updated && self.options.validate_hashes {
-            if let Some(h3_table) = self.meta.as_ref().and_then(|m| m.raw_h3_table.as_deref()) {
+            if let Some(h3_table) = self.h3_table.as_deref() {
                 verify_hashes(
                     array_ref![sector_group.data, 0, SECTOR_GROUP_SIZE],
                     group_idx,
                     h3_table,
+                    (self.partition.data_end_sector
+                        - self.partition.data_start_sector
+                        - group_idx * 64)
+                        .min(64) as usize,
+                    self.options
+                        .hash_mismatch_warnings
+                        .then_some(&mut self.hash_mismatches),
                 )?;
             }
         }
@@ -465,8 +500,68 @@ impl Seek for PartitionReaderWii {
     }
 }
 
-fn verify_hashes(buf: &[u8; SECTOR_GROUP_SIZE], group_idx: u32, h3_table: &[u8]) -> io::Result<()> {
-    for sector in 0..64 {
+/// One failed H0-H3 comparison found while verifying a sector group.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HashMismatchKind {
+    H0 { block: usize },
+    H1 { sector: usize },
+    H2 { sub_group: usize },
+    H3 { group: usize },
+}
+
+impl std::fmt::Display for HashMismatchKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::H0 { block } => write!(f, "Invalid H0 hash! (block {block})"),
+            Self::H1 { sector } => write!(f, "Invalid H1 hash! (sector {sector})"),
+            Self::H2 { sub_group } => write!(f, "Invalid H2 hash! (subgroup {sub_group})"),
+            Self::H3 { group } => write!(f, "Invalid H3 hash! (group {group})"),
+        }
+    }
+}
+
+/// A hash mismatch at a partition-relative sector, recorded by the sector-group loader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct HashMismatch {
+    pub sector: u32,
+    pub kind: HashMismatchKind,
+}
+
+fn verify_hashes(
+    buf: &[u8; SECTOR_GROUP_SIZE],
+    group_idx: u32,
+    h3_table: &[u8],
+    sector_count: usize,
+    mut warnings: Option<&mut HashMismatchSummary>,
+) -> io::Result<()> {
+    verify_hashes_with(
+        buf,
+        group_idx,
+        h3_table,
+        sector_count,
+        |part_sector, kind| {
+            if let Some(summary) = warnings.as_deref_mut() {
+                summary.record(group_idx, part_sector, || kind.to_string());
+                Ok(())
+            } else {
+                Err(io::Error::new(io::ErrorKind::InvalidData, kind.to_string()))
+            }
+        },
+    )
+}
+
+/// Checks the H0-H3 hashes of a decrypted sector group with rebuilt hashes, reporting each
+/// failed comparison (partition-relative sector and kind) to `mismatch`. A missing H3 entry is
+/// a structural error.
+pub(crate) fn verify_hashes_with(
+    buf: &[u8; SECTOR_GROUP_SIZE],
+    group_idx: u32,
+    h3_table: &[u8],
+    sector_count: usize,
+    mut mismatch: impl FnMut(u32, HashMismatchKind) -> io::Result<()>,
+) -> io::Result<()> {
+    // Synthesized tail sectors have no mastered hashes or exceptions to verify.
+    for sector in 0..sector_count {
         let buf = array_ref![buf, sector * SECTOR_SIZE, SECTOR_SIZE];
         let part_sector = group_idx * 64 + sector as u32;
         let (cluster, sector) = div_rem(part_sector as usize, 8);
@@ -477,10 +572,7 @@ fn verify_hashes(buf: &[u8; SECTOR_GROUP_SIZE], group_idx: u32, h3_table: &[u8])
             let expected = array_ref![buf, i * 20, 20];
             let output = sha1_hash(array_ref![buf, (i + 1) * 0x400, 0x400]);
             if output != *expected {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Invalid H0 hash! (block {i})"),
-                ));
+                mismatch(part_sector, HashMismatchKind::H0 { block: i })?;
             }
         }
 
@@ -489,10 +581,7 @@ fn verify_hashes(buf: &[u8; SECTOR_GROUP_SIZE], group_idx: u32, h3_table: &[u8])
             let expected = array_ref![buf, 0x280 + sector * 20, 20];
             let output = sha1_hash(array_ref![buf, 0, 0x26C]);
             if output != *expected {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Invalid H1 hash! (sector {sector})",),
-                ));
+                mismatch(part_sector, HashMismatchKind::H1 { sector })?;
             }
         }
 
@@ -501,22 +590,21 @@ fn verify_hashes(buf: &[u8; SECTOR_GROUP_SIZE], group_idx: u32, h3_table: &[u8])
             let expected = array_ref![buf, 0x340 + sub_group * 20, 20];
             let output = sha1_hash(array_ref![buf, 0x280, 0xA0]);
             if output != *expected {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Invalid H2 hash! (subgroup {sub_group})"),
-                ));
+                mismatch(part_sector, HashMismatchKind::H2 { sub_group })?;
             }
         }
 
         // H3 hash
         {
-            let expected = array_ref![h3_table, group * 20, 20];
-            let output = sha1_hash(array_ref![buf, 0x340, 0xA0]);
-            if output != *expected {
-                return Err(io::Error::new(
+            let expected = h3_table.get(group * 20..group * 20 + 20).ok_or_else(|| {
+                io::Error::new(
                     io::ErrorKind::InvalidData,
-                    format!("Invalid H3 hash! (group {group})"),
-                ));
+                    format!("H3 table missing hash for group {group}"),
+                )
+            })?;
+            let output = sha1_hash(array_ref![buf, 0x340, 0xA0]);
+            if output.as_slice() != expected {
+                mismatch(part_sector, HashMismatchKind::H3 { group })?;
             }
         }
     }
@@ -525,6 +613,12 @@ fn verify_hashes(buf: &[u8; SECTOR_GROUP_SIZE], group_idx: u32, h3_table: &[u8])
 }
 
 impl PartitionReader for PartitionReaderWii {
+    fn hash_mismatches(&self) -> Option<&HashMismatchSummary> {
+        self.options
+            .hash_mismatch_warnings
+            .then_some(&self.hash_mismatches)
+    }
+
     fn is_wii(&self) -> bool {
         true
     }
@@ -567,17 +661,7 @@ impl PartitionReader for PartitionReaderWii {
         } else {
             None
         };
-        meta.raw_h3_table = if self.partition.has_hashes {
-            reader
-                .seek(SeekFrom::Start(
-                    offset + self.partition.header.h3_table_off(),
-                ))
-                .context("Seeking to H3 table offset")?;
-
-            Some(read_arc::<[u8; H3_TABLE_SIZE], _>(&mut reader).context("Reading H3 table")?)
-        } else {
-            None
-        };
+        meta.raw_h3_table = self.read_h3_table()?;
 
         self.meta = Some(meta.clone());
         Ok(meta)

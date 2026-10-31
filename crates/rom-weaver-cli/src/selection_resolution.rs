@@ -280,7 +280,7 @@ impl CliApp {
             parent: None,
             containing_archive: None,
         };
-        match handler.extract(&request, context) {
+        match self.extract_container(handler, &request, context) {
             Ok(report) => Ok(report),
             Err(error) => {
                 if !self.interactive_selection_enabled
@@ -314,7 +314,7 @@ impl CliApp {
                     parent: None,
                     containing_archive: None,
                 };
-                handler.extract(&retry_request, context)
+                self.extract_container(handler, &retry_request, context)
             }
         }
     }

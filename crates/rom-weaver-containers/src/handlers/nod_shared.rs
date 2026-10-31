@@ -1,5 +1,7 @@
 use super::*;
-use rom_weaver_core::{CancellationToken, VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError};
+use rom_weaver_core::{
+    CancellationToken, SharedThreadPool, VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError,
+};
 #[cfg(target_family = "wasm")]
 use std::collections::HashMap;
 #[cfg(target_family = "wasm")]
@@ -18,6 +20,17 @@ pub(crate) struct NodExtractPlan {
     pub(crate) disc_size: u64,
     pub(crate) compression_label: String,
     pub(crate) output_path: PathBuf,
+    /// WIA/RVZ integrity checks that run during the output copy.
+    pub(crate) integrity: Option<IntegrityCheck>,
+}
+
+/// Integrity checks folded into the single WIA/RVZ output copy: Wii partitions whose H0-H3
+/// hashes the disc reader verifies while it is read, and optional NKit image digests computed
+/// over the bytes written. Mismatches become warnings once the copy finishes.
+pub(crate) struct IntegrityCheck {
+    format: &'static str,
+    partitions: Vec<usize>,
+    digests: Option<ImageDigests>,
 }
 
 /// Adds the disc header's game ID and title, and each Wii partition's kind and data size, to
@@ -490,7 +503,8 @@ impl NodHandlerCore {
             format!("opening {} for extraction", self.format_name()),
             Some(&execution),
         );
-        let disc = open_disc(&request.source, preloader_threads)?;
+        // Mutable so WIA/RVZ can enable copy-pass hash verification.
+        let mut disc = open_disc(&request.source, preloader_threads)?;
         emit_container_indeterminate_progress(
             context,
             "extract",
@@ -515,12 +529,20 @@ impl NodHandlerCore {
         fs::create_dir_all(&request.out_dir)?;
         let output_path = request.out_dir.join(output_name);
 
+        let integrity = if matches!(self.nod_format, NodFormat::Wia | NodFormat::Rvz) {
+            rom_weaver_core::ensure_output_available(&output_path, request.overwrite)?;
+            Some(prepare_integrity(&mut disc, self.format_name(), context)?)
+        } else {
+            None
+        };
+
         Ok(NodExtractPlan {
             execution,
             disc,
             disc_size,
             compression_label,
             output_path,
+            integrity,
         })
     }
 
@@ -541,11 +563,12 @@ impl NodHandlerCore {
     ) -> Result<OperationReport> {
         let mut plan = self.prepare_extract(request, context)?;
         let output = create_extract_output_file(&plan.output_path, request.overwrite)?;
+        let mut output = ExtractOutput::new(output, &mut plan.integrity);
         let progress_label = format!("extracting `{}`", self.format_name());
         let hasher = ExtractHasher::new(context, None, &plan.output_path, 1)?;
         let copied = (|| {
             output.set_len(plan.disc_size)?;
-            let mut output = HashingWriter::new(BufWriter::new(output), hasher);
+            let mut output = HashingWriter::new(BufWriter::new(&mut output), hasher);
             let bytes_written = copy_reader_with_progress(
                 &mut plan.disc,
                 &mut output,
@@ -562,11 +585,16 @@ impl NodHandlerCore {
             output.flush()?;
             Ok((bytes_written, output.into_hasher()))
         })();
-        let (bytes_written, hasher) = match copied {
-            Ok(copied) => copied,
+        let digests = output.finish();
+        let finished = copied.and_then(|(bytes_written, hasher)| {
+            let warnings = self.finish_extract_integrity(&mut plan, digests, context)?;
+            Ok((bytes_written, hasher, warnings))
+        });
+        let (bytes_written, hasher, warnings) = match finished {
+            Ok(finished) => finished,
             Err(error) => {
-                // A failed or cancelled copy leaves a partial disc image; the closure has
-                // already closed it.
+                // A failed or cancelled copy or verification leaves a partial or unverified
+                // disc image; the output is already closed.
                 let _ = fs::remove_file(&plan.output_path);
                 return Err(error);
             }
@@ -584,7 +612,7 @@ impl NodHandlerCore {
             "nod disc extract copy finished"
         );
 
-        let report = self.extracted_report(
+        let mut report = self.extracted_report(
             &request.source,
             &plan.output_path,
             bytes_written,
@@ -592,6 +620,7 @@ impl NodHandlerCore {
             &plan.compression_label,
             plan.execution,
         );
+        attach_integrity_warnings(&mut report, warnings);
         Ok(attach_extract_checksum_details(
             report,
             checksum.into_iter().collect(),
@@ -899,4 +928,410 @@ fn wbfs_size_mismatch(error: &crate::nod::Error) -> Option<(u64, u64)> {
     let sizes = message.strip_prefix("Invalid WBFS file size: ")?;
     let (actual, expected) = sizes.split_once(", expected ")?;
     Some((actual.parse().ok()?, expected.parse().ok()?))
+}
+
+/// Checks that must pass before any WIA/RVZ output is written: each hashed Wii partition's H3
+/// table is read and covers every group, then the disc reader verifies H0-H3 hashes during the
+/// copy. NKit digests are prepared for the copy when the image stores them.
+fn prepare_integrity(
+    disc: &mut NodDiscReader,
+    format: &'static str,
+    context: &OperationContext,
+) -> Result<IntegrityCheck> {
+    use crate::nod::disc::wii::H3_TABLE_SIZE;
+
+    let hashed = disc
+        .partitions()
+        .iter()
+        .filter(|partition| partition.has_hashes)
+        .map(|partition| {
+            (
+                partition.index,
+                (partition.data_end_sector - partition.data_start_sector).div_ceil(64),
+            )
+        })
+        .collect::<Vec<_>>();
+    let h3_groups = (H3_TABLE_SIZE / 20) as u32;
+    let mut partitions = Vec::with_capacity(hashed.len());
+    for (index, groups) in hashed {
+        context.cancel().check()?;
+        // Verification would fail at the first group past the H3 table; fail before writing.
+        if groups > h3_groups {
+            debug!(
+                partition = index,
+                groups, h3_groups, format, "Wii partition exceeds its H3 table"
+            );
+            return Err(RomWeaverError::Validation(format!(
+                "{format} partition {index} integrity check failed: H3 table missing hash for group {h3_groups}"
+            )));
+        }
+        disc.enable_hash_verification(index).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "{format} partition {index} integrity check failed: {error}"
+            ))
+        })?;
+        debug!(
+            partition = index,
+            groups, format, "Wii partition hashes verify during the copy"
+        );
+        partitions.push(index);
+    }
+
+    let digests = ImageDigests::new(&disc.meta(), context)?;
+    debug!(
+        format,
+        partitions = partitions.len(),
+        nkit_digests = digests.is_some(),
+        "disc integrity checks prepared"
+    );
+    Ok(IntegrityCheck {
+        format,
+        partitions,
+        digests,
+    })
+}
+
+/// Turns the copy's integrity results into warnings, in partition order and then CRC32, MD5,
+/// SHA-1, XXH64. Groups of a hashed partition that the copy never reached (data past the disc
+/// size) are verified here with a validating partition reader, continuing the same summary.
+fn finish_integrity(
+    integrity: Option<IntegrityCheck>,
+    digests: Option<ImageDigests>,
+    disc: &NodDiscReader,
+    output_name: &str,
+    context: &OperationContext,
+) -> Result<Vec<String>> {
+    use crate::nod::{disc::wii::SECTOR_DATA_SIZE, read::PartitionOptions};
+    use tracing::warn;
+
+    let Some(IntegrityCheck {
+        format, partitions, ..
+    }) = integrity
+    else {
+        return Ok(Vec::new());
+    };
+    let mut warnings = Vec::new();
+    for index in partitions {
+        context.cancel().check()?;
+        let mut summary = disc.hash_mismatches(index).cloned().unwrap_or_default();
+        let next_group = disc.next_unverified_group(index).unwrap_or(0);
+        let groups = disc
+            .partitions()
+            .iter()
+            .find(|partition| partition.index == index)
+            .map_or(0, |partition| {
+                (partition.data_end_sector - partition.data_start_sector).div_ceil(64)
+            });
+        trace!(
+            partition = index,
+            next_group, groups, format, "Wii partition copy-pass verification result"
+        );
+        if next_group < groups {
+            debug!(
+                partition = index,
+                next_group, groups, format, "verifying Wii partition groups the copy did not reach"
+            );
+            let failed = |error: &dyn std::fmt::Display| {
+                RomWeaverError::Validation(format!(
+                    "{format} partition {index} integrity check failed: {error}"
+                ))
+            };
+            let mut reader = disc
+                .open_partition(
+                    index,
+                    &PartitionOptions {
+                        validate_hashes: true,
+                        hash_mismatch_warnings: true,
+                    },
+                )
+                .map_err(|error| failed(&error))?;
+            reader
+                .seek(SeekFrom::Start(
+                    u64::from(next_group) * 64 * SECTOR_DATA_SIZE as u64,
+                ))
+                .map_err(|error| failed(&error))?;
+            loop {
+                context.cancel().check()?;
+                let len = reader.fill_buf().map_err(|error| failed(&error))?.len();
+                if len == 0 {
+                    break;
+                }
+                reader.consume(len);
+            }
+            if let Some(later) = reader.hash_mismatches() {
+                summary.append(later);
+            }
+        }
+        if let Some(first) = &summary.first {
+            let warning = format!(
+                "{format} partition {index} hash mismatch: {first}; {} hashes in {} sectors across {} groups; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished (output `{output_name}`)",
+                summary.hashes, summary.sectors, summary.groups
+            );
+            warn!(format, partition = index, %warning, "Wii partition hash mismatch");
+            warnings.push(warning);
+        }
+    }
+
+    if let Some(digests) = digests {
+        for algorithm in digests.mismatches(&disc.meta()) {
+            let warning = format!(
+                "{format} NKit {algorithm} checksum mismatch; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished (output `{output_name}`)"
+            );
+            warn!(format, algorithm, %warning, "NKit image checksum mismatch");
+            warnings.push(warning);
+        }
+    }
+    debug!(
+        format,
+        warnings = warnings.len(),
+        "disc integrity verification complete"
+    );
+    Ok(warnings)
+}
+
+/// Optional NKit image digests, computed over the ISO bytes as the copy writes them.
+pub(crate) struct ImageDigests {
+    crc32: Option<crc32fast::Hasher>,
+    md5: Option<md5::Md5>,
+    sha1: Option<sha1::Sha1>,
+    xxh64: Option<xxhash_rust::xxh64::Xxh64>,
+    /// Shared operation pool for hashing the digests concurrently; `None` hashes inline.
+    pool: Option<SharedThreadPool>,
+}
+
+impl ImageDigests {
+    fn new(meta: &crate::nod::read::DiscMeta, context: &OperationContext) -> Result<Option<Self>> {
+        use digest::Digest;
+
+        let crc32 = meta.crc32.map(|_| crc32fast::Hasher::new());
+        let md5 = meta.md5.map(|_| md5::Md5::new());
+        let sha1 = meta.sha1.map(|_| sha1::Sha1::new());
+        let xxh64 = meta.xxh64.map(|_| xxhash_rust::xxh64::Xxh64::new(0));
+        let count = [
+            crc32.is_some(),
+            md5.is_some(),
+            sha1.is_some(),
+            xxh64.is_some(),
+        ]
+        .into_iter()
+        .filter(|present| *present)
+        .count();
+        if count == 0 {
+            return Ok(None);
+        }
+        // Each digest is serial; with a parallel pool they run side by side (and, natively,
+        // alongside the chunk write) instead of one after another.
+        let (execution, pool) = context.build_pool(ThreadCapability::parallel(Some(count + 1)))?;
+        let pool = execution.used_parallelism.then_some(pool);
+        debug!(
+            digests = count,
+            parallel = pool.is_some(),
+            effective_threads = execution.effective_threads,
+            "NKit image digests compute during the copy"
+        );
+        Ok(Some(Self {
+            crc32,
+            md5,
+            sha1,
+            xxh64,
+            pool,
+        }))
+    }
+
+    fn update_inline(&mut self, data: &[u8]) {
+        use digest::Digest;
+
+        if let Some(hash) = &mut self.crc32 {
+            hash.update(data);
+        }
+        if let Some(hash) = &mut self.md5 {
+            hash.update(data);
+        }
+        if let Some(hash) = &mut self.sha1 {
+            hash.update(data);
+        }
+        if let Some(hash) = &mut self.xxh64 {
+            hash.update(data);
+        }
+    }
+
+    /// Hashes `data` into every digest on the pool.
+    #[cfg(target_family = "wasm")]
+    fn update_parallel(&mut self, pool: &SharedThreadPool, data: &[u8]) {
+        let Self {
+            crc32,
+            md5,
+            sha1,
+            xxh64,
+            ..
+        } = self;
+        pool.install(|| {
+            rayon::scope(|scope| {
+                spawn_digest_updates(scope, crc32, md5, sha1, xxh64, data);
+            });
+        });
+    }
+
+    /// Writes `data` with `write` and hashes it. Natively the write runs on the pool beside the
+    /// hashing; under wasm it stays on the calling thread, whose WASI descriptors other threads
+    /// cannot use, and hashing follows it.
+    fn write_and_update(
+        &mut self,
+        data: &[u8],
+        write: impl FnOnce(&[u8]) -> io::Result<()> + Send,
+    ) -> io::Result<()> {
+        let Some(pool) = self.pool.clone() else {
+            write(data)?;
+            self.update_inline(data);
+            return Ok(());
+        };
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let Self {
+                crc32,
+                md5,
+                sha1,
+                xxh64,
+                ..
+            } = self;
+            pool.install(|| {
+                rayon::scope(|scope| {
+                    spawn_digest_updates(scope, crc32, md5, sha1, xxh64, data);
+                    write(data)
+                })
+            })
+        }
+        #[cfg(target_family = "wasm")]
+        {
+            write(data)?;
+            self.update_parallel(&pool, data);
+            Ok(())
+        }
+    }
+
+    /// Names of the stored digests that differ from the computed ones, in report order.
+    fn mismatches(self, meta: &crate::nod::read::DiscMeta) -> Vec<&'static str> {
+        use digest::Digest;
+
+        [
+            (
+                "CRC32",
+                self.crc32.map(|hash| hash.finalize()) != meta.crc32,
+            ),
+            (
+                "MD5",
+                self.md5.map(|hash| <[u8; 16]>::from(hash.finalize())) != meta.md5,
+            ),
+            (
+                "SHA-1",
+                self.sha1.map(|hash| <[u8; 20]>::from(hash.finalize())) != meta.sha1,
+            ),
+            ("XXH64", self.xxh64.map(|hash| hash.digest()) != meta.xxh64),
+        ]
+        .into_iter()
+        .filter_map(|(algorithm, mismatch)| mismatch.then_some(algorithm))
+        .collect()
+    }
+}
+
+fn spawn_digest_updates<'scope>(
+    scope: &rayon::Scope<'scope>,
+    crc32: &'scope mut Option<crc32fast::Hasher>,
+    md5: &'scope mut Option<md5::Md5>,
+    sha1: &'scope mut Option<sha1::Sha1>,
+    xxh64: &'scope mut Option<xxhash_rust::xxh64::Xxh64>,
+    data: &'scope [u8],
+) {
+    use digest::Digest;
+
+    if let Some(hash) = crc32 {
+        scope.spawn(move |_| hash.update(data));
+    }
+    if let Some(hash) = md5 {
+        scope.spawn(move |_| hash.update(data));
+    }
+    if let Some(hash) = sha1 {
+        scope.spawn(move |_| hash.update(data));
+    }
+    if let Some(hash) = xxh64 {
+        scope.spawn(move |_| hash.update(data));
+    }
+}
+
+/// The extracted ISO file. When NKit digests are checked, every byte written is also hashed.
+pub(crate) struct ExtractOutput {
+    file: File,
+    digests: Option<ImageDigests>,
+}
+
+impl ExtractOutput {
+    pub(crate) fn new(file: File, integrity: &mut Option<IntegrityCheck>) -> Self {
+        Self {
+            file,
+            digests: integrity
+                .as_mut()
+                .and_then(|integrity| integrity.digests.take()),
+        }
+    }
+
+    pub(crate) fn set_len(&self, len: u64) -> io::Result<()> {
+        self.file.set_len(len)
+    }
+
+    /// Closes the file and returns the digests for [`NodHandlerCore::finish_extract_integrity`].
+    pub(crate) fn finish(self) -> Option<ImageDigests> {
+        drop(self.file);
+        self.digests
+    }
+}
+
+impl Write for ExtractOutput {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let Some(digests) = &mut self.digests else {
+            return self.file.write(buf);
+        };
+        let file = &mut self.file;
+        digests.write_and_update(buf, |data| file.write_all(data))?;
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.file.flush()
+    }
+}
+
+impl NodHandlerCore {
+    /// Integrity warnings for a finished copy; errors mean the output must be removed.
+    pub(crate) fn finish_extract_integrity(
+        &self,
+        plan: &mut NodExtractPlan,
+        digests: Option<ImageDigests>,
+        context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        let output_name = plan
+            .output_path
+            .file_name()
+            .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+        finish_integrity(
+            plan.integrity.take(),
+            digests,
+            &plan.disc,
+            &output_name,
+            context,
+        )
+    }
+}
+
+pub(crate) fn attach_integrity_warnings(report: &mut OperationReport, warnings: Vec<String>) {
+    if warnings.is_empty() {
+        return;
+    }
+    for warning in &warnings {
+        report.label.push_str("; warning=");
+        report.label.push_str(warning);
+    }
+    let details = report.details.get_or_insert_with(|| serde_json::json!({}));
+    if let Some(details) = details.as_object_mut() {
+        details.insert("warnings".to_string(), serde_json::json!(warnings));
+    }
 }

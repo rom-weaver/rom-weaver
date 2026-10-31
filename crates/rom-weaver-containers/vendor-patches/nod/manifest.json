@@ -166,6 +166,51 @@
       ]
     },
     {
+      "file": "0024-wii-initial-hash-validation.patch",
+      "stage": "source",
+      "reason": "Invalidate the first group read before H3 metadata exists and rewind new validating Wii partition readers, so the first group is verified on read.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib wia_extract",
+        "cargo test -p rom-weaver-containers --lib nod::disc::wii::tests::"
+      ]
+    },
+    {
+      "file": "0025-wii-real-sector-hash-validation.patch",
+      "stage": "source",
+      "reason": "Verify only stored Wii sectors; synthesized final-group tail sectors have no mastered hash exceptions.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib wia_extract_preserves_partial_group_with_mastered_hash_exceptions"
+      ]
+    },
+    {
+      "file": "0026-apploader-size-safety.patch",
+      "stage": "source",
+      "reason": "Compute apploader sizes in u64, bound them by the partition extent, and check address-space conversion before allocation.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib partition_meta_rejects_overflowing_apploader_size"
+      ]
+    },
+    {
+      "file": "0027-wii-verification-metadata-safety.patch",
+      "stage": "source",
+      "reason": "Read only H3 metadata for Wii hash verification, reject missing H3 entries, and bound DOL section extents before allocation.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::disc::"
+      ]
+    },
+    {
       "file": "0013-rust-codec-backends.patch",
       "stage": "integration",
       "reason": "Select Rust AES/digest backends and flate2 zlib compression/decompression for the workspace WASM build; preserve bounded-output raw-block fallback and validate zlib levels.",
@@ -296,6 +341,31 @@
       },
       "tests": [
         "cargo test -p rom-weaver-containers --lib nod::io::gcz::tests::"
+      ]
+    },
+    {
+      "file": "0028-wii-hash-mismatch-warnings.patch",
+      "stage": "integration",
+      "reason": "Collect bounded Wii hash mismatch summaries for extraction warnings while retaining strict validation and structural errors.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib hash_warning",
+        "cargo test -p rom-weaver-containers --lib wia_rvz_extract"
+      ]
+    },
+    {
+      "file": "0029-wii-copy-pass-hash-verification.patch",
+      "stage": "integration",
+      "reason": "Let the sector-group loader verify Wii H0-H3 hashes of real sectors against a registered H3 table before re-encrypting, so WIA/RVZ extraction checks hashes in its single Original-mode copy; the disc reader replays per-group mismatches into the sequential-read summary.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib wia_rvz",
+        "cargo test -p rom-weaver-containers --lib hash_warning",
+        "cargo test -p rom-weaver-containers --lib nod::"
       ]
     }
   ],

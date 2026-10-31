@@ -1259,6 +1259,7 @@ struct CliApp {
     containers: ContainerRegistry,
     patches: PatchRegistry,
     checksum: NativeChecksumEngine,
+    extraction_warnings: std::sync::Mutex<Vec<String>>,
 }
 
 const MAX_NESTED_EXTRACT_DEPTH: usize = 8;

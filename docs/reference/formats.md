@@ -10,6 +10,7 @@ The [feature map](features.md) explains the capabilities in plain words. [Cheat 
 - [Legend](#legend)
 - [Patch formats](#patch-formats)
 - [Container and compression formats](#container-and-compression-formats)
+  - [WIA and RVZ payload integrity](#wia-and-rvz-payload-integrity)
   - [Z3DS filename variants](#z3ds-filename-variants)
 - [Create-time codecs](#create-time-codecs)
 - [Checksum support](#checksum-support)
@@ -122,6 +123,32 @@ The browser's Compress page offers CHD for optical inputs under the following ru
 Explicit CHD output on Apply and Weave accepts raw and hard-disk inputs. Valid disk headers take precedence over CD signatures, including inside archives. Raw and disk inputs use generic codecs from the DVD codec setting. A `.bin` name or sector alignment alone does not select CD codecs.
 
 A/V CHD creation needs the native CLI.
+
+### WIA and RVZ payload integrity
+
+WIA and RVZ store SHA-1 hashes for the file header, disc header, and partition table. Opening verifies those hashes. Header or partition-table SHA-1 mismatches fail extraction. Decoder errors, invalid table bounds, and crafted-input bounds violations also fail extraction. Raw-data and group tables contain offsets and sizes without separate payload hashes.
+
+Extraction verifies Wii partition H0, H1, H2, and H3 hashes where present. Only real sectors are checked; synthesized tail sectors have no mastered hashes. WIA and RVZ rebuild sector hashes and apply stored hash exceptions. The original H3 table supplies the final comparison. Verification reads H3 directly without parsing apploader, DOL, or filesystem metadata.
+
+Wii hash mismatches are warnings. Extraction writes the decoded ISO as-is and exits with status 0. Each affected partition produces one summary with the first failing group and partition-relative sector, the first hash error, and counts of failed hash comparisons, affected sectors, and affected groups. For example:
+
+```text
+wia partition 0 hash mismatch: first group 0, sector 0: Invalid H3 hash! (group 0); 4 hashes in 4 sectors across 1 groups; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished (output `disc.iso`)
+```
+
+RVZ summaries use the `rvz` prefix. Optional NKit CRC32, MD5, SHA-1, and XXH64 image digests are also checked. Each mismatching digest produces this warning, with the format, algorithm, and output file name substituted. The output file name keeps warnings from several discs in one command distinct:
+
+```text
+wia NKit SHA-1 checksum mismatch; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished (output `disc.iso`)
+```
+
+Warnings appear on stderr as `warning:` lines in human-readable output and in the command report's `details.warnings` in JSON and JSONL output. JSON also includes a top-level `warnings` array. This applies to explicit extraction, automatic extraction by other commands, and nested archives. Hash mismatches cannot distinguish source-disc errors from payload corruption. These mismatches appear in warnings while extraction succeeds; exit status alone does not identify them.
+
+Verification runs during the single output copy: each hashed partition's H3 table is read and checked against the partition size before the output is created, the decoder checks each sector group's hashes before re-encrypting it, and NKit digests are computed over the bytes as they are written. Warnings are reported after the copy finishes. Errors found during the copy remove the partial ISO. With `--force`, this also deletes any pre-existing file at that output path. Valid-file output bytes remain unchanged.
+
+GameCube data and raw Wii regions have no default payload checksum. Uncompressed (`none`) and raw LZMA/LZMA2 payloads can decode after a bit flip and produce a different ISO with exit status 0 and no warning when no NKit digest covers them. Successful decoding alone does not establish integrity. Purge compression is unsupported and fails when opening the image.
+
+Commands with `--no-extract`, such as `checksum --no-extract`, read the raw WIA or RVZ container and bypass ISO extraction and its source-hash warnings.
 
 ### Z3DS filename variants
 

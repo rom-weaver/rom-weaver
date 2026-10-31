@@ -12,6 +12,24 @@ pub(super) const EMITTED_ROM_EXTENSIONS: &[&str] = &[
 ];
 
 impl CliApp {
+    pub(super) fn extract_container(
+        &self,
+        handler: &dyn ContainerHandler,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let report = handler.extract(request, context)?;
+        let warnings = Self::report_warnings(&report);
+        if !warnings.is_empty() {
+            debug!(source = %request.source.display(), warnings = warnings.len(), "retaining extraction warnings for command output");
+            self.extraction_warnings
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .extend(warnings);
+        }
+        Ok(report)
+    }
+
     pub(super) fn append_report_warnings(
         report: &mut OperationReport,
         warnings: impl IntoIterator<Item = String>,

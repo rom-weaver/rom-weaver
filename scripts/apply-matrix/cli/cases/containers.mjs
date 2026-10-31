@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { add, check, skip } from "../lib/harness.mjs";
 import { have } from "../lib/fixture-defs.mjs";
 import * as E from "../lib/encoders.mjs";
+import { registerWiaCases } from "./wia.mjs";
 
 const IPS = "patches/ind/same.ips";
 
@@ -21,6 +22,7 @@ const needTool = (tool) => {
 };
 
 export const register = async ({ root, fixtures }) => {
+  registerWiaCases();
   // ----------------------------------------------------- source ROM in archives / streams
   const archives = [
     ["zip-deflate", "zip-deflate.zip", "zip"],
@@ -380,8 +382,8 @@ export const register = async ({ root, fixtures }) => {
     ctx.ok(ctx.apply(ctx.tmp("hif_000000.nfs"), patch, out), "apply to nfs");
     check(fs.readFileSync(out).equals(target), "nfs output mismatch");
   });
-  // quality-reason: rom-weaver has no WIA/GCZ writer and this harness does not drive dolphin-tool; read paths are covered by Rust tests rvz_z3ds.rs / shared.rs write_wia_fixture_from_iso.
-  add("container.disc.wia-gcz", ["container", "disc", "wia", "gcz"], () => skip("no WIA/GCZ writer in this harness; read paths covered by Rust tests rvz_z3ds.rs / shared.rs write_wia_fixture_from_iso"));
+  // quality-reason: rom-weaver has no GCZ writer and this harness does not drive dolphin-tool; Rust tests cover GCZ reading.
+  add("container.disc.gcz", ["container", "disc", "gcz"], () => skip("no GCZ writer in this harness; read paths covered by Rust tests"));
 
   // RVZ / CHD / Z3DS inputs made by rom-weaver compress from the wbfs payload
   const wbfsPayload = "disc/wbfs.payload.iso";

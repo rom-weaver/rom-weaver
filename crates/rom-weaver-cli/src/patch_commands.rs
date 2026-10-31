@@ -389,7 +389,7 @@ impl CliApp {
             parent: None,
             containing_archive: None,
         };
-        handler.extract(&request, context)?;
+        self.extract_container(handler.as_ref(), &request, context)?;
         let selected_names = selections.into_iter().collect::<BTreeSet<_>>();
         let patches = self
             .collect_checksum_extract_candidates(&out_dir)?

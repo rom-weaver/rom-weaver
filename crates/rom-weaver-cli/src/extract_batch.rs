@@ -123,16 +123,23 @@ impl CliApp {
                 })
                 .collect();
 
-            // Scoped threads borrow `&self` (CliApp is Send + Sync) so every job runs the exact
-            // single-extract path, just concurrently.
+            // Each job MUST own its warnings while sharing the batch's output sink.
             let wave_results: Vec<(usize, AppRunOutcome)> = std::thread::scope(|scope| {
                 let handles: Vec<_> = wave_jobs
                     .into_iter()
                     .map(|(index, command)| {
+                        let app = Self::new_with_dry_run(
+                            self.reporter.clone(),
+                            self.prompter.clone(),
+                            self.emit_progress_events,
+                            self.interactive_selection_enabled,
+                            self.assume_yes,
+                            self.dry_run,
+                        );
                         std::thread::Builder::new()
                             .name(format!("extract-job-{index}"))
                             .stack_size(JOB_THREAD_STACK_BYTES)
-                            .spawn_scoped(scope, move || (index, self.run_extract(command)))
+                            .spawn_scoped(scope, move || (index, app.run_extract(command)))
                             .expect("spawn extract job thread")
                     })
                     .collect();

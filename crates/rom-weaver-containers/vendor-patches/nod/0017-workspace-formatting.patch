@@ -572,10 +572,9 @@ index bacc0c856..ba5daa287 100644
      }
  }
 diff --git a/disc/gcn.rs b/disc/gcn.rs
-index 61b458b92..95a38f811 100644
 --- a/disc/gcn.rs
 +++ b/disc/gcn.rs
-@@ -43,7 +43,13 @@ impl Clone for PartitionReaderGC {
+@@ -43,7 +43,13 @@
  
  impl PartitionReaderGC {
      pub fn new(preloader: Arc<Preloader>, disc_size: u64) -> Result<Box<Self>> {
@@ -590,7 +589,7 @@ index 61b458b92..95a38f811 100644
      }
  }
  
-@@ -84,7 +90,9 @@ impl BufRead for PartitionReaderGC {
+@@ -84,7 +90,9 @@
      }
  
      #[inline]
@@ -601,7 +600,7 @@ index 61b458b92..95a38f811 100644
  }
  
  impl_read_for_bufread!(PartitionReaderGC);
-@@ -99,11 +107,15 @@ impl Seek for PartitionReaderGC {
+@@ -99,11 +107,15 @@
          Ok(self.pos)
      }
  
@@ -619,9 +618,9 @@ index 61b458b92..95a38f811 100644
  
      fn meta(&mut self) -> Result<PartitionMeta> {
          if let Some(meta) = &self.meta {
-@@ -136,7 +148,9 @@ pub(crate) fn read_dol(
-         .max(size_of::<DolHeader>() as u32);
-     let mut raw_dol = <[u8]>::new_box_zeroed_with_elems(dol_size as usize)?;
+@@ -148,7 +160,9 @@
+         .context("Seeking to DOL payload")?;
+     let mut raw_dol = <[u8]>::new_box_zeroed_with_elems(dol_size)?;
      raw_dol[..size_of::<DolHeader>()].copy_from_slice(dol_header.as_bytes());
 -    reader.read_exact(&mut raw_dol[size_of::<DolHeader>()..]).context("Reading DOL")?;
 +    reader
@@ -1106,10 +1105,9 @@ index c2f8f69c9..d0059df00 100644
      let mut part_info = Vec::new();
      for (group_idx, group) in part_groups.iter().enumerate() {
 diff --git a/disc/wii.rs b/disc/wii.rs
-index ec4816628..b4d34b4e7 100644
 --- a/disc/wii.rs
 +++ b/disc/wii.rs
-@@ -78,7 +78,9 @@ pub(crate) struct WiiPartEntry {
+@@ -78,7 +78,9 @@
  static_assert!(size_of::<WiiPartEntry>() == 8);
  
  impl WiiPartEntry {
@@ -1120,7 +1118,7 @@ index ec4816628..b4d34b4e7 100644
  }
  
  pub(crate) const WII_PART_GROUP_OFF: u64 = 0x40000;
-@@ -93,7 +95,9 @@ pub(crate) struct WiiPartGroup {
+@@ -93,7 +95,9 @@
  static_assert!(size_of::<WiiPartGroup>() == 8);
  
  impl WiiPartGroup {
@@ -1131,7 +1129,7 @@ index ec4816628..b4d34b4e7 100644
  }
  
  /// Signed blob header
-@@ -169,21 +173,30 @@ impl Ticket {
+@@ -169,21 +173,30 @@
      pub fn decrypt_title_key(&self) -> Result<KeyBytes> {
          let mut iv: KeyBytes = [0; 16];
          iv[..8].copy_from_slice(&self.title_id);
@@ -1169,7 +1167,7 @@ index ec4816628..b4d34b4e7 100644
          let mut title_key = self.title_key;
          aes_cbc_decrypt(common_key, &iv, &mut title_key);
          Ok(title_key)
-@@ -274,28 +287,44 @@ static_assert!(size_of::<WiiPartitionHeader>() == 0x2C0);
+@@ -274,28 +287,44 @@
  
  impl WiiPartitionHeader {
      /// TMD size in bytes
@@ -1222,7 +1220,7 @@ index ec4816628..b4d34b4e7 100644
  }
  
  pub(crate) struct PartitionReaderWii {
-@@ -342,7 +371,9 @@ impl PartitionReaderWii {
+@@ -344,7 +373,9 @@
      }
  
      #[inline]
@@ -1230,10 +1228,10 @@ index ec4816628..b4d34b4e7 100644
 +    pub fn len(&self) -> u64 {
 +        self.partition.data_size()
 +    }
- }
  
- impl BufRead for PartitionReaderWii {
-@@ -353,7 +384,10 @@ impl BufRead for PartitionReaderWii {
+     fn read_h3_table(&mut self) -> Result<Option<Arc<[u8; H3_TABLE_SIZE]>>> {
+         if self.partition.has_hashes && self.h3_table.is_none() {
+@@ -370,7 +401,10 @@
                  (self.pos % SECTOR_DATA_SIZE as u64) as usize,
              )
          } else {
@@ -1245,7 +1243,7 @@ index ec4816628..b4d34b4e7 100644
          };
          let abs_sector = self.partition.data_start_sector + part_sector;
          if abs_sector >= self.partition.data_end_sector {
-@@ -409,7 +443,9 @@ impl BufRead for PartitionReaderWii {
+@@ -430,7 +464,9 @@
      }
  
      #[inline]
@@ -1256,7 +1254,7 @@ index ec4816628..b4d34b4e7 100644
  }
  
  impl_read_for_bufread!(PartitionReaderWii);
-@@ -424,7 +460,9 @@ impl Seek for PartitionReaderWii {
+@@ -445,7 +481,9 @@
          Ok(self.pos)
      }
  
@@ -1266,8 +1264,8 @@ index ec4816628..b4d34b4e7 100644
 +    }
  }
  
- fn verify_hashes(buf: &[u8; SECTOR_GROUP_SIZE], group_idx: u32, h3_table: &[u8]) -> io::Result<()> {
-@@ -487,7 +525,9 @@ fn verify_hashes(buf: &[u8; SECTOR_GROUP_SIZE], group_idx: u32, h3_table: &[u8])
+ fn verify_hashes(
+@@ -519,7 +557,9 @@
  }
  
  impl PartitionReader for PartitionReaderWii {
@@ -1278,7 +1276,7 @@ index ec4816628..b4d34b4e7 100644
  
      fn meta(&mut self) -> Result<PartitionMeta> {
          if let Some(meta) = &self.meta {
-@@ -513,7 +553,9 @@ impl PartitionReader for PartitionReaderWii {
+@@ -545,7 +585,9 @@
          };
          meta.raw_cert_chain = if self.partition.header.cert_chain_size() != 0 {
              reader
@@ -1289,17 +1287,6 @@ index ec4816628..b4d34b4e7 100644
                  .context("Seeking to cert chain offset")?;
              Some(
                  read_arc_slice::<u8, _>(
-@@ -527,7 +569,9 @@ impl PartitionReader for PartitionReaderWii {
-         };
-         meta.raw_h3_table = if self.partition.has_hashes {
-             reader
--                .seek(SeekFrom::Start(offset + self.partition.header.h3_table_off()))
-+                .seek(SeekFrom::Start(
-+                    offset + self.partition.header.h3_table_off(),
-+                ))
-                 .context("Seeking to H3 table offset")?;
- 
-             Some(read_arc::<[u8; H3_TABLE_SIZE], _>(&mut reader).context("Reading H3 table")?)
 diff --git a/disc/writer.rs b/disc/writer.rs
 index 6e947e5d5..c86a8ab74 100644
 --- a/disc/writer.rs

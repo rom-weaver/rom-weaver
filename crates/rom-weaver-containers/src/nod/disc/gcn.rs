@@ -67,6 +67,7 @@ impl BufRead for PartitionReaderGC {
             partition_idx: None,
             mode: PartitionEncryption::Original,
             force_rehash: false,
+            verify_hashes: false,
         };
 
         // Load sector group
@@ -142,11 +143,23 @@ pub(crate) fn read_dol(
     // header this function copies into it.
     let dol_size = (dol_header.text_offs.iter().zip(&dol_header.text_sizes))
         .chain(dol_header.data_offs.iter().zip(&dol_header.data_sizes))
-        .map(|(offs, size)| offs.get().saturating_add(size.get()))
+        .map(|(offs, size)| u64::from(offs.get()) + u64::from(size.get()))
         .max()
         .unwrap_or(0)
-        .max(size_of::<DolHeader>() as u32);
-    let mut raw_dol = <[u8]>::new_box_zeroed_with_elems(dol_size as usize)?;
+        .max(size_of::<DolHeader>() as u64);
+    let payload_offset = reader.stream_position().context("Reading DOL position")?;
+    let partition_size = reader
+        .seek(SeekFrom::End(0))
+        .context("Reading partition size")?;
+    if dol_size > partition_size.saturating_sub(boot_header.dol_offset(is_wii)) {
+        tracing::debug!(dol_size, partition_size, "DOL exceeds partition bounds");
+        return Err("DOL size exceeds partition".into());
+    }
+    let dol_size = usize::try_from(dol_size).map_err(|_| "DOL size exceeds address space")?;
+    reader
+        .seek(SeekFrom::Start(payload_offset))
+        .context("Seeking to DOL payload")?;
+    let mut raw_dol = <[u8]>::new_box_zeroed_with_elems(dol_size)?;
     raw_dol[..size_of::<DolHeader>()].copy_from_slice(dol_header.as_bytes());
     reader
         .read_exact(&mut raw_dol[size_of::<DolHeader>()..])
@@ -179,9 +192,29 @@ pub(crate) fn read_apploader(reader: &mut dyn PartitionReader) -> Result<Arc<[u8
         .context("Seeking to apploader offset")?;
     let apploader_header: ApploaderHeader =
         read_from(reader).context("Reading apploader header")?;
-    let apploader_size = size_of::<ApploaderHeader>()
-        + apploader_header.size.get() as usize
-        + apploader_header.trailer_size.get() as usize;
+    let apploader_size = size_of::<ApploaderHeader>() as u64
+        + u64::from(apploader_header.size.get())
+        + u64::from(apploader_header.trailer_size.get());
+    let payload_offset = reader
+        .stream_position()
+        .context("Reading apploader position")?;
+    let partition_size = reader
+        .seek(SeekFrom::End(0))
+        .context("Reading partition size")?;
+    let apploader_offset = (BOOT_SIZE + BI2_SIZE) as u64;
+    if apploader_size > partition_size.saturating_sub(apploader_offset) {
+        tracing::debug!(
+            apploader_size,
+            partition_size,
+            "apploader exceeds partition bounds"
+        );
+        return Err("Apploader size exceeds partition".into());
+    }
+    let apploader_size =
+        usize::try_from(apploader_size).map_err(|_| "Apploader size exceeds address space")?;
+    reader
+        .seek(SeekFrom::Start(payload_offset))
+        .context("Seeking to apploader payload")?;
     let mut raw_apploader = <[u8]>::new_box_zeroed_with_elems(apploader_size)?;
     raw_apploader[..size_of::<ApploaderHeader>()].copy_from_slice(apploader_header.as_bytes());
     reader

@@ -62,6 +62,57 @@ pub struct PartitionOptions {
     /// Wii: Validate data hashes while reading the partition, if available.
     /// This significantly slows down reading.
     pub validate_hashes: bool,
+    /// Collect source hash mismatches instead of failing; structural errors still fail.
+    pub hash_mismatch_warnings: bool,
+}
+
+/// Bounded summary of hash mismatches encountered during a sequential partition read.
+#[derive(Default, Debug, Clone)]
+pub struct HashMismatchSummary {
+    /// First mismatching hash, including group and partition-relative sector.
+    pub first: Option<String>,
+    /// Number of failed hash comparisons.
+    pub hashes: u64,
+    /// Number of affected sectors in the sequential read.
+    pub sectors: u64,
+    /// Number of affected sector groups in the sequential read.
+    pub groups: u64,
+    last_sector: Option<u32>,
+    last_group: Option<u32>,
+}
+
+impl HashMismatchSummary {
+    pub(crate) fn record(&mut self, group: u32, sector: u32, message: impl FnOnce() -> String) {
+        if self.first.is_none() {
+            self.first = Some(format!(
+                "first group {group}, sector {sector}: {}",
+                message()
+            ));
+        }
+        self.hashes += 1;
+        if self.last_sector != Some(sector) {
+            self.sectors += 1;
+            self.last_sector = Some(sector);
+        }
+        if self.last_group != Some(group) {
+            self.groups += 1;
+            self.last_group = Some(group);
+        }
+    }
+
+    /// Appends a summary of later groups of the same sequential read.
+    pub fn append(&mut self, later: &HashMismatchSummary) {
+        if self.first.is_none() {
+            self.first.clone_from(&later.first);
+        }
+        self.hashes += later.hashes;
+        self.sectors += later.sectors;
+        self.groups += later.groups;
+        if later.last_sector.is_some() {
+            self.last_sector = later.last_sector;
+            self.last_group = later.last_group;
+        }
+    }
 }
 
 /// Trait for reading disc images.
@@ -301,6 +352,26 @@ impl DiscReader {
         self.0.open_partition_kind(kind, options)
     }
 
+    /// Verifies Wii partition `index`'s H0-H3 hashes while this reader is read sequentially in
+    /// [`PartitionEncryption::Original`] mode. Reads the partition's H3 table now; the
+    /// sector-group loader checks each later group before re-encrypting it.
+    #[inline]
+    pub fn enable_hash_verification(&mut self, index: usize) -> Result<()> {
+        self.0.enable_hash_verification(index)
+    }
+
+    /// Hash mismatches recorded so far for verified partition `index`.
+    #[inline]
+    pub fn hash_mismatches(&self, index: usize) -> Option<&HashMismatchSummary> {
+        self.0.hash_mismatches(index)
+    }
+
+    /// First group of verified partition `index` the sequential read has not checked yet.
+    #[inline]
+    pub fn next_unverified_group(&self, index: usize) -> Option<u32> {
+        self.0.next_unverified_group(index)
+    }
+
     pub(crate) fn into_inner(self) -> disc::reader::DiscReader {
         self.0
     }
@@ -363,6 +434,11 @@ pub struct DiscMeta {
 pub trait PartitionReader: DynClone + BufRead + Seek + Send {
     /// Whether this is a Wii partition. (GameCube otherwise)
     fn is_wii(&self) -> bool;
+
+    /// Source hash mismatches collected when requested through partition options.
+    fn hash_mismatches(&self) -> Option<&HashMismatchSummary> {
+        None
+    }
 
     /// Reads the partition header and file system table.
     fn meta(&mut self) -> Result<PartitionMeta>;
