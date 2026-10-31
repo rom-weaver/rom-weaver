@@ -111,3 +111,55 @@ fn kind_filters_accept_non_extension_tails() {
         }
     }
 }
+
+#[test]
+fn kind_filter_selection_keeps_containers_beside_unnamed_entries() {
+    let filter = ArchiveEntryKindFilter::new(true, false);
+    let select = |names: &[&'static str], include_containers: bool| {
+        select_kind_filter_matches(
+            names
+                .iter()
+                .map(|name| (filter.classify_name(name), *name))
+                .collect(),
+            include_containers,
+        )
+    };
+    assert_eq!(
+        filter.classify_name("game.nes"),
+        KindFilterNameMatch::Payload
+    );
+    assert_eq!(
+        filter.classify_name("game.nes.gz"),
+        KindFilterNameMatch::Payload
+    );
+    assert_eq!(
+        filter.classify_name("LICENSE"),
+        KindFilterNameMatch::Unnamed
+    );
+    assert_eq!(
+        filter.classify_name("Hack v1.1.GZ"),
+        KindFilterNameMatch::UnnamedStream
+    );
+    assert_eq!(
+        filter.classify_name("inner.zip"),
+        KindFilterNameMatch::Container
+    );
+    assert_eq!(
+        filter.classify_name("notes.txt"),
+        KindFilterNameMatch::Rejected
+    );
+    assert_eq!(
+        select(&["LICENSE", "inner.zip", "patch.gz", "notes.txt"], false),
+        ["inner.zip", "patch.gz"]
+    );
+    assert_eq!(
+        select(&["LICENSE", "game.nes", "inner.zip", "patch.gz"], false),
+        ["LICENSE", "game.nes", "patch.gz"]
+    );
+    assert_eq!(select(&["LICENSE", "notes.txt"], false), ["LICENSE"]);
+    assert_eq!(
+        select(&["LICENSE", "game.nes", "inner.zip", "notes.txt"], true),
+        ["LICENSE", "game.nes", "inner.zip"]
+    );
+    assert!(select(&["notes.txt"], false).is_empty());
+}

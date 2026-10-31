@@ -2899,6 +2899,82 @@ fn ingest_classification_unnamed_raw_dump_beside_named_patch_stays_rom() {
     assert_eq!(ingest["patches"].as_array().unwrap().len(), 1, "{ingest}");
 }
 
+/// Unnamed top-level entries carry no kind, so they MUST NOT stop descent into a nested ROM archive.
+#[test]
+fn ingest_classification_unnamed_entries_keep_nested_archive_descent() {
+    for (extra_name, extra_bytes) in [
+        ("LICENSE", b"license text".to_vec()),
+        ("patch", banded_bps()),
+    ] {
+        let temp = setup_temp_dir();
+        let alpha = temp.child("alpha.nes");
+        let beta = temp.child("beta.nes");
+        fs::write(alpha.path(), banded_rom()).unwrap();
+        fs::write(beta.path(), banded_rom_patched()).unwrap();
+        let inner = temp.child("inner.zip");
+        zip_members(&temp, inner.path(), &[alpha.path(), beta.path()]);
+        let extra = temp.child(extra_name);
+        fs::write(extra.path(), &extra_bytes).unwrap();
+        let outer = temp.child("outer.zip");
+        zip_members(&temp, outer.path(), &[inner.path(), extra.path()]);
+
+        let result = ingest_json(&temp, outer.path(), "out");
+        let ingest = &result["details"]["ingest"];
+        assert_eq!(ingest["kind"], "rom", "{extra_name}: {ingest}");
+        let mut assets: Vec<_> = ingest["assets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|asset| asset["file_name"].as_str().unwrap())
+            .collect();
+        assets.sort_unstable();
+        assert_eq!(assets, ["alpha.nes", "beta.nes"], "{extra_name}: {ingest}");
+
+        let extracted = temp.child("extracted");
+        isolated_json_event(
+            &temp,
+            &[
+                "extract",
+                "--input",
+                outer.path().to_str().unwrap(),
+                "--output",
+                extracted.path().to_str().unwrap(),
+                "--filter",
+                "rom",
+                "--json",
+            ],
+            0,
+        );
+        assert!(
+            extracted.path().join("inner/alpha.nes").is_file(),
+            "{extra_name}"
+        );
+        assert!(
+            extracted.path().join("inner/beta.nes").is_file(),
+            "{extra_name}"
+        );
+        assert!(!extracted.path().join(extra_name).exists(), "{extra_name}");
+
+        let checksum = isolated_json_event(
+            &temp,
+            &[
+                "checksum",
+                "--input",
+                outer.path().to_str().unwrap(),
+                "--filter",
+                "rom",
+                "--json",
+            ],
+            1,
+        );
+        let error = checksum["error"]["message"].as_str().unwrap();
+        assert!(
+            error.contains("candidates: `alpha.nes`, `beta.nes`"),
+            "{extra_name}: {checksum}"
+        );
+    }
+}
+
 #[test]
 fn ingest_classification_wrong_kind_uses_consistent_filter_error() {
     let temp = setup_temp_dir();

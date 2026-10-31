@@ -25,11 +25,11 @@ use crate::libarchive::{
 use rayon::prelude::*;
 use rom_weaver_core::{
     ArchiveEntryKindFilter, CancellationToken, ContainerByteProgress, ContainerCreateRequest,
-    ContainerExtractRequest, ContainerListEntry, OperationContext, OperationFamily,
-    OperationReport, ProbeConfidence, Result, RomWeaverError, SelectionMatcher, SharedThreadPool,
-    ThreadCapability, ThreadExecution, bounded_items_for_threads, create_extract_output_file,
-    decode_memory_budget_bytes, emit_container_running_progress,
-    maybe_emit_container_byte_progress, normalize_archive_name,
+    ContainerExtractRequest, ContainerListEntry, KindFilterNameMatch, OperationContext,
+    OperationFamily, OperationReport, ProbeConfidence, Result, RomWeaverError, SelectionMatcher,
+    SharedThreadPool, ThreadCapability, ThreadExecution, bounded_items_for_threads,
+    create_extract_output_file, decode_memory_budget_bytes, emit_container_running_progress,
+    maybe_emit_container_byte_progress, normalize_archive_name, select_kind_filter_matches,
     should_ignore_common_container_file,
 };
 use tracing::{debug, trace};
@@ -990,8 +990,7 @@ fn build_libarchive_extract_tasks(
     let mut ignored_count = 0usize;
     let mut kind_filtered_count = 0usize;
     let mut tasks = Vec::new();
-    let mut payload_kind_tasks = Vec::new();
-    let mut container_fallback_tasks = Vec::new();
+    let mut kind_matched_tasks = Vec::new();
 
     for entry in list_regular_archive_entries(source, format_name)? {
         let entry_path = entry.path;
@@ -1022,12 +1021,14 @@ fn build_libarchive_extract_tasks(
             decoder_bytes: entry.decoder_bytes,
         };
         if kind_filter.enabled() {
-            if kind_filter.matches_payload_name(&archive_name) {
-                payload_kind_tasks.push(task);
-            } else if kind_filter.matches_container_fallback_name(&archive_name) {
-                container_fallback_tasks.push(task);
-            } else {
-                kind_filtered_count = kind_filtered_count.saturating_add(1);
+            match kind_filter.classify_name(&archive_name) {
+                KindFilterNameMatch::Rejected => {
+                    kind_filtered_count = kind_filtered_count.saturating_add(1);
+                }
+                kind => {
+                    trace!(entry = %archive_name, ?kind, "classified entry under payload kind filter");
+                    kind_matched_tasks.push((kind, task));
+                }
             }
         } else {
             tasks.push(task);
@@ -1036,17 +1037,17 @@ fn build_libarchive_extract_tasks(
 
     matcher.ensure_all_matched()?;
     if kind_filter.enabled() {
-        tasks = if include_nested_containers {
-            // Exhaustive nested extract-all: keep the matched payloads AND any nested-container
-            // entries, so descent continues into deeper sub-archives (e.g. a patch sitting beside
-            // a further nested zip) instead of stopping once sibling payloads are found.
-            payload_kind_tasks.append(&mut container_fallback_tasks);
-            payload_kind_tasks
-        } else if payload_kind_tasks.iter().any(|task| !task.is_dir) {
-            payload_kind_tasks
-        } else {
-            container_fallback_tasks
-        };
+        // Exhaustive nested extract-all keeps nested-container entries beside matched payloads,
+        // so descent continues into deeper sub-archives (e.g. a patch beside a further nested zip).
+        let matched_count = kind_matched_tasks.len();
+        tasks = select_kind_filter_matches(kind_matched_tasks, include_nested_containers);
+        debug!(
+            source = %source.display(),
+            matched_count,
+            selected_count = tasks.len(),
+            include_nested_containers,
+            "selected kind-filtered extract tasks"
+        );
     }
     if should_filter_common && ignored_count > 0 && !tasks.iter().any(|task| !task.is_dir) {
         return Err(RomWeaverError::Validation(format!(
@@ -3100,6 +3101,60 @@ mod tests {
             vec!["nested.zip".to_string()],
             "with no matching payload the nested container must carry the descent"
         );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn kind_filtered_tasks_keep_nested_containers_beside_unnamed_entries() {
+        let dir = unique_temp_dir("kind-filter-unnamed");
+        let archive = create_test_zip(
+            &dir,
+            &[
+                ("LICENSE", Some(b"text".as_slice())),
+                ("Hack v1.1.gz", Some(b"gz".as_slice())),
+                ("nested.zip", Some(b"zip".as_slice())),
+            ],
+        );
+        let unnamed_only = create_test_zip(
+            &dir.join("unnamed"),
+            &[("LICENSE", Some(b"text".as_slice()))],
+        );
+        let out_dir = dir.join("out");
+        for filter in [
+            ArchiveEntryKindFilter::new(true, false),
+            ArchiveEntryKindFilter::new(false, true),
+        ] {
+            let tasks = build_libarchive_extract_tasks(
+                &archive,
+                &out_dir,
+                &[],
+                filter,
+                false,
+                false,
+                "zip",
+            )
+            .expect("plan a kind-filtered extract");
+            assert_eq!(
+                task_names(&tasks),
+                vec!["Hack v1.1.gz".to_string(), "nested.zip".to_string()],
+                "{filter:?}"
+            );
+            let tasks = build_libarchive_extract_tasks(
+                &unnamed_only,
+                &out_dir,
+                &[],
+                filter,
+                false,
+                false,
+                "zip",
+            )
+            .expect("plan an unnamed-only extract");
+            assert_eq!(
+                task_names(&tasks),
+                vec!["LICENSE".to_string()],
+                "{filter:?}"
+            );
+        }
         fs::remove_dir_all(&dir).ok();
     }
 

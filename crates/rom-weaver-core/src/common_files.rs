@@ -141,6 +141,46 @@ pub const CONTAINER_FILTER_FILE_EXTENSIONS: &[&str] = &[
     ".chd",
 ];
 
+/// How an [`ArchiveEntryKindFilter`] treats an entry name before the entry's bytes are read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum KindFilterNameMatch {
+    /// The name's extension matches the filter (`game.nes`, `hack.bps.gz`).
+    Payload,
+    /// The name carries no kind (`LICENSE`, `Hack v1.1`), so content classification decides.
+    Unnamed,
+    /// A stream wrapper around an unnamed payload (`patch.gz`).
+    UnnamedStream,
+    /// A container that may hold matching payloads (`inner.zip`, `game.bin.gz` for patches).
+    Container,
+    Rejected,
+}
+
+/// Keeps the entries a kind-filtered pass uses, in input order. Unnamed entries accompany named
+/// payloads, but MUST NOT displace the containers (or unnamed stream wrappers, which name filters
+/// treated as containers) that would otherwise carry the descent; alone they are a last resort.
+pub fn select_kind_filter_matches<T>(
+    entries: Vec<(KindFilterNameMatch, T)>,
+    include_containers: bool,
+) -> Vec<T> {
+    use KindFilterNameMatch::{Container, Payload, Rejected, Unnamed, UnnamedStream};
+    let has_payload = entries.iter().any(|(kind, _)| *kind == Payload);
+    let has_container = entries
+        .iter()
+        .any(|(kind, _)| matches!(kind, Container | UnnamedStream));
+    entries
+        .into_iter()
+        .filter(|(kind, _)| match kind {
+            Rejected => false,
+            _ if include_containers => true,
+            Payload => true,
+            Unnamed => has_payload || !has_container,
+            UnnamedStream => true,
+            Container => !has_payload,
+        })
+        .map(|(_, entry)| entry)
+        .collect()
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ArchiveEntryKindFilter {
     pub rom: bool,
@@ -165,19 +205,31 @@ impl ArchiveEntryKindFilter {
             return true;
         }
         let lower = candidate_name.to_ascii_lowercase();
-        let mut payload_name = lower.as_str();
-        while let Some(stripped) = [".gz", ".bz2", ".xz", ".zst", ".lz4"]
-            .iter()
-            .find_map(|suffix| payload_name.strip_suffix(suffix))
-        {
-            payload_name = stripped;
-        }
+        let payload_name = strip_stream_suffixes(&lower);
         if payload_name != lower {
             return self.matches_payload_name(payload_name);
         }
         payload_name_needs_content_classification(candidate_name)
             || (self.rom && is_rom_filter_candidate_name(candidate_name))
             || (self.patch && is_patch_filter_candidate_name(candidate_name))
+    }
+
+    pub fn classify_name(self, candidate_name: &str) -> KindFilterNameMatch {
+        if !self.matches_payload_name(candidate_name) {
+            return if self.matches_container_fallback_name(candidate_name) {
+                KindFilterNameMatch::Container
+            } else {
+                KindFilterNameMatch::Rejected
+            };
+        }
+        if payload_name_needs_content_classification(candidate_name) {
+            return KindFilterNameMatch::Unnamed;
+        }
+        let lower = candidate_name.to_ascii_lowercase();
+        if payload_name_needs_content_classification(strip_stream_suffixes(&lower)) {
+            return KindFilterNameMatch::UnnamedStream;
+        }
+        KindFilterNameMatch::Payload
     }
 
     pub fn matches_payload_or_container_name(self, candidate_name: &str) -> bool {
@@ -264,6 +316,17 @@ pub fn payload_name_needs_content_classification(candidate_name: &str) -> bool {
         && tail.as_bytes()[0].is_ascii_alphabetic()
         && tail.bytes().all(|byte| byte.is_ascii_alphanumeric());
     !plausible_extension
+}
+
+fn strip_stream_suffixes(lower_name: &str) -> &str {
+    let mut payload_name = lower_name;
+    while let Some(stripped) = [".gz", ".bz2", ".xz", ".zst", ".lz4"]
+        .iter()
+        .find_map(|suffix| payload_name.strip_suffix(suffix))
+    {
+        payload_name = stripped;
+    }
+    payload_name
 }
 
 fn has_extension(candidate_name: &str, extensions: &[&str]) -> bool {

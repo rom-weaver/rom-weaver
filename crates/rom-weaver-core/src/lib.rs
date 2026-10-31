@@ -34,10 +34,11 @@ pub use cancel::{
 };
 pub use common_files::{
     ArchiveEntryKindFilter, COMMON_CONTAINER_FILE_EXTENSIONS, CONTAINER_FILTER_FILE_EXTENSIONS,
-    PATCH_FILTER_FILE_EXTENSIONS, ROM_FILTER_FILE_EXTENSIONS,
+    KindFilterNameMatch, PATCH_FILTER_FILE_EXTENSIONS, ROM_FILTER_FILE_EXTENSIONS,
     is_container_filter_passthrough_candidate_name, is_dcp_patch_name,
     is_patch_filter_candidate_name, is_rom_filter_candidate_name,
-    payload_name_needs_content_classification, should_ignore_common_container_file,
+    payload_name_needs_content_classification, select_kind_filter_matches,
+    should_ignore_common_container_file,
 };
 pub use concurrency::{
     BatchPlan, BatchWave, ConcurrencyLimits, JobDemand, plan_batch, plan_waves,

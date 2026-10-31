@@ -339,23 +339,24 @@ impl CliApp {
         let report = self.with_recommended_label(report, probe_recommendation);
         // Enumerate the container's selectable entries (a cheap, decompression-free
         // central-directory/header scan) so probe is a strict superset of the former `list`
-        // command. Honors the same `rom_filter`/`patch_filter`/`no_ignore` semantics: payload
-        // matches win, falling back to container entries when no payload matches.
+        // command. Honors the same `rom_filter`/`patch_filter`/`no_ignore` selection as extraction.
         let listed_entries = handler
             .list_entry_records(&request, context)
             .ok()
             .map(|entries| {
-                let (payload_entries, fallback_entries) =
-                    Self::kind_filtered_container_list_entries(
-                        &entries,
-                        options.kind_filter,
-                        !options.no_ignore,
-                    );
-                if payload_entries.is_empty() {
-                    fallback_entries
-                } else {
-                    payload_entries
+                if options.kind_filter.disabled() {
+                    return entries;
                 }
+                rom_weaver_core::select_kind_filter_matches(
+                    entries
+                        .into_iter()
+                        .filter(|entry| {
+                            options.no_ignore || !should_ignore_common_container_file(&entry.path)
+                        })
+                        .map(|entry| (options.kind_filter.classify_name(&entry.path), entry))
+                        .collect(),
+                    false,
+                )
             });
         let mut report =
             Self::attach_container_probe_details(report, listed_entries, probe_recommendation);

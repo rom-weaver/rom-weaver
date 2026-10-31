@@ -301,20 +301,13 @@ impl CliApp {
             return Ok(None);
         }
         let selected = if kind_filter.enabled() {
-            let mut payload_matches = Vec::new();
-            let mut container_fallback_matches = Vec::new();
-            for (name, index) in selected {
-                if kind_filter.matches_payload_name(&name) {
-                    payload_matches.push((name, index));
-                } else if kind_filter.matches_container_fallback_name(&name) {
-                    container_fallback_matches.push((name, index));
-                }
-            }
-            if payload_matches.is_empty() {
-                container_fallback_matches
-            } else {
-                payload_matches
-            }
+            rom_weaver_core::select_kind_filter_matches(
+                selected
+                    .into_iter()
+                    .map(|(name, index)| (kind_filter.classify_name(&name), (name, index)))
+                    .collect(),
+                false,
+            )
         } else {
             selected
         };
