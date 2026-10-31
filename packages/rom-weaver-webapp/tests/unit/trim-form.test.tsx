@@ -425,6 +425,22 @@ describe("TrimPatchForm", () => {
     },
   );
 
+  it("does not offer RVZ for a bare .iso the engine did not recognise as a GameCube or Wii disc", async () => {
+    const { container } = renderForm({
+      pageDrop: { files: [new File(["disc"], "dvd.iso")], id: 1 },
+      outputFormat: "rvz",
+      settings: { defaultCompression: "none" },
+    });
+    await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+    await vi.waitFor(() => {
+      const format = container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement;
+      const offered = Array.from(format.options).map((option) => option.value);
+      expect(offered).toContain("zip");
+      expect(offered).not.toContain("rvz");
+      expect(format.value).not.toBe("rvz");
+    });
+  });
+
   it("offers only raw, ZIP, and 7z outputs for a cartridge ROM", async () => {
     const { container } = renderForm({ pageDrop: { files: [new File(["rom"], "game.nds")], id: 1 } });
     await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));

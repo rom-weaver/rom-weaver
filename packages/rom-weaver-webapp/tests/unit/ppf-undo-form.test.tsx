@@ -45,6 +45,16 @@ describe("PPF Undo input replacement", () => {
       noneLabel: ".img/.cue",
     },
     {
+      name: "plain DVD ISO without a GameCube verdict",
+      filename: "dvd.iso",
+      recommendedFormat: undefined,
+      discFormat: "DVD",
+      group: false,
+      track: "track.iso",
+      formats: ["none", "zip", "7z", "chd"],
+      noneLabel: ".iso",
+    },
+    {
       name: "content-detected GameCube",
       filename: "game.bin",
       recommendedFormat: "rvz",

@@ -5,10 +5,10 @@ import {
   compressFiles,
   getCompressFormats,
   RvzInputNotDiscError,
-  getCompressSource,
   extractCompressEntries,
   isOpenableCompressInput,
   listCompressInput,
+  validateCompressInputs,
 } from "../../src/webapp/compress-service.ts";
 
 const file = (name: string, contents: string | Uint8Array = "rom") => new File([contents], name);
@@ -17,6 +17,8 @@ const options = (compression: "zip" | "7z" | "chd" | "rvz" | "z3ds"): ApplyWorkf
   signal: new AbortController().signal,
   workers: { threads: 3 },
 });
+const formatsOf = async (files: File[], loadRuntime?: () => Promise<WorkflowRuntime>) =>
+  getCompressFormats(await validateCompressInputs(files, loadRuntime));
 const makeRuntime = () => {
   const cleanup = vi.fn(async () => undefined);
   const output = {
@@ -81,16 +83,16 @@ describe("compress service", () => {
   });
 
   it("filters formats for raw inputs, compressed inputs, and multi-file sets", async () => {
-    expect(await getCompressFormats([file("game.iso", new Uint8Array(2048))])).toEqual(["zip", "7z", "chd"]);
-    expect(await getCompressFormats([file("game.iso", "not-sector-aligned")])).toEqual(["zip", "7z"]);
+    expect(await formatsOf([file("game.iso", new Uint8Array(2048))])).toEqual(["zip", "7z", "chd"]);
+    expect(await formatsOf([file("game.iso", "not-sector-aligned")])).toEqual(["zip", "7z"]);
     for (const name of ["game.gcm", "game.wbfs"]) {
-      expect(await getCompressFormats([file(name, new Uint8Array(2048))])).toEqual(["zip", "7z", "rvz"]);
+      expect(await formatsOf([file(name, new Uint8Array(2048))])).toEqual(["zip", "7z", "rvz"]);
     }
-    expect(await getCompressFormats([file("game.3ds")])).toEqual(["zip", "7z", "z3ds"]);
+    expect(await formatsOf([file("game.3ds")])).toEqual(["zip", "7z", "z3ds"]);
     for (const name of ["game.gba", "disc.chd", "game.rvz", "disc.gdi", "game.z3ds"]) {
-      expect(await getCompressFormats([file(name)])).toEqual(["zip", "7z"]);
+      expect(await formatsOf([file(name)])).toEqual(["zip", "7z"]);
     }
-    expect(await getCompressFormats([file("a.bin"), file("b.ips")])).toEqual(["zip", "7z"]);
+    expect(await formatsOf([file("a.bin"), file("b.ips")])).toEqual(["zip", "7z"]);
   });
 
   it("offers RVZ for a bare .iso only when the engine probe recognises a GameCube or Wii disc", async () => {
@@ -99,14 +101,10 @@ describe("compress service", () => {
     const dvd = file("dvd.iso", new Uint8Array(2048 * 4));
     const gamecube = file("game.iso", new Uint8Array(2048 * 4));
     // A plain DVD ISO, with or without a verdict, is not an RVZ candidate.
-    expect(await getCompressFormats([dvd], probeWith({ discFormat: "DVD" }))).toEqual(["zip", "7z", "chd"]);
-    expect(await getCompressFormats([dvd], probeWith({ recommendedFormat: "chd" }))).toEqual(["zip", "7z", "chd"]);
-    expect(await getCompressFormats([dvd], async () => Promise.reject(new Error("no worker")))).toEqual([
-      "zip",
-      "7z",
-      "chd",
-    ]);
-    expect(await getCompressFormats([gamecube], probeWith({ discFormat: "DVD", recommendedFormat: "rvz" }))).toEqual([
+    expect(await formatsOf([dvd], probeWith({ discFormat: "DVD" }))).toEqual(["zip", "7z", "chd"]);
+    expect(await formatsOf([dvd], probeWith({ recommendedFormat: "chd" }))).toEqual(["zip", "7z", "chd"]);
+    expect(await formatsOf([dvd], async () => Promise.reject(new Error("no worker")))).toEqual(["zip", "7z", "chd"]);
+    expect(await formatsOf([gamecube], probeWith({ discFormat: "DVD", recommendedFormat: "rvz" }))).toEqual([
       "zip",
       "7z",
       "chd",
@@ -114,7 +112,27 @@ describe("compress service", () => {
     ]);
     // A trimmed GameCube image need not be sector aligned, but the probe still vouches for it.
     const trimmed = file("trimmed.iso", new Uint8Array(2048 * 4 + 4));
-    expect(await getCompressFormats([trimmed], probeWith({ recommendedFormat: "rvz" }))).toEqual(["zip", "7z", "rvz"]);
+    expect(await formatsOf([trimmed], probeWith({ recommendedFormat: "rvz" }))).toEqual(["zip", "7z", "rvz"]);
+  });
+
+  it("probes a file once for staging and the run, and probes again when the file set changed", async () => {
+    const { runtime } = makeRuntime();
+    const probe = vi.fn(async () => ({ entries: [], recommendedFormat: "rvz" }));
+    Object.assign(runtime.compression, { probe });
+    const staged = file("game.iso", new Uint8Array(2048 * 4));
+    const validated = await validateCompressInputs([staged], async () => runtime);
+    expect(getCompressFormats(validated)).toContain("rvz");
+    await compressFiles([staged], options("rvz"), runtime, validated);
+    expect(probe).toHaveBeenCalledTimes(1);
+
+    // The same name with different bytes is another file: it is validated and probed again, and its
+    // verdict (no longer a GameCube disc) decides the format.
+    probe.mockResolvedValue({ entries: [], recommendedFormat: "chd" } as never);
+    const replaced = file("game.iso", new Uint8Array(2048 * 4));
+    await expect(compressFiles([replaced], options("rvz"), runtime, validated)).rejects.toThrow(
+      "does not support this file set",
+    );
+    expect(probe).toHaveBeenCalledTimes(2);
   });
 
   it.each([
@@ -155,16 +173,16 @@ describe("compress service", () => {
       ({
         compression: { probe: async () => ({ entries: [], ...(discFormat ? { discFormat } : {}) }) },
       }) as unknown as WorkflowRuntime;
-    expect(await getCompressFormats([cart], runtimeWith())).toEqual(["zip", "7z"]);
-    expect(await getCompressFormats([cart])).toEqual(["zip", "7z"]);
-    expect(await getCompressFormats([cart], async () => Promise.reject(new Error("no worker")))).toEqual(["zip", "7z"]);
+    expect(await formatsOf([cart], runtimeWith())).toEqual(["zip", "7z"]);
+    expect(await formatsOf([cart])).toEqual(["zip", "7z"]);
+    expect(await formatsOf([cart], async () => Promise.reject(new Error("no worker")))).toEqual(["zip", "7z"]);
     // Header evidence (sync header or ISO9660 descriptor) from the engine probe offers CHD.
-    expect(await getCompressFormats([cart], runtimeWith("CD"))).toEqual(["zip", "7z", "chd"]);
+    expect(await formatsOf([cart], runtimeWith("CD"))).toEqual(["zip", "7z", "chd"]);
     // A non-CD medium, such as a GameCube DVD dump named `.bin`, is not CD evidence.
-    expect(await getCompressFormats([cart], runtimeWith("DVD"))).toEqual(["zip", "7z"]);
+    expect(await formatsOf([cart], runtimeWith("DVD"))).toEqual(["zip", "7z"]);
     // Evidence still needs whole sectors.
     const unaligned = file("odd.bin", new Uint8Array(524_289));
-    expect(await getCompressFormats([unaligned], runtimeWith("CD"))).toEqual(["zip", "7z"]);
+    expect(await formatsOf([unaligned], runtimeWith("CD"))).toEqual(["zip", "7z"]);
   });
 
   it("compresses a single CD .bin to CHD on the runtime's header evidence", async () => {
@@ -191,7 +209,7 @@ describe("compress service", () => {
     const { create, cleanup, runtime } = makeRuntime();
     // The engine probe reports the create mode native `chd` auto-inference picks from the bytes.
     Object.assign(runtime.compression, { probe: async () => ({ entries: [], chdCreateMode: "cd" }) });
-    expect((await getCompressSource([source], async () => runtime))?.metadata).toMatchObject({ mode: "cd" });
+    expect((await validateCompressInputs([source], async () => runtime)).source.metadata).toMatchObject({ mode: "cd" });
     const output = await compressFiles([source], options("chd"), runtime);
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -211,13 +229,13 @@ describe("compress service", () => {
     const cue = file("disc.cue", 'FILE "track.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n');
     const track = file("track.bin", new Uint8Array(2352));
     const { create, runtime } = makeRuntime();
-    expect(await getCompressFormats([cue])).toEqual(["zip", "7z"]);
-    expect(await getCompressFormats([cue, track, file("extra.bin")])).toEqual(["zip", "7z"]);
+    expect(await formatsOf([cue])).toEqual(["zip", "7z"]);
+    expect(await formatsOf([cue, track, file("extra.bin")])).toEqual(["zip", "7z"]);
     await expect(compressFiles([cue], options("chd"), runtime)).rejects.toThrow("missing track: track.bin");
     await expect(compressFiles([cue, track, file("extra.bin")], options("chd"), runtime)).rejects.toThrow(
       "unreferenced file",
     );
-    expect(await getCompressFormats([cue, track])).toEqual(["zip", "7z", "chd"]);
+    expect(await formatsOf([cue, track])).toEqual(["zip", "7z", "chd"]);
     await compressFiles([cue, track], options("chd"), runtime);
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -251,7 +269,7 @@ describe("compress service", () => {
     const track1 = file("track1.bin", new Uint8Array(2352));
     const track2 = file("track2.bin", new Uint8Array(2352));
     const { create, runtime } = makeRuntime();
-    expect(await getCompressFormats([cue, track2, track1])).toEqual(["zip", "7z", "chd"]);
+    expect(await formatsOf([cue, track2, track1])).toEqual(["zip", "7z", "chd"]);
     await compressFiles([cue, track2, track1], options("chd"), runtime);
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -273,7 +291,7 @@ describe("compress service", () => {
     const lower = file("track.bin");
     const upper = file("TRACK.BIN");
     const { runtime } = makeRuntime();
-    expect(await getCompressFormats([cue, lower, upper])).toEqual(["zip", "7z"]);
+    expect(await formatsOf([cue, lower, upper])).toEqual(["zip", "7z"]);
     await expect(compressFiles([cue, lower, upper], options("chd"), runtime)).rejects.toThrow("ambiguous track names");
     await expect(compressFiles([cue, lower, upper], options("zip"), runtime)).resolves.toBeDefined();
     const repeated = file("disc.cue", 'FILE "a/track.bin" BINARY\nFILE "b/TRACK.BIN" BINARY\n');
@@ -441,7 +459,7 @@ describe("compress service", () => {
         runtime,
       );
       expect(await entries[0]?.file.text()).toBe(text.replace('"tracks/track 01.bin"', '"track 01.bin"'));
-      expect(await getCompressFormats(entries.map((entry) => entry.file))).toEqual(["zip", "7z", "chd"]);
+      expect(await formatsOf(entries.map((entry) => entry.file))).toEqual(["zip", "7z", "chd"]);
     });
 
     it.each(["zip", "7z"] as const)("preserves case-distinct GDI tracks when repacking as %s", async (format) => {
@@ -511,7 +529,7 @@ describe("compress service", () => {
         "Disc 2 - readme.txt",
         "game.cue",
       ]);
-      await expect(getCompressFormats(entries.slice(0, 2).map((entry) => entry.file))).resolves.toEqual(["zip", "7z"]);
+      await expect(formatsOf(entries.slice(0, 2).map((entry) => entry.file))).resolves.toEqual(["zip", "7z"]);
     });
 
     it("disposes every extracted file when a picked entry is missing or unreadable", async () => {
@@ -552,10 +570,10 @@ it("offers and creates CHD only for a complete GDI group", async () => {
   const firstTrack = file("track 01.bin", new Uint8Array(2352));
   const tracks = [firstTrack, file("track02.bin", new Uint8Array(2352))];
   const { create, runtime } = makeRuntime();
-  expect(await getCompressFormats([gdi, ...tracks])).toEqual(["zip", "7z", "chd"]);
-  expect((await getCompressSource([gdi, ...tracks]))?.metadata).toMatchObject({ mode: "gd" });
-  expect(await getCompressFormats([gdi, firstTrack])).toEqual(["zip", "7z"]);
-  expect(await getCompressFormats([gdi, ...tracks, file("extra.bin")])).toEqual(["zip", "7z"]);
+  expect(await formatsOf([gdi, ...tracks])).toEqual(["zip", "7z", "chd"]);
+  expect((await validateCompressInputs([gdi, ...tracks])).source.metadata).toMatchObject({ mode: "gd" });
+  expect(await formatsOf([gdi, firstTrack])).toEqual(["zip", "7z"]);
+  expect(await formatsOf([gdi, ...tracks, file("extra.bin")])).toEqual(["zip", "7z"]);
   await expect(compressFiles([gdi, firstTrack], options("chd"), runtime)).rejects.toThrow("missing track");
   await compressFiles([gdi, ...tracks], options("chd"), runtime);
   expect(create).toHaveBeenCalledWith(

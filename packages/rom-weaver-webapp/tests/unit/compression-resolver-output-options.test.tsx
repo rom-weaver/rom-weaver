@@ -5,11 +5,15 @@ import { createRomInputRow } from "../../src/public/react/apply-session-inputs.t
 import { useCompressionResolver } from "../../src/public/react/use-compression-resolver.ts";
 import type { ApplyPatchFormSettings } from "../../src/public/react/patcher-form.ts";
 
-const labelsFor = (row: ReturnType<typeof createRomInputRow>) => {
+const labelsFor = (
+  row: ReturnType<typeof createRomInputRow>,
+  compressionOptions: string[] = ["none", "zip", "chd"],
+  activeSettings = {} as ApplyPatchFormSettings,
+) => {
   const hook = renderHook(() =>
     useCompressionResolver({
-      activeSettings: {} as ApplyPatchFormSettings,
-      compressionOptions: ["none", "zip", "chd"],
+      activeSettings,
+      compressionOptions,
       effectiveInputs: [new File([], row.info.fileName)],
       outputCompressionEdited: false,
       romInputs: [row],
@@ -42,5 +46,45 @@ describe("compression resolver output options", () => {
       kind: "track",
     });
     expect(labelsFor(extracted).none).toBe(".gdi");
+  });
+
+  describe("RVZ output", () => {
+    const allOptions = ["none", "zip", "7z", "chd", "rvz"];
+    const rvzIn = (fileName: string, recommendedFormat?: string) =>
+      Object.keys(
+        labelsFor(
+          createRomInputRow({
+            id: "rom",
+            info: { fileName, ...(recommendedFormat ? { romType: { discFormat: "DVD", recommendedFormat } } : {}) },
+          }),
+          allOptions,
+        ),
+      ).includes("rvz");
+
+    it("offers RVZ for a bare .iso only when the engine recognised a GameCube or Wii disc", () => {
+      expect(rvzIn("game.iso")).toBe(false);
+      expect(rvzIn("dvd.iso", "chd")).toBe(false);
+      expect(rvzIn("game.iso", "rvz")).toBe(true);
+    });
+
+    it("offers RVZ for extensions that only GameCube and Wii discs use, with no verdict", () => {
+      for (const fileName of ["game.gcm", "game.wbfs", "game.rvz", "game.gcz", "game.wia"]) {
+        expect(rvzIn(fileName)).toBe(true);
+      }
+    });
+
+    it("falls back to no compression when the default output is RVZ for a plain DVD ISO", () => {
+      const row = createRomInputRow({ id: "rom", info: { fileName: "dvd.iso" } });
+      const hook = renderHook(() =>
+        useCompressionResolver({
+          activeSettings: { output: { compression: "rvz" } } as ApplyPatchFormSettings,
+          compressionOptions: allOptions,
+          effectiveInputs: [new File([], "dvd.iso")],
+          outputCompressionEdited: false,
+          romInputs: [row],
+        }),
+      );
+      expect(hook.result.current.requestedCompression).toBe("none");
+    });
   });
 });

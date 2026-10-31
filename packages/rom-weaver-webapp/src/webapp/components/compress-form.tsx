@@ -31,18 +31,25 @@ import {
   compressFiles,
   type CompressSource,
   getCompressFormats,
-  getCompressSource,
   isOpenableCompressInput,
   RvzInputNotDiscError,
+  type ValidatedCompressInput,
+  validateCompressInputs,
 } from "../compress-service.ts";
 import { useCompressArchiveInputs } from "./compress-archive-inputs.tsx";
 
 type CompressFormProps = { pageDrop?: PageFileDrop | null; onSessionChange?: (active: boolean) => void };
-type CompressionFormat = Awaited<ReturnType<typeof getCompressFormats>>[number];
-type InputInfo = { files: File[]; formats: CompressionFormat[]; source: CompressSource | null };
+type CompressionFormat = ReturnType<typeof getCompressFormats>[number];
+/** `validated` is the one probe of `files`; the run reuses it instead of probing again. */
+type InputInfo = {
+  files: File[];
+  formats: CompressionFormat[];
+  source: CompressSource | null;
+  validated: ValidatedCompressInput | null;
+};
 const logger = createLogger("compress-form");
 let browserRuntimeLoad: Promise<WorkflowRuntime> | undefined;
-// Staging probes the input twice (source and formats), so share one dynamic import instead of paying for two.
+// Staging shares one dynamic import of the runtime across file sets.
 const loadBrowserRuntime = (): Promise<WorkflowRuntime> => {
   browserRuntimeLoad ??= import("../../platform/browser/workflow-runtime.ts").then(
     (module) => module.browserRuntime,
@@ -124,16 +131,14 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
   useEffect(() => {
     let current = true;
     if (!files.length) return;
-    void Promise.all([
-      getCompressSource(files, loadBrowserRuntime),
-      getCompressFormats(files, loadBrowserRuntime),
-    ]).then(
-      ([nextSource, nextFormats]) => {
-        if (current) setInputInfo({ files, formats: nextFormats, source: nextSource });
+    void validateCompressInputs(files, loadBrowserRuntime).then(
+      (validated) => {
+        if (current)
+          setInputInfo({ files, formats: getCompressFormats(validated), source: validated.source, validated });
       },
       (cause: unknown) => {
         if (!current) return;
-        setInputInfo({ files, formats: ["zip", "7z"], source: null });
+        setInputInfo({ files, formats: ["zip", "7z"], source: null, validated: null });
         setError(cause instanceof Error ? cause.message : String(cause));
       },
     );
@@ -205,6 +210,7 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
           },
         },
         browserRuntime,
+        inputInfo?.validated ?? undefined,
       );
       if (abort.signal.aborted || runId !== runIdRef.current) {
         await result.dispose();

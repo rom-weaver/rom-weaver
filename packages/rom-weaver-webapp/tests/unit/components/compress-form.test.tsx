@@ -65,6 +65,8 @@ describe("CompressForm", () => {
         }),
       }),
       expect.anything(),
+      // The staging probe result rides along so the run does not probe the files again.
+      expect.objectContaining({ files: expect.arrayContaining([expect.objectContaining({ name: "fix.bps" })]) }),
     );
     expect(output.dispose).not.toHaveBeenCalled();
     expect(onSessionChange).toHaveBeenLastCalledWith(true);
