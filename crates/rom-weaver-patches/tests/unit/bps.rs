@@ -11,17 +11,18 @@ use rom_weaver_core::{
 };
 
 use super::{
-    BPS_CREATE_MEMORY_LIMIT_BYTES, BPS_MAGIC, BPS_PARALLEL_WRITE_CHUNK_SIZE, BpsAction,
-    BpsApplyProgress, BpsCombinedSuffixMatcher, BpsCreateData, BpsCreateMode, BpsCreateProgress,
-    BpsPatchHandler, BpsSuffixIndexMode, ParsedBpsPatch, PreparedBpsWrite, adjust_relative_offset,
-    apply_patch_actions, apply_patch_actions_in_memory, apply_prepared_bps_writes,
-    bps_create_copy_match_is_worth, bps_create_estimated_low_memory_suffix_bytes,
-    bps_create_estimated_suffix_memory_bytes, bps_create_match_is_worth,
-    bps_create_suffix_index_mode, bps_create_usize_len, bps_parallel_batch_end,
-    collect_parallel_bps_write_plans, common_prefix_len_limited, copy_target_range, crc32_bytes,
-    encode_action_header, encode_signed_offset, initial_bps_sorted_target_len,
-    next_bps_sorted_target_len, parse_bps_bytes, parse_bps_bytes_with_checksum_validation,
-    push_varint, read_bps_create_data, repeated_byte_run_len, validate_output_file,
+    BPS_CREATE_MAX_COMBINED_INPUT_BYTES, BPS_CREATE_MEMORY_LIMIT_BYTES, BPS_MAGIC,
+    BPS_PARALLEL_WRITE_CHUNK_SIZE, BpsAction, BpsApplyProgress, BpsCombinedSuffixMatcher,
+    BpsCreateData, BpsCreateMode, BpsCreateProgress, BpsPatchHandler, BpsSuffixIndexMode,
+    ParsedBpsPatch, PreparedBpsWrite, adjust_relative_offset, apply_patch_actions,
+    apply_patch_actions_in_memory, apply_prepared_bps_writes, bps_create_copy_match_is_worth,
+    bps_create_estimated_low_memory_suffix_bytes, bps_create_estimated_suffix_memory_bytes,
+    bps_create_inputs_fit, bps_create_match_is_worth, bps_create_suffix_index_mode,
+    bps_create_usize_len, bps_parallel_batch_end, collect_parallel_bps_write_plans,
+    common_prefix_len_limited, copy_target_range, crc32_bytes, encode_action_header,
+    encode_signed_offset, initial_bps_sorted_target_len, next_bps_sorted_target_len,
+    parse_bps_bytes, parse_bps_bytes_with_checksum_validation, push_varint, read_bps_create_data,
+    repeated_byte_run_len, validate_output_file,
 };
 use crate::{
     BPS,
@@ -574,6 +575,68 @@ fn create_rejects_inputs_that_exceed_suffix_memory_budget_before_reading() {
             .to_string()
             .contains("lower-memory suffix-index memory")
     );
+}
+
+#[test]
+fn create_size_cap_is_the_exact_boundary_of_the_suffix_memory_estimate() {
+    let cap = BPS_CREATE_MAX_COMBINED_INPUT_BYTES;
+    let limit = u128::from(BPS_CREATE_MEMORY_LIMIT_BYTES);
+
+    // The estimate depends only on the combined size, so every split of the cap behaves alike.
+    for (source_len, target_len) in [(cap, 0), (cap / 2, cap - cap / 2), (0, cap)] {
+        assert!(bps_create_inputs_fit(source_len, target_len));
+        assert!(
+            bps_create_estimated_low_memory_suffix_bytes(source_len, target_len).expect("estimate")
+                <= limit
+        );
+        bps_create_suffix_index_mode(source_len, target_len).expect("cap-sized pair fits");
+    }
+    for (source_len, target_len) in [(cap + 1, 0), (cap / 2 + 1, cap - cap / 2), (0, cap + 1)] {
+        assert!(!bps_create_inputs_fit(source_len, target_len));
+        assert!(
+            bps_create_estimated_low_memory_suffix_bytes(source_len, target_len).expect("estimate")
+                > limit
+        );
+        let error = bps_create_suffix_index_mode(source_len, target_len)
+            .expect_err("one byte past the cap exceeds the budget");
+        assert!(
+            error
+                .to_string()
+                .contains(&format!("at most {cap} bytes; use xdelta")),
+            "{error}"
+        );
+    }
+    assert!(!bps_create_inputs_fit(u64::MAX, 1));
+}
+
+#[test]
+fn create_rejects_a_pair_one_byte_over_the_size_cap_before_reading() {
+    let temp = TestDir::new();
+    let original_path = temp.child("original.bin");
+    let modified_path = temp.child("modified.bin");
+    let half = BPS_CREATE_MAX_COMBINED_INPUT_BYTES / 2;
+    fs::File::create(&original_path)
+        .expect("original")
+        .set_len(half)
+        .expect("original len");
+    fs::File::create(&modified_path)
+        .expect("modified")
+        .set_len(BPS_CREATE_MAX_COMBINED_INPUT_BYTES - half + 1)
+        .expect("modified len");
+
+    let error = BpsPatchHandler::new(&BPS)
+        .create(
+            &PatchCreateRequest {
+                original: original_path,
+                modified: modified_path,
+                output: temp.child("update.bps"),
+                format: "BPS".into(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("one byte over the cap should fail before reading");
+
+    assert!(error.to_string().contains("use xdelta"), "{error}");
 }
 
 #[test]

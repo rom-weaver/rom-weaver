@@ -67,10 +67,10 @@ The browser's **Save as patch** action exports one supported ROM cheat. Its auto
 | ROM size | Patch format |
 | --- | --- |
 | Less than 16 MiB | IPS |
-| 16 MiB through 256 MiB | BPS |
-| More than 256 MiB | xdelta |
+| 16 MiB through 107,374,182 bytes | BPS |
+| More than 107,374,182 bytes | xdelta |
 
-The 256 MiB cutoff is rom-weaver's creation policy, not a limit of the BPS format.
+The 107,374,182-byte cutoff is rom-weaver's creation policy, not a limit of the BPS format. BPS create holds the original and the patched ROM in memory together, so the pair can total at most 214,748,364 bytes.
 
 Procedure: [Save a ROM cheat as a patch](../how-to/use-browser-cheats.md#save-a-rom-cheat-as-a-patch).
 

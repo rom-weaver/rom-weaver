@@ -234,7 +234,11 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
       const patchType = this.getPatchType();
       if (!SUPPORTED_CREATE_PATCH_TYPES.has(patchType))
         throw new RomWeaverError("UNSUPPORTED_FORMAT", `Unsupported patch type: ${patchType}`);
-      const supportedCreateFormats = getCreatePatchFormatsForSizes(original.state.size, modified?.state.size);
+      // Cheat-code mode has no modified file; the cheat-patched ROM keeps the original's size.
+      const supportedCreateFormats = getCreatePatchFormatsForSizes(
+        original.state.size,
+        modified ? modified.state.size : original.state.size,
+      );
       if (!supportedCreateFormats.includes(patchType)) {
         throw new RomWeaverError(
           "UNSUPPORTED_FORMAT",

@@ -457,6 +457,8 @@ Under `--plan` and `--independent`, structural parser failures set `unreadable: 
 
 `patch create` rejects an output that refers to either input file, including symbolic links and native hard links, even with `--force`.
 
+`patch create --format bps` indexes both inputs in memory under a 1 GiB suffix-index budget, so the original and modified files can total at most 214,748,364 bytes (about 204.8 MiB). A larger pair fails from file sizes alone, before any input is read, with an error that names this cap and suggests xdelta. With `--code` or `--cheat` the pair is the original twice (cheats patch bytes in place), so an original above 107,374,182 bytes fails before the cheats are applied. `--plan` omits `bps` from the format candidates for such a pair, selects xdelta as the default format, and reports the cap as `limits.bps_max_combined_input_bytes`. The webapp applies the same cap.
+
 `patch create` compares raw input bytes, including archive and compressed-container headers. It does not extract ROM payloads. Creation and `--plan` reports identify inputs that may need `--no-extract` during application.
 
 Applying container patches requires `--no-extract --no-compress` for exact reconstruction of Modified.
