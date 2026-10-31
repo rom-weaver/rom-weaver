@@ -40,7 +40,7 @@ pub(crate) fn regular_archive_probe_report(
     ))
 }
 
-/// Expands to the `list_entries`, `list_entry_records` and `extract` methods
+/// Expands to the `list_entries`, `list_entry_records`, `read_entry_prefixes` and `extract` methods
 /// of `ContainerHandlerOperations` for a handler with a `descriptor` field
 /// whose archives libarchive reads.
 ///
@@ -83,6 +83,21 @@ macro_rules! regular_archive_read_operations {
             list_regular_archive_entry_records_with_libarchive(
                 &request.source,
                 self.descriptor.name,
+            )
+        }
+
+        fn read_entry_prefixes(
+            &self,
+            request: &ContainerProbeRequest,
+            entries: &[String],
+            max_len: usize,
+            _context: &OperationContext,
+        ) -> Result<BTreeMap<String, Vec<u8>>> {
+            read_regular_archive_entry_prefixes_with_libarchive(
+                &request.source,
+                self.descriptor.name,
+                entries,
+                max_len,
             )
         }
 

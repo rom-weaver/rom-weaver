@@ -332,11 +332,21 @@ impl CliApp {
         options: SelectionResolutionOptions<'_>,
         context: &OperationContext,
     ) -> Result<Vec<String>> {
-        let entries = handler
+        let entries = Self::list_selection_entries(handler, source, options.split_bin, context)?;
+        self.resolve_listed_payload_selections(&entries, source, options)
+    }
+
+    pub(super) fn list_selection_entries(
+        handler: &dyn ContainerHandler,
+        source: &Path,
+        split_bin: bool,
+        context: &OperationContext,
+    ) -> Result<Vec<ContainerListEntry>> {
+        handler
             .list_entry_records(
                 &ContainerProbeRequest {
                     source: source.to_path_buf(),
-                    split_bin: options.split_bin,
+                    split_bin,
                 },
                 context,
             )
@@ -346,8 +356,7 @@ impl CliApp {
                     source.display(),
                     handler.descriptor().name
                 ))
-            })?;
-        self.resolve_listed_payload_selections(&entries, source, options)
+            })
     }
 
     pub(super) fn resolve_listed_payload_selections(

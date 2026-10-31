@@ -20,7 +20,8 @@ use crate::libarchive::{
     WriteFilter as LibarchiveCreateFilter, WriteFormat as LibarchiveCreateFormat,
     list_regular_archive_entries,
     probe_regular_archive as probe_regular_archive_with_libarchive_impl,
-    probe_regular_archive_format, visit_selected_regular_archive_entries,
+    probe_regular_archive_format, read_regular_archive_entry_prefixes,
+    visit_selected_regular_archive_entries,
 };
 use rayon::prelude::*;
 use rom_weaver_core::{
@@ -748,6 +749,20 @@ pub(crate) fn list_regular_archive_entry_records_with_libarchive(
             })
         })
         .collect())
+}
+
+/// Leading bytes of the named entries, keyed by the normalized names the listing reports.
+pub(crate) fn read_regular_archive_entry_prefixes_with_libarchive(
+    source: &Path,
+    format_name: &str,
+    entries: &[String],
+    max_len: usize,
+) -> Result<BTreeMap<String, Vec<u8>>> {
+    let wanted = entries.iter().cloned().collect::<BTreeSet<_>>();
+    read_regular_archive_entry_prefixes(source, format_name, wanted.len(), max_len, |path| {
+        let name = normalize_archive_name(path);
+        wanted.contains(&name).then_some(name)
+    })
 }
 
 #[derive(Clone, Debug)]

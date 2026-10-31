@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::BTreeMap;
 use tracing::trace;
 
 const REGULAR_ARCHIVE_READ_BLOCK_BYTES: usize = 2 * 1024 * 1024;
@@ -313,6 +314,81 @@ where
         (Ok(count), Ok(())) => Ok(count),
         (Err(error), _) => Err(error),
         (Ok(_), Err(error)) => Err(error),
+    }
+}
+
+/// Read at most `max_len` leading bytes of each file entry that `entry_key` maps to a key, in
+/// one forward pass that stops once `expected` keys are filled. Nothing is extracted to disk and
+/// an entry whose data cannot be read is skipped, so one unreadable entry never hides the rest.
+pub fn read_regular_archive_entry_prefixes<F>(
+    source: &Path,
+    format_name: &str,
+    expected: usize,
+    max_len: usize,
+    entry_key: F,
+) -> Result<BTreeMap<String, Vec<u8>>>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    trace!(
+        format = format_name,
+        source = %source.display(),
+        expected,
+        max_len,
+        "regular archive prefix read start"
+    );
+    let mut prefixes = BTreeMap::new();
+    if expected == 0 || max_len == 0 {
+        return Ok(prefixes);
+    }
+    let mut reader = open_regular_archive_reader(source, format_name)?;
+    let result = (|| -> Result<()> {
+        let mut index = 0usize;
+        while let Some(entry) = reader.next_entry().map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "{format_name} prefix read failed while reading entry {index}: {error}"
+            ))
+        })? {
+            index = index.saturating_add(1);
+            if !entry.is_file() {
+                continue;
+            }
+            let Ok(entry_path) = entry.pathname() else {
+                continue;
+            };
+            let Some(key) = entry_key(&entry_path).filter(|key| !prefixes.contains_key(key)) else {
+                continue;
+            };
+            match rom_weaver_core::read_up_to(entry.into_reader(), max_len) {
+                Ok(bytes) => {
+                    trace!(
+                        format = format_name,
+                        entry = %key,
+                        bytes = bytes.len(),
+                        "regular archive prefix read entry"
+                    );
+                    prefixes.insert(key, bytes);
+                }
+                Err(error) => {
+                    trace!(
+                        format = format_name,
+                        entry = %key,
+                        error = %error,
+                        "regular archive prefix read skipped an unreadable entry"
+                    );
+                }
+            }
+            if prefixes.len() == expected {
+                break;
+            }
+        }
+        Ok(())
+    })();
+
+    match (result, close_regular_archive_reader(reader, format_name)) {
+        (Ok(()), Ok(())) => Ok(prefixes),
+        (Err(error), _) => Err(error),
+        (Ok(()), Err(error)) => Err(error),
     }
 }
 

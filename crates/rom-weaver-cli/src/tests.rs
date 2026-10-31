@@ -1562,6 +1562,31 @@ fn extract_payload_selection_ignores_directory_entries_without_prompting() {
     );
 }
 
+/// Writes one fixture per ROM name; a `.zip` name becomes an archive holding a single `inner.nes`.
+fn write_signature_sidecar_roms(app: &CliApp, dir: &Path, rom_names: &[&str]) -> Vec<PathBuf> {
+    rom_names
+        .iter()
+        .map(|name| {
+            let path = dir.join(name);
+            if name.ends_with(".zip") {
+                let inner = dir.join("inner.nes");
+                std::fs::write(&inner, b"nested ROM payload").unwrap();
+                compress_zip_fixture(app, &[inner], &path);
+                return path;
+            }
+            let bytes: &[u8] = if name.ends_with(".cue") {
+                b"FILE \"game.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n"
+            } else if *name == "raw" {
+                b"PAT weak signature raw ROM payload"
+            } else {
+                b"raw ROM payload"
+            };
+            std::fs::write(&path, bytes).unwrap();
+            path
+        })
+        .collect()
+}
+
 fn check_ingest_interactive_signature_sidecar(
     rom_names: &[&str],
     selected: Option<usize>,
@@ -1606,19 +1631,7 @@ fn check_ingest_interactive_signature_sidecar(
         calls: Mutex::new(Vec::new()),
     });
     let app = CliApp::new(events.clone(), prompt.clone(), true, true, false);
-    let mut members = Vec::new();
-    for name in rom_names {
-        let path = temp.path().join(name);
-        let bytes: &[u8] = if name.ends_with(".cue") {
-            b"FILE \"game.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n"
-        } else if *name == "raw" {
-            b"PAT weak signature raw ROM payload"
-        } else {
-            b"raw ROM payload"
-        };
-        std::fs::write(&path, bytes).unwrap();
-        members.push(path);
-    }
+    let mut members = write_signature_sidecar_roms(&app, temp.path(), rom_names);
     let patch = temp.path().join("patch");
     let patch_bytes = b"PATCH\x00\x00\x00\x00\x01\x01EOF";
     std::fs::write(&patch, patch_bytes).unwrap();
@@ -1687,13 +1700,18 @@ fn check_ingest_interactive_signature_sidecar(
     let expected_assets = if calls.is_empty() { rom_names.len() } else { 1 };
     assert_eq!(ingest["assets"].as_array().unwrap().len(), expected_assets);
     if let Some(index) = selected {
-        assert_eq!(ingest["assets"][0]["file_name"], rom_names[index]);
+        let expected_name = if rom_names[index].ends_with(".zip") {
+            "inner.nes"
+        } else {
+            rom_names[index]
+        };
+        assert_eq!(ingest["assets"][0]["file_name"], expected_name);
     }
     let manifests: Vec<_> = events
         .iter()
         .filter(|event| event["stage"] == "patch-manifest")
         .collect();
-    assert_eq!(manifests.len(), 1);
+    assert_eq!(manifests.len(), 1, "{events:?}");
     assert_eq!(
         manifests[0]["details"]["patch_manifest"]["patches"],
         ingest["patches"]
@@ -1727,6 +1745,16 @@ fn ingest_interactive_signature_sidecar_survives_rom_choice_and_cancellation() {
     check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], Some(1), "absolute");
     check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], None, "absolute");
     check_ingest_interactive_signature_sidecar(&["game.bin", "raw"], Some(1), "absolute");
+}
+
+/// A nested archive beside the ROMs keeps the top-level prompt, but the unnamed patch is classified
+/// from its header first: it is never offered as a ROM and survives whichever entry is chosen.
+#[test]
+fn ingest_interactive_nested_archive_excludes_signature_patch_from_rom_prompt() {
+    let names = ["first.nes", "second.nes", "extra.zip"];
+    check_ingest_interactive_signature_sidecar(&names, Some(1), "absolute");
+    check_ingest_interactive_signature_sidecar(&names, Some(2), "absolute");
+    check_ingest_interactive_signature_sidecar(&names, None, "absolute");
 }
 
 #[test]

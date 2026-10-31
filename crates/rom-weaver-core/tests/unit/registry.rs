@@ -219,6 +219,19 @@ impl ContainerHandlerOperations for SentinelHandler {
         }])
     }
 
+    fn read_entry_prefixes(
+        &self,
+        _request: &ContainerProbeRequest,
+        _entries: &[String],
+        _max_len: usize,
+        _context: &OperationContext,
+    ) -> Result<std::collections::BTreeMap<String, Vec<u8>>> {
+        Ok(std::collections::BTreeMap::from([(
+            "from_read_entry_prefixes".to_string(),
+            vec![7],
+        )]))
+    }
+
     fn extract(
         &self,
         _request: &ContainerExtractRequest,
@@ -331,6 +344,12 @@ fn traced_container_handler_forwards_every_operation() {
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].path, "from_list_entry_records");
     assert_eq!(records[0].size, Some(42));
+
+    // The tracing wrapper must forward prefix reads instead of using the empty default.
+    let prefixes = handler
+        .read_entry_prefixes(&probe, &["entry".to_string()], 4, &context)
+        .unwrap();
+    assert_eq!(prefixes["from_read_entry_prefixes"], vec![7]);
 
     let extract = ContainerExtractRequest {
         source: PathBuf::from("x.guard"),
@@ -598,6 +617,14 @@ fn container_trait_defaults_describe_an_unimplemented_operation() {
         }
         other => panic!("expected a dry-run-size unsupported error, got {other:?}"),
     }
+
+    // Prefix reads default to "nothing readable", which callers treat as unclassified.
+    assert!(
+        handler
+            .read_entry_prefixes(&probe, &["entry".to_string()], 4, &context)
+            .expect("default prefix read")
+            .is_empty()
+    );
 
     // `list_entry_records` defaults to re-mapping `list_entries`, so it inherits
     // that failure rather than reporting an empty listing.

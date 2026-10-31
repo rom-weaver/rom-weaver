@@ -62,7 +62,7 @@ Crate dependency flow is one-directional: `core` ← format crates (`checksum`/`
 
 Every pluggable format handler implements one of two traits, registered into a registry keyed by `FormatDescriptor` (name + aliases + extensions, used for both CLI `--format` matching and path-based probing):
 
-- `ContainerHandler` (+ `ContainerHandlerOperations`): `probe`, `probe_details`, `list_entries`, `extract`, `create`, plus `capabilities()` describing what the format supports (create, dry-run sizing, ...).
+- `ContainerHandler` (+ `ContainerHandlerOperations`): `probe`, `probe_details`, `list_entries`, `read_entry_prefixes` (header bytes of named entries, no extraction), `extract`, `create`, plus `capabilities()` describing what the format supports (create, dry-run sizing, ...).
 - `PatchHandler`: `probe`, `parse`, `apply`, `create`, with a default `validate` that dry-run applies to a temp path.
 
 Checksums and codecs are not trait-pluggable: `NativeChecksumEngine` (`crates/rom-weaver-checksum/src/core.rs`) covers whole-file and range checksums for every algorithm, and the codec helpers in `crates/rom-weaver-core/src/codecs` are free functions.

@@ -9,6 +9,14 @@ use super::*;
 /// bytes `SP`, and PAT is matched by a record-layout heuristic, so either could be a raw dump.
 const UNRELIABLE_EXTENSIONLESS_SIGNATURE_FORMATS: &[&str] = &["solid", "pat"];
 
+/// ROM selections resolved around unnamed entries that carry a reliable patch signature.
+struct SignaturePatchSelection {
+    /// Entries the user kept; empty means every non-patch entry extracts.
+    rom_selections: Vec<String>,
+    /// Signature-classified patch entries, extracted separately from the ROM selection.
+    patch_names: Vec<String>,
+}
+
 /// Which input bucket the dropped source classified into. `rom` sources still carry their ROM
 /// `assets`; a `rom` source that *also* bundled sidecar patches additionally carries them in
 /// `patches` (mixed ROM+patch archive surfacing). `patch` sources carry only `patches`.
@@ -724,7 +732,10 @@ impl CliApp {
         let Some(handler) = self.patches.probe_signature(path) else {
             return false;
         };
-        let format = handler.descriptor().name;
+        Self::is_reliable_unnamed_patch_format(path, handler.descriptor().name)
+    }
+
+    fn is_reliable_unnamed_patch_format(path: &Path, format: &str) -> bool {
         let reliable = !UNRELIABLE_EXTENSIONLESS_SIGNATURE_FORMATS
             .iter()
             .any(|unreliable| unreliable.eq_ignore_ascii_case(format));
@@ -735,6 +746,95 @@ impl CliApp {
             "unnamed payload matched a patch signature"
         );
         reliable
+    }
+
+    /// Resolve the ROM prompt for an archive holding unnamed entries that carry a reliable patch
+    /// signature. Those entries are not ROM candidates, so the prompt never offers them; the
+    /// caller MUST extract `patch_names` in a separate pass because ROM selection drops them.
+    /// Returns `None` when no entry is signature-classified, leaving the ordinary resolution.
+    fn resolve_signature_patch_selection(
+        &self,
+        handler: &dyn ContainerHandler,
+        source: &Path,
+        options: SelectionResolutionOptions<'_>,
+        context: &OperationContext,
+    ) -> Result<Option<SignaturePatchSelection>> {
+        let entries = Self::list_selection_entries(handler, source, options.split_bin, context)?;
+        let patch_names =
+            self.signature_patch_entry_names(handler, source, &entries, options.split_bin, context);
+        if patch_names.is_empty() {
+            return Ok(None);
+        }
+        let candidates = entries
+            .iter()
+            .filter(|entry| !patch_names.contains(&normalize_archive_name(&entry.path)))
+            .cloned()
+            .collect::<Vec<_>>();
+        trace!(
+            source = %source.display(),
+            entry_count = entries.len(),
+            patch_count = patch_names.len(),
+            "excluded signature-classified patches from ROM selection candidates"
+        );
+        let rom_selections =
+            self.resolve_listed_payload_selections(&candidates, source, options)?;
+        Ok(Some(SignaturePatchSelection {
+            rom_selections,
+            patch_names,
+        }))
+    }
+
+    /// Names of unnamed archive entries whose leading bytes carry a reliable patch signature,
+    /// read from a bounded prefix without extracting. Entries the container cannot read stay
+    /// unclassified, which keeps them as ROM candidates.
+    fn signature_patch_entry_names(
+        &self,
+        handler: &dyn ContainerHandler,
+        source: &Path,
+        entries: &[ContainerListEntry],
+        split_bin: bool,
+        context: &OperationContext,
+    ) -> Vec<String> {
+        let unnamed = entries
+            .iter()
+            .filter(|entry| rom_weaver_core::payload_name_needs_content_classification(&entry.path))
+            .map(|entry| normalize_archive_name(&entry.path))
+            .filter(|name| !name.is_empty())
+            .collect::<Vec<_>>();
+        if unnamed.is_empty() {
+            return Vec::new();
+        }
+        let prefixes = match handler.read_entry_prefixes(
+            &ContainerProbeRequest {
+                source: source.to_path_buf(),
+                split_bin,
+            },
+            &unnamed,
+            rom_weaver_patches::SIGNATURE_PREFIX_LEN,
+            context,
+        ) {
+            Ok(prefixes) => prefixes,
+            Err(error) => {
+                debug!(
+                    source = %source.display(),
+                    error = %error,
+                    "could not read unnamed entry prefixes; leaving them as ROM candidates"
+                );
+                return Vec::new();
+            }
+        };
+        unnamed
+            .into_iter()
+            .filter(|name| {
+                let path = Path::new(name);
+                prefixes
+                    .get(name)
+                    .and_then(|prefix| self.patches.probe_signature_prefix(path, prefix))
+                    .is_some_and(|patch| {
+                        Self::is_reliable_unnamed_patch_format(path, patch.descriptor().name)
+                    })
+            })
+            .collect()
     }
 
     /// Ingest a bare `.cue`/`.gdi` sheet with its referenced track files sitting
@@ -932,22 +1032,84 @@ impl CliApp {
             && interactive
             && self.interactive_selection_enabled
             && raw_selections.is_empty();
+        // Nested containers skip classify-before-selection, so unnamed patches are classified from
+        // their headers here and kept out of the ROM prompt.
+        let signature_selection = if interactive
+            && !select_classified_leaves
+            && self.interactive_selection_enabled
+            && raw_selections.is_empty()
+        {
+            self.resolve_signature_patch_selection(
+                handler,
+                source,
+                SelectionResolutionOptions {
+                    kind_filter,
+                    split_bin,
+                    ignore_common_files: !no_ignore,
+                    source_label,
+                },
+                context,
+            )?
+        } else {
+            None
+        };
+        let rom_selections = signature_selection
+            .as_ref()
+            .map_or(raw_selections, |selection| &selection.rom_selections);
         let mut leaves = self.ingest_extract_leaves(
             handler,
             IngestLeavesRequest {
                 source,
                 out_dir,
-                raw_selections,
+                raw_selections: rom_selections,
                 kind_filter,
                 no_ignore,
                 no_nested_extract,
                 preserve_nested_formats,
                 split_bin,
-                interactive: interactive && !select_classified_leaves,
+                interactive: interactive
+                    && !select_classified_leaves
+                    && signature_selection.is_none(),
                 source_label,
                 context,
             },
         )?;
+        if let Some(selection) =
+            signature_selection.filter(|selection| !selection.patch_names.is_empty())
+        {
+            let patch_leaves = self.ingest_extract_leaves(
+                handler,
+                IngestLeavesRequest {
+                    source,
+                    out_dir,
+                    raw_selections: &selection.patch_names,
+                    kind_filter: Self::archive_entry_kind_filter(false, true),
+                    no_ignore,
+                    no_nested_extract,
+                    preserve_nested_formats,
+                    split_bin,
+                    interactive: false,
+                    source_label,
+                    context,
+                },
+            )?;
+            let known = leaves
+                .iter()
+                .filter_map(|leaf| leaf.get("path").and_then(Value::as_str))
+                .map(str::to_string)
+                .collect::<HashSet<_>>();
+            let before = leaves.len();
+            leaves.extend(patch_leaves.into_iter().filter(|leaf| {
+                leaf.get("path")
+                    .and_then(Value::as_str)
+                    .is_some_and(|path| !known.contains(path))
+            }));
+            trace!(
+                source = %source.display(),
+                patch_leaf_count = leaves.len() - before,
+                "added signature-classified patch leaves beside the selected ROMs"
+            );
+        }
         if select_classified_leaves {
             let selection_root = Self::normalized_emitted_path_key(out_dir);
             let selection_name = |path: &str| {

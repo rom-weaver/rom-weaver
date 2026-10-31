@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     sync::Arc,
@@ -460,6 +461,19 @@ pub trait ContainerHandlerOperations: Send + Sync {
             .map(|path| ContainerListEntry { path, size: None })
             .collect())
     }
+    /// Read at most `max_len` leading bytes of each named entry without extracting any of them,
+    /// keyed by the entry name [`Self::list_entry_records`] reports. Entries that cannot be read are
+    /// omitted. The default reads nothing, so callers MUST treat a missing entry as unclassified.
+    fn read_entry_prefixes(
+        &self,
+        request: &ContainerProbeRequest,
+        entries: &[String],
+        max_len: usize,
+        context: &OperationContext,
+    ) -> Result<BTreeMap<String, Vec<u8>>> {
+        let _ = (request, entries, max_len, context);
+        Ok(BTreeMap::new())
+    }
     fn extract(
         &self,
         request: &ContainerExtractRequest,
@@ -736,6 +750,46 @@ impl ContainerHandlerOperations for TracingContainerHandler {
                     format = descriptor.name,
                     error = %error,
                     "container list records failed"
+                );
+            }
+        }
+        result
+    }
+
+    fn read_entry_prefixes(
+        &self,
+        request: &ContainerProbeRequest,
+        entries: &[String],
+        max_len: usize,
+        context: &OperationContext,
+    ) -> Result<BTreeMap<String, Vec<u8>>> {
+        let descriptor = self.registration.descriptor;
+        trace!(
+            family = ?descriptor.family,
+            format = descriptor.name,
+            source = %request.source.display(),
+            requested = entries.len(),
+            max_len,
+            "container entry prefix read start"
+        );
+        let result = self
+            .inner
+            .read_entry_prefixes(request, entries, max_len, context);
+        match &result {
+            Ok(prefixes) => {
+                trace!(
+                    family = ?descriptor.family,
+                    format = descriptor.name,
+                    read = prefixes.len(),
+                    "container entry prefix read complete"
+                );
+            }
+            Err(error) => {
+                trace!(
+                    family = ?descriptor.family,
+                    format = descriptor.name,
+                    error = %error,
+                    "container entry prefix read failed"
                 );
             }
         }
