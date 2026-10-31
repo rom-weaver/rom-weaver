@@ -26,14 +26,18 @@ import {
   getDefaultCompressionArchive,
 } from "./settings-context.tsx";
 
-// A shared extension (`.iso`, `.bin`) names an RVZ-capable disc only once the engine's verdict arrives with the
-// row's checksums, so until then an RVZ pick on such a file is undecided rather than unsupported.
-const isRvzVerdictPending = (firstRom: RomInputRowState | undefined) => {
+// A shared extension (`.iso`, and `.bin` when its size could be a disc) names an RVZ-capable disc only once the
+// engine's verdict arrives with the row's checksums, so until then an RVZ pick on such a file is undecided rather
+// than unsupported.
+const isRvzVerdictPending = (firstRom: RomInputRowState | undefined, sourceSize: number | null | undefined) => {
   if (!firstRom) return false;
   const extension = getFileNameExtension(String(firstRom.info?.fileName || ""));
+  const mayBeDisc =
+    (hasRomSpecificExtension(RVZ_COMPRESSION_INPUT_EXTENSIONS, extension) &&
+      !hasUnambiguousRomSpecificCompressionInputExtension(RVZ_COMPRESSION_INPUT_EXTENSIONS, extension)) ||
+    (isAmbiguousDiscImageExtension(extension) && isLikelyDiscImageSize(sourceSize));
   return (
-    hasRomSpecificExtension(RVZ_COMPRESSION_INPUT_EXTENSIONS, extension) &&
-    !hasUnambiguousRomSpecificCompressionInputExtension(RVZ_COMPRESSION_INPUT_EXTENSIONS, extension) &&
+    mayBeDisc &&
     !firstRom.info?.romType?.recommendedFormat &&
     (firstRom.loading || !!firstRom.progress || !(firstRom.info?.crc32 || firstRom.info?.sha1 || firstRom.info?.md5))
   );
@@ -70,9 +74,10 @@ const resolveCompressionState = ({
     configuredOutputCompression !== null &&
     String(configuredOutputCompression).trim() !== "";
   const activeCompression = configuredOutputCompression || defaultArchiveCompression;
+  const resolvedSourceSize = romInputs[0]?.size ?? getBinarySourceSize(effectiveInputs[0]);
   // An explicit RVZ pick survives a ROM swap: it is only dropped once the new ROM's verdict says it is no disc.
   const keepsPendingRvzChoice =
-    outputCompressionEdited && activeCompression === "rvz" && isRvzVerdictPending(romInputs[0]);
+    outputCompressionEdited && activeCompression === "rvz" && isRvzVerdictPending(romInputs[0], resolvedSourceSize);
   const effectiveActiveCompression =
     activeCompression === "auto" ||
     keepsPendingRvzChoice ||
@@ -80,7 +85,6 @@ const resolveCompressionState = ({
       ? activeCompression
       : "none";
   const hasDiscEvidence = hasDiscImageEvidence(romInputs[0]?.info?.romType?.recommendedFormat, romInputs[0]?.chdMode);
-  const resolvedSourceSize = romInputs[0]?.size ?? getBinarySourceSize(effectiveInputs[0]);
   const autoResolvedCompression = resolveAutomaticCompressionFormat({
     fallback: "zip",
     parentCompressions: romInputs[0]?.archivePathEntries,
@@ -127,14 +131,19 @@ const resolveCompressionState = ({
   const evidenceDecidesDefault =
     !(hasConfiguredOutputCompression && activeCompression !== "auto") &&
     (allowsDefaultCompressionSpecial(defaultCompressionMode) || defaultCompressionMode === "auto");
+  // A held RVZ choice is not offered in the picker until the verdict lands (RVZ is not a valid option for a
+  // plain disc), so the picker waits too: showing the first option would misstate the pending RVZ output.
   const formatPending =
-    !outputCompressionEdited &&
-    evidenceDecidesDefault &&
-    !!firstRom &&
-    (firstRom.loading || !!firstRom.progress || !(firstRom.info?.crc32 || firstRom.info?.sha1 || firstRom.info?.md5)) &&
-    isAmbiguousDiscImageExtension(getFileNameExtension(String(firstRom.info?.fileName || ""))) &&
-    isLikelyDiscImageSize(resolvedSourceSize) &&
-    !hasDiscImageEvidence(firstRom.info?.romType?.recommendedFormat, firstRom.chdMode);
+    keepsPendingRvzChoice ||
+    (!outputCompressionEdited &&
+      evidenceDecidesDefault &&
+      !!firstRom &&
+      (firstRom.loading ||
+        !!firstRom.progress ||
+        !(firstRom.info?.crc32 || firstRom.info?.sha1 || firstRom.info?.md5)) &&
+      isAmbiguousDiscImageExtension(getFileNameExtension(String(firstRom.info?.fileName || ""))) &&
+      isLikelyDiscImageSize(resolvedSourceSize) &&
+      !hasDiscImageEvidence(firstRom.info?.romType?.recommendedFormat, firstRom.chdMode));
   return {
     activeCompression,
     displayedCompression,

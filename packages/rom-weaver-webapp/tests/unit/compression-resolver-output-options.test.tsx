@@ -108,11 +108,41 @@ describe("compression resolver output options", () => {
           },
         });
 
-      it("keeps requesting RVZ for a new .iso with no verdict yet, without offering RVZ", () => {
+      it("keeps requesting RVZ for a new .iso with no verdict yet, and the picker waits instead of misreporting it", () => {
         const resolved = resolveFor(createRomInputRow({ id: "rom", info: { fileName: "b.iso" } }));
         expect(resolved.effectiveActiveCompression).toBe("rvz");
         expect(resolved.requestedCompression).toBe("rvz");
         expect(resolved.outputOptions.map(({ value }) => value)).not.toContain("rvz");
+        expect(resolved.formatPending).toBe(true);
+      });
+
+      it("keeps requesting RVZ for a new .bin with no verdict yet, as a disc-sized .bin may be a GameCube disc", () => {
+        const resolved = resolveFor(createRomInputRow({ id: "rom", info: { fileName: "b.bin" } }));
+        expect(resolved.requestedCompression).toBe("rvz");
+        expect(resolved.formatPending).toBe(true);
+        const staging = resolveFor(
+          createRomInputRow({ id: "rom", info: { crc32: "0badc0de", fileName: "b.bin" }, loading: true }),
+        );
+        expect(staging.requestedCompression).toBe("rvz");
+        expect(staging.formatPending).toBe(true);
+      });
+
+      it("does not hold RVZ for a .bin whose size cannot be a disc", () => {
+        const cartridge = createRomInputRow({ id: "rom", info: { fileName: "b.bin" }, size: 524_289 });
+        expect(resolveFor(cartridge).requestedCompression).toBe("none");
+      });
+
+      it("keeps RVZ for a .bin once the verdict says GameCube or Wii, and stops waiting", () => {
+        const resolved = resolveFor(identified("b.bin", "rvz"));
+        expect(resolved.requestedCompression).toBe("rvz");
+        expect(resolved.formatPending).toBe(false);
+        expect(resolved.outputOptions.map(({ value }) => value)).toContain("rvz");
+      });
+
+      it("falls back to no compression once the verdict says the .bin is not a GameCube or Wii disc", () => {
+        const resolved = resolveFor(identified("b.bin"));
+        expect(resolved.requestedCompression).toBe("none");
+        expect(resolved.formatPending).toBe(false);
       });
 
       it("keeps the pick while the new .iso is still staging", () => {
@@ -125,11 +155,13 @@ describe("compression resolver output options", () => {
       it("keeps RVZ once the verdict says GameCube or Wii", () => {
         const resolved = resolveFor(identified("b.iso", "rvz"));
         expect(resolved.requestedCompression).toBe("rvz");
+        expect(resolved.formatPending).toBe(false);
         expect(resolved.outputOptions.map(({ value }) => value)).toContain("rvz");
       });
 
       it("falls back to no compression once the verdict says the .iso is not a GameCube or Wii disc", () => {
         expect(resolveFor(identified("b.iso")).requestedCompression).toBe("none");
+        expect(resolveFor(identified("b.iso")).formatPending).toBe(false);
         expect(resolveFor(identified("b.iso", "chd")).requestedCompression).toBe("none");
       });
 
