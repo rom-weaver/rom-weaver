@@ -345,11 +345,10 @@ describe("TrimPatchForm", () => {
     await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalledOnce());
   });
 
-  it("describes a known disc CHD output as a lossless copy", async () => {
+  it("describes a known disc output as a lossless copy", async () => {
     recommendedFormat = "rvz";
     const { container } = renderForm({
       pageDrop: { files: [new File(["disc"], "game.wbfs")], id: 1 },
-      outputFormat: "chd",
     });
     await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
     await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
@@ -357,6 +356,41 @@ describe("TrimPatchForm", () => {
     expect(document.body.textContent).not.toContain("A lossless RVZ copy");
     expect(document.body.textContent).not.toContain("restored padding");
   });
+
+  it.each(["game.gcm", "game.iso", "game.wbfs", "game.rvz"])(
+    "never offers CHD for the GameCube/Wii disc %s, even when CHD is requested",
+    async (fileName) => {
+      recommendedFormat = "rvz";
+      const { container } = renderForm({
+        pageDrop: { files: [new File(["disc"], fileName)], id: 1 },
+        outputFormat: "chd",
+        settings: { defaultCompression: "none" },
+      });
+      await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+      await vi.waitFor(() => {
+        const format = container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement;
+        const offered = Array.from(format.options).map((option) => option.value);
+        expect(offered).toContain("rvz");
+        expect(offered).not.toContain("chd");
+        expect(format.value).toBe("rvz");
+      });
+      await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+      await act(async () =>
+        fireEvent.click(
+          Array.from(document.querySelectorAll("button")).find((button) =>
+            button.textContent?.includes("Trim ROM"),
+          ) as HTMLButtonElement,
+        ),
+      );
+      await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalled());
+      // run() takes no arguments; the chosen format reaches the workflow through its setters.
+      const formatCalls = vi.mocked(latest?.workflow.setOutputFormat as () => Promise<void>).mock.calls;
+      expect(JSON.stringify(formatCalls)).not.toContain("chd");
+      const settingsCalls = vi.mocked(latest?.workflow.setSettings as (settings: unknown) => Promise<void>).mock.calls;
+      const lastSettings = settingsCalls.at(-1)?.[0] as { output: { outputName: string } };
+      expect(lastSettings.output.outputName).toMatch(/\.rvz$/);
+    },
+  );
 
   it("preserves the global ZIP default for a detected RVZ-convertible disc", async () => {
     recommendedFormat = "rvz";

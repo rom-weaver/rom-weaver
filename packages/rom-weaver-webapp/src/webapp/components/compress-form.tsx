@@ -33,6 +33,7 @@ import {
   getCompressFormats,
   getCompressSource,
   isOpenableCompressInput,
+  RvzInputNotDiscError,
 } from "../compress-service.ts";
 import { useCompressArchiveInputs } from "./compress-archive-inputs.tsx";
 
@@ -212,8 +213,15 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
       outputRef.current = result;
       setOutput(result);
     } catch (cause) {
-      if (!abort.signal.aborted && runId === runIdRef.current)
-        setError(cause instanceof Error ? cause.message : String(cause));
+      if (!abort.signal.aborted && runId === runIdRef.current) {
+        setError(
+          cause instanceof RvzInputNotDiscError
+            ? localizer.message("ui.compress.rvzNeedsDisc", { name: cause.fileName })
+            : cause instanceof Error
+              ? cause.message
+              : String(cause),
+        );
+      }
     } finally {
       if (runId === runIdRef.current) {
         abortRef.current = null;

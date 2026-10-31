@@ -56,6 +56,27 @@ const ARCHIVE_FORMATS = ["zip", "7z"] as const;
 const ROM_SPECIFIC_FORMATS = ["chd", "rvz", "z3ds"] as const;
 const getExtension = (fileName: string) => fileName.match(/\.([^./\\]+)$/)?.[1]?.toLowerCase() || "";
 
+/** RVZ was requested for a file the engine does not recognise as a GameCube or Wii disc image. */
+class RvzInputNotDiscError extends Error {
+  readonly fileName: string;
+  constructor(fileName: string, options?: ErrorOptions) {
+    super(`RVZ can only store GameCube and Wii disc images, and ${fileName} is not one.`, options);
+    this.name = "RvzInputNotDiscError";
+    this.fileName = fileName;
+  }
+}
+
+// The engine rejects a non-GameCube/Wii disc with its disc-format diagnostics (`Unknown disc format`,
+// `the input must be a GameCube or Wii disc image`); those mean the input is not an RVZ candidate.
+const RVZ_NOT_A_DISC_REGEX = /unknown disc format|must be a gamecube or wii disc image/i;
+const isRvzNotADiscFailure = (error: unknown): boolean => {
+  for (let current = error, depth = 0; current instanceof Error && depth < 8; depth += 1) {
+    if (RVZ_NOT_A_DISC_REGEX.test(current.message)) return true;
+    current = current.cause;
+  }
+  return false;
+};
+
 const assertFiles = (files: File[]) => {
   if (files.length === 0) throw new Error("Select at least one file to compress");
   const names = new Set<string>();
@@ -88,11 +109,13 @@ const validateInputs = async (files: File[], loadRuntime?: LoadCompressRuntime):
   const sheetFiles = files.filter((file) => ["cue", "gdi"].includes(getExtension(file.name)));
   if (sheetFiles.length === 0) {
     const first = files[0];
+    // An `.iso` is probed whatever its size: a trimmed GameCube/Wii image need not be sector aligned,
+    // and the probe is the only evidence that RVZ applies to it.
     const probe =
-      first && /\.(bin|iso)$/i.test(first.name) && isLikelyDiscImageSize(first.size)
+      first && (/\.iso$/i.test(first.name) || (/\.bin$/i.test(first.name) && isLikelyDiscImageSize(first.size)))
         ? await probeLooseImage(first, loadRuntime)
         : undefined;
-    const chdCreateMode = probe?.chdCreateMode;
+    const chdCreateMode = isLikelyDiscImageSize(first?.size) ? probe?.chdCreateMode : undefined;
     return {
       files,
       ...(probe ? { probe } : {}),
@@ -160,6 +183,14 @@ const getCompressSource = async (files: File[], loadRuntime?: LoadCompressRuntim
 const hasBinDiscEvidence = (probe: CompressionProbeResult | undefined): boolean =>
   !!probe && (String(probe.recommendedFormat || "").toLowerCase() === "chd" || probe.discFormat === "CD");
 
+/**
+ * Whether RVZ can hold this single file. `.gcm` and `.wbfs` only exist for GameCube and Wii discs, but a
+ * bare `.iso` is also a DVD or other disc, so it needs the engine's verdict from its header bytes (as Trim
+ * does). Without a runtime or on a probe failure there is no verdict, so a plain ISO is never offered RVZ.
+ */
+const hasRvzEvidence = (extension: string, probe: CompressionProbeResult | undefined): boolean =>
+  extension !== "iso" || String(probe?.recommendedFormat || "").toLowerCase() === "rvz";
+
 const getCompressFormats = async (
   files: File[],
   loadRuntime?: () => Promise<WorkflowRuntime>,
@@ -181,7 +212,8 @@ const getCompressFormats = async (
     ...ROM_SPECIFIC_FORMATS.filter(
       (format) =>
         OutputCompressionManager.supportsOutputCompression(source, format) &&
-        (format !== "chd" || (source.size > 0 && isLikelyDiscImageSize(source.size) && discEvidence)),
+        (format !== "chd" || (source.size > 0 && isLikelyDiscImageSize(source.size) && discEvidence)) &&
+        (format !== "rvz" || hasRvzEvidence(extension, input.probe)),
     ),
   ];
 };
@@ -459,12 +491,15 @@ const compressFiles = async (
     return output;
   } catch (error) {
     await Promise.resolve(outputFile ? getPatchFileCleanup(outputFile)?.() : undefined).catch(() => undefined);
+    if (compression === "rvz" && assets.length === 1 && isRvzNotADiscFailure(error))
+      throw new RvzInputNotDiscError(assets[0]?.fileName ?? files[0]?.name ?? "the input", { cause: error });
     throw error;
   }
 };
 
 export type { CompressSource, ListedCompressEntry, OpenedCompressEntry };
 export {
+  RvzInputNotDiscError,
   compressFiles,
   disposeOpenedOutputs,
   getCompressFormats,

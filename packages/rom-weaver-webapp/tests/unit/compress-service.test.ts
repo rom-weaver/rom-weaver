@@ -4,6 +4,7 @@ import type { ApplyWorkflowOptions, PublicOutput } from "../../src/types/workflo
 import {
   compressFiles,
   getCompressFormats,
+  RvzInputNotDiscError,
   getCompressSource,
   extractCompressEntries,
   isOpenableCompressInput,
@@ -80,13 +81,71 @@ describe("compress service", () => {
   });
 
   it("filters formats for raw inputs, compressed inputs, and multi-file sets", async () => {
-    expect(await getCompressFormats([file("game.iso", new Uint8Array(2048))])).toEqual(["zip", "7z", "chd", "rvz"]);
-    expect(await getCompressFormats([file("game.iso", "not-sector-aligned")])).toEqual(["zip", "7z", "rvz"]);
+    expect(await getCompressFormats([file("game.iso", new Uint8Array(2048))])).toEqual(["zip", "7z", "chd"]);
+    expect(await getCompressFormats([file("game.iso", "not-sector-aligned")])).toEqual(["zip", "7z"]);
+    for (const name of ["game.gcm", "game.wbfs"]) {
+      expect(await getCompressFormats([file(name, new Uint8Array(2048))])).toEqual(["zip", "7z", "rvz"]);
+    }
     expect(await getCompressFormats([file("game.3ds")])).toEqual(["zip", "7z", "z3ds"]);
     for (const name of ["game.gba", "disc.chd", "game.rvz", "disc.gdi", "game.z3ds"]) {
       expect(await getCompressFormats([file(name)])).toEqual(["zip", "7z"]);
     }
     expect(await getCompressFormats([file("a.bin"), file("b.ips")])).toEqual(["zip", "7z"]);
+  });
+
+  it("offers RVZ for a bare .iso only when the engine probe recognises a GameCube or Wii disc", async () => {
+    const probeWith = (probe: Record<string, string>) => async () =>
+      ({ compression: { probe: async () => ({ entries: [], ...probe }) } }) as unknown as WorkflowRuntime;
+    const dvd = file("dvd.iso", new Uint8Array(2048 * 4));
+    const gamecube = file("game.iso", new Uint8Array(2048 * 4));
+    // A plain DVD ISO, with or without a verdict, is not an RVZ candidate.
+    expect(await getCompressFormats([dvd], probeWith({ discFormat: "DVD" }))).toEqual(["zip", "7z", "chd"]);
+    expect(await getCompressFormats([dvd], probeWith({ recommendedFormat: "chd" }))).toEqual(["zip", "7z", "chd"]);
+    expect(await getCompressFormats([dvd], async () => Promise.reject(new Error("no worker")))).toEqual([
+      "zip",
+      "7z",
+      "chd",
+    ]);
+    expect(await getCompressFormats([gamecube], probeWith({ discFormat: "DVD", recommendedFormat: "rvz" }))).toEqual([
+      "zip",
+      "7z",
+      "chd",
+      "rvz",
+    ]);
+    // A trimmed GameCube image need not be sector aligned, but the probe still vouches for it.
+    const trimmed = file("trimmed.iso", new Uint8Array(2048 * 4 + 4));
+    expect(await getCompressFormats([trimmed], probeWith({ recommendedFormat: "rvz" }))).toEqual(["zip", "7z", "rvz"]);
+  });
+
+  it.each([
+    "failed to open input `dvd.iso` for rvz create: disc format error: Unknown disc format",
+    "the input must be a GameCube or Wii disc image",
+  ])("reports a non-disc RVZ input in plain words: %s", async (engineMessage) => {
+    const { cleanup, create, runtime } = makeRuntime();
+    create.mockRejectedValue(Object.assign(new Error(engineMessage), { code: "COMPRESSION_FAILED" }));
+    const probe = async () => ({ entries: [], recommendedFormat: "rvz" });
+    Object.assign(runtime.compression, { probe });
+    const failure = await compressFiles([file("dvd.iso", new Uint8Array(2048))], options("rvz"), runtime).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(RvzInputNotDiscError);
+    expect((failure as RvzInputNotDiscError).fileName).toBe("dvd.iso");
+    expect((failure as Error).message).not.toContain("Unknown disc format");
+    expect((failure as Error).cause).toBeInstanceOf(Error);
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+
+  it("leaves other RVZ and non-RVZ failures untouched", async () => {
+    const { create, runtime } = makeRuntime();
+    Object.assign(runtime.compression, { probe: async () => ({ entries: [], recommendedFormat: "rvz" }) });
+    create.mockRejectedValue(new Error("out of memory"));
+    await expect(compressFiles([file("game.iso", new Uint8Array(2048))], options("rvz"), runtime)).rejects.toThrow(
+      "out of memory",
+    );
+    create.mockRejectedValue(new Error("disc format error: Unknown disc format"));
+    await expect(compressFiles([file("game.iso", new Uint8Array(2048))], options("chd"), runtime)).rejects.toThrow(
+      "Unknown disc format",
+    );
   });
 
   it("offers CHD for a single .bin only when its header shows a CD image, not by sector-aligned size", async () => {
