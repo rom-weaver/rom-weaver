@@ -113,6 +113,7 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
   const createCompressedTrimOutput = async (
     trimmedFile: PatchFileInstance,
     compression: CompressionFormat,
+    trimChdMode?: "cd" | "dvd",
   ): Promise<TrimResult["output"]> => {
     if (compression === "none") {
       traceWorkflowStage(options, "stage.skip", "compress", "output", { reason: "output compression disabled" });
@@ -138,7 +139,18 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
         () =>
           createSingleFileRomSpecificOutput({
             compression,
-            options,
+            // The engine's verdict for the trimmed image wins over `chdOutputMode`: a CD codec set
+            // cannot build the DVD CHD its structural mode asks for, and an XISO is never a CD.
+            options:
+              compression === "chd" && trimChdMode
+                ? {
+                    ...options,
+                    output: {
+                      ...options.output,
+                      container: { ...options.output?.container, chdOutputMode: trimChdMode },
+                    },
+                  }
+                : options,
             outputFile: trimmedFile,
             runtime,
           }),
@@ -219,10 +231,10 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
   });
   // The trimmed file's path has no extension to infer a CHD layout from, so the engine's verdict for
   // it (an XISO is a DVD disc) is the structural mode the CHD step sends instead of `auto`.
-  const trimChdMode = result.output.romType?.chdCreateMode;
-  if (trimChdMode === "cd" || trimChdMode === "dvd")
-    trimmedFile.metadata = { ...trimmedFile.metadata, mode: trimChdMode };
-  const output = await createCompressedTrimOutput(trimmedFile, compression);
+  const reportedChdMode = result.output.romType?.chdCreateMode;
+  const trimChdMode = reportedChdMode === "cd" || reportedChdMode === "dvd" ? reportedChdMode : undefined;
+  if (trimChdMode) trimmedFile.metadata = { ...trimmedFile.metadata, mode: trimChdMode };
+  const output = await createCompressedTrimOutput(trimmedFile, compression, trimChdMode);
   const compressionTimeMs = roundElapsedMs(output?.timing);
   return {
     output,

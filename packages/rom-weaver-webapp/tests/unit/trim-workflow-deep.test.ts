@@ -204,6 +204,41 @@ describe("runTrimWorkflow compressed outputs", () => {
     });
   });
 
+  it("forces the CHD output mode to the engine's trim verdict so codecs and layout agree", async () => {
+    mocks.createPatchFileFromPublicOutput.mockResolvedValue({ fileName: "trimmed.bin", fileSize: 50 });
+    mocks.romSpecificOutput.mockResolvedValue({ fileName: "trimmed.chd", size: 20 });
+    const runtime = {
+      ...baseRuntime,
+      trim: {
+        trim: vi.fn(async (input) => ({
+          output: { fileName: input.outputName, path: "/work/raw", romType: { chdCreateMode: "dvd" }, size: 50 },
+          sizeSummary: { outputSize: 50 },
+        })),
+      },
+    };
+    await runTrimWorkflow(
+      {
+        options: {
+          output: { compression: "chd", container: { chdOutputMode: "cd", zipCodec: "store" }, outputName: "t.chd" },
+        },
+        source: source as never,
+      },
+      runtime as never,
+    );
+    const call = mocks.romSpecificOutput.mock.calls[0]?.[0];
+    expect(call.options.output.container).toEqual({ chdOutputMode: "dvd", zipCodec: "store" });
+    expect(call.options.output.outputName).toBe("t.chd");
+    expect(call.outputFile.metadata).toMatchObject({ mode: "dvd" });
+  });
+
+  it("leaves the configured CHD output mode alone when the trim reports no CHD mode", async () => {
+    mocks.createPatchFileFromPublicOutput.mockResolvedValue({ fileName: "trimmed.iso", fileSize: 50 });
+    mocks.romSpecificOutput.mockResolvedValue({ fileName: "trimmed.chd", size: 20 });
+    const options = { output: { compression: "chd", container: { chdOutputMode: "cd" }, outputName: "t.chd" } };
+    await runTrimWorkflow({ options: options as never, source: source as never }, baseRuntime as never);
+    expect(mocks.romSpecificOutput.mock.calls[0]?.[0].options.output.container.chdOutputMode).toBe("cd");
+  });
+
   it("fails clearly when a ROM-specific compressor returns no output", async () => {
     mocks.createPatchFileFromPublicOutput.mockResolvedValue({ fileName: "trimmed.iso", fileSize: 50 });
     mocks.romSpecificOutput.mockResolvedValue(undefined);

@@ -183,7 +183,7 @@ Checksums can target source bytes, selected container payloads, or byte ranges (
 - XISO images (`.xiso`, `.xiso.iso`, and probed XDVDFS `.iso` files)
 - GameCube/Wii disc candidates detected by the format recommendation: lossless RVZ conversion, without sector scrubbing
 
-A single disc conversion reports mode `rvz-convert` and `output_format: "rvz"` (the container's name when `--output` packs it into a `.zip` or `.7z`). Completed conversions also report logical disc byte counts in `input_size` and `raw_size`, read from the RVZ before any `.zip` or `.7z` packing. The emitted file size is the compressed size. Separate output is required; sectors are not scrubbed.
+A single disc conversion reports mode `rvz-convert` and `output_format: "rvz"` (the container's name when `--output` packs it into a `.zip` or `.7z`). A single XISO trim also reports `output_format` (`"xiso"`, or the container's name when it is packed into a `.zip`, `.7z`, or `.chd`) and, only when the file is written as-is, `chd_create_mode: "dvd"` so a caller can build a DVD CHD from an extensionless output. Batches, in-place archive repacks, and the other trim kinds report neither field. Completed conversions also report logical disc byte counts in `input_size` and `raw_size`, read from the RVZ before any `.zip` or `.7z` packing. The emitted file size is the compressed size. Separate output is required; sectors are not scrubbed.
 
 `--in-place` rewrites the source file; `--output` or `--extension` write the trimmed copy elsewhere instead, and `-n`/`--dry-run` reports what would change without writing anything.
 

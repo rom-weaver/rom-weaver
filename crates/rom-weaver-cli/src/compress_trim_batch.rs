@@ -1109,19 +1109,25 @@ impl CliApp {
                     )
                 {
                     let mut metadata = serde_json::Map::new();
-                    let packed_format = match &output_plan {
-                        TrimOutputPlan::Pack { handler, .. } => Some(handler.descriptor().name),
-                        TrimOutputPlan::Direct => None,
-                    };
-                    let direct_format = trim_source.kind.direct_output_format();
-                    metadata.insert(
-                        "output_format".into(),
-                        json!(packed_format.or(direct_format)),
-                    );
-                    // Only a file written as-is can still be handed to a CHD step by its caller.
-                    if let (None, Some(mode)) = (packed_format, trim_source.kind.chd_create_mode())
-                    {
-                        metadata.insert("chd_create_mode".into(), json!(mode));
+                    // An archive repack rewrites the archive, so the trimmed image's own format
+                    // and CHD mode do not describe the file the run emitted.
+                    if repack_root.is_none() {
+                        let packed_format = match &output_plan {
+                            TrimOutputPlan::Pack { handler, .. } => Some(handler.descriptor().name),
+                            TrimOutputPlan::Direct => None,
+                        };
+                        let direct_format = trim_source.kind.direct_output_format();
+                        metadata.insert(
+                            "output_format".into(),
+                            json!(packed_format.or(direct_format)),
+                        );
+                        // Only a file written as-is can still be handed to a CHD step by its
+                        // caller.
+                        if let (None, Some(mode)) =
+                            (packed_format, trim_source.kind.chd_create_mode())
+                        {
+                            metadata.insert("chd_create_mode".into(), json!(mode));
+                        }
                     }
                     if let Some(size) = logical_size {
                         metadata.insert("input_size".into(), json!(size));

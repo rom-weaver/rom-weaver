@@ -321,6 +321,32 @@ test("trim of an XISO into CHD builds a DVD CHD from one engine trim", async () 
   }
 });
 
+// `output.container.chdOutputMode` is public API; a forced "cd" must not turn an XISO trim into a
+// CD-codec / DVD-layout CHD that the engine rejects.
+test("trim of an XISO into CHD with chdOutputMode cd still builds a DVD CHD", async () => {
+  const xiso = new Uint8Array(xisoFixture().length + 65536);
+  xiso.set(xisoFixture());
+  const workflow = new TrimWorkflow({
+    settings: {
+      output: { compression: "chd", container: { chdOutputMode: "cd" }, outputName: "game (trimmed).chd" },
+      workers: { threads: 1 },
+    },
+  });
+  try {
+    await workflow.setInput(new File([xiso], "game.iso"));
+    const result = await workflow.run();
+    try {
+      const blob = await result.output.getBlob();
+      expect(new TextDecoder().decode(await blob.slice(0, 8).arrayBuffer())).toBe("MComprHD");
+      expect(await chdFirstMetadataTag(blob)).toBe("DVD ");
+    } finally {
+      await result.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});
+
 test("trim applies edited ZIP Store settings to an already staged input", async () => {
   const workflow = new TrimWorkflow({
     settings: { output: { compression: "zip", outputName: "trimmed.zip" }, workers: { threads: 1 } },

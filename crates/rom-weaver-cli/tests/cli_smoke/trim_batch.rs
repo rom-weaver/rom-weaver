@@ -1991,9 +1991,14 @@ fn trim_3ds_output_accepts_only_the_z3ds_descriptor_extensions_that_match_the_pa
                 );
             }
         }
-        for name in accepted {
+        // Each accepted name gets its own directory: `game.zcci` and `GAME.ZCCI` are
+        // one file on a case-insensitive filesystem (macOS, Windows), so sharing a
+        // directory would make the later runs collide with the earlier output.
+        for (index, name) in accepted.iter().enumerate() {
+            let output_dir = temp.child(format!("{payload}-accepted-{index}"));
+            fs::create_dir_all(output_dir.path()).expect("accepted output dir");
             for dry_run in [true, false] {
-                let output = temp.child(format!("{payload}-{name}"));
+                let output = output_dir.child(name);
                 let extra: &[&str] = if dry_run { &["--dry-run"] } else { &[] };
                 let terminal = trim_to_output(rom_3ds.path(), output.path(), extra, 0);
                 assert_eq!(
@@ -2143,6 +2148,118 @@ fn trim_xiso_to_an_extensionless_path_reports_the_xiso_output_format() {
     assert_eq!(terminal["details"]["chd_create_mode"], "dvd");
     assert_eq!(terminal["details"]["mode_counts"]["xiso"], 1);
     assert!(output.path().exists());
+}
+
+/// Only a trimmed XISO written as-is can be handed to a CHD step, so a packed output (`.chd`,
+/// `.zip`) reports its container and no `chd_create_mode`.
+#[test]
+fn trim_xiso_into_packed_outputs_reports_the_container_and_no_chd_create_mode() {
+    let temp = setup_temp_dir();
+    let source_tree = temp.child("xiso-source");
+    fs::create_dir_all(source_tree.path()).expect("source tree root");
+    fs::write(source_tree.child("default.xbe").path(), vec![7_u8; 4096]).expect("xbe");
+    let xiso = temp.child("game.iso");
+    write_xiso_fixture_from_directory(source_tree.path(), xiso.path());
+    for (name, format) in [("packed.chd", "chd"), ("packed.zip", "zip")] {
+        let output = temp.child(name);
+        let terminal = trim_to_output(xiso.path(), output.path(), &[], 0);
+        assert_eq!(terminal["status"], "succeeded", "{name}");
+        assert_eq!(terminal["details"]["output_format"], format, "{name}");
+        assert!(
+            terminal["details"].get("chd_create_mode").is_none(),
+            "{name}: {}",
+            terminal["details"]
+        );
+    }
+}
+
+/// A batch emits several files, so no single output format or CHD mode describes the run.
+#[test]
+fn trim_xiso_batch_reports_neither_output_format_nor_chd_create_mode() {
+    let temp = setup_temp_dir();
+    let source_tree = temp.child("xiso-source");
+    fs::create_dir_all(source_tree.path()).expect("source tree root");
+    fs::write(source_tree.child("default.xbe").path(), vec![7_u8; 4096]).expect("xbe");
+    let first = temp.child("first.iso");
+    let second = temp.child("second.iso");
+    write_xiso_fixture_from_directory(source_tree.path(), first.path());
+    write_xiso_fixture_from_directory(source_tree.path(), second.path());
+    let terminal = parse_single_json_line(&command_stdout(
+        &[
+            "trim",
+            "--input",
+            first.path().to_str().expect("path"),
+            "--input",
+            second.path().to_str().expect("path"),
+            "--extension",
+            "small.xiso",
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(terminal["status"], "succeeded");
+    for field in ["output_format", "chd_create_mode"] {
+        assert!(
+            terminal["details"].get(field).is_none(),
+            "{field}: {}",
+            terminal["details"]
+        );
+    }
+}
+
+/// An in-place archive repack rewrites the archive, so the XISO inside it must not make the run
+/// claim an `xiso` output that a CHD step could consume: the emitted file is the `.zip`.
+#[test]
+fn trim_in_place_archive_repack_of_an_xiso_reports_no_image_metadata() {
+    let temp = setup_temp_dir();
+    let source_tree = temp.child("xiso-source");
+    fs::create_dir_all(source_tree.path()).expect("source tree root");
+    fs::write(source_tree.child("default.xbe").path(), vec![7_u8; 4096]).expect("xbe");
+    for (name, source_name) in [("game.zip", "game.xiso"), ("game-iso.zip", "game.iso")] {
+        let xiso = temp.child(source_name);
+        write_xiso_fixture_from_directory(source_tree.path(), xiso.path());
+        let archive = temp.child(name);
+        command_stdout(
+            &[
+                "compress",
+                "--input",
+                xiso.path().to_str().expect("path"),
+                "--format",
+                "zip",
+                "--output",
+                archive.path().to_str().expect("path"),
+            ],
+            0,
+        );
+        fs::remove_file(xiso.path()).expect("remove loose xiso");
+        let terminal = parse_single_json_line(&command_stdout(
+            &[
+                "trim",
+                "--in-place",
+                "--input",
+                archive.path().to_str().expect("path"),
+                "--json",
+            ],
+            0,
+        ));
+        assert_eq!(terminal["status"], "succeeded", "{name}");
+        assert!(
+            terminal["label"]
+                .as_str()
+                .expect("label")
+                .contains("processed=1"),
+            "{name}: {}",
+            terminal["label"]
+        );
+        for field in ["output_format", "chd_create_mode"] {
+            assert!(
+                terminal["details"].get(field).is_none(),
+                "{name} {field}: {}",
+                terminal["details"]
+            );
+        }
+        assert_eq!(&fs::read(archive.path()).expect("archive")[..2], b"PK");
+    }
 }
 
 /// A name that is not valid UTF-8 still has an extension: `.rvz` must be read as `.rvz`
