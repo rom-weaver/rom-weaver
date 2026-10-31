@@ -217,6 +217,11 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
     materializeBlob: false,
     preferExternalFilePath: true,
   });
+  // The trimmed file's path has no extension to infer a CHD layout from, so the engine's verdict for
+  // it (an XISO is a DVD disc) is the structural mode the CHD step sends instead of `auto`.
+  const trimChdMode = result.output.romType?.chdCreateMode;
+  if (trimChdMode === "cd" || trimChdMode === "dvd")
+    trimmedFile.metadata = { ...trimmedFile.metadata, mode: trimChdMode };
   const output = await createCompressedTrimOutput(trimmedFile, compression);
   const compressionTimeMs = roundElapsedMs(output?.timing);
   return {

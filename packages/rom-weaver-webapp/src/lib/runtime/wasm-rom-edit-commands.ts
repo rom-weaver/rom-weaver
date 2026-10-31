@@ -21,6 +21,7 @@ import {
   getEmittedFiles,
   getRunResultTiming,
   getTerminalEvent,
+  romTypeFromEmittedFile,
 } from "./run-result-parsing.ts";
 import { runRomWeaverJson, relaySimpleProgress } from "./wasm-command-shared.ts";
 
@@ -85,6 +86,11 @@ const invokeRomWeaverTrimWorker = async (
       fileName: actualFileName,
       trimSizeSummary: { inputSize: sizeField(details?.input_size), rawSize: sizeField(details?.raw_size) },
       filePath: emitted?.path || outputPath,
+      // The extensionless output path says nothing about the file, so the engine's own verdict (an
+      // XISO is a DVD-class disc) rides along for the CHD step instead of being inferred from the name.
+      romType: romTypeFromEmittedFile({
+        chdCreateMode: typeof details?.chd_create_mode === "string" ? details.chd_create_mode : undefined,
+      }),
       size: emitted?.sizeBytes,
       timing: getRunResultTiming(result),
     };

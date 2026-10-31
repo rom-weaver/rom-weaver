@@ -405,23 +405,8 @@ impl CliApp {
         {
             return Ok(TrimOutputPlan::Direct);
         }
-        // A 3DS trim input is always a `.3ds` cartridge image, but the other Z3DS descriptor
-        // extensions (`.zcci`, `.zcxi`, `.zcia`, `.z3dsx`) name different payload types and make
-        // `extract` write a file of that type (`.zcia` -> `.cia`) around the cartridge image.
-        if kind == TrimInputKind::ThreeDs
-            && descriptor.matches_name("z3ds")
-            && !extension
-                .as_deref()
-                .is_some_and(|extension| extension == "z3ds")
-        {
-            debug!(
-                destination = %destination.display(),
-                "3ds trim rejected a Z3DS descriptor extension other than .z3ds"
-            );
-            return Err(RomWeaverError::Validation(format!(
-                "`{}` is not a valid trim output for {subject}: a trimmed .3ds is a cartridge image, so a Z3DS output must end in .z3ds (the .zcci, .zcxi, .zcia and .z3dsx names mark other 3DS file types)",
-                destination.display()
-            )));
+        if kind == TrimInputKind::ThreeDs && descriptor.matches_name("z3ds") {
+            Self::validate_three_ds_z3ds_name(source, destination, subject)?;
         }
         let packable = kind.packable_output_formats();
         if !handler.capabilities().create
@@ -478,6 +463,56 @@ impl CliApp {
             entry_name,
             create_format,
         })
+    }
+
+    /// A Z3DS name other than the generic `.z3ds` fixes the payload type, and `extract` writes
+    /// that type back (`.zcia` -> `.cia`). A trimmed `.3ds` keeps its NCSD or NCCH payload, so
+    /// only the descriptor for that payload (`.zcci` for NCSD, `.zcxi` for NCCH) may be used.
+    fn validate_three_ds_z3ds_name(source: &Path, destination: &Path, subject: &str) -> Result<()> {
+        let extension = destination
+            .extension()
+            .map(|extension| extension.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
+        if extension == "z3ds" {
+            return Ok(());
+        }
+        let payload_magic = Self::three_ds_payload_magic(source);
+        let payload_subtype = payload_magic.and_then(|magic| {
+            rom_weaver_containers::z3ds_subtype_metadata()
+                .iter()
+                .find(|subtype| subtype.underlying_magic == Some(magic))
+        });
+        if payload_subtype.is_some_and(|subtype| subtype.compressed_extension == extension) {
+            return Ok(());
+        }
+        debug!(
+            destination = %destination.display(),
+            extension,
+            payload_magic = ?payload_magic,
+            "3ds trim rejected a Z3DS descriptor extension that does not match the payload"
+        );
+        let accepted = match payload_subtype {
+            Some(subtype) => format!(
+                ".z3ds or .{} for the {} image in this file",
+                subtype.compressed_extension,
+                String::from_utf8_lossy(&subtype.underlying_magic.unwrap_or_default())
+            ),
+            None => ".z3ds".to_string(),
+        };
+        Err(RomWeaverError::Validation(format!(
+            "`{}` is not a valid trim output for {subject}: the Z3DS name `.{extension}` marks a different 3DS file type than this trimmed image, so a Z3DS output must end in {accepted}",
+            destination.display()
+        )))
+    }
+
+    /// The NCSD or NCCH magic at 0x100 of a 3DS image, which decides the Z3DS descriptor
+    /// extension; `None` for a file too short or without either magic.
+    fn three_ds_payload_magic(source: &Path) -> Option<[u8; 4]> {
+        let mut file = File::open(source).ok()?;
+        let mut header = [0_u8; 0x104];
+        file.read_exact(&mut header).ok()?;
+        let magic: [u8; 4] = header[0x100..0x104].try_into().ok()?;
+        matches!(&magic, b"NCSD" | b"NCCH").then_some(magic)
     }
 
     /// The name the trimmed file carries inside its container: the destination's name without

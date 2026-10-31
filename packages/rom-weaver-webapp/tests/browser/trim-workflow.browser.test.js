@@ -5,6 +5,7 @@ import { TrimWorkflow } from "../../src/platform/browser/browser-api.ts";
 import { warmupBrowserRuntimeExtraction } from "../../src/platform/browser/browser-runtime-warmup.ts";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { readRuntimeOutputBytes } from "../../src/storage/vfs/runtime-output.ts";
+import { xisoFixture } from "../fixtures/synthetic-patch-containers.mjs";
 
 const ndsCrc16 = (bytes) => {
   let crc = 0xffff;
@@ -268,6 +269,48 @@ test.each([
     try {
       expect(result.output.fileName).toBe(outputName);
       expect(result.output.size).toBeGreaterThan(0);
+      const dispatches = traces.filter((log) => String(log?.message || "").startsWith("runJson trim "));
+      expect(dispatches.map((log) => log.details?.command?.args?.dry_run)).toEqual([false]);
+    } finally {
+      await result.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+// The trim writes to an extensionless path, so CHD cannot infer the disc type from a name or from the
+// file's bytes: an XISO has no ISO 9660/UDF descriptor. The first CHD v5 metadata entry (the header's
+// metadata offset is the big-endian u64 at 0x30) is "DVD " for a DVD CHD, "CHT2" for a CD, and absent for raw.
+const chdFirstMetadataTag = async (blob) => {
+  const header = new DataView(await blob.slice(0, 124).arrayBuffer());
+  const offset = Number(header.getBigUint64(0x30, false));
+  if (!offset) return "";
+  return new TextDecoder().decode(await blob.slice(offset, offset + 4).arrayBuffer());
+};
+
+test("trim of an XISO into CHD builds a DVD CHD from one engine trim", async () => {
+  const xiso = new Uint8Array(xisoFixture().length + 65536);
+  xiso.set(xisoFixture());
+  const traces = [];
+  const workflow = new TrimWorkflow({
+    settings: {
+      logging: { level: "trace", sink: (log) => traces.push(log) },
+      output: { compression: "chd", outputName: "game (trimmed).chd" },
+      workers: { threads: 1 },
+    },
+  });
+  try {
+    await workflow.setInput(new File([xiso], "game.iso"));
+    expect(workflow.getInput()?.trimSupported).toBe(true);
+    traces.length = 0;
+    const result = await workflow.run();
+    try {
+      expect(result.output.fileName).toBe("game (trimmed).chd");
+      expect(result.sizeSummary.rawSize).toBeLessThan(xiso.length);
+      const blob = await result.output.getBlob();
+      expect(new TextDecoder().decode(await blob.slice(0, 8).arrayBuffer())).toBe("MComprHD");
+      expect(await chdFirstMetadataTag(blob)).toBe("DVD ");
       const dispatches = traces.filter((log) => String(log?.message || "").startsWith("runJson trim "));
       expect(dispatches.map((log) => log.details?.command?.args?.dry_run)).toEqual([false]);
     } finally {

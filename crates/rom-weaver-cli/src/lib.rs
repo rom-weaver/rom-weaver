@@ -1464,6 +1464,15 @@ impl TrimInputKind {
         }
     }
 
+    /// The CHD create mode a trimmed file of this kind needs. An XISO is a DVD-class disc whatever
+    /// its name or size, which CHD inference from the file would not conclude.
+    const fn chd_create_mode(self) -> Option<&'static str> {
+        match self {
+            Self::Xiso => Some("dvd"),
+            Self::NdsFamily | Self::Gba | Self::ThreeDs | Self::RvzConvert => None,
+        }
+    }
+
     /// The container formats a trimmed file of this kind can be packed into. Archives take any
     /// kind; CHD is for disc images and Z3DS for 3DS ROMs.
     const fn packable_output_formats(self) -> &'static [&'static str] {

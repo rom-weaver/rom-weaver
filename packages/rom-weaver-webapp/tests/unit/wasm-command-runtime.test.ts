@@ -686,6 +686,33 @@ describe("output-producing runtime workers", () => {
     expect(lastCall()[0].args).toMatchObject({ dry_run: false, output: expect.stringMatching(/\/[^./]+$/) });
   });
 
+  it("hands the engine's DVD verdict for an XISO trim to the caller, since the output path has no extension", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        chd_create_mode: "dvd",
+        emitted_files: [{ path: "/out/trim-output", size_bytes: 4096 }],
+        output_format: "xiso",
+        processed: 1,
+      }),
+    );
+    await expect(
+      invokeRomWeaverTrimWorker({ outputName: "game (trimmed).iso", sourceFilePath: "/game.iso" }),
+    ).resolves.toMatchObject({
+      fileName: "game (trimmed).iso",
+      filePath: "/out/trim-output",
+      romType: { chdCreateMode: "dvd" },
+    });
+    expect(mocks.runRomWeaverJson).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports no create mode for a trim whose engine run gave none", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({ emitted_files: [{ path: "/out/trim-output", size_bytes: 12288 }], processed: 1 }),
+    );
+    const output = await invokeRomWeaverTrimWorker({ outputName: "game (trimmed).nds", sourceFilePath: "/game.nds" });
+    expect(output.romType).toBeUndefined();
+  });
+
   it("relays the progress of the single real trim", async () => {
     mocks.runRomWeaverJson.mockImplementation((_command: unknown, options: { onEvent?: (event: unknown) => void }) => {
       options.onEvent?.({ percent: 40, status: "running", step: "trim" });

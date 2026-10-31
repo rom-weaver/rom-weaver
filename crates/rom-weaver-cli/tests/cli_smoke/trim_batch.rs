@@ -696,6 +696,7 @@ fn trim_xiso_rebuilds_and_warns_irreversible() {
     assert_eq!(terminal["status"], "succeeded");
     let label = terminal["label"].as_str().expect("label");
     assert!(label.contains("mode=xiso"));
+    assert_eq!(terminal["details"]["output_format"], "xiso");
     assert!(label.contains("revert_supported=false"));
     assert!(label.contains(
         "warning=trimmed xiso output cannot be reverted to original padding; keep backup"
@@ -1925,47 +1926,123 @@ fn trim_output_z3ds_packs_a_3ds_rom_and_chd_packs_an_xiso() {
 }
 
 #[test]
-fn trim_3ds_output_rejects_z3ds_descriptor_extensions_other_than_z3ds() {
+fn trim_3ds_output_accepts_only_the_z3ds_descriptor_extensions_that_match_the_payload() {
+    let temp = setup_temp_dir();
+    let build_3ds = |magic: &[u8; 4], name: &str| {
+        let path = temp.child(name);
+        let mut rom = build_test_padded_rom(0x4567, 0x8000, 0xFF);
+        rom[0x100..0x104].copy_from_slice(magic);
+        rom[0x104..0x108].copy_from_slice(&0x22_u32.to_le_bytes());
+        rom[0x18E] = 0;
+        if magic == b"NCSD" {
+            rom[0x108..0x200].fill(0);
+            rom[0x400..0x600].fill(0);
+            rom[0x120..0x124].copy_from_slice(&2_u32.to_le_bytes());
+            rom[0x124..0x128].copy_from_slice(&0x20_u32.to_le_bytes());
+            rom[0x500..0x504].copy_from_slice(b"NCCH");
+            rom[0x504..0x508].copy_from_slice(&0x20_u32.to_le_bytes());
+        }
+        fs::write(path.path(), &rom).expect("3ds fixture");
+        path
+    };
+
+    // (payload magic, accepted descriptor extensions, rejected names)
+    let cases: [(&[u8; 4], &[&str], &[&str]); 2] = [
+        (
+            b"NCSD",
+            &["game.z3ds", "game.zcci", "GAME.ZCCI"],
+            &["game.zcia", "game.zcxi", "game.z3dsx", "GAME.ZCIA"],
+        ),
+        (
+            b"NCCH",
+            &["game.z3ds", "game.zcxi"],
+            &["game.zcia", "game.zcci", "game.z3dsx", "GAME.ZCIA"],
+        ),
+    ];
+    for (magic, accepted, rejected) in cases {
+        let payload = String::from_utf8_lossy(magic).into_owned();
+        let rom_3ds = build_3ds(magic, &format!("{payload}.3ds"));
+        let descriptor = if magic == b"NCSD" { ".zcci" } else { ".zcxi" };
+        for name in rejected {
+            for dry_run in [false, true] {
+                let output = temp.child(format!("{payload}-{name}"));
+                let extra: &[&str] = if dry_run { &["--dry-run"] } else { &[] };
+                let terminal = trim_to_output(rom_3ds.path(), output.path(), extra, 1);
+                let extension = name.rsplit('.').next().expect("ext").to_ascii_lowercase();
+                assert_eq!(
+                    terminal["status"], "failed",
+                    "{payload} {name} dry_run={dry_run}"
+                );
+                assert_eq!(
+                    terminal["label"].as_str().expect("label"),
+                    rejected_trim_label(
+                        rom_3ds.path(),
+                        dry_run,
+                        &format!(
+                            "`{}` is not a valid trim output for 3DS ROMs: the Z3DS name `.{extension}` marks a different 3DS file type than this trimmed image, so a Z3DS output must end in .z3ds or {descriptor} for the {payload} image in this file",
+                            output.path().display()
+                        )
+                    ),
+                    "{payload} {name} dry_run={dry_run}"
+                );
+                assert!(
+                    !output.path().exists(),
+                    "{payload} {name} must not be written"
+                );
+            }
+        }
+        for name in accepted {
+            for dry_run in [true, false] {
+                let output = temp.child(format!("{payload}-{name}"));
+                let extra: &[&str] = if dry_run { &["--dry-run"] } else { &[] };
+                let terminal = trim_to_output(rom_3ds.path(), output.path(), extra, 0);
+                assert_eq!(
+                    terminal["status"], "succeeded",
+                    "{payload} {name} dry_run={dry_run}"
+                );
+                assert_eq!(
+                    output.path().exists(),
+                    !dry_run,
+                    "{payload} {name} dry_run={dry_run}"
+                );
+            }
+        }
+        // A packed descriptor extracts back to the payload type it names.
+        let packed = temp.child(format!("{payload}-roundtrip{descriptor}"));
+        trim_to_output(rom_3ds.path(), packed.path(), &[], 0);
+        let extracted = temp.child(format!("{payload}-extracted"));
+        assert_eq!(
+            extracted_entries(packed.path(), extracted.path()),
+            vec![format!(
+                "{}-roundtrip.{}",
+                payload,
+                if magic == b"NCSD" { "cci" } else { "cxi" }
+            )]
+        );
+    }
+}
+
+#[test]
+fn trim_3ds_output_rejects_a_descriptor_extension_when_the_payload_is_unrecognized() {
     let temp = setup_temp_dir();
     let rom_3ds = temp.child("game.3ds");
     let mut rom = build_test_padded_rom(0x4567, 0x8000, 0xFF);
-    rom[0x100..0x104].copy_from_slice(b"NCCH");
-    rom[0x104..0x108].copy_from_slice(&0x22_u32.to_le_bytes());
     rom[0x18E] = 0;
     fs::write(rom_3ds.path(), &rom).expect("3ds fixture");
-
-    for name in [
-        "game.zcia",
-        "game.zcci",
-        "game.zcxi",
-        "game.z3dsx",
-        "GAME.ZCIA",
-    ] {
-        for dry_run in [false, true] {
-            let output = temp.child(name);
-            let extra: &[&str] = if dry_run { &["--dry-run"] } else { &[] };
-            let terminal = trim_to_output(rom_3ds.path(), output.path(), extra, 1);
-            assert_eq!(terminal["status"], "failed", "{name} dry_run={dry_run}");
-            assert_eq!(
-                terminal["label"].as_str().expect("label"),
-                rejected_trim_label(
-                    rom_3ds.path(),
-                    dry_run,
-                    &format!(
-                        "`{}` is not a valid trim output for 3DS ROMs: a trimmed .3ds is a cartridge image, so a Z3DS output must end in .z3ds (the .zcci, .zcxi, .zcia and .z3dsx names mark other 3DS file types)",
-                        output.path().display()
-                    )
-                ),
-                "{name} dry_run={dry_run}"
-            );
-            assert!(!output.path().exists(), "{name} must not be written");
-        }
-    }
-
-    let z3ds = temp.child("game.z3ds");
-    let terminal = trim_to_output(rom_3ds.path(), z3ds.path(), &[], 0);
-    assert_eq!(terminal["status"], "succeeded");
-    assert!(z3ds.path().exists());
+    let output = temp.child("game.zcci");
+    let terminal = trim_to_output(rom_3ds.path(), output.path(), &["--dry-run"], 1);
+    assert_eq!(terminal["status"], "failed");
+    assert_eq!(
+        terminal["label"].as_str().expect("label"),
+        rejected_trim_label(
+            rom_3ds.path(),
+            true,
+            &format!(
+                "`{}` is not a valid trim output for 3DS ROMs: the Z3DS name `.zcci` marks a different 3DS file type than this trimmed image, so a Z3DS output must end in .z3ds",
+                output.path().display()
+            )
+        )
+    );
 }
 
 #[test]
@@ -2035,6 +2112,7 @@ fn trim_xiso_into_chd_builds_a_dvd_chd_for_xiso_and_iso_sources() {
         let chd = temp.child(format!("{name}.chd"));
         let terminal = trim_to_output(xiso.path(), chd.path(), &[], 0);
         assert_eq!(terminal["status"], "succeeded", "{name}");
+        assert_eq!(terminal["details"]["output_format"], "chd", "{name}");
         let probe = parse_single_json_line(&command_stdout(
             &[
                 "probe",
@@ -2046,6 +2124,25 @@ fn trim_xiso_into_chd_builds_a_dvd_chd_for_xiso_and_iso_sources() {
         ));
         assert_eq!(probe["details"]["chd"]["media_kind"], "dvd", "{name}");
     }
+}
+
+/// A caller that writes the trim to an extensionless path (the webapp does) learns that the file is
+/// an XISO from the same run, since the name no longer says so.
+#[test]
+fn trim_xiso_to_an_extensionless_path_reports_the_xiso_output_format() {
+    let temp = setup_temp_dir();
+    let source_tree = temp.child("xiso-source");
+    fs::create_dir_all(source_tree.path()).expect("source tree root");
+    fs::write(source_tree.child("default.xbe").path(), vec![7_u8; 4096]).expect("xbe");
+    let xiso = temp.child("game.iso");
+    write_xiso_fixture_from_directory(source_tree.path(), xiso.path());
+    let output = temp.child("trim-output");
+    let terminal = trim_to_output(xiso.path(), output.path(), &[], 0);
+    assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(terminal["details"]["output_format"], "xiso");
+    assert_eq!(terminal["details"]["chd_create_mode"], "dvd");
+    assert_eq!(terminal["details"]["mode_counts"]["xiso"], 1);
+    assert!(output.path().exists());
 }
 
 /// A name that is not valid UTF-8 still has an extension: `.rvz` must be read as `.rvz`

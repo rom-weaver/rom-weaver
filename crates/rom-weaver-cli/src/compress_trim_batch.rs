@@ -1100,16 +1100,29 @@ impl CliApp {
                 if writes_new_file && !config.dry_run {
                     rom_weaver_core::complete_in_progress_output(&output_path);
                 }
-                if config.source_count == 1 && trim_source.kind == TrimInputKind::RvzConvert {
+                // The format of what the run wrote, so a caller that named the destination without
+                // an extension learns it from the same run instead of probing or running twice.
+                if config.source_count == 1
+                    && matches!(
+                        trim_source.kind,
+                        TrimInputKind::RvzConvert | TrimInputKind::Xiso
+                    )
+                {
                     let mut metadata = serde_json::Map::new();
                     let packed_format = match &output_plan {
                         TrimOutputPlan::Pack { handler, .. } => Some(handler.descriptor().name),
                         TrimOutputPlan::Direct => None,
                     };
+                    let direct_format = trim_source.kind.direct_output_format();
                     metadata.insert(
                         "output_format".into(),
-                        json!(packed_format.unwrap_or("rvz")),
+                        json!(packed_format.or(direct_format)),
                     );
+                    // Only a file written as-is can still be handed to a CHD step by its caller.
+                    if let (None, Some(mode)) = (packed_format, trim_source.kind.chd_create_mode())
+                    {
+                        metadata.insert("chd_create_mode".into(), json!(mode));
+                    }
                     if let Some(size) = logical_size {
                         metadata.insert("input_size".into(), json!(size));
                         metadata.insert("raw_size".into(), json!(size));
