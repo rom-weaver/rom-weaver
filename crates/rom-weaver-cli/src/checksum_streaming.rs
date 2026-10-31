@@ -293,21 +293,21 @@ impl CliApp {
                 .filter_map(|(name, (index, ignored))| (!ignored).then_some((name, index)))
                 .collect::<Vec<_>>()
         };
+        if kind_filter.enabled()
+            && selected
+                .iter()
+                .any(|(name, _)| rom_weaver_core::payload_name_needs_content_classification(name))
+        {
+            return Ok(None);
+        }
         let selected = if kind_filter.enabled() {
-            let mut payload_matches = Vec::new();
-            let mut container_fallback_matches = Vec::new();
-            for (name, index) in selected {
-                if kind_filter.matches_payload_name(&name) {
-                    payload_matches.push((name, index));
-                } else if kind_filter.matches_container_fallback_name(&name) {
-                    container_fallback_matches.push((name, index));
-                }
-            }
-            if payload_matches.is_empty() {
-                container_fallback_matches
-            } else {
-                payload_matches
-            }
+            rom_weaver_core::select_kind_filter_matches(
+                selected
+                    .into_iter()
+                    .map(|(name, index)| (kind_filter.classify_name(&name), (name, index)))
+                    .collect(),
+                false,
+            )
         } else {
             selected
         };
@@ -351,7 +351,9 @@ impl CliApp {
             Self::inferred_stream_extract_output_path(source, stream_format)
         {
             if kind_filter.enabled()
-                && !kind_filter.matches_payload_name(&inferred_output.to_string_lossy())
+                && (rom_weaver_core::payload_name_needs_content_classification(
+                    &inferred_output.to_string_lossy(),
+                ) || !kind_filter.matches_payload_name(&inferred_output.to_string_lossy()))
             {
                 return None;
             }

@@ -9,6 +9,14 @@ use super::*;
 /// bytes `SP`, and PAT is matched by a record-layout heuristic, so either could be a raw dump.
 const UNRELIABLE_EXTENSIONLESS_SIGNATURE_FORMATS: &[&str] = &["solid", "pat"];
 
+/// ROM selections resolved around unnamed entries that carry a reliable patch signature.
+struct SignaturePatchSelection {
+    /// Entries the user kept; empty means every non-patch entry extracts.
+    rom_selections: Vec<String>,
+    /// Signature-classified patch entries, extracted separately from the ROM selection.
+    patch_names: Vec<String>,
+}
+
 /// Which input bucket the dropped source classified into. `rom` sources still carry their ROM
 /// `assets`; a `rom` source that *also* bundled sidecar patches additionally carries them in
 /// `patches` (mixed ROM+patch archive surfacing). `patch` sources carry only `patches`.
@@ -529,6 +537,7 @@ impl CliApp {
                     context,
                 },
                 None,
+                true,
             )?;
             return Ok(IngestOutcome {
                 kind: IngestKind::Patch,
@@ -545,9 +554,18 @@ impl CliApp {
         // patch dialog - the two single-modal prompts never overlap.
         let resolved_split_bin =
             self.resolve_ingest_split_bin(handler, source, split_bin, context)?;
-        // Emit mixed-archive patches before the slower ROM extract+checksum so
-        // the host can open selection early. Return every patch independently
-        // of ROM selection; derive sidecar ordering from classified ROM names.
+        let has_unnamed_payloads = entries
+            .iter()
+            .any(|entry| rom_weaver_core::payload_name_needs_content_classification(&entry.path));
+        let has_nested_containers = entries.iter().any(|entry| {
+            rom_weaver_core::is_container_filter_passthrough_candidate_name(&entry.path)
+                && !rom_weaver_core::is_rom_filter_candidate_name(&entry.path)
+        });
+        // Hosts MUST see signature-classified and named patches together in their first manifest.
+        let defer_patch_manifest = has_unnamed_payloads || has_nested_containers;
+        // Nested containers MUST retain top-level selection and prompt-free descent.
+        let classify_before_selection = has_unnamed_payloads && !has_nested_containers;
+        // Sidecars MUST remain independent of ROM selection; derive ordering from ROM names.
         let mut patches = if has_patch {
             let rom_hint = summaries
                 .iter()
@@ -569,8 +587,11 @@ impl CliApp {
                     context,
                 },
                 rom_hint.as_deref(),
+                false,
             )?;
-            self.emit_patch_manifest(source, &patches);
+            if !defer_patch_manifest {
+                self.emit_patch_manifest(source, &patches);
+            }
             patches
         } else {
             Vec::new()
@@ -591,6 +612,8 @@ impl CliApp {
                 context,
             },
             algorithms,
+            classify_before_selection,
+            has_unnamed_payloads && has_nested_containers,
         ) {
             Ok(assets) => assets,
             Err(rom_error) => {
@@ -621,6 +644,7 @@ impl CliApp {
                                 context,
                             },
                             None,
+                            true,
                         )
                         .unwrap_or_default();
                 }
@@ -632,6 +656,8 @@ impl CliApp {
                     patch_count = patches.len(),
                     "ingest ROM branch found no ROM; re-routed nested weave as patch source"
                 );
+                // Patch-source selection uses the terminal descriptors. A sidecar manifest here
+                // would open a competing ROM-sidecar dialog before that selection.
                 return Ok(IngestOutcome {
                     kind: IngestKind::Patch,
                     is_rom: false,
@@ -644,8 +670,7 @@ impl CliApp {
             let named_pass_ran = assets.is_empty() && patches.is_empty();
             if named_pass_ran {
                 // The archive listing showed no patch, so the named-patch pass never ran; run it now
-                // so a named patch beside an extension-less one is not dropped. That pass filters by
-                // patch name, so it never returns an extension-less signature leaf.
+                // so a named patch beside an unnamed one is not dropped.
                 patches = self.ingest_patch_leaves(
                     handler,
                     IngestLeavesRequest {
@@ -662,16 +687,8 @@ impl CliApp {
                         context,
                     },
                     None,
+                    false,
                 )?;
-            }
-            // Named patches found by the pass above have not been announced yet; send them with the
-            // signature patches in ONE manifest, since the host acts on the first manifest it sees.
-            if named_pass_ran {
-                let mut manifest = patches.clone();
-                manifest.extend(signature_patches.iter().cloned());
-                self.emit_patch_manifest(source, &manifest);
-            } else {
-                self.emit_patch_manifest(source, &signature_patches);
             }
             patches.extend(signature_patches);
             if assets.is_empty() {
@@ -680,6 +697,11 @@ impl CliApp {
                     patch_count = patches.len(),
                     "ingest ROM branch found only signature-classified patches; routing as patch source"
                 );
+                // A listing that names patches was a patch-only weave before content classification;
+                // like that branch, it MUST NOT open a sidecar dialog that competes with patch selection.
+                if defer_patch_manifest && !has_patch {
+                    self.emit_patch_manifest(source, &patches);
+                }
                 return Ok(IngestOutcome {
                     kind: IngestKind::Patch,
                     is_rom: false,
@@ -687,6 +709,9 @@ impl CliApp {
                     patches,
                 });
             }
+        }
+        if defer_patch_manifest {
+            self.emit_patch_manifest(source, &patches);
         }
         Ok(IngestOutcome {
             kind: IngestKind::Rom,
@@ -696,19 +721,22 @@ impl CliApp {
         })
     }
 
-    /// True when `path` has no extension and its leading magic positively identifies a patch.
-    ///
-    /// Only for names that carry no kind information; a named file keeps its name-based
-    /// classification. Short or heuristic signatures (SOLID's two-byte `SP`, the PAT record
-    /// heuristic) are excluded so a raw dump is never mistaken for a patch.
-    fn is_extensionless_signature_patch(&self, path: &Path) -> bool {
-        if path.extension().is_some() {
+    /// Unnamed payloads MUST use reliable signatures; weak patch magic can match raw dumps.
+    pub(super) fn is_patch_payload(&self, path: &Path) -> bool {
+        let name = path.to_string_lossy();
+        if is_patch_filter_candidate_name(&name) {
+            return true;
+        }
+        if !rom_weaver_core::payload_name_needs_content_classification(&name) {
             return false;
         }
         let Some(handler) = self.patches.probe_signature(path) else {
             return false;
         };
-        let format = handler.descriptor().name;
+        Self::is_reliable_unnamed_patch_format(path, handler.descriptor().name)
+    }
+
+    fn is_reliable_unnamed_patch_format(path: &Path, format: &str) -> bool {
         let reliable = !UNRELIABLE_EXTENSIONLESS_SIGNATURE_FORMATS
             .iter()
             .any(|unreliable| unreliable.eq_ignore_ascii_case(format));
@@ -716,9 +744,98 @@ impl CliApp {
             path = %path.display(),
             format,
             reliable,
-            "extension-less file matched a patch signature"
+            "unnamed payload matched a patch signature"
         );
         reliable
+    }
+
+    /// Resolve the ROM prompt for an archive holding unnamed entries that carry a reliable patch
+    /// signature. Those entries are not ROM candidates, so the prompt never offers them; the
+    /// caller MUST extract `patch_names` in a separate pass because ROM selection drops them.
+    /// Returns `None` when no entry is signature-classified, leaving the ordinary resolution.
+    fn resolve_signature_patch_selection(
+        &self,
+        handler: &dyn ContainerHandler,
+        source: &Path,
+        options: SelectionResolutionOptions<'_>,
+        context: &OperationContext,
+    ) -> Result<Option<SignaturePatchSelection>> {
+        let entries = Self::list_selection_entries(handler, source, options.split_bin, context)?;
+        let patch_names =
+            self.signature_patch_entry_names(handler, source, &entries, options.split_bin, context);
+        if patch_names.is_empty() {
+            return Ok(None);
+        }
+        let candidates = entries
+            .iter()
+            .filter(|entry| !patch_names.contains(&normalize_archive_name(&entry.path)))
+            .cloned()
+            .collect::<Vec<_>>();
+        trace!(
+            source = %source.display(),
+            entry_count = entries.len(),
+            patch_count = patch_names.len(),
+            "excluded signature-classified patches from ROM selection candidates"
+        );
+        let rom_selections =
+            self.resolve_listed_payload_selections(&candidates, source, options)?;
+        Ok(Some(SignaturePatchSelection {
+            rom_selections,
+            patch_names,
+        }))
+    }
+
+    /// Names of unnamed archive entries whose leading bytes carry a reliable patch signature,
+    /// read from a bounded prefix without extracting. Entries the container cannot read stay
+    /// unclassified, which keeps them as ROM candidates.
+    fn signature_patch_entry_names(
+        &self,
+        handler: &dyn ContainerHandler,
+        source: &Path,
+        entries: &[ContainerListEntry],
+        split_bin: bool,
+        context: &OperationContext,
+    ) -> Vec<String> {
+        let unnamed = entries
+            .iter()
+            .filter(|entry| rom_weaver_core::payload_name_needs_content_classification(&entry.path))
+            .map(|entry| normalize_archive_name(&entry.path))
+            .filter(|name| !name.is_empty())
+            .collect::<Vec<_>>();
+        if unnamed.is_empty() {
+            return Vec::new();
+        }
+        let prefixes = match handler.read_entry_prefixes(
+            &ContainerProbeRequest {
+                source: source.to_path_buf(),
+                split_bin,
+            },
+            &unnamed,
+            rom_weaver_patches::SIGNATURE_PREFIX_LEN,
+            context,
+        ) {
+            Ok(prefixes) => prefixes,
+            Err(error) => {
+                debug!(
+                    source = %source.display(),
+                    error = %error,
+                    "could not read unnamed entry prefixes; leaving them as ROM candidates"
+                );
+                return Vec::new();
+            }
+        };
+        unnamed
+            .into_iter()
+            .filter(|name| {
+                let path = Path::new(name);
+                prefixes
+                    .get(name)
+                    .and_then(|prefix| self.patches.probe_signature_prefix(path, prefix))
+                    .is_some_and(|patch| {
+                        Self::is_reliable_unnamed_patch_format(path, patch.descriptor().name)
+                    })
+            })
+            .collect()
     }
 
     /// Ingest a bare `.cue`/`.gdi` sheet with its referenced track files sitting
@@ -834,9 +951,7 @@ impl CliApp {
         if let Some(outcome) = self.ingest_bare_disc_sheet(source, algorithms, context)? {
             return Ok(outcome);
         }
-        if is_patch_filter_candidate_name(&source.to_string_lossy())
-            || self.is_extensionless_signature_patch(source)
-        {
+        if self.is_patch_payload(source) {
             let descriptor = self.build_patch_descriptor(source, input_name, None, context)?;
             return Ok(IngestOutcome {
                 kind: IngestKind::Patch,
@@ -899,6 +1014,8 @@ impl CliApp {
         handler: &dyn ContainerHandler,
         request: IngestLeavesRequest<'_>,
         algorithms: &[String],
+        classify_before_selection: bool,
+        sniff_unnamed_before_prompt: bool,
     ) -> Result<(Vec<IngestRomAsset>, Vec<PatchDescriptor>)> {
         let IngestLeavesRequest {
             source,
@@ -913,22 +1030,137 @@ impl CliApp {
             source_label,
             context,
         } = request;
-        let leaves = self.ingest_extract_leaves(
+        let select_classified_leaves = classify_before_selection
+            && interactive
+            && self.interactive_selection_enabled
+            && raw_selections.is_empty();
+        // Nested containers skip classify-before-selection, so unnamed patches are classified from
+        // their headers here and kept out of the ROM prompt.
+        let signature_selection = if interactive
+            && sniff_unnamed_before_prompt
+            && !select_classified_leaves
+            && self.interactive_selection_enabled
+            && raw_selections.is_empty()
+        {
+            self.resolve_signature_patch_selection(
+                handler,
+                source,
+                SelectionResolutionOptions {
+                    kind_filter,
+                    split_bin,
+                    ignore_common_files: !no_ignore,
+                    source_label,
+                },
+                context,
+            )?
+        } else {
+            None
+        };
+        let rom_selections = signature_selection
+            .as_ref()
+            .map_or(raw_selections, |selection| &selection.rom_selections);
+        let mut leaves = self.ingest_extract_leaves(
             handler,
             IngestLeavesRequest {
                 source,
                 out_dir,
-                raw_selections,
+                raw_selections: rom_selections,
                 kind_filter,
                 no_ignore,
                 no_nested_extract,
                 preserve_nested_formats,
                 split_bin,
-                interactive,
+                interactive: interactive
+                    && !select_classified_leaves
+                    && signature_selection.is_none(),
                 source_label,
                 context,
             },
         )?;
+        if let Some(selection) =
+            signature_selection.filter(|selection| !selection.patch_names.is_empty())
+        {
+            let patch_leaves = self.ingest_extract_leaves(
+                handler,
+                IngestLeavesRequest {
+                    source,
+                    out_dir,
+                    raw_selections: &selection.patch_names,
+                    kind_filter: Self::archive_entry_kind_filter(false, true),
+                    no_ignore,
+                    no_nested_extract,
+                    preserve_nested_formats,
+                    split_bin,
+                    interactive: false,
+                    source_label,
+                    context,
+                },
+            )?;
+            let known = leaves
+                .iter()
+                .filter_map(|leaf| leaf.get("path").and_then(Value::as_str))
+                .map(str::to_string)
+                .collect::<HashSet<_>>();
+            let before = leaves.len();
+            leaves.extend(patch_leaves.into_iter().filter(|leaf| {
+                leaf.get("path")
+                    .and_then(Value::as_str)
+                    .is_some_and(|path| !known.contains(path))
+            }));
+            trace!(
+                source = %source.display(),
+                patch_leaf_count = leaves.len() - before,
+                "added signature-classified patch leaves beside the selected ROMs"
+            );
+        }
+        if select_classified_leaves {
+            let selection_root = Self::normalized_emitted_path_key(out_dir);
+            let selection_name = |path: &str| {
+                normalize_archive_name(
+                    &Path::new(path)
+                        .strip_prefix(&selection_root)
+                        .unwrap_or(Path::new(path))
+                        .to_string_lossy(),
+                )
+            };
+            let entries = leaves
+                .iter()
+                .filter_map(|leaf| {
+                    let path = leaf.get("path")?.as_str()?;
+                    (!self.is_patch_payload(Path::new(path))).then(|| ContainerListEntry {
+                        path: selection_name(path),
+                        size: leaf.get("size_bytes").and_then(Value::as_u64),
+                    })
+                })
+                .collect::<Vec<_>>();
+            trace!(
+                source = %source.display(),
+                leaf_count = leaves.len(),
+                rom_count = entries.len(),
+                "classifying ingest leaves before ROM selection"
+            );
+            let selections = self.resolve_listed_payload_selections(
+                &entries,
+                source,
+                SelectionResolutionOptions {
+                    kind_filter,
+                    split_bin,
+                    ignore_common_files: !no_ignore,
+                    source_label,
+                },
+            )?;
+            if !selections.is_empty() {
+                let selected = selections.into_iter().collect::<HashSet<_>>();
+                leaves.retain(|leaf| {
+                    leaf.get("path")
+                        .and_then(Value::as_str)
+                        .is_some_and(|path| {
+                            self.is_patch_payload(Path::new(path))
+                                || selected.contains(&selection_name(path))
+                        })
+                });
+            }
+        }
         let mut assets = Vec::with_capacity(leaves.len());
         let mut signature_patches = Vec::new();
         for leaf in &leaves {
@@ -938,14 +1170,9 @@ impl CliApp {
             let Some(path) = map.get("path").and_then(Value::as_str) else {
                 continue;
             };
-            // An extension-less leaf (e.g. `patch.gz` -> `patch`) has no name to classify it by, so
-            // its leading magic decides: a patch signature makes it a patch, anything else stays a
-            // ROM candidate (raw dump).
-            if self.is_extensionless_signature_patch(Path::new(path)) {
-                trace!(
-                    leaf = path,
-                    "extension-less ingest leaf matched a patch signature"
-                );
+            // Unnamed leaves MUST use patch signatures; other bytes remain raw ROM candidates.
+            if self.is_patch_payload(Path::new(path)) {
+                trace!(leaf = path, "ingest leaf classified as a patch");
                 signature_patches.push(self.build_patch_descriptor(
                     Path::new(path),
                     None,
@@ -1050,6 +1277,7 @@ impl CliApp {
         handler: &dyn ContainerHandler,
         request: IngestLeavesRequest<'_>,
         rom_hint: Option<&str>,
+        include_signature_patches: bool,
     ) -> Result<Vec<PatchDescriptor>> {
         let IngestLeavesRequest {
             source,
@@ -1090,7 +1318,10 @@ impl CliApp {
                 continue;
             };
             let leaf_path = Path::new(path);
-            if !is_patch_filter_candidate_name(path) {
+            // Mixed enumeration MUST leave unnamed patches to the ROM pass, avoiding duplicate copies.
+            if !self.is_patch_payload(leaf_path)
+                || (!include_signature_patches && !is_patch_filter_candidate_name(path))
+            {
                 continue;
             }
             patches.push(self.build_patch_descriptor(leaf_path, None, rom_hint, context)?);
@@ -1517,12 +1748,8 @@ impl CliApp {
         });
     }
 
-    /// Stream the sidecar patch descriptors the instant they are enumerated - before the ROM is
-    /// hashed - so the host can open the patch-selection dialog while the (slower) ROM checksum runs,
-    /// instead of waiting for the whole ingest to return. Purely additive and gated on streaming
-    /// output (`emit_progress_events`), so the CLI report bytes are unchanged; the identical
-    /// descriptors also ride the terminal `details.ingest.patches`. The leaf files referenced here are
-    /// already extracted to `out_dir` by the patch sub-pass, so the host can act on the picks at once.
+    /// Hosts MUST receive one complete sidecar list before the terminal report, because selection
+    /// uses the first manifest. Referenced leaves are already extracted and ready for selection.
     fn emit_patch_manifest(&self, source: &Path, patches: &[PatchDescriptor]) {
         if !self.emit_progress_events || patches.is_empty() {
             return;

@@ -352,6 +352,8 @@ const IPS_SIGNATURE: &[u8] = b"PATCH";
 const IPS32_SIGNATURE: &[u8] = b"IPS32";
 const SOLID_SIGNATURE: &[u8] = b"SP";
 const MOD_SIGNATURE: &[u8] = b"PMSR";
+/// Bytes [`PatchRegistry::probe_signature_prefix`] needs to recognize every leading-magic format.
+pub const SIGNATURE_PREFIX_LEN: usize = DLDI_SIGNATURE.len();
 const DLDI_SIGNATURE: [u8; 12] = [
     0xED, 0xA5, 0x8D, 0xBF, b' ', b'C', b'h', b'i', b's', b'h', b'm', 0x00,
 ];
@@ -613,10 +615,8 @@ impl PatchRegistry {
             .cloned()
     }
 
-    fn probe_ambiguous_ips_by_signature(&self, path: &Path) -> Option<Arc<dyn PatchHandler>> {
-        let bytes = read_signature_prefix(path, 5)?;
-
-        if bytes.starts_with(b"IPS32") {
+    fn probe_ambiguous_ips_by_signature(&self, prefix: &[u8]) -> Option<Arc<dyn PatchHandler>> {
+        if prefix.starts_with(b"IPS32") {
             return self.find_by_name("ips32");
         }
 
@@ -629,7 +629,7 @@ impl PatchRegistry {
         ebp_extension: bool,
         xdelta_extension: bool,
     ) -> Option<Arc<dyn PatchHandler>> {
-        let Some(prefix) = read_signature_prefix(path, DLDI_SIGNATURE.len()) else {
+        let Some(prefix) = read_signature_prefix(path, SIGNATURE_PREFIX_LEN) else {
             trace!(
                 patch = %path.display(),
                 "patch signature probe skipped (unable to read signature bytes)"
@@ -637,6 +637,42 @@ impl PatchRegistry {
             return None;
         };
 
+        if let Some(handler) =
+            self.probe_prefix_signature(path, &prefix, ebp_extension, xdelta_extension)
+        {
+            return Some(handler);
+        }
+        if has_pat_record_signature(path) {
+            return self.probe_signature_match(path, "PAT record", "pat");
+        }
+
+        trace!(
+            patch = %path.display(),
+            "patch signature probe found no signature match"
+        );
+        None
+    }
+
+    /// Identify a patch from its leading bytes alone, for callers that hold a prefix but no file.
+    ///
+    /// `prefix` SHOULD hold [`SIGNATURE_PREFIX_LEN`] bytes. The PAT format has no leading magic
+    /// (it is recognized by parsing the whole file), so it is never reported here; `label` only
+    /// names the payload in traces.
+    pub fn probe_signature_prefix(
+        &self,
+        label: &Path,
+        prefix: &[u8],
+    ) -> Option<Arc<dyn PatchHandler>> {
+        self.probe_prefix_signature(label, prefix, false, false)
+    }
+
+    fn probe_prefix_signature(
+        &self,
+        path: &Path,
+        prefix: &[u8],
+        ebp_extension: bool,
+        xdelta_extension: bool,
+    ) -> Option<Arc<dyn PatchHandler>> {
         if prefix.starts_with(BPS_SIGNATURE) {
             return self.probe_signature_match(path, "BPS1", "bps");
         }
@@ -677,7 +713,7 @@ impl PatchRegistry {
             return self.probe_signature_match(path, "IPS32", "ips32");
         }
         if prefix.starts_with(IPS_SIGNATURE) {
-            if let Some(resolved) = self.probe_ambiguous_ips_by_signature(path) {
+            if let Some(resolved) = self.probe_ambiguous_ips_by_signature(prefix) {
                 trace!(
                     patch = %path.display(),
                     format = resolved.descriptor().name,
@@ -702,14 +738,6 @@ impl PatchRegistry {
         if prefix.starts_with(BSDIFF_SIGNATURE) {
             return self.probe_signature_match(path, "BSDIFF40", "bdf");
         }
-        if has_pat_record_signature(path) {
-            return self.probe_signature_match(path, "PAT record", "pat");
-        }
-
-        trace!(
-            patch = %path.display(),
-            "patch signature probe found no signature match"
-        );
         None
     }
 

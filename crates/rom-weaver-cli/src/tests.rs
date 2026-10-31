@@ -1526,3 +1526,365 @@ fn old_bundle_source_and_typed_result_contracts_remain_usable() {
     assert_eq!(schema["$id"], super::BUNDLE_JSON_SCHEMA_URL);
     assert_ne!(super::BUNDLE_JSON_SCHEMA_URL, super::WEAVE_JSON_SCHEMA_URL);
 }
+
+#[test]
+fn extract_payload_selection_ignores_directory_entries_without_prompting() {
+    let app = test_app_with_prompt(vec![0]);
+    let context = app.context(ThreadBudget::Fixed(1));
+    let handler = TestListHandler {
+        entries: vec![
+            ContainerListEntry {
+                path: "Game/".to_string(),
+                size: None,
+            },
+            ContainerListEntry {
+                path: "Game/Game.sfc".to_string(),
+                size: Some(100),
+            },
+        ],
+    };
+    let selected = app
+        .resolve_extract_payload_selections(
+            &handler,
+            Path::new("folder.zip"),
+            SelectionResolutionOptions {
+                kind_filter: ArchiveEntryKindFilter::new(true, false),
+                split_bin: false,
+                ignore_common_files: true,
+                source_label: "extract input",
+            },
+            &context,
+        )
+        .unwrap();
+    assert!(
+        selected.is_empty(),
+        "unexpected prompt selection: {selected:?}"
+    );
+}
+
+/// Writes one fixture per ROM name; a `.zip` name becomes an archive holding a single `inner.nes`.
+fn write_signature_sidecar_roms(app: &CliApp, dir: &Path, rom_names: &[&str]) -> Vec<PathBuf> {
+    rom_names
+        .iter()
+        .map(|name| {
+            let path = dir.join(name);
+            if name.ends_with(".zip") {
+                let inner = dir.join("inner.nes");
+                std::fs::write(&inner, b"nested ROM payload").unwrap();
+                compress_zip_fixture(app, &[inner], &path);
+                return path;
+            }
+            let bytes: &[u8] = if name.ends_with(".cue") {
+                b"FILE \"game.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n"
+            } else if *name == "raw" {
+                b"PAT weak signature raw ROM payload"
+            } else {
+                b"raw ROM payload"
+            };
+            std::fs::write(&path, bytes).unwrap();
+            path
+        })
+        .collect()
+}
+
+fn check_ingest_interactive_signature_sidecar(
+    rom_names: &[&str],
+    selected: Option<usize>,
+    output_mode: &str,
+) {
+    struct JsonLines(Mutex<String>);
+    impl rom_weaver_core::ProgressSink for JsonLines {
+        fn emit(&self, event: rom_weaver_core::ProgressEvent) {
+            let mut lines = self.0.lock().unwrap();
+            lines.push_str(&serde_json::to_string(&event).unwrap());
+            lines.push('\n');
+        }
+    }
+    struct Prompt {
+        selected: Option<usize>,
+        calls: Mutex<Vec<Vec<String>>>,
+    }
+    impl SelectionPrompter for Prompt {
+        fn select(&self, _heading: &str, candidates: &[PromptCandidate]) -> Selection {
+            self.calls.lock().unwrap().push(
+                candidates
+                    .iter()
+                    .map(|candidate| candidate.value.clone())
+                    .collect(),
+            );
+            self.selected
+                .map(Selection::Selected)
+                .unwrap_or(Selection::Cancelled)
+        }
+        fn select_many(&self, _heading: &str, _candidates: &[PromptCandidate]) -> SelectionList {
+            panic!("ROM selection must be single-select");
+        }
+        fn confirm(&self, _heading: &str, _details: &[String]) -> bool {
+            false
+        }
+    }
+    let cwd = std::env::current_dir().unwrap();
+    let temp = assert_fs::TempDir::new().unwrap();
+    let events = Arc::new(JsonLines(Mutex::new(String::new())));
+    let prompt = Arc::new(Prompt {
+        selected,
+        calls: Mutex::new(Vec::new()),
+    });
+    let app = CliApp::new(events.clone(), prompt.clone(), true, true, false);
+    let mut members = write_signature_sidecar_roms(&app, temp.path(), rom_names);
+    let patch = temp.path().join("patch");
+    let patch_bytes = b"PATCH\x00\x00\x00\x00\x01\x01EOF";
+    std::fs::write(&patch, patch_bytes).unwrap();
+    members.push(patch);
+    let archive = temp.path().join("mixed.zip");
+    compress_zip_fixture(&app, &members, &archive);
+    events.0.lock().unwrap().clear();
+    let output = match output_mode {
+        "relative" => {
+            let root = cwd.ancestors().last().unwrap();
+            let parents: PathBuf = cwd.ancestors().skip(1).map(|_| "..").collect();
+            parents
+                .join(temp.path().strip_prefix(root).unwrap())
+                .join("out")
+        }
+        #[cfg(unix)]
+        "symlink" => {
+            let actual = temp.path().join("actual");
+            std::fs::create_dir(&actual).unwrap();
+            let link = temp.path().join("link");
+            std::os::unix::fs::symlink(actual, &link).unwrap();
+            link.join("out")
+        }
+        "absolute" => temp.path().join("out"),
+        mode => panic!("unexpected output mode: {mode}"),
+    };
+    let outcome = app.run(Commands::Ingest(super::IngestCommand {
+        input: archive,
+        output,
+        database: Vec::new(),
+        select: Vec::new(),
+        sidecar_names: Vec::new(),
+        sidecar_only: false,
+        input_name: None,
+        no_ignore: false,
+        no_nested_extract: false,
+        preserve_nested_formats: Vec::new(),
+        split_bin: None,
+        checksum: vec!["crc32".to_string()],
+        threads: ThreadBudget::Fixed(1),
+    }));
+    let calls = prompt.calls.lock().unwrap();
+    if rom_names.len() <= 1 || rom_names.contains(&"game.cue") {
+        assert!(calls.is_empty(), "unexpected ROM prompt: {calls:?}");
+    } else {
+        assert_eq!(calls.len(), 1, "ROMs must still prompt");
+        assert_eq!(calls[0], rom_names, "prompt names must be archive-relative");
+        assert!(
+            calls[0].iter().all(|name| !name.ends_with("patch")),
+            "{calls:?}"
+        );
+    }
+    let lines = events.0.lock().unwrap();
+    let events: Vec<serde_json::Value> = lines
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    if selected.is_none() && !calls.is_empty() {
+        assert_ne!(outcome.exit_code, 0);
+        assert!(events.last().unwrap()["details"].get("ingest").is_none());
+        return;
+    }
+    assert_eq!(outcome.exit_code, 0, "{events:?}");
+    let ingest = &events.last().unwrap()["details"]["ingest"];
+    assert_eq!(ingest["kind"], "rom");
+    let expected_assets = if calls.is_empty() { rom_names.len() } else { 1 };
+    assert_eq!(ingest["assets"].as_array().unwrap().len(), expected_assets);
+    if let Some(index) = selected {
+        let expected_name = if rom_names[index].ends_with(".zip") {
+            "inner.nes"
+        } else {
+            rom_names[index]
+        };
+        assert_eq!(ingest["assets"][0]["file_name"], expected_name);
+    }
+    let manifests: Vec<_> = events
+        .iter()
+        .filter(|event| event["stage"] == "patch-manifest")
+        .collect();
+    assert_eq!(manifests.len(), 1, "{events:?}");
+    assert_eq!(
+        manifests[0]["details"]["patch_manifest"]["patches"],
+        ingest["patches"]
+    );
+    assert_eq!(ingest["patches"].as_array().unwrap().len(), 1);
+    assert_eq!(ingest["patches"][0]["file_name"], "patch");
+    assert_eq!(ingest["patches"][0]["is_valid_patch"], true);
+    assert_eq!(
+        std::fs::read(ingest["patches"][0]["leaf_path"].as_str().unwrap()).unwrap(),
+        patch_bytes
+    );
+    eprintln!(
+        "interactive JSONL: {} ROM assets, 1 valid sidecar, {} prompts",
+        expected_assets,
+        calls.len()
+    );
+}
+
+#[test]
+fn ingest_interactive_signature_sidecar_does_not_prompt_for_one_rom() {
+    check_ingest_interactive_signature_sidecar(&["game.bin"], None, "absolute");
+}
+
+#[test]
+fn ingest_interactive_signature_sidecar_keeps_disc_together() {
+    check_ingest_interactive_signature_sidecar(&["game.cue", "game.bin"], None, "absolute");
+}
+
+#[test]
+fn ingest_interactive_signature_sidecar_survives_rom_choice_and_cancellation() {
+    check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], Some(1), "absolute");
+    check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], None, "absolute");
+    check_ingest_interactive_signature_sidecar(&["game.bin", "raw"], Some(1), "absolute");
+}
+
+/// A nested archive beside the ROMs keeps the top-level prompt, but the unnamed patch is classified
+/// from its header first: it is never offered as a ROM and survives whichever entry is chosen.
+#[test]
+fn ingest_interactive_nested_archive_excludes_signature_patch_from_rom_prompt() {
+    let names = ["first.nes", "second.nes", "extra.zip"];
+    check_ingest_interactive_signature_sidecar(&names, Some(1), "absolute");
+    check_ingest_interactive_signature_sidecar(&names, Some(2), "absolute");
+    check_ingest_interactive_signature_sidecar(&names, None, "absolute");
+}
+
+#[test]
+fn ingest_interactive_relative_output_uses_archive_names() {
+    check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], Some(1), "relative");
+}
+
+#[cfg(unix)]
+#[test]
+fn ingest_interactive_symlink_output_uses_archive_names() {
+    check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], Some(1), "symlink");
+}
+
+fn check_ingest_interactive_nested_archive(extra: Option<&'static str>, selected: Option<usize>) {
+    std::thread::Builder::new()
+        .stack_size(32 * 1024 * 1024)
+        .spawn(move || check_ingest_interactive_nested_archive_body(extra, selected))
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+fn check_ingest_interactive_nested_archive_body(extra: Option<&str>, selected: Option<usize>) {
+    struct JsonLines(Mutex<Vec<serde_json::Value>>);
+    impl rom_weaver_core::ProgressSink for JsonLines {
+        fn emit(&self, event: rom_weaver_core::ProgressEvent) {
+            self.0
+                .lock()
+                .unwrap()
+                .push(serde_json::to_value(event).unwrap());
+        }
+    }
+    struct Prompt {
+        calls: Mutex<Vec<Vec<String>>>,
+        selected: Option<usize>,
+        output: PathBuf,
+    }
+    impl SelectionPrompter for Prompt {
+        fn select(&self, _heading: &str, candidates: &[PromptCandidate]) -> Selection {
+            assert!(
+                !self.output.exists() || std::fs::read_dir(&self.output).unwrap().next().is_none(),
+                "ordinary archive prompts must precede extraction"
+            );
+            self.calls.lock().unwrap().push(
+                candidates
+                    .iter()
+                    .map(|candidate| candidate.label.clone())
+                    .collect(),
+            );
+            self.selected
+                .map(Selection::Selected)
+                .unwrap_or(Selection::Cancelled)
+        }
+        fn select_many(&self, _heading: &str, _candidates: &[PromptCandidate]) -> SelectionList {
+            panic!("ROM selection must be single-select");
+        }
+        fn confirm(&self, _heading: &str, _details: &[String]) -> bool {
+            false
+        }
+    }
+    let temp = assert_fs::TempDir::new().unwrap();
+    let output = temp.path().join("out");
+    let prompt = Arc::new(Prompt {
+        calls: Mutex::new(Vec::new()),
+        selected,
+        output: output.clone(),
+    });
+    let events = Arc::new(JsonLines(Mutex::new(Vec::new())));
+    let app = CliApp::new(events.clone(), prompt.clone(), true, true, false);
+    let roms = ["alpha.nes", "beta.nes"].map(|name| {
+        let path = temp.path().join(name);
+        std::fs::write(&path, b"raw ROM payload").unwrap();
+        path
+    });
+    let inner = temp.path().join("inner.zip");
+    compress_zip_fixture(&app, &roms, &inner);
+    let mut members = vec![inner];
+    if let Some(name) = extra {
+        let path = temp.path().join(name);
+        if name.ends_with(".zip") {
+            compress_zip_fixture(&app, &roms, &path);
+        } else {
+            std::fs::write(&path, b"license text").unwrap();
+        }
+        members.push(path);
+    }
+    let archive = temp.path().join("outer.zip");
+    compress_zip_fixture(&app, &members, &archive);
+    let outcome = app.run(Commands::Ingest(super::IngestCommand {
+        input: archive,
+        output,
+        database: Vec::new(),
+        select: Vec::new(),
+        sidecar_names: Vec::new(),
+        sidecar_only: false,
+        input_name: None,
+        no_ignore: false,
+        no_nested_extract: false,
+        preserve_nested_formats: Vec::new(),
+        split_bin: None,
+        checksum: vec!["crc32".to_string()],
+        threads: ThreadBudget::Fixed(1),
+    }));
+    let calls = prompt.calls.lock().unwrap();
+    if extra.is_none() {
+        assert!(
+            calls.is_empty(),
+            "nested descent must not prompt: {calls:?}"
+        );
+    } else {
+        assert_eq!(calls.len(), 1);
+    }
+    let events = events.0.lock().unwrap();
+    assert_eq!(outcome.exit_code, 0, "{events:?}");
+    let ingest = &events.last().unwrap()["details"]["ingest"];
+    assert_eq!(ingest["assets"].as_array().unwrap().len(), 2);
+    assert!(ingest["patches"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn ingest_interactive_nested_roms_do_not_prompt() {
+    check_ingest_interactive_nested_archive(None, None);
+}
+
+#[test]
+fn ingest_interactive_known_archives_prompt_before_extraction() {
+    check_ingest_interactive_nested_archive(Some("other.zip"), Some(0));
+}
+
+#[test]
+fn ingest_interactive_license_prompts_before_nested_extraction() {
+    check_ingest_interactive_nested_archive(Some("LICENSE"), Some(1));
+}

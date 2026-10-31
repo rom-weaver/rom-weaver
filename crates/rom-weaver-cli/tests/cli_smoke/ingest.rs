@@ -1695,9 +1695,7 @@ fn ingest_mixed_archive_surfaces_sidecar_patch_independent_of_rom_selection() {
 
 #[test]
 fn ingest_streams_patch_manifest_before_terminal_for_mixed_archive() {
-    // The sidecar patch descriptors stream in an early `patch-manifest` event - before the ROM is
-    // checksummed and before the terminal report - so the host can open the patch-selection dialog
-    // while the (slower) ROM hashing finishes instead of waiting for the whole ingest to return.
+    // The host MUST receive all sidecar descriptors before the terminal report.
     let temp = setup_temp_dir();
     let rom = temp.child("game.nes");
     fs::write(rom.path(), with_nes_header(b"mixed rom payload")).expect("rom fixture");
@@ -2679,5 +2677,808 @@ fn patch_apply_accepts_extensionless_compressed_rom_and_patch() {
             banded_rom_patched(),
             "{codec}"
         );
+    }
+}
+
+fn assert_ingest_unnamed_archive_leaves(format: &str) {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    let raw = temp.child("dump");
+    let patch = temp.child("patch");
+    fs::write(rom.path(), banded_rom()).unwrap();
+    let mut raw_bytes = banded_rom();
+    raw_bytes[..2].copy_from_slice(b"SP");
+    fs::write(raw.path(), &raw_bytes).unwrap();
+    fs::write(patch.path(), banded_bps()).unwrap();
+    let archive = temp.child(format!("bundle.{format}"));
+    if format == "tar" {
+        let mut builder = tar::Builder::new(File::create(archive.path()).unwrap());
+        for path in [rom.path(), raw.path(), patch.path()] {
+            builder
+                .append_path_with_name(path, path.file_name().unwrap())
+                .unwrap();
+        }
+        builder.finish().unwrap();
+    } else {
+        isolated_json_event(
+            &temp,
+            &[
+                "compress",
+                "--format",
+                format,
+                "--input",
+                rom.path().to_str().unwrap(),
+                "--input",
+                raw.path().to_str().unwrap(),
+                "--input",
+                patch.path().to_str().unwrap(),
+                "--output",
+                archive.path().to_str().unwrap(),
+                "--json",
+            ],
+            0,
+        );
+    }
+    let result = ingest_json(&temp, archive.path(), "out");
+    let ingest = &result["details"]["ingest"];
+    let assets = ingest["assets"].as_array().unwrap();
+    assert_eq!(assets.len(), 2, "{format}: {ingest}");
+    assert!(assets.iter().any(|asset| asset["file_name"] == "dump"));
+    let patches = ingest["patches"].as_array().unwrap();
+    assert_eq!(patches.len(), 1, "{format}: {ingest}");
+    assert_eq!(patches[0]["file_name"], "patch");
+    assert_eq!(patches[0]["format"], "BPS");
+    assert_eq!(
+        fs::read(patches[0]["leaf_path"].as_str().unwrap()).unwrap(),
+        banded_bps()
+    );
+}
+
+#[test]
+fn ingest_classification_extensionless_zip_patch_and_raw_dump() {
+    assert_ingest_unnamed_archive_leaves("zip");
+}
+
+#[test]
+fn ingest_classification_extensionless_tar_patch_and_raw_dump() {
+    assert_ingest_unnamed_archive_leaves("tar");
+}
+
+#[test]
+fn ingest_classification_extensionless_7z_patch_and_raw_dump() {
+    assert_ingest_unnamed_archive_leaves("7z");
+}
+
+#[test]
+fn ingest_classification_patch_only_zip_keeps_extensionless_compressed_patch() {
+    let temp = setup_temp_dir();
+    let named = temp.child("a.bps");
+    fs::write(named.path(), banded_bps()).unwrap();
+    let wrapped = write_wrapped(&temp, "b.gz", "gz", &banded_bps());
+    let archive = temp.child("patches.zip");
+    zip_members(&temp, archive.path(), &[named.path(), &wrapped]);
+    let result = ingest_json(&temp, archive.path(), "out");
+    let ingest = &result["details"]["ingest"];
+    assert_eq!(ingest["kind"], "patch");
+    let mut names: Vec<_> = patch_file_names(ingest)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    names.sort();
+    assert_eq!(names, ["a.bps", "b"], "{ingest}");
+}
+
+#[test]
+fn ingest_classification_dotted_gzip_payload_names() {
+    for (name, bytes, kind) in [
+        ("Dr. Mario (Japan, USA)", banded_rom(), "rom"),
+        ("Hack v1.1", banded_bps(), "patch"),
+    ] {
+        let temp = setup_temp_dir();
+        let source = write_wrapped(&temp, &format!("{name}.gz"), "gz", &bytes);
+        let result = ingest_json(&temp, &source, "out");
+        let ingest = &result["details"]["ingest"];
+        assert_eq!(ingest["kind"], kind, "{ingest}");
+        let leaves = ingest[if kind == "rom" { "assets" } else { "patches" }]
+            .as_array()
+            .unwrap();
+        assert_eq!(leaves.len(), 1, "{ingest}");
+        assert_eq!(leaves[0]["file_name"], name);
+        assert_eq!(
+            fs::read(
+                leaves[0][if kind == "rom" { "path" } else { "leaf_path" }]
+                    .as_str()
+                    .unwrap()
+            )
+            .unwrap(),
+            bytes
+        );
+    }
+}
+
+#[test]
+fn ingest_classification_dotted_and_extensionless_gzip_non_ingest_commands() {
+    for (rom_name, patch_name) in [("rom", "patch"), ("Dr. Mario (Japan, USA)", "Hack v1.1")] {
+        let temp = setup_temp_dir();
+        let rom = write_wrapped(&temp, &format!("{rom_name}.gz"), "gz", &banded_rom());
+        let patch = write_wrapped(&temp, &format!("{patch_name}.gz"), "gz", &banded_bps());
+        let applied = temp.child("applied.bin");
+        isolated_json_event(
+            &temp,
+            &[
+                "checksum",
+                "--input",
+                rom.to_str().unwrap(),
+                "--filter",
+                "rom",
+                "--jsonl",
+            ],
+            0,
+        );
+        isolated_json_event(
+            &temp,
+            &[
+                "patch",
+                "apply",
+                "--input",
+                rom.to_str().unwrap(),
+                "--patch",
+                patch.to_str().unwrap(),
+                "--output",
+                applied.path().to_str().unwrap(),
+                "--no-compress",
+                "--filter",
+                "rom",
+                "--filter",
+                "patch",
+                "--jsonl",
+            ],
+            0,
+        );
+        isolated_json_event(
+            &temp,
+            &[
+                "patch",
+                "validate",
+                "--input",
+                rom.to_str().unwrap(),
+                "--patch",
+                patch.to_str().unwrap(),
+                "--filter",
+                "rom",
+                "--filter",
+                "patch",
+                "--jsonl",
+            ],
+            0,
+        );
+        assert_eq!(fs::read(applied.path()).unwrap(), banded_rom_patched());
+    }
+}
+
+#[test]
+fn ingest_classification_named_and_unnamed_patches_are_unique() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    let named = temp.child("a.bps");
+    let unnamed = temp.child("patch");
+    fs::write(rom.path(), banded_rom()).unwrap();
+    fs::write(named.path(), banded_bps()).unwrap();
+    fs::write(unnamed.path(), banded_bps()).unwrap();
+    let wrapped = write_wrapped(&temp, "compressed.gz", "gz", &banded_bps());
+    let archive = temp.child("mixed.zip");
+    zip_members(
+        &temp,
+        archive.path(),
+        &[rom.path(), named.path(), unnamed.path(), &wrapped],
+    );
+    let result = ingest_json(&temp, archive.path(), "out");
+    let ingest = &result["details"]["ingest"];
+    assert_eq!(ingest["assets"].as_array().unwrap().len(), 1, "{ingest}");
+    let mut names: Vec<_> = patch_file_names(ingest)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    names.sort();
+    assert_eq!(names, ["a.bps", "compressed", "patch"], "{ingest}");
+}
+
+#[test]
+fn ingest_classification_unnamed_raw_dump_beside_named_patch_stays_rom() {
+    let temp = setup_temp_dir();
+    let raw = temp.child("dump");
+    let named = temp.child("a.bps");
+    fs::write(raw.path(), banded_rom()).unwrap();
+    fs::write(named.path(), banded_bps()).unwrap();
+    let archive = temp.child("mixed.zip");
+    zip_members(&temp, archive.path(), &[raw.path(), named.path()]);
+    let result = ingest_json(&temp, archive.path(), "out");
+    let ingest = &result["details"]["ingest"];
+    assert_eq!(ingest["kind"], "rom", "{ingest}");
+    assert_eq!(ingest["assets"].as_array().unwrap().len(), 1, "{ingest}");
+    assert_eq!(ingest["patches"].as_array().unwrap().len(), 1, "{ingest}");
+}
+
+/// Unnamed top-level entries carry no kind, so they MUST NOT stop descent into a nested ROM archive.
+#[test]
+fn ingest_classification_unnamed_entries_keep_nested_archive_descent() {
+    for (extra_name, extra_bytes) in [
+        ("LICENSE", b"license text".to_vec()),
+        ("patch", banded_bps()),
+    ] {
+        let temp = setup_temp_dir();
+        let alpha = temp.child("alpha.nes");
+        let beta = temp.child("beta.nes");
+        fs::write(alpha.path(), banded_rom()).unwrap();
+        fs::write(beta.path(), banded_rom_patched()).unwrap();
+        let inner = temp.child("inner.zip");
+        zip_members(&temp, inner.path(), &[alpha.path(), beta.path()]);
+        let extra = temp.child(extra_name);
+        fs::write(extra.path(), &extra_bytes).unwrap();
+        let outer = temp.child("outer.zip");
+        zip_members(&temp, outer.path(), &[inner.path(), extra.path()]);
+
+        let result = ingest_json(&temp, outer.path(), "out");
+        let ingest = &result["details"]["ingest"];
+        assert_eq!(ingest["kind"], "rom", "{extra_name}: {ingest}");
+        let mut assets: Vec<_> = ingest["assets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|asset| asset["file_name"].as_str().unwrap())
+            .collect();
+        assets.sort_unstable();
+        assert_eq!(assets, ["alpha.nes", "beta.nes"], "{extra_name}: {ingest}");
+
+        let extracted = temp.child("extracted");
+        isolated_json_event(
+            &temp,
+            &[
+                "extract",
+                "--input",
+                outer.path().to_str().unwrap(),
+                "--output",
+                extracted.path().to_str().unwrap(),
+                "--filter",
+                "rom",
+                "--json",
+            ],
+            0,
+        );
+        assert!(
+            extracted.path().join("inner/alpha.nes").is_file(),
+            "{extra_name}"
+        );
+        assert!(
+            extracted.path().join("inner/beta.nes").is_file(),
+            "{extra_name}"
+        );
+        assert!(!extracted.path().join(extra_name).exists(), "{extra_name}");
+
+        let checksum = isolated_json_event(
+            &temp,
+            &[
+                "checksum",
+                "--input",
+                outer.path().to_str().unwrap(),
+                "--filter",
+                "rom",
+                "--json",
+            ],
+            1,
+        );
+        let error = checksum["error"]["message"].as_str().unwrap();
+        assert!(
+            error.contains("candidates: `alpha.nes`, `beta.nes`"),
+            "{extra_name}: {checksum}"
+        );
+    }
+}
+
+/// A stream-wrapped unnamed payload cannot be classified without decompressing it, so it MUST NOT
+/// make a named payload ambiguous when one candidate is resolved.
+#[test]
+fn ingest_classification_unnamed_stream_does_not_shadow_named_payload() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    let named_patch = temp.child("a.bps");
+    let loose_patch = temp.child("hack.bps");
+    fs::write(rom.path(), banded_rom()).unwrap();
+    fs::write(named_patch.path(), banded_bps()).unwrap();
+    fs::write(loose_patch.path(), banded_bps()).unwrap();
+    let wrapped = write_wrapped(&temp, "compressed.gz", "gz", &banded_bps());
+    let roms = temp.child("mixed.zip");
+    zip_members(&temp, roms.path(), &[rom.path(), &wrapped]);
+    let patches = temp.child("patches.zip");
+    zip_members(&temp, patches.path(), &[named_patch.path(), &wrapped]);
+
+    let crc = |input: &Path| {
+        isolated_json_event(
+            &temp,
+            &[
+                "checksum",
+                "--input",
+                input.to_str().unwrap(),
+                "--filter",
+                "rom",
+                "--json",
+            ],
+            0,
+        )["details"]["checksums"]["crc32"]
+            .clone()
+    };
+    assert_eq!(crc(roms.path()), crc(rom.path()));
+    for (input, patch, name) in [
+        (roms.path(), loose_patch.path(), "rom-archive"),
+        (rom.path(), patches.path(), "patch-archive"),
+    ] {
+        let applied = temp.child(format!("{name}.bin"));
+        isolated_json_event(
+            &temp,
+            &[
+                "patch",
+                "apply",
+                "--input",
+                input.to_str().unwrap(),
+                "--patch",
+                patch.to_str().unwrap(),
+                "--output",
+                applied.path().to_str().unwrap(),
+                "--no-compress",
+                "--filter",
+                "rom",
+                "--filter",
+                "patch",
+                "--jsonl",
+            ],
+            0,
+        );
+        assert_eq!(
+            fs::read(applied.path()).unwrap(),
+            banded_rom_patched(),
+            "{name}"
+        );
+        isolated_json_event(
+            &temp,
+            &[
+                "patch",
+                "validate",
+                "--input",
+                input.to_str().unwrap(),
+                "--patch",
+                patch.to_str().unwrap(),
+                "--filter",
+                "rom",
+                "--filter",
+                "patch",
+                "--jsonl",
+            ],
+            0,
+        );
+    }
+}
+
+#[test]
+fn ingest_classification_wrong_kind_uses_consistent_filter_error() {
+    let temp = setup_temp_dir();
+    for name in ["patch.gz", "Hack v1.1.gz", "patch.bps.gz"] {
+        let source = write_wrapped(&temp, name, "gz", &banded_bps());
+        let result = isolated_json_event(
+            &temp,
+            &[
+                "checksum",
+                "--input",
+                source.to_str().unwrap(),
+                "--filter",
+                "rom",
+                "--json",
+            ],
+            1,
+        );
+        let error = result["error"]["message"].as_str().unwrap();
+        assert!(
+            error.starts_with(&format!(
+                "validation failed: no extract entries from `{}` matched --filter rom",
+                source.display()
+            )),
+            "{result}"
+        );
+    }
+}
+
+fn review_ingest_events(temp: &TempDir, archive: &Path) -> Vec<Value> {
+    let home = temp.child("review-home");
+    fs::create_dir_all(home.path()).unwrap();
+    let home = home.path().to_str().unwrap();
+    let out = temp.child("review-out");
+    run_json_events_with_env(
+        &[
+            "ingest",
+            "--input",
+            archive.to_str().unwrap(),
+            "--output",
+            out.path().to_str().unwrap(),
+            "--jsonl",
+        ],
+        &[
+            ("HOME", home),
+            ("XDG_CACHE_HOME", home),
+            ("XDG_CONFIG_HOME", home),
+            ("XDG_STATE_HOME", home),
+            ("XDG_DATA_HOME", home),
+            ("TMPDIR", home),
+        ],
+        0,
+    )
+}
+
+#[test]
+fn ingest_nested_patch_sources_do_not_open_a_sidecar_dialog() {
+    for (archive_name, expected_names) in [
+        (
+            "B_weave.zip",
+            vec!["patchB1.ips", "patchB2.ips", "patchB3.ips"],
+        ),
+        ("C_root.zip", vec!["deep.ips", "flat1.ips", "flat2.ips"]),
+    ] {
+        let temp = setup_temp_dir();
+        let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packages/rom-weaver-webapp/tests/fixtures/archives")
+            .join(archive_name);
+        let events = review_ingest_events(&temp, &archive);
+        let ingest = &events.last().unwrap()["details"]["ingest"];
+        assert_eq!(ingest["kind"], "patch", "{archive_name}: {ingest}");
+        assert!(ingest["assets"].as_array().unwrap().is_empty());
+        let patches = ingest["patches"].as_array().unwrap();
+        let mut names: Vec<_> = patches
+            .iter()
+            .map(|patch| {
+                assert_eq!(patch["is_valid_patch"], true, "{patch}");
+                assert!(Path::new(patch["leaf_path"].as_str().unwrap()).is_file());
+                patch["file_name"].as_str().unwrap()
+            })
+            .collect();
+        names.sort();
+        assert_eq!(names, expected_names, "{archive_name}");
+        assert!(
+            events
+                .iter()
+                .all(|event| event["stage"] != "patch-manifest"),
+            "{archive_name}: patch sources must use terminal patch selection, not a ROM sidecar dialog"
+        );
+    }
+}
+
+/// A listing that already names patches and no ROM is a patch weave; signature-classifying its
+/// unnamed members MUST NOT turn it into a ROM-sidecar announcement.
+#[test]
+fn ingest_named_patch_weave_with_unnamed_patch_skips_sidecar_dialog() {
+    for wrapped in [true, false] {
+        let temp = setup_temp_dir();
+        let named = temp.child("a.bps");
+        fs::write(named.path(), banded_bps()).unwrap();
+        let unnamed = if wrapped {
+            write_wrapped(&temp, "b.gz", "gz", &banded_bps())
+        } else {
+            let path = temp.child("b");
+            fs::write(path.path(), banded_bps()).unwrap();
+            path.path().to_path_buf()
+        };
+        let archive = temp.child("patches.zip");
+        zip_members(&temp, archive.path(), &[named.path(), &unnamed]);
+        let events = review_ingest_events(&temp, archive.path());
+        let ingest = &events.last().unwrap()["details"]["ingest"];
+        assert_eq!(ingest["kind"], "patch", "wrapped={wrapped}: {ingest}");
+        let mut names: Vec<_> = patch_file_names(ingest)
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect();
+        names.sort();
+        assert_eq!(names, ["a.bps", "b"], "wrapped={wrapped}: {ingest}");
+        assert!(
+            events
+                .iter()
+                .all(|event| event["stage"] != "patch-manifest"),
+            "wrapped={wrapped}: patch sources must use terminal patch selection"
+        );
+    }
+}
+
+#[test]
+fn ingest_review_complete_sidecar_manifest() {
+    for named_count in [1, 2] {
+        let temp = setup_temp_dir();
+        let mut members = Vec::new();
+        for (name, bytes) in [
+            ("game.bin", banded_rom()),
+            ("a.bps", banded_bps()),
+            ("patch", banded_bps()),
+        ] {
+            let member = temp.child(name);
+            fs::write(member.path(), bytes).unwrap();
+            members.push(member.path().to_path_buf());
+        }
+        if named_count == 2 {
+            let member = temp.child("b.bps");
+            fs::write(member.path(), banded_bps()).unwrap();
+            members.push(member.path().to_path_buf());
+        }
+        members.push(write_wrapped(&temp, "compressed.gz", "gz", &banded_bps()));
+        let archive = temp.child("mixed.zip");
+        zip_members(
+            &temp,
+            archive.path(),
+            &members.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
+        );
+        let events = review_ingest_events(&temp, archive.path());
+        let manifests: Vec<_> = events
+            .iter()
+            .filter(|event| event["stage"] == "patch-manifest")
+            .collect();
+        assert_eq!(manifests.len(), 1, "manifests: {manifests:?}");
+        let patches = manifests[0]["details"]["patch_manifest"]["patches"]
+            .as_array()
+            .unwrap();
+        let mut names: Vec<_> = patches
+            .iter()
+            .map(|patch| patch["file_name"].as_str().unwrap())
+            .collect();
+        names.sort();
+        let expected = if named_count == 1 {
+            vec!["a.bps", "compressed", "patch"]
+        } else {
+            vec!["a.bps", "b.bps", "compressed", "patch"]
+        };
+        assert_eq!(names, expected);
+        let terminal = events.last().unwrap();
+        let terminal_patches = terminal["details"]["ingest"]["patches"].as_array().unwrap();
+        assert_eq!(terminal_patches.len(), patches.len());
+        for (announced, final_patch) in patches.iter().zip(terminal_patches) {
+            assert_eq!(announced["file_name"], final_patch["file_name"]);
+            assert_eq!(announced["leaf_path"], final_patch["leaf_path"]);
+            assert_eq!(announced["is_valid_patch"], true);
+            assert_eq!(
+                fs::read(announced["leaf_path"].as_str().unwrap()).unwrap(),
+                banded_bps()
+            );
+        }
+        let manifest_index = events
+            .iter()
+            .position(|event| event["stage"] == "patch-manifest")
+            .unwrap();
+        assert!(manifest_index < events.len() - 1);
+    }
+}
+
+#[test]
+fn ingest_review_disc_sidecar_manifest_precedes_rom_extraction() {
+    for extension in ["chd", "rvz", "cso"] {
+        let temp = setup_temp_dir();
+        let disc = temp.child(format!("game.{extension}"));
+        fs::write(disc.path(), banded_rom()).unwrap();
+        let patch = temp.child("hack.bps");
+        fs::write(patch.path(), banded_bps()).unwrap();
+        let archive = temp.child("disc.zip");
+        zip_members(&temp, archive.path(), &[disc.path(), patch.path()]);
+        let out = temp.child("out");
+        let events = run_json_events(
+            &[
+                "ingest",
+                "--input",
+                archive.path().to_str().unwrap(),
+                "--output",
+                out.path().to_str().unwrap(),
+                "--no-nested-extract",
+                "--jsonl",
+            ],
+            0,
+        );
+        let manifest_index = events
+            .iter()
+            .position(|event| event["stage"] == "patch-manifest")
+            .unwrap();
+        let extraction_starts: Vec<_> = events
+            .iter()
+            .enumerate()
+            .filter(|(_, event)| event["command"] == "ingest" && event["stage"] == "extract")
+            .map(|(index, _)| index)
+            .collect();
+        assert_eq!(extraction_starts.len(), 2, "{events:?}");
+        assert!(
+            manifest_index < extraction_starts[1],
+            "{extension}: patch dialog must be available before ROM extraction: {events:?}"
+        );
+        assert_eq!(
+            events.last().unwrap()["details"]["ingest"]["patches"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+}
+
+#[test]
+fn ingest_review_named_stream_patch_beside_rom() {
+    for codec in STREAM_CODECS {
+        let temp = setup_temp_dir();
+        let rom = temp.child("game.sfc");
+        fs::write(rom.path(), banded_rom()).unwrap();
+        let patch = write_wrapped(&temp, &format!("hack.bps.{codec}"), codec, &banded_bps());
+        let archive = temp.child("mixed.zip");
+        zip_members(&temp, archive.path(), &[rom.path(), &patch]);
+        let events = review_ingest_events(&temp, archive.path());
+        let ingest = &events.last().unwrap()["details"]["ingest"];
+        assert_eq!(
+            ingest["assets"].as_array().unwrap().len(),
+            1,
+            "{codec}: {ingest}"
+        );
+        let patches = ingest["patches"].as_array().unwrap();
+        assert_eq!(patches.len(), 1, "{codec}: {ingest}");
+        assert_eq!(patches[0]["file_name"], "hack.bps");
+        assert_eq!(
+            fs::read(patches[0]["leaf_path"].as_str().unwrap()).unwrap(),
+            banded_bps()
+        );
+    }
+}
+
+#[test]
+fn ingest_review_patch_zip_ignores_executable() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    let modified = temp.child("modified.bin");
+    let patch = temp.child("Game.xdelta");
+    fs::write(original.path(), banded_rom()).unwrap();
+    fs::write(modified.path(), banded_rom_patched()).unwrap();
+    isolated_json_event(
+        &temp,
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().unwrap(),
+            "--modified",
+            modified.path().to_str().unwrap(),
+            "--format",
+            "xdelta",
+            "--output",
+            patch.path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let tool = temp.child("xdelta3.exe");
+    fs::write(tool.path(), b"MZpatcher executable").unwrap();
+    let archive = temp.child("patch.zip");
+    zip_members(&temp, archive.path(), &[patch.path(), tool.path()]);
+    let events = review_ingest_events(&temp, archive.path());
+    let ingest = &events.last().unwrap()["details"]["ingest"];
+    assert_eq!(ingest["kind"], "patch", "{ingest}");
+    assert!(ingest["assets"].as_array().unwrap().is_empty());
+    assert_eq!(ingest["patches"].as_array().unwrap().len(), 1);
+    assert_eq!(ingest["patches"][0]["file_name"], "Game.xdelta");
+}
+
+fn assert_review_sidecars_do_not_ambiguate(embedded_patch: bool) {
+    let temp = setup_temp_dir();
+    let rom = temp.child(if embedded_patch {
+        "Game.sfc"
+    } else {
+        "game.sfc"
+    });
+    let patch = temp.child("Game.bps");
+    fs::write(rom.path(), banded_rom()).unwrap();
+    fs::write(patch.path(), banded_bps()).unwrap();
+    let mut members = vec![rom.path().to_path_buf()];
+    for name in if embedded_patch {
+        vec!["Game.srm"]
+    } else {
+        vec!["game.msu", "game-1.pcm"]
+    } {
+        let file = temp.child(name);
+        fs::write(file.path(), b"sidecar data").unwrap();
+        members.push(file.path().to_path_buf());
+    }
+    if embedded_patch {
+        members.push(patch.path().to_path_buf());
+    }
+    let archive = temp.child("rom.zip");
+    zip_members(
+        &temp,
+        archive.path(),
+        &members.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
+    );
+    let checksum = isolated_json_event(
+        &temp,
+        &[
+            "checksum",
+            "--input",
+            archive.path().to_str().unwrap(),
+            "--filter",
+            "rom",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(checksum["status"], "succeeded", "{checksum}");
+    let output = temp.child("patched.sfc");
+    let mut args = vec![
+        "patch",
+        "apply",
+        "--input",
+        archive.path().to_str().unwrap(),
+        "--output",
+        output.path().to_str().unwrap(),
+        "--no-compress",
+        "--filter",
+        "rom",
+        "--jsonl",
+    ];
+    if !embedded_patch {
+        args.extend(["--patch", patch.path().to_str().unwrap()]);
+    }
+    isolated_json_event(&temp, &args, 0);
+    assert_eq!(fs::read(output.path()).unwrap(), banded_rom_patched());
+}
+
+#[test]
+fn ingest_review_msu_sidecars_do_not_ambiguate() {
+    assert_review_sidecars_do_not_ambiguate(false);
+}
+
+#[test]
+fn ingest_review_save_sidecar_does_not_ambiguate() {
+    assert_review_sidecars_do_not_ambiguate(true);
+}
+
+#[test]
+fn ingest_review_zip_directories_are_not_payloads() {
+    for (folder, name, bytes, kind) in [
+        ("Game", "Game.sfc", banded_rom(), "rom"),
+        ("Hack", "Hack.bps", banded_bps(), "patch"),
+    ] {
+        let temp = setup_temp_dir();
+        let directory = temp.child(folder);
+        fs::create_dir(directory.path()).unwrap();
+        fs::write(directory.path().join(name), &bytes).unwrap();
+        let archive = temp.child("folder.zip");
+        zip_members(&temp, archive.path(), &[directory.path()]);
+        let events = review_ingest_events(&temp, archive.path());
+        let probe = events
+            .iter()
+            .find_map(|event| event["details"].get("probe_manifest"))
+            .unwrap();
+        assert_eq!(probe["is_rom"], kind == "rom", "{probe}");
+        let ingest = &events.last().unwrap()["details"]["ingest"];
+        assert_eq!(ingest["kind"], kind, "{ingest}");
+        let leaves = ingest[if kind == "rom" { "assets" } else { "patches" }]
+            .as_array()
+            .unwrap();
+        assert_eq!(leaves.len(), 1, "{ingest}");
+        assert_eq!(
+            fs::read(
+                leaves[0][if kind == "rom" { "path" } else { "leaf_path" }]
+                    .as_str()
+                    .unwrap()
+            )
+            .unwrap(),
+            bytes
+        );
+        if kind == "rom" {
+            isolated_json_event(
+                &temp,
+                &[
+                    "checksum",
+                    "--input",
+                    archive.path().to_str().unwrap(),
+                    "--filter",
+                    "rom",
+                    "--json",
+                ],
+                0,
+            );
+        }
     }
 }

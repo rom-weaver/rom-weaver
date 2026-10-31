@@ -642,6 +642,27 @@ fn probe_signature_matches_magic_but_never_falls_back_to_the_extension() {
 }
 
 #[test]
+fn probe_signature_prefix_matches_magic_from_bytes_without_a_file() {
+    let registry = PatchRegistry::new();
+    let label = Path::new("patch");
+
+    let ips = registry
+        .probe_signature_prefix(label, b"PATCH\0\0\0\0\x01\x01EOF")
+        .expect("ips magic");
+    assert_eq!(ips.descriptor().name, "IPS");
+    let bps = registry
+        .probe_signature_prefix(label, b"BPS1\0")
+        .expect("bps magic");
+    assert_eq!(bps.descriptor().name, "BPS");
+    assert!(
+        registry
+            .probe_signature_prefix(label, b"raw ROM payload")
+            .is_none()
+    );
+    assert!(registry.probe_signature_prefix(label, b"").is_none());
+}
+
+#[test]
 fn probe_reports_no_handler_for_bytes_and_an_extension_it_does_not_know() {
     let path = temp_file_path_with_extension("unknown-signature", "bin");
     fs::write(&path, b"NOTAPATCHATALL\0\0").expect("fixture");

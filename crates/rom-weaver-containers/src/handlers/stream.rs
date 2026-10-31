@@ -323,14 +323,10 @@ impl ContainerHandlerOperations for StreamContainerHandler {
         if !selections.matches(&output_name) {
             selections.ensure_all_matched()?;
         }
-        // The payload name is derived from the wrapper name (`rom.gz` -> `rom`), not stored metadata,
-        // so an extension-less name carries no kind information: the name filters cannot reject it.
-        // Callers classify such a payload by its bytes (patch magic) after extraction.
-        let extensionless = Path::new(&output_name).extension().is_none();
-        if !extensionless
-            && !request
-                .kind_filter
-                .matches_payload_or_container_name(&output_name)
+        // Unknown suffixes MUST reach content classification, including dots within game titles.
+        if !request
+            .kind_filter
+            .matches_payload_or_container_name(&output_name)
         {
             return Err(RomWeaverError::Validation(format!(
                 "no extract entries from `{}` matched {}",
@@ -342,7 +338,6 @@ impl ContainerHandlerOperations for StreamContainerHandler {
         trace!(
             format = self.descriptor.name,
             payload = %output_name,
-            extensionless,
             filter = %request.kind_filter.flag_label(),
             "stream payload accepted by kind filter"
         );

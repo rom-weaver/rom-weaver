@@ -1710,7 +1710,47 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    /// A named payload that no filter accepts is still rejected: only extension-less names relax.
+    #[test]
+    fn stream_extract_accepts_dotted_payload_under_kind_filters() {
+        let temp_dir = temp_dir_path("stream-dotted-filter");
+        fs::create_dir_all(&temp_dir).unwrap();
+        let payload = b"payload bytes";
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), DeflateCompression::new(6));
+        encoder.write_all(payload).unwrap();
+        let wrapped = encoder.finish().unwrap();
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("gz").unwrap();
+        for name in ["Dr. Mario (Japan, USA)", "Hack v1.1"] {
+            for filter in [
+                rom_weaver_core::ArchiveEntryKindFilter::new(true, false),
+                rom_weaver_core::ArchiveEntryKindFilter::new(false, true),
+            ] {
+                let source = temp_dir.join(format!("{name}.gz"));
+                fs::write(&source, &wrapped).unwrap();
+                let out_dir = temp_dir.join(format!("{}-{name}", filter.rom));
+                handler
+                    .extract(
+                        &rom_weaver_core::ContainerExtractRequest {
+                            source,
+                            out_dir: out_dir.clone(),
+                            selections: Vec::new(),
+                            kind_filter: filter,
+                            containing_archive: None,
+                            split_bin: false,
+                            ignore_common_files: true,
+                            overwrite: false,
+                            parent: None,
+                        },
+                        &test_context(&temp_dir, 1),
+                    )
+                    .unwrap();
+                assert_eq!(fs::read(out_dir.join(name)).unwrap(), payload);
+            }
+        }
+        fs::remove_dir_all(temp_dir).unwrap();
+    }
+
+    /// Named metadata payloads MUST remain excluded by ROM kind filters.
     #[test]
     fn stream_extract_still_rejects_unrelated_named_payload_under_kind_filter() {
         let temp_dir = temp_dir_path("stream-named-filter");

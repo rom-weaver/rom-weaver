@@ -72,7 +72,8 @@ pub use entries::{
     RegularArchiveEntryMetadata, RegularArchiveFileEntry, RegularArchiveProbeFormat,
     RegularArchiveProbeSummary, SelectedRegularArchiveEntry, list_regular_archive_entries,
     list_regular_archive_file_entries, probe_regular_archive, probe_regular_archive_format,
-    visit_selected_regular_archive_entries, with_regular_archive_file_entry_reader,
+    read_regular_archive_entry_prefixes, visit_selected_regular_archive_entries,
+    with_regular_archive_file_entry_reader,
 };
 pub use read::{ReadArchive, ReadFilter, with_raw_stream_reader};
 pub use write::{EntryFileType, EntrySpec, WriteArchive, WriteFilter, WriteFormat};

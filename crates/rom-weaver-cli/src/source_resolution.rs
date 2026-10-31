@@ -3,6 +3,7 @@ use rom_weaver_containers::libarchive::{RegularArchiveProbeFormat, probe_regular
 use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
 use super::weave_load::is_stream_codec_format_name;
 use super::*;
+use rom_weaver_core::KindFilterNameMatch;
 
 #[derive(Debug)]
 pub(super) struct ResolvedChecksumSource {
@@ -480,6 +481,11 @@ impl CliApp {
                 context,
             )
             .map_err(|error| {
+                if matches!(&error, RomWeaverError::Validation(message)
+                    if message.starts_with("no extract entries from "))
+                {
+                    return error;
+                }
                 RomWeaverError::Validation(format!(
                     "{} payload extraction failed for `{}` ({}): {error}",
                     labels.source_label,
@@ -567,10 +573,9 @@ impl CliApp {
         let candidates = if ignored_candidate_selected {
             candidates
         } else {
-            Self::filter_kind_auto_extract_candidates(
+            self.filter_kind_auto_extract_candidates(
                 current_source,
                 candidates,
-                labels.source_label,
                 options.kind_filter,
             )?
         };
@@ -663,28 +668,35 @@ impl CliApp {
     }
 
     fn filter_kind_auto_extract_candidates(
+        &self,
         current_source: &Path,
         candidates: Vec<ChecksumExtractCandidate>,
-        source_label: &str,
         kind_filter: ArchiveEntryKindFilter,
     ) -> Result<Vec<ChecksumExtractCandidate>> {
         if !kind_filter.enabled() {
             return Ok(candidates);
         }
-        let mut payload_matches = Vec::new();
-        let mut container_fallback_matches = Vec::new();
-        for candidate in &candidates {
-            if kind_filter.matches_payload_name(&candidate.display_name) {
-                payload_matches.push(candidate.clone());
-            } else if kind_filter.matches_container_fallback_name(&candidate.display_name) {
-                container_fallback_matches.push(candidate.clone());
-            }
-        }
-        let filtered = if payload_matches.is_empty() {
-            container_fallback_matches
-        } else {
-            payload_matches
-        };
+        let classified = candidates
+            .iter()
+            .map(|candidate| {
+                let kind = match kind_filter.classify_name(&candidate.display_name) {
+                    KindFilterNameMatch::Unnamed => {
+                        let is_patch = self.is_patch_payload(&candidate.source);
+                        if (kind_filter.patch && is_patch) || (kind_filter.rom && !is_patch) {
+                            KindFilterNameMatch::Unnamed
+                        } else {
+                            KindFilterNameMatch::Rejected
+                        }
+                    }
+                    // Resolving one candidate descends into a wrapper before reading its payload.
+                    KindFilterNameMatch::UnnamedStream => KindFilterNameMatch::Container,
+                    kind => kind,
+                };
+                trace!(candidate = %candidate.display_name, ?kind, "classified auto-extract candidate");
+                (kind, candidate.clone())
+            })
+            .collect();
+        let filtered = rom_weaver_core::select_kind_filter_matches(classified, false);
         trace!(
             source = %current_source.display(),
             candidate_count = candidates.len(),
@@ -695,7 +707,7 @@ impl CliApp {
         if filtered.is_empty() {
             let choices = Self::render_checksum_candidate_choices(&candidates);
             return Err(RomWeaverError::Validation(format!(
-                "no extracted {source_label} candidates from `{}` matched {}; candidates: {choices}",
+                "no extract entries from `{}` matched {}; candidates: {choices}",
                 current_source.display(),
                 kind_filter.flag_label()
             )));

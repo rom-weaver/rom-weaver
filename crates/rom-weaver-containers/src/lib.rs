@@ -99,7 +99,8 @@ use libarchive_support::{
     libarchive_open_read_stream, list_regular_archive_entries_with_libarchive,
     list_regular_archive_entry_records_with_libarchive,
     probe_regular_archive_details_with_libarchive, probe_regular_archive_with_libarchive,
-    probe_stream_with_libarchive, write_archive_with_libarchive,
+    probe_stream_with_libarchive, read_regular_archive_entry_prefixes_with_libarchive,
+    write_archive_with_libarchive,
 };
 pub use z3ds::{Z3dsSubtypeMetadata, z3ds_subtype_metadata};
 
