@@ -584,14 +584,15 @@ const renderWebappRoot = (): undefined => {
           });
           if (!accepted) return;
           await resetRomWeaverRunner({ terminate: true });
-          webappController.resetPage();
-          pageResetKey += 1;
-          renderWebappRoot();
-          await resetBrowserTransientOpfs().catch((error: unknown) => {
+          const cleanup = resetBrowserTransientOpfs().catch((error: unknown) => {
             logger.warn("Reset OPFS cleanup failed", {
               message: error instanceof Error ? error.message : String(error),
             });
           });
+          webappController.resetPage();
+          pageResetKey += 1;
+          renderWebappRoot();
+          await cleanup;
         })();
       },
       onRestoreDefaults: () => webappController.restoreDefaults(),

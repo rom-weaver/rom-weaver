@@ -36,6 +36,7 @@ import browserThreadWorkerUrl from "../../wasm/workers/browser-wasi-thread-worke
 import { createBrowserWorkerClient } from "../../wasm/workers/browser-worker-client.ts";
 import { registerRomWeaverShutdown, waitForRomWeaverShutdown } from "../../wasm/browser-opfs-shutdown.ts";
 import { formatCommandForTrace } from "../../wasm/workers/worker-trace-format.ts";
+import { registerBrowserOpfsRunScratch } from "../../storage/browser/browser-opfs-cleanup.ts";
 import { createVfsPathId } from "../../storage/vfs/path-id.ts";
 import { getManagedOpfsFileHandle, removeManagedOpfsPath } from "../protocol/opfs-path.ts";
 import { getStagedInputMs } from "../protocol/browser-opfs-source-ref.ts";
@@ -559,6 +560,9 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
           env: { ...(runOptions as { env?: Record<string, string> }).env, TMPDIR: scratchPath },
         } as RomWeaverRunnerRunJsonOptions)
       : runOptions;
+    const opfsRunId = createVfsPathId();
+    const releaseRunScratch = registerBrowserOpfsRunScratch(opfsRunId);
+    leaseRunOptions.env = { ...leaseRunOptions.env, ROM_WEAVER_OPFS_RUN_ID: opfsRunId };
     const recycleUnrecoverableError = (error: unknown) => {
       if (isRunnerUnrecoverableError(error)) {
         emitRunnerTraceLine(options, "runJson unrecoverable failure; terminating runner");
@@ -596,6 +600,9 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
         lease.runner.runJson(dispatchInput, leaseRunOptions).then(
           (result) => {
             if (settled) return;
+            if (result.scratchCleanupFailed)
+              logger.debug("Run scratch cleanup failed; retained for Reset", { opfsRunId });
+            if (result.ok && !result.scratchCleanupFailed) releaseRunScratch();
             settled = true;
             // Start the perceived-latency tail that ends when the result paints.
             markWasmFinished();

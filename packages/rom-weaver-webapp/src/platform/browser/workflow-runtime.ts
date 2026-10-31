@@ -36,6 +36,7 @@ import {
   registerBrowserSourceCleanup,
 } from "../../storage/browser/browser-source-primitives.ts";
 import { createCleanupOnce } from "../../storage/shared/disposal.ts";
+import { registerBrowserTransientOpfsPath } from "../../storage/browser/browser-opfs-cleanup.ts";
 import { joinVfsPath } from "../../storage/vfs/path.ts";
 import { createVfsPathId } from "../../storage/vfs/path-id.ts";
 import {
@@ -50,7 +51,8 @@ import type {
   RuntimeWorkerIo,
   WorkflowRuntime,
 } from "../../types/workflow-runtime-adapter.ts";
-import { noteRomWeaverIoBatch } from "../../workers/rom-weaver/runner-control.ts";
+import { requestBrowserOpfsStorage } from "../../workers/protocol/browser-opfs-worker-client.ts";
+import { noteRomWeaverIoBatch, waitForRomWeaverShutdown } from "../../workers/rom-weaver/runner-control.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
 import { triggerBrowserDownload } from "./browser-download.ts";
 import type { BrowserIdentifyPack } from "./identify-packs.ts";
@@ -552,6 +554,14 @@ const createBrowserWeaveRuntime = (
       source,
       trace: { logLevel, onLog },
     });
+    const releaseOwnership = registerBrowserTransientOpfsPath(extractDirPath);
+    const removeExtractDir = async () => {
+      await waitForRomWeaverShutdown();
+      const response = await requestBrowserOpfsStorage({ action: "remove", filePath: extractDirPath });
+      if (!response.success)
+        throw new Error(response.error?.message || `Unable to remove OPFS path: ${extractDirPath}`);
+      releaseOwnership();
+    };
     try {
       const result = await invokeRomWeaverWeaveParseWorker(
         {
@@ -574,7 +584,7 @@ const createBrowserWeaveRuntime = (
       const removeExtractedPath = async (path: string) => {
         await browserVfs.remove(path).catch(() => undefined);
         remainingPaths.delete(path);
-        if (!remainingPaths.size) await browserVfs.remove(extractDirPath).catch(() => undefined);
+        if (!remainingPaths.size) await removeExtractDir().catch(() => undefined);
       };
       const extractedCleanups: Array<() => Promise<void>> = [];
       for (const extractedPath of extractedPaths) {
@@ -591,11 +601,11 @@ const createBrowserWeaveRuntime = (
       }
       const cleanup = createCleanupOnce(async () => {
         await Promise.all(extractedCleanups.map((release) => release()));
-        await browserVfs.remove(extractDirPath).catch(() => undefined);
+        await removeExtractDir().catch(() => undefined);
       });
       return { cleanup, extractedFiles, result };
     } catch (error) {
-      await browserVfs.remove(extractDirPath).catch(() => undefined);
+      await removeExtractDir().catch(() => undefined);
       throw error;
     } finally {
       await staged.cleanup().catch(() => undefined);
