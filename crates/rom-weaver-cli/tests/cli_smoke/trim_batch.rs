@@ -892,13 +892,28 @@ fn trim_wbfs_revert_is_rejected_for_rvz_convert() {
     );
 }
 
+/// The failure label a single rejected trim input reports around the engine's message.
+fn rejected_trim_label(source: &Path, dry_run: bool, message: &str) -> String {
+    let verb = if dry_run { "trim simulation" } else { "trim" };
+    format!(
+        "{verb} completed with failures; processed=1 trimmed=0 already_trimmed=0 failed=1 skipped_unsupported=0; first_error={}: validation failed: {message}",
+        source.display()
+    )
+}
+
 #[test]
 fn trim_gamecube_disc_rejects_non_rvz_container_outputs() {
     let temp = setup_temp_dir();
     let source = temp.child("disc.iso");
     fs::write(source.path(), build_test_gamecube_iso(0x4000)).expect("iso fixture");
 
-    for (extension, label) in [("chd", "CHD"), ("z3ds", "Z3DS"), ("tar.gz", "TAR.GZ")] {
+    for (extension, label) in [
+        ("chd", "CHD"),
+        ("wbfs", "WBFS"),
+        ("gcz", "GCZ"),
+        ("z3ds", "Z3DS"),
+        ("tar.gz", "TAR.GZ"),
+    ] {
         let output = temp.child(format!("trimmed.{extension}"));
         let terminal = parse_single_json_line(&command_stdout(
             &[
@@ -913,11 +928,18 @@ fn trim_gamecube_disc_rejects_non_rvz_container_outputs() {
         ));
         assert_eq!(terminal["status"], "failed", "{extension}");
         let message = terminal["label"].as_str().expect("label");
-        assert!(
-            message.contains(&format!(
-                "{label} is not a valid trim output for GameCube/Wii discs"
-            )),
-            "{extension}: {message}"
+        // Every plain extension is rejected for these discs, so the message must not offer one.
+        assert_eq!(
+            message,
+            rejected_trim_label(
+                source.path(),
+                false,
+                &format!(
+                    "{label} is not a valid trim output for GameCube/Wii discs: `{}` must end in one of .rvz, .zip, .7z",
+                    output.path().display()
+                )
+            ),
+            "{extension}"
         );
         assert!(!output.path().exists(), "{extension} must not be written");
     }
@@ -1819,11 +1841,17 @@ fn trim_output_container_must_be_valid_for_the_input_type() {
                 "{name}: {message}"
             );
             assert!(message.contains(".zip, .7z"), "{name}: {message}");
-            assert!(
-                message.contains(
-                    "or be a plain name such as `.nds` that writes the trimmed file itself"
+            assert_eq!(
+                message,
+                rejected_trim_label(
+                    source.path(),
+                    dry_run,
+                    &format!(
+                        "{label} is not a valid trim output for NDS/DSi ROMs: `{}` must end in one of .zip, .7z, or be a plain name such as `.nds` that writes the trimmed file itself",
+                        output.path().display()
+                    )
                 ),
-                "{name}: {message}"
+                "{name}"
             );
             assert!(!output.path().exists(), "{name} must not be written");
         }
@@ -1894,6 +1922,50 @@ fn trim_output_z3ds_packs_a_3ds_rom_and_chd_packs_an_xiso() {
             .expect("label")
             .contains("CHD is not a valid trim output for 3DS ROMs")
     );
+}
+
+#[test]
+fn trim_3ds_output_rejects_z3ds_descriptor_extensions_other_than_z3ds() {
+    let temp = setup_temp_dir();
+    let rom_3ds = temp.child("game.3ds");
+    let mut rom = build_test_padded_rom(0x4567, 0x8000, 0xFF);
+    rom[0x100..0x104].copy_from_slice(b"NCCH");
+    rom[0x104..0x108].copy_from_slice(&0x22_u32.to_le_bytes());
+    rom[0x18E] = 0;
+    fs::write(rom_3ds.path(), &rom).expect("3ds fixture");
+
+    for name in [
+        "game.zcia",
+        "game.zcci",
+        "game.zcxi",
+        "game.z3dsx",
+        "GAME.ZCIA",
+    ] {
+        for dry_run in [false, true] {
+            let output = temp.child(name);
+            let extra: &[&str] = if dry_run { &["--dry-run"] } else { &[] };
+            let terminal = trim_to_output(rom_3ds.path(), output.path(), extra, 1);
+            assert_eq!(terminal["status"], "failed", "{name} dry_run={dry_run}");
+            assert_eq!(
+                terminal["label"].as_str().expect("label"),
+                rejected_trim_label(
+                    rom_3ds.path(),
+                    dry_run,
+                    &format!(
+                        "`{}` is not a valid trim output for 3DS ROMs: a trimmed .3ds is a cartridge image, so a Z3DS output must end in .z3ds (the .zcci, .zcxi, .zcia and .z3dsx names mark other 3DS file types)",
+                        output.path().display()
+                    )
+                ),
+                "{name} dry_run={dry_run}"
+            );
+            assert!(!output.path().exists(), "{name} must not be written");
+        }
+    }
+
+    let z3ds = temp.child("game.z3ds");
+    let terminal = trim_to_output(rom_3ds.path(), z3ds.path(), &[], 0);
+    assert_eq!(terminal["status"], "succeeded");
+    assert!(z3ds.path().exists());
 }
 
 #[test]

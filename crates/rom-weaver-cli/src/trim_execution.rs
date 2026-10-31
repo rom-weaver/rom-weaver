@@ -405,6 +405,24 @@ impl CliApp {
         {
             return Ok(TrimOutputPlan::Direct);
         }
+        // A 3DS trim input is always a `.3ds` cartridge image, but the other Z3DS descriptor
+        // extensions (`.zcci`, `.zcxi`, `.zcia`, `.z3dsx`) name different payload types and make
+        // `extract` write a file of that type (`.zcia` -> `.cia`) around the cartridge image.
+        if kind == TrimInputKind::ThreeDs
+            && descriptor.matches_name("z3ds")
+            && !extension
+                .as_deref()
+                .is_some_and(|extension| extension == "z3ds")
+        {
+            debug!(
+                destination = %destination.display(),
+                "3ds trim rejected a Z3DS descriptor extension other than .z3ds"
+            );
+            return Err(RomWeaverError::Validation(format!(
+                "`{}` is not a valid trim output for {subject}: a trimmed .3ds is a cartridge image, so a Z3DS output must end in .z3ds (the .zcci, .zcxi, .zcia and .z3dsx names mark other 3DS file types)",
+                destination.display()
+            )));
+        }
         let packable = kind.packable_output_formats();
         if !handler.capabilities().create
             || !packable.iter().any(|name| descriptor.matches_name(name))
@@ -422,12 +440,21 @@ impl CliApp {
                 ?kind,
                 "trim rejected an output container that is not valid for the input"
             );
-            let plain_name = source
-                .extension()
-                .map(|extension| format!(" such as `.{}`", extension.to_string_lossy()))
-                .unwrap_or_default();
+            // GameCube/Wii trims reject every plain extension, so only the other kinds can be
+            // told to use a plain name.
+            let plain_name = if kind == TrimInputKind::RvzConvert {
+                String::new()
+            } else {
+                let source_extension = source
+                    .extension()
+                    .map(|extension| format!(" such as `.{}`", extension.to_string_lossy()))
+                    .unwrap_or_default();
+                format!(
+                    ", or be a plain name{source_extension} that writes the trimmed file itself"
+                )
+            };
             return Err(RomWeaverError::Validation(format!(
-                "{} is not a valid trim output for {subject}: `{}` must end in one of {accepted}, or be a plain name{plain_name} that writes the trimmed file itself",
+                "{} is not a valid trim output for {subject}: `{}` must end in one of {accepted}{plain_name}",
                 format.to_ascii_uppercase(),
                 destination.display()
             )));

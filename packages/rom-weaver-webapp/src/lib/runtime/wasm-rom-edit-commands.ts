@@ -38,49 +38,45 @@ const invokeRomWeaverTrimWorker = async (
     const siblingPath = (fileName: string) => joinPath(scopePath.slice(0, scopePath.lastIndexOf("/")), fileName);
     // Matches the Rust `TrimCommand`: `source: Vec<PathBuf>` (required), `output: Option<PathBuf>`
     // (conflicts with `in_place`), `extension: Option<String>`, `in_place`, `dry_run`, `revert`,
-    // `recursive` (defaults true), `threads`. We always write a new file (`in_place: false`) and
-    // never restore padding (`revert: false`).
-    const runTrim = async (target: string, dryRun: boolean, trace: string) => {
-      const command = createRomWeaverCommand("trim", {
-        dry_run: dryRun,
-        in_place: false,
-        output: target,
-        revert: false,
-        input: [sourceFilePath],
-        ...(normalizedExtension ? { extension: normalizedExtension } : {}),
-        ...(threadArg ? { threads: threadArg } : {}),
-      });
-      emitRuntimeTrace({ logLevel: input.logLevel, onLog }, trace, { command });
-      const result = await runRomWeaverJson(
-        command,
-        toRomWeaverOptions({
-          logLevel: input.logLevel,
-          onEvent: dryRun ? undefined : relaySimpleProgress(onProgress),
-          onLog,
-          signal: input.signal,
-        }),
-      );
-      ensureRomWeaverSuccess(result, "Trim failed");
-      const terminal = getTerminalEvent(result);
-      const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
-      if (
-        details?.processed === 0 &&
-        typeof details.skipped_unsupported === "number" &&
-        details.skipped_unsupported > 0
-      ) {
-        throw new Error("This input does not support trimming");
-      }
-      return { details, result };
-    };
-
+    // `recursive` (defaults true), `threads`. We always write a new file (`in_place: false`), simulate
+    // only for the staging support probe (`dryRun`), and never restore padding (`revert: false`).
+    //
     // The engine writes a GameCube/Wii disc as RVZ and rejects any other output extension for it, but
-    // only it knows which inputs those are. Plan with an extensionless name, which it accepts for
-    // every input, then name the real output after what it will write.
-    const plan = await runTrim(siblingPath("trim-plan"), true, "runJson trim plan dispatch");
-    const isRvz = plan.details?.output_format === "rvz";
-    const actualFileName = isRvz ? replaceFileNameExtension(outputFileName, "rvz") : outputFileName;
-    const outputPath = isRvz ? siblingPath(actualFileName) : scopePath;
-    const { details, result } = input.dryRun ? plan : await runTrim(outputPath, false, "runJson trim dispatch");
+    // only it knows which inputs those are, and a trim is the heavy pass (an RVZ conversion or an XISO
+    // rebuild), so it runs once. Its output path is extensionless, which the engine accepts for every
+    // input; the user-visible name is chosen afterwards from the `output_format` that same run reports.
+    const outputPath = siblingPath("trim-output");
+    const command = createRomWeaverCommand("trim", {
+      dry_run: !!input.dryRun,
+      in_place: false,
+      output: outputPath,
+      revert: false,
+      input: [sourceFilePath],
+      ...(normalizedExtension ? { extension: normalizedExtension } : {}),
+      ...(threadArg ? { threads: threadArg } : {}),
+    });
+    emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson trim dispatch", { command });
+    const result = await runRomWeaverJson(
+      command,
+      toRomWeaverOptions({
+        logLevel: input.logLevel,
+        onEvent: relaySimpleProgress(onProgress),
+        onLog,
+        signal: input.signal,
+      }),
+    );
+    ensureRomWeaverSuccess(result, "Trim failed");
+    const terminal = getTerminalEvent(result);
+    const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
+    if (
+      details?.processed === 0 &&
+      typeof details.skipped_unsupported === "number" &&
+      details.skipped_unsupported > 0
+    ) {
+      throw new Error("This input does not support trimming");
+    }
+    const actualFileName =
+      details?.output_format === "rvz" ? replaceFileNameExtension(outputFileName, "rvz") : outputFileName;
 
     const emitted = getEmittedFileDetails(result);
     const sizeField = (value: unknown) =>

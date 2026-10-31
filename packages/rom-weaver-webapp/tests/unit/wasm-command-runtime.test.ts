@@ -652,9 +652,9 @@ describe("output-producing runtime workers", () => {
   });
 
   it("names a lossless disc trim by its actual format and retains logical size metadata", async () => {
-    mocks.runRomWeaverJson.mockResolvedValueOnce(succeededResult({ output_format: "rvz" })).mockResolvedValueOnce(
+    mocks.runRomWeaverJson.mockResolvedValue(
       succeededResult({
-        emitted_files: [{ path: "/out/trimmed.rvz", size_bytes: 700 }],
+        emitted_files: [{ path: "/out/trim-output", size_bytes: 700 }],
         output_format: "rvz",
         input_size: 65536,
         raw_size: 65536,
@@ -664,34 +664,40 @@ describe("output-producing runtime workers", () => {
       invokeRomWeaverTrimWorker({ outputName: "trimmed.iso", sourceFilePath: "/game.iso" }),
     ).resolves.toMatchObject({
       fileName: "trimmed.rvz",
-      filePath: "/out/trimmed.rvz",
+      filePath: "/out/trim-output",
       size: 700,
       trimSizeSummary: { inputSize: 65536, rawSize: 65536 },
     });
-    // The engine rejects a GameCube/Wii output that is not .rvz, .zip or .7z, so the real run is
-    // addressed to a .rvz path after an extensionless dry run reports what it will write.
-    expect(mocks.runRomWeaverJson).toHaveBeenCalledTimes(2);
-    const [[plan], [run]] = mocks.runRomWeaverJson.mock.calls as RunCall[];
-    expect(plan.args).toMatchObject({ dry_run: true, output: expect.stringMatching(/\/[^./]+$/) });
-    expect(run.args).toMatchObject({ dry_run: false, output: expect.stringMatching(/\/trimmed\.rvz$/) });
+    // The engine rejects a GameCube/Wii output that is not .rvz, .zip or .7z but accepts an
+    // extensionless one for every input, so the one real trim writes to an extensionless path and
+    // the name comes from the output_format it reports. A trim is the heavy pass: it must not repeat.
+    expect(mocks.runRomWeaverJson).toHaveBeenCalledTimes(1);
+    expect(lastCall()[0].args).toMatchObject({ dry_run: false, output: expect.stringMatching(/\/[^./]+$/) });
   });
 
   it("keeps the requested output name for a trim that is not an RVZ conversion", async () => {
-    mocks.runRomWeaverJson
-      .mockResolvedValueOnce(succeededResult({ processed: 1 }))
-      .mockResolvedValueOnce(
-        succeededResult({ emitted_files: [{ path: "/out/game (trimmed).nds", size_bytes: 12288 }] }),
-      );
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({ emitted_files: [{ path: "/out/trim-output", size_bytes: 12288 }], processed: 1 }),
+    );
     await expect(
       invokeRomWeaverTrimWorker({ outputName: "game (trimmed).nds", sourceFilePath: "/game.nds" }),
-    ).resolves.toMatchObject({ fileName: "game (trimmed).nds" });
-    expect(lastCall()[0].args).toMatchObject({
-      dry_run: false,
-      output: expect.stringMatching(/game \(trimmed\)\.nds$/),
-    });
+    ).resolves.toMatchObject({ fileName: "game (trimmed).nds", filePath: "/out/trim-output" });
+    expect(mocks.runRomWeaverJson).toHaveBeenCalledTimes(1);
+    expect(lastCall()[0].args).toMatchObject({ dry_run: false, output: expect.stringMatching(/\/[^./]+$/) });
   });
 
-  it("answers the staging support probe from the extensionless plan alone", async () => {
+  it("relays the progress of the single real trim", async () => {
+    mocks.runRomWeaverJson.mockImplementation((_command: unknown, options: { onEvent?: (event: unknown) => void }) => {
+      options.onEvent?.({ percent: 40, status: "running", step: "trim" });
+      return Promise.resolve(succeededResult({ output_format: "rvz" }));
+    });
+    const onProgress = vi.fn();
+    await invokeRomWeaverTrimWorker({ outputName: "trimmed.iso", sourceFilePath: "/game.iso" }, onProgress);
+    expect(mocks.runRomWeaverJson).toHaveBeenCalledTimes(1);
+    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ percent: 40 }));
+  });
+
+  it("answers the staging support probe with one dry run", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(succeededResult({ output_format: "rvz" }));
     await invokeRomWeaverTrimWorker({ dryRun: true, outputName: "", sourceFilePath: "/game.iso" });
     expect(mocks.runRomWeaverJson).toHaveBeenCalledTimes(1);
