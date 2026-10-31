@@ -86,5 +86,58 @@ describe("compression resolver output options", () => {
       );
       expect(hook.result.current.requestedCompression).toBe("none");
     });
+
+    describe("an explicit RVZ pick while the replacement ROM is still being identified", () => {
+      const resolveFor = (row: ReturnType<typeof createRomInputRow>) =>
+        renderHook(() =>
+          useCompressionResolver({
+            activeSettings: { output: { compression: "rvz" } } as ApplyPatchFormSettings,
+            compressionOptions: allOptions,
+            effectiveInputs: [new File([], row.info.fileName)],
+            outputCompressionEdited: true,
+            romInputs: [row],
+          }),
+        ).result.current;
+      const identified = (fileName: string, recommendedFormat?: string) =>
+        createRomInputRow({
+          id: "rom",
+          info: {
+            crc32: "0badc0de",
+            fileName,
+            ...(recommendedFormat ? { romType: { discFormat: "DVD", recommendedFormat } } : {}),
+          },
+        });
+
+      it("keeps requesting RVZ for a new .iso with no verdict yet, without offering RVZ", () => {
+        const resolved = resolveFor(createRomInputRow({ id: "rom", info: { fileName: "b.iso" } }));
+        expect(resolved.effectiveActiveCompression).toBe("rvz");
+        expect(resolved.requestedCompression).toBe("rvz");
+        expect(resolved.outputOptions.map(({ value }) => value)).not.toContain("rvz");
+      });
+
+      it("keeps the pick while the new .iso is still staging", () => {
+        const resolved = resolveFor(
+          createRomInputRow({ id: "rom", info: { crc32: "0badc0de", fileName: "b.iso" }, loading: true }),
+        );
+        expect(resolved.requestedCompression).toBe("rvz");
+      });
+
+      it("keeps RVZ once the verdict says GameCube or Wii", () => {
+        const resolved = resolveFor(identified("b.iso", "rvz"));
+        expect(resolved.requestedCompression).toBe("rvz");
+        expect(resolved.outputOptions.map(({ value }) => value)).toContain("rvz");
+      });
+
+      it("falls back to no compression once the verdict says the .iso is not a GameCube or Wii disc", () => {
+        expect(resolveFor(identified("b.iso")).requestedCompression).toBe("none");
+        expect(resolveFor(identified("b.iso", "chd")).requestedCompression).toBe("none");
+      });
+
+      it("does not hold RVZ for a file that can never be an RVZ source", () => {
+        expect(resolveFor(createRomInputRow({ id: "rom", info: { fileName: "game.nes" } })).requestedCompression).toBe(
+          "none",
+        );
+      });
+    });
   });
 });

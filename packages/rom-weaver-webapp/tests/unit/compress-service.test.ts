@@ -115,6 +115,17 @@ describe("compress service", () => {
     expect(await formatsOf([trimmed], probeWith({ recommendedFormat: "rvz" }))).toEqual(["zip", "7z", "rvz"]);
   });
 
+  it("does not offer Z3DS for a .bin or .iso the probe recognises as a 3DS image", async () => {
+    // The run has no way to name a Z3DS output from a `.bin` or `.iso` extension and would throw.
+    const probeWith = (probe: Record<string, string>) => async () =>
+      ({ compression: { probe: async () => ({ entries: [], ...probe }) } }) as unknown as WorkflowRuntime;
+    const formats = (name: string) =>
+      formatsOf([file(name, new Uint8Array(2048 * 4))], probeWith({ recommendedFormat: "z3ds" }));
+    expect(await formats("game.bin")).toEqual(["zip", "7z"]);
+    expect(await formats("game.iso")).toEqual(["zip", "7z", "chd"]);
+    expect(await formats("game.3ds")).toEqual(["zip", "7z", "z3ds"]);
+  });
+
   it("probes a file once for staging and the run, and probes again when the file set changed", async () => {
     const { runtime } = makeRuntime();
     const probe = vi.fn(async () => ({ entries: [], recommendedFormat: "rvz" }));

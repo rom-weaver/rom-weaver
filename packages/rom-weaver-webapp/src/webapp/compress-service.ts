@@ -194,10 +194,12 @@ const getCompressFormats = (input: ValidatedCompressInput): ConcreteCompressForm
   if (input.sheet) return input.sheetProblem ? [...ARCHIVE_FORMATS] : [...ARCHIVE_FORMATS, "chd"];
   if (input.files.length !== 1) return [...ARCHIVE_FORMATS];
 
-  const recommendedFormat = input.probe?.recommendedFormat;
+  // Only the RVZ verdict is handed on: the run cannot name a Z3DS output for a `.bin` or `.iso` source, so a
+  // Z3DS verdict there would offer a format that fails.
+  const rvzVerdict = String(input.probe?.recommendedFormat || "").toLowerCase() === "rvz";
   const source = {
     ...input.source,
-    metadata: { ...input.source.metadata, ...(recommendedFormat ? { recommendedFormat } : {}) },
+    metadata: { ...input.source.metadata, ...(rvzVerdict ? { recommendedFormat: "rvz" } : {}) },
   };
   const extension = getExtension(source.fileName);
   if (extension === "gdi" || ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS.includes(extension))

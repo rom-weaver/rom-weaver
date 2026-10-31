@@ -10,6 +10,11 @@ import {
   isLikelyDiscImageSize,
 } from "../../lib/compression/disc-image-policy.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
+import {
+  hasRomSpecificExtension,
+  hasUnambiguousRomSpecificCompressionInputExtension,
+  RVZ_COMPRESSION_INPUT_EXTENSIONS,
+} from "../../lib/compression/rom-specific-format-support.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import { getBinarySourceFileName, getBinarySourceSize } from "./input-session-helpers.ts";
 import { createOutputOptions } from "./output-view-model.ts";
@@ -20,6 +25,19 @@ import {
   getBareDefaultCompressionMode,
   getDefaultCompressionArchive,
 } from "./settings-context.tsx";
+
+// A shared extension (`.iso`, `.bin`) names an RVZ-capable disc only once the engine's verdict arrives with the
+// row's checksums, so until then an RVZ pick on such a file is undecided rather than unsupported.
+const isRvzVerdictPending = (firstRom: RomInputRowState | undefined) => {
+  if (!firstRom) return false;
+  const extension = getFileNameExtension(String(firstRom.info?.fileName || ""));
+  return (
+    hasRomSpecificExtension(RVZ_COMPRESSION_INPUT_EXTENSIONS, extension) &&
+    !hasUnambiguousRomSpecificCompressionInputExtension(RVZ_COMPRESSION_INPUT_EXTENSIONS, extension) &&
+    !firstRom.info?.romType?.recommendedFormat &&
+    (firstRom.loading || !!firstRom.progress || !(firstRom.info?.crc32 || firstRom.info?.sha1 || firstRom.info?.md5))
+  );
+};
 
 const isSpecialOutputCompression = (compression: CompressionFormat | string | null | undefined) =>
   isRomSpecificCompressionFormat(compression);
@@ -52,8 +70,12 @@ const resolveCompressionState = ({
     configuredOutputCompression !== null &&
     String(configuredOutputCompression).trim() !== "";
   const activeCompression = configuredOutputCompression || defaultArchiveCompression;
+  // An explicit RVZ pick survives a ROM swap: it is only dropped once the new ROM's verdict says it is no disc.
+  const keepsPendingRvzChoice =
+    outputCompressionEdited && activeCompression === "rvz" && isRvzVerdictPending(romInputs[0]);
   const effectiveActiveCompression =
     activeCompression === "auto" ||
+    keepsPendingRvzChoice ||
     OutputCompressionManager.supportsOutputCompression(z3dsLabelSource, activeCompression)
       ? activeCompression
       : "none";
