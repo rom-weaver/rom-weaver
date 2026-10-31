@@ -483,6 +483,185 @@ fn disc_image_with_options(
     image
 }
 
+// The writer omits exceptions, so fixtures MUST append the mastered tables themselves.
+fn set_wia_group_exceptions(
+    image: &mut Vec<u8>,
+    group_index: usize,
+    exceptions: &[crate::nod::io::wia::WIAException],
+) {
+    use crate::nod::io::wia::{WIADisc, WIAFileHeader, WIAGroup, WIAPartition};
+    let disc = WIADisc::read_from_bytes(
+        &image[size_of::<WIAFileHeader>()..size_of::<WIAFileHeader>() + size_of::<WIADisc>()],
+    )
+    .unwrap();
+    let partition_at = disc.partition_offset.get() as usize;
+    let partition = WIAPartition::read_from_bytes(
+        &image[partition_at..partition_at + size_of::<WIAPartition>()],
+    )
+    .unwrap();
+    let group_at = disc.group_offset.get() as usize
+        + (partition.partition_data[0].group_index.get() as usize + group_index)
+            * size_of::<WIAGroup>();
+    let mut entry =
+        WIAGroup::read_from_bytes(&image[group_at..group_at + size_of::<WIAGroup>()]).unwrap();
+    let old_at = entry.data_offset.get() as usize * 4;
+    let mut payload = (exceptions.len() as u16).to_be_bytes().to_vec();
+    payload.extend_from_slice(exceptions.as_bytes());
+    payload.resize(payload.len().next_multiple_of(4), 0);
+    if entry.data_size.get() == 0 {
+        let sectors: usize = partition
+            .partition_data
+            .iter()
+            .map(|data| data.num_sectors.get() as usize)
+            .sum();
+        let stored_sectors = (sectors - group_index * 64).min(64);
+        payload.resize(payload.len() + stored_sectors * SECTOR_DATA_SIZE, 0);
+    } else {
+        assert_eq!(&image[old_at..old_at + 4], &[0; 4]);
+        payload.extend_from_slice(&image[old_at + 4..old_at + entry.data_size.get() as usize]);
+    }
+    image.resize(image.len().next_multiple_of(4), 0);
+    entry.data_offset = U32::new((image.len() / 4) as u32);
+    entry.data_size = U32::new(payload.len() as u32);
+    image.extend_from_slice(&payload);
+    image[group_at..group_at + size_of::<WIAGroup>()].copy_from_slice(entry.as_bytes());
+    let image_size = image.len() as u64;
+    let header = WIAFileHeader::mut_from_bytes(&mut image[..size_of::<WIAFileHeader>()]).unwrap();
+    header.wia_file_size = U64::new(image_size);
+    header.file_head_hash = crate::nod::util::digest::sha1_hash(&header.as_bytes()[..0x34]);
+}
+
+fn multigroup_wia_image(damaged_sectors: &[(usize, usize)]) -> (Vec<u8>, Vec<u8>) {
+    use crate::nod::{io::wia::WIAException, util::digest::sha1_hash};
+    let data_at = (PART_OFFSET + DATA_OFF) as usize;
+    let sectors = 128 + DATA_SECTORS;
+    let mut iso = build_wii_image(true, Damage::None);
+    iso.resize(data_at + sectors * SECTOR_SIZE, 0);
+    let header = WiiPartitionHeader::mut_from_bytes(
+        &mut iso[PART_OFFSET as usize..PART_OFFSET as usize + size_of::<WiiPartitionHeader>()],
+    )
+    .unwrap();
+    header.data_size = U32::new((sectors * SECTOR_SIZE / 4) as u32);
+    let mut all_exceptions = Vec::new();
+    for group_index in 0..3 {
+        let real_sectors = if group_index == 2 { DATA_SECTORS } else { 64 };
+        let (mut group, mut h3) = if group_index == 0 {
+            build_sector_group_plaintext()
+        } else {
+            let mut group = vec![0; SECTOR_GROUP_SIZE];
+            for sector in 0..64 {
+                for (offset, byte) in sector_mut(&mut group, sector)[HASHES_SIZE..]
+                    .iter_mut()
+                    .enumerate()
+                {
+                    *byte = (offset * 17 + group_index) as u8;
+                }
+            }
+            let hashes = hash_sector_group(group.as_slice().try_into().unwrap(), false);
+            for sector in 0..64 {
+                hashes.apply(sector_mut(&mut group, sector), sector);
+            }
+            (group, hashes.h3_hash)
+        };
+        if group_index == 2 {
+            let mut h1 = group[0x280..0x320].to_vec();
+            h1[real_sectors * 20..].fill(0xA5);
+            let mut h2 = vec![0x5A; 0xA0];
+            h2[..20].copy_from_slice(&sha1_hash(&h1));
+            h3 = sha1_hash(&h2);
+            for sector in 0..real_sectors {
+                let data = sector_mut(&mut group, sector);
+                data[0x280..0x320].copy_from_slice(&h1);
+                data[0x340..0x3E0].copy_from_slice(&h2);
+            }
+        }
+        for &(damaged_group, sector) in damaged_sectors {
+            if damaged_group == group_index {
+                assert!(sector < real_sectors);
+                sector_mut(&mut group, sector)[0x280 + (sector % 8) * 20] ^= 1;
+            }
+        }
+        let mut exceptions = Vec::new();
+        for sector in 0..real_sectors {
+            let data = sector_mut(&mut group, sector);
+            if group_index == 2 || damaged_sectors.contains(&(group_index, sector)) {
+                for offset in (0x280..0x320).step_by(20).chain((0x340..0x3E0).step_by(20)) {
+                    exceptions.push(WIAException {
+                        offset: U16::new((sector * HASHES_SIZE + offset) as u16),
+                        hash: data[offset..offset + 20].try_into().unwrap(),
+                    });
+                }
+            }
+            encrypt_sector(data, &TITLE_KEY);
+        }
+        let at = data_at + group_index * SECTOR_GROUP_SIZE;
+        iso[at..at + real_sectors * SECTOR_SIZE]
+            .copy_from_slice(&group[..real_sectors * SECTOR_SIZE]);
+        let h3_at = (PART_OFFSET + H3_OFF) as usize + group_index * 20;
+        iso[h3_at..h3_at + 20].copy_from_slice(&h3);
+        all_exceptions.push(exceptions);
+    }
+    let mut image = wia_image(&iso, crate::nod::common::Compression::None);
+    for (group_index, exceptions) in all_exceptions.iter().enumerate() {
+        if !exceptions.is_empty() {
+            set_wia_group_exceptions(&mut image, group_index, exceptions);
+        }
+    }
+    (image, iso)
+}
+
+fn wia_image_exceeding_h3_bound(format: crate::nod::common::Format) -> Vec<u8> {
+    use crate::nod::{
+        io::wia::{RVZGroup, WIADisc, WIAFileHeader, WIAGroup, WIARawData},
+        util::digest::sha1_hash,
+    };
+    let iso = build_wii_image(true, Damage::None);
+    let mut image = disc_image_with_options(
+        &iso,
+        format,
+        crate::nod::common::Compression::None,
+        &Default::default(),
+    );
+    let disc = WIADisc::read_from_bytes(
+        &image[size_of::<WIAFileHeader>()..size_of::<WIAFileHeader>() + size_of::<WIADisc>()],
+    )
+    .unwrap();
+    let raw_at = disc.raw_data_offset.get() as usize;
+    let raw = image[raw_at..raw_at + disc.num_raw_data.get() as usize * size_of::<WIARawData>()]
+        .chunks_exact(size_of::<WIARawData>())
+        .map(|bytes| WIARawData::read_from_bytes(bytes).unwrap())
+        .find(|raw| raw.start_offset() == PART_OFFSET)
+        .expect("raw partition header region");
+    assert_eq!(raw.num_groups.get(), 1);
+    let mut payload = iso[raw.start_offset() as usize..raw.end_offset() as usize].to_vec();
+    let header =
+        WiiPartitionHeader::mut_from_bytes(&mut payload[..size_of::<WiiPartitionHeader>()])
+            .unwrap();
+    header.data_size = U32::new((((H3_TABLE_SIZE / 20) * 64 + 1) * SECTOR_SIZE / 4) as u32);
+    image.resize(image.len().next_multiple_of(4), 0);
+    let offset = image.len() / 4;
+    image.extend_from_slice(&payload);
+    let group_size = if format == crate::nod::common::Format::Rvz {
+        size_of::<RVZGroup>()
+    } else {
+        size_of::<WIAGroup>()
+    };
+    let group_at = disc.group_offset.get() as usize + raw.group_index.get() as usize * group_size;
+    let group =
+        WIAGroup::mut_from_bytes(&mut image[group_at..group_at + size_of::<WIAGroup>()]).unwrap();
+    group.data_offset = U32::new(offset as u32);
+    group.data_size = U32::new(payload.len() as u32);
+    if format == crate::nod::common::Format::Rvz {
+        let group = RVZGroup::mut_from_bytes(&mut image[group_at..group_at + group_size]).unwrap();
+        group.rvz_packed_size = U32::new(0);
+    }
+    let size = image.len() as u64;
+    let header = WIAFileHeader::mut_from_bytes(&mut image[..size_of::<WIAFileHeader>()]).unwrap();
+    header.wia_file_size = U64::new(size);
+    header.file_head_hash = sha1_hash(&header.as_bytes()[..0x34]);
+    image
+}
+
 fn extract_wia_image(
     image: &[u8],
 ) -> (
@@ -508,6 +687,41 @@ fn extract_wia_image_with_threads(
     image: &[u8],
     existing_output: Option<&[u8]>,
     threads: usize,
+) -> (
+    crate::test_support::TempPath,
+    rom_weaver_core::Result<rom_weaver_core::OperationReport>,
+    Arc<rom_weaver_core::RecordingProgressSink>,
+) {
+    extract_wia_image_with_controls(image, existing_output, threads, false, None)
+}
+
+struct WiaExtractProgress {
+    sink: Arc<rom_weaver_core::RecordingProgressSink>,
+    cancel: rom_weaver_core::CancellationToken,
+    cancel_at: Option<f32>,
+    output_path: std::path::PathBuf,
+}
+
+impl rom_weaver_core::ProgressSink for WiaExtractProgress {
+    fn emit(&self, event: rom_weaver_core::ProgressEvent) {
+        if event.stage == "extract"
+            && let (Some(percent), Some(cancel_at)) = (event.percent, self.cancel_at)
+            && percent >= cancel_at
+            && percent < 100.0
+        {
+            assert!(std::fs::metadata(&self.output_path).unwrap().len() > 0);
+            self.cancel.cancel();
+        }
+        self.sink.emit(event);
+    }
+}
+
+fn extract_wia_image_with_controls(
+    image: &[u8],
+    existing_output: Option<&[u8]>,
+    threads: usize,
+    overwrite: bool,
+    cancel_at: Option<f32>,
 ) -> (
     crate::test_support::TempPath,
     rom_weaver_core::Result<rom_weaver_core::OperationReport>,
@@ -544,15 +758,22 @@ fn extract_wia_image_with_threads(
         containing_archive: None,
         split_bin: false,
         ignore_common_files: false,
-        overwrite: false,
+        overwrite,
         parent: None,
     };
     let sink = Arc::new(RecordingProgressSink::default());
+    let cancel = CancellationToken::new();
+    let progress = Arc::new(WiaExtractProgress {
+        sink: sink.clone(),
+        cancel: cancel.clone(),
+        cancel_at,
+        output_path: temp.join("out/disc.iso"),
+    });
     let context = OperationContext::new(
         ThreadBudget::Fixed(threads),
         temp.join("scratch"),
-        sink.clone(),
-        CancellationToken::new(),
+        progress,
+        cancel,
     );
     let registry = crate::ContainerRegistry::new();
     let result = registry
@@ -631,23 +852,9 @@ fn wia_extract_preserves_partial_group_with_mastered_hash_exceptions() {
     .unwrap();
     let group_at = disc.group_offset.get() as usize
         + partition.partition_data[0].group_index.get() as usize * size_of::<WIAGroup>();
-    let mut entry =
+    set_wia_group_exceptions(&mut image, 0, &exceptions);
+    let entry =
         WIAGroup::read_from_bytes(&image[group_at..group_at + size_of::<WIAGroup>()]).unwrap();
-    let old_at = entry.data_offset.get() as usize * 4;
-    assert_eq!(&image[old_at..old_at + 4], &[0; 4]);
-    let mut payload = (exceptions.len() as u16).to_be_bytes().to_vec();
-    payload.extend_from_slice(exceptions.as_bytes());
-    payload.resize(payload.len().next_multiple_of(4), 0);
-    payload.extend_from_slice(&image[old_at + 4..old_at + entry.data_size.get() as usize]);
-    image.resize(image.len().next_multiple_of(4), 0);
-    entry.data_offset = U32::new((image.len() / 4) as u32);
-    entry.data_size = U32::new(payload.len() as u32);
-    image.extend_from_slice(&payload);
-    image[group_at..group_at + size_of::<WIAGroup>()].copy_from_slice(entry.as_bytes());
-    let image_size = image.len() as u64;
-    let header = WIAFileHeader::mut_from_bytes(&mut image[..size_of::<WIAFileHeader>()]).unwrap();
-    header.wia_file_size = U64::new(image_size);
-    header.file_head_hash = sha1_hash(&header.as_bytes()[..0x34]);
     let (temp, result) = extract_wia_image(&image);
     let report = result.expect("real sectors with valid mastered hashes must extract");
     assert!(
@@ -791,10 +998,7 @@ fn wia_rvz_extract_warns_on_wii_hash_mismatches() {
 
 #[test]
 fn wia_extract_refuses_existing_output_before_verification() {
-    let image = wia_image(
-        &build_wii_image(true, Damage::H3Table),
-        crate::nod::common::Compression::None,
-    );
+    let image = wia_image_exceeding_h3_bound(crate::nod::common::Format::Wia);
     let sentinel = b"existing ISO must survive";
     let (temp, result, sink) = extract_wia_image_with_output(&image, Some(sentinel));
     let error = result.expect_err("existing output must be refused before hash verification");
@@ -806,11 +1010,258 @@ fn wia_extract_refuses_existing_output_before_verification() {
     );
     assert_eq!(std::fs::read(temp.join("out/disc.iso")).unwrap(), sentinel);
     assert!(
-        !sink
-            .snapshot()
-            .iter()
-            .any(|event| event.stage.starts_with("verify-"))
+        !sink.snapshot().iter().any(|event| event.stage == "extract"),
+        "refusal must precede copying"
     );
+    let (temp, result) = extract_wia_image(&image);
+    let error = result.expect_err("without an existing output, H3 bounds must fail");
+    assert!(
+        error
+            .to_string()
+            .contains("H3 table missing hash for group"),
+        "{error}"
+    );
+    assert!(!temp.join("out/disc.iso").exists());
+}
+
+#[test]
+fn wia_extract_replays_later_group_exceptions_in_order_across_threads() {
+    let (valid, iso) = multigroup_wia_image(&[]);
+    let (temp, result) = extract_wia_image(&valid);
+    let report = result.expect("mastered later-group H1/H2 exceptions must be valid");
+    assert!(
+        report.details.as_ref().unwrap().get("warnings").is_none(),
+        "{report:?}"
+    );
+    assert!(std::fs::read(temp.join("out/disc.iso")).unwrap() == iso);
+
+    let (image, iso) = multigroup_wia_image(&[(1, 3), (2, 1)]);
+    let disc = open_wii_disc(&image);
+    let mut partition = disc
+        .open_partition(
+            0,
+            &PartitionOptions {
+                validate_hashes: true,
+                hash_mismatch_warnings: true,
+            },
+        )
+        .unwrap();
+    std::io::copy(&mut partition, &mut std::io::sink()).unwrap();
+    let summary = partition.hash_mismatches().unwrap();
+    assert!(
+        summary
+            .first
+            .as_ref()
+            .unwrap()
+            .starts_with("first group 1, sector 67: Invalid H1 hash"),
+        "{summary:?}"
+    );
+    assert_eq!((summary.hashes, summary.sectors, summary.groups), (4, 2, 2));
+    let expected = format!(
+        "wia partition 0 hash mismatch: {}; 4 hashes in 2 sectors across 2 groups; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished",
+        summary.first.as_ref().unwrap(),
+    );
+    let mut warnings = Vec::new();
+    for threads in [1, 4] {
+        let mut disc = DiscReader::new_stream(
+            Box::new(CloneableStream::new(Cursor::new(image.clone()))),
+            &DiscOptions {
+                preloader_threads: if threads == 1 { 0 } else { threads },
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        disc.enable_hash_verification(0).unwrap();
+        let mut copied = Vec::new();
+        disc.read_to_end(&mut copied).unwrap();
+        assert_eq!(disc.next_unverified_group(0), Some(3));
+        let replayed = disc.hash_mismatches(0).unwrap();
+        assert_eq!(
+            (
+                &replayed.first,
+                replayed.hashes,
+                replayed.sectors,
+                replayed.groups
+            ),
+            (
+                &summary.first,
+                summary.hashes,
+                summary.sectors,
+                summary.groups
+            )
+        );
+        assert!(copied == iso);
+        let (temp, result, _) = extract_wia_image_with_threads(&image, None, threads);
+        let report = result.expect("later group hash mismatches must warn");
+        let actual = report.details.as_ref().unwrap()["warnings"]
+            .as_array()
+            .unwrap();
+        assert_eq!(actual, &[serde_json::Value::String(expected.clone())]);
+        assert!(std::fs::read(temp.join("out/disc.iso")).unwrap() == iso);
+        warnings.push(actual.clone());
+    }
+    assert_eq!(warnings[0], warnings[1]);
+}
+
+#[test]
+fn wia_extract_verifies_groups_past_disc_end_and_appends_warnings() {
+    use crate::nod::{io::wia::WIAFileHeader, util::digest::sha1_hash};
+    for damaged in [&[(2, 1)][..], &[(0, 3), (2, 1)][..]] {
+        let (mut image, iso) = multigroup_wia_image(damaged);
+        let copy_end = (PART_OFFSET + DATA_OFF) as usize + SECTOR_GROUP_SIZE;
+        let header =
+            WIAFileHeader::mut_from_bytes(&mut image[..size_of::<WIAFileHeader>()]).unwrap();
+        header.iso_file_size = U64::new(copy_end as u64);
+        header.file_head_hash = sha1_hash(&header.as_bytes()[..0x34]);
+
+        let mut disc = open_wii_disc(&image);
+        disc.enable_hash_verification(0).unwrap();
+        let mut copied = Vec::new();
+        disc.read_to_end(&mut copied).unwrap();
+        assert_eq!(copied.len(), copy_end);
+        assert_eq!(disc.next_unverified_group(0), Some(1));
+        assert_eq!(
+            disc.hash_mismatches(0).unwrap().groups,
+            u64::from(damaged.len() == 2)
+        );
+
+        for threads in [1, 4] {
+            let (temp, result, _) = extract_wia_image_with_threads(&image, None, threads);
+            let report = result.expect("uncopied groups must still produce hash warnings");
+            let warnings = report.details.as_ref().unwrap()["warnings"]
+                .as_array()
+                .unwrap();
+            assert_eq!(warnings.len(), 1);
+            let warning = warnings[0].as_str().unwrap();
+            let (first, counts) = if damaged.len() == 1 {
+                (
+                    "first group 2, sector 129: Invalid H1 hash",
+                    "2 hashes in 1 sectors across 1 groups",
+                )
+            } else {
+                (
+                    "first group 0, sector 3: Invalid H1 hash",
+                    "4 hashes in 2 sectors across 2 groups",
+                )
+            };
+            assert!(warning.contains(first), "{warning}");
+            assert!(warning.contains(counts), "{warning}");
+            assert!(std::fs::read(temp.join("out/disc.iso")).unwrap() == iso[..copy_end]);
+        }
+    }
+}
+
+#[test]
+fn wia_rvz_extract_rejects_partition_exceeding_h3_table_before_output() {
+    for format in [
+        crate::nod::common::Format::Wia,
+        crate::nod::common::Format::Rvz,
+    ] {
+        let image = wia_image_exceeding_h3_bound(format);
+        let (temp, result, sink) = extract_wia_image_with_output(&image, None);
+        let error = result.expect_err("partition size must fit the H3 table");
+        let format = if format == crate::nod::common::Format::Wia {
+            "wia"
+        } else {
+            "rvz"
+        };
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "validation failed: {format} partition 0 integrity check failed: H3 table missing hash for group {}",
+                H3_TABLE_SIZE / 20,
+            )
+        );
+        assert!(!temp.join("out/disc.iso").exists());
+        assert!(!sink.snapshot().iter().any(|event| event.stage == "extract"));
+    }
+}
+
+struct WarningCounter(Arc<std::sync::atomic::AtomicUsize>);
+
+impl tracing::Subscriber for WarningCounter {
+    fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
+        *metadata.level() == tracing::Level::WARN
+    }
+    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+    fn event(&self, _: &tracing::Event<'_>) {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+    fn enter(&self, _: &tracing::span::Id) {}
+    fn exit(&self, _: &tracing::span::Id) {}
+}
+
+#[test]
+fn wia_rvz_extract_cancel_mid_copy_removes_output_without_warnings() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    // This test MUST run alone because tracing caches callsite interest across test threads.
+    const CHILD: &str = "ROM_WEAVER_WIA_CANCEL_TRACE_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let module = module_path!().split_once("::").unwrap().1;
+        let test =
+            format!("{module}::wia_rvz_extract_cancel_mid_copy_removes_output_without_warnings");
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", &test, "--nocapture"])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(
+            stdout.contains("1 passed; 0 failed"),
+            "child must run the cancellation test: {stdout}"
+        );
+        return;
+    }
+    let warnings = Arc::new(AtomicUsize::new(0));
+    tracing::subscriber::with_default(WarningCounter(warnings.clone()), || {
+        for format in [
+            crate::nod::common::Format::Wia,
+            crate::nod::common::Format::Rvz,
+        ] {
+            let image = wii_image_with_hash_and_digest_damage(format);
+            warnings.store(0, Ordering::SeqCst);
+            let (temp, result, sink) =
+                extract_wia_image_with_controls(&image, None, 1, false, Some(90.0));
+            assert!(
+                matches!(result, Err(rom_weaver_core::RomWeaverError::Cancelled)),
+                "{result:?}"
+            );
+            let events = sink.snapshot();
+            assert!(events.iter().any(|event| event.stage == "extract"
+                && event.percent.is_some_and(|p| (90.0..100.0).contains(&p))));
+            assert!(
+                !events
+                    .iter()
+                    .any(|event| event.stage == "extract" && event.percent == Some(100.0))
+            );
+            assert!(!temp.join("out/disc.iso").exists());
+            assert_eq!(
+                warnings.load(Ordering::SeqCst),
+                0,
+                "cancelled extraction must not emit warnings"
+            );
+            let (_, result, _) = extract_wia_image_with_output(&image, None);
+            let report = result.expect("uncancelled damaged input must extract with warnings");
+            assert_eq!(
+                report.details.as_ref().unwrap()["warnings"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                5
+            );
+            assert_eq!(
+                warnings.load(Ordering::SeqCst),
+                5,
+                "warning capture must see the uncancelled run"
+            );
+        }
+    });
 }
 
 #[test]
@@ -933,13 +1384,24 @@ fn wia_rvz_extract_removes_partial_output_when_decoding_fails_after_hash_warning
         crate::nod::common::Format::Wia,
         crate::nod::common::Format::Rvz,
     ] {
-        let mut image = wii_image_with_hash_and_digest_damage(format);
+        let (_, mut iso) = multigroup_wia_image(&[]);
+        iso[(PART_OFFSET + H3_OFF) as usize] ^= 1;
+        let mut image = disc_image_with_options(
+            &iso,
+            format,
+            crate::nod::common::Compression::None,
+            &Default::default(),
+        );
         // The partition group payload is stored last; losing its tail fails mid-copy, after the
         // output exists, so the partial ISO must be removed.
         image.truncate(image.len() - 0x100);
-        let (temp, result) = extract_wia_image(&image);
-        result.expect_err("a truncated payload must fail extraction");
-        assert!(!temp.join("out/disc.iso").exists());
+        for existing in [None, Some(b"previous ISO".as_slice())] {
+            let (temp, result, sink) =
+                extract_wia_image_with_controls(&image, existing, 1, true, None);
+            result.expect_err("a truncated payload must fail extraction");
+            assert!(sink.snapshot().iter().any(|event| event.stage == "extract" && event.percent.is_some_and(|p| p > 0.0)));
+            assert!(!temp.join("out/disc.iso").exists());
+        }
     }
 }
 
