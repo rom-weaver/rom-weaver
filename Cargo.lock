@@ -722,6 +722,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "deflate64"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac6b926516df9c60bfa16e107b21086399f8285a44ca9711344b9e553c5146e2"
+
+[[package]]
 name = "dialoguer"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1828,6 +1834,7 @@ dependencies = [
  "crossbeam-channel",
  "crossbeam-utils",
  "crypto-common 0.2.2",
+ "deflate64",
  "diffy",
  "digest 0.11.3",
  "dyn-clone",

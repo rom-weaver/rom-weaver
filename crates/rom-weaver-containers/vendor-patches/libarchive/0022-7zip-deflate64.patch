@@ -1,0 +1,97 @@
+diff --git a/libarchive/archive_read_support_format_7zip.c b/libarchive/archive_read_support_format_7zip.c
+--- a/libarchive/archive_read_support_format_7zip.c
++++ b/libarchive/archive_read_support_format_7zip.c
+@@ -104,6 +104,11 @@
+ #define _7Z_LZMA	0x030101
+ #define _7Z_LZMA2	0x21
+ #define _7Z_DEFLATE	0x040108
++#define _7Z_DEFLATE64	0x040109
++
++extern void *rom_weaver_deflate64_new(void);
++extern void rom_weaver_deflate64_free(void *);
++extern int rom_weaver_deflate64_inflate(void *, const void *, size_t *, void *, size_t *);
+ #define _7Z_BZ2		0x040202
+ #define _7Z_PPMD	0x030401
+ #define _7Z_DELTA	0x03
+@@ -342,6 +347,7 @@
+ 	bz_stream		 bzstream;
+ 	int			 bzstream_valid;
+ #endif
++	void			*deflate64;
+ 	/* Decoding deflate data. */
+ #ifdef HAVE_ZLIB_H
+ 	z_stream		 stream;
+@@ -1389,6 +1395,7 @@
+ 	case _7Z_COPY:
+ 	case _7Z_BZ2:
+ 	case _7Z_DEFLATE:
++	case _7Z_DEFLATE64:
+ 	case _7Z_ZSTD:
+ 	case _7Z_PPMD:
+ 		if (coder2 != NULL) {
+@@ -1650,6 +1657,10 @@
+ 		return (ARCHIVE_FAILED);
+ #endif
+ 	}
++	case _7Z_DEFLATE64:
++		rom_weaver_deflate64_free(zip->deflate64);
++		zip->deflate64 = rom_weaver_deflate64_new();
++		break;
+ 	case _7Z_DEFLATE:
+ #ifdef HAVE_ZLIB_H
+ 		if (zip->stream_valid)
+@@ -1704,10 +1715,12 @@
+ 			t_avail_out--;
+ 			zip->odd_bcj_size--;
+ 		}
+-		if (o_avail_in == 0 || t_avail_out == 0) {
++		/* Deflate64 MUST drain buffered output after consuming all input. */
++		if ((o_avail_in == 0 && zip->codec != _7Z_DEFLATE64) ||
++		    t_avail_out == 0) {
+ 			*used = o_avail_in - t_avail_in;
+ 			*outbytes = o_avail_out - t_avail_out;
+-			if (o_avail_in == 0)
++			if (o_avail_in == 0 && zip->codec != _7Z_DEFLATE64)
+ 				ret = ARCHIVE_EOF;
+ 			return (ret);
+ 		}
+@@ -1925,6 +1938,17 @@
+ 		t_avail_out = zip->bzstream.avail_out;
+ 		break;
+ #endif
++	case _7Z_DEFLATE64:
++		r = rom_weaver_deflate64_inflate(zip->deflate64, t_next_in,
++		    &t_avail_in, t_next_out, &t_avail_out);
++		if (r < 0) {
++			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
++			    "Deflate64 decompression failed");
++			return (ARCHIVE_FAILED);
++		}
++		if (r > 0)
++			ret = ARCHIVE_EOF;
++		break;
+ #ifdef HAVE_ZLIB_H
+ 	case _7Z_DEFLATE:
+ 		zip->stream.next_in = (Bytef *)(uintptr_t)t_next_in;
+@@ -1945,8 +1969,11 @@
+ 			size_t l = x86_Convert(zip, buff, *outbytes);
+ 
+ 			zip->odd_bcj_size = *outbytes - l;
++			/* Deflate64 MAY consume all input before its last drain;
++			 * BCJ MUST retain the tail until the decoder reaches EOF. */
+ 			if (zip->odd_bcj_size > 0 && zip->odd_bcj_size <= 4 &&
+-		    	o_avail_in && ret != ARCHIVE_EOF) {
++			    (o_avail_in || zip->codec == _7Z_DEFLATE64) &&
++			    ret != ARCHIVE_EOF) {
+ 				memcpy(zip->odd_bcj, ((unsigned char *)buff) + l,
+ 			    	zip->odd_bcj_size);
+ 				*outbytes = l;
+@@ -2137,6 +2164,8 @@
+ 		zip->stream_valid = 0;
+ 	}
+ #endif
++	rom_weaver_deflate64_free(zip->deflate64);
++	zip->deflate64 = NULL;
+ #ifdef HAVE_ZSTD_H
+ 	if (zip->zstdstream_valid)
+ 		ZSTD_freeDStream(zip->zstd_dstream);

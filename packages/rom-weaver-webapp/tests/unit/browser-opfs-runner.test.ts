@@ -113,12 +113,25 @@ vi.mock("../../src/wasm/browser-opfs-proxy-runtime.ts", () => ({
   })),
 }));
 
-vi.mock("../../src/wasm/browser-opfs-run-cleanup.ts", () => ({
-  cleanupBrowserOpfsRunScratch: vi.fn(async (args: { runId: string; workGuestPath: string }) => {
-    harness.runScratchCleanups.push({ runId: args.runId, workGuestPath: args.workGuestPath });
-    if (harness.runScratchError) throw harness.runScratchError;
+vi.mock("../../src/workers/protocol/browser-opfs-worker-client.ts", () => ({
+  requestBrowserOpfsStorage: vi.fn(async (request: { action: string }) => {
+    if (request.action === "list-metadata" && harness.runScratchError) throw harness.runScratchError;
+    return { success: true, entries: [] };
   }),
 }));
+
+vi.mock("../../src/wasm/browser-opfs-run-cleanup.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/wasm/browser-opfs-run-cleanup.ts")>();
+  return {
+    ...actual,
+    cleanupBrowserOpfsRunScratch: vi.fn(async (args: Parameters<typeof actual.cleanupBrowserOpfsRunScratch>[0]) => {
+      const runId = [...args.runIds][0];
+      if (!runId) throw new Error("the runner must register a scratch run id");
+      harness.runScratchCleanups.push({ runId, workGuestPath: args.workGuestPath });
+      await actual.cleanupBrowserOpfsRunScratch(args);
+    }),
+  };
+});
 
 vi.mock("../../src/wasm/browser-wasi-thread-pool.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/wasm/browser-wasi-thread-pool.ts")>();
@@ -542,15 +555,44 @@ describe("createRomWeaverBrowserOpfs run", () => {
     expect(harness.spawnerDrains).toBe(1);
   });
 
-  it("swallows a scratch cleanup failure and traces it", async () => {
+  it.each([new Error("scratch listing failed"), new DOMException("entry vanished", "NotFoundError")])(
+    "reports scratch cleanup failure out-of-band without failing the guest: %s",
+    async (error) => {
+      harness.runScratchError = error;
+      const traceLines: string[] = [];
+      const runner = await createRunner();
+
+      const result = await runner.run(compressCommand(), { onTraceNonJsonLine: (line) => traceLines.push(line) });
+
+      expect(result.ok).toBe(true);
+      expect(result.exitCode).toBe(0);
+      expect(result.error).toBeUndefined();
+      expect(result).toHaveProperty("scratchCleanupFailed", true);
+      expect(traceLines.some((line) => line.includes("run scratch cleanup failed"))).toBe(true);
+    },
+  );
+
+  it("preserves the guest failure when scratch cleanup also fails", async () => {
+    harness.startError = new Error("wasm trap");
     harness.runScratchError = new Error("scratch listing failed");
-    const traceLines: string[] = [];
     const runner = await createRunner();
 
-    const result = await runner.run(compressCommand(), { onTraceNonJsonLine: (line) => traceLines.push(line) });
+    const result = await runner.runJson(compressCommand());
 
-    expect(result.ok).toBe(true);
-    expect(traceLines.some((line) => line.includes("run scratch cleanup failed"))).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe(harness.startError);
+    expect(result).toHaveProperty("scratchCleanupFailed", true);
+  });
+
+  it("preserves a non-zero guest exit code when scratch cleanup also fails", async () => {
+    harness.startExitCode = 3;
+    harness.runScratchError = new DOMException("entry vanished", "NotFoundError");
+    const runner = await createRunner();
+
+    const result = await runner.runJson(compressCommand());
+
+    expect(result).toMatchObject({ ok: false, exitCode: 3, scratchCleanupFailed: true });
+    expect(result.error).toBeUndefined();
   });
 
   it("reports pre-run invalidation failures as ok:false", async () => {

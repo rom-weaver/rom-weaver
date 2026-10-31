@@ -198,6 +198,10 @@ Valid gzip, bzip2, xz, zstd, and LZ4 streams with empty payloads produce empty f
 
 Archive symbolic links and hard links are unsupported and skipped with a warning. Multi-volume RAR5 archives are also unsupported and cause an error.
 
+Split 7z volume sets (`.7z.001`, `.7z.002`, and later volumes) are unsupported and cause an error during extraction or automatic extraction. This includes `checksum`, `probe`, `patch apply`, `patch validate`, patch sources, and `tools ppf-undo`. The `.7z` suffix is case-insensitive; volume numbers have at least three decimal digits.
+
+Joined archives extract normally, including complete archives with volume-like names. `--no-extract` bypasses automatic extraction and uses the individual volume's raw bytes.
+
 `extract --split-bin` writes a CD-format CHD as a CUE plus one Redump-style `<name> (Track N).bin` per track instead of one merged BIN; it is ignored, with a warning, for non-CHD input. `probe --split-bin` lists the per-track BIN files of a CD-format CHD.
 
 XISO extraction rejects an output that refers to its source file, including symbolic links and native hard links, even with `--force`.

@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { requestBrowserOpfsStorage } = vi.hoisted(() => ({
   requestBrowserOpfsStorage: vi.fn(
-    async (_request?: { filePath?: string }): Promise<{ error?: { message: string }; success: boolean }> => ({
+    async (_request?: {
+      action?: string;
+      filePath?: string;
+    }): Promise<{ error?: { message: string }; success: boolean }> => ({
       success: true,
     }),
   ),
@@ -14,12 +17,17 @@ vi.mock("../../src/lib/logging.ts", () => ({ createLogger: () => ({ debug: vi.fn
 vi.mock("../../src/workers/protocol/browser-opfs-worker-client.ts", () => ({ requestBrowserOpfsStorage }));
 
 import {
+  registerBrowserTransientOpfsPath,
   resetBrowserTransientOpfs,
   startBrowserOpfsBootCleanup,
 } from "../../src/storage/browser/browser-opfs-cleanup.ts";
 
+const ownedPathReleases: Array<() => void> = [];
+const ownPath = (filePath: string) => ownedPathReleases.push(registerBrowserTransientOpfsPath(filePath));
+
 describe("browser OPFS cleanup", () => {
   beforeEach(() => {
+    for (const release of ownedPathReleases.splice(0)) release();
     requestBrowserOpfsStorage.mockReset();
     warn.mockClear();
     requestBrowserOpfsStorage.mockResolvedValue({ success: true });
@@ -49,6 +57,8 @@ describe("browser OPFS cleanup", () => {
     vi.resetModules();
     const fresh = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
     await fresh.startBrowserOpfsBootCleanup();
+    fresh.registerBrowserTransientOpfsPath("/work/operations/reset-pending");
+    fresh.registerBrowserTransientOpfsPath("/work/weave-parse/reset-pending");
     // The sweep removes several paths at once and reports only after all have settled.
     const releases: Array<() => void> = [];
     requestBrowserOpfsStorage.mockImplementation(
@@ -71,12 +81,86 @@ describe("browser OPFS cleanup", () => {
     expect(waited).toBe(true);
   });
 
+  it("retries failed run scratch cleanup without sweeping another tab or newly registered runs", async () => {
+    vi.resetModules();
+    const tab = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    tab.registerBrowserOpfsRunScratch("own-run");
+    const releaseFinished = tab.registerBrowserOpfsRunScratch("finished-run");
+    releaseFinished();
+    let releaseNew: () => void = () => undefined;
+    requestBrowserOpfsStorage.mockImplementation(async (request) => {
+      if (request?.action === "list-metadata") {
+        releaseNew = tab.registerBrowserOpfsRunScratch("new-run");
+        return {
+          success: true,
+          entries: ["own-run", "other-run", "finished-run", "new-run"].map((runId) => ({
+            kind: "directory",
+            path: `/rom-weaver-out/rw-${runId}-1-entropy`,
+          })),
+        };
+      }
+      return { success: false, error: { message: "entry is locked" } };
+    });
+    await expect(tab.resetBrowserTransientOpfs()).rejects.toThrow("entry is locked");
+    expect(requestBrowserOpfsStorage.mock.calls.filter(([request]) => request?.action === "remove")).toEqual([
+      [{ action: "remove", filePath: "/work/rom-weaver-out/rw-own-run-1-entropy" }],
+    ]);
+    releaseNew();
+    requestBrowserOpfsStorage.mockClear();
+    requestBrowserOpfsStorage.mockImplementation(async (request) =>
+      request?.action === "list-metadata"
+        ? { success: true, entries: [{ kind: "directory", path: "/rom-weaver-out/rw-own-run-1-entropy" }] }
+        : { success: true },
+    );
+    await tab.resetBrowserTransientOpfs();
+    expect(requestBrowserOpfsStorage).toHaveBeenCalledWith({
+      action: "remove",
+      filePath: "/work/rom-weaver-out/rw-own-run-1-entropy",
+    });
+    requestBrowserOpfsStorage.mockClear();
+    await tab.resetBrowserTransientOpfs();
+    expect(requestBrowserOpfsStorage).not.toHaveBeenCalled();
+  });
+
+  it.each([2, 100])("lists OPFS once when resetting %i retained runs", async (count) => {
+    vi.resetModules();
+    const tab = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    const runIds = Array.from({ length: count }, (_, index) => `own-${index}`);
+    for (const runId of runIds) tab.registerBrowserOpfsRunScratch(runId);
+    const paths = runIds.map((runId) => `/rom-weaver-out/rw-${runId}-1`);
+    requestBrowserOpfsStorage.mockImplementation(async (request) =>
+      request?.action === "list-metadata"
+        ? {
+            success: true,
+            entries: [...paths, "/rom-weaver-out/rw-other-1"].map((path) => ({ kind: "directory", path })),
+          }
+        : { success: true },
+    );
+
+    await tab.resetBrowserTransientOpfs();
+
+    expect(
+      requestBrowserOpfsStorage.mock.calls.filter(([request]) => request?.action === "list-metadata"),
+    ).toHaveLength(1);
+    expect(
+      requestBrowserOpfsStorage.mock.calls
+        .filter(([request]) => request?.action === "remove")
+        .map(([request]) => request?.filePath || "")
+        .sort((left, right) => left.localeCompare(right)),
+    ).toEqual(paths.map((path) => `/work${path}`).sort((left, right) => left.localeCompare(right)));
+    requestBrowserOpfsStorage.mockClear();
+    await tab.resetBrowserTransientOpfs();
+    expect(requestBrowserOpfsStorage).not.toHaveBeenCalled();
+  });
+
   it("reports a failed sweep only after every sibling removal has settled", async () => {
+    ownPath("/work/operations/failed");
+    ownPath("/work/weave-parse/slow");
     let finishSlow: () => void = () => undefined;
     requestBrowserOpfsStorage.mockImplementation((request) =>
-      request?.filePath === "/work/output"
+      request?.filePath === "/work/operations/failed"
         ? Promise.resolve({ error: { message: "quota exceeded" }, success: false })
-        : request?.filePath === "/work/input"
+        : request?.filePath === "/work/weave-parse/slow"
           ? new Promise((resolve) => {
               finishSlow = () => resolve({ success: true });
             })
@@ -206,18 +290,20 @@ describe("browser OPFS cleanup", () => {
       success: false,
     };
     requestBrowserOpfsStorage.mockImplementation(async (request) =>
-      request?.filePath === "/work/temp" ? busy : { success: true },
+      request?.filePath?.startsWith("/work/temp") ? busy : { success: true },
     );
     vi.stubGlobal("navigator", {});
     vi.resetModules();
     const fresh = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
     await expect(fresh.startBrowserOpfsBootCleanup()).resolves.toBeUndefined();
+    ownPath("/work/temp/owned");
     await expect(resetBrowserTransientOpfs()).rejects.toThrow(/Modifications are not allowed/);
   });
 
   it("recognizes a locked entry by error name when the message has no Chromium prefix", async () => {
+    ownPath("/work/temp/owned");
     requestBrowserOpfsStorage.mockImplementation(async (request) =>
-      request?.filePath === "/work/temp"
+      request?.filePath === "/work/temp/owned"
         ? {
             error: { message: "The object can not be modified in this way.", name: "NoModificationAllowedError" },
             success: false,
@@ -228,11 +314,78 @@ describe("browser OPFS cleanup", () => {
     await expect(resetBrowserTransientOpfs()).rejects.toThrow("can not be modified");
   });
 
-  it("still rejects boot cleanup for non-lock failures", async () => {
+  it("still rejects reset cleanup for non-lock failures", async () => {
+    ownPath("/work/operations/owned");
     requestBrowserOpfsStorage.mockImplementation(async () => ({
       error: { message: "quota exceeded" },
       success: false,
     }));
     await expect(resetBrowserTransientOpfs({ skipBusy: true })).rejects.toThrow("quota exceeded");
+  });
+
+  it("does not sweep shared roots when this page has no scratch", async () => {
+    await resetBrowserTransientOpfs();
+    expect(requestBrowserOpfsStorage).not.toHaveBeenCalled();
+  });
+
+  it("resets only directories registered in this page's module instance", async () => {
+    vi.resetModules();
+    const firstTab = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    firstTab.registerBrowserTransientOpfsPath("/work/operations/first-tab");
+    vi.resetModules();
+    const secondTab = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    secondTab.registerBrowserTransientOpfsPath("/work/weave-parse/second-tab");
+    await firstTab.resetBrowserTransientOpfs();
+    expect(requestBrowserOpfsStorage).toHaveBeenCalledExactlyOnceWith({
+      action: "remove",
+      filePath: "/work/operations/first-tab",
+    });
+    requestBrowserOpfsStorage.mockClear();
+    await secondTab.resetBrowserTransientOpfs();
+    expect(requestBrowserOpfsStorage).toHaveBeenCalledExactlyOnceWith({
+      action: "remove",
+      filePath: "/work/weave-parse/second-tab",
+    });
+  });
+
+  it("forgets disposed paths and successful resets, but retries failed removals", async () => {
+    const release = registerBrowserTransientOpfsPath("/work/operations/disposed");
+    release();
+    ownPath("/work/operations/retry");
+    requestBrowserOpfsStorage.mockResolvedValueOnce({ error: { message: "quota exceeded" }, success: false });
+    await expect(resetBrowserTransientOpfs()).rejects.toThrow("quota exceeded");
+    await resetBrowserTransientOpfs();
+    expect(requestBrowserOpfsStorage.mock.calls).toEqual([
+      [{ action: "remove", filePath: "/work/operations/retry" }],
+      [{ action: "remove", filePath: "/work/operations/retry" }],
+    ]);
+    requestBrowserOpfsStorage.mockClear();
+    await resetBrowserTransientOpfs();
+    expect(requestBrowserOpfsStorage).not.toHaveBeenCalled();
+  });
+
+  it("captures only paths owned when reset starts, preserving new work", async () => {
+    ownPath("/work/operations/old");
+    let finish!: () => void;
+    requestBrowserOpfsStorage.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve({ success: true });
+        }),
+    );
+    const reset = resetBrowserTransientOpfs();
+    ownPath("/work/operations/new");
+    finish();
+    await reset;
+    expect(requestBrowserOpfsStorage).toHaveBeenCalledExactlyOnceWith({
+      action: "remove",
+      filePath: "/work/operations/old",
+    });
+    requestBrowserOpfsStorage.mockClear();
+    await resetBrowserTransientOpfs();
+    expect(requestBrowserOpfsStorage).toHaveBeenCalledExactlyOnceWith({
+      action: "remove",
+      filePath: "/work/operations/new",
+    });
   });
 });
