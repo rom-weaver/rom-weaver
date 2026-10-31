@@ -122,6 +122,37 @@ describe("browser OPFS cleanup", () => {
     expect(requestBrowserOpfsStorage).not.toHaveBeenCalled();
   });
 
+  it.each([2, 100])("lists OPFS once when resetting %i retained runs", async (count) => {
+    vi.resetModules();
+    const tab = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    const runIds = Array.from({ length: count }, (_, index) => `own-${index}`);
+    for (const runId of runIds) tab.registerBrowserOpfsRunScratch(runId);
+    const paths = runIds.map((runId) => `/rom-weaver-out/rw-${runId}-1`);
+    requestBrowserOpfsStorage.mockImplementation(async (request) =>
+      request?.action === "list-metadata"
+        ? {
+            success: true,
+            entries: [...paths, "/rom-weaver-out/rw-other-1"].map((path) => ({ kind: "directory", path })),
+          }
+        : { success: true },
+    );
+
+    await tab.resetBrowserTransientOpfs();
+
+    expect(
+      requestBrowserOpfsStorage.mock.calls.filter(([request]) => request?.action === "list-metadata"),
+    ).toHaveLength(1);
+    expect(
+      requestBrowserOpfsStorage.mock.calls
+        .filter(([request]) => request?.action === "remove")
+        .map(([request]) => request?.filePath || "")
+        .sort((left, right) => left.localeCompare(right)),
+    ).toEqual(paths.map((path) => `/work${path}`).sort((left, right) => left.localeCompare(right)));
+    requestBrowserOpfsStorage.mockClear();
+    await tab.resetBrowserTransientOpfs();
+    expect(requestBrowserOpfsStorage).not.toHaveBeenCalled();
+  });
+
   it("reports a failed sweep only after every sibling removal has settled", async () => {
     ownPath("/work/operations/failed");
     ownPath("/work/weave-parse/slow");

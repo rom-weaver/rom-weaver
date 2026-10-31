@@ -600,7 +600,9 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
         lease.runner.runJson(dispatchInput, leaseRunOptions).then(
           (result) => {
             if (settled) return;
-            if (result.ok) releaseRunScratch();
+            if (result.scratchCleanupFailed)
+              logger.debug("Run scratch cleanup failed; retained for Reset", { opfsRunId });
+            if (result.ok && !result.scratchCleanupFailed) releaseRunScratch();
             settled = true;
             // Start the perceived-latency tail that ends when the result paints.
             markWasmFinished();

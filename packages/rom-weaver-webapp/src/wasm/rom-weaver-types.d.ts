@@ -61,6 +61,8 @@ export interface RomWeaverRunResult {
   stderr: string;
   ok: boolean;
   error?: unknown;
+  /** Scratch cleanup failed; the page MUST retain the run ID for Reset to retry. */
+  scratchCleanupFailed?: boolean;
 }
 
 export interface RomWeaverRunOptions {

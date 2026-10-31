@@ -75,13 +75,12 @@ const removeTransientOpfs = async (paths: readonly string[], options: { skipBusy
 
 const resetBrowserTransientOpfs = (options: { skipBusy?: boolean } = {}): Promise<void> => {
   const paths = [...ownedTransientOpfsPaths];
-  const runIds = [...ownedRunScratchIds];
+  const runIds = new Set(ownedRunScratchIds);
   const sweep = (async () => {
     const results = await Promise.allSettled([
       removeTransientOpfs(paths, options),
-      ...runIds.map(async (runId) => {
-        await cleanupBrowserOpfsRunScratch({ runId, workGuestPath: "/work" });
-        ownedRunScratchIds.delete(runId);
+      cleanupBrowserOpfsRunScratch({ runIds, workGuestPath: "/work" }).then(() => {
+        for (const runId of runIds) ownedRunScratchIds.delete(runId);
       }),
     ]);
     const failure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");

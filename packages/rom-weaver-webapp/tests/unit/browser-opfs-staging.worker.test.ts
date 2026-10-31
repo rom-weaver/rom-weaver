@@ -538,6 +538,64 @@ describe("list", () => {
     expect(response).toMatchObject({ action: "stage-error", success: false });
     expect(response.error?.message).toContain("no OPFS root");
   });
+
+  it("continues listing after a file vanishes during a size read", async () => {
+    const root = createDirectory([
+      ["gone.bin", { kind: "file", getFile: () => Promise.reject(new DOMException("file vanished", "NotFoundError")) }],
+      ["keep.bin", { kind: "file", getFile: () => Promise.resolve({ size: 7 }) }],
+    ]);
+    vi.stubGlobal("navigator", { storage: { getDirectory: () => Promise.resolve(root) } });
+    const send = await loadWorker();
+
+    const response = await send({ action: "list" });
+
+    expect(response).toMatchObject({ action: "list-complete", success: true });
+    expect(response.entries).toEqual([{ kind: "file", path: "/keep.bin", size: 7 }]);
+  });
+
+  it("still reports iterator errors other than NotFoundError", async () => {
+    const root = {
+      entries: () => {
+        throw new DOMException("access denied", "NotAllowedError");
+      },
+    };
+    vi.stubGlobal("navigator", { storage: { getDirectory: () => Promise.resolve(root) } });
+    const send = await loadWorker();
+
+    expect(await send({ action: "list-metadata" })).toMatchObject({
+      action: "stage-error",
+      success: false,
+      error: { message: expect.stringContaining("NotAllowedError: access denied") },
+    });
+  });
+
+  it.each(["list", "list-metadata"])("continues %s when a directory vanishes mid-walk", async (action) => {
+    const vanished = {
+      kind: "directory",
+      entries: vi.fn(() => ({
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+        next: () => Promise.reject(new DOMException("entry vanished", "NotFoundError")),
+      })),
+    };
+    const root = createDirectory([
+      ["rw-other-1", vanished],
+      ["keep.bin", { kind: "file", getFile: () => Promise.resolve({ size: 7 }) }],
+    ]);
+    vi.stubGlobal("navigator", { storage: { getDirectory: () => Promise.resolve(root) } });
+    const send = await loadWorker();
+
+    const response = await send({ action });
+
+    expect(vanished.entries).toHaveBeenCalledOnce();
+    expect(response).toMatchObject({ action: "list-complete", success: true });
+    expect(response.entries).toContainEqual({
+      kind: "file",
+      path: "/keep.bin",
+      ...(action === "list" ? { size: 7 } : {}),
+    });
+  });
 });
 
 describe("dispatch", () => {

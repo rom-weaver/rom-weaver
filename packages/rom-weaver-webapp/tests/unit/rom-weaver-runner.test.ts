@@ -169,6 +169,19 @@ describe("run scratch ownership", () => {
     expect(state.storageRequest).not.toHaveBeenCalled();
   });
 
+  it("keeps a successful run's id for Reset when scratch cleanup failed", async () => {
+    state.run.mockResolvedValueOnce({ ...success(), scratchCleanupFailed: true });
+    await expect(runRomWeaverJson(command("probe"))).resolves.toMatchObject({ ok: true, scratchCleanupFailed: true });
+    const runId = state.run.mock.calls.at(-1)?.[1]?.env?.ROM_WEAVER_OPFS_RUN_ID;
+    const path = `/rom-weaver-out/rw-${runId}-1`;
+    state.storageRequest.mockResolvedValueOnce({ success: true, entries: [{ kind: "directory", path }] });
+    await resetBrowserTransientOpfs();
+    expect(state.storageRequest).toHaveBeenCalledWith({ action: "remove", filePath: `/work${path}` });
+    state.storageRequest.mockClear();
+    await resetBrowserTransientOpfs();
+    expect(state.storageRequest).not.toHaveBeenCalled();
+  });
+
   it.each(["resolved", "rejected"])("keeps the run id after a %s failure for Reset", async (kind) => {
     const error = new Error("scratch cleanup failed");
     if (kind === "resolved") state.run.mockResolvedValueOnce({ ok: false, exitCode: 1, events: [], error });

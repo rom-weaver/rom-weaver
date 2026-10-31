@@ -24,26 +24,35 @@ const getFileDescendantPaths = (entries: readonly ListedOpfsEntry[]) => {
   return descendants;
 };
 
-const findRunTempNamespacePaths = (entries: readonly ListedOpfsEntry[], runId: string): string[] => {
-  const namespace = `${TEMP_NAMESPACE_PREFIX}${runId}`;
-  const prefix = `${namespace}-`;
+const hasRunIdPrefix = (name: string, runIds: ReadonlySet<string>): boolean => {
+  for (let separator = name.indexOf("-"); separator >= 0; separator = name.indexOf("-", separator + 1)) {
+    if (runIds.has(name.slice(0, separator))) return true;
+  }
+  return false;
+};
+
+const findRunTempNamespacePaths = (entries: readonly ListedOpfsEntry[], runIds: ReadonlySet<string>): string[] => {
   return entries
     .filter((entry) => {
       if (entry.kind !== "directory") return false;
       const name = entryName(entry.path);
-      return name === namespace || name.startsWith(prefix);
+      if (!name.startsWith(TEMP_NAMESPACE_PREFIX)) return false;
+      const namespace = name.slice(TEMP_NAMESPACE_PREFIX.length);
+      return runIds.has(namespace) || hasRunIdPrefix(namespace, runIds);
     })
     .map((entry) => entry.path);
 };
 
-const findEmptyExtractStagingPaths = (entries: readonly ListedOpfsEntry[], runId: string): string[] => {
-  const prefix = `${EXTRACT_STAGING_PREFIX}${runId}-`;
+const findEmptyExtractStagingPaths = (entries: readonly ListedOpfsEntry[], runIds: ReadonlySet<string>): string[] => {
   const fileDescendantPaths = getFileDescendantPaths(entries);
   return entries
-    .filter(
-      (entry) =>
-        entry.kind === "directory" && entryName(entry.path).startsWith(prefix) && !fileDescendantPaths.has(entry.path),
-    )
+    .filter((entry) => {
+      if (entry.kind !== "directory" || fileDescendantPaths.has(entry.path)) return false;
+      const name = entryName(entry.path);
+      return (
+        name.startsWith(EXTRACT_STAGING_PREFIX) && hasRunIdPrefix(name.slice(EXTRACT_STAGING_PREFIX.length), runIds)
+      );
+    })
     .map((entry) => entry.path);
 };
 
@@ -56,20 +65,21 @@ const removeOpfsPath = async (path: string): Promise<void> => {
 };
 
 export const cleanupBrowserOpfsRunScratch = async ({
-  runId,
+  runIds,
   trace,
   workGuestPath,
 }: {
-  runId: string;
+  runIds: ReadonlySet<string>;
   trace?: (message: string) => void;
   workGuestPath: string;
 }): Promise<void> => {
+  if (!runIds.size) return;
   const listResponse = await requestBrowserOpfsStorage({ action: "list-metadata" });
   if (!listResponse.success) throw new Error(listResponse.error?.message || "Unable to list OPFS scratch paths");
 
   const entries = (listResponse.entries || []) as ListedOpfsEntry[];
-  const tempNamespacePaths = findRunTempNamespacePaths(entries, runId);
-  const emptyExtractPaths = findEmptyExtractStagingPaths(entries, runId);
+  const tempNamespacePaths = findRunTempNamespacePaths(entries, runIds);
+  const emptyExtractPaths = findEmptyExtractStagingPaths(entries, runIds);
   // Keep extract trees containing files. A failed extract may have staged user data, so cleanup
   // removes only the empty transaction directories it can prove are disposable.
   const paths = [...tempNamespacePaths, ...emptyExtractPaths].map((path) => joinVfsPath(workGuestPath, path));

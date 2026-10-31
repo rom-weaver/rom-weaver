@@ -500,6 +500,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         return { stderr: decodeChunks(stderrChunks), stdout: decodeChunks(stdoutChunks) };
       };
       let failure: { error: unknown } | undefined;
+      let scratchCleanupFailed = false;
       const recordFailure = (error: unknown) => {
         failure ??= { error };
         exitCode = 1;
@@ -573,10 +574,10 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           recordFailure(error);
         }
         try {
-          await cleanupBrowserOpfsRunScratch({ runId: opfsRunId, trace, workGuestPath });
+          await cleanupBrowserOpfsRunScratch({ runIds: new Set([opfsRunId]), trace, workGuestPath });
         } catch (error) {
           trace(`[browser-opfs] run scratch cleanup failed ${formatErrorForTrace(error)}`);
-          recordFailure(error);
+          scratchCleanupFailed = true;
         }
         trace("[browser-opfs] cleanup done");
         traceRunTimings(trace, {
@@ -605,6 +606,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         exitCode: exitCode ?? 1,
         ok,
         request,
+        scratchCleanupFailed,
         ...flushStreams(),
       };
     },

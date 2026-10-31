@@ -2,7 +2,7 @@ import { CHROMIUM_SYNC_WRITE_NO_SPACE_COUNT } from "../../wasm/browser-opfs-prox
 import { getManagedOpfsFileHandle, removeManagedOpfsPath } from "../protocol/opfs-path.ts";
 import { getWorkerErrorMessage, postCloneSafeWorkerMessage } from "../shared/worker-message-utils.ts";
 
-// OPFS list/write/truncate/cleanup worker. Input staging (copying a Blob into OPFS) was retired - browser
+// OPFS list/list-metadata/remove/truncate/write worker. Input staging (copying a Blob into OPFS) was retired - browser
 // inputs now read directly via the per-thread FileReaderSync fast path or the OPFS proxy handle (see
 // browser-opfs-source-ref). The "stage-error" response action is kept as the generic failure reply.
 
@@ -200,14 +200,22 @@ const listOpfsPaths = async (request: StorageRequest): Promise<StorageResponse> 
   const includeFileSizes = request.action === "list";
   const entries: Array<{ kind: "directory" | "file"; path: string; size?: number }> = [];
   const walk = async (directory: FileSystemDirectoryHandle, prefix: string): Promise<void> => {
-    for await (const [name, handle] of directory.entries()) {
-      const path = `${prefix}/${name}`;
-      if (handle.kind === "directory") {
-        entries.push({ kind: "directory", path });
-        await walk(handle, path);
-      } else {
-        entries.push({ kind: "file", path, ...(includeFileSizes ? { size: (await handle.getFile()).size } : {}) });
+    try {
+      for await (const [name, handle] of directory.entries()) {
+        const path = `${prefix}/${name}`;
+        if (handle.kind === "directory") {
+          entries.push({ kind: "directory", path });
+          await walk(handle, path);
+        } else {
+          try {
+            entries.push({ kind: "file", path, ...(includeFileSizes ? { size: (await handle.getFile()).size } : {}) });
+          } catch (error) {
+            if ((error as { name?: string })?.name !== "NotFoundError") throw error;
+          }
+        }
       }
+    } catch (error) {
+      if ((error as { name?: string })?.name !== "NotFoundError") throw error;
     }
   };
   await walk(root, "");

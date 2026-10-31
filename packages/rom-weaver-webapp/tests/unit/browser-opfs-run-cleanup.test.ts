@@ -17,6 +17,38 @@ beforeEach(() => {
 });
 
 describe("browser OPFS run scratch cleanup", () => {
+  it("does not list OPFS when there are no retained runs", async () => {
+    await cleanupBrowserOpfsRunScratch({ runIds: new Set(), workGuestPath: "/work" });
+    expect(requestStorage).not.toHaveBeenCalled();
+  });
+
+  it("cleans multiple run namespaces and empty extract trees from one listing", async () => {
+    const owned = ["a", "a-b", "550e8400-e29b-41d4-a716-446655440000"];
+    const removed = owned.flatMap((runId) => [`/rw-${runId}`, `/op/.rom-weaver-extract-${runId}-0`]);
+    requestStorage.mockResolvedValueOnce({
+      action: "list-complete",
+      success: true,
+      entries: [
+        ...removed.map((path) => ({ kind: "directory" as const, path })),
+        { kind: "directory", path: "/rw-another-1" },
+        { kind: "directory", path: "/op/.rom-weaver-extract-a-b-1" },
+        { kind: "file", path: "/op/.rom-weaver-extract-a-b-1/nested/data.bin" },
+        { kind: "directory", path: "/op/.rom-weaver-extract-another-0" },
+      ],
+    });
+    requestStorage.mockResolvedValue({ action: "remove-complete", success: true });
+
+    await cleanupBrowserOpfsRunScratch({ runIds: new Set(owned), workGuestPath: "/work" });
+
+    expect(requestStorage.mock.calls.filter(([request]) => request.action === "list-metadata")).toHaveLength(1);
+    expect(
+      requestStorage.mock.calls
+        .slice(1)
+        .map(([request]) => request.filePath || "")
+        .sort((left, right) => left.localeCompare(right)),
+    ).toEqual(removed.map((path) => `/work${path}`).sort((left, right) => left.localeCompare(right)));
+  });
+
   it("finds only empty extract staging trees owned by the current run", () => {
     const paths = findEmptyExtractStagingPaths(
       [
@@ -27,7 +59,7 @@ describe("browser OPFS run scratch cleanup", () => {
         { kind: "directory", path: "/operations/op/.rom-weaver-extract-run-1-1" },
         { kind: "file", path: "/operations/op/.rom-weaver-extract-run-1-1/new/0.bin" },
       ],
-      "run-1",
+      new Set(["run-1"]),
     );
 
     expect(paths).toEqual(["/operations/op/.rom-weaver-extract-run-1-0"]);
@@ -42,7 +74,7 @@ describe("browser OPFS run scratch cleanup", () => {
           { kind: "directory", path: "/fixture/rom-weaver-out/rw-run-2-1-a" },
           { kind: "directory", path: "/fixture/rom-weaver-out/rw-run-1-old" },
         ],
-        "run-1",
+        new Set(["run-1"]),
       ),
     ).toEqual([
       "/fixture/rom-weaver-out/rw-run-1-1-a",
@@ -66,7 +98,7 @@ describe("browser OPFS run scratch cleanup", () => {
       });
     });
     let settled = false;
-    const pending = cleanupBrowserOpfsRunScratch({ runId: "run-1", workGuestPath: "/work" });
+    const pending = cleanupBrowserOpfsRunScratch({ runIds: new Set(["run-1"]), workGuestPath: "/work" });
     const checked = expect(pending).rejects.toThrow("entry is locked");
     void pending.then(
       () => {
@@ -96,7 +128,7 @@ describe("browser OPFS run scratch cleanup", () => {
     });
     requestStorage.mockResolvedValue({ action: "remove-complete", success: true });
 
-    await cleanupBrowserOpfsRunScratch({ runId: "run-1", workGuestPath: "/work" });
+    await cleanupBrowserOpfsRunScratch({ runIds: new Set(["run-1"]), workGuestPath: "/work" });
 
     expect(requestStorage).toHaveBeenNthCalledWith(1, { action: "list-metadata" });
     expect(
