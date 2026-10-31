@@ -92,8 +92,8 @@ export const expectDownload = (out, expected, label = "output") => {
 };
 
 /** Open a fresh Apply page and hand it to `fn`; always closes the context. */
-export async function drive(h, fn, { route, ready } = {}) {
-  const session = await newSession(h.browser, h.baseUrl, { ready, route });
+export async function drive(h, fn, { route, ready, device } = {}) {
+  const session = await newSession(h.browser, h.baseUrl, { device, ready, route });
   try {
     return await fn(session.page, session);
   } finally {

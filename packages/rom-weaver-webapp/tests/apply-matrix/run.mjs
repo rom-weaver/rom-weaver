@@ -35,7 +35,7 @@ const groups = (option("group", "") || "")
 const workers = Number(option("workers", 2));
 const jsonOut = option("json", null);
 
-const manifest = generate({ writeManifest: false });
+const manifest = generate();
 const cases = buildCases({ manifest }).filter((entry) => {
   if (groups.length && !groups.includes(entry.group)) return false;
   if (!filters.length) return true;
@@ -51,7 +51,7 @@ if (flag("list")) {
 
 fs.mkdirSync(outDir, { recursive: true });
 const server = await ensureServer(baseUrl, port);
-let browser;
+const browser = await chromium.launch({ headless: true });
 const results = [];
 let next = 0;
 
@@ -65,10 +65,21 @@ const runOne = async (entry) => {
     if (entry.skip) result = { detail: entry.skip, status: "skip" };
     else {
       const detail = await entry.run(harness);
-      result = { detail: detail || "", status: "pass" };
+      // An xfail case that now passes is reported loudly so the marker can be removed.
+      result = entry.xfail
+        ? { detail: `[xpass ${entry.xfail}] now passes: remove the xfail marker. ${detail || ""}`, status: "xpass" }
+        : { detail: detail || "", status: "pass" };
     }
   } catch (error) {
     if (error?.skipReason) result = { detail: error.skipReason, status: "skip" };
+    else if (entry.xfail && !flag("strict-xfail"))
+      result = {
+        detail: `[xfail ${entry.xfail}] ${String(error?.message || error)
+          .split("\n")
+          .slice(0, 3)
+          .join(" | ")}`,
+        status: "xfail",
+      };
     else
       result = {
         detail: String(error?.message || error)
@@ -78,13 +89,9 @@ const runOne = async (entry) => {
         status: "fail",
       };
   }
-  // Keep a failing case's downloads for debugging; drop the rest so a run does not fill $TMPDIR.
-  if (result.status !== "fail")
-    for (const name of fs.readdirSync(caseDir))
-      if (/^\d{13}-/.test(name)) fs.rmSync(path.join(caseDir, name), { force: true });
   result = { ...entry, ...result, run: undefined, ms: Date.now() - started };
   results.push(result);
-  const mark = { fail: "FAIL", pass: "pass", skip: "skip" }[result.status];
+  const mark = { fail: "FAIL", pass: "pass", skip: "skip", xfail: "xfail", xpass: "XPASS" }[result.status];
   console.log(`${mark}  ${entry.id}  (${result.ms} ms)${result.status === "pass" ? "" : `  ${result.detail}`}`);
 };
 
@@ -92,30 +99,31 @@ const worker = async () => {
   while (next < cases.length) await runOne(cases[next++]);
 };
 try {
-  browser = await chromium.launch({ headless: true });
   await Promise.all(Array.from({ length: Math.max(1, workers) }, worker));
 } finally {
-  await browser?.close();
+  await browser.close();
   await server.close();
 }
 
 const byGroup = new Map();
 for (const result of results) {
-  const row = byGroup.get(result.group) || { fail: 0, pass: 0, skip: 0 };
+  const row = byGroup.get(result.group) || { fail: 0, pass: 0, skip: 0, xfail: 0, xpass: 0 };
   row[result.status]++;
   byGroup.set(result.group, row);
 }
-console.log("\ngroup".padEnd(16), "pass  fail  skip");
+console.log("\ngroup".padEnd(16), "pass  fail  skip xfail xpass");
 for (const [group, row] of [...byGroup].sort(([a], [b]) => a.localeCompare(b)))
   console.log(
     group.padEnd(15),
     String(row.pass).padStart(4),
     String(row.fail).padStart(5),
     String(row.skip).padStart(5),
+    String(row.xfail).padStart(5),
+    String(row.xpass).padStart(5),
   );
 const failed = results.filter((result) => result.status === "fail");
 console.log(
-  `\nTOTAL ${results.length}: ${results.length - failed.length - results.filter((r) => r.status === "skip").length} pass, ${failed.length} fail, ${results.filter((r) => r.status === "skip").length} skip`,
+  `\nTOTAL ${results.length}: ${results.filter((r) => r.status === "pass").length} pass, ${failed.length} fail, ${results.filter((r) => r.status === "skip").length} skip, ${results.filter((r) => r.status === "xfail").length} xfail, ${results.filter((r) => r.status === "xpass").length} xpass`,
 );
 if (jsonOut)
   fs.writeFileSync(

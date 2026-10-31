@@ -1,0 +1,212 @@
+// Apply-route output sweeps the base matrix does not reach: every compression level for RVZ and CHD
+// outputs of a GameCube image, Z3DS outputs for the 3DS family, CD (cue+bin) sources to CHD, and codec x
+// level on zip/7z for a *disc* source. Judged by dolphin-tool / chdman / the native CLI.
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { cliPath } from "../fixtures/apply-matrix/generate.mjs";
+import { sha256 } from "../fixtures/apply-matrix/encoders.mjs";
+import { LEVELS, openOptions, setCodec, setLevel, setSelect } from "./lib/flows.mjs";
+import { FIXTURE_ROOT } from "./lib/gen.mjs";
+import { applyNow, assert, drive, Skip, stageAndSettle } from "./lib/scenario.mjs";
+import { chdUserData, extractWithHost, have, rvzInspect, withTempDir } from "./lib/tools.mjs";
+
+const GC = path.join(FIXTURE_ROOT, "reference/gc");
+const EXH = path.join(FIXTURE_ROOT, "exh");
+const FORMAT = "#rom-weaver-select-output-format";
+const read = (file) => fs.readFileSync(file);
+
+const ips = (edits) => {
+  const parts = [Buffer.from("PATCH")];
+  for (const [offset, bytes] of edits) {
+    parts.push(
+      Buffer.from([
+        (offset >> 16) & 255,
+        (offset >> 8) & 255,
+        offset & 255,
+        (bytes.length >> 8) & 255,
+        bytes.length & 255,
+      ]),
+      Buffer.from(bytes),
+    );
+  }
+  parts.push(Buffer.from("EOF"));
+  return Buffer.concat(parts);
+};
+const applyIps = (rom, edits) => {
+  const out = Buffer.from(rom);
+  for (const [offset, bytes] of edits) Buffer.from(bytes).copy(out, offset);
+  return out;
+};
+
+const nativeExtractOne = (bytes, name) => {
+  const bin = cliPath();
+  if (!bin) return null;
+  return withTempDir((dir) => {
+    const input = path.join(dir, name);
+    fs.writeFileSync(input, bytes);
+    const out = path.join(dir, "x");
+    const run = spawnSync(bin, ["extract", "--input", input, "--output", out, "--no-progress"], { encoding: "utf8" });
+    if (run.status !== 0) return { error: run.stderr.trim().split("\n").pop() };
+    return { files: fs.readdirSync(out).map((entry) => ({ bytes: read(path.join(out, entry)), name: entry })) };
+  });
+};
+
+export function applyExtraCases() {
+  const cases = [];
+  const iso = path.join(GC, "disc.iso");
+  const isoPatch = path.join(GC, "disc.ips");
+  const isoTarget = path.join(GC, "target.iso");
+
+  const discOut = (format, codec, level) => ({
+    group: "apply-out",
+    id: `apply-out/gc-iso/${format}/${codec ?? "default"}/${level ?? "default"}`,
+    tags: ["apply-out", "gc-iso", format, codec ?? "", level ?? ""],
+    title: `GameCube ISO + IPS -> ${format} codec=${codec ?? "default"} level=${level ?? "default"}`,
+    skip: [iso, isoPatch, isoTarget].find((f) => !fs.existsSync(f)) ? "fixture missing: reference/gc" : undefined,
+    async run(h) {
+      return drive(h, async (page, session) => {
+        await stageAndSettle(page, [iso, isoPatch]);
+        await openOptions(page);
+        if (!(await setSelect(page, FORMAT, format))) throw new Skip(`${format} not offered`);
+        if (codec && !(await setCodec(page, codec))) throw new Skip(`codec ${codec} not selectable`);
+        if (level && !(await setLevel(page, level))) throw new Skip("no level control");
+        const out = await applyNow(h, page, { timeout: 180_000 });
+        assert(!session.pageErrors.length, `page error ${session.pageErrors[0]}`);
+        assert(
+          out.outcome === "download",
+          `no download (${out.outcome}${out.result?.text ? `: ${out.result.text}` : ""})`,
+        );
+        assert(out.name.toLowerCase().endsWith(`.${format}`), `download ${out.name} lacks .${format}`);
+        const want = read(isoTarget);
+        if (format === "rvz") {
+          const r = rvzInspect(out.bytes);
+          if (!r) return "dolphin-tool n/a";
+          assert(r.ok, `dolphin-tool rejected the rvz: ${r.error}`);
+          assert(
+            sha256(r.bytes) === sha256(want),
+            `rvz decodes to ${r.bytes.length} B, differs from patched target (${want.length} B)`,
+          );
+          return `${out.bytes.length}B, dolphin-tool == target`;
+        }
+        if (format === "chd") {
+          const r = chdUserData(out.bytes);
+          if (!r) return "chdman n/a";
+          assert(r.ok, `chdman: ${r.error}`);
+          assert(
+            r.bytes.length >= want.length && Buffer.compare(r.bytes.subarray(0, want.length), want) === 0,
+            `chd decodes to ${r.bytes.length} B, differs from target`,
+          );
+          return `${out.bytes.length}B, chdman == target`;
+        }
+        const unpacked = extractWithHost(out.bytes, out.name);
+        assert(!unpacked.error, unpacked.error);
+        assert(
+          unpacked.files.some((f) => sha256(f.bytes) === sha256(want)),
+          "archive content differs from patched target",
+        );
+        return `${out.bytes.length}B`;
+      });
+    },
+  });
+  for (const level of LEVELS) cases.push(discOut("rvz", "zstd", level));
+  for (const level of LEVELS) cases.push(discOut("chd", null, level));
+  for (const [format, codec, levels] of [
+    ["zip", "deflate", ["min", "max"]],
+    ["zip", "zstd", ["min", "max"]],
+    ["zip", "store", [null]],
+    ["7z", "lzma2", ["min", "max"]],
+  ])
+    for (const level of levels) cases.push(discOut(format, codec, level));
+
+  // 3DS family -> Z3DS (and the other archive outputs) after patching
+  for (const [id, name, ext] of [
+    ["3ds", "game.3ds", "z3ds"],
+    ["cci", "game.cci", "zcci"],
+    ["cxi", "game.cxi", "zcxi"],
+  ]) {
+    const file = path.join(EXH, "ctr", name);
+    for (const level of ["min", "max"]) {
+      cases.push({
+        group: "apply-out",
+        id: `apply-out/${id}/z3ds/${level}`,
+        tags: ["apply-out", id, "z3ds", level],
+        title: `${name} + IPS -> z3ds level=${level}`,
+        skip: fs.existsSync(file) ? undefined : "fixture missing: exh/ctr",
+        async run(h) {
+          const source = read(file);
+          const edits = [[0x300, [0xde, 0xad, 0xbe, 0xef]]];
+          const want = applyIps(source, edits);
+          return drive(h, async (page, session) => {
+            await stageAndSettle(page, [
+              { buffer: source, name },
+              { buffer: ips(edits), name: "edit.ips" },
+            ]);
+            await openOptions(page);
+            if (!(await setSelect(page, FORMAT, "z3ds"))) throw new Skip(`z3ds not offered for ${name}`);
+            await setLevel(page, level);
+            const out = await applyNow(h, page, { timeout: 120_000 });
+            assert(!session.pageErrors.length, `page error ${session.pageErrors[0]}`);
+            assert(
+              out.outcome === "download",
+              `no download (${out.outcome}${out.result?.text ? `: ${out.result.text}` : ""})`,
+            );
+            assert(out.name.toLowerCase().endsWith(`.${ext}`), `download ${out.name} lacks .${ext}`);
+            const extracted = nativeExtractOne(out.bytes, out.name);
+            if (!extracted) return "native CLI n/a";
+            assert(!extracted.error, `native extract of the z3ds failed: ${extracted.error}`);
+            assert(
+              extracted.files.length === 1 && sha256(extracted.files[0].bytes) === sha256(want),
+              "z3ds payload differs from the patched image",
+            );
+            return `${out.name} ${out.bytes.length}B == patched`;
+          });
+        },
+      });
+    }
+  }
+
+  // CD source (cue + bin) patched, written as CHD: extractcd must give the patched bin back
+  const cue = path.join(EXH, "cd/data.cue");
+  const bin = path.join(EXH, "cd/data.bin");
+  cases.push({
+    group: "apply-out",
+    id: "apply-out/cue-bin/chd",
+    tags: ["apply-out", "cue", "chd"],
+    title: "cue+bin + IPS -> chd round trip through chdman extractcd",
+    skip: fs.existsSync(bin) ? undefined : "fixture missing: exh/cd",
+    async run(h) {
+      const source = read(bin);
+      const edits = [[0x30, [0x11, 0x22, 0x33]]];
+      const want = applyIps(source, edits);
+      return drive(h, async (page, session) => {
+        await stageAndSettle(page, [cue, bin, { buffer: ips(edits), name: "edit.ips" }]);
+        await openOptions(page);
+        if (!(await setSelect(page, FORMAT, "chd"))) throw new Skip("chd not offered for cue+bin");
+        const out = await applyNow(h, page, { timeout: 120_000 });
+        assert(!session.pageErrors.length, `page error ${session.pageErrors[0]}`);
+        assert(
+          out.outcome === "download",
+          `no download (${out.outcome}${out.result?.text ? `: ${out.result.text}` : ""})`,
+        );
+        if (!have("chdman")) return "chdman n/a";
+        return withTempDir((dir) => {
+          fs.writeFileSync(path.join(dir, "o.chd"), out.bytes);
+          const run = spawnSync(
+            "chdman",
+            ["extractcd", "-i", path.join(dir, "o.chd"), "-o", path.join(dir, "o.cue"), "-ob", path.join(dir, "o.bin")],
+            { encoding: "utf8" },
+          );
+          assert(run.status === 0, `chdman extractcd: ${(run.stdout + run.stderr).trim().split("\n").pop()}`);
+          const got = read(path.join(dir, "o.bin"));
+          assert(
+            got.length === want.length && Buffer.compare(got, want) === 0,
+            `extracted bin ${got.length} B differs from the patched bin (${want.length} B)`,
+          );
+          return `${out.name} ${out.bytes.length}B == patched`;
+        });
+      });
+    },
+  });
+  return cases;
+}

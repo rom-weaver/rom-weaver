@@ -423,3 +423,162 @@ export const defineContainers = (fx, { root }) => {
   // disc-ish containers made from the webapp's synthetic builders (see containers.mjs) -> built lazily there.
   void root;
 };
+
+// ---------------------------------------------------------------------------------------------------------
+// Fixtures for the create / compress / trim / extract groups. All cache-resident (never committed), generated
+// from the small deterministic builders below, and only built when the file is missing.
+// ---------------------------------------------------------------------------------------------------------
+const NDS_LOGO = Uint8Array.from({ length: 156 }, (_, index) => (index * 37 + 0x24) & 0xff);
+const crc16 = (bytes) => {
+  let crc = 0xffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = crc & 1 ? (crc >>> 1) ^ 0xa001 : crc >>> 1;
+  }
+  return crc;
+};
+const put32 = (buf, at, value) => new DataView(buf.buffer, buf.byteOffset).setUint32(at, value >>> 0, true);
+
+/** Valid-enough NDS: logo + header CRCs, ARM9/ARM7 regions, banner v1; `total` bytes, padded with `pad` after `used`. */
+export const buildNds = ({ total = 0x80000, used = 0x30000, dsi = false, cert = false, pad = 0xff } = {}) => {
+  const rom = new Uint8Array(total).fill(pad);
+  rom.set(randomBytes(used, 0x4e44532), 0);
+  rom.fill(0, 0, 0x4000); // header area; fields below
+  rom.set(Buffer.from("RWNDSFIXTURE"), 0);
+  rom.set(Buffer.from("RWNA"), 0xc);
+  rom[0x12] = dsi ? 3 : 0;
+  put32(rom, 0x20, 0x4000); put32(rom, 0x2c, 0x20000); // ARM9
+  put32(rom, 0x30, 0x24000); put32(rom, 0x3c, 0x8000); // ARM7 offset / size
+  put32(rom, 0x40, 0); put32(rom, 0x44, 0); put32(rom, 0x48, 0); put32(rom, 0x4c, 0); // FNT/FAT (empty)
+  put32(rom, 0x68, 0x2c000); // banner
+  rom.set([1, 0], 0x2c000);
+  put32(rom, 0x80, 0x30000); // NTR ROM size
+  put32(rom, 0x84, 0x4000); // header size
+  rom.set(NDS_LOGO, 0xc0);
+  rom[0x15c] = crc16(NDS_LOGO) & 0xff;
+  rom[0x15d] = crc16(NDS_LOGO) >> 8;
+  if (dsi) put32(rom, 0x210, 0x40000);
+  const header = crc16(rom.subarray(0, 0x15e));
+  rom[0x15e] = header & 0xff;
+  rom[0x15f] = header >> 8;
+  if (cert) {
+    rom.fill(pad, 0x30000, 0x30000 + 0x88);
+    rom.set([0x61, 0x63], 0x30000);
+    rom.set(randomBytes(0x86, 99), 0x30002);
+  }
+  return rom;
+};
+const GBA_LOGO = [
+  0x24, 0xff, 0xae, 0x51, 0x69, 0x9a, 0xa2, 0x21, 0x3d, 0x84, 0x82, 0x0a, 0x84, 0xe4, 0x09, 0xad, 0x11, 0x24, 0x8b, 0x98, 0xc0, 0x81, 0x7f, 0x21, 0xa3, 0x52, 0xbe, 0x19, 0x93, 0x09, 0xce, 0x20, 0x10, 0x46, 0x4a, 0x4a, 0xf8, 0x27, 0x31, 0xec, 0x58, 0xc7, 0xe8, 0x33, 0x82, 0xe3, 0xce, 0xbf, 0x85, 0xf4, 0xdf, 0x94, 0xce, 0x4b, 0x09, 0xc1, 0x94, 0x56, 0x8a, 0xc0, 0x13, 0x72, 0xa7, 0xfc, 0x9f, 0x84, 0x4d, 0x73, 0xa3, 0xca, 0x9a, 0x61, 0x58, 0x97, 0xa3, 0x27, 0xfc, 0x03, 0x98, 0x76, 0x23, 0x1d, 0xc7, 0x61, 0x03, 0x04, 0xae, 0x56, 0xbf, 0x38, 0x84, 0x00, 0x40, 0xa7, 0x0e, 0xfd, 0xff, 0x52, 0xfe, 0x03, 0x6f, 0x95, 0x30, 0xf1, 0x97, 0xfb, 0xc0, 0x85, 0x60, 0xd6, 0x80, 0x25, 0xa9, 0x63, 0xbe, 0x03, 0x01, 0x4e, 0x38, 0xe2, 0xf9, 0xa2, 0x34, 0xff, 0xbb, 0x3e, 0x03, 0x44, 0x78, 0x00, 0x90, 0xcb, 0x88, 0x11, 0x3a, 0x94, 0x65, 0xc0, 0x7c, 0x63, 0x87, 0xf0, 0x3c, 0xaf, 0xd6, 0x25, 0xe4, 0x8b, 0x38, 0x0a, 0xac, 0x72, 0x21, 0xd4, 0xf8, 0x07,
+];
+export const buildGba = ({ total = 0x100000, used = 0x30123, pad = 0xff } = {}) => {
+  const rom = new Uint8Array(total).fill(pad);
+  rom.set(randomBytes(used, 0x47424121), 0);
+  rom.set([0x2e, 0, 0, 0xea], 0);
+  rom.set(GBA_LOGO, 4);
+  rom.set(Buffer.from("ROM WEAVER  "), 0xa0);
+  rom.set(Buffer.from("RWTE00"), 0xac);
+  rom[0xb2] = 0x96;
+  let sum = 0;
+  for (let at = 0xa0; at < 0xbd; at++) sum = (sum - rom[at]) & 0xff;
+  rom[0xbd] = (sum - 0x19) & 0xff;
+  rom[used - 1] = rom[used - 1] === pad ? pad ^ 1 : rom[used - 1]; // last used byte never looks like padding
+  return rom;
+};
+/** NCSD cartridge image: partition 0 (NCCH) at 0x4000..0x24000, remaining space padded with 0xFF. */
+export const build3ds = ({ total = 0x40000, kind = "ncsd", pad = 0xff } = {}) => {
+  const rom = new Uint8Array(total).fill(pad);
+  rom.set(randomBytes(0x24000, 0x33445353), 0);
+  rom.fill(0, 0, 0x200);
+  const ncch = (at, units) => {
+    rom.fill(0, at, at + 0x200);
+    rom.set(Buffer.from("NCCH"), at + 0x100);
+    put32(rom, at + 0x104, units);
+  };
+  if (kind === "ncch") {
+    ncch(0, 0x120);
+    return rom.subarray(0, 0x24000);
+  }
+  rom.set(Buffer.from("NCSD"), 0x100);
+  put32(rom, 0x104, total >> 9);
+  put32(rom, 0x120, 0x20);
+  put32(rom, 0x124, 0x100);
+  ncch(0x4000, 0x100);
+  return rom;
+};
+
+const sectorMsf = (lba) => {
+  const bcd = (n) => ((n / 10) | 0) << 4 | (n % 10);
+  const frames = lba + 150;
+  return [bcd((frames / 4500) | 0), bcd(((frames / 75) | 0) % 60), bcd(frames % 75)];
+};
+const mode1Sector = (lba, seed) => {
+  const sector = new Uint8Array(2352);
+  sector.set([0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0], 0);
+  sector.set(sectorMsf(lba), 12);
+  sector[15] = 1;
+  sector.set(randomBytes(2048, seed + lba), 16);
+  return sector;
+};
+const audioTrack = (sectors, seed) => {
+  const out = new Uint8Array(sectors * 2352);
+  const view = new DataView(out.buffer);
+  for (let i = 0; i < out.length / 4; i++) {
+    const v = Math.round(9000 * Math.sin(i * (0.02 + seed * 0.003)) + 3000 * Math.sin(i * 0.31));
+    view.setInt16(i * 4, v, true);
+    view.setInt16(i * 4 + 2, Math.round(v * 0.7), true);
+  }
+  return out;
+};
+
+export const defineExhaustive = (fx) => {
+  const cache = (name, purpose, how, build) => fx.define(name, { where: "cache", purpose, how, deterministic: false, build });
+  const DATA_SECTORS = 300;
+  const dataTrack = () => {
+    const out = new Uint8Array(DATA_SECTORS * 2352);
+    for (let lba = 0; lba < DATA_SECTORS; lba++) out.set(mode1Sector(lba, 0xcd01), lba * 2352);
+    return out;
+  };
+  cache("exh/cd/data.bin", "single MODE1/2352 track, 300 sectors", "fixture-defs.mjs mode1Sector", () => dataTrack());
+  cache("exh/cd/data.cue", "cue for data.bin", "text", () => 'FILE "data.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n');
+  const audio1 = audioTrack(225, 1);
+  const audio2 = audioTrack(150, 2);
+  cache("exh/cd/mixed.bin", "MODE1 data + 2 audio tracks in one bin", "fixture-defs.mjs", () => {
+    const data = dataTrack();
+    const out = new Uint8Array(data.length + audio1.length + audio2.length);
+    out.set(data, 0);
+    out.set(audio1, data.length);
+    out.set(audio2, data.length + audio1.length);
+    return out;
+  });
+  cache("exh/cd/mixed.cue", "cue for mixed.bin", "text", () => {
+    const msf = (sectors) => `${String((sectors / 4500) | 0).padStart(2, "0")}:${String(((sectors / 75) | 0) % 60).padStart(2, "0")}:${String(sectors % 75).padStart(2, "0")}`;
+    return `FILE "mixed.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    INDEX 01 ${msf(DATA_SECTORS)}\n  TRACK 03 AUDIO\n    INDEX 01 ${msf(DATA_SECTORS + 225)}\n`;
+  });
+  cache("exh/dvd/dvd.iso", "1 MiB ISO9660-ish DVD image (2048-byte sectors)", "fixture-defs.mjs", () => {
+    const iso = randomBytes(512 * 2048, 0xd7d);
+    iso.fill(0, 0, 0x8000);
+    iso.set([1, ...Buffer.from("CD001"), 1], 0x8000);
+    iso[0x8000 + 0x800] = 255;
+    return iso;
+  });
+  cache("exh/ctr/game.3ds", "NCSD cartridge image with 0xFF padding", "build3ds", () => build3ds());
+  cache("exh/ctr/game.cci", "same NCSD under .cci", "build3ds", () => build3ds());
+  cache("exh/ctr/game.cxi", "NCCH executable", "build3ds ncch", () => build3ds({ kind: "ncch" }));
+  cache("exh/ctr/zero-pad.3ds", "NCSD with 0x00 padding", "build3ds", () => build3ds({ pad: 0 }));
+  cache("exh/ctr/not-3ds.3ds", "random bytes named .3ds", "randomBytes", () => randomBytes(0x30000, 0x5e5e));
+  cache("exh/nds/ds.nds", "NDS 512 KiB, 0xFF padded after 0x30000", "buildNds", () => buildNds());
+  cache("exh/nds/ds-zero-pad.nds", "NDS with 0x00 padding", "buildNds", () => buildNds({ pad: 0 }));
+  cache("exh/nds/dsi.nds", "DSi NDS (NTR+TWL size 0x40000)", "buildNds", () => buildNds({ dsi: true }));
+  cache("exh/nds/cert.nds", "NDS with Download Play certificate after the ROM", "buildNds", () => buildNds({ cert: true }));
+  cache("exh/nds/untrimmable.nds", "NDS exactly at its trim boundary", "buildNds", () => buildNds({ total: 0x30000 }));
+  cache("exh/nds/bad-crc.nds", "NDS with corrupted header CRC", "buildNds", () => {
+    const rom = buildNds();
+    rom[0x15e] ^= 0xff;
+    return rom;
+  });
+  cache("exh/nds/short.nds", "NDS shorter than a header", "slice", () => buildNds().subarray(0, 0x800));
+  cache("exh/gba/ff.gba", "GBA 1 MiB, 0xFF padded after 0x30123", "buildGba", () => buildGba());
+  cache("exh/gba/zero.gba", "GBA 1 MiB, 0x00 padded", "buildGba", () => buildGba({ pad: 0 }));
+  cache("exh/gba/full.gba", "GBA with no padding", "buildGba", () => buildGba({ total: 0x40000, used: 0x40000 }));
+};

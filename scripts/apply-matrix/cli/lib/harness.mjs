@@ -77,15 +77,13 @@ export class Ctx {
   /** Run the rom-weaver binary. Never throws; panics are recorded and fail the case at the end. */
   run(args, { env = {}, input, timeout = 180000, cwd, killSignal } = {}) {
     const started = Date.now();
-    const childCwd = path.resolve(cwd ?? this.work);
     const result = spawnSync(this.bin, args, {
       encoding: "buffer",
       input,
       timeout,
       killSignal,
-      cwd: childCwd,
-      // The CLI derives its private temp root from $PWD, so it must match the child cwd.
-      env: { ...process.env, NO_COLOR: "1", PWD: childCwd, ...env },
+      cwd: cwd ?? this.work,
+      env: { ...process.env, NO_COLOR: "1", ...env },
       maxBuffer: 256 * 1024 * 1024,
     });
     const stdout = result.stdout?.toString("utf8") ?? "";
