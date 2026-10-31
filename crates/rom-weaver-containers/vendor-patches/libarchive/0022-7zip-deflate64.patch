@@ -73,7 +73,20 @@ diff --git a/libarchive/archive_read_support_format_7zip.c b/libarchive/archive_
  #ifdef HAVE_ZLIB_H
  	case _7Z_DEFLATE:
  		zip->stream.next_in = (Bytef *)(uintptr_t)t_next_in;
-@@ -2137,6 +2161,8 @@
+@@ -1945,8 +1969,11 @@
+ 			size_t l = x86_Convert(zip, buff, *outbytes);
+ 
+ 			zip->odd_bcj_size = *outbytes - l;
++			/* Deflate64 MAY consume all input before its last drain;
++			 * BCJ MUST retain the tail until the decoder reaches EOF. */
+ 			if (zip->odd_bcj_size > 0 && zip->odd_bcj_size <= 4 &&
+-		    	o_avail_in && ret != ARCHIVE_EOF) {
++			    (o_avail_in || zip->codec == _7Z_DEFLATE64) &&
++			    ret != ARCHIVE_EOF) {
+ 				memcpy(zip->odd_bcj, ((unsigned char *)buff) + l,
+ 			    	zip->odd_bcj_size);
+ 				*outbytes = l;
+@@ -2137,6 +2164,8 @@
  		zip->stream_valid = 0;
  	}
  #endif

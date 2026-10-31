@@ -1,7 +1,7 @@
 use deflate64::InflaterManaged;
 use std::ffi::c_int;
 use std::slice;
-use tracing::debug;
+use tracing::{debug, trace};
 
 #[unsafe(no_mangle)]
 extern "C" fn rom_weaver_deflate64_new() -> *mut InflaterManaged {
@@ -39,6 +39,14 @@ unsafe extern "C" fn rom_weaver_deflate64_inflate(
         unsafe { slice::from_raw_parts_mut(output, *available_output) }
     };
     let result = decoder.inflate(input, output);
+    trace!(
+        input_bytes = input.len(),
+        consumed_bytes = result.bytes_consumed,
+        output_bytes = result.bytes_written,
+        pending_bytes = decoder.available_output(),
+        finished = decoder.finished(),
+        "inflating Deflate64"
+    );
     *available_input -= result.bytes_consumed;
     *available_output -= result.bytes_written;
     if result.data_error {

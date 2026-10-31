@@ -2746,6 +2746,45 @@ fn extract_7z_deflate64_bcj_drains_buffered_output() {
 }
 
 #[test]
+fn extract_7z_deflate64_bcj_converts_calls_across_drain_boundaries() {
+    for (fixture, name, size, prefix, stride, filler) in [
+        ("calls", "calls.bin", 1024 * 1024, 0, 5, 0),
+        ("long-match", "long-match.bin", 851922, 7, 6, 0x90),
+    ] {
+        let archive = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
+            "../rom-weaver-containers/tests/fixtures/7z/deflate64-bcj-{fixture}.7z"
+        ));
+        let mut expected = vec![filler; size];
+        for offset in (prefix..expected.len() - 4).step_by(stride) {
+            expected[offset] = if (offset - prefix) % (stride * 2) == 0 {
+                0xe8
+            } else {
+                0xe9
+            };
+            let relative = 0x20_0000_i32 - offset as i32 - 5;
+            expected[offset + 1..offset + 5].copy_from_slice(&relative.to_le_bytes());
+        }
+        let temp = setup_temp_dir();
+        for threads in ["1", "2"] {
+            let out = temp.child(format!("out-{threads}"));
+            command_stdout(
+                &[
+                    "extract",
+                    "-i",
+                    archive.to_str().expect("path"),
+                    "-o",
+                    out.path().to_str().expect("path"),
+                    "-j",
+                    threads,
+                ],
+                0,
+            );
+            assert_eq!(fs::read(out.child(name).path()).expect("payload"), expected);
+        }
+    }
+}
+
+#[test]
 fn extract_7z_deflate64_solid_and_separate_folders() {
     for solid in ["on", "off"] {
         let archive = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
