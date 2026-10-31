@@ -34,6 +34,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.compress.opening": msg({ id: "ui.compress.opening", message: "Extracting" }),
   "ui.compress.removeFile": msg({ id: "ui.compress.removeFile", message: "Remove {name}" }),
   "ui.compress.running": msg({ id: "ui.compress.running", message: "Compressing files…" }),
+  "ui.compress.rvzNeedsDisc": msg({
+    id: "ui.compress.rvzNeedsDisc",
+    message: "RVZ only stores GameCube and Wii disc images, and {name} is not one. Choose another output format.",
+  }),
   "ui.compress.run": msg({ id: "ui.compress.run", message: "Compress" }),
   "ui.drop.inputHandling": msg({ id: "ui.drop.inputHandling", message: "How files are opened" }),
   "ui.drop.inputs": msg({ id: "ui.drop.inputs", message: "Inputs" }),
