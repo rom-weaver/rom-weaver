@@ -613,6 +613,7 @@ impl CliApp {
             },
             algorithms,
             classify_before_selection,
+            has_unnamed_payloads && has_nested_containers,
         ) {
             Ok(assets) => assets,
             Err(rom_error) => {
@@ -1014,6 +1015,7 @@ impl CliApp {
         request: IngestLeavesRequest<'_>,
         algorithms: &[String],
         classify_before_selection: bool,
+        sniff_unnamed_before_prompt: bool,
     ) -> Result<(Vec<IngestRomAsset>, Vec<PatchDescriptor>)> {
         let IngestLeavesRequest {
             source,
@@ -1035,6 +1037,7 @@ impl CliApp {
         // Nested containers skip classify-before-selection, so unnamed patches are classified from
         // their headers here and kept out of the ROM prompt.
         let signature_selection = if interactive
+            && sniff_unnamed_before_prompt
             && !select_classified_leaves
             && self.interactive_selection_enabled
             && raw_selections.is_empty()
