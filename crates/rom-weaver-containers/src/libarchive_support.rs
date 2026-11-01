@@ -1994,7 +1994,7 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         &request.selections,
         request.kind_filter,
         request.ignore_common_files,
-        request.containing_archive.is_some(),
+        request.containing_archive.is_some() || request.kind_filter.include_containers,
         format_name,
     )?;
     let total_tasks = destination_tasks.len();

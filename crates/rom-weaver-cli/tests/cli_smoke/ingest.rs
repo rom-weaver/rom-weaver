@@ -2929,7 +2929,216 @@ fn ingest_classification_unnamed_raw_dump_beside_named_patch_ignores_appledouble
     );
 }
 
-/// Unnamed top-level entries carry no kind, so they MUST NOT stop descent into a nested ROM archive.
+/// A nested archive never hides its patches, and a patch beside a nested archive never hides the
+/// ROMs inside it: every ROM and patch of every level is reported, without a prompt.
+#[test]
+fn ingest_nested_archives_keep_every_rom_and_patch() {
+    // (top-level members, nested members, expected ROMs, expected patches)
+    type Names = &'static [&'static str];
+    let cases: &[(Names, Names, Names, Names)] = &[
+        // patch and ROMs together in the nested archive
+        (
+            &[],
+            &["hack.bps", "a.nes", "b.nes"],
+            &["a.nes", "b.nes"],
+            &["hack.bps"],
+        ),
+        // patch beside the nested archive of ROMs
+        (
+            &["hack.bps"],
+            &["a.nes", "b.nes"],
+            &["a.nes", "b.nes"],
+            &["hack.bps"],
+        ),
+        // ROM beside the nested archive of ROMs
+        (
+            &["c.nes"],
+            &["a.nes", "b.nes"],
+            &["a.nes", "b.nes", "c.nes"],
+            &[],
+        ),
+        // unnamed ROMs
+        (
+            &[],
+            &["hack.bps", "dumpA", "dumpB"],
+            &["dumpA", "dumpB"],
+            &["hack.bps"],
+        ),
+        (
+            &["hack.bps"],
+            &["dumpA", "dumpB"],
+            &["dumpA", "dumpB"],
+            &["hack.bps"],
+        ),
+        (
+            &["dumpC"],
+            &["dumpA", "dumpB"],
+            &["dumpA", "dumpB", "dumpC"],
+            &[],
+        ),
+    ];
+    for (top, nested, roms, patches) in cases {
+        let temp = setup_temp_dir();
+        let write_members = |dir: &str, names: &[&str]| -> Vec<std::path::PathBuf> {
+            fs::create_dir_all(temp.child(dir).path()).unwrap();
+            names
+                .iter()
+                .map(|name| {
+                    let path = temp.child(dir).child(name);
+                    if name.ends_with(".bps") {
+                        fs::write(path.path(), banded_bps()).unwrap();
+                    } else {
+                        fs::write(
+                            path.path(),
+                            [banded_rom(), name.as_bytes().to_vec()].concat(),
+                        )
+                        .unwrap();
+                    }
+                    path.path().to_path_buf()
+                })
+                .collect()
+        };
+        let inner_members = write_members("inner-src", nested);
+        let inner = temp.child("inner.zip");
+        zip_members(
+            &temp,
+            inner.path(),
+            &inner_members
+                .iter()
+                .map(|p| p.as_path())
+                .collect::<Vec<_>>(),
+        );
+        let mut outer_members = vec![inner.path().to_path_buf()];
+        outer_members.extend(write_members("top-src", top));
+        let outer = temp.child("outer.zip");
+        zip_members(
+            &temp,
+            outer.path(),
+            &outer_members
+                .iter()
+                .map(|p| p.as_path())
+                .collect::<Vec<_>>(),
+        );
+
+        let result = ingest_json(&temp, outer.path(), "out");
+        let ingest = &result["details"]["ingest"];
+        let mut got_roms: Vec<_> = ingest["assets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|asset| asset["file_name"].as_str().unwrap().to_string())
+            .collect();
+        got_roms.sort();
+        let mut got_patches: Vec<_> = patch_file_names(ingest)
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect();
+        got_patches.sort();
+        assert_eq!(got_roms, *roms, "{top:?} + {nested:?}: {ingest}");
+        assert_eq!(got_patches, *patches, "{top:?} + {nested:?}: {ingest}");
+    }
+}
+
+/// A nested archive beside the ROM must not cost the sidecar patch its libretro order: hosts only
+/// auto-apply patches that carry one.
+#[test]
+fn ingest_nested_archive_keeps_the_sidecar_patch_order() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.nes");
+    fs::write(rom.path(), with_nes_header(b"mixed rom payload")).expect("rom fixture");
+    let patch = create_bps_patch(&temp, b"abcdefgh", b"abZZefgh", "game.bps");
+    let extra = temp.child("extra.nes");
+    fs::write(extra.path(), with_nes_header(b"extra rom payload")).expect("extra fixture");
+    let inner = temp.child("inner.zip");
+    zip_members(&temp, inner.path(), &[extra.path()]);
+    let archive = temp.child("mixed.zip");
+    zip_members(
+        &temp,
+        archive.path(),
+        &[rom.path(), patch.as_path(), inner.path()],
+    );
+
+    let result = ingest_json(&temp, archive.path(), "out");
+    let ingest = &result["details"]["ingest"];
+    let descriptor = ingest["patches"]
+        .as_array()
+        .expect("patches array")
+        .iter()
+        .find(|descriptor| descriptor["file_name"] == "game.bps")
+        .expect("sidecar patch surfaced");
+    assert_eq!(descriptor["sidecar_order"], 0, "{ingest}");
+    let mut assets: Vec<_> = ingest["assets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|asset| asset["file_name"].as_str().unwrap())
+        .collect();
+    assets.sort_unstable();
+    assert_eq!(assets, ["extra.nes", "game.nes"], "{ingest}");
+}
+
+/// Nested archives that hold nothing to keep are not a successful ingest: the ignore rules would
+/// otherwise turn the whole input into an empty result.
+#[test]
+fn ingest_archive_of_only_ignored_nested_archives_fails() {
+    let temp = setup_temp_dir();
+    let readme = temp.child("README.txt");
+    let cover = temp.child("cover.png");
+    fs::write(readme.path(), b"read me").unwrap();
+    fs::write(cover.path(), b"\x89PNG\r\n\x1a\n").unwrap();
+    let docs = temp.child("docs.zip");
+    zip_members(&temp, docs.path(), &[readme.path(), cover.path()]);
+    let outer = temp.child("outer.zip");
+    zip_members(&temp, outer.path(), &[docs.path()]);
+    let out = temp.child("out");
+    let event = isolated_json_event(
+        &temp,
+        &[
+            "ingest",
+            "--input",
+            outer.path().to_str().unwrap(),
+            "--output",
+            out.path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    );
+    let message = event["details"]["error"]["message"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(message.contains("holds no ROM or patch"), "{event}");
+}
+
+/// A nested archive with nothing but ignored files has no ROM or patch to keep; it must not fail
+/// the ingest of the ROM beside it.
+#[test]
+fn ingest_nested_archive_of_ignored_files_does_not_fail_the_ingest() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.nes");
+    fs::write(rom.path(), banded_rom()).unwrap();
+    let readme = temp.child("README.txt");
+    let cover = temp.child("cover.png");
+    fs::write(readme.path(), b"read me").unwrap();
+    fs::write(cover.path(), b"\x89PNG\r\n\x1a\n").unwrap();
+    let manual = temp.child("manual.zip");
+    zip_members(&temp, manual.path(), &[readme.path(), cover.path()]);
+    let outer = temp.child("outer.zip");
+    zip_members(&temp, outer.path(), &[rom.path(), manual.path()]);
+
+    let result = ingest_json(&temp, outer.path(), "out");
+    let ingest = &result["details"]["ingest"];
+    assert_eq!(ingest["kind"], "rom", "{ingest}");
+    let assets: Vec<_> = ingest["assets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|asset| asset["file_name"].as_str().unwrap())
+        .collect();
+    assert_eq!(assets, ["game.nes"], "{ingest}");
+}
+
+/// Unnamed top-level entries carry no kind, so they MUST NOT stop descent into a nested ROM archive,
+/// and the archive MUST NOT drop any of them.
 #[test]
 fn ingest_classification_unnamed_entries_keep_nested_archive_descent() {
     for (extra_name, extra_bytes) in [("extra", b"license text".to_vec()), ("patch", banded_bps())]
@@ -2956,7 +3165,24 @@ fn ingest_classification_unnamed_entries_keep_nested_archive_descent() {
             .map(|asset| asset["file_name"].as_str().unwrap())
             .collect();
         assets.sort_unstable();
-        assert_eq!(assets, ["alpha.nes", "beta.nes"], "{extra_name}: {ingest}");
+        // Nothing is dropped: an unnamed entry that is no patch stays a ROM candidate.
+        let expected: &[&str] = if extra_name == "extra" {
+            &["alpha.nes", "beta.nes", "extra"]
+        } else {
+            &["alpha.nes", "beta.nes"]
+        };
+        assert_eq!(assets, expected, "{extra_name}: {ingest}");
+        // An unnamed signature patch beside the nested archive is reported as a patch.
+        let patch_names: Vec<_> = patch_file_names(ingest)
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect();
+        let expected_patches: &[&str] = if extra_name == "patch" {
+            &["patch"]
+        } else {
+            &[]
+        };
+        assert_eq!(patch_names, expected_patches, "{extra_name}: {ingest}");
 
         let extracted = temp.child("extracted");
         isolated_json_event(

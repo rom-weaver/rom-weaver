@@ -209,19 +209,49 @@ impl CliApp {
                 thread_execution: step_threads.clone(),
             });
             let step_started = std::time::Instant::now();
-            let nested_report = self
-                .extract_container(handler.as_ref(), &nested_request, context)
-                .map_err(|error| {
-                    // A cancel stays a cancel, so the exit code and JSON report agree.
-                    if matches!(error, RomWeaverError::Cancelled) {
-                        return error;
+            let nested_report =
+                match self.extract_container(handler.as_ref(), &nested_request, context) {
+                    Ok(report) => report,
+                    // A filter for both kinds keeps every nested archive, so one that holds only
+                    // ignored or unrelated files has nothing to extract and must not fail the rest.
+                    Err(error)
+                        if kind_filter.include_containers
+                            && Self::is_empty_nested_selection_error(&error) =>
+                    {
+                        debug!(
+                            source = %source.display(),
+                            error = %error,
+                            "skipping nested archive with no ROM or patch entries"
+                        );
+                        fs::remove_dir(&nested_out_dir).ok();
+                        // The archive is consumed: it holds no ROM or patch to report.
+                        descended.insert(canonical_source_key);
+                        self.emit_extract_step(ExtractStepEvent {
+                            format: format_name,
+                            depth,
+                            source: &source,
+                            out_dir: &nested_out_dir,
+                            step_status: "succeeded",
+                            outputs: &[],
+                            elapsed_ms: Some(
+                                step_started.elapsed().as_millis().min(u32::MAX as u128) as u32,
+                            ),
+                            thread_execution: step_threads,
+                        });
+                        continue;
                     }
-                    RomWeaverError::Validation(format!(
-                        "nested extract failed for `{}` ({}): {error}",
-                        source.display(),
-                        format_name
-                    ))
-                })?;
+                    Err(error) => {
+                        // A cancel stays a cancel, so the exit code and JSON report agree.
+                        if matches!(error, RomWeaverError::Cancelled) {
+                            return Err(error);
+                        }
+                        return Err(RomWeaverError::Validation(format!(
+                            "nested extract failed for `{}` ({}): {error}",
+                            source.display(),
+                            format_name
+                        )));
+                    }
+                };
             let step_elapsed_ms = step_started.elapsed().as_millis().min(u32::MAX as u128) as u32;
             descended.insert(canonical_source_key);
             nested_count = nested_count.saturating_add(1);
@@ -399,6 +429,15 @@ impl CliApp {
             .filter(|handler| !handler.is_self_contained_rom(path))
     }
 
+    /// The planner's refusal to extract an archive whose every entry is ignored or unrelated.
+    fn is_empty_nested_selection_error(error: &RomWeaverError) -> bool {
+        let RomWeaverError::Validation(message) = error else {
+            return false;
+        };
+        message.contains("were ignored by default filters")
+            || (message.contains("no extract entries from") && message.contains("matched"))
+    }
+
     pub(super) fn should_probe_nested_candidate(
         path: &Path,
         kind_filter: ArchiveEntryKindFilter,
@@ -547,10 +586,7 @@ mod nfs_probe_tests {
                     root_source: &directory.path().join("outer.zip"),
                     root_candidates: &[source],
                     preserve_nested_formats: &[],
-                    kind_filter: ArchiveEntryKindFilter {
-                        rom: false,
-                        patch: true,
-                    },
+                    kind_filter: ArchiveEntryKindFilter::new(false, true),
                     ignore_common_files: true,
                     overwrite: false,
                 },

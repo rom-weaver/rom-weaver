@@ -2062,16 +2062,6 @@ fn ingest_interactive_signature_sidecar_survives_rom_choice_and_cancellation() {
     check_ingest_interactive_signature_sidecar(&["game.bin", "raw"], Some(1), "absolute");
 }
 
-/// A nested archive beside the ROMs keeps the top-level prompt, but the unnamed patch is classified
-/// from its header first: it is never offered as a ROM and survives whichever entry is chosen.
-#[test]
-fn ingest_interactive_nested_archive_excludes_signature_patch_from_rom_prompt() {
-    let names = ["first.nes", "second.nes", "extra.zip"];
-    check_ingest_interactive_signature_sidecar(&names, Some(1), "absolute");
-    check_ingest_interactive_signature_sidecar(&names, Some(2), "absolute");
-    check_ingest_interactive_signature_sidecar(&names, None, "absolute");
-}
-
 #[test]
 fn ingest_interactive_relative_output_uses_archive_names() {
     check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], Some(1), "relative");
@@ -2083,16 +2073,16 @@ fn ingest_interactive_symlink_output_uses_archive_names() {
     check_ingest_interactive_signature_sidecar(&["first.nes", "second.nes"], Some(1), "symlink");
 }
 
-fn check_ingest_interactive_nested_archive(extra: Option<&'static str>, selected: Option<usize>) {
+fn check_ingest_interactive_nested_archive(extra: Option<&'static str>) {
     std::thread::Builder::new()
         .stack_size(32 * 1024 * 1024)
-        .spawn(move || check_ingest_interactive_nested_archive_body(extra, selected))
+        .spawn(move || check_ingest_interactive_nested_archive_body(extra))
         .unwrap()
         .join()
         .unwrap();
 }
 
-fn check_ingest_interactive_nested_archive_body(extra: Option<&str>, selected: Option<usize>) {
+fn check_ingest_interactive_nested_archive_body(extra: Option<&str>) {
     struct JsonLines(Mutex<Vec<serde_json::Value>>);
     impl rom_weaver_core::ProgressSink for JsonLines {
         fn emit(&self, event: rom_weaver_core::ProgressEvent) {
@@ -2104,27 +2094,19 @@ fn check_ingest_interactive_nested_archive_body(extra: Option<&str>, selected: O
     }
     struct Prompt {
         calls: Mutex<Vec<Vec<String>>>,
-        selected: Option<usize>,
-        output: PathBuf,
     }
     impl SelectionPrompter for Prompt {
         fn select(&self, _heading: &str, candidates: &[PromptCandidate]) -> Selection {
-            assert!(
-                !self.output.exists() || std::fs::read_dir(&self.output).unwrap().next().is_none(),
-                "ordinary archive prompts must precede extraction"
-            );
             self.calls.lock().unwrap().push(
                 candidates
                     .iter()
                     .map(|candidate| candidate.label.clone())
                     .collect(),
             );
-            self.selected
-                .map(Selection::Selected)
-                .unwrap_or(Selection::Cancelled)
+            Selection::Cancelled
         }
         fn select_many(&self, _heading: &str, _candidates: &[PromptCandidate]) -> SelectionList {
-            panic!("ROM selection must be single-select");
+            panic!("an archive with nested containers must not prompt");
         }
         fn confirm(&self, _heading: &str, _details: &[String]) -> bool {
             false
@@ -2134,8 +2116,6 @@ fn check_ingest_interactive_nested_archive_body(extra: Option<&str>, selected: O
     let output = temp.path().join("out");
     let prompt = Arc::new(Prompt {
         calls: Mutex::new(Vec::new()),
-        selected,
-        output: output.clone(),
     });
     let events = Arc::new(JsonLines(Mutex::new(Vec::new())));
     let app = CliApp::new(events.clone(), prompt.clone(), true, true, false);
@@ -2174,34 +2154,110 @@ fn check_ingest_interactive_nested_archive_body(extra: Option<&str>, selected: O
         threads: ThreadBudget::Fixed(1),
     }));
     let calls = prompt.calls.lock().unwrap();
-    if extra.is_none() {
-        assert!(
-            calls.is_empty(),
-            "nested descent must not prompt: {calls:?}"
-        );
-    } else {
-        assert_eq!(calls.len(), 1);
-    }
+    assert!(
+        calls.is_empty(),
+        "nested descent must not prompt: {calls:?}"
+    );
     let events = events.0.lock().unwrap();
     assert_eq!(outcome.exit_code, 0, "{events:?}");
     let ingest = &events.last().unwrap()["details"]["ingest"];
-    assert_eq!(ingest["assets"].as_array().unwrap().len(), 2);
+    // Nothing is dropped: both ROMs of every nested archive, and every other entry, are kept.
+    let expected_assets = match extra {
+        None => 2,
+        Some("other.zip") => 4,
+        Some(_) => 3,
+    };
+    assert_eq!(ingest["assets"].as_array().unwrap().len(), expected_assets);
     assert!(ingest["patches"].as_array().unwrap().is_empty());
 }
 
 #[test]
 fn ingest_interactive_nested_roms_do_not_prompt() {
-    check_ingest_interactive_nested_archive(None, None);
+    check_ingest_interactive_nested_archive(None);
 }
 
 #[test]
-fn ingest_interactive_known_archives_prompt_before_extraction() {
-    check_ingest_interactive_nested_archive(Some("other.zip"), Some(0));
+fn ingest_interactive_known_archives_keep_every_nested_rom_without_prompting() {
+    check_ingest_interactive_nested_archive(Some("other.zip"));
 }
 
 #[test]
-fn ingest_interactive_unnamed_entry_prompts_before_nested_extraction() {
-    check_ingest_interactive_nested_archive(Some("extra"), Some(1));
+fn ingest_interactive_unnamed_entry_beside_nested_archive_is_kept_without_prompting() {
+    check_ingest_interactive_nested_archive(Some("extra"));
+}
+
+/// A stream wrapper holds one payload, not other archives: a zip of gzip-wrapped ROMs keeps the
+/// keep-one prompt instead of taking the keep-everything route for nested archives.
+#[test]
+fn ingest_interactive_stream_wrapped_roms_keep_their_prompt() {
+    std::thread::Builder::new()
+        .stack_size(32 * 1024 * 1024)
+        .spawn(check_ingest_interactive_stream_wrapped_roms)
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+fn check_ingest_interactive_stream_wrapped_roms() {
+    struct JsonLines(Mutex<Vec<serde_json::Value>>);
+    impl rom_weaver_core::ProgressSink for JsonLines {
+        fn emit(&self, event: rom_weaver_core::ProgressEvent) {
+            self.0
+                .lock()
+                .unwrap()
+                .push(serde_json::to_value(event).unwrap());
+        }
+    }
+    struct Prompt(Mutex<usize>);
+    impl SelectionPrompter for Prompt {
+        fn select(&self, _heading: &str, _candidates: &[PromptCandidate]) -> Selection {
+            *self.0.lock().unwrap() += 1;
+            Selection::Selected(0)
+        }
+        fn select_many(&self, _heading: &str, _candidates: &[PromptCandidate]) -> SelectionList {
+            panic!("ROM selection must be single-select");
+        }
+        fn confirm(&self, _heading: &str, _details: &[String]) -> bool {
+            false
+        }
+    }
+    let temp = assert_fs::TempDir::new().unwrap();
+    let prompt = Arc::new(Prompt(Mutex::new(0)));
+    let events = Arc::new(JsonLines(Mutex::new(Vec::new())));
+    let app = CliApp::new(events.clone(), prompt.clone(), true, true, false);
+    let wrapped = ["alpha.nes", "beta.nes"].map(|name| {
+        let gz = temp.path().join(format!("{name}.gz"));
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::new(6));
+        std::io::Write::write_all(&mut encoder, b"raw ROM payload").unwrap();
+        std::fs::write(&gz, encoder.finish().unwrap()).unwrap();
+        gz
+    });
+    let archive = temp.path().join("outer.zip");
+    compress_zip_fixture(&app, &wrapped, &archive);
+    let outcome = app.run(Commands::Ingest(super::IngestCommand {
+        input: archive,
+        output: temp.path().join("out"),
+        database: Vec::new(),
+        select: Vec::new(),
+        sidecar_names: Vec::new(),
+        sidecar_only: false,
+        input_name: None,
+        no_ignore: false,
+        no_nested_extract: false,
+        preserve_nested_formats: Vec::new(),
+        split_bin: None,
+        checksum: vec!["crc32".to_string()],
+        threads: ThreadBudget::Fixed(1),
+    }));
+    let events = events.0.lock().unwrap();
+    assert_eq!(outcome.exit_code, 0, "{events:?}");
+    assert_eq!(
+        *prompt.0.lock().unwrap(),
+        1,
+        "wrapped ROMs must still prompt"
+    );
+    let ingest = &events.last().unwrap()["details"]["ingest"];
+    assert_eq!(ingest["assets"].as_array().unwrap().len(), 1, "{ingest}");
 }
 
 #[test]
