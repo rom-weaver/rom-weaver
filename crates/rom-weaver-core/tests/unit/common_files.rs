@@ -241,3 +241,27 @@ fn kind_filter_selection_keeps_containers_beside_unnamed_entries() {
     );
     assert!(select(&["notes.txt"], false).is_empty());
 }
+
+#[test]
+fn stream_wrapped_payload_names_are_not_nested_archives() {
+    for name in [
+        "game.nes.gz",
+        "Game.NES.XZ",
+        "hack.bps.zst",
+        "Hack v1.1.gz",
+        "dump.gz",
+        "folder/game.sfc.bz2",
+    ] {
+        assert!(is_stream_wrapped_payload_name(name), "{name}");
+    }
+    for name in [
+        "inner.zip",
+        "set.tar.gz",
+        "set.tgz",
+        "game.nes",
+        "bundle.7z",
+        "readme.txt.gz",
+    ] {
+        assert!(!is_stream_wrapped_payload_name(name), "{name}");
+    }
+}

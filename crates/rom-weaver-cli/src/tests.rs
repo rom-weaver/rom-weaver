@@ -2186,6 +2186,80 @@ fn ingest_interactive_unnamed_entry_beside_nested_archive_is_kept_without_prompt
     check_ingest_interactive_nested_archive(Some("extra"));
 }
 
+/// A stream wrapper holds one payload, not other archives: a zip of gzip-wrapped ROMs keeps the
+/// keep-one prompt instead of taking the keep-everything route for nested archives.
+#[test]
+fn ingest_interactive_stream_wrapped_roms_keep_their_prompt() {
+    std::thread::Builder::new()
+        .stack_size(32 * 1024 * 1024)
+        .spawn(check_ingest_interactive_stream_wrapped_roms)
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+fn check_ingest_interactive_stream_wrapped_roms() {
+    struct JsonLines(Mutex<Vec<serde_json::Value>>);
+    impl rom_weaver_core::ProgressSink for JsonLines {
+        fn emit(&self, event: rom_weaver_core::ProgressEvent) {
+            self.0
+                .lock()
+                .unwrap()
+                .push(serde_json::to_value(event).unwrap());
+        }
+    }
+    struct Prompt(Mutex<usize>);
+    impl SelectionPrompter for Prompt {
+        fn select(&self, _heading: &str, _candidates: &[PromptCandidate]) -> Selection {
+            *self.0.lock().unwrap() += 1;
+            Selection::Selected(0)
+        }
+        fn select_many(&self, _heading: &str, _candidates: &[PromptCandidate]) -> SelectionList {
+            panic!("ROM selection must be single-select");
+        }
+        fn confirm(&self, _heading: &str, _details: &[String]) -> bool {
+            false
+        }
+    }
+    let temp = assert_fs::TempDir::new().unwrap();
+    let prompt = Arc::new(Prompt(Mutex::new(0)));
+    let events = Arc::new(JsonLines(Mutex::new(Vec::new())));
+    let app = CliApp::new(events.clone(), prompt.clone(), true, true, false);
+    let wrapped = ["alpha.nes", "beta.nes"].map(|name| {
+        let gz = temp.path().join(format!("{name}.gz"));
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::new(6));
+        std::io::Write::write_all(&mut encoder, b"raw ROM payload").unwrap();
+        std::fs::write(&gz, encoder.finish().unwrap()).unwrap();
+        gz
+    });
+    let archive = temp.path().join("outer.zip");
+    compress_zip_fixture(&app, &wrapped, &archive);
+    let outcome = app.run(Commands::Ingest(super::IngestCommand {
+        input: archive,
+        output: temp.path().join("out"),
+        database: Vec::new(),
+        select: Vec::new(),
+        sidecar_names: Vec::new(),
+        sidecar_only: false,
+        input_name: None,
+        no_ignore: false,
+        no_nested_extract: false,
+        preserve_nested_formats: Vec::new(),
+        split_bin: None,
+        checksum: vec!["crc32".to_string()],
+        threads: ThreadBudget::Fixed(1),
+    }));
+    let events = events.0.lock().unwrap();
+    assert_eq!(outcome.exit_code, 0, "{events:?}");
+    assert_eq!(
+        *prompt.0.lock().unwrap(),
+        1,
+        "wrapped ROMs must still prompt"
+    );
+    let ingest = &events.last().unwrap()["details"]["ingest"];
+    assert_eq!(ingest["assets"].as_array().unwrap().len(), 1, "{ingest}");
+}
+
 #[test]
 fn unselected_leaf_cleanup_stays_inside_the_output_directory() {
     let temp = assert_fs::TempDir::new().unwrap();
