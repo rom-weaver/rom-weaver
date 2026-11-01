@@ -156,6 +156,14 @@ const HYDRATION_SETTINGS = JSON.stringify({
 
 const APP_LOG_TAIL_LINES = 80;
 
+// Playwright's message.text() keeps the logger's `%c` format and CSS style arguments in front of the message.
+const cleanAppLogText = (text) =>
+  text
+    .replace(/%[cs]/g, "")
+    .replace(/color: [^;]+; font-weight: \w+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
 const reservePort = () =>
   new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -298,7 +306,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
       const appLog = [];
       page.on("console", (message) => {
         if (message.type() === "error") failures.push(formatConsoleError(message.text(), message.location()));
-        appLog.push(`${message.type()}: ${message.text().slice(0, 400)}`);
+        appLog.push(`${message.type()}: ${cleanAppLogText(message.text()).slice(0, 600)}`);
         if (appLog.length > APP_LOG_TAIL_LINES) appLog.shift();
       });
       watchRequestFailures(page);
@@ -448,9 +456,14 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         if (failures.length) problems.push(`browser errors: ${failures.join(" | ")}`);
         if (problems.length)
           throw new Error(
-            `${testCase.path} hydration audit failed:\n${problems.map((problem) => `- ${problem}`).join("\n")}\napp log (last ${appLog.length} lines):\n${appLog.map((line) => `  ${line}`).join("\n")}`,
+            `${testCase.path} hydration audit failed:\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
           );
         process.stdout.write(`PASS hydration ${testCase.path} (${result.initialView} -> ${result.finalView})\n`);
+      } catch (error) {
+        // Any failure of the case, not only the final checks, prints the page's recent console log.
+        if (error instanceof Error)
+          error.message += `\napp log (last ${appLog.length} lines):\n${appLog.map((line) => `  ${line}`).join("\n")}`;
+        throw error;
       } finally {
         releaseScripts();
         await page.close();

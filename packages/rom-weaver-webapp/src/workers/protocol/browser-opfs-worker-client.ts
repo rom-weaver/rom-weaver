@@ -1,4 +1,4 @@
-import { createLogger } from "../../lib/logging.ts";
+import { createLogger, isLogLevelEnabled } from "../../lib/logging.ts";
 import OPFS_PROXY_WORKER_URL from "../../wasm/workers/browser-opfs-proxy-worker.ts?worker&url";
 import { createWorkerRequestId } from "../shared/worker-request-id.ts";
 // `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/development/ARCHITECTURE.md.
@@ -175,27 +175,29 @@ const readBrowserOpfsPrefix = (filePath: string, length: number, signal?: AbortS
 
 /**
  * Debug aid for the intermittent "OPFS prefix file not found" failure: the file is read right after it was staged,
- * so record whether its directory still existed and what it held when the read failed. Names only, no full paths.
+ * so record whether its directory still existed and what it held when the read failed. The error text keeps the
+ * OPFS path it already carries; the other fields are names relative to the parent directory. The listing walks all
+ * of OPFS, so it only runs when debug logging is on. The result is one line of text: the E2E harness prints console
+ * text, which shows an object or array argument only as a preview.
  */
 const logPrefixReadFailure = async (filePath: string, message: string | undefined): Promise<void> => {
+  if (!isLogLevelEnabled("debug")) return;
   try {
     const separator = filePath.lastIndexOf("/");
     const parent = filePath.slice(0, Math.max(separator, 0)).replace(/^\/work(?=\/|$)/, "");
     const listing = await requestBrowserOpfsStorage({ action: "list-metadata" });
     const entries = listing.success ? (listing.entries ?? []) : null;
-    logger.debug("OPFS prefix read failed", {
-      error: message,
-      fileName: filePath.slice(separator + 1),
-      listError: listing.success ? undefined : listing.error?.message,
-      parentDir: parent.slice(parent.lastIndexOf("/") + 1),
-      parentExists: entries ? entries.some((entry) => entry.kind === "directory" && entry.path === parent) : null,
-      siblings: entries
-        ? entries
-            .filter((entry) => entry.path.startsWith(`${parent}/`))
-            .slice(0, 20)
-            .map((entry) => entry.path.slice(parent.length + 1))
-        : null,
-    });
+    const parentExists = entries ? entries.some((entry) => entry.kind === "directory" && entry.path === parent) : null;
+    const siblings = entries
+      ? entries
+          .filter((entry) => entry.path.startsWith(`${parent}/`))
+          .slice(0, 20)
+          .map((entry) => entry.path.slice(parent.length + 1))
+          .join(",")
+      : `listing failed: ${listing.error?.message}`;
+    logger.debug(
+      `OPFS prefix read failed: parentExists=${parentExists} parentDir=${parent.slice(parent.lastIndexOf("/") + 1)} siblings=[${siblings}] error=${message}`,
+    );
   } catch (error) {
     logger.debug("OPFS prefix read diagnostics failed", {
       error: error instanceof Error ? error.message : String(error),

@@ -55,6 +55,9 @@ const normalizeLogLevel = (value: unknown, fallback: LogLevel = "warn"): LogLeve
   return isLogLevel(normalized) ? normalized : fallback;
 };
 
+/** True when a record at `level` would be delivered; lets callers skip work that only feeds a log line. */
+const isLogLevelEnabled = (level: LogRecord["level"]): boolean => shouldLog(level, globalLogLevel);
+
 const isTraceLogEnabled = (value: unknown): boolean => normalizeLogLevel(value, "off") === "trace";
 
 const shouldLog = (messageLevel: LogRecord["level"], configuredLevel: LogLevel): boolean =>
@@ -259,4 +262,5 @@ export {
   emitTraceLog,
   flushDeferredLogs,
   getConsoleLogSink,
+  isLogLevelEnabled,
 };
