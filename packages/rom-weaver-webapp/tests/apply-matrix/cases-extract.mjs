@@ -122,7 +122,8 @@ export function extractCases() {
       skip: have3(file) ? undefined : `fixture missing: ${file}`,
       async run(h) {
         const want = expected();
-        if (!want) throw new Error("no independent expectation available");
+        // quality-reason: the expectation comes from an independent host tool (7z, bsdtar, chdman, dolphin-tool); without it there is nothing to compare against, so the case skips instead of failing.
+        if (!want) throw new Skip("no independent expectation available (host tool missing)");
         const session = await openExtract(h, [file]);
         try {
           const state = await settleExtract(session.page);

@@ -225,6 +225,8 @@ export function trimCases() {
             if (out.kind !== "download")
               throw new Error(`no download (${out.kind}${out.text ? `: ${out.text}` : ""}) ${await mainText(page)}`);
             const decoded = decodeOutput(wanted, out);
+            // quality-reason: rvz, chd and z3ds outputs are judged by dolphin-tool, chdman or the native CLI; without the verifier the bytes are unchecked, so the case skips instead of passing.
+            if (decoded === null) throw new Skip(`no host verifier for the ${wanted} output`);
             const notes = [`${out.name} ${out.bytes.length}B`];
             if (decoded?.error) throw new Error(decoded.error);
             const payload = decoded?.bytes ?? null;
