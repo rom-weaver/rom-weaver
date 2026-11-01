@@ -2272,3 +2272,24 @@ fn extensionless_documentation_files_do_not_make_a_patch_archive_a_rom() {
             .all(|summary| summary.kind.as_deref() != Some("common"))
     );
 }
+
+#[test]
+fn markdown_documentation_beside_a_rom_is_a_common_file() {
+    let entry = |path: &str| ContainerListEntry {
+        path: path.to_string(),
+        size: Some(1),
+    };
+    let entries = [
+        entry("game.sfc"),
+        entry("LICENSE.md"),
+        entry("notes.markdown"),
+    ];
+    let (is_rom, summaries, has_rom, has_patch) =
+        CliApp::classify_container_entries(&entries, true);
+    assert!(is_rom && has_rom && !has_patch);
+    let kinds: Vec<_> = summaries
+        .iter()
+        .map(|summary| summary.kind.as_deref().unwrap())
+        .collect();
+    assert_eq!(kinds, ["rom", "common", "common"]);
+}

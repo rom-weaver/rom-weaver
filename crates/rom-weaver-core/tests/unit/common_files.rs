@@ -62,6 +62,27 @@ fn common_file_filter_ignores_extensionless_documentation_names() {
 }
 
 #[test]
+fn common_file_filter_ignores_markdown_documentation() {
+    for name in [
+        "README.md",
+        "LICENSE.md",
+        "docs/Changelog.MD",
+        r"docs\contributing.markdown",
+        "notes.markdown",
+        "NOTES.MARKDOWN",
+    ] {
+        assert!(should_ignore_common_container_file(name), "{name}");
+        assert!(!payload_name_needs_content_classification(name), "{name}");
+    }
+
+    // `.md` is also the Mega Drive ROM extension, so only documentation names are ignored.
+    for name in ["sonic.md", "Sonic The Hedgehog (USA, Europe).md", "game.md"] {
+        assert!(!should_ignore_common_container_file(name), "{name}");
+        assert!(ArchiveEntryKindFilter::new(true, false).matches_payload_name(name));
+    }
+}
+
+#[test]
 fn kind_filters_reject_extensionless_documentation_names() {
     for name in ["README", "docs/LICENSE", "CHANGELOG"] {
         for filter in [
