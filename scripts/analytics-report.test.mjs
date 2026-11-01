@@ -516,6 +516,22 @@ test("argument checks cover review edge cases", () => {
   assert.equal(parseArgs(["cloudflare", "--summary"]).summary, true);
 });
 
+test("cloudflare report leaves today's partial day out of weeks but keeps it in days", async () => {
+  const day = (date, uniques) => ({ dimensions: { date }, sum: { requests: 1, pageViews: 1, bytes: 0 }, uniq: { uniques } });
+  const result = await cloudflareReport({
+    env: { CLOUDFLARE_API_TOKEN: "token", CLOUDFLARE_ZONE_ID: "zone" },
+    days: 2,
+    now: new Date("2026-01-07T12:00:00Z"),
+    fetchImpl: async () =>
+      Response.json({ data: { viewer: { zones: [{ httpRequests1dGroups: [day("2026-01-05", 100), day("2026-01-06", 200), day("2026-01-07", 10)] }] } } }),
+  });
+  assert.equal(result.days.length, 3);
+  assert.deepEqual(
+    result.weeks.map(({ weekStart, days, avgDailyUniques }) => ({ weekStart, days, avgDailyUniques })),
+    [{ weekStart: "2026-01-05", days: 2, avgDailyUniques: 150 }],
+  );
+});
+
 test("cloudflare weeks average daily uniques per UTC Monday week and format a summary", () => {
   const day = (date, uniques, pageViews) => ({
     dimensions: { date },
