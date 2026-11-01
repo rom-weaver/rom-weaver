@@ -8,7 +8,7 @@ import { createBundleRuntime } from "../../lib/runtime/bundle-runtime.ts";
 import { invokeRomWeaverChecksumWorker } from "../../lib/runtime/wasm-checksum-command.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
 import { boundIdentifyWait } from "./bounded-identify-wait.ts";
-import { emitTraceLog } from "../../lib/logging.ts";
+import { createLogger, emitTraceLog } from "../../lib/logging.ts";
 import { createRomWeaverOutputScope } from "../../lib/runtime/run-output-paths.ts";
 import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
 import { assertBrowserBinarySource } from "../../lib/runtime/source-normalization.ts";
@@ -64,6 +64,8 @@ import { browserVfs } from "./workflow-runtime-vfs-cleanup.ts";
 import { ROM_WEAVER_WEAVE_FILE_NAMES } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 type BrowserWeaveCreateInput = Parameters<NonNullable<NonNullable<WorkflowRuntime["weave"]>["create"]>>[0];
+
+const logger = createLogger("weave-parse");
 
 const stageWeaveCreateInputs = async ({
   weaveRom,
@@ -555,7 +557,11 @@ const createBrowserWeaveRuntime = (
       trace: { logLevel, onLog },
     });
     const releaseOwnership = registerBrowserTransientOpfsPath(extractDirPath);
-    const removeExtractDir = async () => {
+    // Deletions are logged with the reason: a later read of a removed file shows up as an intermittent
+    // "OPFS prefix file not found", and the order of these lines tells which release raced it.
+    const extractDirId = getPathBaseName(extractDirPath, "weave-parse");
+    const removeExtractDir = async (reason: string) => {
+      logger.debug("removing weave extract dir", { extractDirId, reason });
       await waitForRomWeaverShutdown();
       const response = await requestBrowserOpfsStorage({ action: "remove", filePath: extractDirPath });
       if (!response.success)
@@ -582,9 +588,14 @@ const createBrowserWeaveRuntime = (
       const extractedFiles = new Map<string, File>();
       const remainingPaths = new Set(extractedPaths);
       const removeExtractedPath = async (path: string) => {
+        logger.debug("releasing weave extracted file", {
+          extractDirId,
+          extractedPath: path,
+          remaining: remainingPaths.size,
+        });
         await browserVfs.remove(path).catch(() => undefined);
         remainingPaths.delete(path);
-        if (!remainingPaths.size) await removeExtractDir().catch(() => undefined);
+        if (!remainingPaths.size) await removeExtractDir("last extracted file released").catch(() => undefined);
       };
       const extractedCleanups: Array<() => Promise<void>> = [];
       for (const extractedPath of extractedPaths) {
@@ -599,13 +610,15 @@ const createBrowserWeaveRuntime = (
         extractedCleanups.push(release);
         extractedFiles.set(extractedPath, file);
       }
+      logger.debug("weave extract ready", { extractDirId, files: extractedPaths.size });
       const cleanup = createCleanupOnce(async () => {
+        logger.debug("weave cleanup requested", { extractDirId, files: extractedPaths.size });
         await Promise.all(extractedCleanups.map((release) => release()));
-        await removeExtractDir().catch(() => undefined);
+        await removeExtractDir("weave cleanup").catch(() => undefined);
       });
       return { cleanup, extractedFiles, result };
     } catch (error) {
-      await removeExtractDir().catch(() => undefined);
+      await removeExtractDir("weave parse failed").catch(() => undefined);
       throw error;
     } finally {
       await staged.cleanup().catch(() => undefined);

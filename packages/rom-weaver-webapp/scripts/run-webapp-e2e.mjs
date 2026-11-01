@@ -148,10 +148,13 @@ const systemChromeLaunchOptions =
   browserName === "chromium" && process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
 const HYDRATION_SETTINGS = JSON.stringify({
   apply: { compression: { threads: 3 } },
-  common: { betaToolsEnabled: true },
+  // debug: the audit keeps the app's console log and prints its tail when a page fails (see runHydrationAudit).
+  common: { betaToolsEnabled: true, logLevel: "debug" },
   create: { compression: { threads: 3 } },
   version: 5,
 });
+
+const APP_LOG_TAIL_LINES = 80;
 
 const reservePort = () =>
   new Promise((resolve, reject) => {
@@ -292,8 +295,11 @@ const runHydrationAudit = async (createContext, baseUrl) => {
     ]) {
       const page = await context.newPage();
       const failures = [];
+      const appLog = [];
       page.on("console", (message) => {
         if (message.type() === "error") failures.push(formatConsoleError(message.text(), message.location()));
+        appLog.push(`${message.type()}: ${message.text().slice(0, 400)}`);
+        if (appLog.length > APP_LOG_TAIL_LINES) appLog.shift();
       });
       watchRequestFailures(page);
       page.on("pageerror", (error) => failures.push(error.stack || error.message));
@@ -442,7 +448,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         if (failures.length) problems.push(`browser errors: ${failures.join(" | ")}`);
         if (problems.length)
           throw new Error(
-            `${testCase.path} hydration audit failed:\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
+            `${testCase.path} hydration audit failed:\n${problems.map((problem) => `- ${problem}`).join("\n")}\napp log (last ${appLog.length} lines):\n${appLog.map((line) => `  ${line}`).join("\n")}`,
           );
         process.stdout.write(`PASS hydration ${testCase.path} (${result.initialView} -> ${result.finalView})\n`);
       } finally {

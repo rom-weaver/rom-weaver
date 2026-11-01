@@ -1,7 +1,10 @@
+import { createLogger } from "../../lib/logging.ts";
 import OPFS_PROXY_WORKER_URL from "../../wasm/workers/browser-opfs-proxy-worker.ts?worker&url";
 import { createWorkerRequestId } from "../shared/worker-request-id.ts";
 // `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/development/ARCHITECTURE.md.
 import WEAVED_STAGING_WORKER_URL from "../storage/browser-opfs-staging.worker.ts?worker&url";
+
+const logger = createLogger("browser-opfs-worker-client");
 
 type WorkerAssetRoot = typeof globalThis & {
   __romWeaverWorkerBaseUrl?: string;
@@ -146,6 +149,7 @@ const readBrowserOpfsPrefix = (filePath: string, length: number, signal?: AbortS
       event: MessageEvent<{ requestId?: string; type?: string; bytes?: Uint8Array; message?: string }>,
     ) => {
       if (event.data?.requestId !== requestId) return;
+      if (event.data.type === "read-prefix-error") void logPrefixReadFailure(filePath, event.data.message);
       if (
         event.data.type !== "read-prefix-complete" ||
         !(event.data.bytes instanceof Uint8Array) ||
@@ -168,6 +172,36 @@ const readBrowserOpfsPrefix = (filePath: string, length: number, signal?: AbortS
       fail(error);
     }
   });
+
+/**
+ * Debug aid for the intermittent "OPFS prefix file not found" failure: the file is read right after it was staged,
+ * so record whether its directory still existed and what it held when the read failed. Names only, no full paths.
+ */
+const logPrefixReadFailure = async (filePath: string, message: string | undefined): Promise<void> => {
+  try {
+    const separator = filePath.lastIndexOf("/");
+    const parent = filePath.slice(0, Math.max(separator, 0)).replace(/^\/work(?=\/|$)/, "");
+    const listing = await requestBrowserOpfsStorage({ action: "list-metadata" });
+    const entries = listing.success ? (listing.entries ?? []) : null;
+    logger.debug("OPFS prefix read failed", {
+      error: message,
+      fileName: filePath.slice(separator + 1),
+      listError: listing.success ? undefined : listing.error?.message,
+      parentDir: parent.slice(parent.lastIndexOf("/") + 1),
+      parentExists: entries ? entries.some((entry) => entry.kind === "directory" && entry.path === parent) : null,
+      siblings: entries
+        ? entries
+            .filter((entry) => entry.path.startsWith(`${parent}/`))
+            .slice(0, 20)
+            .map((entry) => entry.path.slice(parent.length + 1))
+        : null,
+    });
+  } catch (error) {
+    logger.debug("OPFS prefix read diagnostics failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
 
 export type { BrowserOpfsEntry };
 export { readBrowserOpfsPrefix, requestBrowserOpfsStorage };
