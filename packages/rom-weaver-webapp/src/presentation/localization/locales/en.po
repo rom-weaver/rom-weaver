@@ -25,6 +25,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.saves.editor.max"
+#~ msgstr "Max"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.saves.editor.step"
+#~ msgstr "step {step}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", an output extension. The format selector adds the extension; remove it to avoid a doubled name."
 
@@ -197,6 +207,11 @@ msgstr "{fileName} was closed to free memory."
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.defaultOption"
 msgstr "{label} (Default)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.slider"
+msgstr "{label} slider"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2860,6 +2875,11 @@ msgstr "Looking this ROM up in the title database. The rows below fill in once i
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.lower"
+msgstr "Lower {label} by {step}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tutorial.tryCreate"
 msgstr "Make a patch from practice ROMs"
 
@@ -2922,11 +2942,6 @@ msgstr "matches your ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.matchesRomVariant"
 msgstr "matches your ROM ({variant})"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.saves.editor.max"
-msgstr "Max"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4070,6 +4085,11 @@ msgstr "Questions"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.raise"
+msgstr "Raise {label} by {step}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.supported.raw"
 msgstr "Raw game saves"
 
@@ -4897,11 +4917,6 @@ msgstr "Stay in Patches & cheats with this ROM as the original."
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.stayOn"
 msgstr "Stay on {page}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.saves.editor.step"
-msgstr "step {step}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

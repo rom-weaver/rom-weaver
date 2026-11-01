@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, expect, test, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { SaveEditor } from "../../src/webapp/components/save-editor.tsx";
 import "../../src/webapp/design-system/index.css";
 
@@ -151,7 +151,7 @@ test("loads a recognized local save with generic grouped fields", async () => {
   await uploadSave();
   await expect.element(page.getByRole("group", { name: "trainer" })).toBeInTheDocument();
   await expect.element(page.getByRole("group", { name: "progress" })).toBeInTheDocument();
-  await expect.element(page.getByLabelText("Money", { exact: true })).toHaveValue(5000);
+  await expect.element(page.getByLabelText("Money", { exact: true })).toHaveValue("5,000");
   await expect.element(page.getByLabelText("Badge 1", { exact: true })).toHaveTextContent("1");
 });
 
@@ -173,7 +173,29 @@ test("finds properties while retaining pending changes", async () => {
   await search.fill("missing property");
   await expect.element(page.getByText("No properties match this search.")).toBeInTheDocument();
   await search.fill("");
-  await expect.element(page.getByLabelText("Money", { exact: true })).toHaveValue(12345);
+  await expect.element(page.getByLabelText("Money", { exact: true })).toHaveValue("12,345");
+});
+
+test("changes a bounded number with the buttons, the slider keys, and typed shorthand", async () => {
+  await uploadSave();
+  const money = page.getByLabelText("Money", { exact: true });
+  await page.getByRole("button", { name: "Raise Money by 1" }).click();
+  await expect.element(money).toHaveValue("5,001");
+  await page.getByRole("button", { name: "Lower Money by 1" }).click();
+  await expect.element(money).toHaveValue("5,000");
+  const slider = page.getByRole("slider", { name: "Money slider" });
+  await expect.element(slider).toHaveAttribute("aria-valuemax", "999999");
+  await slider.click({ position: { x: 1, y: 25 } });
+  await expect.element(money).toHaveValue("0");
+  await userEvent.keyboard("{End}");
+  await expect.element(money).toHaveValue("999,999");
+  await money.fill("1.5m");
+  await expect.element(page.getByText("Enter a valid integer in the allowed range.")).toBeVisible();
+  await money.fill("50k");
+  await expect.element(page.getByText("Enter a valid integer in the allowed range.")).not.toBeInTheDocument();
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  await expect.poll(() => mocks.previewSaveFields.mock.calls.length).toBe(1);
+  expect(mocks.previewSaveFields.mock.calls[0][0].assignments).toEqual(["trainer.money=50000"]);
 });
 
 test("previews named schema choices and preserves an unknown current code", async () => {
@@ -219,7 +241,7 @@ test("tracks edits, resets one or all fields, previews, and downloads", async ()
   await expect.element(page.getByLabelText("Name", { exact: true })).toHaveValue("ASH");
   await page.getByLabelText("Money", { exact: true }).fill("8000");
   await page.getByRole("button", { name: "Reset all" }).click();
-  await expect.element(page.getByLabelText("Money", { exact: true })).toHaveValue(5000);
+  await expect.element(page.getByLabelText("Money", { exact: true })).toHaveValue("5,000");
 
   await page.getByLabelText("Name", { exact: true }).fill("MAY");
   await page.getByRole("button", { name: "Download edited copy" }).click();

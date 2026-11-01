@@ -2443,8 +2443,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "{editable} editable, {readOnly} read-only",
   }),
   "ui.saves.editor.countEditable": msg({ id: "ui.saves.editor.countEditable", message: "{editable} editable" }),
-  "ui.saves.editor.max": msg({ id: "ui.saves.editor.max", message: "Max" }),
-  "ui.saves.editor.step": msg({ id: "ui.saves.editor.step", message: "step {step}" }),
+  "ui.saves.editor.lower": msg({ id: "ui.saves.editor.lower", message: "Lower {label} by {step}" }),
+  "ui.saves.editor.raise": msg({ id: "ui.saves.editor.raise", message: "Raise {label} by {step}" }),
+  "ui.saves.editor.slider": msg({ id: "ui.saves.editor.slider", message: "{label} slider" }),
   "ui.saves.editor.noDocument": msg({
     id: "ui.saves.editor.noDocument",
     message: "rom-weaver couldn't read this save.",

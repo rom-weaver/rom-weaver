@@ -25,6 +25,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.saves.editor.max"
+#~ msgstr "Máx."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.saves.editor.step"
+#~ msgstr "paso {step}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", una extensión de salida. El selector de formato agrega la extensión; elimínala para evitar un nombre duplicado."
 
@@ -197,6 +207,11 @@ msgstr "{fileName} se cerró para liberar memoria."
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.defaultOption"
 msgstr "{label} (predeterminado)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.slider"
+msgstr "Control deslizante de {label}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2860,6 +2875,11 @@ msgstr "Buscando esta ROM en la base de datos de títulos. Las filas se completa
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.lower"
+msgstr "Reducir {label} en {step}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tutorial.tryCreate"
 msgstr "Crear ejemplo"
 
@@ -2922,11 +2942,6 @@ msgstr "coincide con tu ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.matchesRomVariant"
 msgstr "coincide con tu ROM ({variant})"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.saves.editor.max"
-msgstr "Máx."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4070,6 +4085,11 @@ msgstr "Preguntas"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.raise"
+msgstr "Aumentar {label} en {step}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.supported.raw"
 msgstr "Partidas sin procesar"
 
@@ -4897,11 +4917,6 @@ msgstr "Quedarse en Parches y trucos con esta ROM como original."
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.stayOn"
 msgstr "Quedarse en {page}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.saves.editor.step"
-msgstr "paso {step}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

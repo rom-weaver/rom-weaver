@@ -37,6 +37,7 @@ import { getEmulatorJsCore } from "../../public/react/components/emulatorjs.ts";
 import { restartCurrentGameWithSave, useEmulatorSession } from "../../public/react/emulator-session-store.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import { SaveGenerator } from "./save-generator.tsx";
+import { SaveNumberField } from "./save-number-field.tsx";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 
 type SaveEditorProps = {
@@ -235,36 +236,17 @@ const SaveFieldControl = ({
       </span>
     );
   }
-  const { max, min } = field.constraints;
   return (
-    <span className="save-editor-text">
-      <input
-        {...common}
-        className="input save-editor-control save-editor-number mono"
-        max={max ?? undefined}
-        min={min ?? undefined}
-        step={field.step ?? undefined}
-        type="number"
-        value={text}
-      />
-      {max === null ? null : (
-        <button
-          className="btn slim ghost save-editor-max"
-          disabled={disabled || text === String(max)}
-          onClick={() => onChange(String(max))}
-          type="button"
-        >
-          {localizer.message("ui.saves.editor.max")}
-        </button>
-      )}
-      {min !== null || max !== null ? (
-        <span className="save-editor-range mono">
-          {min === null ? "…" : min.toLocaleString(localizer.locale)} –{" "}
-          {max === null ? "…" : max.toLocaleString(localizer.locale)}
-          {field.step && field.step > 1 ? ` · ${localizer.message("ui.saves.editor.step", { step: field.step })}` : ""}
-        </span>
-      ) : null}
-    </span>
+    <SaveNumberField
+      describedBy={describedBy}
+      disabled={disabled}
+      error={error}
+      field={field}
+      id={common.id}
+      localizer={localizer}
+      onChange={onChange}
+      text={text}
+    />
   );
 };
 

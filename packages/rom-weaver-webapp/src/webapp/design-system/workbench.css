@@ -717,9 +717,181 @@
   width: 150px;
   min-width: 0;
 }
-.rw-app .save-editor-number {
-  width: 130px;
-  text-align: right;
+/* A number box with its slider in one frame: value and step buttons on top, a bar below. All parts are 44px or taller. */
+.rw-app .save-number {
+  --number-line: var(--ink-3);
+  --number-row: 48px;
+  --number-strip: 50px;
+  --number-groove: 12px;
+  --number-knob: 34px;
+  --number-reach: calc(var(--number-knob) / 2);
+  width: 100%;
+  min-width: 0;
+  max-width: 520px;
+  overflow: hidden;
+  background: var(--plate);
+  border: 1.5px solid var(--number-line);
+  border-radius: var(--r-m);
+}
+.rw-app .save-number:has(.save-number-value:focus) {
+  outline: 3px solid var(--thread);
+  outline-offset: 2px;
+}
+.rw-app .save-number.is-invalid {
+  border-color: var(--fault);
+}
+.rw-app .save-number-row {
+  display: flex;
+  height: var(--number-row);
+}
+.rw-app .save-number-step {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--number-row);
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 6%, var(--plate));
+  border: 0;
+}
+.rw-app .save-number-step:first-child {
+  border-inline-end: 1.5px solid var(--number-line);
+}
+.rw-app .save-number-step:last-child {
+  border-inline-start: 1.5px solid var(--number-line);
+}
+.rw-app .save-number-step svg {
+  width: 20px;
+  height: 20px;
+}
+@media (hover: hover) {
+  .rw-app .save-number-step:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--ink) 14%, var(--plate));
+  }
+}
+.rw-app .save-number-step:active:not(:disabled) {
+  background: color-mix(in oklab, var(--ink) 24%, var(--plate));
+}
+.rw-app .save-number-step:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.rw-app .save-number-value {
+  flex: 1;
+  min-width: 0;
+  padding: 0 var(--sp-s);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: center;
+  background: transparent;
+  border: 0;
+}
+.rw-app .save-number-value:focus {
+  outline: none;
+}
+.rw-app .save-number-strip {
+  display: flex;
+  gap: var(--sp-m);
+  align-items: center;
+  height: var(--number-strip);
+  padding-inline: var(--sp-m);
+  background: var(--well);
+  border-block-start: 1.5px solid var(--number-line);
+}
+.rw-app .save-number-limit {
+  flex: none;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.rw-app .save-number-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  touch-action: pan-y;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+}
+.rw-app .save-number-groove {
+  position: absolute;
+  inset-block: 50% auto;
+  inset-inline: 0;
+  height: var(--number-groove);
+  background: var(--plate);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1.5px var(--number-line);
+  translate: 0 -50%;
+}
+.rw-app .save-number-rail {
+  position: absolute;
+  inset-block: 0;
+  inset-inline: var(--number-reach);
+}
+.rw-app .save-number-fill {
+  position: absolute;
+  inset-block: 50% auto;
+  inset-inline-start: calc(var(--number-reach) * -1);
+  width: calc(var(--number-reach) + 100% * var(--fraction));
+  height: var(--number-groove);
+  background: var(--thread);
+  border-radius: 999px;
+  box-shadow: 0 0 0 1.5px var(--number-line);
+  translate: 0 -50%;
+}
+.rw-app .save-number-knob {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: calc(100% * var(--fraction));
+  display: grid;
+  place-items: center;
+  width: var(--number-knob);
+  height: var(--number-knob);
+  cursor: grab;
+  background: var(--thread);
+  border: 3px solid var(--plate);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1.5px var(--number-line),
+    0 2px 5px rgb(0 0 0 / 0.3);
+  translate: -50% -50%;
+  transition: scale 0.12s;
+}
+/* Three grip lines tell the handle apart from a plain dot. */
+.rw-app .save-number-knob::before {
+  width: 8px;
+  height: 10px;
+  content: "";
+  background: linear-gradient(
+    90deg,
+    var(--thread-ink) 0 2px,
+    transparent 2px 3px,
+    var(--thread-ink) 3px 5px,
+    transparent 5px 6px,
+    var(--thread-ink) 6px 8px
+  );
+  opacity: 0.75;
+}
+@media (hover: hover) {
+  .rw-app .save-number-track:hover .save-number-knob {
+    scale: 1.08;
+  }
+}
+.rw-app .save-number-track:active .save-number-knob {
+  scale: 1.15;
+}
+.rw-app .save-number.is-dragging .save-number-knob {
+  cursor: grabbing;
+  scale: 1.15;
+}
+.rw-app .save-number-track:focus-visible .save-number-knob {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+.rw-app .save-number-track[aria-disabled="true"] {
+  pointer-events: none;
+  opacity: 0.5;
 }
 .rw-app .save-editor-range,
 .rw-app .save-editor-warning {
@@ -946,6 +1118,7 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
   .rw-app .save-editor-field .save-editor-text,
+  .rw-app .save-editor-field .save-number,
   .rw-app .save-editor-field .save-editor-readonly,
   .rw-app .save-editor-field .save-editor-segment {
     grid-column: 1 / -1;
