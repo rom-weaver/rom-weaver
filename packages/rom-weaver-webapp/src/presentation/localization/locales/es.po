@@ -1975,6 +1975,11 @@ msgstr "certificado de descarga y juego conservado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.wasWritten"
+msgstr "Descargado. Era {value}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.headerDownloading"
 msgstr "Descargando"
 
@@ -5832,6 +5837,11 @@ msgstr "Advertencia: si lo desactivas, los nuevos estados guardados y la SRAM no
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.option.logLevel.warn"
 msgstr "Advertencias"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.was"
+msgstr "Era {value}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

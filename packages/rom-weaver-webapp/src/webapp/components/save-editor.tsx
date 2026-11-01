@@ -137,6 +137,11 @@ const displayValue = (value: SaveValue, localizer: Localizer) => {
   if (text === "false") return localizer.message("ui.patch.off").toLowerCase();
   return text;
 };
+/** A value as the field box shows it: whole numbers get the locale's grouping, everything else reads as stored. */
+const shownValue = (value: SaveValue, localizer: Localizer) => {
+  const text = displayValue(value, localizer);
+  return /^-?\d+$/.test(text) ? Number(text).toLocaleString(localizer.locale) : text;
+};
 /** Display title for a group; ids without a catalog entry keep the capitalized segment. */
 const groupTitle = (group: FieldGroup, localizer: Localizer) =>
   Object.hasOwn(GROUP_TITLES, group.id)
@@ -854,7 +859,10 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     const readOnly = isReadOnly(field);
     const controlId = `save-field-${field.id}`;
     return (
-      <div className={join("save-editor-field", changed && "is-changed")} key={field.id}>
+      <div
+        className={join("save-editor-field", changed && "is-changed", changed && output && "is-written")}
+        key={field.id}
+      >
         <div className="save-editor-field-head">
           <label htmlFor={controlId}>{field.label}</label>
           {field.description ? (
@@ -881,18 +889,25 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
           />
         )}
         {changed || errorText ? (
-          <button
-            aria-label={localizer.message("ui.saves.editor.resetField", { label: field.label })}
-            className="btn slim ghost save-editor-reset"
-            disabled={busy}
-            onClick={() => resetField(field)}
-            type="button"
-          >
-            <RotateCcw aria-hidden="true" /> {localizer.message("ui.settings.reset")}
-          </button>
-        ) : (
-          <span />
-        )}
+          <span className="save-editor-field-foot">
+            {changed ? (
+              <span className="save-editor-was">
+                {localizer.message(output ? "ui.saves.editor.wasWritten" : "ui.saves.editor.was", {
+                  value: shownValue(originalValues[field.id] ?? field.value, localizer),
+                })}
+              </span>
+            ) : null}
+            <button
+              aria-label={localizer.message("ui.saves.editor.resetField", { label: field.label })}
+              className="btn slim ghost save-editor-reset"
+              disabled={busy}
+              onClick={() => resetField(field)}
+              type="button"
+            >
+              <RotateCcw aria-hidden="true" /> {localizer.message("ui.settings.reset")}
+            </button>
+          </span>
+        ) : null}
         {field.warnings.length ? <span className="save-editor-warning">{field.warnings.join(" ")}</span> : null}
         {errorText ? (
           <span className="save-editor-field-error" id={`save-field-error-${field.id}`} role="alert">
@@ -908,7 +923,12 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     const on = saveValueToText(values[field.id] || field.value) === "true";
     return (
       <label
-        className={join("save-editor-toggle", on && "is-on", changed && "is-changed")}
+        className={join(
+          "save-editor-toggle",
+          on && "is-on",
+          changed && "is-changed",
+          changed && output && "is-written",
+        )}
         key={field.id}
         title={field.description || undefined}
       >

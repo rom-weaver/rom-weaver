@@ -1975,6 +1975,11 @@ msgstr "Download-Play-Zertifikat erhalten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.wasWritten"
+msgstr "Heruntergeladen. War {value}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.headerDownloading"
 msgstr "Lädt herunter"
 
@@ -5832,6 +5837,11 @@ msgstr "Warnung: Wenn du dies ausschaltest, werden neue Savestates und SRAM nich
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.option.logLevel.warn"
 msgstr "Warnungen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.was"
+msgstr "War {value}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -2481,6 +2481,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.saves.editor.readOnly": msg({ id: "ui.saves.editor.readOnly", message: "read-only" }),
   "ui.saves.editor.resetField": msg({ id: "ui.saves.editor.resetField", message: "Reset {label}" }),
+  "ui.saves.editor.was": msg({ id: "ui.saves.editor.was", message: "Was {value}" }),
+  "ui.saves.editor.wasWritten": msg({ id: "ui.saves.editor.wasWritten", message: "Downloaded. Was {value}" }),
   "ui.saves.editor.emulatorSram": msg({ id: "ui.saves.editor.emulatorSram", message: "emulator in-game save" }),
   "ui.saves.editor.removeSave": msg({ id: "ui.saves.editor.removeSave", message: "Remove save" }),
   "ui.saves.editor.slotIndex": msg({ id: "ui.saves.editor.slotIndex", message: "slot {slot}, index {index}" }),

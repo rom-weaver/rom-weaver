@@ -507,6 +507,18 @@ describe("SaveEditor", () => {
     expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("5,000");
   });
 
+  it("marks an edit with what it was, and closes the marker once the edited save is written", async () => {
+    const { container } = render(<SaveEditor onSessionChange={vi.fn()} />);
+    await chooseFile();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "MAY" } });
+    expect(screen.getByText("Was ASH")).toBeTruthy();
+    expect(container.querySelector(".save-editor-field.is-changed")).not.toBeNull();
+    expect(container.querySelector(".save-editor-field.is-written")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Download edited copy" }));
+    await waitFor(() => expect(screen.getByText("Downloaded. Was ASH")).toBeTruthy());
+    expect(container.querySelector(".save-editor-field.is-written")).not.toBeNull();
+  });
+
   it("locks field changes while Rust creates an edited save", async () => {
     let finish: (value: object) => void = () => undefined;
     setSaveFields.mockImplementationOnce(

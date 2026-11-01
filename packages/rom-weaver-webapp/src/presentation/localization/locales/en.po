@@ -1975,6 +1975,11 @@ msgstr "download-play certificate preserved"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.wasWritten"
+msgstr "Downloaded. Was {value}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.headerDownloading"
 msgstr "Downloading"
 
@@ -5832,6 +5837,11 @@ msgstr "Warning: If you turn this off, new save states and in-game saves are not
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.option.logLevel.warn"
 msgstr "Warnings"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.was"
+msgstr "Was {value}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
