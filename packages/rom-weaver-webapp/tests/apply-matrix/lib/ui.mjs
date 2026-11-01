@@ -10,25 +10,37 @@ export const { chromium } = require("playwright");
 
 const UNIFIED_INPUT = "#rom-weaver-input-file-unified";
 
+export const DESKTOP = { height: 1100, width: 1280 };
+/** iPhone-class viewport with touch and a mobile user agent (Chromium emulation, not real Safari). */
+export const MOBILE = {
+  hasTouch: true,
+  isMobile: true,
+  userAgent:
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+  viewport: { height: 780, width: 390 },
+};
+
 export async function newSession(
   browser,
   baseUrl,
-  { route = "apply-rom-patches", acceptDownloads = true, ready = UNIFIED_INPUT } = {},
+  { route = "apply-rom-patches", acceptDownloads = true, ready = UNIFIED_INPUT, device = null } = {},
 ) {
   const context = await browser.newContext({
     acceptDownloads,
     ignoreHTTPSErrors: true,
-    viewport: { height: 1100, width: 1280 },
+    viewport: DESKTOP,
+    ...device,
   });
   const page = await context.newPage();
-  const session = { consoleErrors: [], context, page, pageErrors: [] };
+  const session = { consoleErrors: [], consoleWarnings: [], context, page, pageErrors: [] };
   page.on("pageerror", (error) => session.pageErrors.push(error.message));
   page.on("console", (message) => {
     // The preview server's self-signed certificate makes service-worker script fetches fail; that is
     // an environment artifact, not an app defect.
     const text = message.text();
-    if (message.type() === "error" && !/SSL certificate error|fetching the script|ERR_CERT/i.test(text))
-      session.consoleErrors.push(text.slice(0, 400));
+    if (/SSL certificate error|fetching the script|ERR_CERT/i.test(text)) return;
+    if (message.type() === "error") session.consoleErrors.push(text.slice(0, 400));
+    else if (message.type() === "warning") session.consoleWarnings.push(text.slice(0, 400));
   });
   const url = new URL(route, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`).href;
   await page.goto(url, { timeout: 60_000, waitUntil: "domcontentloaded" });
@@ -38,8 +50,13 @@ export async function newSession(
 }
 
 /** Stage files via the unified drop input. Each entry is a path or { name, buffer }. */
-export async function stage(page, files) {
-  // Playwright forbids mixing paths and buffers, so everything goes through buffers.
+export async function stage(page, files, inputSelector = UNIFIED_INPUT) {
+  // All-path input goes straight through (no 50 MB buffer limit); mixed input goes through buffers
+  // because Playwright forbids mixing paths and buffers.
+  if (files.every((file) => typeof file === "string")) {
+    await page.locator(inputSelector).setInputFiles(files);
+    return;
+  }
   const payload = files.map((file) =>
     typeof file === "string"
       ? {
@@ -49,7 +66,7 @@ export async function stage(page, files) {
         }
       : { buffer: Buffer.from(file.buffer), mimeType: "application/octet-stream", name: file.name },
   );
-  await page.locator(UNIFIED_INPUT).setInputFiles(payload);
+  await page.locator(inputSelector).setInputFiles(payload);
 }
 
 /** Snapshot the visible state of the apply form for assertions and failure messages. */
@@ -147,8 +164,8 @@ export async function waitApplyEnabled(page, timeout = 90_000) {
  * Click the primary action and resolve with the outcome: the downloaded bytes, or the first error
  * notice the app shows. Never throws for app-level failures; throws only on harness timeouts.
  */
-export async function runApply(page, outDir, { timeout = 180_000 } = {}) {
-  const button = page.locator("#rom-weaver-button-apply");
+export async function runApply(page, outDir, { timeout = 180_000, buttonSelector = "#rom-weaver-button-apply" } = {}) {
+  const button = page.locator(buttonSelector);
   const downloadPromise = page.waitForEvent("download", { timeout }).then(
     async (download) => {
       const saved = path.join(outDir, `${Date.now()}-${download.suggestedFilename()}`);

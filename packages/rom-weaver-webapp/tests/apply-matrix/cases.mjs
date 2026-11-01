@@ -6,13 +6,19 @@ import path from "node:path";
 import { BLOBS, CACHE } from "../fixtures/apply-matrix/generate.mjs";
 import { cliApply } from "./lib/cli.mjs";
 import { assert, expectDownload, fail, scenario } from "./lib/scenario.mjs";
+import { applyExtraCases } from "./cases-apply-extra.mjs";
 import { chainCases } from "./cases-chain.mjs";
+import { compressCases } from "./cases-compress.mjs";
 import { containerCases } from "./cases-containers.mjs";
+import { createCases } from "./cases-create.mjs";
 import { discCases } from "./cases-discs.mjs";
+import { edgeCases } from "./cases-edge.mjs";
+import { extractCases } from "./cases-extract.mjs";
 import { featureCases } from "./cases-features.mjs";
 import { miscCases } from "./cases-misc.mjs";
 import { optionCases } from "./cases-options.mjs";
 import { outputCases } from "./cases-output.mjs";
+import { trimCases } from "./cases-trim.mjs";
 
 const read = (file) => fs.readFileSync(file);
 const stem = (name) => name.replace(/\.[^.]+$/, "");
@@ -195,6 +201,12 @@ export function buildCases({ manifest }) {
     ...discCases({ manifest }),
     ...miscCases(),
     ...featureCases({ manifest }),
+    ...trimCases(),
+    ...createCases(),
+    ...compressCases(),
+    ...extractCases(),
+    ...edgeCases(),
+    ...applyExtraCases(),
   );
   return cases;
 }

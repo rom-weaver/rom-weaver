@@ -195,9 +195,9 @@ export const register = () => {
   add("output.chd.cd-codec-on-raw-media-rejected", ["output", "chd", "negative"], (ctx) => {
     ctx.failed(compressed(ctx, ctx.tmp("out.chd"), ["--compress-codec", "cdzs"]), { message: /codec|raw/i, what: "cdzs for raw media" });
   });
-  // quality-reason: this harness never drives chdman; parity is asserted by Rust cli_smoke chd.rs and `mise run quality-reference`.
+  // quality-reason: CHD parity with chdman is asserted by the compress.chd.* cases (chdman verify) and extract.reference.chdman.*, and by Rust cli_smoke chd.rs and `mise run quality-reference`; this placeholder only marks the old id as moved.
   add("output.chd.reference-chdman", ["output", "chd", "reference"], () => {
-    skip("parity vs chdman is not driven by this harness; see Rust cli_smoke chd.rs and `mise run quality-reference`");
+    skip("moved: see compress.chd.* (chdman verify), extract.reference.chdman.* and Rust cli_smoke chd.rs");
   });
 
   // ------------------------------------------------------------------- z3ds / rvz outputs
@@ -257,9 +257,9 @@ export const register = () => {
     }
     for (const out of outputs.slice(1)) ctx.same(out, outputs[0], `${path.relative(ctx.work, out)} vs first`);
   });
-  // quality-reason: this harness never drives dolphin-tool; parity is asserted by Rust rvz_z3ds.rs and `mise run quality-reference`.
+  // quality-reason: RVZ parity with dolphin-tool is asserted by extract.reference.dolphin-tool.* and reference.wia.*, and by Rust rvz_z3ds.rs and `mise run quality-reference`; this placeholder only marks the old id as moved.
   add("output.rvz.reference-dolphin-tool", ["output", "rvz", "reference"], () => {
-    skip("parity vs dolphin-tool is not driven by this harness; see Rust rvz_z3ds.rs and `mise run quality-reference`");
+    skip("moved: see extract.reference.dolphin-tool.*, reference.wia.* and Rust rvz_z3ds.rs");
   });
   add("output.disc.default-output-is-raw-iso", ["output", "disc"], (ctx) => {
     const input = ctx.write("in.wbfs", fs.readFileSync(ctx.fx("disc/wbfs.wbfs")));

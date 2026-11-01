@@ -31,6 +31,16 @@ The runner reuses a preview server already listening on the base URL; otherwise 
 
 `patch-format`, `patch-wrongsource`, `patch-corrupt`, `chain`, `container-input`, `container-select`, `output-format`, `naming`, `reapply`, `header`, `options`, `disc-input`, `cheats`, `weave`, `combined-patch`, `ppf-undo`, `patch-unsupported` (BSP, DLDI and NINJA1 live in `cases-misc.mjs`).
 
+Exhaustive groups (Create, Trim, Compress, Extract, edge cases; ~470 cases):
+
+- `create` - every format the Create UI offers x input pair, containers/codecs/levels, input shapes, size buckets, mobile, repeat. Judged by flips/xdelta3, the native CLI and a webapp Apply round trip.
+- `trim` - every trim-capable fixture (NDS/DSi/SRL, GBA, 3DS, disc to RVZ/CHD) x offered output, codec x level, native revert round trips.
+- `compress` - zip/7z codec x level, RVZ/CHD/Z3DS outputs, duplicate names, 0/1-byte, mobile.
+- `extract` - every archive/stream/disc input type vs host tools (7z, bsdtar, chdman, dolphin-tool), negatives, multipart.
+- `drop` / `edge` / `console` / `apply-out` - real CDP drag-and-drop (`lib/drag.mjs`), cancel and recover, progress, large (400 MiB) inputs, OPFS cleanup, console cleanliness, per-level Apply output sweeps.
+
+Extra generated fixtures live in `~/.cache/agents/apply-matrix-fixtures/exh-web` and are never committed. Host tools used when present: `7z`, `bsdtar`, `chdman`, `dolphin-tool`, `xdelta3`, `flips`, `target/release/rom-weaver`; a missing tool turns the dependent assertion into a skip. The `create`, `trim`, `compress`, `extract` and `apply-out` groups read fixtures that the CLI harness builds (`scripts/apply-matrix/cli/run.sh --gen-fixtures`); without them those cases skip with `fixture missing`.
+
 Extension-less single-file wrappers: `rom-in/rom.{gz,xz,bz2,zst,lz4}` and `patch-in/patch.{gz,xz,bz2,zst,lz4}` are extracted and applied (Rust ingest accepts an extension-less payload and classifies it by patch signature). When a drop has several ROM candidates, the app asks Rust ingest about each extension-less one before routing it: `rom-in/bare-no-extension-{gz,xz,bz2,zst,lz4}` (sole extension-less compressed ROM named `rom`) are staged and applied, `patch-in/bare-no-extension` (bare extension-less BPS) is applied with no picker, and `rom-in/rom.gz+base.bin-picker` still opens the ROM picker with no error and no patch card. `unsupported/ninja1` (unknown `.rnp` extension) and the split-WBFS `disc/wbfs-split-*` cases assert a visible "not a recognised ROM or patch format" or "split WBFS" message at staging, with no second-ROM picker and no download.
 
 ## Fixtures

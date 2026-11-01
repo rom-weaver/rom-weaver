@@ -382,8 +382,6 @@ export const register = async ({ root, fixtures }) => {
     ctx.ok(ctx.apply(ctx.tmp("hif_000000.nfs"), patch, out), "apply to nfs");
     check(fs.readFileSync(out).equals(target), "nfs output mismatch");
   });
-  // quality-reason: rom-weaver has no GCZ writer and this harness does not drive dolphin-tool; Rust tests cover GCZ reading.
-  add("container.disc.gcz", ["container", "disc", "gcz"], () => skip("no GCZ writer in this harness; read paths covered by Rust tests"));
 
   // RVZ / CHD / Z3DS inputs made by rom-weaver compress from the wbfs payload
   const wbfsPayload = "disc/wbfs.payload.iso";

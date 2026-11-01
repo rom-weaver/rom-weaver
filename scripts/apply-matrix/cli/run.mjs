@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { Fixtures } from "./lib/fixtures.mjs";
-import { defineAll, defineContainers } from "./lib/fixture-defs.mjs";
+import { defineAll, defineContainers, defineExhaustive } from "./lib/fixture-defs.mjs";
 import { allCases, defaultCacheDir, runCases, summarize } from "./lib/harness.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -80,6 +80,7 @@ const fixtures = new Fixtures({
 });
 defineAll(fixtures);
 defineContainers(fixtures, { root });
+defineExhaustive(fixtures);
 
 const { registerAll } = await import("./cases/index.mjs");
 await registerAll({ root, bin, fixtures });
