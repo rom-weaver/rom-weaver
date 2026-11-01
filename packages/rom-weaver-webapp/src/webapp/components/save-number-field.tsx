@@ -56,6 +56,8 @@ export const SaveNumberField = ({
   const step = field.step && field.step > 0 ? field.step : 1;
   const integer = field.kind === "unsigned_integer" || field.kind === "signed_integer";
   const bounded = integer && min !== null && max !== null && max > min;
+  /* The highest value the step grid reaches; the slider ends there so its End key and right edge agree. */
+  const top = bounded ? snapSaveNumber(max, min, max, step) : null;
   const current = parseSaveNumber(text);
   const [draft, setDraft] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
@@ -149,7 +151,8 @@ export const SaveNumberField = ({
     const box = rail.current?.getBoundingClientRect();
     if (!box || min === null || max === null || box.width <= 0) return;
     const at = x - (drag.current?.offset ?? 0);
-    commit(min + Math.max(0, Math.min(1, (at - box.left) / box.width)) * (max - min));
+    if (top === null) return;
+    commit(min + Math.max(0, Math.min(1, (at - box.left) / box.width)) * (top - min));
   };
   const onTrackDown = (event: PointerEvent<HTMLDivElement>) => {
     if (disabled || event.button !== 0) return;
@@ -195,7 +198,7 @@ export const SaveNumberField = ({
   };
   const onTrackKey = (event: KeyboardEvent<HTMLDivElement>) => {
     if (disabled || min === null || max === null) return;
-    const target = saveNumberKeyTarget(event.key, event.shiftKey, latest.current, { max, min, step });
+    const target = saveNumberKeyTarget(event.key, event.shiftKey, latest.current, { max: top ?? max, min, step });
     if (target === null) return;
     event.preventDefault();
     commit(target);
@@ -215,7 +218,7 @@ export const SaveNumberField = ({
 
   const atMin = floor !== null && current !== null && current <= floor;
   const atMax = max !== null && current !== null && current >= max;
-  const fraction = bounded && current !== null ? saveNumberFraction(current, min, max) : 0;
+  const fraction = bounded && current !== null ? saveNumberFraction(current, min, top ?? max) : 0;
   const style = { "--fraction": fraction } as CSSProperties;
   return (
     <div
@@ -248,7 +251,10 @@ export const SaveNumberField = ({
           inputMode={min !== null && min < 0 ? "text" : "numeric"}
           onBlur={() => {
             setFocused(false);
-            if (!error) setDraft(null);
+            if (error) return;
+            /* A typed value between steps settles on the nearest one. */
+            if (current !== null && fitToRange(current) !== current) commit(current);
+            setDraft(null);
           }}
           onChange={onInput}
           onFocus={() => {
@@ -283,7 +289,7 @@ export const SaveNumberField = ({
             aria-disabled={disabled || undefined}
             aria-label={localizer.message("ui.saves.editor.slider", { label: field.label })}
             aria-orientation="horizontal"
-            aria-valuemax={max}
+            aria-valuemax={top ?? max}
             aria-valuemin={min}
             aria-valuenow={current ?? min}
             aria-valuetext={format(current ?? min)}
@@ -302,7 +308,7 @@ export const SaveNumberField = ({
               <b className="save-number-knob" />
             </div>
           </div>
-          <span className="save-number-limit mono">{format(max)}</span>
+          <span className="save-number-limit mono">{format(top ?? max)}</span>
         </div>
       ) : null}
     </div>

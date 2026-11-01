@@ -473,7 +473,8 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     const numericKind = field.kind === "unsigned_integer" || field.kind === "signed_integer";
     if (numericKind) {
       if (!text.trim()) return localizer.message("ui.saves.editor.invalidInteger");
-      const number = Number(text);
+      /* Plain digits only: Number() would also accept `0x10`, `1e3` and `1.0`. */
+      const number = /^-?\d+$/.test(text.trim()) ? Number(text) : Number.NaN;
       const minimum = field.constraints.min ?? (field.kind === "signed_integer" ? -Number.MAX_SAFE_INTEGER : 0);
       if (
         !Number.isSafeInteger(number) ||
@@ -879,7 +880,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
             value={values[field.id] || field.value}
           />
         )}
-        {changed ? (
+        {changed || errorText ? (
           <button
             aria-label={localizer.message("ui.saves.editor.resetField", { label: field.label })}
             className="btn slim ghost save-editor-reset"

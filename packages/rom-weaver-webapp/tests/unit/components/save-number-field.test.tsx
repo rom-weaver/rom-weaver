@@ -136,4 +136,22 @@ describe("SaveNumberField", () => {
       press("pointerup", "mouse");
     });
   });
+
+  it("ends the slider at the last value the step reaches", () => {
+    const onValue = mount(field({ constraints: { choices: [], max: 100, max_length: null, min: 0 }, step: 30 }), "0");
+    const slider = screen.getByRole("slider");
+    expect(slider.getAttribute("aria-valuemax")).toBe("90");
+    fireEvent.keyDown(slider, { key: "End" });
+    expect(onValue).toHaveBeenLastCalledWith("90");
+  });
+
+  it("settles a typed value between steps on the nearest step when the box loses focus", () => {
+    const onValue = mount(field({ constraints: { choices: [], max: 160, max_length: null, min: 24 }, step: 8 }), "24");
+    const input = screen.getByLabelText("Coins");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "50" } });
+    expect(onValue).toHaveBeenLastCalledWith("50");
+    fireEvent.blur(input);
+    expect(onValue).toHaveBeenLastCalledWith("48");
+  });
 });

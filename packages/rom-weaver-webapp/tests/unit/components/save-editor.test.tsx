@@ -437,6 +437,19 @@ describe("SaveEditor", () => {
     expect(screen.getByRole("slider", { name: "Money slider" }).getAttribute("aria-valuenow")).toBe("5000");
   });
 
+  it("rejects hex, exponent and decimal text, and resets an invalid box that was never edited", async () => {
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    await chooseFile();
+    const money = screen.getByLabelText("Money") as HTMLInputElement;
+    for (const text of ["0x10", "1e3", "1.0"]) {
+      fireEvent.change(money, { target: { value: text } });
+      expect(screen.getByRole("alert").textContent).toContain("valid integer");
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Reset Money" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(money.value).toBe("5,000");
+  });
+
   it("filters properties without losing hidden edits", async () => {
     inspectSave.mockResolvedValueOnce(documentResult(genericFields));
     render(<SaveEditor onSessionChange={vi.fn()} />);
