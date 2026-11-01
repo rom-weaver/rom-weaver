@@ -747,20 +747,19 @@
 .rw-app .save-number {
   --number-line: var(--ink-3);
   --number-row: 48px;
-  --number-strip: 50px;
-  --number-groove: 12px;
-  --number-knob: 34px;
+  --number-strip: 46px;
+  --number-groove: 10px;
+  --number-knob: 14px;
   --number-reach: calc(var(--number-knob) / 2);
   width: 100%;
   min-width: 0;
-  max-width: 520px;
   overflow: hidden;
   background: var(--plate);
-  border: 1.5px solid var(--number-line);
+  border: 1px solid var(--number-line);
   border-radius: var(--r-m);
 }
 .rw-app .save-number:has(.save-number-value:focus) {
-  outline: 3px solid var(--thread);
+  outline: 2px solid var(--thread-text);
   outline-offset: 2px;
 }
 .rw-app .save-number.is-invalid {
@@ -775,31 +774,33 @@
   flex: none;
   place-items: center;
   width: var(--number-row);
-  color: var(--ink);
-  background: color-mix(in oklab, var(--ink) 6%, var(--plate));
+  color: var(--ink-2);
+  background: transparent;
   border: 0;
 }
 .rw-app .save-number-step:first-child {
-  border-inline-end: 1.5px solid var(--number-line);
+  border-inline-end: 1px solid var(--seam);
 }
 .rw-app .save-number-step:last-child {
-  border-inline-start: 1.5px solid var(--number-line);
+  border-inline-start: 1px solid var(--seam);
 }
 .rw-app .save-number-step svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 @media (hover: hover) {
   .rw-app .save-number-step:hover:not(:disabled, [aria-disabled="true"]) {
-    background: color-mix(in oklab, var(--ink) 14%, var(--plate));
+    color: var(--ink);
+    background: var(--well);
   }
 }
 .rw-app .save-number-step:active:not(:disabled, [aria-disabled="true"]) {
-  background: color-mix(in oklab, var(--ink) 24%, var(--plate));
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 12%, var(--plate));
 }
 .rw-app .save-number-step:focus-visible {
-  outline: 3px solid var(--thread-text);
-  outline-offset: -3px;
+  outline: 2px solid var(--thread-text);
+  outline-offset: -4px;
 }
 .rw-app .save-number-step:disabled,
 .rw-app .save-number-step[aria-disabled="true"] {
@@ -811,9 +812,10 @@
   min-width: 0;
   padding: 0 var(--sp-s);
   font-size: 1.35rem;
-  font-weight: 700;
+  font-weight: 650;
   color: var(--ink);
   text-align: center;
+  letter-spacing: 0.01em;
   background: transparent;
   border: 0;
 }
@@ -826,14 +828,12 @@
   align-items: center;
   height: var(--number-strip);
   padding-inline: var(--sp-m);
-  background: var(--well);
-  border-block-start: 1.5px solid var(--number-line);
+  border-block-start: 1px solid var(--seam-soft);
 }
 .rw-app .save-number-limit {
   flex: none;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--ink-2);
+  font-size: 0.74rem;
+  color: var(--ink-3);
 }
 .rw-app .save-number-track {
   position: relative;
@@ -850,9 +850,11 @@
   inset-block: 50% auto;
   inset-inline: 0;
   height: var(--number-groove);
-  background: var(--plate);
+  background:
+    repeating-linear-gradient(90deg, color-mix(in oklab, var(--thread) 22%, var(--well)) 0 1px, transparent 1px 9px),
+    var(--well);
   border-radius: 999px;
-  box-shadow: inset 0 0 0 1.5px var(--number-line);
+  box-shadow: inset 0 0 0 1px var(--number-line);
   translate: 0 -50%;
 }
 .rw-app .save-number-rail {
@@ -866,11 +868,21 @@
   inset-inline-start: calc(var(--number-reach) * -1);
   width: calc(var(--number-reach) + 100% * var(--fraction));
   height: var(--number-groove);
+  overflow: hidden;
   background: var(--thread);
   border-radius: 999px;
-  box-shadow: 0 0 0 1.5px var(--number-line);
   translate: 0 -50%;
 }
+/* The fill is woven thread, the same texture as the progress meter. */
+.rw-app .save-number-fill::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: rgb(255 255 255 / 0.2);
+  mask-image: var(--weave-mask);
+  mask-size: 6px 6px;
+}
+/* The handle is the meter's shuttle: an upright bar in ink, with a thread-colored bobbin, so it reads apart from the fill in both themes. */
 .rw-app .save-number-knob {
   position: absolute;
   inset-block-start: 50%;
@@ -878,46 +890,42 @@
   display: grid;
   place-items: center;
   width: var(--number-knob);
-  height: var(--number-knob);
+  height: 30px;
   cursor: grab;
-  background: var(--thread);
-  border: 3px solid var(--plate);
-  border-radius: 50%;
-  box-shadow:
-    0 0 0 1.5px var(--number-line),
-    0 2px 5px rgb(0 0 0 / 0.3);
+  background: var(--ink);
+  border: 2px solid var(--plate);
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.28);
   translate: -50% -50%;
-  transition: scale 0.12s;
+  transition: height 0.12s var(--ease);
 }
-/* Three grip lines tell the handle apart from a plain dot. */
 .rw-app .save-number-knob::before {
-  width: 8px;
-  height: 10px;
+  width: 2px;
+  height: 45%;
   content: "";
-  background: linear-gradient(
-    90deg,
-    var(--thread-ink) 0 2px,
-    transparent 2px 3px,
-    var(--thread-ink) 3px 5px,
-    transparent 5px 6px,
-    var(--thread-ink) 6px 8px
-  );
-  opacity: 0.75;
+  background: var(--thread);
+  border-radius: 1px;
+}
+/* A wider invisible grab area, so pressing near the slim handle still grabs it. */
+.rw-app .save-number-knob::after {
+  position: absolute;
+  inset: -6px -12px;
+  content: "";
 }
 @media (hover: hover) {
   .rw-app .save-number-track:hover .save-number-knob {
-    scale: 1.08;
+    height: 34px;
   }
 }
-.rw-app .save-number-track:active .save-number-knob {
-  scale: 1.15;
+.rw-app .save-number-track:active .save-number-knob,
+.rw-app .save-number.is-dragging .save-number-knob {
+  height: 36px;
 }
 .rw-app .save-number.is-dragging .save-number-knob {
   cursor: grabbing;
-  scale: 1.15;
 }
 .rw-app .save-number-track:focus-visible .save-number-knob {
-  outline: 3px solid var(--ink);
+  outline: 2px solid var(--thread-text);
   outline-offset: 3px;
 }
 .rw-app .save-number-track[aria-disabled="true"] {
@@ -995,15 +1003,16 @@
 }
 /* Toggles are chips: a tick circle and the name, filled when on, dashed while an edit is pending. */
 .rw-app .save-editor-toggles {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
   gap: var(--sp-s);
   padding: 12px 14px;
 }
+/* Chips share columns so a long list reads as a grid; the bit name sits at the far end. */
 .rw-app .save-editor-toggle {
   position: relative;
-  display: inline-grid;
-  grid-template-columns: auto auto auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--sp-s);
   align-items: center;
   min-height: 40px;
