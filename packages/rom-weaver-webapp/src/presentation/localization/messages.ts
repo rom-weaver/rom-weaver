@@ -2533,6 +2533,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.saves.editor.saveFile": msg({ id: "ui.saves.editor.saveFile", message: "Save file" }),
   "ui.saves.editor.pending": msg({ id: "ui.saves.editor.pending", message: "{count} pending" }),
+  "ui.saves.editor.slotEdited": msg({ id: "ui.saves.editor.slotEdited", message: "Edited" }),
   "ui.saves.editor.saveFiles": msg({ id: "ui.saves.editor.saveFiles", message: "Save files" }),
   "ui.saves.editor.findProperty": msg({ id: "ui.saves.editor.findProperty", message: "Find a property" }),
   "ui.saves.editor.noMatch": msg({ id: "ui.saves.editor.noMatch", message: "No properties match this search." }),

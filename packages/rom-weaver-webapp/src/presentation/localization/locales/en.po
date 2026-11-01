@@ -2090,6 +2090,11 @@ msgstr "Edit trainer names, money, badges, hearts, and gear in a game save."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.slotEdited"
+msgstr "Edited"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.info"
 msgstr "Editing runs locally and never changes the file you add. Use a raw game save, not an emulator save state. A new Pokémon save needs a save made by the game as its template."
 

@@ -638,6 +638,16 @@
   border: 1px solid var(--seam);
   border-radius: var(--r-m);
 }
+/* A dot on a file tab that holds edits, so changes in a hidden file are not missed. */
+.rw-app .save-editor-slot-edited {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-start: var(--sp-s);
+  vertical-align: middle;
+  background: var(--thread);
+  border-radius: 50%;
+}
 .rw-app .save-editor-slot[aria-selected="true"] {
   background: var(--plate);
   border-color: var(--thread);

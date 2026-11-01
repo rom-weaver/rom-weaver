@@ -2090,6 +2090,11 @@ msgstr "Bearbeite Trainernamen, Geld, Orden, Herzen und Ausrüstung in einem Spi
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.slotEdited"
+msgstr "Bearbeitet"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.info"
 msgstr "Die Bearbeitung läuft lokal und verändert nie die Datei, die du hinzufügst. Verwende einen rohen Spielstand, keinen Emulator-Savestate. Ein neuer Pokémon-Spielstand braucht als Vorlage einen vom Spiel erstellten Spielstand."
 

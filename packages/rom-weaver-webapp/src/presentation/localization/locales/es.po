@@ -2090,6 +2090,11 @@ msgstr "Edita nombres de entrenador, dinero, medallas, corazones y equipo en una
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.slotEdited"
+msgstr "Editado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.info"
 msgstr "La edición se ejecuta en local y nunca modifica el archivo que añades. Usa una partida sin procesar, no un estado guardado de emulador. Una partida nueva de Pokémon necesita como plantilla una partida creada por el juego."
 

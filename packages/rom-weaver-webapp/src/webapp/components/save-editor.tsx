@@ -1185,6 +1185,11 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                           type="button"
                         >
                           {slotName(slot, slotTitle(slot, localizer))}
+                          {slot.groups.some((group) => group.fields.some(isChanged)) ? (
+                            <span className="save-editor-slot-edited">
+                              <span className="sr-only">{localizer.message("ui.saves.editor.slotEdited")}</span>
+                            </span>
+                          ) : null}
                         </button>
                       ))}
                     </div>

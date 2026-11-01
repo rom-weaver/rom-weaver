@@ -490,6 +490,11 @@ describe("SaveEditor", () => {
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "money" } });
     fireEvent.click(screen.getByRole("tab", { name: "File 2" }));
     expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("42");
+    expect(screen.queryByText("Edited")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Money"), { target: { value: "50" } });
+    fireEvent.click(screen.getByRole("tab", { name: /File 1/ }));
+    expect(screen.getByRole("tab", { name: /File 2.*Edited/ })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /File 1/ }).textContent).not.toContain("Edited");
   });
 
   it("shows pending changes, supports one-field reset, all reset, and dry-run preview", async () => {
