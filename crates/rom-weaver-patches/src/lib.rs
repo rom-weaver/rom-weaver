@@ -615,14 +615,6 @@ impl PatchRegistry {
             .cloned()
     }
 
-    fn probe_ambiguous_ips_by_signature(&self, prefix: &[u8]) -> Option<Arc<dyn PatchHandler>> {
-        if prefix.starts_with(b"IPS32") {
-            return self.find_by_name("ips32");
-        }
-
-        None
-    }
-
     fn probe_by_signature(
         &self,
         path: &Path,
@@ -713,14 +705,6 @@ impl PatchRegistry {
             return self.probe_signature_match(path, "IPS32", "ips32");
         }
         if prefix.starts_with(IPS_SIGNATURE) {
-            if let Some(resolved) = self.probe_ambiguous_ips_by_signature(prefix) {
-                trace!(
-                    patch = %path.display(),
-                    format = resolved.descriptor().name,
-                    "patch signature probe resolved ambiguous IPS variant"
-                );
-                return Some(resolved);
-            }
             if ebp_extension {
                 return self.probe_signature_match(path, "IPS+ebp extension", "ebp");
             }
