@@ -384,6 +384,7 @@ export const register = () => {
   add("cheats.code.with-patch-header-strip-rejected", ["cheats", "negative"], (ctx) => {
     ctx.failed(ctx.apply(ctx.fx("cheats/nes32.nes"), [], ctx.tmp("o.nes"), ["--code", "AKE-LVS", "--patch-header", "strip"]), { what: "--code with --patch-header strip" });
   });
+  // quality-reason: needs the offline cheat database, which only `rom-weaver setup` downloads; covered by Rust cheats.rs.
   add("cheats.database.cheat-flag", ["cheats"], () => {
     skip("--cheat needs the offline cheat database (rom-weaver setup downloads it); a synthetic-shard workflow is covered by Rust tests cheats.rs patch_apply_bakes_database_cheats_and_refuses_unbakeable_ones");
   });

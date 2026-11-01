@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { BLOBS, CACHE } from "../fixtures/apply-matrix/generate.mjs";
 import * as enc from "../fixtures/apply-matrix/encoders.mjs";
-import { cliApply } from "./lib/cli.mjs";
+import { cliApply, cliExtract } from "./lib/cli.mjs";
 import { applyNow, assert, drive, expectDownload, fail, Skip, stageAndSettle } from "./lib/scenario.mjs";
 import { snapshot, waitApplyEnabled } from "./lib/ui.mjs";
 
@@ -120,6 +120,7 @@ export function optionCases({ manifest }) {
     tags: ["large", "mod", "pmsr"],
     title: "40 MiB source + PMSR patch (CRC-gated format)",
     async run(h) {
+      // quality-reason: pmsr-large.mod is authored by the native CLI, which is absent when RW_BIN is unset; PMSR apply is covered at small size by the CLI harness patch.mod.apply.* cases.
       if (!have("pmsr-large.mod")) throw new Skip("pmsr-large.mod needs the native CLI to create");
       return drive(h, async (page, session) => {
         await stageAndSettle(page, bigFiles(), 180_000);
@@ -137,6 +138,7 @@ export function optionCases({ manifest }) {
     tags: ["large", "cancel", "retry", "mod"],
     title: "start the 40 MiB apply, cancel mid-run, UI recovers, retry succeeds",
     async run(h) {
+      // quality-reason: pmsr-large.mod is authored by the native CLI, which is absent when RW_BIN is unset; PMSR apply is covered at small size by the CLI harness patch.mod.apply.* cases.
       if (!have("pmsr-large.mod")) throw new Skip("pmsr-large.mod needs the native CLI to create");
       return drive(h, async (page, session) => {
         await stageAndSettle(page, bigFiles(), 180_000);
@@ -170,6 +172,16 @@ export function optionCases({ manifest }) {
             { ...out, after: await snapshot(page) },
             `retry after cancel gave ${out.outcome}; after-cancel apply label=${afterCancel.applyText}`,
           );
+        const expected = read(path.join(CACHE, "pmsr-target.z64"));
+        if (/\.(7z|zip)$/i.test(out.name)) {
+          // After a cancel the app may hand back a compressed bundle; open it natively and compare the payload.
+          const extracted = cliExtract(out.bytes, out.name);
+          if (!extracted || extracted.error)
+            fail(out, `cannot verify ${out.name}: ${extracted?.error ?? "no native CLI"}`);
+          const want = enc.sha256(expected);
+          if (!extracted.files.some((file) => enc.sha256(file.bytes) === want))
+            fail(out, `${out.name} does not contain the patched payload`);
+        } else expectDownload(out, expected);
         return `retry ${out.name} ${out.bytes.length} B; after-cancel label=${afterCancel.applyText}; ${states.join(",")}`;
       });
     },

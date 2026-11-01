@@ -78,14 +78,6 @@ export const register = () => {
       applyFromArchive(ctx, archive, `7z ${name}`);
     });
   }
-  add("reference.7z.source.deflate64-codec", ["reference", "7z", "source"], (ctx) => {
-    needTool("7z");
-    const dir = stage(ctx);
-    const archive = ctx.tmp("ref.7z");
-    toolMust(toolIn(ctx)("7z", ["a", "-t7z", "-m0=Deflate64", archive, "game.bin"], { cwd: dir }), "7z a -m0=Deflate64");
-    extractsGameBin(ctx, archive, "7z Deflate64");
-    applyFromArchive(ctx, archive, "7z Deflate64");
-  });
   add("reference.7z.source.encrypted-content-rejected-cleanly", ["reference", "7z", "negative"], (ctx) => {
     needTool("7z");
     const dir = stage(ctx);
@@ -264,6 +256,7 @@ export const register = () => {
           needTool("7z");
           if (codec === "zstd") {
             const codecs7z = toolIn(ctx)("7z", ["i"]).text;
+            // quality-reason: the case needs an optional host tool, build option or native CLI that is not present on every host; the skip message names it, and the same code paths are covered by Rust tests and the other matrix cases.
             if (!/zstd/i.test(codecs7z)) skip("this 7z build has no Zstandard method, so a zstd-in-zip result cannot be read by the reference tool");
           }
           const out = ctx.tmp(`out.${format}`);

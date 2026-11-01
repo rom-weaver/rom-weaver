@@ -157,7 +157,7 @@ export function chainCases({ manifest }) {
     group: "chain",
     id: "chain/js-8-formats/remove-and-reapply",
     tags: ["chain", "reapply", "remove"],
-    title: "apply the chain, remove the last patch card, apply again: second download is step 7",
+    title: "apply the full chain, then a fresh page with the first 7 patches: second download is step 7",
     async run(h) {
       const out = await scenario(h, {
         files: [base, ...jsChain],
@@ -165,7 +165,7 @@ export function chainCases({ manifest }) {
         applyTimeout: 180_000,
       });
       expectDownload(out, read(path.join(BLOBS, "chain-final.bin")), "first apply");
-      // Same page is gone after scenario(); drive a fresh one for the second half.
+      // scenario() closes its page, so this drives a fresh page; it does not remove a card on the same page.
       const second = await scenario(h, {
         files: [base, ...jsChain.slice(0, 7)],
         shot: "second",
@@ -181,6 +181,7 @@ export function chainCases({ manifest }) {
     tags: ["chain", "dps", "rup", "ppf", "aps", "pat", "solid", "apsgba", "bdf"],
     title: "eight CLI-written formats chained in order",
     async run(h) {
+      // quality-reason: cchain-final.bin is authored by the native CLI, which is absent when RW_BIN is unset; the same eight formats chained from JS-authored patches run in chain/js-8-formats/in-order in this file.
       if (!has("cchain-final.bin")) throw new Skip("native-chain fixtures need the native CLI (not built)");
       const out = await scenario(h, {
         files: [base, ...nativeChain],

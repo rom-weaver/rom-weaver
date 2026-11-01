@@ -170,6 +170,7 @@ export const register = ({ fixtures }) => {
           ctx.ok(ctx.run(["patch", "create", "--original", ctx.fx(source), "--modified", ctx.fx(target), "--output", patch, ...(format === "xdelta" ? ["--xdelta-secondary", secondary] : [])]), `rom-weaver patch create ${pair}`);
           const decoded = ctx.tmp(`${pair}.decoded`);
           const result = tool("xdelta3", ["-d", "-f", "-s", ctx.fx(source), patch, decoded]);
+          // quality-reason: the case needs an optional host tool, build option or native CLI that is not present on every host; the skip message names it, and the same code paths are covered by Rust tests and the other matrix cases.
           if (!result.ok && /not compiled|unrecognized .*secondary/i.test(result.text)) skip(`xdelta3 build cannot decode ${secondary} secondary compression: ${describeTool(result)}`);
           toolMust(result, `xdelta3 -d ${path.basename(patch)}`);
           ctx.same(decoded, ctx.fx(target), `${pair}: xdelta3 -d of rom-weaver ${format} (${secondary})`);
@@ -247,6 +248,7 @@ export const register = ({ fixtures }) => {
     const patch = createWithFlips(ctx, ["--ips"], "ips", ctx.fx("ips-eof/base.bin"), ctx.fx("ips-eof/target.bin"), "eof");
     const parsed = parseIps(fs.readFileSync(patch));
     const spans = parsed.records.some((record) => record.offset <= 0x454f46 && 0x454f46 < record.offset + record.length);
+    // quality-reason: flips picks its own record layout; when this input pair does not produce the construct under test there is nothing to compare, and the other flips cases cover the rest.
     if (!spans) skip("flips did not emit a record covering the EOF address 0x454F46 for this pair");
     check(!parsed.records.some((record) => record.offset === 0x454f46), "flips emitted a record starting at the EOF address (reference tool quirk changed)");
     const out = ctx.tmp("out.bin");
@@ -256,6 +258,7 @@ export const register = ({ fixtures }) => {
   add("reference.flips.apply.ips-rle-records", ["reference", "flips", "ips", "edge"], (ctx) => {
     needTool("flips");
     const patch = createWithFlips(ctx, ["--ips"], "ips", ctx.fx("rom/base.bin"), ctx.fx("rom/rle.bin"), "rle");
+    // quality-reason: flips picks its own record layout; when this input pair does not produce the construct under test there is nothing to compare, and the other flips cases cover the rest.
     if (!parseIps(fs.readFileSync(patch)).records.some((record) => record.rle)) skip("flips emitted no RLE record for the 200 x 0xAA run");
     const out = ctx.tmp("out.bin");
     rwApply(ctx, ctx.fx("rom/base.bin"), patch, out);
@@ -265,6 +268,7 @@ export const register = ({ fixtures }) => {
     needTool("flips");
     const patch = createWithFlips(ctx, ["--ips"], "ips", ctx.fx("rom/base.bin"), ctx.fx("rom/shrink.bin"), "shrink");
     const parsed = parseIps(fs.readFileSync(patch));
+    // quality-reason: flips picks its own record layout; when this input pair does not produce the construct under test there is nothing to compare, and the other flips cases cover the rest.
     if (parsed.truncate === null) skip("flips emitted no truncate extension for a shrinking target");
     check(parsed.truncate === fs.statSync(ctx.fx("rom/shrink.bin")).size, () => `flips truncate size ${parsed.truncate} != target size`);
     const out = ctx.tmp("out.bin");

@@ -392,6 +392,7 @@ export const register = () => {
     try {
       fs.symlinkSync(dir, path.join(dir, "loop"));
     } catch {
+      // quality-reason: creating symlinks needs privileges some hosts lack; symlink handling is also covered by Rust unit tests in crates/rom-weaver-cli/tests/unit.
       skip("cannot create symlinks");
     }
     const result = ctx.run(["trim", dir, "--in-place"], { timeout: 30000 });

@@ -16,7 +16,7 @@ const usage = `usage: node scripts/apply-matrix/cli/run.mjs [options]
   --filter A,B,...      run cases whose "<id> <tags>" matches any regex (e.g. --filter bps,container.zip)
   --skip REGEX          drop cases matching this regex
   --list                list case ids and exit
-  --gen-fixtures        build every fixture and exit
+  --gen-fixtures        build missing fixtures and exit
   --update-manifest     rewrite tests/fixtures/apply-matrix/manifest.json from the built fixtures
   --strict              treat known-bug (xfail) cases as failures
   --fail-fast           stop at the first failure
@@ -52,20 +52,28 @@ for (let index = 0; index < args.length; index++) {
   }
 }
 
-const bin = [opt.bin, process.env.RW_BIN, path.join(root, "target/release/rom-weaver"), path.join(root, "target/debug/rom-weaver")].find((candidate) => candidate && fs.existsSync(candidate));
+const explicitBin = opt.bin || process.env.RW_BIN;
+if (explicitBin && !fs.existsSync(path.resolve(explicitBin))) {
+  console.error(`rom-weaver binary not found: ${path.resolve(explicitBin)} (from ${opt.bin ? "--bin" : "RW_BIN"})`);
+  process.exit(2);
+}
+const bin = [explicitBin && path.resolve(explicitBin), path.join(root, "target/release/rom-weaver"), path.join(root, "target/debug/rom-weaver")].find((candidate) => candidate && fs.existsSync(candidate));
 if (!bin && !opt.list) {
   console.error("no rom-weaver binary found; run: cargo build -p rom-weaver-cli --release");
   process.exit(2);
 }
 
 const fixtureRun = (runArgs) => {
-  const result = spawnSync(bin, runArgs, { encoding: "utf8", env: { ...process.env, NO_COLOR: "1" } });
+  // Run inside the cache dir with a matching PWD so the CLI's private temp root stays out of the repo.
+  const cwd = path.resolve(defaultCacheDir());
+  fs.mkdirSync(cwd, { recursive: true });
+  const result = spawnSync(bin, runArgs, { encoding: "utf8", cwd, env: { ...process.env, NO_COLOR: "1", PWD: cwd } });
   return { code: result.status, all: `${result.stdout}\n${result.stderr}` };
 };
 const fixtures = new Fixtures({
   root,
   repoDir: path.join(root, "tests/fixtures/apply-matrix"),
-  cacheDir: defaultCacheDir(),
+  cacheDir: path.resolve(defaultCacheDir()),
   manifestPath: path.join(root, "tests/fixtures/apply-matrix/manifest.json"),
   run: fixtureRun,
   quiet: !opt.verbose,

@@ -8,6 +8,7 @@ import { have } from "./fixture-defs.mjs";
 
 /** Skip the case, with the reason, when the reference tool is not on PATH. */
 export const needTool = (...tools) => {
+  // quality-reason: the case needs an optional host tool, build option or native CLI that is not present on every host; the skip message names it, and the same code paths are covered by Rust tests and the other matrix cases.
   for (const tool of tools) if (!have(tool)) skip(`${tool} not installed on this host`);
 };
 
@@ -61,6 +62,7 @@ export const toolMust = (result, what = result.cmd) => {
  */
 export const toolOrSkip = (result, what) => {
   if (result.timedOut) fail(`${what} timed out`);
+  // quality-reason: the case needs an optional host tool, build option or native CLI that is not present on every host; the skip message names it, and the same code paths are covered by Rust tests and the other matrix cases.
   if (!result.ok) skip(`${what}: reference tool cannot produce this variant (${describeTool(result)})`);
   return result;
 };

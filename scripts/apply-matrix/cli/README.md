@@ -9,7 +9,7 @@ scripts/apply-matrix/cli/run.sh --list             # list case ids
 scripts/apply-matrix/cli/run.sh --filter bps       # regex on "<id> <tags>", comma = OR
 scripts/apply-matrix/cli/run.sh --filter 'container\.source,output\.zip' --skip fuzz
 scripts/apply-matrix/cli/run.sh --strict           # known-bug (xfail) cases count as failures
-scripts/apply-matrix/cli/run.sh --gen-fixtures --update-manifest   # build every fixture, rewrite manifest.json
+scripts/apply-matrix/cli/run.sh --gen-fixtures --update-manifest   # build missing fixtures, rewrite manifest.json (to rebuild cache fixtures after a generator change, delete the cache dir or point APPLY_MATRIX_CACHE at an empty one first)
 ```
 
 Exit status is non-zero when any case fails (or, with `--strict`, any known bug reproduces). Options: `--bin PATH` (or `RW_BIN`), `--work DIR`, `--keep` (keep per-case dirs of passing cases), `--verbose` (print every invocation), `--fail-fast`, `--json FILE`.
@@ -51,7 +51,7 @@ Registered in `lib/fixture-defs.mjs`; generated lazily and verified against `man
 | location | content | policy |
 | --- | --- | --- |
 | `tests/fixtures/apply-matrix/` (repo) | 40 KiB pseudo-random ROM family, patches from the independent encoders in `lib/encoders.mjs`, header/N64/GB/DLDI/BSP fixtures | byte-deterministic; regenerated when stale; sha256 enforced by the manifest |
-| `~/.cache/agents/apply-matrix-fixtures/` (override `APPLY_MATRIX_CACHE`) | `exh/` generators for the create / compress / trim / extract groups (CD cue+bin, DVD iso, NDS, GBA, 3DS, archives from system tools, chdman / dolphin-tool containers; built only when missing), patches authored by `rom-weaver patch create`, archives built by system `zip`/`tar`/`bsdtar`/`xz`/..., disc containers, the 34 MiB ROM | tool/product dependent: sha256 is informational |
+| `~/.cache/agents/apply-matrix-fixtures/` (override `APPLY_MATRIX_CACHE`) | `exh/` generators for the create / compress / trim / extract groups (CD cue+bin, DVD iso, NDS, GBA, 3DS, archives from system tools, chdman / dolphin-tool containers; built only when missing), patches authored by `rom-weaver patch create`, archives built by system `zip`/`tar`/`bsdtar`/`xz`/..., disc containers, the 34 MiB ROM | built only when missing, never rebuilt over an existing file; sha256 is enforced for entries marked deterministic (e.g. `cheats/snes4m.sfc`) and informational for tool/product-built ones |
 | existing repo fixtures (`ext:` paths) | `tests/fixtures/{vcdiff,rar,extract-only}`, `crates/rom-weaver-patches/tests/fixtures/hdiffpatch`, webapp `archives/` and `browser-generated/` | used in place, never copied |
 
 Oracles: independent Node encoders for IPS, IPS32, BPS, UPS, PPF1-3, APS (N64), GDIFF, VCDIFF; the vendored upstream `bsppatch.js` runtime for BSP; `unzip`/`bsdtar` for zip/7z outputs; system `zip`/`tar`/... for inputs; `node:crypto` for checksums. `chdman`, `dolphin-tool`, `xdelta3`, `flips`, `7z`, `rar`, `unrar` are used when present (cases skip with a reason otherwise); the `reference.*` fixtures (a GameCube-like ISO, WIA/GCZ containers from `dolphin-tool convert`, a 3 MiB block-shuffled pair) live in the cache directory - `mise run quality-reference` and the Rust `cli_smoke` suite assert parity against them where installed.

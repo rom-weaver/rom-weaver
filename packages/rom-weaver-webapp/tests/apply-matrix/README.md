@@ -8,7 +8,7 @@ It drives the real UI in headless Chromium (Playwright from the webapp package),
 2. the native CLI (`target/release/rom-weaver`, or `RW_BIN`) as a differential oracle when it is built,
 3. invariants (no page error, no hang, no silent success on a corrupt patch).
 
-Missing tools or fixtures turn a case into `skip` with a printed reason; nothing is skipped silently.
+Missing tools or fixtures turn a case into `skip` with a printed reason; nothing is skipped silently. Disc outputs in a container format that need the native CLI to open them, when none is built, pass with the note `unverified (no native CLI)` in the case detail; single-file raw (`none`) outputs always need an exact byte match.
 
 ## Run
 
@@ -41,7 +41,7 @@ Exhaustive groups (Create, Trim, Compress, Extract, edge cases; ~470 cases):
 
 Known product bugs are marked `xfail: "<id>"` on the case. They report as `xfail` (and `XPASS` when fixed; pass `--strict-xfail` to make failures of xfail cases fatal). Extra generated fixtures live in `~/.cache/agents/apply-matrix-fixtures/exh-web` and are never committed. Host tools used when present: `7z`, `bsdtar`, `chdman`, `dolphin-tool`, `xdelta3`, `flips`, `target/release/rom-weaver`; a missing tool turns the dependent assertion into a skip.
 
-Extension-less single-file wrappers: `rom-in/rom.{gz,xz,bz2,zst,lz4}` are extracted and applied (the app stages them under an aliased payload name). `patch-in/patch.{gz,xz,bz2,zst,lz4}`, `unsupported/ninja1` and the split-WBFS `disc/wbfs-split-*` cases assert a visible "not a supported patch" or "split WBFS" message at staging, with no second-ROM picker and no download.
+Extension-less single-file wrappers: `rom-in/rom.{gz,xz,bz2,zst,lz4}` and `patch-in/patch.{gz,xz,bz2,zst,lz4}` are extracted and applied (Rust ingest accepts an extension-less payload and classifies it by patch signature). When a drop has several ROM candidates, the app asks Rust ingest about each extension-less one before routing it: `rom-in/bare-no-extension-{gz,xz,bz2,zst,lz4}` (sole extension-less compressed ROM named `rom`) are staged and applied, `patch-in/bare-no-extension` (bare extension-less BPS) is applied with no picker, and `rom-in/rom.gz+base.bin-picker` still opens the ROM picker with no error and no patch card. `unsupported/ninja1` (unknown `.rnp` extension) and the split-WBFS `disc/wbfs-split-*` cases assert a visible "not a recognised ROM or patch format" or "split WBFS" message at staging, with no second-ROM picker and no download.
 
 ## Fixtures
 

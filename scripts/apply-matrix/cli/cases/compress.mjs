@@ -89,6 +89,7 @@ export const register = () => {
         }
       });
       add(`compress.${fmt}.${codec}.higher-level-is-not-larger`, ["compress", fmt, codec, "levels"], (ctx) => {
+        // quality-reason: the store codec has no level, so a higher-level-is-not-larger comparison has nothing to compare.
         if (codec === "store") skip("store has no level");
         const input = ctx.write("game.bin", textLike(1 << 20));
         const sizes = {};
@@ -818,6 +819,7 @@ export const register = () => {
     ctx.failed(result, { what: "output is a directory" });
   });
   add("compress.output.read-only-directory", ["compress", "negative"], (ctx) => {
+    // quality-reason: root bypasses directory permissions so the read-only directory cannot be forced; path_access.rs unit tests in crates/rom-weaver-cli/tests/unit cover the permission errors.
     if (process.getuid?.() === 0) skip("root ignores directory permissions");
     const dir = ctx.tmp("ro");
     fs.mkdirSync(dir);

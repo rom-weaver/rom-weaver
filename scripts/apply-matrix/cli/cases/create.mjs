@@ -308,6 +308,7 @@ export const register = () => {
     try {
       fs.symlinkSync(o, link);
     } catch {
+      // quality-reason: creating symlinks needs privileges some hosts lack; symlink handling is also covered by Rust unit tests in crates/rom-weaver-cli/tests/unit.
       skip("cannot create symlinks");
     }
     const result = ctx.run(createArgs(o, m, link, ["--force", "-f", "ips"]));

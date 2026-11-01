@@ -176,7 +176,7 @@ export function outputCases() {
     group: "naming",
     id: "naming/duplicate-patch-dropped-twice",
     tags: ["naming", "duplicate"],
-    title: "the same patch dropped twice: no crash, any download must still be sane",
+    title: "the same patch dropped twice: no page error and no hang (download contents not checked)",
     async run(h) {
       return drive(h, async (page, session) => {
         await stageAndSettle(page, [base, patch, { buffer: read(patch), name: "bps-same.bps" }]);
@@ -238,7 +238,8 @@ export function outputCases() {
     group: "reapply",
     id: "reapply/swap-patch-after-apply",
     tags: ["reapply", "replace-patch"],
-    title: "apply with bps, drop a different patch (ips) in a fresh session state, apply: output follows the patch",
+    title:
+      "apply with bps, then drop an ips on the same page and apply again: first output exact, second informational",
     async run(h) {
       return drive(h, async (page, session) => {
         await stageAndSettle(page, [base, patch]);
@@ -248,6 +249,8 @@ export function outputCases() {
         await stageAndSettle(page, [path.join(BLOBS, "ips-grow.ips")]);
         const second = await applyNow(h, page);
         second.pageErrors = session.pageErrors;
+        if (second.pageErrors.length) fail(second, `page error ${second.pageErrors[0]}`);
+        if (second.outcome === "timeout") fail(second, "hang on second apply");
         if (second.outcome === "download") return `second=${second.bytes.length}B chain-or-replace (informational)`;
         return `second outcome ${second.outcome}`;
       });

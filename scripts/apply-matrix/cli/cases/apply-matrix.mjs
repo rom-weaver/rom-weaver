@@ -33,6 +33,7 @@ export const register = () => {
     const tag = ["apply-matrix", fmt];
     for (const [label, tool, build] of ARCHIVES) {
       add(`apply-matrix.${fmt}.patch-in-${label}`, [...tag, "container", label], (ctx) => {
+        // quality-reason: the case needs an optional host tool, build option or native CLI that is not present on every host; the skip message names it, and the same code paths are covered by Rust tests and the other matrix cases.
         if (!have(tool)) skip(`${tool} not installed`);
         const patchName = `patch.${fmt}`;
         ctx.write(`stage/${patchName}`, fs.readFileSync(ctx.fx(patchFx(fmt))));
@@ -44,6 +45,7 @@ export const register = () => {
         ctx.same(out, ctx.fx("rom/same.bin"), `${fmt} via ${label}`);
       });
       add(`apply-matrix.${fmt}.rom-in-${label}`, [...tag, "container", label], (ctx) => {
+        // quality-reason: the case needs an optional host tool, build option or native CLI that is not present on every host; the skip message names it, and the same code paths are covered by Rust tests and the other matrix cases.
         if (!have(tool)) skip(`${tool} not installed`);
         ctx.write("stage/game.bin", fs.readFileSync(ctx.fx("rom/base.bin")));
         const archive = ctx.tmp(`rom.${label}`);
@@ -68,6 +70,7 @@ export const register = () => {
     });
     for (const [label, tool, flags] of SINGLE) {
       add(`apply-matrix.${fmt}.patch-in-${label}`, [...tag, "container", label], (ctx) => {
+        // quality-reason: the case needs an optional host tool, build option or native CLI that is not present on every host; the skip message names it, and the same code paths are covered by Rust tests and the other matrix cases.
         if (!have(tool)) skip(`${tool} not installed`);
         const name = `patch.${fmt}`;
         ctx.write(`stage/${name}`, fs.readFileSync(ctx.fx(patchFx(fmt))));

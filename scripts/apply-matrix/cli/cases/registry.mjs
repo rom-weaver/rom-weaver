@@ -53,8 +53,6 @@ export const register = (env) => {
         ctx.ok(ctx.run(["patch", "create", "--original", o, "--modified", m, "--output", viaAlias, "-f", alias]), `-f ${alias}`);
         ctx.ok(ctx.run(["patch", "create", "--original", o, "--modified", m, "--output", viaExt]), "by extension");
         if (NAME_EMBEDDING.includes(names)) return;
-        const knownVcdiff = names === "vcdiff"; // ISSUE-1586: -f vcdiff writes xdelta
-        if (knownVcdiff) return;
         check(fs.readFileSync(viaAlias).equals(fs.readFileSync(viaExt)), `-f ${alias} differs from the ${canonical} output`);
       });
       add(`registry.patch.${base}.alias-${alias}.uppercase`, ["registry", "create", base], (ctx) => {

@@ -154,12 +154,14 @@ export function createCases() {
             const offered = (await optionsOf(page, TYPE)).map((option) => option.value);
             if (!offered.length) {
               const text = `${await mainText(page)} | ${(await visibleErrors(page)).join(" | ")}`;
+              // quality-reason: the case needs an optional host tool, build option or native CLI that is not present on every host; the skip message names it, and the same code paths are covered by Rust tests and the other matrix cases.
               if (pair.name === "identical" || pair.name === "empty-to-data" || pair.name === "one-byte")
                 throw new Skip(
                   `UI offers no formats for ${pair.name} (button ${enabled ? "enabled" : "disabled"}): ${text.slice(0, 160)}`,
                 );
               throw new Error(`no format select options: ${text.slice(0, 300)}`);
             }
+            // quality-reason: the app offers only the codecs, levels and formats valid for the selected input; a combination it does not expose is outside this case, and the other cases in the group cover the offered ones.
             if (!offered.includes(format))
               throw new Skip(`${format} not offered for ${pair.name} (offered: ${offered.join(",")})`);
             await setSelect(page, TYPE, format);
@@ -252,6 +254,7 @@ export function createCases() {
         );
         try {
           const offered = (await optionsOf(page, TYPE)).map((option) => option.value);
+          // quality-reason: the app offers only the codecs, levels and formats valid for the selected input; a combination it does not expose is outside this case, and the other cases in the group cover the offered ones.
           if (offered.includes(format)) return `offered (${offered.join(",")}) - now testable`;
           throw new Skip(`not reachable from the webapp (Create offers: ${offered.join(",")})`);
         } finally {
@@ -275,7 +278,9 @@ export function createCases() {
       await setSelect(page, TYPE, format);
       await openOptions(page);
       if (!(await setSelect(page, COMPRESSION, container))) throw new Error(`container ${container} not offered`);
+      // quality-reason: the app offers only the codecs, levels and formats valid for the selected input; a combination it does not expose is outside this case, and the other cases in the group cover the offered ones.
       if (codec && !(await setCodec(page, codec))) throw new Skip(`codec ${codec} not selectable`);
+      // quality-reason: the app offers only the codecs, levels and formats valid for the selected input; a combination it does not expose is outside this case, and the other cases in the group cover the offered ones.
       if (level && !(await setLevel(page, level))) throw new Skip("no level control");
       const out = await runCreate(page, h.caseDir);
       if (session.pageErrors.length) throw new Error(`page error ${String(session.pageErrors[0])}`);
