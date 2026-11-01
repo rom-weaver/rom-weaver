@@ -733,6 +733,11 @@ impl ContainerRegistry {
         }
     }
 
+    /// A registry holding exactly `handlers`, for hosts and tests that supply their own.
+    pub fn from_handlers(handlers: Vec<Arc<dyn ContainerHandler>>) -> Self {
+        Self { handlers }
+    }
+
     pub fn handlers(&self) -> &[Arc<dyn ContainerHandler>] {
         &self.handlers
     }

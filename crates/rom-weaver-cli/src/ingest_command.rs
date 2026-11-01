@@ -17,6 +17,27 @@ struct SignaturePatchSelection {
     patch_names: Vec<String>,
 }
 
+/// How [`CliApp::resolve_signature_patch_selection`] settled the ROM prompt for an archive holding
+/// unnamed entries.
+enum SignatureResolution {
+    /// No unnamed entry carries a reliable patch signature; the ordinary listing-driven prompt
+    /// applies.
+    NoSignaturePatches,
+    /// Patches were classified from their prefixes and the prompt already ran without extracting.
+    Selected(SignaturePatchSelection),
+    /// Some unnamed entry could not be read without extracting it (the container has no prefix
+    /// reads), so classification MUST wait until the entries are extracted. Nothing was prompted.
+    NeedsExtractedClassification,
+}
+
+/// Names of unnamed entries split by what a bounded prefix read could tell.
+struct UnnamedEntryScan {
+    /// Entries whose prefix carries a reliable patch signature.
+    patch_names: Vec<String>,
+    /// Entries whose prefix could not be read, so they stay unclassified.
+    unread_names: Vec<String>,
+}
+
 /// Which input bucket the dropped source classified into. `rom` sources still carry their ROM
 /// `assets`; a `rom` source that *also* bundled sidecar patches additionally carries them in
 /// `patches` (mixed ROM+patch archive surfacing). `patch` sources carry only `patches`.
@@ -749,23 +770,34 @@ impl CliApp {
         reliable
     }
 
-    /// Resolve the ROM prompt for an archive holding unnamed entries that carry a reliable patch
-    /// signature. Those entries are not ROM candidates, so the prompt never offers them; the
-    /// caller MUST extract `patch_names` in a separate pass because ROM selection drops them.
-    /// Returns `None` when no entry is signature-classified, leaving the ordinary resolution.
+    /// Resolve the ROM prompt for an archive holding unnamed entries, classifying them from bounded
+    /// prefix reads so no ROM is extracted before the user chooses. Entries with a reliable patch
+    /// signature are not ROM candidates, so the prompt never offers them; the caller MUST extract
+    /// `patch_names` in a separate pass because ROM selection drops them. With
+    /// `require_complete`, an unreadable unnamed entry yields
+    /// [`SignatureResolution::NeedsExtractedClassification`] before any prompt.
     fn resolve_signature_patch_selection(
         &self,
         handler: &dyn ContainerHandler,
         source: &Path,
         options: SelectionResolutionOptions<'_>,
+        require_complete: bool,
         context: &OperationContext,
-    ) -> Result<Option<SignaturePatchSelection>> {
+    ) -> Result<SignatureResolution> {
         let entries = Self::list_selection_entries(handler, source, options.split_bin, context)?;
-        let patch_names =
-            self.signature_patch_entry_names(handler, source, &entries, options.split_bin, context);
-        if patch_names.is_empty() {
-            return Ok(None);
+        let scan = self.scan_unnamed_entries(handler, source, &entries, options.split_bin, context);
+        if require_complete && !scan.unread_names.is_empty() {
+            debug!(
+                source = %source.display(),
+                unread_count = scan.unread_names.len(),
+                "unnamed entries cannot be classified without extraction; deferring the ROM prompt"
+            );
+            return Ok(SignatureResolution::NeedsExtractedClassification);
         }
+        if scan.patch_names.is_empty() {
+            return Ok(SignatureResolution::NoSignaturePatches);
+        }
+        let patch_names = scan.patch_names;
         let candidates = entries
             .iter()
             .filter(|entry| !patch_names.contains(&normalize_archive_name(&entry.path)))
@@ -779,23 +811,22 @@ impl CliApp {
         );
         let rom_selections =
             self.resolve_listed_payload_selections(&candidates, source, options)?;
-        Ok(Some(SignaturePatchSelection {
+        Ok(SignatureResolution::Selected(SignaturePatchSelection {
             rom_selections,
             patch_names,
         }))
     }
 
-    /// Names of unnamed archive entries whose leading bytes carry a reliable patch signature,
-    /// read from a bounded prefix without extracting. Entries the container cannot read stay
-    /// unclassified, which keeps them as ROM candidates.
-    fn signature_patch_entry_names(
+    /// Classify unnamed archive entries from a bounded prefix read without extracting. Entries the
+    /// container cannot read stay unclassified, which keeps them as ROM candidates.
+    fn scan_unnamed_entries(
         &self,
         handler: &dyn ContainerHandler,
         source: &Path,
         entries: &[ContainerListEntry],
         split_bin: bool,
         context: &OperationContext,
-    ) -> Vec<String> {
+    ) -> UnnamedEntryScan {
         let unnamed = entries
             .iter()
             .filter(|entry| rom_weaver_core::payload_name_needs_content_classification(&entry.path))
@@ -803,7 +834,10 @@ impl CliApp {
             .filter(|name| !name.is_empty())
             .collect::<Vec<_>>();
         if unnamed.is_empty() {
-            return Vec::new();
+            return UnnamedEntryScan {
+                patch_names: Vec::new(),
+                unread_names: Vec::new(),
+            };
         }
         let prefixes = match handler.read_entry_prefixes(
             &ContainerProbeRequest {
@@ -821,10 +855,13 @@ impl CliApp {
                     error = %error,
                     "could not read unnamed entry prefixes; leaving them as ROM candidates"
                 );
-                return Vec::new();
+                BTreeMap::new()
             }
         };
-        unnamed
+        let (read, unread_names): (Vec<_>, Vec<_>) = unnamed
+            .into_iter()
+            .partition(|name| prefixes.contains_key(name));
+        let patch_names = read
             .into_iter()
             .filter(|name| {
                 let path = Path::new(name);
@@ -835,7 +872,17 @@ impl CliApp {
                         Self::is_reliable_unnamed_patch_format(path, patch.descriptor().name)
                     })
             })
-            .collect()
+            .collect::<Vec<_>>();
+        trace!(
+            source = %source.display(),
+            patch_count = patch_names.len(),
+            unread_count = unread_names.len(),
+            "scanned unnamed entry prefixes"
+        );
+        UnnamedEntryScan {
+            patch_names,
+            unread_names,
+        }
     }
 
     /// Ingest a bare `.cue`/`.gdi` sheet with its referenced track files sitting
@@ -1030,19 +1077,16 @@ impl CliApp {
             source_label,
             context,
         } = request;
-        let select_classified_leaves = classify_before_selection
-            && interactive
-            && self.interactive_selection_enabled
-            && raw_selections.is_empty();
-        // Nested containers skip classify-before-selection, so unnamed patches are classified from
-        // their headers here and kept out of the ROM prompt.
-        let signature_selection = if interactive
-            && sniff_unnamed_before_prompt
-            && !select_classified_leaves
-            && self.interactive_selection_enabled
-            && raw_selections.is_empty()
-        {
-            self.resolve_signature_patch_selection(
+        let prompt_ready =
+            interactive && self.interactive_selection_enabled && raw_selections.is_empty();
+        // Unnamed entries are classified from their headers without extracting, so the ROM prompt
+        // runs first and only the chosen ROMs (plus patches) are extracted. When the container
+        // cannot read an unnamed entry's prefix, the leaves are classified after extraction instead
+        // and the unselected ones are deleted again.
+        let mut select_classified_leaves = false;
+        let mut signature_selection = None;
+        if prompt_ready && (classify_before_selection || sniff_unnamed_before_prompt) {
+            match self.resolve_signature_patch_selection(
                 handler,
                 source,
                 SelectionResolutionOptions {
@@ -1051,11 +1095,25 @@ impl CliApp {
                     ignore_common_files: !no_ignore,
                     source_label,
                 },
+                classify_before_selection,
                 context,
-            )?
-        } else {
-            None
-        };
+            )? {
+                SignatureResolution::Selected(selection) => signature_selection = Some(selection),
+                SignatureResolution::NoSignaturePatches => {}
+                SignatureResolution::NeedsExtractedClassification => {
+                    select_classified_leaves = true;
+                }
+            }
+        }
+        trace!(
+            source = %source.display(),
+            classify_before_selection,
+            select_classified_leaves,
+            signature_patches = signature_selection
+                .as_ref()
+                .map_or(0, |selection| selection.patch_names.len()),
+            "resolved ingest ROM selection strategy"
+        );
         let rom_selections = signature_selection
             .as_ref()
             .map_or(raw_selections, |selection| &selection.rom_selections);
@@ -1139,7 +1197,7 @@ impl CliApp {
                 rom_count = entries.len(),
                 "classifying ingest leaves before ROM selection"
             );
-            let selections = self.resolve_listed_payload_selections(
+            let selections = match self.resolve_listed_payload_selections(
                 &entries,
                 source,
                 SelectionResolutionOptions {
@@ -1148,17 +1206,34 @@ impl CliApp {
                     ignore_common_files: !no_ignore,
                     source_label,
                 },
-            )?;
+            ) {
+                Ok(selections) => selections,
+                Err(error) => {
+                    // A cancelled prompt aborts the ingest, so the ROMs extracted for
+                    // classification must not linger in the output directory.
+                    let (_, rom_leaves): (Vec<_>, Vec<_>) =
+                        leaves.iter().cloned().partition(|leaf| {
+                            leaf.get("path")
+                                .and_then(Value::as_str)
+                                .is_some_and(|path| self.is_patch_payload(Path::new(path)))
+                        });
+                    Self::remove_unselected_leaves(out_dir, &rom_leaves, &[]);
+                    return Err(error);
+                }
+            };
             if !selections.is_empty() {
                 let selected = selections.into_iter().collect::<HashSet<_>>();
-                leaves.retain(|leaf| {
-                    leaf.get("path")
-                        .and_then(Value::as_str)
-                        .is_some_and(|path| {
-                            self.is_patch_payload(Path::new(path))
-                                || selected.contains(&selection_name(path))
-                        })
-                });
+                let (kept, dropped): (Vec<_>, Vec<_>) =
+                    std::mem::take(&mut leaves).into_iter().partition(|leaf| {
+                        leaf.get("path")
+                            .and_then(Value::as_str)
+                            .is_some_and(|path| {
+                                self.is_patch_payload(Path::new(path))
+                                    || selected.contains(&selection_name(path))
+                            })
+                    });
+                leaves = kept;
+                Self::remove_unselected_leaves(out_dir, &dropped, &leaves);
             }
         }
         let mut assets = Vec::with_capacity(leaves.len());
@@ -1272,6 +1347,55 @@ impl CliApp {
         Ok((assets, signature_patches))
     }
 
+    /// Delete ROM leaves that were extracted only to be classified and were then not selected, so
+    /// nothing unselected remains in `out_dir`. Only files strictly inside `out_dir` and absent from
+    /// `kept` are removed; directories left empty by the removal are pruned up to (never including)
+    /// `out_dir`.
+    pub(super) fn remove_unselected_leaves(out_dir: &Path, dropped: &[Value], kept: &[Value]) {
+        let root = PathBuf::from(Self::normalized_emitted_path_key(out_dir));
+        let kept_paths = kept
+            .iter()
+            .filter_map(|leaf| leaf.get("path").and_then(Value::as_str))
+            .map(Self::normalize_emitted_path_string)
+            .collect::<HashSet<_>>();
+        for path in dropped
+            .iter()
+            .filter_map(|leaf| leaf.get("path").and_then(Value::as_str))
+        {
+            let candidate = Path::new(path);
+            let inside_root = candidate.strip_prefix(&root).is_ok_and(|relative| {
+                !relative.as_os_str().is_empty()
+                    && relative
+                        .components()
+                        .all(|component| matches!(component, std::path::Component::Normal(_)))
+            });
+            if !inside_root || kept_paths.contains(&Self::normalize_emitted_path_string(path)) {
+                debug!(
+                    path,
+                    inside_root, "keeping unselected leaf outside the removable set"
+                );
+                continue;
+            }
+            match fs::remove_file(candidate) {
+                Ok(()) => trace!(path, "removed unselected extracted ROM"),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => {
+                    debug!(path, error = %error, "could not remove unselected extracted ROM");
+                    continue;
+                }
+            }
+            let mut parent = candidate.parent();
+            while let Some(dir) = parent.filter(|dir| *dir != root && dir.starts_with(&root)) {
+                // `remove_dir` only succeeds on an empty directory.
+                if fs::remove_dir(dir).is_err() {
+                    break;
+                }
+                trace!(dir = %dir.display(), "removed empty directory left by an unselected ROM");
+                parent = dir.parent();
+            }
+        }
+    }
+
     fn ingest_patch_leaves(
         &self,
         handler: &dyn ContainerHandler,
@@ -1319,9 +1443,11 @@ impl CliApp {
             };
             let leaf_path = Path::new(path);
             // Mixed enumeration MUST leave unnamed patches to the ROM pass, avoiding duplicate copies.
-            if !self.is_patch_payload(leaf_path)
-                || (!include_signature_patches && !is_patch_filter_candidate_name(path))
-            {
+            // Checked first so those unnamed leaves are not signature-sniffed twice.
+            if !include_signature_patches && !is_patch_filter_candidate_name(path) {
+                continue;
+            }
+            if !self.is_patch_payload(leaf_path) {
                 continue;
             }
             patches.push(self.build_patch_descriptor(leaf_path, None, rom_hint, context)?);
