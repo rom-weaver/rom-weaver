@@ -96,4 +96,44 @@ describe("SaveNumberField", () => {
     fireEvent.keyDown(slider, { key: "Home" });
     expect(onValue).toHaveBeenLastCalledWith("24");
   });
+
+  it("does not report a press that lands on the stored value", () => {
+    const onValue = mount(field({ constraints: { choices: [], max: 10, max_length: null, min: 0 } }), "10");
+    fireEvent.keyDown(screen.getByRole("slider"), { key: "End" });
+    fireEvent.click(screen.getByRole("button", { name: "Raise Coins by 1" }), { detail: 0 });
+    expect(onValue).not.toHaveBeenCalled();
+  });
+
+  describe("pointer presses", () => {
+    const press = (type: string, pointerType: string) =>
+      fireEvent(
+        screen.getByRole("button", { name: "Raise Coins by 1" }),
+        Object.assign(new Event(type, { bubbles: true, cancelable: true }), {
+          button: 0,
+          pointerId: 1,
+          pointerType,
+        }),
+      );
+
+    it("steps a touch tap on release, and not when the browser cancels it to scroll", () => {
+      vi.stubGlobal("PointerEvent", Event);
+      Object.assign(HTMLElement.prototype, { setPointerCapture: () => undefined });
+      const onValue = mount(field(), "5");
+      press("pointerdown", "touch");
+      press("pointercancel", "touch");
+      expect(onValue).not.toHaveBeenCalled();
+      press("pointerdown", "touch");
+      press("pointerup", "touch");
+      expect(onValue).toHaveBeenLastCalledWith("6");
+      vi.unstubAllGlobals();
+    });
+
+    it("steps a mouse press at once", () => {
+      Object.assign(HTMLElement.prototype, { setPointerCapture: () => undefined });
+      const onValue = mount(field(), "5");
+      press("pointerdown", "mouse");
+      expect(onValue).toHaveBeenLastCalledWith("6");
+      press("pointerup", "mouse");
+    });
+  });
 });

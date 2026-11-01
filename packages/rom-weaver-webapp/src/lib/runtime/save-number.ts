@@ -8,6 +8,8 @@ export const parseSaveNumber = (text: string): number | null => {
   return Number.isFinite(value) ? value : null;
 };
 
+const escapeForRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const separatorsFor = (locale: string): { decimal: string; group: string } => {
   try {
     const parts = new Intl.NumberFormat(locale).formatToParts(1_000_000.5);
@@ -28,7 +30,12 @@ const separatorsFor = (locale: string): { decimal: string; group: string } => {
  */
 export const normalizeSaveNumberText = (raw: string, locale = "en-US"): string => {
   const { decimal, group } = separatorsFor(locale);
-  const compact = raw.trim().replace(/[\s_]/g, "").split(group).join("").split(decimal).join(".");
+  const spaced = raw.trim().replace(/[\s_]/g, "");
+  /* Grouping marks must split digits in threes; anything else, such as "1.5k" where "." groups, is left for validation to reject. */
+  const marks = `${escapeForRegExp(group)}`;
+  const grouped = new RegExp(`^-?\\d{1,3}(?:${marks}\\d{3})+(?:${escapeForRegExp(decimal)}\\d+)?[kmb]?$`, "i");
+  if (spaced.includes(group) && !grouped.test(spaced)) return spaced;
+  const compact = spaced.split(group).join("").split(decimal).join(".");
   const match = SHORTHAND.exec(compact);
   if (!match) return compact;
   const factor = SHORTHAND_FACTOR[(match[2] ?? "").toLowerCase()] ?? 1;

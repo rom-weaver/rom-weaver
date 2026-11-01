@@ -771,6 +771,10 @@
 .rw-app .save-number-step:active:not(:disabled, [aria-disabled="true"]) {
   background: color-mix(in oklab, var(--ink) 24%, var(--plate));
 }
+.rw-app .save-number-step:focus-visible {
+  outline: 3px solid var(--thread-text);
+  outline-offset: -3px;
+}
 .rw-app .save-number-step:disabled,
 .rw-app .save-number-step[aria-disabled="true"] {
   cursor: not-allowed;

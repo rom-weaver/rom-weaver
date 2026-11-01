@@ -298,6 +298,10 @@ html:has(.rw-modal) {
     .rw-app select:not(.meta-target-select):not(.ck-add-select) {
       font-size: max(16px, 1em);
     }
+    /* The save number box is already larger than the floor; keep its own size. */
+    .rw-app input.save-number-value:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]) {
+      font-size: max(16px, 1.35rem);
+    }
     /* Reassert the 16px floor against more specific field rules. */
     .rw-app .ofld .select,
     .rw-app .fname .select,

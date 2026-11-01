@@ -27,6 +27,14 @@ describe("normalizeSaveNumberText", () => {
     expect(normalizeSaveNumberText("48,200", "en-US")).toBe("48200");
   });
 
+  it("rejects grouping marks that do not split digits in threes", () => {
+    expect(normalizeSaveNumberText("1.5k", "de-DE")).toBe("1.5k");
+    expect(normalizeSaveNumberText("1.5k", "es-ES")).toBe("1.5k");
+    expect(normalizeSaveNumberText("1,5k", "en-US")).toBe("1,5k");
+    expect(normalizeSaveNumberText("12,34", "en-US")).toBe("12,34");
+    expect(normalizeSaveNumberText("1.234.567", "de-DE")).toBe("1234567");
+  });
+
   it("falls back to English marks for an unknown locale", () => {
     expect(normalizeSaveNumberText("48,200", "not a locale")).toBe("48200");
   });

@@ -185,10 +185,13 @@ test("changes a bounded number with the buttons, the slider keys, and typed shor
   await expect.element(money).toHaveValue("5,000");
   const slider = page.getByRole("slider", { name: "Money slider" });
   await expect.element(slider).toHaveAttribute("aria-valuemax", "999999");
+  /* Pressing the handle itself grabs it without moving the value; pressing the bar jumps there. */
   await slider.click({ position: { x: 1, y: 25 } });
-  await expect.element(money).toHaveValue("0");
-  await userEvent.keyboard("{End}");
+  await expect.element(money).toHaveValue("5,000");
+  await slider.click({ position: { x: slider.element().getBoundingClientRect().width - 1, y: 25 } });
   await expect.element(money).toHaveValue("999,999");
+  await userEvent.keyboard("{Home}");
+  await expect.element(money).toHaveValue("0");
   await money.fill("1.5m");
   await expect.element(page.getByText("Enter a valid integer in the allowed range.")).toBeVisible();
   await money.fill("50k");

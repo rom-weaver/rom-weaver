@@ -24,7 +24,7 @@ const HOLD_DELAY_MS = 450;
 const HOLD_INTERVAL_MS = 70;
 const holdMultiplier = (repeats: number) => (repeats > 24 ? 100 : repeats > 12 ? 10 : 1);
 
-type DragState = { id: number; moved: boolean; touch: boolean; x: number; y: number };
+type DragState = { grabbed: boolean; id: number; moved: boolean; offset: number; touch: boolean; x: number; y: number };
 
 /**
  * A number box with the value, step buttons and, when the field has a range,
@@ -63,7 +63,12 @@ export const SaveNumberField = ({
   const latest = useRef(current ?? min ?? 0);
   const rail = useRef<HTMLDivElement>(null);
   const drag = useRef<DragState | null>(null);
-  const hold = useRef<{ interval?: ReturnType<typeof setInterval>; timer: ReturnType<typeof setTimeout> } | null>(null);
+  /* `tap` is the direction of a touch press that has not stepped yet: it steps on release, or once held, but never when the browser takes the touch to scroll. */
+  const hold = useRef<{
+    interval?: ReturnType<typeof setInterval>;
+    tap: number;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
   useEffect(() => {
     latest.current = current ?? min ?? 0;
   }, [current, min]);
@@ -88,9 +93,11 @@ export const SaveNumberField = ({
   };
   const commit = (value: number) => {
     const next = fitToRange(Math.round(value));
+    /* A press that lands on the value already stored must not reach the editor, which would drop its preview and output. */
+    const unchanged = next === latest.current && draft === null && !error;
     latest.current = next;
     setDraft(null);
-    onChange(String(next));
+    if (!unchanged) onChange(String(next));
     return next;
   };
   const stepBy = (direction: number, multiplier = 1) => {
@@ -112,13 +119,26 @@ export const SaveNumberField = ({
     event.currentTarget.setPointerCapture(event.pointerId);
     let repeats = 0;
     const press = () => {
-      if (!stepBy(direction, holdMultiplier(repeats++))) stopHold();
+      const moved = stepBy(direction, holdMultiplier(repeats++));
+      if (!moved) stopHold();
+      return moved;
     };
-    press();
+    const deferred = event.pointerType !== "mouse";
+    if (!(deferred || press())) return;
     const timer = setTimeout(() => {
+      if (!hold.current) return;
+      if (deferred) {
+        hold.current.tap = 0;
+        if (!press()) return;
+      }
       if (hold.current) hold.current.interval = setInterval(press, HOLD_INTERVAL_MS);
     }, HOLD_DELAY_MS);
-    hold.current = { timer };
+    hold.current = { tap: deferred ? direction : 0, timer };
+  };
+  const endPress = (released: boolean) => {
+    const tap = hold.current?.tap ?? 0;
+    stopHold();
+    if (released && tap) stepBy(tap);
   };
   /* Pointer presses are handled on press; a keyboard activation arrives as a click with no pointer. */
   const keyboardStep = (direction: number) => (event: { detail: number }) => {
@@ -128,17 +148,30 @@ export const SaveNumberField = ({
   const setFromX = (x: number) => {
     const box = rail.current?.getBoundingClientRect();
     if (!box || min === null || max === null || box.width <= 0) return;
-    commit(min + Math.max(0, Math.min(1, (x - box.left) / box.width)) * (max - min));
+    const at = x - (drag.current?.offset ?? 0);
+    commit(min + Math.max(0, Math.min(1, (at - box.left) / box.width)) * (max - min));
   };
   const onTrackDown = (event: PointerEvent<HTMLDivElement>) => {
     if (disabled || event.button !== 0) return;
     event.currentTarget.focus({ preventScroll: true });
     const touch = event.pointerType === "touch";
-    drag.current = { id: event.pointerId, moved: !touch, touch, x: event.clientX, y: event.clientY };
+    /* Pressing the handle itself grabs it where it is, so the value does not jump to the pointer. */
+    const knob = event.target instanceof Element ? event.target.closest(".save-number-knob") : null;
+    const knobBox = knob?.getBoundingClientRect();
+    const offset = knobBox ? event.clientX - (knobBox.left + knobBox.width / 2) : 0;
+    drag.current = {
+      grabbed: Boolean(knob),
+      id: event.pointerId,
+      moved: !touch,
+      offset,
+      touch,
+      x: event.clientX,
+      y: event.clientY,
+    };
     if (touch) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     setDragging(true);
-    setFromX(event.clientX);
+    if (!knob) setFromX(event.clientX);
   };
   const onTrackMove = (event: PointerEvent<HTMLDivElement>) => {
     const state = drag.current;
@@ -156,7 +189,7 @@ export const SaveNumberField = ({
   const onTrackEnd = (event: PointerEvent<HTMLDivElement>) => {
     const state = drag.current;
     if (!state || state.id !== event.pointerId) return;
-    if (!state.moved && event.type === "pointerup") setFromX(event.clientX);
+    if (!(state.moved || state.grabbed) && event.type === "pointerup") setFromX(event.clientX);
     drag.current = null;
     setDragging(false);
   };
@@ -197,9 +230,9 @@ export const SaveNumberField = ({
           disabled={disabled}
           onClick={keyboardStep(-1)}
           onContextMenu={(event) => event.preventDefault()}
-          onPointerCancel={stopHold}
+          onPointerCancel={() => endPress(false)}
           onPointerDown={(event) => startHold(event, -1)}
-          onPointerUp={stopHold}
+          onPointerUp={() => endPress(true)}
           title={localizer.message("ui.saves.editor.lower", { label: field.label, step: stepLabel })}
           type="button"
         >
@@ -234,9 +267,9 @@ export const SaveNumberField = ({
           disabled={disabled}
           onClick={keyboardStep(1)}
           onContextMenu={(event) => event.preventDefault()}
-          onPointerCancel={stopHold}
+          onPointerCancel={() => endPress(false)}
           onPointerDown={(event) => startHold(event, 1)}
-          onPointerUp={stopHold}
+          onPointerUp={() => endPress(true)}
           title={localizer.message("ui.saves.editor.raise", { label: field.label, step: stepLabel })}
           type="button"
         >
