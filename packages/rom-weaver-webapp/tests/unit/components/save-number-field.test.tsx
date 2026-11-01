@@ -154,4 +154,12 @@ describe("SaveNumberField", () => {
     fireEvent.blur(input);
     expect(onValue).toHaveBeenLastCalledWith("48");
   });
+
+  it("disables the raise button at the last value the step reaches", () => {
+    mount(field({ constraints: { choices: [], max: 100, max_length: null, min: 0 }, step: 30 }), "60");
+    const raise = screen.getByRole("button", { name: "Raise Coins by 30" });
+    expect(raise.getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(raise, { detail: 0 });
+    expect(raise.getAttribute("aria-disabled")).toBe("true");
+  });
 });

@@ -217,7 +217,7 @@ export const SaveNumberField = ({
   };
 
   const atMin = floor !== null && current !== null && current <= floor;
-  const atMax = max !== null && current !== null && current >= max;
+  const atMax = (top ?? max) !== null && current !== null && current >= (top ?? max ?? Number.POSITIVE_INFINITY);
   const fraction = bounded && current !== null ? saveNumberFraction(current, min, top ?? max) : 0;
   const style = { "--fraction": fraction } as CSSProperties;
   return (
