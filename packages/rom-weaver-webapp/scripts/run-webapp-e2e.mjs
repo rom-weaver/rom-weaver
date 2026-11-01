@@ -148,7 +148,7 @@ const systemChromeLaunchOptions =
   browserName === "chromium" && process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
 const HYDRATION_SETTINGS = JSON.stringify({
   apply: { compression: { threads: 3 } },
-  // debug: the audit keeps the app's console log and prints its tail when a page fails (see runHydrationAudit).
+  // debug: the audit keeps the app's console log and prints its tail when a case fails (see runHydrationAudit).
   common: { betaToolsEnabled: true, logLevel: "debug" },
   create: { compression: { threads: 3 } },
   version: 5,
@@ -461,8 +461,12 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         process.stdout.write(`PASS hydration ${testCase.path} (${result.initialView} -> ${result.finalView})\n`);
       } catch (error) {
         // Any failure of the case, not only the final checks, prints the page's recent console log.
-        if (error instanceof Error)
-          error.message += `\napp log (last ${appLog.length} lines):\n${appLog.map((line) => `  ${line}`).join("\n")}`;
+        if (error instanceof Error) {
+          const tail = `\napp log (last ${appLog.length} lines):\n${appLog.map((line) => `  ${line}`).join("\n")}`;
+          error.message += tail;
+          // Playwright errors print their stored stack, not the message.
+          if (typeof error.stack === "string") error.stack += tail;
+        }
         throw error;
       } finally {
         releaseScripts();
