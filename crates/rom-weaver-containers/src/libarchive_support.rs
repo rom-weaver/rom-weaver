@@ -3125,14 +3125,14 @@ mod tests {
         let archive = create_test_zip(
             &dir,
             &[
-                ("LICENSE", Some(b"text".as_slice())),
+                ("Hack v1.1", Some(b"text".as_slice())),
                 ("Hack v1.1.gz", Some(b"gz".as_slice())),
                 ("nested.zip", Some(b"zip".as_slice())),
             ],
         );
         let unnamed_only = create_test_zip(
             &dir.join("unnamed"),
-            &[("LICENSE", Some(b"text".as_slice()))],
+            &[("Hack v1.1", Some(b"text".as_slice()))],
         );
         let out_dir = dir.join("out");
         for filter in [
@@ -3166,7 +3166,7 @@ mod tests {
             .expect("plan an unnamed-only extract");
             assert_eq!(
                 task_names(&tasks),
-                vec!["LICENSE".to_string()],
+                vec!["Hack v1.1".to_string()],
                 "{filter:?}"
             );
         }

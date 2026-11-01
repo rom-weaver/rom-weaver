@@ -4,6 +4,25 @@ pub const COMMON_CONTAINER_FILE_EXTENSIONS: &[&str] = &[
     ".sha512", ".crc", ".log", ".json",
 ];
 
+/// Extension-less documentation file names (matched case-insensitively against the file name only).
+/// A bare `README` is neither a ROM dump nor a patch, so listings that skip common files drop it
+/// instead of treating it as an unnamed payload.
+pub const COMMON_CONTAINER_FILE_NAMES: &[&str] = &[
+    "readme",
+    "license",
+    "licence",
+    "copying",
+    "notice",
+    "authors",
+    "credits",
+    "changelog",
+    "changes",
+    "todo",
+    "install",
+    "history",
+    "contributors",
+];
+
 pub const PATCH_FILTER_FILE_EXTENSIONS: &[&str] = &[
     ".ips",
     ".ips32",
@@ -273,6 +292,9 @@ pub fn should_ignore_common_container_file(candidate_name: &str) -> bool {
             return true;
         }
         if matches!(file_name, ".ds_store" | "thumbs.db" | "desktop.ini") {
+            return true;
+        }
+        if COMMON_CONTAINER_FILE_NAMES.contains(&file_name) {
             return true;
         }
     }

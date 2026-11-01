@@ -1885,6 +1885,32 @@ fn ingest_interactive_known_archives_prompt_before_extraction() {
 }
 
 #[test]
-fn ingest_interactive_license_prompts_before_nested_extraction() {
-    check_ingest_interactive_nested_archive(Some("LICENSE"), Some(1));
+fn ingest_interactive_unnamed_entry_prompts_before_nested_extraction() {
+    check_ingest_interactive_nested_archive(Some("extra"), Some(1));
+}
+
+#[test]
+fn extensionless_documentation_files_do_not_make_a_patch_archive_a_rom() {
+    let entry = |path: &str| ContainerListEntry {
+        path: path.to_string(),
+        size: Some(1),
+    };
+    let entries = [entry("hack.bps"), entry("README"), entry("docs/LICENSE")];
+    let (is_rom, summaries, has_rom, has_patch) =
+        CliApp::classify_container_entries(&entries, true);
+    assert!(!is_rom && !has_rom && has_patch);
+    let kinds: Vec<_> = summaries
+        .iter()
+        .map(|summary| summary.kind.as_deref().unwrap())
+        .collect();
+    assert_eq!(kinds, ["patch", "common", "common"]);
+
+    // `--no-ignore` stops treating them as common files, and they still are not ROMs.
+    let (is_rom, summaries, has_rom, _) = CliApp::classify_container_entries(&entries, false);
+    assert!(!is_rom && !has_rom);
+    assert!(
+        summaries
+            .iter()
+            .all(|summary| summary.kind.as_deref() != Some("common"))
+    );
 }
