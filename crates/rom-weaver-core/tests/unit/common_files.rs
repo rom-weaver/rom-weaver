@@ -39,6 +39,8 @@ fn common_file_filter_ignores_extensionless_documentation_names() {
         "INSTALL",
         "HISTORY",
         "CONTRIBUTORS",
+        "CONTRIBUTING",
+        "CONTRIBUTING.md",
         "docs/deep/dir/README",
         r"docs\deep\LICENSE",
         "README.txt",

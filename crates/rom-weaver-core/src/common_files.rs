@@ -45,6 +45,7 @@ pub const COMMON_CONTAINER_FILE_NAMES: &[&str] = &[
     "install",
     "history",
     "contributors",
+    "contributing",
 ];
 
 pub const PATCH_FILTER_FILE_EXTENSIONS: &[&str] = &[
