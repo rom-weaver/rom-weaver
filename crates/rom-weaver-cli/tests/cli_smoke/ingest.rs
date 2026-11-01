@@ -3039,6 +3039,34 @@ fn ingest_nested_archives_keep_every_rom_and_patch() {
     }
 }
 
+/// A nested archive with nothing but ignored files has no ROM or patch to keep; it must not fail
+/// the ingest of the ROM beside it.
+#[test]
+fn ingest_nested_archive_of_ignored_files_does_not_fail_the_ingest() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.nes");
+    fs::write(rom.path(), banded_rom()).unwrap();
+    let readme = temp.child("README.txt");
+    let cover = temp.child("cover.png");
+    fs::write(readme.path(), b"read me").unwrap();
+    fs::write(cover.path(), b"\x89PNG\r\n\x1a\n").unwrap();
+    let manual = temp.child("manual.zip");
+    zip_members(&temp, manual.path(), &[readme.path(), cover.path()]);
+    let outer = temp.child("outer.zip");
+    zip_members(&temp, outer.path(), &[rom.path(), manual.path()]);
+
+    let result = ingest_json(&temp, outer.path(), "out");
+    let ingest = &result["details"]["ingest"];
+    assert_eq!(ingest["kind"], "rom", "{ingest}");
+    let assets: Vec<_> = ingest["assets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|asset| asset["file_name"].as_str().unwrap())
+        .collect();
+    assert_eq!(assets, ["game.nes"], "{ingest}");
+}
+
 /// Unnamed top-level entries carry no kind, so they MUST NOT stop descent into a nested ROM archive,
 /// and the archive MUST NOT drop any of them.
 #[test]
