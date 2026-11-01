@@ -524,6 +524,30 @@ describe("SaveEditor", () => {
     expect(container.querySelector(".save-editor-field.is-written")).not.toBeNull();
   });
 
+  it("does not call a save downloaded when it was only written for Test", async () => {
+    inspectSave.mockResolvedValueOnce({
+      document: { ...documentResult([textField(), moneyField()]).document, save_size: 4 },
+    });
+    setSaveFields.mockResolvedValueOnce({
+      output: {
+        dispose: vi.fn(),
+        fileName: "edited.sav",
+        path: "/work/edited.sav",
+        saveAs: vi.fn(),
+        size: 4,
+        vfs: { getFile: async () => new File([new Uint8Array([1, 2, 3, 4])], "edited.sav") },
+      },
+    });
+    const { container } = render(<SaveEditor onSessionChange={vi.fn()} onSelectTab={vi.fn()} />);
+    await chooseFile();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "MAY" } });
+    fireEvent.click(screen.getByRole("button", { name: "Choose ROM and test" }));
+    await waitFor(() => expect(stagePendingTestSave).toHaveBeenCalled());
+    expect(screen.getByText("Was ASH")).toBeTruthy();
+    expect(screen.queryByText(/Downloaded/)).toBeNull();
+    expect(container.querySelector(".save-editor-field.is-written")).toBeNull();
+  });
+
   it("locks field changes while Rust creates an edited save", async () => {
     let finish: (value: object) => void = () => undefined;
     setSaveFields.mockImplementationOnce(

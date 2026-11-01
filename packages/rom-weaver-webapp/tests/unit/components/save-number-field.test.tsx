@@ -162,4 +162,12 @@ describe("SaveNumberField", () => {
     fireEvent.click(raise, { detail: 0 });
     expect(raise.getAttribute("aria-disabled")).toBe("true");
   });
+
+  it("leaves a stored value off the step grid alone when the box is only focused and left", () => {
+    const onValue = mount(field({ constraints: { choices: [], max: 160, max_length: null, min: 24 }, step: 8 }), "76");
+    const input = screen.getByLabelText("Coins");
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+    expect(onValue).not.toHaveBeenCalled();
+  });
 });

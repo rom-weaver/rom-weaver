@@ -252,8 +252,8 @@ export const SaveNumberField = ({
           onBlur={() => {
             setFocused(false);
             if (error) return;
-            /* A typed value between steps settles on the nearest one. */
-            if (current !== null && fitToRange(current) !== current) commit(current);
+            /* A typed value between steps settles on the nearest one; a value left untouched is never rewritten. */
+            if (draft !== null && current !== null && fitToRange(current) !== current) commit(current);
             setDraft(null);
           }}
           onChange={onInput}

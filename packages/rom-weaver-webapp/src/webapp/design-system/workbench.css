@@ -1019,6 +1019,7 @@
 .rw-app .save-editor-toggle > input[type="checkbox"] {
   grid-area: 1 / 1 / 2 / -1;
   opacity: 0;
+  clip-path: inset(50%);
 }
 .rw-app .save-editor-toggle-mark {
   display: block;
@@ -1057,12 +1058,13 @@
   opacity: 0.55;
 }
 @media (hover: hover) {
-  .rw-app .save-editor-toggle:not(.is-on):hover {
-    border-color: var(--seam-strong);
+  .rw-app .save-editor-toggle:not(.is-on, :has(input:disabled)):hover {
+    border-color: var(--ink-3);
   }
 }
-.rw-app .save-editor-toggle:not(.is-on):active {
-  border-color: var(--seam-strong);
+.rw-app .save-editor-toggle:not(.is-on, :has(input:disabled)):active {
+  background: var(--well);
+  border-color: var(--ink-3);
 }
 .rw-app .save-editor-toggle-label {
   grid-area: 1 / 2;

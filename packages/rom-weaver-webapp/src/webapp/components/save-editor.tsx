@@ -137,10 +137,11 @@ const displayValue = (value: SaveValue, localizer: Localizer) => {
   if (text === "false") return localizer.message("ui.patch.off").toLowerCase();
   return text;
 };
-/** A value as the field box shows it: whole numbers get the locale's grouping, everything else reads as stored. */
-const shownValue = (value: SaveValue, localizer: Localizer) => {
+/** A value as the field box shows it: integer fields get the locale's grouping, everything else reads as stored. */
+const shownValue = (field: SaveField, value: SaveValue, localizer: Localizer) => {
   const text = displayValue(value, localizer);
-  return /^-?\d+$/.test(text) ? Number(text).toLocaleString(localizer.locale) : text;
+  const integer = field.kind === "unsigned_integer" || field.kind === "signed_integer";
+  return integer && /^-?\d+$/.test(text) ? Number(text).toLocaleString(localizer.locale) : text;
 };
 /** Display title for a group; ids without a catalog entry keep the capitalized segment. */
 const groupTitle = (group: FieldGroup, localizer: Localizer) =>
@@ -272,6 +273,8 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
   const [errors, setErrors] = useState<FieldErrors>({});
   const [preview, setPreview] = useState<SavePreview | null>(null);
   const [output, setOutput] = useState<PublicOutput | null>(null);
+  /* Set once the edited save has been handed to the browser's download, not when it is only written for Test. */
+  const [downloaded, setDownloaded] = useState(false);
   const [saves, setSaves] = useState<EmulatorSaveRecord[]>([]);
   const [selectedSaveId, setSelectedSaveId] = useState<string>();
   const [selectedSlot, setSelectedSlot] = useState("");
@@ -302,6 +305,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     const previous = outputRef.current;
     outputRef.current = null;
     setOutput(null);
+    setDownloaded(false);
     if (previous) void previous.dispose();
   }, []);
   const resetEditor = useCallback(() => {
@@ -562,7 +566,10 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
       }
       outputRef.current = result.output;
       setOutput(result.output);
-      if (download) await result.output.saveAs();
+      if (download) {
+        await result.output.saveAs();
+        if (request === requestRef.current) setDownloaded(true);
+      }
       return result.output;
     } catch (cause) {
       if (request === requestRef.current) setError(cause instanceof Error ? cause.message : String(cause));
@@ -610,6 +617,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     setBusy(true);
     try {
       await output.saveAs();
+      setDownloaded(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -860,7 +868,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     const controlId = `save-field-${field.id}`;
     return (
       <div
-        className={join("save-editor-field", changed && "is-changed", changed && output && "is-written")}
+        className={join("save-editor-field", changed && "is-changed", changed && downloaded && "is-written")}
         key={field.id}
       >
         <div className="save-editor-field-head">
@@ -892,8 +900,8 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
           <span className="save-editor-field-foot">
             {changed ? (
               <span className="save-editor-was">
-                {localizer.message(output ? "ui.saves.editor.wasWritten" : "ui.saves.editor.was", {
-                  value: shownValue(originalValues[field.id] ?? field.value, localizer),
+                {localizer.message(downloaded ? "ui.saves.editor.wasWritten" : "ui.saves.editor.was", {
+                  value: shownValue(field, originalValues[field.id] ?? field.value, localizer),
                 })}
               </span>
             ) : null}
@@ -927,7 +935,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
           "save-editor-toggle",
           on && "is-on",
           changed && "is-changed",
-          changed && output && "is-written",
+          changed && downloaded && "is-written",
         )}
         key={field.id}
         title={field.description || undefined}
