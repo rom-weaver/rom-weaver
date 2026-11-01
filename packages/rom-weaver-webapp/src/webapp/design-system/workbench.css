@@ -764,14 +764,15 @@
   height: 20px;
 }
 @media (hover: hover) {
-  .rw-app .save-number-step:hover:not(:disabled) {
+  .rw-app .save-number-step:hover:not(:disabled, [aria-disabled="true"]) {
     background: color-mix(in oklab, var(--ink) 14%, var(--plate));
   }
 }
-.rw-app .save-number-step:active:not(:disabled) {
+.rw-app .save-number-step:active:not(:disabled, [aria-disabled="true"]) {
   background: color-mix(in oklab, var(--ink) 24%, var(--plate));
 }
-.rw-app .save-number-step:disabled {
+.rw-app .save-number-step:disabled,
+.rw-app .save-number-step[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.4;
 }

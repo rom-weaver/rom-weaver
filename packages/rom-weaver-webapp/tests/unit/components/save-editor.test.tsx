@@ -390,7 +390,7 @@ describe("SaveEditor", () => {
     render(<SaveEditor onSessionChange={vi.fn()} />);
     await chooseFile();
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("ASH");
-    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("5000");
+    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("5,000");
   });
 
   it("supports generic field kinds and groups fields by their id prefix", async () => {
@@ -428,12 +428,13 @@ describe("SaveEditor", () => {
     expect(screen.getByRole("checkbox", { name: "Region map zoom" })).toBeTruthy();
   });
 
-  it("shows a field error and keeps the previous value for invalid integers", async () => {
+  it("shows a field error, keeps the typed text visible, and keeps the previous value stored", async () => {
     render(<SaveEditor onSessionChange={vi.fn()} />);
     await chooseFile();
     fireEvent.change(screen.getByLabelText("Money"), { target: { value: "1000000" } });
     expect(screen.getByRole("alert").textContent).toContain("allowed range");
-    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("5000");
+    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("1000000");
+    expect(screen.getByRole("slider", { name: "Money slider" }).getAttribute("aria-valuenow")).toBe("5000");
   });
 
   it("filters properties without losing hidden edits", async () => {
@@ -451,7 +452,7 @@ describe("SaveEditor", () => {
     fireEvent.change(search, { target: { value: "missing property" } });
     expect(screen.getByText("No properties match this search.")).toBeTruthy();
     fireEvent.change(search, { target: { value: "" } });
-    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("12345");
+    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("12,345");
   });
 
   it("keeps nested properties in their group and real file slots in tabs", async () => {
@@ -490,7 +491,7 @@ describe("SaveEditor", () => {
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("ASH");
     fireEvent.change(screen.getByLabelText("Money"), { target: { value: "7000" } });
     fireEvent.click(screen.getByRole("button", { name: "Reset all" }));
-    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("5000");
+    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("5,000");
   });
 
   it("locks field changes while Rust creates an edited save", async () => {

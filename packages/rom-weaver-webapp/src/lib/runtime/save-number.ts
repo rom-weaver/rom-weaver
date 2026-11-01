@@ -8,13 +8,27 @@ export const parseSaveNumber = (text: string): number | null => {
   return Number.isFinite(value) ? value : null;
 };
 
+const separatorsFor = (locale: string): { decimal: string; group: string } => {
+  try {
+    const parts = new Intl.NumberFormat(locale).formatToParts(1_000_000.5);
+    return {
+      decimal: parts.find((part) => part.type === "decimal")?.value ?? ".",
+      group: parts.find((part) => part.type === "group")?.value ?? ",",
+    };
+  } catch {
+    return { decimal: ".", group: "," };
+  }
+};
+
 /**
- * Typed text as the editor stores it: grouping commas, spaces and underscores
- * drop out and `50k` / `1.5m` expand, so large values are quick to enter. Text
- * that is not a number passes through for the field validation to reject.
+ * Typed text as the editor stores it: the locale's grouping character, spaces
+ * and underscores drop out, its decimal mark becomes `.`, and `50k` / `1.5m`
+ * expand, so large values are quick to enter and the shown number can be typed
+ * back. Text that is not a number passes through for the field validation to reject.
  */
-export const normalizeSaveNumberText = (raw: string): string => {
-  const compact = raw.trim().replace(/[,\s_]/g, "");
+export const normalizeSaveNumberText = (raw: string, locale = "en-US"): string => {
+  const { decimal, group } = separatorsFor(locale);
+  const compact = raw.trim().replace(/[\s_]/g, "").split(group).join("").split(decimal).join(".");
   const match = SHORTHAND.exec(compact);
   if (!match) return compact;
   const factor = SHORTHAND_FACTOR[(match[2] ?? "").toLowerCase()] ?? 1;

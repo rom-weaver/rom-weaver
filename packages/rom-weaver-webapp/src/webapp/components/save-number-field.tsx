@@ -51,11 +51,14 @@ export const SaveNumberField = ({
   text: string;
 }) => {
   const { max, min } = field.constraints;
+  /* An unsigned field never goes below zero, even when its schema gives no minimum. */
+  const floor = min ?? (field.kind === "unsigned_integer" ? 0 : null);
   const step = field.step && field.step > 0 ? field.step : 1;
   const integer = field.kind === "unsigned_integer" || field.kind === "signed_integer";
   const bounded = integer && min !== null && max !== null && max > min;
   const current = parseSaveNumber(text);
   const [draft, setDraft] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
   const [dragging, setDragging] = useState(false);
   const latest = useRef(current ?? min ?? 0);
   const rail = useRef<HTMLDivElement>(null);
@@ -74,10 +77,11 @@ export const SaveNumberField = ({
   );
 
   const format = (value: number) => value.toLocaleString(localizer.locale);
-  const shown = draft ?? (current === null ? text : format(current));
+  /* Typed text stays on screen while the box has focus or its value is invalid; otherwise the formatted value shows. */
+  const shown = draft !== null && (focused || error) ? draft : current === null ? text : format(current);
   const stepLabel = format(step);
   const fitToRange = (value: number) => {
-    const low = min ?? Number.NEGATIVE_INFINITY;
+    const low = floor ?? Number.NEGATIVE_INFINITY;
     const high = max ?? Number.POSITIVE_INFINITY;
     if (min !== null && max !== null) return snapSaveNumber(value, min, max, step);
     return Math.max(low, Math.min(high, value));
@@ -104,6 +108,8 @@ export const SaveNumberField = ({
   const startHold = (event: PointerEvent<HTMLButtonElement>, direction: number) => {
     if (event.button !== 0 || disabled) return;
     stopHold();
+    /* Capture keeps the release with this button even when the pointer has left it. */
+    event.currentTarget.setPointerCapture(event.pointerId);
     let repeats = 0;
     const press = () => {
       if (!stepBy(direction, holdMultiplier(repeats++))) stopHold();
@@ -165,7 +171,7 @@ export const SaveNumberField = ({
   const onInput = (event: ChangeEvent<HTMLInputElement>) => {
     const raw = event.currentTarget.value;
     setDraft(raw);
-    onChange(normalizeSaveNumberText(raw));
+    onChange(normalizeSaveNumberText(raw, localizer.locale));
   };
   const onInputKey = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") event.currentTarget.blur();
@@ -174,7 +180,7 @@ export const SaveNumberField = ({
     stepBy(event.key === "ArrowUp" ? 1 : -1, event.shiftKey ? 10 : 1);
   };
 
-  const atMin = min !== null && current !== null && current <= min;
+  const atMin = floor !== null && current !== null && current <= floor;
   const atMax = max !== null && current !== null && current >= max;
   const fraction = bounded && current !== null ? saveNumberFraction(current, min, max) : 0;
   const style = { "--fraction": fraction } as CSSProperties;
@@ -187,7 +193,8 @@ export const SaveNumberField = ({
         <button
           aria-label={localizer.message("ui.saves.editor.lower", { label: field.label, step: stepLabel })}
           className="save-number-step"
-          disabled={disabled || atMin}
+          aria-disabled={atMin || undefined}
+          disabled={disabled}
           onClick={keyboardStep(-1)}
           onContextMenu={(event) => event.preventDefault()}
           onPointerCancel={stopHold}
@@ -206,8 +213,15 @@ export const SaveNumberField = ({
           disabled={disabled}
           id={id}
           inputMode={min !== null && min < 0 ? "text" : "numeric"}
-          onBlur={() => setDraft(null)}
+          onBlur={() => {
+            setFocused(false);
+            if (!error) setDraft(null);
+          }}
           onChange={onInput}
+          onFocus={() => {
+            setFocused(true);
+            if (!error) setDraft(null);
+          }}
           onKeyDown={onInputKey}
           spellCheck={false}
           type="text"
@@ -216,7 +230,8 @@ export const SaveNumberField = ({
         <button
           aria-label={localizer.message("ui.saves.editor.raise", { label: field.label, step: stepLabel })}
           className="save-number-step"
-          disabled={disabled || atMax}
+          aria-disabled={atMax || undefined}
+          disabled={disabled}
           onClick={keyboardStep(1)}
           onContextMenu={(event) => event.preventDefault()}
           onPointerCancel={stopHold}

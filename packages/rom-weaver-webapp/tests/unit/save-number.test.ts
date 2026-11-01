@@ -20,6 +20,17 @@ describe("normalizeSaveNumberText", () => {
     expect(normalizeSaveNumberText("-2k")).toBe("-2000");
   });
 
+  it("reads the grouping and decimal marks of the locale", () => {
+    expect(normalizeSaveNumberText("48.200", "de-DE")).toBe("48200");
+    expect(normalizeSaveNumberText("1,5m", "de-DE")).toBe("1500000");
+    expect(normalizeSaveNumberText("48.200", "es-ES")).toBe("48200");
+    expect(normalizeSaveNumberText("48,200", "en-US")).toBe("48200");
+  });
+
+  it("falls back to English marks for an unknown locale", () => {
+    expect(normalizeSaveNumberText("48,200", "not a locale")).toBe("48200");
+  });
+
   it("passes text that is not a number through for validation to reject", () => {
     expect(normalizeSaveNumberText("abc")).toBe("abc");
     expect(normalizeSaveNumberText("12x")).toBe("12x");

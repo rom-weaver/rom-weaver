@@ -198,6 +198,23 @@ test("changes a bounded number with the buttons, the slider keys, and typed shor
   expect(mocks.previewSaveFields.mock.calls[0][0].assignments).toEqual(["trainer.money=50000"]);
 });
 
+test("keeps an invalid typed number on screen and keeps focus on a button that reaches its limit", async () => {
+  await uploadSave();
+  const money = page.getByLabelText("Money", { exact: true });
+  await money.fill("1.5m");
+  await userEvent.tab();
+  await expect.element(money).toHaveValue("1.5m");
+  await expect.element(page.getByText("Enter a valid integer in the allowed range.")).toBeVisible();
+  await money.fill("999,998");
+  await userEvent.tab();
+  await expect.element(money).toHaveValue("999,998");
+  const raise = page.getByRole("button", { name: "Raise Money by 1" });
+  await raise.click();
+  await expect.element(money).toHaveValue("999,999");
+  await expect.element(raise).toHaveAttribute("aria-disabled", "true");
+  expect(document.activeElement).toBe(raise.element());
+});
+
 test("previews named schema choices and preserves an unknown current code", async () => {
   const result = documentResult();
   result.document.fields.push({

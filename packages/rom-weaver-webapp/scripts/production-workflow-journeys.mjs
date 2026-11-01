@@ -662,7 +662,9 @@ export const runSaveEditorJourney = async (createContext, baseUrl) => {
     await editor.getByRole("button", { name: "Choose game profile", exact: true }).click();
     await editor.getByRole("combobox", { name: "Game profile" }).selectOption("pokemon-red");
     await editor.getByRole("button", { name: "Open profile", exact: true }).click();
-    await page.waitForFunction(() => document.getElementById("save-field-trainer.money")?.value === "65432");
+    await page.waitForFunction(
+      () => document.getElementById("save-field-trainer.money")?.value.replace(/\D/g, "") === "65432",
+    );
     process.stdout.write("PASS Save Editor money edit, checksum repair, exact preservation and reopen\n");
   } finally {
     await context.close();
