@@ -23,6 +23,84 @@ fn common_file_filter_ignores_known_metadata_names() {
 }
 
 #[test]
+fn common_file_filter_ignores_extensionless_documentation_names() {
+    for name in [
+        "README",
+        "readme",
+        "LICENSE",
+        "Licence",
+        "COPYING",
+        "NOTICE",
+        "AUTHORS",
+        "CREDITS",
+        "ChangeLog",
+        "CHANGES",
+        "TODO",
+        "INSTALL",
+        "HISTORY",
+        "CONTRIBUTORS",
+        "CONTRIBUTING",
+        "CONTRIBUTING.md",
+        "docs/deep/dir/README",
+        r"docs\deep\LICENSE",
+        "README.txt",
+    ] {
+        assert!(should_ignore_common_container_file(name), "{name}");
+    }
+
+    // Only the whole file name counts: dumps that merely start with a documentation word, or sit
+    // in a directory named after one, stay payloads.
+    for name in [
+        "README Hack v1.1",
+        "license-plate",
+        "README/game",
+        "changes.sfc",
+        "todo.bin",
+        "Hack v1.1",
+        "patch",
+    ] {
+        assert!(!should_ignore_common_container_file(name), "{name}");
+    }
+}
+
+#[test]
+fn common_file_filter_ignores_markdown_documentation() {
+    for name in [
+        "README.md",
+        "LICENSE.md",
+        "docs/Changelog.MD",
+        r"docs\contributing.markdown",
+        "notes.markdown",
+        "NOTES.MARKDOWN",
+    ] {
+        assert!(should_ignore_common_container_file(name), "{name}");
+        assert!(!payload_name_needs_content_classification(name), "{name}");
+    }
+
+    // `.md` is also the Mega Drive ROM extension, so only documentation names are ignored.
+    for name in ["sonic.md", "Sonic The Hedgehog (USA, Europe).md", "game.md"] {
+        assert!(!should_ignore_common_container_file(name), "{name}");
+        assert!(ArchiveEntryKindFilter::new(true, false).matches_payload_name(name));
+    }
+}
+
+#[test]
+fn kind_filters_reject_extensionless_documentation_names() {
+    for name in ["README", "docs/LICENSE", "CHANGELOG"] {
+        for filter in [
+            ArchiveEntryKindFilter::new(true, false),
+            ArchiveEntryKindFilter::new(false, true),
+        ] {
+            assert!(!filter.matches_payload_name(name), "{name}: {filter:?}");
+            assert!(!payload_name_needs_content_classification(name), "{name}");
+        }
+    }
+    // A dump or signature patch with an ordinary extension-less name still waits for its bytes.
+    assert!(payload_name_needs_content_classification("patch"));
+    assert!(ArchiveEntryKindFilter::new(true, false).matches_payload_name("Hack v1.1"));
+}
+
+#[test]
 fn kind_filters_defer_unnamed_payloads_and_streams_to_content() {
     for name in [
         "patch",
@@ -133,7 +211,7 @@ fn kind_filter_selection_keeps_containers_beside_unnamed_entries() {
         KindFilterNameMatch::Payload
     );
     assert_eq!(
-        filter.classify_name("LICENSE"),
+        filter.classify_name("Hack v1.1"),
         KindFilterNameMatch::Unnamed
     );
     assert_eq!(
@@ -149,17 +227,17 @@ fn kind_filter_selection_keeps_containers_beside_unnamed_entries() {
         KindFilterNameMatch::Rejected
     );
     assert_eq!(
-        select(&["LICENSE", "inner.zip", "patch.gz", "notes.txt"], false),
+        select(&["Hack v1.1", "inner.zip", "patch.gz", "notes.txt"], false),
         ["inner.zip", "patch.gz"]
     );
     assert_eq!(
-        select(&["LICENSE", "game.nes", "inner.zip", "patch.gz"], false),
-        ["LICENSE", "game.nes", "patch.gz"]
+        select(&["Hack v1.1", "game.nes", "inner.zip", "patch.gz"], false),
+        ["Hack v1.1", "game.nes", "patch.gz"]
     );
-    assert_eq!(select(&["LICENSE", "notes.txt"], false), ["LICENSE"]);
+    assert_eq!(select(&["Hack v1.1", "notes.txt"], false), ["Hack v1.1"]);
     assert_eq!(
-        select(&["LICENSE", "game.nes", "inner.zip", "notes.txt"], true),
-        ["LICENSE", "game.nes", "inner.zip"]
+        select(&["Hack v1.1", "game.nes", "inner.zip", "notes.txt"], true),
+        ["Hack v1.1", "game.nes", "inner.zip"]
     );
     assert!(select(&["notes.txt"], false).is_empty());
 }

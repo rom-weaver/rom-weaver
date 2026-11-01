@@ -14,8 +14,8 @@ use serde_json::json;
 
 use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
 use super::{
-    CliApp, Commands, CompressCommand, CompressionLevelProfile, ExtractCommand, LogLevel,
-    N64ByteOrder, N64ByteOrderTransform, RomWeaverWeave, log_filter_spec,
+    CliApp, Commands, CompressCommand, CompressionLevelProfile, ContainerRegistry, ExtractCommand,
+    LogLevel, N64ByteOrder, N64ByteOrderTransform, RomWeaverWeave, log_filter_spec,
 };
 use rom_weaver_checksum::checksum_hex_len;
 
@@ -1587,10 +1587,198 @@ fn write_signature_sidecar_roms(app: &CliApp, dir: &Path, rom_names: &[&str]) ->
         .collect()
 }
 
+/// File names (relative to `dir`, `/`-separated) of every file under `dir`; empty when it is absent.
+fn output_file_names(dir: &Path) -> Vec<String> {
+    fn walk(root: &Path, dir: &Path, names: &mut Vec<String>) {
+        let Ok(read_dir) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in read_dir.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(root, &path, names);
+            } else {
+                names.push(
+                    path.strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                );
+            }
+        }
+    }
+    let mut names = Vec::new();
+    walk(dir, dir, &mut names);
+    names
+}
+
+/// Delegates to a real handler but, like handlers without prefix reads, never exposes entry
+/// prefixes, so unnamed entries can only be classified after they are extracted.
+struct NoPrefixHandler(Arc<dyn ContainerHandler>);
+
+impl ContainerHandlerOperations for NoPrefixHandler {
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        self.0.descriptor()
+    }
+
+    fn probe(&self, source: &Path) -> rom_weaver_core::ProbeConfidence {
+        self.0.probe(source)
+    }
+
+    fn probe_details(
+        &self,
+        request: &ContainerProbeRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        self.0.probe_details(request, context)
+    }
+
+    fn list_entries(
+        &self,
+        request: &ContainerProbeRequest,
+        context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        self.0.list_entries(request, context)
+    }
+
+    fn list_entry_records(
+        &self,
+        request: &ContainerProbeRequest,
+        context: &OperationContext,
+    ) -> Result<Vec<ContainerListEntry>> {
+        self.0.list_entry_records(request, context)
+    }
+
+    fn extract(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        self.0.extract(request, context)
+    }
+
+    fn create(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        self.0.create(request, context)
+    }
+}
+
+impl ContainerHandler for NoPrefixHandler {
+    fn capabilities(&self) -> ContainerCapabilities {
+        self.0.capabilities()
+    }
+}
+
+/// Output files a chosen prompt entry may leave behind. A disc keeps both tracks; a selected nested
+/// archive stays beside the ROM it yielded (`extra.zip`, `extra/inner.nes`).
+fn selected_output_files(entry: &str) -> Vec<String> {
+    if entry == "game.cue" {
+        return vec!["game.cue".to_string(), "game.bin".to_string()];
+    }
+    match entry.strip_suffix(".zip") {
+        Some(stem) => vec![entry.to_string(), format!("{stem}/inner.nes")],
+        None => vec![entry.to_string()],
+    }
+}
+
+/// The prompt MUST precede any extraction: nothing may sit in the output tree while it is open.
+/// Without prefix reads the leaves are extracted to be classified, which proves a run took the
+/// extract-then-delete path.
+///
+/// A named patch beside the unnamed entries is extracted by its own pass before the prompt, which
+/// is pinned to the named patch so the unnamed entries wait for the choice like any other run.
+fn assert_prompt_extraction_order(
+    files_at_prompt: &[Vec<String>],
+    prefix_reads: bool,
+    named_patch: bool,
+) {
+    for files in files_at_prompt {
+        if named_patch {
+            assert!(
+                files.iter().any(|name| name == "hack.ips"),
+                "the named patch pass must run first: {files:?}"
+            );
+            assert!(
+                !prefix_reads || files.len() == 1,
+                "only the named patch may be extracted before the prompt: {files:?}"
+            );
+        } else if prefix_reads {
+            assert!(files.is_empty(), "extracted before the prompt: {files:?}");
+        } else {
+            assert!(!files.is_empty(), "fallback did not extract first");
+        }
+    }
+}
+
+fn assert_rom_prompt_names(calls: &[Vec<String>], logical: &[&str]) {
+    if logical.len() <= 1 {
+        assert!(calls.is_empty(), "unexpected ROM prompt: {calls:?}");
+        return;
+    }
+    assert_eq!(calls.len(), 1, "ROMs must still prompt");
+    assert_eq!(calls[0], logical, "prompt names must be archive-relative");
+    assert!(
+        calls[0].iter().all(|name| !name.ends_with("patch")),
+        "{calls:?}"
+    );
+}
+
+/// Every expected patch file is reported, valid, and byte-identical to what the archive held.
+fn assert_sidecar_patches(ingest: &serde_json::Value, patch_files: &[&str], patch_bytes: &[u8]) {
+    let patches = ingest["patches"].as_array().unwrap();
+    assert_eq!(patches.len(), patch_files.len(), "{patches:?}");
+    let mut patch_names: Vec<_> = patches
+        .iter()
+        .map(|patch| patch["file_name"].as_str().unwrap())
+        .collect();
+    patch_names.sort_unstable();
+    let mut expected_patches = patch_files.to_vec();
+    expected_patches.sort_unstable();
+    assert_eq!(patch_names, expected_patches);
+    for patch in patches {
+        assert_eq!(patch["is_valid_patch"], true);
+        assert_eq!(
+            std::fs::read(patch["leaf_path"].as_str().unwrap()).unwrap(),
+            patch_bytes
+        );
+    }
+}
+
 fn check_ingest_interactive_signature_sidecar(
     rom_names: &[&str],
     selected: Option<usize>,
     output_mode: &str,
+) {
+    check_ingest_interactive_signature_sidecar_with(rom_names, selected, output_mode, true);
+}
+
+fn check_ingest_interactive_signature_sidecar_with(
+    rom_names: &[&str],
+    selected: Option<usize>,
+    output_mode: &str,
+    prefix_reads: bool,
+) {
+    check_ingest_interactive_sidecar_archive(rom_names, selected, output_mode, prefix_reads, false);
+}
+
+/// Adds a named `hack.ips` beside the unnamed signature patch, so the named-patch pass runs.
+fn check_ingest_interactive_named_patch(
+    rom_names: &[&str],
+    selected: Option<usize>,
+    prefix_reads: bool,
+) {
+    check_ingest_interactive_sidecar_archive(rom_names, selected, "absolute", prefix_reads, true);
+}
+
+fn check_ingest_interactive_sidecar_archive(
+    rom_names: &[&str],
+    selected: Option<usize>,
+    output_mode: &str,
+    prefix_reads: bool,
+    named_patch: bool,
 ) {
     struct JsonLines(Mutex<String>);
     impl rom_weaver_core::ProgressSink for JsonLines {
@@ -1603,9 +1791,15 @@ fn check_ingest_interactive_signature_sidecar(
     struct Prompt {
         selected: Option<usize>,
         calls: Mutex<Vec<Vec<String>>>,
+        output: Mutex<PathBuf>,
+        files_at_prompt: Mutex<Vec<Vec<String>>>,
     }
     impl SelectionPrompter for Prompt {
         fn select(&self, _heading: &str, candidates: &[PromptCandidate]) -> Selection {
+            self.files_at_prompt
+                .lock()
+                .unwrap()
+                .push(output_file_names(&self.output.lock().unwrap()));
             self.calls.lock().unwrap().push(
                 candidates
                     .iter()
@@ -1629,6 +1823,8 @@ fn check_ingest_interactive_signature_sidecar(
     let prompt = Arc::new(Prompt {
         selected,
         calls: Mutex::new(Vec::new()),
+        output: Mutex::new(PathBuf::new()),
+        files_at_prompt: Mutex::new(Vec::new()),
     });
     let app = CliApp::new(events.clone(), prompt.clone(), true, true, false);
     let mut members = write_signature_sidecar_roms(&app, temp.path(), rom_names);
@@ -1636,6 +1832,11 @@ fn check_ingest_interactive_signature_sidecar(
     let patch_bytes = b"PATCH\x00\x00\x00\x00\x01\x01EOF";
     std::fs::write(&patch, patch_bytes).unwrap();
     members.push(patch);
+    if named_patch {
+        let named = temp.path().join("hack.ips");
+        std::fs::write(&named, patch_bytes).unwrap();
+        members.push(named);
+    }
     let archive = temp.path().join("mixed.zip");
     compress_zip_fixture(&app, &members, &archive);
     events.0.lock().unwrap().clear();
@@ -1658,9 +1859,18 @@ fn check_ingest_interactive_signature_sidecar(
         "absolute" => temp.path().join("out"),
         mode => panic!("unexpected output mode: {mode}"),
     };
+    *prompt.output.lock().unwrap() = output.clone();
+    let app = if prefix_reads {
+        app
+    } else {
+        let mut app = CliApp::new(events.clone(), prompt.clone(), true, true, false);
+        let zip = app.containers.find_by_name("zip").expect("zip handler");
+        app.containers = ContainerRegistry::from_handlers(vec![Arc::new(NoPrefixHandler(zip))]);
+        app
+    };
     let outcome = app.run(Commands::Ingest(super::IngestCommand {
         input: archive,
-        output,
+        output: output.clone(),
         database: Vec::new(),
         select: Vec::new(),
         sidecar_names: Vec::new(),
@@ -1674,38 +1884,75 @@ fn check_ingest_interactive_signature_sidecar(
         threads: ThreadBudget::Fixed(1),
     }));
     let calls = prompt.calls.lock().unwrap();
-    if rom_names.len() <= 1 || rom_names.contains(&"game.cue") {
-        assert!(calls.is_empty(), "unexpected ROM prompt: {calls:?}");
-    } else {
-        assert_eq!(calls.len(), 1, "ROMs must still prompt");
-        assert_eq!(calls[0], rom_names, "prompt names must be archive-relative");
-        assert!(
-            calls[0].iter().all(|name| !name.ends_with("patch")),
-            "{calls:?}"
-        );
-    }
+    // A disc (`game.cue` + `game.bin`) is one logical ROM: one prompt entry that keeps both files.
+    let has_disc = rom_names.contains(&"game.cue");
+    let logical: Vec<&str> = rom_names
+        .iter()
+        .copied()
+        .filter(|name| !(has_disc && *name == "game.bin"))
+        .collect();
+    assert_rom_prompt_names(&calls, &logical);
     let lines = events.0.lock().unwrap();
     let events: Vec<serde_json::Value> = lines
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
+    assert_prompt_extraction_order(
+        &prompt.files_at_prompt.lock().unwrap(),
+        prefix_reads,
+        named_patch,
+    );
+    // Files a patch may leave in the output tree: the unnamed one from the ROM pass (or the
+    // fallback extraction) and the named one from its own pass.
+    let patch_files: &[&str] = if named_patch {
+        &["patch", "hack.ips"]
+    } else {
+        &["patch"]
+    };
     if selected.is_none() && !calls.is_empty() {
         assert_ne!(outcome.exit_code, 0);
         assert!(events.last().unwrap()["details"].get("ingest").is_none());
+        // Without prefix reads the ROMs were extracted to be classified; cancelling MUST NOT leave
+        // them behind (the unnamed patch is not a ROM and stays).
+        let left = output_file_names(&output);
+        assert!(
+            left.iter()
+                .all(|name| name == "hack.ips" || (!prefix_reads && name == "patch")),
+            "a cancelled prompt must leave no ROM extracted: {left:?}"
+        );
         return;
     }
     assert_eq!(outcome.exit_code, 0, "{events:?}");
     let ingest = &events.last().unwrap()["details"]["ingest"];
     assert_eq!(ingest["kind"], "rom");
-    let expected_assets = if calls.is_empty() { rom_names.len() } else { 1 };
+    let selected_disc = selected.is_some_and(|index| has_disc && logical[index] == "game.cue");
+    let expected_assets = if calls.is_empty() {
+        rom_names.len()
+    } else if selected_disc {
+        2
+    } else {
+        1
+    };
     assert_eq!(ingest["assets"].as_array().unwrap().len(), expected_assets);
     if let Some(index) = selected {
-        let expected_name = if rom_names[index].ends_with(".zip") {
-            "inner.nes"
-        } else {
-            rom_names[index]
-        };
-        assert_eq!(ingest["assets"][0]["file_name"], expected_name);
+        if !selected_disc {
+            let expected_name = if logical[index].ends_with(".zip") {
+                "inner.nes"
+            } else {
+                logical[index]
+            };
+            assert_eq!(ingest["assets"][0]["file_name"], expected_name);
+        }
+        if !calls.is_empty() {
+            let allowed = selected_output_files(logical[index]);
+            let extracted = output_file_names(&output);
+            assert!(
+                extracted
+                    .iter()
+                    .all(|name| patch_files.contains(&name.as_str()) || allowed.contains(name)),
+                "unselected ROMs must not remain in the output tree: {extracted:?}"
+            );
+        }
     }
     let manifests: Vec<_> = events
         .iter()
@@ -1716,17 +1963,85 @@ fn check_ingest_interactive_signature_sidecar(
         manifests[0]["details"]["patch_manifest"]["patches"],
         ingest["patches"]
     );
-    assert_eq!(ingest["patches"].as_array().unwrap().len(), 1);
-    assert_eq!(ingest["patches"][0]["file_name"], "patch");
-    assert_eq!(ingest["patches"][0]["is_valid_patch"], true);
-    assert_eq!(
-        std::fs::read(ingest["patches"][0]["leaf_path"].as_str().unwrap()).unwrap(),
-        patch_bytes
-    );
+    assert_sidecar_patches(ingest, patch_files, patch_bytes);
     eprintln!(
-        "interactive JSONL: {} ROM assets, 1 valid sidecar, {} prompts",
+        "interactive JSONL: {} ROM assets, {} valid sidecars, {} prompts",
         expected_assets,
+        patch_files.len(),
         calls.len()
+    );
+}
+
+/// Containers that cannot read entry prefixes extract first and classify afterwards; the ROMs that
+/// were extracted only to be classified MUST NOT survive the selection.
+#[test]
+fn ingest_interactive_without_prefix_reads_deletes_unselected_roms() {
+    check_ingest_interactive_signature_sidecar_with(
+        &["first.nes", "second.nes"],
+        Some(1),
+        "absolute",
+        false,
+    );
+    check_ingest_interactive_signature_sidecar_with(
+        &["first.nes", "second.nes", "third.nes"],
+        Some(0),
+        "symlink",
+        false,
+    );
+    // A chosen disc keeps its sibling track; the unchosen ROM goes.
+    check_ingest_interactive_signature_sidecar_with(
+        &["game.cue", "game.bin", "other.nes"],
+        Some(0),
+        "absolute",
+        false,
+    );
+    check_ingest_interactive_signature_sidecar_with(
+        &["game.cue", "game.bin", "other.nes"],
+        Some(1),
+        "absolute",
+        false,
+    );
+    check_ingest_interactive_signature_sidecar_with(
+        &["first.nes", "second.nes"],
+        None,
+        "absolute",
+        false,
+    );
+}
+
+/// A named patch beside extension-less raw dumps: the named-patch pass extracts the unnamed entries
+/// before the prompt, so the ones that are not chosen MUST be deleted again.
+#[test]
+fn ingest_interactive_named_patch_beside_unnamed_roms_keeps_only_the_selection() {
+    for prefix_reads in [true, false] {
+        check_ingest_interactive_named_patch(&["Game A", "Game B"], Some(0), prefix_reads);
+        check_ingest_interactive_named_patch(&["Game A", "Game B"], Some(1), prefix_reads);
+        check_ingest_interactive_named_patch(&["Game A", "Game B"], None, prefix_reads);
+    }
+}
+
+/// A named ROM beside an unnamed one, with a named patch present.
+#[test]
+fn ingest_interactive_named_patch_beside_named_and_unnamed_rom() {
+    for prefix_reads in [true, false] {
+        check_ingest_interactive_named_patch(&["first.nes", "Game B"], Some(0), prefix_reads);
+        check_ingest_interactive_named_patch(&["first.nes", "Game B"], Some(1), prefix_reads);
+        check_ingest_interactive_named_patch(&["first.nes", "Game B"], None, prefix_reads);
+    }
+}
+
+/// Pre-extraction classification covers discs too: the chosen disc extracts whole, nothing else.
+#[test]
+fn ingest_interactive_disc_choice_extracts_only_the_chosen_group() {
+    check_ingest_interactive_signature_sidecar(
+        &["game.cue", "game.bin", "other.nes"],
+        Some(0),
+        "absolute",
+    );
+    check_ingest_interactive_signature_sidecar(
+        &["game.cue", "game.bin", "other.nes"],
+        Some(1),
+        "absolute",
     );
 }
 
@@ -1885,6 +2200,99 @@ fn ingest_interactive_known_archives_prompt_before_extraction() {
 }
 
 #[test]
-fn ingest_interactive_license_prompts_before_nested_extraction() {
-    check_ingest_interactive_nested_archive(Some("LICENSE"), Some(1));
+fn ingest_interactive_unnamed_entry_prompts_before_nested_extraction() {
+    check_ingest_interactive_nested_archive(Some("extra"), Some(1));
+}
+
+#[test]
+fn unselected_leaf_cleanup_stays_inside_the_output_directory() {
+    let temp = assert_fs::TempDir::new().unwrap();
+    let out = temp.path().join("out");
+    let outside = temp.path().join("outside.nes");
+    std::fs::create_dir_all(out.join("deep/er")).unwrap();
+    std::fs::create_dir_all(out.join("kept-dir")).unwrap();
+    for file in [
+        out.join("drop.nes"),
+        out.join("deep/er/drop.nes"),
+        out.join("keep.nes"),
+        out.join("kept-dir/drop.nes"),
+        out.join("kept-dir/keep.nes"),
+        outside.clone(),
+    ] {
+        std::fs::write(file, b"rom").unwrap();
+    }
+    let out = std::fs::canonicalize(&out).unwrap();
+    let outside = std::fs::canonicalize(&outside).unwrap();
+    let leaf = |path: &Path| json!({ "path": path.to_string_lossy() });
+    let dropped = [
+        leaf(&out.join("drop.nes")),
+        leaf(&out.join("deep/er/drop.nes")),
+        leaf(&out.join("kept-dir/drop.nes")),
+        // The kept set wins over a path that was also reported as dropped.
+        leaf(&out.join("keep.nes")),
+        leaf(&outside),
+        leaf(&out.join("../outside.nes")),
+        leaf(&out),
+    ];
+    let kept = [
+        leaf(&out.join("keep.nes")),
+        leaf(&out.join("kept-dir/keep.nes")),
+    ];
+
+    CliApp::remove_unselected_leaves(&out, &dropped, &kept);
+
+    let mut left = output_file_names(&out);
+    left.sort_unstable();
+    assert_eq!(left, ["keep.nes", "kept-dir/keep.nes"]);
+    assert!(!out.join("deep").exists(), "emptied parents are pruned");
+    assert!(out.join("kept-dir").is_dir(), "non-empty parents stay");
+    assert!(out.is_dir(), "the output directory itself stays");
+    assert!(outside.is_file(), "files outside the output directory stay");
+}
+
+#[test]
+fn extensionless_documentation_files_do_not_make_a_patch_archive_a_rom() {
+    let entry = |path: &str| ContainerListEntry {
+        path: path.to_string(),
+        size: Some(1),
+    };
+    let entries = [entry("hack.bps"), entry("README"), entry("docs/LICENSE")];
+    let (is_rom, summaries, has_rom, has_patch) =
+        CliApp::classify_container_entries(&entries, true);
+    assert!(!is_rom && !has_rom && has_patch);
+    let kinds: Vec<_> = summaries
+        .iter()
+        .map(|summary| summary.kind.as_deref().unwrap())
+        .collect();
+    assert_eq!(kinds, ["patch", "common", "common"]);
+
+    // `--no-ignore` stops treating them as common files, and they still are not ROMs.
+    let (is_rom, summaries, has_rom, _) = CliApp::classify_container_entries(&entries, false);
+    assert!(!is_rom && !has_rom);
+    assert!(
+        summaries
+            .iter()
+            .all(|summary| summary.kind.as_deref() != Some("common"))
+    );
+}
+
+#[test]
+fn markdown_documentation_beside_a_rom_is_a_common_file() {
+    let entry = |path: &str| ContainerListEntry {
+        path: path.to_string(),
+        size: Some(1),
+    };
+    let entries = [
+        entry("game.sfc"),
+        entry("LICENSE.md"),
+        entry("notes.markdown"),
+    ];
+    let (is_rom, summaries, has_rom, has_patch) =
+        CliApp::classify_container_entries(&entries, true);
+    assert!(is_rom && has_rom && !has_patch);
+    let kinds: Vec<_> = summaries
+        .iter()
+        .map(|summary| summary.kind.as_deref().unwrap())
+        .collect();
+    assert_eq!(kinds, ["rom", "common", "common"]);
 }

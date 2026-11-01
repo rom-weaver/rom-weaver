@@ -2899,13 +2899,41 @@ fn ingest_classification_unnamed_raw_dump_beside_named_patch_stays_rom() {
     assert_eq!(ingest["patches"].as_array().unwrap().len(), 1, "{ingest}");
 }
 
+/// The pass limited to the named patches must keep the default ignore rules: an AppleDouble
+/// `._a.bps` beside `a.bps` is clutter, not a second patch.
+#[test]
+fn ingest_classification_unnamed_raw_dump_beside_named_patch_ignores_appledouble_clutter() {
+    let temp = setup_temp_dir();
+    let raw = temp.child("dump");
+    let named = temp.child("a.bps");
+    let clutter = temp.child("._a.bps");
+    fs::write(raw.path(), banded_rom()).unwrap();
+    fs::write(named.path(), banded_bps()).unwrap();
+    fs::write(clutter.path(), b"\0\x05\x16\x07 AppleDouble").unwrap();
+    let archive = temp.child("mixed.zip");
+    zip_members(
+        &temp,
+        archive.path(),
+        &[raw.path(), named.path(), clutter.path()],
+    );
+    let result = ingest_json(&temp, archive.path(), "out");
+    let ingest = &result["details"]["ingest"];
+    let names: Vec<_> = patch_file_names(ingest)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(names, ["a.bps"], "{ingest}");
+    assert!(
+        !temp.child("out").child("._a.bps").path().exists(),
+        "ignored clutter must not be extracted"
+    );
+}
+
 /// Unnamed top-level entries carry no kind, so they MUST NOT stop descent into a nested ROM archive.
 #[test]
 fn ingest_classification_unnamed_entries_keep_nested_archive_descent() {
-    for (extra_name, extra_bytes) in [
-        ("LICENSE", b"license text".to_vec()),
-        ("patch", banded_bps()),
-    ] {
+    for (extra_name, extra_bytes) in [("extra", b"license text".to_vec()), ("patch", banded_bps())]
+    {
         let temp = setup_temp_dir();
         let alpha = temp.child("alpha.nes");
         let beta = temp.child("beta.nes");
@@ -3481,4 +3509,59 @@ fn ingest_review_zip_directories_are_not_payloads() {
             );
         }
     }
+}
+
+/// Extension-less documentation files are not payloads: a patch archive that ships a `README`
+/// beside its patch is still a patch source, and never a ROM.
+#[test]
+fn ingest_extensionless_documentation_files_do_not_make_a_patch_archive_a_rom() {
+    let temp = setup_temp_dir();
+    let patch = temp.child("hack.bps");
+    fs::write(patch.path(), banded_bps()).unwrap();
+    let readme = temp.child("README");
+    let license = temp.child("LICENSE");
+    fs::write(readme.path(), b"how to apply this hack").unwrap();
+    fs::write(license.path(), b"license text").unwrap();
+    let archive = temp.child("hack.zip");
+    zip_members(
+        &temp,
+        archive.path(),
+        &[patch.path(), readme.path(), license.path()],
+    );
+
+    let result = ingest_json(&temp, archive.path(), "out");
+    let ingest = &result["details"]["ingest"];
+    assert_eq!(ingest["kind"], "patch", "{ingest}");
+    assert_eq!(
+        patch_file_names(ingest),
+        [("hack.bps".to_string(), "BPS".to_string())],
+        "{ingest}"
+    );
+    assert!(ingest["assets"].as_array().unwrap().is_empty(), "{ingest}");
+}
+
+/// A `LICENSE` beside the one ROM must not make `--filter rom` payload resolution ambiguous.
+#[test]
+fn checksum_filter_rom_ignores_extensionless_documentation_files() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.sfc");
+    let license = temp.child("LICENSE");
+    fs::write(rom.path(), banded_rom()).unwrap();
+    fs::write(license.path(), b"license text").unwrap();
+    let archive = temp.child("game.zip");
+    zip_members(&temp, archive.path(), &[rom.path(), license.path()]);
+
+    let checksum = isolated_json_event(
+        &temp,
+        &[
+            "checksum",
+            "--input",
+            archive.path().to_str().unwrap(),
+            "--filter",
+            "rom",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(checksum["details"]["file_name"], "game.sfc", "{checksum}");
 }

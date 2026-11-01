@@ -1,7 +1,51 @@
 pub const COMMON_CONTAINER_FILE_EXTENSIONS: &[&str] = &[
-    ".txt", ".nfo", ".diz", ".rtf", ".doc", ".docx", ".xls", ".xlsx", ".htm", ".html", ".pdf",
-    ".jpg", ".jpeg", ".gif", ".png", ".bmp", ".webp", ".sfv", ".md5", ".sha1", ".sha256",
-    ".sha512", ".crc", ".log", ".json",
+    ".txt",
+    ".nfo",
+    ".diz",
+    ".rtf",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".htm",
+    ".html",
+    ".pdf",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".png",
+    ".bmp",
+    ".webp",
+    ".sfv",
+    ".md5",
+    ".sha1",
+    ".sha256",
+    ".sha512",
+    ".crc",
+    ".log",
+    ".json",
+    ".markdown",
+];
+
+/// Documentation file names (matched case-insensitively against the file name only), bare or with
+/// a `.md` extension. A bare `README` is neither a ROM dump nor a patch, so listings that skip
+/// common files drop it instead of treating it as an unnamed payload. `.md` is also the Mega Drive
+/// ROM extension, so it is ignored only behind these names (`README.md`), never on its own.
+pub const COMMON_CONTAINER_FILE_NAMES: &[&str] = &[
+    "readme",
+    "license",
+    "licence",
+    "copying",
+    "notice",
+    "authors",
+    "credits",
+    "changelog",
+    "changes",
+    "todo",
+    "install",
+    "history",
+    "contributors",
+    "contributing",
 ];
 
 pub const PATCH_FILTER_FILE_EXTENSIONS: &[&str] = &[
@@ -273,6 +317,15 @@ pub fn should_ignore_common_container_file(candidate_name: &str) -> bool {
             return true;
         }
         if matches!(file_name, ".ds_store" | "thumbs.db" | "desktop.ini") {
+            return true;
+        }
+        if COMMON_CONTAINER_FILE_NAMES.contains(&file_name) {
+            return true;
+        }
+        if file_name
+            .strip_suffix(".md")
+            .is_some_and(|stem| COMMON_CONTAINER_FILE_NAMES.contains(&stem))
+        {
             return true;
         }
     }
