@@ -878,6 +878,26 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
               {field.description}
             </span>
           ) : null}
+          {changed || errorText ? (
+            <span className="save-editor-field-foot">
+              {changed ? (
+                <span className="save-editor-was">
+                  {localizer.message(downloaded ? "ui.saves.editor.wasWritten" : "ui.saves.editor.was", {
+                    value: shownValue(field, originalValues[field.id] ?? field.value, localizer),
+                  })}
+                </span>
+              ) : null}
+              <button
+                aria-label={localizer.message("ui.saves.editor.resetField", { label: field.label })}
+                className="btn slim ghost save-editor-reset"
+                disabled={busy}
+                onClick={() => resetField(field)}
+                type="button"
+              >
+                <RotateCcw aria-hidden="true" /> {localizer.message("ui.settings.reset")}
+              </button>
+            </span>
+          ) : null}
         </div>
         {readOnly ? (
           <span className="save-editor-readonly">
@@ -896,26 +916,6 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
             value={values[field.id] || field.value}
           />
         )}
-        {changed || errorText ? (
-          <span className="save-editor-field-foot">
-            {changed ? (
-              <span className="save-editor-was">
-                {localizer.message(downloaded ? "ui.saves.editor.wasWritten" : "ui.saves.editor.was", {
-                  value: shownValue(field, originalValues[field.id] ?? field.value, localizer),
-                })}
-              </span>
-            ) : null}
-            <button
-              aria-label={localizer.message("ui.saves.editor.resetField", { label: field.label })}
-              className="btn slim ghost save-editor-reset"
-              disabled={busy}
-              onClick={() => resetField(field)}
-              type="button"
-            >
-              <RotateCcw aria-hidden="true" /> {localizer.message("ui.settings.reset")}
-            </button>
-          </span>
-        ) : null}
         {field.warnings.length ? <span className="save-editor-warning">{field.warnings.join(" ")}</span> : null}
         {errorText ? (
           <span className="save-editor-field-error" id={`save-field-error-${field.id}`} role="alert">

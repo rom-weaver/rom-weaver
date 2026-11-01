@@ -712,12 +712,13 @@
 .rw-app .save-editor-field.is-written {
   border-inline-start-style: solid;
 }
+/* The old value and Reset sit with the label they belong to, so every row's control keeps its full width. */
 .rw-app .save-editor-field-foot {
   display: flex;
   flex-wrap: wrap;
-  grid-column: 2 / -1;
-  gap: var(--sp-s) var(--sp-m);
+  gap: var(--sp-xs) var(--sp-s);
   align-items: center;
+  margin-block-start: var(--sp-xs);
   font-size: 0.8rem;
 }
 .rw-app .save-editor-was {
@@ -1174,9 +1175,25 @@
   .rw-app .save-editor-field .save-editor-segment {
     grid-column: 1 / -1;
   }
-  .rw-app .save-editor-field-error,
-  .rw-app .save-editor-field-foot {
+  .rw-app .save-editor-field-error {
     grid-column: 1 / -1;
+  }
+  /* On a phone Reset moves to the top right, level with the label; the old value stays under the description. */
+  .rw-app .save-editor-field-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-column: 1 / -1;
+    column-gap: var(--sp-m);
+    align-items: center;
+  }
+  .rw-app .save-editor-field-head > *,
+  .rw-app .save-editor-was {
+    grid-column: 1;
+  }
+  .rw-app .save-editor-field-foot {
+    display: contents;
+  }
+  .rw-app .save-editor-field-head .save-editor-reset {
+    grid-area: 1 / 2;
   }
   .rw-app .save-editor-slots {
     flex-direction: column;
