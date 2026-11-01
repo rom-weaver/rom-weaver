@@ -1687,9 +1687,22 @@ fn selected_output_files(entry: &str) -> Vec<String> {
 /// The prompt MUST precede any extraction: nothing may sit in the output tree while it is open.
 /// Without prefix reads the leaves are extracted to be classified, which proves a run took the
 /// extract-then-delete path.
-fn assert_prompt_extraction_order(files_at_prompt: &[Vec<String>], prefix_reads: bool) {
+///
+/// A named patch beside the unnamed entries is extracted by its own pass before the prompt, and so
+/// are the unnamed entries it cannot tell apart; those are deleted once the choice is made, so
+/// only the final tree is checked for that shape.
+fn assert_prompt_extraction_order(
+    files_at_prompt: &[Vec<String>],
+    prefix_reads: bool,
+    named_patch: bool,
+) {
     for files in files_at_prompt {
-        if prefix_reads {
+        if named_patch {
+            assert!(
+                files.iter().any(|name| name == "hack.ips"),
+                "the named patch pass must run first: {files:?}"
+            );
+        } else if prefix_reads {
             assert!(files.is_empty(), "extracted before the prompt: {files:?}");
         } else {
             assert!(!files.is_empty(), "fallback did not extract first");
@@ -1710,6 +1723,27 @@ fn assert_rom_prompt_names(calls: &[Vec<String>], logical: &[&str]) {
     );
 }
 
+/// Every expected patch file is reported, valid, and byte-identical to what the archive held.
+fn assert_sidecar_patches(ingest: &serde_json::Value, patch_files: &[&str], patch_bytes: &[u8]) {
+    let patches = ingest["patches"].as_array().unwrap();
+    assert_eq!(patches.len(), patch_files.len(), "{patches:?}");
+    let mut patch_names: Vec<_> = patches
+        .iter()
+        .map(|patch| patch["file_name"].as_str().unwrap())
+        .collect();
+    patch_names.sort_unstable();
+    let mut expected_patches = patch_files.to_vec();
+    expected_patches.sort_unstable();
+    assert_eq!(patch_names, expected_patches);
+    for patch in patches {
+        assert_eq!(patch["is_valid_patch"], true);
+        assert_eq!(
+            std::fs::read(patch["leaf_path"].as_str().unwrap()).unwrap(),
+            patch_bytes
+        );
+    }
+}
+
 fn check_ingest_interactive_signature_sidecar(
     rom_names: &[&str],
     selected: Option<usize>,
@@ -1723,6 +1757,25 @@ fn check_ingest_interactive_signature_sidecar_with(
     selected: Option<usize>,
     output_mode: &str,
     prefix_reads: bool,
+) {
+    check_ingest_interactive_sidecar_archive(rom_names, selected, output_mode, prefix_reads, false);
+}
+
+/// Adds a named `hack.ips` beside the unnamed signature patch, so the named-patch pass runs.
+fn check_ingest_interactive_named_patch(
+    rom_names: &[&str],
+    selected: Option<usize>,
+    prefix_reads: bool,
+) {
+    check_ingest_interactive_sidecar_archive(rom_names, selected, "absolute", prefix_reads, true);
+}
+
+fn check_ingest_interactive_sidecar_archive(
+    rom_names: &[&str],
+    selected: Option<usize>,
+    output_mode: &str,
+    prefix_reads: bool,
+    named_patch: bool,
 ) {
     struct JsonLines(Mutex<String>);
     impl rom_weaver_core::ProgressSink for JsonLines {
@@ -1776,6 +1829,11 @@ fn check_ingest_interactive_signature_sidecar_with(
     let patch_bytes = b"PATCH\x00\x00\x00\x00\x01\x01EOF";
     std::fs::write(&patch, patch_bytes).unwrap();
     members.push(patch);
+    if named_patch {
+        let named = temp.path().join("hack.ips");
+        std::fs::write(&named, patch_bytes).unwrap();
+        members.push(named);
+    }
     let archive = temp.path().join("mixed.zip");
     compress_zip_fixture(&app, &members, &archive);
     events.0.lock().unwrap().clear();
@@ -1836,7 +1894,18 @@ fn check_ingest_interactive_signature_sidecar_with(
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
-    assert_prompt_extraction_order(&prompt.files_at_prompt.lock().unwrap(), prefix_reads);
+    assert_prompt_extraction_order(
+        &prompt.files_at_prompt.lock().unwrap(),
+        prefix_reads,
+        named_patch,
+    );
+    // Files a patch may leave in the output tree: the unnamed one from the ROM pass (or the
+    // fallback extraction) and the named one from its own pass.
+    let patch_files: &[&str] = if named_patch {
+        &["patch", "hack.ips"]
+    } else {
+        &["patch"]
+    };
     if selected.is_none() && !calls.is_empty() {
         assert_ne!(outcome.exit_code, 0);
         assert!(events.last().unwrap()["details"].get("ingest").is_none());
@@ -1844,7 +1913,8 @@ fn check_ingest_interactive_signature_sidecar_with(
         // them behind (the unnamed patch is not a ROM and stays).
         let left = output_file_names(&output);
         assert!(
-            left.iter().all(|name| !prefix_reads && name == "patch") || left.is_empty(),
+            left.iter()
+                .all(|name| name == "hack.ips" || (!prefix_reads && name == "patch")),
             "a cancelled prompt must leave no ROM extracted: {left:?}"
         );
         return;
@@ -1876,7 +1946,7 @@ fn check_ingest_interactive_signature_sidecar_with(
             assert!(
                 extracted
                     .iter()
-                    .all(|name| name == "patch" || allowed.contains(name)),
+                    .all(|name| patch_files.contains(&name.as_str()) || allowed.contains(name)),
                 "unselected ROMs must not remain in the output tree: {extracted:?}"
             );
         }
@@ -1890,16 +1960,11 @@ fn check_ingest_interactive_signature_sidecar_with(
         manifests[0]["details"]["patch_manifest"]["patches"],
         ingest["patches"]
     );
-    assert_eq!(ingest["patches"].as_array().unwrap().len(), 1);
-    assert_eq!(ingest["patches"][0]["file_name"], "patch");
-    assert_eq!(ingest["patches"][0]["is_valid_patch"], true);
-    assert_eq!(
-        std::fs::read(ingest["patches"][0]["leaf_path"].as_str().unwrap()).unwrap(),
-        patch_bytes
-    );
+    assert_sidecar_patches(ingest, patch_files, patch_bytes);
     eprintln!(
-        "interactive JSONL: {} ROM assets, 1 valid sidecar, {} prompts",
+        "interactive JSONL: {} ROM assets, {} valid sidecars, {} prompts",
         expected_assets,
+        patch_files.len(),
         calls.len()
     );
 }
@@ -1939,6 +2004,27 @@ fn ingest_interactive_without_prefix_reads_deletes_unselected_roms() {
         "absolute",
         false,
     );
+}
+
+/// A named patch beside extension-less raw dumps: the named-patch pass extracts the unnamed entries
+/// before the prompt, so the ones that are not chosen MUST be deleted again.
+#[test]
+fn ingest_interactive_named_patch_beside_unnamed_roms_keeps_only_the_selection() {
+    for prefix_reads in [true, false] {
+        check_ingest_interactive_named_patch(&["Game A", "Game B"], Some(0), prefix_reads);
+        check_ingest_interactive_named_patch(&["Game A", "Game B"], Some(1), prefix_reads);
+        check_ingest_interactive_named_patch(&["Game A", "Game B"], None, prefix_reads);
+    }
+}
+
+/// A named ROM beside an unnamed one, with a named patch present.
+#[test]
+fn ingest_interactive_named_patch_beside_named_and_unnamed_rom() {
+    for prefix_reads in [true, false] {
+        check_ingest_interactive_named_patch(&["first.nes", "Game B"], Some(0), prefix_reads);
+        check_ingest_interactive_named_patch(&["first.nes", "Game B"], Some(1), prefix_reads);
+        check_ingest_interactive_named_patch(&["first.nes", "Game B"], None, prefix_reads);
+    }
 }
 
 /// Pre-extraction classification covers discs too: the chosen disc extracts whole, nothing else.

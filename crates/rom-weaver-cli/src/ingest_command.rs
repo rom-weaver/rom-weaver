@@ -30,6 +30,13 @@ enum SignatureResolution {
     NeedsExtractedClassification,
 }
 
+/// Result of a patch-leaf pass: the described patches plus the extracted unnamed leaves it did not
+/// report as patches (raw dumps the kind filter extracted beside named patches).
+struct PatchLeafPass {
+    patches: Vec<PatchDescriptor>,
+    unnamed_leaves: Vec<Value>,
+}
+
 /// Names of unnamed entries split by what a bounded prefix read could tell.
 struct UnnamedEntryScan {
     /// Entries whose prefix carries a reliable patch signature.
@@ -542,7 +549,10 @@ impl CliApp {
         if !is_rom {
             // Patch-only weave: describe every patch leaf, no ROM checksumming. An explicit `--select`
             // still pins specific leaves; interactive resolution stays driven by the global flag.
-            let patches = self.ingest_patch_leaves(
+            let PatchLeafPass {
+                patches,
+                unnamed_leaves,
+            } = self.ingest_patch_leaves(
                 handler,
                 IngestLeavesRequest {
                     source,
@@ -560,6 +570,11 @@ impl CliApp {
                 None,
                 true,
             )?;
+            Self::remove_unreported_unnamed_leaves(
+                out_dir,
+                &unnamed_leaves,
+                patches.iter().map(|patch| patch.leaf_path.clone()),
+            );
             return Ok(IngestOutcome {
                 kind: IngestKind::Patch,
                 is_rom,
@@ -587,12 +602,16 @@ impl CliApp {
         // Nested containers MUST retain top-level selection and prompt-free descent.
         let classify_before_selection = has_unnamed_payloads && !has_nested_containers;
         // Sidecars MUST remain independent of ROM selection; derive ordering from ROM names.
+        let mut named_pass_unnamed = Vec::new();
         let mut patches = if has_patch {
             let rom_hint = summaries
                 .iter()
                 .find(|entry| entry.kind.as_deref() == Some("rom"))
                 .map(|entry| Self::archive_entry_file_name(&entry.file_name).to_string());
-            let patches = self.ingest_patch_leaves(
+            let PatchLeafPass {
+                patches,
+                unnamed_leaves,
+            } = self.ingest_patch_leaves(
                 handler,
                 IngestLeavesRequest {
                     source,
@@ -610,6 +629,9 @@ impl CliApp {
                 rom_hint.as_deref(),
                 false,
             )?;
+            // The unnamed entries extracted beside the named patches are dropped once the ROM
+            // selection below settles; only the chosen ROMs and signature patches stay.
+            named_pass_unnamed = unnamed_leaves;
             if !defer_patch_manifest {
                 self.emit_patch_manifest(source, &patches);
             }
@@ -638,6 +660,12 @@ impl CliApp {
         ) {
             Ok(assets) => assets,
             Err(rom_error) => {
+                // A cancelled or failed ROM pass must not leave the unnamed entries behind.
+                Self::remove_unreported_unnamed_leaves(
+                    out_dir,
+                    &named_pass_unnamed,
+                    patches.iter().map(|patch| patch.leaf_path.clone()),
+                );
                 if matches!(&rom_error, RomWeaverError::Cancelled)
                     || matches!(&rom_error, RomWeaverError::Validation(message)
                         if message.contains("interactive selection was cancelled"))
@@ -648,7 +676,7 @@ impl CliApp {
                 // Retry as patches before preserving the original ROM failure.
                 if patches.is_empty() {
                     // The ROM selection must not filter nested patch leaves.
-                    patches = self
+                    let retry = self
                         .ingest_patch_leaves(
                             handler,
                             IngestLeavesRequest {
@@ -667,7 +695,19 @@ impl CliApp {
                             None,
                             true,
                         )
-                        .unwrap_or_default();
+                        .ok();
+                    if let Some(PatchLeafPass {
+                        patches: retried,
+                        unnamed_leaves,
+                    }) = retry
+                    {
+                        Self::remove_unreported_unnamed_leaves(
+                            out_dir,
+                            &unnamed_leaves,
+                            retried.iter().map(|patch| patch.leaf_path.clone()),
+                        );
+                        patches = retried;
+                    }
                 }
                 if patches.is_empty() {
                     return Err(rom_error);
@@ -687,12 +727,24 @@ impl CliApp {
                 });
             }
         };
+        Self::remove_unreported_unnamed_leaves(
+            out_dir,
+            &named_pass_unnamed,
+            patches
+                .iter()
+                .chain(&signature_patches)
+                .map(|patch| patch.leaf_path.clone())
+                .chain(assets.iter().map(|asset| asset.path.clone())),
+        );
         if !signature_patches.is_empty() {
             let named_pass_ran = assets.is_empty() && patches.is_empty();
             if named_pass_ran {
                 // The archive listing showed no patch, so the named-patch pass never ran; run it now
                 // so a named patch beside an unnamed one is not dropped.
-                patches = self.ingest_patch_leaves(
+                let PatchLeafPass {
+                    patches: found,
+                    unnamed_leaves,
+                } = self.ingest_patch_leaves(
                     handler,
                     IngestLeavesRequest {
                         source,
@@ -710,6 +762,15 @@ impl CliApp {
                     None,
                     false,
                 )?;
+                Self::remove_unreported_unnamed_leaves(
+                    out_dir,
+                    &unnamed_leaves,
+                    found
+                        .iter()
+                        .chain(&signature_patches)
+                        .map(|patch| patch.leaf_path.clone()),
+                );
+                patches = found;
             }
             patches.extend(signature_patches);
             if assets.is_empty() {
@@ -1402,7 +1463,7 @@ impl CliApp {
         request: IngestLeavesRequest<'_>,
         rom_hint: Option<&str>,
         include_signature_patches: bool,
-    ) -> Result<Vec<PatchDescriptor>> {
+    ) -> Result<PatchLeafPass> {
         let IngestLeavesRequest {
             source,
             out_dir,
@@ -1433,6 +1494,7 @@ impl CliApp {
             },
         )?;
         let mut patches = Vec::new();
+        let mut unnamed_leaves = Vec::new();
         for leaf in &leaves {
             let Some(path) = leaf
                 .as_object()
@@ -1444,15 +1506,43 @@ impl CliApp {
             let leaf_path = Path::new(path);
             // Mixed enumeration MUST leave unnamed patches to the ROM pass, avoiding duplicate copies.
             // Checked first so those unnamed leaves are not signature-sniffed twice.
-            if !include_signature_patches && !is_patch_filter_candidate_name(path) {
-                continue;
-            }
-            if !self.is_patch_payload(leaf_path) {
+            let skipped = if !include_signature_patches && !is_patch_filter_candidate_name(path) {
+                true
+            } else {
+                !self.is_patch_payload(leaf_path)
+            };
+            if skipped {
+                // The kind filter extracts unnamed entries beside named patches before any ROM
+                // prompt. They are not reported here, so the caller deletes the ones it does not keep.
+                if rom_weaver_core::payload_name_needs_content_classification(path) {
+                    unnamed_leaves.push(leaf.clone());
+                }
                 continue;
             }
             patches.push(self.build_patch_descriptor(leaf_path, None, rom_hint, context)?);
         }
-        Ok(patches)
+        Ok(PatchLeafPass {
+            patches,
+            unnamed_leaves,
+        })
+    }
+
+    /// Delete the unnamed leaves a patch pass extracted but never reported, once the ROM selection
+    /// is resolved. Leaves the caller kept (selected ROMs, signature patches, patches) stay;
+    /// everything else would be an unselected ROM left in `out_dir`.
+    fn remove_unreported_unnamed_leaves(
+        out_dir: &Path,
+        unnamed_leaves: &[Value],
+        kept_paths: impl IntoIterator<Item = String>,
+    ) {
+        if unnamed_leaves.is_empty() {
+            return;
+        }
+        let kept = kept_paths
+            .into_iter()
+            .map(|path| json!({ "path": path }))
+            .collect::<Vec<_>>();
+        Self::remove_unselected_leaves(out_dir, unnamed_leaves, &kept);
     }
 
     /// Extract `source` (and any nested containers) to `out_dir`, returning the bottom/leaf
