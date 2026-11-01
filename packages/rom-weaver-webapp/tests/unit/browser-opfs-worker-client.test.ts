@@ -143,6 +143,66 @@ describe("one-shot OPFS prefix worker", () => {
     },
   );
 
+  it("logs what the parent directory held when a prefix read fails at debug level", async () => {
+    const { configureLogger } = await import("../../src/lib/logging.ts");
+    const records: Array<{ level: string; message: string }> = [];
+    configureLogger({ level: "debug", sink: (record) => records.push(record) });
+    try {
+      const pending = readBrowserOpfsPrefix("/work/weave-parse/abc/hello.nes", 12);
+      const rejected = expect(pending).rejects.toBeInstanceOf(Error);
+      const worker = getStartedWorker();
+      worker.emit("message", {
+        data: {
+          requestId: getRequest(worker).requestId,
+          type: "read-prefix-error",
+          message: "OPFS prefix file not found",
+        },
+      });
+      await rejected;
+      await vi.waitFor(() => expect(FakeWorker.instances[1]).toBeDefined());
+      const storage = FakeWorker.instances[1] as FakeWorker;
+      const request = storage.posted[0]?.message as { action: string; requestId: string };
+      expect(request.action).toBe("list-metadata");
+      storage.emit("message", {
+        data: {
+          entries: [
+            { kind: "directory", path: "/weave-parse/abc" },
+            { kind: "file", path: "/weave-parse/abc/other.ips" },
+            { kind: "file", path: "/weave-parse/zzz/unrelated.bin" },
+          ],
+          requestId: request.requestId,
+          success: true,
+        },
+      });
+      await vi.waitFor(() =>
+        expect(records.some((record) => record.message.includes("prefix read failed"))).toBe(true),
+      );
+      const line = records.find((record) => record.message.includes("prefix read failed"));
+      expect(line?.level).toBe("debug");
+      expect(line?.message).toContain("parentExists=true");
+      expect(line?.message).toContain("parentDir=abc");
+      expect(line?.message).toContain("siblings=[other.ips]");
+    } finally {
+      configureLogger({ level: "warn", sink: null });
+    }
+  });
+
+  it("skips the OPFS listing for a failed prefix read when debug logging is off", async () => {
+    const pending = readBrowserOpfsPrefix("/work/weave-parse/abc/hello.nes", 12);
+    const rejected = expect(pending).rejects.toBeInstanceOf(Error);
+    const worker = getStartedWorker();
+    worker.emit("message", {
+      data: {
+        requestId: getRequest(worker).requestId,
+        type: "read-prefix-error",
+        message: "OPFS prefix file not found",
+      },
+    });
+    await rejected;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(FakeWorker.instances).toHaveLength(1);
+  });
+
   it("does not spawn for an already aborted read or an invalid bound", async () => {
     const controller = new AbortController();
     controller.abort(new Error("cancelled"));

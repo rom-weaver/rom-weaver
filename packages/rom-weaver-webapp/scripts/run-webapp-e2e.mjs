@@ -148,10 +148,21 @@ const systemChromeLaunchOptions =
   browserName === "chromium" && process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
 const HYDRATION_SETTINGS = JSON.stringify({
   apply: { compression: { threads: 3 } },
-  common: { betaToolsEnabled: true },
+  // debug: the audit keeps the app's console log and prints its tail when a case fails (see runHydrationAudit).
+  common: { betaToolsEnabled: true, logLevel: "debug" },
   create: { compression: { threads: 3 } },
   version: 5,
 });
+
+const APP_LOG_TAIL_LINES = 80;
+
+// Playwright's message.text() keeps the logger's `%c` format and CSS style arguments in front of the message.
+const cleanAppLogText = (text) =>
+  text
+    .replace(/%[cs]/g, "")
+    .replace(/color: [^;]+; font-weight: \w+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
 const reservePort = () =>
   new Promise((resolve, reject) => {
@@ -292,8 +303,11 @@ const runHydrationAudit = async (createContext, baseUrl) => {
     ]) {
       const page = await context.newPage();
       const failures = [];
+      const appLog = [];
       page.on("console", (message) => {
         if (message.type() === "error") failures.push(formatConsoleError(message.text(), message.location()));
+        appLog.push(`${message.type()}: ${cleanAppLogText(message.text()).slice(0, 600)}`);
+        if (appLog.length > APP_LOG_TAIL_LINES) appLog.shift();
       });
       watchRequestFailures(page);
       page.on("pageerror", (error) => failures.push(error.stack || error.message));
@@ -445,6 +459,15 @@ const runHydrationAudit = async (createContext, baseUrl) => {
             `${testCase.path} hydration audit failed:\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
           );
         process.stdout.write(`PASS hydration ${testCase.path} (${result.initialView} -> ${result.finalView})\n`);
+      } catch (error) {
+        // Any failure of the case, not only the final checks, prints the page's recent console log.
+        if (error instanceof Error) {
+          const tail = `\napp log (last ${appLog.length} lines):\n${appLog.map((line) => `  ${line}`).join("\n")}`;
+          error.message += tail;
+          // Playwright errors print their stored stack, not the message.
+          if (typeof error.stack === "string") error.stack += tail;
+        }
+        throw error;
       } finally {
         releaseScripts();
         await page.close();
