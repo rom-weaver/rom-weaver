@@ -1688,9 +1688,8 @@ fn selected_output_files(entry: &str) -> Vec<String> {
 /// Without prefix reads the leaves are extracted to be classified, which proves a run took the
 /// extract-then-delete path.
 ///
-/// A named patch beside the unnamed entries is extracted by its own pass before the prompt, and so
-/// are the unnamed entries it cannot tell apart; those are deleted once the choice is made, so
-/// only the final tree is checked for that shape.
+/// A named patch beside the unnamed entries is extracted by its own pass before the prompt, which
+/// is pinned to the named patch so the unnamed entries wait for the choice like any other run.
 fn assert_prompt_extraction_order(
     files_at_prompt: &[Vec<String>],
     prefix_reads: bool,
@@ -1701,6 +1700,10 @@ fn assert_prompt_extraction_order(
             assert!(
                 files.iter().any(|name| name == "hack.ips"),
                 "the named patch pass must run first: {files:?}"
+            );
+            assert!(
+                !prefix_reads || files.len() == 1,
+                "only the named patch may be extracted before the prompt: {files:?}"
             );
         } else if prefix_reads {
             assert!(files.is_empty(), "extracted before the prompt: {files:?}");

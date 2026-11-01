@@ -604,6 +604,15 @@ impl CliApp {
         // Sidecars MUST remain independent of ROM selection; derive ordering from ROM names.
         let mut named_pass_unnamed = Vec::new();
         let mut patches = if has_patch {
+            // Unnamed entries sit beside the named patches under the kind filter, so the pass
+            // would extract them before the ROM prompt and again in the ROM pass. Pinning the
+            // named patches keeps those entries out of it; nested containers still need the
+            // filter to descend.
+            let patch_selections = if has_unnamed_payloads && !has_nested_containers {
+                Self::named_patch_selections(&entries)
+            } else {
+                Vec::new()
+            };
             let rom_hint = summaries
                 .iter()
                 .find(|entry| entry.kind.as_deref() == Some("rom"))
@@ -616,7 +625,7 @@ impl CliApp {
                 IngestLeavesRequest {
                     source,
                     out_dir,
-                    raw_selections: &[],
+                    raw_selections: &patch_selections,
                     kind_filter: Self::archive_entry_kind_filter(false, true),
                     no_ignore,
                     no_nested_extract,
@@ -1525,6 +1534,25 @@ impl CliApp {
             patches,
             unnamed_leaves,
         })
+    }
+
+    /// Entry names of the extension-named patches, to pin the named-patch pass to exactly those.
+    /// Empty (no pinning) when there are none or a name holds selection-pattern characters that
+    /// would match other entries.
+    fn named_patch_selections(entries: &[ContainerListEntry]) -> Vec<String> {
+        let filter = Self::archive_entry_kind_filter(false, true);
+        let names = entries
+            .iter()
+            .filter(|entry| {
+                filter.classify_name(&entry.path) == rom_weaver_core::KindFilterNameMatch::Payload
+            })
+            .map(|entry| entry.path.clone())
+            .collect::<Vec<_>>();
+        if names.iter().any(|name| name.contains(['*', '?', '['])) {
+            trace!("named patch entries hold selection-pattern characters; not pinning them");
+            return Vec::new();
+        }
+        names
     }
 
     /// Delete the unnamed leaves a patch pass extracted but never reported, once the ROM selection
