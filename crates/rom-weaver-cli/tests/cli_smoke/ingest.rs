@@ -2899,6 +2899,36 @@ fn ingest_classification_unnamed_raw_dump_beside_named_patch_stays_rom() {
     assert_eq!(ingest["patches"].as_array().unwrap().len(), 1, "{ingest}");
 }
 
+/// The pass limited to the named patches must keep the default ignore rules: an AppleDouble
+/// `._a.bps` beside `a.bps` is clutter, not a second patch.
+#[test]
+fn ingest_classification_unnamed_raw_dump_beside_named_patch_ignores_appledouble_clutter() {
+    let temp = setup_temp_dir();
+    let raw = temp.child("dump");
+    let named = temp.child("a.bps");
+    let clutter = temp.child("._a.bps");
+    fs::write(raw.path(), banded_rom()).unwrap();
+    fs::write(named.path(), banded_bps()).unwrap();
+    fs::write(clutter.path(), b"\0\x05\x16\x07 AppleDouble").unwrap();
+    let archive = temp.child("mixed.zip");
+    zip_members(
+        &temp,
+        archive.path(),
+        &[raw.path(), named.path(), clutter.path()],
+    );
+    let result = ingest_json(&temp, archive.path(), "out");
+    let ingest = &result["details"]["ingest"];
+    let names: Vec<_> = patch_file_names(ingest)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(names, ["a.bps"], "{ingest}");
+    assert!(
+        !temp.child("out").child("._a.bps").path().exists(),
+        "ignored clutter must not be extracted"
+    );
+}
+
 /// Unnamed top-level entries carry no kind, so they MUST NOT stop descent into a nested ROM archive.
 #[test]
 fn ingest_classification_unnamed_entries_keep_nested_archive_descent() {

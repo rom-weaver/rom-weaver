@@ -609,7 +609,7 @@ impl CliApp {
             // named patches keeps those entries out of it; nested containers still need the
             // filter to descend.
             let patch_selections = if has_unnamed_payloads && !has_nested_containers {
-                Self::named_patch_selections(&entries)
+                Self::named_patch_selections(&entries, !no_ignore)
             } else {
                 Vec::new()
             };
@@ -1539,12 +1539,18 @@ impl CliApp {
     /// Entry names of the extension-named patches, to pin the named-patch pass to exactly those.
     /// Empty (no pinning) when there are none or a name holds selection-pattern characters that
     /// would match other entries.
-    fn named_patch_selections(entries: &[ContainerListEntry]) -> Vec<String> {
+    fn named_patch_selections(
+        entries: &[ContainerListEntry],
+        ignore_common_files: bool,
+    ) -> Vec<String> {
         let filter = Self::archive_entry_kind_filter(false, true);
+        // An explicit selection turns the container's default ignore rules off, so apply them here.
         let names = entries
             .iter()
             .filter(|entry| {
                 filter.classify_name(&entry.path) == rom_weaver_core::KindFilterNameMatch::Payload
+                    && !(ignore_common_files
+                        && rom_weaver_core::should_ignore_common_container_file(&entry.path))
             })
             .map(|entry| entry.path.clone())
             .collect::<Vec<_>>();
