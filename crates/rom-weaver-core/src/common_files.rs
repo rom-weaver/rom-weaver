@@ -229,11 +229,24 @@ pub fn select_kind_filter_matches<T>(
 pub struct ArchiveEntryKindFilter {
     pub rom: bool,
     pub patch: bool,
+    /// Keep nested containers beside matched payloads, so none of them is dropped.
+    pub include_containers: bool,
 }
 
 impl ArchiveEntryKindFilter {
     pub const fn new(rom: bool, patch: bool) -> Self {
-        Self { rom, patch }
+        Self {
+            rom,
+            patch,
+            include_containers: false,
+        }
+    }
+
+    pub const fn with_containers(self) -> Self {
+        Self {
+            include_containers: true,
+            ..self
+        }
     }
 
     pub const fn disabled(self) -> bool {
@@ -369,6 +382,17 @@ pub fn payload_name_needs_content_classification(candidate_name: &str) -> bool {
         && tail.as_bytes()[0].is_ascii_alphabetic()
         && tail.bytes().all(|byte| byte.is_ascii_alphanumeric());
     !plausible_extension
+}
+
+/// A stream wrapper around one payload (`game.nes.gz`, `Hack v1.1.gz`): that payload, not an
+/// archive that holds other files.
+pub fn is_stream_wrapped_payload_name(candidate_name: &str) -> bool {
+    let lower = candidate_name.to_ascii_lowercase();
+    let payload_name = strip_stream_suffixes(&lower);
+    payload_name != lower
+        && (is_rom_filter_candidate_name(payload_name)
+            || is_patch_filter_candidate_name(payload_name)
+            || payload_name_needs_content_classification(payload_name))
 }
 
 fn strip_stream_suffixes(lower_name: &str) -> &str {

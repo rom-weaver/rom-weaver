@@ -550,18 +550,24 @@ impl CliApp {
             rom_weaver_core::is_container_filter_passthrough_candidate_name(&entry.path)
                 && !rom_weaver_core::is_rom_filter_candidate_name(&entry.path)
         });
+        let has_nested_archives = has_nested_containers
+            && entries.iter().any(|entry| {
+                rom_weaver_core::is_container_filter_passthrough_candidate_name(&entry.path)
+                    && !rom_weaver_core::is_rom_filter_candidate_name(&entry.path)
+                    && !rom_weaver_core::is_stream_wrapped_payload_name(&entry.path)
+            });
         // An archive holding other archives could pair its ROMs and patches across levels, so
         // nothing is dropped and nothing is asked: every ROM and patch at every level is kept.
-        if has_nested_containers && raw_selections.is_empty() && !no_nested_extract {
+        if has_nested_archives && raw_selections.is_empty() && !no_nested_extract {
             let resolved_split_bin =
                 self.resolve_ingest_split_bin(handler, source, split_bin, context)?;
-            let (assets, patches) = self.ingest_rom_leaves(
+            let (assets, mut patches) = self.ingest_rom_leaves(
                 handler,
                 IngestLeavesRequest {
                     source,
                     out_dir,
                     raw_selections: &[],
-                    kind_filter: Self::archive_entry_kind_filter(true, true),
+                    kind_filter: Self::archive_entry_kind_filter(true, true).with_containers(),
                     no_ignore,
                     no_nested_extract,
                     preserve_nested_formats,
@@ -574,11 +580,30 @@ impl CliApp {
                 false,
                 false,
             )?;
+            if assets.is_empty() && patches.is_empty() {
+                return Err(RomWeaverError::Validation(format!(
+                    "`{}` holds no ROM or patch; rerun with --no-ignore if its files were skipped by default",
+                    source.display()
+                )));
+            }
+            // Sidecars MUST derive ordering from the top-level ROM name.
+            if let Some(rom_hint) = summaries
+                .iter()
+                .find(|entry| entry.kind.as_deref() == Some("rom"))
+                .map(|entry| Self::archive_entry_file_name(&entry.file_name).to_string())
+            {
+                for patch in &mut patches {
+                    if patch.sidecar_order.is_none() {
+                        patch.sidecar_order =
+                            Self::entry_matches_libretro_sidecar(&rom_hint, &patch.file_name);
+                    }
+                }
+            }
             trace!(
                 source = %source.display(),
                 asset_count = assets.len(),
                 patch_count = patches.len(),
-                "ingest kept every ROM and patch of an archive with nested containers"
+                "ingest kept every ROM and patch of an archive with nested archives"
             );
             // A patch-only weave of named patches uses terminal patch selection, so a manifest would
             // open a competing ROM sidecar dialog. Patches found by content classification are

@@ -215,8 +215,7 @@ impl CliApp {
                     // A filter for both kinds keeps every nested archive, so one that holds only
                     // ignored or unrelated files has nothing to extract and must not fail the rest.
                     Err(error)
-                        if kind_filter.rom
-                            && kind_filter.patch
+                        if kind_filter.include_containers
                             && Self::is_empty_nested_selection_error(&error) =>
                     {
                         debug!(
@@ -587,10 +586,7 @@ mod nfs_probe_tests {
                     root_source: &directory.path().join("outer.zip"),
                     root_candidates: &[source],
                     preserve_nested_formats: &[],
-                    kind_filter: ArchiveEntryKindFilter {
-                        rom: false,
-                        patch: true,
-                    },
+                    kind_filter: ArchiveEntryKindFilter::new(false, true),
                     ignore_common_files: true,
                     overwrite: false,
                 },
