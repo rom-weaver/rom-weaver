@@ -13,6 +13,7 @@ import {
   computeDeltas,
   dateRange,
   formatSummary,
+  summarizeCloudflareWeeks,
   githubReport,
   lookupSecret,
   markUnreportedDays,
@@ -412,6 +413,8 @@ test("builds one-day cloudflare host queries", () => {
   assert.match(query, /clientRequestHTTPHost: \$host/);
   assert.match(query, /dimensions \{ date clientRefererHost \}/);
   assert.match(query, /edgeResponseContentTypeName: "html"/);
+  assert.match(query, /dimensions \{ clientCountryName \}/);
+  assert.match(query, /dimensions \{ userAgentBrowser \}/);
   assert.deepEqual(variables, {
     zone: "z",
     start: "2026-01-09T00:00:00Z",
@@ -435,7 +438,14 @@ test("cloudflare --host queries each day and rejects ranges beyond adaptive rete
       return Response.json({
         data: {
           viewer: {
-            zones: [{ referrers: [{ count: 4, dimensions: { clientRefererHost: "google.com" } }], html: [{ count: 3 }] }],
+            zones: [
+              {
+                referrers: [{ count: 4, dimensions: { clientRefererHost: "google.com" } }],
+                html: [{ count: 3 }],
+                countries: [{ count: 2, dimensions: { clientCountryName: "US" } }],
+                browsers: [{ count: 3, dimensions: { userAgentBrowser: "Chrome" } }],
+              },
+            ],
           },
         },
       });
@@ -446,6 +456,8 @@ test("cloudflare --host queries each day and rejects ranges beyond adaptive rete
     date: "2026-01-01",
     referrers: [{ referrer: "google.com", requests: 4 }],
     htmlResponses: 3,
+    countries: [{ country: "US", htmlResponses: 2 }],
+    browsers: [{ browser: "Chrome", htmlResponses: 3 }],
   });
   assert.match(result.host.note, /once per UTC day/);
   await assert.rejects(
@@ -477,8 +489,8 @@ test("cloudflare --host drops referrers when the zone plan denies the field", as
     },
   });
   assert.deepEqual(result.host.days, [
-    { date: "2026-01-01", htmlResponses: 5 },
-    { date: "2026-01-02", htmlResponses: 5 },
+    { date: "2026-01-01", htmlResponses: 5, countries: [], browsers: [] },
+    { date: "2026-01-02", htmlResponses: 5, countries: [], browsers: [] },
   ]);
   assert.match(result.host.warning, /referrers are omitted/);
 });
@@ -500,5 +512,43 @@ test("argument checks cover review edge cases", () => {
   assert.doesNotThrow(() => parseArgs(["gsc", "--dims", "query", "--compare", "2026-01-01:2026-01-07"]));
   assert.throws(() => parseArgs(["gsc-inspect", "--days", "7", "https://example.invalid/"]), (error) => !/history window/.test(error.message));
   assert.throws(() => parseArgs(["bing", "--days", "7"]), /history window/);
-  assert.throws(() => parseArgs(["cloudflare", "--summary"]), /does not apply/);
+  assert.throws(() => parseArgs(["bing", "--summary"]), /does not apply/);
+  assert.equal(parseArgs(["cloudflare", "--summary"]).summary, true);
+});
+
+test("cloudflare report leaves today's partial day out of weeks but keeps it in days", async () => {
+  const day = (date, uniques) => ({ dimensions: { date }, sum: { requests: 1, pageViews: 1, bytes: 0 }, uniq: { uniques } });
+  const result = await cloudflareReport({
+    env: { CLOUDFLARE_API_TOKEN: "token", CLOUDFLARE_ZONE_ID: "zone" },
+    days: 2,
+    now: new Date("2026-01-07T12:00:00Z"),
+    fetchImpl: async () =>
+      Response.json({ data: { viewer: { zones: [{ httpRequests1dGroups: [day("2026-01-05", 100), day("2026-01-06", 200), day("2026-01-07", 10)] }] } } }),
+  });
+  assert.equal(result.days.length, 3);
+  assert.deepEqual(
+    result.weeks.map(({ weekStart, days, avgDailyUniques }) => ({ weekStart, days, avgDailyUniques })),
+    [{ weekStart: "2026-01-05", days: 2, avgDailyUniques: 150 }],
+  );
+});
+
+test("cloudflare weeks average daily uniques per UTC Monday week and format a summary", () => {
+  const day = (date, uniques, pageViews) => ({
+    dimensions: { date },
+    sum: { requests: pageViews * 2, pageViews, bytes: 2e9 },
+    uniq: { uniques },
+  });
+  const weeks = summarizeCloudflareWeeks([
+    day("2026-01-04", 100, 300),
+    day("2026-01-05", 200, 500),
+    day("2026-01-06", 300, 700),
+    day("2026-01-07", 10, 20),
+    { sum: { requests: 1 } },
+  ], "2026-01-07");
+  assert.deepEqual(weeks, [
+    { weekStart: "2025-12-29", days: 1, pageViews: 300, requests: 600, bytes: 2e9, avgDailyUniques: 100, pageViewsPerUnique: 3 },
+    { weekStart: "2026-01-05", days: 2, pageViews: 1200, requests: 2400, bytes: 4e9, avgDailyUniques: 250, pageViewsPerUnique: 2.4 },
+  ]);
+  const summary = formatSummary({ source: "cloudflare", start: "2026-01-04", end: "2026-01-06", weeks });
+  assert.match(summary, /^2026-01-05  2  250  1200  2\.4  4\.0$/m);
 });

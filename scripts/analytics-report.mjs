@@ -16,9 +16,12 @@
 //   output is marked provisional), --compare START:END (same query for a second range plus
 //   per-page and per-query deltas, current minus compare).
 // bing options: --page URL (GetPageQueryStats), --query TEXT (GetQueryPageStats).
-// cloudflare options: --host HOSTNAME (top referrers and HTML responses for that host,
-//   one query per UTC day because adaptive datasets cap the queryable range).
-// gsc --summary prints a compact table to stderr; JSON stays on stdout.
+// cloudflare options: --host HOSTNAME (top referrers, top countries and browsers, and HTML
+//   responses for that host, one query per UTC day because adaptive datasets cap the
+//   queryable range; countries and browsers count HTML responses only). `weeks` rolls the
+//   completed days (not today) into UTC Monday weeks with average daily uniques; page views
+//   also count bots, so judge growth by uniques.
+// gsc and cloudflare --summary print a compact table to stderr; JSON stays on stdout.
 //
 // Examples:
 //   # Queries that reached one page over the last 28 days
@@ -92,7 +95,7 @@ const FLAGS = {
   "--days": { key: "days", value: true, sources: DATE_SOURCES },
   "--start": { key: "start", value: true, sources: DATE_SOURCES },
   "--end": { key: "end", value: true, sources: DATE_SOURCES },
-  "--summary": { key: "summary", value: false, sources: ["gsc"] },
+  "--summary": { key: "summary", value: false, sources: ["gsc", "cloudflare"] },
   "--fresh": { key: "fresh", value: false, sources: ["gsc"] },
   "--page": { key: "page", value: true, sources: ["gsc", "bing"] },
   "--query": { key: "query", value: true, sources: ["gsc", "bing"] },
@@ -457,6 +460,7 @@ const CLOUDFLARE_ADAPTIVE_MAX_DAYS = 31;
 export function buildCloudflareHostQuery({ zoneId, host, day, referrers = true }) {
   const next = new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString();
   const filter = `datetime_geq: $start, datetime_lt: $end, clientRequestHTTPHost: $host`;
+  const htmlFilter = `${filter}, edgeResponseContentTypeName: "html"`;
   const referrerField = referrers
     ? `referrers: httpRequestsAdaptiveGroups(limit: 100, orderBy: [count_DESC], filter: { ${filter} }) {
           count
@@ -467,13 +471,51 @@ export function buildCloudflareHostQuery({ zoneId, host, day, referrers = true }
     query: `query($zone: String!, $start: Time!, $end: Time!, $host: String!) {
       viewer { zones(filter: { zoneTag: $zone }) {
         ${referrerField}
-        html: httpRequestsAdaptiveGroups(limit: 1, filter: { ${filter}, edgeResponseContentTypeName: "html" }) {
+        html: httpRequestsAdaptiveGroups(limit: 1, filter: { ${htmlFilter} }) {
           count
+        }
+        countries: httpRequestsAdaptiveGroups(limit: 10, orderBy: [count_DESC], filter: { ${htmlFilter} }) {
+          count
+          dimensions { clientCountryName }
+        }
+        browsers: httpRequestsAdaptiveGroups(limit: 10, orderBy: [count_DESC], filter: { ${htmlFilter} }) {
+          count
+          dimensions { userAgentBrowser }
         }
       } }
     }`,
     variables: { zone: zoneId, start: `${day}T00:00:00Z`, end: next.replace(".000Z", "Z"), host },
   };
+}
+
+// UTC Monday of the week containing `date` (YYYY-MM-DD).
+function weekStart(date) {
+  const day = new Date(`${date}T00:00:00Z`);
+  return new Date(day.getTime() - ((day.getUTCDay() + 6) % 7) * 86_400_000).toISOString().slice(0, 10);
+}
+
+// Rolls daily groups into UTC Monday weeks. Daily uniques are per day, so a week reports their
+// average rather than a sum; summing them would count returning visitors once per day. Days
+// from `today` on are left out because a partial day would pull the week's average down.
+export function summarizeCloudflareWeeks(groups, today) {
+  const weeks = new Map();
+  for (const group of groups) {
+    const date = group.dimensions?.date;
+    if (!date || date >= today) continue;
+    const key = weekStart(date);
+    const week = weeks.get(key) ?? { weekStart: key, days: 0, uniques: 0, pageViews: 0, requests: 0, bytes: 0 };
+    week.days += 1;
+    week.uniques += group.uniq?.uniques ?? 0;
+    week.pageViews += group.sum?.pageViews ?? 0;
+    week.requests += group.sum?.requests ?? 0;
+    week.bytes += group.sum?.bytes ?? 0;
+    weeks.set(key, week);
+  }
+  return [...weeks.values()].map(({ uniques, ...week }) => ({
+    ...week,
+    avgDailyUniques: Math.round(uniques / week.days),
+    pageViewsPerUnique: uniques > 0 ? Math.round((week.pageViews / uniques) * 10) / 10 : null,
+  }));
 }
 
 export async function cloudflareReport({ env, fetchImpl = globalThis.fetch, now, lookup = lookupSecret, ...options }) {
@@ -505,7 +547,8 @@ export async function cloudflareReport({ env, fetchImpl = globalThis.fetch, now,
       }`,
     variables: { zone: zoneId, start: range.start, end: range.end },
   });
-  const result = { ...range, days: totals?.httpRequests1dGroups ?? [] };
+  const groups = totals?.httpRequests1dGroups ?? [];
+  const result = { ...range, days: groups, weeks: summarizeCloudflareWeeks(groups, (now ?? new Date()).toISOString().slice(0, 10)) };
   if (!options.host) return result;
   const dates = eachDay(range);
   if (dates.length > CLOUDFLARE_ADAPTIVE_MAX_DAYS) {
@@ -529,6 +572,8 @@ export async function cloudflareReport({ env, fetchImpl = globalThis.fetch, now,
         ? { referrers: (zone?.referrers ?? []).map((group) => ({ referrer: group.dimensions.clientRefererHost, requests: group.count })) }
         : {}),
       htmlResponses: zone?.html?.[0]?.count ?? 0,
+      countries: (zone?.countries ?? []).map((group) => ({ country: group.dimensions.clientCountryName, htmlResponses: group.count })),
+      browsers: (zone?.browsers ?? []).map((group) => ({ browser: group.dimensions.userAgentBrowser, htmlResponses: group.count })),
     });
   }
   result.host = {
@@ -591,6 +636,14 @@ const TOP_ROWS = 10;
 // Compact text table of the top pages (and compare deltas) for stderr.
 export function formatSummary(result) {
   const lines = [`${result.source} ${result.start} to ${result.end}${result.provisional ? " (provisional)" : ""}`];
+  if (result.weeks?.length > 0) {
+    lines.push("week        days  uniques/day  page views  views/unique  GB");
+    for (const week of result.weeks) {
+      lines.push(
+        `${week.weekStart}  ${week.days}  ${week.avgDailyUniques}  ${week.pageViews}  ${week.pageViewsPerUnique ?? "n/a"}  ${(week.bytes / 1e9).toFixed(1)}`,
+      );
+    }
+  }
   const pages = [...(result.reports?.page ?? [])].sort((a, b) => b.clicks - a.clicks).slice(0, TOP_ROWS);
   if (pages.length > 0) {
     lines.push("clicks  impr  ctr  pos  page");

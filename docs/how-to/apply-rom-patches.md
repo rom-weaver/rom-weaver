@@ -1,6 +1,6 @@
-# How to apply a BPS, IPS, UPS, or xdelta patch to a ROM
+# How to patch a ROM: BPS, IPS, UPS, or xdelta patches
 
-Apply an IPS, BPS, UPS, or xdelta patch to your ROM with the free [online ROM patcher](https://rom-weaver.com/apply-rom-patches), then download the patched game. No uploads or account.
+Patch a ROM in four steps with the free [online ROM patcher](https://rom-weaver.com/apply-rom-patches): add your ROM and an IPS, BPS, UPS, or xdelta patch, then download the result. No uploads.
 
 <a id="how-to-apply-bps-ips-ups-and-xdelta-patches"></a>
 
