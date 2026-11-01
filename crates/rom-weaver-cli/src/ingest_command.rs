@@ -546,6 +546,63 @@ impl CliApp {
             "classified ingest container"
         );
 
+        let has_nested_containers = entries.iter().any(|entry| {
+            rom_weaver_core::is_container_filter_passthrough_candidate_name(&entry.path)
+                && !rom_weaver_core::is_rom_filter_candidate_name(&entry.path)
+        });
+        // An archive holding other archives could pair its ROMs and patches across levels, so
+        // nothing is dropped and nothing is asked: every ROM and patch at every level is kept.
+        if has_nested_containers && raw_selections.is_empty() && !no_nested_extract {
+            let resolved_split_bin =
+                self.resolve_ingest_split_bin(handler, source, split_bin, context)?;
+            let (assets, patches) = self.ingest_rom_leaves(
+                handler,
+                IngestLeavesRequest {
+                    source,
+                    out_dir,
+                    raw_selections: &[],
+                    kind_filter: Self::archive_entry_kind_filter(true, true),
+                    no_ignore,
+                    no_nested_extract,
+                    preserve_nested_formats,
+                    split_bin: resolved_split_bin,
+                    interactive: false,
+                    source_label: "ingest input",
+                    context,
+                },
+                algorithms,
+                false,
+                false,
+            )?;
+            trace!(
+                source = %source.display(),
+                asset_count = assets.len(),
+                patch_count = patches.len(),
+                "ingest kept every ROM and patch of an archive with nested containers"
+            );
+            // A patch-only weave of named patches uses terminal patch selection, so a manifest would
+            // open a competing ROM sidecar dialog. Patches found by content classification are
+            // announced together, as the mixed-archive route does.
+            let classified_patches = !has_patch
+                && patches.iter().any(|patch| {
+                    rom_weaver_core::payload_name_needs_content_classification(&patch.leaf_path)
+                });
+            if !assets.is_empty() || classified_patches {
+                self.emit_patch_manifest(source, &patches);
+            }
+            let kind = if assets.is_empty() {
+                IngestKind::Patch
+            } else {
+                IngestKind::Rom
+            };
+            return Ok(IngestOutcome {
+                kind,
+                is_rom: !assets.is_empty(),
+                assets,
+                patches,
+            });
+        }
+
         if !is_rom {
             // Patch-only weave: describe every patch leaf, no ROM checksumming. An explicit `--select`
             // still pins specific leaves; interactive resolution stays driven by the global flag.
@@ -593,10 +650,6 @@ impl CliApp {
         let has_unnamed_payloads = entries
             .iter()
             .any(|entry| rom_weaver_core::payload_name_needs_content_classification(&entry.path));
-        let has_nested_containers = entries.iter().any(|entry| {
-            rom_weaver_core::is_container_filter_passthrough_candidate_name(&entry.path)
-                && !rom_weaver_core::is_rom_filter_candidate_name(&entry.path)
-        });
         // Hosts MUST see signature-classified and named patches together in their first manifest.
         let defer_patch_manifest = has_unnamed_payloads || has_nested_containers;
         // Nested containers MUST retain top-level selection and prompt-free descent.

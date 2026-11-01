@@ -1994,7 +1994,9 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         &request.selections,
         request.kind_filter,
         request.ignore_common_files,
-        request.containing_archive.is_some(),
+        // A filter for both kinds keeps nested archives beside matched payloads, so nothing is dropped.
+        request.containing_archive.is_some()
+            || (request.kind_filter.rom && request.kind_filter.patch),
         format_name,
     )?;
     let total_tasks = destination_tasks.len();
