@@ -18,8 +18,9 @@
 // bing options: --page URL (GetPageQueryStats), --query TEXT (GetQueryPageStats).
 // cloudflare options: --host HOSTNAME (top referrers, top countries and browsers, and HTML
 //   responses for that host, one query per UTC day because adaptive datasets cap the
-//   queryable range). `weeks` rolls the daily groups into UTC Monday weeks with average daily
-//   uniques; page views also count bots, so judge growth by uniques.
+//   queryable range; countries and browsers count HTML responses only). `weeks` rolls the
+//   completed days (not today) into UTC Monday weeks with average daily uniques; page views
+//   also count bots, so judge growth by uniques.
 // gsc and cloudflare --summary print a compact table to stderr; JSON stays on stdout.
 //
 // Examples:
@@ -494,12 +495,13 @@ function weekStart(date) {
 }
 
 // Rolls daily groups into UTC Monday weeks. Daily uniques are per day, so a week reports their
-// average rather than a sum; summing them would count returning visitors once per day.
-export function summarizeCloudflareWeeks(groups) {
+// average rather than a sum; summing them would count returning visitors once per day. Days
+// from `today` on are left out because a partial day would pull the week's average down.
+export function summarizeCloudflareWeeks(groups, today) {
   const weeks = new Map();
   for (const group of groups) {
     const date = group.dimensions?.date;
-    if (!date) continue;
+    if (!date || date >= today) continue;
     const key = weekStart(date);
     const week = weeks.get(key) ?? { weekStart: key, days: 0, uniques: 0, pageViews: 0, requests: 0, bytes: 0 };
     week.days += 1;
@@ -546,7 +548,7 @@ export async function cloudflareReport({ env, fetchImpl = globalThis.fetch, now,
     variables: { zone: zoneId, start: range.start, end: range.end },
   });
   const groups = totals?.httpRequests1dGroups ?? [];
-  const result = { ...range, days: groups, weeks: summarizeCloudflareWeeks(groups) };
+  const result = { ...range, days: groups, weeks: summarizeCloudflareWeeks(groups, (now ?? new Date()).toISOString().slice(0, 10)) };
   if (!options.host) return result;
   const dates = eachDay(range);
   if (dates.length > CLOUDFLARE_ADAPTIVE_MAX_DAYS) {
@@ -570,8 +572,8 @@ export async function cloudflareReport({ env, fetchImpl = globalThis.fetch, now,
         ? { referrers: (zone?.referrers ?? []).map((group) => ({ referrer: group.dimensions.clientRefererHost, requests: group.count })) }
         : {}),
       htmlResponses: zone?.html?.[0]?.count ?? 0,
-      countries: (zone?.countries ?? []).map((group) => ({ country: group.dimensions.clientCountryName, requests: group.count })),
-      browsers: (zone?.browsers ?? []).map((group) => ({ browser: group.dimensions.userAgentBrowser, requests: group.count })),
+      countries: (zone?.countries ?? []).map((group) => ({ country: group.dimensions.clientCountryName, htmlResponses: group.count })),
+      browsers: (zone?.browsers ?? []).map((group) => ({ browser: group.dimensions.userAgentBrowser, htmlResponses: group.count })),
     });
   }
   result.host = {

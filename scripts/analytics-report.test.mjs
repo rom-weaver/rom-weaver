@@ -456,8 +456,8 @@ test("cloudflare --host queries each day and rejects ranges beyond adaptive rete
     date: "2026-01-01",
     referrers: [{ referrer: "google.com", requests: 4 }],
     htmlResponses: 3,
-    countries: [{ country: "US", requests: 2 }],
-    browsers: [{ browser: "Chrome", requests: 3 }],
+    countries: [{ country: "US", htmlResponses: 2 }],
+    browsers: [{ browser: "Chrome", htmlResponses: 3 }],
   });
   assert.match(result.host.note, /once per UTC day/);
   await assert.rejects(
@@ -526,8 +526,9 @@ test("cloudflare weeks average daily uniques per UTC Monday week and format a su
     day("2026-01-04", 100, 300),
     day("2026-01-05", 200, 500),
     day("2026-01-06", 300, 700),
+    day("2026-01-07", 10, 20),
     { sum: { requests: 1 } },
-  ]);
+  ], "2026-01-07");
   assert.deepEqual(weeks, [
     { weekStart: "2025-12-29", days: 1, pageViews: 300, requests: 600, bytes: 2e9, avgDailyUniques: 100, pageViewsPerUnique: 3 },
     { weekStart: "2026-01-05", days: 2, pageViews: 1200, requests: 2400, bytes: 4e9, avgDailyUniques: 250, pageViewsPerUnique: 2.4 },
