@@ -12,7 +12,7 @@ import {
   replaceFileNameExtension,
   stripLeadingExtensionDot,
 } from "../path-utils.ts";
-import { isAmbiguousDiscImageExtension, isLikelyDiscImageSize } from "./disc-image-policy.ts";
+import { isAmbiguousDiscImageExtension, isLikelyDiscImageSize, isXboxSource } from "./disc-image-policy.ts";
 import { createRomSpecificExtensionRegex } from "./rom-specific-format-support.ts";
 import {
   z3dsCompressedExtensionForSourceExtension,
@@ -380,6 +380,7 @@ const resolveAutomaticCompressionFormat = ({
   parentKind,
   sourceFileName,
   sourceSize,
+  sourcePlatform,
   hasDiscEvidence = false,
 }: {
   fallback?: CompressionFormat;
@@ -387,6 +388,8 @@ const resolveAutomaticCompressionFormat = ({
   parentKind?: string | null;
   sourceFileName?: string;
   sourceSize?: number | null;
+  /** Engine platform verdict; an Xbox XISO never resolves to CHD. */
+  sourcePlatform?: string | null;
   /** Content evidence that an ambiguous-extension source (`.bin`) is a CD image; see `disc-image-policy.ts`. */
   hasDiscEvidence?: boolean;
 }): CompressionFormat => {
@@ -396,6 +399,7 @@ const resolveAutomaticCompressionFormat = ({
   const extension = normalizeExtension(getSourceFileExtension(sourceFileName));
   const extensionFormat = getCompressionFormatForFileExtension(extension);
   if (!extensionFormat) return fallback;
+  if (extensionFormat === "chd" && isXboxSource(sourcePlatform, sourceFileName)) return fallback;
   // `.bin` doubles as a bare console ROM dump; an ambiguous-extension source without content
   // evidence (sync header / ISO9660 descriptor, or a cue sheet) and a sector-aligned size is not a
   // disc image, so it does not auto-resolve to a disc container. The sector sizes + ambiguous-extension

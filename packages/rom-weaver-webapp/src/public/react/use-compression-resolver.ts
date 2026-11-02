@@ -90,6 +90,7 @@ const resolveCompressionState = ({
     parentCompressions: romInputs[0]?.archivePathEntries,
     sourceFileName: String(romInputs[0]?.info?.fileName || getBinarySourceFileName(effectiveInputs[0], "")),
     sourceSize: resolvedSourceSize,
+    sourcePlatform: romInputs[0]?.info?.romType?.platform,
     hasDiscEvidence,
   });
   const defaultResolvedCompression = resolveAutomaticCompressionFormat({
@@ -97,6 +98,7 @@ const resolveCompressionState = ({
     parentCompressions: romInputs[0]?.archivePathEntries,
     sourceFileName: String(romInputs[0]?.info?.fileName || getBinarySourceFileName(effectiveInputs[0], "")),
     sourceSize: resolvedSourceSize,
+    sourcePlatform: romInputs[0]?.info?.romType?.platform,
     hasDiscEvidence,
   });
   const automaticSpecialCompression = OutputCompressionManager.resolveOutputCompression(z3dsLabelSource, {
@@ -181,6 +183,8 @@ const useCompressionResolver = ({
     const recommendedFormat = romInputs[0]?.info?.romType?.recommendedFormat;
     // Native `chd` auto-inference verdict for the source's bytes (Rust ingest), read by the panel mode.
     const chdCreateMode = romInputs[0]?.info?.romType?.chdCreateMode;
+    // Engine platform verdict; "Microsoft Xbox" keeps CHD out of the format list for an XISO.
+    const platform = romInputs[0]?.info?.romType?.platform;
     // A staged disc track carries its sheet, which makes the uncompressed output several files.
     const cueText = romInputs[0]?.cueText;
     const gdiText = romInputs[0]?.gdiText;
@@ -192,7 +196,7 @@ const useCompressionResolver = ({
       const baseSize = romInputs[0]?.size ?? getBinarySourceSize(baseSource);
       return {
         ...(baseSource as unknown as Record<string, unknown>),
-        ...(chdMode || discFormat || recommendedFormat || chdCreateMode || cueText || gdiText
+        ...(chdMode || discFormat || recommendedFormat || platform || chdCreateMode || cueText || gdiText
           ? {
               metadata: {
                 ...(chdCreateMode ? { chdCreateMode } : {}),
@@ -200,6 +204,7 @@ const useCompressionResolver = ({
                 ...(cueText ? { cueText } : {}),
                 ...(discFormat ? { format: discFormat } : {}),
                 ...(gdiText ? { gdiText } : {}),
+                ...(platform ? { platform } : {}),
                 ...(recommendedFormat ? { recommendedFormat } : {}),
               },
             }

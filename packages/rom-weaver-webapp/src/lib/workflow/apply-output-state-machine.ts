@@ -35,6 +35,7 @@ const resolveAutomaticFormat = (
     parentCompressions: input?.view?.parentCompressions,
     sourceFileName: stripFileNameQuery(sourceName),
     sourceSize: getSourceSize(input?.sources[0]),
+    sourcePlatform: input?.view?.state?.romType?.platform,
     hasDiscEvidence: hasDiscImageEvidence(input?.view?.state?.romType?.recommendedFormat, input?.view?.state?.chdMode),
   });
 };
