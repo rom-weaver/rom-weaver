@@ -10,7 +10,7 @@ use std::path::Path;
 use tracing::{debug, trace};
 
 use crate::platform_detection::{self, DiscSectorSource, detect_disc_platform, platform};
-use crate::rom_headers::KnownRomHeader;
+use crate::rom_headers::{KnownRomHeader, has_xiso_volume_descriptor};
 
 /// Prefix covering sector-0 signatures and ISO 9660 metadata at both supported
 /// sector sizes.
@@ -120,6 +120,13 @@ impl DiscSectorSource for PrefixDisc<'_> {
 /// be masked by weak cartridge heuristics (e.g. a zeroed prefix or a leading
 /// `"AB"`).
 pub fn detect_rom_identity(prefix: &[u8], total_len: u64, extension: Option<&str>) -> RomIdentity {
+    if has_xiso_volume_descriptor(prefix) {
+        trace!("detected Xbox XISO volume descriptor");
+        return RomIdentity {
+            platform: Some(platform::XBOX),
+            disc_format: Some(DiscFormat::Dvd),
+        };
+    }
     if let Some(identity) = detect_disc_identity(prefix, total_len, extension) {
         trace!(
             platform = ?identity.platform,

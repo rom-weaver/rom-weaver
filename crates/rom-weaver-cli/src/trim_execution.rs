@@ -24,8 +24,7 @@ pub(super) enum TrimOutputPlan {
     Pack {
         handler: Arc<dyn ContainerHandler>,
         entry_name: String,
-        /// The format name passed to the container's `create`; a media-layout variant such as
-        /// `chd-dvd` where the container name alone would be inferred from the file.
+        /// The format name passed to the container's `create`.
         create_format: &'static str,
     },
 }
@@ -451,6 +450,18 @@ impl CliApp {
         {
             return Ok(TrimOutputPlan::Direct);
         }
+        if kind == TrimInputKind::Xiso && descriptor.matches_name("chd") {
+            debug!(
+                source = %source.display(),
+                destination = %destination.display(),
+                "trim rejected CHD output for an Xbox XISO"
+            );
+            return Err(RomWeaverError::Validation(format!(
+                "`{}` is an Xbox XISO image, which cannot be stored as CHD: `{}` must end in .xiso, .zip, or .7z",
+                source.display(),
+                destination.display()
+            )));
+        }
         if kind == TrimInputKind::ThreeDs && descriptor.matches_name("z3ds") {
             Self::validate_three_ds_z3ds_name(source, destination, subject)?;
         }
@@ -491,13 +502,6 @@ impl CliApp {
             )));
         }
         let entry_name = Self::trim_pack_entry_name(kind, source, destination);
-        // CHD infers its media from the packed file, which would build a CD or raw CHD for an
-        // XISO; it is a DVD-class disc, so ask for the DVD layout outright.
-        let create_format = if kind == TrimInputKind::Xiso && descriptor.matches_name("chd") {
-            "chd-dvd"
-        } else {
-            format
-        };
         debug!(
             destination = %destination.display(),
             format,
@@ -507,7 +511,7 @@ impl CliApp {
         Ok(TrimOutputPlan::Pack {
             handler,
             entry_name,
-            create_format,
+            create_format: format,
         })
     }
 
