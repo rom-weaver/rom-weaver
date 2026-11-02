@@ -10,6 +10,8 @@ type WorkflowOutputStepProps = OutputCardProps & {
     onToggle: () => void;
   };
   fault?: boolean;
+  /** Right-aligned header control, such as a mode toggle. */
+  headerExtra?: ReactNode;
   id?: string;
   info?: ReactNode;
   meta?: ReactNode;
@@ -34,6 +36,7 @@ type OutputRunActionProps = {
 const WorkflowOutputStep = ({
   fault,
   collapse,
+  headerExtra,
   id,
   info,
   meta,
@@ -44,7 +47,17 @@ const WorkflowOutputStep = ({
   woven,
   ...output
 }: WorkflowOutputStepProps) => (
-  <StepSection collapse={collapse} fault={fault} id={id} info={info} meta={meta} num={num} title={title} woven={woven}>
+  <StepSection
+    collapse={collapse}
+    fault={fault}
+    headerExtra={headerExtra}
+    id={id}
+    info={info}
+    meta={meta}
+    num={num}
+    title={title}
+    woven={woven}
+  >
     <OutputCard {...output} />
     {notice}
     {secondary}

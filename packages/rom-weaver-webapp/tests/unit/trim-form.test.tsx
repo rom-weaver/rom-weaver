@@ -7,6 +7,7 @@ import type { BinarySource } from "../../src/public/react/patcher-form.ts";
 let recommendedFormat: string | undefined;
 let stagingGate: Promise<void> | undefined;
 let startUnidentified = false;
+let paddingTrimmed: boolean | undefined;
 const changeListeners = new Set<() => void>();
 
 const makeTrimSource = (fileName: string) => ({
@@ -29,6 +30,7 @@ const makeTrimSource = (fileName: string) => ({
         status: "matched",
       },
   parentCompressions: [],
+  ...(paddingTrimmed === undefined ? {} : { paddingTrimmed, restoreSupported: true }),
   romProbe: recommendedFormat ? undefined : { trim: { detected: true, trimmedInputBytes: 96 } },
   romType: recommendedFormat ? { recommendedFormat } : undefined,
   selectedCandidateId: "rom-candidate",
@@ -80,6 +82,7 @@ const makeFakeTrimWorkflow = () => {
       input = makeTrimSource(source instanceof File ? source.name : "game.nes");
     }),
     setSettings: vi.fn(async () => undefined),
+    setMode: vi.fn(async () => undefined),
     setOutputFormat: vi.fn(async () => undefined),
     setOutputName: vi.fn(async () => undefined),
   };
@@ -113,6 +116,7 @@ beforeEach(() => {
   recommendedFormat = undefined;
   stagingGate = undefined;
   startUnidentified = false;
+  paddingTrimmed = undefined;
   changeListeners.clear();
 });
 
@@ -544,5 +548,81 @@ describe("TrimPatchForm", () => {
     };
 
     expect(await runWithTypedName("Hack v1.2")).toBe("Hack v1.2.zip");
+  });
+
+  describe("restore padding", () => {
+    const stageRom = async (fileName: string) => {
+      const file = new File(["rom"], fileName, { type: "application/octet-stream" });
+      const view = renderForm({ pageDrop: { files: [file], id: 1 } });
+      await vi.waitFor(() => expect(view.container.querySelector("#trim-builder-button-run")).toBeTruthy());
+      await waitForWorkflow();
+      await vi.waitFor(() => expect(view.container.textContent).toContain("Trim Example (USA)"));
+      return view;
+    };
+    const confirmRun = async (container: HTMLElement, confirmLabel: string) => {
+      await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+      const confirm = Array.from(document.querySelectorAll("button")).find(
+        (button) => button.textContent === confirmLabel && !button.closest("#trim-builder-mode"),
+      );
+      expect(confirm).toBeTruthy();
+      await act(async () => fireEvent.click(confirm as HTMLButtonElement));
+      await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalled());
+    };
+    const modeButton = (container: HTMLElement, label: string) =>
+      Array.from(container.querySelectorAll("#trim-builder-mode button")).find(
+        (button) => button.textContent === label,
+      ) as HTMLButtonElement;
+
+    it("defaults an already-trimmed ROM to restoring its padding", async () => {
+      paddingTrimmed = true;
+      const { container } = await stageRom("game (trimmed).nes");
+      await vi.waitFor(() =>
+        expect(container.querySelector("#trim-builder-button-run")?.textContent).toContain("RESTORE & DOWNLOAD"),
+      );
+      expect(modeButton(container, "Restore padding").getAttribute("aria-pressed")).toBe("true");
+      const nameField = container.querySelector("#trim-builder-output-file") as HTMLInputElement;
+      expect(nameField.value).toBe("Trim Example (USA)");
+      await confirmRun(container, "Restore padding");
+      expect(latest?.workflow.setMode).toHaveBeenLastCalledWith("restore");
+      expect(String(latest?.workflow.setOutputName.mock.calls.at(-1)?.[0])).not.toContain("(trimmed)");
+    });
+
+    it("names a restore of an unlabelled ROM so it differs from the input", async () => {
+      paddingTrimmed = true;
+      const { container } = await stageRom("game.nes");
+      const nameField = container.querySelector("#trim-builder-output-file") as HTMLInputElement;
+      fireEvent.change(nameField, { target: { value: "game" } });
+      await confirmRun(container, "Restore padding");
+      expect(String(latest?.workflow.setOutputName.mock.calls.at(-1)?.[0])).toMatch(/^game \(restored\)\./);
+    });
+
+    it("lets the user switch a trimmed ROM back to trimming", async () => {
+      paddingTrimmed = true;
+      const { container } = await stageRom("game.nes");
+      await vi.waitFor(() => expect(modeButton(container, "Trim")).toBeTruthy());
+      await act(async () => fireEvent.click(modeButton(container, "Trim")));
+      expect(container.querySelector("#trim-builder-button-run")?.textContent).toContain("TRIM & DOWNLOAD");
+      expect((container.querySelector("#trim-builder-output-file") as HTMLInputElement).value).toBe(
+        "Trim Example (USA) (trimmed)",
+      );
+      await confirmRun(container, "Trim ROM");
+      expect(latest?.workflow.setMode).toHaveBeenLastCalledWith("trim");
+    });
+
+    it("keeps trim selected for an untrimmed ROM that can be restored", async () => {
+      paddingTrimmed = false;
+      const { container } = await stageRom("game.nes");
+      await vi.waitFor(() => expect(container.querySelector("#trim-builder-mode")).toBeTruthy());
+      expect(modeButton(container, "Trim").getAttribute("aria-pressed")).toBe("true");
+      await confirmRun(container, "Trim ROM");
+      expect(latest?.workflow.setMode).toHaveBeenLastCalledWith("trim");
+    });
+
+    it("offers no mode switch when the input cannot be restored", async () => {
+      const { container } = await stageRom("game.nes");
+      expect(container.querySelector("#trim-builder-mode")).toBeNull();
+      await confirmRun(container, "Trim ROM");
+      expect(latest?.workflow.setMode).toHaveBeenLastCalledWith("trim");
+    });
   });
 });

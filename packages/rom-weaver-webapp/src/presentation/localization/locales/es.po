@@ -5186,7 +5186,7 @@ msgstr "La CLI puede inspeccionar archivos y calcular sumas de verificación."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.find.cliTrimRevertHint"
-msgstr "La CLI puede restaurar el relleno; la página Trim del navegador no."
+msgstr "La CLI también puede escribir un marcador de reversión para que una restauración posterior sea exacta."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

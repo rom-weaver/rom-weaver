@@ -5186,7 +5186,7 @@ msgstr "The CLI can inspect files and calculate checksums."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.find.cliTrimRevertHint"
-msgstr "The CLI can restore padding; the browser Trim page cannot."
+msgstr "The CLI can also write a revert marker so a later restore is exact."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

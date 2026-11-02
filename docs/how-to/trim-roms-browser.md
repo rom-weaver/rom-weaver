@@ -1,6 +1,6 @@
 # Trim a ROM in the browser
 
-Use Trim to remove padding from a supported ROM and download a smaller copy. Keep the original for future patches.
+Use Trim to remove padding from a supported ROM and download a smaller copy, or to pad a trimmed ROM back to full size. Keep the original for future patches.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -37,6 +37,9 @@ A file without removable padding may have no useful size reduction. A format tha
 
 ## Restore padding
 
-The browser does not expose the CLI's restore-padding or revert-marker options. Use [Trim and restore from the CLI](cli-trim.md#put-the-padding-back) when you need them.
+1. Add the trimmed NDS, GBA, or 3DS ROM. Trim selects **Restore padding** in the output step when the ROM is already trimmed. Select it yourself for any other ROM it can restore.
+2. Choose an output name and format.
+3. Select **RESTORE & DOWNLOAD**, then select **Restore padding** to continue.
+4. Save the result and test it in the emulator or hardware you use.
 
-Restoring padding does not always reproduce the original bytes. XISO trimming and RVZ conversion do not support restore-padding. [Compression and trimming](../explanation/compression-formats.md#trim-compress-or-both) explains the difference.
+The output is the original byte for byte only for a ROM trimmed with the CLI's revert marker and uniform padding. Otherwise the padding is rebuilt as `0xFF` up to the next power-of-two size, which may not match the original. XISO trimming and RVZ conversion cannot be restored, and Trim does not offer **Restore padding** for them. The browser does not write revert markers; use [Trim and restore from the CLI](cli-trim.md#make-the-trim-reversible) for that. [Compression and trimming](../explanation/compression-formats.md#trim-compress-or-both) explains the difference.

@@ -401,6 +401,8 @@ test("trim rejects unsupported input and allows a successful retry", async () =>
       await result.output.dispose();
     }
     await workflow.setInput(new File([buildTestNdsRom().subarray(0, 0x3000)], "already-trimmed.nds"));
+    // An already-trimmed ROM defaults to restoring its padding; trimming it again changes nothing.
+    await workflow.setMode("trim");
     const unchanged = await workflow.run();
     try {
       expect(unchanged.output.size).toBe(0x3000);
@@ -428,3 +430,91 @@ test("trim staging settles for an empty file and the next file", async () => {
     await workflow.dispose();
   }
 }, 60000);
+
+// `RWT\x01` revert footer: fill byte, 40-bit LE padding length, CRC-32 of the first 10 bytes.
+const appendRevertFooter = (data, padLength, padByte) => {
+  const footer = new Uint8Array(14);
+  footer.set([0x52, 0x57, 0x54, 0x01, padByte], 0);
+  for (let index = 0; index < 5; index++) footer[5 + index] = Math.floor(padLength / 256 ** index) & 0xff;
+  let crc = 0xffffffff;
+  for (const byte of footer.subarray(0, 10)) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  writeLe32(footer, 10, ~crc >>> 0);
+  const marked = new Uint8Array(data.length + footer.length);
+  marked.set(data, 0);
+  marked.set(footer, data.length);
+  return marked;
+};
+
+const readOutputBytes = async (output) => new Uint8Array(await (await output.getBlob()).arrayBuffer());
+
+test("trim stages an already-trimmed ROM for restore and pads it back", async () => {
+  const workflow = new TrimWorkflow({ settings: { output: { compression: "none" }, workers: { threads: 1 } } });
+  try {
+    await workflow.setInput(new File([buildTestNdsRom()], "game.nds"));
+    expect(workflow.getInput()).toMatchObject({ paddingTrimmed: false, restoreSupported: true });
+    expect(workflow.getSnapshot().mode).toBe("trim");
+
+    const trimmed = buildTestNdsRom().subarray(0, 0x3000);
+    await workflow.setInput(new File([trimmed], "game (trimmed).nds"));
+    expect(workflow.getInput()).toMatchObject({ paddingTrimmed: true, restoreSupported: true });
+    expect(workflow.getSnapshot()).toMatchObject({ mode: "restore", outputName: "game.nds" });
+    const result = await workflow.run();
+    try {
+      const bytes = await readOutputBytes(result.output);
+      expect(result.output.fileName).toBe("game.nds");
+      expect(bytes.length).toBe(0x4000);
+      expect(bytes.subarray(0, 0x3000)).toEqual(trimmed);
+      expect(bytes.subarray(0x3000).every((byte) => byte === 0xff)).toBe(true);
+    } finally {
+      await result.output.dispose();
+    }
+
+    await workflow.setMode("trim");
+    const unchanged = await workflow.run();
+    try {
+      expect(unchanged.output.size).toBe(0x3000);
+    } finally {
+      await unchanged.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("trim restores a revert-marked ROM byte for byte", async () => {
+  const original = buildTestNdsRom().subarray(0, 0x4000).slice();
+  original.fill(0x00, 0x3000);
+  const marked = appendRevertFooter(original.subarray(0, 0x3000), 0x1000, 0x00);
+  const workflow = new TrimWorkflow({ settings: { output: { compression: "none" }, workers: { threads: 1 } } });
+  try {
+    await workflow.setInput(new File([marked], "game.nds"));
+    expect(workflow.getInput()).toMatchObject({ paddingTrimmed: true, restoreSupported: true });
+    expect(workflow.getSnapshot()).toMatchObject({ mode: "restore", outputName: "game (restored).nds" });
+    const result = await workflow.run();
+    try {
+      expect(await readOutputBytes(result.output)).toEqual(original);
+    } finally {
+      await result.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("trim offers no restore for an XISO", async () => {
+  const workflow = new TrimWorkflow({ settings: { output: { compression: "none" }, workers: { threads: 1 } } });
+  try {
+    const xiso = new Uint8Array(xisoFixture().length + 65536);
+    xiso.set(xisoFixture());
+    await workflow.setInput(new File([xiso], "game.iso"));
+    expect(workflow.getInput()).toMatchObject({ paddingTrimmed: false, restoreSupported: false, trimSupported: true });
+    expect(workflow.getSnapshot().mode).toBe("trim");
+    await workflow.setMode("restore");
+    await expect(workflow.run()).rejects.toThrow("This input does not support restoring padding");
+  } finally {
+    await workflow.dispose();
+  }
+});

@@ -177,6 +177,8 @@ type TrimWorkflowOptions = CreateWorkflowOptions;
 
 type TrimInput = {
   source: SourceRef;
+  /** Restore removed padding instead of removing it. */
+  revert?: boolean;
   selectedSourceEntryName?: string;
   options?: TrimWorkflowOptions;
 };

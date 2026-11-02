@@ -1355,6 +1355,24 @@ fn trim_revert_marker_round_trips_byte_identical() {
     );
 
     let reverted = temp.child("game.revert.gba");
+    for (input, revert_marker) in [(&trimmed, true), (&source, false)] {
+        let plan = parse_single_json_line(&command_stdout(
+            &[
+                "trim",
+                "--input",
+                input.path().to_str().expect("path"),
+                "--revert",
+                "--dry-run",
+                "--output",
+                reverted.path().to_str().expect("path"),
+                "--json",
+            ],
+            0,
+        ));
+        assert_eq!(plan["details"]["revert_marker"], revert_marker);
+        assert_eq!(plan["details"]["would_change"], u64::from(revert_marker));
+    }
+
     command_stdout(
         &[
             "trim",

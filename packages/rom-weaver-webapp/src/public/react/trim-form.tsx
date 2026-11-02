@@ -1,4 +1,4 @@
-import { Download, Scissors } from "lucide-react";
+import { Download, Scissors, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hasDiscImageEvidence } from "../../lib/compression/disc-image-policy.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
@@ -10,6 +10,7 @@ import {
 } from "../../lib/compression/container-format-registry.ts";
 import { removeKnownOutputExtension, withOutputExtension } from "../../lib/output/output-name-validation.ts";
 import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
+import { markTrimOutputStem, type TrimMode } from "../../lib/trim/trim-output-name.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import type {
   BrowserSaveDestination,
@@ -48,6 +49,7 @@ import {
   useUiLocalizer,
 } from "./settings-context.tsx";
 import { TrimPatchFormView, type TrimPatchFormViewModel } from "./trim-form-view.tsx";
+import { TrimModeToggle } from "./trim-mode-toggle.tsx";
 import {
   getRomDropNotice,
   getRomDropNoticeLevel,
@@ -187,6 +189,7 @@ const TrimOutputAction = ({
   busy,
   completedOutput,
   disabled,
+  mode,
   onCancelProgress,
   onDownload,
   onRun,
@@ -199,6 +202,7 @@ const TrimOutputAction = ({
   busy: boolean;
   completedOutput: CompletedTrimOutput | null;
   disabled: boolean;
+  mode: TrimMode;
   onCancelProgress: () => void;
   onDownload: () => void;
   onRun: () => void;
@@ -217,10 +221,19 @@ const TrimOutputAction = ({
             completedOutput.size,
             completedOutput.inputSize ?? sourceInputSize,
             completedOutput.rawSize,
+            mode,
           )
         : undefined
     }
-    icon={completedOutput ? <Download aria-hidden="true" /> : busy ? undefined : <Scissors aria-hidden="true" />}
+    icon={
+      completedOutput ? (
+        <Download aria-hidden="true" />
+      ) : busy ? undefined : mode === "restore" ? (
+        <Undo2 aria-hidden="true" />
+      ) : (
+        <Scissors aria-hidden="true" />
+      )
+    }
     id="trim-builder-button-run"
     onClick={completedOutput ? onDownload : onRun}
     progress={
@@ -228,20 +241,20 @@ const TrimOutputAction = ({
         ? waitingProgressProps
           ? {
               ...waitingProgressProps,
-              cancelLabel: "Cancel queued trim",
+              cancelLabel: mode === "restore" ? "Cancel queued restore" : "Cancel queued trim",
               onCancel: onCancelProgress,
             }
           : null
         : busy && progressProps && progressStage !== "input"
           ? {
               ...progressProps,
-              cancelLabel: "Cancel trim",
+              cancelLabel: mode === "restore" ? "Cancel restore" : "Cancel trim",
               onCancel: onCancelProgress,
             }
           : null
     }
   >
-    TRIM & DOWNLOAD
+    {mode === "restore" ? "RESTORE & DOWNLOAD" : "TRIM & DOWNLOAD"}
   </OutputRunAction>
 );
 
@@ -252,8 +265,6 @@ const getSourceExtension = (fileName: string) => {
 };
 
 const getFileNameStem = (fileName: string) => fileName.replace(FILE_EXTENSION_REGEX, "").trim();
-
-const appendTrimmedMarker = (baseName: string) => (/\(trimmed\)$/i.test(baseName) ? baseName : `${baseName} (trimmed)`);
 
 const getTrimOutputExtension = (sourceFileName: string, outputFormat: string, settings?: TrimPatchFormSettings) => {
   if (isCompressionFormat(outputFormat))
@@ -266,17 +277,17 @@ const getTrimOutputExtension = (sourceFileName: string, outputFormat: string, se
 
 // The filename field holds the stem only - the format selector owns the
 // extension, which resolveTrimExecutionOutputName appends at run time.
-const getDefaultTrimOutputName = (sourceFileName: string, identifiedBase?: string | null) =>
-  appendTrimmedMarker(identifiedBase || getFileNameStem(sourceFileName) || "trimmed");
+const getDefaultTrimOutputName = (sourceFileName: string, mode: TrimMode, identifiedBase?: string | null) =>
+  markTrimOutputStem(identifiedBase || getFileNameStem(sourceFileName), getFileNameStem(sourceFileName), mode);
 
-const ensureTrimmedOutputName = (outputName: string, sourceFileName: string) => {
+const ensureTrimmedOutputName = (outputName: string, sourceFileName: string, mode: TrimMode) => {
   const normalizedOutputName = outputName.trim();
   if (!normalizedOutputName) return normalizedOutputName;
   // The typed name is a stem, so only a known extension ends it: `Hack v1.2` keeps its `.2`.
   const outputBaseName = removeKnownOutputExtension(normalizedOutputName).trim().toLowerCase();
   const sourceBaseName = getFileNameStem(sourceFileName).toLowerCase();
   if (outputBaseName && outputBaseName === sourceBaseName) {
-    return getDefaultTrimOutputName(sourceFileName);
+    return getDefaultTrimOutputName(sourceFileName, mode);
   }
   return normalizedOutputName;
 };
@@ -299,6 +310,7 @@ const getCompletedDownloadMeta = (
   size?: number | null,
   inputSize?: number | null,
   rawSize?: number | null,
+  mode: TrimMode = "trim",
 ) => {
   const outputSize = getFiniteSize(size);
   const sourceSize = getFiniteSize(inputSize);
@@ -313,8 +325,10 @@ const getCompletedDownloadMeta = (
   ]
     .filter(Boolean)
     .join(" · ");
-  const alreadyTrimmed = typeof sourceSize === "number" && sourceSize === trimmedSize && compressedSavedSize === 0;
-  const verb = getSourceExtension(fileName) === "rvz" ? "Converted" : alreadyTrimmed ? "Already trimmed" : "Trimmed";
+  const unchanged = typeof sourceSize === "number" && sourceSize === trimmedSize && compressedSavedSize === 0;
+  let verb = unchanged ? "Already trimmed" : "Trimmed";
+  if (mode === "restore") verb = unchanged ? "Already padded" : "Restored";
+  if (getSourceExtension(fileName) === "rvz") verb = "Converted";
   return {
     format: `${verb} .${getSourceExtension(fileName)}`,
     savedSize: savedSize || undefined,
@@ -548,6 +562,8 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const [completedCompressionTimeMs, setCompletedCompressionTimeMs] = useState<number | null>(null);
   const [completedTrimTimeMs, setCompletedTrimTimeMs] = useState<number | null>(null);
   const [outputName, setOutputName] = useState("");
+  /** The user's mode pick, kept only for the source it was made on; otherwise detection decides. */
+  const [modeChoice, setModeChoice] = useState<{ mode: TrimMode; source: BinarySource } | null>(null);
   const stagedTrimWorkflowRef = useRef<BrowserTrimWorkflow | null>(null);
   const stagedTrimWorkflowGenerationRef = useRef(0);
   const stagedTrimWorkflowReadyRef = useRef<Promise<void> | null>(null);
@@ -600,9 +616,17 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     (error: Error) => setWorkflowMessage("output", error),
     [setWorkflowMessage],
   );
+  const restoreAvailable = sourceState?.restoreSupported === true;
+  const chosenMode = modeChoice && modeChoice.source === source ? modeChoice.mode : null;
+  const mode: TrimMode = restoreAvailable ? (chosenMode ?? (sourceState?.paddingTrimmed ? "restore" : "trim")) : "trim";
   const createInitialProgress = useCallback(
-    () => createIndeterminateWorkflowProgress({ label: "Trimming...", role: "worker", stage: "trim" }),
-    [],
+    () =>
+      createIndeterminateWorkflowProgress({
+        label: mode === "restore" ? "Restoring padding..." : "Trimming...",
+        role: "worker",
+        stage: "trim",
+      }),
+    [mode],
   );
   const notifyError = useCallback((error: Error) => onErrorRef.current?.(error), []);
   const uploadDisabled = !!props.disabled || busy;
@@ -671,10 +695,10 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const generatedOutputName =
     configuredOutputName ||
     (source
-      ? getDefaultTrimOutputName(resolvedSourceFileName, useIdentifiedOutputName ? identifiedOutputTitle : null)
+      ? getDefaultTrimOutputName(resolvedSourceFileName, mode, useIdentifiedOutputName ? identifiedOutputTitle : null)
       : "");
   const rawResolvedOutputName = outputName.trim() || generatedOutputName;
-  const resolvedOutputName = ensureTrimmedOutputName(rawResolvedOutputName, resolvedSourceFileName);
+  const resolvedOutputName = ensureTrimmedOutputName(rawResolvedOutputName, resolvedSourceFileName, mode);
   const executionOutputName =
     resolveTrimExecutionOutputName(resolvedOutputName, resolvedOutputFormat, resolvedSourceFileName, settings) ||
     resolveTrimExecutionOutputName(generatedOutputName, resolvedOutputFormat, resolvedSourceFileName, settings);
@@ -794,6 +818,12 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     resetWorkflowOutput({ clearProgress: false });
     if (!props.settings) setInternalSettings(nextSettings);
     props.onSettingsChange?.(nextSettings);
+  };
+
+  const updateMode = (nextMode: TrimMode) => {
+    if (nextMode === mode || !source) return;
+    resetWorkflowOutput();
+    setModeChoice({ mode: nextMode, source });
   };
 
   const updateOutputFormat = (nextOutputFormat: string) => {
@@ -1009,6 +1039,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         ),
       );
       await trimWorkflow.setOutputFormat(resolvedOutputFormat);
+      await trimWorkflow.setMode(mode);
       await trimWorkflow.setOutputName(executionOutputName);
 
       if (trimWorkflow.getInput()?.status !== "ready" || !trimWorkflow.getInput()?.selectedCandidateId) {
@@ -1147,8 +1178,10 @@ function TrimPatchForm(props: TrimPatchFormProps) {
           }
         : null,
       options: {
+        mode,
         outputFormat: resolvedOutputFormat,
         outputName: executionOutputName,
+        restoreAvailable,
       },
       output: completedOutput
         ? {
@@ -1160,18 +1193,28 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         : null,
     }),
     actions: {
+      restoreMode: {
+        description: "Restore the staged ROM's removed padding instead of trimming it.",
+        enabled: restoreAvailable && !busy && mode !== "restore",
+        execute: () => updateMode("restore"),
+      },
+      trimMode: {
+        description: "Trim the staged ROM's padding instead of restoring it.",
+        enabled: restoreAvailable && !busy && mode !== "trim",
+        execute: () => updateMode("trim"),
+      },
       run: {
-        description: "Open the trim confirmation or cancel the active trim.",
+        description: "Open the trim or restore confirmation, or cancel the active run.",
         enabled: !(completedOutput || actionDisabled),
         execute: onRunClick,
       },
       download: {
-        description: "Download the completed trimmed ROM.",
+        description: "Download the completed trimmed or restored ROM.",
         enabled: !!completedOutput && !busy,
         execute: () => void runTrim(),
       },
       cancel: {
-        description: "Cancel ROM staging, a queued trim, or the active trim.",
+        description: "Cancel ROM staging, a queued run, or the active run.",
         enabled: sourceStaging || trimQueued || busy,
         execute: sourceStaging ? cancelSourceStaging : cancelTrimOutputProgress,
       },
@@ -1225,6 +1268,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         busy={busy}
         completedOutput={completedOutput}
         disabled={actionDisabled}
+        mode={mode}
         onCancelProgress={cancelTrimOutputProgress}
         onDownload={() => void runTrim()}
         onRun={onRunClick}
@@ -1249,7 +1293,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     disabled: outputDisabled,
     fileName: resolvedOutputName,
     fileNameId: "trim-builder-output-file",
-    fileNamePlaceholder: "Trimmed filename (no extension)",
+    fileNamePlaceholder: mode === "restore" ? "Restored filename (no extension)" : "Trimmed filename (no extension)",
     format: resolvedOutputFormat,
     outputExtensions: [
       getTrimOutputExtension(resolvedSourceFileName, resolvedOutputFormat, settings),
@@ -1257,6 +1301,9 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     ],
     formatId: "trim-builder-select-output-format",
     formatOptions,
+    headerExtra: restoreAvailable ? (
+      <TrimModeToggle disabled={outputDisabled} onChange={updateMode} value={mode} />
+    ) : undefined,
     info: (
       <InfoPopover title="Output options">
         <strong>Output</strong>
@@ -1264,6 +1311,14 @@ function TrimPatchForm(props: TrimPatchFormProps) {
           <li>Set the filename without an extension - the format selector controls it.</li>
           {losslessDiscConversion ? (
             <li>Disc conversion preserves all data in RVZ. Savings come from compression.</li>
+          ) : restoreAvailable ? (
+            <>
+              <li>Trim removes trailing padding. Restore padding pads a trimmed ROM back to its full size.</li>
+              <li>
+                Restore padding is selected for ROMs that are already trimmed. Only a ROM trimmed with a revert marker
+                comes back byte for byte; other padding is rebuilt as 0xFF up to a power-of-two size.
+              </li>
+            </>
           ) : (
             <>
               <li>Trimming permanently removes trailing padding from the ROM and can't be undone.</li>
@@ -1306,12 +1361,15 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       });
     },
     onFormatChange: updateOutputFormat,
-    title: "Trim",
+    title: mode === "restore" ? "Restore" : "Trim",
   });
 
   let trimConfirmationBody = `The trimmed copy of ${sourceFileName} is saved as a new download - your original file is not changed. Keep the original: some patches and tools need the untrimmed ROM, and restored padding may not be byte-identical.`;
   if (losslessDiscConversion) {
     trimConfirmationBody = `A lossless copy of ${sourceFileName} is saved as a new download. All disc data is preserved; savings come from compression. Your original file is not changed.`;
+  }
+  if (mode === "restore") {
+    trimConfirmationBody = `A padded copy of ${sourceFileName} is saved as a new download - your original file is not changed. Only a ROM trimmed with a revert marker comes back byte for byte; other padding is rebuilt as 0xFF.`;
   }
   if (trimPreparationPending) {
     trimConfirmationBody = `A new copy of ${sourceFileName} is saved as a download. Supported cartridge padding is removed; GameCube and Wii discs are converted losslessly. Your original file is not changed. Keep the original for patches and tools.`;
@@ -1323,11 +1381,11 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     confirm: {
       body: trimConfirmationBody,
       cancelLabel: "Cancel",
-      confirmLabel: "Trim ROM",
+      confirmLabel: mode === "restore" ? "Restore padding" : "Trim ROM",
       onCancel: () => setConfirmOpen(false),
       onConfirm: onConfirmTrim,
       open: confirmOpen,
-      title: "Trim this ROM?",
+      title: mode === "restore" ? "Restore this ROM's padding?" : "Trim this ROM?",
     },
     dialog: candidateSelectionDialog,
     dropZone: {

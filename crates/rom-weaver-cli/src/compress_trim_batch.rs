@@ -1051,6 +1051,11 @@ impl CliApp {
             config.thread_execution.clone(),
         );
 
+        // Read before the run: an in-place revert removes the footer it reports.
+        let revert_marker = (config.source_count == 1 && config.operation == TrimOperation::Revert)
+            .then(|| {
+                Self::read_revert_footer(&trim_source.path).is_ok_and(|footer| footer.is_some())
+            });
         let trim_result = self.trim_file_into_output(
             &trim_source.path,
             &output_path,
@@ -1134,6 +1139,17 @@ impl CliApp {
                         metadata.insert("raw_size".into(), json!(size));
                     }
                     state.single_metadata = Some(Value::Object(metadata));
+                }
+                // Whether a revert restores recorded padding or reconstructs it by convention, so a
+                // caller can tell a marked trim apart from a merely unpadded file.
+                if let Some(revert_marker) = revert_marker {
+                    trace!(revert_marker, path = %trim_source.path.display(), "trim revert footer probe");
+                    let metadata = state
+                        .single_metadata
+                        .get_or_insert_with(|| Value::Object(serde_json::Map::new()));
+                    if let Value::Object(metadata) = metadata {
+                        metadata.insert("revert_marker".into(), json!(revert_marker));
+                    }
                 }
                 Self::record_trim_outcome(outcome, config, state);
             }
