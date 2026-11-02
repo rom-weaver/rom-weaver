@@ -495,7 +495,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
         },
       },
       revert: this.mode === "restore",
-      // Only formats the engine can restore accept the footer; XISO and RVZ conversion reject it.
+      // Only formats the engine can restore accept the footer; XISO trimming rejects it.
       revertMarker: this.mode === "trim" && stage.state.restoreSupported === true,
       selectedSourceEntryName: preparedSource ? undefined : stage.selectedArchiveEntry,
       source: (preparedSource || stage.source) as never,

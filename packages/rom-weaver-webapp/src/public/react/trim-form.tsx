@@ -656,9 +656,10 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const outputDisabled = !!props.disabled || busy;
   const trimSourceReady = !!source && sourceState?.status === "ready";
   const trimPreparationPending = sourceStaging || progress?.stage === "input" || (!!source && !sourceState);
-  const trimQueueBlocked = !!message || !!errorCode || hasSourceQueueWarning(sourceState);
-  const trimReady = trimSourceReady && !trimPreparationPending;
   const trimUnsupported = sourceState?.trimSupported === false;
+  // A click queued while the source stages is dropped once the support probe flags the input.
+  const trimQueueBlocked = !!message || !!errorCode || hasSourceQueueWarning(sourceState) || trimUnsupported;
+  const trimReady = trimSourceReady && !trimPreparationPending;
   const actionDisabled =
     !!props.disabled || trimQueued || !(busy || completedOutput || source) || (trimUnsupported && !busy);
   const sourceFileName = getReactBinarySourceFileName(source, "ROM");
@@ -676,9 +677,11 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     },
     ...(typeof sourceState?.size === "number" ? { size: sourceState.size } : {}),
   };
+  // An input trim cannot handle (a GameCube/Wii disc) is converted in Compress, so Trim offers no
+  // CHD, RVZ, or Z3DS output for it either.
   const isOfferedOutputFormat = (format: string) =>
     !(CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS as readonly string[]).includes(format) ||
-    OutputCompressionManager.supportsOutputCompression(formatSource, format);
+    (!trimUnsupported && OutputCompressionManager.supportsOutputCompression(formatSource, format));
   const requestedConfiguredFormat = props.outputFormat ?? (outputFormatEdited ? internalOutputFormat : "");
   const configuredOutputFormat = isOfferedOutputFormat(requestedConfiguredFormat) ? requestedConfiguredFormat : "";
   const extractedFormatInput = {
@@ -691,13 +694,17 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     ...extractedFormatInput,
     parentCompressions: sourceState?.parentCompressions,
   });
-  const automaticOutputFormat = resolveTrimAutomaticOutputFormat({
+  const computedAutomaticOutputFormat = resolveTrimAutomaticOutputFormat({
     automaticCompressionFormat,
     defaultArchiveFormat,
     defaultCompressionMode,
     extractedCompressionFormat: resolveAutomaticCompressionFormat(extractedFormatInput),
     rawOutputFormat,
   });
+  const automaticOutputFormat =
+    trimUnsupported && !isOfferedOutputFormat(computedAutomaticOutputFormat)
+      ? rawOutputFormat
+      : computedAutomaticOutputFormat;
   const resolvedOutputFormat = configuredOutputFormat || automaticOutputFormat;
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
   // Once a run started the file keeps the name it was produced with; a late identification still

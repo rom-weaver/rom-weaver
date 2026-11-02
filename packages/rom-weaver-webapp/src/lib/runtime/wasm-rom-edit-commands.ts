@@ -26,8 +26,8 @@ import { runRomWeaverJson, relaySimpleProgress } from "./wasm-command-shared.ts"
 
 const TRIM_UNSUPPORTED_MESSAGE = "This input does not support trimming";
 const GAMECUBE_WII_COMPRESS_HINT = "Use Compress to convert GameCube and Wii discs to RVZ.";
-/** Part of the engine's refusal message for a GameCube/Wii disc (`trim_detection.rs`). */
-const GAMECUBE_WII_TRIM_REJECTION = "GameCube/Wii disc, which trim does not support";
+/** Part of the engine's refusal for a GameCube/Wii disc, or an archive holding discs (`trim_detection.rs`). */
+const GAMECUBE_WII_TRIM_REJECTION = /GameCube\/Wii discs?, which trim does not support/;
 
 const invokeRomWeaverTrimWorker = async (
   input: RuntimeTrimWorkerInput,
@@ -76,7 +76,7 @@ const invokeRomWeaverTrimWorker = async (
     } catch (error) {
       // The engine refuses a lone GameCube/Wii disc outright (Compress writes those as RVZ); report it
       // the way an unsupported input is reported so the staging probe flags it before any run.
-      if (error instanceof Error && error.message.includes(GAMECUBE_WII_TRIM_REJECTION)) {
+      if (error instanceof Error && GAMECUBE_WII_TRIM_REJECTION.test(error.message)) {
         throw Object.assign(new Error(`${TRIM_UNSUPPORTED_MESSAGE}. ${GAMECUBE_WII_COMPRESS_HINT}`), {
           code: "TRIM_UNSUPPORTED",
         });
@@ -90,7 +90,14 @@ const invokeRomWeaverTrimWorker = async (
       typeof details.skipped_unsupported === "number" &&
       details.skipped_unsupported > 0
     ) {
-      throw Object.assign(new Error(TRIM_UNSUPPORTED_MESSAGE), { code: "TRIM_UNSUPPORTED" });
+      // A batch that skipped only GameCube/Wii discs gets the same Compress hint as a lone disc.
+      const skippedDiscs = typeof details.skipped_gamecube_wii === "number" && details.skipped_gamecube_wii > 0;
+      throw Object.assign(
+        new Error(
+          skippedDiscs ? `${TRIM_UNSUPPORTED_MESSAGE}. ${GAMECUBE_WII_COMPRESS_HINT}` : TRIM_UNSUPPORTED_MESSAGE,
+        ),
+        { code: "TRIM_UNSUPPORTED" },
+      );
     }
     if (input.dryRun) {
       return {

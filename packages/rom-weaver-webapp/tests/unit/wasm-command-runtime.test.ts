@@ -666,6 +666,32 @@ describe("output-producing runtime workers", () => {
     expect(mocks.runRomWeaverJson).toHaveBeenCalledTimes(1);
   });
 
+  it("reports an archive that holds only GameCube/Wii discs with the same Compress hint", async () => {
+    for (const holds of ["a GameCube/Wii disc", "GameCube/Wii discs"]) {
+      mocks.runRomWeaverJson.mockResolvedValue(
+        failedResult(
+          `validation failed: \`/Kururin Squash! (Japan).7z\` holds ${holds}, which trim does not support; use \`rom-weaver compress\` to convert it to RVZ`,
+        ),
+      );
+      await expect(
+        invokeRomWeaverTrimWorker({ dryRun: true, sourceFilePath: "/Kururin Squash! (Japan).7z" }),
+      ).rejects.toMatchObject({
+        code: "TRIM_UNSUPPORTED",
+        message: "This input does not support trimming. Use Compress to convert GameCube and Wii discs to RVZ.",
+      });
+    }
+  });
+
+  it("points to Compress when a run skipped only GameCube/Wii discs", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({ processed: 0, skipped_gamecube_wii: 2, skipped_unsupported: 2 }),
+    );
+    await expect(invokeRomWeaverTrimWorker({ sourceFilePath: "/discs.zip" })).rejects.toMatchObject({
+      code: "TRIM_UNSUPPORTED",
+      message: expect.stringContaining("Use Compress to convert GameCube and Wii discs to RVZ"),
+    });
+  });
+
   it("does not turn other trim failures into an unsupported verdict", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(failedResult("input is empty and cannot be processed"));
     await expect(invokeRomWeaverTrimWorker({ sourceFilePath: "/game.nds" })).rejects.toThrow(

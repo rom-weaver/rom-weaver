@@ -471,6 +471,74 @@ test("trim is disabled with the reason when the staged input cannot be trimmed",
   expect(workflowMockState.runCalls).toBe(0);
 });
 
+const GAMECUBE_UNSUPPORTED_OVERRIDES = {
+  romType: { recommendedFormat: "rvz" },
+  trimSupported: false,
+  warnings: [
+    {
+      code: "TRIM_UNSUPPORTED",
+      message: "This input does not support trimming. Use Compress to convert GameCube and Wii discs to RVZ.",
+    },
+  ],
+};
+
+const getOfferedOutputFormats = () =>
+  Array.from(document.getElementById("trim-builder-select-output-format")?.options || []).map((option) => option.value);
+
+test("trim offers rvz for a disc until the staged input is flagged as untrimmable", async () => {
+  workflowMockState.inputStateOverrides = { romType: { recommendedFormat: "rvz" } };
+  workflowMockState.inputDeferred.resolve();
+  mount(
+    createElement(
+      TrimPatchForm,
+      withTrimWorkflowMock({ defaultSource: new File([new Uint8Array([0, 1, 2, 3])], "game.gcm") }),
+    ),
+  );
+  await expect.poll(getOfferedOutputFormats).toContain("rvz");
+});
+
+test("trim offers no CHD or RVZ output for a GameCube/Wii disc flagged as untrimmable", async () => {
+  workflowMockState.inputStateOverrides = GAMECUBE_UNSUPPORTED_OVERRIDES;
+  workflowMockState.inputDeferred.resolve();
+  mount(
+    createElement(
+      TrimPatchForm,
+      withTrimWorkflowMock({
+        defaultSource: new File([new Uint8Array([0, 1, 2, 3])], "game.gcm"),
+        outputFormat: "rvz",
+      }),
+    ),
+  );
+  await expect
+    .poll(() => document.getElementById("trim-builder-source-error-message")?.textContent || "")
+    .toContain("Use Compress");
+  const offered = getOfferedOutputFormats();
+  expect(offered).not.toContain("rvz");
+  expect(offered).not.toContain("chd");
+  expect(document.getElementById("trim-builder-select-output-format").value).not.toBe("rvz");
+});
+
+test("trim drops a click queued during staging when the support probe flags the disc", async () => {
+  mount(
+    createElement(
+      TrimPatchForm,
+      withTrimWorkflowMock({ defaultSource: new File([new Uint8Array([0, 1, 2, 3])], "game.gcm") }),
+    ),
+  );
+  await expect.poll(() => document.querySelectorAll(".stage-status").length).toBeGreaterThan(0);
+  await queueTrim();
+
+  workflowMockState.inputStateOverrides = GAMECUBE_UNSUPPORTED_OVERRIDES;
+  workflowMockState.inputDeferred.resolve();
+  await expect
+    .poll(() => document.getElementById("trim-builder-source-error-message")?.textContent || "")
+    .toContain("Use Compress");
+  await expect.poll(getOutputWaitingText).toBe("");
+  expect(document.getElementById("trim-builder-button-run").disabled).toBe(true);
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
+  expect(workflowMockState.runCalls).toBe(0);
+});
+
 test("trim queued default format follows unambiguous special compression input", async () => {
   mount(
     createElement(

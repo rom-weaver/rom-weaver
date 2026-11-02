@@ -227,6 +227,23 @@ test.each(["game.iso", "game.gcm"])(
   },
 );
 
+test("trim flags an archive that holds a GameCube/Wii disc as unsupported and points to Compress", async () => {
+  await warmupBrowserRuntimeExtraction();
+  const workflow = new TrimWorkflow({
+    settings: { output: { compression: "none", outputName: "trimmed.iso" }, workers: { threads: 1 } },
+  });
+  try {
+    const archive = await createZipFile("Kururin Squash! (Japan).iso", buildAlignedGameCubeRom(), "kururin.zip");
+    await workflow.setInput(archive);
+    expect(workflow.getInput().trimSupported).toBe(false);
+    const warning = workflow.getInput().warnings.find((entry) => entry.code === "TRIM_UNSUPPORTED");
+    expect(warning?.message).toContain("Use Compress to convert GameCube and Wii discs to RVZ");
+    await expect(workflow.run()).rejects.toThrow("This input does not support trimming");
+  } finally {
+    await workflow.dispose();
+  }
+});
+
 // A trim is the heavy engine pass (an XISO rebuild), so each real trim must start
 // the engine's `trim` command exactly once, with the output named after what that one run wrote.
 test.each([

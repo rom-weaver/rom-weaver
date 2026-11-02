@@ -9,6 +9,8 @@ let trimUnsupportedMessage: string | undefined;
 let stagingGate: Promise<void> | undefined;
 let startUnidentified = false;
 let paddingTrimmed: boolean | undefined;
+// The engine's content verdict for the staged input, as the format dropdowns read it.
+let romType: { recommendedFormat: string } | undefined;
 // Models staging extracting the upload: the image's name and the containers it came out of.
 let extracted: { fileName: string; parentKind: string } | undefined;
 const changeListeners = new Set<() => void>();
@@ -34,6 +36,7 @@ const makeTrimSource = (fileName: string) => ({
       },
   parentCompressions: extracted ? [{ kind: extracted.parentKind }] : [],
   ...(paddingTrimmed === undefined ? {} : { paddingTrimmed, restoreSupported: true }),
+  ...(romType ? { romType } : {}),
   romProbe: { trim: { detected: true, trimmedInputBytes: 96 } },
   selectedCandidateId: "rom-candidate",
   size: 128,
@@ -121,6 +124,7 @@ beforeEach(() => {
   stagingGate = undefined;
   startUnidentified = false;
   paddingTrimmed = undefined;
+  romType = undefined;
   extracted = undefined;
   changeListeners.clear();
 });
@@ -371,6 +375,72 @@ describe("TrimPatchForm", () => {
       expect(latest?.workflow.run).not.toHaveBeenCalled();
     },
   );
+
+  it.each([
+    { fileName: "game.gcm", format: "rvz", recommendedFormat: "rvz" },
+    { fileName: "game.iso", format: "chd", recommendedFormat: "chd" },
+  ])(
+    "offers $format for $fileName until the staged input is flagged as untrimmable",
+    async ({ fileName, format, recommendedFormat }) => {
+      romType = { recommendedFormat };
+      const { container, unmount } = renderForm({ pageDrop: { files: [new File(["disc"], fileName)], id: 1 } });
+      const offered = () =>
+        Array.from((container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement).options).map(
+          (option) => option.value,
+        );
+      await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+      await vi.waitFor(() => expect(offered()).toContain(format));
+      unmount();
+      cleanup();
+      latest = null;
+
+      trimUnsupportedMessage =
+        "This input does not support trimming. Use Compress to convert GameCube and Wii discs to RVZ.";
+      const flagged = renderForm({
+        outputFormat: format,
+        pageDrop: { files: [new File(["disc"], fileName)], id: 2 },
+      });
+      await vi.waitFor(() =>
+        expect(flagged.container.querySelector("#trim-builder-source-error-message")?.textContent).toContain(
+          "Use Compress",
+        ),
+      );
+      const select = flagged.container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement;
+      const flaggedOffered = Array.from(select.options).map((option) => option.value);
+      expect(flaggedOffered).not.toContain("chd");
+      expect(flaggedOffered).not.toContain("rvz");
+      expect(flaggedOffered).toContain("zip");
+      expect(select.value).not.toBe(format);
+    },
+  );
+
+  it("drops a click queued while an untrimmable disc is still staging once the probe flags it", async () => {
+    let release!: () => void;
+    stagingGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    trimUnsupportedMessage =
+      "This input does not support trimming. Use Compress to convert GameCube and Wii discs to RVZ.";
+    const { container } = renderForm({ pageDrop: { files: [new File(["disc"], "game.iso")], id: 1 } });
+    await vi.waitFor(() => expect(latest?.workflow.setInput).toHaveBeenCalled());
+    await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+    await act(async () =>
+      fireEvent.click(
+        Array.from(document.querySelectorAll("button")).find((button) =>
+          button.textContent?.includes("Trim ROM"),
+        ) as HTMLButtonElement,
+      ),
+    );
+    await act(async () => {
+      release();
+    });
+    await vi.waitFor(() =>
+      expect(container.querySelector("#trim-builder-source-error-message")?.textContent).toContain("Use Compress"),
+    );
+    expect((container.querySelector("#trim-builder-button-run") as HTMLButtonElement).disabled).toBe(true);
+    expect(document.querySelector("button[aria-label='Cancel queued trim']")).toBeNull();
+    expect(latest?.workflow.run).not.toHaveBeenCalled();
+  });
 
   it("does not offer RVZ for a bare .iso the engine did not recognise as a GameCube or Wii disc", async () => {
     const { container } = renderForm({

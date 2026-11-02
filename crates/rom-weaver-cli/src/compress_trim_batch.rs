@@ -45,7 +45,7 @@ struct CompressPlan {
 struct TrimSummary {
     report_format: String,
     processed: usize,
-    skipped_unsupported: usize,
+    skips: TrimSkips,
     dry_run: bool,
     operation: TrimOperation,
     irreversible_warning: &'static str,
@@ -625,7 +625,7 @@ impl CliApp {
             }
         };
 
-        let mut skipped_unsupported = 0usize;
+        let mut skips = TrimSkips::default();
         let mut cleanup_paths: Vec<PathBuf> = Vec::new();
         let collect_options = TrimCollectOptions {
             recursive,
@@ -638,7 +638,7 @@ impl CliApp {
             &source,
             collect_options,
             &mut cleanup_paths,
-            &mut skipped_unsupported,
+            &mut skips,
         ) {
             Ok(paths) => paths,
             Err(error) => {
@@ -655,12 +655,7 @@ impl CliApp {
             Self::cleanup_temp_paths(&cleanup_paths);
             return self.finish(
                 "trim",
-                Self::trim_empty_report(
-                    report_format,
-                    skipped_unsupported,
-                    dry_run,
-                    thread_execution,
-                ),
+                Self::trim_empty_report(report_format, skips, dry_run, thread_execution),
             );
         }
 
@@ -699,7 +694,7 @@ impl CliApp {
         let summary = TrimSummary {
             report_format,
             processed: trim_sources.len(),
-            skipped_unsupported,
+            skips,
             dry_run,
             operation,
             irreversible_warning: Self::irreversible_trim_warning(operation, &state),
@@ -714,17 +709,36 @@ impl CliApp {
         self.finish("trim", report)
     }
 
+    /// The note about skipped GameCube/Wii discs, or `None` when none were skipped.
+    fn gamecube_wii_skip_note(skips: TrimSkips) -> Option<String> {
+        (skips.gamecube_wii > 0).then(|| {
+            format!(
+                "{} GameCube/Wii disc(s) were not trimmed because trim does not support them; use `rom-weaver compress` to convert them to RVZ",
+                skips.gamecube_wii
+            )
+        })
+    }
+
     fn trim_empty_report(
         report_format: String,
-        skipped_unsupported: usize,
+        skips: TrimSkips,
         dry_run: bool,
         thread_execution: Option<ThreadExecution>,
     ) -> OperationReport {
+        let skipped_unsupported = skips.unsupported;
+        let mut label =
+            format!("no trim-eligible inputs found; skipped_unsupported={skipped_unsupported}");
+        if skips.gamecube_wii > 0 {
+            label.push_str(&format!(
+                "; GameCube/Wii discs are not trimmed (skipped_gamecube_wii={}); use `rom-weaver compress` to convert them to RVZ",
+                skips.gamecube_wii
+            ));
+        }
         let mut report = OperationReport::succeeded(
             OperationFamily::Command,
             Some(report_format),
             "trim",
-            format!("no trim-eligible inputs found; skipped_unsupported={skipped_unsupported}"),
+            label,
             Some(100.0),
             thread_execution,
         );
@@ -734,6 +748,9 @@ impl CliApp {
             "already_target": 0,
             "skipped_unsupported": skipped_unsupported,
         });
+        if skips.gamecube_wii > 0 {
+            details["skipped_gamecube_wii"] = json!(skips.gamecube_wii);
+        }
         if dry_run {
             details["dry_run"] = json!(true);
             details["command"] = json!("trim");
@@ -793,12 +810,13 @@ impl CliApp {
         let TrimSummary {
             report_format,
             processed,
-            skipped_unsupported,
+            skips,
             dry_run,
             operation,
             irreversible_warning,
             thread_execution,
         } = summary;
+        let skipped_unsupported = skips.unsupported;
         let first_error_kind = state.first_error_kind;
         let mut report = OperationReport::failed(
             OperationFamily::Command,
@@ -837,6 +855,7 @@ impl CliApp {
             "dry_run": dry_run,
             "writes": state.planned_outputs,
         }));
+        Self::attach_gamecube_wii_skips(&mut report, skips);
         let emitted = Self::build_emitted_file_detail_values(
             report.details.as_ref(),
             &state.emitted_outputs,
@@ -849,16 +868,32 @@ impl CliApp {
         report
     }
 
+    /// Record skipped GameCube/Wii discs: a `skipped_gamecube_wii` count plus a warning that
+    /// points to `compress`, so every output mode shows it.
+    fn attach_gamecube_wii_skips(report: &mut OperationReport, skips: TrimSkips) {
+        let Some(note) = Self::gamecube_wii_skip_note(skips) else {
+            return;
+        };
+        if let Some(Value::Object(details)) = report.details.as_mut() {
+            details.insert(
+                "skipped_gamecube_wii".to_string(),
+                json!(skips.gamecube_wii),
+            );
+        }
+        Self::append_report_warnings(report, [note]);
+    }
+
     fn trim_success_report(summary: TrimSummary, state: TrimBatchState) -> OperationReport {
         let TrimSummary {
             report_format,
             processed,
-            skipped_unsupported,
+            skips,
             dry_run,
             operation,
             irreversible_warning,
             thread_execution,
         } = summary;
+        let skipped_unsupported = skips.unsupported;
         let mut report = OperationReport::succeeded(
             OperationFamily::Command,
             Some(report_format),
@@ -920,6 +955,7 @@ impl CliApp {
         {
             details.extend(metadata);
         }
+        Self::attach_gamecube_wii_skips(&mut report, skips);
         if let Some(warning) = irreversible_warning.strip_prefix("; warning=") {
             Self::append_report_warnings(&mut report, [warning.to_string()]);
         }

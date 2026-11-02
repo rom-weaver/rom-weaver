@@ -1346,6 +1346,26 @@ struct TrimCollectOptions<'a> {
     context: &'a OperationContext,
 }
 
+/// Inputs trim collected but did not trim. `unsupported` counts every skipped item;
+/// `gamecube_wii` counts the GameCube/Wii discs among them (top-level or inside archives) so
+/// the report can point at `rom-weaver compress`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct TrimSkips {
+    unsupported: usize,
+    gamecube_wii: usize,
+}
+
+impl TrimSkips {
+    fn skip_unsupported(&mut self) {
+        self.unsupported = self.unsupported.saturating_add(1);
+    }
+
+    fn skip_gamecube_wii(&mut self) {
+        self.skip_unsupported();
+        self.gamecube_wii = self.gamecube_wii.saturating_add(1);
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TrimOperation {
     Trim,

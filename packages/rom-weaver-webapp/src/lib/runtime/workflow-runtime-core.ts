@@ -473,7 +473,7 @@ const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["
       try {
         return { restore: await simulate(true), trim };
       } catch (error) {
-        // XISO and RVZ conversion reject a restore; only a cancel outranks that verdict.
+        // XISO trimming rejects a restore; only a cancel outranks that verdict.
         if (signal?.aborted) throw error;
         emitTraceLog({ logLevel, namespace: "runtime:trim", onLog }, "trim restore plan unavailable", { error });
         return { trim };

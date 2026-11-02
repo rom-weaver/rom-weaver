@@ -209,7 +209,7 @@ Checksums can target source bytes, selected container payloads, or byte ranges (
 - 3DS images (`.3ds`, `.cci`, `.cxi`) with validated NCSD/NCCH partition extents, including inside `.z3ds`, `.zcci`, `.zcxi`, ZIP, and 7z; CIA and 3DSX files have no cartridge padding and are not trimmed
 - XISO images (`.xiso`, `.xiso.iso`, and probed XDVDFS `.iso` files)
 
-GameCube and Wii discs (`.gcm`, `.wbfs`, `.rvz`, and any `.iso` that is not an XISO) are not trim inputs. A lone disc given to `trim` fails with a validation error that names the file and points to `rom-weaver compress`, which writes RVZ; in a folder or multi-file run a disc is counted in `skipped_unsupported`.
+GameCube and Wii discs are not trim inputs. They are detected by content in any supported disc container (`.iso`, `.gcm`, `.rvz`, `.wbfs`, `.wia`, `.gcz`, `.ciso`, `.tgc`, `.nfs`); other non-XISO `.iso` files (for example PS2 images) are skipped as unsupported. A lone disc, or a lone archive holding only discs, given to `trim` fails with a validation error that names the input and points to `rom-weaver compress`, which writes RVZ. In a folder or multi-file run a disc is counted in `skipped_unsupported` and also in `skipped_gamecube_wii`, discs inside archives are never extracted, and the report carries a warning that points to `compress`.
 
 A single XISO trim also reports `output_format` (`"xiso"`, or the container's name when it is packed into a `.zip`, `.7z`, or `.chd`) and, only when the file is written as-is, `chd_create_mode: "dvd"` so a caller can build a DVD CHD from an extensionless output. Batches, in-place archive repacks, and the other trim kinds report neither field.
 
