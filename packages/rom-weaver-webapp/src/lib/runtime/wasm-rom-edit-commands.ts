@@ -112,8 +112,8 @@ const invokeRomWeaverTrimWorker = async (
     return {
       fileName: outputFileName,
       filePath: emitted?.path || outputPath,
-      // The extensionless output path says nothing about the file, so the engine's own verdict (an
-      // XISO is a DVD-class disc) rides along for the CHD step instead of being inferred from the name.
+      // The extensionless output path says nothing about the file, so an engine-reported create mode (the
+      // current engine reports none for a trim: an XISO is never stored as CHD) is kept for the CHD step.
       romType: romTypeFromEmittedFile({
         chdCreateMode: typeof details?.chd_create_mode === "string" ? details.chd_create_mode : undefined,
       }),

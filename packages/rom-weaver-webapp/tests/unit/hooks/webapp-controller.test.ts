@@ -74,20 +74,28 @@ describe("createWebappRootController over the vanilla store", () => {
     const controller = createController();
     expect(controller.selectView("identify")).toBe("identify");
     expect(controller.selectView("ppf-undo")).toBe("ppf-undo");
-    expect(controller.selectView("trim")).toBe("patcher");
+    expect(controller.selectView("save-editor")).toBe("patcher");
     expect(controller.getState().currentView).toBe("patcher");
 
     controller.updateDraftSetting("betaToolsEnabled", true);
     expect(controller.saveDraftSettings()).toBe(true);
-    expect(controller.selectView("trim")).toBe("trim");
-    expect(controller.getState().currentView).toBe("trim");
+    expect(controller.selectView("save-editor")).toBe("save-editor");
+    expect(controller.getState().currentView).toBe("save-editor");
     expect(controller.selectView("identify")).toBe("identify");
     expect(controller.getState().currentView).toBe("identify");
 
     controller.updateDraftSetting("betaToolsEnabled", false);
     expect(controller.saveDraftSettings()).toBe(true);
     expect(controller.getState().currentView).toBe("identify");
-    expect(controller.selectView("trim")).toBe("patcher");
+    expect(controller.selectView("save-editor")).toBe("patcher");
+  });
+
+  it("opens Trim without beta tools", () => {
+    const controller = createController();
+    expect(controller.getState().settings.betaToolsEnabled).toBe(false);
+    expect(controller.selectView("trim")).toBe("trim");
+    expect(controller.getState().currentView).toBe("trim");
+    expect(window.location.pathname).toBe("/trim-rom");
   });
 
   it("keeps the legacy tools route pointing to PPF undo", () => {
@@ -98,13 +106,13 @@ describe("createWebappRootController over the vanilla store", () => {
   });
 
   it("keeps a direct beta route when an unrelated setting changes", () => {
-    window.history.replaceState({}, "", "/trim-rom");
+    window.history.replaceState({}, "", "/rom-save-editor");
     const controller = createController();
 
     controller.setOnboardingEnabled(false);
 
-    expect(controller.getState().currentView).toBe("trim");
-    expect(window.location.pathname).toBe("/trim-rom");
+    expect(controller.getState().currentView).toBe("save-editor");
+    expect(window.location.pathname).toBe("/rom-save-editor");
   });
 
   it("commits and persists the detailed view toggle immediately", () => {

@@ -51,6 +51,12 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     slug: "apply-rom-patches",
     title: `ROM Patcher Online: BPS, IPS, UPS, xdelta & PPF | ${SITE_NAME}`,
   }),
+  trim: Object.freeze({
+    description:
+      "Trim unused padding from Nintendo DS, Game Boy Advance, Nintendo 3DS, and Xbox XISO ROMs, or pad a trimmed ROM back to full size, locally in your browser. No uploads.",
+    slug: "trim-rom",
+    title: `Trim ROMs online: NDS, GBA, 3DS & Xbox | ${SITE_NAME}`,
+  }),
   "ppf-undo": Object.freeze({
     description:
       "Undo a PPF3 patch using its stored original bytes and download a restored ROM locally in your browser. Requires the exact patch with undo data. No uploads.",
@@ -94,7 +100,6 @@ const readWorkflowEntryFromPathname = (pathname) => {
 // Beta tools stay out of WORKFLOW_SEO_ROUTES (no sitemap, no Markdown twin) but still need their own page title.
 const BETA_ROUTE_TITLES = Object.freeze({
   "rom-save-editor": `Save Editor | ${SITE_NAME}`,
-  "trim-rom": `Trim ROM | ${SITE_NAME}`,
   "whats-new": `What's new | ${SITE_NAME}`,
 });
 

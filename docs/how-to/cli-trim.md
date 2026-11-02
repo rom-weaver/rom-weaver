@@ -44,7 +44,7 @@ rom-weaver trim --input game.nds --extension trimmed.nds
 | Input | Output name | Result |
 | --- | --- | --- |
 | Any trimmable ROM or XISO disc | `.zip`, `.7z` | The trimmed file inside the archive. |
-| XISO disc | `.chd` | The trimmed disc packed as a DVD CHD. |
+| XISO disc | `.chd` | Rejected: an Xbox XISO cannot be stored as CHD. Use `.zip`, `.7z`, or `.xiso`. |
 | 3DS ROM | `.z3ds` | The trimmed ROM packed as Z3DS. `.z3ds` always works; `.zcci` is also accepted for a cartridge image (NCSD) and `.zcxi` for an NCCH image, the name `extract` reads back as `.cci` or `.cxi`. The other Z3DS names (`.zcia`, `.z3dsx`, and the descriptor that does not match the file's payload) are an error. |
 | XISO disc | `.xiso`, `.xiso.iso` | The rebuilt XISO, written as the output. |
 | NDS, GBA, 3DS ROM or XISO | any extension that is not a container (such as `.nds` or `.iso`) | The trimmed file itself, as before. |

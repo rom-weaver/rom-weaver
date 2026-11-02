@@ -161,9 +161,14 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         ),
         WORKFLOW_SEO_ROUTES.test,
       );
-      const trimHtml = withRoutePreloadLinks(
-        makeBetaRouteNoindex(withShell("trim"), "trim-rom", channel, channelLabel),
-        routePreloadLinks.get("trim"),
+      const trimHtml = injectLdJson(
+        createWorkflowRouteHtml(
+          withRoutePreloadLinks(withShell("trim"), routePreloadLinks.get("trim")),
+          WORKFLOW_SEO_ROUTES.trim,
+          channel,
+          channelLabel,
+        ),
+        WORKFLOW_SEO_ROUTES.trim,
       );
       const ppfUndoHtml = injectLdJson(
         createWorkflowRouteHtml(

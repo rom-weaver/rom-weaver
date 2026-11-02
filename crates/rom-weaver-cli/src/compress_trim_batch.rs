@@ -1137,7 +1137,7 @@ impl CliApp {
                 if config.source_count == 1 && trim_source.kind == TrimInputKind::Xiso {
                     let mut metadata = serde_json::Map::new();
                     // An archive repack rewrites the archive, so the trimmed image's own format
-                    // and CHD mode do not describe the file the run emitted.
+                    // does not describe the file the run emitted.
                     if repack_root.is_none() {
                         let packed_format = match &output_plan {
                             TrimOutputPlan::Pack { handler, .. } => Some(handler.descriptor().name),
@@ -1148,13 +1148,6 @@ impl CliApp {
                             "output_format".into(),
                             json!(packed_format.or(direct_format)),
                         );
-                        // Only a file written as-is can still be handed to a CHD step by its
-                        // caller.
-                        if let (None, Some(mode)) =
-                            (packed_format, trim_source.kind.chd_create_mode())
-                        {
-                            metadata.insert("chd_create_mode".into(), json!(mode));
-                        }
                     }
                     state.single_metadata = Some(Value::Object(metadata));
                 }
@@ -1192,13 +1185,18 @@ impl CliApp {
             .archive_origin
             .as_ref()
             .expect("repack source carries its archive origin");
-        match self.confirm_archive_repack(
-            archive,
-            repack_root,
-            &trim_source.path,
-            trim_source.kind,
-            config.dry_run,
-        ) {
+        let confirmation = self
+            .reject_xiso_chd_repack(archive, &trim_source.path, trim_source.kind)
+            .and_then(|()| {
+                self.confirm_archive_repack(
+                    archive,
+                    repack_root,
+                    &trim_source.path,
+                    trim_source.kind,
+                    config.dry_run,
+                )
+            });
+        match confirmation {
             Ok(true) => true,
             Ok(false) => {
                 Self::record_trim_failure(
@@ -1226,6 +1224,34 @@ impl CliApp {
                 false
             }
         }
+    }
+
+    /// An in-place repack rebuilds the archive in its own format, and the engine refuses to store an
+    /// Xbox XISO as CHD. Reject it before anything is trimmed so dry and real runs agree, instead of
+    /// failing in CHD create after the work is done.
+    fn reject_xiso_chd_repack(
+        &self,
+        archive: &Path,
+        rom_path: &Path,
+        kind: TrimInputKind,
+    ) -> Result<()> {
+        if kind != TrimInputKind::Xiso
+            || !self
+                .containers
+                .probe(archive)
+                .is_some_and(|handler| handler.descriptor().matches_name("chd"))
+        {
+            return Ok(());
+        }
+        debug!(
+            archive = %archive.display(),
+            payload = %rom_path.display(),
+            "trim --in-place rejected: Xbox XISO inside a CHD cannot be repacked as CHD"
+        );
+        Err(RomWeaverError::Validation(format!(
+            "`{}` holds an Xbox XISO image, which cannot be stored as CHD, so --in-place cannot repack it: use --output <name>.xiso, <name>.zip, or <name>.7z",
+            archive.display()
+        )))
     }
 
     fn record_trim_failure(state: &mut TrimBatchState, message: String) {

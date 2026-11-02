@@ -1132,7 +1132,14 @@ impl CliApp {
     }
 
     /// The CHD create mode native `chd` auto-inference picks for a loose disc/raw image at `path`.
+    /// An Xbox XISO is not storable as CHD, so it carries no verdict.
     pub(super) fn chd_create_mode_for_path(path: &Path) -> Option<&'static str> {
+        if rom_weaver_checksum::detect_rom_identity_for_path(path).platform
+            == Some(rom_weaver_checksum::platform_detection::platform::XBOX)
+        {
+            tracing::trace!(path = %path.display(), "no chd create mode for an Xbox XISO");
+            return None;
+        }
         rom_weaver_containers::chd::ChdContainerHandler.infer_auto_create_mode_label(path)
     }
 

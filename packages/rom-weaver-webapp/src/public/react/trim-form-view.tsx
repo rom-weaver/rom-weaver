@@ -1,7 +1,7 @@
 import type { ComponentProps, ReactNode } from "react";
 import { RelatedStrip } from "../../webapp/components/related-strip.tsx";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
-import { ConfirmDialog } from "./components/ds/modal.tsx";
+import { InfoDialog } from "./components/ds/modal.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
@@ -12,13 +12,13 @@ import { useUiLocalizer } from "./settings-context.tsx";
  * Presentational shell for the trim workflow. The stateful TrimPatchForm
  * controller builds these prop bundles and hands them over; the view owns only
  * layout - the page section, the unified drop zone, the empty vs. staged source
- * branch, the output step and the trim confirmation. Keeping the markup here
+ * branch, the output step and the trim warning. Keeping the markup here
  * lets it be exercised inert (a11y / state galleries) without booting the
  * workflow, wasm or worker pool.
  */
 type TrimPatchFormViewModel = {
-  /** Trim confirmation dialog (driven open by the controller). */
-  confirm: ComponentProps<typeof ConfirmDialog>;
+  /** Informational warning shown while the run proceeds (driven open by the controller). */
+  warning: ComponentProps<typeof InfoDialog>;
   /** Active candidate-selection dialog (or nothing). */
   dialog?: ReactNode;
   /** True once a trim run has produced a downloadable ROM. */
@@ -36,7 +36,7 @@ type TrimPatchFormViewModel = {
 };
 
 const TrimPatchFormView = ({
-  confirm,
+  warning,
   dialog,
   done,
   dropZone,
@@ -67,7 +67,7 @@ const TrimPatchFormView = ({
           {done && onSelectTab ? <RelatedStrip entryKey="trim" onSelectTab={onSelectTab} /> : null}
         </>
       )}
-      <ConfirmDialog {...confirm} />
+      <InfoDialog {...warning} />
       {dialog}
     </section>
   );

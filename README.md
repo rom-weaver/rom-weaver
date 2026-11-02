@@ -135,7 +135,7 @@ The CLI and browser share one Rust engine. Browser workers and storage add costs
 - **Bake in cheats.** Apply supported ROM-writing codes, or turn them into patches. Live-memory codes cannot be baked.
 - **Try the result.** Play supported games in your browser with EmulatorJS. Import and export emulator saves.
 - **Reuse patch weaves.** Preserve patches, order, choices, and ROM checksums. Patch-only weaves omit the ROM; each user supplies their matching original.
-- **Trim and edit saves (beta).** Trim supported ROM padding, edit supported saves, and generate saves within [game-specific limits](docs/reference/save-editor.md#save-generation). Browser Trim and Save Editor require the beta setting.
+- **Trim ROMs and edit saves.** Trim supported ROM padding, edit supported saves, and generate saves within [game-specific limits](docs/reference/save-editor.md#save-generation). Browser Trim is available by default; the beta Save Editor requires the beta setting.
 - **Undo patches.** Reverse PPF3 patches containing undo data.
 - **Automate or self-host.** CLI scripts, JSON output, and your own webapp hosting. Both interfaces share one Rust engine.
 

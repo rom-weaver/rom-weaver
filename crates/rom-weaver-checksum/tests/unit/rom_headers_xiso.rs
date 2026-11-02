@@ -80,3 +80,38 @@ fn streamed_xiso_never_plans_a_headerless_variant() {
         );
     }
 }
+
+fn xiso_prefix() -> Vec<u8> {
+    let mut prefix = vec![0_u8; 0x10800];
+    prefix[0x10000..0x10014].copy_from_slice(b"MICROSOFT*XBOX*MEDIA");
+    prefix[0x107EC..0x10800].copy_from_slice(b"MICROSOFT*XBOX*MEDIA");
+    prefix
+}
+
+#[test]
+fn xiso_volume_descriptor_identifies_as_microsoft_xbox() {
+    use crate::platform_detection::platform;
+    use crate::rom_identity::{DiscFormat, detect_rom_identity};
+
+    let prefix = xiso_prefix();
+    for extension in [None, Some(".xiso"), Some(".iso"), Some(".bin")] {
+        let identity = detect_rom_identity(&prefix, 0x20000, extension);
+        assert_eq!(identity.platform, Some("Microsoft Xbox"));
+        assert_eq!(identity.platform, Some(platform::XBOX));
+        assert_eq!(identity.disc_format, Some(DiscFormat::Dvd));
+    }
+}
+
+#[test]
+fn incomplete_xiso_descriptor_is_not_identified_as_xbox() {
+    use crate::rom_identity::detect_rom_identity;
+
+    let mut head_only = xiso_prefix();
+    head_only[0x107EC..0x10800].fill(0);
+    let identity = detect_rom_identity(&head_only, 0x20000, Some(".iso"));
+    assert_eq!(identity.platform, None);
+    assert_eq!(
+        detect_rom_identity(&xiso_prefix()[..0x10013], 0x10013, Some(".iso")).platform,
+        None
+    );
+}

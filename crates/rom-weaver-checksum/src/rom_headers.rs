@@ -369,7 +369,7 @@ pub fn detect_strippable_rom_header_from_prefix(
 
 // XDVDFS sector 32 MUST retain its preceding system area.
 // https://github.com/antangelo/xdvdfs/blob/main/xdvdfs-core/src/layout/volume.rs
-fn has_xiso_volume_descriptor(prefix: &[u8]) -> bool {
+pub(crate) fn has_xiso_volume_descriptor(prefix: &[u8]) -> bool {
     prefix.get(0x10000..0x10014) == Some(XISO_VOLUME_MAGIC.as_slice())
         && prefix.get(0x107EC..0x10800) == Some(XISO_VOLUME_MAGIC.as_slice())
 }

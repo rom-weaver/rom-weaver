@@ -2152,7 +2152,7 @@ fn trim_output_container_must_be_valid_for_the_input_type() {
 }
 
 #[test]
-fn trim_output_z3ds_packs_a_3ds_rom_and_chd_packs_an_xiso() {
+fn trim_output_z3ds_packs_a_3ds_rom_and_zip_packs_an_xiso() {
     let temp = setup_temp_dir();
     let rom_3ds = temp.child("sample.3ds");
     let mut rom = build_test_padded_rom(0x4567, 0x8000, 0xFF);
@@ -2186,10 +2186,10 @@ fn trim_output_z3ds_packs_a_3ds_rom_and_chd_packs_an_xiso() {
     fs::create_dir_all(source_tree.path()).expect("source tree root");
     let xiso = temp.child("source.iso");
     write_xiso_fixture_from_directory(source_tree.path(), xiso.path());
-    let chd = temp.child("out.chd");
-    let terminal = trim_to_output(xiso.path(), chd.path(), &[], 0);
+    let zip = temp.child("out.zip");
+    let terminal = trim_to_output(xiso.path(), zip.path(), &[], 0);
     assert_eq!(terminal["status"], "succeeded");
-    assert_eq!(&fs::read(chd.path()).expect("chd")[..8], b"MComprHD");
+    assert_eq!(&fs::read(zip.path()).expect("zip")[..2], b"PK");
 
     // An XISO is not a 3DS ROM, and a 3DS ROM is not a disc.
     let terminal = trim_to_output(xiso.path(), temp.child("bad.z3ds").path(), &[], 1);
@@ -2372,10 +2372,10 @@ fn trim_3ds_output_rejects_a_descriptor_extension_when_the_payload_is_unrecogniz
     );
 }
 
-/// CHD infers its media from the packed file's name and size, which turns a small XISO into a
-/// CD CHD and a `.xiso` into a raw one; an XISO is a DVD-class disc and must always be a DVD CHD.
+/// An Xbox XISO is not storable as CHD, so a trim whose output name resolves to CHD is refused
+/// before anything is written, for `.iso` and `.xiso` sources, in a real run and a dry run.
 #[test]
-fn trim_xiso_into_chd_builds_a_dvd_chd_for_xiso_and_iso_sources() {
+fn trim_xiso_into_chd_is_rejected_before_writing() {
     let temp = setup_temp_dir();
     let source_tree = temp.child("xiso-source");
     fs::create_dir_all(source_tree.path()).expect("source tree root");
@@ -2383,20 +2383,89 @@ fn trim_xiso_into_chd_builds_a_dvd_chd_for_xiso_and_iso_sources() {
     for name in ["source.iso", "source.xiso"] {
         let xiso = temp.child(name);
         write_xiso_fixture_from_directory(source_tree.path(), xiso.path());
-        let chd = temp.child(format!("{name}.chd"));
-        let terminal = trim_to_output(xiso.path(), chd.path(), &[], 0);
-        assert_eq!(terminal["status"], "succeeded", "{name}");
-        assert_eq!(terminal["details"]["output_format"], "chd", "{name}");
-        let probe = parse_single_json_line(&command_stdout(
-            &[
-                "probe",
-                "--input",
-                chd.path().to_str().expect("path"),
-                "--json",
-            ],
-            0,
-        ));
-        assert_eq!(probe["details"]["chd"]["media_kind"], "dvd", "{name}");
+        for dry_run in [false, true] {
+            let chd = temp.child(format!("{name}.chd"));
+            let extra: &[&str] = if dry_run { &["--dry-run"] } else { &[] };
+            let terminal = trim_to_output(xiso.path(), chd.path(), extra, 1);
+            assert_eq!(terminal["status"], "failed", "{name} dry_run={dry_run}");
+            assert_eq!(
+                terminal["label"].as_str().expect("label"),
+                rejected_trim_label(
+                    xiso.path(),
+                    dry_run,
+                    &format!(
+                        "`{}` is an Xbox XISO image, which cannot be stored as CHD: `{}` must end in .xiso, .zip, or .7z",
+                        xiso.path().display(),
+                        chd.path().display()
+                    )
+                ),
+                "{name} dry_run={dry_run}"
+            );
+            assert!(!chd.path().exists(), "{name} must not write a CHD");
+        }
+    }
+}
+
+/// `trim --in-place` on an XISO inside a CHD would rebuild the CHD, which the engine refuses for an
+/// Xbox XISO. The run is rejected up front (before any trimming) and identically in a dry run, and
+/// the CHD stays byte-identical.
+#[test]
+fn trim_in_place_xiso_inside_chd_is_rejected_before_trimming() {
+    // XGD3 layout: the XDVDFS volume sits 0x2080000 bytes in. The leading gap keeps the CHD
+    // creator's own Xbox check (which only looks at offset 0x10000) from refusing to build the
+    // fixture, while the trim detector still finds the volume.
+    const XGD3_VOLUME_OFFSET: usize = 0x0208_0000;
+    let temp = setup_temp_dir();
+    let source_tree = temp.child("xiso-source");
+    fs::create_dir_all(source_tree.path()).expect("source tree root");
+    fs::write(source_tree.child("default.xbe").path(), vec![7_u8; 4096]).expect("xbe");
+    let plain = temp.child("plain.xiso");
+    write_xiso_fixture_from_directory(source_tree.path(), plain.path());
+    let mut wrapped = vec![0_u8; XGD3_VOLUME_OFFSET];
+    wrapped.extend(fs::read(plain.path()).expect("xiso bytes"));
+    let image = temp.child("game.iso");
+    fs::write(image.path(), &wrapped).expect("wrapped xiso");
+    let chd = temp.child("game.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            image.path().to_str().expect("path"),
+            "--format",
+            "chd-dvd",
+            "--output",
+            chd.path().to_str().expect("path"),
+        ],
+        0,
+    );
+    let before = fs::read(chd.path()).expect("chd bytes");
+
+    for dry_run in [true, false] {
+        let mut args = vec![
+            "trim",
+            "--in-place",
+            "--input",
+            chd.path().to_str().expect("path"),
+            "--json",
+        ];
+        if dry_run {
+            args.push("--dry-run");
+        }
+        let terminal = parse_single_json_line(&command_stdout(&args, 1));
+        assert_eq!(terminal["status"], "failed", "dry_run={dry_run}");
+        let label = terminal["label"].as_str().expect("label");
+        assert!(
+            label.contains(&format!(
+                "`{}` holds an Xbox XISO image, which cannot be stored as CHD, so --in-place cannot repack it: use --output <name>.xiso, <name>.zip, or <name>.7z",
+                chd.path().display()
+            )),
+            "dry_run={dry_run}: {label}"
+        );
+        assert_eq!(
+            fs::read(chd.path()).expect("chd bytes"),
+            before,
+            "dry_run={dry_run}: the CHD must be left unchanged"
+        );
     }
 }
 
@@ -2414,13 +2483,17 @@ fn trim_xiso_to_an_extensionless_path_reports_the_xiso_output_format() {
     let terminal = trim_to_output(xiso.path(), output.path(), &[], 0);
     assert_eq!(terminal["status"], "succeeded");
     assert_eq!(terminal["details"]["output_format"], "xiso");
-    assert_eq!(terminal["details"]["chd_create_mode"], "dvd");
+    assert!(
+        terminal["details"].get("chd_create_mode").is_none(),
+        "an XISO is never handed to a CHD step: {}",
+        terminal["details"]
+    );
     assert_eq!(terminal["details"]["mode_counts"]["xiso"], 1);
     assert!(output.path().exists());
 }
 
-/// Only a trimmed XISO written as-is can be handed to a CHD step, so a packed output (`.chd`,
-/// `.zip`) reports its container and no `chd_create_mode`.
+/// A trimmed XISO is never handed to a CHD step, so a packed output (`.zip`) reports its container
+/// and no `chd_create_mode`.
 #[test]
 fn trim_xiso_into_packed_outputs_reports_the_container_and_no_chd_create_mode() {
     let temp = setup_temp_dir();
@@ -2429,7 +2502,7 @@ fn trim_xiso_into_packed_outputs_reports_the_container_and_no_chd_create_mode() 
     fs::write(source_tree.child("default.xbe").path(), vec![7_u8; 4096]).expect("xbe");
     let xiso = temp.child("game.iso");
     write_xiso_fixture_from_directory(source_tree.path(), xiso.path());
-    for (name, format) in [("packed.chd", "chd"), ("packed.zip", "zip")] {
+    for (name, format) in [("packed.zip", "zip"), ("packed.7z", "7z")] {
         let output = temp.child(name);
         let terminal = trim_to_output(xiso.path(), output.path(), &[], 0);
         assert_eq!(terminal["status"], "succeeded", "{name}");

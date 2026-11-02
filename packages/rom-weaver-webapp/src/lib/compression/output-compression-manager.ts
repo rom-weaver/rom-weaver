@@ -26,7 +26,7 @@ import {
   normalizeGeneratedCompressionProfile,
 } from "./compression-metadata.ts";
 import { applyCompressionOutputFileName } from "./container-format-registry.ts";
-import { isLikelyDiscImageSource } from "./disc-image-policy.ts";
+import { isLikelyDiscImageSource, isXboxSource } from "./disc-image-policy.ts";
 import {
   CHD_COMPRESSION_INPUT_EXTENSIONS,
   CHD_DECOMPRESSION_INPUT_EXTENSIONS,
@@ -145,6 +145,9 @@ const OutputCompressionManager = (() => {
       _hasChdSourceMetadata(source) || String(source?.metadata?.recommendedFormat || "").toLowerCase() === "chd",
     );
   };
+  // An Xbox XISO has no useful CHD form, so CHD is neither offered nor picked for it.
+  const _isXboxSource = (source: CompressionSource | null | undefined) =>
+    isXboxSource(source?.metadata?.platform, source ? _getFileName(source) : "");
   // Engine-recommended rom-specific container (chd/rvz/z3ds) from the ingest identity pass.
   // Content-detected in Rust (works on a bare `.iso`), so it is authoritative and wins over the
   // extension/size heuristics below; `null` when the engine surfaced no rom-specific format.
@@ -155,6 +158,7 @@ const OutputCompressionManager = (() => {
       .trim()
       .toLowerCase();
     if (recommended === OUTPUT_COMPRESSION.CHD) {
+      if (_isXboxSource(source)) return null;
       // The engine reads headers but not alignment: a `.bin` must also be whole sectors to be a disc.
       return _isLikelyDiscImageSource(source) ? OUTPUT_COMPRESSION.CHD : null;
     }
@@ -165,9 +169,14 @@ const OutputCompressionManager = (() => {
   const _resolveAutomaticOutputCompression = (source: CompressionSource | null | undefined) => {
     const engineRecommended = _engineRecommendedRomSpecific(source);
     if (engineRecommended) return engineRecommended;
-    if (_hasChdSourceMetadata(source) && _isLikelyDiscImageSource(source)) return OUTPUT_COMPRESSION.CHD;
+    const chdAllowed = !_isXboxSource(source);
+    if (chdAllowed && _hasChdSourceMetadata(source) && _isLikelyDiscImageSource(source)) return OUTPUT_COMPRESSION.CHD;
     if (_isUnambiguousZ3dsCompressionInput(source) || _isZ3dsSource(source)) return OUTPUT_COMPRESSION.Z3DS;
-    if ((_isUnambiguousChdCompressionInput(source) || _isChdSource(source)) && _isLikelyDiscImageSource(source))
+    if (
+      chdAllowed &&
+      (_isUnambiguousChdCompressionInput(source) || _isChdSource(source)) &&
+      _isLikelyDiscImageSource(source)
+    )
       return OUTPUT_COMPRESSION.CHD;
     if (_isUnambiguousRvzCompressionInput(source) || _isRvzSource(source)) return OUTPUT_COMPRESSION.RVZ;
     return OUTPUT_COMPRESSION.SEVEN_ZIP;
@@ -198,9 +207,10 @@ const OutputCompressionManager = (() => {
     const engineRecommended = _engineRecommendedRomSpecific(source as CompressionSource | null | undefined);
     if (selected === OUTPUT_COMPRESSION.CHD)
       return (
-        engineRecommended === OUTPUT_COMPRESSION.CHD ||
-        _isChdCompressionInput(source as CompressionSource | null | undefined) ||
-        _isChdSource(source as CompressionSource | null | undefined)
+        !_isXboxSource(source as CompressionSource | null | undefined) &&
+        (engineRecommended === OUTPUT_COMPRESSION.CHD ||
+          _isChdCompressionInput(source as CompressionSource | null | undefined) ||
+          _isChdSource(source as CompressionSource | null | undefined))
       );
     // RVZ only holds GameCube and Wii discs. A shared extension such as `.iso` also names DVDs and CDs, so
     // it counts only with the engine's verdict above; `.gcm`/`.wbfs` and already-RVZ-family sources are

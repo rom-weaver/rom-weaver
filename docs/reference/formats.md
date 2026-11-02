@@ -104,7 +104,7 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 | Z3DS | `3ds` | `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, `.z3dsx` | ✅ | ✅ | ✅ |
 | XISO | none | `.xiso`, `.xiso.iso` | ❌ | ⚠️ ¹ | ❌ |
 
-> ¹ XISO extraction rebuilds the detected XDVDFS filesystem as a normalized ISO. Detailed `probe` reports and XISO creation are not supported.
+> ¹ XISO extraction rebuilds the detected XDVDFS filesystem as a normalized ISO. Detailed `probe` reports and XISO creation are not supported. An XISO is not accepted as CHD input: `compress --format chd` and the browser Compress and Trim pages reject or omit CHD for it.
 >
 > ² CHD parent and differential support exists in the Rust container API. The native CLI does not expose it. `extract --split-bin` affects CD images only.
 >
@@ -211,11 +211,11 @@ Checksums can target source bytes, selected container payloads, or byte ranges (
 
 GameCube and Wii discs are not trim inputs. They are detected by content in any supported disc container (`.iso`, `.gcm`, `.rvz`, `.wbfs`, `.wia`, `.gcz`, `.ciso`, `.tgc`, `.nfs`); other non-XISO `.iso` files (for example PS2 images) are skipped as unsupported. A lone disc, or a lone archive holding only discs, given to `trim` fails with a validation error that names the input and points to `rom-weaver compress`, which writes RVZ. In a folder or multi-file run a disc is counted in `skipped_unsupported` and also in `skipped_gamecube_wii`, discs inside archives are never decoded, and the report carries a warning that points to `compress`.
 
-A single XISO trim also reports `output_format` (`"xiso"`, or the container's name when it is packed into a `.zip`, `.7z`, or `.chd`) and, only when the file is written as-is, `chd_create_mode: "dvd"` so a caller can build a DVD CHD from an extensionless output. Batches, in-place archive repacks, and the other trim kinds report neither field.
+A single XISO trim reports `output_format` (`"xiso"`, or the container's name when it is packed into a `.zip` or `.7z`). Batches, in-place archive repacks, and the other trim kinds report neither field.
 
 `--in-place` rewrites the source file; `--output` or `--extension` write the trimmed copy elsewhere instead, and `-n`/`--dry-run` reports what would change without writing anything.
 
-A `--output` or `--extension` name that ends in a container extension packs the trimmed file inside it: `.zip` and `.7z` for every input, `.chd` for XISO (a DVD CHD), `.z3ds` for 3DS (`.zcci` is accepted for a cartridge image (NCSD) and `.zcxi` for an NCCH image, while `.zcia`, `.z3dsx`, and a descriptor that does not match the file's payload are rejected), and `.xiso` and `.xiso.iso` for XISO (the rebuilt XISO itself). Any other container extension is rejected with nothing written. See [choose the output format](../how-to/cli-trim.md#choose-the-output-format).
+A `--output` or `--extension` name that ends in a container extension packs the trimmed file inside it: `.zip` and `.7z` for every input, `.z3ds` for 3DS (`.zcci` is accepted for a cartridge image (NCSD) and `.zcxi` for an NCCH image, while `.zcia`, `.z3dsx`, and a descriptor that does not match the file's payload are rejected), and `.xiso` and `.xiso.iso` for XISO (the rebuilt XISO itself). Any other container extension is rejected with nothing written. A `.chd` output for an XISO is rejected with nothing written, and so is `compress --format chd` on an XISO: CHD is never offered for Xbox images. See [choose the output format](../how-to/cli-trim.md#choose-the-output-format).
 
 `--revert` pads a trimmed file back out, and works for NDS, GBA, and 3DS. XISO trimming does not support this operation. It also answers to `--untrim` and `--restore`.
 

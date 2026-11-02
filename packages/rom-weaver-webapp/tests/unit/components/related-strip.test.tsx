@@ -68,7 +68,7 @@ describe("RelatedStrip", () => {
 
   it("keeps a beta-only strip in the markup for the CSS gate to hide", () => {
     const { container } = render(
-      withSettings(<RelatedStrip entryKey="docs/cli-trim" onSelectTab={vi.fn()} />, { betaToolsEnabled: false }),
+      withSettings(<RelatedStrip entryKey="docs/edit-gen3-saves" onSelectTab={vi.fn()} />, { betaToolsEnabled: false }),
     );
     // The strip stays; `:root[data-beta-tools-enabled="false"]` hides the row
     // and, having no unmarked sibling, the whole nav (see result.css).

@@ -377,9 +377,7 @@ test("disc conversion and extraction have independent hit targets on mobile", as
 });
 
 test("WebappRoot mounts the full workflow shell and stages archive inputs", async () => {
-  // Trim is beta-gated (see `betaToolsEnabled`), so the full-shell assertions
-  // below require the flag on - matching the pattern the sibling controller unit tests use.
-  mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
+  mountWebappRoot();
 
   // The unified drop surface is the only input now; its label flips once the workflow has files.
   const romInput = page.getByLabelText(/ROMs, patches, weaves, or archives/i);
@@ -423,6 +421,10 @@ test("WebappRoot keeps the beta workflows out of the nav while the setting is of
     .toEqual(["Apply", "Create", "Identify", "Test", "Menu"]);
   expect(navRow("PPF undo")).toBeTruthy();
   expect(navRow("PPF undo").querySelector(".nav-beta")).toBeNull();
+  // Trim is a regular workflow: always listed, no beta chip. Only Save Editor stays gated.
+  expect(navRow("Trim")).toBeTruthy();
+  expect(navRow("Trim").querySelector(".nav-beta")).toBeNull();
+  expect(navRow("Save Editor")).toBeFalsy();
   expect(navRow("Identify")).toBeTruthy();
   navRow("Identify").click();
   await expect.poll(() => document.querySelector("#identify-input-picker") !== null).toBe(true);

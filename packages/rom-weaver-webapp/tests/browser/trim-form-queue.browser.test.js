@@ -186,13 +186,13 @@ const withTrimWorkflowMock = (props = {}) => ({
 
 const getOutputWaitingText = () => document.querySelector(".outcard > .fileprog")?.textContent || "";
 
-const confirmTrim = async () => {
-  await expect.poll(() => document.querySelector(".confirm-card")?.textContent || "").toContain("Trim ROM");
-  const confirmButton = Array.from(document.querySelectorAll(".confirm-card button")).find((button) =>
-    button.textContent?.includes("Trim ROM"),
-  );
-  expect(confirmButton).toBeInstanceOf(HTMLButtonElement);
-  confirmButton.click();
+// Starting a run opens an informational warning; it never gates the run, so dismissing it is optional.
+const dismissTrimWarning = async () => {
+  await expect.poll(() => document.querySelector(".confirm-card")?.textContent || "").toContain("Trimming this ROM");
+  const buttons = Array.from(document.querySelectorAll(".confirm-card button"));
+  expect(buttons.map((button) => button.textContent)).toEqual(["Got it"]);
+  buttons[0].click();
+  await expect.poll(() => document.querySelector(".confirm-card")).toBeNull();
 };
 
 const queueTrim = async () => {
@@ -200,7 +200,7 @@ const queueTrim = async () => {
   expect(trimButton).toBeInstanceOf(HTMLButtonElement);
   expect(trimButton.disabled).toBe(false);
   trimButton.click();
-  await confirmTrim();
+  await dismissTrimWarning();
   await expect.poll(getOutputWaitingText).toContain("Waiting for other actions");
 };
 
@@ -370,7 +370,7 @@ test("trim active output cancel button aborts the workflow without an error noti
   const trimButton = document.getElementById("trim-builder-button-run");
   expect(trimButton).toBeInstanceOf(HTMLButtonElement);
   trimButton.click();
-  await confirmTrim();
+  await dismissTrimWarning();
   await expect.poll(() => workflowMockState.runCalls).toBe(1);
 
   await expect.poll(() => document.querySelector("button[aria-label='Cancel trim']")).toBeInstanceOf(HTMLButtonElement);
@@ -398,7 +398,7 @@ test("trim output edits after completion reuse prepared source", async () => {
   const firstTrimButton = document.getElementById("trim-builder-button-run");
   expect(firstTrimButton).toBeInstanceOf(HTMLButtonElement);
   firstTrimButton.click();
-  await confirmTrim();
+  await dismissTrimWarning();
   await expect.poll(() => workflowMockState.runCalls).toBe(1);
   workflowMockState.runDeferred.resolve();
   await expect
@@ -419,7 +419,7 @@ test("trim output edits after completion reuse prepared source", async () => {
   expect(trimButton).toBeInstanceOf(HTMLButtonElement);
   await expect.poll(() => trimButton.textContent || "").toContain("TRIM");
   trimButton.click();
-  await confirmTrim();
+  await dismissTrimWarning();
   await expect.poll(() => workflowMockState.runCalls).toBe(2);
   expect(workflowMockState.inputSetCalls).toBe(1);
 });
@@ -469,6 +469,10 @@ test("trim is disabled with the reason when the staged input cannot be trimmed",
   await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
   expect(document.querySelector(".confirm-card")).toBeNull();
   expect(workflowMockState.runCalls).toBe(0);
+  // The output step explains what Trim supports instead of only disabling the button.
+  const summary = document.getElementById("trim-builder-run-summary");
+  expect(summary?.textContent).toContain("Nintendo DS/DSi, Game Boy Advance, Nintendo 3DS, and Xbox XISO");
+  expect(summary?.textContent).toContain("Compress");
 });
 
 const GAMECUBE_UNSUPPORTED_OVERRIDES = {

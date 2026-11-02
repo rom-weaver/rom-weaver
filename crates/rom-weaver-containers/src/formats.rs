@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use tracing::debug;
+use tracing::{debug, trace};
 
 use crate::nod::read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader};
 use rom_weaver_core::{
@@ -956,8 +956,8 @@ fn same_file_path(left: &Path, right: &Path) -> bool {
 
 /// Map a detected ROM identity (the `platform` label and optical-medium `disc_format`
 /// label emitted by `rom_weaver_checksum::rom_identity`) to the best rom-specific
-/// compression container. GameCube/Wii → RVZ, 3DS → z3ds, any optical disc → CHD,
-/// otherwise the 7z fallback.
+/// compression container. GameCube/Wii → RVZ, 3DS → z3ds, Xbox XISO → 7z (its XDVDFS
+/// layout is not storable as CHD), any other optical disc → CHD, otherwise the 7z fallback.
 ///
 /// GameCube/Wii are matched before the disc rule because those discs also report a DVD
 /// medium - keying CHD off `disc_format` alone would mis-route a GameCube ISO to CHD.
@@ -977,6 +977,13 @@ pub fn recommend_container_for_identity(
             format_name: Z3DS.name,
             reason: "n3ds",
         },
+        Some(plat::XBOX) => {
+            trace!("Xbox XISO is not storable as CHD, recommending 7z");
+            CompressFormatRecommendation {
+                format_name: SEVEN_Z.name,
+                reason: "xbox-xiso",
+            }
+        }
         _ if disc_format.is_some() => CompressFormatRecommendation {
             format_name: crate::chd::CHD.name,
             reason: "disc-chd",

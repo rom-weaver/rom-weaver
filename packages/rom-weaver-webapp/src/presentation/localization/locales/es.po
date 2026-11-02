@@ -2131,7 +2131,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Activar herramientas beta (Recortar y Save Editor)"
+msgstr "Activar herramientas beta (Save Editor)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4331,7 +4331,7 @@ msgstr "Quita este parche y elige un archivo de parche válido."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimDescription"
-msgstr "Elimina el relleno sin usar de ROMs e imágenes de disco compatibles para ahorrar espacio."
+msgstr "Elimina el relleno sin usar de imágenes de Nintendo DS/DSi, Game Boy Advance, Nintendo 3DS y Xbox XISO, o rellena una ROM recortada hasta su tamaño completo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5175,6 +5175,11 @@ msgstr "La base de datos de trucos no está disponible. El acceso sin conexión 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.cliTrimRevertHint"
+msgstr "La CLI también puede escribir un marcador de reversión para que una restauración posterior sea exacta."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.find.cliArchiveHint"
 msgstr "La CLI puede extraer y comprimir archivos."
 
@@ -5182,11 +5187,6 @@ msgstr "La CLI puede extraer y comprimir archivos."
 #: src/presentation/localization/messages.ts
 msgid "ui.find.cliIdentifyAndHashHint"
 msgstr "La CLI puede inspeccionar archivos y calcular sumas de verificación."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.find.cliTrimRevertHint"
-msgstr "La CLI también puede escribir un marcador de reversión para que una restauración posterior sea exacta."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
