@@ -290,6 +290,7 @@ const createEmulatorBridgeScript = (gameName: string, gameLabel: string, saveId:
         window.__romWeaverGameStarted = false;
         EJS_onGameStart = () => {
           window.__romWeaverGameStarted = true;
+          request("game-started");
           const emulator = window.EJS_emulator;
           if (emulator && typeof emulator.on === "function") emulator.on("saveSaveFiles", (data) => send("save-sram", data));
           // The core opens its menu bar as part of starting and leaves it up for

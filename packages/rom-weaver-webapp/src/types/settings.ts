@@ -43,6 +43,7 @@ type CommonSettings = {
   byteUnits?: ByteUnitSystem;
   defaultCompression?: DefaultCompression;
   emulatorSaveStorageEnabled?: boolean;
+  keepTestedRomsEnabled?: boolean;
   input?: InputSettings;
   logging?: LoggingSettings;
   weavePackage?: WeavePackage;

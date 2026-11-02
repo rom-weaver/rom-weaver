@@ -1565,28 +1565,38 @@ html.vt-mode .drop:has(#ppf-undo-input-picker),
   flex-wrap: wrap;
   gap: var(--sp-xs);
 }
-/* The heading text gives way; the two actions keep one row at their own width,
-   one height, so "Import save" never breaks onto a second line beside a square
-   refresh button. */
 .rw-app .emulator-saves-heading {
+  flex-wrap: wrap;
   align-items: flex-start;
 }
 .rw-app .emulator-saves-heading > div:first-child {
-  flex: 1 1 auto;
+  flex: 1 1 16rem;
   min-width: 0;
 }
 .rw-app .emulator-saves-actions {
-  flex: none;
-  flex-wrap: nowrap;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
 }
 .rw-app .emulator-saves-actions .btn {
-  height: 32px;
-  min-height: 32px;
-  white-space: nowrap;
+  max-width: 100%;
+  height: auto;
+  min-height: 44px;
+  white-space: normal;
 }
-.rw-app .emulator-saves-actions .btn:first-child {
-  width: 32px;
+.rw-app .emulator-saves-actions .emulator-saves-refresh {
+  width: 44px;
   padding-inline: 0;
+}
+.rw-app .emulator-saves-heading > .btn {
+  max-width: 100%;
+  height: auto;
+  min-height: 44px;
+  white-space: normal;
+}
+.rw-app .emulator-save-actions .btn {
+  min-width: 44px;
+  height: auto;
+  min-height: 44px;
 }
 .rw-app .emulator-saves-actions svg,
 .rw-app .emulator-save-actions svg {

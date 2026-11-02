@@ -53,6 +53,7 @@ type SettingsState = {
   postApplyTestBehavior: PostApplyActionBehavior;
   betaToolsEnabled: boolean;
   emulatorSaveStorageEnabled: boolean;
+  keepTestedRomsEnabled: boolean;
   offlineCopyEnabled: boolean;
   onboardingEnabled: boolean;
   fixChecksum: boolean;
@@ -172,6 +173,7 @@ const SETTINGS_FIELD_ORDER = [
   "detailedViewEnabled",
   "betaToolsEnabled",
   "emulatorSaveStorageEnabled",
+  "keepTestedRomsEnabled",
   "offlineCopyEnabled",
   "onboardingEnabled",
   "fixChecksum",
@@ -257,6 +259,7 @@ const SETTINGS_PANEL_SECTIONS: ReadonlyArray<{ fields: SettingsFieldKey[]; title
       "postApplyDownloadBehavior",
       "postApplyTestBehavior",
       "emulatorSaveStorageEnabled",
+      "keepTestedRomsEnabled",
       "fixChecksum",
       "identifiedOutputName",
       "requireInputChecksumMatch",
@@ -352,6 +355,15 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "checkbox",
     label: getSettingsLabel("emulatorSaveStorageEnabled"),
     labelId: "settings.emulatorSaveStorageEnabled",
+    layout: "large",
+  },
+  keepTestedRomsEnabled: {
+    defaultValue: false,
+    id: "settings-keep-tested-roms-enabled",
+    key: "keepTestedRomsEnabled",
+    kind: "checkbox",
+    label: getSettingsLabel("keepTestedRomsEnabled"),
+    labelId: "settings.keepTestedRomsEnabled",
     layout: "large",
   },
   postApplyDownloadBehavior: {

@@ -966,6 +966,7 @@ function ApplyWorkflowFormView({
           : "rom-weaver-output-notice-message"
       }
       onDismiss={dismissSectionNotice("outputNotice")}
+      onRetry={() => controllers.output.runPrimaryAction()}
       state={uiState.outputNotice}
     />
   );

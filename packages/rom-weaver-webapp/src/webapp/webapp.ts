@@ -12,6 +12,7 @@ import {
   requestGuidedSampleStart,
 } from "../public/react/guided-sample-start.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
+import { listKeptRoms } from "../storage/browser/kept-roms.ts";
 import { setByteUnitSystem } from "../presentation/formatting/index.ts";
 import { resetBrowserTransientOpfs, startBrowserOpfsBootCleanup } from "../storage/browser/browser-opfs-cleanup.ts";
 import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/runner-control.ts";
@@ -77,6 +78,9 @@ let resolvePendingConfirmation: ((accepted: boolean) => void) | null = null;
 let vitePageUpdateState = createEmptyVitePageUpdateState();
 let pageResetKey = 0;
 if (typeof window !== "undefined") {
+  void listKeptRoms().catch((error: unknown) => {
+    logger.debug("Kept ROM reconciliation unavailable", { message: String(error) });
+  });
   void startBrowserOpfsBootCleanup().catch((error: unknown) => {
     logger.warn("Initial OPFS cleanup failed", { message: error instanceof Error ? error.message : String(error) });
   });

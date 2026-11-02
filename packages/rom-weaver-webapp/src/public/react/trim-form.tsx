@@ -106,14 +106,16 @@ const TrimNotice = ({
   level,
   message,
   onDismiss,
+  onRetry,
 }: {
   id: string;
   level: "error" | "warn";
   message: string;
   onDismiss?: () => void;
+  onRetry?: () => void;
 }) =>
   message ? (
-    <Notice id={id} level={level} onDismiss={onDismiss}>
+    <Notice id={id} level={level} onDismiss={onDismiss} onRetry={onRetry}>
       {message}
     </Notice>
   ) : null;
@@ -1399,6 +1401,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
           id="trim-builder-row-error-message"
           level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
           message={messagePlacement === "output" ? message : ""}
+          onRetry={onRunClick}
           onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
         />
       </>

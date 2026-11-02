@@ -451,7 +451,11 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         </Notice>
       ) : null}
       {error ? (
-        <Notice level="error" onDismiss={() => setError("")}>
+        <Notice
+          level="error"
+          onDismiss={() => setError("")}
+          onRetry={source ? () => void startExtract(source, companionFiles) : undefined}
+        >
           {error}
         </Notice>
       ) : null}

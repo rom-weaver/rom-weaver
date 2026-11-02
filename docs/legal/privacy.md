@@ -29,8 +29,14 @@ The app keeps a few things locally so it works across reloads and can handle fil
 - **Local storage**: your preferences, such as theme and settings, plus update state and a short recent log.
 - **Session storage**: coordinates service-worker and security-mode reloads, update prompts, and the docs shelf state for the current tab.
 - **Cache storage**: the app's own files, so it loads fast and works offline.
-- **IndexedDB**: emulator save states and SRAM. Each record uses the ROM's SHA-1 as its key and stores the file name as a display name. It does not store play history.
-- **Origin Private File System**: temporary inputs, working files, and outputs that are too large for memory.
+- **IndexedDB**: emulator save states, SRAM, and the kept-ROM index. Saves and kept ROMs share the ROM's SHA-1 key. File names are display labels. The app does not store a play history.
+- **Origin Private File System**: temporary working files and outputs, plus ROMs explicitly kept from Test.
+
+**Keep tested ROMs on this device** is off by default. When enabled, it keeps original files played on Test, including compressed archives. Apply outputs and created patches are excluded. Turning it off stops new copies; existing copies remain until you delete them. Failed copies do not stop the game.
+
+Enabling ROM keeping requests persistent browser storage for saves and ROMs. The protection control in **Saves & storage** makes the same request. A browser can decline it. Clearing site data still removes everything.
+
+Saves can be backed up individually or together using **Export all saves**. Browser storage is not a backup. Safari may remove script-writable data after seven days of Safari use without interaction with this site. Home-screen web apps are exempt from that inactivity limit; see [WebKit's storage policy](https://webkit.org/tracking-prevention/#intelligent-tracking-prevention-itp).
 
 All of it belongs to the rom-weaver site in your browser and is under your browser's control. The app sets no advertising or tracking cookies.
 

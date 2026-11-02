@@ -65,6 +65,9 @@ import {
 } from "./emulator-audio-context.ts";
 import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
+import { keepTestRom } from "../../storage/browser/kept-roms.ts";
+import { KeptRomsPanel } from "./kept-roms-panel.tsx";
+import { StorageFullRecovery } from "./storage-full-recovery.tsx";
 import type { PageFileDrop } from "./public-types.ts";
 import { usePageDropForwarder } from "./workflow-form-effects.ts";
 import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
@@ -140,6 +143,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
   const settings = useRomWeaverSettings();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const loadAbortControllerRef = useRef<AbortController | null>(null);
+  const lastPickedRomRef = useRef<File | undefined>(undefined);
   const sampleAbortControllerRef = useRef<AbortController | null>(null);
   const playerFrameRef = useRef<HTMLDivElement>(null);
   const fullscreenDialogRef = useRef<HTMLDialogElement>(null);
@@ -149,6 +153,11 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
   const [loadProgress, setLoadProgress] = useState<ProgressViewModel | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [sampleError, setSampleError] = useState("");
+  const [keepNotice, setKeepNotice] = useState("");
+  const keptFilesRef = useRef(new WeakSet<File>());
+  const playbackDisposersRef = useRef(new WeakMap<File, () => Promise<void>>());
+  const keepingEnabledRef = useRef(settings.keepTestedRomsEnabled === true);
+  keepingEnabledRef.current = settings.keepTestedRomsEnabled === true;
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleTutorialActive, setSampleTutorialActive] = useState(false);
   const [pendingSave, setPendingSave] = useState<PendingTestSave>();
@@ -175,6 +184,31 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
     [currentGame],
   );
   const saveId = currentIdentity?.saveId;
+  useEffect(() => {
+    setKeepNotice("");
+    if (!currentGame?.originalFile || currentGame.source !== "local" || !saveId) return;
+    const file = currentGame.originalFile;
+    let current = true;
+    const started = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow || !keepingEnabledRef.current) return;
+      const data = event.data as { source?: string; kind?: string; gameId?: string } | null;
+      if (data?.source !== "rom-weaver-emulator" || data.kind !== "game-started" || data.gameId !== saveId) return;
+      if (keptFilesRef.current.has(file)) return;
+      keptFilesRef.current.add(file);
+      void keepTestRom(saveId, file)
+        .then(() => {
+          window.dispatchEvent(new Event("rom-weaver-kept-roms-changed"));
+        })
+        .catch((reason: unknown) => {
+          if (current) setKeepNotice(String(reason));
+        });
+    };
+    window.addEventListener("message", started);
+    return () => {
+      current = false;
+      window.removeEventListener("message", started);
+    };
+  }, [currentGame, saveId]);
   const loadedGameRef = useRef<
     { game: EmulatorSessionEntry; identity: NonNullable<typeof currentIdentity> } | undefined
   >(undefined);
@@ -387,6 +421,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
     async (files: File[], prepareAudio = true, save?: File, keepHeldSave = false): Promise<boolean> => {
       const file = files[0];
       if (!file || busy) return false;
+      lastPickedRomRef.current = playbackDisposersRef.current.has(file) ? undefined : file;
       if (!hasWebgl2()) {
         setError({
           blocksPlayer: true,
@@ -395,6 +430,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
         });
         return false;
       }
+      loadAbortControllerRef.current?.abort();
       const abortController = new AbortController();
       loadAbortControllerRef.current = abortController;
       setBusy(true);
@@ -450,6 +486,15 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
           sizeBytes: loaded.blob.size,
           ...(loaded.expandedSizeBytes === undefined ? {} : { expandedSizeBytes: loaded.expandedSizeBytes }),
           source: "local" as const,
+          originalFile: file,
+          ...(playbackDisposersRef.current.has(file)
+            ? {
+                artifact: {
+                  dispose: async () => playbackDisposersRef.current.get(file)?.(),
+                  getBlob: async () => loaded.blob,
+                },
+              }
+            : {}),
         };
         const cancelled = () => abortController.signal.aborted || loadAbortControllerRef.current !== abortController;
         const held = await readPendingTestSaves();
@@ -870,6 +915,17 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
                   onDismiss={error.blocksPlayer ? undefined : () => setError(null)}
                 >
                   <b>{error.summary}</b> {error.detail}
+                  <StorageFullRecovery
+                    message={error.detail}
+                    onRetry={
+                      lastPickedRomRef.current
+                        ? () => {
+                            const file = lastPickedRomRef.current;
+                            if (file) void handleFiles([file]);
+                          }
+                        : undefined
+                    }
+                  />
                 </Notice>
               ) : null}
               {currentGame && missingBios ? (
@@ -924,6 +980,28 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
         title="Load a game"
       />
 
+      <KeptRomsPanel
+        active={active}
+        disabled={busy || preparing}
+        onPlayStart={() => {
+          loadAbortControllerRef.current?.abort();
+          const controller = new AbortController();
+          loadAbortControllerRef.current = controller;
+          return controller.signal;
+        }}
+        onPlay={({ file, dispose }) => {
+          // Replaying MUST NOT replace the kept original.
+          keptFilesRef.current.add(file);
+          playbackDisposersRef.current.set(file, dispose);
+          return handleFiles([file]);
+        }}
+      />
+      {keepNotice ? (
+        <p role="status">
+          {localizer.message("ui.keptRoms.keepFailed")}
+          <StorageFullRecovery message={keepNotice} />
+        </p>
+      ) : null}
       {showPlayer ? (
         <>
           <StepSection

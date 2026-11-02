@@ -397,7 +397,7 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
               }
             />
             {error ? (
-              <Notice level="error" onDismiss={() => setError("")}>
+              <Notice level="error" onDismiss={() => setError("")} onRetry={() => void run()}>
                 {error}
               </Notice>
             ) : null}

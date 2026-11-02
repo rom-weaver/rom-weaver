@@ -111,7 +111,9 @@ wasm (Rust std::fs)
 | Blob/File, proxy handle (`useProxyHandle=true`) | `BrowserProxyRandomAccessFile` -> OPFS proxy worker (Blob-backed handle) | exactly one reader, over SAB |
 | in-memory `Uint8Array`/`ArrayBuffer` | `BrowserVirtualRandomAccessFile` in-memory | defensive only - no current caller |
 
-The fast-path/proxy choice is browser-gated: `useProxyHandle = isWebKitInputRuntime() && size >= ~64 MiB`. Concurrent reads of one File parallelize on Chrome/Firefox (fast path scales ~Nx) but serialize at WebKit's file layer (one proxy reader avoids the contention; measured RVZ extract ~5747 ms stalled vs ~4612 ms balanced). Small inputs are single-threaded (no contention), so they take the lower-overhead fast path even on Safari. OPFS input *staging* (copying a Blob into OPFS up front) is fully retired.
+The fast-path/proxy choice is browser-gated: `useProxyHandle = isWebKitInputRuntime() && size >= ~64 MiB`. Concurrent reads of one File parallelize on Chrome/Firefox (fast path scales ~Nx) but serialize at WebKit's file layer (one proxy reader avoids the contention; measured RVZ extract ~5747 ms stalled vs ~4612 ms balanced). Small inputs are single-threaded (no contention), so they take the lower-overhead fast path even on Safari. Picked inputs are not staged into OPFS.
+
+Replaying a kept Test ROM creates an emulator-owned scratch snapshot through the OPFS proxy. Deleting or replacing the kept file cannot invalidate the player's Blob. Stop or unload releases that snapshot. The persistent originals stay outside scratch cleanup.
 
 **Output writes** - wasm-produced files (extracted ISO, created CHD/RVZ, patched ROM) write through `BrowserProxyRandomAccessFile.writeAt` (4 MiB write-back coalescing) -> `OpfsProxyClient.write` -> proxy server `SyncAccessHandle.write`. A separate storage worker (`packages/rom-weaver-webapp/src/workers/storage/browser-opfs-staging.worker.ts`, actions `list`/`list-metadata`/`remove`/`truncate`/`write`) backs the app-side large-file VFS and path cleanup, not the per-op wasm output.
 

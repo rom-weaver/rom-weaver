@@ -1346,6 +1346,41 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Show detailed file information",
   }),
   "settings.defaultCompression": msg({ id: "settings.defaultCompression", message: "Download format" }),
+  "settings.keepTestedRomsEnabled": msg({
+    id: "settings.keepTestedRomsEnabled",
+    message: "Keep tested ROMs on this device",
+  }),
+  "ui.keptRoms.title": msg({ id: "ui.keptRoms.title", message: "Kept Test ROMs" }),
+  "ui.keptRoms.description": msg({
+    id: "ui.keptRoms.description",
+    message: "Only tested ROMs are kept when the setting is on. Turning it off keeps existing files.",
+  }),
+  "ui.keptRoms.protect": msg({ id: "ui.keptRoms.protect", message: "Protect saves and ROMs from automatic removal" }),
+  "ui.keptRoms.persistence.granted": msg({
+    id: "ui.keptRoms.persistence.granted",
+    message: "Persistent storage granted. Export saves for a separate backup.",
+  }),
+  "ui.keptRoms.persistence.denied": msg({
+    id: "ui.keptRoms.persistence.denied",
+    message: "Persistent storage was not granted. The browser may remove saves and ROMs. Export saves for backup.",
+  }),
+  "ui.keptRoms.removed": msg({ id: "ui.keptRoms.removed", message: "Removed by the browser" }),
+  "ui.keptRoms.unreadable": msg({ id: "ui.keptRoms.unreadable", message: "Can't read this version" }),
+  "ui.keptRoms.play": msg({ id: "ui.keptRoms.play", message: "Play" }),
+  "ui.keptRoms.remove": msg({ id: "ui.keptRoms.remove", message: "Remove" }),
+  "ui.keptRoms.delete": msg({ id: "ui.keptRoms.delete", message: "Delete" }),
+  "ui.keptRoms.empty": msg({ id: "ui.keptRoms.empty", message: "No Test ROMs are kept on this device." }),
+  "ui.keptRoms.keepFailed": msg({
+    id: "ui.keptRoms.keepFailed",
+    message: "The game started, but its ROM could not be kept. Free space in Saves & storage and try again.",
+  }),
+  "ui.saves.emulator.exportAll": msg({ id: "ui.saves.emulator.exportAll", message: "Export all saves" }),
+  "ui.storageFull.keptUsage": msg({
+    id: "ui.storageFull.keptUsage",
+    message: "Browser storage is full. Kept Test ROMs use {size}. Delete kept ROMs to free space.",
+  }),
+  "ui.storageFull.openStorage": msg({ id: "ui.storageFull.openStorage", message: "Open Saves & storage" }),
+  "ui.storageFull.tryAgain": msg({ id: "ui.storageFull.tryAgain", message: "Try again" }),
   "settings.emulatorSaveStorageEnabled": msg({
     id: "settings.emulatorSaveStorageEnabled",
     message: "Store emulator saves on this device",

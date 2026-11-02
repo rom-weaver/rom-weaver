@@ -15,6 +15,7 @@ type EmulatorSessionEntry = {
   core?: string;
   artifact?: Pick<RetainedRuntimeOutput, "dispose" | "getBlob">;
   source: EmulatorSessionSource;
+  originalFile?: File;
   sizeBytes: number;
   expandedSizeBytes?: number;
   savePreviewRevision?: number;

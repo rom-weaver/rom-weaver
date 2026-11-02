@@ -5,10 +5,12 @@ import type { NoticeState } from "./patcher-ui-state.ts";
 export const SectionNotice = ({
   id,
   onDismiss,
+  onRetry,
   state,
 }: {
   id?: string;
   onDismiss?: () => void;
+  onRetry?: () => void;
   state: NoticeState;
 }) => {
   if (!state.visible) return null;
@@ -18,7 +20,7 @@ export const SectionNotice = ({
       level={state.level === "warning" ? "warn" : "error"}
       onDismiss={state.dismissible ? onDismiss : undefined}
     >
-      <WorkflowErrorMessage message={state.message} />
+      <WorkflowErrorMessage message={state.message} onRetry={onRetry} />
     </Notice>
   );
 };
