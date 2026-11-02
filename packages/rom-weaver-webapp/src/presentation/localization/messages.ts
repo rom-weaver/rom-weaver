@@ -2092,7 +2092,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.settings.option.defaultCompression.zipSpecial": msg({
     id: "ui.settings.option.defaultCompression.zipSpecial",
-    message: "Default: ROM-specific format, else plain file or .zip",
+    message: "ROM-specific, else raw or .zip",
   }),
   "ui.settings.option.defaultCompression.specialOnly": msg({
     id: "ui.settings.option.defaultCompression.specialOnly",
