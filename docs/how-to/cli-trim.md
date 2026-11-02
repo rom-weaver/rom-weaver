@@ -44,7 +44,7 @@ For a GameCube or Wii disc, keep the default `.rvz` output name: this path conve
 | Input | Output name | Result |
 | --- | --- | --- |
 | Any trimmable ROM or disc | `.zip`, `.7z` | The trimmed file inside the archive. |
-| XISO disc | `.chd` | The trimmed disc packed as a DVD CHD. |
+| XISO disc | `.chd` | Rejected: an Xbox XISO cannot be stored as CHD. Use `.zip`, `.7z`, or `.xiso`. |
 | 3DS ROM | `.z3ds` | The trimmed ROM packed as Z3DS. `.z3ds` always works; `.zcci` is also accepted for a cartridge image (NCSD) and `.zcxi` for an NCCH image, the name `extract` reads back as `.cci` or `.cxi`. The other Z3DS names (`.zcia`, `.z3dsx`, and the descriptor that does not match the file's payload) are an error. |
 | GameCube or Wii disc | `.rvz` | The RVZ conversion, written as the output. |
 | XISO disc | `.xiso`, `.xiso.iso` | The rebuilt XISO, written as the output. |
