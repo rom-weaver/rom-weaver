@@ -748,8 +748,8 @@
 }
 
 /* Settings tab of the unified dialog. Viewport units avoid a cyclic width under
-   inline-size containment, and the named container is the same one the settings
-   rows already query. */
+   inline-size containment. The named container drives the two-column rule below;
+   each group's rows query their own `setgroup` container instead. */
 .rw-app .log-dlg .settings-body {
   padding-block-end: max(var(--sp-l), env(safe-area-inset-bottom));
   container: settings-card / inline-size;
