@@ -209,49 +209,46 @@ const buildAlignedGameCubeRom = () => {
   return bytes;
 };
 
-test("disc trim names lossless RVZ honestly and converts the intermediate to CHD", async () => {
-  const bytes = buildAlignedGameCubeRom();
+test.each(["game.iso", "game.gcm"])(
+  "trim flags the GameCube/Wii disc %s as unsupported at staging and points to Compress",
+  async (fileName) => {
+    const workflow = new TrimWorkflow({
+      settings: { output: { compression: "none", outputName: "trimmed.iso" }, workers: { threads: 1 } },
+    });
+    try {
+      await workflow.setInput(new File([buildAlignedGameCubeRom()], fileName));
+      expect(workflow.getInput().trimSupported).toBe(false);
+      const warning = workflow.getInput().warnings.find((entry) => entry.code === "TRIM_UNSUPPORTED");
+      expect(warning?.message).toContain("Use Compress to convert GameCube and Wii discs to RVZ");
+      await expect(workflow.run()).rejects.toThrow("This input does not support trimming");
+    } finally {
+      await workflow.dispose();
+    }
+  },
+);
+
+test("trim flags an archive that holds a GameCube/Wii disc as unsupported and points to Compress", async () => {
+  await warmupBrowserRuntimeExtraction();
   const workflow = new TrimWorkflow({
     settings: { output: { compression: "none", outputName: "trimmed.iso" }, workers: { threads: 1 } },
   });
   try {
-    await workflow.setInput(new File([bytes], "game.iso"));
-    expect(workflow.getInput()?.romType?.recommendedFormat).toBe("rvz");
-    const raw = await workflow.run();
-    try {
-      expect(raw.output.fileName).toBe("trimmed.rvz");
-      expect(raw.sizeSummary).toMatchObject({ inputSize: bytes.length, rawSize: bytes.length });
-      const blob = await raw.output.getBlob();
-      expect(Array.from(new Uint8Array(await blob.slice(0, 4).arrayBuffer()))).toEqual([82, 86, 90, 1]);
-    } finally {
-      await raw.output.dispose();
-    }
-    await workflow.setOutputFormat("chd");
-    await workflow.setOutputName("trimmed.chd");
-    const chd = await workflow.run();
-    try {
-      expect(chd.output.fileName).toBe("trimmed.chd");
-      expect(chd.sizeSummary).toMatchObject({ inputSize: bytes.length, rawSize: bytes.length });
-      const blob = await chd.output.getBlob();
-      expect(new TextDecoder().decode(await blob.slice(0, 8).arrayBuffer())).toBe("MComprHD");
-    } finally {
-      await chd.output.dispose();
-    }
+    const archive = await createZipFile("Kururin Squash! (Japan).iso", buildAlignedGameCubeRom(), "kururin.zip");
+    await workflow.setInput(archive);
+    expect(workflow.getInput().trimSupported).toBe(false);
+    const warning = workflow.getInput().warnings.find((entry) => entry.code === "TRIM_UNSUPPORTED");
+    expect(warning?.message).toContain("Use Compress to convert GameCube and Wii discs to RVZ");
+    await expect(workflow.run()).rejects.toThrow("This input does not support trimming");
   } finally {
     await workflow.dispose();
   }
 });
 
-// A trim is the heavy engine pass (an RVZ conversion, an XISO rebuild), so each real trim must start
+// A trim is the heavy engine pass (an XISO rebuild), so each real trim must start
 // the engine's `trim` command exactly once, with the output named after what that one run wrote.
 test.each([
   ["game.nds", () => buildTestNdsRom(), "none", "trimmed.nds"],
   ["game.nds", () => buildTestNdsRom(), "zip", "trimmed.zip"],
-  ["game.iso", () => buildAlignedGameCubeRom(), "none", "trimmed.rvz"],
-  ["game.iso", () => buildAlignedGameCubeRom(), "zip", "trimmed.zip"],
-  ["game.iso", () => buildAlignedGameCubeRom(), "7z", "trimmed.7z"],
-  ["game.iso", () => buildAlignedGameCubeRom(), "chd", "trimmed.chd"],
-  ["game.gcm", () => buildAlignedGameCubeRom(), "none", "trimmed.rvz"],
 ])("trim %s with %s output runs the engine trim once", async (sourceName, buildBytes, compression, outputName) => {
   const traces = [];
   const workflow = new TrimWorkflow({
@@ -259,7 +256,7 @@ test.each([
       logging: { level: "trace", sink: (log) => traces.push(log) },
       output: {
         compression,
-        outputName: sourceName.endsWith(".iso") || sourceName.endsWith(".gcm") ? "trimmed.iso" : "trimmed.nds",
+        outputName: "trimmed.nds",
       },
       workers: { threads: 1 },
     },

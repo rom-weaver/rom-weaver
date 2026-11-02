@@ -2534,10 +2534,7 @@ export const ROM_WEAVER_TRIM_INPUT_EXTENSIONS = [
   "cxi",
   "xiso",
   "xiso.iso",
-  "iso",
-  "gcm",
-  "wbfs",
-  "rvz"
+  "iso"
 ] as const;
 
 export const ROM_WEAVER_THREADED_COMMANDS = [

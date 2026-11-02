@@ -1116,7 +1116,7 @@ its header declares; other files round up to the next power of two, and NDS
 also keeps the used-data boundary from its header. Restoration without a
 footer does not guarantee the original bytes.
 
-XISO trimming and lossless RVZ conversion do not support this operation."
+XISO trimming does not support this operation."
         )
     )]
     #[serde(default)]
