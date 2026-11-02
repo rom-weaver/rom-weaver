@@ -208,11 +208,12 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
           }),
         outputName: rawTrimFileName,
         revert: input.revert,
+        revertMarker: input.revertMarker,
         signal: options.signal,
         source: source as SourceRef,
         threads: getTrimThreads(options),
       }),
-    () => ({ revert: !!input.revert, worker: true }),
+    () => ({ revert: !!input.revert, revertMarker: !!input.revertMarker, worker: true }),
   );
   const rawSize = result.sizeSummary?.rawSize ?? result.sizeSummary?.outputSize ?? result.output.size;
   const logicalInputSize = result.sizeSummary?.inputSize ?? inputSize;

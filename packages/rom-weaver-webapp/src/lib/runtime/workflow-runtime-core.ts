@@ -483,7 +483,18 @@ const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["
       await workerSource.cleanup().catch(() => undefined);
     }
   },
-  trim: async ({ source, extension, outputName, revert, threads, logLevel, onLog, onProgress, signal }) => {
+  trim: async ({
+    source,
+    extension,
+    outputName,
+    revert,
+    revertMarker,
+    threads,
+    logLevel,
+    onLog,
+    onProgress,
+    signal,
+  }) => {
     const workerSource = await stageTrimSource(adapter, source, { logLevel, onLog });
     try {
       const result = await adapter.invokeTrimWorker(
@@ -492,6 +503,7 @@ const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["
           logLevel,
           outputName,
           revert,
+          revertMarker,
           signal,
           sourceFileName: workerSource.fileName,
           sourceFilePath: workerSource.filePath,

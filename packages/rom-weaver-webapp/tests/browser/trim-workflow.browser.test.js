@@ -20,6 +20,9 @@ const ndsCrc16 = (bytes) => {
   return crc & 0xffff;
 };
 
+// The webapp appends a revert footer to every NDS, GBA, and 3DS trim it can later restore.
+const REVERT_FOOTER_BYTES = 14;
+
 const writeLe32 = (bytes, offset, value) => {
   bytes[offset] = value & 0xff;
   bytes[offset + 1] = (value >>> 8) & 0xff;
@@ -165,10 +168,10 @@ test("trim workflow sends extracted archive payload to the trim worker", async (
 
     const result = await workflow.run();
     expect(result.output.fileName).toBe("game (trimmed).nds");
-    expect(result.output.size).toBe(0x3000);
+    expect(result.output.size).toBe(0x3000 + REVERT_FOOTER_BYTES);
     expect(result.sizeSummary?.inputSize).toBe(0x5000);
-    expect(result.sizeSummary?.outputSize).toBe(0x3000);
-    expect(result.sizeSummary?.rawSize).toBe(0x3000);
+    expect(result.sizeSummary?.outputSize).toBe(0x3000 + REVERT_FOOTER_BYTES);
+    expect(result.sizeSummary?.rawSize).toBe(0x3000 + REVERT_FOOTER_BYTES);
     await result.output.dispose();
 
     // The run starts the engine's trim once (the staging probe passes no log sink).
@@ -394,9 +397,11 @@ test("trim rejects unsupported input and allows a successful retry", async () =>
     await workflow.setInput(new File([buildTestNdsRom()], "game.nds"));
     const result = await workflow.run();
     try {
-      expect(result.output.size).toBe(0x3000);
+      expect(result.output.size).toBe(0x3000 + REVERT_FOOTER_BYTES);
       const blob = await result.output.getBlob();
-      expect(new Uint8Array(await blob.arrayBuffer())).toEqual(buildTestNdsRom().subarray(0, 0x3000));
+      expect(new Uint8Array(await blob.arrayBuffer()).subarray(0, 0x3000)).toEqual(
+        buildTestNdsRom().subarray(0, 0x3000),
+      );
     } finally {
       await result.output.dispose();
     }
@@ -514,6 +519,39 @@ test("trim offers no restore for an XISO", async () => {
     expect(workflow.getSnapshot().mode).toBe("trim");
     await workflow.setMode("restore");
     await expect(workflow.run()).rejects.toThrow("This input does not support restoring padding");
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("trim writes a revert marker that a later restore uses to rebuild the original", async () => {
+  // 0x00 padding: a restore without the marker would rebuild 0xFF and miss the original.
+  const original = buildTestNdsRom().subarray(0, 0x4000).slice();
+  original.fill(0x00, 0x3000);
+  const workflow = new TrimWorkflow({ settings: { output: { compression: "none" }, workers: { threads: 1 } } });
+  try {
+    await workflow.setInput(new File([original], "game.nds"));
+    expect(workflow.getSnapshot().mode).toBe("trim");
+    const trimmed = await workflow.run();
+    let trimmedBytes;
+    try {
+      trimmedBytes = await readOutputBytes(trimmed.output);
+    } finally {
+      await trimmed.output.dispose();
+    }
+    expect(trimmedBytes.length).toBe(0x3000 + REVERT_FOOTER_BYTES);
+    expect(trimmedBytes.subarray(0, 0x3000)).toEqual(original.subarray(0, 0x3000));
+    expect(new TextDecoder().decode(trimmedBytes.subarray(0x3000, 0x3003))).toBe("RWT");
+
+    await workflow.setInput(new File([trimmedBytes], "game (trimmed).nds"));
+    expect(workflow.getInput()).toMatchObject({ paddingTrimmed: true, restoreSupported: true });
+    expect(workflow.getSnapshot().mode).toBe("restore");
+    const restored = await workflow.run();
+    try {
+      expect(await readOutputBytes(restored.output)).toEqual(original);
+    } finally {
+      await restored.output.dispose();
+    }
   } finally {
     await workflow.dispose();
   }

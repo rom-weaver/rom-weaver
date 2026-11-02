@@ -179,6 +179,8 @@ type TrimInput = {
   source: SourceRef;
   /** Restore removed padding instead of removing it. */
   revert?: boolean;
+  /** Append a revert footer so a later restore is exact (NDS, GBA, and 3DS trims only). */
+  revertMarker?: boolean;
   selectedSourceEntryName?: string;
   options?: TrimWorkflowOptions;
 };

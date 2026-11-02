@@ -390,6 +390,8 @@ type RuntimeTrimWorkerInput = {
   logLevel?: LogLevel;
   outputName: string;
   revert?: boolean;
+  /** Append a revert footer recording the removed padding (NDS, GBA, and 3DS trims only). */
+  revertMarker?: boolean;
   signal?: AbortSignal;
   sourceFileName: string;
   sourceFilePath: string;
@@ -656,6 +658,8 @@ type WorkflowRuntimeTrimInput = {
   outputName: string;
   /** Restore removed padding instead of removing it. */
   revert?: boolean;
+  /** Append a revert footer recording the removed padding (NDS, GBA, and 3DS trims only). */
+  revertMarker?: boolean;
   threads?: RuntimeThreadBudgetInput;
   logLevel?: LogLevel;
   onLog?: (log: WorkflowRuntimeLog) => void;

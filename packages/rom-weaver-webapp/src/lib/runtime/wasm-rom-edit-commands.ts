@@ -40,7 +40,8 @@ const invokeRomWeaverTrimWorker = async (
     // Matches the Rust `TrimCommand`: `source: Vec<PathBuf>` (required), `output: Option<PathBuf>`
     // (conflicts with `in_place`), `extension: Option<String>`, `in_place`, `dry_run`, `revert`,
     // `recursive` (defaults true), `threads`. We always write a new file (`in_place: false`) and
-    // simulate only for the staging probe (`dryRun`); `revert` restores padding instead of removing it.
+    // simulate only for the staging probe (`dryRun`); `revert` restores padding instead of removing it,
+    // and `revert_marker` appends the footer that makes that restore exact.
     //
     // The engine writes a GameCube/Wii disc as RVZ and rejects any other output extension for it, but
     // only it knows which inputs those are, and a trim is the heavy pass (an RVZ conversion or an XISO
@@ -52,6 +53,7 @@ const invokeRomWeaverTrimWorker = async (
       in_place: false,
       output: outputPath,
       revert: !!input.revert,
+      ...(input.revertMarker && !input.revert ? { revert_marker: true } : {}),
       input: [sourceFilePath],
       ...(normalizedExtension ? { extension: normalizedExtension } : {}),
       ...(threadArg ? { threads: threadArg } : {}),

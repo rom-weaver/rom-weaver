@@ -614,6 +614,8 @@ describe("TrimPatchForm", () => {
       const { container } = await stageRom("game.nes");
       await vi.waitFor(() => expect(container.querySelector("#trim-builder-mode")).toBeTruthy());
       expect(modeButton(container, "Trim").getAttribute("aria-pressed")).toBe("true");
+      await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+      expect(document.body.textContent).toContain("A 14-byte revert marker at its end records the removed padding");
       await confirmRun(container, "Trim ROM");
       expect(latest?.workflow.setMode).toHaveBeenLastCalledWith("trim");
     });
