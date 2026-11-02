@@ -1746,7 +1746,7 @@ msgstr "Predeterminado: compresión específica de la ROM, como Z3DS, CHD, RVZ, 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.option.defaultCompression.zipSpecial"
-msgstr "Predeterminado: específico de la ROM; si no, archivo sin comprimir o .zip"
+msgstr ".zip o específico de la ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

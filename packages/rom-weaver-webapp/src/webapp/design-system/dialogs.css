@@ -899,14 +899,18 @@
   color: var(--ink-3);
 }
 
-/* Settings groups use subgrid to align labels and controls. */
+/* Settings groups use subgrid to align labels and controls. Each group is its
+   own size container: a row's label and control sit side by side only while
+   the group is wide enough to show the control's value in full (see
+   webapp-modals.css); the pane's width says nothing about a column's. */
 .rw-app .setgroup {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 1.4fr);
   column-gap: var(--sp-m);
   align-content: start;
   padding: var(--sp-m) var(--sp-l) var(--sp-l);
   margin-block-end: 11px;
+  container: setgroup / inline-size;
   background: var(--plate-2);
   border: 1px solid var(--seam);
   border-radius: var(--r-m);

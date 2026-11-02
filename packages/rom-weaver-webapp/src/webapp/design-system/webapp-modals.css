@@ -95,8 +95,9 @@ html:has(.rw-modal) {
 .rw-modal.select-modal .modal-body {
   padding-block-start: var(--sp-s);
 }
-/* Stack labels when the card, not the viewport, runs narrow. */
-@container settings-card (max-width: 560px) {
+/* Stack the label over its control when the group, not the viewport, runs
+   narrow: the control then takes the group's full width. */
+@container setgroup (max-width: 27rem) {
   .rw-app .setgroup .setrow {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--sp-xs);
@@ -122,11 +123,10 @@ html:has(.rw-modal) {
   height: 34px;
   font-size: 0.85rem;
 }
+/* A label wraps rather than truncating: it is the only name the control has. */
 .rw-app .setrow .slabel label {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .rw-app .setrow .slabel small {
   flex-basis: 100%;
