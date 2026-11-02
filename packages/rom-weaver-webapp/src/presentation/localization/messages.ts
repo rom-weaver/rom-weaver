@@ -1333,7 +1333,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "settings.betaToolsEnabled": msg({
     id: "settings.betaToolsEnabled",
-    message: "Enable beta tools (Trim and Save Editor)",
+    message: "Enable beta tools (Save Editor)",
   }),
   "settings.accent": msg({ id: "settings.accent", message: "Accent" }),
   "settings.weavePackage": msg({ id: "settings.weavePackage", message: "What a shared weave includes" }),
@@ -1683,7 +1683,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.hero.trimDescription": msg({
     id: "ui.hero.trimDescription",
-    message: "Remove unused padding from supported ROMs and disc images to save storage space.",
+    message:
+      "Remove unused padding from Nintendo DS, Game Boy Advance, Nintendo 3DS, and Xbox (XISO) images, or pad a trimmed ROM back to full size.",
   }),
   "ui.hero.toolsDescription": msg({
     id: "ui.hero.toolsDescription",

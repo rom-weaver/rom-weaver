@@ -8,6 +8,10 @@ let recommendedFormat: string | undefined;
 let stagingGate: Promise<void> | undefined;
 let startUnidentified = false;
 let paddingTrimmed: boolean | undefined;
+// Engine verdicts staging would report: the platform, the dry-run trim verdict, and restore support.
+let platform: string | undefined;
+let trimSupported: boolean | undefined;
+let restoreSupported: boolean | undefined;
 // Models staging extracting the upload: the image's name and the containers it came out of.
 let extracted: { fileName: string; parentKind: string } | undefined;
 const changeListeners = new Set<() => void>();
@@ -33,8 +37,13 @@ const makeTrimSource = (fileName: string) => ({
       },
   parentCompressions: extracted ? [{ kind: extracted.parentKind }] : [],
   ...(paddingTrimmed === undefined ? {} : { paddingTrimmed, restoreSupported: true }),
+  ...(restoreSupported === undefined ? {} : { restoreSupported }),
+  ...(trimSupported === undefined ? {} : { trimSupported }),
   romProbe: recommendedFormat ? undefined : { trim: { detected: true, trimmedInputBytes: 96 } },
-  romType: recommendedFormat ? { recommendedFormat } : undefined,
+  romType:
+    recommendedFormat || platform
+      ? { ...(recommendedFormat ? { recommendedFormat } : {}), ...(platform ? { platform } : {}) }
+      : undefined,
   selectedCandidateId: "rom-candidate",
   size: 128,
   status: "ready",
@@ -119,6 +128,9 @@ beforeEach(() => {
   stagingGate = undefined;
   startUnidentified = false;
   paddingTrimmed = undefined;
+  platform = undefined;
+  trimSupported = undefined;
+  restoreSupported = undefined;
   extracted = undefined;
   changeListeners.clear();
 });
@@ -142,10 +154,6 @@ describe("TrimPatchForm", () => {
     });
     await vi.waitFor(() => expect(container.textContent).toContain("Trim Example (USA)"));
     await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
-    const confirm = Array.from(document.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("Trim ROM"),
-    );
-    await act(async () => fireEvent.click(confirm as HTMLButtonElement));
     await vi.waitFor(() => expect(latest?.workflow.setOutputName).toHaveBeenCalled());
     expect(String(latest?.workflow.setOutputName.mock.calls[0]?.[0])).toContain("Trim Example (USA)");
   });
@@ -175,10 +183,6 @@ describe("TrimPatchForm", () => {
     const before = nameField().value;
     expect(before).not.toContain("Trim Example (USA)");
     await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
-    const confirm = Array.from(document.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("Trim ROM"),
-    );
-    await act(async () => fireEvent.click(confirm as HTMLButtonElement));
     await vi.waitFor(() =>
       expect(container.querySelector("#trim-builder-button-run")?.textContent).toContain("Download"),
     );
@@ -202,7 +206,7 @@ describe("TrimPatchForm", () => {
     expect(container.textContent).toContain("Detected (96 B)");
   });
 
-  it("requires confirmation, runs the trim, and exposes a completed download", async () => {
+  it("starts the run at once, shows a dismissible warning, and exposes a completed download", async () => {
     const onComplete = vi.fn();
     const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
     const { container } = renderForm({ onTrimComplete: onComplete, settings: { zipCodec: "store", zipLevel: 0 } });
@@ -214,12 +218,7 @@ describe("TrimPatchForm", () => {
     await vi.waitFor(() => expect(container.querySelector("#trim-builder-button-run")).toBeTruthy());
     const run = container.querySelector("#trim-builder-button-run") as HTMLButtonElement;
     await act(async () => fireEvent.click(run));
-    expect(document.body.textContent).toContain("Trim this ROM?");
-    const confirm = Array.from(document.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("Trim ROM"),
-    );
-    expect(confirm).toBeTruthy();
-    await act(async () => fireEvent.click(confirm as HTMLButtonElement));
+    expect(document.body.textContent).toContain("Trimming this ROM");
     await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalled());
     await vi.waitFor(() => expect(latest?.output.saveAs).toHaveBeenCalled());
     expect(latest?.workflow.setSettings).toHaveBeenCalledWith(
@@ -248,15 +247,11 @@ describe("TrimPatchForm", () => {
       sizeSummary: { compressionTimeMs: 0, inputSize: 128, outputSize: 128, rawSize: 128, trimTimeMs: 1 },
     } as never);
     await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
-    const confirm = Array.from(document.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("Trim ROM"),
-    );
-    await act(async () => fireEvent.click(confirm as HTMLButtonElement));
     await vi.waitFor(() => expect(latest?.output.saveAs).toHaveBeenCalled());
     expect(container.textContent).toContain("Already trimmed .nes");
   });
 
-  it("surfaces a trim failure and supports canceling the confirmation", async () => {
+  it("keeps running when the warning dialog is dismissed, and surfaces a trim failure", async () => {
     const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
     const { container } = renderForm();
     const input = container.querySelector("#trim-builder-input-file-unified") as HTMLInputElement;
@@ -265,21 +260,32 @@ describe("TrimPatchForm", () => {
       fireEvent.change(input);
     });
     await vi.waitFor(() => expect(container.querySelector("#trim-builder-button-run")).toBeTruthy());
-    await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
-    const cancel = Array.from(document.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("Cancel"),
-    );
-    expect(cancel).toBeTruthy();
-    await act(async () => fireEvent.click(cancel as HTMLButtonElement));
-    expect(document.body.textContent).not.toContain("Trim this ROM?");
-
+    await waitForWorkflow();
     latest?.workflow.run.mockRejectedValueOnce(new Error("trim failed for the test"));
     await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
-    const confirm = Array.from(document.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("Trim ROM"),
-    );
-    await act(async () => fireEvent.click(confirm as HTMLButtonElement));
+    // No confirm step: the run is already under way while the warning is on screen.
+    await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalledOnce());
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.textContent).toContain("Trimming this ROM");
+    expect(Array.from(dialog.querySelectorAll("button")).map((button) => button.textContent)).not.toContain("Cancel");
+    const gotIt = Array.from(dialog.querySelectorAll("button")).find((button) => button.textContent === "Got it");
+    await act(async () => fireEvent.click(gotIt as HTMLButtonElement));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
     await vi.waitFor(() => expect(container.textContent).toContain("trim failed for the test"));
+    expect(latest?.workflow.run).toHaveBeenCalledOnce();
+  });
+
+  it("closes the warning dialog with Escape without affecting the run", async () => {
+    const { container } = renderForm({ pageDrop: { files: [new File(["rom"], "game.nes")], id: 1 } });
+    await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+    await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+    expect(document.querySelector('[role="dialog"][aria-labelledby]')).toBeTruthy();
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(latest?.output.saveAs).toHaveBeenCalled());
   });
 
   it("reports ignored patches and unused extra ROMs from a unified drop", async () => {
@@ -307,13 +313,6 @@ describe("TrimPatchForm", () => {
     });
     await vi.waitFor(() => expect(container.querySelector("#trim-builder-button-run")).toBeTruthy());
     await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
-    await act(async () =>
-      fireEvent.click(
-        Array.from(document.querySelectorAll("button")).find((button) =>
-          button.textContent?.includes("Trim ROM"),
-        ) as HTMLButtonElement,
-      ),
-    );
     await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalled());
 
     latest?.output.saveAs.mockRejectedValueOnce(new Error("download failed"));
@@ -322,7 +321,7 @@ describe("TrimPatchForm", () => {
     expect(latest?.output.saveAs).toHaveBeenCalledWith({ interactive: true });
   });
 
-  it("uses neutral confirmation while disc metadata is pending and preserves queued execution", async () => {
+  it("uses a neutral warning while disc metadata is pending and queues the run until staging ends", async () => {
     recommendedFormat = "rvz";
     let release!: () => void;
     stagingGate = new Promise<void>((resolve) => {
@@ -338,13 +337,6 @@ describe("TrimPatchForm", () => {
     expect(document.body.textContent).toContain("GameCube and Wii discs are converted losslessly");
     expect(document.body.textContent).not.toContain("A lossless RVZ copy");
     expect(document.body.textContent).not.toContain("restored padding");
-    await act(async () =>
-      fireEvent.click(
-        Array.from(document.querySelectorAll("button")).find((button) =>
-          button.textContent?.includes("Trim ROM"),
-        ) as HTMLButtonElement,
-      ),
-    );
     expect(latest?.workflow.run).not.toHaveBeenCalled();
     await act(async () => {
       release();
@@ -382,13 +374,6 @@ describe("TrimPatchForm", () => {
         expect(format.value).toBe("rvz");
       });
       await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
-      await act(async () =>
-        fireEvent.click(
-          Array.from(document.querySelectorAll("button")).find((button) =>
-            button.textContent?.includes("Trim ROM"),
-          ) as HTMLButtonElement,
-        ),
-      );
       await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalled());
       // run() takes no arguments; the chosen format reaches the workflow through its setters.
       const formatCalls = vi.mocked(latest?.workflow.setOutputFormat as () => Promise<void>).mock.calls;
@@ -489,10 +474,6 @@ describe("TrimPatchForm", () => {
         expect((container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement).value).toBe(format),
       );
       await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
-      const confirm = Array.from(document.querySelectorAll("button")).find((button) =>
-        button.textContent?.includes("Trim ROM"),
-      );
-      await act(async () => fireEvent.click(confirm as HTMLButtonElement));
       await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalled());
       expect(latest?.workflow.setOutputName.mock.calls.at(-1)?.[0]).toMatch(new RegExp(`\\${extension}$`));
     },
@@ -532,10 +513,6 @@ describe("TrimPatchForm", () => {
       const nameField = container.querySelector("#trim-builder-output-file") as HTMLInputElement;
       fireEvent.change(nameField, { target: { value: typedName } });
       await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
-      const confirm = Array.from(document.querySelectorAll("button")).find((button) =>
-        button.textContent?.includes("Trim ROM"),
-      );
-      await act(async () => fireEvent.click(confirm as HTMLButtonElement));
       await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalled());
       return latest?.workflow.setOutputName.mock.calls.at(-1)?.[0];
     };
@@ -571,15 +548,125 @@ describe("TrimPatchForm", () => {
       const nameField = container.querySelector("#trim-builder-output-file") as HTMLInputElement;
       fireEvent.change(nameField, { target: { value: typedName } });
       await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
-      const confirm = Array.from(document.querySelectorAll("button")).find((button) =>
-        button.textContent?.includes("Trim ROM"),
-      );
-      await act(async () => fireEvent.click(confirm as HTMLButtonElement));
       await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalled());
       return latest?.workflow.setOutputName.mock.calls.at(-1)?.[0];
     };
 
     expect(await runWithTypedName("Hack v1.2")).toBe("Hack v1.2.zip");
+  });
+
+  describe("what Trim says about the staged input", () => {
+    const stage = async (fileName: string, props: Record<string, unknown> = {}) => {
+      const view = renderForm({ pageDrop: { files: [new File(["rom"], fileName)], id: 1 }, ...props });
+      await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+      await vi.waitFor(() => expect(view.container.querySelector("#trim-builder-button-run")).toBeTruthy());
+      return view;
+    };
+    const summary = (container: HTMLElement) => container.querySelector("#trim-builder-run-summary")?.textContent ?? "";
+
+    it("says a cartridge trim adds a revert marker that Restore padding uses", async () => {
+      paddingTrimmed = false;
+      trimSupported = true;
+      const { container } = await stage("game.nds");
+      await vi.waitFor(() => expect(summary(container)).toContain("12-byte revert marker"));
+      expect(summary(container)).toContain("removes trailing padding");
+      expect(summary(container)).toContain("Restore padding can rebuild the original exactly");
+    });
+
+    it("says an XISO trim cannot be restored, and warns accordingly in the dialog", async () => {
+      platform = "Microsoft Xbox";
+      trimSupported = true;
+      restoreSupported = false;
+      const { container } = await stage("game.xiso.iso");
+      await vi.waitFor(() => expect(summary(container)).toContain("without its unused space"));
+      expect(summary(container)).toContain("can't be restored");
+      await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+      const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+      expect(dialog.textContent).toContain("XISO trims can't be restored");
+      expect(dialog.textContent).toContain("cannot be restored to the original");
+      await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalledOnce());
+    });
+
+    it("says restore is byte-exact only with a revert marker", async () => {
+      paddingTrimmed = true;
+      trimSupported = true;
+      const { container } = await stage("game (trimmed).nds");
+      await vi.waitFor(() => expect(summary(container)).toContain("0xFF"));
+      expect(summary(container)).toContain("byte-exact only if the ROM carries a revert marker");
+    });
+
+    it("explains an unsupported input and points to Compress instead of only disabling the button", async () => {
+      trimSupported = false;
+      const { container } = await stage("notes.txt");
+      await vi.waitFor(() => expect(summary(container)).toContain("Compress"));
+      expect(summary(container)).toContain("Nintendo DS/DSi, Game Boy Advance, Nintendo 3DS, and Xbox XISO");
+      expect(container.querySelector("#trim-builder-run-summary")?.className).toContain("warn");
+      expect((container.querySelector("#trim-builder-button-run") as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("lists the supported platforms in the hero description", async () => {
+      const { container } = renderForm();
+      expect(container.textContent).toContain("Nintendo DS, Game Boy Advance, Nintendo 3DS, and Xbox (XISO)");
+    });
+  });
+
+  describe("default output format", () => {
+    const stage = async (fileName: string, props: Record<string, unknown> = {}) => {
+      const view = renderForm({ pageDrop: { files: [new File(["rom"], fileName)], id: 1 }, ...props });
+      await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+      const select = () => view.container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement;
+      await vi.waitFor(() => expect(select()?.value).toBeTruthy());
+      return { ...view, select };
+    };
+
+    it("defaults a staged NDS to ZIP from the Settings default", async () => {
+      const { select } = await stage("game.nds");
+      expect(select().value).toBe("zip");
+    });
+
+    it('honors "7z only" from Settings', async () => {
+      const { select } = await stage("game.nds", { settings: { defaultCompression: "7z only" } });
+      expect(select().value).toBe("7z");
+    });
+
+    it('keeps the raw extension for "none"', async () => {
+      const { select } = await stage("game.nds", { settings: { defaultCompression: "none" } });
+      expect(select().value).toBe("nds");
+    });
+
+    it("defaults an XISO to the archive setting and never offers CHD", async () => {
+      platform = "Microsoft Xbox";
+      trimSupported = true;
+      restoreSupported = false;
+      for (const fileName of ["game.xiso.iso", "game.iso"]) {
+        const { select, unmount } = await stage(fileName, { outputFormat: "chd" });
+        const offered = Array.from(select().options).map((option) => option.value);
+        expect(offered).not.toContain("chd");
+        expect(select().value).toBe("zip");
+        unmount();
+        latest = null;
+      }
+    });
+
+    it("never offers CHD for an XISO that staging left without a platform tag", async () => {
+      trimSupported = true;
+      restoreSupported = false;
+      const { select } = await stage("game.iso", { outputFormat: "chd" });
+      const offered = Array.from(select().options).map((option) => option.value);
+      expect(offered).not.toContain("chd");
+      expect(select().value).toBe("zip");
+    });
+
+    it("never defaults an XISO to CHD even when a disc recommendation is attached", async () => {
+      platform = "Microsoft Xbox";
+      recommendedFormat = "chd";
+      trimSupported = true;
+      restoreSupported = false;
+      const { select } = await stage("game.iso", { settings: { defaultCompression: "auto" } });
+      const offered = Array.from(select().options).map((option) => option.value);
+      expect(offered).not.toContain("chd");
+      expect(select().value).not.toBe("chd");
+    });
   });
 
   describe("restore padding", () => {
@@ -591,13 +678,8 @@ describe("TrimPatchForm", () => {
       await vi.waitFor(() => expect(view.container.textContent).toContain("Trim Example (USA)"));
       return view;
     };
-    const confirmRun = async (container: HTMLElement, confirmLabel: string) => {
+    const startRun = async (container: HTMLElement) => {
       await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
-      const confirm = Array.from(document.querySelectorAll("button")).find(
-        (button) => button.textContent === confirmLabel && !button.closest("#trim-builder-mode"),
-      );
-      expect(confirm).toBeTruthy();
-      await act(async () => fireEvent.click(confirm as HTMLButtonElement));
       await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalled());
     };
     const modeButton = (container: HTMLElement, label: string) =>
@@ -614,7 +696,7 @@ describe("TrimPatchForm", () => {
       expect(modeButton(container, "Restore padding").getAttribute("aria-pressed")).toBe("true");
       const nameField = container.querySelector("#trim-builder-output-file") as HTMLInputElement;
       expect(nameField.value).toBe("Trim Example (USA)");
-      await confirmRun(container, "Restore padding");
+      await startRun(container);
       expect(latest?.workflow.setMode).toHaveBeenLastCalledWith("restore");
       expect(String(latest?.workflow.setOutputName.mock.calls.at(-1)?.[0])).not.toContain("(trimmed)");
     });
@@ -624,7 +706,7 @@ describe("TrimPatchForm", () => {
       const { container } = await stageRom("game.nes");
       const nameField = container.querySelector("#trim-builder-output-file") as HTMLInputElement;
       fireEvent.change(nameField, { target: { value: "game" } });
-      await confirmRun(container, "Restore padding");
+      await startRun(container);
       expect(String(latest?.workflow.setOutputName.mock.calls.at(-1)?.[0])).toMatch(/^game \(restored\)\./);
     });
 
@@ -637,7 +719,7 @@ describe("TrimPatchForm", () => {
       expect((container.querySelector("#trim-builder-output-file") as HTMLInputElement).value).toBe(
         "Trim Example (USA) (trimmed)",
       );
-      await confirmRun(container, "Trim ROM");
+      await startRun(container);
       expect(latest?.workflow.setMode).toHaveBeenLastCalledWith("trim");
     });
 
@@ -646,16 +728,15 @@ describe("TrimPatchForm", () => {
       const { container } = await stageRom("game.nes");
       await vi.waitFor(() => expect(container.querySelector("#trim-builder-mode")).toBeTruthy());
       expect(modeButton(container, "Trim").getAttribute("aria-pressed")).toBe("true");
-      await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+      await startRun(container);
       expect(document.body.textContent).toContain("A 12-byte revert marker at its end records the removed padding");
-      await confirmRun(container, "Trim ROM");
       expect(latest?.workflow.setMode).toHaveBeenLastCalledWith("trim");
     });
 
     it("offers no mode switch when the input cannot be restored", async () => {
       const { container } = await stageRom("game.nes");
       expect(container.querySelector("#trim-builder-mode")).toBeNull();
-      await confirmRun(container, "Trim ROM");
+      await startRun(container);
       expect(latest?.workflow.setMode).toHaveBeenLastCalledWith("trim");
     });
   });

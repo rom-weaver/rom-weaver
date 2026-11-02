@@ -224,4 +224,39 @@ const ConfirmDialog = ({
   );
 };
 
-export { ConfirmDialog, Modal };
+/**
+ * Informational dialog: one warning the user should read, one dismiss action. Unlike
+ * ConfirmDialog it never gates anything - closing it (button, Esc, backdrop) changes nothing.
+ */
+const InfoDialog = ({
+  open,
+  title,
+  body,
+  dismissLabel = "Got it",
+  onDismiss,
+}: {
+  open: boolean;
+  title: ReactNode;
+  body: ReactNode;
+  dismissLabel?: string;
+  onDismiss: () => void;
+}) => {
+  const titleId = useId();
+  return (
+    <ModalShell card="confirm-card" labelledBy={titleId} onBackdrop={onDismiss} open={open}>
+      <div className="c-title" id={titleId}>
+        <TriangleAlert aria-hidden="true" />
+        {title}
+      </div>
+      <div className="c-body">{body}</div>
+      <div className="c-actions">
+        <button className="btn primary" onClick={onDismiss} type="button">
+          <Check aria-hidden="true" />
+          {dismissLabel}
+        </button>
+      </div>
+    </ModalShell>
+  );
+};
+
+export { ConfirmDialog, InfoDialog, Modal };
