@@ -368,7 +368,7 @@ describe("createSharedCompressionRuntime", () => {
         ...common,
         format: "rvz",
         source: {},
-        romSpecific: { rvz: { codec: "zstd", blockSize: 1024, compressionLevel: 5, mode: "raw", scrub: true } },
+        romSpecific: { rvz: { codec: "zstd", blockSize: 1024, compressionLevel: 5, mode: "raw" } },
       } as never),
     ).resolves.toMatchObject({ output: expect.anything() });
     await expect(
@@ -382,7 +382,7 @@ describe("createSharedCompressionRuntime", () => {
     expect(createChd).toHaveBeenCalledWith(
       expect.objectContaining({ mode: "cd", sourceMode: "tracks", compressionCodecs: ["lzma"], threads: 4 }),
     );
-    expect(createRvz).toHaveBeenCalledWith(expect.objectContaining({ codec: "zstd", blockSize: 1024, scrub: true }));
+    expect(createRvz).toHaveBeenCalledWith(expect.objectContaining({ codec: "zstd", blockSize: 1024 }));
     expect(createZ3ds).toHaveBeenCalledWith(expect.objectContaining({ compressionLevel: 3, underlyingMagic: "3DS" }));
   });
 

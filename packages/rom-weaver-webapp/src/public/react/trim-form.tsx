@@ -334,7 +334,6 @@ const getCompletedDownloadMeta = (
   const unchanged = typeof sourceSize === "number" && sourceSize === trimmedSize && compressedSavedSize === 0;
   let verb = unchanged ? "Already trimmed" : "Trimmed";
   if (mode === "restore") verb = unchanged ? "Already padded" : "Restored";
-  if (getSourceExtension(fileName) === "rvz") verb = "Converted";
   return {
     format: `${verb} .${getSourceExtension(fileName)}`,
     savedSize: savedSize || undefined,
@@ -517,7 +516,7 @@ const getTrimSpecialOutputFormat = (
   defaultCompressionMode: Parameters<typeof allowsDefaultCompressionSpecial>[0],
 ) => {
   if (!allowsDefaultCompressionSpecial(defaultCompressionMode)) return "";
-  if (!["chd", "rvz", "z3ds"].includes(automaticCompressionFormat)) return "";
+  if (!["chd", "z3ds"].includes(automaticCompressionFormat)) return "";
   return automaticCompressionFormat;
 };
 
@@ -656,20 +655,20 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const outputDisabled = !!props.disabled || busy;
   const trimSourceReady = !!source && sourceState?.status === "ready";
   const trimPreparationPending = sourceStaging || progress?.stage === "input" || (!!source && !sourceState);
-  const trimQueueBlocked = !!message || !!errorCode || hasSourceQueueWarning(sourceState);
-  const trimReady = trimSourceReady && !trimPreparationPending;
   const trimUnsupported = sourceState?.trimSupported === false;
+  // A click queued while the source stages is dropped once the support probe flags the input.
+  const trimQueueBlocked = !!message || !!errorCode || hasSourceQueueWarning(sourceState) || trimUnsupported;
+  const trimReady = trimSourceReady && !trimPreparationPending;
   const actionDisabled =
     !!props.disabled || trimQueued || !(busy || completedOutput || source) || (trimUnsupported && !busy);
   const sourceFileName = getReactBinarySourceFileName(source, "ROM");
   const resolvedSourceFileName = sourceState?.fileName || sourceFileName;
   const rawOutputFormat = getSourceExtension(resolvedSourceFileName);
-  const losslessDiscConversion = sourceState?.romType?.recommendedFormat === "rvz";
-  // XISO is the only supported input the engine trims but cannot restore (GameCube/Wii converts instead).
+  // XISO is the only supported input the engine trims but cannot restore.
   // The dry-run verdict covers a source whose ingest left no platform tag (an `.iso` staged as a container).
   const xisoInput =
     isXboxSource(sourceState?.romType?.platform, resolvedSourceFileName) ||
-    (sourceState?.trimSupported === true && sourceState.restoreSupported === false && !losslessDiscConversion);
+    (sourceState?.trimSupported === true && sourceState.restoreSupported === false);
   const sourcePlatform = xisoInput ? XBOX_PLATFORM : sourceState?.romType?.platform;
   const defaultCompressionMode = getDefaultCompressionMode(settings);
   const defaultArchiveFormat = getDefaultCompressionArchive(defaultCompressionMode);
@@ -685,13 +684,11 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     },
     ...(typeof sourceState?.size === "number" ? { size: sourceState.size } : {}),
   };
-  // A GameCube/Wii disc is converted to RVZ and the result is not a CD/DVD image, so RVZ is the only
-  // rom-specific container offered for it (a CHD would wrap the RVZ file as raw data).
+  // An input trim cannot handle (a GameCube/Wii disc) is converted in Compress, so Trim offers no
+  // CHD, RVZ, or Z3DS output for it either.
   const isOfferedOutputFormat = (format: string) =>
     !(CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS as readonly string[]).includes(format) ||
-    (losslessDiscConversion
-      ? format === "rvz"
-      : OutputCompressionManager.supportsOutputCompression(formatSource, format));
+    (!trimUnsupported && OutputCompressionManager.supportsOutputCompression(formatSource, format));
   const requestedConfiguredFormat = props.outputFormat ?? (outputFormatEdited ? internalOutputFormat : "");
   const configuredOutputFormat = isOfferedOutputFormat(requestedConfiguredFormat) ? requestedConfiguredFormat : "";
   const extractedFormatInput = {
@@ -705,25 +702,22 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     ...extractedFormatInput,
     parentCompressions: sourceState?.parentCompressions,
   });
-  const automaticOutputFormat = resolveTrimAutomaticOutputFormat({
+  const computedAutomaticOutputFormat = resolveTrimAutomaticOutputFormat({
     automaticCompressionFormat,
     defaultArchiveFormat,
     defaultCompressionMode,
     extractedCompressionFormat: resolveAutomaticCompressionFormat(extractedFormatInput),
     rawOutputFormat,
   });
+  const automaticOutputFormat =
+    trimUnsupported && !isOfferedOutputFormat(computedAutomaticOutputFormat)
+      ? rawOutputFormat
+      : computedAutomaticOutputFormat;
   const requestedOutputFormat = configuredOutputFormat || automaticOutputFormat;
   // A format outside the offered list (an XISO whose archive default is CHD) falls back to the default archive.
-  const offeredRequestedOutputFormat = isOfferedOutputFormat(requestedOutputFormat)
-    ? requestedOutputFormat
-    : defaultArchiveFormat;
+  // An unsupported input keeps its own extension instead, since nothing is written for it.
   const resolvedOutputFormat =
-    losslessDiscConversion &&
-    (requestedOutputFormat === rawOutputFormat ||
-      requestedOutputFormat === "none" ||
-      !isOfferedOutputFormat(requestedOutputFormat))
-      ? "rvz"
-      : offeredRequestedOutputFormat;
+    trimUnsupported || isOfferedOutputFormat(requestedOutputFormat) ? requestedOutputFormat : defaultArchiveFormat;
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
   // Once a run started the file keeps the name it was produced with; a late identification still
   // refreshes the card but must not rename the field away from the Download label.
@@ -1183,16 +1177,15 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       }
     : null;
 
-  const rawExtensionOption = losslessDiscConversion ? "" : rawOutputFormat;
   const allFormatOptions = useMemo(
     () =>
-      createTrimOutputOptions(losslessDiscConversion ? "rvz" : rawExtensionOption, {
+      createTrimOutputOptions(rawOutputFormat, {
         rawLabel: source ? undefined : "None",
       }),
-    [losslessDiscConversion, rawExtensionOption, source],
+    [rawOutputFormat, source],
   );
   const formatOptions = allFormatOptions.filter((option) => isOfferedOutputFormat(option.value));
-  const compressFormatOptions = createCompressionTypeOptions(formatOptions, rawExtensionOption);
+  const compressFormatOptions = createCompressionTypeOptions(formatOptions, rawOutputFormat);
   const trimTimingText = formatOptionalElapsedMs(completedTrimTimeMs ?? undefined);
   const compressTimingText = formatOptionalElapsedMs(completedCompressionTimeMs ?? undefined);
   const checksumProgress = progress?.stage === "checksum" ? progress : null;
@@ -1370,9 +1363,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         <strong>Output</strong>
         <ul>
           <li>Set the filename without an extension - the format selector controls it.</li>
-          {losslessDiscConversion ? (
-            <li>Disc conversion preserves all data in RVZ. Savings come from compression.</li>
-          ) : restoreAvailable ? (
+          {restoreAvailable ? (
             <>
               <li>Trim removes trailing padding. Restore padding pads a trimmed ROM back to its full size.</li>
               <li>
@@ -1452,9 +1443,6 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   if (restoreAvailable) {
     trimWarningBody = `The trimmed copy of ${sourceFileName} is saved as a new download - your original file is not changed. A 12-byte revert marker at its end records the removed padding so Restore padding can rebuild the original exactly. Keep the original: some patches and tools need the untrimmed ROM.`;
   }
-  if (losslessDiscConversion) {
-    trimWarningBody = `A lossless copy of ${sourceFileName} is saved as a new download. All disc data is preserved; savings come from compression. Your original file is not changed.`;
-  }
   if (xisoInput && mode === "trim") {
     trimWarningBody = `The trimmed copy of ${sourceFileName} is saved as a new download - your original file is not changed. A trimmed XISO is rebuilt without its unused space and cannot be restored to the original, so keep the original: some patches and tools need it.`;
   }
@@ -1462,7 +1450,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     trimWarningBody = `A padded copy of ${sourceFileName} is saved as a new download - your original file is not changed. Only a ROM trimmed with a revert marker comes back byte for byte; other padding is rebuilt as 0xFF.`;
   }
   if (trimPreparationPending) {
-    trimWarningBody = `A new copy of ${sourceFileName} is saved as a download. Supported cartridge padding is removed; GameCube and Wii discs are converted losslessly. Your original file is not changed. Keep the original for patches and tools.`;
+    trimWarningBody = `A new copy of ${sourceFileName} is saved as a download. Supported padding is removed. Your original file is not changed. Keep the original for patches and tools.`;
   }
 
   const createModel = (): TrimPatchFormViewModel => ({
@@ -1507,7 +1495,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
           <strong>ROM</strong>
           <ul>
             <li>Drop a {TRIM_PLATFORM_SUMMARY} image to remove unused padding.</li>
-            <li>GameCube and Wii discs convert losslessly to RVZ instead; the savings come from compression.</li>
+            <li>GameCube and Wii discs are not supported here; use Compress to convert them to RVZ.</li>
             <li>Archives are extracted; pick the ROM if several candidates are found.</li>
           </ul>
         </InfoPopover>
