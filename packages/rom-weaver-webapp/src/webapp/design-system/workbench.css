@@ -695,7 +695,8 @@
   display: grid;
   grid-template-columns: minmax(140px, 210px) minmax(0, 1fr) auto;
   gap: var(--sp-xs) var(--sp-l);
-  align-items: center;
+  /* Top-aligned, so the old value and Reset appearing under the label grow the row downward and never move the control. */
+  align-items: start;
   min-width: 0;
   padding: 9px 14px 9px 11px;
   border-inline-start: 3px solid transparent;
@@ -721,6 +722,9 @@
   margin-block-start: var(--sp-xs);
   font-size: 0.8rem;
 }
+.rw-app .save-editor-field-foot.is-idle {
+  display: none;
+}
 .rw-app .save-editor-was {
   color: var(--ink-3);
 }
@@ -728,6 +732,10 @@
   display: grid;
   gap: 2px;
   min-width: 0;
+  padding-block-start: 8px;
+}
+.rw-app .save-editor-field .save-editor-readonly {
+  align-self: center;
 }
 .rw-app .save-editor-field-head label {
   font-weight: 600;
@@ -1178,22 +1186,36 @@
   .rw-app .save-editor-field-error {
     grid-column: 1 / -1;
   }
-  /* On a phone Reset moves to the top right, level with the label; the old value stays under the description. */
-  .rw-app .save-editor-field-head {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-column: 1 / -1;
-    column-gap: var(--sp-m);
-    align-items: center;
-  }
-  .rw-app .save-editor-field-head > *,
-  .rw-app .save-editor-was {
-    grid-column: 1;
-  }
-  .rw-app .save-editor-field-foot {
+  /* On a phone the head's parts join the row grid: Reset sits level with the label and the old value goes below the
+     control, so neither moves the control under the finger when an edit begins. */
+  .rw-app .save-editor-field-head,
+  .rw-app .save-editor-field-foot,
+  .rw-app .save-editor-field-foot.is-idle {
     display: contents;
   }
+  /* The idle Reset keeps its column, so the label wraps the same before and after an edit. */
+  .rw-app .save-editor-field-foot.is-idle .save-editor-reset {
+    visibility: hidden;
+  }
+  .rw-app .save-editor-field-head label {
+    grid-column: 1;
+  }
+  .rw-app .save-editor-description {
+    grid-column: 1 / -1;
+  }
+  /* Negative margins keep the 30px button from making the label row taller. */
   .rw-app .save-editor-field-head .save-editor-reset {
     grid-area: 1 / 2;
+    align-self: center;
+    margin-block: -8px;
+  }
+  .rw-app .save-editor-was {
+    grid-column: 1 / -1;
+    order: 1;
+  }
+  .rw-app .save-editor-warning,
+  .rw-app .save-editor-field-error {
+    order: 2;
   }
   .rw-app .save-editor-slots {
     flex-direction: column;

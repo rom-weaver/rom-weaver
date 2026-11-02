@@ -324,3 +324,23 @@ test("stays within the mobile page width", async () => {
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth + 1);
   expect(document.body.scrollWidth).toBeLessThanOrEqual(window.innerWidth + 1);
 });
+
+test.each([900, 390, 320])("keeps controls in place when an edit shows Reset at %ipx", async (width) => {
+  /* A long label wraps on a narrow phone; showing Reset beside it must not wrap it further. */
+  const result = documentResult();
+  result.document.fields[1].label = "Money carried by the trainer on the current save slot";
+  mocks.inspectSave.mockResolvedValue(result);
+  await page.viewport(width, 900);
+  await uploadSave();
+  const top = (locator) => locator.element().getBoundingClientRect().top;
+  const name = page.getByLabelText("Name", { exact: true });
+  const raise = page.getByRole("button", { name: /^Raise Money carried/ });
+  const nameTop = top(name);
+  await name.fill("ASHX");
+  await expect.element(page.getByRole("button", { name: "Reset Name" })).toBeVisible();
+  expect(top(name)).toBeCloseTo(nameTop, 0);
+  const raiseTop = top(raise);
+  await raise.click();
+  await expect.element(page.getByRole("button", { name: /^Reset Money carried/ })).toBeVisible();
+  expect(top(raise)).toBeCloseTo(raiseTop, 0);
+});

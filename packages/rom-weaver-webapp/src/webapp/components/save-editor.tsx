@@ -866,6 +866,8 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     const changed = isChanged(field);
     const readOnly = isReadOnly(field);
     const controlId = `save-field-${field.id}`;
+    /* An editable field always renders Reset; it stays hidden until an edit or error so that its space is reserved and the control never moves when it appears. */
+    const idle = !(changed || errorText);
     return (
       <div
         className={join("save-editor-field", changed && "is-changed", changed && downloaded && "is-written")}
@@ -878,8 +880,8 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
               {field.description}
             </span>
           ) : null}
-          {changed || errorText ? (
-            <span className="save-editor-field-foot">
+          {readOnly ? null : (
+            <span className={join("save-editor-field-foot", idle && "is-idle")}>
               {changed ? (
                 <span className="save-editor-was">
                   {localizer.message(downloaded ? "ui.saves.editor.wasWritten" : "ui.saves.editor.was", {
@@ -888,16 +890,17 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                 </span>
               ) : null}
               <button
+                aria-hidden={idle || undefined}
                 aria-label={localizer.message("ui.saves.editor.resetField", { label: field.label })}
                 className="btn slim ghost save-editor-reset"
-                disabled={busy}
+                disabled={busy || idle}
                 onClick={() => resetField(field)}
                 type="button"
               >
                 <RotateCcw aria-hidden="true" /> {localizer.message("ui.settings.reset")}
               </button>
             </span>
-          ) : null}
+          )}
         </div>
         {readOnly ? (
           <span className="save-editor-readonly">
