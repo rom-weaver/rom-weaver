@@ -905,7 +905,7 @@
    webapp-modals.css); the pane's width says nothing about a column's. */
 .rw-app .setgroup {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 1.4fr);
+  grid-template-columns: minmax(0, 1fr) minmax(min(18rem, calc(100% - var(--sp-m))), 1.4fr);
   column-gap: var(--sp-m);
   align-content: start;
   padding: var(--sp-m) var(--sp-l) var(--sp-l);
