@@ -769,6 +769,49 @@ fn a_revert_marker_trim_round_trips_the_original_bytes() {
 }
 
 #[test]
+fn retrimming_a_marked_gba_strips_only_its_footer() {
+    let dir = scratch_dir("revert-marker-retrim-gba");
+    let app = test_app();
+    let context = app.context(ThreadBudget::Fixed(1));
+    // This layout's footer CRC ends in 0x00, which a trailing-padding scan would treat as fill.
+    let mut bytes = vec![0x42_u8; 0x6F_FF9C];
+    bytes.resize(0x80_0000, 0xFF);
+    let rom = write_fixture(&dir, "game.gba", &bytes);
+    let marker_trim = TrimRequest {
+        revert_marker: true,
+        ..request(TrimOperation::Trim, TrimInputKind::Gba)
+    };
+
+    let first = dir.join("first.gba");
+    app.trim_file(&rom, &first, marker_trim, &context)
+        .expect("first trim");
+    let first_bytes = fs::read(&first).expect("first");
+    assert!(
+        matches!(first_bytes.last(), Some(0x00 | 0xFF)),
+        "fixture must end in a padding-like CRC byte"
+    );
+    let second = dir.join("second.gba");
+    app.trim_file(&first, &second, marker_trim, &context)
+        .expect("second trim");
+    assert_eq!(
+        fs::read(&second).expect("second"),
+        first_bytes,
+        "the old footer is replaced, not partly kept"
+    );
+
+    let reverted = dir.join("reverted.gba");
+    app.trim_file(
+        &second,
+        &reverted,
+        request(TrimOperation::Revert, TrimInputKind::Gba),
+        &context,
+    )
+    .expect("revert");
+    assert_eq!(fs::read(&reverted).expect("reverted"), bytes);
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn trimming_a_marked_rom_again_keeps_the_original_restore_data() {
     let dir = scratch_dir("revert-marker-retrim");
     let app = test_app();

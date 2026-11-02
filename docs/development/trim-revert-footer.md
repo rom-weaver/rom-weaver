@@ -60,7 +60,7 @@ When a valid footer is present:
 
 The CRC covers the footer, not the ROM data. It cannot detect changes to the retained ROM bytes or prove that the recorded fill matches all removed bytes. A footer whose CRC does not validate is ignored.
 
-When no valid footer is present, revert uses the format's size heuristic. A 3DS cart image (NCSD) grows to the card size its header declares, up to 8 GiB; GBA and NCCH-only 3DS images grow to the next power of two. NDS/DSi also use the next power of two, with the parsed used-data size as a lower bound. These paths fill with `0xFF`; they do not recover an arbitrary original dump size or padding pattern.
+When no valid footer is present, revert uses the format's size heuristic. A 3DS cart image (NCSD) grows to the card size its header declares, up to 8 GiB; GBA and NCCH-only `.3ds` images grow to the next power of two. A `.cxi` has no cartridge padding and stays unchanged. NDS/DSi also use the next power of two, with the parsed used-data size as a lower bound. These paths fill with `0xFF`; they do not recover an arbitrary original dump size or padding pattern.
 
 ## Notes and invariants
 
@@ -69,4 +69,4 @@ When no valid footer is present, revert uses the format's size heuristic. A 3DS 
 - **Self-contained.** No sidecar file; the trimmed ROM carries everything needed to revert.
 - **Only helps ROMs trimmed by rom-weaver with the flag.** Other tools' trims have no footer and use the fallback path above.
 - **Identified by magic length.** Legacy `RWT\x01` footers are read, never written; new files always get the 12-byte `RW` footer. A future layout needs a new magic that neither reader accepts.
-- **Re-trimming is format-dependent.** The trim path does not remove or preserve existing footer metadata explicitly. An NDS/DSi trim can truncate it; a GBA/3DS padding scan can leave it in place. When `--revert-marker` is set on a ROM that already has a footer, the new footer reuses the existing footer's original size and fill and is always written in the 12-byte `RW` layout, even if the old one was legacy. Revert before trimming again to recover the recorded size and fill.
+- **Re-trimming replaces the footer.** Trimming a ROM that already has a footer removes that footer: an NDS/DSi trim truncates to the used-data size, and a GBA/3DS trim strips exactly the footer instead of scanning for padding. With `--revert-marker`, the new footer reuses the existing footer's original size and fill and is always written in the 12-byte `RW` layout, even if the old one was legacy. Without it, the output has no footer, so revert falls back to the size heuristic.

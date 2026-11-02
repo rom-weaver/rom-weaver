@@ -233,17 +233,28 @@ impl CliApp {
         let fill_byte = kind.default_padding_byte();
         let (target_size, already_target_size) = match operation {
             TrimOperation::Trim => {
-                // Detect the actual trailing pad byte (0x00 or 0xFF) so both conventions trim,
-                // instead of assuming a single fixed fill. Files that do not end in recognizable
-                // padding are left untouched.
-                match Self::detect_trailing_pad_byte(source)? {
-                    Some(pad_byte) => {
-                        let trimmed_size =
-                            Self::scan_trimmed_size_from_trailing_padding(source, pad_byte)?
-                                .max(minimum_size);
-                        (trimmed_size, trimmed_size == original_size)
+                // A file that already ends in a revert footer was trimmed before: only the footer
+                // goes. Scanning from its last (CRC) byte could cut the footer partway.
+                if let Some(footer) = Self::read_revert_footer(source)? {
+                    let data_size = original_size - footer.footer_len;
+                    debug!(
+                        original_size,
+                        data_size, "trim strips an existing revert footer"
+                    );
+                    (data_size.max(minimum_size), false)
+                } else {
+                    // Detect the actual trailing pad byte (0x00 or 0xFF) so both conventions
+                    // trim, instead of assuming a single fixed fill. Files that do not end in
+                    // recognizable padding are left untouched.
+                    match Self::detect_trailing_pad_byte(source)? {
+                        Some(pad_byte) => {
+                            let trimmed_size =
+                                Self::scan_trimmed_size_from_trailing_padding(source, pad_byte)?
+                                    .max(minimum_size);
+                            (trimmed_size, trimmed_size == original_size)
+                        }
+                        None => (original_size, true),
                     }
-                    None => (original_size, true),
                 }
             }
             TrimOperation::Revert => {
