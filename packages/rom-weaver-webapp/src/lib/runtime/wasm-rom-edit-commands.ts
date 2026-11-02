@@ -32,15 +32,16 @@ const invokeRomWeaverTrimWorker = async (
 ): Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]> => {
   const sourceFilePath = String(input.sourceFilePath || "").trim();
   if (!sourceFilePath) throw new Error("Trim source path is required");
-  const outputFileName = getTrimOutputFileName(sourceFilePath, input.outputName);
+  const outputFileName = getTrimOutputFileName(sourceFilePath, input.outputName, input.revert ? "restore" : "trim");
   return runWithRomWeaverOutputScope(sourceFilePath, outputFileName, [sourceFilePath], async (scopePath) => {
     const normalizedExtension = typeof input.extension === "string" ? input.extension.trim() : "";
     const threadArg = toThreadBudget(input.threads);
     const siblingPath = (fileName: string) => joinPath(scopePath.slice(0, scopePath.lastIndexOf("/")), fileName);
     // Matches the Rust `TrimCommand`: `source: Vec<PathBuf>` (required), `output: Option<PathBuf>`
     // (conflicts with `in_place`), `extension: Option<String>`, `in_place`, `dry_run`, `revert`,
-    // `recursive` (defaults true), `threads`. We always write a new file (`in_place: false`), simulate
-    // only for the staging support probe (`dryRun`), and never restore padding (`revert: false`).
+    // `recursive` (defaults true), `threads`. We always write a new file (`in_place: false`) and
+    // simulate only for the staging probe (`dryRun`); `revert` restores padding instead of removing it,
+    // and `revert_marker` appends the footer that makes that restore exact.
     //
     // The engine writes a GameCube/Wii disc as RVZ and rejects any other output extension for it, but
     // only it knows which inputs those are, and a trim is the heavy pass (an RVZ conversion or an XISO
@@ -51,7 +52,8 @@ const invokeRomWeaverTrimWorker = async (
       dry_run: !!input.dryRun,
       in_place: false,
       output: outputPath,
-      revert: false,
+      revert: !!input.revert,
+      ...(input.revertMarker && !input.revert ? { revert_marker: true } : {}),
       input: [sourceFilePath],
       ...(normalizedExtension ? { extension: normalizedExtension } : {}),
       ...(threadArg ? { threads: threadArg } : {}),
@@ -75,6 +77,15 @@ const invokeRomWeaverTrimWorker = async (
       details.skipped_unsupported > 0
     ) {
       throw new Error("This input does not support trimming");
+    }
+    if (input.dryRun) {
+      return {
+        filePath: outputPath,
+        trimPlan: {
+          revertMarker: details?.revert_marker === true,
+          wouldChange: typeof details?.would_change === "number" && details.would_change > 0,
+        },
+      };
     }
     const actualFileName =
       details?.output_format === "rvz" ? replaceFileNameExtension(outputFileName, "rvz") : outputFileName;

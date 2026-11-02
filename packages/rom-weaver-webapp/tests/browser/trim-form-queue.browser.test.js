@@ -172,6 +172,11 @@ class MockTrimWorkflow {
     this.outputName = outputName;
     return Promise.resolve();
   }
+
+  setMode(mode) {
+    this.mode = mode;
+    return Promise.resolve();
+  }
 }
 
 const withTrimWorkflowMock = (props = {}) => ({

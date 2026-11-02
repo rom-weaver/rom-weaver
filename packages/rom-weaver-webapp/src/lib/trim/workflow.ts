@@ -186,8 +186,9 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
           },
         );
 
+  const runningLabel = input.revert ? "Restoring padding..." : "Trimming...";
   reportProgress(options, {
-    label: "Trimming...",
+    label: runningLabel,
     percent: null,
     stage: "apply",
   });
@@ -201,16 +202,18 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
         onLog: options.onLog,
         onProgress: (progress) =>
           reportProgress(options, {
-            label: typeof progress.label === "string" && progress.label ? progress.label : "Trimming...",
+            label: typeof progress.label === "string" && progress.label ? progress.label : runningLabel,
             percent: getProgressEventPercent(progress),
             stage: "apply",
           }),
         outputName: rawTrimFileName,
+        revert: input.revert,
+        revertMarker: input.revertMarker,
         signal: options.signal,
         source: source as SourceRef,
         threads: getTrimThreads(options),
       }),
-    () => ({ worker: true }),
+    () => ({ revert: !!input.revert, revertMarker: !!input.revertMarker, worker: true }),
   );
   const rawSize = result.sizeSummary?.rawSize ?? result.sizeSummary?.outputSize ?? result.output.size;
   const logicalInputSize = result.sizeSummary?.inputSize ?? inputSize;

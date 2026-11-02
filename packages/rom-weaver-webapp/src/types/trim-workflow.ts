@@ -24,7 +24,11 @@ type TrimWorkflowSourceState = {
   checksums?: TrimWorkflowChecksums;
   checksumTimeMs?: number;
   identification?: ParsedIdentifyResolution;
+  /** True when staging found an already-trimmed input whose padding can be restored. */
+  paddingTrimmed?: boolean;
   parentCompressions: TrimWorkflowParentCompression[];
+  /** False when the engine cannot restore this input's padding (XISO, GameCube/Wii disc). */
+  restoreSupported?: boolean;
   romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;
   /** False when a dry-run trim plan found nothing the engine can trim; undefined while unknown. */

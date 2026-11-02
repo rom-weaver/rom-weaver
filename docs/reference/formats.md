@@ -206,7 +206,7 @@ Checksums can target source bytes, selected container payloads, or byte ranges (
 
 - NDS-family ROMs (`.nds`, `.dsi`, `.srl`)
 - GBA ROMs (`.gba`)
-- 3DS images (`.3ds`) with validated NCSD/NCCH partition extents
+- 3DS images (`.3ds`, `.cci`, `.cxi`) with validated NCSD/NCCH partition extents, including inside `.z3ds`, `.zcci`, `.zcxi`, ZIP, and 7z; CIA and 3DSX files have no cartridge padding and are not trimmed
 - XISO images (`.xiso`, `.xiso.iso`, and probed XDVDFS `.iso` files)
 - GameCube/Wii disc candidates detected by the format recommendation: lossless RVZ conversion, without sector scrubbing
 

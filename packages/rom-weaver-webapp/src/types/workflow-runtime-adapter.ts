@@ -104,6 +104,8 @@ type RuntimeWorkerOutput = {
   timing?: PublicOutput["timing"];
   trackNumber?: number;
   trimSizeSummary?: TrimResult["sizeSummary"];
+  /** A dry-run trim's verdict. */
+  trimPlan?: RuntimeTrimPlanResult;
   /** Handler warnings the worker run reported. */
   warnings?: string[];
 };
@@ -375,11 +377,21 @@ type RuntimePatchCreateFormatCandidates = {
   sourceValues?: Record<string, unknown>;
 };
 
+type RuntimeTrimPlanResult = {
+  /** The run would change the file's size. */
+  wouldChange: boolean;
+  /** A restore uses a revert footer's recorded size and fill byte. */
+  revertMarker?: boolean;
+};
+
 type RuntimeTrimWorkerInput = {
   dryRun?: boolean;
   extension?: string;
   logLevel?: LogLevel;
   outputName: string;
+  revert?: boolean;
+  /** Append a revert footer recording the removed padding (NDS, GBA, and 3DS trims only). */
+  revertMarker?: boolean;
   signal?: AbortSignal;
   sourceFileName: string;
   sourceFilePath: string;
@@ -640,19 +652,31 @@ type WorkflowRuntimeWeave = {
   }>;
 };
 
+type WorkflowRuntimeTrimInput = {
+  source: SourceRef;
+  extension?: string;
+  outputName: string;
+  /** Restore removed padding instead of removing it. */
+  revert?: boolean;
+  /** Append a revert footer recording the removed padding (NDS, GBA, and 3DS trims only). */
+  revertMarker?: boolean;
+  threads?: RuntimeThreadBudgetInput;
+  logLevel?: LogLevel;
+  onLog?: (log: WorkflowRuntimeLog) => void;
+  onProgress?: (progress: WorkflowCreatePatchProgress) => void;
+  signal?: AbortSignal;
+};
+
+/** Dry-run verdicts for one input. `restore` is undefined when padding cannot be restored. */
+type TrimPlan = {
+  trim: RuntimeTrimPlanResult;
+  restore?: RuntimeTrimPlanResult;
+};
+
 type WorkflowRuntimeTrim = {
-  trim?: (input: {
-    source: SourceRef;
-    /** Plan only: resolves without output, rejects when the input cannot be trimmed. */
-    dryRun?: boolean;
-    extension?: string;
-    outputName: string;
-    threads?: RuntimeThreadBudgetInput;
-    logLevel?: LogLevel;
-    onLog?: (log: WorkflowRuntimeLog) => void;
-    onProgress?: (progress: WorkflowCreatePatchProgress) => void;
-    signal?: AbortSignal;
-  }) => Promise<TrimResult>;
+  trim?: (input: WorkflowRuntimeTrimInput) => Promise<TrimResult>;
+  /** Simulate trim and restore without output; rejects when the input cannot be trimmed. */
+  plan?: (input: Pick<WorkflowRuntimeTrimInput, "logLevel" | "onLog" | "signal" | "source">) => Promise<TrimPlan>;
 };
 
 type WorkflowRuntimeSidecars = {

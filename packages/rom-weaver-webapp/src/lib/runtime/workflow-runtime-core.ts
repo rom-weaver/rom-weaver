@@ -433,24 +433,77 @@ type TrimRuntimeAdapter = {
   workerOutputFailureMessage?: string;
 };
 
+type TrimSourceRequest = Parameters<RuntimeWorkerIo["stageSource"]>[0];
+
+const stageTrimSource = (
+  adapter: TrimRuntimeAdapter,
+  source: TrimSourceRequest["source"],
+  trace: TrimSourceRequest["trace"],
+) =>
+  adapter.workerIo.stageSource({
+    fallbackFileName: "input.bin",
+    pathBucket: "input",
+    pathPrefix: "trim-input",
+    scope: "create-patch",
+    source,
+    trace,
+  });
+
 const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["trim"] => ({
-  trim: async ({ source, dryRun, extension, outputName, threads, logLevel, onLog, onProgress, signal }) => {
-    const traceContext = { logLevel, onLog };
-    const workerSource = await adapter.workerIo.stageSource({
-      fallbackFileName: "input.bin",
-      pathBucket: "input",
-      pathPrefix: "trim-input",
-      scope: "create-patch",
-      source,
-      trace: traceContext,
-    });
+  plan: async ({ source, logLevel, onLog, signal }) => {
+    const workerSource = await stageTrimSource(adapter, source, { logLevel, onLog });
+    const simulate = async (revert: boolean) => {
+      const result = await adapter.invokeTrimWorker(
+        {
+          dryRun: true,
+          logLevel,
+          outputName: "",
+          revert,
+          signal,
+          sourceFileName: workerSource.fileName,
+          sourceFilePath: workerSource.filePath,
+        },
+        undefined,
+        onLog,
+      );
+      await result.cleanup?.();
+      return result.trimPlan ?? { wouldChange: false };
+    };
+    try {
+      const trim = await simulate(false);
+      try {
+        return { restore: await simulate(true), trim };
+      } catch (error) {
+        // XISO and RVZ conversion reject a restore; only a cancel outranks that verdict.
+        if (signal?.aborted) throw error;
+        emitTraceLog({ logLevel, namespace: "runtime:trim", onLog }, "trim restore plan unavailable", { error });
+        return { trim };
+      }
+    } finally {
+      await workerSource.cleanup().catch(() => undefined);
+    }
+  },
+  trim: async ({
+    source,
+    extension,
+    outputName,
+    revert,
+    revertMarker,
+    threads,
+    logLevel,
+    onLog,
+    onProgress,
+    signal,
+  }) => {
+    const workerSource = await stageTrimSource(adapter, source, { logLevel, onLog });
     try {
       const result = await adapter.invokeTrimWorker(
         {
-          dryRun,
           extension,
           logLevel,
           outputName,
+          revert,
+          revertMarker,
           signal,
           sourceFileName: workerSource.fileName,
           sourceFilePath: workerSource.filePath,
@@ -459,7 +512,6 @@ const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["
         onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
         onLog,
       );
-      if (dryRun) return (await result.cleanup?.()) as never;
       const trimTimeMs = roundElapsedMs(result.timing);
       return {
         output: await adapter.workerIo.createWorkerOutput(

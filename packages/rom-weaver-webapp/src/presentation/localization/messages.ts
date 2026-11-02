@@ -1570,7 +1570,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.find.cliSetupHint": msg({ id: "ui.find.cliSetupHint", message: "The CLI guide covers installation and setup." }),
   "ui.find.cliTrimRevertHint": msg({
     id: "ui.find.cliTrimRevertHint",
-    message: "The CLI can restore padding; the browser Trim page cannot.",
+    message: "The CLI can also write a revert marker so a later restore is exact.",
   }),
   "ui.find.kindApp": msg({ id: "ui.find.kindApp", message: "App" }),
   "ui.find.kindGuide": msg({ id: "ui.find.kindGuide", message: "Guide" }),

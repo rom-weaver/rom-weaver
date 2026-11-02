@@ -132,5 +132,8 @@ describe("run output path ownership", () => {
     expect(getTrimOutputFileName("/work/game.bin", "game (trimmed).bin")).toBe("game (trimmed).bin");
     expect(getTrimOutputFileName("/work/game.bin?download=1", "new-name.bin")).toBe("new-name.bin");
     expect(getTrimOutputFileName("", "")).toBe("trimmed (trimmed).bin");
+    expect(getTrimOutputFileName("/work/game (trimmed).nds", "game (trimmed).nds", "restore")).toBe("game.nds");
+    expect(getTrimOutputFileName("/work/game.nds", undefined, "restore")).toBe("game (restored).nds");
+    expect(getTrimOutputFileName("/work/game.nds", "other.nds", "restore")).toBe("other.nds");
   });
 });

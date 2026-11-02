@@ -89,6 +89,15 @@ describe("runTrimWorkflow validation and raw output", () => {
     });
   });
 
+  it("forwards the restore mode and revert marker to the trim runtime", async () => {
+    const runtime = { ...baseRuntime, trim: { trim: vi.fn(baseRuntime.trim.trim) } };
+    const options = { output: { compression: "none", outputName: "trimmed.bin" } } as never;
+    await runTrimWorkflow({ options, revertMarker: true, source: source as never }, runtime as never);
+    expect(runtime.trim.trim).toHaveBeenLastCalledWith(expect.objectContaining({ revertMarker: true }));
+    await runTrimWorkflow({ options, revert: true, source: source as never }, runtime as never);
+    expect(runtime.trim.trim).toHaveBeenLastCalledWith(expect.objectContaining({ revert: true }));
+  });
+
   it("prepares a compressed source and selects its primary asset", async () => {
     const prepared = {
       file: { fileName: "game.iso", fileSize: 80 },
