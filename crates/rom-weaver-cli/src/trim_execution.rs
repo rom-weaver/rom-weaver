@@ -635,9 +635,18 @@ impl CliApp {
             fs::create_dir_all(parent)?;
         }
         let staged = StagedOutput::new(destination)?;
+        // Repack at `compress`'s default profile so a trimmed archive is no larger than one
+        // `compress` would write from the same image.
+        let level = Self::resolve_compression_level_for_profile(
+            format,
+            None,
+            None,
+            CompressionLevelProfile::default(),
+        );
         trace!(
             format,
             entry_name,
+            ?level,
             trimmed = %trimmed.display(),
             destination = %destination.display(),
             "packing trimmed output"
@@ -650,7 +659,7 @@ impl CliApp {
                 output: staged.path().to_path_buf(),
                 format: create_format.to_string(),
                 codec: None,
-                level: None,
+                level,
                 parent: None,
             },
             context,

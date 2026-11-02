@@ -1989,6 +1989,45 @@ fn trim_output_z3ds_packs_a_3ds_rom_and_chd_packs_an_xiso() {
 }
 
 #[test]
+fn trim_repacks_a_z3ds_input_as_compress_would_pack_the_trimmed_rom() {
+    let temp = setup_temp_dir();
+    let rom_3ds = temp.child("sample.3ds");
+    let mut rom = build_test_padded_rom(0x4567, 0x8000, 0xFF);
+    rom[0x100..0x104].copy_from_slice(b"NCCH");
+    rom[0x104..0x108].copy_from_slice(&0x22_u32.to_le_bytes());
+    rom[0x18E] = 0;
+    fs::write(rom_3ds.path(), &rom).expect("3ds fixture");
+    let compress = |input: &Path, output: &Path| {
+        command_stdout(
+            &[
+                "compress",
+                "--input",
+                input.to_str().expect("path"),
+                "--output",
+                output.to_str().expect("path"),
+            ],
+            0,
+        );
+    };
+    let packed = temp.child("sample.z3ds");
+    compress(rom_3ds.path(), packed.path());
+
+    // Extract, trim, and repack in one step.
+    let trimmed_z3ds = temp.child("trimmed.z3ds");
+    let terminal = trim_to_output(packed.path(), trimmed_z3ds.path(), &[], 0);
+    assert_eq!(terminal["status"], "succeeded");
+
+    let trimmed_raw = temp.child("trimmed-raw.3ds");
+    fs::write(trimmed_raw.path(), &rom[..0x4567]).expect("trimmed fixture");
+    let expected = temp.child("expected.z3ds");
+    compress(trimmed_raw.path(), expected.path());
+    assert_eq!(
+        fs::read(trimmed_z3ds.path()).expect("trimmed z3ds"),
+        fs::read(expected.path()).expect("expected z3ds")
+    );
+}
+
+#[test]
 fn trim_3ds_output_accepts_only_the_z3ds_descriptor_extensions_that_match_the_payload() {
     let temp = setup_temp_dir();
     let build_3ds = |magic: &[u8; 4], name: &str| {

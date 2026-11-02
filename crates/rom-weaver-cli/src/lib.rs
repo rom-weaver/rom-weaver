@@ -1395,6 +1395,7 @@ const TRIM_PATH_EXTENSIONS: &[(&str, TrimInputKind)] = &[
     ("gba", TrimInputKind::Gba),
     ("3ds", TrimInputKind::ThreeDs),
     ("cci", TrimInputKind::ThreeDs),
+    ("cxi", TrimInputKind::ThreeDs),
     ("xiso", TrimInputKind::Xiso),
     ("xiso.iso", TrimInputKind::Xiso),
 ];

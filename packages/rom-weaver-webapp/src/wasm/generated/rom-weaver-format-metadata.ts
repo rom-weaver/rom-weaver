@@ -2531,6 +2531,7 @@ export const ROM_WEAVER_TRIM_INPUT_EXTENSIONS = [
   "gba",
   "3ds",
   "cci",
+  "cxi",
   "xiso",
   "xiso.iso",
   "iso",
