@@ -622,6 +622,7 @@ describe("TrimPatchForm", () => {
     const stage = async (fileName: string, props: Record<string, unknown> = {}) => {
       const view = renderForm({ pageDrop: { files: [new File(["rom"], fileName)], id: 1 }, ...props });
       await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+      await vi.waitFor(() => expect(view.container.textContent).toContain("Trim Example (USA)"));
       const select = () => view.container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement;
       await vi.waitFor(() => expect(select()?.value).toBeTruthy());
       return { ...view, select };
@@ -639,6 +640,7 @@ describe("TrimPatchForm", () => {
         { defaultCompression: "zip/special" },
       );
       await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+      await vi.waitFor(() => expect(view.container.textContent).toContain("Trim Example (USA)"));
       const select = () => view.container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement;
       await vi.waitFor(() => expect(select()?.value).toBeTruthy());
       expect(select().value).toBe("zip");
