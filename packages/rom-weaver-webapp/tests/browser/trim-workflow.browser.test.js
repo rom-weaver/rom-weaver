@@ -21,7 +21,7 @@ const ndsCrc16 = (bytes) => {
 };
 
 // The webapp appends a revert footer to every NDS, GBA, and 3DS trim it can later restore.
-const REVERT_FOOTER_BYTES = 14;
+const REVERT_FOOTER_BYTES = 12;
 
 const writeLe32 = (bytes, offset, value) => {
   bytes[offset] = value & 0xff;
@@ -436,17 +436,17 @@ test("trim staging settles for an empty file and the next file", async () => {
   }
 }, 60000);
 
-// `RWT\x01` revert footer: fill byte, 40-bit LE padding length, CRC-32 of the first 10 bytes.
+// `RW` revert footer: fill byte, 40-bit LE padding length, CRC-32 of the first 8 bytes.
 const appendRevertFooter = (data, padLength, padByte) => {
-  const footer = new Uint8Array(14);
-  footer.set([0x52, 0x57, 0x54, 0x01, padByte], 0);
-  for (let index = 0; index < 5; index++) footer[5 + index] = Math.floor(padLength / 256 ** index) & 0xff;
+  const footer = new Uint8Array(12);
+  footer.set([0x52, 0x57, padByte], 0);
+  for (let index = 0; index < 5; index++) footer[3 + index] = Math.floor(padLength / 256 ** index) & 0xff;
   let crc = 0xffffffff;
-  for (const byte of footer.subarray(0, 10)) {
+  for (const byte of footer.subarray(0, 8)) {
     crc ^= byte;
     for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
   }
-  writeLe32(footer, 10, ~crc >>> 0);
+  writeLe32(footer, 8, ~crc >>> 0);
   const marked = new Uint8Array(data.length + footer.length);
   marked.set(data, 0);
   marked.set(footer, data.length);
@@ -541,7 +541,7 @@ test("trim writes a revert marker that a later restore uses to rebuild the origi
     }
     expect(trimmedBytes.length).toBe(0x3000 + REVERT_FOOTER_BYTES);
     expect(trimmedBytes.subarray(0, 0x3000)).toEqual(original.subarray(0, 0x3000));
-    expect(new TextDecoder().decode(trimmedBytes.subarray(0x3000, 0x3003))).toBe("RWT");
+    expect(new TextDecoder().decode(trimmedBytes.subarray(0x3000, 0x3002))).toBe("RW");
 
     await workflow.setInput(new File([trimmedBytes], "game (trimmed).nds"));
     expect(workflow.getInput()).toMatchObject({ paddingTrimmed: true, restoreSupported: true });

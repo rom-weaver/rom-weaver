@@ -1053,7 +1053,7 @@ fn trim_and_revert_accept_a_cci_cart_image() {
     );
     assert_eq!(
         fs::read(trimmed.path()).expect("trimmed cci").len(),
-        0x4567 + 14
+        0x4567 + 12
     );
 
     let restored = temp.child("sample.restored.cci");
@@ -1431,11 +1431,10 @@ fn trim_revert_marker_round_trips_byte_identical() {
         ],
         0,
     );
-    // Trimmed payload plus the 14-byte revert footer.
-    assert_eq!(
-        fs::read(trimmed.path()).expect("trimmed gba").len(),
-        0x3456 + 14
-    );
+    // Trimmed payload plus the 12-byte revert footer, which starts with the `RW` magic.
+    let trimmed_bytes = fs::read(trimmed.path()).expect("trimmed gba");
+    assert_eq!(trimmed_bytes.len(), 0x3456 + 12);
+    assert_eq!(&trimmed_bytes[0x3456..0x3456 + 2], b"RW");
 
     let reverted = temp.child("game.revert.gba");
     for (input, revert_marker) in [(&trimmed, true), (&source, false)] {
@@ -1491,8 +1490,8 @@ fn trim_revert_marker_round_trips_in_place_padding() {
             0,
         );
         let trimmed = fs::read(source.path()).expect("trimmed ROM");
-        assert_eq!(trimmed.len(), 0x3456 + 14);
-        assert_eq!(trimmed[0x3456 + 4], pad_byte);
+        assert_eq!(trimmed.len(), 0x3456 + 12);
+        assert_eq!(trimmed[0x3456 + 2], pad_byte);
         command_stdout(
             &[
                 "trim",
@@ -1506,6 +1505,139 @@ fn trim_revert_marker_round_trips_in_place_padding() {
         );
         assert_eq!(fs::read(source.path()).expect("restored ROM"), original);
     }
+}
+
+/// Hand-built legacy footer shipped since v0.10.0: `RWT\x01` + pad byte + 40-bit LE pad length +
+/// CRC-32 of the preceding 10 bytes.
+fn legacy_revert_footer(pad_byte: u8, pad_len: u64) -> Vec<u8> {
+    let mut footer = b"RWT\x01".to_vec();
+    footer.push(pad_byte);
+    footer.extend_from_slice(&pad_len.to_le_bytes()[..5]);
+    let crc = crc32fast::hash(&footer);
+    footer.extend_from_slice(&crc.to_le_bytes());
+    footer
+}
+
+#[test]
+fn trim_revert_restores_a_legacy_rwt_footer_byte_identically() {
+    let temp = setup_temp_dir();
+    let original = build_test_padded_rom(0x3456, 0x4000, 0x00);
+    let mut legacy = original[..0x3456].to_vec();
+    legacy.extend_from_slice(&legacy_revert_footer(0x00, 0x4000 - 0x3456));
+    assert_eq!(legacy.len(), 0x3456 + 14);
+    let source = temp.child("legacy.gba");
+    fs::write(source.path(), &legacy).expect("fixture");
+
+    let plan = parse_single_json_line(&command_stdout(
+        &[
+            "trim",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--revert",
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(plan["details"]["revert_marker"], true);
+
+    let reverted = temp.child("legacy.revert.gba");
+    command_stdout(
+        &[
+            "trim",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--revert",
+            "--output",
+            reverted.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(fs::read(reverted.path()).expect("reverted gba"), original);
+}
+
+#[test]
+fn retrimming_a_legacy_rwt_footer_writes_a_new_rw_footer_that_restores_the_original() {
+    let temp = setup_temp_dir();
+    // The 0x00 fill differs from the 0xFF fallback, so only the recorded footer can restore it.
+    let mut original = build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false);
+    original[0x3000..].fill(0x00);
+    let mut legacy = original[..0x3000].to_vec();
+    legacy.extend_from_slice(&legacy_revert_footer(0x00, 0x5000 - 0x3000));
+    let source = temp.child("legacy.nds");
+    fs::write(source.path(), &legacy).expect("fixture");
+
+    // Re-trimming keeps the legacy footer's recorded size and fill but writes the current footer.
+    let retrimmed = temp.child("legacy.retrim.nds");
+    command_stdout(
+        &[
+            "trim",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--revert-marker",
+            "--output",
+            retrimmed.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let retrimmed_bytes = fs::read(retrimmed.path()).expect("re-trimmed nds");
+    assert_eq!(retrimmed_bytes.len(), 0x3000 + 12);
+    assert_eq!(&retrimmed_bytes[..0x3000], &original[..0x3000]);
+    assert_eq!(&retrimmed_bytes[0x3000..0x3002], b"RW");
+
+    let reverted = temp.child("legacy.retrim.revert.nds");
+    command_stdout(
+        &[
+            "trim",
+            "--input",
+            retrimmed.path().to_str().expect("path"),
+            "--revert",
+            "--output",
+            reverted.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(fs::read(reverted.path()).expect("reverted nds"), original);
+}
+
+#[test]
+fn trim_revert_ignores_a_revert_footer_with_a_corrupt_crc() {
+    let temp = setup_temp_dir();
+    let source = temp.child("game.gba");
+    fs::write(source.path(), build_test_padded_rom(0x3456, 0x4000, 0x00)).expect("fixture");
+    let trimmed = temp.child("game.trim.gba");
+    command_stdout(
+        &[
+            "trim",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--revert-marker",
+            "--output",
+            trimmed.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let mut corrupt = fs::read(trimmed.path()).expect("trimmed gba");
+    *corrupt.last_mut().expect("footer byte") ^= 0xFF;
+    let corrupt_path = temp.child("corrupt.gba");
+    fs::write(corrupt_path.path(), &corrupt).expect("corrupt fixture");
+
+    let plan = parse_single_json_line(&command_stdout(
+        &[
+            "trim",
+            "--input",
+            corrupt_path.path().to_str().expect("path"),
+            "--revert",
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(plan["details"]["revert_marker"], false);
 }
 
 #[test]

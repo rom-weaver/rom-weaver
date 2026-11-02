@@ -1355,7 +1355,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
             <>
               <li>Trim removes trailing padding. Restore padding pads a trimmed ROM back to its full size.</li>
               <li>
-                Trim appends a 14-byte revert marker that records the removed padding, so Restore padding can bring back
+                Trim appends a 12-byte revert marker that records the removed padding, so Restore padding can bring back
                 the original byte for byte.
               </li>
               <li>
@@ -1410,7 +1410,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
   let trimConfirmationBody = `The trimmed copy of ${sourceFileName} is saved as a new download - your original file is not changed. Keep the original: some patches and tools need the untrimmed ROM, and restored padding may not be byte-identical.`;
   if (restoreAvailable) {
-    trimConfirmationBody = `The trimmed copy of ${sourceFileName} is saved as a new download - your original file is not changed. A 14-byte revert marker at its end records the removed padding so Restore padding can rebuild the original exactly. Keep the original: some patches and tools need the untrimmed ROM.`;
+    trimConfirmationBody = `The trimmed copy of ${sourceFileName} is saved as a new download - your original file is not changed. A 12-byte revert marker at its end records the removed padding so Restore padding can rebuild the original exactly. Keep the original: some patches and tools need the untrimmed ROM.`;
   }
   if (losslessDiscConversion) {
     trimConfirmationBody = `A lossless copy of ${sourceFileName} is saved as a new download. All disc data is preserved; savings come from compression. Your original file is not changed.`;

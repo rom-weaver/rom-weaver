@@ -808,6 +808,187 @@ fn trimming_a_marked_rom_again_keeps_the_original_restore_data() {
     fs::remove_dir_all(&dir).ok();
 }
 
+/// Hand-built legacy 14-byte footer: `RWT\x01` + pad_byte + 40-bit LE pad_len + CRC-32 of the
+/// preceding 10 bytes. Uses `crc32fast` so the check is independent of the production CRC helper.
+fn legacy_revert_footer(pad_byte: u8, pad_len: u64) -> Vec<u8> {
+    let mut footer = b"RWT\x01".to_vec();
+    footer.push(pad_byte);
+    footer.extend_from_slice(&pad_len.to_le_bytes()[..5]);
+    let crc = crc32fast::hash(&footer);
+    footer.extend_from_slice(&crc.to_le_bytes());
+    assert_eq!(footer.len(), 14);
+    footer
+}
+
+#[test]
+fn a_new_revert_footer_is_twelve_bytes_starting_with_rw() {
+    let dir = scratch_dir("revert-footer-layout");
+    let path = write_fixture(&dir, "trimmed.bin", &[0x42_u8; 1000]);
+
+    CliApp::write_revert_footer(&path, 0x01_0000_0000_u64 + 1000, 0xA5).expect("footer");
+
+    let written = fs::read(&path).expect("read");
+    assert_eq!(written.len(), 1000 + 12);
+    let footer = &written[1000..];
+    assert_eq!(&footer[..2], b"RW");
+    assert_eq!(footer[2], 0xA5, "pad byte");
+    assert_eq!(
+        &footer[3..8],
+        &[0x00, 0x00, 0x00, 0x00, 0x01],
+        "40-bit LE pad_len"
+    );
+    assert_eq!(
+        footer[8..],
+        crc32fast::hash(&footer[..8]).to_le_bytes(),
+        "CRC-32 covers the preceding 8 bytes"
+    );
+
+    let read = CliApp::read_revert_footer(&path)
+        .expect("read footer")
+        .expect("valid footer");
+    assert_eq!(read.footer_len, 12);
+    assert_eq!(read.pad_byte, 0xA5);
+    assert_eq!(read.original_size, 0x01_0000_0000_u64 + 1000);
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_legacy_revert_footer_still_restores_byte_identically() {
+    let dir = scratch_dir("revert-footer-legacy");
+    let app = test_app();
+    let context = app.context(ThreadBudget::Fixed(1));
+    // 0x00 padding differs from the 0xFF fallback, so only the footer can restore it.
+    let mut original = vec![0x42_u8; 1000];
+    original.resize(4096, 0x00);
+    let mut legacy = original[..1000].to_vec();
+    legacy.extend_from_slice(&legacy_revert_footer(0x00, 4096 - 1000));
+    let trimmed = write_fixture(&dir, "legacy.gba", &legacy);
+
+    let read = CliApp::read_revert_footer(&trimmed)
+        .expect("read footer")
+        .expect("valid legacy footer");
+    assert_eq!(read.footer_len, 14);
+    assert_eq!(read.original_size, 4096);
+
+    let reverted = dir.join("reverted.gba");
+    app.trim_file(
+        &trimmed,
+        &reverted,
+        request(TrimOperation::Revert, TrimInputKind::Gba),
+        &context,
+    )
+    .expect("revert");
+    assert_eq!(fs::read(&reverted).expect("reverted"), original);
+
+    // In place restores the same bytes.
+    app.trim_file(
+        &trimmed,
+        &trimmed,
+        TrimRequest {
+            in_place: true,
+            ..request(TrimOperation::Revert, TrimInputKind::Gba)
+        },
+        &context,
+    )
+    .expect("in-place revert");
+    assert_eq!(fs::read(&trimmed).expect("reverted"), original);
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn retrimming_a_rom_with_a_legacy_footer_writes_a_new_rw_footer() {
+    let dir = scratch_dir("revert-footer-legacy-retrim");
+    let app = test_app();
+    let context = app.context(ThreadBudget::Fixed(1));
+    let original = nds_rom(&nds_header(false, 0x2000, 0x8000), 0x8000);
+    let mut legacy = original[..0x2000].to_vec();
+    legacy.extend_from_slice(&legacy_revert_footer(0xFF, 0x8000 - 0x2000));
+    let source = write_fixture(&dir, "legacy.nds", &legacy);
+
+    let retrimmed = dir.join("retrimmed.nds");
+    app.trim_file(
+        &source,
+        &retrimmed,
+        TrimRequest {
+            revert_marker: true,
+            ..request(TrimOperation::Trim, TrimInputKind::NdsFamily)
+        },
+        &context,
+    )
+    .expect("re-trim");
+
+    let written = fs::read(&retrimmed).expect("re-trimmed");
+    assert_eq!(
+        written.len(),
+        0x2000 + 12,
+        "legacy footer replaced by a 12-byte footer"
+    );
+    assert_eq!(&written[0x2000..0x2002], b"RW");
+    assert_eq!(&written[..0x2000], &original[..0x2000]);
+
+    let reverted = dir.join("reverted.nds");
+    app.trim_file(
+        &retrimmed,
+        &reverted,
+        request(TrimOperation::Revert, TrimInputKind::NdsFamily),
+        &context,
+    )
+    .expect("revert");
+    assert_eq!(fs::read(&reverted).expect("reverted"), original);
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_revert_footer_with_a_corrupt_crc_is_ignored() {
+    let dir = scratch_dir("revert-footer-corrupt-crc");
+
+    let current = write_fixture(&dir, "current.bin", &[0x42_u8; 1000]);
+    CliApp::write_revert_footer(&current, 4096, 0x00).expect("footer");
+    assert!(
+        CliApp::read_revert_footer(&current)
+            .expect("read")
+            .is_some()
+    );
+    let mut bytes = fs::read(&current).expect("read");
+    *bytes.last_mut().expect("footer byte") ^= 0xFF;
+    fs::write(&current, &bytes).expect("corrupt");
+    assert!(
+        CliApp::read_revert_footer(&current)
+            .expect("read")
+            .is_none(),
+        "a corrupt CRC invalidates the RW footer"
+    );
+
+    let mut legacy = vec![0x42_u8; 1000];
+    legacy.extend_from_slice(&legacy_revert_footer(0x00, 3096));
+    let legacy_path = write_fixture(&dir, "legacy.bin", &legacy);
+    assert!(
+        CliApp::read_revert_footer(&legacy_path)
+            .expect("read")
+            .is_some()
+    );
+    *legacy.last_mut().expect("footer byte") ^= 0xFF;
+    fs::write(&legacy_path, &legacy).expect("corrupt");
+    assert!(
+        CliApp::read_revert_footer(&legacy_path)
+            .expect("read")
+            .is_none(),
+        "a corrupt CRC invalidates the legacy footer"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_revert_footer_past_the_forty_bit_pad_length_is_rejected() {
+    let dir = scratch_dir("revert-footer-max-pad");
+    let path = write_fixture(&dir, "trimmed.bin", &[0x42_u8; 16]);
+    let error = CliApp::write_revert_footer(&path, 16 + (1_u64 << 40), 0xFF)
+        .err_or_panic("pad_len needs more than 40 bits");
+    assert!(error.to_string().contains("too large"), "{error}");
+    assert_eq!(fs::metadata(&path).expect("meta").len(), 16);
+    fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn a_revert_marker_is_not_written_when_nothing_was_trimmed() {
     let dir = scratch_dir("revert-marker-noop");

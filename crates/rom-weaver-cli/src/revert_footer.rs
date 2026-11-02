@@ -1,11 +1,17 @@
 use super::*;
 
 // Revert footer format: see `docs/development/trim-revert-footer.md` for the full specification.
-/// 4-byte magic + version identifying a rom-weaver revert footer (`"RWT"` + version `0x01`).
-pub(super) const REVERT_FOOTER_MAGIC: &[u8; 4] = b"RWT\x01";
-/// Total on-disk size of the revert footer: magic+version(4) + pad_byte(1) + pad_len(5, 40-bit LE)
+/// 2-byte magic identifying a current rom-weaver revert footer (`"RW"`).
+pub(super) const REVERT_FOOTER_MAGIC: &[u8; 2] = b"RW";
+/// Total on-disk size of the current revert footer: magic(2) + pad_byte(1) + pad_len(5, 40-bit LE)
 /// + crc32(4).
-pub(super) const REVERT_FOOTER_LEN: u64 = 14;
+pub(super) const REVERT_FOOTER_LEN: u64 = 12;
+/// 4-byte magic + version of the legacy footer shipped since v0.10.0 (`"RWT"` + version `0x01`).
+/// Still read on revert and re-trim; never written.
+pub(super) const LEGACY_REVERT_FOOTER_MAGIC: &[u8; 4] = b"RWT\x01";
+/// Total on-disk size of the legacy revert footer: magic+version(4) + pad_byte(1) + pad_len(5,
+/// 40-bit LE) + crc32(4).
+pub(super) const LEGACY_REVERT_FOOTER_LEN: u64 = 14;
 /// Maximum padding length the 40-bit `pad_len` field can encode: 1 TiB minus one byte.
 pub(super) const REVERT_FOOTER_MAX_PAD_LEN: u64 = (1 << 40) - 1;
 
@@ -14,6 +20,8 @@ pub(super) const REVERT_FOOTER_MAX_PAD_LEN: u64 = (1 << 40) - 1;
 pub(super) struct RevertFooter {
     pub(super) original_size: u64,
     pub(super) pad_byte: u8,
+    /// On-disk length of the footer that was read, so callers strip the right number of bytes.
+    pub(super) footer_len: u64,
 }
 
 impl CliApp {
@@ -27,11 +35,12 @@ impl CliApp {
         footer: RevertFooter,
     ) -> Result<NdsTrimOutcome> {
         let file_size = fs::metadata(source)?.len();
-        let data_size = file_size.saturating_sub(REVERT_FOOTER_LEN);
         let RevertFooter {
             original_size,
             pad_byte,
+            footer_len,
         } = footer;
+        let data_size = file_size.saturating_sub(footer_len);
         if original_size < data_size {
             return Err(RomWeaverError::Validation(format!(
                 "revert footer in `{}` records an original size smaller than the trimmed data",
@@ -95,7 +104,7 @@ impl CliApp {
     }
 
     /// CRC32 (IEEE) over a small buffer, used to validate the revert footer without pulling in a
-    /// dependency. Bitwise form is fine for the 10-byte footer body.
+    /// dependency. Bitwise form is fine for the 8- or 10-byte footer body.
     pub(super) fn revert_footer_crc32(bytes: &[u8]) -> u32 {
         let mut crc: u32 = 0xFFFF_FFFF;
         for &byte in bytes {
@@ -141,33 +150,84 @@ impl CliApp {
         Ok(())
     }
 
-    /// Read and validate a revert footer from the end of a file. Returns `None` when the file is
-    /// too small or the trailing bytes are not a valid footer (magic + CRC must both match). The
-    /// reconstructed original size is derived from the data length plus the recorded padding.
+    /// Read and validate a revert footer from the end of a file. A legacy 14-byte `RWT\x01`
+    /// footer is checked first, then a 12-byte `RW` footer; each needs both magic and CRC to match.
+    /// Returns `None` when the file is too small or neither is valid. The reconstructed original
+    /// size is derived from the data length plus the recorded padding.
     pub(super) fn read_revert_footer(path: &Path) -> Result<Option<RevertFooter>> {
         let mut file = File::open(path)?;
         let file_size = file.metadata()?.len();
-        if file_size < REVERT_FOOTER_LEN {
+
+        if let Some(footer) = Self::read_footer_candidate(
+            &mut file,
+            file_size,
+            LEGACY_REVERT_FOOTER_MAGIC,
+            LEGACY_REVERT_FOOTER_LEN,
+        )? {
+            debug!(
+                path = %path.display(),
+                version = "legacy RWT v1",
+                footer_len = footer.footer_len,
+                "found revert footer"
+            );
+            return Ok(Some(footer));
+        }
+        if let Some(footer) = Self::read_footer_candidate(
+            &mut file,
+            file_size,
+            REVERT_FOOTER_MAGIC,
+            REVERT_FOOTER_LEN,
+        )? {
+            debug!(
+                path = %path.display(),
+                version = "RW",
+                footer_len = footer.footer_len,
+                "found revert footer"
+            );
+            return Ok(Some(footer));
+        }
+        trace!(path = %path.display(), "no valid revert footer found");
+        Ok(None)
+    }
+
+    /// Parse one footer layout (`magic`, `pad_byte`, 40-bit LE `pad_len`, CRC-32 over everything
+    /// before it) ending at the end of the file.
+    fn read_footer_candidate(
+        file: &mut File,
+        file_size: u64,
+        magic: &[u8],
+        footer_len: u64,
+    ) -> Result<Option<RevertFooter>> {
+        if file_size < footer_len {
             return Ok(None);
         }
-        file.seek(SeekFrom::Start(file_size - REVERT_FOOTER_LEN))?;
-        let mut buffer = [0_u8; REVERT_FOOTER_LEN as usize];
+        file.seek(SeekFrom::Start(file_size - footer_len))?;
+        let mut buffer = vec![0_u8; footer_len as usize];
         file.read_exact(&mut buffer)?;
-        if &buffer[0..4] != REVERT_FOOTER_MAGIC {
+        let magic_len = magic.len();
+        let crc_start = buffer.len() - 4;
+        if &buffer[..magic_len] != magic {
             return Ok(None);
         }
-        let stored_crc = u32::from_le_bytes([buffer[10], buffer[11], buffer[12], buffer[13]]);
-        if Self::revert_footer_crc32(&buffer[0..10]) != stored_crc {
-            return Ok(None);
-        }
-        let pad_byte = buffer[4];
-        let pad_len = u64::from_le_bytes([
-            buffer[5], buffer[6], buffer[7], buffer[8], buffer[9], 0, 0, 0,
+        let stored_crc = u32::from_le_bytes([
+            buffer[crc_start],
+            buffer[crc_start + 1],
+            buffer[crc_start + 2],
+            buffer[crc_start + 3],
         ]);
-        let data_size = file_size - REVERT_FOOTER_LEN;
+        if Self::revert_footer_crc32(&buffer[..crc_start]) != stored_crc {
+            trace!(footer_len, "revert footer magic matched but CRC did not");
+            return Ok(None);
+        }
+        let pad_byte = buffer[magic_len];
+        let mut pad_len_bytes = [0_u8; 8];
+        pad_len_bytes[..5].copy_from_slice(&buffer[magic_len + 1..magic_len + 6]);
+        let pad_len = u64::from_le_bytes(pad_len_bytes);
+        let data_size = file_size - footer_len;
         Ok(Some(RevertFooter {
             original_size: data_size + pad_len,
             pad_byte,
+            footer_len,
         }))
     }
 
