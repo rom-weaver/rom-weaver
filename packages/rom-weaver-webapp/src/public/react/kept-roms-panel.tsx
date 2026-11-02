@@ -14,9 +14,13 @@ import { StorageFullRecovery } from "./storage-full-recovery.tsx";
 const KeptRomsPanel = ({
   active = true,
   onPlay,
+  disabled = false,
+  onPlayStart,
 }: {
   active?: boolean;
+  disabled?: boolean;
   onPlay?: (source: KeptRomPlayback) => Promise<unknown>;
+  onPlayStart?: () => AbortSignal;
 }) => {
   const localizer = useUiLocalizer();
   const [roms, setRoms] = useState<KeptRom[]>([]);
@@ -25,17 +29,29 @@ const KeptRomsPanel = ({
   const [persistence, setPersistence] = useState<"granted" | "denied" | null>(null);
   const actionRef = useRef(false);
   const revisionRef = useRef(0);
+  const mountedRef = useRef(true);
+  const playbackAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      playbackAbortRef.current?.abort();
+    };
+  }, []);
   const refresh = useCallback(async () => {
     const revision = ++revisionRef.current;
     try {
       const next = await listKeptRoms();
       if (revision === revisionRef.current) setRoms(next);
     } catch (reason) {
-      if (revision === revisionRef.current) setError(String(reason instanceof Error ? reason.message : reason));
+      if (revision === revisionRef.current) setError(String(reason));
     }
   }, []);
   useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      playbackAbortRef.current?.abort();
+      return;
+    }
     void refresh();
     const changed = () => void refresh();
     window.addEventListener("rom-weaver-kept-roms-changed", changed);
@@ -54,17 +70,17 @@ const KeptRomsPanel = ({
     setError("");
     try {
       await action();
-      await refresh();
+      if (mountedRef.current) await refresh();
     } catch (reason) {
-      setError(String(reason instanceof Error ? reason.message : reason));
+      if (mountedRef.current && (reason as { name?: string } | null)?.name !== "AbortError") setError(String(reason));
     } finally {
       actionRef.current = false;
-      setBusy(false);
+      if (mountedRef.current) setBusy(false);
     }
   };
   const titleId = onPlay ? "test-kept-roms-title" : "storage-kept-roms-title";
   return (
-    <section aria-labelledby={titleId} className="emulator-saves-panel">
+    <section aria-labelledby={titleId} aria-busy={busy} className="emulator-saves-panel">
       <div className="emulator-saves-heading">
         <div>
           <h3 className="dlg-section-title" id={titleId}>
@@ -110,16 +126,25 @@ const KeptRomsPanel = ({
                 {onPlay ? (
                   <button
                     className="btn slim ghost"
-                    disabled={busy || rom.status !== "ready"}
+                    disabled={disabled || busy || rom.status !== "ready"}
                     type="button"
                     onClick={() =>
                       void run(async () => {
-                        const source = await readKeptRom(rom.gameId);
+                        const controller = new AbortController();
+                        playbackAbortRef.current = controller;
+                        const parentSignal = onPlayStart?.();
+                        const signal = parentSignal
+                          ? AbortSignal.any([controller.signal, parentSignal])
+                          : controller.signal;
+                        let source: KeptRomPlayback | undefined;
                         let accepted = false;
                         try {
+                          source = await readKeptRom(rom.gameId, signal);
+                          if (signal.aborted) return;
                           accepted = (await onPlay(source)) !== false;
                         } finally {
-                          if (!accepted) await source.dispose().catch(() => undefined);
+                          if (!accepted) await source?.dispose().catch(() => undefined);
+                          if (playbackAbortRef.current === controller) playbackAbortRef.current = null;
                         }
                       })
                     }
@@ -129,7 +154,7 @@ const KeptRomsPanel = ({
                 ) : null}
                 <button
                   className="btn slim ghost"
-                  disabled={busy}
+                  disabled={disabled || busy}
                   type="button"
                   onClick={() =>
                     void run(async () => {

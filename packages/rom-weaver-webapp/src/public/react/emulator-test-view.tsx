@@ -200,7 +200,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
           window.dispatchEvent(new Event("rom-weaver-kept-roms-changed"));
         })
         .catch((reason: unknown) => {
-          if (current) setKeepNotice(String(reason instanceof Error ? reason.message : reason));
+          if (current) setKeepNotice(String(reason));
         });
     };
     window.addEventListener("message", started);
@@ -430,6 +430,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
         });
         return false;
       }
+      loadAbortControllerRef.current?.abort();
       const abortController = new AbortController();
       loadAbortControllerRef.current = abortController;
       setBusy(true);
@@ -981,6 +982,13 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
 
       <KeptRomsPanel
         active={active}
+        disabled={busy || preparing}
+        onPlayStart={() => {
+          loadAbortControllerRef.current?.abort();
+          const controller = new AbortController();
+          loadAbortControllerRef.current = controller;
+          return controller.signal;
+        }}
         onPlay={({ file, dispose }) => {
           // Replaying MUST NOT replace the kept original.
           keptFilesRef.current.add(file);

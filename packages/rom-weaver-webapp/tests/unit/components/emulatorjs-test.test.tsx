@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
+import type { KeptRomPlayback } from "../../../src/storage/browser/kept-roms.ts";
+import { createKeptRomQuotaError } from "../kept-rom-quota-fixture.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkflowProgress } from "../../../src/platform/browser/browser-api.ts";
 import { EmulatorTestView } from "../../../src/public/react/emulator-test-view.tsx";
@@ -92,6 +94,9 @@ const stubObjectUrls = () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  keptRomMocks.listKeptRoms.mockResolvedValue([]);
+  keptRomMocks.keepTestRom.mockReset().mockResolvedValue(undefined);
+  keptRomMocks.readKeptRom.mockReset();
   pendingSaveMocks.readPendingTestSave.mockResolvedValue(undefined);
   pendingSaveMocks.clearPendingTestSave.mockResolvedValue(undefined);
   pendingSaveMocks.loadDroppedSram.mockResolvedValue("stored");
@@ -1220,4 +1225,58 @@ describe("keeping tested ROMs", () => {
     );
     expect(keptRomMocks.keepTestRom).not.toHaveBeenCalled();
   });
+});
+
+describe("kept replay cancellation", () => {
+  it.each(["Stop", "unmount"])("discards a delayed replay after %s", async (cancel) => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    act(() => addEntry(entry()));
+    keptRomMocks.listKeptRoms.mockResolvedValue([
+      { gameId: "b".repeat(40), fileName: "next.nes", size: 3, status: "ready" },
+    ]);
+    let finish: ((source: KeptRomPlayback) => void) | undefined;
+    keptRomMocks.readKeptRom.mockReturnValueOnce(
+      new Promise<KeptRomPlayback>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const view = render(withSettings(<EmulatorTestView />));
+    fireEvent.click(await screen.findByRole("button", { name: "Play" }));
+    await waitFor(() => expect(keptRomMocks.readKeptRom).toHaveBeenCalledOnce());
+    if (cancel === "Stop") fireEvent.click(screen.getByRole("button", { name: "Stop and unload game" }));
+    else view.unmount();
+    const dispose = vi.fn(async () => undefined);
+    if (!finish) throw new Error("The replay did not request its source");
+    await act(async () => finish?.({ file: new File(["ROM"], "next.nes"), dispose }));
+    expect(getEmulatorSessionState().entries.some((game) => game.fileName === "next.nes")).toBe(false);
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+});
+
+it("shows cleanup guidance for the worker's actual kept-ROM quota error", async () => {
+  stubObjectUrls();
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+  keptRomMocks.listKeptRoms.mockResolvedValue([
+    { gameId: "a".repeat(40), fileName: "other.nes", size: 1000, status: "ready" },
+  ]);
+  keptRomMocks.keepTestRom.mockRejectedValueOnce(await createKeptRomQuotaError());
+  render(
+    <RomWeaverSettingsProvider settings={{ keepTestedRomsEnabled: true }}>
+      <EmulatorTestView />
+    </RomWeaverSettingsProvider>,
+  );
+  fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
+    target: { files: [new File(["ROM"], "new.nes")] },
+  });
+  await waitFor(() => expect(document.querySelector("iframe")).toBeTruthy());
+  await act(() =>
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: document.querySelector("iframe")?.contentWindow,
+        data: { source: "rom-weaver-emulator", gameId: "b".repeat(40), kind: "game-started" },
+      }),
+    ),
+  );
+  expect(await screen.findByRole("button", { name: "Open Saves & storage" })).toBeTruthy();
 });

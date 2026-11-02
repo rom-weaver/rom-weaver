@@ -81,9 +81,9 @@ const isReadableRecord = (value: unknown): value is KeptRomRecord =>
   value.storageName.startsWith(`${value.gameId}-`) &&
   typeof value.updatedAt === "number";
 
-const withLock = <T>(action: () => Promise<T>): Promise<T> => {
+const withLock = <T>(action: () => Promise<T>, signal?: AbortSignal): Promise<T> => {
   if (!globalThis.navigator?.locks) return Promise.reject(new Error("Kept ROM storage requires browser Web Locks."));
-  return navigator.locks.request(LOCK_NAME, action);
+  return navigator.locks.request(LOCK_NAME, { signal }, action);
 };
 
 const readRecords = async (): Promise<Map<string, unknown>> => {
@@ -170,9 +170,11 @@ const keepTestRom = (gameId: string, file: File): Promise<void> =>
     }
   });
 
-const readKeptRom = async (gameId: string): Promise<KeptRomPlayback> => {
+const readKeptRom = async (gameId: string, signal?: AbortSignal): Promise<KeptRomPlayback> => {
+  signal?.throwIfAborted();
   await waitForBrowserOpfsBootCleanup();
   return withLock(async () => {
+    signal?.throwIfAborted();
     const record: unknown = await transaction("readonly", (store) => store.get(gameId));
     if (!isReadableRecord(record) || record.gameId !== gameId) throw new Error("This kept ROM can't be read.");
     const snapshotId = crypto.randomUUID();
@@ -185,7 +187,7 @@ const readKeptRom = async (gameId: string): Promise<KeptRomPlayback> => {
     };
     try {
       // Playback MUST own scratch bytes so deleting a kept ROM cannot invalidate its active Blob.
-      const { blob } = await requestKeptRomFile({ action: "read", name: record.storageName, snapshotId });
+      const { blob } = await requestKeptRomFile({ action: "read", name: record.storageName, snapshotId }, signal);
       if (!blob || blob.size !== record.size) throw new Error("This kept ROM was removed or changed by the browser.");
       return { file: new File([blob], record.fileName), dispose };
     } catch (error) {
@@ -194,7 +196,7 @@ const readKeptRom = async (gameId: string): Promise<KeptRomPlayback> => {
       );
       throw error;
     }
-  });
+  }, signal);
 };
 
 const deleteKeptRom = (gameId: string): Promise<void> =>

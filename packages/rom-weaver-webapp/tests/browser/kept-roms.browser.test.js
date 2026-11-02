@@ -126,3 +126,33 @@ it("keeps the active playback readable when its kept original is deleted", async
   expect(await source.file.text()).toBe("ROM");
   expect(await listKeptRoms()).toEqual([]);
 });
+
+it("cancels a queued replay without changing the kept original", async () => {
+  await keepTestRom(gameId, new File(["ROM"], "game.nes"));
+  let unlock;
+  let acquired;
+  const gate = new Promise((resolve) => {
+    unlock = resolve;
+  });
+  const locked = new Promise((resolve) => {
+    acquired = resolve;
+  });
+  const holder = navigator.locks.request("rom-weaver-kept-roms", async () => {
+    acquired();
+    await gate;
+  });
+  await locked;
+  try {
+    const controller = new AbortController();
+    const cancelled = readKeptRomSource(gameId, controller.signal).catch((error) => error);
+    await expect
+      .poll(async () => (await navigator.locks.query()).pending.some((lock) => lock.name === "rom-weaver-kept-roms"))
+      .toBe(true);
+    controller.abort();
+    expect((await cancelled).name).toBe("AbortError");
+  } finally {
+    unlock();
+    await holder;
+  }
+  expect(await (await readKeptRom(gameId)).text()).toBe("ROM");
+});

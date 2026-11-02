@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
+import { createKeptRomQuotaError } from "../kept-rom-quota-fixture.ts";
 import { KeptRomsPanel } from "../../../src/public/react/kept-roms-panel.tsx";
 
 const storage = vi.hoisted(() => ({
@@ -62,4 +63,11 @@ it("releases playback scratch when starting the player is rejected", async () =>
   render(<KeptRomsPanel onPlay={async () => false} />);
   fireEvent.click(await screen.findByRole("button", { name: "Play" }));
   await waitFor(() => expect(dispose).toHaveBeenCalledOnce());
+});
+
+it("shows cleanup guidance for the worker's actual replay quota error", async () => {
+  storage.readKeptRom.mockRejectedValueOnce(await createKeptRomQuotaError());
+  render(<KeptRomsPanel onPlay={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Play" }));
+  expect(await screen.findByRole("button", { name: "Open Saves & storage" })).toBeTruthy();
 });
