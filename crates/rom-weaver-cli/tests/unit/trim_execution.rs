@@ -769,6 +769,46 @@ fn a_revert_marker_trim_round_trips_the_original_bytes() {
 }
 
 #[test]
+fn trimming_a_marked_rom_again_keeps_the_original_restore_data() {
+    let dir = scratch_dir("revert-marker-retrim");
+    let app = test_app();
+    let context = app.context(ThreadBudget::Fixed(1));
+    let bytes = nds_rom(&nds_header(false, 0x2000, 0x8000), 0x8000);
+    let rom = write_fixture(&dir, "game.nds", &bytes);
+    let marker_trim = TrimRequest {
+        revert_marker: true,
+        ..request(TrimOperation::Trim, TrimInputKind::NdsFamily)
+    };
+
+    let first = dir.join("first.nds");
+    app.trim_file(&rom, &first, marker_trim, &context)
+        .expect("first trim");
+    let second = dir.join("second.nds");
+    let outcome = app
+        .trim_file(&first, &second, marker_trim, &context)
+        .expect("second trim");
+    assert!(
+        !outcome.already_target_size,
+        "the second trim strips the footer"
+    );
+
+    let reverted = dir.join("reverted.nds");
+    app.trim_file(
+        &second,
+        &reverted,
+        request(TrimOperation::Revert, TrimInputKind::NdsFamily),
+        &context,
+    )
+    .expect("revert");
+    assert_eq!(
+        fs::read(&reverted).expect("reverted"),
+        bytes,
+        "the rewritten footer still restores the original bytes"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn a_revert_marker_is_not_written_when_nothing_was_trimmed() {
     let dir = scratch_dir("revert-marker-noop");
     let app = test_app();

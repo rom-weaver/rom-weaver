@@ -12,8 +12,8 @@ pub(super) const REVERT_FOOTER_MAX_PAD_LEN: u64 = (1 << 40) - 1;
 /// Stored restoration size and fill byte; the footer does not store removed bytes.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct RevertFooter {
-    original_size: u64,
-    pad_byte: u8,
+    pub(super) original_size: u64,
+    pub(super) pad_byte: u8,
 }
 
 impl CliApp {

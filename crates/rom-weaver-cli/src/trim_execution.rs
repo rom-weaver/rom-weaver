@@ -67,9 +67,24 @@ impl CliApp {
             return Self::revert_with_footer(source, destination, in_place, dry_run, kind, footer);
         }
 
-        // The source fill MUST be captured before an in-place trim removes its padding.
-        let restore_fill = if operation == TrimOperation::Trim && revert_marker && !dry_run {
-            Some(Self::detect_trailing_pad_byte(source)?.unwrap_or(0xFF))
+        // The source fill MUST be captured before an in-place trim removes its padding. A source
+        // that already carries a footer keeps its recorded size and fill: trimming it again only
+        // strips that footer, so the trimmed file's own size and last byte would be wrong.
+        let restore_info = if operation == TrimOperation::Trim && revert_marker && !dry_run {
+            match Self::read_revert_footer(source)? {
+                Some(footer) => {
+                    debug!(
+                        original_size = footer.original_size,
+                        pad_byte = footer.pad_byte,
+                        "keeping the existing revert footer's restore data"
+                    );
+                    Some((Some(footer.original_size), footer.pad_byte))
+                }
+                None => Some((
+                    None,
+                    Self::detect_trailing_pad_byte(source)?.unwrap_or(0xFF),
+                )),
+            }
         } else {
             None
         };
@@ -100,10 +115,11 @@ impl CliApp {
         }?;
 
         // Unchanged files need no restoration metadata.
-        if let Some(pad_byte) = restore_fill
+        if let Some((recorded_size, pad_byte)) = restore_info
             && !outcome.already_target_size
         {
-            Self::write_revert_footer(&outcome.output_path, outcome.original_size, pad_byte)?;
+            let original_size = recorded_size.unwrap_or(outcome.original_size);
+            Self::write_revert_footer(&outcome.output_path, original_size, pad_byte)?;
         }
 
         Ok(outcome)
