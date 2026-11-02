@@ -1073,6 +1073,44 @@ fn trim_and_revert_accept_a_cci_cart_image() {
 }
 
 #[test]
+fn trim_revert_restores_an_ncsd_cart_image_to_its_declared_card_size() {
+    // The NCSD header declares a 48 KiB card, which is not the next power of two (32 KiB) above
+    // the 0x4567 bytes of data, so only the header can rebuild the original without a marker.
+    let temp = setup_temp_dir();
+    let source = temp.child("cart.3ds");
+    let mut rom = build_test_padded_rom(0x4567, 0xC000, 0xFF);
+    rom[0x100..0x104].copy_from_slice(b"NCSD");
+    rom[0x104..0x108].copy_from_slice(&0x60_u32.to_le_bytes());
+    rom[0x108..0x200].fill(0);
+    rom[0x400..0x600].fill(0);
+    rom[0x120..0x124].copy_from_slice(&2_u32.to_le_bytes());
+    rom[0x124..0x128].copy_from_slice(&0x20_u32.to_le_bytes());
+    rom[0x500..0x504].copy_from_slice(b"NCCH");
+    rom[0x504..0x508].copy_from_slice(&0x20_u32.to_le_bytes());
+    fs::write(source.path(), &rom).expect("fixture");
+
+    let trimmed = temp.child("cart.trim.3ds");
+    let restored = temp.child("cart.restored.3ds");
+    for (input, output, extra) in [
+        (source.path(), trimmed.path(), None),
+        (trimmed.path(), restored.path(), Some("--revert")),
+    ] {
+        let mut args = vec![
+            "trim",
+            "--input",
+            input.to_str().expect("path"),
+            "--output",
+            output.to_str().expect("path"),
+            "--json",
+        ];
+        args.extend(extra);
+        command_stdout(&args, 0);
+    }
+    assert_eq!(fs::read(trimmed.path()).expect("trimmed").len(), 0x4567);
+    assert_eq!(fs::read(restored.path()).expect("restored"), rom);
+}
+
+#[test]
 fn trim_revert_restores_3ds_to_next_power_of_two() {
     let temp = setup_temp_dir();
     let source = temp.child("sample.3ds");

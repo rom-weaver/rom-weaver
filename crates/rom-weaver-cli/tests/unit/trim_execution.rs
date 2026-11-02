@@ -1037,6 +1037,39 @@ fn three_ds_trimming_preserves_declared_ncsd_and_ncch_extents() {
 }
 
 #[test]
+fn three_ds_restore_uses_the_declared_card_size_only_up_to_8_gib() {
+    let dir = scratch_dir("3ds-card-size");
+    // (declared card size in 512-byte units, expected restore size)
+    for (card_units, expected) in [
+        (0x60_u32, 0xC000_u64),
+        (0x0100_0000, 8 << 30),
+        (0x0100_0001, 0x8000),
+    ] {
+        let mut bytes = vec![0x11; 0x4567];
+        bytes[0x100..0x104].copy_from_slice(b"NCSD");
+        bytes[0x104..0x108].copy_from_slice(&card_units.to_le_bytes());
+        bytes[0x108..0x200].fill(0);
+        bytes[0x400..0x600].fill(0);
+        bytes[0x120..0x124].copy_from_slice(&2_u32.to_le_bytes());
+        bytes[0x124..0x128].copy_from_slice(&0x20_u32.to_le_bytes());
+        bytes[0x500..0x504].copy_from_slice(b"NCCH");
+        bytes[0x504..0x508].copy_from_slice(&0x20_u32.to_le_bytes());
+        let source = write_fixture(&dir, "game.3ds", &bytes);
+        let outcome = CliApp::trim_power_of_two_file(
+            &source,
+            &dir.join("restored.3ds"),
+            false,
+            true,
+            TrimOperation::Revert,
+            TrimInputKind::ThreeDs,
+        )
+        .expect("restore dry run");
+        assert_eq!(outcome.result_size, expected, "card units {card_units:#x}");
+    }
+    fs::remove_dir_all(dir).ok();
+}
+
+#[test]
 fn rvz_rejects_markers_footer_restoration_and_in_place_dry_runs() {
     let dir = scratch_dir("rvz-refusals");
     let app = test_app();

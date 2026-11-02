@@ -43,7 +43,7 @@ For NDS-family, GBA, and 3DS ROMs, on `--revert`, before the format-specific siz
 
 The CRC covers the footer, not the ROM data. It cannot detect changes to the retained ROM bytes or prove that the recorded fill matches all removed bytes.
 
-When no valid footer is present, revert uses the format's size heuristic. GBA and 3DS grow to the next power of two. NDS/DSi also use the next power of two, with the parsed used-data size as a lower bound. These paths fill with `0xFF`; they do not recover an arbitrary original dump size or padding pattern.
+When no valid footer is present, revert uses the format's size heuristic. A 3DS cart image (NCSD) grows to the card size its header declares, up to 8 GiB; GBA and NCCH-only 3DS images grow to the next power of two. NDS/DSi also use the next power of two, with the parsed used-data size as a lower bound. These paths fill with `0xFF`; they do not recover an arbitrary original dump size or padding pattern.
 
 ## Notes and invariants
 

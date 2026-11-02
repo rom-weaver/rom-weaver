@@ -1111,9 +1111,10 @@ Pad a trimmed file back to full size. `--untrim` and `--restore` do the same
 thing.
 
 A revert footer from an earlier --revert-marker run supplies the size and
-padding byte. Without a footer, the size rounds up to the next power of two;
-NDS also keeps the used-data boundary from its header. Restoration does not
-guarantee the original bytes.
+padding byte. Without a footer, a 3DS cart image (NCSD) grows to the card size
+its header declares; other files round up to the next power of two, and NDS
+also keeps the used-data boundary from its header. Restoration without a
+footer does not guarantee the original bytes.
 
 XISO trimming and lossless RVZ conversion do not support this operation."
         )

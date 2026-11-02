@@ -1,6 +1,9 @@
 use super::*;
 use crate::path_access::paths_refer_to_same_file;
 
+/// The largest 3DS game card (8 GiB).
+const THREE_DS_MAX_CARD_SIZE: u64 = 8 << 30;
+
 /// The mode/operation settings for a single trim operation, grouped so `trim_file` takes one
 /// request descriptor instead of four positional flags.
 #[derive(Clone, Copy)]
@@ -199,10 +202,10 @@ impl CliApp {
     ) -> Result<NdsTrimOutcome> {
         Self::validate_trim_destination(source, destination, in_place)?;
         let original_size = fs::metadata(source)?.len();
-        let minimum_size = if kind == TrimInputKind::ThreeDs {
+        let (minimum_size, card_size) = if kind == TrimInputKind::ThreeDs {
             Self::three_ds_data_extent(source, original_size, operation == TrimOperation::Revert)?
         } else {
-            1
+            (1, None)
         };
         if original_size == 0 {
             return Err(RomWeaverError::Validation(format!(
@@ -228,8 +231,19 @@ impl CliApp {
                 }
             }
             TrimOperation::Revert => {
-                let revert_size =
-                    Self::power_of_two_target_size_for_revert(original_size)?.max(minimum_size);
+                // A cart image's NCSD header records the full card size, so restore to exactly
+                // that; only headers without one (NCCH) fall back to the next power of two.
+                let revert_size = match card_size {
+                    Some(card_size) => card_size.max(original_size),
+                    None => Self::power_of_two_target_size_for_revert(original_size)?,
+                }
+                .max(minimum_size);
+                trace!(
+                    original_size,
+                    ?card_size,
+                    revert_size,
+                    "resolved padding restore size"
+                );
                 (revert_size, revert_size == original_size)
             }
         };
@@ -958,11 +972,18 @@ impl CliApp {
         Ok(0x200_u64 << shift)
     }
 
-    fn three_ds_data_extent(source: &Path, file_size: u64, reverting: bool) -> Result<u64> {
+    /// The bytes a 3DS image's partitions reach, and for an NCSD cart image the card size its
+    /// header declares.
+    fn three_ds_data_extent(
+        source: &Path,
+        file_size: u64,
+        reverting: bool,
+    ) -> Result<(u64, Option<u64>)> {
         let mut file = File::open(source)?;
         let mut header = [0_u8; 0x200];
         file.read_exact(&mut header)?;
         let unit = Self::three_ds_media_unit(&header)?;
+        let mut card_size = None;
         let extent = match &header[0x100..0x104] {
             b"NCCH" => u64::from(Self::read_u32_le(&header, 0x104, "NCCH size")?) * unit,
             b"NCSD" => {
@@ -1031,6 +1052,9 @@ impl CliApp {
                         "NCSD contains no partitions".into(),
                     ));
                 }
+                // 3DS game cards top out at 8 GiB; a larger declared size is not a real card, so
+                // a restore does not trust it.
+                card_size = (media_size <= THREE_DS_MAX_CARD_SIZE).then_some(media_size);
                 end
             }
             _ => {
@@ -1044,7 +1068,7 @@ impl CliApp {
                 "3DS data extent is invalid or exceeds the input size".into(),
             ));
         }
-        Ok(extent)
+        Ok((extent, card_size))
     }
 
     pub(super) fn write_padding_bytes(
