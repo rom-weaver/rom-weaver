@@ -866,7 +866,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     const changed = isChanged(field);
     const readOnly = isReadOnly(field);
     const controlId = `save-field-${field.id}`;
-    /* An editable field always renders Reset; it stays hidden until an edit or error so that its space is reserved and the control never moves when it appears. */
+    /* An editable field always renders Reset, hidden until an edit or error. On a phone the hidden button keeps its column so the label never re-wraps; on desktop it is not displayed, and top-aligned rows keep the control in place. */
     const idle = !(changed || errorText);
     return (
       <div
