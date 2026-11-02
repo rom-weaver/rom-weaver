@@ -1070,6 +1070,30 @@ fn three_ds_restore_uses_the_declared_card_size_only_up_to_8_gib() {
 }
 
 #[test]
+fn restoring_a_cxi_without_a_marker_leaves_it_unchanged() {
+    let dir = scratch_dir("cxi-restore");
+    let mut bytes = vec![0x11; 0x4600];
+    bytes[0x100..0x104].copy_from_slice(b"NCCH");
+    bytes[0x104..0x108].copy_from_slice(&0x23_u32.to_le_bytes());
+    bytes[0x18E] = 0;
+    for (name, expected) in [("game.cxi", 0x4600_u64), ("game.3ds", 0x8000)] {
+        let source = write_fixture(&dir, name, &bytes);
+        let outcome = CliApp::trim_power_of_two_file(
+            &source,
+            &dir.join("restored.bin"),
+            false,
+            true,
+            TrimOperation::Revert,
+            TrimInputKind::ThreeDs,
+        )
+        .expect("restore dry run");
+        assert_eq!(outcome.result_size, expected, "{name}");
+        assert_eq!(outcome.already_target_size, name == "game.cxi", "{name}");
+    }
+    fs::remove_dir_all(dir).ok();
+}
+
+#[test]
 fn rvz_rejects_markers_footer_restoration_and_in_place_dry_runs() {
     let dir = scratch_dir("rvz-refusals");
     let app = test_app();

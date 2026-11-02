@@ -232,9 +232,14 @@ impl CliApp {
             }
             TrimOperation::Revert => {
                 // A cart image's NCSD header records the full card size, so restore to exactly
-                // that; only headers without one (NCCH) fall back to the next power of two.
+                // that; only headers without one (NCCH) fall back to the next power of two. A
+                // `.cxi` is a bare NCCH that never had card padding, so it has nothing to restore.
+                let is_cxi = source
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("cxi"));
                 let revert_size = match card_size {
                     Some(card_size) => card_size.max(original_size),
+                    None if is_cxi => original_size,
                     None => Self::power_of_two_target_size_for_revert(original_size)?,
                 }
                 .max(minimum_size);
