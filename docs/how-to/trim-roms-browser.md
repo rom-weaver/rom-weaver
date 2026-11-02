@@ -30,6 +30,8 @@ Once the ROM is staged, the output step states what the run will do for that fil
 
 The format starts from the **Download format** setting in [Settings](browser-settings.md): ZIP for Nintendo DS and Game Boy Advance ROMs and Z3DS for Nintendo 3DS ROMs by default, `.7z` or the plain file if you chose those there. Change it in the output step for one run.
 
+GameCube and Wii disc inputs convert losslessly to RVZ by default. The downloaded extension reflects the actual format, and savings come from compression rather than removal of unused sectors.
+
 The format list offers the ROM's own extension, ZIP, and 7z. Z3DS appears only for a 3DS ROM, and CHD is never offered for an Xbox XISO, which cannot be stored as CHD. A 3DS ROM is trimmed from inside a `.z3ds`, `.zcci`, `.zcxi`, ZIP, or 7z file; a `.z3ds` or `.zcci` input keeps its own extension.
 
 A trimmed NDS, GBA, or 3DS ROM ends in a 12-byte revert marker that records the removed padding, so [Restore padding](#restore-padding) can rebuild the original exactly. Tools that read only the ROM's used data ignore it; the [footer format](../development/trim-revert-footer.md) describes its limits. An XISO is rebuilt without its unused space and cannot be restored, so keep the original.
@@ -38,6 +40,6 @@ A file without removable padding may have no useful size reduction. A format tha
 
 ## Restore padding
 
-Add a trimmed ROM and Trim selects **Restore** for it; use the mode toggle in the output step to choose between trimming and restoring. **RESTORE & DOWNLOAD** also starts at once and opens a warning dialog.
+Add a trimmed ROM and Trim selects **Restore padding** for it; use the mode toggle in the output step to choose between trimming and restoring. **RESTORE & DOWNLOAD** also starts at once and opens a warning dialog.
 
-Restoring is byte-exact only for a ROM trimmed with a revert marker. Without one, the padding is rebuilt as `0xFF` up to a power-of-two size. XISO trimming does not support restore-padding. The browser does not expose the CLI's revert-marker option; use [Trim and restore from the CLI](cli-trim.md#put-the-padding-back) when you need it. [Compression and trimming](../explanation/compression-formats.md#trim-compress-or-both) explains the difference.
+Restoring is byte-exact only for a ROM trimmed with a revert marker, which browser Trim always writes for NDS, GBA, and 3DS ROMs. Without one, the padding is rebuilt as `0xFF`: a 3DS cart image grows to the card size recorded in its header, a `.cxi` stays unchanged because it has no cartridge padding, and other ROMs grow to the next power-of-two size, which may not match the original. XISO trimming does not support restore-padding. A ROM trimmed with the CLI carries a marker only when you passed `--revert-marker`; see [Trim and restore from the CLI](cli-trim.md#put-the-padding-back). [Compression and trimming](../explanation/compression-formats.md#trim-compress-or-both) explains the difference.

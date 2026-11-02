@@ -305,6 +305,20 @@ test.each([
   }
 });
 
+// A plain `.iso` XISO is staged as raw bytes, so the Xbox platform must be tagged on the input itself: it is
+// what keeps CHD out of the format lists of every workflow that reads the staged input.
+test("a staged XISO carries the Xbox platform", async () => {
+  const xiso = new Uint8Array(xisoFixture().length + 65536);
+  xiso.set(xisoFixture());
+  const workflow = new TrimWorkflow({ settings: { workers: { threads: 1 } } });
+  try {
+    await workflow.setInput(new File([xiso], "game.iso"));
+    expect(workflow.getInput()?.romType?.platform).toBe("Microsoft Xbox");
+  } finally {
+    await workflow.dispose();
+  }
+});
+
 test("trim of an XISO into ZIP still works", async () => {
   const xiso = new Uint8Array(xisoFixture().length + 65536);
   xiso.set(xisoFixture());

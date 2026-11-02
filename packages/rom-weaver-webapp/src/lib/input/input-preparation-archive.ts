@@ -11,6 +11,7 @@ import { STANDARD_CHECKSUM_ALGORITHMS } from "../checksum-algorithms.ts";
 import { RomWeaverError, throwIfAborted, toRomWeaverError } from "../errors.ts";
 import { emitTraceLog } from "../logging.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
+import { XBOX_PLATFORM } from "../compression/disc-image-policy.ts";
 import { romTypeFromEmittedFile } from "../runtime/run-result-parsing.ts";
 import { transferRetainedOutputOwnership } from "../runtime/workflow-runtime-worker-helpers.ts";
 import { isCueEntryFileName, isGdiEntryFileName } from "./archive.ts";
@@ -819,9 +820,13 @@ const resolveUnclassifiedInputAssets = async (
       ...(options?.signal ? { signal: options.signal } : {}),
     });
     throwIfAborted(options?.signal);
+    // The raw bytes skip the ingest outputs that carry the platform, so tag it here: it keeps CHD out of
+    // the output formats of an XISO that the engine cannot store as CHD.
+    const romType = romTypeFromEmittedFile({ platform: XBOX_PLATFORM });
     Object.assign(file, {
       checksums: raw.checksums,
       checksumVariants: raw.variants,
+      ...(romType ? { romType } : {}),
       _precomputedChecksumMs: Date.now() - checksumStartedAt,
     });
     return;
