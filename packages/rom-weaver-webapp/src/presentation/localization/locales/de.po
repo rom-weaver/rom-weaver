@@ -4331,7 +4331,7 @@ msgstr "Entferne diesen Patch und wähle eine gültige Patch-Datei."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimDescription"
-msgstr "Entferne ungenutzte Fülldaten aus Nintendo-DS-, Game-Boy-Advance-, Nintendo-3DS- und Xbox-(XISO-)Images oder fülle ein getrimmtes ROM wieder auf die volle Größe auf."
+msgstr "Entferne ungenutzte Fülldaten aus Nintendo-DS/DSi-, Game-Boy-Advance-, Nintendo-3DS- und Xbox-XISO-Images oder fülle ein getrimmtes ROM wieder auf die volle Größe auf."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

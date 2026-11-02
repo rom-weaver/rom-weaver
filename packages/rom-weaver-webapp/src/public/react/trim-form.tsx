@@ -44,6 +44,7 @@ import {
   getDefaultCompressionMode,
   toCreateWorkflowSettings,
   useCreateSettings,
+  useRomWeaverSettings,
   useRomWeaverAssetBaseUrl,
   useUiLocalizer,
 } from "./settings-context.tsx";
@@ -539,7 +540,14 @@ type PendingTrimDrop = ReturnType<typeof routeSingleRom>;
 function TrimPatchForm(props: TrimPatchFormProps) {
   const internalProps = props as InternalTrimPatchFormProps;
   const trimWorkflowOverride = internalProps.trimWorkflow;
-  const providerSettings = useCreateSettings();
+  const storedSettings = useRomWeaverSettings();
+  const createSettings = useCreateSettings();
+  // Create hands back the bare file for the shipped "zip/special" default, but a trimmed copy follows the
+  // saved Download format as written (NDS and XISO default to ZIP), so keep the stored mode.
+  const providerSettings = useMemo<TrimPatchFormSettings>(
+    () => ({ ...createSettings, defaultCompression: getDefaultCompressionMode(storedSettings) }),
+    [createSettings, storedSettings],
+  );
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const localizer = useUiLocalizer();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;

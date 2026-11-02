@@ -1,6 +1,6 @@
 # Trim a ROM in the browser
 
-Use Trim to remove unused padding from a Nintendo DS/DSi, Game Boy Advance, Nintendo 3DS, or Xbox (XISO) image and download a smaller copy, or to pad a trimmed ROM back to full size. Keep the original for future patches.
+Use Trim to remove unused padding from a Nintendo DS/DSi, Game Boy Advance, Nintendo 3DS, or Xbox XISO image and download a smaller copy, or to pad a trimmed ROM back to full size. Keep the original for future patches.
 
 <!-- START doctoc -->
 ## Table of contents

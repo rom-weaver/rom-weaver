@@ -111,9 +111,9 @@ class FakeTrimWorkflow {
 
 const { TrimPatchForm } = await import("../../src/public/react/trim-form.tsx");
 
-const renderForm = (props: Record<string, unknown> = {}) =>
+const renderForm = (props: Record<string, unknown> = {}, providerSettings: Record<string, unknown> = {}) =>
   render(
-    <RomWeaverSettingsProvider settings={{}}>
+    <RomWeaverSettingsProvider settings={providerSettings}>
       <TrimPatchForm {...({ trimWorkflow: FakeTrimWorkflow, ...props } as never)} />
     </RomWeaverSettingsProvider>,
   );
@@ -606,7 +606,7 @@ describe("TrimPatchForm", () => {
 
     it("lists the supported platforms in the hero description", async () => {
       const { container } = renderForm();
-      expect(container.textContent).toContain("Nintendo DS, Game Boy Advance, Nintendo 3DS, and Xbox (XISO)");
+      expect(container.textContent).toContain("Nintendo DS/DSi, Game Boy Advance, Nintendo 3DS, and Xbox XISO");
     });
   });
 
@@ -621,6 +621,18 @@ describe("TrimPatchForm", () => {
 
     it("defaults a staged NDS to ZIP from the Settings default", async () => {
       const { select } = await stage("game.nds");
+      expect(select().value).toBe("zip");
+    });
+
+    it('defaults a staged NDS to ZIP for the shipped "zip/special" provider setting', async () => {
+      // Create and Apply read this value as "bare file"; a trimmed copy follows it as the archive default.
+      const view = renderForm(
+        { pageDrop: { files: [new File(["rom"], "game.nds")], id: 1 } },
+        { defaultCompression: "zip/special" },
+      );
+      await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+      const select = () => view.container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement;
+      await vi.waitFor(() => expect(select()?.value).toBeTruthy());
       expect(select().value).toBe("zip");
     });
 

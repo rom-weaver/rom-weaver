@@ -4331,7 +4331,7 @@ msgstr "Quita este parche y elige un archivo de parche válido."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimDescription"
-msgstr "Elimina el relleno sin usar de imágenes de Nintendo DS, Game Boy Advance, Nintendo 3DS y Xbox (XISO), o rellena una ROM recortada hasta su tamaño completo."
+msgstr "Elimina el relleno sin usar de imágenes de Nintendo DS/DSi, Game Boy Advance, Nintendo 3DS y Xbox XISO, o rellena una ROM recortada hasta su tamaño completo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
