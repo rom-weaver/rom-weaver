@@ -75,7 +75,7 @@ const createStructuredDataLdJson = (route, includeWebsite) => {
 export const injectLdJson = (html, route, includeWebsite = false) =>
   html.replace("</head>", `  ${createStructuredDataLdJson(route, includeWebsite)}\n  </head>`);
 
-// The Trim and Save Editor tabs are still beta - they navigate in
+// The Save Editor and What's new tabs navigate in
 // production but must not be indexed, so strip the shared index directive to
 // noindex and point their canonical at themselves.
 export const makeBetaRouteNoindex = (html, slug, channel = "prod", channelLabel = "") => {
@@ -203,6 +203,10 @@ const WORKFLOW_MARKDOWN_GUIDES = {
   "ppf-undo": {
     slug: "docs/undo-ppf-browser",
     sections: ["Restore the saved bytes", "Check the restored copy"],
+  },
+  "trim-rom": {
+    slug: "docs/trim-roms-browser",
+    sections: ["Open Trim", "Save a trimmed copy", "Restore padding"],
   },
   "play-rom": {
     slug: "docs/test-roms",

@@ -303,7 +303,6 @@ type CompressionCreateRvzOptions = {
   codec?: string | null;
   compressionLevel?: string | number | null;
   mode?: string | null;
-  scrub?: boolean | string | number | null;
   sourceFileName?: string | null;
 };
 

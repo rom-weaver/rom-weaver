@@ -271,7 +271,6 @@ const getNormalizedWorkflowSettings = (
         rvzBlockSize: rvzBlockSize as OutputContainerSettings["rvzBlockSize"],
         rvzCodec: compressionLevels.rvzCodec as OutputContainerSettings["rvzCodec"],
         rvzCompressionLevel: compressionLevels.rvzCompressionLevel as OutputContainerSettings["rvzCompressionLevel"],
-        rvzScrub: false as OutputContainerSettings["rvzScrub"],
         sevenZipCodec: compressionLevels.sevenZipCodec as OutputContainerSettings["sevenZipCodec"],
         sevenZipLevel: compressionLevels.sevenZipLevel as OutputContainerSettings["sevenZipLevel"],
         z3dsCompressionLevel: compressionLevels.z3dsCompressionLevel as OutputContainerSettings["z3dsCompressionLevel"],

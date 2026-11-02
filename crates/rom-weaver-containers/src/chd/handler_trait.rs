@@ -291,6 +291,22 @@ impl ContainerHandlerOperations for ChdContainerHandler {
 }
 
 impl ChdContainerHandler {
+    /// Rejects an Xbox XISO (XDVDFS) image: it is not storable as CHD, so creating one would
+    /// produce a file that does not round-trip. Only inputs carrying the XDVDFS volume
+    /// descriptor are rejected; other ISO and disc inputs pass through.
+    fn reject_xbox_xiso(input: &Path) -> Result<()> {
+        let identity = rom_weaver_checksum::rom_identity::detect_rom_identity_for_path(input);
+        if identity.platform != Some(rom_weaver_checksum::platform_detection::platform::XBOX) {
+            trace!(input = %input.display(), "chd create: input is not an Xbox XISO");
+            return Ok(());
+        }
+        debug!(input = %input.display(), "chd create: rejecting Xbox XISO input");
+        Err(RomWeaverError::Validation(format!(
+            "`{}` is an Xbox XISO image, which cannot be stored as CHD. Compress it to zip or 7z instead",
+            input.display()
+        )))
+    }
+
     /// Resolve the input media, codec chain, and level a create request asks for. `create`
     /// and `validate_create` both run this, so a request that fails here fails the same way
     /// in a dry run.
@@ -303,6 +319,7 @@ impl ChdContainerHandler {
 
         let input = &request.inputs[0];
         let input_bytes = fs::metadata(input)?.len();
+        Self::reject_xbox_xiso(input)?;
         let mode_override = self.parse_create_mode_override(&request.format)?;
         let mut create_kind = if let Some(mode) = mode_override {
             self.infer_create_kind_with_override(input, input_bytes, mode)?

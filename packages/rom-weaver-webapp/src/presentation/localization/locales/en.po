@@ -1746,7 +1746,7 @@ msgstr "Default: ROM-specific compression such as Z3DS, CHD, RVZ, etc. when avai
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.option.defaultCompression.zipSpecial"
-msgstr "Default: ROM-specific format, else plain file or .zip"
+msgstr "ROM-specific, else raw or .zip"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2131,7 +2131,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Enable beta tools (Trim and Save Editor)"
+msgstr "Enable beta tools (Save Editor)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4331,7 +4331,7 @@ msgstr "Remove this patch and choose a valid patch file."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimDescription"
-msgstr "Remove unused padding from supported ROMs and disc images to save storage space."
+msgstr "Remove unused padding from Nintendo DS/DSi, Game Boy Advance, Nintendo 3DS, and Xbox XISO images, or pad a trimmed ROM back to full size."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5175,6 +5175,11 @@ msgstr "The cheat database is unavailable. Offline access starts after this syst
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.cliTrimRevertHint"
+msgstr "The CLI can also write a revert marker so a later restore is exact."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.find.cliArchiveHint"
 msgstr "The CLI can extract and compress archives."
 
@@ -5182,11 +5187,6 @@ msgstr "The CLI can extract and compress archives."
 #: src/presentation/localization/messages.ts
 msgid "ui.find.cliIdentifyAndHashHint"
 msgstr "The CLI can inspect files and calculate checksums."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.find.cliTrimRevertHint"
-msgstr "The CLI can also write a revert marker so a later restore is exact."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

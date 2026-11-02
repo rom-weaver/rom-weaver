@@ -460,7 +460,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
         value: "7z/special",
       },
       {
-        label: "Default: ROM-specific format, else plain file or .zip",
+        label: "ROM-specific, else raw or .zip",
         labelId: "ui.settings.option.defaultCompression.zipSpecial",
         value: "zip/special",
       },

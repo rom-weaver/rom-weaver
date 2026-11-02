@@ -65,7 +65,7 @@ Patching support, emulator support, cheat support, and save editing support are 
 | Offline use | The offline copy caches the app, every emulator core, and selected databases. Remote links and unselected databases need a connection. [Offline setup](../how-to/browser-settings.md#prepare-for-offline-use). |
 | Browser preferences | Theme, accent, language, byte units, guided help, output defaults, compression settings, and worker threads. [Settings](../how-to/browser-settings.md). |
 | Guided practice runs | Step-by-step cards for Apply, Create, Weave, Test, and the two cheat workflows, using homebrew practice files. Guided Apply waits for you to add files. [Guided practice runs](guided-runs.md). |
-| Beta tools | Trim and Save Editor are behind the browser's beta setting. PPF Undo and cheat tools in Apply, Create, and Identify are available without it. |
+| Beta tools | Save Editor is behind the browser's beta setting. Trim, PPF Undo, and cheat tools in Apply, Create, and Identify are available without it. |
 | Scripts and pipelines | The CLI has file selection, dry runs, standard input/output, JSON results, JSON event streams, shell completions, and man pages. [CLI reference](cli.md). |
 | Hosting and integration | Static or Docker hosting, subpaths, URL-loaded ROMs and patches, weaves, and same-origin file integration. [Hosting](../hosting/self-hosting.md), [integration](../hosting/webapp-integration.md). |
 

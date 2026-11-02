@@ -1746,7 +1746,7 @@ msgstr "Standard: ROM-spezifische Komprimierung wie Z3DS, CHD, RVZ usw., sofern 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.option.defaultCompression.zipSpecial"
-msgstr "Standard: ROM-spezifisch, sonst unverpackte Datei oder .zip"
+msgstr ".zip oder ROM-spezifisch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2131,7 +2131,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Beta-Tools aktivieren (Trimmen und Save Editor)"
+msgstr "Beta-Tools aktivieren (Save Editor)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4331,7 +4331,7 @@ msgstr "Entferne diesen Patch und wähle eine gültige Patch-Datei."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimDescription"
-msgstr "Entferne ungenutzte Fülldaten aus unterstützten ROMs und Disc-Images, um Speicherplatz zu sparen."
+msgstr "Entferne ungenutzte Fülldaten aus Nintendo-DS/DSi-, Game-Boy-Advance-, Nintendo-3DS- und Xbox-XISO-Images oder fülle ein getrimmtes ROM wieder auf die volle Größe auf."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5175,6 +5175,11 @@ msgstr "Die Cheat-Datenbank ist nicht verfügbar. Der Offline-Zugriff beginnt, n
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.cliTrimRevertHint"
+msgstr "Die CLI kann zusätzlich eine Revert-Markierung schreiben, damit eine spätere Wiederherstellung exakt ist."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.find.cliArchiveHint"
 msgstr "Die CLI kann Archive entpacken und komprimieren."
 
@@ -5182,11 +5187,6 @@ msgstr "Die CLI kann Archive entpacken und komprimieren."
 #: src/presentation/localization/messages.ts
 msgid "ui.find.cliIdentifyAndHashHint"
 msgstr "Die CLI kann Dateien prüfen und Prüfsummen berechnen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.find.cliTrimRevertHint"
-msgstr "Die CLI kann zusätzlich eine Revert-Markierung schreiben, damit eine spätere Wiederherstellung exakt ist."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -4093,6 +4093,78 @@ mod tests {
         let _ = fs::remove_file(path);
     }
 
+    fn synthetic_xiso_bytes() -> Vec<u8> {
+        let mut image = vec![0_u8; 0x20000];
+        image[0x10000..0x10014].copy_from_slice(b"MICROSOFT*XBOX*MEDIA");
+        image[0x107EC..0x10800].copy_from_slice(b"MICROSOFT*XBOX*MEDIA");
+        image
+    }
+
+    #[test]
+    fn recommend_compress_format_routes_xbox_xiso_away_from_chd() {
+        let path = temp_file_path_with_extension("recommend-xiso", "iso");
+        fs::write(&path, synthetic_xiso_bytes()).expect("fixture");
+
+        let recommendation = ContainerRegistry::new().recommend_compress_format(&path);
+        assert_eq!(recommendation.format_name, "7z");
+        assert_eq!(recommendation.reason, "xbox-xiso");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn chd_create_rejects_xbox_xiso_but_accepts_other_iso_inputs() {
+        let temp_dir = temp_dir_path("chd-xiso-reject");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let xiso = temp_dir.join("game.xiso");
+        fs::write(&xiso, synthetic_xiso_bytes()).expect("xiso fixture");
+        let plain_iso = temp_dir.join("plain.iso");
+        fs::write(&plain_iso, vec![0x5a_u8; 0x20000]).expect("iso fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("chd").expect("chd handler");
+        let context = test_context(&temp_dir, 1);
+        let request = |input: &Path, output: &str| ContainerCreateRequest {
+            rvz_block_size: None,
+            archive_names: None,
+            inputs: vec![input.to_path_buf()],
+            output: temp_dir.join(output),
+            format: "chd".to_string(),
+            codec: None,
+            level: None,
+            parent: None,
+        };
+
+        let expected = format!(
+            "`{}` is an Xbox XISO image, which cannot be stored as CHD. Compress it to zip or 7z instead",
+            xiso.display()
+        );
+        let validate_error = handler
+            .validate_create(&request(&xiso, "xiso-validate.chd"), &context)
+            .expect_err("XISO must be rejected by validate_create");
+        assert!(
+            matches!(validate_error, RomWeaverError::Validation(ref message) if *message == expected),
+            "unexpected error: {validate_error:?}"
+        );
+        let create_error = handler
+            .create(&request(&xiso, "xiso-create.chd"), &context)
+            .expect_err("XISO must be rejected by create");
+        assert!(
+            matches!(create_error, RomWeaverError::Validation(ref message) if *message == expected),
+            "unexpected error: {create_error:?}"
+        );
+        assert!(
+            !temp_dir.join("xiso-create.chd").exists(),
+            "rejected create must not write output"
+        );
+
+        handler
+            .validate_create(&request(&plain_iso, "plain.chd"), &context)
+            .expect("non-XISO ISO input must still validate for chd");
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
     #[test]
     fn recommend_compress_format_survives_cso_v1_with_zero_header_size() {
         // The original v1 `ciso` tool writes header size 0, which GameCube CISO reads as its
@@ -4147,6 +4219,14 @@ mod tests {
         assert_eq!(
             crate::recommend_container_for_identity(None, Some("CD")).format_name,
             "chd"
+        );
+        // Xbox XISO reports a DVD medium but is not storable as CHD → 7z with its own reason.
+        let xbox = crate::recommend_container_for_identity(Some(plat::XBOX), Some("DVD"));
+        assert_eq!(xbox.format_name, "7z");
+        assert_eq!(xbox.reason, "xbox-xiso");
+        assert_eq!(
+            crate::recommend_container_for_identity(Some(plat::XBOX), None).format_name,
+            "7z"
         );
         // Cartridge / undetected → 7z fallback.
         assert_eq!(

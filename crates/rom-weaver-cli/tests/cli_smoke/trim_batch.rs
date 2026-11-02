@@ -490,56 +490,6 @@ fn trim_xiso_simulate_does_not_write_outputs() {
 }
 
 #[test]
-fn trim_wbfs_simulate_does_not_write_outputs() {
-    let temp = setup_temp_dir();
-    let iso_bytes = build_test_gamecube_iso(0x4000);
-    let source_iso = temp.child("disc.iso");
-    let source_wbfs = temp.child("disc.wbfs");
-    fs::write(source_iso.path(), &iso_bytes).expect("iso fixture");
-    let disc = NodDiscReader::new(source_iso.path(), &NodDiscOptions::default()).expect("open iso");
-    let options = NodFormatOptions {
-        format: NodFormat::Wbfs,
-        compression: NodCompression::None,
-        block_size: NodFormat::Wbfs.default_block_size(),
-    };
-    let writer = NodDiscWriter::new(disc, &options).expect("create wbfs writer");
-    let mut output = File::create(source_wbfs.path()).expect("create wbfs");
-    let finalization = writer
-        .process(
-            |data, _processed, _total| output.write_all(data.as_ref()),
-            &NodProcessOptions::default(),
-        )
-        .expect("write wbfs");
-    if !finalization.header.is_empty() {
-        output.rewind().expect("seek wbfs");
-        output
-            .write_all(finalization.header.as_ref())
-            .expect("write wbfs header");
-    }
-    output.flush().expect("flush wbfs");
-
-    let trim_output = command_stdout(
-        &[
-            "trim",
-            "--input",
-            source_wbfs.path().to_str().expect("path"),
-            "--dry-run",
-            "--json",
-        ],
-        0,
-    );
-
-    let terminal = parse_single_json_line(&trim_output);
-    assert_eq!(terminal["command"], "trim");
-    assert_eq!(terminal["family"], "command");
-    assert_eq!(terminal["status"], "succeeded");
-    let label = terminal["label"].as_str().expect("label");
-    assert!(label.contains("trim simulation complete"));
-    assert!(label.contains("mode=rvz-convert"));
-    assert!(!source_wbfs.path().with_extension("trim.rvz").exists());
-}
-
-#[test]
 fn trim_short_inplace_flag_trims_source_file() {
     let temp = setup_temp_dir();
     let source = temp.child("sample.nds");
@@ -761,138 +711,6 @@ fn trim_xiso_revert_is_rejected() {
     );
 }
 
-#[test]
-fn trim_wbfs_uses_rvz_convert_output() {
-    let temp = setup_temp_dir();
-    let iso_bytes = build_test_gamecube_iso(0x8000);
-    let source_iso = temp.child("disc.iso");
-    let source_wbfs = temp.child("disc.wbfs");
-    fs::write(source_iso.path(), &iso_bytes).expect("iso fixture");
-    let disc = NodDiscReader::new(source_iso.path(), &NodDiscOptions::default()).expect("open iso");
-    let options = NodFormatOptions {
-        format: NodFormat::Wbfs,
-        compression: NodCompression::None,
-        block_size: NodFormat::Wbfs.default_block_size(),
-    };
-    let writer = NodDiscWriter::new(disc, &options).expect("create wbfs writer");
-    let mut output = File::create(source_wbfs.path()).expect("create wbfs");
-    let finalization = writer
-        .process(
-            |data, _processed, _total| output.write_all(data.as_ref()),
-            &NodProcessOptions::default(),
-        )
-        .expect("write wbfs");
-    if !finalization.header.is_empty() {
-        output.rewind().expect("seek wbfs");
-        output
-            .write_all(finalization.header.as_ref())
-            .expect("write wbfs header");
-    }
-    output.flush().expect("flush wbfs");
-
-    let trim_output = command_stdout(
-        &[
-            "trim",
-            "--input",
-            source_wbfs.path().to_str().expect("path"),
-            "--json",
-        ],
-        0,
-    );
-
-    let terminal = parse_single_json_line(&trim_output);
-    assert_eq!(terminal["command"], "trim");
-    assert_eq!(terminal["family"], "command");
-    assert_eq!(terminal["status"], "succeeded");
-    assert_eq!(terminal["details"]["output_format"], "rvz");
-    assert_eq!(terminal["details"]["input_size"], iso_bytes.len() as u64);
-    assert_eq!(terminal["details"]["raw_size"], iso_bytes.len() as u64);
-    let label = terminal["label"].as_str().expect("label");
-    assert!(label.contains("mode=rvz-convert"));
-    assert!(label.contains("revert_supported=false"));
-    assert!(label.contains(
-        "warning=RVZ conversion preserves logical disc bytes; use extract to recover ISO"
-    ));
-    // A plain trim never asked for --revert, so the warning must not mention it.
-    assert!(!label.contains("--revert"), "{label}");
-
-    let trimmed = source_wbfs.path().with_extension("trim.rvz");
-    assert!(trimmed.exists(), "expected trimmed rvz output");
-
-    let extract_dir = temp.child("extract");
-    let extract_output = command_stdout(
-        &[
-            "extract",
-            "--input",
-            trimmed.to_str().expect("path"),
-            "--output",
-            extract_dir.path().to_str().expect("path"),
-            "--json",
-        ],
-        0,
-    );
-
-    let extract_terminal = parse_single_json_line(&extract_output);
-    assert_eq!(extract_terminal["command"], "extract");
-    assert_eq!(extract_terminal["format"], "rvz");
-    assert_eq!(extract_terminal["status"], "succeeded");
-    assert_eq!(
-        fs::read(extract_dir.child("disc.trim.iso").path()).expect("extracted iso"),
-        iso_bytes
-    );
-}
-
-#[test]
-fn trim_wbfs_revert_is_rejected_for_rvz_convert() {
-    let temp = setup_temp_dir();
-    let iso_bytes = build_test_gamecube_iso(0x4000);
-    let source_iso = temp.child("disc.iso");
-    let source_wbfs = temp.child("disc.wbfs");
-    fs::write(source_iso.path(), &iso_bytes).expect("iso fixture");
-    let disc = NodDiscReader::new(source_iso.path(), &NodDiscOptions::default()).expect("open iso");
-    let options = NodFormatOptions {
-        format: NodFormat::Wbfs,
-        compression: NodCompression::None,
-        block_size: NodFormat::Wbfs.default_block_size(),
-    };
-    let writer = NodDiscWriter::new(disc, &options).expect("create wbfs writer");
-    let mut output = File::create(source_wbfs.path()).expect("create wbfs");
-    let finalization = writer
-        .process(
-            |data, _processed, _total| output.write_all(data.as_ref()),
-            &NodProcessOptions::default(),
-        )
-        .expect("write wbfs");
-    if !finalization.header.is_empty() {
-        output.rewind().expect("seek wbfs");
-        output
-            .write_all(finalization.header.as_ref())
-            .expect("write wbfs header");
-    }
-    output.flush().expect("flush wbfs");
-
-    let trim_output = command_stdout(
-        &[
-            "trim",
-            "--input",
-            source_wbfs.path().to_str().expect("path"),
-            "--revert",
-            "--json",
-        ],
-        1,
-    );
-
-    let terminal = parse_single_json_line(&trim_output);
-    assert_eq!(terminal["command"], "trim");
-    assert_eq!(terminal["status"], "failed");
-    assert!(
-        terminal["label"]
-            .as_str()
-            .expect("label")
-            .contains("rvz-convert trim revert is not supported")
-    );
-}
-
 /// The failure label a single rejected trim input reports around the engine's message.
 fn rejected_trim_label(source: &Path, dry_run: bool, message: &str) -> String {
     let verb = if dry_run { "trim simulation" } else { "trim" };
@@ -902,77 +720,309 @@ fn rejected_trim_label(source: &Path, dry_run: bool, message: &str) -> String {
     )
 }
 
-#[test]
-fn trim_gamecube_disc_rejects_non_rvz_container_outputs() {
-    let temp = setup_temp_dir();
-    let source = temp.child("disc.iso");
-    fs::write(source.path(), build_test_gamecube_iso(0x4000)).expect("iso fixture");
-
-    for (extension, label) in [
-        ("chd", "CHD"),
-        ("wbfs", "WBFS"),
-        ("gcz", "GCZ"),
-        ("z3ds", "Z3DS"),
-        ("tar.gz", "TAR.GZ"),
-    ] {
-        let output = temp.child(format!("trimmed.{extension}"));
-        let terminal = parse_single_json_line(&command_stdout(
-            &[
-                "trim",
-                "--input",
-                source.path().to_str().expect("path"),
-                "--output",
-                output.path().to_str().expect("path"),
-                "--json",
-            ],
-            1,
-        ));
-        assert_eq!(terminal["status"], "failed", "{extension}");
-        let message = terminal["label"].as_str().expect("label");
-        // Every plain extension is rejected for these discs, so the message must not offer one.
-        assert_eq!(
-            message,
-            rejected_trim_label(
-                source.path(),
-                false,
-                &format!(
-                    "{label} is not a valid trim output for GameCube/Wii discs: `{}` must end in one of .rvz, .zip, .7z",
-                    output.path().display()
-                )
-            ),
-            "{extension}"
-        );
-        assert!(!output.path().exists(), "{extension} must not be written");
-    }
-
-    let dry_run = parse_single_json_line(&command_stdout(
+/// One of each GameCube/Wii disc form trim used to convert to RVZ: a raw `.iso`, a `.gcm` copy of
+/// it, a `.wbfs`, and an `.rvz` made by `compress`.
+fn write_gamecube_wii_trim_fixtures(temp: &TempDir) -> Vec<std::path::PathBuf> {
+    let iso = temp.child("disc.iso");
+    fs::write(iso.path(), build_test_gamecube_iso(0x4000)).expect("iso fixture");
+    let gcm = temp.child("disc.gcm");
+    fs::copy(iso.path(), gcm.path()).expect("gcm fixture");
+    let wbfs = temp.child("disc.wbfs");
+    write_wbfs_fixture_from_iso(iso.path(), wbfs.path());
+    let rvz = temp.child("disc.rvz");
+    command_stdout(
         &[
-            "trim",
+            "compress",
             "--input",
-            source.path().to_str().expect("path"),
-            "--output",
-            temp.child("dry.chd").path().to_str().expect("path"),
-            "--dry-run",
-            "--json",
-        ],
-        1,
-    ));
-    assert_eq!(dry_run["status"], "failed");
-
-    let rvz = temp.child("trimmed.rvz");
-    let terminal = parse_single_json_line(&command_stdout(
-        &[
-            "trim",
-            "--input",
-            source.path().to_str().expect("path"),
+            iso.path().to_str().expect("path"),
             "--output",
             rvz.path().to_str().expect("path"),
             "--json",
         ],
         0,
+    );
+    vec![
+        iso.path().to_path_buf(),
+        gcm.path().to_path_buf(),
+        wbfs.path().to_path_buf(),
+        rvz.path().to_path_buf(),
+    ]
+}
+
+#[test]
+fn trim_rejects_gamecube_wii_discs_and_points_to_compress() {
+    let temp = setup_temp_dir();
+    for source in write_gamecube_wii_trim_fixtures(&temp) {
+        for extra in [&["--dry-run"][..], &["--revert"][..], &[][..]] {
+            let mut args = vec!["trim", "--input", source.to_str().expect("path"), "--json"];
+            args.extend_from_slice(extra);
+            let terminal = parse_single_json_line(&command_stdout(&args, 1));
+            assert_eq!(terminal["command"], "trim", "{}", source.display());
+            assert_eq!(terminal["status"], "failed", "{}", source.display());
+            assert_eq!(
+                terminal["label"],
+                format!(
+                    "validation failed: `{}` is a GameCube/Wii disc, which trim does not support; use `rom-weaver compress` to convert it to RVZ",
+                    source.display()
+                ),
+                "{extra:?}"
+            );
+        }
+        // Nothing is written next to the source, whatever the extension.
+        let siblings = fs::read_dir(source.parent().expect("parent"))
+            .expect("read dir")
+            .count();
+        assert_eq!(
+            siblings,
+            4,
+            "{} must not create an output",
+            source.display()
+        );
+    }
+}
+
+#[test]
+fn trim_batch_skips_gamecube_wii_discs_as_unsupported() {
+    let temp = setup_temp_dir();
+    let folder = temp.child("roms");
+    fs::create_dir_all(folder.path()).expect("folder");
+    let nds = folder.child("game.nds");
+    fs::write(
+        nds.path(),
+        build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false),
+    )
+    .expect("nds fixture");
+    let discs = write_gamecube_wii_trim_fixtures(&temp);
+    for disc in &discs {
+        fs::copy(disc, folder.path().join(disc.file_name().expect("name"))).expect("copy disc");
+    }
+
+    let terminal = parse_single_json_line(&command_stdout(
+        &[
+            "trim",
+            "--input",
+            folder.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
     ));
     assert_eq!(terminal["status"], "succeeded");
-    assert!(rvz.path().exists());
+    assert_eq!(terminal["details"]["processed"], 1);
+    assert_eq!(terminal["details"]["skipped_unsupported"], 4);
+    assert_eq!(terminal["details"]["skipped_gamecube_wii"], 4);
+    let warnings = terminal["details"]["warnings"].to_string();
+    assert!(
+        warnings.contains("4 GameCube/Wii disc(s) were not trimmed")
+            && warnings.contains(COMPRESS_HINT),
+        "{warnings}"
+    );
+    assert!(folder.child("game.trim.nds").path().exists());
+    for disc in &discs {
+        let name = disc.file_name().expect("name").to_string_lossy();
+        let stem = name.rsplit_once('.').expect("extension").0;
+        for output in ["trim.rvz", "trim.iso", "trim.gcm", "trim.wbfs"] {
+            assert!(
+                !folder.child(format!("{stem}.{output}")).path().exists(),
+                "{name} must not produce {output}"
+            );
+        }
+    }
+}
+
+#[test]
+fn trim_batch_of_only_gamecube_wii_discs_reports_them_unsupported() {
+    let temp = setup_temp_dir();
+    let discs = write_gamecube_wii_trim_fixtures(&temp);
+    let mut args = vec!["trim", "--json"];
+    for disc in &discs {
+        args.push("--input");
+        args.push(disc.to_str().expect("path"));
+    }
+    let terminal = parse_single_json_line(&command_stdout(&args, 0));
+    assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(terminal["details"]["processed"], 0);
+    assert_eq!(terminal["details"]["skipped_unsupported"], 4);
+}
+
+const COMPRESS_HINT: &str = "use `rom-weaver compress` to convert";
+
+/// A small GameCube disc written as RVZ and then packed into `archive` (a `.zip` or `.7z`),
+/// leaving only the archive on disk next to `temp`'s other files.
+fn write_gamecube_disc_archive(temp: &TempDir, name: &str) -> std::path::PathBuf {
+    let iso = temp.child(format!("{name}.iso"));
+    fs::write(iso.path(), build_test_gamecube_iso(0x4000)).expect("iso fixture");
+    let rvz = temp.child(format!("{name}.rvz"));
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            iso.path().to_str().expect("path"),
+            "--output",
+            rvz.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let archive = temp.child(name);
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            rvz.path().to_str().expect("path"),
+            "--format",
+            if name.ends_with(".7z") { "7z" } else { "zip" },
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    fs::remove_file(iso.path()).expect("remove iso");
+    fs::remove_file(rvz.path()).expect("remove rvz");
+    archive.path().to_path_buf()
+}
+
+#[test]
+fn trim_batch_never_extracts_gamecube_wii_discs_inside_archives() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let archive = write_gamecube_disc_archive(&staging, "kururin.zip");
+    let folder = temp.child("roms");
+    fs::create_dir_all(folder.path()).expect("folder");
+    fs::copy(&archive, folder.path().join("kururin.zip")).expect("copy archive");
+    fs::write(
+        folder.child("game.nds").path(),
+        build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false),
+    )
+    .expect("nds fixture");
+
+    let output = command_output_with_env(
+        &[
+            "--log-level",
+            "trace",
+            "trim",
+            "--input",
+            folder.path().to_str().expect("path"),
+            "--json",
+        ],
+        &[],
+        0,
+    );
+    let terminal = parse_single_json_line(&output.stdout);
+    assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(terminal["details"]["processed"], 1);
+    assert_eq!(terminal["details"]["skipped_unsupported"], 1);
+    assert_eq!(terminal["details"]["skipped_gamecube_wii"], 1);
+    let warnings = terminal["details"]["warnings"].to_string();
+    assert!(
+        warnings.contains("GameCube/Wii disc") && warnings.contains(COMPRESS_HINT),
+        "{warnings}"
+    );
+    assert!(folder.child("game.trim.nds").path().exists());
+
+    // The archive is opened to look inside, but the disc it holds is never decoded to temp
+    // space: only the zip itself is extracted for trim.
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let extractions = stderr
+        .lines()
+        .filter(|line| line.contains("extracting archive for trim"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        extractions.len(),
+        1,
+        "only the zip may be extracted: {extractions:#?}"
+    );
+    assert!(extractions[0].contains("kururin.zip"), "{}", extractions[0]);
+    assert!(
+        !stderr.contains("\"format\":\"rvz\""),
+        "the disc must not be decoded by the rvz handler"
+    );
+}
+
+#[test]
+fn trim_rejects_a_lone_archive_that_holds_only_gamecube_wii_discs() {
+    let temp = setup_temp_dir();
+    for name in ["Kururin Squash! (Japan).zip", "Kururin Squash! (Japan).7z"] {
+        let archive = write_gamecube_disc_archive(&temp, name);
+        for extra in [&["--dry-run"][..], &[][..]] {
+            let mut args = vec!["trim", "--input", archive.to_str().expect("path"), "--json"];
+            args.extend_from_slice(extra);
+            let terminal = parse_single_json_line(&command_stdout(&args, 1));
+            assert_eq!(terminal["status"], "failed", "{name}");
+            assert_eq!(
+                terminal["label"],
+                format!(
+                    "validation failed: `{}` holds a GameCube/Wii disc, which trim does not support; {COMPRESS_HINT} it to RVZ",
+                    archive.display()
+                ),
+                "{name} {extra:?}"
+            );
+        }
+        // Nothing is written beside the archive.
+        let siblings = fs::read_dir(temp.path()).expect("read dir").count();
+        assert_eq!(siblings, 1 + usize::from(name.ends_with(".7z")));
+    }
+}
+
+#[test]
+fn trim_batch_of_only_gamecube_wii_discs_points_to_compress() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let folder = temp.child("roms");
+    fs::create_dir_all(folder.path()).expect("folder");
+    for disc in write_gamecube_wii_trim_fixtures(&staging) {
+        fs::copy(&disc, folder.path().join(disc.file_name().expect("name"))).expect("copy disc");
+    }
+    let archive = write_gamecube_disc_archive(&staging, "inside.zip");
+    fs::copy(&archive, folder.path().join("inside.zip")).expect("copy archive");
+
+    let args = [
+        "trim",
+        "--input",
+        folder.path().to_str().expect("path"),
+        "--json",
+    ];
+    let terminal = parse_single_json_line(&command_stdout(&args, 0));
+    assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(terminal["details"]["processed"], 0);
+    assert_eq!(terminal["details"]["skipped_unsupported"], 5);
+    assert_eq!(terminal["details"]["skipped_gamecube_wii"], 5);
+    assert_eq!(
+        terminal["label"],
+        "no trim-eligible inputs found; skipped_unsupported=5; GameCube/Wii discs are not trimmed (skipped_gamecube_wii=5); use `rom-weaver compress` to convert them to RVZ"
+    );
+
+    // The human summary carries the same hint.
+    let human =
+        String::from_utf8_lossy(&command_output_with_env(&args[..3], &[], 0).stderr).into_owned();
+    assert!(
+        human.contains("GameCube/Wii discs are not trimmed")
+            && human.contains("rom-weaver compress"),
+        "{human}"
+    );
+}
+
+#[test]
+fn trim_batch_without_gamecube_wii_discs_reports_no_disc_note() {
+    let temp = setup_temp_dir();
+    let folder = temp.child("roms");
+    fs::create_dir_all(folder.path()).expect("folder");
+    fs::write(folder.child("notes.txt").path(), b"not a rom").expect("text fixture");
+
+    let terminal = parse_single_json_line(&command_stdout(
+        &[
+            "trim",
+            "--input",
+            folder.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(
+        terminal["label"],
+        "no trim-eligible inputs found; skipped_unsupported=1"
+    );
+    assert!(terminal["details"].get("skipped_gamecube_wii").is_none());
 }
 
 #[test]
@@ -2102,7 +2152,7 @@ fn trim_output_container_must_be_valid_for_the_input_type() {
 }
 
 #[test]
-fn trim_output_z3ds_packs_a_3ds_rom_and_chd_packs_an_xiso() {
+fn trim_output_z3ds_packs_a_3ds_rom_and_zip_packs_an_xiso() {
     let temp = setup_temp_dir();
     let rom_3ds = temp.child("sample.3ds");
     let mut rom = build_test_padded_rom(0x4567, 0x8000, 0xFF);
@@ -2136,10 +2186,10 @@ fn trim_output_z3ds_packs_a_3ds_rom_and_chd_packs_an_xiso() {
     fs::create_dir_all(source_tree.path()).expect("source tree root");
     let xiso = temp.child("source.iso");
     write_xiso_fixture_from_directory(source_tree.path(), xiso.path());
-    let chd = temp.child("out.chd");
-    let terminal = trim_to_output(xiso.path(), chd.path(), &[], 0);
+    let zip = temp.child("out.zip");
+    let terminal = trim_to_output(xiso.path(), zip.path(), &[], 0);
     assert_eq!(terminal["status"], "succeeded");
-    assert_eq!(&fs::read(chd.path()).expect("chd")[..8], b"MComprHD");
+    assert_eq!(&fs::read(zip.path()).expect("zip")[..2], b"PK");
 
     // An XISO is not a 3DS ROM, and a 3DS ROM is not a disc.
     let terminal = trim_to_output(xiso.path(), temp.child("bad.z3ds").path(), &[], 1);
@@ -2322,63 +2372,10 @@ fn trim_3ds_output_rejects_a_descriptor_extension_when_the_payload_is_unrecogniz
     );
 }
 
+/// An Xbox XISO is not storable as CHD, so a trim whose output name resolves to CHD is refused
+/// before anything is written, for `.iso` and `.xiso` sources, in a real run and a dry run.
 #[test]
-fn trim_gamecube_disc_output_zip_packs_the_rvz_and_other_extensions_are_rejected() {
-    let temp = setup_temp_dir();
-    let source = temp.child("disc.iso");
-    let iso = build_test_gamecube_iso(0x4000);
-    fs::write(source.path(), &iso).expect("iso fixture");
-
-    for (name, entry) in [("pack.zip", "pack.rvz"), ("pack.iso.7z", "pack.iso.rvz")] {
-        let output = temp.child(name);
-        let terminal = trim_to_output(source.path(), output.path(), &[], 0);
-        assert_eq!(terminal["status"], "succeeded", "{name}");
-        // The logical sizes come from the RVZ before it is packed into the archive.
-        assert_eq!(terminal["details"]["input_size"], iso.len(), "{name}");
-        assert_eq!(terminal["details"]["raw_size"], iso.len(), "{name}");
-        assert_eq!(
-            terminal["details"]["output_format"],
-            name.rsplit('.').next().expect("ext")
-        );
-        let destination = temp.child(format!("unpacked-{name}"));
-        assert_eq!(
-            extracted_entries(output.path(), destination.path()),
-            vec![entry.to_string()],
-            "{name}"
-        );
-        let packed = fs::read(destination.child(entry).path()).expect("packed rvz");
-        assert_eq!(&packed[..3], b"RVZ", "{name}");
-    }
-
-    for name in [
-        "plain.iso",
-        "plain.bin",
-        "plain.GCM",
-        "plain.img",
-        "plain.nds",
-        "plain.foo",
-        "trimmed.disc",
-    ] {
-        for dry_run in [false, true] {
-            let output = temp.child(name);
-            let extra: &[&str] = if dry_run { &["--dry-run"] } else { &[] };
-            let terminal = trim_to_output(source.path(), output.path(), extra, 1);
-            let message = terminal["label"].as_str().expect("label");
-            assert!(
-                message.contains("is not a valid trim output for GameCube/Wii discs"),
-                "{name}: {message}"
-            );
-            assert!(message.contains(".rvz, .zip, or .7z"), "{name}: {message}");
-            assert!(message.contains("`extract`"), "{name}: {message}");
-            assert!(!output.path().exists(), "{name} must not be written");
-        }
-    }
-}
-
-/// CHD infers its media from the packed file's name and size, which turns a small XISO into a
-/// CD CHD and a `.xiso` into a raw one; an XISO is a DVD-class disc and must always be a DVD CHD.
-#[test]
-fn trim_xiso_into_chd_builds_a_dvd_chd_for_xiso_and_iso_sources() {
+fn trim_xiso_into_chd_is_rejected_before_writing() {
     let temp = setup_temp_dir();
     let source_tree = temp.child("xiso-source");
     fs::create_dir_all(source_tree.path()).expect("source tree root");
@@ -2386,20 +2383,89 @@ fn trim_xiso_into_chd_builds_a_dvd_chd_for_xiso_and_iso_sources() {
     for name in ["source.iso", "source.xiso"] {
         let xiso = temp.child(name);
         write_xiso_fixture_from_directory(source_tree.path(), xiso.path());
-        let chd = temp.child(format!("{name}.chd"));
-        let terminal = trim_to_output(xiso.path(), chd.path(), &[], 0);
-        assert_eq!(terminal["status"], "succeeded", "{name}");
-        assert_eq!(terminal["details"]["output_format"], "chd", "{name}");
-        let probe = parse_single_json_line(&command_stdout(
-            &[
-                "probe",
-                "--input",
-                chd.path().to_str().expect("path"),
-                "--json",
-            ],
-            0,
-        ));
-        assert_eq!(probe["details"]["chd"]["media_kind"], "dvd", "{name}");
+        for dry_run in [false, true] {
+            let chd = temp.child(format!("{name}.chd"));
+            let extra: &[&str] = if dry_run { &["--dry-run"] } else { &[] };
+            let terminal = trim_to_output(xiso.path(), chd.path(), extra, 1);
+            assert_eq!(terminal["status"], "failed", "{name} dry_run={dry_run}");
+            assert_eq!(
+                terminal["label"].as_str().expect("label"),
+                rejected_trim_label(
+                    xiso.path(),
+                    dry_run,
+                    &format!(
+                        "`{}` is an Xbox XISO image, which cannot be stored as CHD: `{}` must end in .xiso, .zip, or .7z",
+                        xiso.path().display(),
+                        chd.path().display()
+                    )
+                ),
+                "{name} dry_run={dry_run}"
+            );
+            assert!(!chd.path().exists(), "{name} must not write a CHD");
+        }
+    }
+}
+
+/// `trim --in-place` on an XISO inside a CHD would rebuild the CHD, which the engine refuses for an
+/// Xbox XISO. The run is rejected up front (before any trimming) and identically in a dry run, and
+/// the CHD stays byte-identical.
+#[test]
+fn trim_in_place_xiso_inside_chd_is_rejected_before_trimming() {
+    // XGD3 layout: the XDVDFS volume sits 0x2080000 bytes in. The leading gap keeps the CHD
+    // creator's own Xbox check (which only looks at offset 0x10000) from refusing to build the
+    // fixture, while the trim detector still finds the volume.
+    const XGD3_VOLUME_OFFSET: usize = 0x0208_0000;
+    let temp = setup_temp_dir();
+    let source_tree = temp.child("xiso-source");
+    fs::create_dir_all(source_tree.path()).expect("source tree root");
+    fs::write(source_tree.child("default.xbe").path(), vec![7_u8; 4096]).expect("xbe");
+    let plain = temp.child("plain.xiso");
+    write_xiso_fixture_from_directory(source_tree.path(), plain.path());
+    let mut wrapped = vec![0_u8; XGD3_VOLUME_OFFSET];
+    wrapped.extend(fs::read(plain.path()).expect("xiso bytes"));
+    let image = temp.child("game.iso");
+    fs::write(image.path(), &wrapped).expect("wrapped xiso");
+    let chd = temp.child("game.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            image.path().to_str().expect("path"),
+            "--format",
+            "chd-dvd",
+            "--output",
+            chd.path().to_str().expect("path"),
+        ],
+        0,
+    );
+    let before = fs::read(chd.path()).expect("chd bytes");
+
+    for dry_run in [true, false] {
+        let mut args = vec![
+            "trim",
+            "--in-place",
+            "--input",
+            chd.path().to_str().expect("path"),
+            "--json",
+        ];
+        if dry_run {
+            args.push("--dry-run");
+        }
+        let terminal = parse_single_json_line(&command_stdout(&args, 1));
+        assert_eq!(terminal["status"], "failed", "dry_run={dry_run}");
+        let label = terminal["label"].as_str().expect("label");
+        assert!(
+            label.contains(&format!(
+                "`{}` holds an Xbox XISO image, which cannot be stored as CHD, so --in-place cannot repack it: use --output <name>.xiso, <name>.zip, or <name>.7z",
+                chd.path().display()
+            )),
+            "dry_run={dry_run}: {label}"
+        );
+        assert_eq!(
+            fs::read(chd.path()).expect("chd bytes"),
+            before,
+            "dry_run={dry_run}: the CHD must be left unchanged"
+        );
     }
 }
 
@@ -2417,13 +2483,17 @@ fn trim_xiso_to_an_extensionless_path_reports_the_xiso_output_format() {
     let terminal = trim_to_output(xiso.path(), output.path(), &[], 0);
     assert_eq!(terminal["status"], "succeeded");
     assert_eq!(terminal["details"]["output_format"], "xiso");
-    assert_eq!(terminal["details"]["chd_create_mode"], "dvd");
+    assert!(
+        terminal["details"].get("chd_create_mode").is_none(),
+        "an XISO is never handed to a CHD step: {}",
+        terminal["details"]
+    );
     assert_eq!(terminal["details"]["mode_counts"]["xiso"], 1);
     assert!(output.path().exists());
 }
 
-/// Only a trimmed XISO written as-is can be handed to a CHD step, so a packed output (`.chd`,
-/// `.zip`) reports its container and no `chd_create_mode`.
+/// A trimmed XISO is never handed to a CHD step, so a packed output (`.zip`) reports its container
+/// and no `chd_create_mode`.
 #[test]
 fn trim_xiso_into_packed_outputs_reports_the_container_and_no_chd_create_mode() {
     let temp = setup_temp_dir();
@@ -2432,7 +2502,7 @@ fn trim_xiso_into_packed_outputs_reports_the_container_and_no_chd_create_mode() 
     fs::write(source_tree.child("default.xbe").path(), vec![7_u8; 4096]).expect("xbe");
     let xiso = temp.child("game.iso");
     write_xiso_fixture_from_directory(source_tree.path(), xiso.path());
-    for (name, format) in [("packed.chd", "chd"), ("packed.zip", "zip")] {
+    for (name, format) in [("packed.zip", "zip"), ("packed.7z", "7z")] {
         let output = temp.child(name);
         let terminal = trim_to_output(xiso.path(), output.path(), &[], 0);
         assert_eq!(terminal["status"], "succeeded", "{name}");
@@ -2534,8 +2604,8 @@ fn trim_in_place_archive_repack_of_an_xiso_reports_no_image_metadata() {
     }
 }
 
-/// A name that is not valid UTF-8 still has an extension: `.rvz` must be read as `.rvz`
-/// (not rejected as a non-rvz name) and `.zip` must pack rather than write a raw ROM.
+/// A name that is not valid UTF-8 still has an extension: `.zip` must pack rather than write a
+/// raw ROM.
 #[cfg(unix)]
 #[test]
 fn trim_reads_the_extension_of_a_non_utf8_file_name() {
@@ -2554,29 +2624,6 @@ fn trim_reads_the_extension_of_a_non_utf8_file_name() {
         parse_single_json_line(&output)
     };
     let name = |bytes: &[u8]| temp.path().join(OsStr::from_bytes(bytes));
-
-    let disc = name(b"disc\xe9.iso");
-    fs::write(&disc, build_test_gamecube_iso(0x4000)).expect("iso fixture");
-    let terminal = run(
-        &[OsStr::new("trim"), disc.as_os_str(), OsStr::new("--json")],
-        0,
-    );
-    assert_eq!(terminal["status"], "succeeded", "default destination");
-    assert!(name(b"disc\xe9.trim.rvz").exists());
-
-    let rvz = name(b"o\xe9.rvz");
-    let terminal = run(
-        &[
-            OsStr::new("trim"),
-            disc.as_os_str(),
-            OsStr::new("--output"),
-            rvz.as_os_str(),
-            OsStr::new("--json"),
-        ],
-        0,
-    );
-    assert_eq!(terminal["status"], "succeeded", "-o .rvz");
-    assert_eq!(&fs::read(&rvz).expect("rvz")[..3], b"RVZ");
 
     let rom = name(b"x\xe9.nds");
     fs::write(

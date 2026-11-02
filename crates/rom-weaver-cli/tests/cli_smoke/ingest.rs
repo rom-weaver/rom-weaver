@@ -3791,3 +3791,28 @@ fn checksum_filter_rom_ignores_extensionless_documentation_files() {
     );
     assert_eq!(checksum["details"]["file_name"], "game.sfc", "{checksum}");
 }
+
+#[test]
+fn ingest_reports_no_chd_create_mode_for_an_xbox_xiso() {
+    // An XISO is not storable as CHD, so hosts get no auto-inference verdict for it.
+    let temp = setup_temp_dir();
+    let xiso = temp.child("game.iso");
+    write_xiso_fixture_from_directory(temp.child("xiso-tree").path(), xiso.path());
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        xiso.path().to_str().expect("path"),
+        "--output",
+        temp.child("ingest-xiso").path().to_str().expect("path"),
+        "--json",
+    ]);
+    assert_eq!(terminal["status"], "succeeded");
+    let asset = &terminal["details"]["ingest"]["assets"][0];
+    assert!(asset.get("chd_create_mode").is_none(), "{asset}");
+    assert_eq!(asset["platform"], "Microsoft Xbox", "{asset}");
+    // The generic 7z fallback is not a rom-specific recommendation, and CHD is never offered.
+    assert!(
+        asset.get("recommended_format").is_none_or(Value::is_null),
+        "{asset}"
+    );
+}

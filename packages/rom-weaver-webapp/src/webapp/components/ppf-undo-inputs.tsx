@@ -115,6 +115,7 @@ const usePpfUndoInputs = (
               metadata: {
                 recommendedFormat: asset.recommendedFormat,
                 ...(asset.chdCreateMode ? { chdCreateMode: asset.chdCreateMode } : {}),
+                ...(asset.platform ? { platform: asset.platform } : {}),
                 format: asset.discFormat || sheet?.discFormat,
                 cuePath: sheetOutput?.path,
               },

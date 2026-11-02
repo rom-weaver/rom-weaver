@@ -821,9 +821,15 @@ describe("page metadata per view", () => {
   });
 
   it("names the page for a view that has no SEO route of its own", async () => {
+    await renderRoot({ currentView: "save-editor" });
+
+    expect(document.title).toBe(withChannelBadge("Save Editor | rom-weaver", CHANNEL_BADGE));
+  });
+
+  it("titles Trim from its indexed SEO route", async () => {
     await renderRoot({ currentView: "trim" });
 
-    expect(document.title).toBe(withChannelBadge("Trim ROM | rom-weaver", CHANNEL_BADGE));
+    expect(document.title).toBe(withChannelBadge("Trim ROMs online: NDS, GBA, 3DS & Xbox | rom-weaver", CHANNEL_BADGE));
   });
 
   it("uses the marketing title for a view that has one", async () => {

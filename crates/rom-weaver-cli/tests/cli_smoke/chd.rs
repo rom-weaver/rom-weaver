@@ -3421,3 +3421,61 @@ fn chd_extract_checksum_covers_the_bin_but_not_the_generated_cue() {
         .expect("cue");
     assert!(cue.get("checksums").is_none(), "{cue}");
 }
+
+#[test]
+fn chd_compress_rejects_xbox_xiso_and_zip_still_works() {
+    let temp = setup_temp_dir();
+    let tree = temp.child("tree");
+    let xiso = temp.child("game.xiso");
+    write_xiso_fixture_from_directory(tree.path(), xiso.path());
+    let xiso_str = xiso.path().to_str().expect("xiso path");
+
+    let chd = temp.child("game.chd");
+    let events = run_json_events(
+        &[
+            "compress",
+            "--format",
+            "chd",
+            "--input",
+            xiso_str,
+            "--output",
+            chd.path().to_str().expect("chd path"),
+            "--jsonl",
+        ],
+        1,
+    );
+    let failed = events.last().expect("terminal event");
+    assert_eq!(failed["command"], "compress");
+    assert_eq!(failed["status"], "failed");
+    assert_eq!(failed["error_kind"], "validation");
+    assert_eq!(
+        failed["details"]["error"]["message"],
+        format!(
+            "validation failed: `{xiso_str}` is an Xbox XISO image, which cannot be stored as CHD. Compress it to zip or 7z instead"
+        )
+    );
+    assert!(
+        !chd.path().exists(),
+        "rejected compress must not write a CHD"
+    );
+
+    let zip = temp.child("game.zip");
+    let created = run_json_events(
+        &[
+            "compress",
+            "--format",
+            "zip",
+            "--input",
+            xiso_str,
+            "--output",
+            zip.path().to_str().expect("zip path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(
+        created.last().expect("terminal event")["status"],
+        "succeeded"
+    );
+    assert!(zip.path().exists());
+}

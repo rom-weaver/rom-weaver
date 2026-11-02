@@ -76,7 +76,6 @@ type CompressionSettings = {
   rvzBlockSize?: StringNumber;
   rvzCodec?: string;
   rvzCompressionLevel?: StringNumber;
-  rvzScrub?: boolean | string | number;
   sevenZipCodec?: SevenZipCodec;
   sevenZipLevel?: StringNumber;
   z3dsCompressionLevel?: StringNumber | "default";

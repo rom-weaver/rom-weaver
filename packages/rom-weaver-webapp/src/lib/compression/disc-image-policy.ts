@@ -43,4 +43,21 @@ const hasDiscImageEvidence = (
   chdMode: string | null | undefined,
 ): boolean => String(recommendedFormat ?? "").toLowerCase() === "chd" || !!chdMode;
 
-export { hasDiscImageEvidence, isAmbiguousDiscImageExtension, isLikelyDiscImageSize, isLikelyDiscImageSource };
+/** Engine platform name for an Xbox image (`platform::XBOX` in rom-weaver-checksum). */
+const XBOX_PLATFORM = "Microsoft Xbox";
+
+/**
+ * Whether a source is an Xbox XISO, which the engine refuses to store as CHD. The engine's platform verdict
+ * decides; a `.xiso` / `.xiso.iso` name covers the window before identification lands.
+ */
+const isXboxSource = (platform: string | null | undefined, fileName?: string | null): boolean =>
+  String(platform ?? "").toLowerCase() === XBOX_PLATFORM.toLowerCase() || /\.xiso(?:\.iso)?$/i.test(fileName ?? "");
+
+export {
+  hasDiscImageEvidence,
+  isAmbiguousDiscImageExtension,
+  isLikelyDiscImageSize,
+  isLikelyDiscImageSource,
+  isXboxSource,
+  XBOX_PLATFORM,
+};

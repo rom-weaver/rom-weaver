@@ -103,7 +103,6 @@ type RuntimeWorkerOutput = {
   size?: number;
   timing?: PublicOutput["timing"];
   trackNumber?: number;
-  trimSizeSummary?: TrimResult["sizeSummary"];
   /** A dry-run trim's verdict. */
   trimPlan?: RuntimeTrimPlanResult;
   /** Handler warnings the worker run reported. */
@@ -182,7 +181,6 @@ type RuntimeRomSpecificCreateRvzInput = RuntimeRomSpecificHooks & {
   fileName?: RuntimeRomSpecificCreateInputBase["fileName"];
   mode?: RuntimeRomSpecificCreateRvzOptions["mode"];
   outputName: RuntimeRomSpecificCreateInputBase["outputName"];
-  scrub?: RuntimeRomSpecificCreateRvzOptions["scrub"];
   sourceFileName?: RuntimeRomSpecificCreateRvzOptions["sourceFileName"];
   source: RuntimeRomSpecificCreateInputBase["source"];
 };

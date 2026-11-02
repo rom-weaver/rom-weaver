@@ -199,7 +199,11 @@ const getCompressFormats = (input: ValidatedCompressInput): ConcreteCompressForm
   const rvzVerdict = String(input.probe?.recommendedFormat || "").toLowerCase() === "rvz";
   const source = {
     ...input.source,
-    metadata: { ...input.source.metadata, ...(rvzVerdict ? { recommendedFormat: "rvz" } : {}) },
+    metadata: {
+      ...input.source.metadata,
+      ...(input.probe?.platform ? { platform: input.probe.platform } : {}),
+      ...(rvzVerdict ? { recommendedFormat: "rvz" } : {}),
+    },
   };
   const extension = getExtension(source.fileName);
   if (extension === "gdi" || ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS.includes(extension))
