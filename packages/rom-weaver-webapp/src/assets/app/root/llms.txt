@@ -19,6 +19,7 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Checksum a file](https://rom-weaver.com/file-checksum): Calculate CRC32, MD5, SHA-1, SHA-256, and other checksums of any file, with optional archive extraction, and compare them with an expected value.
 - [Identify a ROM](https://rom-weaver.com/identify-rom): Identify a ROM file or search an existing CRC32, MD5, or SHA-1 checksum locally. Look up recorded games, regions, revisions, and dump names.
 - [ROM tester online](https://rom-weaver.com/play-rom): Play supported ROMs and test patched games locally with the browser emulator. Gameplay testing does not verify file checksums.
+- [Trim ROMs online](https://rom-weaver.com/trim-rom): Remove unused padding from Nintendo DS, Game Boy Advance, Nintendo 3DS, and Xbox XISO images, or pad a trimmed ROM back to full size, locally in your browser.
 - [Documentation](https://rom-weaver.com/docs): Tutorials, how-to guides, reference tables, and explanation, for the browser app and the CLI.
 - [Use MCP and browser agents](https://rom-weaver.com/docs/use-mcp): Connect an MCP client for public documentation and formats, or use WebMCP workflows with browser approval.
 - [What rom-weaver supports](https://rom-weaver.com/docs/features): Plain-language feature map, browser and CLI availability, and links to exact support limits.
@@ -34,9 +35,9 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Compress ISO to RVZ](https://rom-weaver.com/docs/convert-to-rvz): Create an RVZ from a GameCube or Wii disc image with the Compress tool.
 - [3DS to Z3DS and ZCCI: compress 3DS ROMs online](https://rom-weaver.com/docs/convert-to-z3ds): Compress `.3ds`, `.cci`, `.cxi`, `.app`, `.cia`, or `.3dsx` files to `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, or `.z3dsx`.
 - [Z3DS and ZCCI to CCI: decompress 3DS ROMs online](https://rom-weaver.com/docs/extract-z3ds): Decompress `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, or `.z3dsx` files to `.cci`, `.cxi`, `.cia`, or `.3dsx`.
-- [Trim ROMs in the browser](https://rom-weaver.com/docs/trim-roms-browser): Remove supported padding and download a separate copy.
+- [Trim ROMs in the browser](https://rom-weaver.com/docs/trim-roms-browser): Remove padding from Nintendo DS, Game Boy Advance, Nintendo 3DS, and Xbox XISO images, or restore it, and download a separate copy.
 - [Undo PPF in the browser](https://rom-weaver.com/docs/undo-ppf-browser): Restore bytes recorded in a PPF3 patch with undo data.
-- [Settings and offline use](https://rom-weaver.com/docs/browser-settings): Preferences, beta tools, offline preparation, and local storage.
+- [Settings and offline use](https://rom-weaver.com/docs/browser-settings): Preferences, Save Editor beta tools, offline preparation, and local storage.
 - [Markdown documentation index](https://rom-weaver.com/docs.md): Generated Markdown index for every published documentation page.
 - [Patch a compressed CHD disc](https://rom-weaver.com/docs/patch-compressed-disc): Browser tutorial with a synthetic CHD, two ordered patches, and a verified output checksum.
 - [Your first patch](https://rom-weaver.com/docs/get-started): Tutorial that patches a homebrew ROM in the browser and verifies the result.

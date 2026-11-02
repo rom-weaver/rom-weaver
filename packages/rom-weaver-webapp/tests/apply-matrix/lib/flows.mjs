@@ -128,18 +128,19 @@ export const TRIM_BUTTON = "#trim-builder-button-run";
 export const runCreate = (page, outDir, timeout = 120_000) =>
   runApply(page, outDir, { buttonSelector: CREATE_BUTTON, timeout });
 
-/** Trim shows a confirmation dialog ("Trim this ROM?") before it runs. */
-export async function runTrim(page, outDir, { timeout = 180_000, confirm = true } = {}) {
+/** Trim starts at once and opens an informational warning ("Got it"); dismissing it never affects the run. */
+export async function runTrim(page, outDir, { timeout = 180_000, dismissWarning = true } = {}) {
   const resultPromise = runApply(page, outDir, { buttonSelector: TRIM_BUTTON, timeout });
-  if (confirm) {
+  if (dismissWarning) {
     const dialog = page.locator(".rw-modal[role=dialog], [role=dialog]").first();
     try {
       await dialog.waitFor({ state: "visible", timeout: 15_000 });
-      const button = dialog.getByRole("button", { name: /^trim rom$/i }).first();
-      if (await button.count()) await button.click();
-      else await dialog.getByRole("button").last().click();
+      await dialog
+        .getByRole("button", { name: /^got it$/i })
+        .first()
+        .click();
     } catch {
-      // No dialog: the run may have started directly; the race below still resolves.
+      // No dialog: the run already carried on; the race below still resolves.
     }
   }
   return resultPromise;

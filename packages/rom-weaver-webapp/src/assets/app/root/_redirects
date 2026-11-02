@@ -65,6 +65,7 @@
 /trim/ /trim-rom 301
 /trim.html /trim-rom 301
 /trim/index.html /trim-rom 301
+/trim.md /trim-rom.md 301
 /bundle /weave-rom-patches 301
 /bundle/ /weave-rom-patches 301
 /bundle.html /weave-rom-patches 301

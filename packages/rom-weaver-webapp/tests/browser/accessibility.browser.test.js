@@ -13,7 +13,7 @@ import { CandidateSelectionDialog } from "../../src/public/react/candidate-selec
 import { ChecksumList, ChecksumRow } from "../../src/public/react/components/ds/checksum-list.tsx";
 import { FileProgress, InlineProgress, Notice, RunButton } from "../../src/public/react/components/ds/feedback.tsx";
 import { FileCard } from "../../src/public/react/components/ds/file-card.tsx";
-import { ConfirmDialog, Modal } from "../../src/public/react/components/ds/modal.tsx";
+import { ConfirmDialog, InfoDialog, Modal } from "../../src/public/react/components/ds/modal.tsx";
 import { DiscTracksPanel, SourceInfoList } from "../../src/public/react/components/ds/source-info-list.tsx";
 import { CreatePatchFormView } from "../../src/public/react/create-patch-form-view.tsx";
 import { CreatePatchForm, TrimPatchForm } from "../../src/public/react/index.tsx";
@@ -441,7 +441,6 @@ const PAGE_TABS = [
     label: "Test",
   },
   {
-    beta: true,
     group: "roms",
     href: "trim",
     icon: createElement("span", { "aria-hidden": "true" }),
@@ -729,14 +728,12 @@ const stagedTrimPage = () =>
     "trim",
     "trim",
     createElement(TrimPatchFormView, {
-      confirm: {
+      warning: {
         body: "The trimmed copy is saved as a new download - your original file is not changed.",
-        cancelLabel: "Cancel",
-        confirmLabel: "Trim ROM",
-        onCancel: noop,
-        onConfirm: noop,
+        dismissLabel: "Got it",
+        onDismiss: noop,
         open: false,
-        title: "Trim this ROM?",
+        title: "Trimming this ROM",
       },
       dropZone: { label: "Replace the ROM", onFiles: noop },
       output: stagedOutputStep({
@@ -851,6 +848,14 @@ const DIALOGS = {
       onConfirm: noop,
       open: true,
       title: "Reload and lose changes?",
+    }),
+  "trim warning": () =>
+    createElement(InfoDialog, {
+      body: "The trimmed copy is saved as a new download. Keep the original: some patches and tools need it.",
+      dismissLabel: "Got it",
+      onDismiss: noop,
+      open: true,
+      title: "Trimming this ROM",
     }),
   // The changelog route uses the same full-page accessibility checks.
   "whats new": () => createElement(WhatsNewPage, { active: true, onReload: noop, updateReady: true }),

@@ -32,7 +32,7 @@ const routeShell = `<!doctype html><html><head>
 </head><body></body></html>`;
 
 test("workflow descriptions propagate to metadata and structured data", () => {
-  for (const key of ["home", "identify", "patcher", "creator", "ppf-undo"]) {
+  for (const key of ["home", "identify", "patcher", "creator", "ppf-undo", "trim"]) {
     const route = WORKFLOW_SEO_ROUTES[key];
     const html = injectLdJson(createWorkflowRouteHtml(routeShell, route, "prod", "Production"), route, key === "home");
     const expectedCanonical = `https://rom-weaver.com/${route.slug}`;
@@ -133,10 +133,11 @@ test("the sitemap contains each indexable workflow once and excludes beta tools"
     "identify-rom",
     "ppf-undo",
     "play-rom",
+    "trim-rom",
   ]) {
     assert.ok(locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
-  for (const slug of ["trim-rom", "rom-save-editor"]) {
+  for (const slug of ["rom-save-editor"]) {
     assert.ok(!locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
 });
@@ -195,6 +196,11 @@ test("workflow Markdown includes task instructions and limits from the published
     [WORKFLOW_SEO_ROUTES.extract, "Extract an archive", "Extract opens one archive per run."],
     [WORKFLOW_SEO_ROUTES.identify, "Identify a file", "It does not prove that your file is corrupt."],
     [WORKFLOW_SEO_ROUTES["ppf-undo"], "Restore the saved bytes", "If the patch lacks undo data"],
+    [
+      WORKFLOW_SEO_ROUTES.trim,
+      "Save a trimmed copy",
+      "Restoring is byte-exact only for a ROM trimmed with a revert marker",
+    ],
     [WORKFLOW_SEO_ROUTES.test, "Load a ROM", "Converting, patching, or identifying a ROM"],
     [WORKFLOW_ENTRY_ROUTES["apply-cheats"], "Add cheats to a ROM", "Codes that need live game memory"],
     [
@@ -220,7 +226,6 @@ test("beta tool pages get their own title, social titles, and channel badge", ()
   const shell = `${routeShell.replace("</head>", '<meta name="robots" content="index, follow" />\n</head>')}`;
   for (const [slug, name] of [
     ["rom-save-editor", "Save Editor"],
-    ["trim-rom", "Trim ROM"],
     ["whats-new", "What's new"],
   ]) {
     const prod = makeBetaRouteNoindex(shell, slug, "prod", "Production");

@@ -263,6 +263,7 @@ for (const endpoint of expectedEndpoints) {
   }
 }
 assertIncludes(llmsTxt, `](${siteOrigin}/apply-rom-patches)`, "llms.txt web app link");
+assertIncludes(llmsTxt, `](${siteOrigin}/trim-rom)`, "llms.txt trim link");
 assertIncludes(llmsTxt, `](${siteOrigin}/index.md)`, "llms.txt Markdown link");
 assertIncludes(read("index.md"), `](${siteOrigin}/docs.md)`, "home Markdown documentation link");
 if (openapi.servers?.[0]?.url !== siteOrigin) throw new Error(`OpenAPI server must be ${siteOrigin}`);
@@ -675,7 +676,6 @@ for (const script of bundledScripts) {
 
 for (const [slug, title] of [
   ["rom-save-editor", "Save Editor | rom-weaver"],
-  ["trim-rom", "Trim ROM | rom-weaver"],
   ["whats-new", "What's new | rom-weaver"],
 ]) {
   const html = read(`${slug}/index.html`);
@@ -683,7 +683,7 @@ for (const [slug, title] of [
   assertIncludes(html, `property="og:title" content="${title}`, `${slug} og:title`);
   assertIncludes(html, `name="twitter:title" content="${title}`, `${slug} twitter:title`);
 }
-for (const beta of ["trim-rom", "whats-new", "rom-save-editor"]) {
+for (const beta of ["whats-new", "rom-save-editor"]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
   assertIncludes(
     read(`${beta}/index.html`),
@@ -755,6 +755,18 @@ for (const weave of ["weave/index.html", "weave.html"]) {
   );
   assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/weave-rom-patches"', `${weave} canonical`);
 }
+// Trim left beta: its page is indexed, self-canonical, titled by its SEO route, and listed in the sitemap.
+{
+  const trimHtml = read("trim-rom/index.html");
+  assertIncludes(trimHtml, `<title>${WORKFLOW_SEO_ROUTES.trim.title}`, "trim title");
+  assertIncludes(trimHtml, WORKFLOW_SEO_ROUTES.trim.description, "trim description");
+  assertIncludes(trimHtml, 'rel="canonical" href="https://rom-weaver.com/trim-rom"', "trim canonical");
+  assertIncludes(
+    trimHtml,
+    `name="robots" content="${production ? "index, follow" : "noindex, nofollow"}"`,
+    "trim robots directive",
+  );
+}
 // The retired /tools/ slug serves the PPF undo page and canonicalizes to it.
 assertIncludes(read("tools/index.html"), 'name="robots" content="noindex, nofollow"', "tools alias noindex");
 assertIncludes(
@@ -770,6 +782,7 @@ if (production) {
   assertIncludes(read("sitemap.xml"), "<loc>https://rom-weaver.com/</loc>", "home sitemap entry");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/create-rom-patch", "sitemap");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/extract-files", "extract sitemap entry");
+  assertIncludes(read("sitemap.xml"), "<loc>https://rom-weaver.com/trim-rom</loc>", "trim sitemap entry");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/identify-rom", "sitemap");
   for (const route of DOC_ROUTES) {
     assertIncludes(read("sitemap.xml"), `https://rom-weaver.com/${route.slug}`, `${route.slug} sitemap entry`);

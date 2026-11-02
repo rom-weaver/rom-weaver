@@ -1050,7 +1050,8 @@ Fixture description.
     render(<DocsPage active slug="docs/cli-trim" />);
     expect(document.querySelector(".docs-footer nav.related-strip")).toBeNull();
     expect(screen.getByRole("link", { name: "Trim ROMs" }).getAttribute("href")).toBe("/trim-rom");
-    expect(document.querySelector(".docs-tools li")?.getAttribute("data-beta")).toBe("true");
+    // Trim left beta: its tool link is not gated behind the beta-tools setting.
+    expect(document.querySelector(".docs-tools li")?.getAttribute("data-beta")).toBeNull();
   });
 
   it("preserves the deployment subpath in tool links", () => {

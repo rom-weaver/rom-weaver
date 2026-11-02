@@ -32,7 +32,7 @@ const workflowPages = {
   test: "play-rom",
 };
 const routes = [
-  ...["trim-rom", "rom-save-editor"].map((slug) => ({
+  ...["rom-save-editor"].map((slug) => ({
     slug,
     title: slug,
     description: "Beta browser workflow",
@@ -92,7 +92,7 @@ export function installWebMcp(actions?: WorkflowActions) {
         const slug = stringArgument(input, "slug");
         if (!routes.some((route) => route.slug === slug)) throw new Error("Unknown page slug");
         const betaView = Object.entries(workflowPages).find(
-          ([view, route]) => ["trim", "save-editor"].includes(view) && route === slug,
+          ([view, route]) => view === "save-editor" && route === slug,
         )?.[0];
         if (betaView && actions?.openBetaWorkflow) {
           actions.openBetaWorkflow(betaView);

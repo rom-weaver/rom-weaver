@@ -5,7 +5,7 @@ import type { WebappView } from "./webapp-state-types.ts";
 
 /** One tool pointer: a tab to switch to, plus the beta gate it lives behind. */
 type RelatedToolLink = {
-  /** True for a tool that stays behind the beta-tools setting (Trim). */
+  /** True for a tool that stays behind the beta-tools setting (Save Editor). */
   beta?: boolean;
   entry?: keyof typeof WORKFLOW_ENTRY_ROUTES;
   /** Create mode the link requests with `?mode=`. */
@@ -37,7 +37,7 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
     tools: [{ labelId: "ui.docs.toolApply", view: "patcher" }],
   },
   "docs/cli-trim": {
-    tools: [{ beta: true, labelId: "ui.docs.toolTrim", view: "trim" }],
+    tools: [{ labelId: "ui.docs.toolTrim", view: "trim" }],
   },
   "docs/create-bundles": {
     tools: [{ labelId: "ui.docs.toolWeave", view: "weave" }],
@@ -100,7 +100,7 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
     tools: [{ labelId: "ui.docs.toolIdentify", view: "identify" }],
   },
   "docs/trim-roms-browser": {
-    tools: [{ beta: true, labelId: "ui.docs.toolTrim", view: "trim" }],
+    tools: [{ labelId: "ui.docs.toolTrim", view: "trim" }],
   },
   "docs/undo-ppf-browser": {
     tools: [{ labelId: "ui.docs.toolUndo", view: "ppf-undo" }],

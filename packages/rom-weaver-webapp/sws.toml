@@ -253,6 +253,11 @@ destination = "/trim-rom"
 kind = 301
 
 [[advanced.redirects]]
+source = "/trim.md"
+destination = "/trim-rom.md"
+kind = 301
+
+[[advanced.redirects]]
 source = "/weave"
 destination = "/weave-rom-patches"
 kind = 301
