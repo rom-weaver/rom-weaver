@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   compressEmulatorSaveExport,
+  exportAllEmulatorSaves,
   extractEmulatorSaveExport,
   getCompressedFileName,
 } from "../../src/storage/browser/emulator-save-export.ts";
+
+const saveMocks = vi.hoisted(() => ({ listEmulatorSaves: vi.fn() }));
+vi.mock("../../src/storage/browser/emulator-saves.ts", async (original) => ({
+  ...(await original<typeof import("../../src/storage/browser/emulator-saves.ts")>()),
+  listEmulatorSaves: saveMocks.listEmulatorSaves,
+}));
 
 const create = vi.fn();
 const probe = vi.fn();
@@ -68,4 +75,27 @@ describe("emulator save export compression", () => {
     expect(result).toBeInstanceOf(Blob);
     expect(dispose).toHaveBeenCalledTimes(1);
   });
+});
+
+it("exports every save as a separately restorable JSON, with unique SHA-1 filenames", async () => {
+  saveMocks.listEmulatorSaves.mockResolvedValue(
+    ["a", "b"].map((letter) => ({
+      gameId: letter.repeat(40),
+      gameName: letter.repeat(40),
+      label: "same name.nes",
+      sram: new Uint8Array([1, 2]),
+      updatedAt: 1,
+    })),
+  );
+  await exportAllEmulatorSaves();
+  const request = create.mock.calls[0]?.[0];
+  if (!request) throw new Error("The backup did not call the ZIP runtime");
+  expect(request.options.outputName).toBe("rom-weaver-all-saves.zip");
+  expect(request.entries).toHaveLength(2);
+  for (const [index, entry] of request.entries.entries()) {
+    const json = JSON.parse(new TextDecoder().decode(entry.arrayBuffer));
+    const gameId = String.fromCharCode(97 + index).repeat(40);
+    expect(json).toMatchObject({ gameId, sram: "AQI=" });
+    expect(entry.fileName).toBe(`${gameId}.rw-emulator-save.json`);
+  }
 });

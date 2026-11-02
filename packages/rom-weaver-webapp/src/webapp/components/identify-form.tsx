@@ -434,7 +434,12 @@ const IdentifyForm = ({
     <>
       {entries.map((entry) =>
         entry.error ? (
-          <Notice key={entry.id} level="error" onDismiss={() => updateEntry(entry.id, { error: "" })}>
+          <Notice
+            key={entry.id}
+            level="error"
+            onDismiss={() => updateEntry(entry.id, { error: "" })}
+            onRetry={() => void runEntry(entry.id, entry.file)}
+          >
             {entries.length > 1 ? `${entry.file.name}: ${entry.error}` : entry.error}
           </Notice>
         ) : null,

@@ -313,7 +313,7 @@ describe("createEmulatorDocument", () => {
     expect(window.__romWeaverGameStarted).toBe(false);
     start();
     expect(window.__romWeaverGameStarted).toBe(true);
-    expect(requests).toEqual(["request-load-sram"]);
+    expect(requests).toEqual(["game-started", "request-load-sram"]);
   });
 
   it("restarts the game after importing SRAM before reporting success", () => {

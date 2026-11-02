@@ -233,9 +233,11 @@ const WeaveExportAction = ({
 const ApplyErrorNotice = ({
   notice,
   noticeController,
+  onRetry,
 }: {
   notice: NoticeState | null;
   noticeController?: NoticeController;
+  onRetry?: () => void;
 }) => {
   if (!notice?.visible) return null;
   return (
@@ -244,7 +246,7 @@ const ApplyErrorNotice = ({
       level={notice.level === "warning" ? "warn" : "error"}
       onDismiss={notice.dismissible ? () => noticeController?.dismiss?.() : undefined}
     >
-      <WorkflowErrorMessage message={notice.message} />
+      <WorkflowErrorMessage message={notice.message} onRetry={onRetry} />
     </Notice>
   );
 };
@@ -342,7 +344,11 @@ export const ApplyOutputAction = ({
   const showDownloadFallback = !emulatorCore && (postApplyTestOption.visible || postApplyTestOption.automatic);
   return (
     <>
-      <ApplyErrorNotice notice={errorNotice} noticeController={noticeController} />
+      <ApplyErrorNotice
+        notice={errorNotice}
+        noticeController={noticeController}
+        onRetry={() => controllers.output.runPrimaryAction()}
+      />
       <ChecksumOverrideRow state={uiState.checksumOverride} uiController={uiController} />
       <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
         <p aria-live="polite" className="patch-off-note">

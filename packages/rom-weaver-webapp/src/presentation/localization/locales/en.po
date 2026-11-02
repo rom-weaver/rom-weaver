@@ -6107,3 +6107,89 @@ msgstr "ZIP codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z and weaves"
+
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.keepTestedRomsEnabled"
+msgstr "Keep tested ROMs on this device"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.title"
+msgstr "Kept Test ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.description"
+msgstr "Only tested ROMs are kept when the setting is on. Turning it off keeps existing files."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.protect"
+msgstr "Protect saves and ROMs from automatic removal"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.persistence.granted"
+msgstr "Persistent storage granted. Export saves for a separate backup."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.persistence.denied"
+msgstr "Persistent storage was not granted. The browser may remove saves and ROMs. Export saves for backup."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.removed"
+msgstr "Removed by the browser"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.unreadable"
+msgstr "Can't read this version"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.play"
+msgstr "Play"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.remove"
+msgstr "Remove"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.delete"
+msgstr "Delete"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.empty"
+msgstr "No Test ROMs are kept on this device."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.keepFailed"
+msgstr "The game started, but its ROM could not be kept. Free space in Saves & storage and try again."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.saves.emulator.exportAll"
+msgstr "Export all saves"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.storageFull.keptUsage"
+msgstr "Browser storage is full. Kept Test ROMs use {size}. Delete kept ROMs to free space."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.storageFull.openStorage"
+msgstr "Open Saves & storage"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.storageFull.tryAgain"
+msgstr "Try again"

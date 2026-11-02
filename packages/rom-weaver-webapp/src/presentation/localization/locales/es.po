@@ -6107,3 +6107,89 @@ msgstr "Códec ZIP"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z y paquetes"
+
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.keepTestedRomsEnabled"
+msgstr "ROMs de pruebas en este dispositivo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.title"
+msgstr "ROMs de pruebas guardadas"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.description"
+msgstr "Solo se guardan las ROMs probadas con la opción activada. Desactivarla conserva los archivos."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.protect"
+msgstr "Proteger partidas y ROMs del borrado automático"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.persistence.granted"
+msgstr "Almacenamiento persistente concedido. Exporta las partidas como copia de seguridad."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.persistence.denied"
+msgstr "No se concedió almacenamiento persistente. El navegador puede borrar partidas y ROMs. Exporta las partidas."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.removed"
+msgstr "Eliminada por el navegador"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.unreadable"
+msgstr "No se puede leer esta versión"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.play"
+msgstr "Jugar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.remove"
+msgstr "Quitar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.delete"
+msgstr "Eliminar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.empty"
+msgstr "No hay ROMs de pruebas guardadas en este dispositivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.keepFailed"
+msgstr "El juego se inició, pero no se pudo guardar la ROM. Libera espacio en Partidas y almacenamiento."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.saves.emulator.exportAll"
+msgstr "Exportar todas las partidas"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.storageFull.keptUsage"
+msgstr "El almacenamiento está lleno. Las ROMs guardadas ocupan {size}. Elimina ROMs para liberar espacio."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.storageFull.openStorage"
+msgstr "Abrir Partidas y almacenamiento"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.storageFull.tryAgain"
+msgstr "Reintentar"

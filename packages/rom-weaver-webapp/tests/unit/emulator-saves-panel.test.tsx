@@ -8,6 +8,7 @@ import type { EmulatorSaveRecord } from "../../src/storage/browser/emulator-save
 
 const mocks = vi.hoisted(() => ({
   compressEmulatorSaveExport: vi.fn(),
+  exportAllEmulatorSaves: vi.fn(),
   createEmulatorSaveExport: vi.fn(),
   deleteEmulatorSave: vi.fn(),
   extractEmulatorSaveExport: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock("../../src/storage/browser/emulator-saves.ts", () => ({
 
 vi.mock("../../src/storage/browser/emulator-save-export.ts", () => ({
   compressEmulatorSaveExport: mocks.compressEmulatorSaveExport,
+  exportAllEmulatorSaves: mocks.exportAllEmulatorSaves,
   extractEmulatorSaveExport: mocks.extractEmulatorSaveExport,
 }));
 
@@ -63,6 +65,7 @@ beforeEach(() => {
   mocks.listEmulatorSaves.mockResolvedValue([SAVE]);
   mocks.createEmulatorSaveExport.mockReturnValue(EXPORT_BLOB);
   mocks.compressEmulatorSaveExport.mockResolvedValue(EXPORT_BLOB);
+  mocks.exportAllEmulatorSaves.mockResolvedValue(EXPORT_BLOB);
   mocks.triggerBrowserDownload.mockResolvedValue(undefined);
   mocks.deleteEmulatorSave.mockResolvedValue(undefined);
   mocks.importEmulatorSave.mockResolvedValue(SAVE);
@@ -127,7 +130,7 @@ describe("EmulatorSavesPanel export", () => {
     render(<EmulatorSavesPanel />);
     await screen.findByText("Sample Game");
 
-    fireEvent.click(screen.getByRole("button", { name: /Export/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Export$/ }));
 
     await waitFor(() => expect(mocks.triggerBrowserDownload).toHaveBeenCalledTimes(1));
     expect(mocks.createEmulatorSaveExport).toHaveBeenCalledWith(SAVE);
@@ -141,7 +144,7 @@ describe("EmulatorSavesPanel export", () => {
     render(<EmulatorSavesPanel />);
     await screen.findByText("Sample Game");
 
-    fireEvent.click(screen.getByRole("button", { name: /Export/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Export$/ }));
 
     expect((await screen.findByRole("alert")).textContent).toBe("Download was blocked");
     const retry = await screen.findByRole("button", { name: /Download/ });
@@ -384,4 +387,15 @@ describe("EmulatorSavesPanel in German", () => {
     expect(screen.getByRole("button", { name: /Löschen/u })).toBeTruthy();
     expect(screen.getByText(/Savestate: .* · SRAM: /u)).toBeTruthy();
   });
+});
+
+it("downloads all saves from the panel and reuses a prepared backup after a blocked download", async () => {
+  mocks.triggerBrowserDownload.mockRejectedValueOnce(new Error("Download blocked"));
+  render(<EmulatorSavesPanel />);
+  await screen.findByText("Sample Game");
+  fireEvent.click(screen.getByRole("button", { name: "Export all saves" }));
+  expect(await screen.findByText("Download blocked")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Export all saves" }));
+  await waitFor(() => expect(mocks.triggerBrowserDownload).toHaveBeenCalledTimes(2));
+  expect(mocks.exportAllEmulatorSaves).toHaveBeenCalledOnce();
 });

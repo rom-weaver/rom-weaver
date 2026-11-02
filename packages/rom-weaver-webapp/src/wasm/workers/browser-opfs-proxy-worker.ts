@@ -1,4 +1,6 @@
 import { getManagedOpfsFileHandle } from "../../workers/protocol/opfs-path.ts";
+import type { KeptRomFileRequest } from "../../storage/browser/kept-rom-files.ts";
+import { handleKeptRomFile } from "../kept-rom-file-worker.ts";
 import { acknowledgeOpfsShutdown } from "../browser-opfs-shutdown.ts";
 // This dedicated worker owns the runner's OPFS handles and resolves mount paths from the OPFS root.
 // File I/O uses the shared channel; bootstrap, Blob registration, tracing, and shutdown use postMessage.
@@ -63,6 +65,7 @@ const readPrefix = async (data: ProxyReadPrefixMessage): Promise<void> => {
 };
 
 type ProxyWorkerMessage =
+  | KeptRomFileRequest
   | ProxyReadPrefixMessage
   | ProxyBootstrapMessage
   | ProxyStopMessage
@@ -115,6 +118,13 @@ const bootstrap = async (data: ProxyBootstrapMessage): Promise<void> => {
 workerScope.onmessage = (event: MessageEvent<ProxyWorkerMessage>) => {
   const data = event.data;
   if (!data || typeof data !== "object") return;
+  if (data.type === "kept-rom-file") {
+    void handleKeptRomFile(
+      data,
+      Promise.resolve().then(() => navigator.storage.getDirectory()),
+    ).then((result) => workerScope.postMessage(result));
+    return;
+  }
   if (data.type === "read-prefix") {
     void readPrefix(data);
     return;

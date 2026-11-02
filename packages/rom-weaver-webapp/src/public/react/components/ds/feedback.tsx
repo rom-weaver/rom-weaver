@@ -5,6 +5,7 @@ import { usePressThroughLayoutShift } from "../../../../presentation/react/use-p
 import { useUiLocalizer } from "../../settings-context.tsx";
 import { join } from "./cx.ts";
 import { prefersReducedMotion } from "./flat-transition.ts";
+import { StorageFullRecovery } from "../../storage-full-recovery.tsx";
 
 /**
  * Loom feedback primitives: notices, the weave meter, the recessed progress
@@ -21,6 +22,7 @@ const Notice = ({
   className,
   dismissLabel,
   onDismiss,
+  onRetry,
 }: {
   level: NoticeLevel;
   id?: string;
@@ -28,6 +30,7 @@ const Notice = ({
   className?: string;
   dismissLabel?: string;
   onDismiss?: () => void;
+  onRetry?: () => void;
 }) => {
   const localizer = useUiLocalizer();
   const resolvedDismissLabel = dismissLabel ?? localizer.message("ui.common.dismiss");
@@ -35,7 +38,12 @@ const Notice = ({
   return (
     <div className={join("notice", level, className)} id={id} role={level === "error" ? "alert" : "status"}>
       <Icon aria-hidden="true" />
-      <span className="body notice-copy">{children}</span>
+      <span className="body notice-copy">
+        {children}
+        {level === "error" && typeof children === "string" ? (
+          <StorageFullRecovery message={children} onRetry={onRetry} />
+        ) : null}
+      </span>
       {onDismiss ? (
         <button
           aria-label={resolvedDismissLabel}

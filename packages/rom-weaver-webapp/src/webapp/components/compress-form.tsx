@@ -413,7 +413,7 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
         <GhostSteps steps={[{ num: "0x02", title: localizer.message("ui.apply.outputOptions.output") }]} />
       )}
       {error ? (
-        <Notice level="error" onDismiss={() => setError("")}>
+        <Notice level="error" onDismiss={() => setError("")} onRetry={() => void run()}>
           {error}
         </Notice>
       ) : null}

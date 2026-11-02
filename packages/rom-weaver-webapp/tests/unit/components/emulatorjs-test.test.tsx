@@ -56,6 +56,14 @@ vi.mock("../../../src/public/react/components/emulator-document.ts", () => ({
   }),
 }));
 
+const keptRomMocks = vi.hoisted(() => ({
+  keepTestRom: vi.fn(async () => undefined),
+  listKeptRoms: vi.fn(async (): Promise<import("../../../src/storage/browser/kept-roms.ts").KeptRom[]> => []),
+  readKeptRom: vi.fn(),
+  deleteKeptRom: vi.fn(),
+}));
+vi.mock("../../../src/storage/browser/kept-roms.ts", () => keptRomMocks);
+
 const NativeURL = URL;
 
 const withSettings = (children: ReactNode) => (
@@ -1109,5 +1117,107 @@ describe("fallback fullscreen game validation", () => {
     expect(document.body.style.overflow).toBe("hidden");
     view.unmount();
     expect(document.body.style.overflow).toBe(previousOverflow);
+  });
+});
+
+describe("keeping tested ROMs", () => {
+  const load = async (enabled: boolean) => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    const original = new File(["compressed archive"], "v1.2 #2; Pokémon.zip");
+    loadRomMock.mockResolvedValueOnce({ blob: new Blob(["ROM"]), checksum: "b".repeat(40), fileName: "game.nes" });
+    render(
+      <RomWeaverSettingsProvider settings={{ keepTestedRomsEnabled: enabled }}>
+        <EmulatorTestView />
+      </RomWeaverSettingsProvider>,
+    );
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), { target: { files: [original] } });
+    await waitFor(() => expect(document.querySelector("iframe")).toBeTruthy());
+    const frame = document.querySelector("iframe");
+    if (!frame) throw new Error("The loaded game has no player frame");
+    const started = async (source: MessageEventSource | null = frame.contentWindow) =>
+      await act(() =>
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            source,
+            data: { source: "rom-weaver-emulator", gameId: "b".repeat(40), kind: "game-started" },
+          }),
+        ),
+      );
+    return { original, started };
+  };
+
+  it("starts first, then keeps original compressed input once under the save SHA-1", async () => {
+    const { original, started } = await load(true);
+    expect(keptRomMocks.keepTestRom).not.toHaveBeenCalled();
+    await started(window);
+    expect(keptRomMocks.keepTestRom).not.toHaveBeenCalled();
+    await started();
+    await started();
+    await waitFor(() => expect(keptRomMocks.keepTestRom).toHaveBeenCalledExactlyOnceWith("b".repeat(40), original));
+  });
+
+  it("keeps nothing when the setting is off", async () => {
+    const { started } = await load(false);
+    await started();
+    expect(keptRomMocks.keepTestRom).not.toHaveBeenCalled();
+  });
+
+  it("retains the running player when keeping fails", async () => {
+    keptRomMocks.keepTestRom.mockRejectedValueOnce(new DOMException("full", "QuotaExceededError"));
+    const { started } = await load(true);
+    await started();
+    expect(await screen.findByText(/The game started, but its ROM could not be kept/)).toBeTruthy();
+    expect(document.querySelector("iframe")).toBeTruthy();
+    expect(getEmulatorSessionState().entries[0]?.checksum).toBe("b".repeat(40));
+  });
+
+  it("plays a kept ROM without replacing the file backing its active session", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    keptRomMocks.listKeptRoms.mockResolvedValueOnce([
+      { gameId: "b".repeat(40), fileName: "game.nes", size: 3, status: "ready" },
+    ]);
+    keptRomMocks.readKeptRom.mockResolvedValueOnce({
+      file: new File(["ROM"], "game.nes"),
+      dispose: vi.fn(async () => undefined),
+    });
+    render(
+      <RomWeaverSettingsProvider settings={{ keepTestedRomsEnabled: true }}>
+        <EmulatorTestView />
+      </RomWeaverSettingsProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Play" }));
+    await waitFor(() => expect(document.querySelector("iframe")).toBeTruthy());
+    await act(() =>
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: document.querySelector("iframe")?.contentWindow,
+          data: { source: "rom-weaver-emulator", gameId: "b".repeat(40), kind: "game-started" },
+        }),
+      ),
+    );
+    expect(keptRomMocks.keepTestRom).not.toHaveBeenCalled();
+  });
+
+  it("does not keep an Apply output even when the setting is on", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    act(() => addEntry(entry({ source: "apply" })));
+    render(
+      <RomWeaverSettingsProvider settings={{ keepTestedRomsEnabled: true }}>
+        <EmulatorTestView />
+      </RomWeaverSettingsProvider>,
+    );
+    await waitFor(() => expect(document.querySelector("iframe")).toBeTruthy());
+    await act(() =>
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: document.querySelector("iframe")?.contentWindow,
+          data: { source: "rom-weaver-emulator", gameId: "a".repeat(40), kind: "game-started" },
+        }),
+      ),
+    );
+    expect(keptRomMocks.keepTestRom).not.toHaveBeenCalled();
   });
 });

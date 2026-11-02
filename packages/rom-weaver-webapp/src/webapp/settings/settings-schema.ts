@@ -79,6 +79,7 @@ const BOOLEAN_SETTINGS_FIELDS = [
   "onboardingEnabled",
   "offlineCopyEnabled",
   "emulatorSaveStorageEnabled",
+  "keepTestedRomsEnabled",
   "fixChecksum",
   "identifiedOutputName",
 ] as const satisfies readonly SettingsFieldKey[];
@@ -391,6 +392,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     detailedViewEnabled: commonSettings.detailedViewEnabled,
     legacyApplyPlayButtonEnabled: commonSettings.applyPlayButtonEnabled,
     emulatorSaveStorageEnabled: commonSettings.emulatorSaveStorageEnabled,
+    keepTestedRomsEnabled: commonSettings.keepTestedRomsEnabled,
     onboardingEnabled: commonSettings.onboardingEnabled,
     offlineCopyEnabled: commonSettings.offlineCopyEnabled,
     accent: commonSettings.accent,
@@ -534,6 +536,8 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
 
     const emulatorSaveStorageEnabled = readStoredField(storedBooleanSchema, loadedSettings.emulatorSaveStorageEnabled);
     if (emulatorSaveStorageEnabled !== undefined) settings.emulatorSaveStorageEnabled = emulatorSaveStorageEnabled;
+    const keepTestedRomsEnabled = readStoredField(storedBooleanSchema, loadedSettings.keepTestedRomsEnabled);
+    if (keepTestedRomsEnabled !== undefined) settings.keepTestedRomsEnabled = keepTestedRomsEnabled;
     const defaultCompression = readStoredField(storedStringSchema, loadedSettings.defaultCompression);
     if (defaultCompression !== undefined) {
       settings.defaultCompression = normalizeChoiceField(
@@ -633,6 +637,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       fieldKey === "betaToolsEnabled" ||
       fieldKey === "detailedViewEnabled" ||
       fieldKey === "emulatorSaveStorageEnabled" ||
+      fieldKey === "keepTestedRomsEnabled" ||
       fieldKey === "onboardingEnabled" ||
       fieldKey === "offlineCopyEnabled" ||
       fieldKey === "language" ||
