@@ -584,96 +584,6 @@ fn the_temporary_xiso_path_is_hidden_and_sits_beside_the_source() {
 }
 
 #[test]
-fn an_rvz_convert_trim_refuses_revert_empty_input_and_in_place() {
-    let dir = scratch_dir("rvz-refusals");
-    let app = test_app();
-    let context = app.context(ThreadBudget::Fixed(1));
-    let empty = write_fixture(&dir, "empty.rvz", &[]);
-    let error = app
-        .trim_rvz_convert_file(
-            &empty,
-            &dir.join("out.rvz"),
-            false,
-            false,
-            TrimOperation::Revert,
-            &context,
-        )
-        .err_or_panic("revert unsupported");
-    assert!(
-        error
-            .to_string()
-            .contains("rvz-convert trim revert is not supported"),
-        "{error}"
-    );
-    let error = app
-        .trim_rvz_convert_file(
-            &empty,
-            &dir.join("out.rvz"),
-            false,
-            false,
-            TrimOperation::Trim,
-            &context,
-        )
-        .err_or_panic("empty input");
-    assert!(error.to_string().contains("input is empty"), "{error}");
-
-    let source = write_fixture(&dir, "game.rvz", &vec![0x42_u8; 4096]);
-    let error = app
-        .trim_rvz_convert_file(&source, &source, true, false, TrimOperation::Trim, &context)
-        .err_or_panic("in-place unsupported");
-    assert!(
-        error
-            .to_string()
-            .contains("requires a separate output file"),
-        "{error}"
-    );
-    fs::remove_dir_all(&dir).ok();
-}
-
-#[test]
-fn an_rvz_convert_of_a_non_disc_source_reports_the_rebuild_failure() {
-    let dir = scratch_dir("rvz-not-a-disc");
-    let app = test_app();
-    let context = app.context(ThreadBudget::Fixed(1));
-    let source = write_fixture(&dir, "game.rvz", &vec![0x42_u8; 4096]);
-
-    let error = app
-        .trim_rvz_convert_file(
-            &source,
-            &dir.join("out.rvz"),
-            false,
-            true,
-            TrimOperation::Trim,
-            &context,
-        )
-        .err_or_panic("dry run cannot rebuild");
-    assert!(
-        error
-            .to_string()
-            .contains("rvz-convert trim simulation failed while rebuilding"),
-        "{error}"
-    );
-
-    let error = app
-        .trim_rvz_convert_file(
-            &source,
-            &dir.join("out/out.rvz"),
-            false,
-            false,
-            TrimOperation::Trim,
-            &context,
-        )
-        .err_or_panic("rebuild fails");
-    assert!(
-        error
-            .to_string()
-            .contains("rvz-convert trim failed while rebuilding"),
-        "{error}"
-    );
-    fs::remove_dir_all(&dir).ok();
-}
-
-#[test]
 fn write_padding_bytes_spans_more_than_one_chunk() {
     let mut sink = Vec::new();
     CliApp::write_padding_bytes(&mut sink, 0, 0xFF).expect("no padding");
@@ -729,7 +639,6 @@ fn applying_a_size_target_to_a_new_file_creates_its_parent_directory() {
 fn a_revert_marker_trim_round_trips_the_original_bytes() {
     let dir = scratch_dir("revert-marker");
     let app = test_app();
-    let context = app.context(ThreadBudget::Fixed(1));
     let mut bytes = vec![0x42_u8; 1000];
     bytes.resize(4096, 0xFF);
     let rom = write_fixture(&dir, "game.gba", &bytes);
@@ -743,7 +652,6 @@ fn a_revert_marker_trim_round_trips_the_original_bytes() {
                 revert_marker: true,
                 ..request(TrimOperation::Trim, TrimInputKind::Gba)
             },
-            &context,
         )
         .expect("trim");
     assert_eq!(outcome.result_size, 1000);
@@ -757,7 +665,6 @@ fn a_revert_marker_trim_round_trips_the_original_bytes() {
         &trimmed,
         &reverted,
         request(TrimOperation::Revert, TrimInputKind::Gba),
-        &context,
     )
     .expect("revert");
     assert_eq!(
@@ -772,7 +679,6 @@ fn a_revert_marker_trim_round_trips_the_original_bytes() {
 fn retrimming_a_marked_gba_strips_only_its_footer() {
     let dir = scratch_dir("revert-marker-retrim-gba");
     let app = test_app();
-    let context = app.context(ThreadBudget::Fixed(1));
     // This layout's footer CRC ends in 0x00, which a trailing-padding scan would treat as fill.
     let mut bytes = vec![0x42_u8; 0x6F_FF9C];
     bytes.resize(0x80_0000, 0xFF);
@@ -783,7 +689,7 @@ fn retrimming_a_marked_gba_strips_only_its_footer() {
     };
 
     let first = dir.join("first.gba");
-    app.trim_file(&rom, &first, marker_trim, &context)
+    app.trim_file(&rom, &first, marker_trim)
         .expect("first trim");
     let first_bytes = fs::read(&first).expect("first");
     assert!(
@@ -791,7 +697,7 @@ fn retrimming_a_marked_gba_strips_only_its_footer() {
         "fixture must end in a padding-like CRC byte"
     );
     let second = dir.join("second.gba");
-    app.trim_file(&first, &second, marker_trim, &context)
+    app.trim_file(&first, &second, marker_trim)
         .expect("second trim");
     assert_eq!(
         fs::read(&second).expect("second"),
@@ -804,7 +710,6 @@ fn retrimming_a_marked_gba_strips_only_its_footer() {
         &second,
         &reverted,
         request(TrimOperation::Revert, TrimInputKind::Gba),
-        &context,
     )
     .expect("revert");
     assert_eq!(fs::read(&reverted).expect("reverted"), bytes);
@@ -815,7 +720,6 @@ fn retrimming_a_marked_gba_strips_only_its_footer() {
 fn trimming_a_marked_rom_again_keeps_the_original_restore_data() {
     let dir = scratch_dir("revert-marker-retrim");
     let app = test_app();
-    let context = app.context(ThreadBudget::Fixed(1));
     let bytes = nds_rom(&nds_header(false, 0x2000, 0x8000), 0x8000);
     let rom = write_fixture(&dir, "game.nds", &bytes);
     let marker_trim = TrimRequest {
@@ -824,11 +728,11 @@ fn trimming_a_marked_rom_again_keeps_the_original_restore_data() {
     };
 
     let first = dir.join("first.nds");
-    app.trim_file(&rom, &first, marker_trim, &context)
+    app.trim_file(&rom, &first, marker_trim)
         .expect("first trim");
     let second = dir.join("second.nds");
     let outcome = app
-        .trim_file(&first, &second, marker_trim, &context)
+        .trim_file(&first, &second, marker_trim)
         .expect("second trim");
     assert!(
         !outcome.already_target_size,
@@ -840,7 +744,6 @@ fn trimming_a_marked_rom_again_keeps_the_original_restore_data() {
         &second,
         &reverted,
         request(TrimOperation::Revert, TrimInputKind::NdsFamily),
-        &context,
     )
     .expect("revert");
     assert_eq!(
@@ -899,7 +802,6 @@ fn a_new_revert_footer_is_twelve_bytes_starting_with_rw() {
 fn a_legacy_revert_footer_still_restores_byte_identically() {
     let dir = scratch_dir("revert-footer-legacy");
     let app = test_app();
-    let context = app.context(ThreadBudget::Fixed(1));
     // 0x00 padding differs from the 0xFF fallback, so only the footer can restore it.
     let mut original = vec![0x42_u8; 1000];
     original.resize(4096, 0x00);
@@ -918,7 +820,6 @@ fn a_legacy_revert_footer_still_restores_byte_identically() {
         &trimmed,
         &reverted,
         request(TrimOperation::Revert, TrimInputKind::Gba),
-        &context,
     )
     .expect("revert");
     assert_eq!(fs::read(&reverted).expect("reverted"), original);
@@ -931,7 +832,6 @@ fn a_legacy_revert_footer_still_restores_byte_identically() {
             in_place: true,
             ..request(TrimOperation::Revert, TrimInputKind::Gba)
         },
-        &context,
     )
     .expect("in-place revert");
     assert_eq!(fs::read(&trimmed).expect("reverted"), original);
@@ -942,7 +842,6 @@ fn a_legacy_revert_footer_still_restores_byte_identically() {
 fn retrimming_a_rom_with_a_legacy_footer_writes_a_new_rw_footer() {
     let dir = scratch_dir("revert-footer-legacy-retrim");
     let app = test_app();
-    let context = app.context(ThreadBudget::Fixed(1));
     let original = nds_rom(&nds_header(false, 0x2000, 0x8000), 0x8000);
     let mut legacy = original[..0x2000].to_vec();
     legacy.extend_from_slice(&legacy_revert_footer(0xFF, 0x8000 - 0x2000));
@@ -956,7 +855,6 @@ fn retrimming_a_rom_with_a_legacy_footer_writes_a_new_rw_footer() {
             revert_marker: true,
             ..request(TrimOperation::Trim, TrimInputKind::NdsFamily)
         },
-        &context,
     )
     .expect("re-trim");
 
@@ -974,7 +872,6 @@ fn retrimming_a_rom_with_a_legacy_footer_writes_a_new_rw_footer() {
         &retrimmed,
         &reverted,
         request(TrimOperation::Revert, TrimInputKind::NdsFamily),
-        &context,
     )
     .expect("revert");
     assert_eq!(fs::read(&reverted).expect("reverted"), original);
@@ -1036,7 +933,6 @@ fn a_revert_footer_past_the_forty_bit_pad_length_is_rejected() {
 fn a_revert_marker_is_not_written_when_nothing_was_trimmed() {
     let dir = scratch_dir("revert-marker-noop");
     let app = test_app();
-    let context = app.context(ThreadBudget::Fixed(1));
     let bytes = vec![0x42_u8; 1024];
     let rom = write_fixture(&dir, "game.gba", &bytes);
     let trimmed = dir.join("trimmed.gba");
@@ -1049,7 +945,6 @@ fn a_revert_marker_is_not_written_when_nothing_was_trimmed() {
                 revert_marker: true,
                 ..request(TrimOperation::Trim, TrimInputKind::Gba)
             },
-            &context,
         )
         .expect("trim");
     assert!(outcome.already_target_size);
@@ -1065,7 +960,6 @@ fn a_revert_marker_is_not_written_when_nothing_was_trimmed() {
 fn a_dry_run_trim_never_writes_a_revert_footer() {
     let dir = scratch_dir("revert-marker-dry-run");
     let app = test_app();
-    let context = app.context(ThreadBudget::Fixed(1));
     let mut bytes = vec![0x42_u8; 1000];
     bytes.resize(4096, 0xFF);
     let rom = write_fixture(&dir, "game.gba", &bytes);
@@ -1079,7 +973,6 @@ fn a_dry_run_trim_never_writes_a_revert_footer() {
             revert_marker: true,
             ..request(TrimOperation::Trim, TrimInputKind::Gba)
         },
-        &context,
     )
     .expect("dry run");
     assert!(!trimmed.exists());
@@ -1090,33 +983,27 @@ fn a_dry_run_trim_never_writes_a_revert_footer() {
 fn trim_file_dispatches_each_input_kind_to_its_own_refusal() {
     let dir = scratch_dir("dispatch");
     let app = test_app();
-    let context = app.context(ThreadBudget::Fixed(1));
     let empty = write_fixture(&dir, "empty.bin", &[]);
 
-    for (kind, expected) in [
-        (TrimInputKind::Xiso, "xiso trim revert is not supported"),
-        (
-            TrimInputKind::RvzConvert,
-            "rvz-convert trim revert is not supported",
-        ),
-    ] {
-        let error = app
-            .trim_file(
-                &empty,
-                &dir.join("out.bin"),
-                request(TrimOperation::Revert, kind),
-                &context,
-            )
-            .err_or_panic("revert unsupported");
-        assert!(error.to_string().contains(expected), "{error}");
-    }
+    let error = app
+        .trim_file(
+            &empty,
+            &dir.join("out.bin"),
+            request(TrimOperation::Revert, TrimInputKind::Xiso),
+        )
+        .err_or_panic("revert unsupported");
+    assert!(
+        error
+            .to_string()
+            .contains("xiso trim revert is not supported"),
+        "{error}"
+    );
 
     let error = app
         .trim_file(
             &empty,
             &dir.join("out.bin"),
             request(TrimOperation::Trim, TrimInputKind::NdsFamily),
-            &context,
         )
         .err_or_panic("nds needs a header");
     assert!(
@@ -1132,30 +1019,27 @@ fn trim_file_dispatches_each_input_kind_to_its_own_refusal() {
 fn irreversible_trim_kinds_reject_existing_revert_footers() {
     let dir = scratch_dir("irreversible-revert-footer");
     let app = test_app();
-    let context = app.context(ThreadBudget::Fixed(1));
     let source = write_fixture(&dir, "marked.bin", &[0x42; 64]);
     CliApp::write_revert_footer(&source, 128, 0).expect("legacy footer");
     let original = fs::read(&source).expect("original bytes");
-    for kind in [TrimInputKind::Xiso, TrimInputKind::RvzConvert] {
-        for dry_run in [false, true] {
-            let error = app
-                .trim_file(
-                    &source,
-                    &source,
-                    TrimRequest {
-                        in_place: true,
-                        dry_run,
-                        ..request(TrimOperation::Revert, kind)
-                    },
-                    &context,
-                )
-                .err_or_panic("irreversible format");
-            assert!(
-                error.to_string().contains("trim revert is not supported"),
-                "{error}"
-            );
-            assert_eq!(fs::read(&source).expect("unchanged source"), original);
-        }
+    let kind = TrimInputKind::Xiso;
+    for dry_run in [false, true] {
+        let error = app
+            .trim_file(
+                &source,
+                &source,
+                TrimRequest {
+                    in_place: true,
+                    dry_run,
+                    ..request(TrimOperation::Revert, kind)
+                },
+            )
+            .err_or_panic("irreversible format");
+        assert!(
+            error.to_string().contains("trim revert is not supported"),
+            "{error}"
+        );
+        assert_eq!(fs::read(&source).expect("unchanged source"), original);
     }
     fs::remove_dir_all(&dir).ok();
 }
@@ -1164,31 +1048,28 @@ fn irreversible_trim_kinds_reject_existing_revert_footers() {
 fn irreversible_trim_kinds_reject_markers_including_dry_runs() {
     let dir = scratch_dir("irreversible-marker");
     let app = test_app();
-    let context = app.context(ThreadBudget::Fixed(1));
     let source = write_fixture(&dir, "source.bin", &[0x42; 64]);
-    for kind in [TrimInputKind::Xiso, TrimInputKind::RvzConvert] {
-        for dry_run in [false, true] {
-            let error = app
-                .trim_file(
-                    &source,
-                    &source,
-                    TrimRequest {
-                        in_place: true,
-                        dry_run,
-                        revert_marker: true,
-                        ..request(TrimOperation::Trim, kind)
-                    },
-                    &context,
-                )
-                .err_or_panic("irreversible format");
-            assert!(
-                error
-                    .to_string()
-                    .contains("does not support --revert-marker"),
-                "{error}"
-            );
-            assert_eq!(fs::read(&source).expect("unchanged source"), [0x42; 64]);
-        }
+    let kind = TrimInputKind::Xiso;
+    for dry_run in [false, true] {
+        let error = app
+            .trim_file(
+                &source,
+                &source,
+                TrimRequest {
+                    in_place: true,
+                    dry_run,
+                    revert_marker: true,
+                    ..request(TrimOperation::Trim, kind)
+                },
+            )
+            .err_or_panic("irreversible format");
+        assert!(
+            error
+                .to_string()
+                .contains("does not support --revert-marker"),
+            "{error}"
+        );
+        assert_eq!(fs::read(&source).expect("unchanged source"), [0x42; 64]);
     }
     fs::remove_dir_all(&dir).ok();
 }
@@ -1358,59 +1239,7 @@ fn restoring_a_cxi_without_a_marker_leaves_it_unchanged() {
 }
 
 #[test]
-fn rvz_rejects_markers_footer_restoration_and_in_place_dry_runs() {
-    let dir = scratch_dir("rvz-refusals");
-    let app = test_app();
-    let context = app.context(ThreadBudget::Fixed(1));
-    let source = write_fixture(&dir, "game.rvz", &[0x42; 1000]);
-    CliApp::write_revert_footer(&source, 4096, 0xFF).expect("footer fixture");
-    let bytes = fs::read(&source).expect("source");
-    for dry_run in [false, true] {
-        for (operation, revert_marker, in_place, message) in [
-            (
-                TrimOperation::Trim,
-                true,
-                false,
-                "does not support --revert-marker",
-            ),
-            (
-                TrimOperation::Revert,
-                false,
-                false,
-                "revert is not supported",
-            ),
-            (
-                TrimOperation::Trim,
-                false,
-                true,
-                "requires a separate output file",
-            ),
-        ] {
-            let output = dir.join("out.rvz");
-            let error = app
-                .trim_file(
-                    &source,
-                    &output,
-                    TrimRequest {
-                        operation,
-                        revert_marker,
-                        in_place,
-                        dry_run,
-                        kind: TrimInputKind::RvzConvert,
-                    },
-                    &context,
-                )
-                .err_or_panic("unsupported RVZ operation");
-            assert!(error.to_string().contains(message), "{error}");
-            assert!(!output.exists());
-            assert_eq!(fs::read(&source).expect("source preserved"), bytes);
-        }
-    }
-    fs::remove_dir_all(dir).ok();
-}
-
-#[test]
-fn trim_input_extensions_cover_path_kinds_and_rvz_candidates() {
+fn trim_input_extensions_cover_path_and_sniffed_kinds_but_not_gamecube_wii_discs() {
     let extensions = trim_input_extensions();
     for (extension, kind) in TRIM_PATH_EXTENSIONS {
         assert!(extensions.contains(extension), "{extension}");
@@ -1425,6 +1254,13 @@ fn trim_input_extensions_cover_path_kinds_and_rvz_candidates() {
         assert!(extensions.contains(sniffed), "{sniffed}");
         assert_eq!(
             TrimInputKind::from_path(&PathBuf::from(format!("game.{sniffed}"))),
+            None
+        );
+    }
+    for disc in ["gcm", "wbfs", "rvz"] {
+        assert!(!extensions.contains(&disc), "{disc}");
+        assert_eq!(
+            TrimInputKind::from_path(&PathBuf::from(format!("game.{disc}"))),
             None
         );
     }

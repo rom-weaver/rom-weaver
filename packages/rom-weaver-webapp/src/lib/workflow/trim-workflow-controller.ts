@@ -403,7 +403,10 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
         !!plan?.restore?.wouldChange && (!plan.trim.wouldChange || !!plan.restore.revertMarker);
     } catch (error) {
       // Only a definite "unsupported" verdict counts; other probe failures must not block trimming.
-      if ((error as Error)?.message !== "This input does not support trimming") return;
+      const unsupported =
+        (error as { code?: string })?.code === "TRIM_UNSUPPORTED" ||
+        (error as Error)?.message === "This input does not support trimming";
+      if (!unsupported) return;
       stage.state.trimSupported = false;
       this.pushWarning(stage, Object.assign(error as Error, { code: "TRIM_UNSUPPORTED" }));
     }

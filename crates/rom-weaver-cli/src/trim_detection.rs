@@ -2,7 +2,7 @@ use super::selection_resolution::SelectionExtract;
 use super::*;
 
 impl CliApp {
-    pub(super) fn trim_fix_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
+    pub(super) fn trim_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
         if let Some(kind) = TrimInputKind::from_path(path) {
             return Some(kind);
         }
@@ -26,21 +26,18 @@ impl CliApp {
         None
     }
 
-    pub(super) fn trim_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
-        if let Some(kind) = self.trim_fix_eligible_kind_for_path(path) {
-            return Some(kind);
-        }
-
-        if self.is_rvz_convert_candidate(path) {
-            return Some(TrimInputKind::RvzConvert);
-        }
-
-        None
-    }
-
-    pub(super) fn is_rvz_convert_candidate(&self, path: &Path) -> bool {
+    /// Whether `path` is a GameCube/Wii disc image (`.gcm`, `.wbfs`, `.rvz`, or an `.iso` that is
+    /// not an XISO). Trim does not handle these; `compress` writes them as RVZ.
+    pub(super) fn is_gamecube_wii_disc(&self, path: &Path) -> bool {
         let recommendation = self.containers.recommend_compress_format(path);
         recommendation.format_name.eq_ignore_ascii_case("rvz")
+    }
+
+    fn gamecube_wii_disc_trim_error(path: &Path) -> RomWeaverError {
+        RomWeaverError::Validation(format!(
+            "`{}` is a GameCube/Wii disc, which trim does not support; use `rom-weaver compress` to convert it to RVZ",
+            path.display()
+        ))
     }
 
     pub(super) fn collect_trim_input_files(
@@ -59,9 +56,13 @@ impl CliApp {
                 ))
             })?;
             if metadata.is_file() {
+                // A lone file the user named is rejected with an explanation; in a larger batch
+                // or a folder a GameCube/Wii disc is counted as unsupported like any other file.
+                let reject_gamecube_wii = sources.len() == 1;
                 self.collect_trim_file(
                     source,
                     options,
+                    reject_gamecube_wii,
                     &mut files,
                     cleanup_paths,
                     skipped_unsupported,
@@ -89,11 +90,13 @@ impl CliApp {
 
     /// Resolve a single file input into trim sources: a directly trim-eligible file becomes one
     /// source, otherwise an extractable archive is unpacked and its trim-eligible payloads are
-    /// added. Anything else increments the unsupported counter.
+    /// added. Anything else increments the unsupported counter; a GameCube/Wii disc is an error
+    /// instead when `reject_gamecube_wii` is set.
     pub(super) fn collect_trim_file(
         &self,
         path: &Path,
         options: TrimCollectOptions<'_>,
+        reject_gamecube_wii: bool,
         files: &mut Vec<TrimSource>,
         cleanup_paths: &mut Vec<PathBuf>,
         skipped_unsupported: &mut usize,
@@ -105,6 +108,15 @@ impl CliApp {
                 archive_origin: None,
                 repack_root: None,
             });
+            return Ok(());
+        }
+
+        if self.is_gamecube_wii_disc(path) {
+            debug!(path = %path.display(), reject_gamecube_wii, "trim skipped a GameCube/Wii disc");
+            if reject_gamecube_wii {
+                return Err(Self::gamecube_wii_disc_trim_error(path));
+            }
+            *skipped_unsupported = skipped_unsupported.saturating_add(1);
             return Ok(());
         }
 
@@ -153,7 +165,14 @@ impl CliApp {
                     *skipped_unsupported = skipped_unsupported.saturating_add(1);
                     continue;
                 }
-                self.collect_trim_file(&path, options, files, cleanup_paths, skipped_unsupported)?;
+                self.collect_trim_file(
+                    &path,
+                    options,
+                    false,
+                    files,
+                    cleanup_paths,
+                    skipped_unsupported,
+                )?;
             }
         }
         Ok(())
@@ -396,16 +415,12 @@ impl CliApp {
     }
 }
 
-/// The `{ext}` substitution for a trim source: `rvz` for RVZ conversions,
-/// otherwise the source's own extension (`bin` when it has none).
+/// The `{ext}` substitution for a trim source: the source's own extension (`bin` when it has
+/// none).
 fn trim_source_extension(source: &TrimSource) -> &str {
-    if source.kind == TrimInputKind::RvzConvert {
-        "rvz"
-    } else {
-        source
-            .path
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or("bin")
-    }
+    source
+        .path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("bin")
 }

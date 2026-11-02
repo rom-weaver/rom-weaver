@@ -166,17 +166,17 @@ describe("runTrimWorkflow compressed outputs", () => {
     });
   });
 
-  it("preserves the actual disc intermediate name and logical raw size", async () => {
+  it("preserves the runtime-reported intermediate name and raw size", async () => {
     const runtime = {
       ...baseRuntime,
       trim: {
         trim: vi.fn(async () => ({
-          output: { fileName: "trimmed.rvz", path: "/work/trimmed.rvz", size: 7 },
-          sizeSummary: { inputSize: 100, rawSize: 100, outputSize: 7 },
+          output: { fileName: "trimmed.iso", path: "/work/trimmed.iso", size: 7 },
+          sizeSummary: { inputSize: 100, rawSize: 80, outputSize: 7 },
         })),
       },
     };
-    mocks.createPatchFileFromPublicOutput.mockResolvedValue({ fileName: "trimmed.rvz", fileSize: 7 });
+    mocks.createPatchFileFromPublicOutput.mockResolvedValue({ fileName: "trimmed.iso", fileSize: 7 });
     mocks.romSpecificOutput.mockResolvedValue({ fileName: "trimmed.chd", size: 20 });
     const result = await runTrimWorkflow(
       {
@@ -185,11 +185,11 @@ describe("runTrimWorkflow compressed outputs", () => {
       },
       runtime as never,
     );
-    expect(mocks.createPatchFileFromPublicOutput).toHaveBeenCalledWith(expect.anything(), "trimmed.rvz", {
+    expect(mocks.createPatchFileFromPublicOutput).toHaveBeenCalledWith(expect.anything(), "trimmed.iso", {
       materializeBlob: false,
       preferExternalFilePath: true,
     });
-    expect(result.sizeSummary).toMatchObject({ inputSize: 100, rawSize: 100, outputSize: 20 });
+    expect(result.sizeSummary).toMatchObject({ inputSize: 100, rawSize: 80, outputSize: 20 });
   });
 
   it("uses the lazy output path for ROM-specific compression", async () => {

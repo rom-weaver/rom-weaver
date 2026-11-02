@@ -8,7 +8,6 @@ import type {
 } from "../../types/workflow-runtime-adapter.ts";
 import { createRomWeaverCommand } from "../../wasm/index.ts";
 import { getRomWeaverRunEventDetails } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
-import { replaceFileNameExtension } from "../input/path-utils.ts";
 import { getPathBaseName, joinPath } from "../path-utils.ts";
 import { toThreadBudget } from "./compression-thread-budget.ts";
 import { emitRuntimeTrace, toRomWeaverOptions } from "./run-options.ts";
@@ -24,6 +23,11 @@ import {
   romTypeFromEmittedFile,
 } from "./run-result-parsing.ts";
 import { runRomWeaverJson, relaySimpleProgress } from "./wasm-command-shared.ts";
+
+const TRIM_UNSUPPORTED_MESSAGE = "This input does not support trimming";
+const GAMECUBE_WII_COMPRESS_HINT = "Use Compress to convert GameCube and Wii discs to RVZ.";
+/** Part of the engine's refusal message for a GameCube/Wii disc (`trim_detection.rs`). */
+const GAMECUBE_WII_TRIM_REJECTION = "GameCube/Wii disc, which trim does not support";
 
 const invokeRomWeaverTrimWorker = async (
   input: RuntimeTrimWorkerInput,
@@ -43,10 +47,9 @@ const invokeRomWeaverTrimWorker = async (
     // simulate only for the staging probe (`dryRun`); `revert` restores padding instead of removing it,
     // and `revert_marker` appends the footer that makes that restore exact.
     //
-    // The engine writes a GameCube/Wii disc as RVZ and rejects any other output extension for it, but
-    // only it knows which inputs those are, and a trim is the heavy pass (an RVZ conversion or an XISO
-    // rebuild), so it runs once. Its output path is extensionless, which the engine accepts for every
-    // input; the user-visible name is chosen afterwards from the `output_format` that same run reports.
+    // Only the engine knows which inputs it can trim, and a trim is the heavy pass (an XISO rebuild),
+    // so it runs once. Its output path is extensionless, which the engine accepts for every input; the
+    // user-visible name is chosen afterwards from the `output_format` that same run reports.
     const outputPath = siblingPath("trim-output");
     const command = createRomWeaverCommand("trim", {
       dry_run: !!input.dryRun,
@@ -68,7 +71,18 @@ const invokeRomWeaverTrimWorker = async (
         signal: input.signal,
       }),
     );
-    ensureRomWeaverSuccess(result, "Trim failed");
+    try {
+      ensureRomWeaverSuccess(result, "Trim failed");
+    } catch (error) {
+      // The engine refuses a lone GameCube/Wii disc outright (Compress writes those as RVZ); report it
+      // the way an unsupported input is reported so the staging probe flags it before any run.
+      if (error instanceof Error && error.message.includes(GAMECUBE_WII_TRIM_REJECTION)) {
+        throw Object.assign(new Error(`${TRIM_UNSUPPORTED_MESSAGE}. ${GAMECUBE_WII_COMPRESS_HINT}`), {
+          code: "TRIM_UNSUPPORTED",
+        });
+      }
+      throw error;
+    }
     const terminal = getTerminalEvent(result);
     const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
     if (
@@ -76,7 +90,7 @@ const invokeRomWeaverTrimWorker = async (
       typeof details.skipped_unsupported === "number" &&
       details.skipped_unsupported > 0
     ) {
-      throw new Error("This input does not support trimming");
+      throw Object.assign(new Error(TRIM_UNSUPPORTED_MESSAGE), { code: "TRIM_UNSUPPORTED" });
     }
     if (input.dryRun) {
       return {
@@ -87,15 +101,9 @@ const invokeRomWeaverTrimWorker = async (
         },
       };
     }
-    const actualFileName =
-      details?.output_format === "rvz" ? replaceFileNameExtension(outputFileName, "rvz") : outputFileName;
-
     const emitted = getEmittedFileDetails(result);
-    const sizeField = (value: unknown) =>
-      typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
     return {
-      fileName: actualFileName,
-      trimSizeSummary: { inputSize: sizeField(details?.input_size), rawSize: sizeField(details?.raw_size) },
+      fileName: outputFileName,
       filePath: emitted?.path || outputPath,
       // The extensionless output path says nothing about the file, so the engine's own verdict (an
       // XISO is a DVD-class disc) rides along for the CHD step instead of being inferred from the name.

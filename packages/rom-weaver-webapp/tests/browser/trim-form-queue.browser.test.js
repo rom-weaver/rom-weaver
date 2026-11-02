@@ -479,7 +479,7 @@ test("trim queued default format follows unambiguous special compression input",
         defaultSettings: {
           defaultCompression: "zip/special",
         },
-        defaultSource: new File([new Uint8Array([0, 1, 2, 3])], "game.gcm"),
+        defaultSource: new File([new Uint8Array([0, 1, 2, 3])], "game.3ds"),
       }),
     ),
   );
@@ -489,13 +489,13 @@ test("trim queued default format follows unambiguous special compression input",
     .toBe(true);
   const outputFormat = document.getElementById("trim-builder-select-output-format");
   expect(outputFormat).toBeInstanceOf(HTMLSelectElement);
-  await expect.poll(() => outputFormat.value).toBe("rvz");
+  await expect.poll(() => outputFormat.value).toBe("z3ds");
 
   await queueTrim();
   workflowMockState.inputDeferred.resolve();
   await expect.poll(() => workflowMockState.runCalls).toBe(1);
-  expect(workflowMockState.instances[0]?.outputFormat).toBe("rvz");
-  expect(workflowMockState.instances[0]?.outputName).toMatch(/\.rvz$/);
+  expect(workflowMockState.instances[0]?.outputFormat).toBe("z3ds");
+  expect(workflowMockState.instances[0]?.outputName).toMatch(/\.z3ds$/);
 });
 
 test("trim queued default format does not guess for iso input", async () => {

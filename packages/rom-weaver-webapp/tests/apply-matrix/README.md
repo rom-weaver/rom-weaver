@@ -34,7 +34,7 @@ The runner reuses a preview server already listening on the base URL; otherwise 
 Exhaustive groups (Create, Trim, Compress, Extract, edge cases; ~470 cases):
 
 - `create` - every format the Create UI offers x input pair, containers/codecs/levels, input shapes, size buckets, mobile, repeat. Judged by flips/xdelta3, the native CLI and a webapp Apply round trip.
-- `trim` - every trim-capable fixture (NDS/DSi/SRL, GBA, 3DS, disc to RVZ/CHD) x offered output, codec x level, native revert round trips.
+- `trim` - every trim-capable fixture (NDS/DSi/SRL, GBA, 3DS, XISO) x offered output, GameCube/Wii discs refused at staging, codec x level, native revert round trips.
 - `compress` - zip/7z codec x level, RVZ/CHD/Z3DS outputs, duplicate names, 0/1-byte, mobile.
 - `extract` - every archive/stream/disc input type vs host tools (7z, bsdtar, chdman, dolphin-tool), negatives, multipart.
 - `drop` / `edge` / `console` / `apply-out` - real CDP drag-and-drop (`lib/drag.mjs`), cancel and recover, progress, large (400 MiB) inputs, OPFS cleanup, console cleanliness, per-level Apply output sweeps.

@@ -305,7 +305,7 @@ describe("browser runtime helpers", () => {
       outputName: "restored.iso",
       compression: "rvz",
       settings: {
-        output: { container: { rvzBlockSize: "131072", rvzScrub: true, rvzCodec: "zstd", rvzCompressionLevel: "7" } },
+        output: { container: { rvzBlockSize: "131072", rvzCodec: "zstd", rvzCompressionLevel: "7" } },
       },
     });
     expect(mocks.runtime.compression.create).toHaveBeenCalledWith(
@@ -313,7 +313,7 @@ describe("browser runtime helpers", () => {
         format: "rvz",
         source: expect.objectContaining({ path: raw.path, vfs }),
         romSpecific: {
-          rvz: expect.objectContaining({ blockSize: "131072", scrub: true, codec: "zstd", compressionLevel: 7 }),
+          rvz: expect.objectContaining({ blockSize: "131072", codec: "zstd", compressionLevel: 7 }),
         },
       }),
     );

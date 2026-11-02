@@ -29,9 +29,9 @@ The [trim support reference](../reference/formats.md#trim-support) lists support
 4. Read the warning, then select **Trim ROM** to continue.
 5. Save the result and test it in the emulator or hardware you use.
 
-GameCube and Wii disc inputs convert losslessly to RVZ by default. The downloaded extension reflects the actual format, and savings come from compression rather than removal of unused sectors.
+GameCube and Wii discs cannot be trimmed: Trim flags them when staged and keeps the button disabled. Convert them to RVZ with [Compress](convert-to-rvz-browser.md) instead.
 
-The format list offers the ROM's own extension, ZIP, and 7z. CHD, RVZ, and Z3DS appear only when the input is a matching disc image or 3DS ROM. A 3DS ROM is trimmed from inside a `.z3ds`, `.zcci`, `.zcxi`, ZIP, or 7z file and is packed as Z3DS by default; a `.z3ds` or `.zcci` input keeps its own extension.
+The format list offers the ROM's own extension, ZIP, and 7z. CHD and Z3DS appear only when the input is a matching disc image or 3DS ROM. A 3DS ROM is trimmed from inside a `.z3ds`, `.zcci`, `.zcxi`, ZIP, or 7z file and is packed as Z3DS by default; a `.z3ds` or `.zcci` input keeps its own extension.
 
 A trimmed NDS, GBA, or 3DS ROM ends in a 12-byte revert marker that records the removed padding, so [Restore padding](#restore-padding) can rebuild the original exactly. Tools that read only the ROM's used data ignore it; the [footer format](../development/trim-revert-footer.md) describes its limits.
 

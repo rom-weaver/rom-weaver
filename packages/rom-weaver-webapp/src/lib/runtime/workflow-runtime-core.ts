@@ -49,7 +49,6 @@ const LEGACY_ROM_SPECIFIC_CREATE_FIELDS = [
   "rvzCodec",
   "rvzCompressionLevel",
   "rvzMode",
-  "rvzScrub",
   "rvzSourceFileName",
   "z3dsCompressionLevel",
   "z3dsMetadata",
@@ -519,7 +518,7 @@ const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["
           result.fileName || outputName || "trimmed.bin",
           adapter.workerOutputFailureMessage,
         ),
-        sizeSummary: { ...result.trimSizeSummary, ...(trimTimeMs === undefined ? {} : { trimTimeMs }) },
+        sizeSummary: trimTimeMs === undefined ? {} : { trimTimeMs },
       };
     } finally {
       await workerSource.cleanup().catch(() => undefined);
@@ -588,7 +587,6 @@ const createSharedCompressionRuntime = (
         `Compressing ${request.fileName} to RVZ`,
       ),
       outputName: request.outputName,
-      scrub: request.romSpecific?.rvz?.scrub,
       source: request.source,
       sourceFileName: request.romSpecific?.rvz?.sourceFileName,
       threads: request.options?.threads,

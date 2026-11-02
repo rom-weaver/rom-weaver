@@ -115,7 +115,6 @@ const getRvzOptions = (
     rvzCompressionLevel: levels.rvzCompressionLevel,
   };
   setCompressionOption(options, "rvzBlockSize", archiveSettings.rvzBlockSize as CompressionOptionValue | undefined);
-  setCompressionOption(options, "rvzScrub", archiveSettings.rvzScrub as CompressionOptionValue | undefined);
   return options;
 };
 
@@ -293,7 +292,6 @@ const createRuntimeRomSpecificOutputFiles = async (
           codec: outputPlan.rvzOptions?.rvzCodec as string | null | undefined,
           compressionLevel: outputPlan.rvzOptions?.rvzCompressionLevel as string | number | null | undefined,
           mode: outputPlan.rvzMode,
-          scrub: outputPlan.rvzOptions?.rvzScrub as boolean | string | number | null | undefined,
           sourceFileName: outputPlan.rvzSourceFileName,
         },
       },

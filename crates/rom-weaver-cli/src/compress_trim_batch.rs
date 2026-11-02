@@ -25,7 +25,6 @@ struct TrimBatchState {
     single_detail: Option<String>,
     single_metadata: Option<Value>,
     irreversible_xiso: bool,
-    irreversible_rvz_convert: bool,
     planned_outputs: Vec<String>,
     emitted_outputs: Vec<PathBuf>,
 }
@@ -648,8 +647,8 @@ impl CliApp {
             }
         };
 
-        // Report format reflects the kind(s) actually collected, so xiso /
-        // rvz-convert trims are no longer mislabeled `nds`.
+        // Report format reflects the kind(s) actually collected, so xiso trims are not
+        // mislabeled `nds`.
         let report_format = Self::trim_report_format(&trim_sources);
 
         if trim_sources.is_empty() {
@@ -783,12 +782,8 @@ impl CliApp {
     fn irreversible_trim_warning(operation: TrimOperation, state: &TrimBatchState) -> &'static str {
         if operation != TrimOperation::Trim {
             ""
-        } else if state.irreversible_xiso && !state.irreversible_rvz_convert {
+        } else if state.irreversible_xiso {
             "; warning=trimmed xiso output cannot be reverted to original padding; keep backup"
-        } else if state.irreversible_rvz_convert && !state.irreversible_xiso {
-            "; warning=RVZ conversion preserves logical disc bytes; use extract to recover ISO"
-        } else if state.irreversible_xiso && state.irreversible_rvz_convert {
-            "; warning=some trimmed outputs cannot be reverted to original source format; keep backups"
         } else {
             ""
         }
@@ -1069,10 +1064,6 @@ impl CliApp {
             },
             config.context,
         );
-        let (trim_result, logical_size) = match trim_result {
-            Ok((outcome, size)) => (Ok(outcome), size),
-            Err(error) => (Err(error), None),
-        };
         let trim_result = match (trim_result, repack_root) {
             (Ok(outcome), Some(repack_root)) if !config.dry_run => {
                 let archive = trim_source
@@ -1107,12 +1098,7 @@ impl CliApp {
                 }
                 // The format of what the run wrote, so a caller that named the destination without
                 // an extension learns it from the same run instead of probing or running twice.
-                if config.source_count == 1
-                    && matches!(
-                        trim_source.kind,
-                        TrimInputKind::RvzConvert | TrimInputKind::Xiso
-                    )
-                {
+                if config.source_count == 1 && trim_source.kind == TrimInputKind::Xiso {
                     let mut metadata = serde_json::Map::new();
                     // An archive repack rewrites the archive, so the trimmed image's own format
                     // and CHD mode do not describe the file the run emitted.
@@ -1133,10 +1119,6 @@ impl CliApp {
                         {
                             metadata.insert("chd_create_mode".into(), json!(mode));
                         }
-                    }
-                    if let Some(size) = logical_size {
-                        metadata.insert("input_size".into(), json!(size));
-                        metadata.insert("raw_size".into(), json!(size));
                     }
                     state.single_metadata = Some(Value::Object(metadata));
                 }
@@ -1235,8 +1217,6 @@ impl CliApp {
         *mode_count = mode_count.saturating_add(1);
         if config.operation == TrimOperation::Trim && !outcome.revert_supported {
             state.irreversible_xiso |= outcome.mode == TrimInputKind::Xiso.mode_label();
-            state.irreversible_rvz_convert |=
-                outcome.mode == TrimInputKind::RvzConvert.mode_label();
         }
         if outcome.already_target_size {
             state.already_trimmed_count = state.already_trimmed_count.saturating_add(1);
@@ -1267,7 +1247,7 @@ impl CliApp {
     }
 
     /// Report `format` for a trim run: the shared trim kind's label when every
-    /// collected source is the same kind (so an xiso / rvz-convert batch is not
+    /// collected source is the same kind (so an xiso batch is not
     /// mislabeled `nds`), or a generic `trim` when the kinds differ or none were
     /// collected.
     fn trim_report_format(sources: &[TrimSource]) -> String {
@@ -1564,16 +1544,16 @@ mod trim_report_format_tests {
     }
 
     #[test]
-    fn single_rvz_convert_is_not_mislabeled_nds() {
-        let sources = vec![source(TrimInputKind::RvzConvert)];
-        assert_eq!(CliApp::trim_report_format(&sources), "rvz-convert");
+    fn single_xiso_is_not_mislabeled_nds() {
+        let sources = vec![source(TrimInputKind::Xiso)];
+        assert_eq!(CliApp::trim_report_format(&sources), "xiso");
     }
 
     #[test]
     fn mixed_kinds_fall_back_to_generic_trim() {
         let sources = vec![
             source(TrimInputKind::NdsFamily),
-            source(TrimInputKind::RvzConvert),
+            source(TrimInputKind::Xiso),
         ];
         assert_eq!(CliApp::trim_report_format(&sources), "trim");
     }

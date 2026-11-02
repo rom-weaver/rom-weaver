@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import type { BinarySource } from "../../src/public/react/patcher-form.ts";
 
-let recommendedFormat: string | undefined;
+// The engine's verdict for an input trim cannot handle (such as a GameCube/Wii disc).
+let trimUnsupportedMessage: string | undefined;
 let stagingGate: Promise<void> | undefined;
 let startUnidentified = false;
 let paddingTrimmed: boolean | undefined;
@@ -33,12 +34,13 @@ const makeTrimSource = (fileName: string) => ({
       },
   parentCompressions: extracted ? [{ kind: extracted.parentKind }] : [],
   ...(paddingTrimmed === undefined ? {} : { paddingTrimmed, restoreSupported: true }),
-  romProbe: recommendedFormat ? undefined : { trim: { detected: true, trimmedInputBytes: 96 } },
-  romType: recommendedFormat ? { recommendedFormat } : undefined,
+  romProbe: { trim: { detected: true, trimmedInputBytes: 96 } },
   selectedCandidateId: "rom-candidate",
   size: 128,
   status: "ready",
-  warnings: [],
+  ...(trimUnsupportedMessage
+    ? { trimSupported: false, warnings: [{ code: "TRIM_UNSUPPORTED", message: trimUnsupportedMessage }] }
+    : { warnings: [] }),
 });
 
 const makeFakeTrimWorkflow = () => {
@@ -115,7 +117,7 @@ const waitForWorkflow = () => vi.waitFor(() => expect(latest).not.toBeNull());
 beforeEach(() => {
   window.history.replaceState(null, "", "/trim-rom");
   latest = null;
-  recommendedFormat = undefined;
+  trimUnsupportedMessage = undefined;
   stagingGate = undefined;
   startUnidentified = false;
   paddingTrimmed = undefined;
@@ -322,21 +324,19 @@ describe("TrimPatchForm", () => {
     expect(latest?.output.saveAs).toHaveBeenCalledWith({ interactive: true });
   });
 
-  it("uses neutral confirmation while disc metadata is pending and preserves queued execution", async () => {
-    recommendedFormat = "rvz";
+  it("uses neutral confirmation while ROM metadata is pending and preserves queued execution", async () => {
     let release!: () => void;
     stagingGate = new Promise<void>((resolve) => {
       release = resolve;
     });
     const { container } = renderForm({
-      pageDrop: { files: [new File(["disc"], "game.gcz")], id: 1 },
-      outputFormat: "chd",
+      pageDrop: { files: [new File(["rom"], "game.nds")], id: 1 },
     });
     await vi.waitFor(() => expect(latest?.workflow.setInput).toHaveBeenCalled());
     await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
-    expect(document.body.textContent).toContain("A new copy of game.gcz");
-    expect(document.body.textContent).toContain("GameCube and Wii discs are converted losslessly");
-    expect(document.body.textContent).not.toContain("A lossless RVZ copy");
+    expect(document.body.textContent).toContain("A new copy of game.nds");
+    expect(document.body.textContent).toContain("Supported padding is removed");
+    expect(document.body.textContent).not.toContain("GameCube");
     expect(document.body.textContent).not.toContain("restored padding");
     await act(async () =>
       fireEvent.click(
@@ -352,83 +352,23 @@ describe("TrimPatchForm", () => {
     await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalledOnce());
   });
 
-  it("describes a known disc output as a lossless copy", async () => {
-    recommendedFormat = "rvz";
-    const { container } = renderForm({
-      pageDrop: { files: [new File(["disc"], "game.wbfs")], id: 1 },
-    });
-    await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
-    await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
-    expect(document.body.textContent).toContain("A lossless copy of game.wbfs");
-    expect(document.body.textContent).not.toContain("A lossless RVZ copy");
-    expect(document.body.textContent).not.toContain("restored padding");
-  });
-
   it.each(["game.gcm", "game.iso", "game.wbfs", "game.rvz"])(
-    "never offers CHD for the GameCube/Wii disc %s, even when CHD is requested",
+    "disables Trim and points to Compress for the GameCube/Wii disc %s",
     async (fileName) => {
-      recommendedFormat = "rvz";
-      const { container } = renderForm({
-        pageDrop: { files: [new File(["disc"], fileName)], id: 1 },
-        outputFormat: "chd",
-        settings: { defaultCompression: "none" },
-      });
+      trimUnsupportedMessage =
+        "This input does not support trimming. Use Compress to convert GameCube and Wii discs to RVZ.";
+      const { container } = renderForm({ pageDrop: { files: [new File(["disc"], fileName)], id: 1 } });
       await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
-      await vi.waitFor(() => {
-        const format = container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement;
-        const offered = Array.from(format.options).map((option) => option.value);
-        expect(offered).toContain("rvz");
-        expect(offered).not.toContain("chd");
-        expect(format.value).toBe("rvz");
-      });
-      await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
-      await act(async () =>
-        fireEvent.click(
-          Array.from(document.querySelectorAll("button")).find((button) =>
-            button.textContent?.includes("Trim ROM"),
-          ) as HTMLButtonElement,
+      await vi.waitFor(() =>
+        expect(container.querySelector("#trim-builder-source-error-message")?.textContent).toContain(
+          "Use Compress to convert GameCube and Wii discs to RVZ",
         ),
       );
-      await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalled());
-      // run() takes no arguments; the chosen format reaches the workflow through its setters.
-      const formatCalls = vi.mocked(latest?.workflow.setOutputFormat as () => Promise<void>).mock.calls;
-      expect(JSON.stringify(formatCalls)).not.toContain("chd");
-      const settingsCalls = vi.mocked(latest?.workflow.setSettings as (settings: unknown) => Promise<void>).mock.calls;
-      const lastSettings = settingsCalls.at(-1)?.[0] as { output: { outputName: string } };
-      expect(lastSettings.output.outputName).toMatch(/\.rvz$/);
-    },
-  );
-
-  it("preserves the global ZIP default for a detected RVZ-convertible disc", async () => {
-    recommendedFormat = "rvz";
-    const { container } = renderForm({
-      pageDrop: { files: [new File(["disc"], "game.iso")], id: 1 },
-      defaultSettings: { defaultCompression: "zip" },
-    });
-    await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
-    await vi.waitFor(() =>
-      expect((container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement)?.value).toBe("zip"),
-    );
-  });
-
-  it.each(["game.gcm", "game.iso", "game.rvz"])(
-    "offers actual compressed formats for lossless disc conversion of %s",
-    async (fileName) => {
-      recommendedFormat = "rvz";
-      const { container } = renderForm({
-        pageDrop: { files: [new File(["disc"], fileName)], id: 1 },
-        settings: { defaultCompression: "none" },
-      });
-      await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
-      await vi.waitFor(() => {
-        const format = container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement;
-        expect(format?.value).toBe("rvz");
-        expect(Array.from(format.options).filter((option) => option.value === "rvz")).toHaveLength(1);
-        if (fileName !== "game.rvz")
-          expect(Array.from(format.options).map((option) => option.value)).not.toContain(fileName.split(".").pop());
-        const compression = container.querySelector("#trim-builder-select-output-compression") as HTMLSelectElement;
-        expect(Array.from(compression.options).map((option) => option.textContent)).not.toContain("None");
-      });
+      const run = container.querySelector("#trim-builder-button-run") as HTMLButtonElement;
+      expect(run.disabled).toBe(true);
+      await act(async () => fireEvent.click(run));
+      expect(document.querySelector(".confirm-card")).toBeNull();
+      expect(latest?.workflow.run).not.toHaveBeenCalled();
     },
   );
 
