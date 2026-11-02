@@ -8,6 +8,7 @@ import {
   isCompressionFormat,
   resolveAutomaticCompressionFormat,
 } from "../../lib/compression/container-format-registry.ts";
+import { isZ3dsCompressedExtension } from "../../lib/compression/z3ds-subtypes.ts";
 import { removeKnownOutputExtension, withOutputExtension } from "../../lib/output/output-name-validation.ts";
 import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { markTrimOutputStem, type TrimMode } from "../../lib/trim/trim-output-name.ts";
@@ -266,10 +267,20 @@ const getSourceExtension = (fileName: string) => {
 
 const getFileNameStem = (fileName: string) => fileName.replace(FILE_EXTENSION_REGEX, "").trim();
 
-const getTrimOutputExtension = (sourceFileName: string, outputFormat: string, settings?: TrimPatchFormSettings) => {
+const getTrimOutputExtension = (
+  sourceFileName: string,
+  outputFormat: string,
+  settings?: TrimPatchFormSettings,
+  uploadedFileName?: string,
+) => {
   if (isCompressionFormat(outputFormat))
     return getCompressionOutputExtension(outputFormat, {
-      inputFileName: sourceFileName,
+      // A trimmed `.z3ds`/`.zcci` upload keeps its own extension rather than the one the
+      // extracted image's subtype maps to (a generic `.z3ds` extracts to `.cci`).
+      inputFileName:
+        outputFormat === "z3ds" && uploadedFileName && isZ3dsCompressedExtension(getSourceExtension(uploadedFileName))
+          ? uploadedFileName
+          : sourceFileName,
       settings,
     });
   return outputFormat || getSourceExtension(sourceFileName);
@@ -297,10 +308,14 @@ const resolveTrimExecutionOutputName = (
   outputFormat: string,
   sourceFileName: string,
   settings?: TrimPatchFormSettings,
+  uploadedFileName?: string,
 ) => {
   const normalizedOutputName = sanitizeTypedOutputName(outputName);
   if (!normalizedOutputName) return normalizedOutputName;
-  return withOutputExtension(normalizedOutputName, getTrimOutputExtension(sourceFileName, outputFormat, settings));
+  return withOutputExtension(
+    normalizedOutputName,
+    getTrimOutputExtension(sourceFileName, outputFormat, settings, uploadedFileName),
+  );
 };
 
 const getFiniteSize = (size?: number | null) => (typeof size === "number" && Number.isFinite(size) ? size : undefined);
@@ -479,14 +494,23 @@ const resolveTrimAutomaticOutputFormat = ({
   automaticCompressionFormat,
   defaultArchiveFormat,
   defaultCompressionMode,
+  extractedCompressionFormat,
   rawOutputFormat,
 }: {
   automaticCompressionFormat: string;
   defaultArchiveFormat: string;
   defaultCompressionMode: Parameters<typeof allowsDefaultCompressionSpecial>[0];
+  /** The format the extracted image alone resolves to, ignoring the archive it came from. */
+  extractedCompressionFormat: string;
   rawOutputFormat: string;
 }) => {
-  const automaticSpecialOutputFormat = getTrimSpecialOutputFormat(automaticCompressionFormat, defaultCompressionMode);
+  // "auto" keeps the input's own container; otherwise a ROM inside a ZIP/7z gets the same
+  // ROM-specific default (a `.3ds` -> Z3DS) as the bare ROM would.
+  const automaticSpecialOutputFormat =
+    getTrimSpecialOutputFormat(automaticCompressionFormat, defaultCompressionMode) ||
+    (defaultCompressionMode === "auto"
+      ? ""
+      : getTrimSpecialOutputFormat(extractedCompressionFormat, defaultCompressionMode));
   const automaticDefaultFormat = getTrimDefaultOutputFormat(
     automaticCompressionFormat,
     automaticSpecialOutputFormat,
@@ -663,17 +687,21 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       : OutputCompressionManager.supportsOutputCompression(formatSource, format));
   const requestedConfiguredFormat = props.outputFormat ?? (outputFormatEdited ? internalOutputFormat : "");
   const configuredOutputFormat = isOfferedOutputFormat(requestedConfiguredFormat) ? requestedConfiguredFormat : "";
-  const automaticCompressionFormat = resolveAutomaticCompressionFormat({
+  const extractedFormatInput = {
     fallback: defaultArchiveFormat,
-    parentCompressions: sourceState?.parentCompressions,
     sourceFileName: resolvedSourceFileName,
     sourceSize: sourceState?.size,
     hasDiscEvidence: hasDiscImageEvidence(sourceState?.romType?.recommendedFormat, sourceState?.chdMode),
+  };
+  const automaticCompressionFormat = resolveAutomaticCompressionFormat({
+    ...extractedFormatInput,
+    parentCompressions: sourceState?.parentCompressions,
   });
   const automaticOutputFormat = resolveTrimAutomaticOutputFormat({
     automaticCompressionFormat,
     defaultArchiveFormat,
     defaultCompressionMode,
+    extractedCompressionFormat: resolveAutomaticCompressionFormat(extractedFormatInput),
     rawOutputFormat,
   });
   const requestedOutputFormat = configuredOutputFormat || automaticOutputFormat;
@@ -700,8 +728,20 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const rawResolvedOutputName = outputName.trim() || generatedOutputName;
   const resolvedOutputName = ensureTrimmedOutputName(rawResolvedOutputName, resolvedSourceFileName, mode);
   const executionOutputName =
-    resolveTrimExecutionOutputName(resolvedOutputName, resolvedOutputFormat, resolvedSourceFileName, settings) ||
-    resolveTrimExecutionOutputName(generatedOutputName, resolvedOutputFormat, resolvedSourceFileName, settings);
+    resolveTrimExecutionOutputName(
+      resolvedOutputName,
+      resolvedOutputFormat,
+      resolvedSourceFileName,
+      settings,
+      sourceFileName,
+    ) ||
+    resolveTrimExecutionOutputName(
+      generatedOutputName,
+      resolvedOutputFormat,
+      resolvedSourceFileName,
+      settings,
+      sourceFileName,
+    );
   const stagingSettingsKey = useMemo(
     () =>
       createSettingsDependencyKey({
@@ -1296,7 +1336,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     fileNamePlaceholder: mode === "restore" ? "Restored filename (no extension)" : "Trimmed filename (no extension)",
     format: resolvedOutputFormat,
     outputExtensions: [
-      getTrimOutputExtension(resolvedSourceFileName, resolvedOutputFormat, settings),
+      getTrimOutputExtension(resolvedSourceFileName, resolvedOutputFormat, settings, sourceFileName),
       getSourceExtension(resolvedSourceFileName),
     ],
     formatId: "trim-builder-select-output-format",
