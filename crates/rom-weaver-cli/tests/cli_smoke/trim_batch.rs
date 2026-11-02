@@ -1028,6 +1028,51 @@ fn trim_revert_restores_gba_to_next_power_of_two() {
 }
 
 #[test]
+fn trim_and_revert_accept_a_cci_cart_image() {
+    // Z3DS cart images extract as `.cci`, so a trimmed `.z3ds` must trim and restore under that name.
+    let temp = setup_temp_dir();
+    let source = temp.child("sample.cci");
+    let mut rom = build_test_padded_rom(0x4567, 0x8000, 0xFF);
+    rom[0x100..0x104].copy_from_slice(b"NCCH");
+    rom[0x104..0x108].copy_from_slice(&0x22_u32.to_le_bytes());
+    rom[0x18E] = 0;
+    fs::write(source.path(), &rom).expect("fixture");
+
+    let trimmed = temp.child("sample.trim.cci");
+    command_stdout(
+        &[
+            "trim",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--output",
+            trimmed.path().to_str().expect("path"),
+            "--revert-marker",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(trimmed.path()).expect("trimmed cci").len(),
+        0x4567 + 14
+    );
+
+    let restored = temp.child("sample.restored.cci");
+    command_stdout(
+        &[
+            "trim",
+            "--input",
+            trimmed.path().to_str().expect("path"),
+            "--output",
+            restored.path().to_str().expect("path"),
+            "--revert",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(fs::read(restored.path()).expect("restored cci"), rom);
+}
+
+#[test]
 fn trim_revert_restores_3ds_to_next_power_of_two() {
     let temp = setup_temp_dir();
     let source = temp.child("sample.3ds");
