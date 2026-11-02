@@ -669,6 +669,18 @@ describe("TrimPatchForm", () => {
       expect(select().value).toBe("zip");
     });
 
+    it("never defaults an XISO extracted from a CHD to CHD", async () => {
+      platform = "Microsoft Xbox";
+      trimSupported = true;
+      restoreSupported = false;
+      extracted = { fileName: "game.iso", parentKind: "chd" };
+      const { select } = await stage("game.chd", { settings: { defaultCompression: "auto" } });
+      const offered = Array.from(select().options).map((option) => option.value);
+      expect(offered).not.toContain("chd");
+      expect(offered).toContain(select().value);
+      expect(select().value).not.toBe("chd");
+    });
+
     it("never defaults an XISO to CHD even when a disc recommendation is attached", async () => {
       platform = "Microsoft Xbox";
       recommendedFormat = "chd";

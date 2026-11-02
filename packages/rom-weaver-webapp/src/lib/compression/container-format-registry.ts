@@ -395,7 +395,10 @@ const resolveAutomaticCompressionFormat = ({
 }): CompressionFormat => {
   const parentFormat =
     getCompressionFormatForParentCompressions(parentCompressions) || getCompressionFormatForParentKind(parentKind);
-  if (parentFormat) return parentFormat;
+  if (parentFormat) {
+    if (parentFormat === "chd" && isXboxSource(sourcePlatform, sourceFileName)) return fallback;
+    return parentFormat;
+  }
   const extension = normalizeExtension(getSourceFileExtension(sourceFileName));
   const extensionFormat = getCompressionFormatForFileExtension(extension);
   if (!extensionFormat) return fallback;

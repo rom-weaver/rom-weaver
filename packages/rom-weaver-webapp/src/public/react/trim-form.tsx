@@ -713,13 +713,17 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     rawOutputFormat,
   });
   const requestedOutputFormat = configuredOutputFormat || automaticOutputFormat;
+  // A format outside the offered list (an XISO whose archive default is CHD) falls back to the default archive.
+  const offeredRequestedOutputFormat = isOfferedOutputFormat(requestedOutputFormat)
+    ? requestedOutputFormat
+    : defaultArchiveFormat;
   const resolvedOutputFormat =
     losslessDiscConversion &&
     (requestedOutputFormat === rawOutputFormat ||
       requestedOutputFormat === "none" ||
       !isOfferedOutputFormat(requestedOutputFormat))
       ? "rvz"
-      : requestedOutputFormat;
+      : offeredRequestedOutputFormat;
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
   // Once a run started the file keeps the name it was produced with; a late identification still
   // refreshes the card but must not rename the field away from the Download label.

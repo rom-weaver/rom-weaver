@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import OutputCompressionManager from "../../src/lib/compression/output-compression-manager.ts";
+import { createApplyOutputState } from "../../src/lib/workflow/apply-output-state-machine.ts";
+import { getApplyOutputCompression } from "../../src/public/react/apply-workflow-staging-model.ts";
 import { resolveAutomaticCompressionFormat } from "../../src/lib/compression/container-format-registry.ts";
 import { isXboxSource, XBOX_PLATFORM } from "../../src/lib/compression/disc-image-policy.ts";
 import { TRIM_SUPPORTED_FILES } from "../../src/public/react/trim-supported-files.ts";
@@ -47,6 +49,53 @@ describe("Xbox XISO never gets CHD", () => {
     const input = { fallback: "zip", hasDiscEvidence: true, sourceFileName: "game.cue", sourceSize: 2048 * 4 } as const;
     expect(resolveAutomaticCompressionFormat(input)).toBe("chd");
     expect(resolveAutomaticCompressionFormat({ ...input, sourcePlatform: XBOX_PLATFORM })).toBe("zip");
+  });
+
+  it("falls back from CHD when an XISO was extracted from a CHD parent", () => {
+    const input = { fallback: "zip", sourceFileName: "game.iso", sourceSize: 2048 * 4 } as const;
+    const chdParent = [{ kind: "chd" }];
+    expect(resolveAutomaticCompressionFormat({ ...input, parentCompressions: chdParent })).toBe("chd");
+    expect(resolveAutomaticCompressionFormat({ ...input, parentKind: "chd" })).toBe("chd");
+    expect(
+      resolveAutomaticCompressionFormat({ ...input, parentCompressions: chdParent, sourcePlatform: XBOX_PLATFORM }),
+    ).toBe("zip");
+    expect(resolveAutomaticCompressionFormat({ ...input, parentKind: "chd", sourcePlatform: XBOX_PLATFORM })).toBe(
+      "zip",
+    );
+    expect(
+      resolveAutomaticCompressionFormat({ ...input, parentCompressions: chdParent, sourceFileName: "g.xiso" }),
+    ).toBe("zip");
+  });
+
+  it("keeps a non-CHD parent format for an XISO", () => {
+    expect(
+      resolveAutomaticCompressionFormat({
+        fallback: "zip",
+        parentCompressions: [{ kind: "7z" }],
+        sourceFileName: "game.iso",
+        sourcePlatform: XBOX_PLATFORM,
+      }),
+    ).toBe("7z");
+  });
+
+  it("falls back from CHD on the Apply path for an XISO extracted from a CHD", () => {
+    const snapshot = { inputs: [new File(["x"], "game.iso")], options: { output: { compression: "auto" } } } as never;
+    const state = (platform?: string) =>
+      ({
+        parentCompressions: [{ kind: "chd" }],
+        size: 2048 * 4,
+        ...(platform ? { romType: { platform } } : {}),
+      }) as never;
+    expect(getApplyOutputCompression(snapshot, state())).toBe("chd");
+    expect(getApplyOutputCompression(snapshot, state(XBOX_PLATFORM))).not.toBe("chd");
+
+    const session = (platform?: string) =>
+      ({
+        sources: [new File(["x"], "game.iso")],
+        view: { parentCompressions: [{ kind: "chd" }], state: platform ? { romType: { platform } } : {} },
+      }) as never;
+    expect(createApplyOutputState({}, session()).outputFormat).toBe("chd");
+    expect(createApplyOutputState({}, session(XBOX_PLATFORM)).outputFormat).not.toBe("chd");
   });
 });
 
