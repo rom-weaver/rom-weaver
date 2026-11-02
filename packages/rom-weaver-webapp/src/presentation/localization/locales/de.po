@@ -25,6 +25,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.saves.editor.max"
+#~ msgstr "Max."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.saves.editor.step"
+#~ msgstr "Schritt {step}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", eine Ausgabe-Endung. Die Formatauswahl fügt die Endung hinzu; entferne sie, um einen doppelten Namen zu vermeiden."
 
@@ -197,6 +207,11 @@ msgstr "{fileName} wurde geschlossen, um Speicher freizugeben."
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.defaultOption"
 msgstr "{label} (Standard)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.slider"
+msgstr "Schieberegler für {label}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1960,6 +1975,11 @@ msgstr "Download-Play-Zertifikat erhalten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.wasWritten"
+msgstr "Heruntergeladen. War {value}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.headerDownloading"
 msgstr "Lädt herunter"
 
@@ -2067,6 +2087,11 @@ msgstr "Die Patch-Anleitung bearbeiten und als Weave teilen."
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
 msgstr "Bearbeite Trainernamen, Geld, Orden, Herzen und Ausrüstung in einem Spielstand."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.slotEdited"
+msgstr "Bearbeitet"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2860,6 +2885,11 @@ msgstr "Dieses ROM wird in der Titeldatenbank gesucht. Die Zeilen werden gefüll
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.lower"
+msgstr "{label} um {step} verringern"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tutorial.tryCreate"
 msgstr "Patch bauen"
 
@@ -2922,11 +2952,6 @@ msgstr "passt zu deiner ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.matchesRomVariant"
 msgstr "passt zu deiner ROM ({variant})"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.saves.editor.max"
-msgstr "Max."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4070,6 +4095,11 @@ msgstr "Fragen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.raise"
+msgstr "{label} um {step} erhöhen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.supported.raw"
 msgstr "Rohe Spielstände"
 
@@ -4897,11 +4927,6 @@ msgstr "In Patches & Cheats bleiben und diese ROM als Original verwenden."
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.stayOn"
 msgstr "Bei {page} bleiben"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.saves.editor.step"
-msgstr "Schritt {step}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5817,6 +5842,11 @@ msgstr "Warnung: Wenn du dies ausschaltest, werden neue Savestates und SRAM nich
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.option.logLevel.warn"
 msgstr "Warnungen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.was"
+msgstr "War {value}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

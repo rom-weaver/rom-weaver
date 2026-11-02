@@ -638,6 +638,16 @@
   border: 1px solid var(--seam);
   border-radius: var(--r-m);
 }
+/* A dot on a file tab that holds edits, so changes in a hidden file are not missed. */
+.rw-app .save-editor-slot-edited {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-start: var(--sp-s);
+  vertical-align: middle;
+  background: var(--thread);
+  border-radius: 50%;
+}
 .rw-app .save-editor-slot[aria-selected="true"] {
   background: var(--plate);
   border-color: var(--thread);
@@ -685,22 +695,47 @@
   display: grid;
   grid-template-columns: minmax(140px, 210px) minmax(0, 1fr) auto;
   gap: var(--sp-xs) var(--sp-l);
-  align-items: center;
+  /* Top-aligned, so the old value and Reset appearing under the label grow the row downward and never move the control. */
+  align-items: start;
   min-width: 0;
-  padding: 9px 14px;
+  padding: 9px 14px 9px 11px;
+  border-inline-start: 3px solid transparent;
   border-bottom: 1px solid var(--seam-soft);
 }
 .rw-app .save-editor-field:last-child {
   border-bottom: 0;
 }
+/* A dashed stitch marks an edit not yet downloaded; it closes to a solid one once the edited save is written. */
 .rw-app .save-editor-field.is-changed {
   background: color-mix(in oklab, var(--thread) 6%, transparent);
-  box-shadow: inset 3px 0 0 var(--thread);
+  border-inline-start: 3px dashed var(--thread);
+}
+.rw-app .save-editor-field.is-written {
+  border-inline-start-style: solid;
+}
+/* The old value and Reset sit with the label they belong to, so every row's control keeps its full width. */
+.rw-app .save-editor-field-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs) var(--sp-s);
+  align-items: center;
+  margin-block-start: var(--sp-xs);
+  font-size: 0.8rem;
+}
+.rw-app .save-editor-field-foot.is-idle {
+  display: none;
+}
+.rw-app .save-editor-was {
+  color: var(--ink-3);
 }
 .rw-app .save-editor-field-head {
   display: grid;
   gap: 2px;
   min-width: 0;
+  padding-block-start: 8px;
+}
+.rw-app .save-editor-field .save-editor-readonly {
+  align-self: center;
 }
 .rw-app .save-editor-field-head label {
   font-weight: 600;
@@ -717,9 +752,194 @@
   width: 150px;
   min-width: 0;
 }
-.rw-app .save-editor-number {
-  width: 130px;
-  text-align: right;
+/* A number box with its slider in one frame: value and step buttons on top, a bar below. All parts are 44px or taller. */
+.rw-app .save-number {
+  --number-line: var(--ink-3);
+  --number-row: 48px;
+  --number-strip: 46px;
+  --number-groove: 10px;
+  --number-knob: 14px;
+  --number-reach: calc(var(--number-knob) / 2);
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--plate);
+  border: 1px solid var(--number-line);
+  border-radius: var(--r-m);
+}
+.rw-app .save-number:has(.save-number-value:focus) {
+  outline: 2px solid var(--thread-text);
+  outline-offset: 2px;
+}
+.rw-app .save-number.is-invalid {
+  border-color: var(--fault);
+}
+.rw-app .save-number-row {
+  display: flex;
+  height: var(--number-row);
+}
+.rw-app .save-number-step {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--number-row);
+  color: var(--ink-2);
+  background: transparent;
+  border: 0;
+}
+.rw-app .save-number-step:first-child {
+  border-inline-end: 1px solid var(--seam);
+}
+.rw-app .save-number-step:last-child {
+  border-inline-start: 1px solid var(--seam);
+}
+.rw-app .save-number-step svg {
+  width: 18px;
+  height: 18px;
+}
+@media (hover: hover) {
+  .rw-app .save-number-step:hover:not(:disabled, [aria-disabled="true"]) {
+    color: var(--ink);
+    background: var(--well);
+  }
+}
+.rw-app .save-number-step:active:not(:disabled, [aria-disabled="true"]) {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 12%, var(--plate));
+}
+.rw-app .save-number-step:focus-visible {
+  outline: 2px solid var(--thread-text);
+  outline-offset: -4px;
+}
+.rw-app .save-number-step:disabled,
+.rw-app .save-number-step[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.rw-app .save-number-value {
+  flex: 1;
+  min-width: 0;
+  padding: 0 var(--sp-s);
+  font-size: 1.35rem;
+  font-weight: 650;
+  color: var(--ink);
+  text-align: center;
+  letter-spacing: 0.01em;
+  background: transparent;
+  border: 0;
+}
+.rw-app .save-number-value:focus {
+  outline: none;
+}
+.rw-app .save-number-strip {
+  display: flex;
+  gap: var(--sp-m);
+  align-items: center;
+  height: var(--number-strip);
+  padding-inline: var(--sp-m);
+  border-block-start: 1px solid var(--seam-soft);
+}
+.rw-app .save-number-limit {
+  flex: none;
+  font-size: 0.74rem;
+  color: var(--ink-3);
+}
+.rw-app .save-number-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  touch-action: pan-y;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+}
+.rw-app .save-number-groove {
+  position: absolute;
+  inset-block: 50% auto;
+  inset-inline: 0;
+  height: var(--number-groove);
+  background:
+    repeating-linear-gradient(90deg, color-mix(in oklab, var(--thread) 22%, var(--well)) 0 1px, transparent 1px 9px),
+    var(--well);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--number-line);
+  translate: 0 -50%;
+}
+.rw-app .save-number-rail {
+  position: absolute;
+  inset-block: 0;
+  inset-inline: var(--number-reach);
+}
+.rw-app .save-number-fill {
+  position: absolute;
+  inset-block: 50% auto;
+  inset-inline-start: calc(var(--number-reach) * -1);
+  width: calc(var(--number-reach) + 100% * var(--fraction));
+  height: var(--number-groove);
+  overflow: hidden;
+  background: var(--thread);
+  border-radius: 999px;
+  translate: 0 -50%;
+}
+/* The fill is woven thread, the same texture as the progress meter. */
+.rw-app .save-number-fill::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: rgb(255 255 255 / 0.2);
+  mask-image: var(--weave-mask);
+  mask-size: 6px 6px;
+}
+/* The handle is the meter's shuttle: an upright bar in ink, with a thread-colored bobbin, so it reads apart from the fill in both themes. */
+.rw-app .save-number-knob {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: calc(100% * var(--fraction));
+  display: grid;
+  place-items: center;
+  width: var(--number-knob);
+  height: 30px;
+  cursor: grab;
+  background: var(--ink);
+  border: 2px solid var(--plate);
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.28);
+  translate: -50% -50%;
+  transition: height 0.12s var(--ease);
+}
+.rw-app .save-number-knob::before {
+  width: 2px;
+  height: 45%;
+  content: "";
+  background: var(--thread);
+  border-radius: 1px;
+}
+/* A wider invisible grab area, so pressing near the slim handle still grabs it. */
+.rw-app .save-number-knob::after {
+  position: absolute;
+  inset: -6px -12px;
+  content: "";
+}
+@media (hover: hover) {
+  .rw-app .save-number-track:hover .save-number-knob {
+    height: 34px;
+  }
+}
+.rw-app .save-number-track:active .save-number-knob,
+.rw-app .save-number.is-dragging .save-number-knob {
+  height: 36px;
+}
+.rw-app .save-number.is-dragging .save-number-knob {
+  cursor: grabbing;
+}
+.rw-app .save-number-track:focus-visible .save-number-knob {
+  outline: 2px solid var(--thread-text);
+  outline-offset: 3px;
+}
+.rw-app .save-number-track[aria-disabled="true"] {
+  pointer-events: none;
+  opacity: 0.5;
 }
 .rw-app .save-editor-range,
 .rw-app .save-editor-warning {
@@ -746,9 +966,6 @@
   color: var(--ink-3);
   border: 1px solid var(--seam-soft);
   border-radius: 999px;
-}
-.rw-app .save-editor-reset {
-  justify-self: end;
 }
 .rw-app .save-editor-field-error {
   grid-column: 2 / -1;
@@ -793,50 +1010,62 @@
   cursor: not-allowed;
   opacity: 0.55;
 }
+/* Toggles are chips: a tick circle and the name, filled when on, dashed while an edit is pending. */
 .rw-app .save-editor-toggles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
   gap: var(--sp-s);
   padding: 12px 14px;
 }
+/* Chips share columns so a long list reads as a grid; the bit name sits at the far end. */
 .rw-app .save-editor-toggle {
   position: relative;
   display: grid;
-  gap: 5px;
-  justify-items: center;
-  padding: 10px 6px 8px;
-  font-size: 0.74rem;
-  text-align: center;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--sp-s);
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px 0 10px;
+  font-size: 0.85rem;
+  color: var(--ink-2);
   cursor: pointer;
-  background: var(--well);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-m);
+  background: var(--plate-2);
+  border: 1px solid var(--seam-strong);
+  border-radius: 999px;
 }
-.rw-app .save-editor-toggle input {
-  position: absolute;
-  inset: 0;
-  margin: 0;
+/* The shared checkbox style (a later layer) keeps this input in flow, so it sits across every cell instead of taking a column of its own. */
+.rw-app .save-editor-toggle > input[type="checkbox"] {
+  grid-area: 1 / 1 / 2 / -1;
   opacity: 0;
+  clip-path: inset(50%);
 }
 .rw-app .save-editor-toggle-mark {
   display: block;
-  width: 24px;
-  height: 24px;
-  border: 2px solid var(--seam-strong);
+  grid-area: 1 / 1;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--seam-strong);
   border-radius: 50%;
 }
 .rw-app .save-editor-toggle.is-on {
-  background: var(--plate);
-  border-color: color-mix(in oklab, var(--thread) 50%, var(--seam));
+  color: var(--ink);
+  background: color-mix(in oklab, var(--thread) 14%, var(--plate));
+  border-color: var(--thread);
 }
 .rw-app .save-editor-toggle.is-on .save-editor-toggle-mark {
-  background: var(--thread);
+  background:
+    var(--thread)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%231c1206' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m2.5 6.3 2.4 2.4 4.6-5'/%3E%3C/svg%3E")
+    center / 12px no-repeat;
   border-color: var(--thread);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--thread) 25%, transparent);
 }
 .rw-app .save-editor-toggle.is-changed {
-  outline: 2px solid var(--thread);
-  outline-offset: 1px;
+  border-style: dashed;
+}
+/* A ring inside the border, so a written chip keeps the size of a pending one and its neighbours do not shift. */
+.rw-app .save-editor-toggle.is-written {
+  border-style: solid;
+  box-shadow: inset 0 0 0 1px var(--thread);
 }
 .rw-app .save-editor-toggle:has(input:focus-visible) {
   outline: 2px solid var(--thread-text);
@@ -847,17 +1076,20 @@
   opacity: 0.55;
 }
 @media (hover: hover) {
-  .rw-app .save-editor-toggle:hover {
-    border-color: var(--seam-strong);
+  .rw-app .save-editor-toggle:not(.is-on, :has(input:disabled)):hover {
+    border-color: var(--ink-3);
   }
 }
-.rw-app .save-editor-toggle:active {
-  border-color: var(--seam-strong);
+.rw-app .save-editor-toggle:not(.is-on, :has(input:disabled)):active {
+  background: var(--well);
+  border-color: var(--ink-3);
 }
 .rw-app .save-editor-toggle-label {
+  grid-area: 1 / 2;
   overflow-wrap: anywhere;
 }
 .rw-app .save-editor-toggle-id {
+  grid-area: 1 / 3;
   font-size: 0.66rem;
   color: var(--ink-3);
 }
@@ -946,12 +1178,44 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
   .rw-app .save-editor-field .save-editor-text,
+  .rw-app .save-editor-field .save-number,
   .rw-app .save-editor-field .save-editor-readonly,
   .rw-app .save-editor-field .save-editor-segment {
     grid-column: 1 / -1;
   }
   .rw-app .save-editor-field-error {
     grid-column: 1 / -1;
+  }
+  /* On a phone the head's parts join the row grid: Reset sits level with the label and the old value goes below the
+     control, so neither moves the control under the finger when an edit begins. */
+  .rw-app .save-editor-field-head,
+  .rw-app .save-editor-field-foot,
+  .rw-app .save-editor-field-foot.is-idle {
+    display: contents;
+  }
+  /* The idle Reset keeps its column, so the label wraps the same before and after an edit. */
+  .rw-app .save-editor-field-foot.is-idle .save-editor-reset {
+    visibility: hidden;
+  }
+  .rw-app .save-editor-field-head label {
+    grid-column: 1;
+  }
+  .rw-app .save-editor-description {
+    grid-column: 1 / -1;
+  }
+  /* Negative margins keep the 30px button from making the label row taller. */
+  .rw-app .save-editor-field-head .save-editor-reset {
+    grid-area: 1 / 2;
+    align-self: center;
+    margin-block: -8px;
+  }
+  .rw-app .save-editor-was {
+    grid-column: 1 / -1;
+    order: 1;
+  }
+  .rw-app .save-editor-warning,
+  .rw-app .save-editor-field-error {
+    order: 2;
   }
   .rw-app .save-editor-slots {
     flex-direction: column;

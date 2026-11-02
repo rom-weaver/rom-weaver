@@ -390,7 +390,7 @@ describe("SaveEditor", () => {
     render(<SaveEditor onSessionChange={vi.fn()} />);
     await chooseFile();
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("ASH");
-    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("5000");
+    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("5,000");
   });
 
   it("supports generic field kinds and groups fields by their id prefix", async () => {
@@ -428,12 +428,26 @@ describe("SaveEditor", () => {
     expect(screen.getByRole("checkbox", { name: "Region map zoom" })).toBeTruthy();
   });
 
-  it("shows a field error and keeps the previous value for invalid integers", async () => {
+  it("shows a field error, keeps the typed text visible, and keeps the previous value stored", async () => {
     render(<SaveEditor onSessionChange={vi.fn()} />);
     await chooseFile();
     fireEvent.change(screen.getByLabelText("Money"), { target: { value: "1000000" } });
     expect(screen.getByRole("alert").textContent).toContain("allowed range");
-    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("5000");
+    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("1000000");
+    expect(screen.getByRole("slider", { name: "Money slider" }).getAttribute("aria-valuenow")).toBe("5000");
+  });
+
+  it("rejects hex, exponent and decimal text, and resets an invalid box that was never edited", async () => {
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    await chooseFile();
+    const money = screen.getByLabelText("Money") as HTMLInputElement;
+    for (const text of ["0x10", "1e3", "1.0"]) {
+      fireEvent.change(money, { target: { value: text } });
+      expect(screen.getByRole("alert").textContent).toContain("valid integer");
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Reset Money" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(money.value).toBe("5,000");
   });
 
   it("filters properties without losing hidden edits", async () => {
@@ -451,7 +465,7 @@ describe("SaveEditor", () => {
     fireEvent.change(search, { target: { value: "missing property" } });
     expect(screen.getByText("No properties match this search.")).toBeTruthy();
     fireEvent.change(search, { target: { value: "" } });
-    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("12345");
+    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("12,345");
   });
 
   it("keeps nested properties in their group and real file slots in tabs", async () => {
@@ -476,6 +490,11 @@ describe("SaveEditor", () => {
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "money" } });
     fireEvent.click(screen.getByRole("tab", { name: "File 2" }));
     expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("42");
+    expect(screen.queryByText("Edited")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Money"), { target: { value: "50" } });
+    fireEvent.click(screen.getByRole("tab", { name: /File 1/ }));
+    expect(screen.getByRole("tab", { name: /File 2.*Edited/ })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /File 1/ }).textContent).not.toContain("Edited");
   });
 
   it("shows pending changes, supports one-field reset, all reset, and dry-run preview", async () => {
@@ -490,7 +509,43 @@ describe("SaveEditor", () => {
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("ASH");
     fireEvent.change(screen.getByLabelText("Money"), { target: { value: "7000" } });
     fireEvent.click(screen.getByRole("button", { name: "Reset all" }));
-    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("5000");
+    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("5,000");
+  });
+
+  it("marks an edit with what it was, and closes the marker once the edited save is written", async () => {
+    const { container } = render(<SaveEditor onSessionChange={vi.fn()} />);
+    await chooseFile();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "MAY" } });
+    expect(screen.getByText("Was ASH")).toBeTruthy();
+    expect(container.querySelector(".save-editor-field.is-changed")).not.toBeNull();
+    expect(container.querySelector(".save-editor-field.is-written")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Download edited copy" }));
+    await waitFor(() => expect(screen.getByText("Downloaded. Was ASH")).toBeTruthy());
+    expect(container.querySelector(".save-editor-field.is-written")).not.toBeNull();
+  });
+
+  it("does not call a save downloaded when it was only written for Test", async () => {
+    inspectSave.mockResolvedValueOnce({
+      document: { ...documentResult([textField(), moneyField()]).document, save_size: 4 },
+    });
+    setSaveFields.mockResolvedValueOnce({
+      output: {
+        dispose: vi.fn(),
+        fileName: "edited.sav",
+        path: "/work/edited.sav",
+        saveAs: vi.fn(),
+        size: 4,
+        vfs: { getFile: async () => new File([new Uint8Array([1, 2, 3, 4])], "edited.sav") },
+      },
+    });
+    const { container } = render(<SaveEditor onSessionChange={vi.fn()} onSelectTab={vi.fn()} />);
+    await chooseFile();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "MAY" } });
+    fireEvent.click(screen.getByRole("button", { name: "Choose ROM and test" }));
+    await waitFor(() => expect(stagePendingTestSave).toHaveBeenCalled());
+    expect(screen.getByText("Was ASH")).toBeTruthy();
+    expect(screen.queryByText(/Downloaded/)).toBeNull();
+    expect(container.querySelector(".save-editor-field.is-written")).toBeNull();
   });
 
   it("locks field changes while Rust creates an edited save", async () => {

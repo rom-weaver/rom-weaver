@@ -37,6 +37,7 @@ import { getEmulatorJsCore } from "../../public/react/components/emulatorjs.ts";
 import { restartCurrentGameWithSave, useEmulatorSession } from "../../public/react/emulator-session-store.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import { SaveGenerator } from "./save-generator.tsx";
+import { SaveNumberField } from "./save-number-field.tsx";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 
 type SaveEditorProps = {
@@ -135,6 +136,12 @@ const displayValue = (value: SaveValue, localizer: Localizer) => {
   if (text === "true") return localizer.message("ui.patch.on").toLowerCase();
   if (text === "false") return localizer.message("ui.patch.off").toLowerCase();
   return text;
+};
+/** A value as the field box shows it: integer fields get the locale's grouping, everything else reads as stored. */
+const shownValue = (field: SaveField, value: SaveValue, localizer: Localizer) => {
+  const text = displayValue(value, localizer);
+  const integer = field.kind === "unsigned_integer" || field.kind === "signed_integer";
+  return integer && /^-?\d+$/.test(text) ? Number(text).toLocaleString(localizer.locale) : text;
 };
 /** Display title for a group; ids without a catalog entry keep the capitalized segment. */
 const groupTitle = (group: FieldGroup, localizer: Localizer) =>
@@ -235,36 +242,17 @@ const SaveFieldControl = ({
       </span>
     );
   }
-  const { max, min } = field.constraints;
   return (
-    <span className="save-editor-text">
-      <input
-        {...common}
-        className="input save-editor-control save-editor-number mono"
-        max={max ?? undefined}
-        min={min ?? undefined}
-        step={field.step ?? undefined}
-        type="number"
-        value={text}
-      />
-      {max === null ? null : (
-        <button
-          className="btn slim ghost save-editor-max"
-          disabled={disabled || text === String(max)}
-          onClick={() => onChange(String(max))}
-          type="button"
-        >
-          {localizer.message("ui.saves.editor.max")}
-        </button>
-      )}
-      {min !== null || max !== null ? (
-        <span className="save-editor-range mono">
-          {min === null ? "…" : min.toLocaleString(localizer.locale)} –{" "}
-          {max === null ? "…" : max.toLocaleString(localizer.locale)}
-          {field.step && field.step > 1 ? ` · ${localizer.message("ui.saves.editor.step", { step: field.step })}` : ""}
-        </span>
-      ) : null}
-    </span>
+    <SaveNumberField
+      describedBy={describedBy}
+      disabled={disabled}
+      error={error}
+      field={field}
+      id={common.id}
+      localizer={localizer}
+      onChange={onChange}
+      text={text}
+    />
   );
 };
 
@@ -285,6 +273,8 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
   const [errors, setErrors] = useState<FieldErrors>({});
   const [preview, setPreview] = useState<SavePreview | null>(null);
   const [output, setOutput] = useState<PublicOutput | null>(null);
+  /* Set once the edited save has been handed to the browser's download, not when it is only written for Test. */
+  const [downloaded, setDownloaded] = useState(false);
   const [saves, setSaves] = useState<EmulatorSaveRecord[]>([]);
   const [selectedSaveId, setSelectedSaveId] = useState<string>();
   const [selectedSlot, setSelectedSlot] = useState("");
@@ -315,6 +305,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     const previous = outputRef.current;
     outputRef.current = null;
     setOutput(null);
+    setDownloaded(false);
     if (previous) void previous.dispose();
   }, []);
   const resetEditor = useCallback(() => {
@@ -491,7 +482,8 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     const numericKind = field.kind === "unsigned_integer" || field.kind === "signed_integer";
     if (numericKind) {
       if (!text.trim()) return localizer.message("ui.saves.editor.invalidInteger");
-      const number = Number(text);
+      /* Plain digits only: Number() would also accept `0x10`, `1e3` and `1.0`. */
+      const number = /^-?\d+$/.test(text.trim()) ? Number(text) : Number.NaN;
       const minimum = field.constraints.min ?? (field.kind === "signed_integer" ? -Number.MAX_SAFE_INTEGER : 0);
       if (
         !Number.isSafeInteger(number) ||
@@ -574,7 +566,10 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
       }
       outputRef.current = result.output;
       setOutput(result.output);
-      if (download) await result.output.saveAs();
+      if (download) {
+        await result.output.saveAs();
+        if (request === requestRef.current) setDownloaded(true);
+      }
       return result.output;
     } catch (cause) {
       if (request === requestRef.current) setError(cause instanceof Error ? cause.message : String(cause));
@@ -622,6 +617,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     setBusy(true);
     try {
       await output.saveAs();
+      setDownloaded(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -870,8 +866,13 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     const changed = isChanged(field);
     const readOnly = isReadOnly(field);
     const controlId = `save-field-${field.id}`;
+    /* An editable field always renders Reset, hidden until an edit or error. On a phone the hidden button keeps its column so the label never re-wraps; on desktop it is not displayed, and top-aligned rows keep the control in place. */
+    const idle = !(changed || errorText);
     return (
-      <div className={join("save-editor-field", changed && "is-changed")} key={field.id}>
+      <div
+        className={join("save-editor-field", changed && "is-changed", changed && downloaded && "is-written")}
+        key={field.id}
+      >
         <div className="save-editor-field-head">
           <label htmlFor={controlId}>{field.label}</label>
           {field.description ? (
@@ -879,6 +880,27 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
               {field.description}
             </span>
           ) : null}
+          {readOnly ? null : (
+            <span className={join("save-editor-field-foot", idle && "is-idle")}>
+              {changed ? (
+                <span className="save-editor-was">
+                  {localizer.message(downloaded ? "ui.saves.editor.wasWritten" : "ui.saves.editor.was", {
+                    value: shownValue(field, originalValues[field.id] ?? field.value, localizer),
+                  })}
+                </span>
+              ) : null}
+              <button
+                aria-hidden={idle || undefined}
+                aria-label={localizer.message("ui.saves.editor.resetField", { label: field.label })}
+                className="btn slim ghost save-editor-reset"
+                disabled={busy || idle}
+                onClick={() => resetField(field)}
+                type="button"
+              >
+                <RotateCcw aria-hidden="true" /> {localizer.message("ui.settings.reset")}
+              </button>
+            </span>
+          )}
         </div>
         {readOnly ? (
           <span className="save-editor-readonly">
@@ -897,19 +919,6 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
             value={values[field.id] || field.value}
           />
         )}
-        {changed ? (
-          <button
-            aria-label={localizer.message("ui.saves.editor.resetField", { label: field.label })}
-            className="btn slim ghost save-editor-reset"
-            disabled={busy}
-            onClick={() => resetField(field)}
-            type="button"
-          >
-            <RotateCcw aria-hidden="true" /> {localizer.message("ui.settings.reset")}
-          </button>
-        ) : (
-          <span />
-        )}
         {field.warnings.length ? <span className="save-editor-warning">{field.warnings.join(" ")}</span> : null}
         {errorText ? (
           <span className="save-editor-field-error" id={`save-field-error-${field.id}`} role="alert">
@@ -925,7 +934,12 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     const on = saveValueToText(values[field.id] || field.value) === "true";
     return (
       <label
-        className={join("save-editor-toggle", on && "is-on", changed && "is-changed")}
+        className={join(
+          "save-editor-toggle",
+          on && "is-on",
+          changed && "is-changed",
+          changed && downloaded && "is-written",
+        )}
         key={field.id}
         title={field.description || undefined}
       >
@@ -1182,6 +1196,11 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                           type="button"
                         >
                           {slotName(slot, slotTitle(slot, localizer))}
+                          {slot.groups.some((group) => group.fields.some(isChanged)) ? (
+                            <span className="save-editor-slot-edited">
+                              <span className="sr-only">{localizer.message("ui.saves.editor.slotEdited")}</span>
+                            </span>
+                          ) : null}
                         </button>
                       ))}
                     </div>
