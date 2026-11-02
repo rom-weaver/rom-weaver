@@ -66,7 +66,7 @@ Find rom-weaver guides for ROM patching, checksum errors, supported files, priva
 
 ### Where is the Save Editor?
 
-[Enable beta tools](how-to/browser-settings.md#enable-beta-tools). Trim is always available from the navigation.
+[Enable beta tools](how-to/browser-settings.md#enable-beta-tools).
 
 ## Files and privacy
 
