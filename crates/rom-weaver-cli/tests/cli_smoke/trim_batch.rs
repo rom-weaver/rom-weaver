@@ -2409,6 +2409,69 @@ fn trim_xiso_into_chd_is_rejected_before_writing() {
     }
 }
 
+/// `trim --in-place` on an XISO inside a CHD would rebuild the CHD, which the engine refuses for an
+/// Xbox XISO. The run is rejected up front (before any trimming) and identically in a dry run, and
+/// the CHD stays byte-identical.
+#[test]
+fn trim_in_place_xiso_inside_chd_is_rejected_before_trimming() {
+    // XGD3 layout: the XDVDFS volume sits 0x2080000 bytes in. The leading gap keeps the CHD
+    // creator's own Xbox check (which only looks at offset 0x10000) from refusing to build the
+    // fixture, while the trim detector still finds the volume.
+    const XGD3_VOLUME_OFFSET: usize = 0x0208_0000;
+    let temp = setup_temp_dir();
+    let source_tree = temp.child("xiso-source");
+    fs::create_dir_all(source_tree.path()).expect("source tree root");
+    fs::write(source_tree.child("default.xbe").path(), vec![7_u8; 4096]).expect("xbe");
+    let plain = temp.child("plain.xiso");
+    write_xiso_fixture_from_directory(source_tree.path(), plain.path());
+    let mut wrapped = vec![0_u8; XGD3_VOLUME_OFFSET];
+    wrapped.extend(fs::read(plain.path()).expect("xiso bytes"));
+    let image = temp.child("game.iso");
+    fs::write(image.path(), &wrapped).expect("wrapped xiso");
+    let chd = temp.child("game.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            image.path().to_str().expect("path"),
+            "--format",
+            "chd-dvd",
+            "--output",
+            chd.path().to_str().expect("path"),
+        ],
+        0,
+    );
+    let before = fs::read(chd.path()).expect("chd bytes");
+
+    for dry_run in [true, false] {
+        let mut args = vec![
+            "trim",
+            "--in-place",
+            "--input",
+            chd.path().to_str().expect("path"),
+            "--json",
+        ];
+        if dry_run {
+            args.push("--dry-run");
+        }
+        let terminal = parse_single_json_line(&command_stdout(&args, 1));
+        assert_eq!(terminal["status"], "failed", "dry_run={dry_run}");
+        let label = terminal["label"].as_str().expect("label");
+        assert!(
+            label.contains(&format!(
+                "`{}` holds an Xbox XISO image, which cannot be stored as CHD, so --in-place cannot repack it: use --output <name>.xiso, <name>.zip, or <name>.7z",
+                chd.path().display()
+            )),
+            "dry_run={dry_run}: {label}"
+        );
+        assert_eq!(
+            fs::read(chd.path()).expect("chd bytes"),
+            before,
+            "dry_run={dry_run}: the CHD must be left unchanged"
+        );
+    }
+}
+
 /// A caller that writes the trim to an extensionless path (the webapp does) learns that the file is
 /// an XISO from the same run, since the name no longer says so.
 #[test]

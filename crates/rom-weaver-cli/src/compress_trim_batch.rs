@@ -1167,13 +1167,18 @@ impl CliApp {
             .archive_origin
             .as_ref()
             .expect("repack source carries its archive origin");
-        match self.confirm_archive_repack(
-            archive,
-            repack_root,
-            &trim_source.path,
-            trim_source.kind,
-            config.dry_run,
-        ) {
+        let confirmation = self
+            .reject_xiso_chd_repack(archive, &trim_source.path, trim_source.kind)
+            .and_then(|()| {
+                self.confirm_archive_repack(
+                    archive,
+                    repack_root,
+                    &trim_source.path,
+                    trim_source.kind,
+                    config.dry_run,
+                )
+            });
+        match confirmation {
             Ok(true) => true,
             Ok(false) => {
                 Self::record_trim_failure(
@@ -1201,6 +1206,34 @@ impl CliApp {
                 false
             }
         }
+    }
+
+    /// An in-place repack rebuilds the archive in its own format, and the engine refuses to store an
+    /// Xbox XISO as CHD. Reject it before anything is trimmed so dry and real runs agree, instead of
+    /// failing in CHD create after the work is done.
+    fn reject_xiso_chd_repack(
+        &self,
+        archive: &Path,
+        rom_path: &Path,
+        kind: TrimInputKind,
+    ) -> Result<()> {
+        if kind != TrimInputKind::Xiso
+            || !self
+                .containers
+                .probe(archive)
+                .is_some_and(|handler| handler.descriptor().matches_name("chd"))
+        {
+            return Ok(());
+        }
+        debug!(
+            archive = %archive.display(),
+            payload = %rom_path.display(),
+            "trim --in-place rejected: Xbox XISO inside a CHD cannot be repacked as CHD"
+        );
+        Err(RomWeaverError::Validation(format!(
+            "`{}` holds an Xbox XISO image, which cannot be stored as CHD, so --in-place cannot repack it: use --output <name>.xiso, <name>.zip, or <name>.7z",
+            archive.display()
+        )))
     }
 
     fn record_trim_failure(state: &mut TrimBatchState, message: String) {
