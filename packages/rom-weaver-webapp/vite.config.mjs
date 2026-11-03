@@ -192,6 +192,7 @@ export default defineConfig(({ command, mode }) => {
             "WEBAPP_NOTICE",
             "emulatorjs/LICENSE",
             "emulatorjs/NOTICE",
+            "emulatorjs/bios/*.rom",
             "logo.svg",
             "first-create.zip",
             "first-weave.zip",

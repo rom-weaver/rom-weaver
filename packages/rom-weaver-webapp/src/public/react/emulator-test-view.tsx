@@ -713,7 +713,10 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
     currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked && !fdsChecking && !invalidFds,
   );
   useEffect(() => {
-    if (!canPlay) return undefined;
+    if (!canPlay) {
+      if (invalidFds) setPseudoFullscreen(false);
+      return undefined;
+    }
     const dialog = fullscreenDialogRef.current;
     if (!dialog || typeof dialog.showModal !== "function") return undefined;
     // The top layer is what escapes the panel's `overflow: clip`; a plain fixed
@@ -724,7 +727,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
     const handleClose = () => setPseudoFullscreen(false);
     dialog.addEventListener("close", handleClose);
     return () => dialog.removeEventListener("close", handleClose);
-  }, [canPlay, pseudoFullscreen]);
+  }, [canPlay, invalidFds, pseudoFullscreen]);
 
   const workflowEmpty = !(currentGame || busy);
   const showPlayer = Boolean(currentGame);

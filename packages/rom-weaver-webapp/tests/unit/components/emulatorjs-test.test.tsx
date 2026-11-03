@@ -1079,6 +1079,21 @@ describe("fallback fullscreen game validation", () => {
     return view;
   };
 
+  it("restores scrolling when a malformed FDS replacement removes the fullscreen player", async () => {
+    const previousOverflow = document.body.style.overflow;
+    const view = await openFullscreenGame();
+
+    view.rerender(
+      withSettings(<EmulatorTestView pageDrop={{ id: 1, files: [new File(["not a disk"], "malformed.fds")] }} />),
+    );
+
+    expect(await screen.findByText("Cannot play malformed.fds.")).toBeTruthy();
+    await waitFor(() => expect(document.querySelector("iframe")).toBeNull());
+    expect(document.querySelector("dialog")).toBeNull();
+    expect(document.body.style.overflow).toBe(previousOverflow);
+    expect(screen.queryByRole("button", { name: "Exit fullscreen" })).toBeNull();
+  });
+
   it("keeps a validated replacement visible in fallback fullscreen and restores scrolling on stop", async () => {
     const previousOverflow = document.body.style.overflow;
     const view = await openFullscreenGame();
