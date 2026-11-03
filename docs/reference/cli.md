@@ -380,7 +380,7 @@ Without an explicit compression flag, an output extension matching the selected 
 
 `--no-compress` and its compatibility alias `--raw` force raw output. `--compress-format`, `--compress-codec`, and `--compress-level` remain the canonical compression flags; `--format`, `--codec`, and `--level` are accepted aliases on `patch apply`.
 
-DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM data track and reassemble the whole disc, so they cannot be chained with another patch or combined with the header and checksum options.
+DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM data track and reassemble the whole disc, so they cannot be chained with another patch or combined with the header and checksum options. With `--no-compress`, a `.cue` or `.gdi` output receives the whole disc, with its tracks beside it; any other output path receives only the rebuilt data track. The JSON result names that track in `details.dcp_data_track`.
 
 <a id="bundle-detection"></a>
 

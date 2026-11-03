@@ -59,6 +59,7 @@ import type { BrowserIdentifyPack } from "./identify-packs.ts";
 import { createBrowserRuntimeVfsIo } from "./browser-runtime-vfs.ts";
 import { createBrowserArchiveRuntime, stageArchiveInputs } from "./workflow-runtime-archive.ts";
 import { createBrowserChdRuntime, stripPrimaryChdTrackSuffix } from "./workflow-runtime-chd.ts";
+import { createBrowserDcpApply } from "./workflow-runtime-dcp.ts";
 import { createBrowserDiscFormatsRuntime } from "./workflow-runtime-disc-formats.ts";
 import { browserVfs } from "./workflow-runtime-vfs-cleanup.ts";
 import { ROM_WEAVER_WEAVE_FILE_NAMES } from "../../wasm/generated/rom-weaver-format-metadata.ts";
@@ -284,6 +285,12 @@ const prepareIngestIdentify = async ({
   }
 };
 
+type IngestDiscAsset = { discGroupId?: string; gdiText?: string };
+
+// Whether a track belongs to a disc whose sheet is a `.gdi` (a GD-ROM), from the same ingest result.
+const isGdiDiscTrack = (track: IngestDiscAsset, assets: readonly IngestDiscAsset[]): boolean =>
+  assets.some((asset) => !!asset.gdiText && asset.discGroupId === track.discGroupId);
+
 // Ingest a staged source and adopt extracted leaves as path-backed outputs. Bare ROMs are checksummed
 // in place and produce no output leaf.
 const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["ingest"] => ({
@@ -299,6 +306,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
     select,
     interactiveSelectionEnabled,
     splitBin,
+    threads,
     logLevel,
     onLog,
     onProgress,
@@ -374,6 +382,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
           outDirPath: outputScope.rootPath,
           signal,
           sourcePath: stagedSource.filePath,
+          threads,
         },
         onProgress,
         onLog,
@@ -402,8 +411,12 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
               ...(asset.cueText ? { cueText: asset.cueText } : {}),
               ...(asset.discGroupId ? { discGroupId: asset.discGroupId } : {}),
               // Rebase a split CD's primary track ("Game (Track 1).bin" -> "Game.bin") to match the
-              // descend/extract runtimes, which strip the same suffix; ingest emits the raw name.
-              fileName: asset.trackNumber === 1 ? stripPrimaryChdTrackSuffix(asset.fileName) : asset.fileName,
+              // descend/extract runtimes, which strip the same suffix; ingest emits the raw name. A
+              // GD-ROM keeps it: its `.gdi` names every track file, the first included.
+              fileName:
+                asset.trackNumber === 1 && !isGdiDiscTrack(asset, extractedAssets)
+                  ? stripPrimaryChdTrackSuffix(asset.fileName)
+                  : asset.fileName,
               filePath: asset.path,
               ...(asset.gdiText ? { gdiText: asset.gdiText } : {}),
               romType: romTypeFromEmittedFile({
@@ -648,7 +661,7 @@ const createBrowserPatchRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["
     workerIo,
     workerOutputFailureMessage: "Patch worker did not return browser output",
   });
-  return sharedPatchRuntime;
+  return { ...sharedPatchRuntime, applyDcpPatch: createBrowserDcpApply(workerIo) };
 };
 
 const createBrowserTrimRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["trim"] =>

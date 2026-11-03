@@ -2,6 +2,8 @@
 //!
 //! A `.dcp` rebuilds a GD-ROM data track's ISO9660 filesystem rather than patching bytes. It accepts
 //! a disc sheet, reassembles the disc, and emits CHD by default or a sheet with `--no-compress`.
+//! `--no-compress` with a non-sheet output writes only the rebuilt data track, which the browser
+//! swaps into the disc it already holds.
 
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
@@ -23,6 +25,15 @@ struct CompressDcpDiscInputs<'a> {
     label: &'a mut String,
     single: Option<ThreadExecution>,
     force: bool,
+}
+
+/// `--no-compress` to a path that is not a `.cue`/`.gdi` writes only the
+/// rebuilt data track there instead of the whole disc beside a sheet.
+fn dcp_writes_track_only(
+    output: &Path,
+    compression_options: &PatchApplyCompressionOptions,
+) -> bool {
+    !compression_options.enabled && detect_disc_sheet(output).is_none()
 }
 
 impl CliApp {
@@ -216,6 +227,11 @@ impl CliApp {
             {
                 return fail_error("validate", error);
             }
+        } else if dcp_writes_track_only(output, &compression_options) {
+            sources.extend(Self::disc_source_paths(&disc));
+            if let Err(error) = Self::ensure_patch_output_preserves_sources(output, &sources) {
+                return fail_error("validate", error);
+            }
         } else if let Err(error) =
             Self::validate_disc_output_destinations(&disc, output, &sources, args.force)
         {
@@ -244,6 +260,8 @@ impl CliApp {
                     Ok(plan) => vec![plan.output_path],
                     Err(error) => return fail_error("validate", error),
                 }
+            } else if dcp_writes_track_only(output, &compression_options) {
+                vec![output.to_path_buf()]
             } else {
                 Self::disc_output_paths(&disc, output)
             };
@@ -336,12 +354,24 @@ impl CliApp {
             Err(error) => return fail_io("prepare", error),
         };
 
-        // Stream the rebuilt track straight to a temp file for staging - the
-        // cooked image and raw track are never fully held in memory.
+        // Stream the rebuilt track straight to a temp file for staging (or to
+        // the output itself when only the track is wanted) - the cooked image
+        // and raw track are never fully held in memory.
+        let track_only = dcp_writes_track_only(output, compression_options);
         let mut temp_paths: Vec<PathBuf> = Vec::new();
-        let rebuilt_path = context
-            .temp_paths()
-            .next_path("dcp-rebuilt-track", Some("bin"));
+        let rebuilt_path = if track_only {
+            output.to_path_buf()
+        } else {
+            context
+                .temp_paths()
+                .next_path("dcp-rebuilt-track", Some("bin"))
+        };
+        trace!(
+            rebuilt = %rebuilt_path.display(),
+            track_only,
+            target = %disc.target_name,
+            "writing rebuilt GD-ROM data track"
+        );
         if let Some(parent) = rebuilt_path.parent()
             && let Err(error) = fs::create_dir_all(parent)
         {
@@ -366,11 +396,14 @@ impl CliApp {
                 }
             };
             if let Err(error) = sink.flush() {
+                Self::cleanup_temp_paths(std::slice::from_ref(&rebuilt_path));
                 return fail_io("apply", error);
             }
             summary
         };
-        temp_paths.push(rebuilt_path.clone());
+        if !track_only {
+            temp_paths.push(rebuilt_path.clone());
+        }
 
         let boot_note = if rebuilt.boot_sector_replaced {
             "; IP.BIN boot sector replaced"
@@ -387,28 +420,61 @@ impl CliApp {
 
         // Emit: compress (default) reads every untouched track in place from the
         // source disc and redirects only the rebuilt track via a create override
-        // (no whole-disc scratch copy); --no-compress stages the full disc and
-        // writes it beside the output sheet.
+        // (no whole-disc scratch copy), unless the rebuild changed the track's
+        // size, which needs a staged disc; --no-compress stages the full disc
+        // and writes it beside the output sheet.
         let report = if compression_options.enabled {
-            let track_override =
-                match self.disc_target_track_override(disc, &rebuilt_path, &mut temp_paths) {
-                    Ok(track_override) => track_override,
-                    Err(error) => {
-                        Self::cleanup_temp_paths(&temp_paths);
-                        return fail_error("prepare", error);
-                    }
-                };
+            let prepared = Self::disc_replacements_keep_track_sizes(&BTreeMap::from([(
+                disc.target_file.clone(),
+                rebuilt_path.clone(),
+            )]))
+            .and_then(|keep_track_sizes| {
+                if keep_track_sizes {
+                    let track_override =
+                        self.disc_target_track_override(disc, &rebuilt_path, &mut temp_paths)?;
+                    Ok((
+                        self.primary_disc_sheet(disc).to_path_buf(),
+                        vec![track_override],
+                    ))
+                } else {
+                    let staged_sheet =
+                        self.stage_disc_directory(disc, &rebuilt_path, context, &mut temp_paths)?;
+                    Ok((staged_sheet, Vec::new()))
+                }
+            });
+            let (sheet, overrides) = match prepared {
+                Ok(prepared) => prepared,
+                Err(error) => {
+                    Self::cleanup_temp_paths(&temp_paths);
+                    return fail_error("prepare", error);
+                }
+            };
             self.compress_dcp_disc(CompressDcpDiscInputs {
                 output,
                 extension_source: &args.input,
-                sheet: self.primary_disc_sheet(disc),
-                overrides: std::slice::from_ref(&track_override),
+                sheet: &sheet,
+                overrides: &overrides,
                 compression_options,
                 context,
                 label: &mut label,
                 single: single.clone(),
                 force: args.force,
             })
+        } else if track_only {
+            label = format!(
+                "{label}; wrote rebuilt data track `{}` to `{}`",
+                disc.target_name,
+                output.display()
+            );
+            let report = OperationReport::succeeded(
+                OperationFamily::Patch,
+                Some("dcp".to_string()),
+                "apply",
+                label,
+                Some(100.0),
+                single.clone(),
+            );
+            Self::attach_emitted_files_details(report, vec![output.to_path_buf()], None)
         } else {
             let staged_sheet =
                 match self.stage_disc_directory(disc, &rebuilt_path, context, &mut temp_paths) {
@@ -441,6 +507,19 @@ impl CliApp {
 
         let mut report = report;
         Self::append_report_warnings(&mut report, disc.warnings.iter().cloned());
+        if report.status == OperationStatus::Succeeded {
+            // Name the rebuilt track so a host holding the disc (the browser)
+            // can swap it in without re-running the CLI's track selection.
+            let mut details = operation_report_details(&mut report);
+            details.insert(
+                "dcp_data_track".to_string(),
+                json!({
+                    "name": disc.target_name,
+                    "path": disc.target_file.to_string_lossy(),
+                }),
+            );
+            report.details = Some(Value::Object(details));
+        }
         Self::cleanup_temp_paths(&temp_paths);
         report
     }

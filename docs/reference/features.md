@@ -24,7 +24,7 @@ The browser needs no account or installation. The CLI is the terminal version, u
 | Cheat codes | Bake supported codes into a ROM, or turn them into a patch. | [Cheats](../how-to/use-browser-cheats.md) | [Cheats](../how-to/bake-cheat-codes.md) |
 | Patch weaves | Package patches with their order, names, choices, and expected ROM checks. | [Weaves](../how-to/create-bundles.md) | [Weaves](../how-to/cli-bundles.md) |
 
-Applying and creating have different format limits. The [patch format table](formats.md#patch-formats) lists both, including the specialized Dreamcast DCP workflow.
+Applying and creating have different format limits. The [patch format table](formats.md#patch-formats) lists both, including Dreamcast DCP, which rebuilds a whole GD-ROM disc in the browser or the CLI.
 
 Cheat support covers writes to the ROM. Codes that need live game memory cannot be baked. The [cheat reference](cheat-database.md) lists supported systems and matching limits.
 

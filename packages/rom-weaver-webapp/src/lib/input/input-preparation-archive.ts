@@ -528,6 +528,7 @@ const resolveArchiveInputAssetsByDescent = async (
     companionFiles,
     fileName: archiveFile.fileName,
     identify: shouldIdentifySource(archiveFile),
+    threads: options?.workers?.threads,
     source: companionFiles?.length ? getArchiveFileBackedSource(archiveFile) : getCompressionRuntimeSource(archiveFile),
     ...(select.length ? { select } : {}),
     logLevel: options?.logging?.level,
@@ -770,6 +771,7 @@ const resolveUnclassifiedInputAssets = async (
     ingested = await resolvedRuntime.ingest.run({
       fileName: file.fileName,
       identify: shouldIdentifySource(file),
+      threads: options?.workers?.threads,
       ...(selectedInputEntryName ? { select: [selectedInputEntryName] } : {}),
       logLevel: options?.logging?.level,
       onLog: options?.onLog,

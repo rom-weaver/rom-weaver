@@ -1,0 +1,18 @@
+{
+  "gdi": {
+    "chd": "fd8b1a712d95dc4b0b4a715cbedc09d5f4ecfaf5",
+    "tracks": {
+      "track01.bin": "afc2ecbb4578a7889622bfec907502dc0be67623",
+      "track02.bin": "8aabe9baa48e49e82910cc326adc10c1c0800fa9",
+      "track03.bin": "40225c071ddabe9ddece7dd701e62597f22cc234"
+    }
+  },
+  "cue": {
+    "chd": "fd8b1a712d95dc4b0b4a715cbedc09d5f4ecfaf5",
+    "tracks": {
+      "track01.bin": "afc2ecbb4578a7889622bfec907502dc0be67623",
+      "track02.bin": "8aabe9baa48e49e82910cc326adc10c1c0800fa9",
+      "track03.bin": "40225c071ddabe9ddece7dd701e62597f22cc234"
+    }
+  }
+}

@@ -28,6 +28,13 @@ import type { ApplyWorkflowResult, PatchInput } from "../../types/workflow-runti
 import type { ParsedPatchLike } from "../../workers/protocol/patch-engine.ts";
 import { type createPatchFile, getPatchFileExternalSource } from "../input/binary-service.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
+import { RomWeaverError } from "../errors.ts";
+import {
+  DCP_DISC_REQUIRED_MESSAGE,
+  DCP_PATCH_ALONE_MESSAGE,
+  findDcpDiscSheet,
+  isDcpPatchName,
+} from "../workflow/apply-dcp-patch.ts";
 import { roundElapsedMs } from "../workflow/source-preparation.ts";
 import { getPatchFilePrecomputedChecksumVariants } from "../workflow/staged-source-checksums.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
@@ -675,6 +682,86 @@ const applyPatchesToAsset = async ({
   return { applyTimeMs, file, output: workerOutput };
 };
 
+// A `.dcp` rebuilds the disc's GD-ROM data track rather than patching bytes, so it runs alone on the
+// whole disc (sheet plus tracks) and the rebuilt track replaces the input track the engine picked.
+// The checks mirror the CLI's `.dcp` validation.
+const applyDcpPatchToDisc = async ({
+  cheatRecords,
+  inputAssets,
+  options,
+  patchFiles,
+  runtime,
+}: {
+  cheatRecords: PatchInput["cheatRecords"];
+  inputAssets: InputAsset[];
+  options: ApplyPatchOptions;
+  patchFiles: PatchFileInstance[];
+  runtime: WorkflowRuntime;
+}) => {
+  const [patchFile] = patchFiles;
+  if (!patchFile || patchFiles.length !== 1) throw new RomWeaverError("INVALID_INPUT", DCP_PATCH_ALONE_MESSAGE);
+  if (cheatRecords?.length) throw new RomWeaverError("INVALID_INPUT", DCP_PATCH_ALONE_MESSAGE);
+  const applyDcpPatch = runtime.patch?.applyDcpPatch;
+  if (!applyDcpPatch)
+    throw new RomWeaverError("UNSUPPORTED_FORMAT", "Dreamcast DCP patches are not supported in this runtime");
+  const sheet = findDcpDiscSheet(inputAssets);
+  if (!sheet) throw new RomWeaverError("INVALID_INPUT", DCP_DISC_REQUIRED_MESSAGE);
+  const tracks = inputAssets.filter(
+    (asset) => asset.kind === "track" && (!sheet.groupId || asset.groupId === sheet.groupId),
+  );
+  const patchFileName = patchFile.fileName || "patch.dcp";
+  const applyLabel = `Applying ${patchFileName} to ${sheet.fileName}`;
+  reportProgress(options, { label: applyLabel, percent: null, stage: "apply" });
+  const { output, trackFileName, warnings } = await traceWorkflowStageBlock(
+    options,
+    "apply",
+    "output",
+    () =>
+      applyDcpPatch({
+        logLevel: getApplyLogLevel(options),
+        onLog: options.onLog,
+        onProgress: (progress) =>
+          reportProgress(options, {
+            label: applyLabel,
+            percent:
+              typeof progress.percent === "number" && Number.isFinite(progress.percent) ? progress.percent : null,
+            stage: "apply",
+          }),
+        patch: { patchFile: toWorkerSourceRef(patchFile, patchFileName), patchFileName },
+        sheet: { fileName: sheet.fileName, source: toWorkerSourceRef(sheet.file, sheet.fileName) },
+        signal: options.signal,
+        tracks: tracks.map((track) => ({
+          fileName: track.fileName,
+          source: toWorkerSourceRef(track.file, track.fileName),
+        })),
+      }),
+    () => ({ patchFormat: "dcp", sheet: sheet.fileName, trackCount: tracks.length }),
+  );
+  const target = tracks.find((track) => track.fileName === trackFileName);
+  if (!target) throw new Error(`DCP apply rebuilt a track that is not part of the disc: ${trackFileName}`);
+  const workerOutput: AppliedWorkerOutput = Object.assign(output, {
+    _applySummary: {
+      outputSize: output.size,
+      patches: [{ fileName: patchFileName, format: "DCP" }],
+      rom: { fileName: target.fileName, size: target.size },
+      warnings,
+    },
+  });
+  const file = await createPatchFileFromPublicOutput(
+    workerOutput as unknown as Parameters<typeof createPatchFile>[0],
+    target.fileName,
+    canReuseWorkerOutputPath(workerOutput) ? { materializeBlob: false, preferExternalFilePath: true } : undefined,
+  );
+  file.fileName = target.fileName;
+  return {
+    applyTimeMs: 0,
+    hasApplyTimeMs: false,
+    patchedById: new Map([[target.id, file]]),
+    targets: [target],
+    workerOutputsById: new Map([[target.id, workerOutput]]),
+  };
+};
+
 const applyPreparedPatches = async ({
   assetCount,
   assets,
@@ -722,6 +809,8 @@ const applyPreparedPatches = async ({
     });
     return { applyTimeMs, hasApplyTimeMs, patchedById, targets, workerOutputsById };
   }
+  if (patchFiles.some((patchFile) => isDcpPatchName(patchFile.fileName)))
+    return applyDcpPatchToDisc({ cheatRecords, inputAssets, options, patchFiles, runtime });
   reportProgress(options, { label: "Applying patch...", percent: null, stage: "apply" });
   const bareMemberRule = createRunBareMemberRule(patchOptions, rootMember, bareFileChecksums);
   if (patches.length) {

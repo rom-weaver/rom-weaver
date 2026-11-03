@@ -145,6 +145,8 @@ type ApplyWorkflowPatchState = {
     requiredSize?: number;
     status: "invalid" | "pending" | "unknown" | "valid";
   };
+  /** A Dreamcast `.dcp`: it runs alone on the whole disc, with no header, checksum, or track options. */
+  dcp?: boolean;
   patchValidation?: {
     message?: string;
     /** `deferred`: a previous-basis mid-chain patch whose input state is only provable during the

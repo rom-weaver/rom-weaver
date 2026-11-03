@@ -99,6 +99,8 @@ type PatchStackItemState = {
   validationValues: string[];
   validationMessage: string;
   validationUnreadable: boolean;
+  /** A Dreamcast `.dcp`: the card hides the track, header, byte-order, basis, and checks controls. */
+  dcp?: boolean;
   validationActualValue: string;
   targetDisabled?: boolean;
   targetOptions?: PatchTargetOption[];

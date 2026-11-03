@@ -460,6 +460,19 @@ type WorkflowRuntimePatch = {
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
     signal?: AbortSignal;
   }) => Promise<PublicOutput>;
+  /**
+   * Rebuild a Dreamcast disc's GD-ROM data track from a `.dcp` patch. The engine picks the data track
+   * as the CLI does; `trackFileName` names the input track the returned output replaces.
+   */
+  applyDcpPatch?: (input: {
+    sheet: { fileName: string; source: SourceRef };
+    tracks: Array<{ fileName: string; source: SourceRef }>;
+    patch: { patchFile: SourceRef; patchFileName?: string };
+    logLevel?: LogLevel;
+    onLog?: (log: WorkflowRuntimeLog) => void;
+    onProgress?: (progress: WorkflowCreatePatchProgress) => void;
+    signal?: AbortSignal;
+  }) => Promise<{ output: PublicOutput; trackFileName: string; warnings: string[] }>;
   validatePatch?: (input: {
     input: SourceRef;
     patches: Array<{
@@ -550,6 +563,8 @@ type WorkflowRuntimeIngest = {
     // For a multi-track CHD CD: force per-track split BIN (true) or single merged BIN (false). Omit
     // to let ingest ask the host interactively when the disc offers the choice.
     splitBin?: boolean;
+    /** The workflow's thread budget; omitted lets the engine use every core. */
+    threads?: RuntimeThreadBudgetInput;
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowRuntimeProgress) => void;

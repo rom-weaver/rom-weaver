@@ -1,5 +1,5 @@
 import { sanitizeTypedOutputName } from "../path-utils.ts";
-import { isDcpPatchName, isDcpPatchStage, markDcpPatchUnsupported } from "./apply-dcp-patch.ts";
+import { type DcpReadinessContext, evaluateDcpPatchStage, isDcpPatchName, isDcpPatchStage } from "./apply-dcp-patch.ts";
 import { createVfsFileRef, isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type {
   ApplyWorkflowWeaveSources,
@@ -20,13 +20,18 @@ import type {
   PublicOutput,
 } from "../../types/workflow-runtime-types.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
-import { getPatchProbeRequirements, parsePatchForApply } from "../apply/patch-apply-service.ts";
+import { createDcpParsedPatch, getPatchProbeRequirements, parsePatchForApply } from "../apply/patch-apply-service.ts";
 import { runApplyWorkflow } from "../apply/workflow.ts";
 import { runCreateWorkflow } from "../create/workflow.ts";
 import { isCompressionFormat } from "../compression/container-format-registry.ts";
 import type { CheatRecord } from "../cheats/model.ts";
 import { RomWeaverError, toRomWeaverError, withAbortSignal } from "../errors.ts";
-import { getPatchFileBlob, getPatchFileBytes, getPatchFileExternalSource } from "../input/binary-service.ts";
+import {
+  createPatchFile,
+  getPatchFileBlob,
+  getPatchFileBytes,
+  getPatchFileExternalSource,
+} from "../input/binary-service.ts";
 import {
   getPrimaryInputAsset,
   type InputAsset,
@@ -239,6 +244,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   setCheats(records: CheatRecord[], cheatPositions: number[] = []): void {
     this.cheatRecords = records.map((record) => cloneValue(record));
     this.cheatPositions = [...cheatPositions];
+    this.refreshDcpStages();
     this.recomputeOutputState();
   }
 
@@ -1287,10 +1293,19 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       sourceSize: stage.state.sourceSize,
     });
     if (isDcpPatchName(stage.state.fileName)) {
-      // Name the DCP before any staging, ingest, or selection runs; see apply-dcp-patch.ts.
+      // Take the DCP as is, before any ingest or selection runs; see apply-dcp-patch.ts.
+      const patchFile = await createPatchFile(stage.source as never, stage.state.fileName || "patch.dcp");
+      stage.preparedPatchFile = patchFile;
+      applyPreparedPatchMetadata(stage, {
+        decompressionTimeMs: 0,
+        file: patchFile,
+        parentCompressions: [],
+        sourceSize: patchFile.fileSize,
+        wasDecompressed: false,
+      });
       this.addDirectCandidate(stage, stage.state.role, stage.index, stage.state.id);
       stage.state.selectedCandidateId = stage.state.candidates[0]?.id;
-      markDcpPatchUnsupported(stage);
+      await this.parsePatch(stage);
       return stage;
     }
     const requests: CandidateSelectionRequest[] = [];
@@ -1587,8 +1602,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       return;
     }
     if (isDcpPatchStage(stage)) {
-      // The ingest surfaced a .dcp (bare, or a leaf of an archive) as one patch; see apply-dcp-patch.ts.
-      markDcpPatchUnsupported(stage);
+      // A .dcp (bare, or the leaf of an archive) has no byte-level requirements to describe.
+      stage.parsedPatch = createDcpParsedPatch(patchFile);
+      evaluateDcpPatchStage(stage, this.getDcpContext(stage));
       return;
     }
     const parsed = await parsePatchForApply(patchFile, this.runtime);
@@ -1794,6 +1810,21 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     });
   }
 
+  /** A DCP is judged against the whole disc and must be the run's only enabled patch, with no cheats. */
+  private getDcpContext(stage: StagedSource<TSource>): DcpReadinessContext {
+    return {
+      combined:
+        this.cheatRecords.length > 0 ||
+        this.patches.some((patch) => patch !== stage && !this.disabledPatches.has(patch)),
+      inputAssets: this.inputSession?.view.state.status === "ready" ? this.getPreparedInputAssets() : [],
+    };
+  }
+
+  private refreshDcpStages(): void {
+    for (const stage of this.patches)
+      if (stage.parsedPatch && isDcpPatchStage(stage)) evaluateDcpPatchStage(stage, this.getDcpContext(stage));
+  }
+
   private getPreparedInputAssets(): InputAsset[] {
     const session = this.inputSession;
     if (!session) return [];
@@ -1865,6 +1896,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       filenameCrc32AppliesTo: (target) =>
         this.isFirstEnabledPatchOn(stage, target.id) && !(inputRef && "patch" in inputRef),
       previousLayout,
+      getDcpContext: (patchStage) => this.getDcpContext(patchStage),
       getPatchableInputAssets: () => this.getPatchableInputAssets(),
       getWeaveLayoutCrc32: (target) =>
         this.weaveRomLayout?.assetId === target.id ? this.weaveRomLayout.crc32 : undefined,
@@ -1972,6 +2004,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       // the patches gaining or losing that role re-run their preflight below.
       const firstEnabledBefore = this.getFirstEnabledPatches();
       this.disabledPatches = new Set(this.patches.filter((_, index) => disabledIndexes?.has(index)));
+      // A DCP runs alone, so adding, removing, or toggling any other patch changes its verdict.
+      this.refreshDcpStages();
       // A new `rom.member` or a toggled member patch changes which members a bare file may stand in for.
       if (this.getBareMemberRuleKey() !== bareMemberRuleBefore) await this.refreshPatchReadiness();
       const firstEnabledAfter = this.getFirstEnabledPatches();
