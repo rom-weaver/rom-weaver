@@ -215,6 +215,43 @@ mod tests {
     }
 
     #[test]
+    fn listing_a_rewritten_archive_reads_it_again() -> Result<()> {
+        run_with_large_stack("list-rewrite", || {
+            let temp_dir = TempDir::new("list-rewrite")?;
+            let source = temp_dir.path().join("fixture.zip");
+            create_zip_fixture(&source)?;
+            assert_eq!(list_regular_archive_entries(&source, "zip")?.len(), 3);
+            assert_eq!(list_regular_archive_entries(&source, "zip")?.len(), 3);
+
+            let mut archive = WriteArchive::new("zip rewrite create failed")?;
+            archive.set_format(WriteFormat::Zip, "zip rewrite format failed")?;
+            archive.add_filter(WriteFilter::None, "zip rewrite filter failed")?;
+            archive.open_filename(&source, "zip rewrite output", "zip rewrite open failed")?;
+            archive.start_entry(
+                EntrySpec {
+                    pathname: "only.bin",
+                    file_type: EntryFileType::Regular,
+                    perm: 0o644,
+                    size: 1,
+                },
+                "zip rewrite start failed",
+            )?;
+            archive.write_data_all(b"x", "zip rewrite write failed")?;
+            archive.finish_entry("zip rewrite finish failed")?;
+            archive.close("zip rewrite close failed", "zip rewrite release failed")?;
+
+            let entries = list_regular_archive_entries(&source, "zip")?;
+            assert_eq!(
+                entries.len(),
+                1,
+                "a rewritten archive MUST NOT reuse the old listing"
+            );
+            assert_eq!(entries[0].path, "only.bin");
+            Ok(())
+        })
+    }
+
+    #[test]
     fn probe_and_list_regular_archive_entries_report_expected_values() -> Result<()> {
         run_with_large_stack("probe-list", || {
             let temp_dir = TempDir::new("probe-list")?;

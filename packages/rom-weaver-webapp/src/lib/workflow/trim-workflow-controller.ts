@@ -22,10 +22,7 @@ import { wrapPublicOutput } from "../output/index.ts";
 import { markTrimOutputStem, type TrimMode } from "../trim/trim-output-name.ts";
 import { runTrimWorkflow } from "../trim/workflow.ts";
 import { BaseWorkflowController, type BaseWorkflowSnapshot, type SourceValidator } from "./base-workflow-controller.ts";
-import {
-  ROM_WEAVER_FILE_FILTERS,
-  ROM_WEAVER_TRIM_INPUT_EXTENSIONS,
-} from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import { ROM_WEAVER_FILE_FILTERS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import {
   cloneCandidate,
   cloneValue,
@@ -77,7 +74,6 @@ type InternalSourceState = {
 type StagedSource<TSource> = SharedRomStagedSource<TSource, InternalSourceState>;
 
 const TRIM_INPUT_ROLE: SourceRole = "input";
-const TRIM_INPUT_SUFFIXES = ROM_WEAVER_TRIM_INPUT_EXTENSIONS.map((extension) => `.${extension}`);
 
 const hasSuffix = (name: string, suffixes: readonly string[]) => {
   const lower = name.toLowerCase();
@@ -436,26 +432,23 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
   }
 
   /**
-   * Whether trim cannot use a container whose listing names no trim input (a GameCube/Wii disc in a
-   * 7z). The engine's verdict on the container reads only its listing and member headers, so staging
-   * can skip extracting, and decoding, what trim would reject.
+   * Whether trim would extract nothing from a container (a GameCube/Wii disc in a 7z). The engine
+   * decides from the container's listing and member headers, as a trim run does, so staging can skip
+   * extracting, and decoding, what trim would reject.
    */
   private async isUnsupportedContainer(source: TSource): Promise<boolean> {
     const fileName = getSourceFileName(source, "");
     const probe = this.runtime.compression?.probe;
-    const plan = this.runtime.trim?.plan;
+    if (!probe) return false;
     if (!hasSuffix(fileName, ROM_WEAVER_FILE_FILTERS.containerExtensions)) return false;
-    if (!(probe && plan)) return false;
     const signal = this.abortController.signal;
     try {
-      const { entries } = await probe({ options: { signal }, source: source as never });
-      if (!entries.length || entries.some((entry) => hasSuffix(entry.filename, TRIM_INPUT_SUFFIXES))) return false;
-      await plan({ signal, source: source as never });
-      return false;
+      const { trimMembers } = await probe({ options: { signal, trimMembers: true }, source: source as never });
+      return trimMembers?.extract.length === 0;
     } catch (error) {
       if (signal.aborted) throw error;
       this.trace("trim.container-precheck", { error, fileName });
-      return isTrimUnsupportedError(error);
+      return false;
     }
   }
 

@@ -1111,6 +1111,174 @@ fn trim_skips_a_disc_inside_an_archive_folder() {
     }
 }
 
+/// Writes a small GameCube disc as `name` in `dir`.
+fn write_gamecube_iso(dir: &TempDir, name: &str) -> std::path::PathBuf {
+    let iso = dir.child(name);
+    fs::write(iso.path(), build_test_gamecube_iso(0x4000)).expect("iso fixture");
+    iso.path().to_path_buf()
+}
+
+#[test]
+fn trim_no_filter_opens_members_with_unknown_names() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let rom = staging.child("game.nds");
+    fs::write(
+        rom.path(),
+        build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false),
+    )
+    .expect("nds fixture");
+    let inner = staging.child("inner.zip");
+    pack_archive(inner.path(), &[rom.path()]);
+    let bundle = staging.child("bundle.dat");
+    fs::rename(inner.path(), bundle.path()).expect("rename inner archive");
+    let archive = temp.child("pack.zip");
+    pack_archive(archive.path(), &[bundle.path()]);
+    let archive_path = archive.path().to_str().expect("path");
+
+    // By default a member with an unknown name is not a trim input.
+    let filtered = parse_single_json_line(&command_stdout(
+        &["trim", "--input", archive_path, "--dry-run", "--json"],
+        0,
+    ));
+    assert_eq!(filtered["details"]["processed"], 0, "{filtered}");
+    // `--no-filter` opens it and finds the ROM by content.
+    let unfiltered = parse_single_json_line(&command_stdout(
+        &[
+            "trim",
+            "--input",
+            archive_path,
+            "--no-filter",
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(unfiltered["details"]["processed"], 1, "{unfiltered}");
+}
+
+#[test]
+fn trim_reads_the_header_of_a_compressed_disc_without_decompressing_it() {
+    let temp = setup_temp_dir();
+    let iso = write_gamecube_iso(&temp, "disc.iso");
+    let gz = temp.child("disc.iso.gz");
+    let mut encoder = GzEncoder::new(
+        fs::File::create(gz.path()).expect("create gz"),
+        DeflateCompression::default(),
+    );
+    encoder
+        .write_all(&fs::read(&iso).expect("read iso"))
+        .expect("write gz");
+    encoder.finish().expect("finish gz");
+    fs::remove_file(&iso).expect("remove iso");
+    let output = command_output_with_env(
+        &[
+            "--log-level",
+            "trace",
+            "trim",
+            "--input",
+            gz.path().to_str().expect("path"),
+            "--json",
+        ],
+        &[],
+        1,
+    );
+    let terminal = parse_single_json_line(&output.stdout);
+    assert_eq!(
+        terminal["label"],
+        format!(
+            "validation failed: `{}` holds a GameCube/Wii disc, which trim does not support; {COMPRESS_HINT} it to RVZ",
+            gz.path().display()
+        )
+    );
+    let extractions = trim_extraction_lines(&output.stderr);
+    assert!(extractions.is_empty(), "{extractions:#?}");
+}
+
+#[test]
+fn probe_reports_the_members_trim_would_extract() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let rom = staging.child("game.nds");
+    fs::write(
+        rom.path(),
+        build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false),
+    )
+    .expect("nds fixture");
+    let iso = write_gamecube_iso(&staging, "disc.iso");
+    let probe = |archive: &std::path::Path| {
+        let output = command_output_with_env(
+            &[
+                "--log-level",
+                "trace",
+                "probe",
+                "--input",
+                archive.to_str().expect("path"),
+                "--no-extract",
+                "--trim-members",
+                "--json",
+            ],
+            &[],
+            0,
+        );
+        assert!(
+            !String::from_utf8_lossy(&output.stderr).contains("extract start"),
+            "probe MUST NOT extract"
+        );
+        parse_single_json_line(&output.stdout)["details"]["trim_members"].clone()
+    };
+
+    let discs = temp.child("discs.7z");
+    pack_archive(discs.path(), &[&iso]);
+    assert_eq!(
+        probe(discs.path()),
+        serde_json::json!({"extract": [], "gamecube_wii_discs": 1})
+    );
+    let mixed = temp.child("mixed.zip");
+    pack_archive(mixed.path(), &[rom.path(), &iso]);
+    assert_eq!(
+        probe(mixed.path()),
+        serde_json::json!({"extract": ["game.nds"], "gamecube_wii_discs": 1})
+    );
+}
+
+#[test]
+fn trim_stops_reading_headers_that_sit_deep_in_a_solid_block() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    // Compresses to almost nothing, but reaching the disc after it decodes all 72 MiB.
+    let filler = staging.child("a-filler.bin");
+    fs::write(filler.path(), vec![0_u8; 72 * 1024 * 1024]).expect("filler");
+    let iso = write_gamecube_iso(&staging, "z-disc.iso");
+    let archive = temp.child("solid.7z");
+    pack_archive(archive.path(), &[filler.path(), &iso]);
+    let output = command_output_with_env(
+        &[
+            "--log-level",
+            "debug",
+            "trim",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ],
+        &[],
+        1,
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("reaching the entry would decode too much"),
+        "the header read MUST stop at the decode budget"
+    );
+    // The disc is still recognized after extraction, so the verdict is unchanged.
+    let terminal = parse_single_json_line(&output.stdout);
+    assert!(
+        terminal["label"]
+            .as_str()
+            .is_some_and(|label| label.contains("holds a GameCube/Wii disc")),
+        "{terminal}"
+    );
+}
+
 #[test]
 fn trim_extracts_only_the_rom_from_an_archive_beside_a_disc() {
     let temp = setup_temp_dir();

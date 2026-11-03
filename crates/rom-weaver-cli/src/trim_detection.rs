@@ -1,5 +1,6 @@
 use super::selection_resolution::SelectionExtract;
 use super::*;
+use crate::path_access::path_basename;
 
 /// The members trim extracts from an archive, chosen from its listing before anything is written.
 struct TrimArchiveMembers {
@@ -18,7 +19,18 @@ enum TrimMemberName {
     Skip,
 }
 
-fn classify_trim_member_name(name: &str, include_nested: bool) -> TrimMemberName {
+/// Which archive members trim may need.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TrimMemberScope {
+    /// Top-level ROMs only, for an `--in-place` repack.
+    TopLevel,
+    /// ROMs and nested archives.
+    Nested,
+    /// Also members with unknown names, which only their content identifies (`--no-filter`).
+    Every,
+}
+
+fn classify_trim_member_name(name: &str, scope: TrimMemberScope) -> TrimMemberName {
     let path = Path::new(name);
     if TrimInputKind::from_path(path).is_some() {
         return TrimMemberName::Extract;
@@ -34,11 +46,16 @@ fn classify_trim_member_name(name: &str, include_nested: bool) -> TrimMemberName
     if GAMECUBE_WII_DISC_EXTENSIONS.contains(&extension.as_str()) {
         return TrimMemberName::GamecubeWiiDisc;
     }
+    if scope == TrimMemberScope::TopLevel
+        || TRIM_NON_ARCHIVE_DISC_EXTENSIONS.contains(&extension.as_str())
+    {
+        return TrimMemberName::Skip;
+    }
     // Unnamed members may be archives that only their content identifies.
-    let may_hold_rom = !TRIM_NON_ARCHIVE_DISC_EXTENSIONS.contains(&extension.as_str())
-        && (is_container_filter_passthrough_candidate_name(name)
-            || rom_weaver_core::payload_name_needs_content_classification(name));
-    if include_nested && may_hold_rom {
+    if scope == TrimMemberScope::Every
+        || is_container_filter_passthrough_candidate_name(name)
+        || rom_weaver_core::payload_name_needs_content_classification(name)
+    {
         return TrimMemberName::Extract;
     }
     TrimMemberName::Skip
@@ -46,12 +63,12 @@ fn classify_trim_member_name(name: &str, include_nested: bool) -> TrimMemberName
 
 impl CliApp {
     /// Choose the members of `archive` trim must extract from the archive's listing, reading only
-    /// a short header for `.iso` and `.ciso` members. `include_nested` keeps nested archives.
+    /// a short header for `.iso` and `.ciso` members.
     /// Returns `None` when the container cannot list its entries, so the caller extracts them all.
     fn plan_trim_archive_members(
         handler: &dyn ContainerHandler,
         archive: &Path,
-        include_nested: bool,
+        scope: TrimMemberScope,
         context: &OperationContext,
     ) -> Option<TrimArchiveMembers> {
         let request = ContainerProbeRequest {
@@ -85,7 +102,7 @@ impl CliApp {
             if name.is_empty() || should_ignore_common_container_file(&name) {
                 continue;
             }
-            match classify_trim_member_name(&name, include_nested) {
+            match classify_trim_member_name(&name, scope) {
                 TrimMemberName::Extract => members.extract.push(name),
                 TrimMemberName::ReadHeader => header_names.push(name),
                 TrimMemberName::GamecubeWiiDisc => {
@@ -121,7 +138,7 @@ impl CliApp {
                         members.gamecube_wii_discs += 1;
                     }
                     // Any other `.ciso` is a container (a PSP or Xbox CSO) that may hold an XISO.
-                    _ if is_ciso && !include_nested => {}
+                    _ if is_ciso && scope == TrimMemberScope::TopLevel => {}
                     // An `.iso` that is not a GameCube/Wii disc may be an Xbox XISO.
                     _ => members.extract.push(name),
                 }
@@ -135,6 +152,55 @@ impl CliApp {
             "planned trim archive members"
         );
         Some(members)
+    }
+
+    /// Add `trim_members` to a probe report: the members a default `trim` of `source` would
+    /// extract and the GameCube/Wii discs it would skip, decided as [`Self::collect_trim_file`]
+    /// decides them, without extracting anything. `null` when the container cannot be listed.
+    pub(super) fn attach_trim_member_details(
+        &self,
+        report: &mut OperationReport,
+        handler: &dyn ContainerHandler,
+        source: &Path,
+        context: &OperationContext,
+    ) {
+        if report.status != OperationStatus::Succeeded {
+            return;
+        }
+        let members = if self.trim_eligible_kind_for_path(source).is_some() {
+            Some(TrimArchiveMembers {
+                extract: vec![path_basename(&source.to_string_lossy()).to_string()],
+                gamecube_wii_discs: 0,
+            })
+        } else if self.is_gamecube_wii_disc(source) {
+            Some(TrimArchiveMembers {
+                extract: Vec::new(),
+                gamecube_wii_discs: 1,
+            })
+        } else if handler.descriptor().matches_name("xiso") || !handler.capabilities().extract {
+            Some(TrimArchiveMembers {
+                extract: Vec::new(),
+                gamecube_wii_discs: 0,
+            })
+        } else {
+            Self::plan_trim_archive_members(handler, source, TrimMemberScope::Nested, context)
+        };
+        let value = members.map_or(serde_json::Value::Null, |members| {
+            serde_json::json!({
+                "extract": members.extract,
+                "gamecube_wii_discs": members.gamecube_wii_discs,
+            })
+        });
+        let mut details = match report.details.take() {
+            Some(serde_json::Value::Object(map)) => map,
+            Some(other) => {
+                report.details = Some(other);
+                return;
+            }
+            None => serde_json::Map::new(),
+        };
+        details.insert("trim_members".to_string(), value);
+        report.details = Some(serde_json::Value::Object(details));
     }
 
     pub(super) fn trim_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
@@ -387,10 +453,15 @@ impl CliApp {
             {
                 continue;
             }
+            let scope = if options.rom_filter {
+                TrimMemberScope::Nested
+            } else {
+                TrimMemberScope::Every
+            };
             let selections = match Self::plan_trim_archive_members(
                 handler.as_ref(),
                 &current,
-                true,
+                scope,
                 options.context,
             ) {
                 Some(members) => {
@@ -513,9 +584,12 @@ impl CliApp {
         }
         // The repack keeps every member, so the plan only decides whether to extract at all. Discs
         // are counted here only when nothing is extracted; otherwise the loop below counts them.
-        if let Some(members) =
-            Self::plan_trim_archive_members(handler.as_ref(), archive, false, options.context)
-            && members.extract.is_empty()
+        if let Some(members) = Self::plan_trim_archive_members(
+            handler.as_ref(),
+            archive,
+            TrimMemberScope::TopLevel,
+            options.context,
+        ) && members.extract.is_empty()
         {
             for _ in 0..members.gamecube_wii_discs {
                 skips.skip_gamecube_wii();

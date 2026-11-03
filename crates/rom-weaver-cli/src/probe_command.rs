@@ -4,6 +4,7 @@ struct ProbeContainerOptions {
     kind_filter: ArchiveEntryKindFilter,
     no_ignore: bool,
     split_bin: bool,
+    trim_members: bool,
 }
 
 impl CliApp {
@@ -37,6 +38,7 @@ impl CliApp {
                     no_ignore,
                 },
             split_bin,
+            trim_members,
         } = args;
         let kind_filter = Self::archive_entry_kind_filter(rom_filter, patch_filter);
         trace!(
@@ -47,6 +49,7 @@ impl CliApp {
             no_extract,
             no_ignore,
             split_bin,
+            trim_members,
             "starting probe command"
         );
         let context = self.context(ThreadBudget::Fixed(1));
@@ -96,12 +99,16 @@ impl CliApp {
             None,
         );
 
-        let mut report = self.probe_resolved_source(
-            &probe_source,
-            &context,
+        let options = ProbeContainerOptions {
             kind_filter,
             no_ignore,
             split_bin,
+            trim_members,
+        };
+        let mut report = self.probe_resolved_source(
+            &probe_source,
+            &context,
+            &options,
             probe_recommendation.as_ref(),
         );
         if report.status == OperationStatus::Failed && (from_stdin || probe_source != source) {
@@ -194,22 +201,15 @@ impl CliApp {
         &self,
         probe_source: &Path,
         context: &OperationContext,
-        kind_filter: ArchiveEntryKindFilter,
-        no_ignore: bool,
-        split_bin: bool,
+        options: &ProbeContainerOptions,
         probe_recommendation: Option<&CompressFormatRecommendation>,
     ) -> OperationReport {
         if let Some(handler) = self.containers.probe(probe_source) {
-            let options = ProbeContainerOptions {
-                kind_filter,
-                no_ignore,
-                split_bin,
-            };
             return self.probe_container_source(
                 handler.as_ref(),
                 probe_source,
                 context,
-                &options,
+                options,
                 probe_recommendation,
             );
         }
@@ -380,6 +380,9 @@ impl CliApp {
             });
         let mut report =
             Self::attach_container_probe_details(report, listed_entries, probe_recommendation);
+        if options.trim_members {
+            self.attach_trim_member_details(&mut report, handler, probe_source, context);
+        }
         // Console + optical medium of the resolved (decoded) source, from a bounded
         // prefix read - the same identity detection checksum/extract surface, now in
         // the probe path so platform identify lives with probe (no-op for archives

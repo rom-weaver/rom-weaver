@@ -238,6 +238,9 @@ test("trim flags an archive that holds a GameCube/Wii disc as unsupported and po
     expect(workflow.getInput().trimSupported).toBe(false);
     const warning = workflow.getInput().warnings.find((entry) => entry.code === "TRIM_UNSUPPORTED");
     expect(warning?.message).toContain("Use Compress to convert GameCube and Wii discs to RVZ");
+    // The disc is recognized from its header, so the archive itself is the staged input.
+    expect(workflow.getInput().fileName).toBe("kururin.zip");
+    expect(workflow.getInput().parentCompressions).toEqual([]);
     await expect(workflow.run()).rejects.toThrow("This input does not support trimming");
   } finally {
     await workflow.dispose();

@@ -82,9 +82,9 @@ rom-weaver trim --input game-trimmed.gba --output game.gba --revert
 rom-weaver trim --input games.zip
 ```
 
-`trim` reads the archive's file list first and extracts only the members it can use: trimmable ROMs, `.iso` files that may be XISO discs, and nested archives (including CHD and CSO, which can hold an XISO). GameCube/Wii discs are skipped without extraction when their name gives them away (`.rvz`, `.wbfs`, `.wia`, `.gcz`, `.gcm`, `.tgc`), or when the archive can read the first bytes of an `.iso` or `.ciso` member, as ZIP, 7z, RAR, and tar can. Inside a stream wrapper such as `.iso.gz`, the disc is decompressed before it is recognized. Each supported ROM is written beside the archive using its member filename and the trim extension. `--output` requires exactly one supported ROM. Conflicting output names are rejected before writing, including with `--force`.
+`trim` reads the archive's file list first and extracts only the members it can use: trimmable ROMs, `.iso` files that may be XISO discs, and nested archives (including CHD and CSO, which can hold an XISO). GameCube/Wii discs are skipped without extraction when their name gives them away (`.rvz`, `.wbfs`, `.wia`, `.gcz`, `.gcm`, `.tgc`), or by reading the first bytes of an `.iso` or `.ciso` member, which works in ZIP, 7z, RAR, tar, and single-file streams such as `.iso.gz`. In a solid 7z, RAR, or compressed tar, a header that sits more than 64 MiB into the data is not read; that member is extracted and checked afterwards. Each supported ROM is written beside the archive using its member filename and the trim extension. `--output` requires exactly one supported ROM. Conflicting output names are rejected before writing, including with `--force`.
 
-`--no-filter` considers every member instead. A patch-only `--filter` is rejected.
+`--no-filter` also extracts members with names that say nothing about their contents, such as `bundle.dat`, so their contents decide; known GameCube/Wii discs are still skipped. A patch-only `--filter` is rejected.
 
 ## Look up what is supported
 
