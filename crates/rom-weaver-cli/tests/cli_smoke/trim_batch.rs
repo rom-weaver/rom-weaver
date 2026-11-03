@@ -2679,6 +2679,51 @@ fn trim_in_place_xiso_inside_chd_is_rejected_before_trimming() {
     }
 }
 
+/// A CHD can carry an Xbox XISO, so a `.chd` inside an archive is still opened and its XISO trimmed.
+#[test]
+fn trim_finds_an_xiso_inside_a_chd_inside_an_archive() {
+    const XGD3_VOLUME_OFFSET: usize = 0x0208_0000;
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let source_tree = staging.child("xiso-source");
+    fs::create_dir_all(source_tree.path()).expect("source tree root");
+    fs::write(source_tree.child("default.xbe").path(), vec![7_u8; 4096]).expect("xbe");
+    let plain = staging.child("plain.xiso");
+    write_xiso_fixture_from_directory(source_tree.path(), plain.path());
+    let mut wrapped = vec![0_u8; XGD3_VOLUME_OFFSET];
+    wrapped.extend(fs::read(plain.path()).expect("xiso bytes"));
+    let image = staging.child("game.iso");
+    fs::write(image.path(), &wrapped).expect("wrapped xiso");
+    let chd = staging.child("game.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            image.path().to_str().expect("path"),
+            "--format",
+            "chd-dvd",
+            "--output",
+            chd.path().to_str().expect("path"),
+        ],
+        0,
+    );
+    let archive = temp.child("pack.zip");
+    pack_archive(archive.path(), &[chd.path()]);
+
+    let terminal = parse_single_json_line(&command_stdout(
+        &[
+            "trim",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(terminal["status"], "succeeded", "{terminal}");
+    assert_eq!(terminal["details"]["processed"], 1, "{terminal}");
+}
+
 /// A caller that writes the trim to an extensionless path (the webapp does) learns that the file is
 /// an XISO from the same run, since the name no longer says so.
 #[test]

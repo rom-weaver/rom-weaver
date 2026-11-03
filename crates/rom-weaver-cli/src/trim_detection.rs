@@ -120,12 +120,10 @@ impl CliApp {
                         trace!(archive = %archive.display(), member = %name, "trim skipped a GameCube/Wii disc by header");
                         members.gamecube_wii_discs += 1;
                     }
-                    // A PSP CSO never holds a trim-eligible ROM.
-                    Some(_) if is_ciso => {}
+                    // Any other `.ciso` is a container (a PSP or Xbox CSO) that may hold an XISO.
+                    _ if is_ciso && !include_nested => {}
                     // An `.iso` that is not a GameCube/Wii disc may be an Xbox XISO.
-                    Some(_) => members.extract.push(name),
-                    None if is_ciso && !include_nested => {}
-                    None => members.extract.push(name),
+                    _ => members.extract.push(name),
                 }
             }
         }

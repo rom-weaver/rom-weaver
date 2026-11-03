@@ -1428,9 +1428,9 @@ const TRIM_CONTENT_SNIFFED_EXTENSIONS: &[&str] = &["iso"];
 /// member with one of them as a disc without extracting it.
 const GAMECUBE_WII_DISC_EXTENSIONS: &[&str] = &["gcm", "gcz", "rvz", "tgc", "wbfs", "wia"];
 
-/// Disc container extensions that never hold a trim-eligible ROM. `.ciso` is either a GameCube
-/// CISO or a PSP CSO, which only its header tells apart.
-const TRIM_NON_ARCHIVE_DISC_EXTENSIONS: &[&str] = &["chd", "ciso", "cso", "nfs", "pbp"];
+/// Disc container extensions that never hold a trim-eligible ROM. CHD and CSO are absent: either
+/// can store an Xbox XISO.
+const TRIM_NON_ARCHIVE_DISC_EXTENSIONS: &[&str] = &["nfs", "pbp"];
 
 /// Every extension (lowercase, no dot) a trim input can carry, for the web UI's
 /// supported-files list: path-recognized, then content-sniffed.

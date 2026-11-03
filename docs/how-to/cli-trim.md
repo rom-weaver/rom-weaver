@@ -35,7 +35,7 @@ rom-weaver trim --input game.nds --output game-trimmed.nds
 rom-weaver trim --input game.nds --extension trimmed.nds
 ```
 
-`trim` does not accept GameCube or Wii discs. They are detected by content in any supported disc container (`.iso`, `.gcm`, `.rvz`, `.wbfs`, `.wia`, `.gcz`, `.ciso`, `.tgc`, `.nfs`), whatever the extension. A lone disc, or a lone archive that holds only discs, stops with an error that names the input and points to `compress`; convert the disc to RVZ with `rom-weaver compress --input game.iso --output game.rvz`. In a folder or multi-file run, discs (including discs inside archives, which are never extracted) are skipped, counted as unsupported and in `skipped_gamecube_wii`, and the run notes that `rom-weaver compress` writes RVZ. Other non-XISO `.iso` files, such as PS2 images, are skipped as unsupported.
+`trim` does not accept GameCube or Wii discs. They are detected by content in any supported disc container (`.iso`, `.gcm`, `.rvz`, `.wbfs`, `.wia`, `.gcz`, `.ciso`, `.tgc`, `.nfs`), whatever the extension. A lone disc, or a lone archive that holds only discs, stops with an error that names the input and points to `compress`; convert the disc to RVZ with `rom-weaver compress --input game.iso --output game.rvz`. In a folder or multi-file run, discs (including discs inside archives) are skipped, counted as unsupported and in `skipped_gamecube_wii`, and the run notes that `rom-weaver compress` writes RVZ. Other non-XISO `.iso` files, such as PS2 images, are skipped as unsupported.
 
 ## Choose the output format
 
@@ -82,7 +82,7 @@ rom-weaver trim --input game-trimmed.gba --output game.gba --revert
 rom-weaver trim --input games.zip
 ```
 
-`trim` reads the archive's file list first and extracts only the members it can use: trimmable ROMs, `.iso` files that may be XISO discs, and nested archives. GameCube/Wii discs are recognized by name or by their first bytes and are never extracted. Each supported ROM is written beside the archive using its member filename and the trim extension. `--output` requires exactly one supported ROM. Conflicting output names are rejected before writing, including with `--force`.
+`trim` reads the archive's file list first and extracts only the members it can use: trimmable ROMs, `.iso` files that may be XISO discs, and nested archives (including CHD and CSO, which can hold an XISO). GameCube/Wii discs are skipped without extraction when their name gives them away (`.rvz`, `.wbfs`, `.wia`, `.gcz`, `.gcm`, `.tgc`), or when the archive can read the first bytes of an `.iso` or `.ciso` member, as ZIP, 7z, RAR, and tar can. Inside a stream wrapper such as `.iso.gz`, the disc is decompressed before it is recognized. Each supported ROM is written beside the archive using its member filename and the trim extension. `--output` requires exactly one supported ROM. Conflicting output names are rejected before writing, including with `--force`.
 
 `--no-filter` considers every member instead. A patch-only `--filter` is rejected.
 
