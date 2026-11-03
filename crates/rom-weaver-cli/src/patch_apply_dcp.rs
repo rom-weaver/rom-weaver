@@ -355,15 +355,20 @@ impl CliApp {
         };
 
         // Stream the rebuilt track straight to a temp file for staging (or to
-        // a `.part` beside the output when only the track is wanted, renamed
-        // over it on success so a failed rebuild leaves an existing output
-        // intact) - the cooked image and raw track are never fully held in memory.
+        // the output when only the track is wanted, staged beside an existing
+        // output so a failed rebuild leaves it intact) - the cooked image and
+        // raw track are never fully held in memory.
         let track_only = dcp_writes_track_only(output, compression_options);
         let mut temp_paths: Vec<PathBuf> = Vec::new();
+        let mut staged_output = None;
         let rebuilt_path = if track_only {
-            let mut part = output.as_os_str().to_owned();
-            part.push(".part");
-            PathBuf::from(part)
+            let staged = match StagedOutput::new(output) {
+                Ok(staged) => staged,
+                Err(error) => return fail_error("prepare", error),
+            };
+            let path = staged.path().to_path_buf();
+            staged_output = Some(staged);
+            path
         } else {
             context
                 .temp_paths()
@@ -404,7 +409,9 @@ impl CliApp {
             }
             summary
         };
-        temp_paths.push(rebuilt_path.clone());
+        if !track_only {
+            temp_paths.push(rebuilt_path.clone());
+        }
 
         let boot_note = if rebuilt.boot_sector_replaced {
             "; IP.BIN boot sector replaced"
@@ -462,10 +469,15 @@ impl CliApp {
                 force: args.force,
             })
         } else if track_only {
-            trace!(part = %rebuilt_path.display(), output = %output.display(), "publishing rebuilt data track");
-            if let Err(error) = fs::rename(&rebuilt_path, output) {
-                Self::cleanup_temp_paths(&temp_paths);
-                return fail_io("apply", error);
+            if let Some(staged) = staged_output.take() {
+                trace!(
+                    staged = staged.is_staged(),
+                    output = %output.display(),
+                    "publishing rebuilt data track"
+                );
+                if let Err(error) = staged.commit() {
+                    return fail_error("apply", error);
+                }
             }
             label = format!(
                 "{label}; wrote rebuilt data track `{}` to `{}`",

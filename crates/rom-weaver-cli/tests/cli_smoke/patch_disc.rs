@@ -2088,10 +2088,12 @@ fn patch_apply_dcp_track_output_failure_keeps_a_forced_existing_output() {
         b"previous output",
         "a failed rebuild must leave the existing output untouched"
     );
-    assert!(
-        !temp.child("rebuilt.bin.part").path().exists(),
-        "the partial track is removed"
-    );
+    let leftovers = fs::read_dir(temp.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.contains("rebuilt"))
+        .collect::<Vec<_>>();
+    assert_eq!(leftovers, ["rebuilt.bin"], "the partial track is removed");
 }
 
 #[test]
