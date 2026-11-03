@@ -1,6 +1,8 @@
 const toScriptString = (value: string) => JSON.stringify(value).replace(/</g, "\\u003c");
 
 type EmulatorDocumentOptions = {
+  /** BIOS the core needs; EmulatorJS saves it under the last path segment, so that must be the file name the core expects. */
+  biosUrl?: string;
   gameId?: number;
   gameLabel?: string;
   saveId?: string;
@@ -429,7 +431,7 @@ const createEmulatorDocument = (
       EJS_gameName = ${toScriptString(gameName)};
       EJS_gameUrl = ${toScriptString(gameUrl)};
       EJS_pathtodata = ${toScriptString(dataUrl)};
-    </script>
+${options.biosUrl ? `      EJS_biosUrl = ${toScriptString(options.biosUrl)};\n` : ""}    </script>
     <script>${createEmulatorAudioContextBridgeScript(gameName)}</script>
     <script>${PREPARE_EMULATORJS}</script>
     <script>${OWN_GAME_BUFFER}</script>

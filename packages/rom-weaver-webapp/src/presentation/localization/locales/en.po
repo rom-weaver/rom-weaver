@@ -35,6 +35,21 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.test.fdsBios.summary"
+#~ msgstr "{fileName} needs the Famicom Disk System BIOS."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.test.fdsBios.detail"
+#~ msgstr "Famicom Disk System games cannot run without the FDS BIOS, and loading BIOS files is not supported yet."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.test.fdsBios.link"
+#~ msgstr "Follow FDS BIOS support"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", an output extension. The format selector adds the extension; remove it to avoid a doubled name."
 
@@ -192,11 +207,6 @@ msgstr "{file} does not match this save. You choose another ROM next."
 #: src/presentation/localization/messages.ts
 msgid "ui.pausedGame.title"
 msgstr "{fileName} is paused in Test."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.test.fdsBios.summary"
-msgstr "{fileName} needs the Famicom Disk System BIOS."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -855,6 +865,11 @@ msgstr "Browse games for {platform}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.storageFull.keptUsage"
+msgstr "Browser storage is full. Kept Test ROMs use {size}. Delete kept ROMs to free space."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.envWeb"
 msgstr "Browser tab"
 
@@ -947,6 +962,11 @@ msgstr "Can I make my own ROM patch?"
 #: src/presentation/localization/messages.ts
 msgid "ui.cheats.delivery.unsupported"
 msgstr "Can't be written into the ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.unreadable"
+msgstr "Can't read this version"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1750,11 +1770,6 @@ msgstr "Default: ROM-specific compression such as Z3DS, CHD, RVZ, etc. when avai
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.settings.option.defaultCompression.zipSpecial"
-msgstr "ROM-specific, else raw or .zip"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.settings.suggestion.logLevel"
 msgstr "Default: Trace in development; Warnings otherwise. Debug and Trace include detailed workflow progress."
 
@@ -1762,6 +1777,11 @@ msgstr "Default: Trace in development; Warnings otherwise. Debug and Trace inclu
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.defaults"
 msgstr "Defaults"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.delete"
+msgstr "Delete"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2240,6 +2260,11 @@ msgstr "Export"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.emulator.exportAll"
+msgstr "Export all saves"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.weaveTutorial.download.body"
 msgstr "Exporting a recipe does not apply patches. Press Share weave to check and download the setup; the control then becomes Download ZIP weave."
 
@@ -2292,11 +2317,6 @@ msgstr "Extracting"
 #: src/presentation/localization/messages.ts
 msgid "ui.stage.extractingWith"
 msgstr "Extracting & {verb}…"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.test.fdsBios.detail"
-msgstr "Famicom Disk System games cannot run without the FDS BIOS, and loading BIOS files is not supported yet."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2372,11 +2392,6 @@ msgstr "Find games (by name/checksum), tools, docs, or settings..."
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.fixOrder"
 msgstr "Fix order"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.test.fdsBios.link"
-msgstr "Follow FDS BIOS support"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2745,6 +2760,11 @@ msgstr "Keep rom-weaver working without a network."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.keepTestedRomsEnabled"
+msgstr "Keep tested ROMs on this device"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.noteStayRomOnly"
 msgstr "Keep the ROMs here. The patches are ignored."
 
@@ -2762,6 +2782,11 @@ msgstr "Keep your files on your device."
 #: src/presentation/localization/messages.ts
 msgid "ui.related.hintCarriesSelection"
 msgstr "Keeps this selection"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.title"
+msgstr "Kept Test ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3255,6 +3280,11 @@ msgstr "No supported profiles match this save size."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.empty"
+msgstr "No Test ROMs are kept on this device."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.faqGamesAnswer"
 msgstr "No. Bring your own files. Practice runs use a tiny homebrew NES ROM made for them."
 
@@ -3435,6 +3465,11 @@ msgstr "Only patch ROMs whose checksum matches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.description"
+msgstr "Only tested ROMs are kept when the setting is on. Turning it off keeps existing files."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.open"
 msgstr "Open"
 
@@ -3477,6 +3512,11 @@ msgstr "Open in the Test tab"
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.openProfile"
 msgstr "Open profile"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.storageFull.openStorage"
+msgstr "Open Saves & storage"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3885,6 +3925,16 @@ msgstr "PDS patches and HDIFF19 directory patches are not supported."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.persistence.granted"
+msgstr "Persistent storage granted. Export saves for a separate backup."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.persistence.denied"
+msgstr "Persistent storage was not granted. The browser may remove saves and ROMs. Export saves for backup."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.output.body"
 msgstr "Pick a name and a patch format. Your two ROMs are not changed."
 
@@ -3917,6 +3967,11 @@ msgstr "Platform"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.platformCandidates"
 msgstr "Platform candidates"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.play"
+msgstr "Play"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4082,6 +4137,11 @@ msgstr "Progress"
 #: src/presentation/localization/messages.ts
 msgid "ui.tools.project"
 msgstr "Project"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.protect"
+msgstr "Protect saves and ROMs from automatic removal"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4280,6 +4340,11 @@ msgstr "Remove"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.remove"
+msgstr "Remove"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.removeCheck"
 msgstr "Remove {check} check"
 
@@ -4337,6 +4402,11 @@ msgstr "Remove this patch and choose a valid patch file."
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimDescription"
 msgstr "Remove unused padding from Nintendo DS/DSi, Game Boy Advance, Nintendo 3DS, and Xbox XISO images, or pad a trimmed ROM back to full size."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.removed"
+msgstr "Removed by the browser"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4497,6 +4567,11 @@ msgstr "ROM-specific format only"
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.option.defaultCompression.sevenZipSpecial"
 msgstr "ROM-specific format, else .7z"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.defaultCompression.zipSpecial"
+msgstr "ROM-specific, else raw or .zip"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5260,6 +5335,11 @@ msgstr "The game runs in your browser. The player menu has controls, save states
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.keepFailed"
+msgstr "The game started, but its ROM could not be kept. Free space in Saves & storage and try again."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.unsupported"
 msgstr "The identification data does not support this input."
 
@@ -5607,6 +5687,11 @@ msgstr "Trim unused space from ROMs."
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.trySample"
 msgstr "Try a checksum lookup"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.storageFull.tryAgain"
+msgstr "Try again"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -6112,89 +6197,3 @@ msgstr "ZIP codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z and weaves"
-
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "settings.keepTestedRomsEnabled"
-msgstr "Keep tested ROMs on this device"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.title"
-msgstr "Kept Test ROMs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.description"
-msgstr "Only tested ROMs are kept when the setting is on. Turning it off keeps existing files."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.protect"
-msgstr "Protect saves and ROMs from automatic removal"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.persistence.granted"
-msgstr "Persistent storage granted. Export saves for a separate backup."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.persistence.denied"
-msgstr "Persistent storage was not granted. The browser may remove saves and ROMs. Export saves for backup."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.removed"
-msgstr "Removed by the browser"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.unreadable"
-msgstr "Can't read this version"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.play"
-msgstr "Play"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.remove"
-msgstr "Remove"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.delete"
-msgstr "Delete"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.empty"
-msgstr "No Test ROMs are kept on this device."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.keepFailed"
-msgstr "The game started, but its ROM could not be kept. Free space in Saves & storage and try again."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.saves.emulator.exportAll"
-msgstr "Export all saves"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.storageFull.keptUsage"
-msgstr "Browser storage is full. Kept Test ROMs use {size}. Delete kept ROMs to free space."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.storageFull.openStorage"
-msgstr "Open Saves & storage"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.storageFull.tryAgain"
-msgstr "Try again"

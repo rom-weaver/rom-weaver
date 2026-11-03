@@ -99,15 +99,13 @@ const getSaveFileCore = (fileName: string): string | undefined => {
 };
 
 /**
- * Famicom Disk System images run on the nes core (fceumm), which needs the
- * FDS BIOS (`disksys.rom`) the site does not supply. Without it the core
- * crashes the browser tab, so the player must not start; user-provided BIOS
- * files are tracked in rom-weaver/rom-weaver#1223.
+ * Famicom Disk System images run on the nes core (fceumm), which needs the FDS
+ * BIOS (`disksys.rom`). Without it the core crashes the browser tab, so these
+ * games are started with the bundled FreeDiskSysROM.
  */
 const FDS_PLATFORM = "Nintendo Famicom Disk System";
-const FDS_BIOS_ISSUE_URL = "https://github.com/rom-weaver/rom-weaver/issues/1223";
 
-const requiresUnsuppliedBios = (game: { fileName?: string; platform?: string }): boolean => {
+const isFdsGame = (game: { fileName?: string; platform?: string }): boolean => {
   if (game.platform?.trim() === FDS_PLATFORM) return true;
   return !!game.fileName && /\.fds$/i.test(game.fileName.trim());
 };
@@ -129,12 +127,4 @@ const hasFdsDiskSignature = async (blob: Blob): Promise<boolean> => {
   return matchesAt(0) || matchesAt(FDS_HEADER_BYTES);
 };
 
-export {
-  FDS_BIOS_ISSUE_URL,
-  coreReadsChd,
-  getEmulatorJsAspectRatio,
-  getEmulatorJsCore,
-  getSaveFileCore,
-  hasFdsDiskSignature,
-  requiresUnsuppliedBios,
-};
+export { coreReadsChd, getEmulatorJsAspectRatio, getEmulatorJsCore, getSaveFileCore, hasFdsDiskSignature, isFdsGame };
