@@ -34,6 +34,10 @@
       "seo": {
         "expected": 1,
         "minimum": 0.95
+      },
+      "agentic-browsing": {
+        "expected": 1,
+        "minimum": 0.85
       }
     },
     "metrics": {

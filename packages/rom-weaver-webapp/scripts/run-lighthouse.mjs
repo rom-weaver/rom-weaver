@@ -134,7 +134,7 @@ export const lighthouseArguments = (url, outputBase) => [
   "--output=json",
   "--output=html",
   `--output-path=${outputBase}`,
-  "--only-categories=performance,accessibility,best-practices,seo",
+  "--only-categories=performance,accessibility,best-practices,seo,agentic-browsing",
   "--chrome-flags=--headless=new --no-sandbox --disable-dev-shm-usage --ignore-certificate-errors",
 ];
 
