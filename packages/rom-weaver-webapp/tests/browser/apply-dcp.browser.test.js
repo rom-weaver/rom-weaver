@@ -57,6 +57,22 @@ for (const sheet of ["gdi", "cue"]) {
   });
 }
 
+test("an unmarked loose GD-ROM CUE uses the engine verdict for DCP and CHD", async () => {
+  const [cue, ...tracks] = await discFiles("cue");
+  const text = (await cue.text()).replace(/^REM (?:SINGLE|HIGH)-DENSITY AREA\r?\n/gm, "");
+  const input = [new File([text], "unmarked.cue"), ...tracks];
+  const workflow = await stageDcpWith(input);
+  try {
+    expect(getDcpPatch(workflow)?.patchValidation).toBeUndefined();
+    expect(getDcpPatch(workflow)?.targetInputFileName).toBe("unmarked.cue");
+  } finally {
+    await workflow.dispose();
+  }
+  const expected = (await loadExpected()).cue;
+  await expectCliTracks(await applyDcp(input, "none"), expected.tracks);
+  expect(await sha1(await applyDcp(input, "chd"))).toBe(expected.chd);
+});
+
 test("a DCP applied to a GD-ROM CHD matches the CLI's output for the same disc", async () => {
   const expected = (await loadExpected()).gdi;
   const chd = await loadFixtureFile(`${FIXTURES}/disc.chd`);

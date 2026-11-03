@@ -2238,6 +2238,44 @@ impl CliApp {
         Ok(())
     }
 
+    fn resolve_disc_group_media(assets: &mut [IngestRomAsset]) {
+        let mut media_by_path = BTreeMap::new();
+        for asset in assets.iter() {
+            let sheet = Path::new(&asset.path);
+            if rom_weaver_core::detect_disc_sheet(sheet).is_none() {
+                continue;
+            }
+            let Some(mode) =
+                rom_weaver_containers::chd::ChdContainerHandler.infer_auto_create_mode_label(sheet)
+            else {
+                continue;
+            };
+            let medium = match mode {
+                "gd" => "GD-ROM",
+                "cd" => "CD",
+                _ => continue,
+            };
+            media_by_path.insert(Self::normalized_emitted_path_key(sheet), (medium, mode));
+            if let Ok(refs) = rom_weaver_core::enumerate_disc_sheet_refs(sheet) {
+                let directory = sheet.parent().unwrap_or_else(|| Path::new("."));
+                for reference in refs.referenced_files {
+                    media_by_path.insert(
+                        Self::normalized_emitted_path_key(&directory.join(reference)),
+                        (medium, mode),
+                    );
+                }
+            }
+            trace!(path = %sheet.display(), medium, mode, "resolved ingest disc media from sheet layout");
+        }
+        for asset in assets {
+            let key = Self::normalized_emitted_path_key(Path::new(&asset.path));
+            if let Some(&(medium, mode)) = media_by_path.get(&key) {
+                asset.disc_format = Some(medium.to_string());
+                asset.chd_create_mode = Some(mode.to_string());
+            }
+        }
+    }
+
     fn ingest_success_report(
         &self,
         source: &Path,
@@ -2263,8 +2301,9 @@ impl CliApp {
         // the already-detected platform/disc_format via the shared Rust recommender. Only
         // chd/rvz/z3ds are surfaced; the 7z fallback stays `None` so the host falls back to
         // its own extension heuristics.
-        let mut assets = outcome
-            .assets
+        let mut assets = outcome.assets;
+        Self::resolve_disc_group_media(&mut assets);
+        let mut assets = assets
             .into_iter()
             .map(|mut asset| {
                 let recommendation = rom_weaver_containers::recommend_container_for_identity(

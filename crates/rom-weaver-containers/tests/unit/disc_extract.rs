@@ -855,6 +855,326 @@ fn parse_cue_file_rejects_inconsistent_track_geometry() {
 
 // --- Disc-input auto-detection ---------------------------------------------
 
+fn iso_root_record(extent: u32, data_len: u32, name: u8) -> [u8; 34] {
+    let mut record = [0; 34];
+    record[0] = 34;
+    record[2..6].copy_from_slice(&extent.to_le_bytes());
+    record[6..10].copy_from_slice(&extent.to_be_bytes());
+    record[10..14].copy_from_slice(&data_len.to_le_bytes());
+    record[14..18].copy_from_slice(&data_len.to_be_bytes());
+    record[25] = 2;
+    record[28..30].copy_from_slice(&1_u16.to_le_bytes());
+    record[30..32].copy_from_slice(&1_u16.to_be_bytes());
+    record[32] = 1;
+    record[33] = name;
+    record
+}
+
+fn iso_disc_track(bias: u32, signature: &[u8]) -> Vec<u8> {
+    let mut bytes = vec![0; 24 * 2048];
+    bytes[..signature.len()].copy_from_slice(signature);
+    let root = iso_root_record(bias + 18, 2048, 0);
+    let pvd = &mut bytes[16 * 2048..17 * 2048];
+    pvd[0] = 1;
+    pvd[1..6].copy_from_slice(b"CD001");
+    pvd[6] = 1;
+    pvd[80..84].copy_from_slice(&24_u32.to_le_bytes());
+    pvd[84..88].copy_from_slice(&24_u32.to_be_bytes());
+    pvd[128..130].copy_from_slice(&2048_u16.to_le_bytes());
+    pvd[130..132].copy_from_slice(&2048_u16.to_be_bytes());
+    pvd[156..190].copy_from_slice(&root);
+    bytes[17 * 2048] = 255;
+    bytes[17 * 2048 + 1..17 * 2048 + 6].copy_from_slice(b"CD001");
+    bytes[17 * 2048 + 6] = 1;
+    bytes[18 * 2048..18 * 2048 + 34].copy_from_slice(&root);
+    bytes[18 * 2048 + 34..18 * 2048 + 68].copy_from_slice(&iso_root_record(bias + 18, 2048, 1));
+    bytes
+}
+
+fn store_iso_sectors(cooked: &[u8], sector_bytes: usize, user_offset: usize) -> Vec<u8> {
+    let mut bytes = vec![0; cooked.len() / 2048 * sector_bytes];
+    for (source, sector) in cooked
+        .chunks_exact(2048)
+        .zip(bytes.chunks_exact_mut(sector_bytes))
+    {
+        sector[user_offset..user_offset + 2048].copy_from_slice(source);
+    }
+    bytes
+}
+
+#[test]
+fn parse_disc_input_infers_unmarked_gd_from_biased_iso_root() {
+    for (mode, sector_bytes, user_offset) in [
+        ("MODE1/2048", 2048, 0),
+        ("MODE1/2352", 2352, 16),
+        ("MODE2/2048", 2048, 0),
+        ("MODE2/2336", 2336, 8),
+        ("MODE2/2352", 2352, 24),
+    ] {
+        let dir = scratch_dir(&format!("unmarked-gd-{sector_bytes}-{user_offset}"));
+        write_file(&dir, "low.bin", &raw_frames(4));
+        write_file(&dir, "audio.bin", &raw_frames(4));
+        write_file(
+            &dir,
+            "high.bin",
+            &store_iso_sectors(&iso_disc_track(45000, b""), sector_bytes, user_offset),
+        );
+        let body = format!(
+            "FILE \"low.bin\" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:00\n\
+             FILE \"audio.bin\" BINARY\nTRACK 02 AUDIO\nINDEX 01 00:00:00\n\
+             FILE \"high.bin\" BINARY\nTRACK 03 {mode}\nINDEX 01 00:00:00\n"
+        );
+        let cue = write_file(&dir, "game.cue", body.as_bytes());
+        let inferred = ChdContainerHandler
+            .parse_disc_input(&cue)
+            .expect("parse unmarked GD cue");
+        assert_eq!(inferred.kind, DiscKind::GdRom, "{mode}");
+        assert_eq!(inferred.tracks[1].pad_frames, 45000 - 8, "{mode}");
+        assert_eq!(
+            ChdContainerHandler.infer_auto_create_mode_label(&cue),
+            Some("gd")
+        );
+        let forced_cd = ChdContainerHandler
+            .infer_create_kind_with_override(&cue, 0, ChdCreateModeOverride::Cd)
+            .expect("explicit CD mode");
+        assert_eq!(ChdContainerHandler::create_kind_label(&forced_cd), "cd");
+        fs::write(
+            &cue,
+            body.replace("TRACK 03", "REM HIGH-DENSITY AREA\nTRACK 03"),
+        )
+        .expect("mark high-density track");
+        let marked = ChdContainerHandler
+            .parse_disc_input(&cue)
+            .expect("parse marked GD cue");
+        assert_eq!(inferred.tracks, marked.tracks, "{mode}");
+    }
+}
+
+#[test]
+fn parse_disc_input_infers_gd_at_resolved_offsets_and_pregaps() {
+    for shared in [false, true] {
+        for gap in [
+            "INDEX 00 00:00:08\nINDEX 01 00:00:10",
+            "PREGAP 00:00:02\nINDEX 01 00:00:08",
+        ] {
+            let dir = scratch_dir(&format!("gd-offset-{shared}-{}", gap.starts_with("INDEX")));
+            let low = vec![0; 4 * 2048];
+            let audio = raw_frames(4);
+            let mut high = vec![0; 2 * 2048];
+            high.extend_from_slice(&iso_disc_track(45000, b"SEGA SEGAKATANA "));
+            let body = if shared {
+                let mut all = low;
+                all.extend_from_slice(&audio);
+                all.extend_from_slice(&high);
+                write_file(&dir, "all.bin", &all);
+                format!(
+                    "FILE \"all.bin\" BINARY\nTRACK 01 MODE1/2048\nINDEX 01 00:00:00\n\
+                     TRACK 02 AUDIO\nINDEX 01 00:00:04\nTRACK 03 MODE1/2048\n{gap}\n"
+                )
+            } else {
+                write_file(&dir, "low.bin", &low);
+                write_file(&dir, "audio.bin", &audio);
+                write_file(&dir, "high.bin", &high);
+                format!(
+                    "FILE \"low.bin\" BINARY\nTRACK 01 MODE1/2048\nINDEX 01 00:00:00\n\
+                     FILE \"audio.bin\" BINARY\nTRACK 02 AUDIO\nINDEX 01 00:00:00\n\
+                     FILE \"high.bin\" BINARY\nTRACK 03 MODE1/2048\n{gap}\n"
+                )
+            };
+            let cue = write_file(&dir, "game.cue", body.as_bytes());
+            let inferred = ChdContainerHandler
+                .parse_disc_input(&cue)
+                .expect("parse offset GD cue");
+            assert_eq!(inferred.kind, DiscKind::GdRom, "shared={shared}, {gap}");
+            assert_eq!(
+                inferred.tracks[2].file_offset_bytes,
+                if shared {
+                    4 * 2048 + 4 * 2352 + 2 * 2048
+                } else {
+                    2 * 2048
+                }
+            );
+            fs::write(
+                &cue,
+                body.replace("TRACK 03", "REM HIGH-DENSITY AREA\nTRACK 03"),
+            )
+            .expect("mark offset GD cue");
+            let marked = ChdContainerHandler
+                .parse_disc_input(&cue)
+                .expect("parse marked offset cue");
+            assert_eq!(inferred.tracks, marked.tracks);
+        }
+    }
+}
+
+#[test]
+fn parse_disc_input_keeps_dreamcast_selfboot_and_saturn_cues_as_cd() {
+    for (label, signature, bias) in [
+        ("dreamcast", b"SEGA SEGAKATANA ".as_slice(), 0),
+        ("dreamcast-session", b"SEGA SEGAKATANA ".as_slice(), 11700),
+        ("saturn", b"SEGA SEGASATURN ".as_slice(), 0),
+    ] {
+        let dir = scratch_dir(label);
+        write_file(&dir, "audio.bin", &raw_frames(4));
+        write_file(
+            &dir,
+            "data.bin",
+            &store_iso_sectors(&iso_disc_track(bias, signature), 2352, 16),
+        );
+        let cue = write_file(&dir, "game.cue", b"FILE \"audio.bin\" BINARY\nTRACK 01 AUDIO\nINDEX 01 00:00:00\nFILE \"data.bin\" BINARY\nTRACK 02 MODE1/2352\nINDEX 01 00:00:00\n");
+        assert_eq!(
+            ChdContainerHandler
+                .parse_disc_input(&cue)
+                .expect("parse CD control")
+                .kind,
+            DiscKind::CdRom,
+            "{label}"
+        );
+        assert_eq!(
+            ChdContainerHandler.infer_auto_create_mode_label(&cue),
+            Some("cd"),
+            "{label}"
+        );
+    }
+}
+
+#[test]
+fn parse_disc_input_rejects_malformed_biased_iso_evidence() {
+    for case in 0..12 {
+        let dir = scratch_dir(&format!("gd-malformed-{case}"));
+        let mut bytes = iso_disc_track(45000, b"SEGA SEGAKATANA ");
+        let pvd_root = 16 * 2048 + 156;
+        match case {
+            0 => bytes[16 * 2048 + 6] = 2,
+            1 => bytes[16 * 2048 + 129] = 0,
+            2 => bytes[pvd_root] = 33,
+            3 => bytes[pvd_root + 25] = 0,
+            4 => bytes[pvd_root + 6] ^= 1,
+            5 => bytes[pvd_root + 10..pvd_root + 18].copy_from_slice(&[0xff; 8]),
+            6 => bytes[pvd_root + 2..pvd_root + 10].copy_from_slice(&[0xff; 8]),
+            7 => bytes[18 * 2048..19 * 2048].fill(0),
+            8 => bytes[18 * 2048 + 33] = 1,
+            9 => bytes[18 * 2048 + 34 + 33] = 0,
+            10 => bytes[pvd_root + 10..pvd_root + 18].fill(0),
+            11 => bytes.truncate(18 * 2048),
+            _ => unreachable!(),
+        }
+        write_file(&dir, "game.bin", &bytes);
+        let cue = write_file(
+            &dir,
+            "game.cue",
+            b"FILE \"game.bin\" BINARY\nTRACK 01 MODE1/2048\nINDEX 01 00:00:00\n",
+        );
+        assert_eq!(
+            ChdContainerHandler
+                .parse_disc_input(&cue)
+                .expect("parse malformed ISO as CD")
+                .kind,
+            DiscKind::CdRom,
+            "case {case}"
+        );
+    }
+}
+
+#[test]
+fn parse_disc_input_bounds_iso_root_to_its_resolved_track() {
+    let dir = scratch_dir("gd-root-track-boundary");
+    write_file(&dir, "game.bin", &iso_disc_track(45000, b""));
+    let cue = write_file(
+        &dir,
+        "game.cue",
+        b"FILE \"game.bin\" BINARY\nTRACK 01 MODE1/2048\nINDEX 01 00:00:00\nTRACK 02 MODE1/2048\nINDEX 01 00:00:17\n",
+    );
+    assert_eq!(
+        ChdContainerHandler
+            .parse_disc_input(&cue)
+            .expect("parse split root image")
+            .kind,
+        DiscKind::CdRom,
+    );
+}
+
+#[test]
+fn parse_disc_input_checks_the_entire_biased_root_extent() {
+    for (sectors, kind) in [(6, DiscKind::GdRom), (7, DiscKind::CdRom)] {
+        let dir = scratch_dir(&format!("gd-root-length-{sectors}"));
+        let mut bytes = iso_disc_track(45000, b"");
+        let root = iso_root_record(45018, sectors * 2048, 0);
+        bytes[16 * 2048 + 156..16 * 2048 + 190].copy_from_slice(&root);
+        bytes[18 * 2048..18 * 2048 + 34].copy_from_slice(&root);
+        bytes[18 * 2048 + 34..18 * 2048 + 68].copy_from_slice(&iso_root_record(
+            45018,
+            sectors * 2048,
+            1,
+        ));
+        write_file(&dir, "game.bin", &bytes);
+        let cue = write_file(
+            &dir,
+            "game.cue",
+            b"FILE \"game.bin\" BINARY\nTRACK 01 MODE1/2048\nINDEX 01 00:00:00\n",
+        );
+        assert_eq!(
+            ChdContainerHandler
+                .parse_disc_input(&cue)
+                .expect("parse root extent boundary")
+                .kind,
+            kind,
+            "{sectors} sectors"
+        );
+    }
+}
+
+#[test]
+fn parse_disc_input_ignores_iso_shaped_audio_and_form2_tracks() {
+    for (mode, sector_bytes, user_offset) in [("AUDIO", 2352, 16), ("MODE2/2324", 2324, 0)] {
+        let dir = scratch_dir(&format!("gd-non-data-{sector_bytes}"));
+        write_file(
+            &dir,
+            "game.bin",
+            &store_iso_sectors(&iso_disc_track(45000, b""), sector_bytes, user_offset),
+        );
+        let cue = write_file(
+            &dir,
+            "game.cue",
+            format!("FILE \"game.bin\" BINARY\nTRACK 01 {mode}\nINDEX 01 00:00:00\n").as_bytes(),
+        );
+        assert_eq!(
+            ChdContainerHandler
+                .parse_disc_input(&cue)
+                .expect("parse non-data control")
+                .kind,
+            DiscKind::CdRom,
+            "{mode}"
+        );
+    }
+}
+
+#[test]
+fn infer_auto_create_mode_label_uses_gdi_and_sibling_precedence() {
+    let dir = scratch_dir("gd-sheet-mode-label");
+    write_file(&dir, "track.bin", &raw_frames(4));
+    let gdi = write_file(&dir, "Disc 世界.gdi", b"1\n1 0 4 2352 \"track.bin\" 0\n");
+    let cue = write_file(&dir, "Disc 世界.cue", b"invalid cue data\n");
+    assert_eq!(
+        ChdContainerHandler.infer_auto_create_mode_label(&gdi),
+        Some("gd")
+    );
+    assert_eq!(
+        ChdContainerHandler.infer_auto_create_mode_label(&cue),
+        Some("gd")
+    );
+    let unsupported = write_file(&dir, "Disc 世界.txt", b"invalid cue data\n");
+    assert_eq!(
+        ChdContainerHandler.infer_auto_create_mode_label(&unsupported),
+        None
+    );
+    let malformed = write_file(&dir, "broken.gdi", b"invalid gdi data\n");
+    assert_eq!(
+        ChdContainerHandler.infer_auto_create_mode_label(&malformed),
+        None
+    );
+}
+
 #[test]
 fn parse_disc_input_synthesizes_a_gd_rom_from_high_density_markers() {
     let dir = scratch_dir("cue-high-density");

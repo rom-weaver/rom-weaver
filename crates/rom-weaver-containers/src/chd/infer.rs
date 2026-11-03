@@ -609,7 +609,7 @@ impl ChdContainerHandler {
                         let layout = self.parse_disc_input(input)?;
                         if layout.kind != DiscKind::GdRom {
                             return Err(RomWeaverError::Validation(format!(
-                                "chd-gd input `{}` is not a gd-rom; provide a `.gdi`, a sibling `.gdi`, or a cue with `REM HIGH-DENSITY AREA` markers (or use `chd-cd`)",
+                                "chd-gd input `{}` is not a gd-rom; provide a `.gdi`, a sibling `.gdi`, or a cue with `REM HIGH-DENSITY AREA` markers or a valid ISO9660 root at LBA bias 45000 (or use `chd-cd`)",
                                 input.display()
                             )));
                         }
@@ -675,14 +675,14 @@ impl ChdContainerHandler {
         }
     }
 
-    /// The create mode (`cd`/`dvd`/`hd`/`raw`/...) native `chd` auto-inference would pick for a
-    /// loose `.bin`/`.iso`/extensionless image, so hosts read the verdict instead of re-deriving it
-    /// from bytes. `None` for any other extension or when inference fails (unreadable, or an
-    /// `.iso` that is not whole 2048-byte sectors).
+    /// Hosts SHOULD use this verdict to match native `chd` auto-inference for
+    /// CUE/GDI sheets and loose BIN/ISO/extensionless images. Unsupported inputs
+    /// and inference failures return `None`.
     pub fn infer_auto_create_mode_label(&self, input: &Path) -> Option<&'static str> {
         let loose =
             Self::is_extension(input, "iso") || self.should_auto_infer_single_track_cd(input);
-        if !loose {
+        let sheet = Self::is_extension(input, "cue") || Self::is_extension(input, "gdi");
+        if !loose && !sheet {
             return None;
         }
         let logical_bytes = std::fs::metadata(input).ok()?.len();

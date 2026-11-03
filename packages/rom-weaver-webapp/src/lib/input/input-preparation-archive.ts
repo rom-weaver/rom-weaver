@@ -612,6 +612,7 @@ const buildIngestInputAssets = async (
           ...file.metadata,
           ...(member ? { member } : {}),
           ...(discFormat ? { format: discFormat } : {}),
+          ...(ingestAsset?.chdCreateMode ? { chdCreateMode: ingestAsset.chdCreateMode } : {}),
           ...(ingestAsset?.discGroupId ? { discGroupId: ingestAsset.discGroupId } : {}),
           ...(ingestAsset?.trackNumber === undefined ? {} : { trackNumber: ingestAsset.trackNumber }),
         };

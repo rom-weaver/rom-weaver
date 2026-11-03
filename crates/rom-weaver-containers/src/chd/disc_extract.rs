@@ -549,15 +549,19 @@ impl ChdContainerHandler {
         Ok(layout)
     }
 
-    /// Resolve a disc input for the default `chd` format, auto-detecting GD-ROM
-    /// media. A `.cue` is treated as a GD-ROM when a sibling `.gdi` exists (its
-    /// physical track offsets are authoritative) or when the sheet carries
-    /// `REM HIGH-DENSITY AREA` markers; otherwise it is a plain CD-ROM.
+    /// Resolve the default `chd` disc layout. A sibling GDI MUST take precedence
+    /// over CUE density markers and ISO9660 evidence because it supplies physical offsets.
     pub(super) fn parse_disc_input(&self, path: &Path) -> Result<DiscLayout> {
         if let Some(gdi_path) = Self::sibling_gdi_path(path) {
             return self.parse_gdi_file(&gdi_path);
         }
         let (tracks, high_density_first) = self.resolve_cue_tracks(path)?;
+        let high_density_first = high_density_first.or_else(|| {
+            tracks.iter().enumerate().find_map(|(index, track)| {
+                self.cue_track_has_gd_iso_root(track, index > 0)
+                    .then_some(track.number)
+            })
+        });
         match high_density_first {
             Some(first) => self.synthesize_gd_from_cue_tracks(tracks, first),
             None => {
@@ -569,6 +573,90 @@ impl ChdContainerHandler {
                 Ok(layout)
             }
         }
+    }
+
+    fn cue_track_has_gd_iso_root(&self, track: &DiscTrack, moves_pregap: bool) -> bool {
+        let user_offset = match track.mode {
+            DiscTrackMode::Mode1 | DiscTrackMode::Mode2Form1 => 0,
+            DiscTrackMode::Mode1Raw => 16,
+            DiscTrackMode::Mode2 | DiscTrackMode::Mode2FormMix => 8,
+            DiscTrackMode::Mode2Raw => 24,
+            DiscTrackMode::Mode2Form2 | DiscTrackMode::Audio => return false,
+        };
+        // Density detection MUST skip the same pregap frames that GD synthesis
+        // moves onto the preceding track, including gaps declared with PREGAP.
+        let pregap = if moves_pregap { track.pregap_frames } else { 0 };
+        let Some(frames) = track.frames.checked_sub(pregap) else {
+            return false;
+        };
+        let sector_bytes = track.mode.data_bytes() as u64;
+        let read_sector = |frame: u32| {
+            if frame >= frames {
+                return None;
+            }
+            let offset = track
+                .file_offset_bytes
+                .checked_add((u64::from(pregap) + u64::from(frame)) * sector_bytes + user_offset)?;
+            self.read_bytes_at(&track.file_path, offset, 2048)
+        };
+        let Some(pvd) = read_sector(16) else {
+            return false;
+        };
+        if pvd[0] != 1
+            || &pvd[1..6] != Self::ISO9660_STANDARD_ID
+            || pvd[6] != 1
+            || pvd[128..132] != [0, 8, 8, 0]
+        {
+            return false;
+        }
+        let Some((extent, data_len)) = Self::gd_iso_root_record(&pvd[156..190], 0) else {
+            return false;
+        };
+        let Some(root_frame) = extent.checked_sub(Self::GD_HIGH_DENSITY_START_LBA) else {
+            return false;
+        };
+        if root_frame <= 16
+            || data_len == 0
+            || !data_len.is_multiple_of(2048)
+            || u64::from(root_frame) + u64::from(data_len) / 2048 > u64::from(frames)
+        {
+            return false;
+        }
+        // GD inference MUST verify data at the biased extent rather than trust
+        // PVD metadata or platform headers alone.
+        let Some(root) = read_sector(root_frame) else {
+            return false;
+        };
+        let fields = Some((extent, data_len));
+        let parent_offset = usize::from(root[0]);
+        let found = Self::gd_iso_root_record(&root, 0) == fields
+            && root
+                .get(parent_offset..)
+                .is_some_and(|parent| Self::gd_iso_root_record(parent, 1) == fields);
+        trace!(
+            track = track.number,
+            extent, data_len, found, "chd infer: biased GD ISO9660 root probe"
+        );
+        found
+    }
+
+    fn gd_iso_root_record(record: &[u8], name: u8) -> Option<(u32, u32)> {
+        let fields = record.get(..34)?;
+        if fields[0] < 34
+            || usize::from(fields[0]) > record.len()
+            || fields[1] != 0
+            || fields[25] & 0x82 != 2
+            || fields[26..28] != [0, 0]
+            || fields[32..34] != [1, name]
+        {
+            return None;
+        }
+        let extent = Self::read_le_u32(fields, 2)?;
+        let data_len = Self::read_le_u32(fields, 10)?;
+        if fields[6..10] != extent.to_be_bytes() || fields[14..18] != data_len.to_be_bytes() {
+            return None;
+        }
+        Some((extent, data_len))
     }
 
     /// Return the `.gdi` next to a `.cue` (same stem) when it exists on disk.
