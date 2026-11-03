@@ -3,6 +3,22 @@ use std::collections::BTreeMap;
 use tracing::trace;
 
 const REGULAR_ARCHIVE_READ_BLOCK_BYTES: usize = 2 * 1024 * 1024;
+
+/// The last listing, keyed by source, format, length, and modification time. Planning and then
+/// extracting one archive lists it twice, and listing a compressed tar decodes all of it.
+type ListingKey = (std::path::PathBuf, String, u64, std::time::SystemTime);
+static LAST_LISTING: std::sync::Mutex<Option<(ListingKey, Vec<RegularArchiveEntryMetadata>)>> =
+    std::sync::Mutex::new(None);
+
+fn listing_key(source: &Path, format_name: &str) -> Option<ListingKey> {
+    let metadata = std::fs::metadata(source).ok()?;
+    Some((
+        source.to_path_buf(),
+        format_name.to_string(),
+        metadata.len(),
+        metadata.modified().ok()?,
+    ))
+}
 #[derive(Clone, Debug)]
 pub struct RegularArchiveFileEntry {
     pub index: usize,
@@ -170,6 +186,28 @@ pub fn probe_regular_archive(
 }
 
 pub fn list_regular_archive_entries(
+    source: &Path,
+    format_name: &str,
+) -> Result<Vec<RegularArchiveEntryMetadata>> {
+    let key = listing_key(source, format_name);
+    if let Some(key) = &key
+        && let Ok(cache) = LAST_LISTING.lock()
+        && let Some((cached_key, entries)) = cache.as_ref()
+        && cached_key == key
+    {
+        trace!(format = format_name, source = %source.display(), "regular archive list reused");
+        return Ok(entries.clone());
+    }
+    let entries = list_regular_archive_entries_uncached(source, format_name)?;
+    if let Some(key) = key
+        && let Ok(mut cache) = LAST_LISTING.lock()
+    {
+        *cache = Some((key, entries.clone()));
+    }
+    Ok(entries)
+}
+
+fn list_regular_archive_entries_uncached(
     source: &Path,
     format_name: &str,
 ) -> Result<Vec<RegularArchiveEntryMetadata>> {

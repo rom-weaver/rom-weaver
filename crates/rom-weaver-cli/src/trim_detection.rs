@@ -1,7 +1,226 @@
 use super::selection_resolution::SelectionExtract;
 use super::*;
+use crate::path_access::path_basename;
+
+/// The members trim extracts from an archive, chosen from its listing before anything is written.
+struct TrimArchiveMembers {
+    /// Members that are or may be trim-eligible, plus nested archives when descending.
+    extract: Vec<String>,
+    /// GameCube/Wii discs recognized by name or header; trim never extracts them.
+    gamecube_wii_discs: usize,
+}
+
+/// How trim treats an archive member, judged by its name alone.
+enum TrimMemberName {
+    Extract,
+    /// An `.iso` or `.ciso` whose header decides whether it is a GameCube/Wii disc.
+    ReadHeader,
+    GamecubeWiiDisc,
+    Skip,
+}
+
+/// Which archive members trim may need.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TrimMemberScope {
+    /// Top-level ROMs only, for an `--in-place` repack.
+    TopLevel,
+    /// ROMs and nested archives.
+    Nested,
+    /// Also members with unknown names, which only their content identifies (`--no-filter`).
+    Every,
+}
+
+fn classify_trim_member_name(name: &str, scope: TrimMemberScope) -> TrimMemberName {
+    let path = Path::new(name);
+    if TrimInputKind::from_path(path).is_some() {
+        return TrimMemberName::Extract;
+    }
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+    if TRIM_CONTENT_SNIFFED_EXTENSIONS.contains(&extension.as_str()) || extension == "ciso" {
+        return TrimMemberName::ReadHeader;
+    }
+    if GAMECUBE_WII_DISC_EXTENSIONS.contains(&extension.as_str()) {
+        return TrimMemberName::GamecubeWiiDisc;
+    }
+    if scope == TrimMemberScope::TopLevel
+        || TRIM_NON_ARCHIVE_DISC_EXTENSIONS.contains(&extension.as_str())
+    {
+        return TrimMemberName::Skip;
+    }
+    // Unnamed members may be archives that only their content identifies.
+    if scope == TrimMemberScope::Every
+        || is_container_filter_passthrough_candidate_name(name)
+        || rom_weaver_core::payload_name_needs_content_classification(name)
+    {
+        return TrimMemberName::Extract;
+    }
+    TrimMemberName::Skip
+}
 
 impl CliApp {
+    /// Choose the members of `archive` trim must extract from the archive's listing, reading only
+    /// a short header for `.iso` and `.ciso` members.
+    /// Returns `None` when the container cannot list its entries, so the caller extracts them all.
+    /// With `stop_at_first_extract`, planning ends at the first member trim would extract, so the
+    /// plan is only complete when it extracts nothing; reaching each later header in a solid
+    /// block decodes everything before it.
+    fn plan_trim_archive_members(
+        handler: &dyn ContainerHandler,
+        archive: &Path,
+        scope: TrimMemberScope,
+        stop_at_first_extract: bool,
+        context: &OperationContext,
+    ) -> Option<TrimArchiveMembers> {
+        let request = ContainerProbeRequest {
+            source: archive.to_path_buf(),
+            split_bin: false,
+        };
+        let entries = match handler.list_entry_records(&request, context) {
+            Ok(entries) => entries,
+            Err(error) => {
+                debug!(
+                    archive = %archive.display(),
+                    format = handler.descriptor().name,
+                    %error,
+                    "trim could not list archive members; extracting all of them"
+                );
+                return None;
+            }
+        };
+        let mut members = TrimArchiveMembers {
+            extract: Vec::new(),
+            gamecube_wii_discs: 0,
+        };
+        let mut header_names = Vec::new();
+        for entry in &entries {
+            // A selected folder would extract everything under it, discs included; its members are
+            // listed on their own.
+            if entry.path.ends_with('/') {
+                continue;
+            }
+            let name = normalize_archive_name(&entry.path);
+            if name.is_empty() || should_ignore_common_container_file(&name) {
+                continue;
+            }
+            match classify_trim_member_name(&name, scope) {
+                TrimMemberName::Extract => members.extract.push(name),
+                TrimMemberName::ReadHeader => header_names.push(name),
+                TrimMemberName::GamecubeWiiDisc => {
+                    trace!(archive = %archive.display(), member = %name, "trim skipped a GameCube/Wii disc by name");
+                    members.gamecube_wii_discs += 1;
+                }
+                TrimMemberName::Skip => {
+                    trace!(archive = %archive.display(), member = %name, "trim skipped an ineligible archive member");
+                }
+            }
+        }
+        if stop_at_first_extract && !members.extract.is_empty() {
+            header_names.clear();
+        }
+        // Read headers one at a time when stopping early: reading stops once the requested
+        // member is found, so nothing past the first extracted member is decoded.
+        let batches: Vec<Vec<String>> = if stop_at_first_extract {
+            header_names.into_iter().map(|name| vec![name]).collect()
+        } else if header_names.is_empty() {
+            Vec::new()
+        } else {
+            vec![header_names]
+        };
+        'batches: for batch in batches {
+            let headers = handler
+                .read_entry_prefixes(&request, &batch, GAMECUBE_WII_DISC_HEADER_LEN, context)
+                .unwrap_or_else(|error| {
+                    debug!(
+                        archive = %archive.display(),
+                        %error,
+                        "trim could not read archive member headers; extracting those members"
+                    );
+                    BTreeMap::new()
+                });
+            for name in batch {
+                let is_ciso = name.to_ascii_lowercase().ends_with(".ciso");
+                match headers.get(&name) {
+                    Some(header) if is_gamecube_wii_disc_header(header) => {
+                        trace!(archive = %archive.display(), member = %name, "trim skipped a GameCube/Wii disc by header");
+                        members.gamecube_wii_discs += 1;
+                    }
+                    // Any other `.ciso` is a container (a PSP or Xbox CSO) that may hold an XISO.
+                    _ if is_ciso && scope == TrimMemberScope::TopLevel => {}
+                    // An `.iso` that is not a GameCube/Wii disc may be an Xbox XISO.
+                    _ => {
+                        members.extract.push(name);
+                        if stop_at_first_extract {
+                            break 'batches;
+                        }
+                    }
+                }
+            }
+        }
+        debug!(
+            archive = %archive.display(),
+            entries = entries.len(),
+            extract = members.extract.len(),
+            gamecube_wii_discs = members.gamecube_wii_discs,
+            "planned trim archive members"
+        );
+        Some(members)
+    }
+
+    /// Add `trim_members` to a probe report: whether a default `trim` of `source` would extract
+    /// anything, decided as [`Self::collect_trim_file`] decides it, without extracting anything.
+    /// Header reads stop at the first member trim would extract, so `extract` names at least one
+    /// such member and the disc count is complete only when `extract` is empty. `null` when the
+    /// container cannot be listed.
+    pub(super) fn attach_trim_member_details(
+        &self,
+        report: &mut OperationReport,
+        handler: &dyn ContainerHandler,
+        source: &Path,
+        context: &OperationContext,
+    ) {
+        if report.status != OperationStatus::Succeeded {
+            return;
+        }
+        let members = if self.trim_eligible_kind_for_path(source).is_some() {
+            Some(TrimArchiveMembers {
+                extract: vec![path_basename(&source.to_string_lossy()).to_string()],
+                gamecube_wii_discs: 0,
+            })
+        } else if self.is_gamecube_wii_disc(source) {
+            Some(TrimArchiveMembers {
+                extract: Vec::new(),
+                gamecube_wii_discs: 1,
+            })
+        } else if handler.descriptor().matches_name("xiso") || !handler.capabilities().extract {
+            Some(TrimArchiveMembers {
+                extract: Vec::new(),
+                gamecube_wii_discs: 0,
+            })
+        } else {
+            Self::plan_trim_archive_members(handler, source, TrimMemberScope::Nested, true, context)
+        };
+        let value = members.map_or(serde_json::Value::Null, |members| {
+            serde_json::json!({
+                "extract": members.extract,
+                "gamecube_wii_discs": members.gamecube_wii_discs,
+            })
+        });
+        let mut details = match report.details.take() {
+            Some(serde_json::Value::Object(map)) => map,
+            Some(other) => {
+                report.details = Some(other);
+                return;
+            }
+            None => serde_json::Map::new(),
+        };
+        details.insert("trim_members".to_string(), value);
+        report.details = Some(serde_json::Value::Object(details));
+    }
+
     pub(super) fn trim_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
         if let Some(kind) = TrimInputKind::from_path(path) {
             return Some(kind);
@@ -204,8 +423,9 @@ impl CliApp {
     }
 
     /// Extract an archive (recursively, bounded) into temporary directories and return only the
-    /// payloads whose type trim actually supports. GameCube/Wii discs found inside are counted in
-    /// `skips` and never queued, so a disc is not decoded to temp space. Temp directories are
+    /// payloads whose type trim actually supports. Only members that may matter are extracted
+    /// (see [`Self::plan_trim_archive_members`]); GameCube/Wii discs found inside are counted in
+    /// `skips` and never extracted or decoded. Temp directories are
     /// recorded in `cleanup_paths` so the caller can remove them after trimming completes.
     pub(super) fn extract_trim_payloads(
         &self,
@@ -239,6 +459,31 @@ impl CliApp {
             if handler.descriptor().matches_name("xiso") || !handler.capabilities().extract {
                 continue;
             }
+            let scope = if options.rom_filter {
+                TrimMemberScope::Nested
+            } else {
+                TrimMemberScope::Every
+            };
+            // Plan before probing: probing a single-file stream (`.iso.gz`) decodes all of it,
+            // which a plan that extracts nothing does not need.
+            let selections = match Self::plan_trim_archive_members(
+                handler.as_ref(),
+                &current,
+                scope,
+                false,
+                options.context,
+            ) {
+                Some(members) => {
+                    for _ in 0..members.gamecube_wii_discs {
+                        skips.skip_gamecube_wii();
+                    }
+                    if members.extract.is_empty() {
+                        continue;
+                    }
+                    members.extract
+                }
+                None => Vec::new(),
+            };
             // Only extract sources that genuinely probe as a container, so extension-only matches
             // on non-container payloads do not abort the batch.
             let probe_request = ContainerProbeRequest {
@@ -262,6 +507,7 @@ impl CliApp {
                 out_dir = %out_dir.display(),
                 depth,
                 rom_filter = options.rom_filter,
+                selections = selections.len(),
                 "extracting archive for trim"
             );
             self.extract_with_selection_fallback(
@@ -269,7 +515,7 @@ impl CliApp {
                 &current,
                 SelectionExtract {
                     out_dir: &out_dir,
-                    selections: &[],
+                    selections: &selections,
                     kind_filter,
                     split_bin: false,
                     ignore_common_files: true,
@@ -356,6 +602,21 @@ impl CliApp {
                 archive.display(),
                 handler.descriptor().name
             )));
+        }
+        // The repack keeps every member, so the plan only decides whether to extract at all. Discs
+        // are counted here only when nothing is extracted; otherwise the loop below counts them.
+        if let Some(members) = Self::plan_trim_archive_members(
+            handler.as_ref(),
+            archive,
+            TrimMemberScope::TopLevel,
+            true,
+            options.context,
+        ) && members.extract.is_empty()
+        {
+            for _ in 0..members.gamecube_wii_discs {
+                skips.skip_gamecube_wii();
+            }
+            return Ok(Vec::new());
         }
 
         let out_dir = options.context.temp_paths().next_path("trim-repack", None);

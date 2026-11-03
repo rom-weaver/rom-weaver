@@ -230,6 +230,8 @@ type CompressionEntryInput = RuntimeCompressionEntryInput;
 type CompressionWorkflowOptions = {
   threads?: number | string;
   chdSplitBin?: boolean;
+  /** Probe only: also report which members a trim would extract (`probe --trim-members`). */
+  trimMembers?: boolean;
   romFilter?: boolean;
   patchFilter?: boolean;
   /** Extract the selected archive entries without classifying them as ROMs or patches. */
@@ -348,6 +350,8 @@ type CompressionProbeResult = {
   chd?: { rawSha1?: string; sha1?: string };
   /** PS1 disc layout and raw stored blocks counted from validated PBP indexes. */
   pbp?: { discCount: number; storedBlockCount: number; hasIndexEndOffsets: boolean };
+  /** With `trimMembers`: the members a trim would extract and the GameCube/Wii discs it would skip. */
+  trimMembers?: { extract: string[]; gamecubeWiiDiscs: number };
 };
 
 type CompressionExtractResult = {

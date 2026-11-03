@@ -706,6 +706,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           sourcePath: archive.filePath,
           knownInputPaths,
           splitBin: workflowInput.options?.chdSplitBin,
+          trimMembers: workflowInput.options?.trimMembers,
         },
         forwardArchiveProgress("input", workflowInput.options?.onProgress, `Reading ${archive.fileName}...`),
         workflowInput.options?.onLog,

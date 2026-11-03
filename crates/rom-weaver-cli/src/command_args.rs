@@ -391,6 +391,16 @@ pub struct ProbeCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub split_bin: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "trim-members",
+            help = "Report which archive members trim would extract, without extracting them"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub trim_members: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
