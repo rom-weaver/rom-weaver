@@ -20,14 +20,25 @@ const dcpStages = new WeakSet<object>();
 const isDcpPatchStage = <TSource>(stage: StagedSource<TSource>): boolean =>
   dcpStages.has(stage) || isDcpPatchName(stage.state.fileName) || isDcpPatchName(stage.preparedPatchFile?.fileName);
 
-// A cue is a GD-ROM only when it marks the inner program area, the rule CHD output and the Rust
-// layout use; a plain CD cue has no data track for the DCP to rebuild.
-const isGdRomCueAsset = (asset: InputAsset): boolean =>
-  asset.kind === "cue" && /^\s*REM\b.*HIGH-DENSITY AREA/im.test(asset.file.metadata?.cueText || "");
+// Rust identity names a track "Sega Dreamcast" (disc format "GD-ROM") from its `SEGA SEGAKATANA` boot header.
+const isDreamcastTrack = (asset: InputAsset): boolean => {
+  const romType = asset.romType ?? (asset.file as { romType?: InputAsset["romType"] }).romType;
+  return romType?.platform === "Sega Dreamcast" || romType?.discFormat === "GD-ROM";
+};
+
+// A cue is a GD-ROM when it marks the inner program area (the rule CHD output and the Rust layout use) or
+// when one of its tracks carries the Dreamcast boot header; a plain CD cue has no data track to rebuild.
+const isGdRomCueAsset = (asset: InputAsset, assets: readonly InputAsset[]): boolean =>
+  asset.kind === "cue" &&
+  (/^\s*REM\b.*HIGH-DENSITY AREA/im.test(asset.file.metadata?.cueText || "") ||
+    assets.some(
+      (track) =>
+        track.kind === "track" && (!asset.groupId || track.groupId === asset.groupId) && isDreamcastTrack(track),
+    ));
 
 /** The disc sheet a DCP rebuilds: a `.gdi` wins over a GD-ROM `.cue` beside it, as for GD-ROM CHD creation. */
 const findDcpDiscSheet = (assets: readonly InputAsset[]): InputAsset | undefined =>
-  assets.find((asset) => asset.kind === "gdi") ?? assets.find(isGdRomCueAsset);
+  assets.find((asset) => asset.kind === "gdi") ?? assets.find((asset) => isGdRomCueAsset(asset, assets));
 
 type DcpReadinessContext = {
   /** Every prepared input asset, sheets included. */
