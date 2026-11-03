@@ -3212,6 +3212,112 @@ fn trim_extracts_a_nested_7z_to_read_the_disc_inside() {
     assert_eq!(extractions.len(), 1, "{extractions:#?}");
 }
 
+fn write_nested_zip_fixture(path: &Path, entries: &[(&str, &[u8])]) {
+    use rom_weaver_containers::libarchive::{
+        EntryFileType, EntrySpec, WriteArchive, WriteFilter, WriteFormat,
+    };
+    let mut archive = WriteArchive::new("fixture").expect("zip writer");
+    archive
+        .set_format(WriteFormat::Zip, "fixture")
+        .expect("zip format");
+    archive
+        .add_filter(WriteFilter::None, "fixture")
+        .expect("no filter");
+    archive
+        .open_filename(path, "fixture", "fixture")
+        .expect("zip output");
+    for (name, bytes) in entries {
+        archive
+            .start_entry(
+                EntrySpec {
+                    pathname: name,
+                    file_type: EntryFileType::Regular,
+                    perm: 0o644,
+                    size: bytes.len() as u64,
+                },
+                "fixture",
+            )
+            .expect("zip entry");
+        archive.write_data_all(bytes, "fixture").expect("zip data");
+        archive.finish_entry("fixture").expect("zip finish entry");
+    }
+    archive.close("fixture", "fixture").expect("zip close");
+}
+
+fn assert_ambiguous_nested_zip_retains_rom(outer: &Path, rom: &[u8]) {
+    let input = outer.to_str().expect("path");
+    let probe = parse_single_json_line(&command_stdout(
+        &["probe", "--input", input, "--trim-members", "--json"],
+        0,
+    ));
+    assert_eq!(
+        probe["details"]["trim_members"]["extract"],
+        serde_json::json!(["inner.zip"]),
+        "{probe}"
+    );
+    let trim = parse_single_json_line(&command_stdout(
+        &["trim", "--input", input, "--dry-run", "--json"],
+        0,
+    ));
+    assert_eq!(trim["details"]["processed"], 1, "{trim}");
+    let output = outer.with_extension("nds");
+    command_stdout(
+        &[
+            "trim",
+            "--input",
+            input,
+            "--output",
+            output.to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(fs::read(output).expect("trimmed ROM"), &rom[..0x3000]);
+}
+
+fn duplicate_nested_zip_fixture(alias: &str) {
+    let temp = setup_temp_dir();
+    let first = temp.child("first.zip");
+    write_nested_zip_fixture(first.path(), &[("readme.txt", b"fixture")]);
+    let rom = build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false);
+    let second = temp.child("second.zip");
+    write_nested_zip_fixture(second.path(), &[("game.nds", &rom)]);
+    let outer = temp.child("outer.zip");
+    write_nested_zip_fixture(
+        outer.path(),
+        &[
+            ("inner.zip", &fs::read(first.path()).expect("first ZIP")),
+            (alias, &fs::read(second.path()).expect("second ZIP")),
+        ],
+    );
+    assert_ambiguous_nested_zip_retains_rom(outer.path(), &rom);
+}
+
+#[test]
+fn trim_retains_duplicate_nested_zip_members() {
+    duplicate_nested_zip_fixture("inner.zip");
+}
+
+#[test]
+fn trim_retains_normalized_alias_nested_zip_members() {
+    duplicate_nested_zip_fixture("./inner.zip");
+}
+
+#[test]
+fn trim_retains_concatenated_nested_zip() {
+    let temp = setup_temp_dir();
+    let first = temp.child("first.zip");
+    write_nested_zip_fixture(first.path(), &[("readme.txt", b"fixture")]);
+    let rom = build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false);
+    let second = temp.child("second.zip");
+    write_nested_zip_fixture(second.path(), &[("game.nds", &rom)]);
+    let mut concatenated = fs::read(first.path()).expect("first ZIP");
+    concatenated.extend(fs::read(second.path()).expect("second ZIP"));
+    let outer = temp.child("outer.zip");
+    write_nested_zip_fixture(outer.path(), &[("inner.zip", &concatenated)]);
+    assert_ambiguous_nested_zip_retains_rom(outer.path(), &rom);
+}
+
 #[test]
 fn trim_skips_nested_names_the_rom_filter_does_not_extract() {
     let temp = setup_temp_dir();

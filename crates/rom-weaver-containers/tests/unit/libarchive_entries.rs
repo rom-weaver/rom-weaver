@@ -64,6 +64,290 @@ fn read_all(reader: &mut dyn Read) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+fn streamed_zip_listing(
+    bytes: &[u8],
+    block_size: usize,
+) -> Result<rom_weaver_core::NestedArchiveListing> {
+    let visitor = rom_weaver_core::NestedEntryVisitor {
+        action: &|_| rom_weaver_core::NestedEntryAction::List,
+        stop_after_prefix: &|_, _| false,
+        end_pass_on_stop: false,
+    };
+    with_streamed_regular_archive(
+        &mut io::Cursor::new(bytes),
+        block_size,
+        "streamed ZIP fixture",
+        0,
+        &visitor,
+    )
+}
+
+#[test]
+fn nested_archive_listing_omits_duplicate_source_keys_requested_once() {
+    let dir = unique_temp_dir("nested-duplicate-key");
+    let inner = dir.join("inner.zip");
+    create_zip_fixture(&inner).expect("inner ZIP");
+    let payload = fs::read(inner).expect("inner bytes");
+    let source = dir.join("outer.zip");
+    let mut writer = WriteArchive::new("fixture").expect("writer");
+    writer.set_format(WriteFormat::Zip, "fixture").expect("ZIP");
+    writer
+        .add_filter(WriteFilter::None, "fixture")
+        .expect("no filter");
+    writer
+        .open_filename(&source, "fixture", "fixture")
+        .expect("output");
+    for _ in 0..2 {
+        writer
+            .start_entry(
+                EntrySpec {
+                    pathname: "inner.zip",
+                    file_type: EntryFileType::Regular,
+                    perm: 0o644,
+                    size: payload.len() as u64,
+                },
+                "fixture",
+            )
+            .expect("duplicate entry");
+        writer.write_data_all(&payload, "fixture").expect("payload");
+        writer.finish_entry("fixture").expect("finish entry");
+    }
+    writer.close("fixture", "fixture").expect("close");
+    let visitor = rom_weaver_core::NestedEntryVisitor {
+        action: &|_| rom_weaver_core::NestedEntryAction::List,
+        stop_after_prefix: &|_, _| false,
+        end_pass_on_stop: false,
+    };
+    let listings = read_nested_regular_archive_entry_prefixes(
+        &source,
+        "zip",
+        &|path| (path == "inner.zip").then(|| path.to_owned()),
+        1,
+        0,
+        &visitor,
+    )
+    .expect("ambiguous entries fall back to extraction");
+    assert!(listings.is_empty());
+}
+
+#[test]
+fn streamed_zip_checks_central_names_offsets_counts_and_footer() {
+    let dir = unique_temp_dir("streamed-directory");
+    let source = dir.join("fixture.zip");
+    create_zip_fixture(&source).expect("ZIP fixture");
+    let bytes = fs::read(&source).expect("ZIP bytes");
+    let central = bytes
+        .windows(4)
+        .position(|bytes| bytes == b"PK\x01\x02")
+        .expect("central directory");
+    let footer = bytes.len() - 22;
+    assert_eq!(
+        streamed_zip_listing(&bytes, 17)
+            .expect("ordinary ZIP")
+            .entries
+            .len(),
+        3
+    );
+    for (label, offset) in [
+        ("central name", central + 46),
+        ("local offset", central + 42),
+        ("entry count", footer + 10),
+        ("directory offset", footer + 16),
+    ] {
+        let mut changed = bytes.clone();
+        changed[offset] ^= 1;
+        assert!(streamed_zip_listing(&changed, 17).is_err(), "{label}");
+    }
+    let mut zip64 = bytes.clone();
+    zip64[footer + 8..footer + 12].fill(255);
+    assert!(
+        streamed_zip_listing(&zip64, 17).is_err(),
+        "ZIP64 count sentinels"
+    );
+    assert!(
+        streamed_zip_listing(&[], 17)
+            .expect("empty archive")
+            .entries
+            .is_empty()
+    );
+    for length in [1, 21, footer, bytes.len() - 1] {
+        assert!(
+            streamed_zip_listing(&bytes[..length], 17).is_err(),
+            "truncated at {length}"
+        );
+    }
+    let mut trailing = bytes.clone();
+    trailing.extend(b"unrecognized trailer");
+    assert!(
+        streamed_zip_listing(&trailing, 17).is_err(),
+        "trailing data"
+    );
+    let name_len = usize::from(u16::from_le_bytes([
+        bytes[central + 28],
+        bytes[central + 29],
+    ]));
+    for (tag, accepted) in [(0x0001_u16, false), (0x7075, false), (0xffff, true)] {
+        let mut changed = bytes.clone();
+        let extra = central + 46 + name_len;
+        changed.splice(extra..extra, [tag as u8, (tag >> 8) as u8, 0, 0]);
+        changed[central + 30..central + 32].copy_from_slice(&4_u16.to_le_bytes());
+        let size = u32::from_le_bytes(
+            bytes[footer + 12..footer + 16]
+                .try_into()
+                .expect("directory size"),
+        );
+        changed[footer + 16..footer + 20].copy_from_slice(&(size + 4).to_le_bytes());
+        assert_eq!(
+            streamed_zip_listing(&changed, 17).is_ok(),
+            accepted,
+            "extra tag {tag:x}"
+        );
+    }
+}
+
+#[test]
+fn streamed_zip_accepts_comments_and_split_read_boundaries() {
+    let dir = unique_temp_dir("streamed-comment");
+    let source = dir.join("fixture.zip");
+    create_zip_fixture(&source).expect("ZIP fixture");
+    let original = fs::read(&source).expect("ZIP bytes");
+    for length in [0, 1, 65535] {
+        let mut bytes = original.clone();
+        let footer = bytes.len() - 22;
+        bytes[footer + 20..footer + 22].copy_from_slice(&(length as u16).to_le_bytes());
+        bytes.extend(vec![b'x'; length]);
+        for block_size in [1, 3, 4, 17, 65536] {
+            assert_eq!(
+                streamed_zip_listing(&bytes, block_size)
+                    .expect("ZIP comment")
+                    .entries
+                    .len(),
+                3,
+                "length={length}, block_size={block_size}"
+            );
+        }
+    }
+}
+
+#[test]
+fn streamed_zip_bounds_the_directory_snapshot() {
+    let dir = unique_temp_dir("streamed-directory-limit");
+    let source = dir.join("fixture.zip");
+    let mut writer = WriteArchive::new("fixture").expect("writer");
+    writer.set_format(WriteFormat::Zip, "fixture").expect("ZIP");
+    writer
+        .add_filter(WriteFilter::None, "fixture")
+        .expect("no filter");
+    writer
+        .open_filename(&source, "fixture", "fixture")
+        .expect("output");
+    for index in 0..20 {
+        let name = format!("{index}-{}.txt", "a".repeat(60000));
+        writer
+            .start_entry(
+                EntrySpec {
+                    pathname: &name,
+                    file_type: EntryFileType::Regular,
+                    perm: 0o644,
+                    size: 0,
+                },
+                "fixture",
+            )
+            .expect("entry");
+        writer.finish_entry("fixture").expect("finish entry");
+    }
+    writer.close("fixture", "fixture").expect("close");
+    let bytes = fs::read(&source).expect("ZIP bytes");
+    assert!(
+        streamed_zip_listing(&bytes, 65536).is_err(),
+        "oversized central directory"
+    );
+}
+
+#[test]
+fn streamed_zip_rejects_ambiguous_comment_footer() {
+    let dir = unique_temp_dir("streamed-comment-footer");
+    let source = dir.join("fixture.zip");
+    create_zip_fixture(&source).expect("ZIP fixture");
+    let mut bytes = fs::read(&source).expect("ZIP bytes");
+    let footer = bytes.len() - 22;
+    bytes[footer + 20..footer + 22].copy_from_slice(&44_u16.to_le_bytes());
+    bytes.extend(b"PK\x05\x06");
+    bytes.extend([0; 18]);
+    bytes.extend([b'x'; 22]);
+    assert!(
+        streamed_zip_listing(&bytes, 17).is_err(),
+        "a comment can select another seekable ZIP directory"
+    );
+}
+
+#[test]
+fn streamed_zip_accepts_a_large_payload_and_preserves_early_stop() {
+    let dir = unique_temp_dir("streamed-large-payload");
+    let source = dir.join("fixture.zip");
+    let mut writer = WriteArchive::new("fixture").expect("writer");
+    writer.set_format(WriteFormat::Zip, "fixture").expect("ZIP");
+    writer
+        .set_format_option(Some("zip"), "compression", "store", "fixture")
+        .expect("stored ZIP");
+    writer
+        .add_filter(WriteFilter::None, "fixture")
+        .expect("no filter");
+    writer
+        .open_filename(&source, "fixture", "fixture")
+        .expect("output");
+    let payload = vec![42_u8; 2 * 1024 * 1024];
+    writer
+        .start_entry(
+            EntrySpec {
+                pathname: "disc.iso",
+                file_type: EntryFileType::Regular,
+                perm: 0o644,
+                size: payload.len() as u64,
+            },
+            "fixture",
+        )
+        .expect("entry");
+    writer.write_data_all(&payload, "fixture").expect("payload");
+    writer.finish_entry("fixture").expect("finish entry");
+    writer
+        .start_entry(
+            EntrySpec {
+                pathname: "readme.txt",
+                file_type: EntryFileType::Regular,
+                perm: 0o644,
+                size: 0,
+            },
+            "fixture",
+        )
+        .expect("entry after large payload");
+    writer.finish_entry("fixture").expect("finish second entry");
+    writer.close("fixture", "fixture").expect("close");
+    let bytes = fs::read(&source).expect("ZIP bytes");
+    assert_eq!(
+        streamed_zip_listing(&bytes, 65536)
+            .expect("small directory after large payload")
+            .entries
+            .len(),
+        2
+    );
+
+    let visitor = rom_weaver_core::NestedEntryVisitor {
+        action: &|_| rom_weaver_core::NestedEntryAction::Stop,
+        stop_after_prefix: &|_, _| false,
+        end_pass_on_stop: true,
+    };
+    let listing = with_streamed_regular_archive(
+        &mut io::Cursor::new(&bytes[..128]),
+        17,
+        "stopped ZIP fixture",
+        0,
+        &visitor,
+    )
+    .expect("stopped listing does not require a directory or drain the payload");
+    assert!(listing.stopped);
+}
+
 fn tar_link_fixture(kind: u8) -> Vec<u8> {
     let mut bytes = vec![0u8; 1536];
     let header = &mut bytes[..512];

@@ -397,28 +397,90 @@ impl Drop for ReadArchive {
 struct StreamCallbackData<'r> {
     reader: &'r mut dyn Read,
     buffer: Vec<u8>,
+    tail: std::collections::VecDeque<u8>,
+    bytes: u64,
 }
 
-/// Read a regular archive from `reader` front to back. libarchive gets no seek callback, so
-/// formats that need random access (7z) fail to open or to read a header, and zip is read from
-/// its local headers. The handle is freed before this returns.
-pub(crate) fn with_streamed_regular_archive<T>(
+// Completed ZIP listings MUST fit their directory and footer in this bounded snapshot.
+const STREAMED_ZIP_TAIL_BYTES: usize = 1024 * 1024;
+
+impl StreamCallbackData<'_> {
+    fn zip_header_offset(&self, start: i64, end: i64, name: &str) -> Option<i64> {
+        let tail_start = self.bytes.checked_sub(self.tail.len() as u64)?;
+        let end = usize::try_from(u64::try_from(end).ok()?.checked_sub(tail_start)?).ok()?;
+        let start = usize::try_from(u64::try_from(start).ok()?.saturating_sub(tail_start)).ok()?;
+        let tail = &self.tail;
+        if end > tail.len() {
+            return None;
+        }
+        let mut matches = (start..end.checked_sub(29)?).filter_map(|offset| {
+            if !tail.range(offset..offset + 4).copied().eq(*b"PK\x03\x04") {
+                return None;
+            }
+            let name_len = usize::from(u16::from_le_bytes([tail[offset + 26], tail[offset + 27]]));
+            let extra_len = usize::from(u16::from_le_bytes([tail[offset + 28], tail[offset + 29]]));
+            if 30 + name_len + extra_len != end - offset
+                || !tail
+                    .range(offset + 30..offset + 30 + name_len)
+                    .copied()
+                    .eq(name.bytes())
+            {
+                return None;
+            }
+            i64::try_from(tail_start + offset as u64).ok()
+        });
+        let offset = matches.next()?;
+        matches.next().is_none().then_some(offset)
+    }
+
+    fn read_block(&mut self) -> io::Result<usize> {
+        let read = loop {
+            match self.reader.read(&mut self.buffer) {
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                result => break result?,
+            }
+        };
+        self.bytes = self
+            .bytes
+            .checked_add(read as u64)
+            .ok_or_else(|| io::Error::other("nested archive input length overflowed u64"))?;
+        let bytes = &self.buffer[..read];
+        if read >= STREAMED_ZIP_TAIL_BYTES {
+            self.tail.clear();
+            self.tail.extend(&bytes[read - STREAMED_ZIP_TAIL_BYTES..]);
+        } else {
+            let discard = (self.tail.len() + read).saturating_sub(STREAMED_ZIP_TAIL_BYTES);
+            self.tail.drain(..discard);
+            self.tail.extend(bytes);
+        }
+        Ok(read)
+    }
+}
+
+/// Stream a regular archive's listing and optional prefixes without seeking, freeing the handle
+/// before returning. Completed ZIP listings MUST match a bounded central-directory snapshot;
+/// unsupported layouts and formats that require seeking return an error for normal extraction.
+pub(crate) fn with_streamed_regular_archive(
     reader: &mut dyn Read,
     block_size: usize,
     context: &str,
-    use_archive: impl FnOnce(&mut ReadArchive) -> Result<T>,
-) -> Result<T> {
+    max_len: usize,
+    visitor: &rom_weaver_core::NestedEntryVisitor<'_>,
+) -> Result<rom_weaver_core::NestedArchiveListing> {
     // Declared before the archive so it is dropped after it.
     let mut callback_data = StreamCallbackData {
         reader,
         buffer: vec![0; block_size.max(1)],
+        tail: std::collections::VecDeque::new(),
+        bytes: 0,
     };
     let mut archive = ReadArchive::new(context)?;
     archive.support_regular_archives(context)?;
+    let callback_ptr = &mut callback_data as *mut StreamCallbackData<'_>;
     let status = unsafe {
         sys::archive_read_open2(
             archive.as_ptr(),
-            (&mut callback_data as *mut StreamCallbackData<'_>).cast::<c_void>(),
+            callback_ptr.cast::<c_void>(),
             None,
             Some(stream_read_callback),
             None,
@@ -426,16 +488,189 @@ pub(crate) fn with_streamed_regular_archive<T>(
         )
     };
     archive.check_status(status, &format!("{context} while opening the stream"))?;
-    let result = use_archive(&mut archive);
+    let result = list_streamed_entries(&mut archive, callback_ptr, max_len, visitor);
+    let is_zip = archive.format() == ARCHIVE_FORMAT_ZIP;
+    let unfiltered =
+        unsafe { archive_filter_code(archive.as_ptr(), 0) } == sys::ARCHIVE_FILTER_NONE;
+    let directory_offset = unsafe { sys::archive_filter_bytes(archive.as_ptr(), 0) };
     let closed = archive.close(
         &format!("{context} while closing the stream"),
         &format!("{context} while releasing the stream"),
     );
-    match (result, closed) {
+    let (listing, offsets) = match (result, closed) {
         (Ok(value), Ok(())) => Ok(value),
         (Err(error), _) => Err(error),
         (Ok(_), Err(error)) => Err(error),
+    }?;
+    if is_zip && !listing.stopped {
+        while callback_data.read_block()? != 0 {}
+        if !unfiltered
+            || !streamed_zip_directory_matches(
+                callback_data.tail.make_contiguous(),
+                callback_data.bytes,
+                directory_offset,
+                &listing,
+                &offsets,
+            )
+        {
+            return Err(RomWeaverError::Validation(format!(
+                "{context}: streamed ZIP listing does not match a supported central directory"
+            )));
+        }
     }
+    Ok(listing)
+}
+
+fn list_streamed_entries(
+    archive: &mut ReadArchive,
+    callback_data: *mut StreamCallbackData<'_>,
+    max_len: usize,
+    visitor: &rom_weaver_core::NestedEntryVisitor<'_>,
+) -> Result<(rom_weaver_core::NestedArchiveListing, Vec<i64>)> {
+    use rom_weaver_core::NestedEntryAction;
+    let mut listing = rom_weaver_core::NestedArchiveListing::default();
+    let mut offsets = Vec::new();
+    while let Some(entry) = archive
+        .next_entry()
+        .map_err(|error| RomWeaverError::Validation(format!("reading a nested entry: {error}")))?
+    {
+        let mut path = entry
+            .pathname()
+            .map_err(|error| RomWeaverError::Validation(format!("nested entry name: {error}")))?;
+        if entry.archive.format() == ARCHIVE_FORMAT_ZIP {
+            let ptr = entry.archive.as_ptr();
+            // Header position precedes skipped ZIP data descriptors; the snapshot MUST locate
+            // the actual local header ending at libarchive's consumed position.
+            // The callback data MUST only be borrowed between libarchive calls.
+            offsets.push(
+                unsafe { &*callback_data }
+                    .zip_header_offset(
+                        unsafe { sys::archive_read_header_position(ptr) },
+                        unsafe { sys::archive_filter_bytes(ptr, 0) },
+                        &path,
+                    )
+                    .unwrap_or(-1),
+            );
+        }
+        if entry.is_dir() {
+            path = format!("{}/", path.trim_end_matches('/'));
+        }
+        let action = (visitor.action)(&path);
+        let prefix = if action == NestedEntryAction::ReadPrefix && entry.is_file() && max_len > 0 {
+            Some(rom_weaver_core::read_up_to(entry.into_reader(), max_len)?)
+        } else {
+            None
+        };
+        trace!(entry = %path, ?action, prefix = prefix.as_ref().map(Vec::len), "nested archive entry");
+        let settled = prefix
+            .as_deref()
+            .is_some_and(|prefix| (visitor.stop_after_prefix)(&path, prefix));
+        listing
+            .entries
+            .push(rom_weaver_core::NestedArchiveEntry { path, prefix });
+        if action == NestedEntryAction::Stop || settled {
+            listing.stopped = true;
+            break;
+        }
+    }
+    Ok((listing, offsets))
+}
+
+fn streamed_zip_directory_matches(
+    tail: &[u8],
+    bytes: u64,
+    directory_offset: i64,
+    listing: &rom_weaver_core::NestedArchiveListing,
+    offsets: &[i64],
+) -> bool {
+    let le16 = |data: &[u8], offset| u16::from_le_bytes([data[offset], data[offset + 1]]);
+    let le32 = |data: &[u8], offset| {
+        u32::from_le_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ])
+    };
+    let Some(eocd) = (tail.len().saturating_sub(65535 + 22)..tail.len().saturating_sub(21))
+        .rev()
+        .find(|&index| {
+            tail[index..].starts_with(b"PK\x05\x06")
+                && index + 22 + usize::from(le16(tail, index + 20)) == tail.len()
+        })
+    else {
+        return false;
+    };
+    // archive_read_format_zip_seekable_bid ignores comment lengths; later EOCD signatures
+    // MUST force fallback rather than trusting a different directory.
+    if tail[eocd + 4..]
+        .windows(4)
+        .any(|bytes| bytes == b"PK\x05\x06")
+    {
+        return false;
+    }
+    let footer = &tail[eocd..];
+    let count = le16(footer, 10);
+    let size = le32(footer, 12);
+    let offset = le32(footer, 16);
+    if le16(footer, 4) != 0
+        || le16(footer, 6) != 0
+        || le16(footer, 8) != count
+        || count == u16::MAX
+        || size == u32::MAX
+        || offset == u32::MAX
+        || usize::from(count) != listing.entries.len()
+        || offsets.len() != listing.entries.len()
+        || directory_offset < 0
+        || i64::from(offset) < directory_offset
+        || u64::from(offset) + u64::from(size) != bytes - (tail.len() - eocd) as u64
+    {
+        return false;
+    }
+    let Ok(size) = usize::try_from(size) else {
+        return false;
+    };
+    let Some(start) = eocd.checked_sub(size) else {
+        return false;
+    };
+    let mut directory = &tail[start..eocd];
+    for (entry, &local_offset) in listing.entries.iter().zip(offsets) {
+        if directory.len() < 46 || !directory.starts_with(b"PK\x01\x02") {
+            return false;
+        }
+        let flags = le16(directory, 8);
+        let name_len = usize::from(le16(directory, 28));
+        let extra_len = usize::from(le16(directory, 30));
+        let comment_len = usize::from(le16(directory, 32));
+        let entry_len = 46 + name_len + extra_len + comment_len;
+        if directory.len() < entry_len
+            || flags & !0x080e != 0
+            || le32(directory, 20) == u32::MAX
+            || le32(directory, 24) == u32::MAX
+            || le16(directory, 34) != 0
+            || i64::from(le32(directory, 42)) != local_offset
+        {
+            return false;
+        }
+        let name = &directory[46..46 + name_len];
+        if (!name.is_ascii() && flags & 0x0800 == 0) || name != entry.path.as_bytes() {
+            return false;
+        }
+        let mut extra = &directory[46 + name_len..46 + name_len + extra_len];
+        while !extra.is_empty() {
+            if extra.len() < 4 {
+                return false;
+            }
+            let tag = le16(extra, 0);
+            let length = usize::from(le16(extra, 2));
+            if matches!(tag, 0x0001 | 0x7075) || extra.len() < 4 + length {
+                return false;
+            }
+            extra = &extra[4 + length..];
+        }
+        directory = &directory[entry_len..];
+    }
+    directory.is_empty()
 }
 
 unsafe extern "C" fn stream_read_callback(
@@ -448,14 +683,8 @@ unsafe extern "C" fn stream_read_callback(
     }
     let callback_data = unsafe { &mut *client_data.cast::<StreamCallbackData<'_>>() };
     // A panic MUST NOT unwind across the extern "C" boundary; report it as a read error.
-    let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        loop {
-            match callback_data.reader.read(&mut callback_data.buffer) {
-                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-                result => break result,
-            }
-        }
-    }));
+    let read =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback_data.read_block()));
     match read {
         Ok(Ok(read)) => {
             unsafe { *buffer = callback_data.buffer.as_ptr().cast::<c_void>() };

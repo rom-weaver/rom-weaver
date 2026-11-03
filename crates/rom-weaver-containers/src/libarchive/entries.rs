@@ -495,7 +495,7 @@ where
 /// that stops once `expected` keys are seen: each member's data is streamed into a second reader,
 /// and `visitor` decides per inner entry whether to read at most `max_len` leading bytes or to
 /// stop that member's listing. Inner directories end with `/`. Nothing is extracted. A member whose
-/// data is not an archive libarchive can read front to back is left out of the result.
+/// key is duplicated or whose data cannot be safely listed without seeking is left out of the result.
 pub fn read_nested_regular_archive_entry_prefixes(
     source: &Path,
     format_name: &str,
@@ -512,6 +512,29 @@ pub fn read_nested_regular_archive_entry_prefixes(
         "nested archive prefix read start"
     );
     let mut listings = BTreeMap::new();
+    if expected == 0 {
+        return Ok(listings);
+    }
+    // A name-keyed listing MUST NOT decide for distinct payloads extracted to the same path.
+    let mut unique = std::collections::BTreeSet::new();
+    let mut ambiguous = std::collections::BTreeSet::new();
+    for entry in list_regular_archive_entries(source, format_name)? {
+        if !entry.is_dir
+            && let Some(key) = member_key(&entry.path)
+            && !unique.insert(key.clone())
+        {
+            ambiguous.insert(key);
+        }
+    }
+    if !ambiguous.is_empty() {
+        trace!(
+            format = format_name,
+            members = ambiguous.len(),
+            "nested archive prefix read omitted ambiguous member names"
+        );
+    }
+    unique.retain(|key| !ambiguous.contains(key));
+    let expected = expected.min(unique.len());
     if expected == 0 {
         return Ok(listings);
     }
@@ -532,7 +555,7 @@ pub fn read_nested_regular_archive_entry_prefixes(
                 .pathname()
                 .ok()
                 .and_then(|path| member_key(&path))
-                .filter(|key| !seen.contains(key))
+                .filter(|key| unique.contains(key) && !seen.contains(key))
             else {
                 continue;
             };
@@ -542,7 +565,8 @@ pub fn read_nested_regular_archive_entry_prefixes(
                 &mut member,
                 64 * 1024,
                 &format!("{format_name} nested archive read"),
-                |inner| list_streamed_entries(inner, max_len, visitor),
+                max_len,
+                visitor,
             ) {
                 Ok(listing) => {
                     trace!(
@@ -579,44 +603,6 @@ pub fn read_nested_regular_archive_entry_prefixes(
         (Err(error), _) => Err(error),
         (Ok(()), Err(error)) => Err(error),
     }
-}
-
-fn list_streamed_entries(
-    archive: &mut ReadArchive,
-    max_len: usize,
-    visitor: &rom_weaver_core::NestedEntryVisitor<'_>,
-) -> Result<rom_weaver_core::NestedArchiveListing> {
-    use rom_weaver_core::NestedEntryAction;
-    let mut listing = rom_weaver_core::NestedArchiveListing::default();
-    while let Some(entry) = archive
-        .next_entry()
-        .map_err(|error| RomWeaverError::Validation(format!("reading a nested entry: {error}")))?
-    {
-        let mut path = entry
-            .pathname()
-            .map_err(|error| RomWeaverError::Validation(format!("nested entry name: {error}")))?;
-        if entry.is_dir() {
-            path = format!("{}/", path.trim_end_matches('/'));
-        }
-        let action = (visitor.action)(&path);
-        let prefix = if action == NestedEntryAction::ReadPrefix && entry.is_file() && max_len > 0 {
-            Some(rom_weaver_core::read_up_to(entry.into_reader(), max_len)?)
-        } else {
-            None
-        };
-        trace!(entry = %path, ?action, prefix = prefix.as_ref().map(Vec::len), "nested archive entry");
-        let settled = prefix
-            .as_deref()
-            .is_some_and(|prefix| (visitor.stop_after_prefix)(&path, prefix));
-        listing
-            .entries
-            .push(rom_weaver_core::NestedArchiveEntry { path, prefix });
-        if action == NestedEntryAction::Stop || settled {
-            listing.stopped = true;
-            break;
-        }
-    }
-    Ok(listing)
 }
 
 fn open_regular_archive_reader(source: &Path, format_name: &str) -> Result<ReadArchive> {
