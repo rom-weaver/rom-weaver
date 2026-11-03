@@ -33,6 +33,14 @@ describe("createDocsRouteHtml", () => {
     expect(readStructuredData(html)).toMatchObject({ "@type": "TechArticle", headline: "FAQ" });
   });
 
+  it("dates the page only when its last change is known", () => {
+    const dated = createDocsRouteHtml(SHELL, route(), "prod", "", "2026-10-01T12:00:00.000Z");
+    expect(readStructuredData(dated).dateModified).toBe("2026-10-01T12:00:00.000Z");
+    expect(readStructuredData(createDocsRouteHtml(SHELL, route(), "prod", "", null))).not.toHaveProperty(
+      "dateModified",
+    );
+  });
+
   it("keeps guide text from closing the inline script", () => {
     const title = "FAQ</script><script>alert(1)</script>";
     const html = createDocsRouteHtml(SHELL, route({ title }), "prod", "");
