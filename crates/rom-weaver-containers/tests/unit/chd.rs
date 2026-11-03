@@ -16,6 +16,51 @@ fn split_checksum_workers_share_the_operation_thread_budget() {
     assert_eq!(disc_extract::split_checksum_thread_budget(10, 3), 3);
 }
 
+#[test]
+fn shared_pool_disc_extract_keeps_decode_and_checksum_workers_within_the_budget() {
+    // 16 requested threads, a 3-track GD-ROM and crc32/md5/sha1: an unbudgeted run kept 16 decode
+    // threads beside 3 x 3 checksum workers, past the 20-slot browser pool.
+    let split = disc_extract::split_disc_threads(16, 3, 3, true);
+    assert_eq!(
+        split,
+        disc_extract::DiscThreadSplit {
+            decode_threads: 10,
+            checksum_threads: Some(2),
+        }
+    );
+    for operation_threads in 1..=64 {
+        for outputs in 1..=8 {
+            for algorithms in 0..=5 {
+                let split =
+                    disc_extract::split_disc_threads(operation_threads, outputs, algorithms, true);
+                let per_output = split.checksum_threads.unwrap();
+                let checksum_workers = if per_output > 1 {
+                    per_output * outputs
+                } else {
+                    0
+                };
+                assert!(split.decode_threads >= 1);
+                assert!(per_output <= algorithms.max(1));
+                assert!(
+                    split.decode_threads + checksum_workers <= operation_threads,
+                    "{operation_threads} threads, {outputs} outputs, {algorithms} algorithms"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn unbounded_host_disc_extract_keeps_the_full_decode_budget() {
+    assert_eq!(
+        disc_extract::split_disc_threads(16, 3, 3, false),
+        disc_extract::DiscThreadSplit {
+            decode_threads: 16,
+            checksum_threads: None,
+        }
+    );
+}
+
 // --- CD sector ECC ---------------------------------------------------------
 
 /// MAME CD sync header that prefixes every reconstructable 2352-byte sector.
