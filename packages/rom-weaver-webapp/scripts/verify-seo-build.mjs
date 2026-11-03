@@ -579,6 +579,7 @@ assertIncludes(createHtml, '"@type":"SoftwareApplication"', "create SoftwareAppl
 assertIncludes(createHtml, '"url":"https://rom-weaver.com/create-rom-patch"', "create JSON-LD canonical url");
 if (createHtml.includes('"@type":"WebSite"')) throw new Error("WebSite JSON-LD belongs on the home route only");
 
+const sitemapSource = production ? read("sitemap.xml") : "";
 for (const route of DOC_ROUTES) {
   const docsHtml = read(`${route.slug}.html`);
   const directoryHtml = read(`${route.slug}/index.html`);
@@ -619,6 +620,15 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, 'rel="stylesheet" crossorigin href="./assets/', `${route.slug} app stylesheet`);
   const legalPage = isLegalDocRoute(route.slug);
   assertIncludes(docsHtml, `"@type":"${legalPage ? "WebPage" : "TechArticle"}"`, `${route.slug} structured data`);
+  // The page MUST report the same modification date as its sitemap entry, including none.
+  if (production) {
+    const lastmod = sitemapSource.match(
+      new RegExp(`<loc>https://rom-weaver.com/${route.slug}</loc>(?:<lastmod>([^<]+)</lastmod>)?`),
+    )?.[1];
+    const dateModified = docsHtml.match(/"dateModified":"([^"]+)"/)?.[1];
+    if (dateModified !== lastmod)
+      throw new Error(`${route.slug} dateModified ${dateModified} must equal its sitemap lastmod ${lastmod}`);
+  }
   // The guided-sample offer is the hub's, not every page's: the guides all
   // closing on the same three buttons made it furniture. Each guide still reaches
   // the samples through the prose links its own author wrote.

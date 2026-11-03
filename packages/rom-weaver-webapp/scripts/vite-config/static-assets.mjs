@@ -33,6 +33,7 @@ import {
   createWorkflowMarkdown,
   injectLdJson,
   makeBetaRouteNoindex,
+  readDocLastmods,
 } from "./seo-html.mjs";
 
 const copyFile = (from, to) => {
@@ -187,9 +188,10 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         makeBetaRouteNoindex(withShell("whats-new"), "whats-new", channel, channelLabel),
         routePreloadLinks.get("whats-new"),
       );
+      const docLastmods = readDocLastmods();
       for (const route of DOC_ROUTES) {
         const routeShellHtml = withRoutePreloadLinks(withShell(route.slug), routePreloadLinks.get("docs"));
-        const docsHtml = createDocsRouteHtml(routeShellHtml, route, channel, channelLabel);
+        const docsHtml = createDocsRouteHtml(routeShellHtml, route, channel, channelLabel, docLastmods.get(route.slug));
         const extensionlessPath = path.join(distDir, `${route.slug}.html`);
         const directoryIndexPath = path.join(distDir, route.slug, "index.html");
         fs.mkdirSync(path.dirname(extensionlessPath), { recursive: true });
@@ -258,7 +260,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
           fs.copyFileSync(canonicalMarkdown, path.join(distDir, `${legacy}.md`));
         }
       }
-      if (channel === "prod") fs.writeFileSync(path.join(distDir, "sitemap.xml"), createSitemapSource());
+      if (channel === "prod") fs.writeFileSync(path.join(distDir, "sitemap.xml"), createSitemapSource({ docLastmods }));
       // Every channel serves the catalog. Its links use the origin the build is
       // served from (production unless ROM_WEAVER_SITE_ORIGIN says otherwise),
       // while canonical URLs and headers stay on production; only the sitemap
