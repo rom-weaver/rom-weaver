@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import http from "node:http";
 import { CHANNEL_BADGE } from "../../src/webapp/build-channel.ts";
 import { APP_VERSION } from "../../src/webapp/build-version.ts";
 import { WORKFLOW_ENTRY_ROUTES, withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
@@ -12,8 +13,15 @@ import { createEmptyConfirmationDialogState } from "../../src/webapp/webapp-root
 import type { WebappRootProps } from "../../src/webapp/webapp-root-types.ts";
 import { resolveThreads, selectViewWithTransition, WebappRoot } from "../../src/webapp/webapp-root.tsx";
 import { preloadWorkflowRoute } from "../../src/webapp/workflow-routes.tsx";
+import { emptyIdentifyDeployment } from "./empty-identify-deployment.ts";
+
+vi.mock("../../src/platform/browser/identify-packs.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/platform/browser/identify-packs.ts")>()),
+  loadIdentifyIndexAndCatalog: vi.fn(async () => emptyIdentifyDeployment),
+}));
 
 const mocks = vi.hoisted(() => ({
+  fetchChangelog: vi.fn(),
   mastheadFails: false,
   queryOfflineReadyState: vi.fn(async () => null),
   requestEmulatorStartFromUserAction: vi.fn(),
@@ -152,12 +160,48 @@ const fileDragEvent = (type: string, target: EventTarget = document, files: File
 };
 
 beforeEach(() => {
+  vi.stubGlobal(
+    "fetch",
+    mocks.fetchChangelog.mockResolvedValue({
+      json: () =>
+        Promise.resolve([
+          {
+            date: "2026-07-29T00:00:00Z",
+            hash: "release",
+            release: {
+              changelogUrl: "https://github.com/rom-weaver/rom-weaver/blob/main/CHANGELOG.md",
+              notes: [
+                {
+                  groups: [{ entries: [{ summary: "Shiny highlight" }], title: "Highlights" }],
+                  version: APP_VERSION,
+                },
+              ],
+              repositoryUrl: "https://github.com/rom-weaver/rom-weaver",
+              truncated: false,
+              version: APP_VERSION,
+            },
+            subject: "release",
+          },
+        ]),
+      ok: true,
+    }),
+  );
+});
+
+beforeEach(() => {
+  vi.spyOn(http, "request");
   window.history.replaceState({}, "", "/");
   window.localStorage.clear();
 });
 
 afterEach(() => {
   cleanup();
+  expect(http.request).not.toHaveBeenCalled();
+  for (const [input] of mocks.fetchChangelog.mock.calls) {
+    const url = new URL(String(input));
+    expect(url.origin).toBe(window.location.origin);
+    expect(url.pathname).toMatch(/\/changelog\.json$/u);
+  }
   vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
@@ -479,37 +523,6 @@ describe("the update banner", () => {
     act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-
-  beforeEach(() => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        json: () =>
-          Promise.resolve([
-            {
-              date: "2026-07-29T00:00:00Z",
-              hash: "release",
-              release: {
-                changelogUrl: "https://github.com/rom-weaver/rom-weaver/blob/main/CHANGELOG.md",
-                notes: [
-                  {
-                    groups: [{ entries: [{ summary: "Shiny highlight" }], title: "Highlights" }],
-                    version: APP_VERSION,
-                  },
-                ],
-                repositoryUrl: "https://github.com/rom-weaver/rom-weaver",
-                truncated: false,
-                version: APP_VERSION,
-              },
-              subject: "release",
-            },
-          ]),
-        ok: true,
-      }),
-    );
-  });
-
-  afterEach(() => vi.unstubAllGlobals());
 
   describe("with a deploy waiting", () => {
     it("remembers a dismissal for this build", async () => {
