@@ -107,6 +107,19 @@ describe("createEmulatorDocument", () => {
     expect(config.EJS_defaultOptions.ejs_threads).toBe("disabled");
   });
 
+  it("defaults Saturn to the 4 MB RAM expansion cartridge", () => {
+    const config = readEmulatorConfig("segaSaturn");
+
+    expect(config.EJS_defaultOptions.yabause_addon_cartridge).toBe("4M_ram");
+  });
+
+  it.each(Object.keys(EMULATORJS_SYSTEM_CORES).filter((system) => system !== "segaSaturn"))(
+    "leaves the Saturn cartridge option unset for %s",
+    (system) => {
+      expect(readEmulatorConfig(system).EJS_defaultOptions).not.toHaveProperty("yabause_addon_cartridge");
+    },
+  );
+
   it.each(Object.entries(EMULATORJS_SYSTEM_CORES))("requests a vendored WebGL 2 build for %s", (system, core) => {
     const config = readEmulatorConfig(system);
     const threads = config.EJS_defaultOptions.ejs_threads === "enabled";
@@ -449,6 +462,27 @@ describe("createEmulatorDocument", () => {
       ["disk", "1"],
       ["volume", "0"],
     ]);
+  });
+
+  it("writes the default core options on a game's first launch", () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.iso", "segaSaturn");
+    const start = document.indexOf("Object.defineProperty(window, 'EmulatorJS'");
+    const script = document.slice(document.lastIndexOf("(() => {", start), document.indexOf("})();", start) + 5);
+    let saved = "";
+    class FakeEmulatorJS {
+      config = { defaultOptions: { ejs_threads: "disabled", yabause_addon_cartridge: "4M_ram" } };
+      getCoreSettings() {
+        return saved;
+      }
+    }
+    const window: { EmulatorJS?: typeof FakeEmulatorJS } = {};
+    runInNewContext(script, { window });
+    window.EmulatorJS = FakeEmulatorJS;
+    const emulator = new window.EmulatorJS();
+
+    expect(emulator.getCoreSettings()).toBe('ejs_threads = "disabled"\nyabause_addon_cartridge = "4M_ram"\n');
+    saved = 'yabause_addon_cartridge = "none"\n';
+    expect(emulator.getCoreSettings()).toBe(saved);
   });
 
   const readGameBufferScript = (gameUrl: string) => {
