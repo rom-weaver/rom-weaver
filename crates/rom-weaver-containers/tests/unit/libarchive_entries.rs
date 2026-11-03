@@ -282,6 +282,30 @@ fn streamed_zip_rejects_ambiguous_comment_footer() {
 }
 
 #[test]
+fn streamed_zip_rejects_a_zip64_locator_in_a_directory_comment() {
+    let dir = unique_temp_dir("streamed-zip64-locator");
+    let source = dir.join("fixture.zip");
+    create_zip_fixture(&source).expect("ZIP fixture");
+    let mut bytes = fs::read(source).expect("ZIP bytes");
+    let footer = bytes.len() - 22;
+    let central = bytes
+        .windows(4)
+        .rposition(|bytes| bytes == b"PK\x01\x02")
+        .expect("last central entry");
+    let size = u32::from_le_bytes(bytes[footer + 12..footer + 16].try_into().expect("size"));
+    bytes[central + 32..central + 34].copy_from_slice(&20_u16.to_le_bytes());
+    let mut locator = [0_u8; 20];
+    locator[..4].copy_from_slice(b"PK\x06\x07");
+    locator[16..20].copy_from_slice(&1_u32.to_le_bytes());
+    bytes.splice(footer..footer, locator);
+    bytes[footer + 32..footer + 36].copy_from_slice(&(size + 20).to_le_bytes());
+    assert!(
+        streamed_zip_listing(&bytes, 17).is_err(),
+        "a ZIP64 locator must force seekable extraction even without ZIP32 sentinels"
+    );
+}
+
+#[test]
 fn streamed_zip_accepts_a_large_payload_and_preserves_early_stop() {
     let dir = unique_temp_dir("streamed-large-payload");
     let source = dir.join("fixture.zip");

@@ -3319,6 +3319,63 @@ fn trim_retains_concatenated_nested_zip() {
 }
 
 #[test]
+fn trim_retains_a_nested_zip_with_a_zip64_locator() {
+    let temp = setup_temp_dir();
+    let first = temp.child("first.zip");
+    write_nested_zip_fixture(first.path(), &[("readme.txt", b"fixture")]);
+    let mut inner = fs::read(first.path()).expect("first ZIP");
+    let footer = inner.split_off(inner.len() - 22);
+    let central = inner
+        .windows(4)
+        .position(|bytes| bytes == b"PK\x01\x02")
+        .expect("readme directory");
+    let comment_start = inner.len();
+    let rom = build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false);
+    let second = temp.child("second.zip");
+    write_nested_zip_fixture(second.path(), &[("game.nds", &rom)]);
+    let mut alternate = fs::read(second.path()).expect("ROM ZIP");
+    let alternate_footer = alternate.len() - 22;
+    let alternate_central = u32::from_le_bytes(
+        alternate[alternate_footer + 16..alternate_footer + 20]
+            .try_into()
+            .expect("ROM directory offset"),
+    ) as usize;
+    alternate.truncate(alternate_footer);
+    alternate[alternate_central + 42..alternate_central + 46]
+        .copy_from_slice(&(comment_start as u32).to_le_bytes());
+    let directory_offset = comment_start + alternate_central;
+    let directory_size = alternate.len() - alternate_central;
+    let zip64_offset = comment_start + alternate.len();
+    let mut comment = alternate;
+    comment.extend_from_slice(b"PK\x06\x06");
+    comment.extend_from_slice(&44_u64.to_le_bytes());
+    comment.extend_from_slice(&45_u16.to_le_bytes());
+    comment.extend_from_slice(&45_u16.to_le_bytes());
+    comment.extend_from_slice(&[0; 8]);
+    comment.extend_from_slice(&1_u64.to_le_bytes());
+    comment.extend_from_slice(&1_u64.to_le_bytes());
+    comment.extend_from_slice(&(directory_size as u64).to_le_bytes());
+    comment.extend_from_slice(&(directory_offset as u64).to_le_bytes());
+    comment.extend_from_slice(b"PK\x06\x07");
+    comment.extend_from_slice(&0_u32.to_le_bytes());
+    comment.extend_from_slice(&(zip64_offset as u64).to_le_bytes());
+    comment.extend_from_slice(&1_u32.to_le_bytes());
+    inner[central + 32..central + 34].copy_from_slice(
+        &u16::try_from(comment.len())
+            .expect("small comment")
+            .to_le_bytes(),
+    );
+    inner.extend_from_slice(&comment);
+    let directory_size = inner.len() - central;
+    inner.extend_from_slice(&footer);
+    let footer = inner.len() - 22;
+    inner[footer + 12..footer + 16].copy_from_slice(&(directory_size as u32).to_le_bytes());
+    let outer = temp.child("outer.zip");
+    write_nested_zip_fixture(outer.path(), &[("inner.zip", &inner)]);
+    assert_ambiguous_nested_zip_retains_rom(outer.path(), &rom);
+}
+
+#[test]
 fn trim_skips_nested_names_the_rom_filter_does_not_extract() {
     let temp = setup_temp_dir();
     let staging = setup_temp_dir();

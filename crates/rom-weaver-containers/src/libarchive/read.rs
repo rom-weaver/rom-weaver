@@ -609,6 +609,10 @@ fn streamed_zip_directory_matches(
     {
         return false;
     }
+    // The seekable bidder follows ZIP64 locators even without ZIP32 sentinel fields.
+    if eocd >= 20 && tail[eocd - 20..eocd].starts_with(b"PK\x06\x07") {
+        return false;
+    }
     let footer = &tail[eocd..];
     let count = le16(footer, 10);
     let size = le32(footer, 12);
