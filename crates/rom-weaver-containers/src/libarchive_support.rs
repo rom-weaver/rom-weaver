@@ -771,31 +771,36 @@ pub(crate) fn read_regular_archive_entry_prefixes_with_libarchive(
 pub(crate) fn read_nested_regular_archive_entry_prefixes_with_libarchive(
     source: &Path,
     format_name: &str,
-    member: &str,
+    members: &[String],
     max_len: usize,
-    wanted: &dyn Fn(&str) -> bool,
-) -> Result<Option<Vec<rom_weaver_core::NestedArchiveEntry>>> {
-    let entries = read_nested_regular_archive_entry_prefixes(
+    visit: &dyn Fn(&str) -> rom_weaver_core::NestedEntryAction,
+) -> Result<BTreeMap<String, rom_weaver_core::NestedArchiveListing>> {
+    let normalize = |path: &str| {
+        let name = normalize_archive_name(path);
+        if path.ends_with('/') {
+            format!("{}/", name.trim_end_matches('/'))
+        } else {
+            name
+        }
+    };
+    let wanted = members.iter().cloned().collect::<BTreeSet<_>>();
+    let mut listings = read_nested_regular_archive_entry_prefixes(
         source,
         format_name,
-        &|path| normalize_archive_name(path) == member,
+        &|path| {
+            let name = normalize_archive_name(path);
+            wanted.contains(&name).then_some(name)
+        },
+        wanted.len(),
         max_len,
-        &|path| wanted(&normalize_archive_name(path)),
+        &|path| visit(&normalize(path)),
     )?;
-    Ok(entries.map(|entries| {
-        entries
-            .into_iter()
-            .map(|entry| {
-                let name = normalize_archive_name(&entry.path);
-                let path = if entry.path.ends_with('/') {
-                    format!("{}/", name.trim_end_matches('/'))
-                } else {
-                    name
-                };
-                rom_weaver_core::NestedArchiveEntry { path, ..entry }
-            })
-            .collect()
-    }))
+    for listing in listings.values_mut() {
+        for entry in &mut listing.entries {
+            entry.path = normalize(&entry.path);
+        }
+    }
+    Ok(listings)
 }
 
 #[derive(Clone, Debug)]

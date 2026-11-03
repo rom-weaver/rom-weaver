@@ -491,25 +491,33 @@ where
         (Ok(_), Err(error)) => Err(error),
     }
 }
-/// List the archive stored in the first file entry `is_member` accepts by streaming that entry's
-/// data into a second reader, reading at most `max_len` leading bytes of each inner file entry
-/// `wanted` accepts. Inner directories end with `/`. Nothing is extracted. `Ok(None)` when no
-/// entry matches or its data is not an archive libarchive can read front to back.
+/// List the archives stored in the file entries `member_key` maps to a key, in one forward pass
+/// that stops once `expected` keys are seen: each member's data is streamed into a second reader,
+/// and `visit` decides per inner entry whether to read at most `max_len` leading bytes or to stop
+/// that member's listing. Inner directories end with `/`. Nothing is extracted. A member whose
+/// data is not an archive libarchive can read front to back is left out of the result.
 pub fn read_nested_regular_archive_entry_prefixes(
     source: &Path,
     format_name: &str,
-    is_member: &dyn Fn(&str) -> bool,
+    member_key: &dyn Fn(&str) -> Option<String>,
+    expected: usize,
     max_len: usize,
-    wanted: &dyn Fn(&str) -> bool,
-) -> Result<Option<Vec<rom_weaver_core::NestedArchiveEntry>>> {
+    visit: &dyn Fn(&str) -> rom_weaver_core::NestedEntryAction,
+) -> Result<BTreeMap<String, rom_weaver_core::NestedArchiveListing>> {
     trace!(
         format = format_name,
         source = %source.display(),
+        expected,
         max_len,
         "nested archive prefix read start"
     );
+    let mut listings = BTreeMap::new();
+    if expected == 0 {
+        return Ok(listings);
+    }
     let mut reader = open_regular_archive_reader(source, format_name)?;
-    let result = (|| -> Result<Option<Vec<rom_weaver_core::NestedArchiveEntry>>> {
+    let result = (|| -> Result<()> {
+        let mut seen = std::collections::BTreeSet::new();
         let mut index = 0usize;
         while let Some(entry) = reader.next_entry().map_err(|error| {
             RomWeaverError::Validation(format!(
@@ -517,74 +525,91 @@ pub fn read_nested_regular_archive_entry_prefixes(
             ))
         })? {
             index = index.saturating_add(1);
-            if !entry.is_file() || !entry.pathname().is_ok_and(|path| is_member(&path)) {
+            if !entry.is_file() {
                 continue;
             }
+            let Some(key) = entry
+                .pathname()
+                .ok()
+                .and_then(|path| member_key(&path))
+                .filter(|key| !seen.contains(key))
+            else {
+                continue;
+            };
+            seen.insert(key.clone());
             let mut member = entry.into_reader();
-            let listed = with_streamed_regular_archive(
+            match with_streamed_regular_archive(
                 &mut member,
                 64 * 1024,
                 &format!("{format_name} nested archive read"),
-                |inner| list_streamed_entries(inner, max_len, wanted),
-            );
-            return Ok(match listed {
-                Ok(entries) => {
+                |inner| list_streamed_entries(inner, max_len, visit),
+            ) {
+                Ok(listing) => {
                     trace!(
                         format = format_name,
-                        entries = entries.len(),
-                        "nested archive prefix read complete"
+                        member = %key,
+                        entries = listing.entries.len(),
+                        stopped = listing.stopped,
+                        "nested archive prefix read member"
                     );
-                    Some(entries)
+                    listings.insert(key, listing);
                 }
                 Err(error) => {
                     debug!(
                         format = format_name,
+                        member = %key,
                         %error,
                         "nested archive could not be streamed; the member must be extracted"
                     );
-                    None
                 }
-            });
+            }
+            if seen.len() == expected {
+                break;
+            }
         }
-        Ok(None)
+        Ok(())
     })();
 
     match (result, close_regular_archive_reader(reader, format_name)) {
-        (Ok(entries), Ok(())) => Ok(entries),
+        (Ok(()), Ok(())) => Ok(listings),
         (Err(error), _) => Err(error),
-        (Ok(_), Err(error)) => Err(error),
+        (Ok(()), Err(error)) => Err(error),
     }
 }
 
 fn list_streamed_entries(
     archive: &mut ReadArchive,
     max_len: usize,
-    wanted: &dyn Fn(&str) -> bool,
-) -> Result<Vec<rom_weaver_core::NestedArchiveEntry>> {
-    let mut entries = Vec::new();
+    visit: &dyn Fn(&str) -> rom_weaver_core::NestedEntryAction,
+) -> Result<rom_weaver_core::NestedArchiveListing> {
+    use rom_weaver_core::NestedEntryAction;
+    let mut listing = rom_weaver_core::NestedArchiveListing::default();
     while let Some(entry) = archive
         .next_entry()
         .map_err(|error| RomWeaverError::Validation(format!("reading a nested entry: {error}")))?
     {
-        let path = entry
+        let mut path = entry
             .pathname()
             .map_err(|error| RomWeaverError::Validation(format!("nested entry name: {error}")))?;
         if entry.is_dir() {
-            entries.push(rom_weaver_core::NestedArchiveEntry {
-                path: format!("{}/", path.trim_end_matches('/')),
-                prefix: None,
-            });
-            continue;
+            path = format!("{}/", path.trim_end_matches('/'));
         }
-        let prefix = if entry.is_file() && max_len > 0 && wanted(&path) {
+        let action = visit(&path);
+        let prefix = if action == NestedEntryAction::ReadPrefix && entry.is_file() && max_len > 0 {
             Some(rom_weaver_core::read_up_to(entry.into_reader(), max_len)?)
         } else {
             None
         };
-        trace!(entry = %path, prefix = prefix.as_ref().map(Vec::len), "nested archive entry");
-        entries.push(rom_weaver_core::NestedArchiveEntry { path, prefix });
+        trace!(entry = %path, ?action, prefix = prefix.as_ref().map(Vec::len), "nested archive entry");
+        listing
+            .entries
+            .push(rom_weaver_core::NestedArchiveEntry { path, prefix });
+        if action == NestedEntryAction::Stop {
+            listing.stopped = true;
+            break;
+        }
     }
-    Ok(entries)
+    Ok(listing)
 }
 
 fn open_regular_archive_reader(source: &Path, format_name: &str) -> Result<ReadArchive> {

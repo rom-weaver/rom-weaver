@@ -3211,3 +3211,80 @@ fn trim_extracts_a_nested_7z_to_read_the_disc_inside() {
     let extractions = trim_extraction_lines(&output.stderr);
     assert_eq!(extractions.len(), 1, "{extractions:#?}");
 }
+
+#[test]
+fn trim_skips_nested_names_the_rom_filter_does_not_extract() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let tbz = staging.child("game.tbz");
+    fs::write(tbz.path(), b"not a tar").expect("tbz fixture");
+    let archive = temp.child("pack.zip");
+    pack_archive(archive.path(), &[tbz.path()]);
+    let terminal = parse_single_json_line(&command_stdout(
+        &[
+            "trim",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(terminal["details"]["processed"], 0, "{terminal}");
+}
+
+#[test]
+fn trim_streams_every_nested_archive_in_one_pass() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let rom = staging.child("game.nds");
+    fs::write(
+        rom.path(),
+        build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false),
+    )
+    .expect("nds fixture");
+    let iso = write_gamecube_iso(&staging, "z-disc.iso");
+    let discs = staging.child("a-discs.zip");
+    pack_archive(discs.path(), &[&iso]);
+    let roms = staging.child("b-roms.zip");
+    pack_archive(roms.path(), &[rom.path(), &iso]);
+    let outer = temp.child("outer.7z");
+    pack_archive(outer.path(), &[discs.path(), roms.path()]);
+    let output = command_output_with_env(
+        &[
+            "--log-level",
+            "trace",
+            "trim",
+            "--input",
+            outer.path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        &[],
+        0,
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let passes = stderr
+        .lines()
+        .filter(|line| line.contains("\"nested archive prefix read start\""))
+        .count();
+    assert_eq!(
+        passes, 1,
+        "both nested archives MUST be read in one outer pass"
+    );
+    // The ROM settles that `b-roms.zip` is needed, so the disc after it is not listed.
+    let roms_listing = stderr
+        .lines()
+        .find(|line| {
+            line.contains("\"nested archive prefix read member\"") && line.contains("b-roms.zip")
+        })
+        .expect("b-roms.zip listing trace");
+    assert!(roms_listing.contains("\"stopped\":true"), "{roms_listing}");
+    let extractions = trim_extraction_lines(&output.stderr);
+    assert!(
+        extractions.iter().all(|line| !line.contains("a-discs.zip")),
+        "{extractions:#?}"
+    );
+    let terminal = parse_single_json_line(&output.stdout);
+    assert_eq!(terminal["details"]["processed"], 1, "{terminal}");
+}

@@ -104,17 +104,17 @@ macro_rules! regular_archive_read_operations {
         fn read_nested_entry_prefixes(
             &self,
             request: &ContainerProbeRequest,
-            member: &str,
+            members: &[String],
             max_len: usize,
-            wanted: &dyn Fn(&str) -> bool,
+            visit: &dyn Fn(&str) -> rom_weaver_core::NestedEntryAction,
             _context: &OperationContext,
-        ) -> Result<Option<Vec<rom_weaver_core::NestedArchiveEntry>>> {
+        ) -> Result<BTreeMap<String, rom_weaver_core::NestedArchiveListing>> {
             read_nested_regular_archive_entry_prefixes_with_libarchive(
                 &request.source,
                 self.descriptor.name,
-                member,
+                members,
                 max_len,
-                wanted,
+                visit,
             )
         }
 
