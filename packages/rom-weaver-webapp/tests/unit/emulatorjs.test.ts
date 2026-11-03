@@ -13,7 +13,7 @@ import {
   getEmulatorJsAspectRatio,
   getEmulatorJsCore,
   hasFdsDiskSignature,
-  requiresUnsuppliedBios,
+  isFdsGame,
 } from "../../src/public/react/components/emulatorjs.ts";
 
 describe("getEmulatorJsCore", () => {
@@ -100,6 +100,14 @@ const readEmulatorConfig = (system: string) => {
 };
 
 describe("createEmulatorDocument", () => {
+  it("hands the core a BIOS only when asked", () => {
+    const biosUrl = "https://rom-weaver.test/emulatorjs/bios/disksys.rom";
+    expect(createEmulatorDocument("/emulatorjs/data/", "blob:game", "game", "nes", { biosUrl })).toContain(
+      `EJS_biosUrl = ${JSON.stringify(biosUrl)};`,
+    );
+    expect(createEmulatorDocument("/emulatorjs/data/", "blob:game", "game", "nes")).not.toContain("EJS_biosUrl");
+  });
+
   it("runs Saturn on the single-threaded yabause build", () => {
     const config = readEmulatorConfig("segaSaturn");
 
@@ -603,15 +611,15 @@ describe("CHD pass-through cores", () => {
   });
 });
 
-describe("requiresUnsuppliedBios", () => {
+describe("isFdsGame", () => {
   it("flags Famicom Disk System images by platform or extension", () => {
-    expect(requiresUnsuppliedBios({ fileName: "game.bin", platform: "Nintendo Famicom Disk System" })).toBe(true);
-    expect(requiresUnsuppliedBios({ fileName: "GAME.FDS" })).toBe(true);
+    expect(isFdsGame({ fileName: "game.bin", platform: "Nintendo Famicom Disk System" })).toBe(true);
+    expect(isFdsGame({ fileName: "GAME.FDS" })).toBe(true);
   });
 
   it("leaves cartridge systems alone", () => {
-    expect(requiresUnsuppliedBios({ fileName: "game.nes", platform: "Nintendo Entertainment System" })).toBe(false);
-    expect(requiresUnsuppliedBios({ fileName: "game.sfc" })).toBe(false);
+    expect(isFdsGame({ fileName: "game.nes", platform: "Nintendo Entertainment System" })).toBe(false);
+    expect(isFdsGame({ fileName: "game.sfc" })).toBe(false);
   });
 });
 

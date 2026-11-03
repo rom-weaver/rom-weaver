@@ -35,6 +35,21 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.test.fdsBios.summary"
+#~ msgstr "{fileName} necesita la BIOS de Famicom Disk System."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.test.fdsBios.detail"
+#~ msgstr "Los juegos de Famicom Disk System no funcionan sin la BIOS de FDS y aún no se admite cargar archivos BIOS."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.test.fdsBios.link"
+#~ msgstr "Seguir la compatibilidad con la BIOS de FDS"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", una extensión de salida. El selector de formato agrega la extensión; elimínala para evitar un nombre duplicado."
 
@@ -192,11 +207,6 @@ msgstr "{file} no coincide con esta partida. Elegirás otra ROM a continuación.
 #: src/presentation/localization/messages.ts
 msgid "ui.pausedGame.title"
 msgstr "{fileName} está en pausa en Probar."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.test.fdsBios.summary"
-msgstr "{fileName} necesita la BIOS de Famicom Disk System."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -850,6 +860,11 @@ msgstr "Explorar juegos de {platform}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.storageFull.keptUsage"
+msgstr "El almacenamiento está lleno. Las ROMs guardadas ocupan {size}. Elimina ROMs para liberar espacio."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.envWeb"
 msgstr "Pestaña del navegador"
 
@@ -942,6 +957,11 @@ msgstr "¿Puedo crear mi propio parche de ROM?"
 #: src/presentation/localization/messages.ts
 msgid "ui.cheats.delivery.unsupported"
 msgstr "No se puede integrar en la ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.unreadable"
+msgstr "No se puede leer esta versión"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1745,11 +1765,6 @@ msgstr "Predeterminado: compresión específica de la ROM, como Z3DS, CHD, RVZ, 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.settings.option.defaultCompression.zipSpecial"
-msgstr ".zip o formato de ROM"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.settings.suggestion.logLevel"
 msgstr "Predeterminado: Traza en desarrollo; Advertencias en caso contrario. Depuración y Traza incluyen el progreso detallado del flujo de trabajo."
 
@@ -1757,6 +1772,11 @@ msgstr "Predeterminado: Traza en desarrollo; Advertencias en caso contrario. Dep
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.defaults"
 msgstr "Valores predeterminados"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.delete"
+msgstr "Eliminar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2235,6 +2255,11 @@ msgstr "Exportar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.emulator.exportAll"
+msgstr "Exportar todas las partidas"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.weaveTutorial.download.body"
 msgstr "Exportar una receta no aplica parches. Pulsa Compartir paquete para comprobar y descargar la configuración; después será Descargar paquete ZIP."
 
@@ -2287,11 +2312,6 @@ msgstr "Extrayendo"
 #: src/presentation/localization/messages.ts
 msgid "ui.stage.extractingWith"
 msgstr "Extrayendo y {verb}…"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.test.fdsBios.detail"
-msgstr "Los juegos de Famicom Disk System no funcionan sin la BIOS de FDS y aún no se admite cargar archivos BIOS."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2367,11 +2387,6 @@ msgstr "Buscar juegos (por nombre/suma de verificación), herramientas, guías o
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.fixOrder"
 msgstr "Corregir orden"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.test.fdsBios.link"
-msgstr "Seguir la compatibilidad con la BIOS de FDS"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2740,6 +2755,11 @@ msgstr "Usa rom-weaver sin conexión a la red."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.keepTestedRomsEnabled"
+msgstr "ROMs de pruebas en este dispositivo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.noteStayRomOnly"
 msgstr "Conserva las ROMs aquí. Los parches se ignoran."
 
@@ -2757,6 +2777,11 @@ msgstr "Tus archivos se quedan en tu dispositivo."
 #: src/presentation/localization/messages.ts
 msgid "ui.related.hintCarriesSelection"
 msgstr "Conserva esta selección"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.title"
+msgstr "ROMs de pruebas guardadas"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3250,6 +3275,11 @@ msgstr "Ningún perfil compatible coincide con este tamaño de partida."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.empty"
+msgstr "No hay ROMs de pruebas guardadas en este dispositivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.faqGamesAnswer"
 msgstr "No. Trae tus propios archivos. Los ejemplos guiados usan una pequeña ROM homebrew de NES."
 
@@ -3430,6 +3460,11 @@ msgstr "Exigir coincidencia de entrada"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.description"
+msgstr "Solo se guardan las ROMs probadas con la opción activada. Desactivarla conserva los archivos."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.open"
 msgstr "Abrir"
 
@@ -3472,6 +3507,11 @@ msgstr "Abrir en la pestaña Prueba"
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.openProfile"
 msgstr "Abrir perfil"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.storageFull.openStorage"
+msgstr "Abrir Partidas y almacenamiento"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3880,6 +3920,16 @@ msgstr "Los parches PDS y los parches de directorio HDIFF19 no son compatibles."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.persistence.granted"
+msgstr "Almacenamiento persistente concedido. Exporta las partidas como copia de seguridad."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.persistence.denied"
+msgstr "No se concedió almacenamiento persistente. El navegador puede borrar partidas y ROMs. Exporta las partidas."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.output.body"
 msgstr "Elige un nombre y un formato de parche. Tus dos ROM no cambian."
 
@@ -3912,6 +3962,11 @@ msgstr "Plataforma"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.platformCandidates"
 msgstr "Plataformas posibles"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.play"
+msgstr "Jugar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4077,6 +4132,11 @@ msgstr "Progreso"
 #: src/presentation/localization/messages.ts
 msgid "ui.tools.project"
 msgstr "Proyecto"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.protect"
+msgstr "Proteger partidas y ROMs del borrado automático"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4275,6 +4335,11 @@ msgstr "Eliminar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.remove"
+msgstr "Quitar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.removeCheck"
 msgstr "Eliminar comprobación de {check}"
 
@@ -4332,6 +4397,11 @@ msgstr "Quita este parche y elige un archivo de parche válido."
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimDescription"
 msgstr "Elimina el relleno sin usar de imágenes de Nintendo DS/DSi, Game Boy Advance, Nintendo 3DS y Xbox XISO, o rellena una ROM recortada hasta su tamaño completo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.removed"
+msgstr "Eliminada por el navegador"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4492,6 +4562,11 @@ msgstr "Solo específico de la ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.option.defaultCompression.sevenZipSpecial"
 msgstr ".7z o formato de ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.defaultCompression.zipSpecial"
+msgstr ".zip o formato de ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5255,6 +5330,11 @@ msgstr "El juego se ejecuta en tu navegador. El menú del reproductor tiene cont
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.keptRoms.keepFailed"
+msgstr "El juego se inició, pero no se pudo guardar la ROM. Libera espacio en Partidas y almacenamiento."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.unsupported"
 msgstr "Los datos de identificación no admiten esta entrada."
 
@@ -5602,6 +5682,11 @@ msgstr "Conserva el juego."
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.trySample"
 msgstr "Probar una búsqueda por checksum"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.storageFull.tryAgain"
+msgstr "Reintentar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -6107,89 +6192,3 @@ msgstr "Códec ZIP"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z y paquetes"
-
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "settings.keepTestedRomsEnabled"
-msgstr "ROMs de pruebas en este dispositivo"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.title"
-msgstr "ROMs de pruebas guardadas"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.description"
-msgstr "Solo se guardan las ROMs probadas con la opción activada. Desactivarla conserva los archivos."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.protect"
-msgstr "Proteger partidas y ROMs del borrado automático"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.persistence.granted"
-msgstr "Almacenamiento persistente concedido. Exporta las partidas como copia de seguridad."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.persistence.denied"
-msgstr "No se concedió almacenamiento persistente. El navegador puede borrar partidas y ROMs. Exporta las partidas."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.removed"
-msgstr "Eliminada por el navegador"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.unreadable"
-msgstr "No se puede leer esta versión"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.play"
-msgstr "Jugar"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.remove"
-msgstr "Quitar"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.delete"
-msgstr "Eliminar"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.empty"
-msgstr "No hay ROMs de pruebas guardadas en este dispositivo."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.keptRoms.keepFailed"
-msgstr "El juego se inició, pero no se pudo guardar la ROM. Libera espacio en Partidas y almacenamiento."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.saves.emulator.exportAll"
-msgstr "Exportar todas las partidas"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.storageFull.keptUsage"
-msgstr "El almacenamiento está lleno. Las ROMs guardadas ocupan {size}. Elimina ROMs para liberar espacio."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.storageFull.openStorage"
-msgstr "Abrir Partidas y almacenamiento"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.storageFull.tryAgain"
-msgstr "Reintentar"

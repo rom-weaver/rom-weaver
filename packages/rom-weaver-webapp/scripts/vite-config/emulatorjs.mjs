@@ -3,7 +3,9 @@ import path from "node:path";
 import { rootDir } from "./paths.mjs";
 
 const EMULATORJS_DATA_PREFIX = "/emulatorjs/data/";
+const EMULATORJS_BIOS_PREFIX = "/emulatorjs/bios/";
 const EMULATORJS_MANIFEST_PATH = "/emulatorjs/manifest.json";
+const emulatorJsBiosSourceDir = path.join(rootDir, "vendor", "emulatorjs", "bios");
 const emulatorJsDataSourceDir = path.join(rootDir, "vendor", "emulatorjs", "data");
 export const emulatorJsLock = JSON.parse(fs.readFileSync(path.join(rootDir, "vendor", "emulatorjs.lock.json"), "utf8"));
 
@@ -65,6 +67,26 @@ export const serveEmulatorJsAssets = () => {
       setEmulatorJsContentType(requestPath, res);
       res.setHeader("Cache-Control", "public, max-age=3600");
       res.end(JSON.stringify(createEmulatorJsManifest(path.join(rootDir, "vendor", "emulatorjs"))) + "\n");
+      return;
+    }
+    if (requestPath.startsWith(EMULATORJS_BIOS_PREFIX)) {
+      const biosName = requestPath.slice(EMULATORJS_BIOS_PREFIX.length);
+      const biosPath = path.join(emulatorJsBiosSourceDir, biosName);
+      if (!(/^[\w.-]+$/.test(biosName) && biosName !== ".." && isRegularFile(biosPath))) {
+        res.statusCode = 404;
+        res.end("EmulatorJS BIOS not found");
+        return;
+      }
+      fs.readFile(biosPath, (err, source) => {
+        if (err) {
+          next(err);
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/octet-stream");
+        res.setHeader("Cache-Control", "public, max-age=3600");
+        res.end(source);
+      });
       return;
     }
     if (!requestPath.startsWith(EMULATORJS_DATA_PREFIX)) {

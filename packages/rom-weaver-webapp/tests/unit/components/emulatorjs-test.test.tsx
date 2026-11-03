@@ -50,7 +50,14 @@ vi.mock("../../../src/storage/browser/emulator-saves.ts", async (importOriginal)
 }));
 
 vi.mock("../../../src/public/react/components/emulator-document.ts", () => ({
-  createEmulatorDocument: () => "<!doctype html><html><body></body></html>",
+  createEmulatorDocument: (
+    _dataUrl: string,
+    _gameUrl: string,
+    _gameName: string,
+    _core: string,
+    options?: { biosUrl?: string },
+  ) =>
+    `<!doctype html><html><body>${options?.biosUrl ? `EJS_biosUrl = ${JSON.stringify(options.biosUrl)}` : ""}</body></html>`,
   createEmulatorGameIdentity: ({ checksum }: { checksum: string }) => ({
     gameId: 1,
     gameName: checksum,
@@ -136,6 +143,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
+
+const frameBiosUrl = async (fileName: string): Promise<string | undefined> => {
+  const frame = await screen.findByTitle(`EmulatorJS test for ${fileName}`);
+  return (frame as HTMLIFrameElement).srcdoc.match(/EJS_biosUrl = ("[^"]*")/)?.[1];
+};
 
 describe("EmulatorTestView", () => {
   it("keeps expanded PBP bundle size for disc retention while reporting the archive size", async () => {
@@ -689,7 +701,7 @@ describe("EmulatorTestView", () => {
     expect(getEmulatorSessionState().entries[0]?.platform).toBe("Sony Playstation Portable");
   });
 
-  it("does not start the core for an FDS image and links the BIOS issue", async () => {
+  it("starts an FDS image with the bundled BIOS", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
     loadRomMock.mockResolvedValue({
@@ -704,24 +716,20 @@ describe("EmulatorTestView", () => {
       target: { files: [new File(["disk"], "game.fds.zip")] },
     });
 
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("game.fds needs the Famicom Disk System BIOS.");
-    expect(alert.querySelector("a")?.getAttribute("href")).toBe("https://github.com/rom-weaver/rom-weaver/issues/1223");
-    expect(screen.queryByTitle("EmulatorJS test for game.fds")).toBeNull();
+    expect(await frameBiosUrl("game.fds")).toMatch(/\/emulatorjs\/bios\/disksys\.rom"/);
   });
 
-  it("does not start the core for a retained FDS session entry", async () => {
+  it("starts a retained FDS session entry with the bundled BIOS", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
     addEntry(entry({ fileName: "patched.fds", id: "fds", platform: "Nintendo Famicom Disk System" }));
 
     render(withSettings(<EmulatorTestView />));
 
-    expect((await screen.findByRole("alert")).textContent).toContain("patched.fds needs the Famicom Disk System BIOS.");
-    expect(screen.queryByTitle("EmulatorJS test for patched.fds")).toBeNull();
+    expect(await frameBiosUrl("patched.fds")).toMatch(/\/emulatorjs\/bios\/disksys\.rom"/);
   });
 
-  it("does not start the core for a headerless FDS image under a renamed output", async () => {
+  it("starts a headerless FDS image under a renamed output with the bundled BIOS", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
     const disk = new Uint8Array(64);
@@ -730,34 +738,7 @@ describe("EmulatorTestView", () => {
 
     render(withSettings(<EmulatorTestView />));
 
-    expect((await screen.findByRole("alert")).textContent).toContain("Zelda v1.1 needs the Famicom Disk System BIOS.");
-    expect(screen.queryByTitle("EmulatorJS test for Zelda v1.1")).toBeNull();
-  });
-
-  it("shows the BIOS notice next to a save mismatch error", async () => {
-    stubObjectUrls();
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
-    pendingSaveMocks.readPendingTestSave.mockResolvedValue({
-      bytes: new Uint8Array([1]),
-      fileName: "other.sav",
-      platform: "gba",
-    });
-    loadRomMock.mockResolvedValue({
-      blob: new Blob(["disk"]),
-      checksum: "b".repeat(40),
-      fileName: "game.fds",
-      platform: "Nintendo Famicom Disk System",
-    });
-
-    render(withSettings(<EmulatorTestView />));
-    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
-      target: { files: [new File(["disk"], "game.fds.zip")] },
-    });
-
-    const alerts = await screen.findAllByRole("alert");
-    const text = alerts.map((alert) => alert.textContent).join(" ");
-    expect(text).toContain("game.fds does not match other.sav.");
-    expect(text).toContain("game.fds needs the Famicom Disk System BIOS.");
+    expect(await frameBiosUrl("Zelda v1.1")).toMatch(/\/emulatorjs\/bios\/disksys\.rom"/);
   });
 
   it("replaces the current game without a game list", async () => {
@@ -1087,19 +1068,6 @@ describe("fallback fullscreen game validation", () => {
     await waitFor(() => expect(document.querySelector("iframe")).toBeNull());
     expect(document.querySelector(".is-pseudo-fullscreen")).toBeNull();
     expect(document.body.style.overflow).toBe(previousOverflow);
-  });
-
-  it("leaves fullscreen and unlocks scrolling when a renamed replacement requires the FDS BIOS", async () => {
-    const previousOverflow = document.body.style.overflow;
-    const view = await openFullscreenGame();
-    const disk = new Uint8Array(64);
-    disk.set([1, ...new TextEncoder().encode("*NINTENDO-HVC*")]);
-    view.rerender(withSettings(<EmulatorTestView pageDrop={{ id: 1, files: [new File([disk], "renamed.nes")] }} />));
-    expect((await screen.findByRole("alert")).textContent).toContain("renamed.nes needs the Famicom Disk System BIOS.");
-    await waitFor(() => expect(document.body.style.overflow).toBe(previousOverflow));
-    expect(document.querySelector("iframe")).toBeNull();
-    expect(document.querySelector("dialog[open]")).toBeNull();
-    expect(document.querySelector(".is-pseudo-fullscreen")).toBeNull();
   });
 
   it("keeps exit and dialog-close controls working after replacement, and unlocks on unmount", async () => {
