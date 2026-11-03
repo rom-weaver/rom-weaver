@@ -987,20 +987,30 @@ test("a real ZIP DCP beside a single ROM asks for a GD-ROM disc without a select
   expect(getPatchStackRows()).toHaveLength(1);
 });
 
-test("a real ZIP DCP beside a multi-track CUE disc targets the disc instead of asking for a track", async () => {
+const addMultiTrackCueWithDcp = async (gdRom) => {
   mount(createElement(ApplyPatchForm));
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
   const track = (fill) => new Uint8Array(2352 * 16).fill(fill);
   const cue = new File(
     [
       'FILE "track1.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n' +
+        (gdRom ? "REM HIGH-DENSITY AREA\n" : "") +
         'FILE "track2.bin" BINARY\n  TRACK 02 MODE1/2352\n    INDEX 01 00:00:00\n',
     ],
     "multi.cue",
     { type: "application/x-cue" },
   );
   addFiles([cue, new File([track(1)], "track1.bin"), new File([track(2)], "track2.bin"), await buildDcpFile()]);
+};
+
+test("a real ZIP DCP beside a multi-track GD-ROM CUE disc targets the disc instead of asking for a track", async () => {
+  await addMultiTrackCueWithDcp(true);
   await expectDcpReadyForDisc();
+});
+
+test("a real ZIP DCP beside a plain CD CUE disc asks for a GD-ROM disc", async () => {
+  await addMultiTrackCueWithDcp(false);
+  await expectDcpFaultAndBlockedApply(DCP_DISC_REQUIRED_MESSAGE);
 });
 
 test("a DCP beside a GD-ROM GDI disc applies and downloads the rebuilt disc", async () => {

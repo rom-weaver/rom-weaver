@@ -355,12 +355,15 @@ impl CliApp {
         };
 
         // Stream the rebuilt track straight to a temp file for staging (or to
-        // the output itself when only the track is wanted) - the cooked image
-        // and raw track are never fully held in memory.
+        // a `.part` beside the output when only the track is wanted, renamed
+        // over it on success so a failed rebuild leaves an existing output
+        // intact) - the cooked image and raw track are never fully held in memory.
         let track_only = dcp_writes_track_only(output, compression_options);
         let mut temp_paths: Vec<PathBuf> = Vec::new();
         let rebuilt_path = if track_only {
-            output.to_path_buf()
+            let mut part = output.as_os_str().to_owned();
+            part.push(".part");
+            PathBuf::from(part)
         } else {
             context
                 .temp_paths()
@@ -401,9 +404,7 @@ impl CliApp {
             }
             summary
         };
-        if !track_only {
-            temp_paths.push(rebuilt_path.clone());
-        }
+        temp_paths.push(rebuilt_path.clone());
 
         let boot_note = if rebuilt.boot_sector_replaced {
             "; IP.BIN boot sector replaced"
@@ -461,6 +462,11 @@ impl CliApp {
                 force: args.force,
             })
         } else if track_only {
+            trace!(part = %rebuilt_path.display(), output = %output.display(), "publishing rebuilt data track");
+            if let Err(error) = fs::rename(&rebuilt_path, output) {
+                Self::cleanup_temp_paths(&temp_paths);
+                return fail_io("apply", error);
+            }
             label = format!(
                 "{label}; wrote rebuilt data track `{}` to `{}`",
                 disc.target_name,

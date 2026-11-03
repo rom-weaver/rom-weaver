@@ -27,7 +27,7 @@ import { isCompressionFormat } from "../compression/container-format-registry.ts
 import type { CheatRecord } from "../cheats/model.ts";
 import { RomWeaverError, toRomWeaverError, withAbortSignal } from "../errors.ts";
 import {
-  createPatchFile,
+  createLazyPatchFile,
   getPatchFileBlob,
   getPatchFileBytes,
   getPatchFileExternalSource,
@@ -1294,7 +1294,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     });
     if (isDcpPatchName(stage.state.fileName)) {
       // Take the DCP as is, before any ingest or selection runs; see apply-dcp-patch.ts.
-      const patchFile = await createPatchFile(stage.source as never, stage.state.fileName || "patch.dcp");
+      // Lazy: the wasm apply streams the DCP from its source, so it is never read whole here.
+      const patchFile = await createLazyPatchFile(stage.source as never, stage.state.fileName || "patch.dcp");
       stage.preparedPatchFile = patchFile;
       applyPreparedPatchMetadata(stage, {
         decompressionTimeMs: 0,

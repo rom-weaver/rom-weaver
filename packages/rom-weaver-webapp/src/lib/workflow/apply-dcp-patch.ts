@@ -20,9 +20,14 @@ const dcpStages = new WeakSet<object>();
 const isDcpPatchStage = <TSource>(stage: StagedSource<TSource>): boolean =>
   dcpStages.has(stage) || isDcpPatchName(stage.state.fileName) || isDcpPatchName(stage.preparedPatchFile?.fileName);
 
-/** The disc sheet a DCP rebuilds: a `.gdi` wins over a `.cue` beside it, as for GD-ROM CHD creation. */
+// A cue is a GD-ROM only when it marks the inner program area, the rule CHD output and the Rust
+// layout use; a plain CD cue has no data track for the DCP to rebuild.
+const isGdRomCueAsset = (asset: InputAsset): boolean =>
+  asset.kind === "cue" && /^\s*REM\b.*HIGH-DENSITY AREA/im.test(asset.file.metadata?.cueText || "");
+
+/** The disc sheet a DCP rebuilds: a `.gdi` wins over a GD-ROM `.cue` beside it, as for GD-ROM CHD creation. */
 const findDcpDiscSheet = (assets: readonly InputAsset[]): InputAsset | undefined =>
-  assets.find((asset) => asset.kind === "gdi") ?? assets.find((asset) => asset.kind === "cue");
+  assets.find((asset) => asset.kind === "gdi") ?? assets.find(isGdRomCueAsset);
 
 type DcpReadinessContext = {
   /** Every prepared input asset, sheets included. */

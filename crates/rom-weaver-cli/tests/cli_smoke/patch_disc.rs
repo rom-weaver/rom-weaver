@@ -2059,6 +2059,42 @@ fn patch_apply_dcp_track_output_matches_the_full_disc_track() {
 }
 
 #[test]
+fn patch_apply_dcp_track_output_failure_keeps_a_forced_existing_output() {
+    let temp = setup_temp_dir();
+    write_dcp_source_gdi(&temp);
+    fs::write(temp.child("game.dcp").path(), b"not a zip archive").expect("broken DCP");
+    fs::write(temp.child("rebuilt.bin").path(), b"previous output").expect("existing output");
+    let assert = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.gdi").path().to_str().unwrap(),
+            "--patch",
+            temp.child("game.dcp").path().to_str().unwrap(),
+            "--no-compress",
+            "--force",
+            "--output",
+            temp.child("rebuilt.bin").path().to_str().unwrap(),
+            "--json",
+        ])
+        .assert()
+        .failure();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    assert!(stdout.contains("\"failed\""), "{stdout}");
+    assert_eq!(
+        fs::read(temp.child("rebuilt.bin").path()).unwrap(),
+        b"previous output",
+        "a failed rebuild must leave the existing output untouched"
+    );
+    assert!(
+        !temp.child("rebuilt.bin.part").path().exists(),
+        "the partial track is removed"
+    );
+}
+
+#[test]
 fn patch_apply_dcp_chd_keeps_a_rebuilt_track_that_grew() {
     let temp = setup_temp_dir();
     write_dcp_source_gdi(&temp);

@@ -85,8 +85,9 @@ test("a DCP combined with another patch is rejected on its card and at apply", a
   try {
     const dcp = getDcpPatch(workflow);
     expect(dcp?.patchValidation).toMatchObject({ message: DCP_PATCH_ALONE_MESSAGE, status: "invalid" });
-    // The run is blocked; the byte patch's own missing-target fault may be reported first.
-    await expect(workflow.run()).rejects.toThrow();
+    // Give the byte patch a track so its own missing-target fault cannot mask the DCP guard.
+    await workflow.setPatchTarget(1, "track03.bin");
+    await expect(workflow.run()).rejects.toThrow(DCP_PATCH_ALONE_MESSAGE);
   } finally {
     await workflow.dispose();
   }
