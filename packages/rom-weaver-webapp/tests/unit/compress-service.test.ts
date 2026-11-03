@@ -115,6 +115,17 @@ describe("compress service", () => {
     expect(await formatsOf([trimmed], probeWith({ recommendedFormat: "rvz" }))).toEqual(["zip", "7z", "rvz"]);
   });
 
+  it("never offers CHD for an Xbox XISO the probe recognises, even with disc-sized, sector-aligned bytes", async () => {
+    const probeWith = (probe: Record<string, string>) => async () =>
+      ({ compression: { probe: async () => ({ entries: [], ...probe }) } }) as unknown as WorkflowRuntime;
+    const disc = file("game.iso", new Uint8Array(2048));
+    expect(await formatsOf([disc], probeWith({ discFormat: "DVD", platform: "Microsoft Xbox" }))).toEqual([
+      "zip",
+      "7z",
+    ]);
+    expect(await formatsOf([file("game.xiso.iso", new Uint8Array(2048))])).toEqual(["zip", "7z"]);
+  });
+
   it("does not offer Z3DS for a .bin or .iso the probe recognises as a 3DS image", async () => {
     // The run has no way to name a Z3DS output from a `.bin` or `.iso` extension and would throw.
     const probeWith = (probe: Record<string, string>) => async () =>

@@ -328,6 +328,26 @@ impl CliApp {
         let report = handler
             .probe_details(&request, context)
             .unwrap_or_else(|error| {
+                // An XISO has no container details to list, but its volume signature still
+                // carries the platform. Report that identity instead of failing so hosts
+                // can keep CHD out of its output formats; the handler's own probe stays
+                // unsupported because other commands read its success as "extractable".
+                if handler.descriptor().name == "xiso"
+                    && !rom_weaver_checksum::detect_rom_identity_for_path(probe_source).is_empty()
+                {
+                    debug!(
+                        source = %probe_source.display(),
+                        "xiso probe reports identity only"
+                    );
+                    return OperationReport::succeeded(
+                        OperationFamily::Container,
+                        Some(handler.descriptor().name.to_string()),
+                        "probe",
+                        format!("{}: XDVDFS volume", handler.descriptor().name),
+                        Some(100.0),
+                        None,
+                    );
+                }
                 OperationReport::failed_with_error(
                     OperationFamily::Container,
                     Some(handler.descriptor().name.to_string()),

@@ -611,8 +611,8 @@ export const runCompressExtractRoundtrip = async (createContext, baseUrl) => {
 };
 
 export const runTrimJourney = async (createContext, baseUrl, configureUncompressedOutput) => {
+  // Trim is a regular workflow: no beta setting is needed to reach it.
   const context = await createContext({ acceptDownloads: true, ignoreHTTPSErrors: true });
-  await enableBetaTools(context);
   const page = await context.newPage();
   page.setDefaultTimeout(60_000);
   const input = makeTrimJourneyInput();
@@ -622,14 +622,22 @@ export const runTrimJourney = async (createContext, baseUrl, configureUncompress
     await picker.setInputFiles(inputFile("game.nds", input));
     await waitForEnabled(page, "trim-builder-button-run");
     const output = await downloadedBytes(page, async () => {
+      // No confirm step: the run starts at once and an informational warning opens beside it.
       await page.locator("#trim-builder-button-run").click();
       await page
-        .getByRole("dialog", { name: "Trim this ROM?" })
-        .getByRole("button", { name: "Trim ROM", exact: true })
+        .getByRole("dialog", { name: "Trimming this ROM" })
+        .getByRole("button", { name: "Got it", exact: true })
         .click();
     });
     requireEqual(output.requestedName, "game (trimmed).nds");
-    assertJourneyBytes(output.bytes, input.subarray(0, 0x3000), "Trim NDS declared extent");
+    // Trim appends a 12-byte revert marker: "RW", pad byte, 40-bit pad length, then a CRC-32 of those.
+    const marker = Buffer.alloc(12);
+    marker.write("RW", "latin1");
+    // The removed bytes are data, not uniform padding, so the marker records the 0xFF fallback fill.
+    marker[2] = 0xff;
+    marker.writeUIntLE(input.length - 0x3000, 3, 5);
+    marker.writeUInt32LE(zlib.crc32(marker.subarray(0, 8)), 8);
+    assertJourneyBytes(output.bytes, Buffer.concat([input.subarray(0, 0x3000), marker]), "Trim NDS declared extent");
     process.stdout.write(`PASS Trim NDS (${input.length} -> ${output.bytes.length} exact bytes)\n`);
   } finally {
     await context.close();

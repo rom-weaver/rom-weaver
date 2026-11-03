@@ -5,6 +5,7 @@ import { createVfsPathId } from "../../storage/vfs/path-id.ts";
 import { removeManagedOpfsPath } from "../../workers/protocol/opfs-path.ts";
 import { waitForRomWeaverShutdown } from "../../workers/rom-weaver/runner-control.ts";
 import { getFileNameParts, getPathBaseName, joinPath } from "../path-utils.ts";
+import { markTrimOutputStem, type TrimMode } from "../trim/trim-output-name.ts";
 
 const WORK_ROOT_PATH = "/work";
 const OPERATION_ROOT_NAME = "operations";
@@ -134,20 +135,17 @@ const runWithRomWeaverOutputScope = async <TResult extends object>(
   }
 };
 
-const appendTrimmedOutputMarker = (fileName: string) => {
-  const { extension, stem } = getFileNameParts(fileName || "trimmed.bin");
-  const normalizedStem = stem.trim() || "trimmed";
-  const trimmedStem = /\(trimmed\)$/i.test(normalizedStem) ? normalizedStem : `${normalizedStem} (trimmed)`;
-  return `${trimmedStem}${extension || ".bin"}`;
-};
-
-const getTrimOutputFileName = (sourceFilePath: string, requestedOutputName: string | undefined) => {
+const getTrimOutputFileName = (
+  sourceFilePath: string,
+  requestedOutputName: string | undefined,
+  mode: TrimMode = "trim",
+) => {
   const sourceBaseName = getPathBaseName(sourceFilePath, "trimmed.bin");
   const requestedBaseName = getPathBaseName(requestedOutputName || sourceBaseName, sourceBaseName);
   const sourceParts = getFileNameParts(sourceBaseName);
   const requestedParts = getFileNameParts(requestedBaseName);
   if (requestedParts.stem.trim().toLowerCase() === sourceParts.stem.trim().toLowerCase()) {
-    return appendTrimmedOutputMarker(requestedBaseName);
+    return `${markTrimOutputStem(requestedParts.stem, sourceParts.stem, mode)}${requestedParts.extension || ".bin"}`;
   }
   return requestedBaseName;
 };

@@ -741,6 +741,7 @@ describe("createSingleFileRomSpecificOutput", () => {
             rvzBlockSize: 262144,
             rvzCodec: "zstd",
             rvzCompressionLevel: 7,
+            // A removed setting an old saved profile may still carry: it must not reach the request.
             rvzScrub: true,
           },
         },
@@ -758,10 +759,10 @@ describe("createSingleFileRomSpecificOutput", () => {
           blockSize: 262144,
           codec: "zstd",
           compressionLevel: 7,
-          scrub: true,
         },
       },
     });
+    expect(request.romSpecific.rvz).not.toHaveProperty("scrub");
   });
 
   it("builds RVZ and Z3DS single-file requests with runtime-specific options", async () => {

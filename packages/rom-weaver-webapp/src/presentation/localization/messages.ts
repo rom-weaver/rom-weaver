@@ -1333,7 +1333,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "settings.betaToolsEnabled": msg({
     id: "settings.betaToolsEnabled",
-    message: "Enable beta tools (Trim and Save Editor)",
+    message: "Enable beta tools (Save Editor)",
   }),
   "settings.accent": msg({ id: "settings.accent", message: "Accent" }),
   "settings.weavePackage": msg({ id: "settings.weavePackage", message: "What a shared weave includes" }),
@@ -1346,6 +1346,41 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Show detailed file information",
   }),
   "settings.defaultCompression": msg({ id: "settings.defaultCompression", message: "Download format" }),
+  "settings.keepTestedRomsEnabled": msg({
+    id: "settings.keepTestedRomsEnabled",
+    message: "Keep tested ROMs on this device",
+  }),
+  "ui.keptRoms.title": msg({ id: "ui.keptRoms.title", message: "Kept Test ROMs" }),
+  "ui.keptRoms.description": msg({
+    id: "ui.keptRoms.description",
+    message: "Only tested ROMs are kept when the setting is on. Turning it off keeps existing files.",
+  }),
+  "ui.keptRoms.protect": msg({ id: "ui.keptRoms.protect", message: "Protect saves and ROMs from automatic removal" }),
+  "ui.keptRoms.persistence.granted": msg({
+    id: "ui.keptRoms.persistence.granted",
+    message: "Persistent storage granted. Export saves for a separate backup.",
+  }),
+  "ui.keptRoms.persistence.denied": msg({
+    id: "ui.keptRoms.persistence.denied",
+    message: "Persistent storage was not granted. The browser may remove saves and ROMs. Export saves for backup.",
+  }),
+  "ui.keptRoms.removed": msg({ id: "ui.keptRoms.removed", message: "Removed by the browser" }),
+  "ui.keptRoms.unreadable": msg({ id: "ui.keptRoms.unreadable", message: "Can't read this version" }),
+  "ui.keptRoms.play": msg({ id: "ui.keptRoms.play", message: "Play" }),
+  "ui.keptRoms.remove": msg({ id: "ui.keptRoms.remove", message: "Remove" }),
+  "ui.keptRoms.delete": msg({ id: "ui.keptRoms.delete", message: "Delete" }),
+  "ui.keptRoms.empty": msg({ id: "ui.keptRoms.empty", message: "No Test ROMs are kept on this device." }),
+  "ui.keptRoms.keepFailed": msg({
+    id: "ui.keptRoms.keepFailed",
+    message: "The game started, but its ROM could not be kept. Free space in Saves & storage and try again.",
+  }),
+  "ui.saves.emulator.exportAll": msg({ id: "ui.saves.emulator.exportAll", message: "Export all saves" }),
+  "ui.storageFull.keptUsage": msg({
+    id: "ui.storageFull.keptUsage",
+    message: "Browser storage is full. Kept Test ROMs use {size}. Delete kept ROMs to free space.",
+  }),
+  "ui.storageFull.openStorage": msg({ id: "ui.storageFull.openStorage", message: "Open Saves & storage" }),
+  "ui.storageFull.tryAgain": msg({ id: "ui.storageFull.tryAgain", message: "Try again" }),
   "settings.emulatorSaveStorageEnabled": msg({
     id: "settings.emulatorSaveStorageEnabled",
     message: "Store emulator saves on this device",
@@ -1570,7 +1605,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.find.cliSetupHint": msg({ id: "ui.find.cliSetupHint", message: "The CLI guide covers installation and setup." }),
   "ui.find.cliTrimRevertHint": msg({
     id: "ui.find.cliTrimRevertHint",
-    message: "The CLI can restore padding; the browser Trim page cannot.",
+    message: "The CLI can also write a revert marker so a later restore is exact.",
   }),
   "ui.find.kindApp": msg({ id: "ui.find.kindApp", message: "App" }),
   "ui.find.kindGuide": msg({ id: "ui.find.kindGuide", message: "Guide" }),
@@ -1683,7 +1718,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.hero.trimDescription": msg({
     id: "ui.hero.trimDescription",
-    message: "Remove unused padding from supported ROMs and disc images to save storage space.",
+    message:
+      "Remove unused padding from Nintendo DS/DSi, Game Boy Advance, Nintendo 3DS, and Xbox XISO images, or pad a trimmed ROM back to full size.",
   }),
   "ui.hero.toolsDescription": msg({
     id: "ui.hero.toolsDescription",
@@ -2092,7 +2128,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.settings.option.defaultCompression.zipSpecial": msg({
     id: "ui.settings.option.defaultCompression.zipSpecial",
-    message: "Default: ROM-specific format, else plain file or .zip",
+    message: "ROM-specific, else raw or .zip",
   }),
   "ui.settings.option.defaultCompression.specialOnly": msg({
     id: "ui.settings.option.defaultCompression.specialOnly",

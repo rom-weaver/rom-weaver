@@ -177,6 +177,10 @@ type TrimWorkflowOptions = CreateWorkflowOptions;
 
 type TrimInput = {
   source: SourceRef;
+  /** Restore removed padding instead of removing it. */
+  revert?: boolean;
+  /** Append a revert footer so a later restore is exact (NDS, GBA, and 3DS trims only). */
+  revertMarker?: boolean;
   selectedSourceEntryName?: string;
   options?: TrimWorkflowOptions;
 };
@@ -299,7 +303,6 @@ type CompressionCreateRvzOptions = {
   codec?: string | null;
   compressionLevel?: string | number | null;
   mode?: string | null;
-  scrub?: boolean | string | number | null;
   sourceFileName?: string | null;
 };
 

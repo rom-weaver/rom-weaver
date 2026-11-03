@@ -133,7 +133,7 @@ describe("searchFind", () => {
     expect(searchFind(index, "play emulator")[0]?.entry).toMatchObject({ id: "tool:test" });
     expect(searchFind(index, "bsdiff")[0]?.entry).toMatchObject({ id: "tool:patcher" });
     expect(searchFind(index, "untrim")[0]?.entry).toMatchObject({
-      hint: "The CLI can restore padding; the browser Trim page cannot.",
+      hint: "The CLI can also write a revert marker so a later restore is exact.",
       href: "/docs/cli-trim",
     });
     const inspect = searchFind(index, "inspect").find((result) => result.entry.id === "guide:cli-probe--inspect");

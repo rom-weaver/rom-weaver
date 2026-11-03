@@ -19,6 +19,7 @@ import { getPrimaryInputAsset, type InputAsset, isChecksummableInputAsset } from
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { sanitizeTypedOutputName } from "../path-utils.ts";
 import { wrapPublicOutput } from "../output/index.ts";
+import { markTrimOutputStem, type TrimMode } from "../trim/trim-output-name.ts";
 import { runTrimWorkflow } from "../trim/workflow.ts";
 import { BaseWorkflowController, type BaseWorkflowSnapshot, type SourceValidator } from "./base-workflow-controller.ts";
 import { cloneCandidate, cloneValue, cloneWarning, getPreparationProgressStage, isRecord } from "./controller-utils.ts";
@@ -52,7 +53,9 @@ type InternalSourceState = {
   checksumTimeMs?: number;
   identification?: ParsedIdentifyResolution;
   decompressionTimeMs?: number;
+  paddingTrimmed?: boolean;
   parentCompressions: TrimWorkflowParentCompression[];
+  restoreSupported?: boolean;
   romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;
   trimSupported?: boolean;
@@ -76,7 +79,9 @@ const cloneSourceState = (state: InternalSourceState | null | undefined) =>
         fileName: state.fileName,
         id: state.id,
         identification: cloneIdentification(state.identification),
+        paddingTrimmed: state.paddingTrimmed,
         parentCompressions: state.parentCompressions.map((entry) => ({ ...entry })),
+        restoreSupported: state.restoreSupported,
         romProbe: state.romProbe
           ? {
               ...state.romProbe,
@@ -94,9 +99,6 @@ const cloneSourceState = (state: InternalSourceState | null | undefined) =>
       } satisfies TrimWorkflowSourceState)
     : null;
 
-const appendTrimmedMarker = (baseName: string) =>
-  /\(trimmed\)$/i.test(baseName.trim()) ? baseName.trim() : `${baseName.trim() || "trimmed"} (trimmed)`;
-
 const getFileNameExtension = (fileName: string) => {
   const match = fileName.match(FILE_EXTENSION_REGEX);
   return match ? match[0].slice(1) : "";
@@ -105,6 +107,7 @@ const getFileNameExtension = (fileName: string) => {
 /** Reactive snapshot of the trim workflow's staged state (see {@link BaseWorkflowController.getSnapshot}). */
 type TrimWorkflowSnapshot = BaseWorkflowSnapshot & {
   input: TrimWorkflowSourceState | null;
+  mode: TrimMode;
   outputName: string;
   outputFormat: CompressionFormat;
   manualOutputName: boolean;
@@ -116,10 +119,10 @@ const getTrimProgressStage = (progress: ProgressEvent) => {
   return getPreparationProgressStage(progress);
 };
 
-const getTrimProgressLabel = (progress: ProgressEvent, stage: string) => {
+const getTrimProgressLabel = (progress: ProgressEvent, stage: string, mode: TrimMode) => {
   if (progress.label) return progress.label;
   if (stage === "compress") return "Compressing output...";
-  if (stage === "trim") return "Trimming...";
+  if (stage === "trim") return mode === "restore" ? "Restoring padding..." : "Trimming...";
   return "Preparing input...";
 };
 
@@ -133,6 +136,9 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
   private outputExtension = "";
   private outputName = "";
   private manualOutputName = false;
+  private mode: TrimMode = "trim";
+  /** Set once a caller picks a mode, so staging a trimmed input no longer switches it to restore. */
+  private manualMode = false;
   /** Set once a run started for the current input, so a late identification leaves the name alone. */
   private outputLocked = false;
   private inputStage?: StagedSource<TSource>;
@@ -180,9 +186,11 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
           this.inputStages.createInitialSource(TRIM_INPUT_ROLE, first, 0),
         )) as StagedSource<TSource>;
         this.inputStage = stage;
+        if (!this.manualMode) this.mode = "trim";
         await this.inputStages.maybeResolveBlockingStageSelection(stage);
         await this.finalizeInputStableState(stage);
         await this.probeTrimSupport(stage);
+        if (!this.manualMode && stage.state.paddingTrimmed) this.mode = "restore";
         if (!this.manualOutputName) this.outputName = this.buildAutomaticOutputName();
       } catch (error) {
         await this.releaseInputStage();
@@ -203,6 +211,17 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
         this.outputFormat = "none";
         this.outputExtension = normalized.replace(/^\./, "");
       }
+      if (!this.manualOutputName) this.outputName = this.buildAutomaticOutputName();
+    });
+  }
+
+  /** Choose between removing padding (`trim`) and restoring it (`restore`). */
+  async setMode(mode: TrimMode): Promise<void> {
+    return this.mutate("setMode", async () => {
+      if (mode !== "trim" && mode !== "restore")
+        throw new RomWeaverError("INVALID_SETTINGS", `Unknown trim mode: ${String(mode)}`);
+      this.mode = mode;
+      this.manualMode = true;
       if (!this.manualOutputName) this.outputName = this.buildAutomaticOutputName();
     });
   }
@@ -229,6 +248,8 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       if (stage.state.status !== "ready" || !stage.state.selectedCandidateId)
         throw new RomWeaverError("AMBIGUOUS_SELECTION", "Trim source requires candidate selection");
       this.getOutputCompression();
+      if (this.mode === "restore" && stage.state.restoreSupported === false)
+        throw new RomWeaverError("INVALID_SETTINGS", "This input does not support restoring padding");
       this.outputLocked = true;
       const outputName = this.normalizeOutputName(this.outputName);
       if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
@@ -263,6 +284,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       id: this.id,
       input: this.getInput(),
       manualOutputName: this.manualOutputName,
+      mode: this.mode,
       outputFormat: this.outputFormat,
       outputName: this.outputName,
       ready: this.computeReady(),
@@ -362,20 +384,29 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
     });
   }
 
-  /** Dry-run the trim plan so an unsupported input is flagged at staging, before any confirm or run. */
+  /**
+   * Dry-run trim and restore so an unsupported input is flagged at staging, before any confirm or
+   * run. An input counts as trimmed when a restore would grow it and either a trim would not shrink
+   * it or a revert footer records its padding (trimming would only strip that footer).
+   */
   private async probeTrimSupport(stage: StagedSource<TSource>) {
     if (stage.state.status !== "ready") return;
     try {
-      await this.runtime.trim?.trim?.({
-        dryRun: true,
-        outputName: "",
+      // The probe passes no log sink, so a run's trace shows only the engine trim it dispatched.
+      const plan = await this.runtime.trim?.plan?.({
         signal: this.abortController.signal,
         source: (this.getPreparedTrimSource(stage) || stage.source) as never,
       });
       stage.state.trimSupported = true;
+      stage.state.restoreSupported = !!plan?.restore;
+      stage.state.paddingTrimmed =
+        !!plan?.restore?.wouldChange && (!plan.trim.wouldChange || !!plan.restore.revertMarker);
     } catch (error) {
       // Only a definite "unsupported" verdict counts; other probe failures must not block trimming.
-      if ((error as Error)?.message !== "This input does not support trimming") return;
+      const unsupported =
+        (error as { code?: string })?.code === "TRIM_UNSUPPORTED" ||
+        (error as Error)?.message === "This input does not support trimming";
+      if (!unsupported) return;
       stage.state.trimSupported = false;
       this.pushWarning(stage, Object.assign(error as Error, { code: "TRIM_UNSUPPORTED" }));
     }
@@ -395,7 +426,11 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
     if (!input?.fileName) return this.outputName;
     const identifiedBase =
       this.settings.output?.identifiedName === false ? null : identifiedOutputBaseName(input.identification);
-    const baseName = appendTrimmedMarker(identifiedBase || getFileNameWithoutExtension(input.fileName) || "trimmed");
+    const baseName = markTrimOutputStem(
+      identifiedBase || getFileNameWithoutExtension(input.fileName) || "",
+      getFileNameWithoutExtension(input.fileName),
+      this.mode,
+    );
     if (this.outputExtension) {
       return `${baseName}.${this.outputExtension}`;
     }
@@ -415,7 +450,11 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
     const outputBaseName = getFileNameWithoutExtension(normalizedName).trim().toLowerCase();
     const inputBaseName = getFileNameWithoutExtension(input.fileName).trim().toLowerCase();
     if (!outputBaseName || outputBaseName !== inputBaseName) return normalizedName;
-    const baseName = appendTrimmedMarker(getFileNameWithoutExtension(input.fileName) || "trimmed");
+    const baseName = markTrimOutputStem(
+      getFileNameWithoutExtension(input.fileName),
+      getFileNameWithoutExtension(input.fileName),
+      this.mode,
+    );
     return `${baseName}.${getFileNameExtension(normalizedName) || getFileNameExtension(input.fileName) || "bin"}`;
   }
 
@@ -447,7 +486,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
             details: isRecord(progress.details) ? progress.details : undefined,
             hasProgress: progress.hasProgress,
             id: `${this.id}:worker:${stageName}`,
-            label: getTrimProgressLabel(progress, stageName),
+            label: getTrimProgressLabel(progress, stageName, this.mode),
             percent:
               typeof progress.percent === "number" && Number.isFinite(progress.percent) ? progress.percent : null,
             role: progress.stage === "output" ? "output" : "worker",
@@ -455,6 +494,9 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
           });
         },
       },
+      revert: this.mode === "restore",
+      // Only formats the engine can restore accept the footer; XISO trimming rejects it.
+      revertMarker: this.mode === "trim" && stage.state.restoreSupported === true,
       selectedSourceEntryName: preparedSource ? undefined : stage.selectedArchiveEntry,
       source: (preparedSource || stage.source) as never,
     };

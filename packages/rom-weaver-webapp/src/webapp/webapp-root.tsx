@@ -175,7 +175,6 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     railLabel: "Extract",
   },
   {
-    beta: true,
     group: "roms",
     href: "trim-rom",
     icon: <Scissors aria-hidden="true" />,

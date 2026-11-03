@@ -21,7 +21,7 @@ import {
   waitEnabled,
 } from "./lib/flows.mjs";
 import { assert, Skip } from "./lib/scenario.mjs";
-import { chdUserData, extractWithHost, have, rvzInspect, testWithHost, withTempDir } from "./lib/tools.mjs";
+import { chdUserData, extractWithHost, have, testWithHost, withTempDir } from "./lib/tools.mjs";
 import { DESKTOP, MOBILE, newSession, stage } from "./lib/ui.mjs";
 
 const TRIM_INPUT = "#trim-builder-input-file-unified";
@@ -82,11 +82,6 @@ function decodeOutput(format, out, expectedKind) {
       };
     return { bytes: extracted.files[0].bytes, entryName: extracted.files[0].name };
   }
-  if (format === "rvz") {
-    const result = rvzInspect(out.bytes);
-    if (!result) return null;
-    return result.ok ? { bytes: result.bytes } : { error: `dolphin-tool rejected the rvz: ${result.error}` };
-  }
   if (format === "chd") {
     const result = chdUserData(out.bytes);
     if (!result) return null;
@@ -132,42 +127,6 @@ function fixtureList() {
     trimmedSize: undefined,
     missing: !fs.existsSync(xiso) && xiso,
   });
-  const gc = path.join(FIXTURES, "reference/gc/disc.iso");
-  list.push({
-    id: "gc-iso",
-    name: "game.iso",
-    ext: "iso",
-    bytes: () => readIf(gc),
-    kind: "disc",
-    missing: !fs.existsSync(gc) && gc,
-  });
-  list.push({
-    id: "gc-gcm",
-    name: "game.gcm",
-    ext: "gcm",
-    bytes: () => readIf(gc),
-    kind: "disc",
-    missing: !fs.existsSync(gc) && gc,
-  });
-  const wbfs = path.join(FIXTURES, "disc/wbfs.wbfs");
-  list.push({
-    id: "wbfs",
-    name: "game.wbfs",
-    ext: "wbfs",
-    bytes: () => readIf(wbfs),
-    kind: "disc-container",
-    missing: !fs.existsSync(wbfs) && wbfs,
-    payload: path.join(FIXTURES, "disc/wbfs.payload.iso"),
-  });
-  const rvz = path.join(FIXTURES, "disc/made.rvz");
-  list.push({
-    id: "rvz-in",
-    name: "game.rvz",
-    ext: "rvz",
-    bytes: () => readIf(rvz),
-    kind: "disc-container",
-    missing: !fs.existsSync(rvz) && rvz,
-  });
   return list;
 }
 
@@ -177,7 +136,6 @@ export function trimCases() {
 
   // 1. Every fixture x every output format the UI offers (the offered set itself is asserted too).
   const formatsOf = (fx) => {
-    if (fx.kind === "disc" || fx.kind === "disc-container") return ["rvz", "zip", "7z"]; // CHD is not a valid GameCube/Wii trim output
     if (fx.ext === "3ds") return ["3ds", "z3ds", "zip", "7z"];
     return [fx.ext, "zip", "7z"];
   };
@@ -225,7 +183,7 @@ export function trimCases() {
             if (out.kind !== "download")
               throw new Error(`no download (${out.kind}${out.text ? `: ${out.text}` : ""}) ${await mainText(page)}`);
             const decoded = decodeOutput(wanted, out);
-            // quality-reason: rvz, chd and z3ds outputs are judged by dolphin-tool, chdman or the native CLI; without the verifier the bytes are unchecked, so the case skips instead of passing.
+            // quality-reason: chd and z3ds outputs are judged by chdman or the native CLI; without the verifier the bytes are unchecked, so the case skips instead of passing.
             if (decoded === null) throw new Skip(`no host verifier for the ${wanted} output`);
             const notes = [`${out.name} ${out.bytes.length}B`];
             if (decoded?.error) throw new Error(decoded.error);
@@ -250,24 +208,6 @@ export function trimCases() {
                   `webapp trim differs from native CLI trim: ${payload.length} B vs ${native.bytes.length} B`,
                 );
                 notes.push("== native");
-              }
-            } else if (payload && (fx.kind === "disc" || fx.kind === "disc-container")) {
-              const reference =
-                fx.kind === "disc" ? bytes : fs.existsSync(fx.payload || "") ? fs.readFileSync(fx.payload) : null;
-              if (wanted === "chd")
-                assert(
-                  payload.subarray(0, 3).toString("latin1") !== "RVZ",
-                  `the CHD's payload is an RVZ file (magic RVZ\\x01, ${payload.length} B), not the disc image`,
-                );
-              if (reference && (wanted === "rvz" || wanted === "chd")) {
-                const same =
-                  payload.length >= reference.length &&
-                  Buffer.compare(payload.subarray(0, reference.length), reference) === 0;
-                assert(
-                  same,
-                  `${wanted} output decodes to ${payload.length} B that differs from the source disc (${reference.length} B)`,
-                );
-                notes.push("disc round trip ok");
               }
             }
             return notes.join(" ");
@@ -488,6 +428,35 @@ export function trimCases() {
       bytes: () => Buffer.alloc(0x20000, 0x5a),
       want: /xdvdfs|xiso|invalid|unsupported|not a|could not|error/i,
     },
+    // GameCube/Wii discs are not trimmed (Compress writes them as RVZ), so staging must refuse them.
+    {
+      id: "gamecube-iso",
+      name: "game.iso",
+      bytes: () => readIf(path.join(FIXTURES, "reference/gc/disc.iso")),
+      want: /not support trimming.*Compress/is,
+      missing: path.join(FIXTURES, "reference/gc/disc.iso"),
+    },
+    {
+      id: "gamecube-gcm",
+      name: "game.gcm",
+      bytes: () => readIf(path.join(FIXTURES, "reference/gc/disc.iso")),
+      want: /not support trimming.*Compress/is,
+      missing: path.join(FIXTURES, "reference/gc/disc.iso"),
+    },
+    {
+      id: "wbfs-disc",
+      name: "game.wbfs",
+      bytes: () => readIf(path.join(FIXTURES, "disc/wbfs.wbfs")),
+      want: /not support trimming.*Compress/is,
+      missing: path.join(FIXTURES, "disc/wbfs.wbfs"),
+    },
+    {
+      id: "rvz-disc",
+      name: "game.rvz",
+      bytes: () => readIf(path.join(FIXTURES, "disc/made.rvz")),
+      want: /not support trimming.*Compress/is,
+      missing: path.join(FIXTURES, "disc/made.rvz"),
+    },
     {
       id: "mac-text-file",
       name: "readme.txt",
@@ -501,6 +470,8 @@ export function trimCases() {
       id: `trim/invalid/${fx.id}`,
       tags: ["trim", "invalid", fx.id],
       title: `trim ${fx.id}: refused with a visible message, no download`,
+      // quality-reason: the fixture is generated by the harness or built with a host tool; when it is absent the case reports which one instead of failing.
+      skip: fx.missing && !fs.existsSync(fx.missing) ? `fixture missing: ${fx.missing}` : undefined,
       async run(h) {
         const { page, session, enabled } = await openTrim(h, { buffer: fx.bytes(), name: fx.name }, { settle: 25_000 });
         try {

@@ -268,6 +268,58 @@ describe("createSharedTrimRuntime", () => {
     await expect(runtime.trim?.({ source: {} } as never)).rejects.toThrow("trim failed");
     expect(source.cleanup).toHaveBeenCalledTimes(1);
   });
+
+  it("plans trim and restore against one staged source", async () => {
+    const source = makeSource("game.nds", 0);
+    const workerIo = { createWorkerOutput: vi.fn(), stageSource: vi.fn(async () => source) };
+    const cleanup = vi.fn(async () => undefined);
+    const invokeTrimWorker = vi.fn(async (input: { revert?: boolean }) => ({
+      cleanup,
+      trimPlan: input.revert ? { revertMarker: true, wouldChange: true } : { wouldChange: false },
+    }));
+    const runtime = createSharedTrimRuntime({ invokeTrimWorker, workerIo } as never);
+    await expect(runtime.plan?.({ source: {} } as never)).resolves.toEqual({
+      restore: { revertMarker: true, wouldChange: true },
+      trim: { wouldChange: false },
+    });
+    expect(workerIo.stageSource).toHaveBeenCalledTimes(1);
+    expect(invokeTrimWorker.mock.calls.map(([input]) => [input.dryRun, input.revert])).toEqual([
+      [true, false],
+      [true, true],
+    ]);
+    expect(cleanup).toHaveBeenCalledTimes(2);
+    expect(source.cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("plans no restore when the engine rejects one and keeps a cancel a cancel", async () => {
+    const source = makeSource("game.iso", 0);
+    const workerIo = { createWorkerOutput: vi.fn(), stageSource: vi.fn(async () => source) };
+    const invokeTrimWorker = vi.fn(async (input: { revert?: boolean }) => {
+      if (input.revert) throw new Error("xiso trim revert is not supported");
+      return { trimPlan: { wouldChange: true } };
+    });
+    const runtime = createSharedTrimRuntime({ invokeTrimWorker, workerIo } as never);
+    await expect(runtime.plan?.({ source: {} } as never)).resolves.toEqual({ trim: { wouldChange: true } });
+    const aborted = new AbortController();
+    aborted.abort();
+    await expect(runtime.plan?.({ signal: aborted.signal, source: {} } as never)).rejects.toThrow(
+      "xiso trim revert is not supported",
+    );
+    expect(source.cleanup).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a plan for an input that cannot be trimmed", async () => {
+    const source = makeSource("plain.bin", 0);
+    const workerIo = { createWorkerOutput: vi.fn(), stageSource: vi.fn(async () => source) };
+    const runtime = createSharedTrimRuntime({
+      invokeTrimWorker: vi.fn(async () => {
+        throw new Error("This input does not support trimming");
+      }),
+      workerIo,
+    } as never);
+    await expect(runtime.plan?.({ source: {} } as never)).rejects.toThrow("This input does not support trimming");
+    expect(source.cleanup).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("createSharedCompressionRuntime", () => {
@@ -316,7 +368,7 @@ describe("createSharedCompressionRuntime", () => {
         ...common,
         format: "rvz",
         source: {},
-        romSpecific: { rvz: { codec: "zstd", blockSize: 1024, compressionLevel: 5, mode: "raw", scrub: true } },
+        romSpecific: { rvz: { codec: "zstd", blockSize: 1024, compressionLevel: 5, mode: "raw" } },
       } as never),
     ).resolves.toMatchObject({ output: expect.anything() });
     await expect(
@@ -330,7 +382,7 @@ describe("createSharedCompressionRuntime", () => {
     expect(createChd).toHaveBeenCalledWith(
       expect.objectContaining({ mode: "cd", sourceMode: "tracks", compressionCodecs: ["lzma"], threads: 4 }),
     );
-    expect(createRvz).toHaveBeenCalledWith(expect.objectContaining({ codec: "zstd", blockSize: 1024, scrub: true }));
+    expect(createRvz).toHaveBeenCalledWith(expect.objectContaining({ codec: "zstd", blockSize: 1024 }));
     expect(createZ3ds).toHaveBeenCalledWith(expect.objectContaining({ compressionLevel: 3, underlyingMagic: "3DS" }));
   });
 

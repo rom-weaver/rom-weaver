@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createLogger } from "../lib/logging.ts";
+import { requestPersistentStorage } from "../storage/browser/persistent-storage.ts";
 import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
 import type { WebappRootProps } from "./webapp-root-types.ts";
 
@@ -115,9 +116,14 @@ const useUnifiedDialog = (actions: WebappRootProps["actions"], state: WebappRoot
     actions.onCloseSettings();
   }, [actions, state.settingsDialogOpen]);
   const saveSettings = useCallback(() => {
+    if (state.draftSettings.keepTestedRomsEnabled === true && state.settings.keepTestedRomsEnabled !== true) {
+      void requestPersistentStorage().catch((error: unknown) => {
+        logger.debug("Persistent storage request failed", { error: String(error) });
+      });
+    }
     settingsCloseArmedRef.current = true;
     actions.onSaveClose();
-  }, [actions]);
+  }, [actions, state.draftSettings.keepTestedRomsEnabled, state.settings.keepTestedRomsEnabled]);
   useEffect(() => {
     if (state.settingsDialogOpen || !settingsCloseArmedRef.current) return;
     settingsCloseArmedRef.current = false;
@@ -170,6 +176,10 @@ const useUnifiedDialog = (actions: WebappRootProps["actions"], state: WebappRoot
   }, []);
   const openStatusTab = useCallback(() => showTab("offline"), [showTab]);
   const openStorageTab = useCallback(() => showTab("storage"), [showTab]);
+  useEffect(() => {
+    window.addEventListener("rom-weaver-open-storage", openStorageTab);
+    return () => window.removeEventListener("rom-weaver-open-storage", openStorageTab);
+  }, [openStorageTab]);
   const openLogsTab = useCallback(() => showTab("logs"), [showTab]);
   const openAboutTab = useCallback(() => showTab("about"), [showTab]);
   return {

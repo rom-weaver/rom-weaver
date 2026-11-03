@@ -900,7 +900,7 @@ describe("routing", () => {
   it("rewrites the address bar when the requested view is unavailable", async () => {
     await loadWebapp();
 
-    window.history.pushState({}, "", "/trim-rom");
+    window.history.pushState({}, "", "/rom-save-editor");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush();
 

@@ -19,6 +19,7 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/play-rom?
 - [Switch games or stop](#switch-games-or-stop)
 - [Use saves and fullscreen](#use-saves-and-fullscreen)
 - [Export and restore a save](#export-and-restore-a-save)
+- [Keep tested ROMs across visits](#keep-tested-roms-across-visits)
 - [Disable save storage](#disable-save-storage)
 - [Fix a game that does not start](#fix-a-game-that-does-not-start)
 
@@ -114,6 +115,8 @@ Restore the save in a browser that has the same ROM:
 
 **Saves & storage** also accepts the older uncompressed JSON export.
 
+To back up every game, select **Export all saves** in **Saves & storage**. Keep the downloaded ZIP separately from browser data. It contains one JSON backup per game. Extract the ZIP, then import each JSON file to restore its save.
+
 You can also drop an exported ZIP or JSON file on any page. **Saves & storage** opens with the file ready to import; select **Import** to restore it. If the drop also holds ROMs, those are opened first.
 
 An import replaces the stored save for that ROM. When one exists, the import form names it and when it last changed, so you can export it first.
@@ -138,6 +141,22 @@ The game restarts with the save. rom-weaver stores the save for that ROM if the 
 Only one save loads at a time. When you drop several, Test names the ones it ignored.
 
 A save dropped alone plays in the game that is already loaded when its system fits; otherwise it waits on Test until you add a ROM. A `.eep`, `.sra`, `.fla`, or `.mpk` file only opens a Nintendo 64 ROM, and a `.mcr` or `.mcd` file only a PlayStation ROM. A save waiting for a ROM does not replace one the Save editor sent to Test. While save storage is off, it is kept only until you reload or close the page, and Test shows a warning.
+
+## Keep tested ROMs across visits
+
+1. Open **Settings** and enable **Keep tested ROMs on this device**.
+2. Select **Save**. Accept the browser's persistent-storage prompt if shown.
+3. Open a ROM on Test and start the game.
+4. After keeping finishes, reload Test. Find it under **Kept Test ROMs**.
+5. Select **Play** to prepare the original file again and load its matching save.
+
+The setting starts off. It keeps original files, including compressed archives, after the game starts. A failed copy shows a notice while the game keeps running. Apply outputs and created patches are excluded.
+
+Select **Remove** on Test, or **Delete** beside the ROM's size in **Saves & storage**. These actions keep its save. Turning the setting off stops new copies and keeps existing ones.
+
+When storage fills, select **Open Saves & storage** in the job's error message. Delete unneeded kept ROMs, close Storage, then select **Try again**. The app never evicts kept ROMs automatically.
+
+Use **Protect saves and ROMs from automatic removal** in **Saves & storage** to request persistent storage separately. Browsers can decline. Back up saves before clearing site data; see [Privacy](../legal/privacy.md#what-your-browser-stores) for browser-removal limits.
 
 ## Disable save storage
 

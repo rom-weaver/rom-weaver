@@ -2,7 +2,7 @@ use super::selection_resolution::SelectionExtract;
 use super::*;
 
 impl CliApp {
-    pub(super) fn trim_fix_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
+    pub(super) fn trim_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
         if let Some(kind) = TrimInputKind::from_path(path) {
             return Some(kind);
         }
@@ -26,21 +26,33 @@ impl CliApp {
         None
     }
 
-    pub(super) fn trim_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
-        if let Some(kind) = self.trim_fix_eligible_kind_for_path(path) {
-            return Some(kind);
-        }
-
-        if self.is_rvz_convert_candidate(path) {
-            return Some(TrimInputKind::RvzConvert);
-        }
-
-        None
-    }
-
-    pub(super) fn is_rvz_convert_candidate(&self, path: &Path) -> bool {
+    /// Whether `path` is a GameCube/Wii disc image. Detected by content, so any supported disc
+    /// container counts (`.iso`, `.gcm`, `.rvz`, `.wbfs`, `.wia`, `.gcz`, `.ciso`, `.tgc`,
+    /// `.nfs`); other non-XISO `.iso` files (PS2, ...) are not discs. Trim does not handle
+    /// these; `compress` writes them as RVZ.
+    pub(super) fn is_gamecube_wii_disc(&self, path: &Path) -> bool {
         let recommendation = self.containers.recommend_compress_format(path);
         recommendation.format_name.eq_ignore_ascii_case("rvz")
+    }
+
+    fn gamecube_wii_disc_trim_error(path: &Path) -> RomWeaverError {
+        RomWeaverError::Validation(format!(
+            "`{}` is a GameCube/Wii disc, which trim does not support; use `rom-weaver compress` to convert it to RVZ",
+            path.display()
+        ))
+    }
+
+    /// The rejection for a lone archive input that holds GameCube/Wii discs and no trim-eligible payload.
+    fn gamecube_wii_archive_trim_error(archive: &Path, disc_count: usize) -> RomWeaverError {
+        let (subject, pronoun) = if disc_count == 1 {
+            ("a GameCube/Wii disc", "it")
+        } else {
+            ("GameCube/Wii discs", "them")
+        };
+        RomWeaverError::Validation(format!(
+            "`{}` holds {subject}, which trim does not support; use `rom-weaver compress` to convert {pronoun} to RVZ",
+            archive.display()
+        ))
     }
 
     pub(super) fn collect_trim_input_files(
@@ -48,7 +60,7 @@ impl CliApp {
         sources: &[PathBuf],
         options: TrimCollectOptions<'_>,
         cleanup_paths: &mut Vec<PathBuf>,
-        skipped_unsupported: &mut usize,
+        skips: &mut TrimSkips,
     ) -> Result<Vec<TrimSource>> {
         let mut files = Vec::new();
         for source in sources {
@@ -59,12 +71,17 @@ impl CliApp {
                 ))
             })?;
             if metadata.is_file() {
+                // A lone file the user named (a disc, or an archive holding only discs) is rejected
+                // with an explanation; in a larger batch or a folder a GameCube/Wii disc is
+                // counted as skipped like any other unsupported file.
+                let reject_gamecube_wii = sources.len() == 1;
                 self.collect_trim_file(
                     source,
                     options,
+                    reject_gamecube_wii,
                     &mut files,
                     cleanup_paths,
-                    skipped_unsupported,
+                    skips,
                 )?;
                 continue;
             }
@@ -74,12 +91,12 @@ impl CliApp {
                     options,
                     &mut files,
                     cleanup_paths,
-                    skipped_unsupported,
+                    skips,
                 )?;
                 continue;
             }
 
-            *skipped_unsupported = skipped_unsupported.saturating_add(1);
+            skips.skip_unsupported();
         }
 
         files.sort_by(|left, right| left.path.cmp(&right.path));
@@ -89,14 +106,16 @@ impl CliApp {
 
     /// Resolve a single file input into trim sources: a directly trim-eligible file becomes one
     /// source, otherwise an extractable archive is unpacked and its trim-eligible payloads are
-    /// added. Anything else increments the unsupported counter.
+    /// added. Anything else increments the unsupported counter; a GameCube/Wii disc (or an
+    /// archive holding only discs) is an error instead when `reject_gamecube_wii` is set.
     pub(super) fn collect_trim_file(
         &self,
         path: &Path,
         options: TrimCollectOptions<'_>,
+        reject_gamecube_wii: bool,
         files: &mut Vec<TrimSource>,
         cleanup_paths: &mut Vec<PathBuf>,
-        skipped_unsupported: &mut usize,
+        skips: &mut TrimSkips,
     ) -> Result<()> {
         if let Some(kind) = self.trim_eligible_kind_for_path(path) {
             files.push(TrimSource {
@@ -108,20 +127,45 @@ impl CliApp {
             return Ok(());
         }
 
-        if options.no_extract {
-            *skipped_unsupported = skipped_unsupported.saturating_add(1);
+        if self.is_gamecube_wii_disc(path) {
+            debug!(path = %path.display(), reject_gamecube_wii, "trim skipped a GameCube/Wii disc");
+            if reject_gamecube_wii {
+                return Err(Self::gamecube_wii_disc_trim_error(path));
+            }
+            skips.skip_gamecube_wii();
             return Ok(());
         }
 
+        if options.no_extract {
+            skips.skip_unsupported();
+            return Ok(());
+        }
+
+        let discs_before = skips.gamecube_wii;
         let extracted = if options.in_place {
-            self.extract_trim_repack_payload(path, options, cleanup_paths)?
+            self.extract_trim_repack_payload(path, options, cleanup_paths, skips)?
         } else {
-            self.extract_trim_payloads(path, options, cleanup_paths)?
+            self.extract_trim_payloads(path, options, cleanup_paths, skips)?
         };
-        if extracted.is_empty() {
-            *skipped_unsupported = skipped_unsupported.saturating_add(1);
-        } else {
+        let discs_in_archive = skips.gamecube_wii.saturating_sub(discs_before);
+        if !extracted.is_empty() {
             files.extend(extracted);
+        } else if discs_in_archive > 0 {
+            // The discs were already counted individually; the archive holds nothing else.
+            debug!(
+                path = %path.display(),
+                discs_in_archive,
+                reject_gamecube_wii,
+                "trim archive holds only GameCube/Wii discs"
+            );
+            if reject_gamecube_wii {
+                return Err(Self::gamecube_wii_archive_trim_error(
+                    path,
+                    discs_in_archive,
+                ));
+            }
+        } else {
+            skips.skip_unsupported();
         }
         Ok(())
     }
@@ -132,7 +176,7 @@ impl CliApp {
         options: TrimCollectOptions<'_>,
         files: &mut Vec<TrimSource>,
         cleanup_paths: &mut Vec<PathBuf>,
-        skipped_unsupported: &mut usize,
+        skips: &mut TrimSkips,
     ) -> Result<()> {
         let mut directories = vec![root.to_path_buf()];
         while let Some(directory) = directories.pop() {
@@ -150,23 +194,25 @@ impl CliApp {
                     continue;
                 }
                 if !file_type.is_file() {
-                    *skipped_unsupported = skipped_unsupported.saturating_add(1);
+                    skips.skip_unsupported();
                     continue;
                 }
-                self.collect_trim_file(&path, options, files, cleanup_paths, skipped_unsupported)?;
+                self.collect_trim_file(&path, options, false, files, cleanup_paths, skips)?;
             }
         }
         Ok(())
     }
 
     /// Extract an archive (recursively, bounded) into temporary directories and return only the
-    /// payloads whose type trim actually supports. Temp directories are recorded in
-    /// `cleanup_paths` so the caller can remove them after trimming completes.
+    /// payloads whose type trim actually supports. GameCube/Wii discs found inside are counted in
+    /// `skips` and never queued, so a disc is not decoded to temp space. Temp directories are
+    /// recorded in `cleanup_paths` so the caller can remove them after trimming completes.
     pub(super) fn extract_trim_payloads(
         &self,
         archive: &Path,
         options: TrimCollectOptions<'_>,
         cleanup_paths: &mut Vec<PathBuf>,
+        skips: &mut TrimSkips,
     ) -> Result<Vec<TrimSource>> {
         let kind_filter = ArchiveEntryKindFilter::new(options.rom_filter, false);
         let mut found = Vec::new();
@@ -259,6 +305,15 @@ impl CliApp {
                         archive_origin: Some(archive.to_path_buf()),
                         repack_root: None,
                     });
+                } else if self.is_gamecube_wii_disc(&candidate.source) {
+                    // A disc matches an extract-capable handler (rvz, wbfs, iso, ...), but trim
+                    // never handles it, so decoding it would only spend temp space to skip it.
+                    debug!(
+                        archive = %archive.display(),
+                        payload = %candidate.source.display(),
+                        "trim skipped a GameCube/Wii disc inside an archive"
+                    );
+                    skips.skip_gamecube_wii();
                 } else if self.containers.probe(&candidate.source).is_some() {
                     queue.push_back((candidate.source, depth + 1));
                 }
@@ -277,6 +332,7 @@ impl CliApp {
         archive: &Path,
         options: TrimCollectOptions<'_>,
         cleanup_paths: &mut Vec<PathBuf>,
+        skips: &mut TrimSkips,
     ) -> Result<Vec<TrimSource>> {
         let Some(handler) = self.containers.probe(archive) else {
             return Ok(Vec::new());
@@ -344,6 +400,13 @@ impl CliApp {
             }
             if let Some(kind) = self.trim_eligible_kind_for_path(&candidate.source) {
                 roms.push((candidate.source, kind));
+            } else if self.is_gamecube_wii_disc(&candidate.source) {
+                debug!(
+                    archive = %archive.display(),
+                    payload = %candidate.source.display(),
+                    "trim repack skipped a GameCube/Wii disc inside an archive"
+                );
+                skips.skip_gamecube_wii();
             }
         }
 
@@ -396,16 +459,12 @@ impl CliApp {
     }
 }
 
-/// The `{ext}` substitution for a trim source: `rvz` for RVZ conversions,
-/// otherwise the source's own extension (`bin` when it has none).
+/// The `{ext}` substitution for a trim source: the source's own extension (`bin` when it has
+/// none).
 fn trim_source_extension(source: &TrimSource) -> &str {
-    if source.kind == TrimInputKind::RvzConvert {
-        "rvz"
-    } else {
-        source
-            .path
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or("bin")
-    }
+    source
+        .path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("bin")
 }

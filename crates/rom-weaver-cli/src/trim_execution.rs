@@ -1,6 +1,9 @@
 use super::*;
 use crate::path_access::paths_refer_to_same_file;
 
+/// The largest 3DS game card (8 GiB).
+const THREE_DS_MAX_CARD_SIZE: u64 = 8 << 30;
+
 /// The mode/operation settings for a single trim operation, grouped so `trim_file` takes one
 /// request descriptor instead of four positional flags.
 #[derive(Clone, Copy)]
@@ -15,14 +18,13 @@ pub(super) struct TrimRequest {
 
 /// Where a trim writes its result for a given destination path.
 pub(super) enum TrimOutputPlan {
-    /// The destination itself holds the trimmed file (or, for a GameCube/Wii disc, the RVZ).
+    /// The destination itself holds the trimmed file.
     Direct,
     /// The result is packed inside the destination container under `entry_name`.
     Pack {
         handler: Arc<dyn ContainerHandler>,
         entry_name: String,
-        /// The format name passed to the container's `create`; a media-layout variant such as
-        /// `chd-dvd` where the container name alone would be inferred from the file.
+        /// The format name passed to the container's `create`.
         create_format: &'static str,
     },
 }
@@ -33,7 +35,6 @@ impl CliApp {
         source: &Path,
         destination: &Path,
         request: TrimRequest,
-        context: &OperationContext,
     ) -> Result<NdsTrimOutcome> {
         let TrimRequest {
             in_place,
@@ -64,9 +65,24 @@ impl CliApp {
             return Self::revert_with_footer(source, destination, in_place, dry_run, kind, footer);
         }
 
-        // The source fill MUST be captured before an in-place trim removes its padding.
-        let restore_fill = if operation == TrimOperation::Trim && revert_marker && !dry_run {
-            Some(Self::detect_trailing_pad_byte(source)?.unwrap_or(0xFF))
+        // The source fill MUST be captured before an in-place trim removes its padding. A source
+        // that already carries a footer keeps its recorded size and fill: trimming it again only
+        // strips that footer, so the trimmed file's own size and last byte would be wrong.
+        let restore_info = if operation == TrimOperation::Trim && revert_marker && !dry_run {
+            match Self::read_revert_footer(source)? {
+                Some(footer) => {
+                    debug!(
+                        original_size = footer.original_size,
+                        pad_byte = footer.pad_byte,
+                        "keeping the existing revert footer's restore data"
+                    );
+                    Some((Some(footer.original_size), footer.pad_byte))
+                }
+                None => Some((
+                    None,
+                    Self::detect_trailing_pad_byte(source)?.unwrap_or(0xFF),
+                )),
+            }
         } else {
             None
         };
@@ -86,21 +102,14 @@ impl CliApp {
             TrimInputKind::Xiso => {
                 Self::trim_xiso_file(source, destination, in_place, dry_run, operation)
             }
-            TrimInputKind::RvzConvert => self.trim_rvz_convert_file(
-                source,
-                destination,
-                in_place,
-                dry_run,
-                operation,
-                context,
-            ),
         }?;
 
         // Unchanged files need no restoration metadata.
-        if let Some(pad_byte) = restore_fill
+        if let Some((recorded_size, pad_byte)) = restore_info
             && !outcome.already_target_size
         {
-            Self::write_revert_footer(&outcome.output_path, outcome.original_size, pad_byte)?;
+            let original_size = recorded_size.unwrap_or(outcome.original_size);
+            Self::write_revert_footer(&outcome.output_path, original_size, pad_byte)?;
         }
 
         Ok(outcome)
@@ -199,10 +208,10 @@ impl CliApp {
     ) -> Result<NdsTrimOutcome> {
         Self::validate_trim_destination(source, destination, in_place)?;
         let original_size = fs::metadata(source)?.len();
-        let minimum_size = if kind == TrimInputKind::ThreeDs {
+        let (minimum_size, card_size) = if kind == TrimInputKind::ThreeDs {
             Self::three_ds_data_extent(source, original_size, operation == TrimOperation::Revert)?
         } else {
-            1
+            (1, None)
         };
         if original_size == 0 {
             return Err(RomWeaverError::Validation(format!(
@@ -214,22 +223,49 @@ impl CliApp {
         let fill_byte = kind.default_padding_byte();
         let (target_size, already_target_size) = match operation {
             TrimOperation::Trim => {
-                // Detect the actual trailing pad byte (0x00 or 0xFF) so both conventions trim,
-                // instead of assuming a single fixed fill. Files that do not end in recognizable
-                // padding are left untouched.
-                match Self::detect_trailing_pad_byte(source)? {
-                    Some(pad_byte) => {
-                        let trimmed_size =
-                            Self::scan_trimmed_size_from_trailing_padding(source, pad_byte)?
-                                .max(minimum_size);
-                        (trimmed_size, trimmed_size == original_size)
+                // A file that already ends in a revert footer was trimmed before: only the footer
+                // goes. Scanning from its last (CRC) byte could cut the footer partway.
+                if let Some(footer) = Self::read_revert_footer(source)? {
+                    let data_size = original_size - footer.footer_len;
+                    debug!(
+                        original_size,
+                        data_size, "trim strips an existing revert footer"
+                    );
+                    (data_size.max(minimum_size), false)
+                } else {
+                    // Detect the actual trailing pad byte (0x00 or 0xFF) so both conventions
+                    // trim, instead of assuming a single fixed fill. Files that do not end in
+                    // recognizable padding are left untouched.
+                    match Self::detect_trailing_pad_byte(source)? {
+                        Some(pad_byte) => {
+                            let trimmed_size =
+                                Self::scan_trimmed_size_from_trailing_padding(source, pad_byte)?
+                                    .max(minimum_size);
+                            (trimmed_size, trimmed_size == original_size)
+                        }
+                        None => (original_size, true),
                     }
-                    None => (original_size, true),
                 }
             }
             TrimOperation::Revert => {
-                let revert_size =
-                    Self::power_of_two_target_size_for_revert(original_size)?.max(minimum_size);
+                // A cart image's NCSD header records the full card size, so restore to exactly
+                // that; only headers without one (NCCH) fall back to the next power of two. A
+                // `.cxi` is a bare NCCH that never had card padding, so it has nothing to restore.
+                let is_cxi = source
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("cxi"));
+                let revert_size = match card_size {
+                    Some(card_size) => card_size.max(original_size),
+                    None if is_cxi => original_size,
+                    None => Self::power_of_two_target_size_for_revert(original_size)?,
+                }
+                .max(minimum_size);
+                trace!(
+                    original_size,
+                    ?card_size,
+                    revert_size,
+                    "resolved padding restore size"
+                );
                 (revert_size, revert_size == original_size)
             }
         };
@@ -382,19 +418,7 @@ impl CliApp {
         destination: &Path,
     ) -> Result<TrimOutputPlan> {
         let subject = kind.output_subject();
-        let extension = destination
-            .extension()
-            .map(|extension| extension.to_string_lossy().to_ascii_lowercase());
         let Some(handler) = self.containers.find_by_output_extension(destination) else {
-            // A GameCube/Wii trim writes RVZ, so any other extension would misname it. Only an
-            // extensionless name (such as the staging file behind `--output -`) is left alone.
-            if kind == TrimInputKind::RvzConvert && extension.is_some() {
-                debug!(destination = %destination.display(), "rvz-convert trim rejected a non-rvz output name");
-                return Err(RomWeaverError::Validation(format!(
-                    "`{}` is not a valid trim output for {subject}: trim converts them to RVZ, so the name must end in .rvz, .zip, or .7z; use `extract` to write the disc as a plain image",
-                    destination.display()
-                )));
-            }
             return Ok(TrimOutputPlan::Direct);
         };
         let descriptor = handler.descriptor();
@@ -404,6 +428,18 @@ impl CliApp {
             .is_some_and(|direct| descriptor.matches_name(direct))
         {
             return Ok(TrimOutputPlan::Direct);
+        }
+        if kind == TrimInputKind::Xiso && descriptor.matches_name("chd") {
+            debug!(
+                source = %source.display(),
+                destination = %destination.display(),
+                "trim rejected CHD output for an Xbox XISO"
+            );
+            return Err(RomWeaverError::Validation(format!(
+                "`{}` is an Xbox XISO image, which cannot be stored as CHD: `{}` must end in .xiso, .zip, or .7z",
+                source.display(),
+                destination.display()
+            )));
         }
         if kind == TrimInputKind::ThreeDs && descriptor.matches_name("z3ds") {
             Self::validate_three_ds_z3ds_name(source, destination, subject)?;
@@ -425,33 +461,20 @@ impl CliApp {
                 ?kind,
                 "trim rejected an output container that is not valid for the input"
             );
-            // GameCube/Wii trims reject every plain extension, so only the other kinds can be
-            // told to use a plain name.
-            let plain_name = if kind == TrimInputKind::RvzConvert {
-                String::new()
-            } else {
-                let source_extension = source
-                    .extension()
-                    .map(|extension| format!(" such as `.{}`", extension.to_string_lossy()))
-                    .unwrap_or_default();
-                format!(
-                    ", or be a plain name{source_extension} that writes the trimmed file itself"
-                )
-            };
+            let source_extension = source
+                .extension()
+                .map(|extension| format!(" such as `.{}`", extension.to_string_lossy()))
+                .unwrap_or_default();
+            let plain_name = format!(
+                ", or be a plain name{source_extension} that writes the trimmed file itself"
+            );
             return Err(RomWeaverError::Validation(format!(
                 "{} is not a valid trim output for {subject}: `{}` must end in one of {accepted}{plain_name}",
                 format.to_ascii_uppercase(),
                 destination.display()
             )));
         }
-        let entry_name = Self::trim_pack_entry_name(kind, source, destination);
-        // CHD infers its media from the packed file, which would build a CD or raw CHD for an
-        // XISO; it is a DVD-class disc, so ask for the DVD layout outright.
-        let create_format = if kind == TrimInputKind::Xiso && descriptor.matches_name("chd") {
-            "chd-dvd"
-        } else {
-            format
-        };
+        let entry_name = Self::trim_pack_entry_name(source, destination);
         debug!(
             destination = %destination.display(),
             format,
@@ -461,7 +484,7 @@ impl CliApp {
         Ok(TrimOutputPlan::Pack {
             handler,
             entry_name,
-            create_format,
+            create_format: format,
         })
     }
 
@@ -516,23 +539,18 @@ impl CliApp {
     }
 
     /// The name the trimmed file carries inside its container: the destination's name without
-    /// the container extension, ending in the extension the trimmed file has (`.rvz` for a
-    /// GameCube/Wii conversion, else the source's own). `game.zip` packs `game.nds`;
+    /// the container extension, ending in the source's own extension. `game.zip` packs `game.nds`;
     /// `game.nds.zip` packs `game.nds`; `v1.2.zip` packs `v1.2.nds`.
-    fn trim_pack_entry_name(kind: TrimInputKind, source: &Path, destination: &Path) -> String {
+    fn trim_pack_entry_name(source: &Path, destination: &Path) -> String {
         let stem = destination
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned())
             .filter(|stem| !stem.is_empty())
             .unwrap_or_else(|| "trimmed".to_string());
-        let payload_extension = if kind == TrimInputKind::RvzConvert {
-            Some("rvz".to_string())
-        } else {
-            source
-                .extension()
-                .map(|extension| extension.to_string_lossy().into_owned())
-                .filter(|extension| !extension.is_empty())
-        };
+        let payload_extension = source
+            .extension()
+            .map(|extension| extension.to_string_lossy().into_owned())
+            .filter(|extension| !extension.is_empty());
         match payload_extension {
             Some(extension)
                 if !stem
@@ -548,8 +566,6 @@ impl CliApp {
     /// Run [`Self::trim_file`] for a destination that may be a container. A packed output is
     /// trimmed into a scratch file named as it will be inside the container, then packed with
     /// the container's own `create`; a dry run only reports the container as the output.
-    /// For a completed GameCube/Wii conversion the second value is the disc's logical size,
-    /// read from the RVZ itself (before it is packed away from the scratch file).
     pub(super) fn trim_file_into_output(
         &self,
         source: &Path,
@@ -557,32 +573,24 @@ impl CliApp {
         plan: &TrimOutputPlan,
         request: TrimRequest,
         context: &OperationContext,
-    ) -> Result<(NdsTrimOutcome, Option<u64>)> {
-        let logical_size = |rvz: &Path| {
-            (request.kind == TrimInputKind::RvzConvert && !request.dry_run)
-                .then(|| self.rvz_logical_size(rvz, context))
-                .flatten()
-        };
+    ) -> Result<NdsTrimOutcome> {
         let TrimOutputPlan::Pack {
             handler,
             entry_name,
             create_format,
         } = plan
         else {
-            let outcome = self.trim_file(source, destination, request, context)?;
-            let size = logical_size(&outcome.output_path);
-            return Ok((outcome, size));
+            return self.trim_file(source, destination, request);
         };
         if request.dry_run {
-            return Ok((self.trim_file(source, destination, request, context)?, None));
+            return self.trim_file(source, destination, request);
         }
         let scratch = context.temp_paths().next_path("trim-pack", None);
         fs::create_dir_all(&scratch)?;
         let trimmed = scratch.join(entry_name);
         let result = self
-            .trim_file(source, &trimmed, request, context)
+            .trim_file(source, &trimmed, request)
             .and_then(|mut outcome| {
-                let size = logical_size(&trimmed);
                 Self::pack_trimmed_output(
                     handler.as_ref(),
                     entry_name,
@@ -592,27 +600,12 @@ impl CliApp {
                     context,
                 )?;
                 outcome.output_path = destination.to_path_buf();
-                Ok((outcome, size))
+                Ok(outcome)
             });
         if let Err(error) = fs::remove_dir_all(&scratch) {
             debug!(scratch = %scratch.display(), %error, "trim pack scratch cleanup failed");
         }
         result
-    }
-
-    /// The uncompressed disc size recorded inside an RVZ, if it can be read.
-    fn rvz_logical_size(&self, rvz: &Path, context: &OperationContext) -> Option<u64> {
-        let handler = self.containers.find_by_name("rvz")?;
-        let entries = handler
-            .list_entry_records(
-                &ContainerProbeRequest {
-                    source: rvz.to_path_buf(),
-                    split_bin: false,
-                },
-                context,
-            )
-            .ok()?;
-        entries.first().and_then(|entry| entry.size)
     }
 
     /// Pack `trimmed` into `destination` with `handler`, keeping an existing file at the
@@ -635,9 +628,18 @@ impl CliApp {
             fs::create_dir_all(parent)?;
         }
         let staged = StagedOutput::new(destination)?;
+        // Repack at `compress`'s default profile so a trimmed archive is no larger than one
+        // `compress` would write from the same image.
+        let level = Self::resolve_compression_level_for_profile(
+            format,
+            None,
+            None,
+            CompressionLevelProfile::default(),
+        );
         trace!(
             format,
             entry_name,
+            ?level,
             trimmed = %trimmed.display(),
             destination = %destination.display(),
             "packing trimmed output"
@@ -650,7 +652,7 @@ impl CliApp {
                 output: staged.path().to_path_buf(),
                 format: create_format.to_string(),
                 codec: None,
-                level: None,
+                level,
                 parent: None,
             },
             context,
@@ -664,151 +666,6 @@ impl CliApp {
         }
         context.cancel().check()?;
         staged.commit()
-    }
-
-    pub(super) fn trim_rvz_convert_file(
-        &self,
-        source: &Path,
-        destination: &Path,
-        in_place: bool,
-        dry_run: bool,
-        operation: TrimOperation,
-        context: &OperationContext,
-    ) -> Result<NdsTrimOutcome> {
-        if operation == TrimOperation::Revert {
-            return Err(RomWeaverError::Validation(
-                "rvz-convert trim revert is not supported; original source container layout cannot be reconstructed"
-                    .to_string(),
-            ));
-        }
-
-        if in_place || paths_refer_to_same_file(source, destination) {
-            return Err(RomWeaverError::Validation(
-                "rvz-convert trim requires a separate output file; in-place replacement is not supported"
-                    .to_string(),
-            ));
-        }
-
-        let original_size = fs::metadata(source)?.len();
-        if original_size == 0 {
-            return Err(RomWeaverError::Validation(format!(
-                "input is empty and cannot be processed: `{}`",
-                source.display()
-            )));
-        }
-
-        if dry_run {
-            let result_size =
-                self.measure_rvz_converted_size(source, context)
-                    .map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "rvz-convert trim simulation failed while rebuilding `{}`: {error}",
-                            source.display()
-                        ))
-                    })?;
-            return Ok(NdsTrimOutcome {
-                original_size,
-                result_size,
-                output_path: if in_place {
-                    source.to_path_buf()
-                } else {
-                    destination.to_path_buf()
-                },
-                mode: TrimInputKind::RvzConvert.mode_label(),
-                preserved_download_play_cert: false,
-                already_target_size: result_size == original_size,
-                revert_supported: false,
-            });
-        }
-
-        self.create_rvz_converted_output(source, destination, context)?;
-        let result_size = fs::metadata(destination)?.len();
-        Ok(NdsTrimOutcome {
-            original_size,
-            result_size,
-            output_path: destination.to_path_buf(),
-            mode: TrimInputKind::RvzConvert.mode_label(),
-            preserved_download_play_cert: false,
-            already_target_size: result_size == original_size,
-            revert_supported: false,
-        })
-    }
-
-    pub(super) fn create_rvz_converted_output(
-        &self,
-        source: &Path,
-        destination: &Path,
-        context: &OperationContext,
-    ) -> Result<()> {
-        if let Some(parent) = destination.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let handler = self
-            .containers
-            .find_by_name("rvz")
-            .ok_or(RomWeaverError::Unsupported(
-                UnsupportedOp::HandlerNotRegistered {
-                    handler: "rvz",
-                    feature: "rvz-convert trim",
-                },
-            ))?;
-        handler
-            .create(
-                &ContainerCreateRequest {
-                    rvz_block_size: None,
-                    archive_names: None,
-                    inputs: vec![source.to_path_buf()],
-                    output: destination.to_path_buf(),
-                    format: "rvz".to_string(),
-                    codec: None,
-                    level: None,
-                    parent: None,
-                },
-                context,
-            )
-            .map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "rvz-convert trim failed while rebuilding `{}`: {error}",
-                    source.display()
-                ))
-            })?;
-        Ok(())
-    }
-
-    pub(super) fn measure_rvz_converted_size(
-        &self,
-        source: &Path,
-        context: &OperationContext,
-    ) -> Result<u64> {
-        let handler = self
-            .containers
-            .find_by_name("rvz")
-            .ok_or(RomWeaverError::Unsupported(
-                UnsupportedOp::HandlerNotRegistered {
-                    handler: "rvz",
-                    feature: "rvz-convert trim",
-                },
-            ))?;
-        handler
-            .create_dry_run_size(
-                &ContainerCreateRequest {
-                    rvz_block_size: None,
-                    archive_names: None,
-                    inputs: vec![source.to_path_buf()],
-                    output: source.with_extension("rvz"),
-                    format: "rvz".to_string(),
-                    codec: None,
-                    level: None,
-                    parent: None,
-                },
-                context,
-            )
-            .map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "rvz-convert trim simulation failed while rebuilding `{}`: {error}",
-                    source.display()
-                ))
-            })
     }
 
     pub(super) fn open_xiso_trim_source_filesystem(
@@ -949,11 +806,18 @@ impl CliApp {
         Ok(0x200_u64 << shift)
     }
 
-    fn three_ds_data_extent(source: &Path, file_size: u64, reverting: bool) -> Result<u64> {
+    /// The bytes a 3DS image's partitions reach, and for an NCSD cart image the card size its
+    /// header declares.
+    fn three_ds_data_extent(
+        source: &Path,
+        file_size: u64,
+        reverting: bool,
+    ) -> Result<(u64, Option<u64>)> {
         let mut file = File::open(source)?;
         let mut header = [0_u8; 0x200];
         file.read_exact(&mut header)?;
         let unit = Self::three_ds_media_unit(&header)?;
+        let mut card_size = None;
         let extent = match &header[0x100..0x104] {
             b"NCCH" => u64::from(Self::read_u32_le(&header, 0x104, "NCCH size")?) * unit,
             b"NCSD" => {
@@ -1022,6 +886,9 @@ impl CliApp {
                         "NCSD contains no partitions".into(),
                     ));
                 }
+                // 3DS game cards top out at 8 GiB; a larger declared size is not a real card, so
+                // a restore does not trust it.
+                card_size = (media_size <= THREE_DS_MAX_CARD_SIZE).then_some(media_size);
                 end
             }
             _ => {
@@ -1035,7 +902,7 @@ impl CliApp {
                 "3DS data extent is invalid or exceeds the input size".into(),
             ));
         }
-        Ok(extent)
+        Ok((extent, card_size))
     }
 
     pub(super) fn write_padding_bytes(

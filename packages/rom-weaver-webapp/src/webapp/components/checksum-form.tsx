@@ -714,7 +714,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
         </StepSection>
       )}
       {errors.map((entry) => (
-        <Notice key={entry.id} level="error" onDismiss={entry.dismissError}>
+        <Notice key={entry.id} level="error" onDismiss={entry.dismissError} onRetry={() => void entry.calculate()}>
           {entry.error}
         </Notice>
       ))}

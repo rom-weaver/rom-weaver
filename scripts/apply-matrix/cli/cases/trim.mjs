@@ -1,4 +1,4 @@
-// `rom-weaver trim`: every trim-capable family (NDS/DSi, GBA, 3DS, XISO, GC/Wii -> RVZ), round trips with and without a
+// `rom-weaver trim`: every trim-capable family (NDS/DSi, GBA, 3DS, XISO; GC/Wii discs are refused), round trips with and without a
 // revert marker, in-place / dry-run / output-naming policy, folders and archives, and untrimmable / broken inputs.
 import fs from "node:fs";
 import path from "node:path";
@@ -399,51 +399,29 @@ export const register = () => {
     check(!result.timedOut && !result.panic, () => `symlink loop: ${ctx.describe(result)}`);
   });
 
-  // ------------------------------------------------------------------ RVZ conversion and XISO
-  add("trim.disc.gamecube-iso-converts-to-lossless-rvz", ["trim", "disc", "rvz"], (ctx) => {
+  // ------------------------------------------------------------------ GameCube/Wii refusal and XISO
+  add("trim.disc.gamecube-wii-discs-are-refused-and-point-to-compress", ["trim", "disc", "negative"], (ctx) => {
     const iso = ctx.fx("reference/gc/disc.iso");
-    const out = ctx.tmp("o/disc.rvz");
-    ctx.ok(ctx.run(["trim", iso, "-o", out]), "trim iso -> rvz");
-    check(ctx.exists(out) && fs.statSync(out).size < fs.statSync(iso).size, "rvz is not smaller than the ISO");
-    const ex = ctx.tmp("ex");
-    ctx.ok(ctx.run(["extract", out, "-o", ex]), "extract trimmed rvz");
-    const files = fs.readdirSync(ex);
-    check(files.length === 1, () => `extract gave ${files}`);
-    ctx.same(path.join(ex, files[0]), iso, "rvz extract equals the source ISO");
-  });
-  add("trim.disc.rvz-verified-by-dolphin-tool", ["trim", "disc", "rvz", "reference"], (ctx) => {
-    needTool("dolphin-tool");
-    const out = ctx.tmp("o/disc.rvz");
-    ctx.ok(ctx.run(["trim", ctx.fx("reference/gc/disc.iso"), "-o", out]), "trim iso -> rvz");
-    const back = ctx.tmp("back.iso");
-    toolMust(toolIn(ctx)("dolphin-tool", ["convert", "-i", out, "-o", back, "-f", "iso"]), "dolphin-tool convert rvz->iso");
-    ctx.same(back, ctx.fx("reference/gc/disc.iso"), "dolphin-tool round trip");
-  });
-  add("trim.disc.revert-and-marker-unsupported-for-discs", ["trim", "disc", "negative"], (ctx) => {
-    const iso = ctx.fx("reference/gc/disc.iso");
-    ctx.failed(ctx.run(["trim", iso, "--revert-marker", "-o", ctx.tmp("a/d.rvz")]), { what: "--revert-marker on a disc" });
-    ctx.failed(ctx.run(["trim", iso, "--revert", "-o", ctx.tmp("b/d.iso")]), { what: "--revert on a disc" });
-    check(!ctx.exists(ctx.tmp("a/d.rvz")) && !ctx.exists(ctx.tmp("b/d.iso")), "left an output");
-  });
-  add("trim.disc.dry-run-writes-nothing", ["trim", "disc"], (ctx) => {
-    const doc = report(ctx, [ctx.fx("reference/gc/disc.iso"), "--dry-run", "-o", ctx.tmp("o/d.rvz")]);
-    check(doc.details.dry_run === true && !ctx.exists(ctx.tmp("o/d.rvz")), "dry-run wrote output");
-  });
-  add("trim.disc.in-place-rvz-conversion", ["trim", "disc", "rvz"], (ctx) => {
-    const iso = ctx.write("g.iso", fs.readFileSync(ctx.fx("reference/gc/disc.iso")));
-    const result = ctx.run(["trim", iso, "--in-place"]);
-    check(!result.panic, "panic");
-    ctx.note(`trim --in-place on a GameCube ISO -> exit ${result.code}; files: ${fs.readdirSync(ctx.work).join(",")}`);
-    if (result.code === 0) {
-      const files = fs.readdirSync(ctx.work);
-      check(files.length === 1, () => `in-place conversion left ${files.join(",")}`);
-    } else check(fs.statSync(iso).size === fs.statSync(ctx.fx("reference/gc/disc.iso")).size, "failed in-place trim changed the ISO");
-  });
-  add("trim.disc.rvz-input-is-already-converted", ["trim", "disc", "rvz"], (ctx) => {
+    const gcm = ctx.write("g.gcm", fs.readFileSync(iso));
     const rvz = ctx.write("g.rvz", fs.readFileSync(ctx.fx("disc/made.rvz")));
-    const result = ctx.run(["trim", rvz, "-o", ctx.tmp("o/g.rvz")]);
-    check(!result.panic, "panic");
-    ctx.note(`trim of an .rvz -> exit ${result.code}: ${result.all.trim().split("\n")[0].slice(0, 120)}`);
+    for (const [what, input, extra] of [
+      ["GameCube .iso", iso, []],
+      ["GameCube .gcm", gcm, []],
+      ["RVZ", rvz, []],
+      ["GameCube .iso --dry-run", iso, ["--dry-run"]],
+      ["GameCube .iso --in-place", ctx.write("g.iso", fs.readFileSync(iso)), ["--in-place"]],
+      ["GameCube .iso --revert", iso, ["--revert"]],
+    ]) {
+      ctx.failed(ctx.run(["trim", input, ...extra]), { message: /GameCube\/Wii disc.*rom-weaver compress/s, what });
+    }
+    const files = fs.readdirSync(ctx.work);
+    check(!files.some((name) => /\.trim\./.test(name)), () => `a refused trim left ${files.join(",")}`);
+  });
+  add("trim.disc.folder-skips-gamecube-wii-discs-as-unsupported", ["trim", "disc"], (ctx) => {
+    ctx.write("in/g.iso", fs.readFileSync(ctx.fx("reference/gc/disc.iso")));
+    ctx.write("in/g.rvz", fs.readFileSync(ctx.fx("disc/made.rvz")));
+    const doc = report(ctx, [path.join(ctx.work, "in")]);
+    check(doc.details.processed === 0 && doc.details.skipped_unsupported === 2, () => `details ${JSON.stringify(doc.details)}`);
   });
   add("trim.xiso.trim-keeps-file-contents", ["trim", "xiso"], (ctx) => {
     const src = ctx.write("g.xiso", fs.readFileSync(ctx.fx("disc/xiso.xiso")));

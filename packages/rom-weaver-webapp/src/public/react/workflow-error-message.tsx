@@ -1,8 +1,9 @@
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
+import { StorageFullRecovery } from "./storage-full-recovery.tsx";
 
 /** Display coded workflow errors and native source-staging diagnostics with recovery guidance. */
-const WorkflowErrorMessage = ({ message }: { message: string }) => {
+const WorkflowErrorMessage = ({ message, onRetry }: { message: string; onRetry?: () => void }) => {
   const localizer = useUiLocalizer();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const code = /^([A-Z_]+): /.exec(message)?.[1];
@@ -45,6 +46,7 @@ const WorkflowErrorMessage = ({ message }: { message: string }) => {
   return (
     <>
       {message}
+      <StorageFullRecovery message={message} onRetry={onRetry} />
       {recovery ? (
         <>
           <br />

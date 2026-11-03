@@ -172,6 +172,11 @@ class MockTrimWorkflow {
     this.outputName = outputName;
     return Promise.resolve();
   }
+
+  setMode(mode) {
+    this.mode = mode;
+    return Promise.resolve();
+  }
 }
 
 const withTrimWorkflowMock = (props = {}) => ({
@@ -181,13 +186,13 @@ const withTrimWorkflowMock = (props = {}) => ({
 
 const getOutputWaitingText = () => document.querySelector(".outcard > .fileprog")?.textContent || "";
 
-const confirmTrim = async () => {
-  await expect.poll(() => document.querySelector(".confirm-card")?.textContent || "").toContain("Trim ROM");
-  const confirmButton = Array.from(document.querySelectorAll(".confirm-card button")).find((button) =>
-    button.textContent?.includes("Trim ROM"),
-  );
-  expect(confirmButton).toBeInstanceOf(HTMLButtonElement);
-  confirmButton.click();
+// Starting a run opens an informational warning; it never gates the run, so dismissing it is optional.
+const dismissTrimWarning = async () => {
+  await expect.poll(() => document.querySelector(".confirm-card")?.textContent || "").toContain("Trimming this ROM");
+  const buttons = Array.from(document.querySelectorAll(".confirm-card button"));
+  expect(buttons.map((button) => button.textContent)).toEqual(["Got it"]);
+  buttons[0].click();
+  await expect.poll(() => document.querySelector(".confirm-card")).toBeNull();
 };
 
 const queueTrim = async () => {
@@ -195,7 +200,7 @@ const queueTrim = async () => {
   expect(trimButton).toBeInstanceOf(HTMLButtonElement);
   expect(trimButton.disabled).toBe(false);
   trimButton.click();
-  await confirmTrim();
+  await dismissTrimWarning();
   await expect.poll(getOutputWaitingText).toContain("Waiting for other actions");
 };
 
@@ -365,7 +370,7 @@ test("trim active output cancel button aborts the workflow without an error noti
   const trimButton = document.getElementById("trim-builder-button-run");
   expect(trimButton).toBeInstanceOf(HTMLButtonElement);
   trimButton.click();
-  await confirmTrim();
+  await dismissTrimWarning();
   await expect.poll(() => workflowMockState.runCalls).toBe(1);
 
   await expect.poll(() => document.querySelector("button[aria-label='Cancel trim']")).toBeInstanceOf(HTMLButtonElement);
@@ -393,7 +398,7 @@ test("trim output edits after completion reuse prepared source", async () => {
   const firstTrimButton = document.getElementById("trim-builder-button-run");
   expect(firstTrimButton).toBeInstanceOf(HTMLButtonElement);
   firstTrimButton.click();
-  await confirmTrim();
+  await dismissTrimWarning();
   await expect.poll(() => workflowMockState.runCalls).toBe(1);
   workflowMockState.runDeferred.resolve();
   await expect
@@ -414,7 +419,7 @@ test("trim output edits after completion reuse prepared source", async () => {
   expect(trimButton).toBeInstanceOf(HTMLButtonElement);
   await expect.poll(() => trimButton.textContent || "").toContain("TRIM");
   trimButton.click();
-  await confirmTrim();
+  await dismissTrimWarning();
   await expect.poll(() => workflowMockState.runCalls).toBe(2);
   expect(workflowMockState.inputSetCalls).toBe(1);
 });
@@ -464,6 +469,78 @@ test("trim is disabled with the reason when the staged input cannot be trimmed",
   await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
   expect(document.querySelector(".confirm-card")).toBeNull();
   expect(workflowMockState.runCalls).toBe(0);
+  // The output step explains what Trim supports instead of only disabling the button.
+  const summary = document.getElementById("trim-builder-run-summary");
+  expect(summary?.textContent).toContain("Nintendo DS/DSi, Game Boy Advance, Nintendo 3DS, and Xbox XISO");
+  expect(summary?.textContent).toContain("Compress");
+});
+
+const GAMECUBE_UNSUPPORTED_OVERRIDES = {
+  romType: { recommendedFormat: "rvz" },
+  trimSupported: false,
+  warnings: [
+    {
+      code: "TRIM_UNSUPPORTED",
+      message: "This input does not support trimming. Use Compress to convert GameCube and Wii discs to RVZ.",
+    },
+  ],
+};
+
+const getOfferedOutputFormats = () =>
+  Array.from(document.getElementById("trim-builder-select-output-format")?.options || []).map((option) => option.value);
+
+test("trim offers rvz for a disc until the staged input is flagged as untrimmable", async () => {
+  workflowMockState.inputStateOverrides = { romType: { recommendedFormat: "rvz" } };
+  workflowMockState.inputDeferred.resolve();
+  mount(
+    createElement(
+      TrimPatchForm,
+      withTrimWorkflowMock({ defaultSource: new File([new Uint8Array([0, 1, 2, 3])], "game.gcm") }),
+    ),
+  );
+  await expect.poll(getOfferedOutputFormats).toContain("rvz");
+});
+
+test("trim offers no CHD or RVZ output for a GameCube/Wii disc flagged as untrimmable", async () => {
+  workflowMockState.inputStateOverrides = GAMECUBE_UNSUPPORTED_OVERRIDES;
+  workflowMockState.inputDeferred.resolve();
+  mount(
+    createElement(
+      TrimPatchForm,
+      withTrimWorkflowMock({
+        defaultSource: new File([new Uint8Array([0, 1, 2, 3])], "game.gcm"),
+        outputFormat: "rvz",
+      }),
+    ),
+  );
+  await expect
+    .poll(() => document.getElementById("trim-builder-source-error-message")?.textContent || "")
+    .toContain("Use Compress");
+  const offered = getOfferedOutputFormats();
+  expect(offered).not.toContain("rvz");
+  expect(offered).not.toContain("chd");
+  expect(document.getElementById("trim-builder-select-output-format").value).not.toBe("rvz");
+});
+
+test("trim drops a click queued during staging when the support probe flags the disc", async () => {
+  mount(
+    createElement(
+      TrimPatchForm,
+      withTrimWorkflowMock({ defaultSource: new File([new Uint8Array([0, 1, 2, 3])], "game.gcm") }),
+    ),
+  );
+  await expect.poll(() => document.querySelectorAll(".stage-status").length).toBeGreaterThan(0);
+  await queueTrim();
+
+  workflowMockState.inputStateOverrides = GAMECUBE_UNSUPPORTED_OVERRIDES;
+  workflowMockState.inputDeferred.resolve();
+  await expect
+    .poll(() => document.getElementById("trim-builder-source-error-message")?.textContent || "")
+    .toContain("Use Compress");
+  await expect.poll(getOutputWaitingText).toBe("");
+  expect(document.getElementById("trim-builder-button-run").disabled).toBe(true);
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
+  expect(workflowMockState.runCalls).toBe(0);
 });
 
 test("trim queued default format follows unambiguous special compression input", async () => {
@@ -474,7 +551,7 @@ test("trim queued default format follows unambiguous special compression input",
         defaultSettings: {
           defaultCompression: "zip/special",
         },
-        defaultSource: new File([new Uint8Array([0, 1, 2, 3])], "game.gcm"),
+        defaultSource: new File([new Uint8Array([0, 1, 2, 3])], "game.3ds"),
       }),
     ),
   );
@@ -484,13 +561,13 @@ test("trim queued default format follows unambiguous special compression input",
     .toBe(true);
   const outputFormat = document.getElementById("trim-builder-select-output-format");
   expect(outputFormat).toBeInstanceOf(HTMLSelectElement);
-  await expect.poll(() => outputFormat.value).toBe("rvz");
+  await expect.poll(() => outputFormat.value).toBe("z3ds");
 
   await queueTrim();
   workflowMockState.inputDeferred.resolve();
   await expect.poll(() => workflowMockState.runCalls).toBe(1);
-  expect(workflowMockState.instances[0]?.outputFormat).toBe("rvz");
-  expect(workflowMockState.instances[0]?.outputName).toMatch(/\.rvz$/);
+  expect(workflowMockState.instances[0]?.outputFormat).toBe("z3ds");
+  expect(workflowMockState.instances[0]?.outputName).toMatch(/\.z3ds$/);
 });
 
 test("trim queued default format does not guess for iso input", async () => {

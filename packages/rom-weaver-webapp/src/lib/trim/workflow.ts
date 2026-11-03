@@ -139,8 +139,8 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
         () =>
           createSingleFileRomSpecificOutput({
             compression,
-            // The engine's verdict for the trimmed image wins over `chdOutputMode`: a CD codec set
-            // cannot build the DVD CHD its structural mode asks for, and an XISO is never a CD.
+            // An engine-reported create mode for the trimmed image wins over `chdOutputMode`: a CD codec
+            // set cannot build the DVD CHD its structural mode asks for. The engine reports none today.
             options:
               compression === "chd" && trimChdMode
                 ? {
@@ -186,8 +186,9 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
           },
         );
 
+  const runningLabel = input.revert ? "Restoring padding..." : "Trimming...";
   reportProgress(options, {
-    label: "Trimming...",
+    label: runningLabel,
     percent: null,
     stage: "apply",
   });
@@ -201,16 +202,18 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
         onLog: options.onLog,
         onProgress: (progress) =>
           reportProgress(options, {
-            label: typeof progress.label === "string" && progress.label ? progress.label : "Trimming...",
+            label: typeof progress.label === "string" && progress.label ? progress.label : runningLabel,
             percent: getProgressEventPercent(progress),
             stage: "apply",
           }),
         outputName: rawTrimFileName,
+        revert: input.revert,
+        revertMarker: input.revertMarker,
         signal: options.signal,
         source: source as SourceRef,
         threads: getTrimThreads(options),
       }),
-    () => ({ worker: true }),
+    () => ({ revert: !!input.revert, revertMarker: !!input.revertMarker, worker: true }),
   );
   const rawSize = result.sizeSummary?.rawSize ?? result.sizeSummary?.outputSize ?? result.output.size;
   const logicalInputSize = result.sizeSummary?.inputSize ?? inputSize;
@@ -229,8 +232,8 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
     materializeBlob: false,
     preferExternalFilePath: true,
   });
-  // The trimmed file's path has no extension to infer a CHD layout from, so the engine's verdict for
-  // it (an XISO is a DVD disc) is the structural mode the CHD step sends instead of `auto`.
+  // The trimmed file's path has no extension to infer a CHD layout from, so an engine-reported create mode
+  // (none today; an XISO is never stored as CHD) is the structural mode the CHD step sends instead of `auto`.
   const reportedChdMode = result.output.romType?.chdCreateMode;
   const trimChdMode = reportedChdMode === "cd" || reportedChdMode === "dvd" ? reportedChdMode : undefined;
   if (trimChdMode) trimmedFile.metadata = { ...trimmedFile.metadata, mode: trimChdMode };

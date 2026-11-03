@@ -241,3 +241,62 @@ describe("TrimWorkflowController checksum and identify pass", () => {
     expect(controller.getSnapshot().outputName).toContain("rom_final_v2 (trimmed)");
   });
 });
+
+describe("TrimWorkflowController restore detection", () => {
+  type ProbedController = { probeTrimSupport: (stage: ReturnType<typeof fakeStage>) => Promise<void> };
+  const probe = async (plan: unknown) => {
+    const runtime = { trim: { plan: vi.fn(async () => plan) } };
+    const controller = new TrimWorkflowController<unknown, unknown>(runtime as never, {});
+    const stage = fakeStage({ fileName: "game.nds", selectedCandidateId: "rom", status: "ready" });
+    await (controller as unknown as ProbedController).probeTrimSupport(stage);
+    return stage.state as ReturnType<typeof fakeStage>["state"] & {
+      paddingTrimmed?: boolean;
+      restoreSupported?: boolean;
+      trimSupported?: boolean;
+    };
+  };
+
+  it.each([
+    ["nothing to trim and padding to restore", { wouldChange: false }, { wouldChange: true }, true],
+    ["padding to trim and a size to restore", { wouldChange: true }, { wouldChange: true }, false],
+    [
+      "a revert marker that trimming would strip",
+      { wouldChange: true },
+      { revertMarker: true, wouldChange: true },
+      true,
+    ],
+    ["a full-size ROM", { wouldChange: true }, { wouldChange: false }, false],
+  ])("classifies %s", async (_label, trim, restore, paddingTrimmed) => {
+    const state = await probe({ restore, trim });
+    expect(state).toMatchObject({ paddingTrimmed, restoreSupported: true, trimSupported: true });
+  });
+
+  it("marks an input whose padding cannot be restored", async () => {
+    const state = await probe({ trim: { wouldChange: true } });
+    expect(state).toMatchObject({ paddingTrimmed: false, restoreSupported: false, trimSupported: true });
+  });
+});
+
+describe("TrimWorkflowController mode", () => {
+  const stagedController = () => {
+    const controller = new TrimWorkflowController<unknown, unknown>({} as never, {});
+    (controller as unknown as ExposedTrimController).inputStage = fakeStage({
+      fileName: "game (trimmed).nds",
+      selectedCandidateId: "rom",
+      status: "ready",
+    });
+    return controller;
+  };
+
+  it("names a restore without the trimmed marker and a trim with it", async () => {
+    const controller = stagedController();
+    await controller.setMode("restore");
+    expect(controller.getSnapshot()).toMatchObject({ mode: "restore", outputName: "game.nds" });
+    await controller.setMode("trim");
+    expect(controller.getSnapshot()).toMatchObject({ mode: "trim", outputName: "game (trimmed).nds" });
+  });
+
+  it("rejects an unknown mode", async () => {
+    await expect(stagedController().setMode("shrink" as never)).rejects.toThrow("Unknown trim mode: shrink");
+  });
+});

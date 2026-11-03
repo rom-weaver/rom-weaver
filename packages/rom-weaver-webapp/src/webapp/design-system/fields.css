@@ -172,17 +172,17 @@
 }
 /* JS provides a fallback where field-sizing is unsupported. */
 .rw-app .fname .outname {
-  height: auto;
-  min-height: 0;
-  resize: none;
-  overflow: hidden;
-  field-sizing: content;
-  padding-block: 8px;
-  line-height: 1.35;
-  white-space: pre-wrap;
-  word-break: break-word;
   /* Center single-line text beside the format select. */
   align-self: center;
+  height: auto;
+  min-height: 0;
+  padding-block: 8px;
+  overflow: hidden;
+  line-height: 1.35;
+  word-break: break-word;
+  white-space: pre-wrap;
+  field-sizing: content;
+  resize: none;
 }
 .rw-app .fname .sep {
   flex: none;

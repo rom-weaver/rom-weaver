@@ -25,11 +25,11 @@ Navigation’s separate **Theme** (light, dark, or system) and **Accent** (highl
 ## Enable beta tools
 
 1. Open **Settings**.
-2. Select **Enable beta tools (Trim and Save Editor)**.
+2. Select **Enable beta tools (Save Editor)**.
 3. Select **Save**.
 4. Open the required tool from the app's navigation.
 
-Only Trim and Save Editor require this setting; PPF Undo and cheats in Apply, Create, and Identify do not.
+Only Save Editor requires this setting; Trim, PPF Undo, and cheats in Apply, Create, and Identify do not.
 
 ## Prepare for offline use
 

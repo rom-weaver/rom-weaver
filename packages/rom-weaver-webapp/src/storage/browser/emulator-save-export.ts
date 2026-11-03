@@ -1,4 +1,5 @@
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
+import { createEmulatorSaveExport, listEmulatorSaves } from "./emulator-saves.ts";
 
 type EmulatorSaveExport = {
   blob: Blob;
@@ -28,26 +29,40 @@ const readPublicOutputBlob = async (
 };
 
 const compressEmulatorSaveExport = async (source: EmulatorSaveExport): Promise<EmulatorSaveExport> => {
+  return compressSaveExports([source], getCompressedFileName(source.fileName));
+};
+
+const exportAllEmulatorSaves = async (): Promise<EmulatorSaveExport> => {
+  const saves = await listEmulatorSaves();
+  if (!saves.length) throw new Error("There are no emulator saves to export.");
+  const sources = saves.map((save) => ({
+    ...createEmulatorSaveExport(save),
+    fileName: `${save.gameId}.rw-emulator-save.json`,
+  }));
+  return compressSaveExports(sources, "rom-weaver-all-saves.zip");
+};
+
+const compressSaveExports = async (sources: EmulatorSaveExport[], outputName: string): Promise<EmulatorSaveExport> => {
   const { browserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
   const create = browserRuntime.compression.create;
   if (!create) throw new Error("The rom-weaver compression runtime is unavailable.");
 
   const result = await create({
-    entries: [
-      {
+    entries: await Promise.all(
+      sources.map(async (source) => ({
         arrayBuffer: await source.blob.arrayBuffer(),
         fileName: source.fileName,
-      },
-    ],
+      })),
+    ),
     format: "zip",
     options: {
-      outputName: getCompressedFileName(source.fileName),
+      outputName,
     },
   });
   const output = getOutput(result);
   return {
     blob: await readPublicOutputBlob(browserRuntime, output),
-    fileName: output.fileName || getCompressedFileName(source.fileName),
+    fileName: output.fileName || outputName,
   };
 };
 
@@ -77,4 +92,4 @@ const extractEmulatorSaveExport = async (source: Blob): Promise<Blob> => {
   return readPublicOutputBlob(browserRuntime, output);
 };
 
-export { compressEmulatorSaveExport, extractEmulatorSaveExport, getCompressedFileName };
+export { compressEmulatorSaveExport, exportAllEmulatorSaves, extractEmulatorSaveExport, getCompressedFileName };

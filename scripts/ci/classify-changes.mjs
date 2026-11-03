@@ -125,6 +125,7 @@ const WASM_RUNTIME_SUPPORT = new Set([
   "packages/rom-weaver-webapp/src/lib/patch-format-classification.ts",
   "packages/rom-weaver-webapp/src/lib/path-utils.ts",
   "packages/rom-weaver-webapp/src/lib/perf/op-perf-marks.ts",
+  "packages/rom-weaver-webapp/src/lib/trim/trim-output-name.ts",
   "packages/rom-weaver-webapp/src/lib/workflow/source-preparation.ts",
   "packages/rom-weaver-webapp/src/presentation/formatting/index.ts",
   "packages/rom-weaver-webapp/src/presentation/localization/catalog.ts",

@@ -55,6 +55,7 @@ import { isReactWebappDevelopmentMode } from "../development-defaults.ts";
 import { setAdvancedSettings, useAdvancedSettings } from "../advanced-settings.ts";
 import { ADVANCED_SETTINGS_FIELDS, SETTINGS_FIELD_ID_TO_KEY } from "../settings/settings-state.ts";
 import { EmulatorSavesPanel, type EmulatorSaveImportRequest } from "./emulator-saves-panel.tsx";
+import { KeptRomsPanel } from "../../public/react/kept-roms-panel.tsx";
 import {
   describeWarmupUnit,
   installingRuntimeLabel,
@@ -1526,6 +1527,7 @@ const LogsStoragePanel = ({
     return (
       <div aria-labelledby="logtab-storage" className="dlg-body storage-body" id="logpanel-storage" role="tabpanel">
         <EmulatorSavesPanel active importRequest={emulatorSaveImport} onImportStarted={onEmulatorSaveImportStarted} />
+        <KeptRomsPanel />
         <HiddenNote localizer={localizer}>{localizer.message("ui.console.hiddenOpfs")}</HiddenNote>
       </div>
     );
@@ -1533,7 +1535,10 @@ const LogsStoragePanel = ({
   return (
     <>
       {showingOpfs ? (
-        <EmulatorSavesPanel active importRequest={emulatorSaveImport} onImportStarted={onEmulatorSaveImportStarted} />
+        <>
+          <EmulatorSavesPanel active importRequest={emulatorSaveImport} onImportStarted={onEmulatorSaveImportStarted} />
+          <KeptRomsPanel />
+        </>
       ) : null}
       <div className="dlg-subhead">
         {showingOpfs ? (

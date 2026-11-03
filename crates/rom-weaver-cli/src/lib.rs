@@ -285,9 +285,9 @@ for when you want to override that."
 Cut the unused padding off the end of a ROM, making the file smaller without
 changing what a console or emulator reads from it.
 
-Works on NDS-family ROMs (.nds, .dsi, .srl), GBA (.gba), 3DS (.3ds), XISO
-images, and GameCube/Wii discs. Disc inputs convert losslessly to RVZ; unused
-sectors are preserved, and the size reduction comes from compression.
+Works on NDS-family ROMs (.nds, .dsi, .srl), GBA (.gba), 3DS (.3ds), and XISO
+images. GameCube/Wii discs are not supported here; use `rom-weaver compress`
+to convert them to RVZ.
 
 By default a new file is written. --in-place overwrites the original, and
 -n/--dry-run reports what would change without touching anything.
@@ -1346,6 +1346,26 @@ struct TrimCollectOptions<'a> {
     context: &'a OperationContext,
 }
 
+/// Inputs trim collected but did not trim. `unsupported` counts every skipped item;
+/// `gamecube_wii` counts the GameCube/Wii discs among them (top-level or inside archives) so
+/// the report can point at `rom-weaver compress`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct TrimSkips {
+    unsupported: usize,
+    gamecube_wii: usize,
+}
+
+impl TrimSkips {
+    fn skip_unsupported(&mut self) {
+        self.unsupported = self.unsupported.saturating_add(1);
+    }
+
+    fn skip_gamecube_wii(&mut self) {
+        self.skip_unsupported();
+        self.gamecube_wii = self.gamecube_wii.saturating_add(1);
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TrimOperation {
     Trim,
@@ -1382,7 +1402,6 @@ enum TrimInputKind {
     Gba,
     ThreeDs,
     Xiso,
-    RvzConvert,
 }
 
 /// Path-recognized trim extensions (lowercase, no dot) and the kind each selects.
@@ -1394,6 +1413,8 @@ const TRIM_PATH_EXTENSIONS: &[(&str, TrimInputKind)] = &[
     ("srl", TrimInputKind::NdsFamily),
     ("gba", TrimInputKind::Gba),
     ("3ds", TrimInputKind::ThreeDs),
+    ("cci", TrimInputKind::ThreeDs),
+    ("cxi", TrimInputKind::ThreeDs),
     ("xiso", TrimInputKind::Xiso),
     ("xiso.iso", TrimInputKind::Xiso),
 ];
@@ -1401,18 +1422,13 @@ const TRIM_PATH_EXTENSIONS: &[(&str, TrimInputKind)] = &[
 /// Extensions trim accepts only after sniffing the file's contents (an Xbox `.iso`).
 const TRIM_CONTENT_SNIFFED_EXTENSIONS: &[&str] = &["iso"];
 
-/// Extensions of GameCube/Wii disc images the container registry recommends RVZ for (by
-/// content), so trim converts them to RVZ. `.iso` is listed under the sniffed extensions.
-const TRIM_RVZ_CONVERT_EXTENSIONS: &[&str] = &["gcm", "wbfs", "rvz"];
-
 /// Every extension (lowercase, no dot) a trim input can carry, for the web UI's
-/// supported-files list: path-recognized, content-sniffed, then RVZ-convert.
+/// supported-files list: path-recognized, then content-sniffed.
 pub fn trim_input_extensions() -> Vec<&'static str> {
     TRIM_PATH_EXTENSIONS
         .iter()
         .map(|(extension, _)| *extension)
         .chain(TRIM_CONTENT_SNIFFED_EXTENSIONS.iter().copied())
-        .chain(TRIM_RVZ_CONVERT_EXTENSIONS.iter().copied())
         .collect()
 }
 
@@ -1440,7 +1456,6 @@ impl TrimInputKind {
             Self::Gba => "gba",
             Self::ThreeDs => "3ds",
             Self::Xiso => "xiso",
-            Self::RvzConvert => "rvz-convert",
         }
     }
 
@@ -1451,36 +1466,25 @@ impl TrimInputKind {
             Self::Gba => "GBA ROMs",
             Self::ThreeDs => "3DS ROMs",
             Self::Xiso => "Xbox XISO discs",
-            Self::RvzConvert => "GameCube/Wii discs",
         }
     }
 
     /// The container format a trim writes straight to its destination, with no packing step:
-    /// an XISO rebuild is an XISO, a GameCube/Wii conversion is an RVZ.
+    /// an XISO rebuild is an XISO.
     const fn direct_output_format(self) -> Option<&'static str> {
         match self {
             Self::Xiso => Some("xiso"),
-            Self::RvzConvert => Some("rvz"),
             Self::NdsFamily | Self::Gba | Self::ThreeDs => None,
         }
     }
 
-    /// The CHD create mode a trimmed file of this kind needs. An XISO is a DVD-class disc whatever
-    /// its name or size, which CHD inference from the file would not conclude.
-    const fn chd_create_mode(self) -> Option<&'static str> {
-        match self {
-            Self::Xiso => Some("dvd"),
-            Self::NdsFamily | Self::Gba | Self::ThreeDs | Self::RvzConvert => None,
-        }
-    }
-
     /// The container formats a trimmed file of this kind can be packed into. Archives take any
-    /// kind; CHD is for disc images and Z3DS for 3DS ROMs.
+    /// kind; Z3DS is for 3DS ROMs. An XISO is not storable as CHD, so it is not packable there.
     const fn packable_output_formats(self) -> &'static [&'static str] {
         match self {
-            Self::NdsFamily | Self::Gba | Self::RvzConvert => &["zip", "7z"],
+            Self::NdsFamily | Self::Gba => &["zip", "7z"],
             Self::ThreeDs => &["zip", "7z", "z3ds"],
-            Self::Xiso => &["zip", "7z", "chd"],
+            Self::Xiso => &["zip", "7z"],
         }
     }
 
@@ -1488,7 +1492,7 @@ impl TrimInputKind {
         match self {
             // Without a footer, restore GBA and 3DS padding using the conventional 0xFF fill.
             Self::ThreeDs | Self::Gba => 0xFF,
-            Self::NdsFamily | Self::Xiso | Self::RvzConvert => 0x00,
+            Self::NdsFamily | Self::Xiso => 0x00,
         }
     }
 }

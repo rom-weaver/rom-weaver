@@ -20,6 +20,9 @@ const ndsCrc16 = (bytes) => {
   return crc & 0xffff;
 };
 
+// The webapp appends a revert footer to every NDS, GBA, and 3DS trim it can later restore.
+const REVERT_FOOTER_BYTES = 12;
+
 const writeLe32 = (bytes, offset, value) => {
   bytes[offset] = value & 0xff;
   bytes[offset + 1] = (value >>> 8) & 0xff;
@@ -165,10 +168,10 @@ test("trim workflow sends extracted archive payload to the trim worker", async (
 
     const result = await workflow.run();
     expect(result.output.fileName).toBe("game (trimmed).nds");
-    expect(result.output.size).toBe(0x3000);
+    expect(result.output.size).toBe(0x3000 + REVERT_FOOTER_BYTES);
     expect(result.sizeSummary?.inputSize).toBe(0x5000);
-    expect(result.sizeSummary?.outputSize).toBe(0x3000);
-    expect(result.sizeSummary?.rawSize).toBe(0x3000);
+    expect(result.sizeSummary?.outputSize).toBe(0x3000 + REVERT_FOOTER_BYTES);
+    expect(result.sizeSummary?.rawSize).toBe(0x3000 + REVERT_FOOTER_BYTES);
     await result.output.dispose();
 
     // The run starts the engine's trim once (the staging probe passes no log sink).
@@ -206,49 +209,46 @@ const buildAlignedGameCubeRom = () => {
   return bytes;
 };
 
-test("disc trim names lossless RVZ honestly and converts the intermediate to CHD", async () => {
-  const bytes = buildAlignedGameCubeRom();
+test.each(["game.iso", "game.gcm"])(
+  "trim flags the GameCube/Wii disc %s as unsupported at staging and points to Compress",
+  async (fileName) => {
+    const workflow = new TrimWorkflow({
+      settings: { output: { compression: "none", outputName: "trimmed.iso" }, workers: { threads: 1 } },
+    });
+    try {
+      await workflow.setInput(new File([buildAlignedGameCubeRom()], fileName));
+      expect(workflow.getInput().trimSupported).toBe(false);
+      const warning = workflow.getInput().warnings.find((entry) => entry.code === "TRIM_UNSUPPORTED");
+      expect(warning?.message).toContain("Use Compress to convert GameCube and Wii discs to RVZ");
+      await expect(workflow.run()).rejects.toThrow("This input does not support trimming");
+    } finally {
+      await workflow.dispose();
+    }
+  },
+);
+
+test("trim flags an archive that holds a GameCube/Wii disc as unsupported and points to Compress", async () => {
+  await warmupBrowserRuntimeExtraction();
   const workflow = new TrimWorkflow({
     settings: { output: { compression: "none", outputName: "trimmed.iso" }, workers: { threads: 1 } },
   });
   try {
-    await workflow.setInput(new File([bytes], "game.iso"));
-    expect(workflow.getInput()?.romType?.recommendedFormat).toBe("rvz");
-    const raw = await workflow.run();
-    try {
-      expect(raw.output.fileName).toBe("trimmed.rvz");
-      expect(raw.sizeSummary).toMatchObject({ inputSize: bytes.length, rawSize: bytes.length });
-      const blob = await raw.output.getBlob();
-      expect(Array.from(new Uint8Array(await blob.slice(0, 4).arrayBuffer()))).toEqual([82, 86, 90, 1]);
-    } finally {
-      await raw.output.dispose();
-    }
-    await workflow.setOutputFormat("chd");
-    await workflow.setOutputName("trimmed.chd");
-    const chd = await workflow.run();
-    try {
-      expect(chd.output.fileName).toBe("trimmed.chd");
-      expect(chd.sizeSummary).toMatchObject({ inputSize: bytes.length, rawSize: bytes.length });
-      const blob = await chd.output.getBlob();
-      expect(new TextDecoder().decode(await blob.slice(0, 8).arrayBuffer())).toBe("MComprHD");
-    } finally {
-      await chd.output.dispose();
-    }
+    const archive = await createZipFile("Kururin Squash! (Japan).iso", buildAlignedGameCubeRom(), "kururin.zip");
+    await workflow.setInput(archive);
+    expect(workflow.getInput().trimSupported).toBe(false);
+    const warning = workflow.getInput().warnings.find((entry) => entry.code === "TRIM_UNSUPPORTED");
+    expect(warning?.message).toContain("Use Compress to convert GameCube and Wii discs to RVZ");
+    await expect(workflow.run()).rejects.toThrow("This input does not support trimming");
   } finally {
     await workflow.dispose();
   }
 });
 
-// A trim is the heavy engine pass (an RVZ conversion, an XISO rebuild), so each real trim must start
+// A trim is the heavy engine pass (an XISO rebuild), so each real trim must start
 // the engine's `trim` command exactly once, with the output named after what that one run wrote.
 test.each([
   ["game.nds", () => buildTestNdsRom(), "none", "trimmed.nds"],
   ["game.nds", () => buildTestNdsRom(), "zip", "trimmed.zip"],
-  ["game.iso", () => buildAlignedGameCubeRom(), "none", "trimmed.rvz"],
-  ["game.iso", () => buildAlignedGameCubeRom(), "zip", "trimmed.zip"],
-  ["game.iso", () => buildAlignedGameCubeRom(), "7z", "trimmed.7z"],
-  ["game.iso", () => buildAlignedGameCubeRom(), "chd", "trimmed.chd"],
-  ["game.gcm", () => buildAlignedGameCubeRom(), "none", "trimmed.rvz"],
 ])("trim %s with %s output runs the engine trim once", async (sourceName, buildBytes, compression, outputName) => {
   const traces = [];
   const workflow = new TrimWorkflow({
@@ -256,7 +256,7 @@ test.each([
       logging: { level: "trace", sink: (log) => traces.push(log) },
       output: {
         compression,
-        outputName: sourceName.endsWith(".iso") || sourceName.endsWith(".gcm") ? "trimmed.iso" : "trimmed.nds",
+        outputName: "trimmed.nds",
       },
       workers: { threads: 1 },
     },
@@ -279,66 +279,57 @@ test.each([
   }
 });
 
-// The trim writes to an extensionless path, so CHD cannot infer the disc type from a name or from the
-// file's bytes: an XISO has no ISO 9660/UDF descriptor. The first CHD v5 metadata entry (the header's
-// metadata offset is the big-endian u64 at 0x30) is "DVD " for a DVD CHD, "CHT2" for a CD, and absent for raw.
-const chdFirstMetadataTag = async (blob) => {
-  const header = new DataView(await blob.slice(0, 124).arrayBuffer());
-  const offset = Number(header.getBigUint64(0x30, false));
-  if (!offset) return "";
-  return new TextDecoder().decode(await blob.slice(offset, offset + 4).arrayBuffer());
-};
-
-test("trim of an XISO into CHD builds a DVD CHD from one engine trim", async () => {
+// An Xbox XISO cannot be stored as CHD in a useful way, so the engine refuses it and the workflow
+// surfaces that error instead of producing a file - whatever CHD layout the caller asks for.
+test.each([
+  ["default", {}],
+  ["chdOutputMode cd", { container: { chdOutputMode: "cd" } }],
+])("trim of an XISO into CHD is rejected (%s)", async (_label, extra) => {
   const xiso = new Uint8Array(xisoFixture().length + 65536);
   xiso.set(xisoFixture());
-  const traces = [];
   const workflow = new TrimWorkflow({
     settings: {
-      logging: { level: "trace", sink: (log) => traces.push(log) },
-      output: { compression: "chd", outputName: "game (trimmed).chd" },
+      output: { compression: "chd", outputName: "game (trimmed).chd", ...extra },
       workers: { threads: 1 },
     },
   });
   try {
     await workflow.setInput(new File([xiso], "game.iso"));
     expect(workflow.getInput()?.trimSupported).toBe(true);
-    traces.length = 0;
-    const result = await workflow.run();
-    try {
-      expect(result.output.fileName).toBe("game (trimmed).chd");
-      expect(result.sizeSummary.rawSize).toBeLessThan(xiso.length);
-      const blob = await result.output.getBlob();
-      expect(new TextDecoder().decode(await blob.slice(0, 8).arrayBuffer())).toBe("MComprHD");
-      expect(await chdFirstMetadataTag(blob)).toBe("DVD ");
-      const dispatches = traces.filter((log) => String(log?.message || "").startsWith("runJson trim "));
-      expect(dispatches.map((log) => log.details?.command?.args?.dry_run)).toEqual([false]);
-    } finally {
-      await result.output.dispose();
-    }
+    await expect(workflow.run()).rejects.toThrow(/XISO/);
   } finally {
     await workflow.dispose();
   }
 });
 
-// `output.container.chdOutputMode` is public API; a forced "cd" must not turn an XISO trim into a
-// CD-codec / DVD-layout CHD that the engine rejects.
-test("trim of an XISO into CHD with chdOutputMode cd still builds a DVD CHD", async () => {
+// A plain `.iso` XISO is staged as raw bytes, so the Xbox platform must be tagged on the input itself: it is
+// what keeps CHD out of the format lists of every workflow that reads the staged input.
+test("a staged XISO carries the Xbox platform", async () => {
+  const xiso = new Uint8Array(xisoFixture().length + 65536);
+  xiso.set(xisoFixture());
+  const workflow = new TrimWorkflow({ settings: { workers: { threads: 1 } } });
+  try {
+    await workflow.setInput(new File([xiso], "game.iso"));
+    expect(workflow.getInput()?.romType?.platform).toBe("Microsoft Xbox");
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("trim of an XISO into ZIP still works", async () => {
   const xiso = new Uint8Array(xisoFixture().length + 65536);
   xiso.set(xisoFixture());
   const workflow = new TrimWorkflow({
-    settings: {
-      output: { compression: "chd", container: { chdOutputMode: "cd" }, outputName: "game (trimmed).chd" },
-      workers: { threads: 1 },
-    },
+    settings: { output: { compression: "zip", outputName: "game (trimmed).zip" }, workers: { threads: 1 } },
   });
   try {
     await workflow.setInput(new File([xiso], "game.iso"));
     const result = await workflow.run();
     try {
-      const blob = await result.output.getBlob();
-      expect(new TextDecoder().decode(await blob.slice(0, 8).arrayBuffer())).toBe("MComprHD");
-      expect(await chdFirstMetadataTag(blob)).toBe("DVD ");
+      expect(result.output.fileName).toBe("game (trimmed).zip");
+      expect(result.sizeSummary.rawSize).toBeLessThan(xiso.length);
+      const header = new DataView(await (await result.output.getBlob()).slice(0, 4).arrayBuffer());
+      expect(header.getUint32(0, true)).toBe(0x04034b50);
     } finally {
       await result.output.dispose();
     }
@@ -394,13 +385,17 @@ test("trim rejects unsupported input and allows a successful retry", async () =>
     await workflow.setInput(new File([buildTestNdsRom()], "game.nds"));
     const result = await workflow.run();
     try {
-      expect(result.output.size).toBe(0x3000);
+      expect(result.output.size).toBe(0x3000 + REVERT_FOOTER_BYTES);
       const blob = await result.output.getBlob();
-      expect(new Uint8Array(await blob.arrayBuffer())).toEqual(buildTestNdsRom().subarray(0, 0x3000));
+      expect(new Uint8Array(await blob.arrayBuffer()).subarray(0, 0x3000)).toEqual(
+        buildTestNdsRom().subarray(0, 0x3000),
+      );
     } finally {
       await result.output.dispose();
     }
     await workflow.setInput(new File([buildTestNdsRom().subarray(0, 0x3000)], "already-trimmed.nds"));
+    // An already-trimmed ROM defaults to restoring its padding; trimming it again changes nothing.
+    await workflow.setMode("trim");
     const unchanged = await workflow.run();
     try {
       expect(unchanged.output.size).toBe(0x3000);
@@ -428,3 +423,124 @@ test("trim staging settles for an empty file and the next file", async () => {
     await workflow.dispose();
   }
 }, 60000);
+
+// `RW` revert footer: fill byte, 40-bit LE padding length, CRC-32 of the first 8 bytes.
+const appendRevertFooter = (data, padLength, padByte) => {
+  const footer = new Uint8Array(12);
+  footer.set([0x52, 0x57, padByte], 0);
+  for (let index = 0; index < 5; index++) footer[3 + index] = Math.floor(padLength / 256 ** index) & 0xff;
+  let crc = 0xffffffff;
+  for (const byte of footer.subarray(0, 8)) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  writeLe32(footer, 8, ~crc >>> 0);
+  const marked = new Uint8Array(data.length + footer.length);
+  marked.set(data, 0);
+  marked.set(footer, data.length);
+  return marked;
+};
+
+const readOutputBytes = async (output) => new Uint8Array(await (await output.getBlob()).arrayBuffer());
+
+test("trim stages an already-trimmed ROM for restore and pads it back", async () => {
+  const workflow = new TrimWorkflow({ settings: { output: { compression: "none" }, workers: { threads: 1 } } });
+  try {
+    await workflow.setInput(new File([buildTestNdsRom()], "game.nds"));
+    expect(workflow.getInput()).toMatchObject({ paddingTrimmed: false, restoreSupported: true });
+    expect(workflow.getSnapshot().mode).toBe("trim");
+
+    const trimmed = buildTestNdsRom().subarray(0, 0x3000);
+    await workflow.setInput(new File([trimmed], "game (trimmed).nds"));
+    expect(workflow.getInput()).toMatchObject({ paddingTrimmed: true, restoreSupported: true });
+    expect(workflow.getSnapshot()).toMatchObject({ mode: "restore", outputName: "game.nds" });
+    const result = await workflow.run();
+    try {
+      const bytes = await readOutputBytes(result.output);
+      expect(result.output.fileName).toBe("game.nds");
+      expect(bytes.length).toBe(0x4000);
+      expect(bytes.subarray(0, 0x3000)).toEqual(trimmed);
+      expect(bytes.subarray(0x3000).every((byte) => byte === 0xff)).toBe(true);
+    } finally {
+      await result.output.dispose();
+    }
+
+    await workflow.setMode("trim");
+    const unchanged = await workflow.run();
+    try {
+      expect(unchanged.output.size).toBe(0x3000);
+    } finally {
+      await unchanged.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("trim restores a revert-marked ROM byte for byte", async () => {
+  const original = buildTestNdsRom().subarray(0, 0x4000).slice();
+  original.fill(0x00, 0x3000);
+  const marked = appendRevertFooter(original.subarray(0, 0x3000), 0x1000, 0x00);
+  const workflow = new TrimWorkflow({ settings: { output: { compression: "none" }, workers: { threads: 1 } } });
+  try {
+    await workflow.setInput(new File([marked], "game.nds"));
+    expect(workflow.getInput()).toMatchObject({ paddingTrimmed: true, restoreSupported: true });
+    expect(workflow.getSnapshot()).toMatchObject({ mode: "restore", outputName: "game (restored).nds" });
+    const result = await workflow.run();
+    try {
+      expect(await readOutputBytes(result.output)).toEqual(original);
+    } finally {
+      await result.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("trim offers no restore for an XISO", async () => {
+  const workflow = new TrimWorkflow({ settings: { output: { compression: "none" }, workers: { threads: 1 } } });
+  try {
+    const xiso = new Uint8Array(xisoFixture().length + 65536);
+    xiso.set(xisoFixture());
+    await workflow.setInput(new File([xiso], "game.iso"));
+    expect(workflow.getInput()).toMatchObject({ paddingTrimmed: false, restoreSupported: false, trimSupported: true });
+    expect(workflow.getSnapshot().mode).toBe("trim");
+    await workflow.setMode("restore");
+    await expect(workflow.run()).rejects.toThrow("This input does not support restoring padding");
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("trim writes a revert marker that a later restore uses to rebuild the original", async () => {
+  // 0x00 padding: a restore without the marker would rebuild 0xFF and miss the original.
+  const original = buildTestNdsRom().subarray(0, 0x4000).slice();
+  original.fill(0x00, 0x3000);
+  const workflow = new TrimWorkflow({ settings: { output: { compression: "none" }, workers: { threads: 1 } } });
+  try {
+    await workflow.setInput(new File([original], "game.nds"));
+    expect(workflow.getSnapshot().mode).toBe("trim");
+    const trimmed = await workflow.run();
+    let trimmedBytes;
+    try {
+      trimmedBytes = await readOutputBytes(trimmed.output);
+    } finally {
+      await trimmed.output.dispose();
+    }
+    expect(trimmedBytes.length).toBe(0x3000 + REVERT_FOOTER_BYTES);
+    expect(trimmedBytes.subarray(0, 0x3000)).toEqual(original.subarray(0, 0x3000));
+    expect(new TextDecoder().decode(trimmedBytes.subarray(0x3000, 0x3002))).toBe("RW");
+
+    await workflow.setInput(new File([trimmedBytes], "game (trimmed).nds"));
+    expect(workflow.getInput()).toMatchObject({ paddingTrimmed: true, restoreSupported: true });
+    expect(workflow.getSnapshot().mode).toBe("restore");
+    const restored = await workflow.run();
+    try {
+      expect(await readOutputBytes(restored.output)).toEqual(original);
+    } finally {
+      await restored.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});

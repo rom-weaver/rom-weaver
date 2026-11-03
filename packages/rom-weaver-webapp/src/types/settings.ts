@@ -43,6 +43,7 @@ type CommonSettings = {
   byteUnits?: ByteUnitSystem;
   defaultCompression?: DefaultCompression;
   emulatorSaveStorageEnabled?: boolean;
+  keepTestedRomsEnabled?: boolean;
   input?: InputSettings;
   logging?: LoggingSettings;
   weavePackage?: WeavePackage;
@@ -75,7 +76,6 @@ type CompressionSettings = {
   rvzBlockSize?: StringNumber;
   rvzCodec?: string;
   rvzCompressionLevel?: StringNumber;
-  rvzScrub?: boolean | string | number;
   sevenZipCodec?: SevenZipCodec;
   sevenZipLevel?: StringNumber;
   z3dsCompressionLevel?: StringNumber | "default";

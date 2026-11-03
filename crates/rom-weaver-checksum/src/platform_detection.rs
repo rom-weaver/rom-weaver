@@ -23,6 +23,7 @@ pub mod platform {
     pub const GAMECUBE: &str = "Nintendo GameCube";
     pub const WII: &str = "Nintendo Wii";
     pub const N3DS: &str = "Nintendo 3DS";
+    pub const XBOX: &str = "Microsoft Xbox";
     pub const NDS: &str = "Nintendo DS";
 
     pub const ATARI_7800: &str = "Atari 7800";

@@ -8,7 +8,7 @@ Find rom-weaver guides for ROM patching, checksum errors, supported files, priva
 - [Getting started](#getting-started)
   - [What can rom-weaver do?](#what-can-rom-weaver-do)
   - [Can I try it without a game file?](#can-i-try-it-without-a-game-file)
-  - [Where are Trim and the Save Editor?](#where-are-trim-and-the-save-editor)
+  - [Where is the Save Editor?](#where-is-the-save-editor)
 - [Files and privacy](#files-and-privacy)
   - [Are my ROMs or patches uploaded?](#are-my-roms-or-patches-uploaded)
   - [Does rom-weaver include games?](#does-rom-weaver-include-games)
@@ -64,7 +64,7 @@ Find rom-weaver guides for ROM patching, checksum errors, supported files, priva
 
 [Your first patch with supplied homebrew files](tutorials/first-patch.md), or any of the [guided practice runs](reference/guided-runs.md).
 
-### Where are Trim and the Save Editor?
+### Where is the Save Editor?
 
 [Enable beta tools](how-to/browser-settings.md#enable-beta-tools).
 

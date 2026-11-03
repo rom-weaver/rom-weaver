@@ -5,14 +5,12 @@ import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 
 const model = () => ({
-  confirm: {
+  warning: {
     body: "The original file is not changed.",
-    cancelLabel: "Cancel",
-    confirmLabel: "Trim ROM",
-    onCancel: vi.fn(),
-    onConfirm: vi.fn(),
+    dismissLabel: "Got it",
+    onDismiss: vi.fn(),
     open: false,
-    title: "Trim this ROM?",
+    title: "Trimming this ROM",
   },
   dialog: <div data-testid="candidate-dialog">candidate selection</div>,
   dropZone: {
@@ -54,23 +52,26 @@ describe("TrimPatchFormView", () => {
     expect(container.querySelector("#trim-builder-row-output")).toBeNull();
   });
 
-  it("renders staged source/output steps and opens the confirmation modal", () => {
-    const confirm = {
-      ...model().confirm,
+  it("renders staged source/output steps and an informational warning with a single dismiss action", () => {
+    const warning = {
+      ...model().warning,
       open: true,
     };
     const { container } = renderView({
-      confirm,
       sourceEmpty: false,
+      warning,
     });
     expect(container.querySelectorAll(".step-num")).toHaveLength(3);
     expect(container.querySelector("#trim-builder-row-output")).toBeTruthy();
-    expect(document.body.textContent).toContain("Trim this ROM?");
-    const cancel = Array.from(document.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("Cancel"),
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.getAttribute("aria-modal")).toBe("true");
+    expect(dialog.getAttribute("aria-labelledby")).toBeTruthy();
+    expect(document.getElementById(dialog.getAttribute("aria-labelledby") as string)?.textContent).toContain(
+      "Trimming this ROM",
     );
-    expect(cancel).toBeTruthy();
-    fireEvent.click(cancel as HTMLButtonElement);
-    expect(confirm.onCancel).toHaveBeenCalledOnce();
+    const buttons = Array.from(dialog.querySelectorAll(".c-actions button"));
+    expect(buttons.map((button) => button.textContent)).toEqual(["Got it"]);
+    fireEvent.click(buttons[0] as HTMLButtonElement);
+    expect(warning.onDismiss).toHaveBeenCalledOnce();
   });
 });

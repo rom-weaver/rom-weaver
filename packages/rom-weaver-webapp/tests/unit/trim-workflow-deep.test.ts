@@ -89,6 +89,15 @@ describe("runTrimWorkflow validation and raw output", () => {
     });
   });
 
+  it("forwards the restore mode and revert marker to the trim runtime", async () => {
+    const runtime = { ...baseRuntime, trim: { trim: vi.fn(baseRuntime.trim.trim) } };
+    const options = { output: { compression: "none", outputName: "trimmed.bin" } } as never;
+    await runTrimWorkflow({ options, revertMarker: true, source: source as never }, runtime as never);
+    expect(runtime.trim.trim).toHaveBeenLastCalledWith(expect.objectContaining({ revertMarker: true }));
+    await runTrimWorkflow({ options, revert: true, source: source as never }, runtime as never);
+    expect(runtime.trim.trim).toHaveBeenLastCalledWith(expect.objectContaining({ revert: true }));
+  });
+
   it("prepares a compressed source and selects its primary asset", async () => {
     const prepared = {
       file: { fileName: "game.iso", fileSize: 80 },
@@ -157,17 +166,17 @@ describe("runTrimWorkflow compressed outputs", () => {
     });
   });
 
-  it("preserves the actual disc intermediate name and logical raw size", async () => {
+  it("preserves the runtime-reported intermediate name and raw size", async () => {
     const runtime = {
       ...baseRuntime,
       trim: {
         trim: vi.fn(async () => ({
-          output: { fileName: "trimmed.rvz", path: "/work/trimmed.rvz", size: 7 },
-          sizeSummary: { inputSize: 100, rawSize: 100, outputSize: 7 },
+          output: { fileName: "trimmed.iso", path: "/work/trimmed.iso", size: 7 },
+          sizeSummary: { inputSize: 100, rawSize: 80, outputSize: 7 },
         })),
       },
     };
-    mocks.createPatchFileFromPublicOutput.mockResolvedValue({ fileName: "trimmed.rvz", fileSize: 7 });
+    mocks.createPatchFileFromPublicOutput.mockResolvedValue({ fileName: "trimmed.iso", fileSize: 7 });
     mocks.romSpecificOutput.mockResolvedValue({ fileName: "trimmed.chd", size: 20 });
     const result = await runTrimWorkflow(
       {
@@ -176,11 +185,11 @@ describe("runTrimWorkflow compressed outputs", () => {
       },
       runtime as never,
     );
-    expect(mocks.createPatchFileFromPublicOutput).toHaveBeenCalledWith(expect.anything(), "trimmed.rvz", {
+    expect(mocks.createPatchFileFromPublicOutput).toHaveBeenCalledWith(expect.anything(), "trimmed.iso", {
       materializeBlob: false,
       preferExternalFilePath: true,
     });
-    expect(result.sizeSummary).toMatchObject({ inputSize: 100, rawSize: 100, outputSize: 20 });
+    expect(result.sizeSummary).toMatchObject({ inputSize: 100, rawSize: 80, outputSize: 20 });
   });
 
   it("uses the lazy output path for ROM-specific compression", async () => {

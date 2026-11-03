@@ -15,7 +15,11 @@ import {
   readEmulatorSave,
   type EmulatorSaveRecord,
 } from "../../storage/browser/emulator-saves.ts";
-import { compressEmulatorSaveExport, extractEmulatorSaveExport } from "../../storage/browser/emulator-save-export.ts";
+import {
+  compressEmulatorSaveExport,
+  exportAllEmulatorSaves,
+  extractEmulatorSaveExport,
+} from "../../storage/browser/emulator-save-export.ts";
 
 const formatSaveSize = (value: Uint8Array | undefined, localizer: Localizer) =>
   value ? formatByteSize(value.byteLength) : localizer.message("ui.saves.emulator.none");
@@ -74,12 +78,14 @@ const EmulatorSavesPanel = ({
   const [error, setError] = useState("");
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [readyExport, setReadyExport] = useState<ReadyEmulatorSaveExport | null>(null);
+  const [allExport, setAllExport] = useState<{ blob: Blob; fileName: string } | null>(null);
   // Dropped backups queue here so each one waits for its own Import click.
   const [pendingImports, setPendingImports] = useState<PendingImport[]>([]);
   const pendingImport = pendingImports[0];
   const [importSha1, setImportSha1] = useState("");
   const [replacedSave, setReplacedSave] = useState<EmulatorSaveRecord>();
   const refresh = useCallback(async () => {
+    setAllExport(null);
     setLoading(true);
     setError("");
     try {
@@ -143,6 +149,21 @@ const EmulatorSavesPanel = ({
     inputRef.current?.click();
   };
 
+  const exportAll = async () => {
+    setExportingId("all");
+    setError("");
+    try {
+      const exported = allExport || (await exportAllEmulatorSaves());
+      setAllExport(exported);
+      await triggerBrowserDownload(exported.blob, exported.fileName, { interactive: true });
+      setAllExport(null);
+    } catch (reason) {
+      reportActionError(reason);
+    } finally {
+      setExportingId(null);
+    }
+  };
+
   const importSelectedFile = (file: File) => {
     if (importingRef.current) return;
     let kind: ImportKind = "sram";
@@ -189,8 +210,16 @@ const EmulatorSavesPanel = ({
         </div>
         <div className="emulator-saves-actions">
           <button
-            aria-label={localizer.message("ui.saves.emulator.refresh")}
             className="btn slim ghost"
+            disabled={!saves.length || exportingId !== null || importing}
+            onClick={() => void exportAll()}
+            type="button"
+          >
+            <Download aria-hidden="true" /> {localizer.message("ui.saves.emulator.exportAll")}
+          </button>
+          <button
+            aria-label={localizer.message("ui.saves.emulator.refresh")}
+            className="btn slim ghost emulator-saves-refresh"
             onClick={() => void refresh()}
             type="button"
           >

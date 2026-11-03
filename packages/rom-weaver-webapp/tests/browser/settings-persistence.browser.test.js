@@ -38,6 +38,7 @@ test("settings persistence round-trips every visible settings field", () => {
     compressionProfile: "medium",
     defaultCompression: "7z only",
     fixChecksum: true,
+    keepTestedRomsEnabled: true,
     language: "de",
     logLevel: "debug",
     requireInputChecksumMatch: false,
@@ -149,4 +150,14 @@ test("codec text settings validate codecs and levels", () => {
     rvzCodec: "zlib",
   });
   expect(rvzValidation.invalidFields).toContain("settings-rvz-codec");
+});
+
+test("keeping tested ROMs defaults off and malformed values cannot enable it", () => {
+  expect(getDefaultSettings().keepTestedRomsEnabled).toBe(false);
+  const storage = createMemoryStorage();
+  storage.setItem(
+    LOCAL_STORAGE_SETTINGS_ID,
+    JSON.stringify({ version: SETTINGS_STORAGE_VERSION, common: { keepTestedRomsEnabled: "true" } }),
+  );
+  expect(loadSettings(storage).keepTestedRomsEnabled).toBe(false);
 });

@@ -2899,3 +2899,29 @@ fn extract_help_says_generated_disc_sheets_are_not_hashed() {
         "{flattened}"
     );
 }
+
+#[test]
+fn probe_no_extract_reports_the_xbox_platform_for_an_xiso() {
+    // Hosts probe a loose `.iso` in place; the platform is what keeps CHD out of an XISO's formats.
+    let temp = setup_temp_dir();
+    let xiso = temp.child("game.iso");
+    write_xiso_fixture_from_directory(temp.child("xiso-tree").path(), xiso.path());
+    let json = run_single_json_event(
+        &[
+            "probe",
+            "--input",
+            xiso.path().to_str().expect("path"),
+            "--no-extract",
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(json["status"], "succeeded", "{json}");
+    assert_eq!(json["format"], "xiso", "{json}");
+    assert_eq!(json["details"]["platform"], "Microsoft Xbox", "{json}");
+    assert_eq!(
+        json["details"]["container"]["reason"], "xbox-xiso",
+        "{json}"
+    );
+    assert!(json["details"].get("chd_create_mode").is_none(), "{json}");
+}

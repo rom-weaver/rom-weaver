@@ -121,6 +121,7 @@ const getApplyOutputCompression = (
     parentCompressions: input?.parentCompressions,
     sourceFileName: sourceName,
     sourceSize: input?.size ?? getBinarySourceSize(snapshot.inputs[0]),
+    sourcePlatform: input?.romType?.platform,
     hasDiscEvidence: hasDiscImageEvidence(input?.romType?.recommendedFormat, input?.chdMode),
   });
 };

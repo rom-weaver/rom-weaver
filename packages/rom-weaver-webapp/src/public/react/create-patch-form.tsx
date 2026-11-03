@@ -1435,7 +1435,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
             level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
             onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
           >
-            <WorkflowErrorMessage message={message} />
+            <WorkflowErrorMessage message={message} onRetry={() => void runCreate()} />
           </Notice>
         ) : completedOutput?.warnings?.length ? (
           <Notice id="patch-builder-output-warning" level="warn">
