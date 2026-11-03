@@ -127,13 +127,6 @@ impl ReadArchive {
         )))
     }
 
-    /// Whether the opened input is decoded through a compression filter (`.tar.gz`, ...), so
-    /// reaching an entry decodes every entry before it.
-    pub(crate) fn has_compression_filter(&self) -> bool {
-        // ARCHIVE_FILTER_NONE
-        unsafe { archive_filter_code(self.as_ptr(), 0) != 0 }
-    }
-
     pub fn open_filename(
         &mut self,
         input: &Path,
@@ -368,11 +361,6 @@ impl<'a> ReadArchiveEntry<'a> {
     // data, or `None` for any other format and for entries with no stream at all
     // (directories, empty files). Everything in one block decodes as a single chain, so
     // two workers assigned entries from the same block each decode the whole block.
-    /// See [`ReadArchive::has_compression_filter`].
-    pub(crate) fn has_compression_filter(&self) -> bool {
-        self.archive.has_compression_filter()
-    }
-
     pub(crate) fn solid_block(&self) -> Option<u64> {
         let index = unsafe { rom_weaver_7zip_entry_solid_block(self.archive.as_ptr()) };
         u64::try_from(index).ok()

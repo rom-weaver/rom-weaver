@@ -1158,7 +1158,7 @@ fn trim_no_filter_opens_members_with_unknown_names() {
 }
 
 #[test]
-fn trim_reads_the_header_of_a_compressed_disc_without_decompressing_it() {
+fn trim_reads_the_header_of_a_compressed_disc_without_extracting_it() {
     let temp = setup_temp_dir();
     let iso = write_gamecube_iso(&temp, "disc.iso");
     let gz = temp.child("disc.iso.gz");
@@ -1214,7 +1214,6 @@ fn probe_reports_the_members_trim_would_extract() {
                 "probe",
                 "--input",
                 archive.to_str().expect("path"),
-                "--no-extract",
                 "--trim-members",
                 "--json",
             ],
@@ -1240,22 +1239,30 @@ fn probe_reports_the_members_trim_would_extract() {
         probe(mixed.path()),
         serde_json::json!({"extract": ["game.nds"], "gamecube_wii_discs": 1})
     );
+    // A lone ROM would be extracted and probed by default; `--trim-members` reports the archive.
+    let single = temp.child("single.zip");
+    pack_archive(single.path(), &[rom.path()]);
+    assert_eq!(
+        probe(single.path()),
+        serde_json::json!({"extract": ["game.nds"], "gamecube_wii_discs": 0})
+    );
 }
 
 #[test]
-fn trim_stops_reading_headers_that_sit_deep_in_a_solid_block() {
+fn trim_reads_every_disc_header_in_a_solid_block() {
     let temp = setup_temp_dir();
     let staging = setup_temp_dir();
-    // Compresses to almost nothing, but reaching the disc after it decodes all 72 MiB.
-    let filler = staging.child("a-filler.bin");
+    let first = write_gamecube_iso(&staging, "a-disc.iso");
+    // Compresses to almost nothing, but reaching the second disc decodes all 72 MiB.
+    let filler = staging.child("b-filler.bin");
     fs::write(filler.path(), vec![0_u8; 72 * 1024 * 1024]).expect("filler");
-    let iso = write_gamecube_iso(&staging, "z-disc.iso");
+    let second = write_gamecube_iso(&staging, "c-disc.iso");
     let archive = temp.child("solid.7z");
-    pack_archive(archive.path(), &[filler.path(), &iso]);
+    pack_archive(archive.path(), &[&first, filler.path(), &second]);
     let output = command_output_with_env(
         &[
             "--log-level",
-            "debug",
+            "trace",
             "trim",
             "--input",
             archive.path().to_str().expect("path"),
@@ -1264,17 +1271,13 @@ fn trim_stops_reading_headers_that_sit_deep_in_a_solid_block() {
         &[],
         1,
     );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("reaching the entry would decode too much"),
-        "the header read MUST stop at the decode budget"
-    );
-    // The disc is still recognized after extraction, so the verdict is unchanged.
+    let extractions = trim_extraction_lines(&output.stderr);
+    assert!(extractions.is_empty(), "{extractions:#?}");
     let terminal = parse_single_json_line(&output.stdout);
     assert!(
         terminal["label"]
             .as_str()
-            .is_some_and(|label| label.contains("holds a GameCube/Wii disc")),
+            .is_some_and(|label| label.contains("holds GameCube/Wii discs")),
         "{terminal}"
     );
 }

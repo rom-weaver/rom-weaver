@@ -441,23 +441,13 @@ impl CliApp {
             if handler.descriptor().matches_name("xiso") || !handler.capabilities().extract {
                 continue;
             }
-            // Only extract sources that genuinely probe as a container, so extension-only matches
-            // on non-container payloads do not abort the batch.
-            let probe_request = ContainerProbeRequest {
-                source: current.clone(),
-                split_bin: false,
-            };
-            if handler
-                .probe_details(&probe_request, options.context)
-                .is_err()
-            {
-                continue;
-            }
             let scope = if options.rom_filter {
                 TrimMemberScope::Nested
             } else {
                 TrimMemberScope::Every
             };
+            // Plan before probing: probing a single-file stream (`.iso.gz`) decodes all of it,
+            // which a plan that extracts nothing does not need.
             let selections = match Self::plan_trim_archive_members(
                 handler.as_ref(),
                 &current,
@@ -475,6 +465,18 @@ impl CliApp {
                 }
                 None => Vec::new(),
             };
+            // Only extract sources that genuinely probe as a container, so extension-only matches
+            // on non-container payloads do not abort the batch.
+            let probe_request = ContainerProbeRequest {
+                source: current.clone(),
+                split_bin: false,
+            };
+            if handler
+                .probe_details(&probe_request, options.context)
+                .is_err()
+            {
+                continue;
+            }
 
             let out_dir = options.context.temp_paths().next_path("trim-extract", None);
             fs::create_dir_all(&out_dir)?;

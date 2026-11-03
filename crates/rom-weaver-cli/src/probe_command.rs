@@ -40,6 +40,8 @@ impl CliApp {
             split_bin,
             trim_members,
         } = args;
+        // Trim members are reported for the input itself, so it must not be extracted first.
+        let no_extract = no_extract || trim_members;
         let kind_filter = Self::archive_entry_kind_filter(rom_filter, patch_filter);
         trace!(
             source = %source.display(),

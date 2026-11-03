@@ -1,12 +1,8 @@
 use super::*;
 use std::collections::BTreeMap;
-use tracing::{debug, trace};
+use tracing::trace;
 
 const REGULAR_ARCHIVE_READ_BLOCK_BYTES: usize = 2 * 1024 * 1024;
-
-/// Most entry bytes a prefix read decodes only to reach a later entry. Past it the remaining
-/// entries stay unread, since extracting them decodes those bytes again.
-const PREFIX_READ_DECODE_BUDGET_BYTES: u64 = 64 * 1024 * 1024;
 
 /// The last listing, keyed by source, format, length, and modification time. Planning and then
 /// extracting one archive lists it twice, and listing a compressed tar decodes all of it.
@@ -384,11 +380,6 @@ where
         return Ok(prefixes);
     }
     let mut reader = open_regular_archive_reader(source, format_name)?;
-    // Zip entries and plain tar members are reached by seeking; 7z solid blocks, compressed tars,
-    // and RAR (solid or not, which libarchive does not report) decode what they pass.
-    let mut skips_decode: Option<bool> = None;
-    let mut decoded_before = 0u64;
-    let mut solid_block = None;
     let result = (|| -> Result<()> {
         let mut index = 0usize;
         while let Some(entry) = reader.next_entry().map_err(|error| {
@@ -397,40 +388,15 @@ where
             ))
         })? {
             index = index.saturating_add(1);
-            let skips_decode = *skips_decode.get_or_insert_with(|| match format_name {
-                "zip" => false,
-                "tar" => entry.has_compression_filter(),
-                _ => true,
-            });
             if !entry.is_file() {
                 continue;
             }
-            if format_name == "7z"
-                && entry.solid_block().is_some()
-                && entry.solid_block() != solid_block
-            {
-                solid_block = entry.solid_block();
-                decoded_before = 0;
-            }
-            let entry_size = entry.size().unwrap_or(0);
             let Ok(entry_path) = entry.pathname() else {
-                decoded_before = decoded_before.saturating_add(entry_size);
                 continue;
             };
             let Some(key) = entry_key(&entry_path).filter(|key| !prefixes.contains_key(key)) else {
-                decoded_before = decoded_before.saturating_add(entry_size);
                 continue;
             };
-            if skips_decode && decoded_before > PREFIX_READ_DECODE_BUDGET_BYTES {
-                debug!(
-                    format = format_name,
-                    entry = %key,
-                    decoded_before,
-                    "regular archive prefix read stopped: reaching the entry would decode too much"
-                );
-                break;
-            }
-            decoded_before = decoded_before.saturating_add(entry_size);
             match rom_weaver_core::read_up_to(entry.into_reader(), max_len) {
                 Ok(bytes) => {
                     trace!(
