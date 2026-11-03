@@ -189,6 +189,20 @@ const PREPARE_EMULATORJS = `
                 return changeOption.apply(this, arguments);
               };
             }
+            // EmulatorJS 4.2.3 writes EJS_defaultOptions into the core's option file only once a game has
+            // saved settings, and yabause reads its add-on cartridge from that file in retro_load_game alone,
+            // so a game's first launch MUST get the defaults before the core starts.
+            if (value && typeof value.prototype?.getCoreSettings === 'function') {
+              const readCoreSettings = value.prototype.getCoreSettings;
+              value.prototype.getCoreSettings = function () {
+                const settings = readCoreSettings.apply(this, arguments);
+                const defaults = this.config && this.config.defaultOptions;
+                if (settings || !defaults) return settings;
+                return Object.keys(defaults)
+                  .map((key) => key + ' = ' + (isNaN(defaults[key]) ? '"' + defaults[key] + '"' : defaults[key]) + '\\n')
+                  .join('');
+              };
+            }
             EmulatorJS = value;
           },
         });

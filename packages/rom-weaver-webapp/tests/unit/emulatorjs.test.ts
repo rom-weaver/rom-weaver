@@ -464,6 +464,27 @@ describe("createEmulatorDocument", () => {
     ]);
   });
 
+  it("writes the default core options on a game's first launch", () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.iso", "segaSaturn");
+    const start = document.indexOf("Object.defineProperty(window, 'EmulatorJS'");
+    const script = document.slice(document.lastIndexOf("(() => {", start), document.indexOf("})();", start) + 5);
+    let saved = "";
+    class FakeEmulatorJS {
+      config = { defaultOptions: { ejs_threads: "disabled", yabause_addon_cartridge: "4M_ram" } };
+      getCoreSettings() {
+        return saved;
+      }
+    }
+    const window: { EmulatorJS?: typeof FakeEmulatorJS } = {};
+    runInNewContext(script, { window });
+    window.EmulatorJS = FakeEmulatorJS;
+    const emulator = new window.EmulatorJS();
+
+    expect(emulator.getCoreSettings()).toBe('ejs_threads = "disabled"\nyabause_addon_cartridge = "4M_ram"\n');
+    saved = 'yabause_addon_cartridge = "none"\n';
+    expect(emulator.getCoreSettings()).toBe(saved);
+  });
+
   const readGameBufferScript = (gameUrl: string) => {
     const document = createEmulatorDocument("/emulatorjs/data/", gameUrl, "game.chd", "psx");
     const start = document.indexOf("Object.defineProperty(window, 'EJS_emulator'");
