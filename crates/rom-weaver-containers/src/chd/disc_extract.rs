@@ -6,6 +6,11 @@ pub(super) fn split_checksum_thread_budget(operation_threads: usize, output_coun
     (operation_threads / output_count.max(1)).max(1)
 }
 
+/// Most threads a shared-pool disc extract uses for decode plus checksum workers. The browser
+/// WASI pool is capped at 20 workers (`MAX_BROWSER_THREAD_POOL_SIZE`); 16 leaves slots for the
+/// coordinating thread and parked workers, and is the budget the browser GD-ROM repro passes at.
+pub(super) const SHARED_POOL_DISC_THREAD_LIMIT: usize = 16;
+
 /// How a multi-output disc extract spends its thread budget on the decode wave and the
 /// per-output checksum workers that run beside it.
 #[derive(Debug, PartialEq, Eq)]
@@ -24,6 +29,10 @@ pub(super) struct DiscThreadSplit {
 /// decode wave runs, so together they MUST NOT exceed `operation_threads`. Checksum workers
 /// get at most half the budget, divided across outputs; a one-thread share hashes inline and
 /// takes no pool slot. The decode wave gets what the checksum workers leave.
+///
+/// The browser pool holds at most 20 workers however many threads are requested (an "auto"
+/// budget follows the reported core count), so a shared-pool budget is capped at
+/// [`SHARED_POOL_DISC_THREAD_LIMIT`] first.
 pub(super) fn split_disc_threads(
     operation_threads: usize,
     output_count: usize,
@@ -37,6 +46,7 @@ pub(super) fn split_disc_threads(
             checksum_threads: None,
         };
     }
+    let operation_threads = operation_threads.min(SHARED_POOL_DISC_THREAD_LIMIT);
     let output_count = output_count.max(1);
     let per_output = (operation_threads / 2 / output_count)
         .min(algorithm_count)

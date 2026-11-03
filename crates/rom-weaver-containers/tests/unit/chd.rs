@@ -28,6 +28,11 @@ fn shared_pool_disc_extract_keeps_decode_and_checksum_workers_within_the_budget(
             checksum_threads: Some(2),
         }
     );
+    // An "auto" budget on a 32-core host still fits the 20-slot pool.
+    assert_eq!(
+        disc_extract::split_disc_threads(32, 3, 3, true),
+        disc_extract::split_disc_threads(16, 3, 3, true)
+    );
     for operation_threads in 1..=64 {
         for outputs in 1..=8 {
             for algorithms in 0..=5 {
@@ -42,7 +47,8 @@ fn shared_pool_disc_extract_keeps_decode_and_checksum_workers_within_the_budget(
                 assert!(split.decode_threads >= 1);
                 assert!(per_output <= algorithms.max(1));
                 assert!(
-                    split.decode_threads + checksum_workers <= operation_threads,
+                    split.decode_threads + checksum_workers
+                        <= operation_threads.min(disc_extract::SHARED_POOL_DISC_THREAD_LIMIT),
                     "{operation_threads} threads, {outputs} outputs, {algorithms} algorithms"
                 );
             }
