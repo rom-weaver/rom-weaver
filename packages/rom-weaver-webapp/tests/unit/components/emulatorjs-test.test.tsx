@@ -74,6 +74,7 @@ const keptRomMocks = vi.hoisted(() => ({
 vi.mock("../../../src/storage/browser/kept-roms.ts", () => keptRomMocks);
 
 const NativeURL = URL;
+const fdsDisk = new Blob(["\x01*NINTENDO-HVC*"]);
 
 const withSettings = (children: ReactNode) => (
   <RomWeaverSettingsProvider settings={{}}>{children}</RomWeaverSettingsProvider>
@@ -701,11 +702,36 @@ describe("EmulatorTestView", () => {
     expect(getEmulatorSessionState().entries[0]?.platform).toBe("Sony Playstation Portable");
   });
 
+  it.each(["picked", "retained"])("rejects a malformed %s FDS image without starting the player", async (source) => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    const file = new File(["not a disk"], "malformed.fds");
+    if (source === "retained") addEntry(entry({ blob: file, fileName: file.name }));
+
+    render(withSettings(<EmulatorTestView />));
+    if (source === "picked") {
+      fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
+        target: { files: [file] },
+      });
+    }
+
+    expect(await screen.findByText("Cannot play malformed.fds.")).toBeTruthy();
+    expect(screen.getByText(/does not contain a Famicom Disk System disk signature/)).toBeTruthy();
+    expect(screen.queryByTitle("EmulatorJS test for malformed.fds")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Enter fullscreen" })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText(/Choose another ROM/), {
+      target: { files: [new File(["game"], "next.nes")] },
+    });
+    expect(await screen.findByTitle("EmulatorJS test for next.nes")).toBeTruthy();
+    expect(screen.queryByText("Cannot play malformed.fds.")).toBeNull();
+  });
+
   it("starts an FDS image with the bundled BIOS", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
     loadRomMock.mockResolvedValue({
-      blob: new Blob(["disk"]),
+      blob: fdsDisk,
       checksum: "b".repeat(40),
       fileName: "game.fds",
       platform: "Nintendo Famicom Disk System",
@@ -722,7 +748,7 @@ describe("EmulatorTestView", () => {
   it("starts a retained FDS session entry with the bundled BIOS", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
-    addEntry(entry({ fileName: "patched.fds", id: "fds", platform: "Nintendo Famicom Disk System" }));
+    addEntry(entry({ blob: fdsDisk, fileName: "patched.fds", id: "fds", platform: "Nintendo Famicom Disk System" }));
 
     render(withSettings(<EmulatorTestView />));
 

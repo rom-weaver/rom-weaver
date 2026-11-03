@@ -706,7 +706,12 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
   const needsFdsBios = Boolean(
     currentGame && (isFdsGame(currentGame) || (fdsBytes?.blob === currentBlob && fdsBytes?.isFds)),
   );
-  const canPlay = Boolean(currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked && !fdsChecking);
+  const invalidFds = Boolean(
+    currentBlob && currentGame && isFdsGame(currentGame) && fdsBytes?.blob === currentBlob && !fdsBytes.isFds,
+  );
+  const canPlay = Boolean(
+    currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked && !fdsChecking && !invalidFds,
+  );
   useEffect(() => {
     if (!canPlay) return undefined;
     const dialog = fullscreenDialogRef.current;
@@ -890,7 +895,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
           </>
         }
         beforeDropZone={
-          error || ignoredSaves || (!currentGame && closedGameName) ? (
+          error || invalidFds || ignoredSaves || (!currentGame && closedGameName) ? (
             <>
               {!currentGame && closedGameName ? (
                 <Notice id="emulator-test-closed-game" level="info" onDismiss={dismissClosedGameNotice}>
@@ -902,6 +907,12 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
                 <Notice id="emulator-test-ignored-saves" level="warn" onDismiss={() => setIgnoredSaves(undefined)}>
                   <b>Only one save loads at a time.</b> Used {ignoredSaves.used}; ignored{" "}
                   {ignoredSaves.names.join(", ")}.
+                </Notice>
+              ) : null}
+              {invalidFds && currentGame ? (
+                <Notice id="emulator-test-invalid-fds" level="error">
+                  <b>Cannot play {currentGame.fileName}.</b> The file does not contain a Famicom Disk System disk
+                  signature. Choose a valid FDS disk image.
                 </Notice>
               ) : null}
               {error ? (
@@ -1002,7 +1013,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
                 <button aria-label="Stop and unload game" className="btn ghost slim" onClick={stopGame} type="button">
                   Stop
                 </button>
-                {currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked && !fdsChecking ? (
+                {canPlay ? (
                   <>
                     <button
                       aria-label={fullscreen || pseudoFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
@@ -1046,7 +1057,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
                   {saveLoadMessage}
                 </p>
               ) : null}
-              {currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked && !fdsChecking ? (
+              {canPlay && currentGame && currentCore && gameUrl && currentIdentity ? (
                 <dialog className="emulator-fullscreen-dialog" ref={fullscreenDialogRef}>
                   <div
                     className={
