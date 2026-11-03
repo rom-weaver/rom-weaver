@@ -535,62 +535,88 @@ impl ChdReadSession {
                 let chunk_size = (batch_end - batch_start).div_ceil(effective_threads).max(1);
                 let source_path = source.as_path();
                 let parent_source_path = parent_source.as_deref();
+                let decode_chunk = |chunk_start: usize,
+                                    chunk_end: usize|
+                 -> std::result::Result<DecodedChunk, String> {
+                    let mut chd = Self::open_rust_chd_with_metadata(
+                        source_path,
+                        parent_source_path,
+                        reader_metadata,
+                    )?;
+                    trace!(
+                        chunk_start,
+                        chunk_end, "chd worker reader opened with shared map"
+                    );
+                    let mut hunk_buffer = chd.get_hunksized_buffer();
+                    let mut compressed_buffer = Vec::new();
+                    let mut decoded = Vec::with_capacity(chunk_end - chunk_start);
+
+                    for hunk_index in chunk_start..chunk_end {
+                        let hunk_index = hunk_index as u32;
+                        let offset = u64::from(hunk_index).saturating_mul(hunk_bytes);
+                        if offset >= logical_bytes {
+                            continue;
+                        }
+                        Self::decode_hunk_into(
+                            &mut chd,
+                            hunk_index,
+                            source_path,
+                            &mut compressed_buffer,
+                            &mut hunk_buffer,
+                        )?;
+                        let write_len = usize::try_from(
+                            logical_bytes
+                                .saturating_sub(offset)
+                                .min(hunk_buffer.len() as u64),
+                        )
+                        .map_err(|_| "decoded CHD chunk exceeded addressable memory".to_string())?;
+                        decoded.push((
+                            hunk_index,
+                            hunk_buffer[..write_len].to_vec(),
+                            write_len as u64,
+                        ));
+                    }
+                    Ok(decoded)
+                };
                 let chunk_results = std::thread::scope(|scope| {
-                    let handles = (batch_start..batch_end)
+                    // Once the pool refuses a worker the rest of the wave decodes inline; each
+                    // further attempt would only wait out the pool's spawn timeout.
+                    let mut pool_refused = false;
+                    let spawned = (batch_start..batch_end)
                         .step_by(chunk_size)
                         .map(|chunk_start| {
                             let chunk_end = chunk_start.saturating_add(chunk_size).min(batch_end);
-                            scope.spawn(move || {
-                                let mut chd = Self::open_rust_chd_with_metadata(
-                                    source_path,
-                                    parent_source_path,
-                                    reader_metadata,
-                                )?;
-                                trace!(
-                                    chunk_start,
-                                    chunk_end, "chd worker reader opened with shared map"
-                                );
-                                let mut hunk_buffer = chd.get_hunksized_buffer();
-                                let mut compressed_buffer = Vec::new();
-                                let mut decoded = Vec::with_capacity(chunk_end - chunk_start);
-
-                                for hunk_index in chunk_start..chunk_end {
-                                    let hunk_index = hunk_index as u32;
-                                    let offset = u64::from(hunk_index).saturating_mul(hunk_bytes);
-                                    if offset >= logical_bytes {
-                                        continue;
-                                    }
-                                    Self::decode_hunk_into(
-                                        &mut chd,
-                                        hunk_index,
-                                        source_path,
-                                        &mut compressed_buffer,
-                                        &mut hunk_buffer,
-                                    )?;
-                                    let write_len = usize::try_from(
-                                        logical_bytes
-                                            .saturating_sub(offset)
-                                            .min(hunk_buffer.len() as u64),
-                                    )
-                                    .map_err(|_| {
-                                        "decoded CHD chunk exceeded addressable memory".to_string()
-                                    })?;
-                                    decoded.push((
-                                        hunk_index,
-                                        hunk_buffer[..write_len].to_vec(),
-                                        write_len as u64,
-                                    ));
-                                }
-                                Ok(decoded)
-                            })
+                            let spawn_result = if pool_refused {
+                                Err(std::io::Error::from(std::io::ErrorKind::WouldBlock))
+                            } else {
+                                spawn_decode_worker(scope, move || {
+                                    decode_chunk(chunk_start, chunk_end)
+                                })
+                            };
+                            pool_refused = spawn_result.is_err();
+                            (chunk_start, chunk_end, spawn_result)
                         })
                         .collect::<Vec<_>>();
 
-                    let mut results = Vec::with_capacity(handles.len());
-                    for handle in handles {
-                        results.push(handle.join().unwrap_or_else(|_| {
-                            Err("CHD stream worker thread panicked".to_string())
-                        }));
+                    let mut results = Vec::with_capacity(spawned.len());
+                    for (chunk_start, chunk_end, spawn_result) in spawned {
+                        match spawn_result {
+                            Ok(handle) => results.push(handle.join().unwrap_or_else(|_| {
+                                Err("CHD stream worker thread panicked".to_string())
+                            })),
+                            Err(error) => {
+                                // A bounded worker pool (browser WASI threads) can refuse a
+                                // spawn; decode the chunk here instead of panicking, which
+                                // would leave the run unanswered.
+                                debug!(
+                                    chunk_start,
+                                    chunk_end,
+                                    %error,
+                                    "chd decode worker spawn failed; decoding chunk inline"
+                                );
+                                results.push(decode_chunk(chunk_start, chunk_end));
+                            }
+                        }
                     }
                     Ok::<_, String>(results)
                 })?;
@@ -619,6 +645,32 @@ impl ChdReadSession {
             Ok(())
         }
     }
+}
+
+/// Chunk decode result: `(hunk_index, bytes, written_len)` per hunk, in hunk order.
+type DecodedChunk = Vec<(u32, Vec<u8>, u64)>;
+
+#[cfg(test)]
+thread_local! {
+    static FORCE_DECODE_SPAWN_FAILURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Spawn one scoped decode worker. Fallible (not `Scope::spawn`) so a bounded worker pool that
+/// refuses the thread degrades the caller to inline decoding instead of panicking.
+fn spawn_decode_worker<'scope, 'env, F>(
+    scope: &'scope std::thread::Scope<'scope, 'env>,
+    work: F,
+) -> std::io::Result<std::thread::ScopedJoinHandle<'scope, std::result::Result<DecodedChunk, String>>>
+where
+    F: FnOnce() -> std::result::Result<DecodedChunk, String> + Send + 'scope,
+{
+    #[cfg(test)]
+    if FORCE_DECODE_SPAWN_FAILURE.with(std::cell::Cell::get) {
+        return Err(std::io::Error::from(std::io::ErrorKind::WouldBlock));
+    }
+    std::thread::Builder::new()
+        .name("rom-weaver-chd-decode".to_string())
+        .spawn_scoped(scope, work)
 }
 
 #[cfg(test)]
@@ -683,5 +735,45 @@ mod shared_map_tests {
                 assert_eq!(offset, logical_bytes);
             }
         }
+    }
+
+    #[test]
+    fn chd_parallel_decode_degrades_inline_when_worker_spawn_fails() {
+        let dir = crate::test_support::TempPath::new(
+            std::env::temp_dir().join(format!("rw-chd-spawn-failure-{}", std::process::id())),
+        );
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("disc.chd");
+        let logical_bytes = 64 * 4096 + 77;
+        let options = ChdWriteOptions::new(4096, 512)
+            .compression(&[CodecType::ZstdV5])
+            .logical_bytes(logical_bytes);
+        let mut writer = ChdWriter::new(File::create(&path).unwrap(), options).unwrap();
+        let mut remaining = logical_bytes;
+        let mut hunk = [0u8; 4096];
+        for index in 0..logical_bytes.div_ceil(4096) {
+            hunk.fill((index % 251) as u8);
+            let len = remaining.min(4096) as usize;
+            writer.write_all(&hunk[..len]).unwrap();
+            remaining -= len as u64;
+        }
+        writer.finish().unwrap();
+
+        let decode = |force_spawn_failure: bool| {
+            FORCE_DECODE_SPAWN_FAILURE.with(|forced| forced.set(force_spawn_failure));
+            let mut decoded = Vec::new();
+            let result = ChdReadSession::open(&path, None)
+                .unwrap()
+                .stream_with_rust_parallel_ordered(8, None, &mut |bytes: &[u8]| {
+                    decoded.extend_from_slice(bytes);
+                    Ok(())
+                });
+            FORCE_DECODE_SPAWN_FAILURE.with(|forced| forced.set(false));
+            result.unwrap();
+            decoded
+        };
+        let threaded = decode(false);
+        assert_eq!(threaded.len() as u64, logical_bytes);
+        assert_eq!(decode(true), threaded);
     }
 }
