@@ -1047,6 +1047,71 @@ fn trim_classifies_gamecube_wii_discs_in_archives_without_extracting_them() {
 }
 
 #[test]
+fn trim_skips_a_disc_inside_an_archive_folder() {
+    let staging = setup_temp_dir();
+    let folder = staging.child("roms");
+    fs::create_dir_all(folder.path()).expect("folder");
+    fs::write(
+        folder.child("game.nds").path(),
+        build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false),
+    )
+    .expect("nds fixture");
+    let iso = staging.child("disc.iso");
+    fs::write(iso.path(), build_test_gamecube_iso(0x4000)).expect("iso fixture");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            iso.path().to_str().expect("path"),
+            "--output",
+            folder.child("disc.rvz").path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    for archive_extension in ["zip", "7z"] {
+        let temp = setup_temp_dir();
+        let archive = temp.child(format!("roms.{archive_extension}"));
+        pack_archive(archive.path(), &[folder.path()]);
+        let output = command_output_with_env(
+            &[
+                "--log-level",
+                "trace",
+                "trim",
+                "--input",
+                archive.path().to_str().expect("path"),
+                "--json",
+            ],
+            &[],
+            0,
+        );
+        let terminal = parse_single_json_line(&output.stdout);
+        assert_eq!(terminal["details"]["processed"], 1, "{archive_extension}");
+        assert_eq!(
+            terminal["details"]["skipped_gamecube_wii"], 1,
+            "{archive_extension}"
+        );
+        let extractions = trim_extraction_lines(&output.stderr);
+        assert_eq!(
+            extractions.len(),
+            1,
+            "{archive_extension}: {extractions:#?}"
+        );
+        assert!(
+            extractions[0].contains("\"selections\":1"),
+            "{archive_extension}: only the ROM may be selected: {}",
+            extractions[0]
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("trim skipped a GameCube/Wii disc inside an archive"),
+            "{archive_extension}: the disc must be skipped before extraction"
+        );
+    }
+}
+
+#[test]
 fn trim_extracts_only_the_rom_from_an_archive_beside_a_disc() {
     let temp = setup_temp_dir();
     let staging = setup_temp_dir();

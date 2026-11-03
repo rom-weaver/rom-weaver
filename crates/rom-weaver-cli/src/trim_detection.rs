@@ -76,6 +76,11 @@ impl CliApp {
         };
         let mut header_names = Vec::new();
         for entry in &entries {
+            // A selected folder would extract everything under it, discs included; its members are
+            // listed on their own.
+            if entry.path.ends_with('/') {
+                continue;
+            }
             let name = normalize_archive_name(&entry.path);
             if name.is_empty() || should_ignore_common_container_file(&name) {
                 continue;
