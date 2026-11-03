@@ -948,6 +948,29 @@ fn ensure_wbfs_parts_cover_header(input: &Path, inputs: &[PathBuf], format: &str
     Ok(())
 }
 
+/// Leading bytes [`is_gamecube_wii_disc_header`] needs: through the GameCube magic at 0x1C.
+pub const GAMECUBE_WII_DISC_HEADER_LEN: usize = 0x20;
+
+/// Whether a file's leading bytes show a GameCube/Wii disc: a raw disc (`.iso`, `.gcm`) or a
+/// GameCube CISO. Other GameCube/Wii containers (RVZ, WBFS, ...) hide the disc magic behind their
+/// own header, so this does not recognize them.
+pub fn is_gamecube_wii_disc_header(header: &[u8]) -> bool {
+    if crate::gc_ciso::is_gamecube_ciso_header(header) {
+        return true;
+    }
+    let identity = rom_weaver_checksum::rom_identity::detect_rom_identity(
+        header,
+        u64::try_from(header.len()).unwrap_or(u64::MAX),
+        None,
+    );
+    recommend_container_for_identity(
+        identity.platform,
+        identity.disc_format.map(|medium| medium.label()),
+    )
+    .format_name
+        == RVZ.name
+}
+
 fn same_file_path(left: &Path, right: &Path) -> bool {
     let canonical =
         |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());

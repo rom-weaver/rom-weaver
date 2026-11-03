@@ -55,8 +55,9 @@ use rom_weaver_checksum::{
 };
 use rom_weaver_checksum::{checksum_reader_execution, checksum_reader_values_with_progress};
 use rom_weaver_containers::{
-    CompressFormatRecommendation, ContainerRegistry, ensure_split_wbfs_inputs_complete,
-    extract_only_create_validation_message, is_ambiguous_disc_image_extension,
+    CompressFormatRecommendation, ContainerRegistry, GAMECUBE_WII_DISC_HEADER_LEN,
+    ensure_split_wbfs_inputs_complete, extract_only_create_validation_message,
+    is_ambiguous_disc_image_extension, is_gamecube_wii_disc_header,
     unregistered_output_format_message,
 };
 pub use rom_weaver_core::N64ByteOrder;
@@ -70,9 +71,10 @@ use rom_weaver_core::{
     SelectionMatcher, SelectionPrompter, SolidPatchMetadata, StagedOutput, ThreadBudget,
     ThreadCapability, ThreadExecution, UnsupportedOp, ValidationCodeError, XdeltaSecondaryMode,
     detect_disc_sheet, emit_variant_plan, ensure_output_available, enumerate_disc_sheet_refs,
-    env_u64, is_dcp_patch_name, is_patch_filter_candidate_name, is_rom_filter_candidate_name,
-    normalize_archive_name, operation_report_details, process_cancellation_token,
-    should_ignore_common_container_file, sibling_gdi_path,
+    env_u64, is_container_filter_passthrough_candidate_name, is_dcp_patch_name,
+    is_patch_filter_candidate_name, is_rom_filter_candidate_name, normalize_archive_name,
+    operation_report_details, process_cancellation_token, should_ignore_common_container_file,
+    sibling_gdi_path,
 };
 // The selection-input parser moved to core; the app keeps a thin wrapper only so the existing unit
 // test in `tests.rs` can exercise it through `CliApp`.
@@ -1421,6 +1423,14 @@ const TRIM_PATH_EXTENSIONS: &[(&str, TrimInputKind)] = &[
 
 /// Extensions trim accepts only after sniffing the file's contents (an Xbox `.iso`).
 const TRIM_CONTENT_SNIFFED_EXTENSIONS: &[&str] = &["iso"];
+
+/// Extensions (lowercase, no dot) used only by GameCube/Wii disc images, so trim counts an archive
+/// member with one of them as a disc without extracting it.
+const GAMECUBE_WII_DISC_EXTENSIONS: &[&str] = &["gcm", "gcz", "rvz", "tgc", "wbfs", "wia"];
+
+/// Disc container extensions that never hold a trim-eligible ROM. `.ciso` is either a GameCube
+/// CISO or a PSP CSO, which only its header tells apart.
+const TRIM_NON_ARCHIVE_DISC_EXTENSIONS: &[&str] = &["chd", "ciso", "cso", "nfs", "pbp"];
 
 /// Every extension (lowercase, no dot) a trim input can carry, for the web UI's
 /// supported-files list: path-recognized, then content-sniffed.

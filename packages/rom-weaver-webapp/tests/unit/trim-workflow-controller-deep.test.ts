@@ -219,6 +219,60 @@ describe("TrimWorkflowController.setInput recovery", () => {
     expect(controller.outputName).toContain("game (trimmed).zip");
   });
 
+  describe("container pre-check", () => {
+    const unsupported = Object.assign(new Error("This input does not support trimming"), { code: "TRIM_UNSUPPORTED" });
+    const stageWith = async (fileName: string, entries: string[], plan: () => Promise<unknown>) => {
+      const controller = makeController();
+      const runtime = {
+        compression: { probe: vi.fn(async () => ({ entries: entries.map((filename) => ({ filename })) })) },
+        trim: { plan: vi.fn(plan) },
+      };
+      (controller as unknown as { runtime: unknown }).runtime = runtime;
+      const stages = controller.inputStages;
+      let stagingInput: Record<string, unknown> | undefined;
+      stages.createInitialSource = vi.fn(() => stage());
+      stages.stageSource = vi.fn(async (initial: unknown) => {
+        stagingInput = (
+          controller as unknown as { createExecutionOptions: () => { input: Record<string, unknown> } }
+        ).createExecutionOptions().input;
+        return initial;
+      });
+      stages.maybeResolveBlockingStageSelection = vi.fn(async () => false);
+      controller.finalizeInputStableState = vi.fn(async () => undefined);
+      await controller.setInput({ name: fileName });
+      return { runtime, stagingInput };
+    };
+
+    it("stages a container whole when trim rejects what it lists", async () => {
+      const { runtime, stagingInput } = await stageWith("Kururin.7z", ["Kururin.rvz"], async () => {
+        throw unsupported;
+      });
+      expect(runtime.trim.plan).toHaveBeenCalledWith(expect.objectContaining({ source: { name: "Kururin.7z" } }));
+      expect(stagingInput?.containerInputsEnabled).toBe(false);
+    });
+
+    it("extracts a container that lists a trim input without asking the engine first", async () => {
+      const { runtime, stagingInput } = await stageWith("Games.7z", ["Kururin.rvz", "Game (USA).NDS"], async () => {
+        throw unsupported;
+      });
+      // Only the support probe after staging runs the plan.
+      expect(runtime.trim.plan).toHaveBeenCalledTimes(1);
+      expect(stagingInput?.containerInputsEnabled).toBeUndefined();
+    });
+
+    it("extracts a container the engine can trim or could not judge", async () => {
+      for (const plan of [async () => ({ trim: { wouldChange: true } }), async () => Promise.reject(new Error("io"))]) {
+        const { stagingInput } = await stageWith("nested.zip", ["inner.zip"], plan);
+        expect(stagingInput?.containerInputsEnabled).toBeUndefined();
+      }
+    });
+
+    it("never lists a source that is not a container", async () => {
+      const { runtime } = await stageWith("game.nds", [], async () => ({ trim: { wouldChange: false } }));
+      expect(runtime.compression.probe).not.toHaveBeenCalled();
+    });
+  });
+
   it("releases runtime sources when staging fails", async () => {
     const controller = makeController();
     const inputStage = stage();

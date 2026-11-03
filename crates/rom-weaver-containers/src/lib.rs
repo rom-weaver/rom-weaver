@@ -86,12 +86,12 @@ use formats::SEVEN_Z;
 pub use formats::{
     CompressFormatRecommendation, ContainerCapabilitiesMetadata, ContainerDefaultOutputMetadata,
     ContainerFormatMetadata, ContainerOutputExtensionStrategy, ContainerRegistry,
-    ContainerThreadCapabilityMetadata, DiscImagePolicyMetadata, container_format_metadata,
-    disc_image_policy_metadata, ensure_split_wbfs_inputs_complete, extract_only_create_error,
-    extract_only_create_validation_message, is_ambiguous_disc_image_extension,
-    is_likely_disc_image_size, is_likely_disc_image_source, recommend_container_for_identity,
-    supported_create_format_names, supported_create_formats_text,
-    unregistered_output_format_message,
+    ContainerThreadCapabilityMetadata, DiscImagePolicyMetadata, GAMECUBE_WII_DISC_HEADER_LEN,
+    container_format_metadata, disc_image_policy_metadata, ensure_split_wbfs_inputs_complete,
+    extract_only_create_error, extract_only_create_validation_message,
+    is_ambiguous_disc_image_extension, is_gamecube_wii_disc_header, is_likely_disc_image_size,
+    is_likely_disc_image_source, recommend_container_for_identity, supported_create_format_names,
+    supported_create_formats_text, unregistered_output_format_message,
 };
 use formats::{GC_CISO, GCZ, NFS, PBP, RVZ, TGC, WBFS, WIA, XISO, Z3DS};
 use libarchive_support::{

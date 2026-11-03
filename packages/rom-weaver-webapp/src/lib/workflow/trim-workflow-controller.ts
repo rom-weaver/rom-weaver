@@ -22,7 +22,18 @@ import { wrapPublicOutput } from "../output/index.ts";
 import { markTrimOutputStem, type TrimMode } from "../trim/trim-output-name.ts";
 import { runTrimWorkflow } from "../trim/workflow.ts";
 import { BaseWorkflowController, type BaseWorkflowSnapshot, type SourceValidator } from "./base-workflow-controller.ts";
-import { cloneCandidate, cloneValue, cloneWarning, getPreparationProgressStage, isRecord } from "./controller-utils.ts";
+import {
+  ROM_WEAVER_FILE_FILTERS,
+  ROM_WEAVER_TRIM_INPUT_EXTENSIONS,
+} from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import {
+  cloneCandidate,
+  cloneValue,
+  cloneWarning,
+  getPreparationProgressStage,
+  getSourceFileName,
+  isRecord,
+} from "./controller-utils.ts";
 import type { SharedRomStagedSource, StagedRomSourceController } from "./staged-rom-source.ts";
 import {
   getAssetChecksumState,
@@ -66,6 +77,17 @@ type InternalSourceState = {
 type StagedSource<TSource> = SharedRomStagedSource<TSource, InternalSourceState>;
 
 const TRIM_INPUT_ROLE: SourceRole = "input";
+const TRIM_INPUT_SUFFIXES = ROM_WEAVER_TRIM_INPUT_EXTENSIONS.map((extension) => `.${extension}`);
+
+const hasSuffix = (name: string, suffixes: readonly string[]) => {
+  const lower = name.toLowerCase();
+  return suffixes.some((suffix) => lower.endsWith(suffix));
+};
+
+/** Only a definite "unsupported" verdict counts; other probe failures must not block trimming. */
+const isTrimUnsupportedError = (error: unknown) =>
+  (error as { code?: string })?.code === "TRIM_UNSUPPORTED" ||
+  (error as Error)?.message === "This input does not support trimming";
 const FILE_EXTENSION_REGEX = /\.[^./\\]+$/;
 
 const cloneSourceState = (state: InternalSourceState | null | undefined) =>
@@ -142,6 +164,8 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
   /** Set once a run started for the current input, so a late identification leaves the name alone. */
   private outputLocked = false;
   private inputStage?: StagedSource<TSource>;
+  /** Set while the input is a container trim cannot use, so it is staged whole rather than extracted. */
+  private stageContainerWhole = false;
 
   constructor(
     runtime: WorkflowRuntime,
@@ -182,6 +206,8 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
         await this.runtime.preload?.preloadCapability?.("compression", () => undefined, {
           threads: this.settings.workers?.threads,
         });
+        // The support probe after staging flags the container; staging it whole skips the extraction.
+        this.stageContainerWhole = await this.isUnsupportedContainer(first);
         const stage = (await this.inputStages.stageSource(
           this.inputStages.createInitialSource(TRIM_INPUT_ROLE, first, 0),
         )) as StagedSource<TSource>;
@@ -318,7 +344,8 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
    * never ran one before, which left its checksum panel permanently empty.
    */
   private async finalizeInputStableState(stage: StagedSource<TSource>) {
-    if (stage.state.status !== "ready") return;
+    // A container staged whole is never trimmed, and identifying it would extract what staging skipped.
+    if (stage.state.status !== "ready" || this.stageContainerWhole) return;
     const assets = stage.preparedInputAssets || [];
     for (let index = 0; index < assets.length; index += 1) {
       const asset = assets[index];
@@ -402,13 +429,33 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       stage.state.paddingTrimmed =
         !!plan?.restore?.wouldChange && (!plan.trim.wouldChange || !!plan.restore.revertMarker);
     } catch (error) {
-      // Only a definite "unsupported" verdict counts; other probe failures must not block trimming.
-      const unsupported =
-        (error as { code?: string })?.code === "TRIM_UNSUPPORTED" ||
-        (error as Error)?.message === "This input does not support trimming";
-      if (!unsupported) return;
+      if (!isTrimUnsupportedError(error)) return;
       stage.state.trimSupported = false;
       this.pushWarning(stage, Object.assign(error as Error, { code: "TRIM_UNSUPPORTED" }));
+    }
+  }
+
+  /**
+   * Whether trim cannot use a container whose listing names no trim input (a GameCube/Wii disc in a
+   * 7z). The engine's verdict on the container reads only its listing and member headers, so staging
+   * can skip extracting, and decoding, what trim would reject.
+   */
+  private async isUnsupportedContainer(source: TSource): Promise<boolean> {
+    const fileName = getSourceFileName(source, "");
+    const probe = this.runtime.compression?.probe;
+    const plan = this.runtime.trim?.plan;
+    if (!hasSuffix(fileName, ROM_WEAVER_FILE_FILTERS.containerExtensions)) return false;
+    if (!(probe && plan)) return false;
+    const signal = this.abortController.signal;
+    try {
+      const { entries } = await probe({ options: { signal }, source: source as never });
+      if (!entries.length || entries.some((entry) => hasSuffix(entry.filename, TRIM_INPUT_SUFFIXES))) return false;
+      await plan({ signal, source: source as never });
+      return false;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      this.trace("trim.container-precheck", { error, fileName });
+      return isTrimUnsupportedError(error);
     }
   }
 
@@ -460,7 +507,10 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
 
   private createExecutionOptions(): CreateWorkflowOptions {
     return {
-      input: cloneValue(this.settings.input || {}),
+      input: {
+        ...cloneValue(this.settings.input || {}),
+        ...(this.stageContainerWhole ? { containerInputsEnabled: false } : {}),
+      },
       logging: cloneValue(this.settings.logging || {}),
       onLog: this.settings.logging?.sink,
       output: {
