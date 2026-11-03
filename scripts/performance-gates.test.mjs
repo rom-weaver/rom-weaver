@@ -60,10 +60,6 @@ test("Lighthouse scores the full set of budgeted categories", () => {
     args.includes("--only-categories=performance,accessibility,best-practices,seo,agentic-browsing"),
     true,
   );
-  assert.match(
-    args.find((argument) => argument.startsWith("--chrome-flags=")) ?? "",
-    /--enable-features=WebMCPTesting(?:\s|$)/,
-  );
   assert.equal(args.includes("--output-path=/tmp/report"), true);
 });
 

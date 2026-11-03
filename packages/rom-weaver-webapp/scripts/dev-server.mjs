@@ -811,10 +811,13 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
   // calls the same handler; Lighthouse's agent-discovery audit reads the catalog.
   const discoveryKind = PREVIEW_DISCOVERY_ROUTES.get(pathname);
   if (discoveryKind) {
-    const response = discoveryResponse(
-      new Request(`https://localhost:${req.socket.localPort}${pathname}`),
-      discoveryKind,
-    );
+    // The documents link to their own origin, so it MUST be the one the client requested.
+    const origin = `https://${req.headers[":authority"] || getRedirectHost(req, req.socket.localPort)}`;
+    if (!URL.canParse(origin)) {
+      send(res, 400, { "Content-Type": "text/plain; charset=utf-8" }, "Bad Request", securityOptions);
+      return;
+    }
+    const response = discoveryResponse(new Request(new URL(pathname, origin)), discoveryKind);
     void response.text().then((body) => {
       const headers = Object.fromEntries(response.headers);
       send(res, response.status, headers, req.method === "HEAD" ? null : body, securityOptions);

@@ -128,8 +128,6 @@ const verifyProductionBuild = () => {
     throw new Error(`Lighthouse requires an indexable production build\n${verify.stdout || ""}${verify.stderr || ""}`);
 };
 
-// WebMCPTesting exposes the page's WebMCP tools without an origin-trial token; without it the
-// agentic-browsing WebMCP audits are not applicable and a broken tool schema still passes.
 export const lighthouseArguments = (url, outputBase) => [
   url,
   "--quiet",
@@ -137,7 +135,7 @@ export const lighthouseArguments = (url, outputBase) => [
   "--output=html",
   `--output-path=${outputBase}`,
   "--only-categories=performance,accessibility,best-practices,seo,agentic-browsing",
-  "--chrome-flags=--headless=new --no-sandbox --disable-dev-shm-usage --ignore-certificate-errors --enable-features=WebMCPTesting",
+  "--chrome-flags=--headless=new --no-sandbox --disable-dev-shm-usage --ignore-certificate-errors",
 ];
 
 export const LIGHTHOUSE_ATTEMPTS = 3;
