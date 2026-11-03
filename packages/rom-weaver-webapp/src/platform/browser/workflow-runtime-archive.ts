@@ -1,3 +1,6 @@
+import { normalizeVirtualFileName } from "../../workers/protocol/browser-opfs-source-ref.ts";
+import { replaceCueFileReferences } from "../../workers/protocol/cue-file-utils.ts";
+import { replaceGdiFileReferences } from "../../workers/protocol/gdi-file-utils.ts";
 import { isRomSpecificCompressionFormat } from "../../lib/compression/container-format-registry.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
 import { createRomWeaverOutputScope } from "../../lib/runtime/run-output-paths.ts";
@@ -221,33 +224,48 @@ const stageArchiveInputs = async (workerIo: RuntimeWorkerIo, input: CompressionP
     const files = [source, ...companionFiles];
     const names = new Set<string>();
     const pathPrefix = `archive-input-${createVfsPathId()}`;
-    // NFS finds its parts by fixed lowercase names, so names are lowercased. Split WBFS parts
-    // instead share the source's stem (`Game.wbfs`, `Game.wbf1`); keeping that stem's case keeps
-    // the extracted ISO named like the source.
+    // Disc sheets MUST preserve reference case; NFS instead requires fixed lowercase names.
+    // Split WBFS parts MUST share the source stem so extraction keeps the output name.
     const sourceName = normalizeArchiveRelativePath(source.name);
+    const isDisc = /\.(cue|gdi)$/i.test(sourceName);
     const stem = sourceName.replace(/\.[^.]*$/, "");
     const sharesStem = (name: string) => name.toLowerCase().startsWith(`${stem.toLowerCase()}.`);
     const keepStem = stem !== sourceName && companionFiles.every((file) => sharesStem(file.name));
-    const stagedName = (name: string) =>
-      keepStem ? `${stem}${name.slice(stem.length).toLowerCase()}` : name.toLowerCase();
-    // Grouped uploads MUST use fresh File identities to keep cached standalone stages
-    // from changing the directory or fixed basename of a companion.
-    requests = files.map((file) => {
-      const fileName = stagedName(normalizeArchiveRelativePath(file.name));
-      if (fileName.includes("/")) {
-        throw new Error("Companion filenames cannot contain directories.");
-      }
+    const stagedName = (name: string) => {
+      if (isDisc) return normalizeVirtualFileName(name);
+      return keepStem ? `${stem}${name.slice(stem.length).toLowerCase()}` : name.toLowerCase();
+    };
+    const stagedNames = files.map((file) => {
+      const originalName = normalizeArchiveRelativePath(file.name);
+      if (originalName.includes("/")) throw new Error("Companion filenames cannot contain directories.");
+      const fileName = stagedName(originalName);
       if (names.has(fileName)) throw new Error("Duplicate companion filename.");
       names.add(fileName);
-      return {
-        fallbackFileName: fileName,
-        pathPrefix,
-        pathPrefixInPath: true,
-        scope: "archive",
-        source: new File([file], fileName),
-        trace,
-      };
+      return fileName;
     });
+    const referenceNames = new Map(files.map((file, index) => [file.name.toLowerCase(), stagedNames[index]]));
+    // Grouped uploads MUST use fresh File identities to keep cached standalone stages
+    // from changing the directory or fixed basename of a companion.
+    requests = await Promise.all(
+      files.map(async (file, index) => {
+        const fileName = stagedNames[index] || file.name;
+        let stagedSource: Blob = file;
+        if (isDisc && /\.(cue|gdi)$/i.test(file.name)) {
+          const replaceReferences = /\.gdi$/i.test(file.name) ? replaceGdiFileReferences : replaceCueFileReferences;
+          stagedSource = new Blob([
+            replaceReferences(await file.text(), (name) => referenceNames.get(getPathBaseName(name).toLowerCase())),
+          ]);
+        }
+        return {
+          fallbackFileName: fileName,
+          pathPrefix,
+          pathPrefixInPath: true,
+          scope: "archive" as const,
+          source: new File([stagedSource], fileName),
+          trace,
+        };
+      }),
+    );
   } else {
     requests = [
       {

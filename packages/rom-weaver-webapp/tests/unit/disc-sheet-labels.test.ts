@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { createPatchFile } from "../../src/lib/input/binary-service.ts";
+import { prepareMultipleDirectInputAssets } from "../../src/lib/input/input-preparation-service.ts";
+import { getPatchFilePrecomputedIdentifyRetry } from "../../src/lib/workflow/staged-source-checksums.ts";
+import { skipSourceIdentification } from "../../src/lib/input/input-identification-policy.ts";
 import { getDiscFormatLabel } from "../../src/lib/input/rom-specific-file-utils.ts";
 import { ApplyWorkflowController } from "../../src/lib/workflow/apply-workflow-controller.ts";
 import { getPatchFilePrecomputedRomType } from "../../src/lib/workflow/staged-source-checksums.ts";
@@ -85,5 +88,158 @@ describe("prepared optical metadata", () => {
 
   it("keeps an absent type unknown without optical metadata", () => {
     expect(getPatchFilePrecomputedRomType(undefined)).toBeUndefined();
+  });
+});
+
+describe("loose disc ingest metadata reuse", () => {
+  it.each([false, true])("uses one complete ingest with identity policy declined=%s", async (declined) => {
+    const sheet = new File(['FILE "track.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n'], "disc.cue");
+    const track = new File(["track"], "track.bin");
+    if (declined) {
+      skipSourceIdentification(sheet);
+      skipSourceIdentification(track);
+    }
+    const identification = { status: "unknown", matches: [] } as const;
+    const checksumVariants = [{ id: "raw", label: "Raw", checksums }];
+    const run = vi.fn(async () => ({
+      result: {
+        isRom: true,
+        assets: [
+          { fileName: sheet.name, kind: "cue", discFormat: "GD-ROM", chdCreateMode: "gd", copiedInPlace: true },
+          {
+            fileName: track.name,
+            kind: "bin",
+            discFormat: "GD-ROM",
+            chdCreateMode: "gd",
+            platform: "Sega Dreamcast",
+            recommendedFormat: "chd",
+            checksums,
+            checksumVariants,
+            checksumMs: 17,
+            identification: declined ? undefined : identification,
+            copiedInPlace: true,
+          },
+        ],
+        patches: [],
+      },
+      outputs: [],
+      patchOutputs: [],
+    }));
+    const runtime = { name: "browser", sidecars: {}, workerIo: {}, ingest: { run } } as unknown as WorkflowRuntime;
+    const controller = new ApplyWorkflowController<File, unknown>(runtime);
+    try {
+      await controller.setInput([track, sheet]);
+      const state = controller.getInput();
+      expect(state?.status).toBe("ready");
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run).toHaveBeenCalledWith(expect.objectContaining({ identify: !declined }));
+      const row = toStagedInputInfos(state, [track, sheet]).find((input) => input.kind === "track");
+      expect(row?.checksums).toEqual(checksums);
+      expect(row?.checksumVariants).toEqual(checksumVariants);
+      expect(state?.resolvedInputs?.find((input) => input.kind === "track")?.checksumTimeMs).toBe(17);
+      expect(row?.identification).toEqual(declined ? undefined : identification);
+      expect(row?.romType).toEqual({
+        platform: "Sega Dreamcast",
+        discFormat: "GD-ROM",
+        chdCreateMode: "gd",
+        recommendedFormat: "chd",
+      });
+    } finally {
+      await controller.dispose();
+    }
+  });
+});
+
+describe("group ingest identification recovery", () => {
+  it("retains unavailable identification and the pending retry with complete hashes", async () => {
+    const sheet = new File(['FILE "Track*.bin" BINARY\n TRACK 01 MODE1/2352\n INDEX 01 00:00:00'], "Disc*.cue");
+    const track = new File(["track"], "Track*.bin");
+    const identifyRetry = Promise.resolve(false);
+    const run = vi.fn(async () => ({
+      identifyRetry,
+      identifyUnavailable: "Database is still loading",
+      result: {
+        isRom: true,
+        assets: [
+          { fileName: "Disc_.cue", kind: "cue", discFormat: "GD-ROM", copiedInPlace: true },
+          { fileName: "Track_.bin", kind: "bin", checksums, checksumMs: 12, copiedInPlace: true },
+        ],
+        patches: [],
+      },
+      outputs: [],
+      patchOutputs: [],
+    }));
+    const assets = await prepareMultipleDirectInputAssets([track, sheet], undefined, {
+      name: "browser",
+      sidecars: {},
+      ingest: { run },
+    } as unknown as WorkflowRuntime);
+    const file = assets?.find((asset) => asset.kind === "track")?.file;
+    expect(getPatchFilePrecomputedIdentifyRetry(file)).toBe(identifyRetry);
+    expect(file).toMatchObject({
+      checksums,
+      _precomputedChecksumMs: 12,
+      identification: { status: "unavailable", matches: [], unavailableReason: "Database is still loading" },
+    });
+  });
+
+  it("preserves later automatic identification when one group member declines", async () => {
+    const sheet = new File(
+      [
+        'FILE "first.bin" BINARY\n TRACK 01 MODE1/2352\n INDEX 01 00:00:00\nFILE "second.bin" BINARY\n TRACK 02 MODE1/2352\n INDEX 01 00:00:00',
+      ],
+      "disc.cue",
+    );
+    const first = new File(["first"], "first.bin");
+    const second = new File(["second"], "second.bin");
+    skipSourceIdentification(first);
+    const run = vi.fn(async ({ fileName }: { fileName?: string }) => ({
+      result: {
+        isRom: true,
+        assets:
+          fileName === sheet.name
+            ? [
+                { fileName: sheet.name, kind: "cue", discFormat: "GD-ROM", copiedInPlace: true },
+                ...[first, second].map((file) => ({
+                  fileName: file.name,
+                  kind: "bin",
+                  checksums,
+                  copiedInPlace: true,
+                })),
+              ]
+            : [
+                {
+                  fileName: second.name,
+                  kind: "bin",
+                  checksums,
+                  identification: { status: "unknown", matches: [] },
+                  copiedInPlace: true,
+                },
+              ],
+        patches: [],
+      },
+      outputs: [],
+      patchOutputs: [],
+    }));
+    const controller = new ApplyWorkflowController<File, unknown>({
+      name: "browser",
+      sidecars: {},
+      workerIo: {},
+      ingest: { run },
+    } as unknown as WorkflowRuntime);
+    try {
+      await controller.setInput([sheet, first, second]);
+      expect(controller.getInput()?.status).toBe("ready");
+      expect(run).toHaveBeenCalledTimes(2);
+      expect(run.mock.calls.map(([input]) => input)).toEqual([
+        expect.objectContaining({ fileName: sheet.name, identify: false }),
+        expect.objectContaining({ fileName: second.name, identify: true }),
+      ]);
+      expect(
+        controller.getInput()?.resolvedInputs?.find((input) => input.fileName === second.name)?.identification,
+      ).toEqual({ status: "unknown", matches: [] });
+    } finally {
+      await controller.dispose();
+    }
   });
 });

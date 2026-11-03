@@ -1,3 +1,4 @@
+import { normalizeVirtualFileName } from "../../workers/protocol/browser-opfs-source-ref.ts";
 import {
   getNamedSourceSize as getBinarySourceSize,
   getNamedSourceFileName,
@@ -27,7 +28,7 @@ import {
   getPatchFileBytes,
   readPathSourcePrefix,
 } from "./binary-service.ts";
-import { inheritSourceIdentificationPolicy } from "./input-identification-policy.ts";
+import { inheritSourceIdentificationPolicy, shouldIdentifySource } from "./input-identification-policy.ts";
 import { chdCodecModeFromCreateMode } from "./rom-specific-file-utils.ts";
 import { getWeaveRomProvenance } from "./weave-rom-provenance.ts";
 import {
@@ -48,6 +49,7 @@ import {
   resolveCompressedInputFile,
 } from "./input-decompression.ts";
 import {
+  attachIngestAssetMetadata,
   getPatchLeafFileForSelection,
   getPatchLeafParentCompressionsForSelection,
   resolveArchiveInputAssets,
@@ -406,27 +408,36 @@ const ingestDiscInputAssets = async (
   if (!runtime.ingest?.run) return assets;
   const sheet = assets.find((asset) => asset.kind === "cue" || asset.kind === "gdi");
   if (!sheet) return assets;
+  const identify = assets.every((asset) => shouldIdentifySource(asset.file));
+  let firstProgressAt = 0;
+  const startedAt = Date.now();
   const ingested = await runtime.ingest.run({
     source,
     fileName: sheet.fileName,
     companionFiles,
-    identify: false,
+    identify,
     threads: options?.workers?.threads,
     logLevel: options?.logging?.level,
     onLog: options?.onLog,
-    onProgress: (progress) =>
+    onProgress: (progress) => {
+      if (!firstProgressAt) firstProgressAt = Date.now();
       options?.onProgress?.({
         ...progress,
         label: progress.label || progress.message || sheet.fileName,
         percent: progress.percent ?? null,
         stage: "input",
-      }),
+      });
+    },
     signal: options?.signal,
   });
   try {
-    const verdict = ingested.result.assets.find(
-      (asset) => asset.kind === sheet.kind && asset.fileName === sheet.fileName,
-    );
+    const emittedByName = new Map(ingested.result.assets.map((asset) => [asset.fileName, asset]));
+    const verdict = emittedByName.get(normalizeVirtualFileName(sheet.fileName));
+    for (const asset of assets) {
+      const emitted = emittedByName.get(normalizeVirtualFileName(asset.fileName));
+      if (emitted?.copiedInPlace && (identify || !shouldIdentifySource(asset.file)))
+        attachIngestAssetMetadata(asset.file, emitted, ingested, Date.now() - (firstProgressAt || startedAt));
+    }
     if (verdict?.discFormat)
       for (const asset of assets)
         asset.file.metadata = {
@@ -596,6 +607,12 @@ const prepareMultipleDirectInputAssets = async (
         : createLazyPatchFile(source, fallbackFileName(index)),
     ),
   );
+  const sourceByFile = new Map(files.map((file, index) => [file, { source: sources[index], index }]));
+  const fileByName = new Map<string, PatchFileInstance>();
+  for (const file of files) {
+    const key = getBaseFileName(file.fileName).toLowerCase();
+    if (!fileByName.has(key)) fileByName.set(key, file);
+  }
   const assets: InputAsset[] = [];
   const used = new Set<PatchFileInstance>();
   const sheets = [
@@ -604,7 +621,7 @@ const prepareMultipleDirectInputAssets = async (
   ];
   for (const sheetFile of sheets) {
     if (used.has(sheetFile)) continue;
-    const sheetIndex = files.indexOf(sheetFile);
+    const sheetIndex = sourceByFile.get(sheetFile)?.index ?? 0;
     const isCue = isCueEntryFileName(sheetFile.fileName);
     const sheetText = decodeUtf8(getPatchFileBytes(sheetFile));
     const cueText = isCue ? sheetText : undefined;
@@ -631,9 +648,7 @@ const prepareMultipleDirectInputAssets = async (
     const missingReferences: string[] = [];
     const trackAssets: InputAsset[] = [];
     for (const reference of references) {
-      const trackFile = files.find(
-        (file) => getBaseFileName(file.fileName).toLowerCase() === getBaseFileName(reference.fileName).toLowerCase(),
-      );
+      const trackFile = fileByName.get(getBaseFileName(reference.fileName).toLowerCase());
       if (!trackFile) {
         missingReferences.push(reference.fileName);
         continue;
@@ -678,17 +693,18 @@ const prepareMultipleDirectInputAssets = async (
       assets.push(...groupAssets);
       continue;
     }
-    const groupFiles = new Set(groupAssets.map((asset) => asset.file));
-    const ingestFiles = sources.map((source, index) => {
-      const preparedFile = files[index];
-      if (!preparedFile) return undefined;
-      if (!groupFiles.has(preparedFile)) return undefined;
-      if (source instanceof File) return source;
-      const blob = createSourceAccessFromSource(source, fileNames[index]).getBlob();
-      return blob ? new File([blob], fileNames[index] || "input.bin") : undefined;
-    });
-    const companions = ingestFiles.filter((source, index): source is File => index !== sheetIndex && !!source);
-    const sheetSource = ingestFiles[sheetIndex] || sources[sheetIndex];
+    const ingestFiles = await Promise.all(
+      groupAssets.map(async (asset) => {
+        const source = sourceByFile.get(asset.file)?.source;
+        if (!source) throw new Error("Disc source is unavailable");
+        if (source instanceof File) return source;
+        const access = createSourceAccessFromSource(source, asset.fileName);
+        const blob = access.getBlob() || (await access.getFileHandle()?.getFile());
+        return blob ? new File([blob], asset.fileName) : undefined;
+      }),
+    );
+    const [sheetSource, ...trackSources] = ingestFiles;
+    const companions = trackSources.filter((source): source is File => !!source);
     if (!sheetSource) throw new Error("Disc sheet source is unavailable");
     assets.push(...(await ingestDiscInputAssets(groupAssets, sheetSource, companions, options, runtime)));
   }
