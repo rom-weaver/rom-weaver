@@ -65,10 +65,14 @@ impl CliApp {
     /// Choose the members of `archive` trim must extract from the archive's listing, reading only
     /// a short header for `.iso` and `.ciso` members.
     /// Returns `None` when the container cannot list its entries, so the caller extracts them all.
+    /// With `stop_at_first_extract`, planning ends at the first member trim would extract, so the
+    /// plan is only complete when it extracts nothing; reaching each later header in a solid
+    /// block decodes everything before it.
     fn plan_trim_archive_members(
         handler: &dyn ContainerHandler,
         archive: &Path,
         scope: TrimMemberScope,
+        stop_at_first_extract: bool,
         context: &OperationContext,
     ) -> Option<TrimArchiveMembers> {
         let request = ContainerProbeRequest {
@@ -114,14 +118,21 @@ impl CliApp {
                 }
             }
         }
-        if !header_names.is_empty() {
+        if stop_at_first_extract && !members.extract.is_empty() {
+            header_names.clear();
+        }
+        // Read headers one at a time when stopping early: reading stops once the requested
+        // member is found, so nothing past the first extracted member is decoded.
+        let batches: Vec<Vec<String>> = if stop_at_first_extract {
+            header_names.into_iter().map(|name| vec![name]).collect()
+        } else if header_names.is_empty() {
+            Vec::new()
+        } else {
+            vec![header_names]
+        };
+        'batches: for batch in batches {
             let headers = handler
-                .read_entry_prefixes(
-                    &request,
-                    &header_names,
-                    GAMECUBE_WII_DISC_HEADER_LEN,
-                    context,
-                )
+                .read_entry_prefixes(&request, &batch, GAMECUBE_WII_DISC_HEADER_LEN, context)
                 .unwrap_or_else(|error| {
                     debug!(
                         archive = %archive.display(),
@@ -130,7 +141,7 @@ impl CliApp {
                     );
                     BTreeMap::new()
                 });
-            for name in header_names {
+            for name in batch {
                 let is_ciso = name.to_ascii_lowercase().ends_with(".ciso");
                 match headers.get(&name) {
                     Some(header) if is_gamecube_wii_disc_header(header) => {
@@ -140,7 +151,12 @@ impl CliApp {
                     // Any other `.ciso` is a container (a PSP or Xbox CSO) that may hold an XISO.
                     _ if is_ciso && scope == TrimMemberScope::TopLevel => {}
                     // An `.iso` that is not a GameCube/Wii disc may be an Xbox XISO.
-                    _ => members.extract.push(name),
+                    _ => {
+                        members.extract.push(name);
+                        if stop_at_first_extract {
+                            break 'batches;
+                        }
+                    }
                 }
             }
         }
@@ -154,9 +170,11 @@ impl CliApp {
         Some(members)
     }
 
-    /// Add `trim_members` to a probe report: the members a default `trim` of `source` would
-    /// extract and the GameCube/Wii discs it would skip, decided as [`Self::collect_trim_file`]
-    /// decides them, without extracting anything. `null` when the container cannot be listed.
+    /// Add `trim_members` to a probe report: whether a default `trim` of `source` would extract
+    /// anything, decided as [`Self::collect_trim_file`] decides it, without extracting anything.
+    /// Header reads stop at the first member trim would extract, so `extract` names at least one
+    /// such member and the disc count is complete only when `extract` is empty. `null` when the
+    /// container cannot be listed.
     pub(super) fn attach_trim_member_details(
         &self,
         report: &mut OperationReport,
@@ -183,7 +201,7 @@ impl CliApp {
                 gamecube_wii_discs: 0,
             })
         } else {
-            Self::plan_trim_archive_members(handler, source, TrimMemberScope::Nested, context)
+            Self::plan_trim_archive_members(handler, source, TrimMemberScope::Nested, true, context)
         };
         let value = members.map_or(serde_json::Value::Null, |members| {
             serde_json::json!({
@@ -452,6 +470,7 @@ impl CliApp {
                 handler.as_ref(),
                 &current,
                 scope,
+                false,
                 options.context,
             ) {
                 Some(members) => {
@@ -590,6 +609,7 @@ impl CliApp {
             handler.as_ref(),
             archive,
             TrimMemberScope::TopLevel,
+            true,
             options.context,
         ) && members.extract.is_empty()
         {

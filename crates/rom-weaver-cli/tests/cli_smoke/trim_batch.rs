@@ -1193,6 +1193,10 @@ fn trim_reads_the_header_of_a_compressed_disc_without_extracting_it() {
     );
     let extractions = trim_extraction_lines(&output.stderr);
     assert!(extractions.is_empty(), "{extractions:#?}");
+    assert!(
+        !String::from_utf8_lossy(&output.stderr).contains("\"stream probe\""),
+        "the disc header MUST settle the input before the stream is decoded in full"
+    );
 }
 
 #[test]
@@ -1235,9 +1239,20 @@ fn probe_reports_the_members_trim_would_extract() {
     );
     let mixed = temp.child("mixed.zip");
     pack_archive(mixed.path(), &[rom.path(), &iso]);
+    // The ROM settles the answer, so the disc's header is never read.
     assert_eq!(
         probe(mixed.path()),
-        serde_json::json!({"extract": ["game.nds"], "gamecube_wii_discs": 1})
+        serde_json::json!({"extract": ["game.nds"], "gamecube_wii_discs": 0})
+    );
+    // Reading stops at the first `.iso` that is not a GameCube/Wii disc.
+    let plain = staging.child("a-plain.iso");
+    fs::write(plain.path(), vec![0_u8; 0x4000]).expect("plain iso");
+    let later = write_gamecube_iso(&staging, "b-disc.iso");
+    let first_extract = temp.child("first-extract.7z");
+    pack_archive(first_extract.path(), &[plain.path(), &later]);
+    assert_eq!(
+        probe(first_extract.path()),
+        serde_json::json!({"extract": ["a-plain.iso"], "gamecube_wii_discs": 0})
     );
     // A lone ROM would be extracted and probed by default; `--trim-members` reports the archive.
     let single = temp.child("single.zip");
