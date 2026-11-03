@@ -5,6 +5,7 @@ import type { WorkflowKind, WorkflowProgress, WorkflowProgressRole } from "../..
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import type { InputAsset, InputParentCompression } from "../input/input-assets.ts";
+import { getDiscFormatLabel } from "../input/rom-specific-file-utils.ts";
 import { romTypeFromEmittedFile } from "../runtime/run-result-parsing.ts";
 import { createChecksumSource, DEFAULT_CHECKSUMS, isRecord } from "./controller-utils.ts";
 
@@ -118,9 +119,20 @@ const getPatchFilePrecomputedChecksumVariants = (
   return Array.isArray(variants) ? cloneChecksumVariants(variants as ChecksumVariant[]) : undefined;
 };
 
+const getPreparedFileRomType = (
+  file: PatchFileInstance | undefined,
+  romType: RomTypeTag | undefined,
+): RomTypeTag | undefined => {
+  const discFormat = file?.metadata?.format;
+  return romTypeFromEmittedFile({
+    ...romType,
+    ...(getDiscFormatLabel(discFormat) ? { discFormat } : {}),
+  });
+};
+
 const getPatchFilePrecomputedRomType = (file: PatchFileInstance | undefined): RomTypeTag | undefined => {
   const romType = (file as (PatchFileInstance & { romType?: unknown }) | undefined)?.romType;
-  return romType && typeof romType === "object" ? cloneRomType(romType as RomTypeTag) : undefined;
+  return getPreparedFileRomType(file, romType && typeof romType === "object" ? (romType as RomTypeTag) : undefined);
 };
 
 const getPatchFilePrecomputedIdentification = (
@@ -255,7 +267,7 @@ const calculateInputChecksumsForFile = async ({
     checksums,
     identification,
     ...(identifyUnavailable && identifyRetry ? { identifyRetry } : {}),
-    romType: romTypeFromEmittedFile({
+    romType: getPreparedFileRomType(file, {
       discFormat: asset?.discFormat,
       platform: asset?.platform,
       recommendedFormat: asset?.recommendedFormat,
