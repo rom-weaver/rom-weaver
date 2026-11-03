@@ -938,6 +938,11 @@ const expectDcpFaultAndBlockedApply = async (message, dcpName = "real.dcp") => {
   expect(dcpRow().classList.contains("bad")).toBe(true);
   expectNoGenericDcpFault();
   const applyButton = document.getElementById("rom-weaver-button-apply");
+  // The blocked reason points at the DCP card, never at an "Apply anyway" override it does not have.
+  await expect
+    .poll(() => document.getElementById("rom-weaver-apply-blocked-reason")?.textContent || "", { timeout: 60000 })
+    .toContain("Dreamcast DCP patch");
+  expect(document.getElementById("rom-weaver-apply-blocked-reason")?.textContent).not.toContain("Apply anyway");
   applyButton?.click();
   await new Promise((resolve) => globalThis.setTimeout(resolve, 2000));
   expect(applyButton?.textContent || "").not.toContain("Download");

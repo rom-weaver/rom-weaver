@@ -1156,6 +1156,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message:
       "Warning: applying anyway uses the damaged patch as is and may produce a wrong or corrupt result. The ROM is not verified.",
   }),
+  "ui.output.applyBlockedDcpPatch": msg({
+    id: "ui.output.applyBlockedDcpPatch",
+    message: "Apply is blocked by the Dreamcast DCP patch. Follow the message on its card.",
+  }),
   "ui.output.applyBlockedDamagedPatch": msg({
     id: "ui.output.applyBlockedDamagedPatch",
     message:
