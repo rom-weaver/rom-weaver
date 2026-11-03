@@ -36,6 +36,7 @@ const DEFAULT_PREVIEW_PORT = 4173;
 const E2E_CORPUS_PREFIX = "/__rom_weaver_corpus__/";
 // Mirrors the GET Functions under `functions/.well-known` and `functions/mcp`.
 const PREVIEW_DISCOVERY_ROUTES = new Map([
+  ["/.well-known/ard.json", "catalog"],
   ["/.well-known/ai-catalog.json", "catalog"],
   ["/.well-known/mcp/server-card.json", "legacy"],
   ["/mcp/server-card", "card"],
