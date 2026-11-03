@@ -6,6 +6,62 @@ pub(super) fn split_checksum_thread_budget(operation_threads: usize, output_coun
     (operation_threads / output_count.max(1)).max(1)
 }
 
+/// Most threads a shared-pool disc extract uses for decode plus checksum workers. The browser
+/// WASI pool is capped at 20 workers (`MAX_BROWSER_THREAD_POOL_SIZE`); 16 leaves slots for the
+/// coordinating thread and parked workers, and is the budget the browser GD-ROM repro passes at.
+pub(super) const SHARED_POOL_DISC_THREAD_LIMIT: usize = 16;
+
+/// How a multi-output disc extract spends its thread budget on the decode wave and the
+/// per-output checksum workers that run beside it.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct DiscThreadSplit {
+    /// Threads for the CHD decode wave.
+    pub(super) decode_threads: usize,
+    /// Worker threads for each output's checksum; `None` keeps the caller's own per-output
+    /// default (an unbounded host has no pool to overflow).
+    pub(super) checksum_threads: Option<usize>,
+}
+
+/// Fit the decode wave and the per-output checksum workers into one operation budget.
+///
+/// A `shared_worker_pool` host (browser WASI threads) serves every spawn from one bounded
+/// pool that cannot grow, and the checksum workers stay alive for the whole extract while the
+/// decode wave runs, so together they MUST NOT exceed `operation_threads`. Checksum workers
+/// get at most half the budget, divided across outputs; a one-thread share hashes inline and
+/// takes no pool slot. The decode wave gets what the checksum workers leave.
+///
+/// The browser pool holds at most 20 workers however many threads are requested (an "auto"
+/// budget follows the reported core count), so a shared-pool budget is capped at
+/// [`SHARED_POOL_DISC_THREAD_LIMIT`] first.
+pub(super) fn split_disc_threads(
+    operation_threads: usize,
+    output_count: usize,
+    algorithm_count: usize,
+    shared_worker_pool: bool,
+) -> DiscThreadSplit {
+    let operation_threads = operation_threads.max(1);
+    if !shared_worker_pool {
+        return DiscThreadSplit {
+            decode_threads: operation_threads,
+            checksum_threads: None,
+        };
+    }
+    let operation_threads = operation_threads.min(SHARED_POOL_DISC_THREAD_LIMIT);
+    let output_count = output_count.max(1);
+    let per_output = (operation_threads / 2 / output_count)
+        .min(algorithm_count)
+        .max(1);
+    let checksum_workers = if per_output > 1 {
+        per_output * output_count
+    } else {
+        0
+    };
+    DiscThreadSplit {
+        decode_threads: operation_threads.saturating_sub(checksum_workers).max(1),
+        checksum_threads: Some(per_output),
+    }
+}
+
 /// Cook a CD/GD data-frame payload for extraction: audio sectors are byte-swapped (CHD stores
 /// audio big-endian); data sectors pass through untouched.
 fn cook_disc_frame_payload<'d>(track: &DiscTrack, data: &'d [u8]) -> Cow<'d, [u8]> {
@@ -1614,14 +1670,15 @@ impl ChdContainerHandler {
             self.write_split_track_cue(writer, layout, split_track_names, write_split_tracks)?;
         }
 
+        let selected_outputs = write_split_tracks
+            .iter()
+            .filter(|selected| **selected)
+            .count();
+        let split = self.disc_thread_split(inputs, selected_outputs)?;
         let checksum_threads = if allow_parallel_checksums {
-            split_checksum_thread_budget(
-                execution.effective_threads,
-                write_split_tracks
-                    .iter()
-                    .filter(|selected| **selected)
-                    .count(),
-            )
+            split.checksum_threads.unwrap_or_else(|| {
+                split_checksum_thread_budget(execution.effective_threads, selected_outputs)
+            })
         } else {
             1
         };
@@ -1638,7 +1695,14 @@ impl ChdContainerHandler {
                 )
             },
         )?;
-        outputs.stream(self, inputs, write_split_tracks, sink.omitted_subcode, "cd")?;
+        outputs.stream(
+            self,
+            inputs,
+            split.decode_threads,
+            write_split_tracks,
+            sink.omitted_subcode,
+            "cd",
+        )?;
         outputs.finish(
             request,
             split_track_names,
@@ -1813,6 +1877,37 @@ impl ChdContainerHandler {
         })
     }
 
+    /// Split the operation budget between the decode wave and the per-output checksum
+    /// workers of a multi-output disc extract (see [`split_disc_threads`]).
+    fn disc_thread_split(
+        &self,
+        inputs: &CdExtractInputs<'_>,
+        output_count: usize,
+    ) -> Result<DiscThreadSplit> {
+        let algorithm_count = if inputs.allow_parallel_checksums {
+            StreamingChecksum::requested_algorithm_count(
+                inputs.context.extract_checksum_algorithms(),
+            )?
+        } else {
+            1
+        };
+        let split = split_disc_threads(
+            inputs.execution.effective_threads,
+            output_count,
+            algorithm_count,
+            cfg!(target_family = "wasm"),
+        );
+        debug!(
+            operation_threads = inputs.execution.effective_threads,
+            output_count,
+            algorithm_count,
+            decode_threads = split.decode_threads,
+            checksum_threads = ?split.checksum_threads,
+            "chd disc extract thread split"
+        );
+        Ok(split)
+    }
+
     /// Write the planned GD-ROM outputs: every selected track bin, then the
     /// `.gdi`. Returns `(omitted_subcode, produced_outputs, output_checksums)`.
     fn write_gd_outputs(
@@ -1834,15 +1929,33 @@ impl ChdContainerHandler {
         let mut output_checksums = Vec::new();
         let gdi_lines = gdi_track_lines(layout, &plan.track_names, &plan.write_tracks)?;
 
+        let selected_outputs = plan
+            .write_tracks
+            .iter()
+            .filter(|selected| **selected)
+            .count();
+        let split = self.disc_thread_split(inputs, selected_outputs)?;
         let mut outputs = PerTrackOutputs::open(
             request,
             &plan.track_names,
             &plan.write_tracks,
             cleanup,
             &mut produced_outputs,
-            || create_extract_checksum(context, allow_parallel_checksums),
+            || match split.checksum_threads {
+                Some(threads) if allow_parallel_checksums => {
+                    StreamingChecksum::new_parallel(context.extract_checksum_algorithms(), threads)
+                }
+                _ => create_extract_checksum(context, allow_parallel_checksums),
+            },
         )?;
-        outputs.stream(self, inputs, &plan.write_tracks, &mut omitted_subcode, "gd")?;
+        outputs.stream(
+            self,
+            inputs,
+            split.decode_threads,
+            &plan.write_tracks,
+            &mut omitted_subcode,
+            "gd",
+        )?;
         outputs.finish(
             request,
             &plan.track_names,
@@ -1950,6 +2063,7 @@ impl PerTrackOutputs {
         &mut self,
         handler: &ChdContainerHandler,
         inputs: &CdExtractInputs<'_>,
+        decode_threads: usize,
         write_tracks: &[bool],
         omitted_subcode: &mut bool,
         media_label: &str,
@@ -1959,7 +2073,7 @@ impl PerTrackOutputs {
         let mut router = DiscFrameRouter::new(&layout.tracks);
         handler.stream_chd_frames_with_progress(
             inputs.chd,
-            inputs.execution.effective_threads,
+            decode_threads,
             Some(inputs.extract_progress),
             inputs.context.cancel(),
             |frame| {

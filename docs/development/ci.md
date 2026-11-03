@@ -238,7 +238,11 @@ security ── advisories (warn only, always green)
   - `webapp-browser` starts the browser suite directly, using Chrome from the Ubuntu runner image.
   - `webapp-wasm-browser` is the direct WASM/browser contract, selected only for conservative runtime inputs.
   - `webapp-e2e` runs the accessibility/docs audit, the raw and archive journeys, the Chromium stress smoke, and the channel-icon check.
-  - `webapp-webkit-e2e` stays one macOS job rather than using the Chromium journey shards: the stress smoke is Chromium-only and the WebKit journeys finish in seconds. Its hydration and accessibility passes run concurrently in separate persistent contexts, while the stateful accessibility page remains whole. It runs the supported Safari-family implementation on macOS and must stay on `macos-15` or newer: Playwright freezes WebKit at revision 2251 on `mac14`/`mac14-arm64` via `revisionOverrides`, so that build no longer gains the protocol settings newer clients send and every launch fails on an unknown setting.
+  - `webapp-webkit-e2e` runs on macOS, without Chromium’s journey shards or stress smoke. Hydration and accessibility run concurrently in separate persistent contexts and production preview origins.
+
+    Playwright’s macOS profiles share OPFS storage but have separate Web Locks. Separate origins keep one audit’s boot cleanup from deleting another audit’s weave inputs. The stateful accessibility page stays whole.
+
+    The job requires `macos-15` or newer. Playwright’s `revisionOverrides` freezes `mac14`/`mac14-arm64` at WebKit revision `2251`. That build rejects protocol settings sent by newer clients.
 
   **Prebuilt bundle.** Both E2E jobs download `webapp-dist` and use `ROM_WEAVER_E2E_USE_PREBUILT_DIST=1` with `ROM_WEAVER_CHANNEL=prod`; they do not rebuild it, which removes two builds. Hydration, accessibility, and Apply journeys use the same production files as Lighthouse and Docker. Local E2E runs still build by default, and the Chromium archive stress page stays on the dev server because it is a test-only entry point.
 
@@ -282,6 +286,8 @@ Lighthouse always audits the local build through `scripts/dev-server.mjs preview
 The server speaks HTTP/2, serves the q11 sidecars, applies the built `dist/_headers`, and holds each asset in memory after the first read, which is what makes it a fair stand-in for the edge. Measured against the hosted Cloudflare bundle it scores slightly *better*, because HTTP/1.1's ~6-connection cap was the only thing that had made a local audit look slow. Auditing the deployed preview instead would gate a required check on `deploy-preview-fast`, which is `continue-on-error: true` precisely so a Cloudflare outage cannot redden a build, and which is not ordered ahead of this job anyway.
 
 Applying `dist/_headers` gives the preview server the same security, cache, and content-signal behavior as Pages. Builds intentionally disable deploy-sensitive `Link` hints, so the preview server does not emit a `103` whose cached hashed URLs could outlive a deployment. The HTML's own stylesheet, modulepreload, and font links remain the render-critical discovery path that production serves.
+
+The `agentic-browsing` category checks `llms.txt`, the accessibility tree, layout shift, and the AI catalog at `/.well-known/ard.json` (with `/.well-known/ai-catalog.json` kept for older consumers). Production serves the catalog and MCP server cards from Pages Functions, so the preview server answers those paths with the same handler. The category's WebMCP audits are not applicable: Chrome exposes WebMCP only behind a flag or origin trial, and the one scored WebMCP audit checks only tools declared on HTML forms, while the app registers its tools in JavaScript.
 
 `wrangler pages dev` is the closer emulator for everything else - it runs `_routes.json` and the sidecar Function for real - but it cannot serve this gate: Early Hints is a zone-level CDN feature rather than part of the Pages runtime, so wrangler never emits a `103`, and it speaks HTTP/1.1 only, which reintroduces exactly the ~6-connection cap this server exists to avoid. It is the right tool for checking `_headers`/`_routes.json`/Function behaviour by hand, just not for timing.
 

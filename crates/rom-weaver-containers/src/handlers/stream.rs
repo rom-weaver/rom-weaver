@@ -310,6 +310,34 @@ impl ContainerHandlerOperations for StreamContainerHandler {
         Ok(vec![self.output_name(&request.source)])
     }
 
+    /// The single payload's leading bytes, decompressing only that far.
+    fn read_entry_prefixes(
+        &self,
+        request: &ContainerProbeRequest,
+        entries: &[String],
+        max_len: usize,
+        _context: &OperationContext,
+    ) -> Result<BTreeMap<String, Vec<u8>>> {
+        let name = self.output_name(&request.source);
+        if max_len == 0 || !entries.contains(&name) {
+            return Ok(BTreeMap::new());
+        }
+        let prefix = crate::libarchive::with_raw_stream_reader(
+            &request.source,
+            self.descriptor.name,
+            self.libarchive_read_filter(),
+            64 * 1024,
+            |reader| Ok(rom_weaver_core::read_up_to(reader, max_len)?),
+        )?;
+        trace!(
+            format = self.descriptor.name,
+            entry = %name,
+            bytes = prefix.len(),
+            "stream prefix read"
+        );
+        Ok(BTreeMap::from([(name, prefix)]))
+    }
+
     fn extract(
         &self,
         request: &ContainerExtractRequest,

@@ -391,10 +391,11 @@ describe("thread worker pool shell failures", () => {
     const pool = createBrowserWasiThreadWorkerPool({ initialSize: 0 });
     await pool.ready;
     const command = pool.createCommand(commandOptions({ poolSize: 1 }));
+    const rejected = expect(command.ready).rejects.toThrow(/did not become ready within 5000ms/);
 
     await vi.advanceTimersByTimeAsync(60_000);
 
-    await expect(command.ready).rejects.toThrow(/did not become ready within 5000ms/);
+    await rejected;
     expect(trace.some((line) => line.includes("thread pool shell ready timeout index=0"))).toBe(true);
   });
 
@@ -430,10 +431,11 @@ describe("thread worker pool shell failures", () => {
     await pool.ready;
 
     const command = pool.createCommand(commandOptions({ poolSize: 1 }));
+    const rejected = expect(command.ready).rejects.toThrow(/did not become ready/);
     // Every shell times out, so the pool replaces it until the budget is spent.
     await vi.advanceTimersByTimeAsync(60_000);
 
-    await expect(command.ready).rejects.toThrow(/did not become ready/);
+    await rejected;
     expect(trace.some((line) => line.includes("thread pool ensureSize giving up target=1"))).toBe(true);
     expect(trace.some((line) => line.includes("thread pool replacing worker=0"))).toBe(true);
     expect(FakeWorker.instances.length).toBeGreaterThan(1);

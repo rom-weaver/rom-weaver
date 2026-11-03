@@ -204,7 +204,7 @@ Split 7z volume sets (`.7z.001`, `.7z.002`, and later volumes) are unsupported a
 
 Joined archives extract normally, including complete archives with volume-like names. `--no-extract` bypasses automatic extraction and uses the individual volume's raw bytes.
 
-`extract --split-bin` writes a CD-format CHD as a CUE plus one Redump-style `<name> (Track N).bin` per track instead of one merged BIN; it is ignored, with a warning, for non-CHD input. `probe --split-bin` lists the per-track BIN files of a CD-format CHD.
+`extract --split-bin` writes a CD-format CHD as a CUE plus one Redump-style `<name> (Track N).bin` per track instead of one merged BIN; it is ignored, with a warning, for non-CHD input. `probe --split-bin` lists the per-track BIN files of a CD-format CHD. `probe --trim-members` implies `--no-extract` and, for a container input, adds `trim_members` to the JSON details, decided without extracting anything: `extract` is empty when a `trim` of the input would extract nothing, and otherwise names the first member it would extract, where the check stops; `gamecube_wii_discs` counts the GameCube/Wii discs it recognized, which is every disc only when `extract` is empty. It is `null` when the container cannot list its members, and absent for inputs that are not containers.
 
 XISO extraction rejects an output that refers to its source file, including symbolic links and native hard links, even with `--force`.
 

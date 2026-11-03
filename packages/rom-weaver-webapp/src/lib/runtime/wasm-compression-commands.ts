@@ -229,6 +229,7 @@ const runRomWeaverProbeWorker = async (
     sourcePath: string;
     knownInputPaths?: string[];
     splitBin?: boolean;
+    trimMembers?: boolean;
     signal?: AbortSignal;
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
@@ -241,6 +242,7 @@ const runRomWeaverProbeWorker = async (
     no_extract: true,
     input: sourcePath,
     ...(typeof input.splitBin === "boolean" ? { split_bin: input.splitBin } : {}),
+    ...(input.trimMembers ? { trim_members: true } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson probe dispatch", {
     command,
@@ -270,8 +272,10 @@ const runRomWeaverProbeWorker = async (
     container?.recommended_compress_format ?? details?.recommended_compress_format ?? "",
   ).trim();
   const chdCreateMode = typeof details?.chd_create_mode === "string" ? details.chd_create_mode.trim() : "";
+  const trimMembers = getTrimMemberProbeDetails(details?.trim_members);
   return {
     entries: getContainerEntriesFromProbe(result),
+    ...(trimMembers ? { trimMembers } : {}),
     ...(chdCreateMode ? { chdCreateMode } : {}),
     ...(platform ? { platform } : {}),
     ...(discFormat ? { discFormat } : {}),
@@ -279,6 +283,13 @@ const runRomWeaverProbeWorker = async (
     ...(chd ? { chd } : {}),
     ...(pbp ? { pbp } : {}),
   };
+};
+
+const getTrimMemberProbeDetails = (value: unknown): CompressionProbeResult["trimMembers"] | undefined => {
+  const record = asRecord(value);
+  const discs = record?.gamecube_wii_discs;
+  if (!Array.isArray(record?.extract) || typeof discs !== "number") return undefined;
+  return { extract: record.extract.map(String), gamecubeWiiDiscs: discs };
 };
 
 const getPbpProbeDetails = (value: unknown): CompressionProbeResult["pbp"] | undefined => {

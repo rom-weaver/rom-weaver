@@ -1,8 +1,23 @@
 // @vitest-environment happy-dom
+import http from "node:http";
 import { act, fireEvent, render } from "@testing-library/react";
 import { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as weaveApplySession from "../../src/public/react/use-weave-apply-session.ts";
+import { emptyIdentifyDeployment } from "./empty-identify-deployment.ts";
+
+vi.mock("../../src/platform/browser/identify-packs.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/platform/browser/identify-packs.ts")>()),
+  loadIdentifyIndexAndCatalog: vi.fn(async () => emptyIdentifyDeployment),
+}));
+
+beforeEach(() => {
+  vi.spyOn(http, "request");
+});
+afterEach(() => {
+  expect(http.request).not.toHaveBeenCalled();
+  vi.restoreAllMocks();
+});
 
 /**
  * Container-level contract for `ApplyPatchForm`: the piece above

@@ -141,11 +141,20 @@ const readWorkflowLastmod = (route, root, repo) => {
 };
 
 // Notices is generated and untracked, so git cannot date it; readNoticesLastmod finds the release
-// that last changed its text.
+// that last changed its text. The sitemap and each page's structured data MUST share these dates.
+export const readDocLastmods = (repo = repoRoot, generatedLastmod = readNoticesLastmod(repo)) =>
+  new Map(
+    DOC_SOURCES.map((source) => [
+      source.slug,
+      source.file.startsWith("wasm/") ? generatedLastmod : readDocLastmod(docSourcePath(source), repo),
+    ]),
+  );
+
 export const createSitemapSource = ({
   root = rootDir,
   repo = repoRoot,
-  generatedLastmod = readNoticesLastmod(repo),
+  generatedLastmod,
+  docLastmods = readDocLastmods(repo, generatedLastmod),
 } = {}) => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${[...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]
@@ -155,7 +164,7 @@ ${[...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES
   })
   .join("\n")}
 ${DOC_SOURCES.map((source) => {
-  const lastmod = source.file.startsWith("wasm/") ? generatedLastmod : readDocLastmod(docSourcePath(source), repo);
+  const lastmod = docLastmods.get(source.slug);
   return `  <url><loc>https://rom-weaver.com/${source.slug}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ""}</url>`;
 }).join("\n")}
 </urlset>

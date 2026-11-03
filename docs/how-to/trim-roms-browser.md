@@ -30,7 +30,7 @@ Once the ROM is staged, the output step states what the run will do for that fil
 
 The format starts from the **Download format** setting in [Settings](browser-settings.md): ZIP for Nintendo DS and Game Boy Advance ROMs and Z3DS for Nintendo 3DS ROMs by default, `.7z` or the plain file if you chose those there. Change it in the output step for one run.
 
-GameCube and Wii discs cannot be trimmed: Trim flags them when staged and keeps the button disabled. Convert them to RVZ with [Compress](convert-to-rvz-browser.md) instead.
+GameCube and Wii discs cannot be trimmed: Trim flags them when staged and keeps the button disabled. An archive that holds only discs is flagged from its file list and the discs' first bytes, without extracting them. Convert them to RVZ with [Compress](convert-to-rvz-browser.md) instead.
 
 The format list offers the ROM's own extension, ZIP, and 7z. Z3DS appears only for a 3DS ROM, and CHD is never offered for an Xbox XISO, which cannot be stored as CHD. A 3DS ROM is trimmed from inside a `.z3ds`, `.zcci`, `.zcxi`, ZIP, or 7z file; a `.z3ds` or `.zcci` input keeps its own extension.
 

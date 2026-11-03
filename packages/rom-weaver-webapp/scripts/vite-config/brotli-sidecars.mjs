@@ -116,6 +116,7 @@ export const writeBrotliSidecars = () => {
         "/mcp/*",
         "/.well-known/mcp/server-card.json",
         "/.well-known/ai-catalog.json",
+        "/.well-known/ard.json",
       ].sort();
       const exclude = ["/docs/*.md"];
       if (include.length + exclude.length > PAGES_ROUTES_MAX_INCLUDES) {

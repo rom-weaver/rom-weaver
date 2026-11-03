@@ -219,6 +219,63 @@ describe("TrimWorkflowController.setInput recovery", () => {
     expect(controller.outputName).toContain("game (trimmed).zip");
   });
 
+  describe("container pre-check", () => {
+    type ProbeResult = { entries: unknown[]; trimMembers?: { extract: string[]; gamecubeWiiDiscs: number } };
+    const stageWith = async (fileName: string, probe: () => Promise<ProbeResult>) => {
+      const controller = makeController();
+      const runtime = {
+        compression: { probe: vi.fn(probe) },
+        trim: { plan: vi.fn(async () => ({ trim: { wouldChange: false } })) },
+      };
+      (controller as unknown as { runtime: unknown }).runtime = runtime;
+      const stages = controller.inputStages;
+      let stagingInput: Record<string, unknown> | undefined;
+      stages.createInitialSource = vi.fn(() => stage());
+      stages.stageSource = vi.fn(async (initial: unknown) => {
+        stagingInput = (
+          controller as unknown as { createExecutionOptions: () => { input: Record<string, unknown> } }
+        ).createExecutionOptions().input;
+        return initial;
+      });
+      stages.maybeResolveBlockingStageSelection = vi.fn(async () => false);
+      controller.finalizeInputStableState = vi.fn(async () => undefined);
+      await controller.setInput({ name: fileName });
+      return { runtime, stagingInput };
+    };
+
+    it("stages a container whole when trim would extract none of its members", async () => {
+      const { runtime, stagingInput } = await stageWith("Kururin.7z", async () => ({
+        entries: [{ filename: "Kururin.iso" }],
+        trimMembers: { extract: [], gamecubeWiiDiscs: 1 },
+      }));
+      expect(runtime.compression.probe).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({ trimMembers: true }),
+          source: { name: "Kururin.7z" },
+        }),
+      );
+      expect(stagingInput?.containerInputsEnabled).toBe(false);
+      // Only the support probe after staging runs the engine trim.
+      expect(runtime.trim.plan).toHaveBeenCalledTimes(1);
+    });
+
+    it("extracts a container trim would use, could not judge, or failed to list", async () => {
+      for (const probe of [
+        async () => ({ entries: [], trimMembers: { extract: ["game.nds"], gamecubeWiiDiscs: 1 } }),
+        async () => ({ entries: [] }),
+        async () => Promise.reject(new Error("io")),
+      ]) {
+        const { stagingInput } = await stageWith("Games.7z", probe);
+        expect(stagingInput?.containerInputsEnabled).toBeUndefined();
+      }
+    });
+
+    it("never lists a source that is not a container", async () => {
+      const { runtime } = await stageWith("game.nds", async () => ({ entries: [] }));
+      expect(runtime.compression.probe).not.toHaveBeenCalled();
+    });
+  });
+
   it("releases runtime sources when staging fails", async () => {
     const controller = makeController();
     const inputStage = stage();

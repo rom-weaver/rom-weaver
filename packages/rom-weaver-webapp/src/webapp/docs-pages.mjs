@@ -48,13 +48,15 @@ const replaceMetaContent = (html, attribute, name, content) =>
  * @param {(typeof DOC_ROUTES)[number]} route
  * @param {string} channel
  * @param {string} channelLabel
+ * @param {string | null} [dateModified] the page's sitemap `<lastmod>`; omitted when unknown
  */
-const createDocsRouteHtml = (html, route, channel, channelLabel) => {
+const createDocsRouteHtml = (html, route, channel, channelLabel, dateModified) => {
   const { canonicalUrl, metadata, title } = createDocsSeoMetadata(route, channel === "prod" ? "" : channelLabel);
   const legalPage = isLegalDocRoute(route.slug);
   const structuredData = {
     "@context": "https://schema.org",
     "@type": legalPage ? "WebPage" : "TechArticle",
+    ...(dateModified ? { dateModified } : {}),
     description: route.description,
     headline: route.title,
     publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_ORIGIN },
