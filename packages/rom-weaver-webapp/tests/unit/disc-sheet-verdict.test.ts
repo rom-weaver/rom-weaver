@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { prepareInputAssets, prepareMultipleDirectInputAssets } from "../../src/lib/input/input-preparation-service.ts";
+import { parseCueFileReferences, parseGdiFileReferences } from "../../src/lib/input/archive.ts";
+import { ApplyWorkflowController } from "../../src/lib/workflow/apply-workflow-controller.ts";
+import { stageArchiveInputs } from "../../src/platform/browser/workflow-runtime-archive.ts";
+import type { RuntimeWorkerIo } from "../../src/types/workflow-runtime-adapter.ts";
 import { buildSessionOutputFiles } from "../../src/lib/output/output-build-service.ts";
 import { findDcpDiscSheet } from "../../src/lib/workflow/apply-dcp-patch.ts";
 import { configureBrowserSourcePrimitives } from "../../src/storage/browser/browser-source-primitives.ts";
@@ -175,4 +179,103 @@ describe("independent loose disc groups", () => {
     }
     for (const read of reads) expect(read).not.toHaveBeenCalled();
   });
+});
+
+describe("repeated physical disc sources", () => {
+  it.each([
+    {
+      extension: "cue",
+      text: 'FILE "shared.bin" BINARY\n TRACK 01 MODE1/2352\n INDEX 01 00:00:00\nFILE "shared.bin" BINARY\n TRACK 02 MODE1/2352\n INDEX 01 00:00:01\n',
+    },
+    { extension: "gdi", text: '2\n1 0 4 2352 "shared.bin" 0\n2 45000 4 2352 "shared.bin" 2352\n' },
+  ])(
+    "stages a shared $extension track once while retaining every reference and its cache",
+    async ({ extension, text }) => {
+      const references =
+        extension === "cue"
+          ? parseCueFileReferences(text).map((reference) => reference.fileName)
+          : parseGdiFileReferences(text);
+      expect(references).toEqual(["shared.bin", "shared.bin"]);
+      const sheet = new File([text], `disc.${extension}`);
+      const track = new File([new Uint8Array(4704)], "shared.bin");
+      const checksums = { crc32: "12345678", md5: "ab".repeat(16), sha1: "cd".repeat(20) };
+      const checksumVariants = [{ id: "raw", label: "Raw", checksums }];
+      const identification = { status: "unknown", matches: [] };
+      const stageSources = vi.fn<RuntimeWorkerIo["stageSources"]>(async (requests) =>
+        requests.map((request) => ({
+          fileName: request.fallbackFileName,
+          filePath: `/work/${request.fallbackFileName}`,
+          cleanup: async () => undefined,
+        })),
+      );
+      const workerIo = { stageSources } as unknown as RuntimeWorkerIo;
+      const run = vi.fn(async ({ source, companionFiles }: { source: File; companionFiles: File[] }) => {
+        await stageArchiveInputs(workerIo, { source, companionFiles });
+        return {
+          result: {
+            isRom: true,
+            assets: [
+              { fileName: sheet.name, kind: extension, discFormat: "GD-ROM", chdCreateMode: "gd", copiedInPlace: true },
+              {
+                fileName: track.name,
+                kind: "bin",
+                discFormat: "GD-ROM",
+                chdCreateMode: "gd",
+                platform: "Sega Dreamcast",
+                checksums,
+                checksumVariants,
+                checksumMs: 7,
+                identification,
+                copiedInPlace: true,
+              },
+            ],
+            patches: [],
+          },
+          outputs: [],
+          patchOutputs: [],
+        };
+      });
+      const runtime = { name: "browser", sidecars: {}, workerIo, ingest: { run } } as unknown as WorkflowRuntime;
+      const sources = [track, sheet];
+      const assets = await prepareMultipleDirectInputAssets(sources, undefined, runtime);
+      expect(assets?.map((asset) => asset.kind)).toEqual([extension, "track", "track"]);
+      expect(assets?.[1]?.file).toBe(assets?.[2]?.file);
+      expect(
+        assets?.every(
+          (asset) => asset.file.metadata?.format === "GD-ROM" && asset.file.metadata.chdCreateMode === "gd",
+        ),
+      ).toBe(true);
+      for (const asset of assets?.filter((asset) => asset.kind === "track") || []) {
+        expect(asset.file).toMatchObject({ checksums, checksumVariants, identification, _precomputedChecksumMs: 7 });
+      }
+      expect(run).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ source: sheet, companionFiles: [track] }));
+      expect(stageSources).toHaveBeenCalledExactlyOnceWith([
+        expect.objectContaining({ source: expect.any(File), fallbackFileName: sheet.name }),
+        expect.objectContaining({ source: expect.any(File), fallbackFileName: track.name }),
+      ]);
+      run.mockClear();
+      stageSources.mockClear();
+      const controller = new ApplyWorkflowController<File, unknown>(runtime);
+      try {
+        await controller.setInput(sources);
+        const state = controller.getInput();
+        expect(state?.status).toBe("ready");
+        const tracks = state?.resolvedInputs?.filter((input) => input.kind === "track");
+        expect(tracks).toHaveLength(2);
+        for (const resolved of tracks || [])
+          expect(resolved).toMatchObject({
+            checksums,
+            checksumVariants,
+            identification,
+            checksumTimeMs: 7,
+            romType: { discFormat: "GD-ROM", chdCreateMode: "gd" },
+          });
+        expect(run).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({ source: sheet, companionFiles: [track] }),
+        );
+      } finally {
+        await controller.dispose();
+      }
+    },
+  );
 });

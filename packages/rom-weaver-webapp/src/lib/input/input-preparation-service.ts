@@ -693,14 +693,15 @@ const prepareMultipleDirectInputAssets = async (
       assets.push(...groupAssets);
       continue;
     }
+    const groupFiles = [...new Set(groupAssets.map((asset) => asset.file))];
     const ingestFiles = await Promise.all(
-      groupAssets.map(async (asset) => {
-        const source = sourceByFile.get(asset.file)?.source;
+      groupFiles.map(async (file) => {
+        const source = sourceByFile.get(file)?.source;
         if (!source) throw new Error("Disc source is unavailable");
         if (source instanceof File) return source;
-        const access = createSourceAccessFromSource(source, asset.fileName);
+        const access = createSourceAccessFromSource(source, file.fileName);
         const blob = access.getBlob() || (await access.getFileHandle()?.getFile());
-        return blob ? new File([blob], asset.fileName) : undefined;
+        return blob ? new File([blob], file.fileName) : undefined;
       }),
     );
     const [sheetSource, ...trackSources] = ingestFiles;
