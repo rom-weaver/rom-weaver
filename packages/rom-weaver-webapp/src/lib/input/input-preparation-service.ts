@@ -406,7 +406,7 @@ const ingestDiscInputAssets = async (
   runtime: InputPreparationRuntime,
 ): Promise<InputAsset[]> => {
   if (!runtime.ingest?.run) return assets;
-  const sheet = assets.find((asset) => asset.kind === "cue" || asset.kind === "gdi");
+  const sheet = assets.find((asset) => asset.kind === "gdi") ?? assets.find((asset) => asset.kind === "cue");
   if (!sheet) return assets;
   const identify = assets.every((asset) => shouldIdentifySource(asset.file));
   let firstProgressAt = 0;
@@ -693,7 +693,7 @@ const prepareMultipleDirectInputAssets = async (
       assets.push(...groupAssets);
       continue;
     }
-    const groupFiles = [...new Set(groupAssets.map((asset) => asset.file))];
+    const groupFiles = [...new Set([gdiFile || sheetFile, ...groupAssets.map((asset) => asset.file)])];
     const ingestFiles = await Promise.all(
       groupFiles.map(async (file) => {
         const source = sourceByFile.get(file)?.source;

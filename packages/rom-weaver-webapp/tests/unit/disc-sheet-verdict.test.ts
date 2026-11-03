@@ -279,3 +279,148 @@ describe("repeated physical disc sources", () => {
     },
   );
 });
+
+describe("paired disc sheet authority", () => {
+  it.each([
+    { name: "same-stem lowercase GDI", gdiName: "disc.gdi", wrapped: false, plainFormat: "CD" },
+    { name: "uppercase GDI extension", gdiName: "disc.GDI", wrapped: false, plainFormat: "CD" },
+    { name: "different-stem GDI", gdiName: "geometry.gdi", wrapped: false, plainFormat: "CD" },
+    { name: "wrapped GDI handle", gdiName: "geometry.GDI", wrapped: true, plainFormat: "CD" },
+    { name: "plain CD CUE", gdiName: undefined, wrapped: false, plainFormat: "CD" },
+    { name: "plain GD CUE", gdiName: undefined, wrapped: false, plainFormat: "GD-ROM" },
+  ])(
+    "uses the authoritative source, verdict and cached hashes for $name",
+    async ({ gdiName, wrapped, plainFormat }) => {
+      const cue = new File([cueText], "disc.cue");
+      const gdi = gdiName ? new File(['1\n1 45000 4 2352 "track.bin" 0\n'], gdiName) : undefined;
+      const track = new File([new Uint8Array(2352)], "track.bin");
+      const trackRead = vi.spyOn(track, "arrayBuffer");
+      const expectedSheet = gdi || cue;
+      const expectedFormat = gdi ? "GD-ROM" : plainFormat;
+      const expectedMode = expectedFormat === "GD-ROM" ? "gd" : "cd";
+      const checksums = { crc32: "12345678", md5: "ab".repeat(16), sha1: "cd".repeat(20) };
+      const checksumVariants = [{ id: "raw", label: "Raw", checksums }];
+      const identification = { status: "unknown", matches: [] };
+      const stageSources = vi.fn<RuntimeWorkerIo["stageSources"]>(async (requests) =>
+        requests.map((request) => ({
+          fileName: request.fallbackFileName,
+          filePath: `/work/${request.fallbackFileName}`,
+          cleanup: async () => undefined,
+        })),
+      );
+      const workerIo = { stageSources } as unknown as RuntimeWorkerIo;
+      const run = vi.fn(
+        async ({ source, companionFiles }: { source: File; companionFiles: File[]; fileName: string }) => {
+          await stageArchiveInputs(workerIo, { source, companionFiles });
+          const format =
+            /\.gdi$/i.test(source.name) || companionFiles.some((file) => file.name === "disc.gdi")
+              ? "GD-ROM"
+              : plainFormat;
+          const mode = format === "GD-ROM" ? "gd" : "cd";
+          return {
+            result: {
+              isRom: true,
+              assets: [
+                {
+                  fileName: source.name,
+                  kind: /\.gdi$/i.test(source.name) ? "rom" : "cue",
+                  discFormat: format,
+                  chdCreateMode: mode,
+                  copiedInPlace: true,
+                },
+                {
+                  fileName: track.name,
+                  kind: "bin",
+                  discFormat: format,
+                  chdCreateMode: mode,
+                  checksums,
+                  checksumVariants,
+                  identification,
+                  checksumMs: 7,
+                  platform: "Sega Dreamcast",
+                  copiedInPlace: true,
+                },
+              ],
+              patches: [],
+            },
+            outputs: [],
+            patchOutputs: [],
+          };
+        },
+      );
+      const create = vi.fn(async () => ({ fileName: "disc.chd", size: 1, bytes: new Uint8Array([1]) }));
+      const runtime = {
+        name: "browser",
+        sidecars: {},
+        workerIo,
+        ingest: { run },
+        compression: { create },
+      } as unknown as WorkflowRuntime;
+      const sources = [
+        cue,
+        track,
+        ...(gdi
+          ? [
+              wrapped
+                ? {
+                    fileName: gdi.name,
+                    source: { kind: "file", name: gdi.name, getFile: async () => gdi } as FileSystemFileHandle,
+                  }
+                : gdi,
+            ]
+          : []),
+      ];
+      const assets = await prepareMultipleDirectInputAssets(sources, undefined, runtime);
+      expect(run).toHaveBeenCalledOnce();
+      expect(run.mock.calls[0]?.[0].source.name).toBe(expectedSheet.name);
+      expect(run.mock.calls[0]?.[0].fileName).toBe(expectedSheet.name);
+      expect(await run.mock.calls[0]?.[0].source.text()).toBe(await expectedSheet.text());
+      const expectedCompanions = gdi ? [cue.name, track.name] : [track.name];
+      expect(run.mock.calls[0]?.[0].companionFiles.map((file) => file.name)).toEqual(expectedCompanions);
+      expect(stageSources).toHaveBeenCalledOnce();
+      expect(stageSources.mock.calls[0]?.[0].map((request) => request.fallbackFileName)).toEqual([
+        expectedSheet.name,
+        ...expectedCompanions,
+      ]);
+      expect(assets?.map((asset) => asset.kind)).toEqual(gdi ? ["cue", "track", "gdi"] : ["cue", "track"]);
+      expect(
+        assets?.every(
+          (asset) =>
+            asset.file.metadata?.format === expectedFormat && asset.file.metadata.chdCreateMode === expectedMode,
+        ),
+      ).toBe(true);
+      expect(assets?.find((asset) => asset.kind === "track")?.file).toMatchObject({
+        checksums,
+        checksumVariants,
+        identification,
+        _precomputedChecksumMs: 7,
+      });
+      expect(findDcpDiscSheet(assets || [])?.fileName).toBe(expectedMode === "gd" ? expectedSheet.name : undefined);
+      await buildSessionOutputFiles(assets || [], new Map(), { output: { compression: "chd" } }, runtime);
+      expect(create).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ romSpecific: { chd: expect.objectContaining({ mode: expectedMode }) } }),
+      );
+      run.mockClear();
+      stageSources.mockClear();
+      const controller = new ApplyWorkflowController<(typeof sources)[number], unknown>(runtime);
+      try {
+        await controller.setInput(sources);
+        expect(controller.getInput()?.status).toBe("ready");
+        expect(controller.getInput()?.resolvedInputs?.find((input) => input.kind === "track")).toMatchObject({
+          checksums,
+          checksumVariants,
+          identification,
+          checksumTimeMs: 7,
+          romType: { discFormat: expectedFormat, chdCreateMode: expectedMode },
+        });
+        expect(run).toHaveBeenCalledOnce();
+        expect(run.mock.calls[0]?.[0].source.name).toBe(expectedSheet.name);
+        expect(run.mock.calls[0]?.[0].fileName).toBe(expectedSheet.name);
+        expect(stageSources).toHaveBeenCalledOnce();
+      } finally {
+        await controller.dispose();
+      }
+      expect(trackRead).not.toHaveBeenCalled();
+    },
+  );
+});
