@@ -86,6 +86,16 @@ const createEmulatorGameIdentity = ({ checksum, core, fileName }: EmulatorGameId
 const SINGLE_THREADED_CORES: ReadonlySet<string> = new Set(["segaSaturn"]);
 
 /**
+ * Core options applied by default for one core only. The yabause core emulates
+ * a RAM expansion cartridge that some Saturn games need to boot and that a few
+ * others run faster with, and it ships with none. A value the user saved in
+ * the EmulatorJS settings menu still wins over these defaults.
+ */
+const CORE_DEFAULT_OPTIONS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  segaSaturn: { yabause_addon_cartridge: "4M_ram" },
+};
+
+/**
  * Drop a previously saved "Disabled" choice for either hidden setting.
  * EmulatorJS stores per game settings under `ejs-<id>-settings` and a stored
  * value beats `EJS_defaultOptions`, so hiding a row does not undo a choice
@@ -363,6 +373,9 @@ const createEmulatorDocument = (
   options: EmulatorDocumentOptions = {},
 ) => {
   const threads = !SINGLE_THREADED_CORES.has(core);
+  const coreDefaults = Object.entries(CORE_DEFAULT_OPTIONS[core] ?? {})
+    .map(([key, value]) => `, ${key}: ${toScriptString(value)}`)
+    .join("");
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -379,7 +392,7 @@ const createEmulatorDocument = (
       }
       EJS_DEBUG_XX = false;
       EJS_threads = ${threads};
-      EJS_defaultOptions = { webgl2Enabled: 'enabled', ejs_threads: '${threads ? "enabled" : "disabled"}' };
+      EJS_defaultOptions = { webgl2Enabled: 'enabled', ejs_threads: '${threads ? "enabled" : "disabled"}'${coreDefaults} };
       // Only one WebGL 2 build of each core is vendored, so both in-emulator
       // toggles that rename the core have to go: flipping either asks for a
       // <core>-wasm.data, <core>-thread-wasm.data, or <core>-legacy-wasm.data

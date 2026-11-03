@@ -107,6 +107,19 @@ describe("createEmulatorDocument", () => {
     expect(config.EJS_defaultOptions.ejs_threads).toBe("disabled");
   });
 
+  it("defaults Saturn to the 4 MB RAM expansion cartridge", () => {
+    const config = readEmulatorConfig("segaSaturn");
+
+    expect(config.EJS_defaultOptions.yabause_addon_cartridge).toBe("4M_ram");
+  });
+
+  it.each(Object.keys(EMULATORJS_SYSTEM_CORES).filter((system) => system !== "segaSaturn"))(
+    "leaves the Saturn cartridge option unset for %s",
+    (system) => {
+      expect(readEmulatorConfig(system).EJS_defaultOptions).not.toHaveProperty("yabause_addon_cartridge");
+    },
+  );
+
   it.each(Object.entries(EMULATORJS_SYSTEM_CORES))("requests a vendored WebGL 2 build for %s", (system, core) => {
     const config = readEmulatorConfig(system);
     const threads = config.EJS_defaultOptions.ejs_threads === "enabled";

@@ -42,6 +42,8 @@ You can also add a ZIP or 7z archive. rom-weaver shows the extraction progress, 
 
 A CHD that rom-weaver identifies as Sony PlayStation or Sega Mega Drive or Genesis opens without extraction. A CHD identified as Sega CD or Mega-CD has no bundled core and does not play. The emulator core reads the CHD directly, so a multi-track CD plays as one file. Add the `.chd` file itself, not an archive that contains it. A CHD for any other platform, including Saturn, is extracted first.
 
+Saturn games start with the 4 MB RAM expansion cartridge inserted, because some games need it to boot. Change it in the emulator's core options if a game misbehaves with it.
+
 [Browser emulator support](../reference/formats.md#browser-emulator-support) lists the platforms with bundled cores.
 
 <figure class="docs-screenshot">
