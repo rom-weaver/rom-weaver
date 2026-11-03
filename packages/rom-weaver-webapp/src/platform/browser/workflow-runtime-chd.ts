@@ -217,8 +217,14 @@ const createBrowserChdRuntime = (
       }
       // A cue now pointing at its staged tracks by absolute path is compressed from a private directory:
       // GD-ROM layout reads prefer a `.gdi` of the same stem beside the cue, and the shared staging
-      // directory can still hold another disc's retained `disc-2.gdi` whose tracks are gone.
-      if (/\.cue$/i.test(chdInputPath) && !normalizedCueFilePath && stagedImageSources.length > 0) {
+      // directory can still hold another disc's retained `disc-2.gdi` whose tracks are gone. A `cd`
+      // layout never looks for that `.gdi`, so it keeps the staged cue.
+      if (
+        requestedMode !== "cd" &&
+        /\.cue$/i.test(chdInputPath) &&
+        !normalizedCueFilePath &&
+        stagedImageSources.length > 0
+      ) {
         const isolatedCuePath = joinPath(cueScope.rootPath, getPathBaseName(chdInputPath, "disc.cue"));
         await writeTextToBrowserVfs(isolatedCuePath, await readStagedCueText(chdInputPath));
         emitBrowserWorkflowTrace({ logLevel, onLog }, "chd cue isolated from staged siblings", {
