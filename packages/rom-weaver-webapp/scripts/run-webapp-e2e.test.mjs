@@ -102,6 +102,58 @@ describe("resolveE2EShard", () => {
 });
 
 describe("runAuditPhases", () => {
+  const baseUrls = {
+    accessibilityBaseUrl: "https://localhost:42001/",
+    hydrationBaseUrl: "https://localhost:42002/",
+  };
+
+  it("preserves hydration inputs when the other audit boots after extraction", async () => {
+    const sharedOriginStorage = new Map();
+    let extracted;
+    let swept;
+    const extractionReady = new Promise((resolve) => {
+      extracted = resolve;
+    });
+    const sweepFinished = new Promise((resolve) => {
+      swept = resolve;
+    });
+    const fallback = baseUrls.accessibilityBaseUrl;
+    const inputPath = "/work/weave-parse/session/hello-world.nes";
+    const hydrate = async (baseUrl = fallback) => {
+      const origin = new URL(baseUrl).origin;
+      sharedOriginStorage.set(origin, new Set([inputPath]));
+      extracted();
+      await sweepFinished;
+      assert.ok(
+        sharedOriginStorage.get(origin)?.has(inputPath),
+        "hydration weave input must survive the accessibility boot sweep",
+      );
+    };
+    const accessibility = async (baseUrl = fallback) => {
+      await extractionReady;
+      sharedOriginStorage.delete(new URL(baseUrl).origin);
+      swept();
+    };
+
+    await runAuditPhases(hydrate, accessibility, true, baseUrls);
+  });
+
+  it("rejects shared origins before either parallel audit starts", async () => {
+    let started = false;
+    const phase = async () => {
+      started = true;
+    };
+    await assert.rejects(
+      () =>
+        runAuditPhases(phase, phase, true, {
+          accessibilityBaseUrl: baseUrls.hydrationBaseUrl,
+          hydrationBaseUrl: `${baseUrls.hydrationBaseUrl}weave-rom-patches`,
+        }),
+      /Parallel audits require separate origins for OPFS isolation/,
+    );
+    assert.equal(started, false);
+  });
+
   it("runs the independent audit phases concurrently when requested", async () => {
     let active = 0;
     let maximumActive = 0;
@@ -112,7 +164,7 @@ describe("runAuditPhases", () => {
       active -= 1;
     };
 
-    await runAuditPhases(phase, phase, true);
+    await runAuditPhases(phase, phase, true, baseUrls);
 
     assert.equal(maximumActive, 2);
   });
@@ -128,7 +180,7 @@ describe("runAuditPhases", () => {
       events.push("settled");
     };
 
-    await assert.rejects(() => runAuditPhases(failedPhase, slowPhase, true), /audit failed/);
+    await assert.rejects(() => runAuditPhases(failedPhase, slowPhase, true, baseUrls), /audit failed/);
 
     assert.deepEqual(events, ["failed", "settled"]);
   });
@@ -145,6 +197,7 @@ describe("runAuditPhases", () => {
       () => phase("hydration"),
       () => phase("accessibility"),
       false,
+      baseUrls,
     );
 
     assert.deepEqual(events, ["hydration:start", "hydration:end", "accessibility:start", "accessibility:end"]);

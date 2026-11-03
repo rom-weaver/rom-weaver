@@ -1228,19 +1228,27 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   }
 };
 
-// WebKit keeps the hydration and accessibility passes in separate persistent
-// contexts, so they can overlap without sharing the stateful accessibility page.
-// Chromium stays serial: its accessibility pass owns the one global CSS-coverage
-// union, and preserving the phase order keeps that collection easy to reason about.
-export const runAuditPhases = async (runHydration, runAccessibility, parallel) => {
+// Parallel audits MUST use separate origins: Playwright’s macOS profiles share OPFS
+// storage but have independent Web Locks, allowing one profile's boot sweep to
+// delete another's inputs. The embedder omits a general-storage path override:
+// https://github.com/microsoft/playwright/blob/v1.64.1/browser_patches/webkit/embedder/Playwright/mac/AppDelegate.m#L175-L216
+export const runAuditPhases = async (
+  runHydration,
+  runAccessibility,
+  parallel,
+  { hydrationBaseUrl, accessibilityBaseUrl },
+) => {
   if (parallel) {
-    const results = await Promise.allSettled([runHydration(), runAccessibility()]);
+    if (new URL(hydrationBaseUrl).origin === new URL(accessibilityBaseUrl).origin) {
+      throw new Error("Parallel audits require separate origins for OPFS isolation");
+    }
+    const results = await Promise.allSettled([runHydration(hydrationBaseUrl), runAccessibility(accessibilityBaseUrl)]);
     const failure = results.find((result) => result.status === "rejected");
     if (failure) throw failure.reason;
     return;
   }
-  await runHydration();
-  await runAccessibility();
+  await runHydration(hydrationBaseUrl);
+  await runAccessibility(accessibilityBaseUrl);
 };
 
 export const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
@@ -1694,9 +1702,17 @@ const main = async () => {
   const previewPort = await reservePort();
   let devPort = await reservePort();
   while (devPort === previewPort) devPort = await reservePort();
+  const parallelAudits = RUN_AUDITS && browserName === "webkit";
+  let hydrationPort = previewPort;
+  if (parallelAudits) {
+    do {
+      hydrationPort = await reservePort();
+    } while (hydrationPort === previewPort || hydrationPort === devPort);
+  }
   const host = browserName === "webkit" ? "localhost" : "127.0.0.1";
   const previewBaseUrl = `https://${host}:${previewPort}/`;
   const devBaseUrl = `https://${host}:${devPort}/`;
+  const hydrationBaseUrl = `https://${host}:${hydrationPort}/`;
   const temporaryCorpusDir =
     RUN_ARCHIVE_JOURNEY && browserName === "chromium" && !process.env.ROM_WEAVER_E2E_CORPUS_DIR
       ? createWorkerReuseCorpus()
@@ -1704,9 +1720,14 @@ const main = async () => {
   const corpusDir = process.env.ROM_WEAVER_E2E_CORPUS_DIR || temporaryCorpusDir;
   const preview = startServer("preview", previewPort);
   const dev = startServer("dev", devPort, corpusDir);
+  const hydration = parallelAudits ? startServer("preview", hydrationPort) : null;
 
   try {
-    await Promise.all([waitForServer(previewBaseUrl), waitForServer(devBaseUrl)]);
+    await Promise.all([
+      waitForServer(previewBaseUrl),
+      waitForServer(devBaseUrl),
+      ...(hydration ? [waitForServer(hydrationBaseUrl)] : []),
+    ]);
     if (corpusDir) {
       const traversalStatus = await requestStatus(`${devBaseUrl}__rom_weaver_corpus__/files/%2e%2e%2fmanifest.json`);
       if (traversalStatus !== 403) throw new Error(`corpus traversal returned ${traversalStatus}, expected 403`);
@@ -1731,9 +1752,10 @@ const main = async () => {
         runAccessibleNavigationAudit(createContext, previewBaseUrl),
       );
       await runAuditPhases(
-        () => scenario("hydration", (createContext) => runHydrationAudit(createContext, previewBaseUrl)),
-        () => scenario("accessibility", (createContext) => runAccessibilityAudit(createContext, previewBaseUrl)),
-        browserName === "webkit",
+        (baseUrl) => scenario("hydration", (createContext) => runHydrationAudit(createContext, baseUrl)),
+        (baseUrl) => scenario("accessibility", (createContext) => runAccessibilityAudit(createContext, baseUrl)),
+        parallelAudits,
+        { accessibilityBaseUrl: previewBaseUrl, hydrationBaseUrl },
       );
     }
     if (RUN_LINK_AUDIT) await scenario("links", (createContext) => runLinkAudit(createContext, devBaseUrl));
@@ -1774,12 +1796,15 @@ const main = async () => {
       }
     }
   } catch (error) {
-    const serverOutput = [preview.output(), dev.output()].filter((output) => output.trim()).join("\n");
+    const serverOutput = [preview.output(), dev.output(), hydration?.output()]
+      .filter((output) => output?.trim())
+      .join("\n");
     if (serverOutput) process.stderr.write(`${serverOutput.trim()}\n`);
     throw error;
   } finally {
     preview.server.kill("SIGTERM");
     dev.server.kill("SIGTERM");
+    hydration?.server.kill("SIGTERM");
     if (temporaryCorpusDir) fs.rmSync(temporaryCorpusDir, { force: true, recursive: true });
   }
 };
