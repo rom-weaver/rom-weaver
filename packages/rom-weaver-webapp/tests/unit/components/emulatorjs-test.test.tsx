@@ -1090,7 +1090,7 @@ describe("fallback fullscreen game validation", () => {
     expect(await screen.findByText("Cannot play malformed.fds.")).toBeTruthy();
     await waitFor(() => expect(document.querySelector("iframe")).toBeNull());
     expect(document.querySelector("dialog")).toBeNull();
-    expect(document.body.style.overflow).toBe(previousOverflow);
+    await waitFor(() => expect(document.body.style.overflow).toBe(previousOverflow));
     expect(screen.queryByRole("button", { name: "Exit fullscreen" })).toBeNull();
   });
 
