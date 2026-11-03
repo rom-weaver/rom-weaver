@@ -236,6 +236,16 @@ pub enum NestedEntryAction {
     Stop,
 }
 
+/// How a nested read treats each inner entry.
+pub struct NestedEntryVisitor<'a> {
+    /// What to do with an entry, decided from its path.
+    pub action: &'a dyn Fn(&str) -> NestedEntryAction,
+    /// Whether the leading bytes just read for an entry settle the listing, which then stops.
+    pub stop_after_prefix: &'a dyn Fn(&str, &[u8]) -> bool,
+    /// End the whole pass once a listing stops, leaving later members unread.
+    pub end_pass_on_stop: bool,
+}
+
 /// The entries read from one nested archive.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NestedArchiveListing {
@@ -502,7 +512,7 @@ pub trait ContainerHandlerOperations: Send + Sync {
         Ok(BTreeMap::new())
     }
     /// List each archive stored in one of `members` by streaming it front to back, all in one
-    /// pass over this archive and without extracting anything. `visit` decides per inner entry
+    /// pass over this archive and without extracting anything. `visitor` decides per inner entry
     /// whether to read at most `max_len` leading bytes or to stop that listing. A member missing
     /// from the result could not be read that way (an inner format that needs seeking, such as
     /// 7z), so callers MUST then extract it. The default reads nothing.
@@ -511,10 +521,10 @@ pub trait ContainerHandlerOperations: Send + Sync {
         request: &ContainerProbeRequest,
         members: &[String],
         max_len: usize,
-        visit: &dyn Fn(&str) -> NestedEntryAction,
+        visitor: &NestedEntryVisitor<'_>,
         context: &OperationContext,
     ) -> Result<BTreeMap<String, NestedArchiveListing>> {
-        let _ = (request, members, max_len, visit, context);
+        let _ = (request, members, max_len, visitor, context);
         Ok(BTreeMap::new())
     }
     fn extract(
@@ -856,7 +866,7 @@ impl ContainerHandlerOperations for TracingContainerHandler {
         request: &ContainerProbeRequest,
         members: &[String],
         max_len: usize,
-        visit: &dyn Fn(&str) -> NestedEntryAction,
+        visitor: &NestedEntryVisitor<'_>,
         context: &OperationContext,
     ) -> Result<BTreeMap<String, NestedArchiveListing>> {
         let descriptor = self.registration.descriptor;
@@ -870,7 +880,7 @@ impl ContainerHandlerOperations for TracingContainerHandler {
         );
         let result = self
             .inner
-            .read_nested_entry_prefixes(request, members, max_len, visit, context);
+            .read_nested_entry_prefixes(request, members, max_len, visitor, context);
         match &result {
             Ok(listings) => {
                 trace!(

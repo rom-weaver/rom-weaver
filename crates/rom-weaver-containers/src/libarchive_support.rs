@@ -773,7 +773,7 @@ pub(crate) fn read_nested_regular_archive_entry_prefixes_with_libarchive(
     format_name: &str,
     members: &[String],
     max_len: usize,
-    visit: &dyn Fn(&str) -> rom_weaver_core::NestedEntryAction,
+    visitor: &rom_weaver_core::NestedEntryVisitor<'_>,
 ) -> Result<BTreeMap<String, rom_weaver_core::NestedArchiveListing>> {
     let normalize = |path: &str| {
         let name = normalize_archive_name(path);
@@ -793,7 +793,13 @@ pub(crate) fn read_nested_regular_archive_entry_prefixes_with_libarchive(
         },
         wanted.len(),
         max_len,
-        &|path| visit(&normalize(path)),
+        &rom_weaver_core::NestedEntryVisitor {
+            action: &|path| (visitor.action)(&normalize(path)),
+            stop_after_prefix: &|path, prefix| {
+                (visitor.stop_after_prefix)(&normalize(path), prefix)
+            },
+            end_pass_on_stop: visitor.end_pass_on_stop,
+        },
     )?;
     for listing in listings.values_mut() {
         for entry in &mut listing.entries {

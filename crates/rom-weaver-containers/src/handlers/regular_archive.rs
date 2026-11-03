@@ -106,7 +106,7 @@ macro_rules! regular_archive_read_operations {
             request: &ContainerProbeRequest,
             members: &[String],
             max_len: usize,
-            visit: &dyn Fn(&str) -> rom_weaver_core::NestedEntryAction,
+            visitor: &rom_weaver_core::NestedEntryVisitor<'_>,
             _context: &OperationContext,
         ) -> Result<BTreeMap<String, rom_weaver_core::NestedArchiveListing>> {
             read_nested_regular_archive_entry_prefixes_with_libarchive(
@@ -114,7 +114,7 @@ macro_rules! regular_archive_read_operations {
                 self.descriptor.name,
                 members,
                 max_len,
-                visit,
+                visitor,
             )
         }
 

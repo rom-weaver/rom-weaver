@@ -3288,3 +3288,99 @@ fn trim_streams_every_nested_archive_in_one_pass() {
     let terminal = parse_single_json_line(&output.stdout);
     assert_eq!(terminal["details"]["processed"], 1, "{terminal}");
 }
+
+/// The "nested archive prefix read member" trace lines of a `--log-level trace` run.
+fn nested_member_lines(stderr: &[u8]) -> Vec<String> {
+    String::from_utf8_lossy(stderr)
+        .lines()
+        .filter(|line| line.contains("\"nested archive prefix read member\""))
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn trim_stops_a_nested_listing_at_a_header_it_needs() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let plain = staging.child("a-plain.iso");
+    fs::write(plain.path(), vec![0_u8; 0x4000]).expect("plain iso");
+    let disc = write_gamecube_iso(&staging, "z-disc.iso");
+    let inner = staging.child("inner.zip");
+    pack_archive(inner.path(), &[plain.path(), &disc]);
+    let outer = temp.child("outer.zip");
+    pack_archive(outer.path(), &[inner.path()]);
+    let output = command_output_with_env(
+        &[
+            "--log-level",
+            "trace",
+            "trim",
+            "--input",
+            outer.path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        &[],
+        // Trim extracts the inner archive and then rejects its disc.
+        1,
+    );
+    // The `.iso` that is not a GameCube/Wii disc may be an XISO, so the disc after it is unread.
+    let members = nested_member_lines(&output.stderr);
+    assert_eq!(members.len(), 1, "{members:#?}");
+    assert!(members[0].contains("\"stopped\":true"), "{members:#?}");
+    assert!(members[0].contains("\"entries\":1"), "{members:#?}");
+}
+
+#[test]
+fn probe_trim_members_ends_the_nested_pass_at_the_first_needed_archive() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let rom = staging.child("game.nds");
+    fs::write(
+        rom.path(),
+        build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false),
+    )
+    .expect("nds fixture");
+    let iso = write_gamecube_iso(&staging, "disc.iso");
+    let roms = staging.child("a-roms.zip");
+    pack_archive(roms.path(), &[rom.path()]);
+    let discs = staging.child("b-discs.zip");
+    pack_archive(discs.path(), &[&iso]);
+    let outer = temp.child("outer.7z");
+    pack_archive(outer.path(), &[roms.path(), discs.path()]);
+    let outer_path = outer.path().to_str().expect("path");
+    let output = command_output_with_env(
+        &[
+            "--log-level",
+            "trace",
+            "probe",
+            "--input",
+            outer_path,
+            "--trim-members",
+            "--json",
+        ],
+        &[],
+        0,
+    );
+    let members = nested_member_lines(&output.stderr);
+    assert_eq!(members.len(), 1, "{members:#?}");
+    assert!(members[0].contains("a-roms.zip"), "{members:#?}");
+    assert_eq!(
+        parse_single_json_line(&output.stdout)["details"]["trim_members"],
+        serde_json::json!({"extract": ["a-roms.zip"], "gamecube_wii_discs": 0})
+    );
+    // Trim itself still reads both, so it can count the disc archive and skip it.
+    let trim = command_output_with_env(
+        &[
+            "--log-level",
+            "trace",
+            "trim",
+            "--input",
+            outer_path,
+            "--dry-run",
+            "--json",
+        ],
+        &[],
+        0,
+    );
+    assert_eq!(nested_member_lines(&trim.stderr).len(), 2);
+}

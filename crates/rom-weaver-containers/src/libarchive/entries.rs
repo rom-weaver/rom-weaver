@@ -493,8 +493,8 @@ where
 }
 /// List the archives stored in the file entries `member_key` maps to a key, in one forward pass
 /// that stops once `expected` keys are seen: each member's data is streamed into a second reader,
-/// and `visit` decides per inner entry whether to read at most `max_len` leading bytes or to stop
-/// that member's listing. Inner directories end with `/`. Nothing is extracted. A member whose
+/// and `visitor` decides per inner entry whether to read at most `max_len` leading bytes or to
+/// stop that member's listing. Inner directories end with `/`. Nothing is extracted. A member whose
 /// data is not an archive libarchive can read front to back is left out of the result.
 pub fn read_nested_regular_archive_entry_prefixes(
     source: &Path,
@@ -502,7 +502,7 @@ pub fn read_nested_regular_archive_entry_prefixes(
     member_key: &dyn Fn(&str) -> Option<String>,
     expected: usize,
     max_len: usize,
-    visit: &dyn Fn(&str) -> rom_weaver_core::NestedEntryAction,
+    visitor: &rom_weaver_core::NestedEntryVisitor<'_>,
 ) -> Result<BTreeMap<String, rom_weaver_core::NestedArchiveListing>> {
     trace!(
         format = format_name,
@@ -542,7 +542,7 @@ pub fn read_nested_regular_archive_entry_prefixes(
                 &mut member,
                 64 * 1024,
                 &format!("{format_name} nested archive read"),
-                |inner| list_streamed_entries(inner, max_len, visit),
+                |inner| list_streamed_entries(inner, max_len, visitor),
             ) {
                 Ok(listing) => {
                     trace!(
@@ -552,7 +552,11 @@ pub fn read_nested_regular_archive_entry_prefixes(
                         stopped = listing.stopped,
                         "nested archive prefix read member"
                     );
+                    let end_pass = listing.stopped && visitor.end_pass_on_stop;
                     listings.insert(key, listing);
+                    if end_pass {
+                        break;
+                    }
                 }
                 Err(error) => {
                     debug!(
@@ -580,7 +584,7 @@ pub fn read_nested_regular_archive_entry_prefixes(
 fn list_streamed_entries(
     archive: &mut ReadArchive,
     max_len: usize,
-    visit: &dyn Fn(&str) -> rom_weaver_core::NestedEntryAction,
+    visitor: &rom_weaver_core::NestedEntryVisitor<'_>,
 ) -> Result<rom_weaver_core::NestedArchiveListing> {
     use rom_weaver_core::NestedEntryAction;
     let mut listing = rom_weaver_core::NestedArchiveListing::default();
@@ -594,17 +598,20 @@ fn list_streamed_entries(
         if entry.is_dir() {
             path = format!("{}/", path.trim_end_matches('/'));
         }
-        let action = visit(&path);
+        let action = (visitor.action)(&path);
         let prefix = if action == NestedEntryAction::ReadPrefix && entry.is_file() && max_len > 0 {
             Some(rom_weaver_core::read_up_to(entry.into_reader(), max_len)?)
         } else {
             None
         };
         trace!(entry = %path, ?action, prefix = prefix.as_ref().map(Vec::len), "nested archive entry");
+        let settled = prefix
+            .as_deref()
+            .is_some_and(|prefix| (visitor.stop_after_prefix)(&path, prefix));
         listing
             .entries
             .push(rom_weaver_core::NestedArchiveEntry { path, prefix });
-        if action == NestedEntryAction::Stop {
+        if action == NestedEntryAction::Stop || settled {
             listing.stopped = true;
             break;
         }

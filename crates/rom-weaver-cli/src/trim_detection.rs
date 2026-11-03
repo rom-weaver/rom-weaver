@@ -1,7 +1,7 @@
 use super::selection_resolution::SelectionExtract;
 use super::*;
 use crate::path_access::path_basename;
-use rom_weaver_core::{NestedArchiveListing, NestedEntryAction};
+use rom_weaver_core::{NestedArchiveListing, NestedEntryAction, NestedEntryVisitor};
 
 /// The members trim extracts from an archive, chosen from its listing before anything is written.
 struct TrimArchiveMembers {
@@ -255,8 +255,14 @@ impl CliApp {
         if nested_names.is_empty() {
             return;
         }
-        let listings =
-            Self::read_nested_trim_listings(handler, request, &nested_names, scope, context);
+        let listings = Self::read_nested_trim_listings(
+            handler,
+            request,
+            &nested_names,
+            scope,
+            stop_at_first_extract,
+            context,
+        );
         for name in nested_names {
             match listings
                 .get(&name)
@@ -284,6 +290,7 @@ impl CliApp {
         request: &ContainerProbeRequest,
         members: &[String],
         scope: TrimMemberScope,
+        stop_at_first_extract: bool,
         context: &OperationContext,
     ) -> BTreeMap<String, NestedArchiveListing> {
         let visit = |path: &str| {
@@ -303,7 +310,12 @@ impl CliApp {
                 request,
                 members,
                 GAMECUBE_WII_DISC_HEADER_LEN,
-                &visit,
+                &NestedEntryVisitor {
+                    action: &visit,
+                    // A header that is not a GameCube/Wii disc may be an XISO, so trim needs it.
+                    stop_after_prefix: &|_, prefix| !is_gamecube_wii_disc_header(prefix),
+                    end_pass_on_stop: stop_at_first_extract,
+                },
                 context,
             )
             .unwrap_or_else(|error| {
