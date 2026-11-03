@@ -15,6 +15,7 @@ import zlib from "node:zlib";
 import { createServer as createViteServer } from "vite";
 import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
 import { generateIconAssets } from "./generated-icon-assets.mjs";
+import { discoveryResponse } from "../src/webapp/mcp-server.mjs";
 
 // An unset channel builds as production (see resolveAppChannel in
 // scripts/vite-config/channel.mjs), which is right for the release artifacts and for anyone
@@ -33,6 +34,12 @@ const BIND_HOST = "0.0.0.0";
 const DEFAULT_DEV_PORT = 5173;
 const DEFAULT_PREVIEW_PORT = 4173;
 const E2E_CORPUS_PREFIX = "/__rom_weaver_corpus__/";
+// Mirrors the GET Functions under `functions/.well-known` and `functions/mcp`.
+const PREVIEW_DISCOVERY_ROUTES = new Map([
+  ["/.well-known/ai-catalog.json", "catalog"],
+  ["/.well-known/mcp/server-card.json", "legacy"],
+  ["/mcp/server-card", "card"],
+]);
 const CERT_VALID_DAYS = parseInt(process.env.DEV_CERT_DAYS || "30", 10);
 const DYNAMIC_BROTLI_MAX_BYTES = 256 * 1024;
 const DYNAMIC_BROTLI_TYPES = new Set([".css", ".html", ".js", ".json", ".mjs", ".svg"]);
@@ -175,7 +182,7 @@ const send = (res, status, headers, body, securityOptions) => {
   // HTTP/1.0 pair behind would contradict it - `Expires: 0` in particular
   // downgrades the immutable hashed assets the preview server is meant to
   // serve exactly the way production does.
-  if (headers?.["Cache-Control"]) {
+  if (Object.keys(headers || {}).some((name) => name.toLowerCase() === "cache-control")) {
     res.removeHeader("Expires");
     res.removeHeader("Pragma");
   }
@@ -797,15 +804,30 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
     return;
   }
 
+  // Pages matches `_headers` against the requested path, not the file the SPA fallback
+  // resolves to, so `/apply` picks up the `/*` block the same way `/` does.
+  const pathname = new URL(req.url, "https://localhost").pathname;
+  // Pages Functions answer the MCP discovery documents in production, so the preview
+  // calls the same handler; Lighthouse's agent-discovery audit reads the catalog.
+  const discoveryKind = PREVIEW_DISCOVERY_ROUTES.get(pathname);
+  if (discoveryKind) {
+    const response = discoveryResponse(
+      new Request(`https://localhost:${req.socket.localPort}${pathname}`),
+      discoveryKind,
+    );
+    void response.text().then((body) => {
+      const headers = Object.fromEntries(response.headers);
+      send(res, response.status, headers, req.method === "HEAD" ? null : body, securityOptions);
+    });
+    return;
+  }
+
   // Cloudflare Pages answers a missed navigation with 404.html at the URL that
   // missed, so the preview does the same: that is the only way to exercise the
   // page at a nested path, where its <base> tag decides every link.
   const fallbackPath = path.join(distDir, "404.html");
   const acceptHeader = req.headers.accept || "";
   const allowFallback = acceptHeader.includes("text/html") || !path.extname(filePath);
-  // Pages matches `_headers` against the requested path, not the file the SPA fallback
-  // resolves to, so `/apply` picks up the `/*` block the same way `/` does.
-  const pathname = new URL(req.url, "https://localhost").pathname;
   readPreviewAsset(cache, filePath, fallbackPath, allowFallback, (readError, asset) => {
     if (readError) {
       send(res, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not Found", securityOptions);

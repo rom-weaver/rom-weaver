@@ -46,7 +46,7 @@ test("Lighthouse TBT tolerates one representative clean run", () => {
   assert.equal(aggregate([818, 46.5, 848], threshold.aggregation, false), 46.5);
 });
 
-// The gates audit a locally served production build, so every audit in the four
+// The gates audit a locally served production build, so every audit in the five
 // budgeted categories has to run. Skipping one silently reweights its category:
 // dropping `is-crawlable` alone would rescore SEO over 9 audits instead of
 // 13.04 weight, so the same regression would score differently run to run.
@@ -57,8 +57,12 @@ test("Lighthouse scores the full set of budgeted categories", () => {
     false,
   );
   assert.equal(
-    args.includes("--only-categories=performance,accessibility,best-practices,seo"),
+    args.includes("--only-categories=performance,accessibility,best-practices,seo,agentic-browsing"),
     true,
+  );
+  assert.match(
+    args.find((argument) => argument.startsWith("--chrome-flags=")) ?? "",
+    /--enable-features=WebMCPTesting(?:\s|$)/,
   );
   assert.equal(args.includes("--output-path=/tmp/report"), true);
 });
