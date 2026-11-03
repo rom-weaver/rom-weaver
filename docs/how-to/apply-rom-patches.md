@@ -111,7 +111,7 @@ Add a single-file `.hdiff`/`.hpatchz` and its matching source. Check the author'
 
 ## Apply a Dreamcast DCP patch
 
-1. Add the Dreamcast disc: its `.gdi` or `.cue` with every track file, a GD-ROM CHD, or a ZIP or 7z of them.
+1. Add the Dreamcast disc: its `.gdi` or GD-ROM `.cue` (one with `REM HIGH-DENSITY AREA`) with every track file, a GD-ROM CHD, or a ZIP or 7z of them.
 2. Check that the disc matches the DCP author's required release. A DCP carries no checksums, so Apply cannot check it for you.
 3. Add the `.dcp` as the only patch, with no cheats turned on. Its card targets the whole disc and has no track, header, or checks controls.
 4. [Choose the output and apply](#choose-the-output-and-apply): CHD, ZIP, 7z, or the uncompressed disc.

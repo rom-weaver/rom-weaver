@@ -128,19 +128,3 @@ test("a DCP beside a ROM that is not a disc asks for a GD-ROM disc", async () =>
     await workflow.dispose();
   }
 });
-
-test("a DCP accepts a GD-ROM cue without density markers when a track carries the Dreamcast boot header", async () => {
-  const [, ...tracks] = await discFiles("cue");
-  const cue = await loadFixtureFile(`${FIXTURES}/disc.cue`);
-  const unmarked = new File([(await cue.text()).replace(/^REM .*DENSITY AREA\r?\n/gm, "")], "disc.cue");
-  // Raw 2352-byte sectors carry 16 bytes of sync and header before the user data Rust identity reads.
-  const track01 = new Uint8Array(await tracks[0].arrayBuffer());
-  track01.set(new TextEncoder().encode("SEGA SEGAKATANA "), 16);
-  const workflow = await stageDcpWith([unmarked, new File([track01], "track01.bin"), ...tracks.slice(1)]);
-  try {
-    expect(getDcpPatch(workflow)?.patchValidation).toBeUndefined();
-    expect(getDcpPatch(workflow)?.targetInputFileName).toBe("disc.cue");
-  } finally {
-    await workflow.dispose();
-  }
-});
