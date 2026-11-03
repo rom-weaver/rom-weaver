@@ -101,6 +101,23 @@ macro_rules! regular_archive_read_operations {
             )
         }
 
+        fn read_nested_entry_prefixes(
+            &self,
+            request: &ContainerProbeRequest,
+            member: &str,
+            max_len: usize,
+            wanted: &dyn Fn(&str) -> bool,
+            _context: &OperationContext,
+        ) -> Result<Option<Vec<rom_weaver_core::NestedArchiveEntry>>> {
+            read_nested_regular_archive_entry_prefixes_with_libarchive(
+                &request.source,
+                self.descriptor.name,
+                member,
+                max_len,
+                wanted,
+            )
+        }
+
         fn extract(
             &self,
             request: &ContainerExtractRequest,

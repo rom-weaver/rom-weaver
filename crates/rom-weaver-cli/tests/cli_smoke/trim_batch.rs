@@ -3086,3 +3086,128 @@ fn trim_reads_the_extension_of_a_non_utf8_file_name() {
     assert_eq!(terminal["status"], "succeeded", "-o .zip");
     assert_eq!(&fs::read(&zip).expect("zip")[..2], b"PK");
 }
+
+#[test]
+fn trim_reads_discs_inside_nested_archives_without_extracting_them() {
+    let staging = setup_temp_dir();
+    let iso = write_gamecube_iso(&staging, "disc.iso");
+    let inner_zip = staging.child("inner.zip");
+    pack_archive(inner_zip.path(), &[&iso]);
+    let inner_tar_gz = staging.child("inner.tar.gz");
+    write_tar_gz_fixture(&[(&iso, "disc.iso")], inner_tar_gz.path());
+    for (outer_name, inner) in [
+        ("zip-in-zip.zip", inner_zip.path()),
+        ("zip-in-7z.7z", inner_zip.path()),
+        ("tgz-in-zip.zip", inner_tar_gz.path()),
+    ] {
+        let temp = setup_temp_dir();
+        let outer = temp.child(outer_name);
+        pack_archive(outer.path(), &[inner]);
+        let outer_path = outer.path().to_str().expect("path");
+        let output = command_output_with_env(
+            &[
+                "--log-level",
+                "trace",
+                "trim",
+                "--input",
+                outer_path,
+                "--json",
+            ],
+            &[],
+            1,
+        );
+        let terminal = parse_single_json_line(&output.stdout);
+        assert!(
+            terminal["label"]
+                .as_str()
+                .is_some_and(|label| label.contains("holds a GameCube/Wii disc")),
+            "{outer_name}: {terminal}"
+        );
+        let extractions = trim_extraction_lines(&output.stderr);
+        assert!(extractions.is_empty(), "{outer_name}: {extractions:#?}");
+
+        let probe = parse_single_json_line(&command_stdout(
+            &["probe", "--input", outer_path, "--trim-members", "--json"],
+            0,
+        ));
+        assert_eq!(
+            probe["details"]["trim_members"],
+            serde_json::json!({"extract": [], "gamecube_wii_discs": 1}),
+            "{outer_name}"
+        );
+    }
+}
+
+#[test]
+fn trim_extracts_a_nested_archive_that_holds_a_rom() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let rom = staging.child("game.nds");
+    fs::write(
+        rom.path(),
+        build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false),
+    )
+    .expect("nds fixture");
+    let iso = write_gamecube_iso(&staging, "disc.iso");
+    let inner = staging.child("inner.zip");
+    pack_archive(inner.path(), &[rom.path(), &iso]);
+    let outer = temp.child("outer.zip");
+    pack_archive(outer.path(), &[inner.path()]);
+    let output = command_output_with_env(
+        &[
+            "--log-level",
+            "trace",
+            "trim",
+            "--input",
+            outer.path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        &[],
+        0,
+    );
+    let terminal = parse_single_json_line(&output.stdout);
+    assert_eq!(terminal["details"]["processed"], 1, "{terminal}");
+    // The outer archive yields the inner one, and the inner one only the ROM.
+    let extractions = trim_extraction_lines(&output.stderr);
+    assert_eq!(extractions.len(), 2, "{extractions:#?}");
+    assert!(
+        extractions
+            .iter()
+            .all(|line| line.contains("\"selections\":1")),
+        "{extractions:#?}"
+    );
+}
+
+#[test]
+fn trim_extracts_a_nested_7z_to_read_the_disc_inside() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let iso = write_gamecube_iso(&staging, "disc.iso");
+    let inner = staging.child("inner.7z");
+    pack_archive(inner.path(), &[&iso]);
+    let outer = temp.child("outer.zip");
+    pack_archive(outer.path(), &[inner.path()]);
+    let output = command_output_with_env(
+        &[
+            "--log-level",
+            "trace",
+            "trim",
+            "--input",
+            outer.path().to_str().expect("path"),
+            "--json",
+        ],
+        &[],
+        1,
+    );
+    let terminal = parse_single_json_line(&output.stdout);
+    assert!(
+        terminal["label"]
+            .as_str()
+            .is_some_and(|label| label.contains("holds a GameCube/Wii disc")),
+        "{terminal}"
+    );
+    // 7z cannot be streamed, so the inner archive is extracted, but never the disc in it.
+    let extractions = trim_extraction_lines(&output.stderr);
+    assert_eq!(extractions.len(), 1, "{extractions:#?}");
+}

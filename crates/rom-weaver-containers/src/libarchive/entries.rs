@@ -1,6 +1,6 @@
 use super::*;
 use std::collections::BTreeMap;
-use tracing::trace;
+use tracing::{debug, trace};
 
 const REGULAR_ARCHIVE_READ_BLOCK_BYTES: usize = 2 * 1024 * 1024;
 
@@ -491,6 +491,102 @@ where
         (Ok(_), Err(error)) => Err(error),
     }
 }
+/// List the archive stored in the first file entry `is_member` accepts by streaming that entry's
+/// data into a second reader, reading at most `max_len` leading bytes of each inner file entry
+/// `wanted` accepts. Inner directories end with `/`. Nothing is extracted. `Ok(None)` when no
+/// entry matches or its data is not an archive libarchive can read front to back.
+pub fn read_nested_regular_archive_entry_prefixes(
+    source: &Path,
+    format_name: &str,
+    is_member: &dyn Fn(&str) -> bool,
+    max_len: usize,
+    wanted: &dyn Fn(&str) -> bool,
+) -> Result<Option<Vec<rom_weaver_core::NestedArchiveEntry>>> {
+    trace!(
+        format = format_name,
+        source = %source.display(),
+        max_len,
+        "nested archive prefix read start"
+    );
+    let mut reader = open_regular_archive_reader(source, format_name)?;
+    let result = (|| -> Result<Option<Vec<rom_weaver_core::NestedArchiveEntry>>> {
+        let mut index = 0usize;
+        while let Some(entry) = reader.next_entry().map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "{format_name} nested read failed while reading entry {index}: {error}"
+            ))
+        })? {
+            index = index.saturating_add(1);
+            if !entry.is_file() || !entry.pathname().is_ok_and(|path| is_member(&path)) {
+                continue;
+            }
+            let mut member = entry.into_reader();
+            let listed = with_streamed_regular_archive(
+                &mut member,
+                64 * 1024,
+                &format!("{format_name} nested archive read"),
+                |inner| list_streamed_entries(inner, max_len, wanted),
+            );
+            return Ok(match listed {
+                Ok(entries) => {
+                    trace!(
+                        format = format_name,
+                        entries = entries.len(),
+                        "nested archive prefix read complete"
+                    );
+                    Some(entries)
+                }
+                Err(error) => {
+                    debug!(
+                        format = format_name,
+                        %error,
+                        "nested archive could not be streamed; the member must be extracted"
+                    );
+                    None
+                }
+            });
+        }
+        Ok(None)
+    })();
+
+    match (result, close_regular_archive_reader(reader, format_name)) {
+        (Ok(entries), Ok(())) => Ok(entries),
+        (Err(error), _) => Err(error),
+        (Ok(_), Err(error)) => Err(error),
+    }
+}
+
+fn list_streamed_entries(
+    archive: &mut ReadArchive,
+    max_len: usize,
+    wanted: &dyn Fn(&str) -> bool,
+) -> Result<Vec<rom_weaver_core::NestedArchiveEntry>> {
+    let mut entries = Vec::new();
+    while let Some(entry) = archive
+        .next_entry()
+        .map_err(|error| RomWeaverError::Validation(format!("reading a nested entry: {error}")))?
+    {
+        let path = entry
+            .pathname()
+            .map_err(|error| RomWeaverError::Validation(format!("nested entry name: {error}")))?;
+        if entry.is_dir() {
+            entries.push(rom_weaver_core::NestedArchiveEntry {
+                path: format!("{}/", path.trim_end_matches('/')),
+                prefix: None,
+            });
+            continue;
+        }
+        let prefix = if entry.is_file() && max_len > 0 && wanted(&path) {
+            Some(rom_weaver_core::read_up_to(entry.into_reader(), max_len)?)
+        } else {
+            None
+        };
+        trace!(entry = %path, prefix = prefix.as_ref().map(Vec::len), "nested archive entry");
+        entries.push(rom_weaver_core::NestedArchiveEntry { path, prefix });
+    }
+    Ok(entries)
+}
+
 fn open_regular_archive_reader(source: &Path, format_name: &str) -> Result<ReadArchive> {
     let mut reader = ReadArchive::new(&format!("{format_name} archive reader allocation failed"))?;
     reader.support_regular_archives(&format!("{format_name} archive setup failed"))?;

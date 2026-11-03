@@ -20,8 +20,8 @@ use crate::libarchive::{
     WriteFilter as LibarchiveCreateFilter, WriteFormat as LibarchiveCreateFormat,
     list_regular_archive_entries,
     probe_regular_archive as probe_regular_archive_with_libarchive_impl,
-    probe_regular_archive_format, read_regular_archive_entry_prefixes,
-    visit_selected_regular_archive_entries,
+    probe_regular_archive_format, read_nested_regular_archive_entry_prefixes,
+    read_regular_archive_entry_prefixes, visit_selected_regular_archive_entries,
 };
 use rayon::prelude::*;
 use rom_weaver_core::{
@@ -763,6 +763,39 @@ pub(crate) fn read_regular_archive_entry_prefixes_with_libarchive(
         let name = normalize_archive_name(path);
         wanted.contains(&name).then_some(name)
     })
+}
+
+/// [`rom_weaver_core::ContainerHandler::read_nested_entry_prefixes`] for a regular archive, with
+/// member and inner entry names normalized as [`list_regular_archive_entries_with_libarchive`]
+/// reports them.
+pub(crate) fn read_nested_regular_archive_entry_prefixes_with_libarchive(
+    source: &Path,
+    format_name: &str,
+    member: &str,
+    max_len: usize,
+    wanted: &dyn Fn(&str) -> bool,
+) -> Result<Option<Vec<rom_weaver_core::NestedArchiveEntry>>> {
+    let entries = read_nested_regular_archive_entry_prefixes(
+        source,
+        format_name,
+        &|path| normalize_archive_name(path) == member,
+        max_len,
+        &|path| wanted(&normalize_archive_name(path)),
+    )?;
+    Ok(entries.map(|entries| {
+        entries
+            .into_iter()
+            .map(|entry| {
+                let name = normalize_archive_name(&entry.path);
+                let path = if entry.path.ends_with('/') {
+                    format!("{}/", name.trim_end_matches('/'))
+                } else {
+                    name
+                };
+                rom_weaver_core::NestedArchiveEntry { path, ..entry }
+            })
+            .collect()
+    }))
 }
 
 #[derive(Clone, Debug)]

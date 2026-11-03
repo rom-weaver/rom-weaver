@@ -393,6 +393,85 @@ impl Drop for ReadArchive {
         }
     }
 }
+/// Data a streamed reader's read callback borrows; it MUST outlive the libarchive handle.
+struct StreamCallbackData<'r> {
+    reader: &'r mut dyn Read,
+    buffer: Vec<u8>,
+}
+
+/// Read a regular archive from `reader` front to back. libarchive gets no seek callback, so
+/// formats that need random access (7z) fail to open or to read a header, and zip is read from
+/// its local headers. The handle is freed before this returns.
+pub(crate) fn with_streamed_regular_archive<T>(
+    reader: &mut dyn Read,
+    block_size: usize,
+    context: &str,
+    use_archive: impl FnOnce(&mut ReadArchive) -> Result<T>,
+) -> Result<T> {
+    // Declared before the archive so it is dropped after it.
+    let mut callback_data = StreamCallbackData {
+        reader,
+        buffer: vec![0; block_size.max(1)],
+    };
+    let mut archive = ReadArchive::new(context)?;
+    archive.support_regular_archives(context)?;
+    let status = unsafe {
+        sys::archive_read_open2(
+            archive.as_ptr(),
+            (&mut callback_data as *mut StreamCallbackData<'_>).cast::<c_void>(),
+            None,
+            Some(stream_read_callback),
+            None,
+            None,
+        )
+    };
+    archive.check_status(status, &format!("{context} while opening the stream"))?;
+    let result = use_archive(&mut archive);
+    let closed = archive.close(
+        &format!("{context} while closing the stream"),
+        &format!("{context} while releasing the stream"),
+    );
+    match (result, closed) {
+        (Ok(value), Ok(())) => Ok(value),
+        (Err(error), _) => Err(error),
+        (Ok(_), Err(error)) => Err(error),
+    }
+}
+
+unsafe extern "C" fn stream_read_callback(
+    _archive: *mut archive,
+    client_data: *mut c_void,
+    buffer: *mut *const c_void,
+) -> sys::la_ssize_t {
+    if client_data.is_null() || buffer.is_null() {
+        return -1;
+    }
+    let callback_data = unsafe { &mut *client_data.cast::<StreamCallbackData<'_>>() };
+    // A panic MUST NOT unwind across the extern "C" boundary; report it as a read error.
+    let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        loop {
+            match callback_data.reader.read(&mut callback_data.buffer) {
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                result => break result,
+            }
+        }
+    }));
+    match read {
+        Ok(Ok(read)) => {
+            unsafe { *buffer = callback_data.buffer.as_ptr().cast::<c_void>() };
+            sys::la_ssize_t::try_from(read).unwrap_or(-1)
+        }
+        Ok(Err(error)) => {
+            trace!(%error, "libarchive stream read callback failed");
+            -1
+        }
+        Err(_) => {
+            trace!("libarchive stream read callback panicked");
+            -1
+        }
+    }
+}
+
 pub fn with_raw_stream_reader<T, F>(
     source: &Path,
     format_name: &str,

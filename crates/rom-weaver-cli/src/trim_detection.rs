@@ -13,6 +13,8 @@ struct TrimArchiveMembers {
 /// How trim treats an archive member, judged by its name alone.
 enum TrimMemberName {
     Extract,
+    /// An archive libarchive can stream, whose own members decide whether trim needs it.
+    NestedArchive,
     /// An `.iso` or `.ciso` whose header decides whether it is a GameCube/Wii disc.
     ReadHeader,
     GamecubeWiiDisc,
@@ -28,6 +30,16 @@ enum TrimMemberScope {
     Nested,
     /// Also members with unknown names, which only their content identifies (`--no-filter`).
     Every,
+}
+
+/// Archives a nested read can stream front to back; 7z needs seeking, so it is extracted.
+fn is_streamable_nested_archive_name(name: &str) -> bool {
+    const SUFFIXES: &[&str] = &[
+        ".zip", ".rar", ".tar", ".tgz", ".tbz", ".tbz2", ".txz", ".tzst", ".tar.gz", ".tar.bz2",
+        ".tar.xz", ".tar.zst", ".tar.lz4",
+    ];
+    let name = name.to_ascii_lowercase();
+    SUFFIXES.iter().any(|suffix| name.ends_with(suffix))
 }
 
 fn classify_trim_member_name(name: &str, scope: TrimMemberScope) -> TrimMemberName {
@@ -50,6 +62,9 @@ fn classify_trim_member_name(name: &str, scope: TrimMemberScope) -> TrimMemberNa
         || TRIM_NON_ARCHIVE_DISC_EXTENSIONS.contains(&extension.as_str())
     {
         return TrimMemberName::Skip;
+    }
+    if is_streamable_nested_archive_name(name) {
+        return TrimMemberName::NestedArchive;
     }
     // Unnamed members may be archives that only their content identifies.
     if scope == TrimMemberScope::Every
@@ -96,6 +111,7 @@ impl CliApp {
             gamecube_wii_discs: 0,
         };
         let mut header_names = Vec::new();
+        let mut nested_names = Vec::new();
         for entry in &entries {
             // A selected folder would extract everything under it, discs included; its members are
             // listed on their own.
@@ -108,6 +124,7 @@ impl CliApp {
             }
             match classify_trim_member_name(&name, scope) {
                 TrimMemberName::Extract => members.extract.push(name),
+                TrimMemberName::NestedArchive => nested_names.push(name),
                 TrimMemberName::ReadHeader => header_names.push(name),
                 TrimMemberName::GamecubeWiiDisc => {
                     trace!(archive = %archive.display(), member = %name, "trim skipped a GameCube/Wii disc by name");
@@ -120,6 +137,7 @@ impl CliApp {
         }
         if stop_at_first_extract && !members.extract.is_empty() {
             header_names.clear();
+            nested_names.clear();
         }
         // Read headers one at a time when stopping early: reading stops once the requested
         // member is found, so nothing past the first extracted member is decoded.
@@ -160,6 +178,24 @@ impl CliApp {
                 }
             }
         }
+        if stop_at_first_extract && !members.extract.is_empty() {
+            nested_names.clear();
+        }
+        for name in nested_names {
+            match Self::nested_archive_gamecube_wii_discs(handler, &request, &name, scope, context)
+            {
+                Some(discs) => {
+                    trace!(archive = %archive.display(), member = %name, discs, "trim skipped a nested archive that holds nothing to trim");
+                    members.gamecube_wii_discs += discs;
+                }
+                None => {
+                    members.extract.push(name);
+                    if stop_at_first_extract {
+                        break;
+                    }
+                }
+            }
+        }
         debug!(
             archive = %archive.display(),
             entries = entries.len(),
@@ -168,6 +204,65 @@ impl CliApp {
             "planned trim archive members"
         );
         Some(members)
+    }
+
+    /// The GameCube/Wii discs in nested archive `member` when nothing else in it can be trimmed,
+    /// judged by streaming its listing and disc headers without extracting it. `None` when trim
+    /// needs the member: it holds a possible trim input, or it cannot be streamed.
+    fn nested_archive_gamecube_wii_discs(
+        handler: &dyn ContainerHandler,
+        request: &ContainerProbeRequest,
+        member: &str,
+        scope: TrimMemberScope,
+        context: &OperationContext,
+    ) -> Option<usize> {
+        let wanted = |name: &str| {
+            matches!(
+                classify_trim_member_name(name, scope),
+                TrimMemberName::ReadHeader
+            )
+        };
+        let entries = match handler.read_nested_entry_prefixes(
+            request,
+            member,
+            GAMECUBE_WII_DISC_HEADER_LEN,
+            &wanted,
+            context,
+        ) {
+            Ok(Some(entries)) => entries,
+            Ok(None) => return None,
+            Err(error) => {
+                debug!(member, %error, "trim could not read a nested archive; extracting it");
+                return None;
+            }
+        };
+        let mut discs = 0;
+        for entry in entries {
+            if entry.path.ends_with('/') {
+                continue;
+            }
+            let name = normalize_archive_name(&entry.path);
+            if name.is_empty() || should_ignore_common_container_file(&name) {
+                continue;
+            }
+            match classify_trim_member_name(&name, scope) {
+                TrimMemberName::Skip => {}
+                TrimMemberName::GamecubeWiiDisc => discs += 1,
+                TrimMemberName::ReadHeader
+                    if entry
+                        .prefix
+                        .as_deref()
+                        .is_some_and(is_gamecube_wii_disc_header) =>
+                {
+                    discs += 1;
+                }
+                _ => {
+                    trace!(member, entry = %name, "trim needs a nested archive member");
+                    return None;
+                }
+            }
+        }
+        Some(discs)
     }
 
     /// Add `trim_members` to a probe report: whether a default `trim` of `source` would extract

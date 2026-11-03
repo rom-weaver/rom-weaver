@@ -89,9 +89,9 @@ pub use registry::{
     ChecksumRequest, ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest,
     ContainerHandler, ContainerHandlerOperations, ContainerHandlerRegistration, ContainerListEntry,
     ContainerProbeRequest, CreateInputOverride, CreateInputSource, CreateSupport, FormatDescriptor,
-    OperationReport, PatchApplyRequest, PatchCapabilities, PatchCreateFormatOptions,
-    PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence, SolidPatchMetadata,
-    traced_container_handler, traced_patch_handler,
+    NestedArchiveEntry, OperationReport, PatchApplyRequest, PatchCapabilities,
+    PatchCreateFormatOptions, PatchCreateRequest, PatchHandler, PatchValidateRequest,
+    ProbeConfidence, SolidPatchMetadata, traced_container_handler, traced_patch_handler,
 };
 pub use report_details::{
     attach_emitted_file_paths, attach_extraction_details, build_emitted_file_detail,

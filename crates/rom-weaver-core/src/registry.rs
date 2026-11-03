@@ -216,6 +216,15 @@ pub struct ContainerListEntry {
     pub size: Option<u64>,
 }
 
+/// An entry of an archive stored inside another archive, read by streaming the outer member.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NestedArchiveEntry {
+    /// Path inside the nested archive; directories end with `/`.
+    pub path: String,
+    /// Leading bytes, read only for entries the caller asked for.
+    pub prefix: Option<Vec<u8>>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContainerExtractRequest {
     pub source: PathBuf,
@@ -472,6 +481,21 @@ pub trait ContainerHandlerOperations: Send + Sync {
     ) -> Result<BTreeMap<String, Vec<u8>>> {
         let _ = (request, entries, max_len, context);
         Ok(BTreeMap::new())
+    }
+    /// List the archive stored in `member` by streaming it front to back, without extracting it,
+    /// and read at most `max_len` leading bytes of each inner entry `wanted` selects. `Ok(None)`
+    /// when the member cannot be read that way (an inner format that needs seeking, such as 7z),
+    /// so callers MUST then extract the member. The default reads nothing.
+    fn read_nested_entry_prefixes(
+        &self,
+        request: &ContainerProbeRequest,
+        member: &str,
+        max_len: usize,
+        wanted: &dyn Fn(&str) -> bool,
+        context: &OperationContext,
+    ) -> Result<Option<Vec<NestedArchiveEntry>>> {
+        let _ = (request, member, max_len, wanted, context);
+        Ok(None)
     }
     fn extract(
         &self,
@@ -801,6 +825,49 @@ impl ContainerHandlerOperations for TracingContainerHandler {
                     format = descriptor.name,
                     error = %error,
                     "container entry prefix read failed"
+                );
+            }
+        }
+        result
+    }
+
+    fn read_nested_entry_prefixes(
+        &self,
+        request: &ContainerProbeRequest,
+        member: &str,
+        max_len: usize,
+        wanted: &dyn Fn(&str) -> bool,
+        context: &OperationContext,
+    ) -> Result<Option<Vec<NestedArchiveEntry>>> {
+        let descriptor = self.registration.descriptor;
+        trace!(
+            family = ?descriptor.family,
+            format = descriptor.name,
+            source = %request.source.display(),
+            member,
+            max_len,
+            "container nested entry prefix read start"
+        );
+        let result = self
+            .inner
+            .read_nested_entry_prefixes(request, member, max_len, wanted, context);
+        match &result {
+            Ok(entries) => {
+                trace!(
+                    family = ?descriptor.family,
+                    format = descriptor.name,
+                    member,
+                    entries = entries.as_ref().map(Vec::len),
+                    "container nested entry prefix read complete"
+                );
+            }
+            Err(error) => {
+                trace!(
+                    family = ?descriptor.family,
+                    format = descriptor.name,
+                    member,
+                    error = %error,
+                    "container nested entry prefix read failed"
                 );
             }
         }
