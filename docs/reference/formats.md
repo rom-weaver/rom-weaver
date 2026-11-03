@@ -60,7 +60,7 @@ Every supported Apply entry also supports probe/parse, except DCP. DCP uses a sp
 
 > ¹ Single-file `.hdiff` and `.hpatchz` patches are supported. Directory patches (`HDIFF19`) are not supported.
 >
-> ² DCP requires a Dreamcast `.cue` or `.gdi` input and must be applied alone. Byte-level patch flags do not apply to this filesystem rebuild. This workflow is available through the native CLI, not browser Apply.
+> ² DCP requires a Dreamcast disc and must be applied alone. The CLI takes a `.cue` or `.gdi` input; browser Apply also takes a GD-ROM CHD or an archive of the disc. Byte-level patch flags and checksum checks do not apply to this filesystem rebuild.
 >
 > ³ MOD patches target Paper Mario (USA) v1.0: 41,943,040 bytes, CRC32 `A7F5CD7E`. Browser Create in **Modified ROM** mode and the CLI format recommendation offer MOD only for that Original and only when the Modified ROM is not smaller. The combined patch in Create's **Patches & cheats** mode and Apply's **Download a combined patch** do not list MOD. CLI `patch create --format mod` accepts another Original with a warning. A MOD patch made from another Original applies in the CLI only with `--ignore-checksum-validation`.
 >

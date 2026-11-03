@@ -837,6 +837,26 @@ describe("browser CHD runtime", () => {
     });
   });
 
+  it("compresses a GD-ROM cue from a private copy so a stale sibling .gdi cannot shadow it", async () => {
+    const runtime = createBrowserChdRuntime(io as never);
+    state.virtualSources.set("/work/disc.cue", new Blob(['FILE "track.bin" BINARY\nREM HIGH-DENSITY AREA\n']));
+    state.staged.push(
+      { filePath: "/work/disc.cue", fileName: "disc.cue", cleanup: vi.fn(async () => undefined) },
+      { filePath: "/work/track-2.bin", fileName: "track.bin", cleanup: vi.fn(async () => undefined) },
+    );
+    await runtime.createChd({
+      source: "disc.cue",
+      fileName: "disc.cue",
+      imageFiles: [{ fileName: "track.bin", source: "track.bin" }],
+      mode: "gd",
+    } as never);
+    expect(state.compressionCreate.mock.calls[0]?.[0]).toMatchObject({
+      format: "chd-gd",
+      inputPaths: ["/work/output-scope/disc.cue"],
+      knownInputPaths: expect.arrayContaining(["/work/track-2.bin"]),
+    });
+  });
+
   it("rewrites GDI track paths and keeps every staged track visible to the guest", async () => {
     const runtime = createBrowserChdRuntime(io as never);
     const text = '2\r\n1 0 4 2352 "tracks/track 01.bin" 0\r\n2 45000 4 2352 track02.bin 128\r\n';

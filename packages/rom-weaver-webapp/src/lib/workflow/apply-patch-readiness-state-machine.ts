@@ -1,5 +1,5 @@
 import { RomWeaverError, toRomWeaverError } from "../errors.ts";
-import { isDcpPatchStage, markDcpPatchUnsupported } from "./apply-dcp-patch.ts";
+import { type DcpReadinessContext, evaluateDcpPatchStage, isDcpPatchStage } from "./apply-dcp-patch.ts";
 import type { InputAsset } from "../input/input-assets.ts";
 import { resolveApplyHeaderMode, resolveApplyN64ByteOrder, toNormalizedCrc32 } from "./apply-header-resolution.ts";
 import type { InternalPatchChecksumPreflight, StagedSource } from "./apply-workflow-state.ts";
@@ -8,6 +8,8 @@ import { loneBareFile } from "../apply/bare-member-target.ts";
 
 type PatchReadinessAdapters<TSource> = {
   getPatchableInputAssets: () => InputAsset[];
+  /** What a Dreamcast `.dcp` stage is judged against: the whole disc and the rest of the run. */
+  getDcpContext: (stage: StagedSource<TSource>) => DcpReadinessContext;
   declaredInputChecks?: string;
   /** The ROM member the patch names as its input or target. A lone bare file that no member
    * reference resolved to is then not the target: it stays unassigned instead of being picked as
@@ -371,10 +373,7 @@ const evaluateApplyPatchReadiness = async <TSource>(
     (warning) => !PATCH_TARGET_SELECTION_ERROR_CODES.has(String(warning.code || "")),
   );
   const changed = () => previousStatus !== stage.state.status;
-  if (isDcpPatchStage(stage)) {
-    markDcpPatchUnsupported(stage);
-    return changed();
-  }
+  if (isDcpPatchStage(stage)) return evaluateDcpPatchStage(stage, adapters.getDcpContext(stage)) || changed();
   if (stage.state.status === "loading" && !stage.preparedPatchFile && !stage.state.candidates.length) return false;
   if (!stage.state.selectedCandidateId) {
     clearApplyPatchTarget(stage);

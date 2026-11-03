@@ -86,10 +86,13 @@ const toFaultDetail = (message: string, localizer: Localizer): string => {
 /** Failed dry-run verdict: an inset fault well with the verdict, the detail,
  * and what to do next (naming the 0x04 override toggle when it is offered). */
 export const PatchFaultWell = ({
+  dcp,
   message,
   overrideAvailable,
   unreadable,
 }: {
+  /** A DCP fault already says what to change, so no generic hint follows it. */
+  dcp?: boolean;
   message: string;
   overrideAvailable?: boolean;
   unreadable?: boolean;
@@ -110,7 +113,7 @@ export const PatchFaultWell = ({
         <span>{localizer.message("ui.patch.validationFailed")}</span>
       </div>
       <p className="pfault-detail">{toFaultDetail(message, localizer)}</p>
-      <p className="pfault-hint">{hint}</p>
+      {dcp ? null : <p className="pfault-hint">{hint}</p>}
     </div>
   );
 };

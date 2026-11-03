@@ -625,6 +625,11 @@ msgstr "Aplica códigos de trucos a ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlockedDcpPatch"
+msgstr "Aplicar está bloqueado por el parche DCP de Dreamcast. Sigue el mensaje de su tarjeta."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.applyBlockedDamagedPatch"
 msgstr "Aplicar está bloqueado porque el archivo del parche está dañado. Reemplaza el parche o marca «Aplicar de todos modos» para usarlo tal cual."
 

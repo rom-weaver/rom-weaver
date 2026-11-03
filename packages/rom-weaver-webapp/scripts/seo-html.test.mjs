@@ -188,7 +188,7 @@ test("workflow Markdown and discovery reuse each route's SEO metadata", () => {
 test("workflow Markdown includes task instructions and limits from the published guides", () => {
   const cases = [
     [WORKFLOW_SEO_ROUTES.home, "Change a game", "Codes that need live game memory cannot be baked."],
-    [WORKFLOW_SEO_ROUTES.patcher, "Patch a ROM in four steps", "Dreamcast DCP patches need the CLI"],
+    [WORKFLOW_SEO_ROUTES.patcher, "Patch a ROM in four steps", "Apply a Dreamcast DCP patch"],
     [WORKFLOW_SEO_ROUTES.creator, "Add Original and Modified", "formats that cannot shrink a file"],
     [WORKFLOW_SEO_ROUTES.weave, "Build the patch recipe", "Choose what to include"],
     [WORKFLOW_SEO_ROUTES.checksum, "Calculate checksums", "If no checksum matches"],

@@ -89,6 +89,17 @@ const traceOutputName = (
 const getStringOption = (value: unknown, fallback: string): string =>
   typeof value === "string" && value.trim() ? value : fallback;
 
+// A Redump-style GD-ROM cue marks its inner program area with `REM HIGH-DENSITY AREA`, the same rule
+// the Rust CHD layout uses, so it compresses as a GD-ROM rather than a single-session CD.
+const isGdRomCue = (asset: PatchFileInstance, file: PatchFileInstance): boolean => {
+  try {
+    const text = asset.metadata?.cueText || decodeUtf8(getPatchFileBytes(file));
+    return /^\s*REM\b.*HIGH-DENSITY AREA/im.test(text);
+  } catch {
+    return false;
+  }
+};
+
 const getChdCompressionCodecs = (mode: string | null | undefined, options: OutputWorkflowOptions | undefined) => {
   const archiveSettings = getContainerSettings(options);
   return OutputCompressionManager.getChdCodecsForMode(mode, {
@@ -581,7 +592,7 @@ const buildSessionOutputFiles = async (
     const cueOutput = outputAssets.find(({ asset }) => asset.kind === "cue" || asset.kind === "gdi");
     const trackOutputs = outputAssets.filter(({ asset }) => asset.kind === "track");
     if (!cueOutput || trackOutputs.length < 1) throw new Error("CHD output requires a disc sheet group with tracks");
-    const mode = cueOutput.asset.kind === "gdi" ? "gd" : "cd";
+    const mode = cueOutput.asset.kind === "gdi" || isGdRomCue(cueOutput.asset.file, cueOutput.file) ? "gd" : "cd";
     if (!runtime?.compression.create) throw new Error("Runtime CHD compression capability is unavailable");
     const cueFile = clonePatchFile(cueOutput.file, cueOutput.asset.fileName);
     const source = createRuntimeSourceFromPatchFile(cueFile, cueOutput.asset.fileName);

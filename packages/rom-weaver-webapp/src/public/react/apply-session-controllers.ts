@@ -39,6 +39,7 @@ const inertOutputController: PatcherOutputController = {
     applyButton: {
       blocked: false,
       blockedByDamagedPatch: false,
+      blockedByDcpPatch: false,
       disabled: true,
       label: "Apply patch",
       loading: false,

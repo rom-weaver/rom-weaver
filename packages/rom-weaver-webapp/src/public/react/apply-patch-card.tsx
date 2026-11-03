@@ -124,7 +124,7 @@ const PatchCard = ({
   const { detailedViewEnabled = false } = useRomWeaverSettings();
   const selectedInput = meta?.input;
   // Tracks belong to the original ROM, so a patch-output source has none to pick.
-  const showTrack = !(staging || isDisabled || (selectedInput && "patch" in selectedInput));
+  const showTrack = !(staging || isDisabled || item.dcp || (selectedInput && "patch" in selectedInput));
   const sharedPredecessor =
     selectedInput && "patch" in selectedInput
       ? predecessors.find((predecessor) => predecessor.id === selectedInput.patch)
@@ -198,7 +198,9 @@ const PatchCard = ({
               {meta.author}
             </span>
           ) : null}
-          {staging ? null : (
+          {/* A DCP runs alone on the whole disc: the engine picks the data track, and it has no
+              header, byte order, chain basis, or checks to choose. */}
+          {staging || item.dcp ? null : (
             <PatchRunsOnSelect
               basis={basisChoice}
               disabled={basisDisabled || !!item.optionsDisabled}
@@ -223,10 +225,12 @@ const PatchCard = ({
               patchStack={patchStack}
             />
           ) : null}
-          {staging || isDisabled ? null : (
+          {staging || isDisabled || item.dcp ? null : (
             <PatchHeaderModeSelect index={index} item={item} patchStack={patchStack} stripDisabled={stripDisabled} />
           )}
-          {staging || isDisabled ? null : <PatchN64ByteOrderSelect index={index} item={item} patchStack={patchStack} />}
+          {staging || isDisabled || item.dcp ? null : (
+            <PatchN64ByteOrderSelect index={index} item={item} patchStack={patchStack} />
+          )}
           {staging ? (
             <StageStatus
               id={`rom-weaver-progress-patch-${index}`}
@@ -282,6 +286,7 @@ const PatchCard = ({
         <div className="patch-body-inner">
           {verdict === "bad" ? (
             <PatchFaultWell
+              dcp={item.dcp}
               message={item.validationMessage}
               overrideAvailable={overrideAvailable}
               unreadable={item.validationUnreadable}
@@ -306,25 +311,27 @@ const PatchCard = ({
               patch). Mirrors the ROM card: keeping the drawer mounted holds the
               card's resolved height so the patch stack below doesn't jump when
               requirements arrive. */}
-          <PatchChecksDrawer
-            basisChoice={basisChoice}
-            chainChip={chainChip}
-            disabled={isDisabled}
-            index={index}
-            integrated
-            isChainInput={isChainInput}
-            isChainOutput={isChainOutput}
-            item={item}
-            meta={meta}
-            onMetaChange={onMetaChange}
-            onDraftValidityChange={onDraftValidityChange}
-            outputCheckHint={outputCheckHint}
-            patchType={detailedViewEnabled ? undefined : item.format?.trim().toUpperCase() || undefined}
-            patchStack={patchStack}
-            romActuals={romActuals}
-            sharedInputChecks={sharedInputChecks}
-            sharedInputLabel={sharedInputLabel}
-          />
+          {item.dcp ? null : (
+            <PatchChecksDrawer
+              basisChoice={basisChoice}
+              chainChip={chainChip}
+              disabled={isDisabled}
+              index={index}
+              integrated
+              isChainInput={isChainInput}
+              isChainOutput={isChainOutput}
+              item={item}
+              meta={meta}
+              onMetaChange={onMetaChange}
+              onDraftValidityChange={onDraftValidityChange}
+              outputCheckHint={outputCheckHint}
+              patchType={detailedViewEnabled ? undefined : item.format?.trim().toUpperCase() || undefined}
+              patchStack={patchStack}
+              romActuals={romActuals}
+              sharedInputChecks={sharedInputChecks}
+              sharedInputLabel={sharedInputLabel}
+            />
+          )}
         </div>
       </div>
     </FileCard>

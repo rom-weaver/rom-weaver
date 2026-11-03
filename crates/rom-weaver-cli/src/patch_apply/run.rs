@@ -1464,6 +1464,20 @@ impl CliApp {
             report.label = format!("{}; {}", report.label, warning);
         }
         Self::append_report_warnings(report, disc.warnings.iter().cloned());
+        let keep_track_sizes =
+            Self::disc_replacements_keep_track_sizes(&chain.disc_track_replacements)
+                .map_err(|error| failed(report.format.clone(), "prepare", error))?;
+        if run.compression_options.enabled && !keep_track_sizes {
+            paths.raw_ready_output = self
+                .stage_disc_directory_with_tracks(
+                    disc,
+                    &chain.disc_track_replacements,
+                    &run.context,
+                    &mut run.temp_paths,
+                )
+                .map_err(|error| failed(report.format.clone(), "prepare", error))?;
+            return Ok(());
+        }
         if run.compression_options.enabled {
             paths.disc_track_overrides = self
                 .disc_track_overrides(disc, &chain.disc_track_replacements)

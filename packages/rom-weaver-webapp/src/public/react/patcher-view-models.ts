@@ -205,6 +205,7 @@ const buildStackViewState = ({
       validationMessage: patchInfo?.validationMessage || "",
       validationState: patchInfo?.validationState || "",
       validationUnreadable: !!patchInfo?.validationUnreadable,
+      dcp: !!patchInfo?.dcp,
       validationValues: patchInfo?.validationValues || [],
     };
   }),
@@ -222,6 +223,8 @@ interface OutputViewStateInput {
   applyBlocked: boolean;
   /** The only blocker is a damaged patch file, so the reason text must not blame the ROM. */
   applyBlockedByDamagedPatch: boolean;
+  /** A Dreamcast DCP card blocks Apply; it has no override to point at. */
+  applyBlockedByDcpPatch: boolean;
   canQueueApply: boolean;
   completedSizeSummary: OutputSizeSummary;
   compressTimingText: string;
@@ -249,6 +252,7 @@ const buildOutputViewState = ({
   applyQueued,
   applyBlocked,
   applyBlockedByDamagedPatch,
+  applyBlockedByDcpPatch,
   applyTimingText,
   busy,
   canQueueApply,
@@ -272,6 +276,7 @@ const buildOutputViewState = ({
   applyButton: {
     blocked: applyBlocked && !hasPendingDownload,
     blockedByDamagedPatch: applyBlockedByDamagedPatch,
+    blockedByDcpPatch: applyBlockedByDcpPatch,
     disabled: disabled || !(busy || hasPendingDownload || canQueueApply),
     label: hasPendingDownload ? `Download ${pendingDownloadFileName || "output"}` : "Apply & download",
     loading: busy || applyQueued,

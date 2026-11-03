@@ -625,6 +625,11 @@ msgstr "Apply cheat codes to ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlockedDcpPatch"
+msgstr "Apply is blocked by the Dreamcast DCP patch. Follow the message on its card."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.applyBlockedDamagedPatch"
 msgstr "Apply is blocked because the patch file is damaged. Replace the patch, or tick “Apply anyway” to use it as is."
 

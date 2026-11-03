@@ -138,6 +138,71 @@ fn patch_apply_disc_cue_target_patches_one_track_and_matches_manual_chd() {
 }
 
 #[test]
+fn patch_apply_disc_chd_keeps_a_patched_track_that_grew() {
+    let temp = setup_temp_dir();
+    let (_track01, track02) = write_two_track_cd(&temp);
+    // A record past the end of the track appends one sector.
+    let sector = vec![0xA5; 2352];
+    let patch = build_ips_patch(
+        vec![TestIpsRecord::Literal {
+            offset: track02.len() as u32,
+            data: sector.clone(),
+        }],
+        None,
+    );
+    fs::write(temp.child("grow.ips").path(), &patch).expect("patch fixture");
+    let patched_chd = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--target",
+            "*track02*",
+            "--patch",
+            temp.child("grow.ips").path().to_str().expect("path"),
+            "--output",
+            patched_chd.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let expected_dir = temp.child("expected");
+    fs::create_dir_all(expected_dir.path()).expect("expected dir");
+    for name in ["track01.bin", "disc.cue"] {
+        fs::copy(temp.child(name).path(), expected_dir.child(name).path()).expect("copy");
+    }
+    fs::write(
+        expected_dir.child("track02.bin").path(),
+        [track02, sector].concat(),
+    )
+    .expect("grown track02");
+    let expected_chd = temp.child("expected.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            expected_dir
+                .child("disc.cue")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--output",
+            expected_chd.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    assert!(
+        fs::read(patched_chd.path()).expect("patched chd")
+            == fs::read(expected_chd.path()).expect("expected chd"),
+        "a disc-patch CHD must hold the whole grown track"
+    );
+}
+
+#[test]
 fn patch_apply_disc_in_memory_and_on_disk_track_produce_identical_chd() {
     // The patched track is read in place for untouched tracks and sourced from
     // the freshly produced track: buffered in memory under the cap by default,
@@ -1920,6 +1985,242 @@ fn patch_apply_dcp_nested_in_zip_in_zip_matches_bare_dcp_output() {
             "{name} from the nested archive must match the bare DCP"
         );
     }
+}
+
+#[test]
+fn patch_apply_dcp_track_output_matches_the_full_disc_track() {
+    let temp = setup_temp_dir();
+    write_dcp_source_gdi(&temp);
+    fs::write(temp.child("NEW.DAT").path(), b"added by the DCP").expect("DCP payload");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("NEW.DAT").path().to_str().unwrap(),
+            "--format",
+            "zip",
+            "--output",
+            temp.child("game.dcp").path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let apply = |output: &str| {
+        let stdout = command_stdout(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                temp.child("disc.gdi").path().to_str().unwrap(),
+                "--patch",
+                temp.child("game.dcp").path().to_str().unwrap(),
+                "--no-compress",
+                "--output",
+                temp.child(output).path().to_str().unwrap(),
+                "--json",
+            ],
+            0,
+        );
+        let events = parse_json_lines(&stdout);
+        let terminal = events.last().expect("terminal event").clone();
+        assert_patch_envelope(&terminal, "patch-apply", "dcp", "succeeded");
+        terminal
+    };
+    apply("full/x.gdi");
+    let terminal = apply("track/rebuilt.bin");
+
+    assert_eq!(
+        fs::read(temp.child("track/rebuilt.bin").path()).unwrap(),
+        fs::read(temp.child("full/track03.bin").path()).unwrap(),
+        "the track-only output must equal the full disc's rebuilt track"
+    );
+    let entries = fs::read_dir(temp.child("track").path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        entries,
+        ["rebuilt.bin"],
+        "only the rebuilt track is written"
+    );
+    let details = terminal
+        .pointer("/result/details")
+        .or_else(|| terminal.pointer("/details"))
+        .unwrap_or_else(|| panic!("terminal details: {terminal}"));
+    assert_eq!(details["dcp_data_track"]["name"], "track03.bin");
+    let emitted = details["emitted_files"].as_array().expect("emitted files");
+    assert_eq!(emitted.len(), 1, "{emitted:?}");
+    assert!(
+        emitted[0]["path"]
+            .as_str()
+            .is_some_and(|path| path.ends_with("rebuilt.bin")),
+        "{emitted:?}"
+    );
+}
+
+#[test]
+fn patch_apply_dcp_track_output_failure_keeps_a_forced_existing_output() {
+    let temp = setup_temp_dir();
+    write_dcp_source_gdi(&temp);
+    fs::write(temp.child("game.dcp").path(), b"not a zip archive").expect("broken DCP");
+    fs::write(temp.child("rebuilt.bin").path(), b"previous output").expect("existing output");
+    let assert = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.gdi").path().to_str().unwrap(),
+            "--patch",
+            temp.child("game.dcp").path().to_str().unwrap(),
+            "--no-compress",
+            "--force",
+            "--output",
+            temp.child("rebuilt.bin").path().to_str().unwrap(),
+            "--json",
+        ])
+        .assert()
+        .failure();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    assert!(stdout.contains("\"failed\""), "{stdout}");
+    assert_eq!(
+        fs::read(temp.child("rebuilt.bin").path()).unwrap(),
+        b"previous output",
+        "a failed rebuild must leave the existing output untouched"
+    );
+    let leftovers = fs::read_dir(temp.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.contains("rebuilt"))
+        .collect::<Vec<_>>();
+    assert_eq!(leftovers, ["rebuilt.bin"], "the partial track is removed");
+}
+
+#[test]
+fn patch_apply_dcp_chd_keeps_a_rebuilt_track_that_grew() {
+    let temp = setup_temp_dir();
+    write_dcp_source_gdi(&temp);
+    // A new file adds sectors, so the rebuilt track outgrows the original.
+    fs::write(temp.child("NEW.DAT").path(), vec![0x5a; 4096]).expect("DCP payload");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("NEW.DAT").path().to_str().unwrap(),
+            "--format",
+            "zip",
+            "--output",
+            temp.child("game.dcp").path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let apply = |output: &str, format: &str, extra: &[&str]| {
+        let (input, patch, output) = (
+            temp.child("disc.gdi"),
+            temp.child("game.dcp"),
+            temp.child(output),
+        );
+        let mut args = vec![
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().unwrap(),
+            "--patch",
+            patch.path().to_str().unwrap(),
+            "--output",
+            output.path().to_str().unwrap(),
+            "--json",
+        ];
+        args.extend_from_slice(extra);
+        let events = parse_json_lines(&command_stdout(&args, 0));
+        assert_patch_envelope(events.last().unwrap(), "patch-apply", format, "succeeded");
+    };
+    apply("full/x.gdi", "dcp", &["--no-compress"]);
+    apply("direct.chd", "chd", &[]);
+    assert!(
+        fs::metadata(temp.child("full/track03.bin").path())
+            .unwrap()
+            .len()
+            > fs::metadata(temp.child("track03.bin").path())
+                .unwrap()
+                .len(),
+        "the fixture must grow the data track"
+    );
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("full/x.gdi").path().to_str().unwrap(),
+            "--output",
+            temp.child("staged.chd").path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    assert!(
+        fs::read(temp.child("direct.chd").path()).unwrap()
+            == fs::read(temp.child("staged.chd").path()).unwrap(),
+        "the DCP CHD must hold the whole rebuilt track, as compressing the rebuilt disc does"
+    );
+}
+
+#[test]
+fn patch_apply_dcp_absolute_sheet_references_are_not_unreferenced_files() {
+    let temp = setup_temp_dir();
+    write_dcp_source_gdi(&temp);
+    // The browser points a staged sheet at its tracks by absolute path.
+    let track = |name: &str| temp.child(name).path().to_str().unwrap().to_string();
+    temp.child("disc.gdi")
+        .write_str(&format!(
+            "3\n1 0 4 2352 {} 0\n2 8 0 2352 {} 0\n3 45000 4 2352 {} 0\n",
+            track("track01.bin"),
+            track("track02.bin"),
+            track("track03.bin"),
+        ))
+        .unwrap();
+    fs::write(temp.child("NEW.DAT").path(), b"added by the DCP").expect("DCP payload");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("NEW.DAT").path().to_str().unwrap(),
+            "--format",
+            "zip",
+            "--output",
+            temp.child("game.dcp").path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let stdout = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.gdi").path().to_str().unwrap(),
+            "--patch",
+            temp.child("game.dcp").path().to_str().unwrap(),
+            "--no-compress",
+            "--output",
+            temp.child("out/rebuilt.bin").path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let events = parse_json_lines(&stdout);
+    let terminal = events.last().expect("terminal event");
+    assert_patch_envelope(terminal, "patch-apply", "dcp", "succeeded");
+    assert!(
+        !terminal.to_string().contains("unreferenced"),
+        "the sheet's own tracks must not be reported as unreferenced: {terminal}"
+    );
+    assert_eq!(
+        terminal
+            .pointer("/result/details/dcp_data_track/name")
+            .or_else(|| terminal.pointer("/details/dcp_data_track/name")),
+        Some(&serde_json::json!(track("track03.bin")))
+    );
 }
 
 #[test]

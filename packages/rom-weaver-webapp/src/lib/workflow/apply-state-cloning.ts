@@ -108,6 +108,7 @@ const clonePatchState = (
   candidates: state.candidates.map(cloneCandidate),
   checksumPreflight: clonePatchChecksumPreflight(state.checksumPreflight),
   checksumTimeMs: state.checksumTimeMs,
+  ...(state.dcp ? { dcp: true } : {}),
   decompressionTimeMs: state.decompressionTimeMs,
   fileName: state.fileName,
   headerChoice: state.headerChoice,

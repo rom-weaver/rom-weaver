@@ -54,6 +54,8 @@ type InternalSourceState = {
   requirements?: InternalPatchRequirements;
   checksumPreflight?: InternalPatchChecksumPreflight;
   patchValidation?: InternalPatchValidation;
+  /** A Dreamcast `.dcp`: it runs alone on the whole disc, with no header, checksum, or track options. */
+  dcp?: boolean;
   chainVerdict?: InternalChainVerdict;
   /** User override for which state this patch's embedded input checks describe. */
   basisChoice?: ApplyWorkflowPatchState["basisChoice"];

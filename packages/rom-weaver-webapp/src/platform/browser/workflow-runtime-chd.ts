@@ -19,10 +19,10 @@ import {
 } from "../../lib/runtime/workflow-runtime-worker-helpers.ts";
 import type { RuntimeWorkerIo } from "../../types/workflow-runtime-adapter.ts";
 import {
-  type BrowserVirtualFileSource,
   getBrowserVirtualFileSource,
   updateBrowserVirtualFileSource,
 } from "../../workers/protocol/browser-virtual-files.ts";
+import { readStagedCueText } from "./disc-sheet-staging.ts";
 import { ROM_WEAVER_CHD_CREATE_MODES } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { parseCueFile, replaceCueFileReferences } from "../../workers/protocol/cue-file-utils.ts";
 import {
@@ -38,7 +38,7 @@ import {
   normalizeRomSpecificEntryNameForSource,
   uniqueNonEmptyStrings,
 } from "./workflow-runtime-helpers.ts";
-import { browserVfs, readTextFromBrowserVfs, writeTextToBrowserVfs } from "./workflow-runtime-vfs-cleanup.ts";
+import { browserVfs, writeTextToBrowserVfs } from "./workflow-runtime-vfs-cleanup.ts";
 
 const CHD_SINGLE_BIN_OUTPUT_REGEX = /\.bin$/i;
 const CHD_ROM_SPECIFIC_FORMAT = ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY.chd;
@@ -86,21 +86,6 @@ const getChdCreateFormat = (requestedMode: string): string => {
     ? ROM_WEAVER_CHD_CREATE_MODES[mode as keyof typeof ROM_WEAVER_CHD_CREATE_MODES]
     : undefined;
   return canonical ? `${CHD_MODE_PREFIX}${canonical}` : "chd";
-};
-
-// Read a staged input's text whether it lives on OPFS or as an in-memory virtual file. File/Blob cue
-// sources are served as virtual files (never written to OPFS), so the OPFS VFS `stat`/`read` returns
-// nothing for them - the registry is the only place their bytes exist on the main thread.
-const virtualSourceToText = async (source: BrowserVirtualFileSource): Promise<string> => {
-  if (source instanceof Uint8Array) return new TextDecoder().decode(source);
-  if (source instanceof ArrayBuffer) return new TextDecoder().decode(new Uint8Array(source));
-  return source.text();
-};
-
-const readStagedCueText = async (cuePath: string): Promise<string> => {
-  const virtualSource = getBrowserVirtualFileSource(cuePath);
-  if (virtualSource) return virtualSourceToText(virtualSource);
-  return readTextFromBrowserVfs(cuePath);
 };
 
 const rewriteStagedCue = async (cuePath: string, rewrite: (contents: string) => string) => {
@@ -184,6 +169,7 @@ const createBrowserChdRuntime = (
           })),
         )
       : [];
+    const cueScope = createRomWeaverOutputScope();
 
     try {
       const stagedInputPaths = [workerInput.filePath, ...stagedImageSources.map((entry) => entry.filePath)];
@@ -229,6 +215,25 @@ const createBrowserChdRuntime = (
           replaceCueFileReferences(contents, (name) => stagedTracks.get(getPathBaseName(name).toLowerCase())),
         );
       }
+      // A cue now pointing at its staged tracks by absolute path is compressed from a private directory:
+      // GD-ROM layout reads prefer a `.gdi` of the same stem beside the cue, and the shared staging
+      // directory can still hold another disc's retained `disc-2.gdi` whose tracks are gone. A `cd`
+      // layout never looks for that `.gdi`, so it keeps the staged cue.
+      if (
+        requestedMode !== "cd" &&
+        /\.cue$/i.test(chdInputPath) &&
+        !normalizedCueFilePath &&
+        stagedImageSources.length > 0
+      ) {
+        const isolatedCuePath = joinPath(cueScope.rootPath, getPathBaseName(chdInputPath, "disc.cue"));
+        await writeTextToBrowserVfs(isolatedCuePath, await readStagedCueText(chdInputPath));
+        emitBrowserWorkflowTrace({ logLevel, onLog }, "chd cue isolated from staged siblings", {
+          cuePath: isolatedCuePath,
+          stagedCuePath: chdInputPath,
+        });
+        chdInputPath = isolatedCuePath;
+        stagedInputPaths.push(isolatedCuePath);
+      }
 
       // Disc sheets MUST hydrate every referenced track before worker threads read the layout.
       if (/\.(cue|gdi)$/i.test(chdInputPath)) {
@@ -266,6 +271,7 @@ const createBrowserChdRuntime = (
         "CHD compression worker did not return browser output",
       );
     } finally {
+      await cueScope.cleanup().catch(() => undefined);
       await workerInput.cleanup().catch(() => undefined);
       await Promise.all(stagedImageSources.map((imageSource) => imageSource.cleanup().catch(() => undefined)));
     }

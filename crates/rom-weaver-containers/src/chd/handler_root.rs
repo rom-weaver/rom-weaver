@@ -109,9 +109,23 @@ impl DiscLayout {
     /// Redirect matching tracks to alternate path or memory sources. Shared-bin
     /// tracks retain their offsets. A track matches when its file is the same
     /// file as `original_path`, however either path spells it. An unmatched
-    /// override errors rather than silently emitting original bytes.
+    /// override errors rather than silently emitting original bytes, and so
+    /// does one whose size differs from the original file: the layout's frame
+    /// counts come from the original, so the replacement would be truncated
+    /// or padded.
     fn apply_input_overrides(&mut self, overrides: &[CreateInputOverride]) -> Result<()> {
         for ovr in overrides {
+            let original_len = fs::metadata(&ovr.original_path)?.len();
+            let len = match &ovr.source {
+                CreateInputSource::Path(path) => fs::metadata(path)?.len(),
+                CreateInputSource::Bytes(bytes) => bytes.len() as u64,
+            };
+            if len != original_len {
+                return Err(RomWeaverError::Validation(format!(
+                    "disc create track override for `{}` is {len} bytes but the original track file is {original_len} bytes; stage the resized disc instead",
+                    ovr.original_path.display()
+                )));
+            }
             let mut matched = false;
             for track in &mut self.tracks {
                 let sources = std::iter::once((&mut track.file_path, &mut track.memory_source))

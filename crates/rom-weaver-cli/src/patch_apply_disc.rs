@@ -28,6 +28,8 @@ pub(super) struct DiscContext {
     files: Vec<DiscFile>,
     /// The single track selected by `--target` (or the only track).
     pub target_file: PathBuf,
+    /// The target track's name exactly as written in the source sheet.
+    pub target_name: String,
     /// Non-fatal notes (e.g. ignored unreferenced files) to surface in the
     /// report label.
     pub warnings: Vec<String>,
@@ -199,11 +201,13 @@ impl CliApp {
         target_index: usize,
     ) -> Result<DiscContext> {
         let target_file = files[target_index].path.clone();
+        let target_name = files[target_index].name.clone();
         let warnings = self.confirm_disc_grouping(input, sheet_directory(input), &files)?;
         Ok(DiscContext {
             sheet_paths,
             files,
             target_file,
+            target_name,
             warnings,
         })
     }
@@ -334,9 +338,12 @@ impl CliApp {
         sheet_dir: &Path,
         files: &[DiscFile],
     ) -> Result<Vec<String>> {
+        // Compare resolved paths, not sheet names: an absolute reference (the
+        // browser stages tracks and points its sheet at them) names a file in
+        // this directory by its full path.
         let referenced = files
             .iter()
-            .map(|file| file.name.to_ascii_lowercase())
+            .map(|file| file.path.to_string_lossy().to_ascii_lowercase())
             .collect::<std::collections::BTreeSet<_>>();
         let mut loose = Vec::new();
         for entry in fs::read_dir(sheet_dir)? {
@@ -346,7 +353,7 @@ impl CliApp {
             if !(lower.ends_with(".bin") || lower.ends_with(".img") || lower.ends_with(".iso")) {
                 continue;
             }
-            if referenced.contains(&lower) {
+            if referenced.contains(&sheet_dir.join(&name).to_string_lossy().to_ascii_lowercase()) {
                 continue;
             }
             loose.push(name);
@@ -442,6 +449,29 @@ impl CliApp {
             }
         }
         Ok(())
+    }
+
+    /// Whether every replacement track keeps its original byte length. A create
+    /// override swaps a track's bytes but keeps the layout built from the
+    /// original files, so a resized track (a `.dcp` rebuild that adds sectors,
+    /// a patch that grows a track) must be compressed from a staged disc.
+    pub(super) fn disc_replacements_keep_track_sizes(
+        replacements: &BTreeMap<PathBuf, PathBuf>,
+    ) -> Result<bool> {
+        for (original_path, path) in replacements {
+            let original_len = fs::metadata(original_path)?.len();
+            let len = fs::metadata(path)?.len();
+            if original_len != len {
+                debug!(
+                    track = %original_path.display(),
+                    original_len,
+                    len,
+                    "replacement disc track changed size; staging the disc for compression"
+                );
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     /// Multiple target results MUST remain file-backed until compression ends

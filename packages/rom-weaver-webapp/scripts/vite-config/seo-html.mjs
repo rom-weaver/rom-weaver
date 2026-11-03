@@ -181,7 +181,7 @@ const WORKFLOW_MARKDOWN_GUIDES = {
     sections: [
       "Patch a ROM in four steps",
       "What do you need?",
-      "Dreamcast DCP patches need the CLI",
+      "Apply a Dreamcast DCP patch",
       "If the ROM does not match",
     ],
   },

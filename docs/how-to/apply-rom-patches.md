@@ -21,7 +21,7 @@ Patch a ROM in four steps with the free [online ROM patcher](https://rom-weaver.
 - [Apply a PPF patch](#apply-a-ppf-patch)
 - [Apply APS, APSGBA, RUP, and other patch formats](#apply-aps-apsgba-rup-and-other-patch-formats)
 - [Apply an HDiffPatch or HPatchZ patch](#apply-an-hdiffpatch-or-hpatchz-patch)
-- [Dreamcast DCP patches need the CLI](#dreamcast-dcp-patches-need-the-cli)
+- [Apply a Dreamcast DCP patch](#apply-a-dreamcast-dcp-patch)
 - [Read the ROM and patch cards](#read-the-rom-and-patch-cards)
 - [Apply multiple patches in order](#apply-multiple-patches-in-order)
 - [Add cheats to the patch order](#add-cheats-to-the-patch-order)
@@ -107,9 +107,18 @@ The same input steps cover APS, APSGBA, RUP, SOLID, GDIFF, PAT/FireFlower, EBP, 
 
 Add a single-file `.hdiff`/`.hpatchz` and its matching source. Check the author's digest. Directory patches marked `HDIFF19` are unsupported; use the author's directory-patching tool.
 
-## Dreamcast DCP patches need the CLI
+<a id="dreamcast-dcp-patches-need-the-cli"></a>
 
-Use the [CLI DCP procedure](cli-apply.md#apply-a-dreamcast-dcp-patch); browser Apply lacks that disc-sheet workflow. Adding a `.dcp` shows a failed patch card that names DCP and gives the CLI procedure's address as plain text, and Apply stays blocked. NINJA1 and PDS cannot be applied. See [support limits](../reference/formats.md#patch-formats).
+## Apply a Dreamcast DCP patch
+
+1. Add the Dreamcast disc: its `.gdi` or GD-ROM `.cue` (one with `REM HIGH-DENSITY AREA`) with every track file, a GD-ROM CHD, or a ZIP or 7z of them.
+2. Check that the disc matches the DCP author's required release. A DCP carries no checksums, so Apply cannot check it for you.
+3. Add the `.dcp` as the only patch, with no cheats turned on. Its card targets the whole disc and has no track, header, or checks controls.
+4. [Choose the output and apply](#choose-the-output-and-apply): CHD, ZIP, 7z, or the uncompressed disc.
+
+rom-weaver rebuilds the disc's GD-ROM data track and keeps every other track as it was. If the card says the DCP must be applied on its own, remove or turn off the other patches and cheats. If it asks for a GD-ROM disc, add the disc instead of a single file. The [CLI DCP procedure](cli-apply.md#apply-a-dreamcast-dcp-patch) produces the same disc.
+
+NINJA1 and PDS cannot be applied. See [support limits](../reference/formats.md#patch-formats).
 
 ## Read the ROM and patch cards
 

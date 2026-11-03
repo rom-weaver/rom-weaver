@@ -28,6 +28,7 @@ type OutputApplyButtonState = {
   /** Validation blocks Apply: shown aria-disabled with a reason, cleared by the "Apply anyway" override. */
   blocked: boolean;
   blockedByDamagedPatch: boolean;
+  blockedByDcpPatch: boolean;
   loading: boolean;
   progress: ProgressViewModel | null;
 };
@@ -99,6 +100,8 @@ type PatchStackItemState = {
   validationValues: string[];
   validationMessage: string;
   validationUnreadable: boolean;
+  /** A Dreamcast `.dcp`: the card hides the track, header, byte-order, basis, and checks controls. */
+  dcp?: boolean;
   validationActualValue: string;
   targetDisabled?: boolean;
   targetOptions?: PatchTargetOption[];
@@ -158,6 +161,7 @@ const createEmptyPatcherOutputState = ({
   applyButton: {
     blocked: false,
     blockedByDamagedPatch: false,
+    blockedByDcpPatch: false,
     disabled: true,
     label: applyButtonLabel,
     loading: false,

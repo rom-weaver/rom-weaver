@@ -267,6 +267,7 @@ const toPatchStageInfo = (
       !!patch.checksumPreflight?.requiredCrc32 || (!!patch.chainVerdict && patch.chainVerdict.matched.kind !== "none"),
     checksumPreflightMismatch: validation.checksumMismatch,
     checksumTiming: validation.checksumTiming,
+    dcp: patch.dcp === true,
     decompressionTimeMs: patch.decompressionTimeMs,
     fileName,
     format: patch.requirements?.format,

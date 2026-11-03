@@ -77,9 +77,11 @@ function PatcherPrimaryAction({
   const runDisabled = state.applyButton.disabled || !!disableRun;
   const blocked = state.applyButton.blocked && !state.applyButton.loading && !runDisabled;
   const disabledReason = disableRun && !state.applyButton.loading && !state.applyButton.disabled ? disableReason : "";
-  const blockedMessageId = state.applyButton.blockedByDamagedPatch
-    ? "ui.output.applyBlockedDamagedPatch"
-    : "ui.output.applyBlocked";
+  const blockedMessageId = state.applyButton.blockedByDcpPatch
+    ? "ui.output.applyBlockedDcpPatch"
+    : state.applyButton.blockedByDamagedPatch
+      ? "ui.output.applyBlockedDamagedPatch"
+      : "ui.output.applyBlocked";
   const reason = blocked ? localizer.message(blockedMessageId) : disabledReason;
   return (
     <>

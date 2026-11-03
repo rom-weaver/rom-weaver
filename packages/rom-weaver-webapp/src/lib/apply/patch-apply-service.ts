@@ -246,6 +246,19 @@ const parsePatchForApply = async (
   return createParsedPatchProxy(patchFile, requirements);
 };
 
+// A Dreamcast .dcp rebuilds a disc's filesystem and carries no byte-level source requirements, so it is
+// described by name alone; ingest is not run over its ZIP.
+const createDcpParsedPatch = (patchFile: PatchFileInstance): ParsedPatchLike =>
+  ({
+    _originalPatchFile: patchFile,
+    constructor: { name: "DCP" },
+    description: null,
+    format: "DCP",
+    getDescription: () => null,
+    getValidationInfo: () => null,
+    isXdeltaPatch: false,
+  }) as unknown as ParsedPatchLike;
+
 const toPublicOutput = async (file: PatchFileInstance, runtime: WorkflowRuntime): Promise<PublicOutput> => {
   const cleanup = getPatchFileCleanup(file);
   const outputName = file.fileName || "patched.bin";
@@ -407,6 +420,7 @@ const resolvePatchTargets = async (
 
 export {
   attachIngestPatchRequirements,
+  createDcpParsedPatch,
   inheritIngestPatchRequirements,
   getPatchProbeRequirements,
   parsePatchForApply,

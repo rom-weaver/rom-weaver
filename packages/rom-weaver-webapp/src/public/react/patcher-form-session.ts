@@ -443,6 +443,8 @@ const useLocalApplyPatchFormSession = ({
   const patchValidationBlocked = stagedPatchInfos.some(
     (info) => info.validationState === "invalid" && info.checksumPreflightMismatch !== true,
   );
+  // A DCP fault has no "Apply anyway" override, so the blocked reason must not offer one.
+  const dcpPatchBlocked = stagedPatchInfos.some((info) => info.dcp && info.validationState === "invalid");
   const applyQueueBlocked =
     !!applyValidationError ||
     !!failureMessage ||
@@ -595,6 +597,7 @@ const useLocalApplyPatchFormSession = ({
         applyBlocked: !!applyValidationError || strictInputChecksumBlocked || patchValidationBlocked,
         applyBlockedByDamagedPatch:
           checksumOverrideNamesDamagedPatch && !applyValidationError && !patchValidationBlocked,
+        applyBlockedByDcpPatch: dcpPatchBlocked && !applyValidationError,
         applyQueued,
         applyTimingText,
         busy,
@@ -622,6 +625,7 @@ const useLocalApplyPatchFormSession = ({
       applyValidationError,
       activeSettings,
       checksumOverrideNamesDamagedPatch,
+      dcpPatchBlocked,
       strictInputChecksumBlocked,
       patchValidationBlocked,
       identifiedTitle,
