@@ -82,7 +82,13 @@ rom-weaver trim --input game-trimmed.gba --output game.gba --revert
 rom-weaver trim --input games.zip
 ```
 
-`trim` reads the archive's file list first and extracts only the members it can use: trimmable ROMs, `.iso` files that may be XISO discs, and nested archives (including CHD and CSO, which can hold an XISO). GameCube/Wii discs are skipped without extraction when their name gives them away (`.rvz`, `.wbfs`, `.wia`, `.gcz`, `.gcm`, `.tgc`), or by reading the first bytes of an `.iso` or `.ciso` member, which works in ZIP, 7z, RAR, tar, and single-file streams such as `.iso.gz`. Each supported ROM is written beside the archive using its member filename and the trim extension. `--output` requires exactly one supported ROM. Conflicting output names are rejected before writing, including with `--force`.
+`trim` reads the archive's file list first and extracts only the members it can use: trimmable ROMs, `.iso` files that may be XISO discs, and nested archives (including CHD and CSO, which can hold an XISO). GameCube/Wii discs are skipped without extraction when their name gives them away (`.rvz`, `.wbfs`, `.wia`, `.gcz`, `.gcm`, `.tgc`), or by reading the first bytes of an `.iso` or `.ciso` member, which works in ZIP, 7z, RAR, tar, and single-file streams such as `.iso.gz`.
+
+Nested ZIP and tar archives can be inspected without extracting them. This includes compressed tar archives such as `.tar.gz`. Trim skips them when they hold only discs or files it cannot use.
+
+Duplicate member names or unverified ZIP listings fall back to extraction. ZIP64 and ZIP directories exceeding the 1 MiB inspection window also use this fallback. Other nested archives, such as 7z, are extracted first. The discs inside them are still skipped.
+
+Each supported ROM is written beside the archive using its member filename and the trim extension. `--output` requires exactly one supported ROM. Conflicting output names are rejected before writing, including with `--force`.
 
 `--no-filter` also extracts members with names that say nothing about their contents, such as `bundle.dat`, so their contents decide; known GameCube/Wii discs are still skipped. A patch-only `--filter` is rejected.
 

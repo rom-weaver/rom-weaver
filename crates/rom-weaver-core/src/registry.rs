@@ -216,6 +216,44 @@ pub struct ContainerListEntry {
     pub size: Option<u64>,
 }
 
+/// An entry of an archive stored inside another archive, read by streaming the outer member.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NestedArchiveEntry {
+    /// Path inside the nested archive; directories end with `/`.
+    pub path: String,
+    /// Leading bytes, read only for entries the visitor asked for.
+    pub prefix: Option<Vec<u8>>,
+}
+
+/// What a nested read does with an inner entry, decided from its path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NestedEntryAction {
+    /// Record the entry without reading it.
+    List,
+    /// Record the entry with its leading bytes.
+    ReadPrefix,
+    /// Record the entry and stop listing this nested archive.
+    Stop,
+}
+
+/// How a nested read treats each inner entry.
+pub struct NestedEntryVisitor<'a> {
+    /// What to do with an entry, decided from its path.
+    pub action: &'a dyn Fn(&str) -> NestedEntryAction,
+    /// Whether the leading bytes just read for an entry settle the listing, which then stops.
+    pub stop_after_prefix: &'a dyn Fn(&str, &[u8]) -> bool,
+    /// End the whole pass once a listing stops, leaving later members unread.
+    pub end_pass_on_stop: bool,
+}
+
+/// The entries read from one nested archive.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NestedArchiveListing {
+    pub entries: Vec<NestedArchiveEntry>,
+    /// The visitor stopped the listing, so later entries are missing.
+    pub stopped: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContainerExtractRequest {
     pub source: PathBuf,
@@ -471,6 +509,22 @@ pub trait ContainerHandlerOperations: Send + Sync {
         context: &OperationContext,
     ) -> Result<BTreeMap<String, Vec<u8>>> {
         let _ = (request, entries, max_len, context);
+        Ok(BTreeMap::new())
+    }
+    /// List each archive stored in one of `members` by streaming it front to back, all in one
+    /// pass over this archive and without extracting anything. `visitor` decides per inner entry
+    /// whether to read at most `max_len` leading bytes or to stop that listing. A member missing
+    /// from the result could not be read that way (an inner format that needs seeking, such as
+    /// 7z), so callers MUST then extract it. The default reads nothing.
+    fn read_nested_entry_prefixes(
+        &self,
+        request: &ContainerProbeRequest,
+        members: &[String],
+        max_len: usize,
+        visitor: &NestedEntryVisitor<'_>,
+        context: &OperationContext,
+    ) -> Result<BTreeMap<String, NestedArchiveListing>> {
+        let _ = (request, members, max_len, visitor, context);
         Ok(BTreeMap::new())
     }
     fn extract(
@@ -801,6 +855,47 @@ impl ContainerHandlerOperations for TracingContainerHandler {
                     format = descriptor.name,
                     error = %error,
                     "container entry prefix read failed"
+                );
+            }
+        }
+        result
+    }
+
+    fn read_nested_entry_prefixes(
+        &self,
+        request: &ContainerProbeRequest,
+        members: &[String],
+        max_len: usize,
+        visitor: &NestedEntryVisitor<'_>,
+        context: &OperationContext,
+    ) -> Result<BTreeMap<String, NestedArchiveListing>> {
+        let descriptor = self.registration.descriptor;
+        trace!(
+            family = ?descriptor.family,
+            format = descriptor.name,
+            source = %request.source.display(),
+            requested = members.len(),
+            max_len,
+            "container nested entry prefix read start"
+        );
+        let result = self
+            .inner
+            .read_nested_entry_prefixes(request, members, max_len, visitor, context);
+        match &result {
+            Ok(listings) => {
+                trace!(
+                    family = ?descriptor.family,
+                    format = descriptor.name,
+                    read = listings.len(),
+                    "container nested entry prefix read complete"
+                );
+            }
+            Err(error) => {
+                trace!(
+                    family = ?descriptor.family,
+                    format = descriptor.name,
+                    error = %error,
+                    "container nested entry prefix read failed"
                 );
             }
         }

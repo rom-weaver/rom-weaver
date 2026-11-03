@@ -1,6 +1,6 @@
 use super::*;
 use std::collections::BTreeMap;
-use tracing::trace;
+use tracing::{debug, trace};
 
 const REGULAR_ARCHIVE_READ_BLOCK_BYTES: usize = 2 * 1024 * 1024;
 
@@ -491,6 +491,120 @@ where
         (Ok(_), Err(error)) => Err(error),
     }
 }
+/// List the archives stored in the file entries `member_key` maps to a key, in one forward pass
+/// that stops once `expected` keys are seen: each member's data is streamed into a second reader,
+/// and `visitor` decides per inner entry whether to read at most `max_len` leading bytes or to
+/// stop that member's listing. Inner directories end with `/`. Nothing is extracted. A member whose
+/// key is duplicated or whose data cannot be safely listed without seeking is left out of the result.
+pub fn read_nested_regular_archive_entry_prefixes(
+    source: &Path,
+    format_name: &str,
+    member_key: &dyn Fn(&str) -> Option<String>,
+    expected: usize,
+    max_len: usize,
+    visitor: &rom_weaver_core::NestedEntryVisitor<'_>,
+) -> Result<BTreeMap<String, rom_weaver_core::NestedArchiveListing>> {
+    trace!(
+        format = format_name,
+        source = %source.display(),
+        expected,
+        max_len,
+        "nested archive prefix read start"
+    );
+    let mut listings = BTreeMap::new();
+    if expected == 0 {
+        return Ok(listings);
+    }
+    // A name-keyed listing MUST NOT decide for distinct payloads extracted to the same path.
+    let mut unique = std::collections::BTreeSet::new();
+    let mut ambiguous = std::collections::BTreeSet::new();
+    for entry in list_regular_archive_entries(source, format_name)? {
+        if !entry.is_dir
+            && let Some(key) = member_key(&entry.path)
+            && !unique.insert(key.clone())
+        {
+            ambiguous.insert(key);
+        }
+    }
+    if !ambiguous.is_empty() {
+        trace!(
+            format = format_name,
+            members = ambiguous.len(),
+            "nested archive prefix read omitted ambiguous member names"
+        );
+    }
+    unique.retain(|key| !ambiguous.contains(key));
+    let expected = expected.min(unique.len());
+    if expected == 0 {
+        return Ok(listings);
+    }
+    let mut reader = open_regular_archive_reader(source, format_name)?;
+    let result = (|| -> Result<()> {
+        let mut seen = std::collections::BTreeSet::new();
+        let mut index = 0usize;
+        while let Some(entry) = reader.next_entry().map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "{format_name} nested read failed while reading entry {index}: {error}"
+            ))
+        })? {
+            index = index.saturating_add(1);
+            if !entry.is_file() {
+                continue;
+            }
+            let Some(key) = entry
+                .pathname()
+                .ok()
+                .and_then(|path| member_key(&path))
+                .filter(|key| unique.contains(key) && !seen.contains(key))
+            else {
+                continue;
+            };
+            seen.insert(key.clone());
+            let mut member = entry.into_reader();
+            match with_streamed_regular_archive(
+                &mut member,
+                64 * 1024,
+                &format!("{format_name} nested archive read"),
+                max_len,
+                visitor,
+            ) {
+                Ok(listing) => {
+                    trace!(
+                        format = format_name,
+                        member = %key,
+                        entries = listing.entries.len(),
+                        stopped = listing.stopped,
+                        "nested archive prefix read member"
+                    );
+                    let end_pass = listing.stopped && visitor.end_pass_on_stop;
+                    listings.insert(key, listing);
+                    if end_pass {
+                        break;
+                    }
+                }
+                Err(error) => {
+                    debug!(
+                        format = format_name,
+                        member = %key,
+                        %error,
+                        "nested archive could not be streamed; the member must be extracted"
+                    );
+                }
+            }
+            if seen.len() == expected {
+                break;
+            }
+        }
+        Ok(())
+    })();
+
+    match (result, close_regular_archive_reader(reader, format_name)) {
+        (Ok(()), Ok(())) => Ok(listings),
+        (Err(error), _) => Err(error),
+        (Ok(()), Err(error)) => Err(error),
+    }
+}
+
 fn open_regular_archive_reader(source: &Path, format_name: &str) -> Result<ReadArchive> {
     let mut reader = ReadArchive::new(&format!("{format_name} archive reader allocation failed"))?;
     reader.support_regular_archives(&format!("{format_name} archive setup failed"))?;

@@ -20,8 +20,8 @@ use crate::libarchive::{
     WriteFilter as LibarchiveCreateFilter, WriteFormat as LibarchiveCreateFormat,
     list_regular_archive_entries,
     probe_regular_archive as probe_regular_archive_with_libarchive_impl,
-    probe_regular_archive_format, read_regular_archive_entry_prefixes,
-    visit_selected_regular_archive_entries,
+    probe_regular_archive_format, read_nested_regular_archive_entry_prefixes,
+    read_regular_archive_entry_prefixes, visit_selected_regular_archive_entries,
 };
 use rayon::prelude::*;
 use rom_weaver_core::{
@@ -763,6 +763,50 @@ pub(crate) fn read_regular_archive_entry_prefixes_with_libarchive(
         let name = normalize_archive_name(path);
         wanted.contains(&name).then_some(name)
     })
+}
+
+/// [`rom_weaver_core::ContainerHandler::read_nested_entry_prefixes`] for a regular archive, with
+/// member and inner entry names normalized as [`list_regular_archive_entries_with_libarchive`]
+/// reports them.
+pub(crate) fn read_nested_regular_archive_entry_prefixes_with_libarchive(
+    source: &Path,
+    format_name: &str,
+    members: &[String],
+    max_len: usize,
+    visitor: &rom_weaver_core::NestedEntryVisitor<'_>,
+) -> Result<BTreeMap<String, rom_weaver_core::NestedArchiveListing>> {
+    let normalize = |path: &str| {
+        let name = normalize_archive_name(path);
+        if path.ends_with('/') {
+            format!("{}/", name.trim_end_matches('/'))
+        } else {
+            name
+        }
+    };
+    let wanted = members.iter().cloned().collect::<BTreeSet<_>>();
+    let mut listings = read_nested_regular_archive_entry_prefixes(
+        source,
+        format_name,
+        &|path| {
+            let name = normalize_archive_name(path);
+            wanted.contains(&name).then_some(name)
+        },
+        wanted.len(),
+        max_len,
+        &rom_weaver_core::NestedEntryVisitor {
+            action: &|path| (visitor.action)(&normalize(path)),
+            stop_after_prefix: &|path, prefix| {
+                (visitor.stop_after_prefix)(&normalize(path), prefix)
+            },
+            end_pass_on_stop: visitor.end_pass_on_stop,
+        },
+    )?;
+    for listing in listings.values_mut() {
+        for entry in &mut listing.entries {
+            entry.path = normalize(&entry.path);
+        }
+    }
+    Ok(listings)
 }
 
 #[derive(Clone, Debug)]

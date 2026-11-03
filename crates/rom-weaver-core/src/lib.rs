@@ -89,6 +89,7 @@ pub use registry::{
     ChecksumRequest, ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest,
     ContainerHandler, ContainerHandlerOperations, ContainerHandlerRegistration, ContainerListEntry,
     ContainerProbeRequest, CreateInputOverride, CreateInputSource, CreateSupport, FormatDescriptor,
+    NestedArchiveEntry, NestedArchiveListing, NestedEntryAction, NestedEntryVisitor,
     OperationReport, PatchApplyRequest, PatchCapabilities, PatchCreateFormatOptions,
     PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence, SolidPatchMetadata,
     traced_container_handler, traced_patch_handler,

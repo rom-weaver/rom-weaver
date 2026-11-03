@@ -3086,3 +3086,464 @@ fn trim_reads_the_extension_of_a_non_utf8_file_name() {
     assert_eq!(terminal["status"], "succeeded", "-o .zip");
     assert_eq!(&fs::read(&zip).expect("zip")[..2], b"PK");
 }
+
+#[test]
+fn trim_reads_discs_inside_nested_archives_without_extracting_them() {
+    let staging = setup_temp_dir();
+    let iso = write_gamecube_iso(&staging, "disc.iso");
+    let inner_zip = staging.child("inner.zip");
+    pack_archive(inner_zip.path(), &[&iso]);
+    let inner_tar_gz = staging.child("inner.tar.gz");
+    write_tar_gz_fixture(&[(&iso, "disc.iso")], inner_tar_gz.path());
+    for (outer_name, inner) in [
+        ("zip-in-zip.zip", inner_zip.path()),
+        ("zip-in-7z.7z", inner_zip.path()),
+        ("tgz-in-zip.zip", inner_tar_gz.path()),
+    ] {
+        let temp = setup_temp_dir();
+        let outer = temp.child(outer_name);
+        pack_archive(outer.path(), &[inner]);
+        let outer_path = outer.path().to_str().expect("path");
+        let output = command_output_with_env(
+            &[
+                "--log-level",
+                "trace",
+                "trim",
+                "--input",
+                outer_path,
+                "--json",
+            ],
+            &[],
+            1,
+        );
+        let terminal = parse_single_json_line(&output.stdout);
+        assert!(
+            terminal["label"]
+                .as_str()
+                .is_some_and(|label| label.contains("holds a GameCube/Wii disc")),
+            "{outer_name}: {terminal}"
+        );
+        let extractions = trim_extraction_lines(&output.stderr);
+        assert!(extractions.is_empty(), "{outer_name}: {extractions:#?}");
+
+        let probe = parse_single_json_line(&command_stdout(
+            &["probe", "--input", outer_path, "--trim-members", "--json"],
+            0,
+        ));
+        assert_eq!(
+            probe["details"]["trim_members"],
+            serde_json::json!({"extract": [], "gamecube_wii_discs": 1}),
+            "{outer_name}"
+        );
+    }
+}
+
+#[test]
+fn trim_extracts_a_nested_archive_that_holds_a_rom() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let rom = staging.child("game.nds");
+    fs::write(
+        rom.path(),
+        build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false),
+    )
+    .expect("nds fixture");
+    let iso = write_gamecube_iso(&staging, "disc.iso");
+    let inner = staging.child("inner.zip");
+    pack_archive(inner.path(), &[rom.path(), &iso]);
+    let outer = temp.child("outer.zip");
+    pack_archive(outer.path(), &[inner.path()]);
+    let output = command_output_with_env(
+        &[
+            "--log-level",
+            "trace",
+            "trim",
+            "--input",
+            outer.path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        &[],
+        0,
+    );
+    let terminal = parse_single_json_line(&output.stdout);
+    assert_eq!(terminal["details"]["processed"], 1, "{terminal}");
+    // The outer archive yields the inner one, and the inner one only the ROM.
+    let extractions = trim_extraction_lines(&output.stderr);
+    assert_eq!(extractions.len(), 2, "{extractions:#?}");
+    assert!(
+        extractions
+            .iter()
+            .all(|line| line.contains("\"selections\":1")),
+        "{extractions:#?}"
+    );
+}
+
+#[test]
+fn trim_extracts_a_nested_7z_to_read_the_disc_inside() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let iso = write_gamecube_iso(&staging, "disc.iso");
+    let inner = staging.child("inner.7z");
+    pack_archive(inner.path(), &[&iso]);
+    let outer = temp.child("outer.zip");
+    pack_archive(outer.path(), &[inner.path()]);
+    let output = command_output_with_env(
+        &[
+            "--log-level",
+            "trace",
+            "trim",
+            "--input",
+            outer.path().to_str().expect("path"),
+            "--json",
+        ],
+        &[],
+        1,
+    );
+    let terminal = parse_single_json_line(&output.stdout);
+    assert!(
+        terminal["label"]
+            .as_str()
+            .is_some_and(|label| label.contains("holds a GameCube/Wii disc")),
+        "{terminal}"
+    );
+    // 7z cannot be streamed, so the inner archive is extracted, but never the disc in it.
+    let extractions = trim_extraction_lines(&output.stderr);
+    assert_eq!(extractions.len(), 1, "{extractions:#?}");
+}
+
+fn write_nested_zip_fixture(path: &Path, entries: &[(&str, &[u8])]) {
+    use rom_weaver_containers::libarchive::{
+        EntryFileType, EntrySpec, WriteArchive, WriteFilter, WriteFormat,
+    };
+    let mut archive = WriteArchive::new("fixture").expect("zip writer");
+    archive
+        .set_format(WriteFormat::Zip, "fixture")
+        .expect("zip format");
+    archive
+        .add_filter(WriteFilter::None, "fixture")
+        .expect("no filter");
+    archive
+        .open_filename(path, "fixture", "fixture")
+        .expect("zip output");
+    for (name, bytes) in entries {
+        archive
+            .start_entry(
+                EntrySpec {
+                    pathname: name,
+                    file_type: EntryFileType::Regular,
+                    perm: 0o644,
+                    size: bytes.len() as u64,
+                },
+                "fixture",
+            )
+            .expect("zip entry");
+        archive.write_data_all(bytes, "fixture").expect("zip data");
+        archive.finish_entry("fixture").expect("zip finish entry");
+    }
+    archive.close("fixture", "fixture").expect("zip close");
+}
+
+fn assert_ambiguous_nested_zip_retains_rom(outer: &Path, rom: &[u8]) {
+    let input = outer.to_str().expect("path");
+    let probe = parse_single_json_line(&command_stdout(
+        &["probe", "--input", input, "--trim-members", "--json"],
+        0,
+    ));
+    assert_eq!(
+        probe["details"]["trim_members"]["extract"],
+        serde_json::json!(["inner.zip"]),
+        "{probe}"
+    );
+    let trim = parse_single_json_line(&command_stdout(
+        &["trim", "--input", input, "--dry-run", "--json"],
+        0,
+    ));
+    assert_eq!(trim["details"]["processed"], 1, "{trim}");
+    let output = outer.with_extension("nds");
+    command_stdout(
+        &[
+            "trim",
+            "--input",
+            input,
+            "--output",
+            output.to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(fs::read(output).expect("trimmed ROM"), &rom[..0x3000]);
+}
+
+fn duplicate_nested_zip_fixture(alias: &str) {
+    let temp = setup_temp_dir();
+    let first = temp.child("first.zip");
+    write_nested_zip_fixture(first.path(), &[("readme.txt", b"fixture")]);
+    let rom = build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false);
+    let second = temp.child("second.zip");
+    write_nested_zip_fixture(second.path(), &[("game.nds", &rom)]);
+    let outer = temp.child("outer.zip");
+    write_nested_zip_fixture(
+        outer.path(),
+        &[
+            ("inner.zip", &fs::read(first.path()).expect("first ZIP")),
+            (alias, &fs::read(second.path()).expect("second ZIP")),
+        ],
+    );
+    assert_ambiguous_nested_zip_retains_rom(outer.path(), &rom);
+}
+
+#[test]
+fn trim_retains_duplicate_nested_zip_members() {
+    duplicate_nested_zip_fixture("inner.zip");
+}
+
+#[test]
+fn trim_retains_normalized_alias_nested_zip_members() {
+    duplicate_nested_zip_fixture("./inner.zip");
+}
+
+#[test]
+fn trim_retains_concatenated_nested_zip() {
+    let temp = setup_temp_dir();
+    let first = temp.child("first.zip");
+    write_nested_zip_fixture(first.path(), &[("readme.txt", b"fixture")]);
+    let rom = build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false);
+    let second = temp.child("second.zip");
+    write_nested_zip_fixture(second.path(), &[("game.nds", &rom)]);
+    let mut concatenated = fs::read(first.path()).expect("first ZIP");
+    concatenated.extend(fs::read(second.path()).expect("second ZIP"));
+    let outer = temp.child("outer.zip");
+    write_nested_zip_fixture(outer.path(), &[("inner.zip", &concatenated)]);
+    assert_ambiguous_nested_zip_retains_rom(outer.path(), &rom);
+}
+
+#[test]
+fn trim_retains_a_nested_zip_with_a_zip64_locator() {
+    let temp = setup_temp_dir();
+    let first = temp.child("first.zip");
+    write_nested_zip_fixture(first.path(), &[("readme.txt", b"fixture")]);
+    let mut inner = fs::read(first.path()).expect("first ZIP");
+    let footer = inner.split_off(inner.len() - 22);
+    let central = inner
+        .windows(4)
+        .position(|bytes| bytes == b"PK\x01\x02")
+        .expect("readme directory");
+    let comment_start = inner.len();
+    let rom = build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false);
+    let second = temp.child("second.zip");
+    write_nested_zip_fixture(second.path(), &[("game.nds", &rom)]);
+    let mut alternate = fs::read(second.path()).expect("ROM ZIP");
+    let alternate_footer = alternate.len() - 22;
+    let alternate_central = u32::from_le_bytes(
+        alternate[alternate_footer + 16..alternate_footer + 20]
+            .try_into()
+            .expect("ROM directory offset"),
+    ) as usize;
+    alternate.truncate(alternate_footer);
+    alternate[alternate_central + 42..alternate_central + 46]
+        .copy_from_slice(&(comment_start as u32).to_le_bytes());
+    let directory_offset = comment_start + alternate_central;
+    let directory_size = alternate.len() - alternate_central;
+    let zip64_offset = comment_start + alternate.len();
+    let mut comment = alternate;
+    comment.extend_from_slice(b"PK\x06\x06");
+    comment.extend_from_slice(&44_u64.to_le_bytes());
+    comment.extend_from_slice(&45_u16.to_le_bytes());
+    comment.extend_from_slice(&45_u16.to_le_bytes());
+    comment.extend_from_slice(&[0; 8]);
+    comment.extend_from_slice(&1_u64.to_le_bytes());
+    comment.extend_from_slice(&1_u64.to_le_bytes());
+    comment.extend_from_slice(&(directory_size as u64).to_le_bytes());
+    comment.extend_from_slice(&(directory_offset as u64).to_le_bytes());
+    comment.extend_from_slice(b"PK\x06\x07");
+    comment.extend_from_slice(&0_u32.to_le_bytes());
+    comment.extend_from_slice(&(zip64_offset as u64).to_le_bytes());
+    comment.extend_from_slice(&1_u32.to_le_bytes());
+    inner[central + 32..central + 34].copy_from_slice(
+        &u16::try_from(comment.len())
+            .expect("small comment")
+            .to_le_bytes(),
+    );
+    inner.extend_from_slice(&comment);
+    let directory_size = inner.len() - central;
+    inner.extend_from_slice(&footer);
+    let footer = inner.len() - 22;
+    inner[footer + 12..footer + 16].copy_from_slice(&(directory_size as u32).to_le_bytes());
+    let outer = temp.child("outer.zip");
+    write_nested_zip_fixture(outer.path(), &[("inner.zip", &inner)]);
+    assert_ambiguous_nested_zip_retains_rom(outer.path(), &rom);
+}
+
+#[test]
+fn trim_skips_nested_names_the_rom_filter_does_not_extract() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let tbz = staging.child("game.tbz");
+    fs::write(tbz.path(), b"not a tar").expect("tbz fixture");
+    let archive = temp.child("pack.zip");
+    pack_archive(archive.path(), &[tbz.path()]);
+    let terminal = parse_single_json_line(&command_stdout(
+        &[
+            "trim",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(terminal["details"]["processed"], 0, "{terminal}");
+}
+
+#[test]
+fn trim_streams_every_nested_archive_in_one_pass() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let rom = staging.child("game.nds");
+    fs::write(
+        rom.path(),
+        build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false),
+    )
+    .expect("nds fixture");
+    let iso = write_gamecube_iso(&staging, "z-disc.iso");
+    let discs = staging.child("a-discs.zip");
+    pack_archive(discs.path(), &[&iso]);
+    let roms = staging.child("b-roms.zip");
+    pack_archive(roms.path(), &[rom.path(), &iso]);
+    let outer = temp.child("outer.7z");
+    pack_archive(outer.path(), &[discs.path(), roms.path()]);
+    let output = command_output_with_env(
+        &[
+            "--log-level",
+            "trace",
+            "trim",
+            "--input",
+            outer.path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        &[],
+        0,
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let passes = stderr
+        .lines()
+        .filter(|line| line.contains("\"nested archive prefix read start\""))
+        .count();
+    assert_eq!(
+        passes, 1,
+        "both nested archives MUST be read in one outer pass"
+    );
+    // The ROM settles that `b-roms.zip` is needed, so the disc after it is not listed.
+    let roms_listing = stderr
+        .lines()
+        .find(|line| {
+            line.contains("\"nested archive prefix read member\"") && line.contains("b-roms.zip")
+        })
+        .expect("b-roms.zip listing trace");
+    assert!(roms_listing.contains("\"stopped\":true"), "{roms_listing}");
+    let extractions = trim_extraction_lines(&output.stderr);
+    assert!(
+        extractions.iter().all(|line| !line.contains("a-discs.zip")),
+        "{extractions:#?}"
+    );
+    let terminal = parse_single_json_line(&output.stdout);
+    assert_eq!(terminal["details"]["processed"], 1, "{terminal}");
+}
+
+/// The "nested archive prefix read member" trace lines of a `--log-level trace` run.
+fn nested_member_lines(stderr: &[u8]) -> Vec<String> {
+    String::from_utf8_lossy(stderr)
+        .lines()
+        .filter(|line| line.contains("\"nested archive prefix read member\""))
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn trim_stops_a_nested_listing_at_a_header_it_needs() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let plain = staging.child("a-plain.iso");
+    fs::write(plain.path(), vec![0_u8; 0x4000]).expect("plain iso");
+    let disc = write_gamecube_iso(&staging, "z-disc.iso");
+    let inner = staging.child("inner.zip");
+    pack_archive(inner.path(), &[plain.path(), &disc]);
+    let outer = temp.child("outer.zip");
+    pack_archive(outer.path(), &[inner.path()]);
+    let output = command_output_with_env(
+        &[
+            "--log-level",
+            "trace",
+            "trim",
+            "--input",
+            outer.path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        &[],
+        // Trim extracts the inner archive and then rejects its disc.
+        1,
+    );
+    // The `.iso` that is not a GameCube/Wii disc may be an XISO, so the disc after it is unread.
+    let members = nested_member_lines(&output.stderr);
+    assert_eq!(members.len(), 1, "{members:#?}");
+    assert!(members[0].contains("\"stopped\":true"), "{members:#?}");
+    assert!(members[0].contains("\"entries\":1"), "{members:#?}");
+}
+
+#[test]
+fn probe_trim_members_ends_the_nested_pass_at_the_first_needed_archive() {
+    let temp = setup_temp_dir();
+    let staging = setup_temp_dir();
+    let rom = staging.child("game.nds");
+    fs::write(
+        rom.path(),
+        build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false),
+    )
+    .expect("nds fixture");
+    let iso = write_gamecube_iso(&staging, "disc.iso");
+    let roms = staging.child("a-roms.zip");
+    pack_archive(roms.path(), &[rom.path()]);
+    let discs = staging.child("b-discs.zip");
+    pack_archive(discs.path(), &[&iso]);
+    let outer = temp.child("outer.7z");
+    pack_archive(outer.path(), &[roms.path(), discs.path()]);
+    let outer_path = outer.path().to_str().expect("path");
+    let output = command_output_with_env(
+        &[
+            "--log-level",
+            "trace",
+            "probe",
+            "--input",
+            outer_path,
+            "--trim-members",
+            "--json",
+        ],
+        &[],
+        0,
+    );
+    let members = nested_member_lines(&output.stderr);
+    assert_eq!(members.len(), 1, "{members:#?}");
+    assert!(members[0].contains("a-roms.zip"), "{members:#?}");
+    assert_eq!(
+        parse_single_json_line(&output.stdout)["details"]["trim_members"],
+        serde_json::json!({"extract": ["a-roms.zip"], "gamecube_wii_discs": 0})
+    );
+    // Trim itself still reads both, so it can count the disc archive and skip it.
+    let trim = command_output_with_env(
+        &[
+            "--log-level",
+            "trace",
+            "trim",
+            "--input",
+            outer_path,
+            "--dry-run",
+            "--json",
+        ],
+        &[],
+        0,
+    );
+    assert_eq!(nested_member_lines(&trim.stderr).len(), 2);
+}
