@@ -1,5 +1,6 @@
 import { ROM_WEAVER_FILE_FILTERS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
+import type { ParsedIngestRomAsset } from "../../types/ingest.ts";
 import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import type { SourceObject, SourceRef } from "../../types/source.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
@@ -488,6 +489,34 @@ const markIdentifyUnavailable = (
   if (ingest.identifyRetry) (file as { identifyRetry?: Promise<boolean> }).identifyRetry = ingest.identifyRetry;
 };
 
+const attachIngestAssetMetadata = (
+  file: PatchFileInstance,
+  asset: ParsedIngestRomAsset,
+  { identifyRetry, identifyUnavailable }: Pick<IngestOutputs, "identifyRetry" | "identifyUnavailable">,
+  fallbackChecksumMs: number,
+): number => {
+  if (asset.checksums && Object.keys(asset.checksums).length) {
+    (file as { checksums?: typeof asset.checksums }).checksums = asset.checksums;
+  }
+  if (asset.checksumVariants?.length) {
+    (file as { checksumVariants?: typeof asset.checksumVariants }).checksumVariants = asset.checksumVariants;
+  }
+  if (asset.identification) {
+    (file as { identification?: typeof asset.identification }).identification = asset.identification;
+  }
+  markIdentifyUnavailable(file, { identifyRetry, identifyUnavailable });
+  const romType = romTypeFromEmittedFile({
+    discFormat: asset.discFormat,
+    platform: asset.platform,
+    recommendedFormat: asset.recommendedFormat,
+    chdCreateMode: asset.chdCreateMode,
+  });
+  if (romType) (file as { romType?: typeof romType }).romType = romType;
+  const checksumMs = asset.checksumMs ?? fallbackChecksumMs;
+  (file as { _precomputedChecksumMs?: number })._precomputedChecksumMs = checksumMs;
+  return checksumMs;
+};
+
 /** Discover a compressed archive's input assets with a SINGLE recursive ingest (classify + descend +
  * checksum): the Rust core descends nested containers, resolving one payload per level (auto-pick when
  * unambiguous, host prompt when not, plus the multi-track CHD CD split-bin prompt), and returns the
@@ -612,6 +641,7 @@ const buildIngestInputAssets = async (
           ...file.metadata,
           ...(member ? { member } : {}),
           ...(discFormat ? { format: discFormat } : {}),
+          ...(ingestAsset?.chdCreateMode ? { chdCreateMode: ingestAsset.chdCreateMode } : {}),
           ...(ingestAsset?.discGroupId ? { discGroupId: ingestAsset.discGroupId } : {}),
           ...(ingestAsset?.trackNumber === undefined ? {} : { trackNumber: ingestAsset.trackNumber }),
         };
@@ -857,29 +887,12 @@ const resolveUnclassifiedInputAssets = async (
   const { identifyRetry, identifyUnavailable, result } = ingested;
   const asset = result.isRom ? result.assets[0] : undefined;
   if (!asset?.copiedInPlace) return;
-  if (asset.checksums && Object.keys(asset.checksums).length) {
-    (file as { checksums?: typeof asset.checksums }).checksums = asset.checksums;
-  }
-  if (asset.checksumVariants?.length) {
-    (file as { checksumVariants?: typeof asset.checksumVariants }).checksumVariants = asset.checksumVariants;
-  }
-  if (asset.identification) {
-    (file as { identification?: typeof asset.identification }).identification = asset.identification;
-  }
-  markIdentifyUnavailable(file, { identifyRetry, identifyUnavailable });
-  const romType = romTypeFromEmittedFile({
-    discFormat: asset.discFormat,
-    platform: asset.platform,
-    recommendedFormat: asset.recommendedFormat,
-    chdCreateMode: asset.chdCreateMode,
-  });
-  if (romType) (file as { romType?: typeof romType }).romType = romType;
-  // A bare ROM is checksummed in place (no extract), so it carries a real checksum duration - unlike
-  // an archive leaf (checksummed DURING extract, reported as 0 → the "from extract" label). Prefer the
-  // Rust-reported hash wall time (`asset.checksumMs`); only if it is absent (e.g. older wasm) fall back
-  // to the JS compute span (first progress → done, which excludes the one-time wasm/thread warm-up).
-  const checksumMs = asset.checksumMs ?? Date.now() - (firstProgressAt || startedAt);
-  (file as { _precomputedChecksumMs?: number })._precomputedChecksumMs = checksumMs;
+  const checksumMs = attachIngestAssetMetadata(
+    file,
+    asset,
+    { identifyRetry, identifyUnavailable },
+    Date.now() - (firstProgressAt || startedAt),
+  );
   traceArchivePreparation(options, "input.archive.bare-rom.ingest", {
     checksumMs,
     checksumMsSource: asset.checksumMs === undefined ? "js-fallback" : "rust",
@@ -896,6 +909,7 @@ const resolveUnclassifiedInputAssets = async (
 // input-archive cluster.
 export type { InputPreparationOptions, InputPreparationRuntimeLike };
 export {
+  attachIngestAssetMetadata,
   resolveUnclassifiedInputAssets,
   describeArchiveFileForTrace,
   getCompressionFormat,

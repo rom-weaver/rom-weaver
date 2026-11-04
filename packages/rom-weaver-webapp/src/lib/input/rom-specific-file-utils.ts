@@ -1,6 +1,15 @@
 import type { SourceMetadata } from "../../types/workflow-source.ts";
 import { parseCueFile, replaceCuePatchFileName } from "../../workers/protocol/cue-file-utils.ts";
 
+import type { InputAsset } from "./input-assets.ts";
+
+const getDiscSheetChdMode = (asset: InputAsset): "cd" | "gd" => {
+  const format = asset.file.metadata?.format;
+  if (format === "CD") return "cd";
+  if (format === "GD-ROM") return "gd";
+  return asset.kind === "gdi" ? "gd" : "cd";
+};
+
 const BIN_EXTENSION_REGEX = /\.bin$/i;
 
 // Map the engine's `disc_format` verdict (Rust `rom_identity::DiscFormat::label()`
@@ -83,6 +92,7 @@ export {
   chdModeFromMetadata,
   discFormatToChdMode,
   getChdAutoCreateMode,
+  getDiscSheetChdMode,
   getDiscFormatLabel,
   isLooseChdAutoSource,
   parseCueFile,

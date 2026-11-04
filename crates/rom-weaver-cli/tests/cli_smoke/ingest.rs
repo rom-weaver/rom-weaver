@@ -1987,6 +1987,112 @@ fn ingest_disc_asset_carries_engine_disc_format() {
     );
 }
 
+fn check_cue_layout_media(start_lba: u32, signature: &[u8], medium: &str, mode: &str) {
+    use rom_weaver_app::gdrom::{IsoFile, IsoTimestamp, build_iso, encode_mode1_sector};
+
+    let temp = setup_temp_dir();
+    let mut cooked = build_iso(
+        &[IsoFile {
+            path: "GAME.DAT".to_string(),
+            data: b"synthetic game data".to_vec(),
+        }],
+        start_lba,
+        IsoTimestamp::default(),
+    )
+    .expect("ISO fixture");
+    cooked[..signature.len()].copy_from_slice(signature);
+    let raw = cooked
+        .chunks_exact(2048)
+        .enumerate()
+        .flat_map(|(index, sector)| {
+            encode_mode1_sector(start_lba + index as u32, sector.try_into().expect("sector"))
+        })
+        .collect::<Vec<_>>();
+    fs::write(temp.child("track.bin").path(), &raw).expect("track fixture");
+    let cue = temp.child("disc.cue");
+    cue.write_str("FILE \"track.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n")
+        .expect("unmarked cue fixture");
+    let archive = temp.child("disc.zip");
+    zip_members(
+        &temp,
+        archive.path(),
+        &[cue.path(), temp.child("track.bin").path()],
+    );
+    for (source, output) in [(cue.path(), "bare"), (archive.path(), "archived")] {
+        let terminal = ingest_terminal(&[
+            "ingest",
+            "--input",
+            source.to_str().expect("source path"),
+            "--output",
+            temp.child(output).path().to_str().expect("output path"),
+            "--json",
+        ]);
+        let assets = terminal["details"]["ingest"]["assets"]
+            .as_array()
+            .expect("disc assets");
+        assert_eq!(assets.len(), 2, "sheet and track: {terminal}");
+        for asset in assets {
+            assert_eq!(
+                asset["disc_format"], medium,
+                "sheet layout must determine group media: {asset}"
+            );
+            assert_eq!(
+                asset["chd_create_mode"], mode,
+                "sheet layout must determine CHD mode: {asset}"
+            );
+        }
+    }
+
+    let chd = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            cue.path().to_str().expect("cue path"),
+            "--format",
+            "chd",
+            "--codec",
+            "zstd",
+            "--output",
+            chd.path().to_str().expect("chd path"),
+            "--json",
+        ],
+        0,
+    );
+    let probe = run_single_json_event(
+        &[
+            "probe",
+            "--input",
+            chd.path().to_str().expect("chd path"),
+            "--no-extract",
+            "--json",
+        ],
+        0,
+    );
+    assert!(
+        probe["label"]
+            .as_str()
+            .expect("probe label")
+            .contains(&format!("{mode} chd")),
+        "CHD layout must agree with ingest: {probe}"
+    );
+}
+
+#[test]
+fn ingest_unmarked_gd_cue_uses_content_for_media_and_chd() {
+    check_cue_layout_media(45000, b"SEGA SEGAKATANA ", "GD-ROM", "gd");
+}
+
+#[test]
+fn ingest_dreamcast_selfboot_cue_stays_cd() {
+    check_cue_layout_media(0, b"SEGA SEGAKATANA ", "CD", "cd");
+}
+
+#[test]
+fn ingest_saturn_cue_stays_cd() {
+    check_cue_layout_media(0, b"SEGA SEGASATURN ", "CD", "cd");
+}
+
 #[test]
 fn ingest_missing_input_uses_the_shared_wording() {
     let temp = setup_temp_dir();

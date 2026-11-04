@@ -1,4 +1,5 @@
 import type { InputAsset } from "../input/input-assets.ts";
+import { getDiscSheetChdMode } from "../input/rom-specific-file-utils.ts";
 import type { StagedSource } from "./apply-workflow-state.ts";
 
 // A .dcp is a ZIP that rebuilds a Dreamcast disc's GD-ROM data track, so Apply runs it alone on the whole
@@ -20,14 +21,10 @@ const dcpStages = new WeakSet<object>();
 const isDcpPatchStage = <TSource>(stage: StagedSource<TSource>): boolean =>
   dcpStages.has(stage) || isDcpPatchName(stage.state.fileName) || isDcpPatchName(stage.preparedPatchFile?.fileName);
 
-// A cue is a GD-ROM only when it marks the inner program area, the rule CHD output and the Rust
-// layout use; a plain CD cue has no data track for the DCP to rebuild.
-const isGdRomCueAsset = (asset: InputAsset): boolean =>
-  asset.kind === "cue" && /^\s*REM\b.*HIGH-DENSITY AREA/im.test(asset.file.metadata?.cueText || "");
-
-/** The disc sheet a DCP rebuilds: a `.gdi` wins over a GD-ROM `.cue` beside it, as for GD-ROM CHD creation. */
-const findDcpDiscSheet = (assets: readonly InputAsset[]): InputAsset | undefined =>
-  assets.find((asset) => asset.kind === "gdi") ?? assets.find(isGdRomCueAsset);
+const findDcpDiscSheet = (assets: readonly InputAsset[]): InputAsset | undefined => {
+  const sheet = assets.find((asset) => asset.kind === "gdi") ?? assets.find((asset) => asset.kind === "cue");
+  return sheet && getDiscSheetChdMode(sheet) === "gd" ? sheet : undefined;
+};
 
 type DcpReadinessContext = {
   /** Every prepared input asset, sheets included. */

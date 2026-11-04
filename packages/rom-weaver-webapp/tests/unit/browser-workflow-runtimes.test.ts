@@ -186,6 +186,55 @@ beforeEach(() => {
 });
 
 describe("browser archive runtime", () => {
+  it.each(["Disc.cue", "Disc.gdi", "日本 : Disc.cue", "日本 : Disc.gdi"])(
+    "preserves grouped disc filenames and references for %s",
+    async (name) => {
+      const runtime = createBrowserArchiveRuntime(io as never);
+      const source = new File(['FILE "Track 日本 : 01.bin" BINARY'], name);
+      const track = new File(["track"], "Track 日本 : 01.bin");
+      state.extractAll.mockResolvedValueOnce([]);
+      await runtime.extract?.({ source, companionFiles: [track], entries: [], extractAll: true });
+      const files = io.stageSource.mock.calls.map(([request]) => request.source as File);
+      expect(files.map((file) => file.name)).toEqual([name, track.name]);
+      expect(await files[0]?.text()).toBe(await source.text());
+    },
+  );
+
+  it.each(["cue", "gdi"])("rewrites sanitized and directory references for grouped %s files", async (extension) => {
+    const source = new File(
+      [
+        extension === "cue"
+          ? 'FILE "folder/Track*.bin" BINARY\n TRACK 01 MODE1/2352\n INDEX 01 00:00:00'
+          : '1\n1 45000 4 2352 "folder/Track*.bin" 0\n',
+      ],
+      `Disc*.${extension}`,
+    );
+    const runtime = createBrowserArchiveRuntime(io as never);
+    state.extractAll.mockResolvedValueOnce([]);
+    await runtime.extract?.({
+      source,
+      companionFiles: [new File(["track"], "Track*.bin")],
+      entries: [],
+      extractAll: true,
+    });
+    const files = io.stageSource.mock.calls.map(([request]) => request.source as File);
+    expect(files.map((file) => file.name)).toEqual([`Disc_.${extension}`, "Track_.bin"]);
+    expect(await files[0]?.text()).toContain('"Track_.bin"');
+    expect(await files[0]?.text()).not.toContain("folder/");
+  });
+
+  it("rejects companion filenames that collide after disc staging normalization", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    await expect(
+      runtime.extract?.({
+        source: new File(["cue"], "Disc.cue"),
+        companionFiles: [new File(["one"], "Track*.bin"), new File(["two"], "Track_.bin")],
+        entries: [],
+        extractAll: true,
+      }),
+    ).rejects.toThrow("Duplicate companion filename.");
+  });
+
   it("stages NFS companions in one isolated directory with canonical basenames", async () => {
     const runtime = createBrowserArchiveRuntime(io as never);
     const source = new File(["header"], "HIF_000000.NFS");

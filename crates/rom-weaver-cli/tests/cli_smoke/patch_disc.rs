@@ -2666,6 +2666,61 @@ fn dcp_disc_fixture() -> TempDir {
 }
 
 #[test]
+fn patch_apply_dcp_unmarked_cue_matches_gdi_and_builds_gd_chd() {
+    let temp = dcp_disc_fixture();
+    let cue = temp.child("unmarked.cue");
+    cue.write_str(concat!(
+        "FILE \"track01.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n",
+        "FILE \"track02.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n",
+        "FILE \"track03.bin\" BINARY\n  TRACK 03 MODE1/2352\n    INDEX 01 00:00:00\n",
+    ))
+    .expect("unmarked cue");
+    assert!(!cue.path().with_extension("gdi").exists());
+    for (input, output, extra) in [
+        ("disc.gdi", "gdi-track.bin", vec!["--no-compress"]),
+        ("unmarked.cue", "cue-track.bin", vec!["--no-compress"]),
+        ("unmarked.cue", "rebuilt.chd", vec![]),
+    ] {
+        let (input, output, patch) = (
+            temp.child(input),
+            temp.child(output),
+            temp.child("game.dcp"),
+        );
+        let mut args = vec![
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().unwrap(),
+            "--patch",
+            patch.path().to_str().unwrap(),
+            "--output",
+            output.path().to_str().unwrap(),
+            "--json",
+        ];
+        args.extend(extra);
+        command_stdout(&args, 0);
+    }
+    assert_eq!(
+        fs::read(temp.child("gdi-track.bin").path()).unwrap(),
+        fs::read(temp.child("cue-track.bin").path()).unwrap()
+    );
+    let probe = run_single_json_event(
+        &[
+            "probe",
+            "--input",
+            temp.child("rebuilt.chd").path().to_str().unwrap(),
+            "--no-extract",
+            "--json",
+        ],
+        0,
+    );
+    assert!(
+        probe["label"].as_str().unwrap().contains("gd chd"),
+        "unmarked GD cue must build a GD CHD after DCP apply: {probe}"
+    );
+}
+
+#[test]
 fn patch_apply_dcp_rejects_database_cheats_before_output() {
     let temp = dcp_disc_fixture();
     let database = temp.child("empty-cheats");

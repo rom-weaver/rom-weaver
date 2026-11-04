@@ -1,3 +1,4 @@
+import { normalizeVirtualFileName } from "../../workers/protocol/browser-opfs-source-ref.ts";
 import {
   getNamedSourceSize as getBinarySourceSize,
   getNamedSourceFileName,
@@ -27,7 +28,7 @@ import {
   getPatchFileBytes,
   readPathSourcePrefix,
 } from "./binary-service.ts";
-import { inheritSourceIdentificationPolicy } from "./input-identification-policy.ts";
+import { inheritSourceIdentificationPolicy, shouldIdentifySource } from "./input-identification-policy.ts";
 import { chdCodecModeFromCreateMode } from "./rom-specific-file-utils.ts";
 import { getWeaveRomProvenance } from "./weave-rom-provenance.ts";
 import {
@@ -48,6 +49,7 @@ import {
   resolveCompressedInputFile,
 } from "./input-decompression.ts";
 import {
+  attachIngestAssetMetadata,
   getPatchLeafFileForSelection,
   getPatchLeafParentCompressionsForSelection,
   resolveArchiveInputAssets,
@@ -58,6 +60,7 @@ import { groupNfsFiles, isNfsPartName } from "./nfs-inputs.ts";
 type InputPreparationOptions = ApplyWorkflowOptions | CreateWorkflowOptions | undefined;
 type InputPreparationRuntime = Pick<WorkflowRuntime, "name"> & {
   compression?: WorkflowRuntime["compression"];
+  ingest?: WorkflowRuntime["ingest"];
   sidecars: {
     read?: (sourcePath: string, referencedName: string) => Promise<SourceRef>;
   };
@@ -395,6 +398,61 @@ const reportCueInputCandidates = ({
   });
 };
 
+const ingestDiscInputAssets = async (
+  assets: InputAsset[],
+  source: SourceRef,
+  companionFiles: File[],
+  options: InputPreparationOptions,
+  runtime: InputPreparationRuntime,
+): Promise<InputAsset[]> => {
+  if (!runtime.ingest?.run) return assets;
+  const sheet = assets.find((asset) => asset.kind === "gdi") ?? assets.find((asset) => asset.kind === "cue");
+  if (!sheet) return assets;
+  const identify = assets.every((asset) => shouldIdentifySource(asset.file));
+  let firstProgressAt = 0;
+  const startedAt = Date.now();
+  const ingested = await runtime.ingest.run({
+    source,
+    fileName: sheet.fileName,
+    companionFiles,
+    identify,
+    threads: options?.workers?.threads,
+    logLevel: options?.logging?.level,
+    onLog: options?.onLog,
+    onProgress: (progress) => {
+      if (!firstProgressAt) firstProgressAt = Date.now();
+      options?.onProgress?.({
+        ...progress,
+        label: progress.label || progress.message || sheet.fileName,
+        percent: progress.percent ?? null,
+        stage: "input",
+      });
+    },
+    signal: options?.signal,
+  });
+  try {
+    const emittedByName = new Map(ingested.result.assets.map((asset) => [asset.fileName, asset]));
+    const verdict = emittedByName.get(normalizeVirtualFileName(sheet.fileName));
+    for (const asset of assets) {
+      const emitted = emittedByName.get(normalizeVirtualFileName(asset.fileName));
+      if (emitted?.copiedInPlace && (identify || !shouldIdentifySource(asset.file)))
+        attachIngestAssetMetadata(asset.file, emitted, ingested, Date.now() - (firstProgressAt || startedAt));
+    }
+    if (verdict?.discFormat)
+      for (const asset of assets)
+        asset.file.metadata = {
+          ...asset.file.metadata,
+          format: verdict.discFormat,
+          ...(verdict.chdCreateMode ? { chdCreateMode: verdict.chdCreateMode } : {}),
+        };
+    return assets;
+  } finally {
+    await Promise.all(
+      [...ingested.outputs, ...ingested.patchOutputs].map((output) => output.dispose().catch(() => undefined)),
+    );
+  }
+};
+
 const resolveCueInputAssets = async (
   cueFile: PatchFileInstance,
   options: ApplyWorkflowOptions | undefined,
@@ -549,6 +607,12 @@ const prepareMultipleDirectInputAssets = async (
         : createLazyPatchFile(source, fallbackFileName(index)),
     ),
   );
+  const sourceByFile = new Map(files.map((file, index) => [file, { source: sources[index], index }]));
+  const fileByName = new Map<string, PatchFileInstance>();
+  for (const file of files) {
+    const key = getBaseFileName(file.fileName).toLowerCase();
+    if (!fileByName.has(key)) fileByName.set(key, file);
+  }
   const assets: InputAsset[] = [];
   const used = new Set<PatchFileInstance>();
   const sheets = [
@@ -557,7 +621,7 @@ const prepareMultipleDirectInputAssets = async (
   ];
   for (const sheetFile of sheets) {
     if (used.has(sheetFile)) continue;
-    const sheetIndex = files.indexOf(sheetFile);
+    const sheetIndex = sourceByFile.get(sheetFile)?.index ?? 0;
     const isCue = isCueEntryFileName(sheetFile.fileName);
     const sheetText = decodeUtf8(getPatchFileBytes(sheetFile));
     const cueText = isCue ? sheetText : undefined;
@@ -584,9 +648,7 @@ const prepareMultipleDirectInputAssets = async (
     const missingReferences: string[] = [];
     const trackAssets: InputAsset[] = [];
     for (const reference of references) {
-      const trackFile = files.find(
-        (file) => getBaseFileName(file.fileName).toLowerCase() === getBaseFileName(reference.fileName).toLowerCase(),
-      );
+      const trackFile = fileByName.get(getBaseFileName(reference.fileName).toLowerCase());
       if (!trackFile) {
         missingReferences.push(reference.fileName);
         continue;
@@ -622,11 +684,30 @@ const prepareMultipleDirectInputAssets = async (
     if (missingReferences.length)
       throw new Error(`${isCue ? "CUE" : "GDI"} file references missing file(s): ${missingReferences.join(", ")}`);
     used.add(sheetFile);
-    assets.push(sheetAsset, ...trackAssets);
+    const groupAssets = [sheetAsset, ...trackAssets];
     if (gdiFile) {
       used.add(gdiFile);
-      assets.push(makeGdiAsset(`${groupId}-gdi`, gdiFile.fileName, gdiFile, groupId, gdiText ?? ""));
+      groupAssets.push(makeGdiAsset(`${groupId}-gdi`, gdiFile.fileName, gdiFile, groupId, gdiText ?? ""));
     }
+    if (!runtime.ingest?.run) {
+      assets.push(...groupAssets);
+      continue;
+    }
+    const groupFiles = [...new Set([gdiFile || sheetFile, ...groupAssets.map((asset) => asset.file)])];
+    const ingestFiles = await Promise.all(
+      groupFiles.map(async (file) => {
+        const source = sourceByFile.get(file)?.source;
+        if (!source) throw new Error("Disc source is unavailable");
+        if (source instanceof File) return source;
+        const access = createSourceAccessFromSource(source, file.fileName);
+        const blob = access.getBlob() || (await access.getFileHandle()?.getFile());
+        return blob ? new File([blob], file.fileName) : undefined;
+      }),
+    );
+    const [sheetSource, ...trackSources] = ingestFiles;
+    const companions = trackSources.filter((source): source is File => !!source);
+    if (!sheetSource) throw new Error("Disc sheet source is unavailable");
+    assets.push(...(await ingestDiscInputAssets(groupAssets, sheetSource, companions, options, runtime)));
   }
   files.forEach((file, index) => {
     if (!used.has(file)) assets.push(makeRomAsset(makeInputId(index, file.fileName, normalizeArchiveEntryName), file));
