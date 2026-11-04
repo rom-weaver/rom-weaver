@@ -12,8 +12,13 @@ const parity = load(readFileSync(".github/workflows/parity.yml", "utf8"));
 test("nightly, manual, and release pull request analysis runs use the selected source revision", () => {
   // coverageTiers in scripts/ci/classify-changes.mjs decides which events set nightly_checks.
   assert.equal(ci.jobs.changes.outputs.nightly_checks, "${{ steps.classify.outputs.nightly_checks }}");
-  for (const name of ["quality-fast", "quality-analysis", "quality-reference"]) {
-    assert.ok(ci.jobs[name].if.includes("needs.changes.outputs.nightly_checks == 'true'"));
+  assert.equal(ci.jobs.changes.outputs.quality_signals, "${{ steps.classify.outputs.quality_signals }}");
+  for (const [name, tier] of [
+    ["quality-fast", "nightly_checks"],
+    ["quality-analysis", "quality_signals"],
+    ["quality-reference", "nightly_checks"],
+  ]) {
+    assert.ok(ci.jobs[name].if.includes(`needs.changes.outputs.${tier} == 'true'`));
     assert.ok(!ci.jobs[name].if.includes("github.event_name"));
   }
   const checkout = ci.jobs["quality-analysis"].steps.find((step) =>

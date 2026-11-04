@@ -437,19 +437,21 @@ export function narrowSelection(whole, since) {
 // Rust, and the arm64 CLI runtime - also leaves main pushes: the nightly schedule
 // and the release pull request cover it before anything ships, which keeps
 // four 15-19 minute Windows builds per merge out of the shared runner pool.
-// `nightlyChecks` - the quality-fast, quality-analysis, and quality-reference jobs -
+// `nightlyChecks` - the quality-fast and quality-reference jobs the gate requires -
 // runs on the nightly schedule, manual runs, and the release pull request.
+// `qualitySignals` - the advisory quality-analysis jobs - drops the release pull
+// request: the gate never waits on them, the nightly already runs them, and their
+// ~40 minutes on two runners queue the jobs the release pull request does wait on.
 // An absent event keeps every tier, the same fail-open default as the classifier.
 export function coverageTiers(eventName, headRef = undefined) {
   const releasePullRequest = isReleasePullRequest(eventName, headRef);
+  const qualitySignals =
+    !eventName || eventName === "schedule" || eventName === "workflow_dispatch";
   return {
     fullMatrix: eventName !== "pull_request" || releasePullRequest,
     fullNative: (eventName !== "pull_request" && eventName !== "push") || releasePullRequest,
-    nightlyChecks:
-      !eventName ||
-      eventName === "schedule" ||
-      eventName === "workflow_dispatch" ||
-      releasePullRequest,
+    nightlyChecks: qualitySignals || releasePullRequest,
+    qualitySignals,
   };
 }
 
