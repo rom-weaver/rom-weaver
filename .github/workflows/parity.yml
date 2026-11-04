@@ -146,6 +146,8 @@ jobs:
           include-hidden-files: true
           path: .agent/quality-signals/live-parity.log
           if-no-files-found: warn
+          # A rerun would otherwise 409 on the first attempt's diagnostics.
+          overwrite: true
 
   perf:
     name: Performance vs latest release
