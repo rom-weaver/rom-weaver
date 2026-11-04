@@ -3,7 +3,10 @@ use std::{
     fs::File,
     io::{BufWriter, Read},
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU8, AtomicU64, Ordering},
+    sync::{
+        Mutex,
+        atomic::{AtomicU8, AtomicU64, Ordering},
+    },
 };
 
 use rom_weaver_checksum::{
@@ -248,6 +251,59 @@ pub(crate) fn copy_chunks_with_progress<R: Read>(
     }
 
     Ok(bytes_written)
+}
+
+/// Recycles the buffers that carry decoded bytes between extract threads: from the parallel
+/// libarchive workers to the writer thread, and from a disc copy to its NKit digest workers. A fresh
+/// buffer per chunk is merely wasteful on a native allocator; on wasm the linear memory only ever
+/// grows, so the churn fragments a heap that never hands pages back. Each consumer returns a buffer
+/// once it is done with it, so steady state allocates nothing.
+#[derive(Debug)]
+pub(crate) struct ExtractIoBufferPool {
+    buffers: Mutex<Vec<Vec<u8>>>,
+    buffer_bytes: usize,
+    max_buffers: usize,
+}
+
+impl ExtractIoBufferPool {
+    pub(crate) fn new(buffer_bytes: usize, max_buffers: usize) -> Self {
+        Self {
+            buffers: Mutex::new(Vec::new()),
+            buffer_bytes: buffer_bytes.max(1),
+            max_buffers: max_buffers.max(1),
+        }
+    }
+
+    /// A buffer of exactly `buffer_bytes`, recycled when one is idle. Ownership is what keeps a
+    /// buffer from being handed out twice: `take` pops it off the free list and only `recycle`
+    /// (which consumes the `Vec`) can put it back, so a buffer in flight is unreachable here.
+    pub(crate) fn take(&self) -> Vec<u8> {
+        let mut buffer = match self.buffers.lock() {
+            Ok(mut buffers) => buffers.pop().unwrap_or_default(),
+            Err(_) => Vec::new(),
+        };
+        // Recycled buffers come back truncated to whatever the previous read produced; resizing
+        // restores the full read window and only zeroes the regrown tail.
+        buffer.resize(self.buffer_bytes, 0);
+        buffer
+    }
+
+    /// Buffers waiting to be reused.
+    #[cfg(test)]
+    pub(crate) fn idle_buffers(&self) -> usize {
+        self.buffers.lock().map_or(0, |buffers| buffers.len())
+    }
+
+    pub(crate) fn recycle(&self, buffer: Vec<u8>) {
+        if buffer.capacity() < self.buffer_bytes {
+            return;
+        }
+        if let Ok(mut buffers) = self.buffers.lock()
+            && buffers.len() < self.max_buffers
+        {
+            buffers.push(buffer);
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -950,6 +1006,49 @@ mod tests {
         let events = sink.snapshot();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].status, OperationStatus::Running);
+    }
+
+    #[test]
+    fn buffer_pool_hands_out_distinct_buffers_until_they_are_returned() {
+        let pool = ExtractIoBufferPool::new(64, 4);
+        let first = pool.take();
+        let second = pool.take();
+        assert_eq!(first.len(), 64);
+        assert_eq!(second.len(), 64);
+        assert_ne!(
+            first.as_ptr(),
+            second.as_ptr(),
+            "an outstanding buffer must never be handed out a second time"
+        );
+
+        let recycled = first.as_ptr();
+        pool.recycle(first);
+        let third = pool.take();
+        assert_eq!(
+            third.as_ptr(),
+            recycled,
+            "a returned buffer should be reused"
+        );
+        assert_ne!(third.as_ptr(), second.as_ptr());
+    }
+
+    #[test]
+    fn buffer_pool_stops_retaining_past_its_ceiling() {
+        let pool = ExtractIoBufferPool::new(32, 2);
+        for _ in 0..5 {
+            pool.recycle(vec![0u8; 32]);
+        }
+        assert_eq!(pool.buffers.lock().expect("pool lock").len(), 2);
+    }
+
+    #[test]
+    fn buffer_pool_rejects_undersized_buffers() {
+        let pool = ExtractIoBufferPool::new(32, 4);
+        pool.recycle(vec![0u8; 8]);
+        assert!(pool.buffers.lock().expect("pool lock").is_empty());
+        // A short buffer that was never sized for this pool must not become a read window that
+        // silently truncates a chunk.
+        assert_eq!(pool.take().len(), 32);
     }
 
     #[test]

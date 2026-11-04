@@ -10,8 +10,9 @@ use std::{
 };
 
 #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
+use std::sync::Arc;
 use std::{
-    sync::{Arc, mpsc},
+    sync::mpsc,
     thread,
     time::{Duration, SystemTime},
 };
@@ -216,14 +217,8 @@ pub struct StreamingChecksum {
 
 pub(super) enum StreamingChecksumInner {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
-    Async(Vec<AsyncStreamingChecksumWorker>),
+    Async(ChunkHashWorkers<HasherBatch, Arc<[u8]>>),
     Sync(HasherBatch),
-}
-
-#[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
-pub(super) struct AsyncStreamingChecksumWorker {
-    handle: thread::JoinHandle<(BTreeMap<String, String>, u128)>,
-    sender: Option<mpsc::SyncSender<Arc<[u8]>>>,
 }
 
 impl StreamingChecksum {
@@ -306,39 +301,18 @@ impl StreamingChecksum {
         algorithms: Vec<Algorithm>,
         worker_count: usize,
     ) -> Option<Self> {
-        let worker_algorithms = partition_streaming_algorithms(&algorithms, worker_count);
-        let mut workers: Vec<AsyncStreamingChecksumWorker> = Vec::new();
-        for algorithms in worker_algorithms {
-            let (sender, receiver) = mpsc::sync_channel::<Arc<[u8]>>(2);
-            let handle = match thread::Builder::new()
-                .name("rom-weaver-streaming-checksum".to_string())
-                .spawn(move || {
-                    let mut batch = HasherBatch::new(algorithms);
-                    // Accumulate only the wall time spent hashing (not the time blocked waiting on the
-                    // next chunk), so the caller can tell how much of the checksum overlapped the
-                    // producer versus ran on its own. `SystemTime` is the wasm-supported clock here.
-                    let mut hash_busy = Duration::ZERO;
-                    while let Ok(bytes) = receiver.recv() {
-                        let hashed_at = SystemTime::now();
-                        batch.update(&bytes);
-                        hash_busy += hashed_at.elapsed().unwrap_or_default();
-                    }
-                    (batch.into_results(), hash_busy.as_nanos())
-                }) {
-                Ok(handle) => handle,
-                Err(_) => {
-                    for mut worker in workers {
-                        drop(worker.sender.take());
-                        let _ = worker.handle.join();
-                    }
-                    return None;
-                }
-            };
-            workers.push(AsyncStreamingChecksumWorker {
-                handle,
-                sender: Some(sender),
-            });
-        }
+        let batches = round_robin_groups(algorithms, worker_count)
+            .into_iter()
+            .map(HasherBatch::new)
+            .collect();
+        let workers = ChunkHashWorkers::spawn(
+            "rom-weaver-streaming-checksum",
+            "streaming checksum",
+            batches,
+            2,
+            drop,
+        )
+        .ok()?;
         Some(Self {
             inner: StreamingChecksumInner::Async(workers),
         })
@@ -347,10 +321,7 @@ impl StreamingChecksum {
     pub fn update(&mut self, bytes: &[u8]) -> Result<()> {
         match &mut self.inner {
             #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
-            StreamingChecksumInner::Async(workers) => {
-                let chunk = Arc::<[u8]>::from(bytes);
-                send_streaming_checksum_chunk(workers, chunk)
-            }
+            StreamingChecksumInner::Async(workers) => workers.send(Arc::<[u8]>::from(bytes)),
             StreamingChecksumInner::Sync(batch) => {
                 batch.update(bytes);
                 Ok(())
@@ -362,8 +333,7 @@ impl StreamingChecksum {
         match &mut self.inner {
             #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
             StreamingChecksumInner::Async(workers) => {
-                let chunk = Arc::<[u8]>::from(bytes.into_boxed_slice());
-                send_streaming_checksum_chunk(workers, chunk)
+                workers.send(Arc::<[u8]>::from(bytes.into_boxed_slice()))
             }
             StreamingChecksumInner::Sync(batch) => {
                 batch.update(&bytes);
@@ -382,19 +352,14 @@ impl StreamingChecksum {
     pub fn finalize_timed(self) -> Result<(BTreeMap<String, String>, StreamingChecksumTiming)> {
         match self.inner {
             #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
-            StreamingChecksumInner::Async(mut workers) => {
-                let workers_count = workers.len();
-                for worker in &mut workers {
-                    drop(worker.sender.take());
-                }
+            StreamingChecksumInner::Async(workers) => {
+                let finished = workers.finish()?;
+                let workers_count = finished.len();
                 let mut results = BTreeMap::new();
                 let mut hash_busy_ns = 0u128;
-                for worker in workers {
-                    let (worker_results, worker_busy_ns) = worker.handle.join().map_err(|_| {
-                        RomWeaverError::Validation("streaming checksum worker panicked".to_string())
-                    })?;
-                    results.extend(worker_results);
-                    hash_busy_ns = hash_busy_ns.max(worker_busy_ns);
+                for (batch, busy_ns) in finished {
+                    results.extend(batch.into_results());
+                    hash_busy_ns = hash_busy_ns.max(busy_ns);
                 }
                 Ok((
                     results,
@@ -412,40 +377,114 @@ impl StreamingChecksum {
     }
 }
 
-#[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
-pub(super) fn send_streaming_checksum_chunk(
-    workers: &mut [AsyncStreamingChecksumWorker],
-    chunk: Arc<[u8]>,
-) -> Result<()> {
-    for worker in workers {
-        let sender = worker.sender.as_ref().ok_or_else(|| {
-            RomWeaverError::Validation(
-                "streaming checksum worker closed before extraction finished".to_string(),
-            )
-        })?;
-        sender.send(Arc::clone(&chunk)).map_err(|_| {
-            RomWeaverError::Validation(
-                "streaming checksum worker stopped before extraction finished".to_string(),
-            )
-        })?;
-    }
-    Ok(())
+/// A hash state that a [`ChunkHashWorkers`] thread folds every chunk into.
+pub trait ChunkHasher: Send + 'static {
+    fn update(&mut self, bytes: &[u8]);
 }
 
-#[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
-pub(super) fn partition_streaming_algorithms(
-    algorithms: &[Algorithm],
-    worker_count: usize,
-) -> Vec<Vec<Algorithm>> {
-    let worker_count = worker_count.min(algorithms.len()).max(1);
-    let mut workers = vec![Vec::new(); worker_count];
-    for (index, algorithm) in algorithms.iter().copied().enumerate() {
-        workers[index % worker_count].push(algorithm);
+impl ChunkHasher for HasherBatch {
+    fn update(&mut self, bytes: &[u8]) {
+        HasherBatch::update(self, bytes);
     }
-    workers
-        .into_iter()
-        .filter(|algorithms| !algorithms.is_empty())
-        .collect()
+}
+
+/// Worker threads that each fold every chunk into their own hasher, so serial hashes run beside
+/// the thread that produces the chunks instead of on it. Every worker gets a clone of each chunk,
+/// so `C` should be a cheap shared handle such as an `Arc`.
+pub struct ChunkHashWorkers<H, C> {
+    workers: Vec<ChunkHashWorker<H, C>>,
+    label: &'static str,
+}
+
+/// One worker's chunk queue, and its thread, which returns the hasher and its busy nanoseconds.
+type ChunkHashWorker<H, C> = (mpsc::SyncSender<C>, thread::JoinHandle<(H, u128)>);
+
+impl<H: ChunkHasher, C: AsRef<[u8]> + Clone + Send + 'static> ChunkHashWorkers<H, C> {
+    /// Starts one thread named `name` per hasher, each queueing up to `queue` chunks. Each worker
+    /// passes every chunk it has hashed to `done`; for an `Arc` chunk, `Arc::into_inner` there
+    /// returns the buffer to whichever worker finishes with it last. When a thread cannot start,
+    /// the ones already started are stopped and the error is returned.
+    pub fn spawn(
+        name: &str,
+        label: &'static str,
+        hashers: Vec<H>,
+        queue: usize,
+        done: impl Fn(C) + Clone + Send + 'static,
+    ) -> std::io::Result<Self> {
+        let mut workers = Vec::with_capacity(hashers.len());
+        for mut hasher in hashers {
+            let (sender, chunks) = mpsc::sync_channel::<C>(queue);
+            let done = done.clone();
+            let spawned = thread::Builder::new()
+                .name(name.to_string())
+                .spawn(move || {
+                    // Only the wall time spent hashing counts, not the wait for the next chunk, so the
+                    // caller can tell how much of it overlapped the producer. `SystemTime` is the
+                    // wasm-supported clock here.
+                    let mut busy = Duration::ZERO;
+                    while let Ok(chunk) = chunks.recv() {
+                        let started = SystemTime::now();
+                        hasher.update(chunk.as_ref());
+                        busy += started.elapsed().unwrap_or_default();
+                        done(chunk);
+                    }
+                    (hasher, busy.as_nanos())
+                });
+            match spawned {
+                Ok(handle) => workers.push((sender, handle)),
+                Err(error) => {
+                    let _ = Self { workers, label }.finish();
+                    return Err(error);
+                }
+            }
+        }
+        Ok(Self { workers, label })
+    }
+
+    /// Hands `chunk` to every worker, waiting while a worker's queue is full.
+    pub fn send(&self, chunk: C) -> Result<()> {
+        let stopped = || {
+            RomWeaverError::Validation(format!(
+                "{} worker stopped before extraction finished",
+                self.label
+            ))
+        };
+        let Some(((last, _), rest)) = self.workers.split_last() else {
+            return Ok(());
+        };
+        for (sender, _) in rest {
+            sender.send(chunk.clone()).map_err(|_| stopped())?;
+        }
+        // The last worker takes the caller's handle, so only workers hold the chunk.
+        last.send(chunk).map_err(|_| stopped())
+    }
+
+    /// Closes every queue, waits for the workers, and returns each hasher with the nanoseconds it
+    /// spent hashing, in spawn order.
+    pub fn finish(self) -> Result<Vec<(H, u128)>> {
+        let label = self.label;
+        let (senders, handles): (Vec<_>, Vec<_>) = self.workers.into_iter().unzip();
+        drop(senders);
+        handles
+            .into_iter()
+            .map(|handle| {
+                handle
+                    .join()
+                    .map_err(|_| RomWeaverError::Validation(format!("{label} worker panicked")))
+            })
+            .collect()
+    }
+}
+
+/// Splits `items` round-robin into at most `groups` groups, none of them empty.
+pub fn round_robin_groups<T>(items: Vec<T>, groups: usize) -> Vec<Vec<T>> {
+    let groups = groups.min(items.len()).max(1);
+    let mut grouped = (0..groups).map(|_| Vec::new()).collect::<Vec<_>>();
+    for (index, item) in items.into_iter().enumerate() {
+        grouped[index % groups].push(item);
+    }
+    grouped.retain(|group| !group.is_empty());
+    grouped
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

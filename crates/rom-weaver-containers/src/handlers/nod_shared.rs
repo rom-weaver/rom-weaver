@@ -1,10 +1,10 @@
 use super::*;
+use rom_weaver_checksum::{ChunkHashWorkers, ChunkHasher, round_robin_groups};
 use rom_weaver_core::{CancellationToken, VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError};
 #[cfg(target_family = "wasm")]
 use std::collections::HashMap;
 #[cfg(target_family = "wasm")]
 use std::thread::ThreadId;
-use std::{sync::mpsc, thread};
 use tracing::{debug, trace};
 
 #[derive(Clone, Copy)]
@@ -530,7 +530,12 @@ impl NodHandlerCore {
 
         let integrity = if matches!(self.nod_format, NodFormat::Wia | NodFormat::Rvz) {
             rom_weaver_core::ensure_output_available(&output_path, request.overwrite)?;
-            Some(prepare_integrity(&mut disc, self.format_name(), context)?)
+            Some(prepare_integrity(
+                &mut disc,
+                self.format_name(),
+                disc_size,
+                context,
+            )?)
         } else {
             None
         };
@@ -937,6 +942,7 @@ fn wbfs_size_mismatch(error: &crate::nod::Error) -> Option<(u64, u64)> {
 fn prepare_integrity(
     disc: &mut NodDiscReader,
     format: &'static str,
+    disc_size: u64,
     context: &OperationContext,
 ) -> Result<IntegrityCheck> {
     use crate::nod::disc::wii::H3_TABLE_SIZE;
@@ -978,7 +984,8 @@ fn prepare_integrity(
         partitions.push(index);
     }
 
-    let digests = ImageDigests::new(&disc.meta(), context)?;
+    // The copy reads in chunks of this size, so the digest workers can recycle its buffers.
+    let digests = ImageDigests::new(&disc.meta(), copy_progress_buffer_size(disc_size), context)?;
     debug!(
         format,
         partitions = partitions.len(),
@@ -1123,6 +1130,16 @@ impl ImageDigest {
         .collect()
     }
 
+    /// Position in reports: CRC32, MD5, SHA-1, then XXH64.
+    fn rank(&self) -> u8 {
+        match self {
+            Self::Crc32(_) => 0,
+            Self::Md5(_) => 1,
+            Self::Sha1(_) => 2,
+            Self::Xxh64(_) => 3,
+        }
+    }
+
     fn name(&self) -> &'static str {
         match self {
             Self::Crc32(_) => "CRC32",
@@ -1158,13 +1175,22 @@ impl ImageDigest {
 /// The NKit image digests checked over the ISO bytes as the copy writes them.
 pub(crate) enum ImageDigests {
     /// Hashed on the copy thread, when no worker thread is available.
-    Inline(Vec<ImageDigest>),
-    /// Hashed on worker threads while the copy reads and writes the next chunk.
-    Workers(DigestWorkers),
+    Inline(DigestGroup),
+    /// Hashed on worker threads while the copy reads and writes the next chunk. Each chunk
+    /// buffer returns to `buffers` once every worker has hashed it.
+    Workers {
+        workers: ChunkHashWorkers<DigestGroup, DigestChunk>,
+        buffers: Arc<ExtractIoBufferPool>,
+    },
 }
 
 impl ImageDigests {
-    fn new(meta: &crate::nod::read::DiscMeta, context: &OperationContext) -> Result<Option<Self>> {
+    /// `chunk_bytes` is the size of the copy's read buffers, which the workers recycle.
+    fn new(
+        meta: &crate::nod::read::DiscMeta,
+        chunk_bytes: usize,
+        context: &OperationContext,
+    ) -> Result<Option<Self>> {
         let digests = ImageDigest::checked(meta);
         let count = digests.len();
         if count == 0 {
@@ -1189,13 +1215,34 @@ impl ImageDigests {
             0
         };
         let digests = if workers == 0 {
-            Self::Inline(digests)
+            Self::Inline(DigestGroup(digests))
         } else {
-            match DigestWorkers::spawn(digests, workers) {
-                Ok(workers) => Self::Workers(workers),
+            // A queue of one chunk per worker is enough: hashing outpaces the copy, so a deeper
+            // queue would only hold more buffers.
+            let buffers = Arc::new(ExtractIoBufferPool::new(chunk_bytes, workers + 2));
+            let recycle = {
+                let buffers = Arc::clone(&buffers);
+                move |chunk: DigestChunk| {
+                    if let Some(buffer) = Arc::into_inner(chunk.buffer) {
+                        buffers.recycle(buffer);
+                    }
+                }
+            };
+            let groups = round_robin_groups(digests, workers)
+                .into_iter()
+                .map(DigestGroup)
+                .collect();
+            match ChunkHashWorkers::spawn(
+                "rom-weaver-nkit-digest",
+                "NKit digest",
+                groups,
+                1,
+                recycle,
+            ) {
+                Ok(workers) => Self::Workers { workers, buffers },
                 Err(error) => {
                     debug!(%error, "NKit digest workers failed to start; hashing on the copy thread");
-                    Self::Inline(ImageDigest::checked(meta))
+                    Self::Inline(DigestGroup(ImageDigest::checked(meta)))
                 }
             }
         };
@@ -1203,9 +1250,10 @@ impl ImageDigests {
             digests = count,
             skipped_md5,
             skipped_sha1,
-            workers = match &digests {
-                Self::Inline(_) => 0,
-                Self::Workers(workers) => workers.workers.len(),
+            workers = if matches!(digests, Self::Inline(_)) {
+                0
+            } else {
+                workers
             },
             effective_threads = execution.effective_threads,
             "NKit image digests compute during the copy"
@@ -1213,38 +1261,43 @@ impl ImageDigests {
         Ok(Some(digests))
     }
 
-    /// Hashes `chunk[..len]` and returns a buffer for the next read when one is free. Workers
-    /// take the chunk itself, so they hash it while the caller reads into another buffer.
-    fn update_owned(&mut self, chunk: Vec<u8>, len: usize) -> io::Result<Option<Vec<u8>>> {
+    /// Hashes `chunk[..len]` and returns a buffer for the next read. Workers take the chunk
+    /// itself, so they hash it while the caller reads into another buffer.
+    fn update_owned(&mut self, chunk: Vec<u8>, len: usize) -> io::Result<Vec<u8>> {
         match self {
-            Self::Inline(digests) => {
-                for digest in digests {
-                    digest.update(&chunk[..len]);
-                }
-                Ok(Some(chunk))
+            Self::Inline(group) => {
+                group.update(&chunk[..len]);
+                Ok(chunk)
             }
-            Self::Workers(workers) => {
-                workers.send(chunk, len)?;
-                Ok(workers.spare.try_recv().ok())
+            Self::Workers { workers, buffers } => {
+                workers
+                    .send(DigestChunk {
+                        buffer: Arc::new(chunk),
+                        len,
+                    })
+                    .map_err(io::Error::other)?;
+                Ok(buffers.take())
             }
         }
     }
 
-    /// Hashes `data`. Workers get a copy of it, in a buffer they have finished with when one
-    /// is free.
+    /// Hashes `data`. Workers get a copy of it in a pooled buffer.
     fn update(&mut self, data: &[u8]) -> io::Result<()> {
         match self {
-            Self::Inline(digests) => {
-                for digest in digests {
-                    digest.update(data);
-                }
+            Self::Inline(group) => {
+                group.update(data);
                 Ok(())
             }
-            Self::Workers(workers) => {
-                let mut chunk = workers.spare.try_recv().unwrap_or_default();
-                chunk.clear();
-                chunk.extend_from_slice(data);
-                workers.send(chunk, data.len())
+            Self::Workers { workers, buffers } => {
+                let mut buffer = buffers.take();
+                buffer.clear();
+                buffer.extend_from_slice(data);
+                workers
+                    .send(DigestChunk {
+                        buffer: Arc::new(buffer),
+                        len: data.len(),
+                    })
+                    .map_err(io::Error::other)
             }
         }
     }
@@ -1252,10 +1305,23 @@ impl ImageDigests {
     /// Waits for the workers, then names the digests that differ from the stored ones, in report
     /// order.
     fn mismatches(self, meta: &crate::nod::read::DiscMeta) -> Result<Vec<&'static str>> {
-        let digests = match self {
-            Self::Inline(digests) => digests,
-            Self::Workers(workers) => workers.finish()?,
+        let mut digests = match self {
+            Self::Inline(group) => group.0,
+            Self::Workers { workers, .. } => {
+                let finished = workers.finish()?;
+                trace!(
+                    workers = finished.len(),
+                    hash_busy_ns = finished.iter().map(|(_, busy_ns)| *busy_ns).max(),
+                    "NKit digest workers finished"
+                );
+                finished
+                    .into_iter()
+                    .flat_map(|(group, _)| group.0)
+                    .collect()
+            }
         };
+        // Workers hold the digests round-robin.
+        digests.sort_by_key(ImageDigest::rank);
         Ok(digests
             .into_iter()
             .filter_map(|digest| {
@@ -1266,95 +1332,27 @@ impl ImageDigests {
     }
 }
 
-/// A chunk of the ISO shared by the digest workers, and the byte count read into it.
-type DigestChunk = (Arc<Vec<u8>>, usize);
+/// The NKit digests one thread hashes.
+pub(crate) struct DigestGroup(Vec<ImageDigest>);
 
-/// Threads that hash every chunk the copy writes, each over its share of the digests.
-pub(crate) struct DigestWorkers {
-    workers: Vec<DigestWorker>,
-    /// Buffers every worker has finished hashing, for the copy to read into again.
-    spare: mpsc::Receiver<Vec<u8>>,
-    spare_sender: mpsc::Sender<Vec<u8>>,
-}
-
-struct DigestWorker {
-    chunks: mpsc::SyncSender<DigestChunk>,
-    handle: thread::JoinHandle<Vec<ImageDigest>>,
-}
-
-impl DigestWorkers {
-    /// Splits `digests` across `count` worker threads, keeping report order.
-    fn spawn(digests: Vec<ImageDigest>, count: usize) -> io::Result<Self> {
-        let total = digests.len();
-        let mut groups = (0..count).map(|_| Vec::new()).collect::<Vec<_>>();
-        for (index, digest) in digests.into_iter().enumerate() {
-            groups[index * count / total].push(digest);
+impl ChunkHasher for DigestGroup {
+    fn update(&mut self, bytes: &[u8]) {
+        for digest in &mut self.0 {
+            digest.update(bytes);
         }
-        let (spare_sender, spare) = mpsc::channel();
-        let workers = groups
-            .into_iter()
-            .map(|digests| DigestWorker::spawn(digests, spare_sender.clone()))
-            .collect::<io::Result<Vec<_>>>()?;
-        Ok(Self {
-            workers,
-            spare,
-            spare_sender,
-        })
-    }
-
-    fn send(&self, chunk: Vec<u8>, len: usize) -> io::Result<()> {
-        let chunk = Arc::new(chunk);
-        for worker in &self.workers {
-            worker
-                .chunks
-                .send((Arc::clone(&chunk), len))
-                .map_err(|_| io::Error::other("NKit digest worker stopped"))?;
-        }
-        // Whoever lets go of a chunk last returns its buffer to the spares.
-        if let Some(buffer) = Arc::into_inner(chunk) {
-            let _ = self.spare_sender.send(buffer);
-        }
-        Ok(())
-    }
-
-    /// Closes each worker's input and collects its digests, in report order.
-    fn finish(self) -> Result<Vec<ImageDigest>> {
-        let mut digests = Vec::new();
-        for DigestWorker { chunks, handle } in self.workers {
-            drop(chunks);
-            digests.extend(handle.join().map_err(|_| {
-                RomWeaverError::Validation("NKit digest worker panicked".to_string())
-            })?);
-        }
-        Ok(digests)
     }
 }
 
-impl DigestWorker {
-    fn spawn(mut digests: Vec<ImageDigest>, spare: mpsc::Sender<Vec<u8>>) -> io::Result<Self> {
-        // One queued chunk lets the worker start the next one as soon as it finishes; hashing
-        // outpaces the copy, so a deeper queue would only hold more buffers.
-        let (chunks, received) = mpsc::sync_channel::<DigestChunk>(1);
-        let handle = thread::Builder::new()
-            .name("rom-weaver-nkit-digest".to_string())
-            .spawn(move || {
-                let mut hashed = 0_u64;
-                while let Ok((chunk, len)) = received.recv() {
-                    for digest in &mut digests {
-                        digest.update(&chunk[..len]);
-                    }
-                    hashed += len as u64;
-                    if let Some(buffer) = Arc::into_inner(chunk) {
-                        let _ = spare.send(buffer);
-                    }
-                }
-                trace!(
-                    digests = digests.len(),
-                    hashed, "NKit digest worker finished"
-                );
-                digests
-            })?;
-        Ok(Self { chunks, handle })
+/// A chunk of the ISO shared by the digest workers: a pooled buffer and the bytes read into it.
+#[derive(Clone)]
+pub(crate) struct DigestChunk {
+    buffer: Arc<Vec<u8>>,
+    len: usize,
+}
+
+impl AsRef<[u8]> for DigestChunk {
+    fn as_ref(&self) -> &[u8] {
+        &self.buffer[..self.len]
     }
 }
 
@@ -1386,7 +1384,7 @@ impl ExtractOutput {
             return Ok(chunk);
         };
         let size = chunk.len();
-        let mut next = digests.update_owned(chunk, len)?.unwrap_or_default();
+        let mut next = digests.update_owned(chunk, len)?;
         next.resize(size, 0);
         Ok(next)
     }
