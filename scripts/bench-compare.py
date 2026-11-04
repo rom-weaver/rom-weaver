@@ -126,7 +126,7 @@ def prepare_fixtures(fixtures: Path, base: Path) -> None:
         path = fixtures / name
         if path.is_file():
             continue
-        print(f"[bench-compare] writing {name}", flush=True)
+        print(f"[bench-compare] writing {name}", file=sys.stderr, flush=True)
         # The partial name keeps the real extension, which picks the output format.
         partial = path.with_name(f"{path.stem}.partial{path.suffix}")
         try:
@@ -159,7 +159,7 @@ def run_case(name: str, args, work: Path) -> dict:
         command = [token.format(**fields) for token in CASES[name].split(" ")]
         sides[label] = (command, out, args.slow_candidate if label == "candidate" else 0.0)
     samples = {"base": [], "candidate": []}
-    print(f"[bench-compare] {name}", flush=True)
+    print(f"[bench-compare] {name}", file=sys.stderr, flush=True)
     try:
         for round_index in range(args.warmup + args.runs):
             order = ("base", "candidate") if round_index % 2 == 0 else ("candidate", "base")

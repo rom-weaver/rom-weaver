@@ -37,7 +37,7 @@ jobs:
           set -euo pipefail
           basis=$(git ls-tree HEAD -- \
             crates Cargo.lock Cargo.toml .cargo .config/mise.toml \
-            .github/actions/setup-build-env .github/workflows/parity.yml)
+            .github/actions/setup-build-env .github/workflows/parity.yml scripts/install-jwasm.sh)
           [[ -n "$basis" ]]
           hash=$(printf '%s\n' "$basis" | sha256sum | cut -d' ' -f1)
           echo "key=parity-cli-${RUNNER_OS}-e1-${hash}" >> "$GITHUB_OUTPUT"
@@ -92,6 +92,12 @@ jobs:
         if: steps.cli-cache.outputs.cache-hit != 'true'
         uses: ./.github/actions/identify-data
 
+      # The release's Linux x64 build uses the LZMA SDK's assembler decode loop, so the perf job
+      # compares like with like.
+      - name: Install the x86-64 LZMA assembler
+        if: steps.cli-cache.outputs.cache-hit != 'true'
+        run: sudo scripts/install-jwasm.sh
+
       - name: Build rom-weaver CLI
         if: steps.cli-cache.outputs.cache-hit != 'true'
         run: cargo build --release -p rom-weaver-cli
@@ -107,6 +113,9 @@ jobs:
           path: target/release/rom-weaver
           retention-days: 1
           if-no-files-found: error
+          # An artifact name cannot be reused within a run, so without this a rerun of a failed
+          # parity job 409s here before the parity check.
+          overwrite: true
 
       - name: Save native CLI
         if: steps.cli-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
@@ -157,7 +166,7 @@ jobs:
           fetch-depth: 0
 
       # The base is the binary users have: the latest release's own Linux x64 build, which the
-      # release builds with the same `--release` profile as the parity CLI.
+      # release builds with the same `--release` profile and LZMA assembler as the parity CLI.
       - name: Download the latest release CLI
         id: base
         env:
@@ -219,3 +228,5 @@ jobs:
           name: perf-compare
           path: ${{ env.PERF_DIR }}/out/*.json
           if-no-files-found: warn
+          # A rerun of a noisy failure would otherwise 409 on the first attempt's results.
+          overwrite: true
