@@ -1982,6 +1982,7 @@ fn ingest_interactive_without_prefix_reads_deletes_unselected_roms() {
         "absolute",
         false,
     );
+    #[cfg(unix)]
     check_ingest_interactive_signature_sidecar_with(
         &["first.nes", "second.nes", "third.nes"],
         Some(0),
