@@ -320,6 +320,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: screenshot-failure-diagnostics
+          overwrite: true
           include-hidden-files: true
           path: |
             docs/screenshots/*-failure.png

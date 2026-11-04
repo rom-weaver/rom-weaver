@@ -58,6 +58,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: e2e-failure-evidence
+          overwrite: true
           path: |
             packages/rom-weaver-webapp/tests/wasm/__screenshots__/**
             test-results/**

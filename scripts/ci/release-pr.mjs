@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 // The head ref identifies release pull requests without a token or label API request.
-// This prefix MUST match .github/workflows/release.yml.
+// This prefix MUST match the workflows that test it in an expression: release.yml, codeql.yml,
+// parity.yml, and ci.yml's last-nightly step (release-pr-workflows.test.mjs checks them).
 export const RELEASE_PR_BRANCH_PREFIX = "release-please--branches--main--components--";
 
 // Release pull requests MUST receive the full CI matrix because merging them starts publication.

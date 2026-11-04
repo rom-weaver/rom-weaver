@@ -135,6 +135,7 @@ runs:
       uses: actions/upload-artifact@v7
       with:
         name: docker-digest-${{ inputs.image }}-${{ inputs.arch }}
+        overwrite: true
         path: ${{ github.workspace }}/.cache/agents/scratch/docker-sweep/digests/*
         if-no-files-found: error
         retention-days: 1

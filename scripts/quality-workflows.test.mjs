@@ -9,12 +9,12 @@ const ci = load(readFileSync(".github/workflows/ci.yml", "utf8"));
 const deep = load(readFileSync(".github/workflows/quality-deep.yml", "utf8"));
 const coverage = load(readFileSync(".github/workflows/coverage.yml", "utf8"));
 const parity = load(readFileSync(".github/workflows/parity.yml", "utf8"));
-test("nightly and manual analysis runs use the selected source revision", () => {
+test("nightly, manual, and release pull request analysis runs use the selected source revision", () => {
+  // coverageTiers in scripts/ci/classify-changes.mjs decides which events set nightly_checks.
+  assert.equal(ci.jobs.changes.outputs.nightly_checks, "${{ steps.classify.outputs.nightly_checks }}");
   for (const name of ["quality-fast", "quality-analysis", "quality-reference"]) {
-    assert.ok(ci.jobs[name].if.includes("github.event_name == 'schedule'"));
-    assert.ok(ci.jobs[name].if.includes("github.event_name == 'workflow_dispatch'"));
-    assert.ok(!ci.jobs[name].if.includes("github.event_name == 'pull_request'"));
-    assert.ok(!ci.jobs[name].if.includes("github.event_name == 'push'"));
+    assert.ok(ci.jobs[name].if.includes("needs.changes.outputs.nightly_checks == 'true'"));
+    assert.ok(!ci.jobs[name].if.includes("github.event_name"));
   }
   const checkout = ci.jobs["quality-analysis"].steps.find((step) =>
     step.uses?.startsWith("actions/checkout@"),
@@ -39,11 +39,9 @@ test("per-change Rust checks do not require the nightly quality jobs", () => {
   assert.ok(ci.jobs.gate.needs.includes("quality-fast"));
   assert.ok(ci.jobs.gate.needs.includes("quality-reference"));
   const fast = ci.jobs.gate.steps.find((step) => step.name === "Verify required quality checks");
-  assert.ok(fast.if.includes("github.event_name == 'schedule'"));
-  assert.ok(fast.if.includes("github.event_name == 'workflow_dispatch'"));
+  assert.ok(fast.if.includes("needs.changes.outputs.nightly_checks == 'true'"));
   const reference = ci.jobs.gate.steps.find((step) => step.name === "Verify selected pinned reference");
-  assert.ok(reference.if.includes("github.event_name == 'schedule'"));
-  assert.ok(reference.if.includes("github.event_name == 'workflow_dispatch'"));
+  assert.ok(reference.if.includes("needs.changes.outputs.nightly_checks == 'true'"));
   assert.equal(ci.jobs["quality-fast"]["continue-on-error"], undefined);
   assert.equal(ci.jobs["quality-reference"]["continue-on-error"], undefined);
   assert.equal(ci.jobs["quality-analysis"]["continue-on-error"], true);

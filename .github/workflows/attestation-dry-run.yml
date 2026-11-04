@@ -60,6 +60,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: attestation-subject
+          overwrite: true
           path: subject.bin
           if-no-files-found: error
           retention-days: 1

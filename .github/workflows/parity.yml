@@ -1,10 +1,15 @@
-name: Nightly parity (chdman + dolphin-tool)
+name: Nightly parity and performance
 
-# Nightly compression parity against live chdman and dolphin-tool releases. It is non-blocking
-# because those third-party tools change independently of this repository.
+# Nightly compression parity against live chdman and dolphin-tool releases, and command timings
+# against the latest release. It is non-blocking because those third-party tools change
+# independently of this repository and shared runners add timing noise.
 
 on:
   workflow_dispatch:
+  # Release pull requests get the nightly checks before anything ships. Every other pull request
+  # skips both jobs; the head-ref prefix MUST match scripts/ci/release-pr.mjs.
+  pull_request:
+    types: [opened, synchronize, reopened]
   schedule:
     # 07:13 UTC nightly (off the top of the hour to dodge scheduler congestion).
     - cron: "13 7 * * *"
@@ -15,6 +20,7 @@ permissions:
 
 jobs:
   parity:
+    if: github.event_name != 'pull_request' || startsWith(github.head_ref, 'release-please--branches--main--components--')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -31,7 +37,7 @@ jobs:
           set -euo pipefail
           basis=$(git ls-tree HEAD -- \
             crates Cargo.lock Cargo.toml .cargo .config/mise.toml \
-            .github/actions/setup-build-env .github/workflows/parity.yml)
+            .github/actions/setup-build-env .github/workflows/parity.yml scripts/install-jwasm.sh)
           [[ -n "$basis" ]]
           hash=$(printf '%s\n' "$basis" | sha256sum | cut -d' ' -f1)
           echo "key=parity-cli-${RUNNER_OS}-e1-${hash}" >> "$GITHUB_OUTPUT"
@@ -86,12 +92,30 @@ jobs:
         if: steps.cli-cache.outputs.cache-hit != 'true'
         uses: ./.github/actions/identify-data
 
+      # The release's Linux x64 build uses the LZMA SDK's assembler decode loop, so the perf job
+      # compares like with like.
+      - name: Install the x86-64 LZMA assembler
+        if: steps.cli-cache.outputs.cache-hit != 'true'
+        run: sudo scripts/install-jwasm.sh
+
       - name: Build rom-weaver CLI
         if: steps.cli-cache.outputs.cache-hit != 'true'
         run: cargo build --release -p rom-weaver-cli
 
       - name: Verify rom-weaver CLI
         run: target/release/rom-weaver --version
+
+      # Upload before the parity check, so a parity mismatch still leaves the perf job a CLI.
+      - name: Upload rom-weaver CLI
+        uses: actions/upload-artifact@v7
+        with:
+          name: parity-cli
+          path: target/release/rom-weaver
+          retention-days: 1
+          if-no-files-found: error
+          # An artifact name cannot be reused within a run, so without this a rerun of a failed
+          # parity job 409s here before the parity check.
+          overwrite: true
 
       - name: Save native CLI
         if: steps.cli-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
@@ -122,3 +146,89 @@ jobs:
           include-hidden-files: true
           path: .agent/quality-signals/live-parity.log
           if-no-files-found: warn
+          # A rerun would otherwise 409 on the first attempt's diagnostics.
+          overwrite: true
+
+  perf:
+    name: Performance vs latest release
+    needs: parity
+    # Runs after a parity mismatch too; only a missing CLI artifact stops it.
+    if: >-
+      !cancelled() &&
+      (github.event_name != 'pull_request' || startsWith(github.head_ref, 'release-please--branches--main--components--'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: always
+      PERF_DIR: ${{ github.workspace }}/.agent/perf
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # The base is the binary users have: the latest release's own Linux x64 build, which the
+      # release builds with the same `--release` profile and LZMA assembler as the parity CLI.
+      - name: Download the latest release CLI
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*')
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+            --pattern rom-weaver-linux-x64-gnu.tar.gz --dir "$PERF_DIR/base"
+          tar -xzf "$PERF_DIR/base/rom-weaver-linux-x64-gnu.tar.gz" -C "$PERF_DIR/base"
+          "$PERF_DIR/base/rom-weaver" --version
+
+      - name: Download the candidate CLI
+        uses: actions/download-artifact@v8
+        with:
+          name: parity-cli
+          path: ${{ env.PERF_DIR }}/candidate
+
+      # Artifacts drop the executable bit.
+      - name: Verify the candidate CLI
+        run: |
+          chmod +x "$PERF_DIR/candidate/rom-weaver"
+          "$PERF_DIR/candidate/rom-weaver" --version
+
+      - name: Set up the fixture build
+        uses: ./.github/actions/setup-build-env
+        with:
+          tools: rust
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+
+      # The fixture writer runs once, so fat LTO would only add link time.
+      - name: Write NKit fixtures
+        env:
+          CARGO_PROFILE_RELEASE_LTO: "false"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+        run: cargo run --locked --release -p rom-weaver-containers --example nkit_fixture -- "$PERF_DIR/fixtures"
+
+      # FAILS the job when a case is more than 10% slower than the release by both its median
+      # and its fastest run.
+      - name: Compare with ${{ steps.base.outputs.tag }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Performance vs ${{ steps.base.outputs.tag }}"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          python3 scripts/bench-compare.py \
+            --base "$PERF_DIR/base/rom-weaver" \
+            --candidate "$PERF_DIR/candidate/rom-weaver" \
+            --fixtures "$PERF_DIR/fixtures" \
+            --out "$PERF_DIR/out" \
+            --threshold 1.10 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload performance results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: perf-compare
+          path: ${{ env.PERF_DIR }}/out/*.json
+          if-no-files-found: warn
+          # A rerun of a noisy failure would otherwise 409 on the first attempt's results.
+          overwrite: true

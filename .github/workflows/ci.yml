@@ -72,6 +72,8 @@ jobs:
       # The non-Linux CLI targets, macOS Rust, and the arm64 runtime check:
       # full_matrix minus pushes to main, which leave them to the nightly.
       full_native: ${{ steps.classify.outputs.full_native }}
+      # The nightly quality jobs: the schedule, manual runs, and the release pull request.
+      nightly_checks: ${{ steps.classify.outputs.nightly_checks }}
       cli_platforms: ${{ steps.cli-platforms.outputs.matrix }}
       deploy_targets: ${{ steps.plan.outputs.targets }}
       preview_branch: ${{ steps.plan.outputs.preview_branch }}
@@ -94,11 +96,15 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
         run: node scripts/ci/cli-platform-matrix.mjs
 
-      # Nightly and manual quality checks share the previous successful nightly
-      # as their baseline. The native matrix uses it to avoid rebuilding unchanged targets.
+      # Nightly, manual, and release pull request quality checks share the previous
+      # successful nightly as their baseline. The native matrix uses it to avoid
+      # rebuilding unchanged targets. This step runs before the classifier, so the
+      # head-ref prefix here MUST match scripts/ci/release-pr.mjs.
       - name: Find the last successful nightly
         id: last-nightly
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: >-
+          github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+          (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--branches--main--components--'))
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
@@ -292,6 +298,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: identify-data
+          overwrite: true
           path: crates/rom-weaver-cli/data/identify
           if-no-files-found: error
           compression-level: 0
@@ -372,8 +379,7 @@ jobs:
     timeout-minutes: 15
     needs: changes
     if: >-
-      github.ref_type != 'tag' &&
-      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      github.ref_type != 'tag' && needs.changes.outputs.nightly_checks == 'true'
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       reference: ${{ steps.plan.outputs.reference }}
@@ -433,6 +439,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: quality-fast
+          overwrite: true
           include-hidden-files: true
           path: .agent/quality-signals/*
           if-no-files-found: error
@@ -444,7 +451,7 @@ jobs:
     needs: [changes, quality-fast]
     if: >-
       github.ref_type != 'tag'
-      && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      && needs.changes.outputs.nightly_checks == 'true'
       && needs.quality-fast.outputs.matrix != ''
       && needs.quality-fast.outputs.matrix != '[]'
     # Initially advisory: baseline mutation survivors and fuzz/tool costs must be observed before gating.
@@ -493,6 +500,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: quality-${{ matrix.signal }}
+          overwrite: true
           include-hidden-files: true
           path: |
             .agent/quality-mutation/summary.json
@@ -505,10 +513,10 @@ jobs:
     name: Quality (pinned reference)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    needs: quality-fast
+    needs: [changes, quality-fast]
     if: >-
       github.ref_type != 'tag'
-      && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      && needs.changes.outputs.nightly_checks == 'true'
       && needs.quality-fast.outputs.reference == 'true'
     steps:
       - uses: actions/checkout@v7
@@ -533,6 +541,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: quality-pinned-reference
+          overwrite: true
           include-hidden-files: true
           path: .agent/quality-signals/reference.json
           if-no-files-found: ignore
@@ -983,6 +992,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: wasm-prod
+          overwrite: true
           if-no-files-found: error
           compression-level: 0
           # Upload the complete bundle, including the freshly generated
@@ -1005,6 +1015,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: webapp-dist
+          overwrite: true
           path: packages/rom-weaver-webapp/dist
           if-no-files-found: error
           include-hidden-files: true
@@ -1181,6 +1192,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ci-cli-linux-arm64-musl
+          overwrite: true
           path: target/${{ matrix.target }}/release/${{ matrix.binary }}
           if-no-files-found: error
 
@@ -1464,6 +1476,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: lighthouse-reports
+          overwrite: true
           path: target/lighthouse
           if-no-files-found: warn
           retention-days: 14
@@ -1717,7 +1730,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Verify required quality checks
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        if: ${{ !cancelled() && needs.changes.outputs.nightly_checks == 'true' }}
         run: >-
           node scripts/ci/assert-jobs.mjs
           '${{ needs.changes.result }}'
@@ -1726,7 +1739,7 @@ jobs:
 
       - name: Verify selected pinned reference
         if: >-
-          ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+          ${{ !cancelled() && needs.changes.outputs.nightly_checks == 'true' }}
         run: >-
           node scripts/ci/assert-jobs.mjs
           '${{ needs.changes.result }}'
