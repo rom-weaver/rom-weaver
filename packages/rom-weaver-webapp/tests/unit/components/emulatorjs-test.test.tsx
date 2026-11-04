@@ -1,4 +1,8 @@
 // @vitest-environment happy-dom
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { KeptRomPlayback } from "../../../src/storage/browser/kept-roms.ts";
@@ -765,6 +769,32 @@ describe("EmulatorTestView", () => {
     render(withSettings(<EmulatorTestView />));
 
     expect(await frameBiosUrl("Zelda v1.1")).toMatch(/\/emulatorjs\/bios\/disksys\.rom"/);
+  });
+
+  it("starts a Saturn disc with the bundled BIOS", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    addEntry(entry({ core: "segaSaturn", fileName: "disc.cue", id: "saturn" }));
+
+    render(withSettings(<EmulatorTestView />));
+
+    const bios = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "../../../vendor/emulatorjs/bios/saturn_bios.bin"),
+    );
+    const sha256 = createHash("sha256").update(bios).digest("hex");
+    expect(await frameBiosUrl("disc.cue")).toMatch(
+      new RegExp(String.raw`/emulatorjs/bios/saturn_bios\.bin\?sha256=${sha256}"`),
+    );
+  });
+
+  it("starts other cores without a BIOS", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    addEntry(entry({ core: "snes", fileName: "game.sfc", id: "snes" }));
+
+    render(withSettings(<EmulatorTestView />));
+
+    expect(await frameBiosUrl("game.sfc")).toBeUndefined();
   });
 
   it("replaces the current game without a game list", async () => {

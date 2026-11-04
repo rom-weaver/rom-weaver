@@ -5,6 +5,7 @@ type PrecacheManifestEntry = string | { revision?: string | null; url: string; i
 type CapturedRoute = {
   handler: (options: { event?: { type: string }; request: Request; url: URL }) => Promise<Response>;
   match: (options: { request: Request; url: URL }) => boolean;
+  method: string;
 };
 
 type CapturedPlugin = {
@@ -75,8 +76,12 @@ const hoisted = vi.hoisted(() => ({
 }));
 
 vi.mock("workbox-routing", () => ({
-  registerRoute: (match: unknown, handler: unknown) => {
-    hoisted.routes.push({ handler: handler as CapturedRoute["handler"], match: match as CapturedRoute["match"] });
+  registerRoute: (match: unknown, handler: unknown, method = "GET") => {
+    hoisted.routes.push({
+      handler: handler as CapturedRoute["handler"],
+      match: match as CapturedRoute["match"],
+      method,
+    });
   },
 }));
 
@@ -353,7 +358,7 @@ const loadWorker = async (
     cacheStorage,
     emulatorJsRoute: requireRoute(1),
     fetchStub,
-    identifyPackRoute: requireRoute(3),
+    identifyPackRoute: requireRoute(4),
     networkFirstRoute: requireRoute(0),
     plugin,
     scope,
@@ -611,7 +616,7 @@ describe("service worker bootstrap", () => {
   it("registers the runtime and deferred routes, the precache plugin and the warm-up", async () => {
     const harness = await loadWorker();
 
-    expect(hoisted.routes).toHaveLength(4);
+    expect(hoisted.routes).toHaveLength(5);
     expect(hoisted.precacheAndRoute).toHaveBeenCalledWith(DEFAULT_MANIFEST, {
       ignoreURLParametersMatching: [/^sha256$/],
     });
@@ -2009,5 +2014,85 @@ describe("precache state reported to the warm-up", () => {
     await harness.warmupConfig.fetchForInteractive(`${APP_ORIGIN}/assets/identify-computers.pack`);
 
     expect(harness.fetchStub.calls[0]?.init).toBeUndefined();
+  });
+});
+
+describe("BIOS HEAD route", () => {
+  const BIOS_URL = `${APP_ORIGIN}/emulatorjs/bios/saturn_bios.bin`;
+  const DEFERRED_CACHE_NAME = "precache-rom-weaver-app-deferred";
+  const loadBiosWorker = (cachedBios?: Response) =>
+    loadWorker({
+      manifest: [
+        "index.html",
+        { install: false, url: "emulatorjs/bios/saturn_bios.bin" },
+        { install: false, url: "assets/deferred.js" },
+      ],
+      seedCaches: async (cacheStorage) => {
+        if (cachedBios) await (await cacheStorage.open(DEFERRED_CACHE_NAME)).put(BIOS_URL, cachedBios);
+      },
+    });
+  const head = (url: string) => new Request(url, { method: "HEAD" });
+
+  it("registers for HEAD only", async () => {
+    await loadBiosWorker();
+
+    expect(requireRoute(3).method).toBe("HEAD");
+    expect(hoisted.routes.filter((route) => route.method === "HEAD")).toHaveLength(1);
+  });
+
+  it("answers from the offline copy without a body or a network request", async () => {
+    const harness = await loadBiosWorker(new Response("bios", { headers: { "content-length": "4" }, status: 200 }));
+
+    const response = await routed(harness, requireRoute(3), head(BIOS_URL));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-length")).toBe("4");
+    expect(response.headers.get("Cross-Origin-Embedder-Policy")).toBe("credentialless");
+    await expect(response.text()).resolves.toBe("");
+    expect(harness.fetchStub.calls).toHaveLength(0);
+  });
+
+  it("matches the versioned BIOS URL the page requests", async () => {
+    const harness = await loadBiosWorker(new Response("bios", { headers: { "content-length": "4" }, status: 200 }));
+
+    const response = await routed(harness, requireRoute(3), head(`${BIOS_URL}?sha256=${"a".repeat(64)}`));
+
+    expect(response.headers.get("content-length")).toBe("4");
+    expect(harness.fetchStub.calls).toHaveLength(0);
+  });
+
+  it("passes a successful network answer through when the file is not cached", async () => {
+    const harness = await loadBiosWorker();
+    harness.fetchStub.handlers.set(
+      BIOS_URL,
+      () => new Response(null, { headers: { "content-length": "4" }, status: 200 }),
+    );
+
+    const response = await routed(harness, requireRoute(3), head(BIOS_URL));
+
+    expect(response.headers.get("content-length")).toBe("4");
+  });
+
+  it.each([
+    ["the network fails", undefined],
+    ["the host answers with an error status", () => new Response(null, { status: 503 })],
+  ])("answers an empty 200 when %s", async (_case, handler) => {
+    const harness = await loadBiosWorker();
+    if (handler) harness.fetchStub.handlers.set(BIOS_URL, handler);
+
+    const response = await routed(harness, requireRoute(3), head(BIOS_URL));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-length")).toBeNull();
+    expect(harness.fetchStub.calls.map((call) => call.url)).toEqual([BIOS_URL]);
+  });
+
+  it("leaves GET and other deferred files to the other routes", async () => {
+    await loadBiosWorker();
+    const route = requireRoute(3);
+    const other = `${APP_ORIGIN}/assets/deferred.js`;
+
+    expect(route.match({ request: new Request(BIOS_URL), url: new URL(BIOS_URL) })).toBe(false);
+    expect(route.match({ request: head(other), url: new URL(other) })).toBe(false);
   });
 });

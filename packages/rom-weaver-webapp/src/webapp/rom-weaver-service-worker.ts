@@ -780,6 +780,33 @@ registerRoute(
   },
 );
 
+// EmulatorJS sends HEAD for a BIOS before using its IndexedDB copy, and stalls
+// startup when that HEAD fails or returns an error status. Answer from the
+// offline copy; when the file is not cached and the network cannot answer, an
+// empty 200 sends it on to the GET, which reports the error.
+registerRoute(
+  ({ request, url }) =>
+    request.method === "HEAD" &&
+    url.pathname.startsWith(new URL("emulatorjs/bios/", self.registration.scope).pathname) &&
+    deferredPrecache.has(url.href),
+  async ({ request, url }) => {
+    const credentialless = await ensureCoepModeHydrated();
+    const cached = await deferredPrecache.match(url.href);
+    let response = cached
+      ? new Response(null, { headers: cached.headers, status: cached.status, statusText: cached.statusText })
+      : await fetch(request).catch((err: unknown) => {
+          logServiceWorker("BIOS HEAD request failed", { error: formatError(err), url: url.href });
+          return undefined;
+        });
+    if (!response?.ok) {
+      if (response) logServiceWorker("BIOS HEAD request failed", { status: response.status, url: url.href });
+      response = new Response(null, { status: 200 });
+    }
+    return withCrossOriginIsolationHeaders(response, credentialless) || response;
+  },
+  "HEAD",
+);
+
 const offlineWarmup = createOfflineWarmup({
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
   emulatorJsVersion: __EMULATORJS_VERSION__,

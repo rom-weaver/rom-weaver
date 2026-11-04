@@ -247,7 +247,7 @@ The Test page supports these platforms:
 - Sega Game Gear
 - Sega Master System
 - Sega Mega Drive or Genesis
-- Sega Saturn
+- Sega Saturn (runs with the bundled [SaturnOpenBios](https://github.com/rom-weaver/saturn-open-bios) BIOS)
 - Sony PlayStation
 - Sony PSP
 

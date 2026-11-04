@@ -193,6 +193,7 @@ export default defineConfig(({ command, mode }) => {
             "emulatorjs/LICENSE",
             "emulatorjs/NOTICE",
             "emulatorjs/bios/*.rom",
+            "emulatorjs/bios/*.bin",
             "logo.svg",
             "first-create.zip",
             "first-weave.zip",
