@@ -76,7 +76,7 @@
       "reason": "Reserve the hunk map and the index of stored hunks from the hunk count when the logical size is set, so they do not reallocate while other threads compress. On browser wasi-threads a heap that grows while sibling threads run can trap their bulk-memory instructions; rom-weaver's previous encoder sized both up front the same way. The reservation is best effort, so a refused allocation falls back to growth instead of aborting.",
       "upstream": {
         "status": "fork",
-        "url": "https://github.com/rom-weaver/chd-rs/pull/5"
+        "url": "https://github.com/rom-weaver/chd-rs/pull/4"
       },
       "tests": [
         "cargo test -p rom-weaver-containers --lib chd_rs::write::compressed_tests::hunk_tables_are_sized_from_the_logical_size -- --exact"
