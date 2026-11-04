@@ -34,7 +34,7 @@ fn shared_pool_disc_extract_keeps_decode_and_checksum_workers_within_the_budget(
         disc_extract::split_disc_threads(16, 3, 3, true)
     );
     for operation_threads in 1..=64 {
-        for outputs in 1..=8 {
+        for outputs in 2..=8 {
             for algorithms in 0..=5 {
                 let split =
                     disc_extract::split_disc_threads(operation_threads, outputs, algorithms, true);
@@ -50,6 +50,72 @@ fn shared_pool_disc_extract_keeps_decode_and_checksum_workers_within_the_budget(
                     split.decode_threads + checksum_workers
                         <= operation_threads.min(disc_extract::SHARED_POOL_DISC_THREAD_LIMIT),
                     "{operation_threads} threads, {outputs} outputs, {algorithms} algorithms"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn shared_pool_single_output_extract_caps_decode_threads_only_past_the_pool_limit() {
+    // A single-bin CD or raw extract at 18 threads kept 18 decode threads beside 3 checksum
+    // workers, one past the 20-slot pool.
+    assert_eq!(
+        disc_extract::split_disc_threads(18, 1, 3, true),
+        disc_extract::DiscThreadSplit {
+            decode_threads: 13,
+            checksum_threads: Some(3),
+        }
+    );
+    // Below the limit the requested decode budget and the default checksum workers stay as they
+    // were: a 2 + 2 split at 4 threads ran a 128 MiB CD extract about 50% slower.
+    assert_eq!(
+        disc_extract::split_disc_threads(4, 1, 3, true),
+        disc_extract::DiscThreadSplit {
+            decode_threads: 4,
+            checksum_threads: Some(3),
+        }
+    );
+    assert_eq!(
+        disc_extract::split_disc_threads(13, 1, 3, true),
+        disc_extract::DiscThreadSplit {
+            decode_threads: 13,
+            checksum_threads: Some(3),
+        }
+    );
+    // 14 decode threads plus 3 checksum workers would pass the 16-thread limit.
+    assert_eq!(
+        disc_extract::split_disc_threads(14, 1, 3, true),
+        disc_extract::DiscThreadSplit {
+            decode_threads: 13,
+            checksum_threads: Some(3),
+        }
+    );
+    // A one-thread budget hashes inline, so decode keeps its single thread.
+    assert_eq!(
+        disc_extract::split_disc_threads(1, 1, 3, true),
+        disc_extract::DiscThreadSplit {
+            decode_threads: 1,
+            checksum_threads: Some(1),
+        }
+    );
+    for operation_threads in 1..=64 {
+        for algorithms in 0..=5 {
+            let split = disc_extract::split_disc_threads(operation_threads, 1, algorithms, true);
+            let per_output = split.checksum_threads.unwrap();
+            let checksum_workers = if per_output > 1 { per_output } else { 0 };
+            assert_eq!(per_output, algorithms.min(operation_threads).max(1));
+            assert!(split.decode_threads >= 1);
+            assert!(split.decode_threads <= operation_threads);
+            assert!(
+                split.decode_threads + checksum_workers
+                    <= disc_extract::SHARED_POOL_DISC_THREAD_LIMIT,
+                "{operation_threads} threads, {algorithms} algorithms"
+            );
+            if operation_threads + checksum_workers <= disc_extract::SHARED_POOL_DISC_THREAD_LIMIT {
+                assert_eq!(
+                    split.decode_threads, operation_threads,
+                    "{operation_threads} threads, {algorithms} algorithms"
                 );
             }
         }

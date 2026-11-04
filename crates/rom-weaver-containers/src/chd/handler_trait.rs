@@ -220,10 +220,17 @@ impl ContainerHandlerOperations for ChdContainerHandler {
         // Chromium's in-memory filesystem backing allocation in private browsing contexts.
         output_file.set_len(chd.header().logical_bytes)?;
         let mut output = BufWriter::new(output_file);
-        let mut output_checksum =
-            create_extract_checksum(context, request.containing_archive.is_none())?;
-        chd.stream_with_progress(
+        let allow_parallel_checksums = request.containing_archive.is_none();
+        let split = disc_extract::extract_thread_split(
+            context,
             execution.effective_threads,
+            1,
+            allow_parallel_checksums,
+        )?;
+        let mut output_checksum =
+            disc_extract::create_split_extract_checksum(context, &split, allow_parallel_checksums)?;
+        chd.stream_with_progress(
+            split.decode_threads,
             Some(&extract_progress),
             context.cancel(),
             |chunk| {
