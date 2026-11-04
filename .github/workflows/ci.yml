@@ -298,6 +298,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: identify-data
+          overwrite: true
           path: crates/rom-weaver-cli/data/identify
           if-no-files-found: error
           compression-level: 0
@@ -438,6 +439,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: quality-fast
+          overwrite: true
           include-hidden-files: true
           path: .agent/quality-signals/*
           if-no-files-found: error
@@ -498,6 +500,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: quality-${{ matrix.signal }}
+          overwrite: true
           include-hidden-files: true
           path: |
             .agent/quality-mutation/summary.json
@@ -538,6 +541,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: quality-pinned-reference
+          overwrite: true
           include-hidden-files: true
           path: .agent/quality-signals/reference.json
           if-no-files-found: ignore
@@ -988,6 +992,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: wasm-prod
+          overwrite: true
           if-no-files-found: error
           compression-level: 0
           # Upload the complete bundle, including the freshly generated
@@ -1010,6 +1015,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: webapp-dist
+          overwrite: true
           path: packages/rom-weaver-webapp/dist
           if-no-files-found: error
           include-hidden-files: true
@@ -1186,6 +1192,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ci-cli-linux-arm64-musl
+          overwrite: true
           path: target/${{ matrix.target }}/release/${{ matrix.binary }}
           if-no-files-found: error
 
@@ -1469,6 +1476,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: lighthouse-reports
+          overwrite: true
           path: target/lighthouse
           if-no-files-found: warn
           retention-days: 14

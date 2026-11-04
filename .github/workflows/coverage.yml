@@ -107,5 +107,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: coverage-reports
+          overwrite: true
           path: dist/coverage/**
           if-no-files-found: error
