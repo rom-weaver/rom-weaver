@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import random
 import shutil
@@ -105,7 +106,10 @@ def prepare_fixtures(fixtures: Path, base: Path) -> None:
     """Write each missing fixture; existing ones are reused, so a local rerun is fast."""
     for name in ("gcjunk-nkit.rvz", "gcjunk-nkit.wia"):
         if not (fixtures / name).is_file():
-            sys.exit(f"{fixtures / name} is missing; run the nkit_fixture example first")
+            sys.exit(
+                f"{fixtures / name} is missing; write it with"
+                f" `cargo run --release -p rom-weaver-containers --example nkit_fixture -- {fixtures}`"
+            )
     raw, modified = str(fixtures / "raw.bin"), str(fixtures / "mod.bin")
     steps = [
         ("gc.iso", lambda path: write_gc_iso(path, 512 * MIB)),
@@ -194,14 +198,21 @@ def main() -> int:
     parser.add_argument("--threshold", type=float, default=1.10)
     parser.add_argument("--runs", type=int, default=10)
     parser.add_argument("--warmup", type=int, default=2)
-    parser.add_argument("--slow-candidate", type=float, default=0.0)
+    parser.add_argument(
+        "--slow-candidate",
+        type=float,
+        default=0.0,
+        metavar="SECONDS",
+        help="seconds to add to each candidate run, to test the gate",
+    )
     args = parser.parse_args()
     names = args.cases.split(",")
     unknown = [name for name in names if name not in CASES]
     if unknown:
         parser.error(f"unknown cases: {', '.join(unknown)} (known: {', '.join(CASES)})")
-    if args.runs < 1 or args.warmup < 0:
-        parser.error("--runs must be at least 1 and --warmup at least 0")
+    # The negated range also rejects nan and inf, which time.sleep() refuses.
+    if args.runs < 1 or args.warmup < 0 or not 0 <= args.slow_candidate < math.inf:
+        parser.error("--runs must be at least 1, --warmup at least 0, and --slow-candidate finite and at least 0")
     for binary in (args.base, args.candidate):
         if not os.access(binary, os.X_OK):
             parser.error(f"{binary} is not an executable file")

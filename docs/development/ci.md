@@ -157,7 +157,7 @@ security ── advisories (warn only, always green)
 | `cli-platforms` | Builds and smoke-tests the native release targets | `CI gate` |
 | `cli-linux-arm64` | Runs the cross-built arm64 musl binary on a native arm64 runner | `CI gate` |
 | `quality-fast`, `quality-reference` | Nightly architecture, verification, and pinned-reference checks | `CI gate` (nightly and release PR) |
-| `quality-analysis` | Nightly mutation and fuzz signals | not required (advisory) |
+| `quality-analysis` | Mutation and fuzz signals on nightly and release PR runs | not required (advisory) |
 | `security` | `cargo deny advisories` and `npm audit` | not required (warn only) |
 | `webapp-static`, `webapp-browser`, `webapp-wasm-browser`, `webapp-e2e`, `webapp-webkit-e2e` | Webapp lint, unit, browser, and E2E suites on the prebuilt module | `CI gate` |
 | `deploy`, `deploy-preview-fast` | Cloudflare Pages deployments | not required |
