@@ -33,6 +33,15 @@ fn shared_pool_disc_extract_keeps_decode_and_checksum_workers_within_the_budget(
         disc_extract::split_disc_threads(32, 3, 3, true),
         disc_extract::split_disc_threads(16, 3, 3, true)
     );
+    // A single-bin CD or raw extract at 18 threads kept 18 decode threads beside 3 checksum
+    // workers, one past the 20-slot pool.
+    assert_eq!(
+        disc_extract::split_disc_threads(18, 1, 3, true),
+        disc_extract::DiscThreadSplit {
+            decode_threads: 13,
+            checksum_threads: Some(3),
+        }
+    );
     for operation_threads in 1..=64 {
         for outputs in 1..=8 {
             for algorithms in 0..=5 {
