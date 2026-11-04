@@ -102,3 +102,36 @@ test("rejects missing or malformed run identity", async () => {
     await assert.rejects(rerunInfraFailures({ env: { ...env, ...bad }, api, logger: sink() }), /required/);
   }
 });
+
+test("names the annotation field that matched", async () => {
+  const { api } = fakeApi({
+    jobs: [{ id: 1, name: "Rust", conclusion: "failure" }],
+    annotations: { 1: [{ message: "generic", title: NOT_ACQUIRED }] },
+  });
+  assert.deepEqual(await findInfraFailures({ api, repo: "o/r", runId: "42", attempt: 1 }), [
+    { job: "Rust", message: NOT_ACQUIRED },
+  ]);
+});
+
+test("an accepted rerun with an empty response body is not a failure", async () => {
+  const { api: inner } = fakeApi({
+    jobs: [{ id: 1, name: "WebKit E2E", conclusion: "cancelled" }],
+    annotations: { 1: [{ message: NOT_ACQUIRED }] },
+  });
+  const api = (path, options) =>
+    options?.method === "POST"
+      ? Promise.reject(new SyntaxError("Unexpected end of JSON input"))
+      : inner(path, options);
+  const result = await rerunInfraFailures({ env, api, logger: sink() });
+  assert.equal(result.rerun, true);
+});
+
+test("a rejected rerun request still fails", async () => {
+  const { api: inner } = fakeApi({
+    jobs: [{ id: 1, name: "WebKit E2E", conclusion: "cancelled" }],
+    annotations: { 1: [{ message: NOT_ACQUIRED }] },
+  });
+  const api = (path, options) =>
+    options?.method === "POST" ? Promise.reject(new Error("failed with 403")) : inner(path, options);
+  await assert.rejects(rerunInfraFailures({ env, api, logger: sink() }), /403/);
+});

@@ -42,7 +42,9 @@ export async function findInfraFailures({ api, repo, runId, attempt }) {
     const match = annotations.find(
       (annotation) => isInfraMessage(annotation.message) || isInfraMessage(annotation.title),
     );
-    if (match) found.push({ job: job.name, message: match.message ?? match.title });
+    if (match) {
+      found.push({ job: job.name, message: isInfraMessage(match.message) ? match.message : match.title });
+    }
   }
   return found;
 }
@@ -75,7 +77,13 @@ export async function rerunInfraFailures({
     return { rerun: false, failures };
   }
 
-  await api(`/repos/${repo}/actions/runs/${runId}/rerun-failed-jobs`, { method: "POST" });
+  // The API helper parses every non-204 body as JSON. An empty body after an
+  // accepted rerun MUST NOT turn the accepted request into a red step.
+  await api(`/repos/${repo}/actions/runs/${runId}/rerun-failed-jobs`, { method: "POST" }).catch(
+    (error) => {
+      if (!(error instanceof SyntaxError)) throw error;
+    },
+  );
   const lines = failures.map(({ job, message }) => `- ${job}: ${message}`);
   logger.write(`reran failed jobs of run ${runId} after infrastructure failures:\n${lines.join("\n")}\n`);
   if (env.GITHUB_STEP_SUMMARY) {
