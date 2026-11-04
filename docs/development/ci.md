@@ -23,6 +23,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
   - [`scripts/ci/assert-jobs.mjs`](#scriptsciassert-jobsmjs)
   - [`scripts/ci/classify-changes.mjs`](#scriptsciclassify-changesmjs)
   - [`scripts/ci/resolve-wasm-run.mjs`](#scriptsciresolve-wasm-runmjs)
+  - [`scripts/ci/rerun-infra-failures.mjs`](#scriptscirerun-infra-failuresmjs)
   - [`scripts/ci/npm-publish-package.mjs`](#scriptscinpm-publish-packagemjs)
 - [Release fan-out](#release-fan-out)
   - [Containers reuse what the fan-out already built](#containers-reuse-what-the-fan-out-already-built)
@@ -54,6 +55,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
 | `quality-deep.yml` | weekly Monday 07:17 UTC, manual | No | Mutation shard, long fuzzing, sanitizers, Miri, Kani, property checks, and browser lifecycle/resource checks |
 | `e2e-nightly.yml` | manual | No | Exhaustive browser E2E, service-worker checks, and published-install smoke tests |
 | `cache-cleanup.yml` | completed main-push CI, daily 03:17 UTC fallback, manual | No | Remove closed-PR and superseded Actions caches |
+| `rerun-infra-failures.yml` | failed first attempt of `ci.yml` or `parity.yml` | No | Rerun the failed jobs once when a job never got a runner or lost it |
 | `cloudflare-preview-cleanup.yml` | every 6 h, manual | No | Reap stale Cloudflare Pages preview deployments |
 | `release.yml` | manual, release PR merge | n/a | Release Please, then the publish fan-out |
 | `release-retry.yml` | manual | n/a | Validate a failed/cancelled Release run and rerun its failed jobs and dependents |
@@ -491,6 +493,14 @@ Two tests pin it. `scripts/ci/classify-changes.test.mjs` covers the path boundar
 ### `scripts/ci/resolve-wasm-run.mjs`
 
 Finds the CI run that built `wasm-prod` for a commit, so release packaging ships the exact module CI tested. It accepts an optional `PREFERRED_RUN_ID` hint and **verifies that run is actually for this commit** before trusting it, otherwise searches by commit, and finally confirms the artifact has not expired. Release falls back to a source build when it is unavailable.
+
+### `scripts/ci/rerun-infra-failures.mjs`
+
+Reruns a failed `ci.yml` or `parity.yml` run once when one of its jobs lost its runner, so a capacity shortage does not need a person to notice and rerun it. The job reads the check-run annotations of each failed job and matches them against a short allowlist: `was not acquired by Runner`, `lost communication with the server`, and `received a shutdown signal`. GitHub writes these when the runner itself is gone. A job whose steps fail normally never matches, but a step that exhausts the runner's memory can, so a rerun is no proof that the change was innocent. A match calls `rerun-failed-jobs` and lists the matching jobs in the job summary.
+
+The workflow runs only for the first attempt of a same-repository run that concluded `failure`, so a rerun that fails again stays failed and a fork cannot spend runner minutes. It also skips a run whose commit is no longer the head of its branch, because a rerun keeps its original ref and would cancel the newer commit's run in the same concurrency group. `rerun-failed-jobs` reruns every failed job in the run, including a job that failed for its own reasons next to the infrastructure failure. The second attempt decides. A run that ends `cancelled` is never rerun, whether a person cancelled it or its only job lost its runner, because the workflow filters on `failure`; `ci.yml` ends `failure` since its gate job fails.
+
+A step that dies to a network timeout inside a job, such as `apt-get`, leaves no runner annotation. `scripts/ci/install-system-dependencies.mjs` retries those itself. A failed Release run is rerun by hand through [`release-retry.yml`](#the-workflows-at-a-glance).
 
 ### `scripts/ci/npm-publish-package.mjs`
 
