@@ -3047,7 +3047,8 @@ fn trim_in_place_archive_repack_of_an_xiso_reports_no_image_metadata() {
 
 /// A name that is not valid UTF-8 still has an extension: `.zip` must pack rather than write a
 /// raw ROM.
-#[cfg(unix)]
+// quality-reason: APFS rejects file names that are not valid UTF-8 (EILSEQ), so macOS cannot hold this input.
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 fn trim_reads_the_extension_of_a_non_utf8_file_name() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
