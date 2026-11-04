@@ -692,7 +692,7 @@ fn extract_wia_image_with_threads(
     rom_weaver_core::Result<rom_weaver_core::OperationReport>,
     Arc<rom_weaver_core::RecordingProgressSink>,
 ) {
-    extract_wia_image_with_controls(image, existing_output, threads, false, None)
+    extract_wia_image_with_controls(image, existing_output, threads, false, None, Vec::new())
 }
 
 struct WiaExtractProgress {
@@ -722,6 +722,7 @@ fn extract_wia_image_with_controls(
     threads: usize,
     overwrite: bool,
     cancel_at: Option<f32>,
+    checksums: Vec<String>,
 ) -> (
     crate::test_support::TempPath,
     rom_weaver_core::Result<rom_weaver_core::OperationReport>,
@@ -774,7 +775,8 @@ fn extract_wia_image_with_controls(
         temp.join("scratch"),
         progress,
         cancel,
-    );
+    )
+    .with_extract_checksum_algorithms(checksums);
     let registry = crate::ContainerRegistry::new();
     let result = registry
         .find_by_name(format)
@@ -1227,7 +1229,7 @@ fn wia_rvz_extract_cancel_mid_copy_removes_output_without_warnings() {
             let image = wii_image_with_hash_and_digest_damage(format);
             warnings.store(0, Ordering::SeqCst);
             let (temp, result, sink) =
-                extract_wia_image_with_controls(&image, None, 1, false, Some(90.0));
+                extract_wia_image_with_controls(&image, None, 1, false, Some(90.0), Vec::new());
             assert!(
                 matches!(result, Err(rom_weaver_core::RomWeaverError::Cancelled)),
                 "{result:?}"
@@ -1407,7 +1409,7 @@ fn wia_rvz_extract_removes_partial_output_when_decoding_fails_after_hash_warning
         image.truncate(image.len() - 0x100);
         for existing in [None, Some(b"previous ISO".as_slice())] {
             let (temp, result, sink) =
-                extract_wia_image_with_controls(&image, existing, 1, true, None);
+                extract_wia_image_with_controls(&image, existing, 1, true, None, Vec::new());
             result.expect_err("a truncated payload must fail extraction");
             assert!(sink.snapshot().iter().any(|event| event.stage == "extract" && event.percent.is_some_and(|p| p > 0.0)));
             assert!(!temp.join("out/disc.iso").exists());
@@ -1528,13 +1530,16 @@ fn wia_extract_checks_each_optional_nkit_digest() {
                 crate::nod::common::Compression::None,
                 &options,
             );
-            let (temp, result) = extract_wia_image(&image);
-            let report = result.expect("matching NKit digest must extract");
-            assert!(
-                report.details.as_ref().unwrap().get("warnings").is_none(),
-                "{report:?}"
-            );
-            assert_eq!(std::fs::read(temp.join("out/disc.iso")).unwrap(), iso);
+            // One thread hashes on the copy thread; four hash on digest worker threads.
+            for threads in [1, 4] {
+                let (temp, result, _) = extract_wia_image_with_threads(&image, None, threads);
+                let report = result.expect("matching NKit digest must extract");
+                assert!(
+                    report.details.as_ref().unwrap().get("warnings").is_none(),
+                    "{threads} threads: {report:?}"
+                );
+                assert_eq!(std::fs::read(temp.join("out/disc.iso")).unwrap(), iso);
+            }
             let disc = WIADisc::read_from_bytes(
                 &image
                     [size_of::<WIAFileHeader>()..size_of::<WIAFileHeader>() + size_of::<WIADisc>()],
@@ -1549,17 +1554,64 @@ fn wia_extract_checks_each_optional_nkit_digest() {
                 WIAGroup::read_from_bytes(&image[group_at..group_at + size_of::<WIAGroup>()])
                     .unwrap();
             image[group.data_offset.get() as usize * 4 + 0x10000] ^= 1;
-            let (temp, result) = extract_wia_image(&image);
-            let report = result.expect("NKit digest mismatch must warn");
-            let warning = report.details.as_ref().unwrap()["warnings"][0]
-                .as_str()
-                .unwrap();
-            assert!(
-                warning.contains(&format!("NKit {algorithm} checksum mismatch")),
-                "{warning}"
+            for threads in [1, 4] {
+                let (temp, result, _) = extract_wia_image_with_threads(&image, None, threads);
+                let report = result.expect("NKit digest mismatch must warn");
+                let warning = report.details.as_ref().unwrap()["warnings"][0]
+                    .as_str()
+                    .unwrap();
+                assert!(
+                    warning.contains(&format!("NKit {algorithm} checksum mismatch")),
+                    "{threads} threads: {warning}"
+                );
+                assert!(warning.contains("ISO extracted as-is"), "{warning}");
+                assert!(temp.join("out/disc.iso").exists());
+            }
+        }
+    }
+}
+
+#[test]
+fn wia_rvz_extract_checksum_matches_the_iso_beside_nkit_digests() {
+    let iso = build_wii_image(false, Damage::None);
+    let expected = format!("{:08x}", crc32fast::hash(&iso));
+    for format in [
+        crate::nod::common::Format::Wia,
+        crate::nod::common::Format::Rvz,
+    ] {
+        let image = disc_image_with_options(
+            &iso,
+            format,
+            crate::nod::common::Compression::None,
+            &crate::nod::write::ProcessOptions {
+                digest_crc32: true,
+                digest_xxh64: true,
+                ..Default::default()
+            },
+        );
+        // The requested checksum and the NKit digests hash the same chunks, on the copy
+        // thread with one thread and on worker threads with four.
+        for threads in [1, 4] {
+            let (temp, result, _) = extract_wia_image_with_controls(
+                &image,
+                None,
+                threads,
+                false,
+                None,
+                vec!["crc32".to_string()],
             );
-            assert!(warning.contains("ISO extracted as-is"), "{warning}");
-            assert!(temp.join("out/disc.iso").exists());
+            let report = result.expect("intact disc must extract");
+            let details = report.details.as_ref().unwrap();
+            assert!(
+                details.get("warnings").is_none(),
+                "{format:?}, {threads} threads: {report:?}"
+            );
+            assert_eq!(
+                details["emitted_files"][0]["checksums"]["crc32"],
+                expected.as_str(),
+                "{format:?}, {threads} threads"
+            );
+            assert_eq!(std::fs::read(temp.join("out/disc.iso")).unwrap(), iso);
         }
     }
 }
@@ -1610,20 +1662,22 @@ fn wia_rvz_extract_checks_md5_and_sha1_only_without_crc32_or_xxh64() {
             ),
         ] {
             let image = wii_image_with_hash_and_digest_damage_for(format, &digests);
-            let (_temp, result) = extract_wia_image(&image);
-            let report = result.expect("NKit digest mismatches must warn");
-            let mismatched: Vec<String> = report.details.as_ref().unwrap()["warnings"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .filter_map(|warning| {
-                    let warning = warning.as_str().unwrap();
-                    let (_, algorithm) = warning.split_once(" NKit ")?;
-                    let (algorithm, _) = algorithm.split_once(" checksum mismatch")?;
-                    Some(algorithm.to_string())
-                })
-                .collect();
-            assert_eq!(mismatched, checked, "{format:?}");
+            for threads in [1, 4] {
+                let (_temp, result, _) = extract_wia_image_with_threads(&image, None, threads);
+                let report = result.expect("NKit digest mismatches must warn");
+                let mismatched: Vec<String> = report.details.as_ref().unwrap()["warnings"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(|warning| {
+                        let warning = warning.as_str().unwrap();
+                        let (_, algorithm) = warning.split_once(" NKit ")?;
+                        let (algorithm, _) = algorithm.split_once(" checksum mismatch")?;
+                        Some(algorithm.to_string())
+                    })
+                    .collect();
+                assert_eq!(mismatched, checked, "{format:?}, {threads} threads");
+            }
         }
     }
 }

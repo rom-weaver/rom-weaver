@@ -348,7 +348,7 @@ impl StreamingChecksum {
         match &mut self.inner {
             #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
             StreamingChecksumInner::Async(workers) => {
-                let chunk = Arc::<[u8]>::from(bytes.to_vec());
+                let chunk = Arc::<[u8]>::from(bytes);
                 send_streaming_checksum_chunk(workers, chunk)
             }
             StreamingChecksumInner::Sync(batch) => {

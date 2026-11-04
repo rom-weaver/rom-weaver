@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     fs::File,
-    io::{BufWriter, Read, Write},
+    io::{BufWriter, Read},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU8, AtomicU64, Ordering},
 };
@@ -199,12 +199,16 @@ pub(crate) fn emit_container_step_progress(
     );
 }
 
-pub(crate) fn copy_reader_with_progress<R: Read, W: Write>(
+/// Copies `reader` to its end in chunks, reporting byte progress against `total_bytes`. `write`
+/// takes each chunk by value with the byte count read into it, and returns a buffer of the same
+/// length for the next read, so a writer that keeps the chunk (to hash it on another thread)
+/// needs no copy.
+pub(crate) fn copy_chunks_with_progress<R: Read>(
     reader: &mut R,
-    writer: &mut W,
     total_bytes: u64,
     progress: &ContainerProgressContext<'_>,
     label: &str,
+    mut write: impl FnMut(Vec<u8>, usize) -> std::io::Result<Vec<u8>>,
 ) -> Result<u64> {
     let ContainerProgressContext {
         context,
@@ -224,7 +228,7 @@ pub(crate) fn copy_reader_with_progress<R: Read, W: Write>(
         if bytes_read == 0 {
             break;
         }
-        writer.write_all(&buffer[..bytes_read])?;
+        buffer = write(buffer, bytes_read)?;
         bytes_written = bytes_written.saturating_add(bytes_read as u64);
         if total_bytes > 0 {
             maybe_emit_container_byte_progress(
@@ -544,39 +548,6 @@ impl ExtractHasher {
                 ))
             }
         }
-    }
-}
-
-/// A writer that folds every byte it accepts into an [`ExtractHasher`], so a handler whose output
-/// is produced sequentially can compute a requested `--checksum` during the copy instead of
-/// re-reading the output.
-pub(crate) struct HashingWriter<W> {
-    inner: W,
-    hasher: ExtractHasher,
-}
-
-impl<W: Write> HashingWriter<W> {
-    pub(crate) fn new(inner: W, hasher: ExtractHasher) -> Self {
-        Self { inner, hasher }
-    }
-
-    /// Hand back the hasher once the copy is done; the caller finishes it against the flushed output.
-    pub(crate) fn into_hasher(self) -> ExtractHasher {
-        self.hasher
-    }
-}
-
-impl<W: Write> Write for HashingWriter<W> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let written = self.inner.write(buf)?;
-        self.hasher
-            .update(&buf[..written])
-            .map_err(std::io::Error::other)?;
-        Ok(written)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.flush()
     }
 }
 
@@ -982,7 +953,7 @@ mod tests {
     }
 
     #[test]
-    fn copy_reader_with_progress_copies_every_byte_and_reports_progress() {
+    fn copy_chunks_with_progress_copies_every_byte_and_reports_progress() {
         let temp = TestDir::new("copy");
         let (context, sink) = recording_context(&temp);
         let progress = progress_context(&context, "extract");
@@ -992,12 +963,15 @@ mod tests {
             .collect::<Vec<_>>();
         let mut reader = payload.as_slice();
         let mut written = Vec::new();
-        let copied = copy_reader_with_progress(
+        let copied = copy_chunks_with_progress(
             &mut reader,
-            &mut written,
             payload.len() as u64,
             &progress,
             "copying",
+            |chunk, len| {
+                written.extend_from_slice(&chunk[..len]);
+                Ok(chunk)
+            },
         )
         .expect("copy");
 
@@ -1010,14 +984,18 @@ mod tests {
     }
 
     #[test]
-    fn copy_reader_with_progress_stays_silent_without_a_known_total() {
+    fn copy_chunks_with_progress_stays_silent_without_a_known_total() {
         let temp = TestDir::new("copy-unknown");
         let (context, sink) = recording_context(&temp);
         let progress = progress_context(&context, "extract");
 
         let mut reader = b"payload".as_slice();
         let mut written = Vec::new();
-        let copied = copy_reader_with_progress(&mut reader, &mut written, 0, &progress, "copying")
+        let copied =
+            copy_chunks_with_progress(&mut reader, 0, &progress, "copying", |chunk, len| {
+                written.extend_from_slice(&chunk[..len]);
+                Ok(chunk)
+            })
             .expect("copy");
 
         assert_eq!(copied, 7);

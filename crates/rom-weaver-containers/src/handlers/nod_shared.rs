@@ -1,11 +1,10 @@
 use super::*;
-use rom_weaver_core::{
-    CancellationToken, SharedThreadPool, VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError,
-};
+use rom_weaver_core::{CancellationToken, VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError};
 #[cfg(target_family = "wasm")]
 use std::collections::HashMap;
 #[cfg(target_family = "wasm")]
 use std::thread::ThreadId;
+use std::{sync::mpsc, thread};
 use tracing::{debug, trace};
 
 #[derive(Clone, Copy)]
@@ -565,13 +564,11 @@ impl NodHandlerCore {
         let output = create_extract_output_file(&plan.output_path, request.overwrite)?;
         let mut output = ExtractOutput::new(output, &mut plan.integrity);
         let progress_label = format!("extracting `{}`", self.format_name());
-        let hasher = ExtractHasher::new(context, None, &plan.output_path, 1)?;
+        let mut hasher = ExtractHasher::new(context, None, &plan.output_path, 1)?;
         let copied = (|| {
             output.set_len(plan.disc_size)?;
-            let mut output = HashingWriter::new(BufWriter::new(&mut output), hasher);
-            let bytes_written = copy_reader_with_progress(
+            let bytes_written = copy_chunks_with_progress(
                 &mut plan.disc,
-                &mut output,
                 plan.disc_size,
                 &ContainerProgressContext {
                     context,
@@ -581,16 +578,20 @@ impl NodHandlerCore {
                     thread_execution: Some(&plan.execution),
                 },
                 &progress_label,
+                |chunk, len| {
+                    hasher.update(&chunk[..len]).map_err(io::Error::other)?;
+                    output.write_chunk(chunk, len)
+                },
             )?;
             output.flush()?;
-            Ok((bytes_written, output.into_hasher()))
+            Ok(bytes_written)
         })();
         let digests = output.finish();
-        let finished = copied.and_then(|(bytes_written, hasher)| {
+        let finished = copied.and_then(|bytes_written| {
             let warnings = self.finish_extract_integrity(&mut plan, digests, context)?;
-            Ok((bytes_written, hasher, warnings))
+            Ok((bytes_written, warnings))
         });
-        let (bytes_written, hasher, warnings) = match finished {
+        let (bytes_written, warnings) = match finished {
             Ok(finished) => finished,
             Err(error) => {
                 // A failed or cancelled copy or verification leaves a partial or unverified
@@ -1073,7 +1074,7 @@ fn finish_integrity(
     }
 
     if let Some(digests) = digests {
-        for algorithm in digests.mismatches(&disc.meta()) {
+        for algorithm in digests.mismatches(&disc.meta())? {
             let warning = format!(
                 "{format} NKit {algorithm} checksum mismatch; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished (output `{output_name}`)"
             );
@@ -1089,185 +1090,271 @@ fn finish_integrity(
     Ok(warnings)
 }
 
-/// Optional NKit image digests, computed over the ISO bytes as the copy writes them.
-pub(crate) struct ImageDigests {
-    crc32: Option<crc32fast::Hasher>,
-    md5: Option<md5::Md5>,
-    sha1: Option<sha1::Sha1>,
-    xxh64: Option<xxhash_rust::xxh64::Xxh64>,
-    /// Shared operation pool for hashing the digests concurrently; `None` hashes inline.
-    pool: Option<SharedThreadPool>,
+/// One optional NKit image digest, computed over the ISO bytes.
+pub(crate) enum ImageDigest {
+    Crc32(crc32fast::Hasher),
+    Md5(md5::Md5),
+    Sha1(sha1::Sha1),
+    Xxh64(xxhash_rust::xxh64::Xxh64),
+}
+
+impl ImageDigest {
+    /// The digests to check for `meta`, in report order. MD5 and SHA-1 hash a disc several times
+    /// slower than the copy writes it, so they would bound extraction at their speed. CRC32 and
+    /// XXH64 catch the same corruption, so the slow digests are checked only when neither fast
+    /// one is stored.
+    fn checked(meta: &crate::nod::read::DiscMeta) -> Vec<Self> {
+        use digest::Digest;
+
+        let fast = meta.crc32.is_some() || meta.xxh64.is_some();
+        [
+            meta.crc32.map(|_| Self::Crc32(crc32fast::Hasher::new())),
+            meta.md5
+                .filter(|_| !fast)
+                .map(|_| Self::Md5(md5::Md5::new())),
+            meta.sha1
+                .filter(|_| !fast)
+                .map(|_| Self::Sha1(sha1::Sha1::new())),
+            meta.xxh64
+                .map(|_| Self::Xxh64(xxhash_rust::xxh64::Xxh64::new(0))),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Crc32(_) => "CRC32",
+            Self::Md5(_) => "MD5",
+            Self::Sha1(_) => "SHA-1",
+            Self::Xxh64(_) => "XXH64",
+        }
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        use digest::Digest;
+
+        match self {
+            Self::Crc32(hash) => hash.update(data),
+            Self::Md5(hash) => hash.update(data),
+            Self::Sha1(hash) => hash.update(data),
+            Self::Xxh64(hash) => hash.update(data),
+        }
+    }
+
+    fn matches(self, meta: &crate::nod::read::DiscMeta) -> bool {
+        use digest::Digest;
+
+        match self {
+            Self::Crc32(hash) => Some(hash.finalize()) == meta.crc32,
+            Self::Md5(hash) => Some(<[u8; 16]>::from(hash.finalize())) == meta.md5,
+            Self::Sha1(hash) => Some(<[u8; 20]>::from(hash.finalize())) == meta.sha1,
+            Self::Xxh64(hash) => Some(hash.digest()) == meta.xxh64,
+        }
+    }
+}
+
+/// The NKit image digests checked over the ISO bytes as the copy writes them.
+pub(crate) enum ImageDigests {
+    /// Hashed on the copy thread, when no worker thread is available.
+    Inline(Vec<ImageDigest>),
+    /// Hashed on worker threads while the copy reads and writes the next chunk.
+    Workers(DigestWorkers),
 }
 
 impl ImageDigests {
     fn new(meta: &crate::nod::read::DiscMeta, context: &OperationContext) -> Result<Option<Self>> {
-        use digest::Digest;
-
-        // MD5 and SHA-1 hash a disc several times slower than the copy writes it, so they would
-        // bound extraction at their speed. CRC32 and XXH64 catch the same corruption, so the
-        // slow digests are checked only when neither fast one is stored.
-        let fast = meta.crc32.is_some() || meta.xxh64.is_some();
-        let crc32 = meta.crc32.map(|_| crc32fast::Hasher::new());
-        let md5 = meta.md5.filter(|_| !fast).map(|_| md5::Md5::new());
-        let sha1 = meta.sha1.filter(|_| !fast).map(|_| sha1::Sha1::new());
-        let xxh64 = meta.xxh64.map(|_| xxhash_rust::xxh64::Xxh64::new(0));
-        let count = [
-            crc32.is_some(),
-            md5.is_some(),
-            sha1.is_some(),
-            xxh64.is_some(),
-        ]
-        .into_iter()
-        .filter(|present| *present)
-        .count();
+        let digests = ImageDigest::checked(meta);
+        let count = digests.len();
         if count == 0 {
             return Ok(None);
         }
-        // Each digest is serial; with a parallel pool they run side by side (and, natively,
-        // alongside the chunk write) instead of one after another.
-        let (execution, pool) = context.build_pool(ThreadCapability::parallel(Some(count + 1)))?;
-        let pool = execution.used_parallelism.then_some(pool);
+        let checked = |name| digests.iter().any(|digest| digest.name() == name);
+        let skipped_md5 = meta.md5.is_some() && !checked("MD5");
+        let skipped_sha1 = meta.sha1.is_some() && !checked("SHA-1");
+        // Worker threads hash each chunk while the copy thread reads and writes the next one.
+        // CRC32 and XXH64 together still outpace the copy, so they share one worker; a second
+        // would only add cross-core traffic. MD5 and SHA-1 are each slower than the copy, so
+        // each gets its own worker when the thread budget allows.
+        let wanted = if checked("MD5") || checked("SHA-1") {
+            count
+        } else {
+            1
+        };
+        let execution = context.plan_threads(ThreadCapability::parallel(Some(wanted + 1)));
+        let workers = if execution.used_parallelism {
+            wanted.min(execution.effective_threads.saturating_sub(1))
+        } else {
+            0
+        };
+        let digests = if workers == 0 {
+            Self::Inline(digests)
+        } else {
+            match DigestWorkers::spawn(digests, workers) {
+                Ok(workers) => Self::Workers(workers),
+                Err(error) => {
+                    debug!(%error, "NKit digest workers failed to start; hashing on the copy thread");
+                    Self::Inline(ImageDigest::checked(meta))
+                }
+            }
+        };
         debug!(
             digests = count,
-            skipped_md5 = meta.md5.is_some() && md5.is_none(),
-            skipped_sha1 = meta.sha1.is_some() && sha1.is_none(),
-            parallel = pool.is_some(),
+            skipped_md5,
+            skipped_sha1,
+            workers = match &digests {
+                Self::Inline(_) => 0,
+                Self::Workers(workers) => workers.workers.len(),
+            },
             effective_threads = execution.effective_threads,
             "NKit image digests compute during the copy"
         );
-        Ok(Some(Self {
-            crc32,
-            md5,
-            sha1,
-            xxh64,
-            pool,
-        }))
+        Ok(Some(digests))
     }
 
-    fn update_inline(&mut self, data: &[u8]) {
-        use digest::Digest;
-
-        if let Some(hash) = &mut self.crc32 {
-            hash.update(data);
-        }
-        if let Some(hash) = &mut self.md5 {
-            hash.update(data);
-        }
-        if let Some(hash) = &mut self.sha1 {
-            hash.update(data);
-        }
-        if let Some(hash) = &mut self.xxh64 {
-            hash.update(data);
+    /// Hashes `chunk[..len]` and returns a buffer for the next read when one is free. Workers
+    /// take the chunk itself, so they hash it while the caller reads into another buffer.
+    fn update_owned(&mut self, chunk: Vec<u8>, len: usize) -> io::Result<Option<Vec<u8>>> {
+        match self {
+            Self::Inline(digests) => {
+                for digest in digests {
+                    digest.update(&chunk[..len]);
+                }
+                Ok(Some(chunk))
+            }
+            Self::Workers(workers) => {
+                workers.send(chunk, len)?;
+                Ok(workers.spare.try_recv().ok())
+            }
         }
     }
 
-    /// Hashes `data` into every digest on the pool.
-    #[cfg(target_family = "wasm")]
-    fn update_parallel(&mut self, pool: &SharedThreadPool, data: &[u8]) {
-        let Self {
-            crc32,
-            md5,
-            sha1,
-            xxh64,
-            ..
-        } = self;
-        pool.install(|| {
-            rayon::scope(|scope| {
-                spawn_digest_updates(scope, crc32, md5, sha1, xxh64, data);
-            });
-        });
+    /// Hashes `data`. Workers get a copy of it, in a buffer they have finished with when one
+    /// is free.
+    fn update(&mut self, data: &[u8]) -> io::Result<()> {
+        match self {
+            Self::Inline(digests) => {
+                for digest in digests {
+                    digest.update(data);
+                }
+                Ok(())
+            }
+            Self::Workers(workers) => {
+                let mut chunk = workers.spare.try_recv().unwrap_or_default();
+                chunk.clear();
+                chunk.extend_from_slice(data);
+                workers.send(chunk, data.len())
+            }
+        }
     }
 
-    /// Writes `data` with `write` and hashes it. Natively the write runs on the pool beside the
-    /// hashing; under wasm it stays on the calling thread, whose WASI descriptors other threads
-    /// cannot use, and hashing follows it.
-    fn write_and_update(
-        &mut self,
-        data: &[u8],
-        write: impl FnOnce(&[u8]) -> io::Result<()> + Send,
-    ) -> io::Result<()> {
-        let Some(pool) = self.pool.clone() else {
-            write(data)?;
-            self.update_inline(data);
-            return Ok(());
+    /// Waits for the workers, then names the digests that differ from the stored ones, in report
+    /// order.
+    fn mismatches(self, meta: &crate::nod::read::DiscMeta) -> Result<Vec<&'static str>> {
+        let digests = match self {
+            Self::Inline(digests) => digests,
+            Self::Workers(workers) => workers.finish()?,
         };
-        #[cfg(not(target_family = "wasm"))]
-        {
-            let Self {
-                crc32,
-                md5,
-                sha1,
-                xxh64,
-                ..
-            } = self;
-            pool.install(|| {
-                rayon::scope(|scope| {
-                    spawn_digest_updates(scope, crc32, md5, sha1, xxh64, data);
-                    write(data)
-                })
+        Ok(digests
+            .into_iter()
+            .filter_map(|digest| {
+                let name = digest.name();
+                (!digest.matches(meta)).then_some(name)
             })
-        }
-        #[cfg(target_family = "wasm")]
-        {
-            write(data)?;
-            self.update_parallel(&pool, data);
-            Ok(())
-        }
-    }
-
-    /// Names of the computed digests that differ from the stored ones, in report order.
-    fn mismatches(self, meta: &crate::nod::read::DiscMeta) -> Vec<&'static str> {
-        use digest::Digest;
-
-        [
-            (
-                "CRC32",
-                self.crc32
-                    .is_some_and(|hash| Some(hash.finalize()) != meta.crc32),
-            ),
-            (
-                "MD5",
-                self.md5
-                    .is_some_and(|hash| Some(<[u8; 16]>::from(hash.finalize())) != meta.md5),
-            ),
-            (
-                "SHA-1",
-                self.sha1
-                    .is_some_and(|hash| Some(<[u8; 20]>::from(hash.finalize())) != meta.sha1),
-            ),
-            (
-                "XXH64",
-                self.xxh64
-                    .is_some_and(|hash| Some(hash.digest()) != meta.xxh64),
-            ),
-        ]
-        .into_iter()
-        .filter_map(|(algorithm, mismatch)| mismatch.then_some(algorithm))
-        .collect()
+            .collect())
     }
 }
 
-fn spawn_digest_updates<'scope>(
-    scope: &rayon::Scope<'scope>,
-    crc32: &'scope mut Option<crc32fast::Hasher>,
-    md5: &'scope mut Option<md5::Md5>,
-    sha1: &'scope mut Option<sha1::Sha1>,
-    xxh64: &'scope mut Option<xxhash_rust::xxh64::Xxh64>,
-    data: &'scope [u8],
-) {
-    use digest::Digest;
+/// A chunk of the ISO shared by the digest workers, and the byte count read into it.
+type DigestChunk = (Arc<Vec<u8>>, usize);
 
-    if let Some(hash) = crc32 {
-        scope.spawn(move |_| hash.update(data));
+/// Threads that hash every chunk the copy writes, each over its share of the digests.
+pub(crate) struct DigestWorkers {
+    workers: Vec<DigestWorker>,
+    /// Buffers every worker has finished hashing, for the copy to read into again.
+    spare: mpsc::Receiver<Vec<u8>>,
+    spare_sender: mpsc::Sender<Vec<u8>>,
+}
+
+struct DigestWorker {
+    chunks: mpsc::SyncSender<DigestChunk>,
+    handle: thread::JoinHandle<Vec<ImageDigest>>,
+}
+
+impl DigestWorkers {
+    /// Splits `digests` across `count` worker threads, keeping report order.
+    fn spawn(digests: Vec<ImageDigest>, count: usize) -> io::Result<Self> {
+        let total = digests.len();
+        let mut groups = (0..count).map(|_| Vec::new()).collect::<Vec<_>>();
+        for (index, digest) in digests.into_iter().enumerate() {
+            groups[index * count / total].push(digest);
+        }
+        let (spare_sender, spare) = mpsc::channel();
+        let workers = groups
+            .into_iter()
+            .map(|digests| DigestWorker::spawn(digests, spare_sender.clone()))
+            .collect::<io::Result<Vec<_>>>()?;
+        Ok(Self {
+            workers,
+            spare,
+            spare_sender,
+        })
     }
-    if let Some(hash) = md5 {
-        scope.spawn(move |_| hash.update(data));
+
+    fn send(&self, chunk: Vec<u8>, len: usize) -> io::Result<()> {
+        let chunk = Arc::new(chunk);
+        for worker in &self.workers {
+            worker
+                .chunks
+                .send((Arc::clone(&chunk), len))
+                .map_err(|_| io::Error::other("NKit digest worker stopped"))?;
+        }
+        // Whoever lets go of a chunk last returns its buffer to the spares.
+        if let Some(buffer) = Arc::into_inner(chunk) {
+            let _ = self.spare_sender.send(buffer);
+        }
+        Ok(())
     }
-    if let Some(hash) = sha1 {
-        scope.spawn(move |_| hash.update(data));
+
+    /// Closes each worker's input and collects its digests, in report order.
+    fn finish(self) -> Result<Vec<ImageDigest>> {
+        let mut digests = Vec::new();
+        for DigestWorker { chunks, handle } in self.workers {
+            drop(chunks);
+            digests.extend(handle.join().map_err(|_| {
+                RomWeaverError::Validation("NKit digest worker panicked".to_string())
+            })?);
+        }
+        Ok(digests)
     }
-    if let Some(hash) = xxh64 {
-        scope.spawn(move |_| hash.update(data));
+}
+
+impl DigestWorker {
+    fn spawn(mut digests: Vec<ImageDigest>, spare: mpsc::Sender<Vec<u8>>) -> io::Result<Self> {
+        // One queued chunk lets the worker start the next one as soon as it finishes; hashing
+        // outpaces the copy, so a deeper queue would only hold more buffers.
+        let (chunks, received) = mpsc::sync_channel::<DigestChunk>(1);
+        let handle = thread::Builder::new()
+            .name("rom-weaver-nkit-digest".to_string())
+            .spawn(move || {
+                let mut hashed = 0_u64;
+                while let Ok((chunk, len)) = received.recv() {
+                    for digest in &mut digests {
+                        digest.update(&chunk[..len]);
+                    }
+                    hashed += len as u64;
+                    if let Some(buffer) = Arc::into_inner(chunk) {
+                        let _ = spare.send(buffer);
+                    }
+                }
+                trace!(
+                    digests = digests.len(),
+                    hashed, "NKit digest worker finished"
+                );
+                digests
+            })?;
+        Ok(Self { chunks, handle })
     }
 }
 
@@ -1291,6 +1378,19 @@ impl ExtractOutput {
         self.file.set_len(len)
     }
 
+    /// Writes `chunk[..len]` and hashes it, then returns a buffer of `chunk.len()` bytes for the
+    /// next read. Unlike [`Write::write`], this hands the chunk to digest workers without a copy.
+    pub(crate) fn write_chunk(&mut self, chunk: Vec<u8>, len: usize) -> io::Result<Vec<u8>> {
+        self.file.write_all(&chunk[..len])?;
+        let Some(digests) = &mut self.digests else {
+            return Ok(chunk);
+        };
+        let size = chunk.len();
+        let mut next = digests.update_owned(chunk, len)?.unwrap_or_default();
+        next.resize(size, 0);
+        Ok(next)
+    }
+
     /// Closes the file and returns the digests for [`NodHandlerCore::finish_extract_integrity`].
     pub(crate) fn finish(self) -> Option<ImageDigests> {
         drop(self.file);
@@ -1303,8 +1403,8 @@ impl Write for ExtractOutput {
         let Some(digests) = &mut self.digests else {
             return self.file.write(buf);
         };
-        let file = &mut self.file;
-        digests.write_and_update(buf, |data| file.write_all(data))?;
+        self.file.write_all(buf)?;
+        digests.update(buf)?;
         Ok(buf.len())
     }
 
