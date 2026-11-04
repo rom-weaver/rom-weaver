@@ -296,19 +296,26 @@ const matchesFunctionRoute = (pathname, patterns) =>
         .join(".*")}$`,
     ).test(pathname),
   );
+const routesThroughFunctions = (pathname) =>
+  matchesFunctionRoute(pathname, functionRoutes.include) && !matchesFunctionRoute(pathname, functionRoutes.exclude);
 if (functionRoutes.include.length + functionRoutes.exclude.length > 100)
   throw new Error("Pages Function routes exceed the 100-rule limit");
 for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
-  if (
-    !matchesFunctionRoute(routePath, functionRoutes.include) ||
-    matchesFunctionRoute(routePath, functionRoutes.exclude)
-  )
+  if (!routesThroughFunctions(routePath))
     throw new Error(`Markdown negotiation is not routed through Functions: ${routePath}`);
-  if (
-    matchesFunctionRoute(markdownPath, functionRoutes.include) &&
-    !matchesFunctionRoute(markdownPath, functionRoutes.exclude)
-  )
+  if (routesThroughFunctions(markdownPath))
     throw new Error(`Direct Markdown unnecessarily invokes Functions: ${markdownPath}`);
+}
+// Without a Function route these fall through to the static 404 page.
+for (const discoveryPath of [
+  "/.well-known/ard.json",
+  "/.well-known/ai-catalog.json",
+  "/.well-known/mcp/server-card.json",
+  "/mcp",
+  "/mcp/server-card",
+]) {
+  if (!routesThroughFunctions(discoveryPath))
+    throw new Error(`Agent discovery route is not routed through Functions: ${discoveryPath}`);
 }
 
 assertExcludes(routes, '"/assets/offline-chunk-*"', "offline download chunks Function route");
