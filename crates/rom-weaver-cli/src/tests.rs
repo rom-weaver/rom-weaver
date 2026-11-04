@@ -2280,7 +2280,10 @@ fn unselected_leaf_cleanup_stays_inside_the_output_directory() {
     }
     let out = std::fs::canonicalize(&out).unwrap();
     let outside = std::fs::canonicalize(&outside).unwrap();
-    let leaf = |path: &Path| json!({ "path": path.to_string_lossy() });
+    // Leaf paths carry the emitted-path key, as extraction reports them (no `\\?\` prefix on
+    // Windows).
+    let leaf =
+        |path: &Path| json!({ "path": rom_weaver_core::emitted_path_key(&path.to_string_lossy()) });
     let dropped = [
         leaf(&out.join("drop.nes")),
         leaf(&out.join("deep/er/drop.nes")),
