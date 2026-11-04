@@ -3,9 +3,10 @@ import test from "node:test";
 
 import { findInfraFailures, isInfraMessage, rerunInfraFailures } from "./rerun-infra-failures.mjs";
 
+const HEAD_SHA = "a".repeat(40);
 const NOT_ACQUIRED = "The job was not acquired by Runner of type hosted even after multiple attempts";
 
-function fakeApi({ jobs, annotations = {}, pageSize = 100 }) {
+function fakeApi({ jobs, annotations = {}, pageSize = 100, head = HEAD_SHA }) {
   const calls = [];
   const api = async (path, { method = "GET" } = {}) => {
     calls.push({ method, path });
@@ -14,6 +15,7 @@ function fakeApi({ jobs, annotations = {}, pageSize = 100 }) {
       const page = Number(jobsPage[1]);
       return { total_count: jobs.length, jobs: jobs.slice((page - 1) * pageSize, page * pageSize) };
     }
+    if (path.includes("/git/ref/heads/")) return head ? { object: { sha: head } } : null;
     const check = path.match(/\/check-runs\/(\d+)\/annotations/);
     if (check) return annotations[check[1]] ?? [];
     if (method === "POST" && path.endsWith("/rerun-failed-jobs")) return null;
@@ -27,7 +29,13 @@ const sink = () => {
   return { lines, write: (text) => lines.push(text) };
 };
 
-const env = { GITHUB_REPOSITORY: "o/r", RUN_ID: "42", RUN_ATTEMPT: "1" };
+const env = {
+  GITHUB_REPOSITORY: "o/r",
+  RUN_ID: "42",
+  RUN_ATTEMPT: "1",
+  HEAD_SHA,
+  HEAD_BRANCH: "feat/x y",
+};
 
 test("matches only runner-loss messages", () => {
   assert.equal(isInfraMessage(NOT_ACQUIRED), true);
@@ -98,7 +106,14 @@ test("never reruns after the first attempt", async () => {
 
 test("rejects missing or malformed run identity", async () => {
   const { api } = fakeApi({ jobs: [] });
-  for (const bad of [{ RUN_ID: "abc" }, { RUN_ID: undefined }, { RUN_ATTEMPT: "x" }, { GITHUB_REPOSITORY: "" }]) {
+  for (const bad of [
+    { RUN_ID: "abc" },
+    { RUN_ID: undefined },
+    { RUN_ATTEMPT: "x" },
+    { GITHUB_REPOSITORY: "" },
+    { HEAD_SHA: "abc" },
+    { HEAD_BRANCH: "" },
+  ]) {
     await assert.rejects(rerunInfraFailures({ env: { ...env, ...bad }, api, logger: sink() }), /required/);
   }
 });
@@ -134,4 +149,23 @@ test("a rejected rerun request still fails", async () => {
   const api = (path, options) =>
     options?.method === "POST" ? Promise.reject(new Error("failed with 403")) : inner(path, options);
   await assert.rejects(rerunInfraFailures({ env, api, logger: sink() }), /403/);
+});
+
+test("leaves a run alone once a newer commit replaced it", async () => {
+  const { api, calls } = fakeApi({
+    jobs: [{ id: 1, name: "WebKit E2E", conclusion: "cancelled" }],
+    annotations: { 1: [{ message: NOT_ACQUIRED }] },
+    head: "b".repeat(40),
+  });
+  const result = await rerunInfraFailures({ env, api, logger: sink() });
+  assert.equal(result.rerun, false);
+  assert.ok(calls.every(({ method }) => method === "GET"));
+  assert.ok(calls.every(({ path }) => !path.includes("/jobs")));
+});
+
+test("leaves a run alone when its branch is gone", async () => {
+  const { api, calls } = fakeApi({ jobs: [], head: null });
+  const result = await rerunInfraFailures({ env, api, logger: sink() });
+  assert.equal(result.rerun, false);
+  assert.deepEqual(calls.map(({ path }) => path), ["/repos/o/r/git/ref/heads/feat/x%20y"]);
 });

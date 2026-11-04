@@ -9,8 +9,9 @@ import { pathToFileURL } from "node:url";
 
 import { createGitHubApi } from "./github-api.mjs";
 
-// GitHub writes these annotations when the runner itself is lost. A job that
-// ran its steps and failed never carries them, so a real failure is not retried.
+// GitHub writes these annotations when the runner itself is lost. A job whose
+// steps fail normally never carries them. A step that exhausts the runner's
+// memory can, so a rerun is no proof the change was innocent: one rerun only.
 export const INFRA_MESSAGES = [
   /was not acquired by Runner/i,
   /lost communication with the server/i,
@@ -61,13 +62,29 @@ export async function rerunInfraFailures({
   const repo = env.GITHUB_REPOSITORY;
   const runId = env.RUN_ID;
   const attempt = Number(env.RUN_ATTEMPT);
-  if (!repo || !/^\d+$/.test(runId ?? "") || !Number.isInteger(attempt)) {
-    throw new Error("GITHUB_REPOSITORY, RUN_ID, and RUN_ATTEMPT are required");
+  const { HEAD_SHA: headSha, HEAD_BRANCH: headBranch } = env;
+  if (
+    !repo ||
+    !/^\d+$/.test(runId ?? "") ||
+    !Number.isInteger(attempt) ||
+    !/^[0-9a-f]{40}$/.test(headSha ?? "") ||
+    !headBranch
+  ) {
+    throw new Error("GITHUB_REPOSITORY, RUN_ID, RUN_ATTEMPT, HEAD_SHA, and HEAD_BRANCH are required");
   }
 
   // A second failure is the verdict; a rerun that fails again MUST NOT loop.
   if (attempt !== 1) {
     logger.write(`run ${runId} is attempt ${attempt}; not rerunning\n`);
+    return { rerun: false, failures: [] };
+  }
+
+  // A rerun keeps its original ref, so rerunning a replaced commit would cancel
+  // the newer commit's run in the same concurrency group.
+  const branchPath = headBranch.split("/").map(encodeURIComponent).join("/");
+  const ref = await api(`/repos/${repo}/git/ref/heads/${branchPath}`, { allow404: true });
+  if (ref?.object?.sha !== headSha) {
+    logger.write(`run ${runId} is not the head of ${headBranch}; not rerunning\n`);
     return { rerun: false, failures: [] };
   }
 
