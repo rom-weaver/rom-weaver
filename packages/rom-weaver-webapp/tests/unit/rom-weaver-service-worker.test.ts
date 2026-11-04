@@ -5,6 +5,7 @@ type PrecacheManifestEntry = string | { revision?: string | null; url: string; i
 type CapturedRoute = {
   handler: (options: { event?: { type: string }; request: Request; url: URL }) => Promise<Response>;
   match: (options: { request: Request; url: URL }) => boolean;
+  method: string;
 };
 
 type CapturedPlugin = {
@@ -75,8 +76,12 @@ const hoisted = vi.hoisted(() => ({
 }));
 
 vi.mock("workbox-routing", () => ({
-  registerRoute: (match: unknown, handler: unknown) => {
-    hoisted.routes.push({ handler: handler as CapturedRoute["handler"], match: match as CapturedRoute["match"] });
+  registerRoute: (match: unknown, handler: unknown, method = "GET") => {
+    hoisted.routes.push({
+      handler: handler as CapturedRoute["handler"],
+      match: match as CapturedRoute["match"],
+      method,
+    });
   },
 }));
 
@@ -932,40 +937,6 @@ describe("navigation requests", () => {
     const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
 
     await expect(response.text()).resolves.toBe("guide");
-  });
-
-  it("answers HEAD for a cached deferred entry from the cache, without a body", async () => {
-    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
-    await (
-      await harness.cacheStorage.open(DEFERRED_CACHE_NAME)
-    ).put(DEFERRED_URL, new Response("js", { headers: { "content-length": "2" }, status: 200 }));
-
-    const response = await routed(harness, requireRoute(3), new Request(DEFERRED_URL, { method: "HEAD" }));
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("content-length")).toBe("2");
-    expect(response.headers.get("Cross-Origin-Embedder-Policy")).toBe("credentialless");
-    await expect(response.text()).resolves.toBe("");
-    expect(harness.fetchStub.calls).toHaveLength(0);
-  });
-
-  it("answers HEAD for an uncached deferred entry with an empty 200 when the network fails", async () => {
-    const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
-
-    const response = await routed(harness, requireRoute(3), new Request(DEFERRED_URL, { method: "HEAD" }));
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("content-length")).toBeNull();
-    expect(harness.fetchStub.calls.map((call) => call.url)).toEqual([DEFERRED_URL]);
-  });
-
-  it("leaves HEAD for other URLs and GET for deferred entries to the other routes", async () => {
-    await loadCompleteWorker({ redirectSourcePaths: [] });
-    const headRoute = requireRoute(3);
-
-    expect(headRoute.match({ request: new Request(DEFERRED_URL), url: new URL(DEFERRED_URL) })).toBe(false);
-    const other = `${APP_ORIGIN}/assets/other.js`;
-    expect(headRoute.match({ request: new Request(other, { method: "HEAD" }), url: new URL(other) })).toBe(false);
   });
 
   it("does not answer from the runtime cache, which may hold a newer deploy", async () => {
@@ -2043,5 +2014,76 @@ describe("precache state reported to the warm-up", () => {
     await harness.warmupConfig.fetchForInteractive(`${APP_ORIGIN}/assets/identify-computers.pack`);
 
     expect(harness.fetchStub.calls[0]?.init).toBeUndefined();
+  });
+});
+
+describe("BIOS HEAD route", () => {
+  const BIOS_URL = `${APP_ORIGIN}/emulatorjs/bios/saturn_bios.bin`;
+  const DEFERRED_CACHE_NAME = "precache-rom-weaver-app-deferred";
+  const loadBiosWorker = (cachedBios?: Response) =>
+    loadWorker({
+      manifest: [
+        "index.html",
+        { install: false, url: "emulatorjs/bios/saturn_bios.bin" },
+        { install: false, url: "assets/deferred.js" },
+      ],
+      seedCaches: async (cacheStorage) => {
+        if (cachedBios) await (await cacheStorage.open(DEFERRED_CACHE_NAME)).put(BIOS_URL, cachedBios);
+      },
+    });
+  const head = (url: string) => new Request(url, { method: "HEAD" });
+
+  it("registers for HEAD only", async () => {
+    await loadBiosWorker();
+
+    expect(requireRoute(3).method).toBe("HEAD");
+    expect(hoisted.routes.filter((route) => route.method === "HEAD")).toHaveLength(1);
+  });
+
+  it("answers from the offline copy without a body or a network request", async () => {
+    const harness = await loadBiosWorker(new Response("bios", { headers: { "content-length": "4" }, status: 200 }));
+
+    const response = await routed(harness, requireRoute(3), head(BIOS_URL));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-length")).toBe("4");
+    expect(response.headers.get("Cross-Origin-Embedder-Policy")).toBe("credentialless");
+    await expect(response.text()).resolves.toBe("");
+    expect(harness.fetchStub.calls).toHaveLength(0);
+  });
+
+  it("passes a successful network answer through when the file is not cached", async () => {
+    const harness = await loadBiosWorker();
+    harness.fetchStub.handlers.set(
+      BIOS_URL,
+      () => new Response(null, { headers: { "content-length": "4" }, status: 200 }),
+    );
+
+    const response = await routed(harness, requireRoute(3), head(BIOS_URL));
+
+    expect(response.headers.get("content-length")).toBe("4");
+  });
+
+  it.each([
+    ["the network fails", undefined],
+    ["the host answers with an error status", () => new Response(null, { status: 503 })],
+  ])("answers an empty 200 when %s", async (_case, handler) => {
+    const harness = await loadBiosWorker();
+    if (handler) harness.fetchStub.handlers.set(BIOS_URL, handler);
+
+    const response = await routed(harness, requireRoute(3), head(BIOS_URL));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-length")).toBeNull();
+    expect(harness.fetchStub.calls.map((call) => call.url)).toEqual([BIOS_URL]);
+  });
+
+  it("leaves GET and other deferred files to the other routes", async () => {
+    await loadBiosWorker();
+    const route = requireRoute(3);
+    const other = `${APP_ORIGIN}/assets/deferred.js`;
+
+    expect(route.match({ request: new Request(BIOS_URL), url: new URL(BIOS_URL) })).toBe(false);
+    expect(route.match({ request: head(other), url: new URL(other) })).toBe(false);
   });
 });
