@@ -70,6 +70,28 @@ function dependencyAvailable(packageName, run, libclang) {
   }
 }
 
+// A stalled mirror or a transient index failure often clears within seconds.
+const APT_ATTEMPTS = 3;
+const APT_BACKOFF_MS = [5_000, 15_000];
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function withAptRetries(label, action, sleep) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return action();
+    } catch (error) {
+      if (attempt >= APT_ATTEMPTS) throw error;
+      process.stderr.write(
+        `apt-get ${label} failed (attempt ${attempt} of ${APT_ATTEMPTS}): ${error.message}; retrying\n`,
+      );
+      sleep(APT_BACKOFF_MS[attempt - 1]);
+    }
+  }
+}
+
 export function areAptPackagesInstalled(packages, run = execFileSync) {
   return packages.every((packageName) => {
     try {
@@ -89,6 +111,7 @@ export function installAptPackages(
   packages,
   run = execFileSync,
   libclang = () => findLibclangDir(undefined, run),
+  sleep = sleepSync,
 ) {
   const missing = [...new Set(packages)].filter(
     (name) => !dependencyAvailable(name, run, libclang),
@@ -111,15 +134,24 @@ export function installAptPackages(
     "-o",
     "DPkg::Lock::Timeout=60",
   ];
-  run("sudo", ["apt-get", ...sourceOptions, "update"], { stdio: "inherit", timeout: 300_000 });
-  run("sudo", ["apt-get", ...sourceOptions, "install", "--yes", ...missing], {
-    stdio: "inherit",
-    timeout: 300_000,
-  });
+  withAptRetries(
+    "update",
+    () => run("sudo", ["apt-get", ...sourceOptions, "update"], { stdio: "inherit", timeout: 300_000 }),
+    sleep,
+  );
+  withAptRetries(
+    "install",
+    () =>
+      run("sudo", ["apt-get", ...sourceOptions, "install", "--yes", ...missing], {
+        stdio: "inherit",
+        timeout: 300_000,
+      }),
+    sleep,
+  );
   return true;
 }
 
-export function main(env = process.env, run = execFileSync) {
+export function main(env = process.env, run = execFileSync, sleep = sleepSync) {
   const packages = (env.APT_PACKAGES || "").split(/\s+/).filter(Boolean);
   if (env.RUNNER_OS === "Linux") {
     if (env.INSTALL_CCACHE === "true") packages.push("ccache");
@@ -134,7 +166,7 @@ export function main(env = process.env, run = execFileSync) {
       run,
     ));
   try {
-    const installed = !installAptPackages(packages, run, discoverLibclang);
+    const installed = !installAptPackages(packages, run, discoverLibclang, sleep);
     process.stdout.write(
       installed
         ? `system dependencies already available: ${packages.join(" ")}\n`

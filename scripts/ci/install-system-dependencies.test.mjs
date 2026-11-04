@@ -71,9 +71,71 @@ test("does not install packages after an Ubuntu index failure", () => {
   };
 
   assert.throws(
-    () => installAptPackages(["cmake"], run),
+    () => installAptPackages(["cmake"], run, undefined, () => {}),
     (error) => error === failure,
   );
+});
+
+function flakyApt(failures) {
+  const calls = [];
+  const remaining = { ...failures };
+  const run = (command, args) => {
+    if (command !== "sudo") throw new Error("missing command");
+    const step = args.at(-1) === "update" ? "update" : "install";
+    calls.push(step);
+    if (remaining[step]-- > 0) {
+      const error = new Error("spawnSync sudo ETIMEDOUT");
+      error.code = "ETIMEDOUT";
+      throw error;
+    }
+    return "";
+  };
+  return { calls, run };
+}
+
+test("retries a timed-out apt update with backoff before installing", () => {
+  const { calls, run } = flakyApt({ update: 2 });
+  const sleeps = [];
+  assert.equal(installAptPackages(["cmake"], run, undefined, (ms) => sleeps.push(ms)), true);
+  assert.deepEqual(calls, ["update", "update", "update", "install"]);
+  assert.deepEqual(sleeps, [5_000, 15_000]);
+});
+
+test("retries a timed-out apt install without repeating the update", () => {
+  const { calls, run } = flakyApt({ install: 1 });
+  const sleeps = [];
+  assert.equal(installAptPackages(["cmake"], run, undefined, (ms) => sleeps.push(ms)), true);
+  assert.deepEqual(calls, ["update", "install", "install"]);
+  assert.deepEqual(sleeps, [5_000]);
+});
+
+test("gives up after three apt attempts with the last error", () => {
+  const { calls, run } = flakyApt({ update: 3 });
+  const sleeps = [];
+  assert.throws(
+    () => installAptPackages(["cmake"], run, undefined, (ms) => sleeps.push(ms)),
+    { code: "ETIMEDOUT" },
+  );
+  assert.deepEqual(calls, ["update", "update", "update"]);
+  assert.deepEqual(sleeps, [5_000, 15_000]);
+});
+
+test("the bootstrap reports a persistent apt failure after its retries", () => {
+  const { run } = flakyApt({ update: 3 });
+  const previous = process.exitCode;
+  const write = process.stderr.write;
+  const lines = [];
+  process.stderr.write = (chunk) => (lines.push(String(chunk)), true);
+  try {
+    main({ APT_PACKAGES: "cmake", RUNNER_OS: "Linux" }, run, () => {});
+  } finally {
+    process.stderr.write = write;
+    const failed = process.exitCode === 1;
+    process.exitCode = previous;
+    assert.equal(failed, true);
+  }
+  assert.equal(lines.filter((line) => line.includes("failed (attempt")).length, 2);
+  assert.ok(lines.some((line) => line.includes("installing apt packages failed")));
 });
 
 test("working tools avoid apt even without unversioned Debian packages", () => {
