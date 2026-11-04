@@ -187,7 +187,7 @@ index 80d15526392e2f4b7e982b861876bbd4b916fff1..93114ff4796fc7b6f5046a714a59e5e9
      /// Compress each audio channel as a separate mono FLAC stream with a single block.
      ///
 diff --git a/compression/cdrom.rs b/compression/cdrom.rs
-index bec90228f343ad6e35d62922c87bb77aa0873965..5d4506363903058efaa9af0fdbc268433a0422af 100644
+index 953c26ae58e8d71268228cd31b8bf5901a4487d2..87a71558cbd2dedab041113e165ba028a11c209a 100644
 --- a/compression/cdrom.rs
 +++ b/compression/cdrom.rs
 @@ -185,7 +185,6 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
@@ -196,9 +196,9 @@ index bec90228f343ad6e35d62922c87bb77aa0873965..5d4506363903058efaa9af0fdbc26843
      /// compressed at the default level.
 -    #[cfg(feature = "encode")]
      fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
-         if hunk_size % CD_FRAME_SIZE != 0 {
-             return Err(Error::CodecError);
-@@ -218,15 +217,12 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+         let mut codec = Self::new(hunk_size)?;
+         codec.engine = Engine::with_level((hunk_size / CD_FRAME_SIZE) * CD_MAX_SECTOR_DATA, level)?;
+@@ -213,15 +212,12 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
              &mut self.buffer[..frames * CD_MAX_SECTOR_DATA as usize],
          )?;
  
@@ -214,7 +214,7 @@ index bec90228f343ad6e35d62922c87bb77aa0873965..5d4506363903058efaa9af0fdbc26843
  
          // Decompressed data has layout
          // [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
-@@ -243,7 +239,6 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+@@ -238,7 +234,6 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
          }
  
          // Reassemble subcode data to expected layout.
@@ -222,7 +222,7 @@ index bec90228f343ad6e35d62922c87bb77aa0873965..5d4506363903058efaa9af0fdbc26843
          for (frame_num, chunk) in self.buffer[frames * CD_MAX_SECTOR_DATA as usize..]
              .chunks_exact(CD_MAX_SUBCODE_DATA as usize)
              .enumerate()
-@@ -254,7 +249,6 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+@@ -249,7 +244,6 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
          }
  
          // Recreate ECC data
@@ -230,7 +230,7 @@ index bec90228f343ad6e35d62922c87bb77aa0873965..5d4506363903058efaa9af0fdbc26843
          for frame_num in 0..frames {
              let mut sector = <&mut [u8; CD_MAX_SECTOR_DATA as usize]>::try_from(
                  &mut output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize],
-@@ -268,7 +262,6 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+@@ -263,7 +257,6 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
          Ok(frame_res + sub_res)
      }
  
@@ -239,7 +239,7 @@ index bec90228f343ad6e35d62922c87bb77aa0873965..5d4506363903058efaa9af0fdbc26843
          // https://github.com/mamedev/mame/blob/master/src/lib/util/chdcodec.cpp chd_cd_compressor::compress
          let frames = input.len() / CD_FRAME_SIZE as usize;
 diff --git a/compression/flac.rs b/compression/flac.rs
-index d09832a74f7e3fe0c13e599d35222ef7faee8980..0c09d2f11c06d33468b96b05ce1f701146a416dd 100644
+index 96e644736146e7d62d098530f597b1acadbac114..5defe970975e1fffabd86cb8db4e30eaf8eb88cb 100644
 --- a/compression/flac.rs
 +++ b/compression/flac.rs
 @@ -19,15 +19,12 @@ use crate::chd_rs::header::CodecType;
@@ -334,9 +334,9 @@ index d09832a74f7e3fe0c13e599d35222ef7faee8980..0c09d2f11c06d33468b96b05ce1f7011
      /// data is always compressed at the default Deflate level.
 -    #[cfg(feature = "encode")]
      fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
-         if hunk_size % CD_FRAME_SIZE != 0 {
-             return Err(Error::CodecError);
-@@ -377,15 +358,12 @@ impl CodecImplementation for CdFlacCodec {
+         let mut codec = Self::new(hunk_size)?;
+         codec.engine =
+@@ -372,15 +353,12 @@ impl CodecImplementation for CdFlacCodec {
              &mut self.buffer[..total_frames * CD_MAX_SECTOR_DATA as usize],
          )?;
  
@@ -352,7 +352,7 @@ index d09832a74f7e3fe0c13e599d35222ef7faee8980..0c09d2f11c06d33468b96b05ce1f7011
  
          // Decompressed FLAC data has layout
          // [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
-@@ -402,7 +380,6 @@ impl CodecImplementation for CdFlacCodec {
+@@ -397,7 +375,6 @@ impl CodecImplementation for CdFlacCodec {
          }
  
          // Reassemble subcode data to expected layout.
@@ -360,7 +360,7 @@ index d09832a74f7e3fe0c13e599d35222ef7faee8980..0c09d2f11c06d33468b96b05ce1f7011
          for (frame_num, chunk) in self.buffer[total_frames * CD_MAX_SECTOR_DATA as usize..]
              .chunks_exact(CD_MAX_SUBCODE_DATA as usize)
              .enumerate()
-@@ -415,7 +392,6 @@ impl CodecImplementation for CdFlacCodec {
+@@ -410,7 +387,6 @@ impl CodecImplementation for CdFlacCodec {
          Ok(frame_res + sub_res)
      }
  
@@ -691,18 +691,18 @@ index c3978883eaa2f1ac1b801670bba9dcbd260cfd33..5a46724e61ecea51c3b63b86e5b516f7
          // Anything not smaller than the input is a failure, so don't bother writing more.
          let output_len = output.len().min(input.len());
 diff --git a/header/mod.rs b/header/mod.rs
-index bb266ecb4425d78dabc5b03b8d9949bff816d067..45ce1faa954ab9c8b912e327f853a221c8294199 100644
+index 7a4c43c2334fad71409a5f769300462a19601b84..2ef0bfe19e221907d6f5d69dadbfb6f531165c2f 100644
 --- a/header/mod.rs
 +++ b/header/mod.rs
-@@ -120,7 +120,6 @@ impl CodecType {
- 
-     /// Initializes the codec for the provided hunk size, compressing at the given level
-     /// if there is one.
--    #[cfg(feature = "encode")]
-     pub(crate) fn init_with_level(
-         &self,
-         hunk_size: u32,
-@@ -378,7 +377,6 @@ impl Header {
+@@ -94,7 +94,6 @@ impl CodecType {
+             level: Option<i32>,
+         ) -> Result<Box<dyn CompressionCodec>> {
+             let codec = match level {
+-                #[cfg(feature = "encode")]
+                 Some(level) => C::with_level(hunk_size, level),
+                 _ => C::new(hunk_size),
+             };
+@@ -343,7 +342,6 @@ impl Header {
      /// Serialize the header into it's on-disk representation.
      ///
      /// The length of the serialized header depends on the header version.
@@ -710,7 +710,7 @@ index bb266ecb4425d78dabc5b03b8d9949bff816d067..45ce1faa954ab9c8b912e327f853a221
      pub fn to_bytes(&self) -> ArrayVec<u8, CHD_MAX_HEADER_SIZE> {
          let mut bytes = ArrayVec::new();
          match self {
-@@ -696,7 +694,6 @@ impl Header {
+@@ -661,7 +659,6 @@ impl Header {
      }
  }
  
@@ -718,7 +718,7 @@ index bb266ecb4425d78dabc5b03b8d9949bff816d067..45ce1faa954ab9c8b912e327f853a221
  impl RawHeaderPrefix {
      fn new(version: Version, length: u32) -> Self {
          let mut magic = [0u8; 8];
-@@ -709,7 +706,6 @@ impl RawHeaderPrefix {
+@@ -674,7 +671,6 @@ impl RawHeaderPrefix {
      }
  }
  
@@ -726,7 +726,7 @@ index bb266ecb4425d78dabc5b03b8d9949bff816d067..45ce1faa954ab9c8b912e327f853a221
  impl HeaderV1 {
      /// Serialize the header into it's on-disk representation.
      ///
-@@ -750,7 +746,6 @@ impl HeaderV1 {
+@@ -715,7 +711,6 @@ impl HeaderV1 {
      }
  }
  
@@ -734,7 +734,7 @@ index bb266ecb4425d78dabc5b03b8d9949bff816d067..45ce1faa954ab9c8b912e327f853a221
  impl HeaderV3 {
      /// Serialize the header into it's on-disk representation.
      pub fn to_bytes(&self) -> [u8; CHD_V3_HEADER_SIZE as usize] {
-@@ -771,7 +766,6 @@ impl HeaderV3 {
+@@ -736,7 +731,6 @@ impl HeaderV3 {
      }
  }
  
@@ -742,7 +742,7 @@ index bb266ecb4425d78dabc5b03b8d9949bff816d067..45ce1faa954ab9c8b912e327f853a221
  impl HeaderV4 {
      /// Serialize the header into it's on-disk representation.
      pub fn to_bytes(&self) -> [u8; CHD_V4_HEADER_SIZE as usize] {
-@@ -791,7 +785,6 @@ impl HeaderV4 {
+@@ -756,7 +750,6 @@ impl HeaderV4 {
      }
  }
  
@@ -750,7 +750,7 @@ index bb266ecb4425d78dabc5b03b8d9949bff816d067..45ce1faa954ab9c8b912e327f853a221
  impl HeaderV5 {
      /// Serialize the header into it's on-disk representation.
      pub fn to_bytes(&self) -> [u8; CHD_V5_HEADER_SIZE as usize] {
-@@ -1055,7 +1048,6 @@ mod test {
+@@ -1020,7 +1013,6 @@ mod test {
      use crate::chd_rs::header::extract_bps_value;
  
      #[test]
@@ -758,7 +758,7 @@ index bb266ecb4425d78dabc5b03b8d9949bff816d067..45ce1faa954ab9c8b912e327f853a221
      fn v5_to_bytes_roundtrip() {
          use crate::chd_rs::header::Header;
          use std::io::Cursor;
-@@ -1086,7 +1078,6 @@ mod test {
+@@ -1051,7 +1043,6 @@ mod test {
      }
  
      #[test]
@@ -1187,10 +1187,10 @@ index 48cd890e07f48fb594f36eb17cfe77d438b8a6a2..7621cec110a95e2809af8080d303e919
      use super::{ChdReader, HunkBufReader};
      use crate::chd_rs::header::CodecType;
 diff --git a/write/compressed.rs b/write/compressed.rs
-index a296ff7d43e4c9a47116d9ab42dc4552ebcd4f9c..6e4e937766a901e9e4807addbf06eeb5743c8c0b 100644
+index 3e8e6ec9c94972c0b8b56ea6d6390b731e386cb2..5bfdf9e6a6ea03ab087183decd0dd334bbd00b0f 100644
 --- a/write/compressed.rs
 +++ b/write/compressed.rs
-@@ -498,7 +498,6 @@ mod tests {
+@@ -509,7 +509,6 @@ mod tests {
  
      /// Each codec with levels, the level chdman compresses with, and levels to test.
      fn leveled_codecs() -> Vec<(CodecType, i32, Vec<i32>)> {
@@ -1198,7 +1198,7 @@ index a296ff7d43e4c9a47116d9ab42dc4552ebcd4f9c..6e4e937766a901e9e4807addbf06eeb5
          let (zstd_default, zstd_levels) = (
              zstd_safe::max_c_level(),
              vec![
-@@ -511,8 +510,6 @@ mod tests {
+@@ -522,8 +521,6 @@ mod tests {
                  zstd_safe::max_c_level(),
              ],
          );
@@ -1207,7 +1207,7 @@ index a296ff7d43e4c9a47116d9ab42dc4552ebcd4f9c..6e4e937766a901e9e4807addbf06eeb5
          let zlib_levels: Vec<i32> = (0..=9).collect();
          let lzma_levels: Vec<i32> = (0..=9).collect();
          let flac_levels: Vec<i32> = (0..=8).collect();
-@@ -601,7 +598,6 @@ mod tests {
+@@ -612,13 +609,10 @@ mod tests {
              (CodecType::HuffV5, 0),
              (CodecType::AVHuffV5, 0),
          ];
@@ -1215,3 +1215,9 @@ index a296ff7d43e4c9a47116d9ab42dc4552ebcd4f9c..6e4e937766a901e9e4807addbf06eeb5
          invalid.extend([
              (CodecType::ZstdV5, zstd_safe::max_c_level() + 1),
              (CodecType::ZstdCdV5, zstd_safe::min_c_level() - 1),
+         ]);
+-        #[cfg(not(feature = "fast_zstd"))]
+-        invalid.extend([(CodecType::ZstdV5, 5), (CodecType::ZstdCdV5, -9)]);
+         for (codec, level) in invalid {
+             assert!(
+                 matches!(

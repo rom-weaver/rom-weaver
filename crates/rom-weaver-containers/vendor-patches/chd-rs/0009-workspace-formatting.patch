@@ -77,7 +77,7 @@ index 93114ff4796fc7b6f5046a714a59e5e9662ff646..ee06dc6d4caa4c06a026843c8d4c32db
  use bitstream_io::{BitWrite, BitWriter};
  use byteorder::ByteOrder;
 diff --git a/compression/cdrom.rs b/compression/cdrom.rs
-index 5d4506363903058efaa9af0fdbc268433a0422af..124839235e1d71e1030ba1f48dd46873569da037 100644
+index 87a71558cbd2dedab041113e165ba028a11c209a..7c569fd8db05adca7af0c8bc6fa4ef34e676c5f5 100644
 --- a/compression/cdrom.rs
 +++ b/compression/cdrom.rs
 @@ -1,5 +1,7 @@
@@ -89,7 +89,7 @@ index 5d4506363903058efaa9af0fdbc268433a0422af..124839235e1d71e1030ba1f48dd46873
  use crate::chd_rs::compression::ecc::ErrorCorrectedSector;
  use crate::chd_rs::compression::lzma::LzmaCodec;
  use crate::chd_rs::compression::zlib::ZlibCodec;
-@@ -223,7 +225,6 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+@@ -218,7 +220,6 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
                  [..frames * CD_MAX_SUBCODE_DATA as usize],
          )?;
  
@@ -98,10 +98,10 @@ index 5d4506363903058efaa9af0fdbc268433a0422af..124839235e1d71e1030ba1f48dd46873
          // [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
          // We need to reassemble the data to be
 diff --git a/compression/flac.rs b/compression/flac.rs
-index 0c09d2f11c06d33468b96b05ce1f701146a416dd..74b072264d0517790865ee29ab82b26f952d575f 100644
+index 5defe970975e1fffabd86cb8db4e30eaf8eb88cb..593acb3058a2b2708096119268c7109796dbaf8e 100644
 --- a/compression/flac.rs
 +++ b/compression/flac.rs
-@@ -364,7 +364,6 @@ impl CodecImplementation for CdFlacCodec {
+@@ -359,7 +359,6 @@ impl CodecImplementation for CdFlacCodec {
                  [..total_frames * CD_MAX_SUBCODE_DATA as usize],
          )?;
  
@@ -163,6 +163,23 @@ index a4265b232cb0cc57b94ab91629e534701063a896..f14a536c219611bc5e656510b1dabb4e
          self.zstd_context
              .reset(zstd_safe::ResetDirective::SessionAndParameters)
              .map_err(|_| Error::DecompressionError)?;
+diff --git a/header/mod.rs b/header/mod.rs
+index 2ef0bfe19e221907d6f5d69dadbfb6f531165c2f..80483ad9b99a2d63199a96b8584c4fb431e70308 100644
+--- a/header/mod.rs
++++ b/header/mod.rs
+@@ -8,11 +8,11 @@
+ //! [`Header`](crate::chd_rs::header::Header) makes no ABI guarantees and is not ABI-compatible
+ //! with [`libchdr::chd_header`](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h#L302).
+ use crate::chd_rs::chdfile::Codecs;
++use crate::chd_rs::compression::CompressionCodec;
+ use crate::chd_rs::compression::codecs::{
+     AVHuffCodec, CdFlacCodec, CdLzmaCodec, CdZlibCodec, CdZstdCodec, HuffmanCodec, LzmaCodec,
+     NoneCodec, RawFlacCodec, ZlibCodec, ZstdCodec,
+ };
+-use crate::chd_rs::compression::CompressionCodec;
+ use crate::chd_rs::error::{Error, Result};
+ use crate::chd_rs::metadata::{KnownMetadata, MetadataRefs, MetadataTag};
+ use crate::chd_rs::{make_tag, map};
 diff --git a/huffman/decode.rs b/huffman/decode.rs
 index dc2cef6a3085d722f9f22d6b13e9df0710ac7d30..9b6aee5707b516635f58fbb91fc6a79bb2cbdb9b 100644
 --- a/huffman/decode.rs
@@ -316,7 +333,7 @@ index 7621cec110a95e2809af8080d303e91912366bfb..6f6d98152de3808650ab996297782fa3
      use rand::{RngExt, SeedableRng};
      use std::io::{BufRead, Cursor, Read, Seek, SeekFrom, Write};
 diff --git a/write/compressed.rs b/write/compressed.rs
-index 1bf051a11af4c84dbc7d1d4aa73f806df946a995..eef1d60fd2be26e6244aaa1677797b769ff27b8f 100644
+index ab8d53b379090326f7c2edd25b3c9f06f6a3bfe0..e4ba29d7e559fa4be7b127f4a631262bda18ce5a 100644
 --- a/write/compressed.rs
 +++ b/write/compressed.rs
 @@ -1,10 +1,10 @@
@@ -331,7 +348,7 @@ index 1bf051a11af4c84dbc7d1d4aa73f806df946a995..eef1d60fd2be26e6244aaa1677797b76
  use arrayvec::ArrayVec;
  use sha1::{Digest, Sha1};
  use std::borrow::Cow;
-@@ -320,9 +320,9 @@ impl HunkCompressor {
+@@ -331,9 +331,9 @@ impl HunkCompressor {
  #[cfg(test)]
  mod tests {
      use super::{CompressionState, HunkCompressor, HunkHash, HunkKind};
@@ -342,7 +359,7 @@ index 1bf051a11af4c84dbc7d1d4aa73f806df946a995..eef1d60fd2be26e6244aaa1677797b76
      use rand::rngs::StdRng;
      use rand::{RngExt, SeedableRng};
      use zstd::zstd_safe;
-@@ -410,7 +410,10 @@ mod tests {
+@@ -421,7 +421,10 @@ mod tests {
              panic!("not compressed");
          };
          assert_eq!(decompress(&codecs, index, &hunk.data), input);
@@ -369,7 +386,7 @@ index 5b45a931734f64f1bd30dd0328ffdfc5807d82c7..0b8a0f33d822182103d46ee99be07a50
  use std::io::{Read, Seek, SeekFrom, Write};
  use zerocopy::IntoBytes;
 diff --git a/write/mod.rs b/write/mod.rs
-index 288096c1747d314f0323dbe3b5e6bed95baec266..db3e63387b617188d56d72d05f776112f67a2bae 100644
+index 34334b979dc99ce3502d4d8f18d8be3da81c4b8d..acaf2695cd3ef5c895ad23aab2d4625893e74b39 100644
 --- a/write/mod.rs
 +++ b/write/mod.rs
 @@ -15,15 +15,15 @@
@@ -390,7 +407,7 @@ index 288096c1747d314f0323dbe3b5e6bed95baec266..db3e63387b617188d56d72d05f776112
  use sha1::{Digest, Sha1};
  use std::io::{self, Read, Seek, SeekFrom, Write};
  
-@@ -838,9 +838,11 @@ mod tests {
+@@ -844,9 +844,11 @@ mod tests {
              // Zero hunks are not stored, and stored hunks are aligned to the hunk size.
              assert_eq!(offsets.len(), 7);
              assert_eq!((offsets[1], offsets[4]), (0, 0));
@@ -405,7 +422,7 @@ index 288096c1747d314f0323dbe3b5e6bed95baec266..db3e63387b617188d56d72d05f776112
              if preallocated {
                  // The map follows the header, so the first hunk is aligned after it.
                  assert_eq!(offsets[0], HUNK_BYTES as u64);
-@@ -1210,8 +1212,8 @@ mod compressed_tests {
+@@ -1232,8 +1234,8 @@ mod compressed_tests {
  #[cfg(test)]
  mod logical_size_tests {
      use super::{ChdWriteOptions, ChdWriter};

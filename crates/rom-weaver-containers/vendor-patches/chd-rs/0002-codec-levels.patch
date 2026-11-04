@@ -1,8 +1,8 @@
 diff --git a/compression/cdrom.rs b/compression/cdrom.rs
-index 0f291209058f718dcf437acaa46c5539df58790a..a6840cf0ffc07bb42672faed8a555436333651e0 100644
+index 0f291209058f718dcf437acaa46c5539df58790a..a09288c621b316b4f2a3f0118379ce090687fad5 100644
 --- a/compression/cdrom.rs
 +++ b/compression/cdrom.rs
-@@ -183,6 +183,20 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+@@ -183,6 +183,15 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
          })
      }
  
@@ -10,21 +10,16 @@ index 0f291209058f718dcf437acaa46c5539df58790a..a6840cf0ffc07bb42672faed8a555436
 +    /// compressed at the default level.
 +    #[cfg(feature = "encode")]
 +    fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
-+        if hunk_size % CD_FRAME_SIZE != 0 {
-+            return Err(Error::CodecError);
-+        }
-+
-+        Ok(CdCodec {
-+            engine: Engine::with_level((hunk_size / CD_FRAME_SIZE) * CD_MAX_SECTOR_DATA, level)?,
-+            ..Self::new(hunk_size)?
-+        })
++        let mut codec = Self::new(hunk_size)?;
++        codec.engine = Engine::with_level((hunk_size / CD_FRAME_SIZE) * CD_MAX_SECTOR_DATA, level)?;
++        Ok(codec)
 +    }
 +
      fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
          // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L647
          let frames = output.len() / CD_FRAME_SIZE as usize;
 diff --git a/compression/flac.rs b/compression/flac.rs
-index 944037bbe0e3cd972e19a809cb0e2a0d5da8dcc2..071bacb2f2ba966a3be32bc26a43f35ea5dcaa91 100644
+index 944037bbe0e3cd972e19a809cb0e2a0d5da8dcc2..b344583668b1b5bcf41648103762965e67fbcb56 100644
 --- a/compression/flac.rs
 +++ b/compression/flac.rs
 @@ -21,9 +21,15 @@ struct FlacCodec<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize
@@ -109,7 +104,7 @@ index 944037bbe0e3cd972e19a809cb0e2a0d5da8dcc2..071bacb2f2ba966a3be32bc26a43f35e
      fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
          match input[0] {
              b'L' => self.le.decompress(&input[1..], output),
-@@ -312,6 +355,21 @@ impl CodecImplementation for CdFlacCodec {
+@@ -312,6 +355,16 @@ impl CodecImplementation for CdFlacCodec {
          })
      }
  
@@ -117,15 +112,10 @@ index 944037bbe0e3cd972e19a809cb0e2a0d5da8dcc2..071bacb2f2ba966a3be32bc26a43f35e
 +    /// data is always compressed at the default Deflate level.
 +    #[cfg(feature = "encode")]
 +    fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
-+        if hunk_size % CD_FRAME_SIZE != 0 {
-+            return Err(Error::CodecError);
-+        }
-+
-+        let flac_data_size = hunk_size / CD_FRAME_SIZE * CD_MAX_SECTOR_DATA;
-+        Ok(CdFlacCodec {
-+            engine: FlacCodec::with_level(flac_data_size, level)?,
-+            ..Self::new(hunk_size)?
-+        })
++        let mut codec = Self::new(hunk_size)?;
++        codec.engine =
++            FlacCodec::with_level(hunk_size / CD_FRAME_SIZE * CD_MAX_SECTOR_DATA, level)?;
++        Ok(codec)
 +    }
 +
      fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
@@ -349,17 +339,27 @@ index 0f6f95d0001a8844a3c7343753744102c297acbd..60317590f2512aca43d9419031ca237d
          if compressed_len >= input.len() {
              return Err(Error::CompressionError);
 diff --git a/header/mod.rs b/header/mod.rs
-index 7ca6aea936db837575f46f4e3236c07a09e240ce..e593bae09b7dd11f4494782d70fbec20fe0aaa82 100644
+index 7ca6aea936db837575f46f4e3236c07a09e240ce..c7000b05f90ecd9ae620606e6ad95467ac264db6 100644
 --- a/header/mod.rs
 +++ b/header/mod.rs
-@@ -110,6 +110,43 @@ impl CodecType {
-             _ => Err(Error::UnsupportedFormat),
-         }
-     }
+@@ -12,7 +12,7 @@ use crate::compression::codecs::{
+     AVHuffCodec, CdFlacCodec, CdLzmaCodec, CdZlibCodec, CdZstdCodec, HuffmanCodec, LzmaCodec,
+     NoneCodec, RawFlacCodec, ZlibCodec, ZstdCodec,
+ };
+-use crate::compression::{CodecImplementation, CompressionCodec};
++use crate::compression::CompressionCodec;
+ use crate::error::{Error, Result};
+ use crate::metadata::{KnownMetadata, MetadataRefs, MetadataTag};
+ use crate::{make_tag, map};
+@@ -72,40 +72,42 @@ impl CodecType {
+ 
+     /// Initializes the codec for the provided hunk size.
+     pub(crate) fn init(&self, hunk_size: u32) -> Result<Box<dyn CompressionCodec>> {
++        self.init_with_level(hunk_size, None)
++    }
 +
 +    /// Initializes the codec for the provided hunk size, compressing at the given level
 +    /// if there is one.
-+    #[cfg(feature = "encode")]
 +    pub(crate) fn init_with_level(
 +        &self,
 +        hunk_size: u32,
@@ -367,19 +367,52 @@ index 7ca6aea936db837575f46f4e3236c07a09e240ce..e593bae09b7dd11f4494782d70fbec20
 +    ) -> Result<Box<dyn CompressionCodec>> {
 +        fn boxed<C: CompressionCodec + 'static>(
 +            hunk_size: u32,
-+            level: i32,
++            level: Option<i32>,
 +        ) -> Result<Box<dyn CompressionCodec>> {
-+            C::with_level(hunk_size, level).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
++            let codec = match level {
++                #[cfg(feature = "encode")]
++                Some(level) => C::with_level(hunk_size, level),
++                _ => C::new(hunk_size),
++            };
++            codec.map(|x| Box::new(x) as Box<dyn CompressionCodec>)
 +        }
 +
-+        let Some(level) = level else {
-+            return self.init(hunk_size);
-+        };
-+        match self {
+         match self {
+-            CodecType::None => {
+-                NoneCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+-            }
 +            CodecType::None => boxed::<NoneCodec>(hunk_size, level),
-+            CodecType::Zlib | CodecType::ZlibPlus | CodecType::ZLibV5 => {
+             CodecType::Zlib | CodecType::ZlibPlus | CodecType::ZLibV5 => {
+-                ZlibCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+-            }
+-            CodecType::ZLibCdV5 => {
+-                CdZlibCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+-            }
+-            CodecType::LzmaCdV5 => {
+-                CdLzmaCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+-            }
+-            CodecType::FlacCdV5 => {
+-                CdFlacCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+-            }
+-            CodecType::LzmaV5 => {
+-                <LzmaCodec>::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+-            }
+-            CodecType::FlacV5 => {
+-                RawFlacCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+-            }
+-            CodecType::HuffV5 => {
+-                HuffmanCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+-            }
+-            CodecType::AV | CodecType::AVHuffV5 => {
+-                AVHuffCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+-            }
+-            CodecType::ZstdV5 => {
+-                ZstdCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+-            }
+-            CodecType::ZstdCdV5 => {
+-                CdZstdCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
 +                boxed::<ZlibCodec>(hunk_size, level)
-+            }
+             }
 +            CodecType::ZLibCdV5 => boxed::<CdZlibCodec>(hunk_size, level),
 +            CodecType::LzmaCdV5 => boxed::<CdLzmaCodec>(hunk_size, level),
 +            CodecType::FlacCdV5 => boxed::<CdFlacCodec>(hunk_size, level),
@@ -389,18 +422,14 @@ index 7ca6aea936db837575f46f4e3236c07a09e240ce..e593bae09b7dd11f4494782d70fbec20
 +            CodecType::AV | CodecType::AVHuffV5 => boxed::<AVHuffCodec>(hunk_size, level),
 +            CodecType::ZstdV5 => boxed::<ZstdCodec>(hunk_size, level),
 +            CodecType::ZstdCdV5 => boxed::<CdZstdCodec>(hunk_size, level),
-+            #[allow(unreachable_patterns)]
-+            _ => Err(Error::UnsupportedFormat),
-+        }
-+    }
- }
- 
- /// The CHD header version.
+             #[allow(unreachable_patterns)]
+             _ => Err(Error::UnsupportedFormat),
+         }
 diff --git a/write/compressed.rs b/write/compressed.rs
-index dfc990814b14aa51cd3fe6efdb4375c2eeda2e08..522871d90a41ce7a9195d097fc63f0fe1f5e22b3 100644
+index dfc990814b14aa51cd3fe6efdb4375c2eeda2e08..a276317bd54c6b223ab8885866dcb4d78c3b8d3f 100644
 --- a/write/compressed.rs
 +++ b/write/compressed.rs
-@@ -162,22 +162,38 @@ pub struct HunkCompressor {
+@@ -162,22 +162,41 @@ pub struct HunkCompressor {
  }
  
  impl HunkCompressor {
@@ -414,7 +443,7 @@ index dfc990814b14aa51cd3fe6efdb4375c2eeda2e08..522871d90a41ce7a9195d097fc63f0fe
          codecs: impl ChdWriteCodecs,
          hunk_bytes: u32,
          state: CompressionState,
-+    ) -> Result<Self> {
+     ) -> Result<Self> {
 +        Self::with_levels(codecs, [None; 4], hunk_bytes, state)
 +    }
 +
@@ -431,9 +460,13 @@ index dfc990814b14aa51cd3fe6efdb4375c2eeda2e08..522871d90a41ce7a9195d097fc63f0fe
 +        levels: [Option<i32>; 4],
 +        hunk_bytes: u32,
 +        state: CompressionState,
-     ) -> Result<Self> {
++    ) -> Result<Self> {
++        let codecs = codecs.into_array_vec();
++        if levels[codecs.len()..].iter().any(Option::is_some) {
++            return Err(Error::InvalidParameter);
++        }
          let codecs = codecs
-             .into_array_vec()
+-            .into_array_vec()
              .iter()
 -            .map(|codec| match codec {
 +            .zip(levels)
@@ -445,7 +478,7 @@ index dfc990814b14aa51cd3fe6efdb4375c2eeda2e08..522871d90a41ce7a9195d097fc63f0fe
              })
              .collect::<Result<ArrayVec<_, 4>>>()?;
  
-@@ -404,4 +420,182 @@ mod tests {
+@@ -404,4 +423,193 @@ mod tests {
              Err(Error::InvalidParameter)
          ));
      }
@@ -586,6 +619,8 @@ index dfc990814b14aa51cd3fe6efdb4375c2eeda2e08..522871d90a41ce7a9195d097fc63f0fe
 +            (CodecType::ZstdV5, zstd_safe::max_c_level() + 1),
 +            (CodecType::ZstdCdV5, zstd_safe::min_c_level() - 1),
 +        ]);
++        #[cfg(not(feature = "fast_zstd"))]
++        invalid.extend([(CodecType::ZstdV5, 5), (CodecType::ZstdCdV5, -9)]);
 +        for (codec, level) in invalid {
 +            assert!(
 +                matches!(
@@ -620,6 +655,15 @@ index dfc990814b14aa51cd3fe6efdb4375c2eeda2e08..522871d90a41ce7a9195d097fc63f0fe
 +        assert!(matches!(
 +            HunkCompressor::with_levels(
 +                &codecs,
++                [None, None, Some(1), None],
++                HUNK_BYTES,
++                CompressionState::default()
++            ),
++            Err(Error::InvalidParameter)
++        ));
++        assert!(matches!(
++            HunkCompressor::with_levels(
++                &codecs,
 +                [None, Some(10), None, None],
 +                HUNK_BYTES,
 +                CompressionState::default()
@@ -629,7 +673,7 @@ index dfc990814b14aa51cd3fe6efdb4375c2eeda2e08..522871d90a41ce7a9195d097fc63f0fe
 +    }
  }
 diff --git a/write/mod.rs b/write/mod.rs
-index 58ff55c2905d9f057e4c61ce75d434d660e38c24..33db749ef42c7d9eb2156133610cbb254cbd0171 100644
+index 58ff55c2905d9f057e4c61ce75d434d660e38c24..5c37e80400994b4544bb5350c188a6daceadcc44 100644
 --- a/write/mod.rs
 +++ b/write/mod.rs
 @@ -51,6 +51,7 @@ pub struct ChdWriteOptions {
@@ -648,22 +692,23 @@ index 58ff55c2905d9f057e4c61ce75d434d660e38c24..33db749ef42c7d9eb2156133610cbb25
              hash_uncompressed: false,
          }
      }
-@@ -186,6 +188,25 @@ impl ChdWriteOptions {
+@@ -186,6 +188,26 @@ impl ChdWriteOptions {
          self
      }
  
 +    /// Set the compression level of each codec, in the same order as the codecs.
 +    ///
-+    /// `None` compresses with the level chdman uses for the codec. Levels outside the
-+    /// range of their codec, or levels for codecs without levels, make creating the
-+    /// writer return [`InvalidParameter`](Error::InvalidParameter).
++    /// `None` compresses with the codec's default level. Levels outside the range of their
++    /// codec, levels for codecs without levels, and levels with no codec at their position
++    /// make creating the writer return [`InvalidParameter`](Error::InvalidParameter).
 +    ///
-+    /// | Codec | Levels | chdman |
-+    /// |-------|--------|--------|
-+    /// | Deflate (`zlib`, `cdzl`) | 0 to 9 | 9 |
-+    /// | LZMA (`lzma`, `cdlz`) | 0 to 9 | 6 |
-+    /// | Zstandard (`zstd`, `cdzs`) | negative to 22, where 0 is 3 | 22 |
-+    /// | FLAC (`flac`, `cdfl`) | 0 to 8 | 8 |
++    /// | Codec | Levels | Default |
++    /// |-------|--------|---------|
++    /// | Deflate (`zlib`, `cdzl`) | 0 to 9 | 9, like chdman |
++    /// | LZMA (`lzma`, `cdlz`) | 0 to 9 | 6, like chdman |
++    /// | Zstandard (`zstd`, `cdzs`) with `fast_zstd` | zstd's negative levels to 22, where 0 is 3 | 22, like chdman |
++    /// | Zstandard (`zstd`, `cdzs`) without `fast_zstd` | -8 to 4, where 0 is 1 | 1 |
++    /// | FLAC (`flac`, `cdfl`) | 0 to 8 | 8, like chdman |
 +    ///
 +    /// CD-ROM codecs compress subcode data at the chdman level regardless.
 +    pub fn compression_levels(mut self, levels: [Option<i32>; 4]) -> Self {
@@ -674,7 +719,7 @@ index 58ff55c2905d9f057e4c61ce75d434d660e38c24..33db749ef42c7d9eb2156133610cbb25
      /// Enable or disable calculation of SHA1 hashes for uncompressed CHDs.
      /// chdman does not hash uncompressed CHDs, but this can be enabled
      /// here. The output CHDs are still valid but will not match the reference
-@@ -301,8 +322,9 @@ impl<W: Write + Seek> ChdWriter<W> {
+@@ -301,8 +323,9 @@ impl<W: Write + Seek> ChdWriter<W> {
              })
              .transpose()?;
  
@@ -685,7 +730,7 @@ index 58ff55c2905d9f057e4c61ce75d434d660e38c24..33db749ef42c7d9eb2156133610cbb25
              options.hunk_bytes,
              state.clone(),
          )?;
-@@ -351,8 +373,9 @@ impl<W: Write + Seek> ChdWriter<W> {
+@@ -351,8 +374,9 @@ impl<W: Write + Seek> ChdWriter<W> {
      /// duplicate hunks are not compressed again. If the CHD is uncompressed, the compressor
      /// stores every hunk as is.
      pub fn compressor(&self) -> Result<HunkCompressor> {
@@ -696,3 +741,26 @@ index 58ff55c2905d9f057e4c61ce75d434d660e38c24..33db749ef42c7d9eb2156133610cbb25
              self.options.hunk_bytes,
              self.state.clone(),
          )
+@@ -904,6 +928,22 @@ mod compressed_tests {
+             .compression(&[CodecType::ZLibV5, CodecType::LzmaV5])
+     }
+ 
++    #[test]
++    fn compression_levels_reach_the_codecs() {
++        let invalid = options().compression_levels([Some(10), None, None, None]);
++        assert!(matches!(
++            ChdWriter::new(Cursor::new(Vec::new()), invalid),
++            Err(Error::InvalidParameter)
++        ));
++
++        // Stored Deflate never wins, so the leveled writer stores the hunk with LZMA.
++        let hunk = text_hunk(0);
++        let options = options().compression_levels([Some(0), None, None, None]);
++        let writer = ChdWriter::new(Cursor::new(Vec::new()), options).unwrap();
++        let compressed = writer.compressor().unwrap().compress(&hunk).unwrap();
++        assert_eq!(compressed.kind, super::compressed::HunkKind::Compressed(1));
++    }
++
+     fn text_hunk(seed: u8) -> Vec<u8> {
+         format!("hunk {seed} says hello. ")
+             .into_bytes()

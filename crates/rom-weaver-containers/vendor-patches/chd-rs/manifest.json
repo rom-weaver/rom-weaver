@@ -26,8 +26,8 @@
       "stage": "source",
       "reason": "Add HunkCompressor::compress_owned so a compressed hunk can own its input and move to the thread that writes it, letting callers compress on worker threads without keeping every read buffer alive.",
       "upstream": {
-        "status": "no-submission-found",
-        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/write/compressed.rs"
+        "status": "fork",
+        "url": "https://github.com/rom-weaver/chd-rs/pull/1"
       },
       "tests": [
         "cargo test -p rom-weaver-containers --lib chd_rs::write::"
@@ -38,8 +38,8 @@
       "stage": "source",
       "reason": "Add CodecImplementation::with_level and ChdWriteOptions::compression_levels for Deflate (0-9), LZMA (0-9, LzmaEncProps_Normalize mapping), Zstandard and FLAC (0-8, libFLAC stereo and LPC presets). Defaults stay the chdman levels; CD subcode keeps the default level.",
       "upstream": {
-        "status": "no-submission-found",
-        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/compression/mod.rs"
+        "status": "fork",
+        "url": "https://github.com/rom-weaver/chd-rs/pull/2"
       },
       "tests": [
         "cargo test -p rom-weaver-containers --lib chd_rs::write::compressed::tests::"
@@ -50,8 +50,8 @@
       "stage": "source",
       "reason": "Skip the CD FLAC trial when other codecs are configured and every frame of the hunk starts with the data-sector sync header, matching rom-weaver's previous encoder. Unlike chdman, a data hunk that FLAC would compress best is stored with another codec.",
       "upstream": {
-        "status": "no-submission-found",
-        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/write/compressed.rs"
+        "status": "fork",
+        "url": "https://github.com/rom-weaver/chd-rs/pull/3"
       },
       "tests": [
         "cargo test -p rom-weaver-containers --lib chd_rs::write::compressed::tests::cd_flac_is_skipped_for_data_hunks -- --exact"
@@ -62,8 +62,8 @@
       "stage": "source",
       "reason": "Use std::sync::RwLock for the shared hunk index instead of parking_lot. On wasm32 parking_lot parks only with its nightly feature, so a contended lock panicked with 'Parking not supported on this platform' on browser wasi-threads; std's lock works there and the parking_lot dependency goes away.",
       "upstream": {
-        "status": "no-submission-found",
-        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/write/compressed.rs"
+        "status": "fork",
+        "url": "https://github.com/rom-weaver/chd-rs/pull/4"
       },
       "tests": [
         "cargo test -p rom-weaver-containers --lib chd_rs::write::",
@@ -73,10 +73,10 @@
     {
       "file": "0005-reserve-hunk-tables.patch",
       "stage": "source",
-      "reason": "Reserve the hunk map and the index of stored hunks from the hunk count when the logical size is set, so they do not reallocate while other threads compress. On browser wasi-threads a heap that grows while sibling threads run can trap their bulk-memory instructions; rom-weaver's previous encoder sized both up front the same way.",
+      "reason": "Reserve the hunk map and the index of stored hunks from the hunk count when the logical size is set, so they do not reallocate while other threads compress. On browser wasi-threads a heap that grows while sibling threads run can trap their bulk-memory instructions; rom-weaver's previous encoder sized both up front the same way. The reservation is best effort, so a refused allocation falls back to growth instead of aborting.",
       "upstream": {
-        "status": "no-submission-found",
-        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/write/mod.rs"
+        "status": "fork",
+        "url": "https://github.com/rom-weaver/chd-rs/pull/4"
       },
       "tests": [
         "cargo test -p rom-weaver-containers --lib chd_rs::write::compressed_tests::hunk_tables_are_sized_from_the_logical_size -- --exact"

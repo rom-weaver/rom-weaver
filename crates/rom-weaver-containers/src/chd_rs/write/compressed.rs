@@ -106,11 +106,15 @@ impl CompressionState {
     }
 
     /// Reserve room in the index of previously compressed hunks for `additional` more hunks.
+    ///
+    /// This is a best-effort hint: if the allocation is refused, the index grows as hunks
+    /// are stored instead of aborting.
     pub fn reserve(&self, additional: usize) {
-        self.hunks
+        let _ = self
+            .hunks
             .write()
             .unwrap_or_else(PoisonError::into_inner)
-            .reserve(additional);
+            .try_reserve(additional);
     }
 
     #[cfg(test)]
@@ -221,6 +225,9 @@ impl HunkCompressor {
         state: CompressionState,
     ) -> Result<Self> {
         let codecs = codecs.into_array_vec();
+        if levels[codecs.len()..].iter().any(Option::is_some) {
+            return Err(Error::InvalidParameter);
+        }
         let cd_flac = (codecs.len() > 1)
             .then(|| {
                 codecs
@@ -252,6 +259,10 @@ impl HunkCompressor {
     }
 
     /// Compress a hunk with codec that returns the smallest result.
+    ///
+    /// When CD FLAC is configured with other codecs, it is not tried on a hunk whose every
+    /// frame starts with the data-sector sync header. Unlike chdman, such a hunk is stored
+    /// with another codec even if FLAC would compress it smaller.
     ///
     /// The provided buffer must be exactly the hunk size, otherwise returns [`InvalidParameter`](Error::InvalidParameter).
     pub fn compress<'a>(&mut self, hunk: &'a [u8]) -> Result<CompressedHunk<'a>> {
@@ -642,6 +653,15 @@ mod tests {
         let hunk = compressor.compress(&input).unwrap();
         // Stored Deflate never wins, so LZMA does.
         assert_eq!(hunk.kind, HunkKind::Compressed(1));
+        assert!(matches!(
+            HunkCompressor::with_levels(
+                &codecs,
+                [None, None, Some(1), None],
+                HUNK_BYTES,
+                CompressionState::default()
+            ),
+            Err(Error::InvalidParameter)
+        ));
         assert!(matches!(
             HunkCompressor::with_levels(
                 &codecs,
