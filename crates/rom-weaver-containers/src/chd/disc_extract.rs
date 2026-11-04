@@ -22,17 +22,22 @@ pub(super) struct DiscThreadSplit {
     pub(super) checksum_threads: Option<usize>,
 }
 
-/// Fit the decode wave and the per-output checksum workers into one operation budget.
+/// Fit the decode wave and the per-output checksum workers into the shared pool.
 ///
 /// A `shared_worker_pool` host (browser WASI threads) serves every spawn from one bounded
 /// pool that cannot grow, and the checksum workers stay alive for the whole extract while the
-/// decode wave runs, so together they MUST NOT exceed `operation_threads`. Checksum workers
-/// get at most half the budget, divided across outputs; a one-thread share hashes inline and
-/// takes no pool slot. The decode wave gets what the checksum workers leave.
+/// decode wave runs, so together they MUST NOT exceed [`SHARED_POOL_DISC_THREAD_LIMIT`]: the
+/// pool holds at most 20 workers however many threads are requested (an "auto" budget follows
+/// the reported core count). A one-thread checksum share hashes inline and takes no pool slot.
 ///
-/// The browser pool holds at most 20 workers however many threads are requested (an "auto"
-/// budget follows the reported core count), so a shared-pool budget is capped at
-/// [`SHARED_POOL_DISC_THREAD_LIMIT`] first.
+/// A single output keeps its default checksum workers (one per algorithm, at most the
+/// budget) and the full decode budget, and gives up decode threads only past the limit:
+/// shrinking the wave below the requested count costs more than the few checksum workers
+/// save (a 128 MiB CD extract ran about 50% slower at 4 threads on a 2 + 2 split).
+///
+/// Multiple outputs multiply the checksum workers, so they fit inside `operation_threads`
+/// as well: checksum workers get at most half the budget, divided across outputs, and the
+/// decode wave gets what they leave.
 pub(super) fn split_disc_threads(
     operation_threads: usize,
     output_count: usize,
@@ -46,8 +51,18 @@ pub(super) fn split_disc_threads(
             checksum_threads: None,
         };
     }
-    let operation_threads = operation_threads.min(SHARED_POOL_DISC_THREAD_LIMIT);
     let output_count = output_count.max(1);
+    if output_count == 1 {
+        let per_output = algorithm_count.min(operation_threads).max(1);
+        let checksum_workers = if per_output > 1 { per_output } else { 0 };
+        return DiscThreadSplit {
+            decode_threads: operation_threads
+                .min(SHARED_POOL_DISC_THREAD_LIMIT.saturating_sub(checksum_workers))
+                .max(1),
+            checksum_threads: Some(per_output),
+        };
+    }
+    let operation_threads = operation_threads.min(SHARED_POOL_DISC_THREAD_LIMIT);
     let per_output = (operation_threads / 2 / output_count)
         .min(algorithm_count)
         .max(1);
@@ -63,7 +78,7 @@ pub(super) fn split_disc_threads(
 }
 
 /// [`split_disc_threads`] for a CHD extract with `output_count` checksummed outputs. Every wasm
-/// extract shares the bounded browser pool, so single-output extracts split their budget too.
+/// extract shares the bounded browser pool, so single-output extracts fit their decode wave too.
 pub(super) fn extract_thread_split(
     context: &OperationContext,
     operation_threads: usize,
