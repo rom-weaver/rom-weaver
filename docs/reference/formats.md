@@ -136,7 +136,7 @@ Wii hash mismatches are warnings. Extraction writes the decoded ISO as-is and ex
 wia partition 0 hash mismatch: first group 0, sector 0: Invalid H3 hash! (group 0); 4 hashes in 4 sectors across 1 groups; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished (output `disc.iso`)
 ```
 
-RVZ summaries use the `rvz` prefix. Optional NKit CRC32, MD5, SHA-1, and XXH64 image digests are also checked. Each mismatching digest produces this warning, with the format, algorithm, and output file name substituted. The output file name keeps warnings from several discs in one command distinct:
+RVZ summaries use the `rvz` prefix. Optional NKit image digests are also checked: CRC32 and XXH64 when the image stores either, otherwise MD5 and SHA-1. Each checked digest that mismatches produces this warning, with the format, algorithm, and output file name substituted. The output file name keeps warnings from several discs in one command distinct:
 
 ```text
 wia NKit SHA-1 checksum mismatch; ISO extracted as-is; source-disc errors and payload corruption cannot be distinguished (output `disc.iso`)
