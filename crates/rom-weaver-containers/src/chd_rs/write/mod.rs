@@ -183,6 +183,10 @@ impl ChdWriteOptions {
     ///
     /// To disable compression, pass in the empty slice. This function
     /// accepts up to 4 compression codecs in a slice.
+    ///
+    /// Each hunk is stored with the codec that compresses it smallest, except that CD FLAC
+    /// is not tried on data-sector hunks when other codecs are configured; see
+    /// [`HunkCompressor::compress`].
     pub fn compression(mut self, compression: impl ChdWriteCodecs) -> Self {
         self.compression_codecs = compression.into_array_vec();
         self
@@ -190,16 +194,17 @@ impl ChdWriteOptions {
 
     /// Set the compression level of each codec, in the same order as the codecs.
     ///
-    /// `None` compresses with the level chdman uses for the codec. Levels outside the
-    /// range of their codec, or levels for codecs without levels, make creating the
-    /// writer return [`InvalidParameter`](Error::InvalidParameter).
+    /// `None` compresses with the codec's default level. Levels outside the range of their
+    /// codec, levels for codecs without levels, and levels with no codec at their position
+    /// make creating the writer return [`InvalidParameter`](Error::InvalidParameter).
     ///
-    /// | Codec | Levels | chdman |
-    /// |-------|--------|--------|
-    /// | Deflate (`zlib`, `cdzl`) | 0 to 9 | 9 |
-    /// | LZMA (`lzma`, `cdlz`) | 0 to 9 | 6 |
-    /// | Zstandard (`zstd`, `cdzs`) | negative to 22, where 0 is 3 | 22 |
-    /// | FLAC (`flac`, `cdfl`) | 0 to 8 | 8 |
+    /// | Codec | Levels | Default |
+    /// |-------|--------|---------|
+    /// | Deflate (`zlib`, `cdzl`) | 0 to 9 | 9, like chdman |
+    /// | LZMA (`lzma`, `cdlz`) | 0 to 9 | 6, like chdman |
+    /// | Zstandard (`zstd`, `cdzs`) with `fast_zstd` | zstd's negative levels to 22, where 0 is 3 | 22, like chdman |
+    /// | Zstandard (`zstd`, `cdzs`) without `fast_zstd` | -8 to 4, where 0 is 1 | 1 |
+    /// | FLAC (`flac`, `cdfl`) | 0 to 8 | 8, like chdman |
     ///
     /// CD-ROM codecs compress subcode data at the chdman level regardless.
     pub fn compression_levels(mut self, levels: [Option<i32>; 4]) -> Self {
@@ -333,9 +338,10 @@ impl<W: Write + Seek> ChdWriter<W> {
 
         // With a known number of hunks, the map and the index of stored hunks are sized
         // up front, so they do not grow while hunks are compressed on other threads.
+        // Both reservations are best effort: a refused allocation falls back to growth.
         let mut entries = Vec::new();
         if let Some(hunk_count) = hunk_count {
-            entries.reserve_exact(hunk_count as usize);
+            let _ = entries.try_reserve_exact(hunk_count as usize);
             if compressed {
                 state.reserve(hunk_count as usize);
             }
@@ -937,6 +943,22 @@ mod compressed_tests {
     fn options() -> ChdWriteOptions {
         ChdWriteOptions::new(HUNK_BYTES, UNIT_BYTES)
             .compression(&[CodecType::ZLibV5, CodecType::LzmaV5])
+    }
+
+    #[test]
+    fn compression_levels_reach_the_codecs() {
+        let invalid = options().compression_levels([Some(10), None, None, None]);
+        assert!(matches!(
+            ChdWriter::new(Cursor::new(Vec::new()), invalid),
+            Err(Error::InvalidParameter)
+        ));
+
+        // Stored Deflate never wins, so the leveled writer stores the hunk with LZMA.
+        let hunk = text_hunk(0);
+        let options = options().compression_levels([Some(0), None, None, None]);
+        let writer = ChdWriter::new(Cursor::new(Vec::new()), options).unwrap();
+        let compressed = writer.compressor().unwrap().compress(&hunk).unwrap();
+        assert_eq!(compressed.kind, super::compressed::HunkKind::Compressed(1));
     }
 
     fn text_hunk(seed: u8) -> Vec<u8> {

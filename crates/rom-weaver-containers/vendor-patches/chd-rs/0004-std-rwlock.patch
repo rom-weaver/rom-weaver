@@ -1,5 +1,5 @@
 diff --git a/write/compressed.rs b/write/compressed.rs
-index 3f4d99e28809684a4b4ed43e96824f7ff5193d71..5eb3c3d02aa7b917200439552d2d2d5ab345c346 100644
+index d1ebbbf68cc30864d49857646828632e307c6ae5..3a7e4bb3271159df0bdb4eae68565bd2fb35c22f 100644
 --- a/write/compressed.rs
 +++ b/write/compressed.rs
 @@ -6,12 +6,11 @@ use crate::header::CodecType;

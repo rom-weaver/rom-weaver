@@ -1,17 +1,21 @@
 diff --git a/write/compressed.rs b/write/compressed.rs
-index 5eb3c3d02aa7b917200439552d2d2d5ab345c346..01c72fa18ea5e88a7ab2b9a7a0b1f866206fdd78 100644
+index 3a7e4bb3271159df0bdb4eae68565bd2fb35c22f..dd96382d9fb04d36745044f6599a679885d805f0 100644
 --- a/write/compressed.rs
 +++ b/write/compressed.rs
-@@ -105,6 +105,22 @@ impl CompressionState {
+@@ -105,6 +105,26 @@ impl CompressionState {
          self.parent.get(hash).copied()
      }
  
 +    /// Reserve room in the index of previously compressed hunks for `additional` more hunks.
++    ///
++    /// This is a best-effort hint: if the allocation is refused, the index grows as hunks
++    /// are stored instead of aborting.
 +    pub fn reserve(&self, additional: usize) {
-+        self.hunks
++        let _ = self
++            .hunks
 +            .write()
 +            .unwrap_or_else(PoisonError::into_inner)
-+            .reserve(additional);
++            .try_reserve(additional);
 +    }
 +
 +    #[cfg(test)]
@@ -26,18 +30,19 @@ index 5eb3c3d02aa7b917200439552d2d2d5ab345c346..01c72fa18ea5e88a7ab2b9a7a0b1f866
      pub fn insert(&self, hash: HunkHash, hunk_num: u32) {
          self.hunks
 diff --git a/write/mod.rs b/write/mod.rs
-index 33db749ef42c7d9eb2156133610cbb254cbd0171..03e9bb315c0c64eda25728e5d093a298341d744b 100644
+index ebded75c823810ccc2c0ddf1f9727ba0f93713cd..817f709ee8374a0d0421dca70e35880d983e1ae1 100644
 --- a/write/mod.rs
 +++ b/write/mod.rs
-@@ -331,10 +331,20 @@ impl<W: Write + Seek> ChdWriter<W> {
+@@ -336,10 +336,21 @@ impl<W: Write + Seek> ChdWriter<W> {
          let compressed = !options.compression_codecs.is_empty();
          let raw_sha1 = (compressed || options.hash_uncompressed).then(Sha1::new);
  
 +        // With a known number of hunks, the map and the index of stored hunks are sized
 +        // up front, so they do not grow while hunks are compressed on other threads.
++        // Both reservations are best effort: a refused allocation falls back to growth.
 +        let mut entries = Vec::new();
 +        if let Some(hunk_count) = hunk_count {
-+            entries.reserve_exact(hunk_count as usize);
++            let _ = entries.try_reserve_exact(hunk_count as usize);
 +            if compressed {
 +                state.reserve(hunk_count as usize);
 +            }
@@ -51,7 +56,7 @@ index 33db749ef42c7d9eb2156133610cbb254cbd0171..03e9bb315c0c64eda25728e5d093a298
              hunk_count,
              buffer: Vec::new(),
              written: 0,
-@@ -1028,6 +1038,14 @@ mod compressed_tests {
+@@ -1049,6 +1060,14 @@ mod compressed_tests {
          writer.finish().unwrap().into_inner()
      }
  

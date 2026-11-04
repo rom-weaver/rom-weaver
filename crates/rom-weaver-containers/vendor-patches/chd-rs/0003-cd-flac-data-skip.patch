@@ -1,5 +1,5 @@
 diff --git a/write/compressed.rs b/write/compressed.rs
-index 522871d90a41ce7a9195d097fc63f0fe1f5e22b3..3f4d99e28809684a4b4ed43e96824f7ff5193d71 100644
+index a276317bd54c6b223ab8885866dcb4d78c3b8d3f..d1ebbbf68cc30864d49857646828632e307c6ae5 100644
 --- a/write/compressed.rs
 +++ b/write/compressed.rs
 @@ -1,4 +1,5 @@
@@ -18,11 +18,10 @@ index 522871d90a41ce7a9195d097fc63f0fe1f5e22b3..3f4d99e28809684a4b4ed43e96824f7f
      best: Vec<u8>,
      scratch: Vec<u8>,
  }
-@@ -186,8 +190,16 @@ impl HunkCompressor {
-         hunk_bytes: u32,
-         state: CompressionState,
-     ) -> Result<Self> {
-+        let codecs = codecs.into_array_vec();
+@@ -190,6 +194,14 @@ impl HunkCompressor {
+         if levels[codecs.len()..].iter().any(Option::is_some) {
+             return Err(Error::InvalidParameter);
+         }
 +        let cd_flac = (codecs.len() > 1)
 +            .then(|| {
 +                codecs
@@ -32,11 +31,9 @@ index 522871d90a41ce7a9195d097fc63f0fe1f5e22b3..3f4d99e28809684a4b4ed43e96824f7f
 +            .flatten()
 +            .map(|index| index as u8);
          let codecs = codecs
--            .into_array_vec()
              .iter()
              .zip(levels)
-             .map(|(codec, level)| match codec {
-@@ -203,6 +215,7 @@ impl HunkCompressor {
+@@ -206,6 +218,7 @@ impl HunkCompressor {
              codecs,
              state,
              find_duplicates,
@@ -44,7 +41,18 @@ index 522871d90a41ce7a9195d097fc63f0fe1f5e22b3..3f4d99e28809684a4b4ed43e96824f7f
              best: vec![0; hunk_bytes as usize],
              scratch: vec![0; hunk_bytes as usize],
          })
-@@ -242,9 +255,20 @@ impl HunkCompressor {
+@@ -213,6 +226,10 @@ impl HunkCompressor {
+ 
+     /// Compress a hunk with codec that returns the smallest result.
+     ///
++    /// When CD FLAC is configured with other codecs, it is not tried on a hunk whose every
++    /// frame starts with the data-sector sync header. Unlike chdman, such a hunk is stored
++    /// with another codec even if FLAC would compress it smaller.
++    ///
+     /// The provided buffer must be exactly the hunk size, otherwise returns [`InvalidParameter`](Error::InvalidParameter).
+     pub fn compress<'a>(&mut self, hunk: &'a [u8]) -> Result<CompressedHunk<'a>> {
+         self.compress_cow(Cow::Borrowed(hunk))
+@@ -245,9 +262,20 @@ impl HunkCompressor {
  
          // The hunk itself is the result to beat. Each codec only gets room for a result
          // strictly smaller than the best so far so a codec that can not beat it fails early.
@@ -65,7 +73,7 @@ index 522871d90a41ce7a9195d097fc63f0fe1f5e22b3..3f4d99e28809684a4b4ed43e96824f7f
              let limit = best_len.saturating_sub(1);
              if let Ok(len) = codec.compress(&hunk, &mut self.scratch[..limit]) {
                  best_codec = Some(index);
-@@ -271,7 +295,7 @@ impl HunkCompressor {
+@@ -274,7 +302,7 @@ impl HunkCompressor {
  #[cfg(test)]
  mod tests {
      use super::{CompressionState, HunkCompressor, HunkHash, HunkKind};
@@ -74,7 +82,7 @@ index 522871d90a41ce7a9195d097fc63f0fe1f5e22b3..3f4d99e28809684a4b4ed43e96824f7f
      use crate::header::CodecType;
      use crate::Error;
      use rand::rngs::StdRng;
-@@ -598,4 +622,52 @@ mod tests {
+@@ -612,4 +640,52 @@ mod tests {
              Err(Error::InvalidParameter)
          ));
      }
@@ -127,3 +135,18 @@ index 522871d90a41ce7a9195d097fc63f0fe1f5e22b3..3f4d99e28809684a4b4ed43e96824f7f
 +        );
 +    }
  }
+diff --git a/write/mod.rs b/write/mod.rs
+index 5c37e80400994b4544bb5350c188a6daceadcc44..ebded75c823810ccc2c0ddf1f9727ba0f93713cd 100644
+--- a/write/mod.rs
++++ b/write/mod.rs
+@@ -183,6 +183,10 @@ impl ChdWriteOptions {
+     ///
+     /// To disable compression, pass in the empty slice. This function
+     /// accepts up to 4 compression codecs in a slice.
++    ///
++    /// Each hunk is stored with the codec that compresses it smallest, except that CD FLAC
++    /// is not tried on data-sector hunks when other codecs are configured; see
++    /// [`HunkCompressor::compress`].
+     pub fn compression(mut self, compression: impl ChdWriteCodecs) -> Self {
+         self.compression_codecs = compression.into_array_vec();
+         self
