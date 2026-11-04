@@ -167,7 +167,7 @@ impl RvzContainerHandler {
     fn copy_extract_with_progress<R: Read>(
         &self,
         reader: &mut R,
-        writer: &mut BufWriter<crate::nod_shared::ExtractOutput>,
+        writer: &mut crate::nod_shared::ExtractOutput,
         total_bytes: u64,
         context: &OperationContext,
         execution: &ThreadExecution,
@@ -203,7 +203,7 @@ impl RvzContainerHandler {
                 execution,
             );
             if total_bytes > 0 {
-                writer.get_ref().set_len(total_bytes)?;
+                writer.set_len(total_bytes)?;
             }
         }
 
@@ -228,15 +228,14 @@ impl RvzContainerHandler {
             checksum.update_owned(first_buffer)?;
         }
 
-        if first_bytes_read > 0 && checksum.is_some() {
+        if first_bytes_read > 0 {
+            let mut buffer = vec![0_u8; buffer_size];
             loop {
                 context.cancel().check()?;
-                let mut buffer = vec![0_u8; buffer_size];
                 let bytes_read = Self::fill_extract_buffer(reader, &mut buffer)?;
                 if bytes_read == 0 {
                     break;
                 }
-                writer.write_all(&buffer[..bytes_read])?;
                 if let Some(checksum) = checksum.as_mut() {
                     stream_extract_identity(
                         context,
@@ -247,28 +246,10 @@ impl RvzContainerHandler {
                         extension,
                         &buffer[..bytes_read],
                     );
-                    buffer.truncate(bytes_read);
-                    checksum.update_owned(buffer)?;
+                    checksum.update(&buffer[..bytes_read])?;
                 }
-                bytes_written = bytes_written.saturating_add(bytes_read as u64);
-                Self::maybe_emit_extract_progress(
-                    context,
-                    total_bytes,
-                    bytes_written,
-                    &mut last_emitted_percent,
-                    &mut emitted_initial_zero,
-                    execution,
-                );
-            }
-        } else if first_bytes_read > 0 {
-            let mut buffer = vec![0_u8; buffer_size];
-            loop {
-                context.cancel().check()?;
-                let bytes_read = Self::fill_extract_buffer(reader, &mut buffer)?;
-                if bytes_read == 0 {
-                    break;
-                }
-                writer.write_all(&buffer[..bytes_read])?;
+                // The output keeps the chunk for its NKit digests and returns another buffer.
+                buffer = writer.write_chunk(buffer, bytes_read)?;
                 bytes_written = bytes_written.saturating_add(bytes_read as u64);
                 Self::maybe_emit_extract_progress(
                     context,
@@ -398,10 +379,7 @@ impl ContainerHandlerOperations for RvzContainerHandler {
         if plan.disc_size > 0 {
             output_file.seek(SeekFrom::Start(0))?;
         }
-        let mut output = BufWriter::new(crate::nod_shared::ExtractOutput::new(
-            output_file,
-            &mut plan.integrity,
-        ));
+        let mut output = crate::nod_shared::ExtractOutput::new(output_file, &mut plan.integrity);
         let extension = plan
             .output_path
             .extension()
@@ -416,8 +394,6 @@ impl ContainerHandlerOperations for RvzContainerHandler {
                 extension.as_deref(),
             )
             .and_then(|copied| Ok(output.flush().map(|()| copied)?));
-        // The flush above already surfaced write errors; `into_parts` cannot fail.
-        let (output, _) = output.into_parts();
         let digests = output.finish();
         let finished = copied.and_then(|copied| {
             let warnings = RVZ_NOD_CORE.finish_extract_integrity(&mut plan, digests, context)?;

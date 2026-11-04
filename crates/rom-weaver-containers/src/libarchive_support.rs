@@ -6,7 +6,7 @@ use std::{
     ops::Range,
     path::{Path, PathBuf},
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicU8, AtomicU64, Ordering},
         mpsc,
     },
@@ -14,6 +14,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use crate::extract_support::ExtractIoBufferPool;
 use crate::libarchive::{
     EntryFileType, EntrySpec, ReadArchive, ReadFilter as LibarchiveReadFilter,
     RegularArchiveProbeFormat as LibarchiveProbeFormat, SelectedRegularArchiveEntry, WriteArchive,
@@ -1351,54 +1352,6 @@ impl ExtractChecksumTimingSample<'_> {
     }
 }
 
-/// Recycles the buffers that carry decoded bytes from the parallel extract workers to the writer
-/// thread. Each `FileData` message used to be a fresh `to_vec` of the worker's read buffer, so a
-/// long extract churned one buffer-sized allocation per chunk. That is merely wasteful on a native
-/// allocator; on wasm the linear memory only ever grows, so the churn fragments a heap that never
-/// hands pages back. The writer returns each buffer once it has written and hashed it, so steady
-/// state allocates nothing.
-#[derive(Debug)]
-struct ExtractIoBufferPool {
-    buffers: Mutex<Vec<Vec<u8>>>,
-    buffer_bytes: usize,
-    max_buffers: usize,
-}
-
-impl ExtractIoBufferPool {
-    fn new(buffer_bytes: usize, max_buffers: usize) -> Self {
-        Self {
-            buffers: Mutex::new(Vec::new()),
-            buffer_bytes: buffer_bytes.max(1),
-            max_buffers: max_buffers.max(1),
-        }
-    }
-
-    /// A buffer of exactly `buffer_bytes`, recycled when one is idle. Ownership is what keeps a
-    /// buffer from being handed out twice: `take` pops it off the free list and only `recycle`
-    /// (which consumes the `Vec`) can put it back, so a buffer in flight is unreachable here.
-    fn take(&self) -> Vec<u8> {
-        let mut buffer = match self.buffers.lock() {
-            Ok(mut buffers) => buffers.pop().unwrap_or_default(),
-            Err(_) => Vec::new(),
-        };
-        // Recycled buffers come back truncated to whatever the previous read produced; resizing
-        // restores the full read window and only zeroes the regrown tail.
-        buffer.resize(self.buffer_bytes, 0);
-        buffer
-    }
-
-    fn recycle(&self, buffer: Vec<u8>) {
-        if buffer.capacity() < self.buffer_bytes {
-            return;
-        }
-        if let Ok(mut buffers) = self.buffers.lock()
-            && buffers.len() < self.max_buffers
-        {
-            buffers.push(buffer);
-        }
-    }
-}
-
 /// Read one chunk into a pooled buffer, truncated to the bytes actually read.
 ///
 /// The truncation is the load-bearing part: a recycled buffer still holds the previous chunk's
@@ -2217,49 +2170,6 @@ mod tests {
     }
 
     #[test]
-    fn buffer_pool_hands_out_distinct_buffers_until_they_are_returned() {
-        let pool = ExtractIoBufferPool::new(64, 4);
-        let first = pool.take();
-        let second = pool.take();
-        assert_eq!(first.len(), 64);
-        assert_eq!(second.len(), 64);
-        assert_ne!(
-            first.as_ptr(),
-            second.as_ptr(),
-            "an outstanding buffer must never be handed out a second time"
-        );
-
-        let recycled = first.as_ptr();
-        pool.recycle(first);
-        let third = pool.take();
-        assert_eq!(
-            third.as_ptr(),
-            recycled,
-            "a returned buffer should be reused"
-        );
-        assert_ne!(third.as_ptr(), second.as_ptr());
-    }
-
-    #[test]
-    fn buffer_pool_stops_retaining_past_its_ceiling() {
-        let pool = ExtractIoBufferPool::new(32, 2);
-        for _ in 0..5 {
-            pool.recycle(vec![0u8; 32]);
-        }
-        assert_eq!(pool.buffers.lock().expect("pool lock").len(), 2);
-    }
-
-    #[test]
-    fn buffer_pool_rejects_undersized_buffers() {
-        let pool = ExtractIoBufferPool::new(32, 4);
-        pool.recycle(vec![0u8; 8]);
-        assert!(pool.buffers.lock().expect("pool lock").is_empty());
-        // A short buffer that was never sized for this pool must not become a read window that
-        // silently truncates a chunk.
-        assert_eq!(pool.take().len(), 32);
-    }
-
-    #[test]
     fn pooled_chunks_never_expose_stale_bytes_after_a_short_read() {
         let pool = ExtractIoBufferPool::new(16, 4);
         let mut reader = ScriptedReader {
@@ -2284,7 +2194,7 @@ mod tests {
             "end of entry is signalled by an empty chunk"
         );
         assert_eq!(
-            pool.buffers.lock().expect("pool lock").len(),
+            pool.idle_buffers(),
             1,
             "the end-of-entry buffer goes straight back to the pool"
         );

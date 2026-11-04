@@ -1,9 +1,12 @@
 use std::{
     collections::BTreeMap,
     fs::File,
-    io::{BufWriter, Read, Write},
+    io::{BufWriter, Read},
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU8, AtomicU64, Ordering},
+    sync::{
+        Mutex,
+        atomic::{AtomicU8, AtomicU64, Ordering},
+    },
 };
 
 use rom_weaver_checksum::{
@@ -199,12 +202,16 @@ pub(crate) fn emit_container_step_progress(
     );
 }
 
-pub(crate) fn copy_reader_with_progress<R: Read, W: Write>(
+/// Copies `reader` to its end in chunks, reporting byte progress against `total_bytes`. `write`
+/// takes each chunk by value with the byte count read into it, and returns a buffer of the same
+/// length for the next read, so a writer that keeps the chunk (to hash it on another thread)
+/// needs no copy.
+pub(crate) fn copy_chunks_with_progress<R: Read>(
     reader: &mut R,
-    writer: &mut W,
     total_bytes: u64,
     progress: &ContainerProgressContext<'_>,
     label: &str,
+    mut write: impl FnMut(Vec<u8>, usize) -> std::io::Result<Vec<u8>>,
 ) -> Result<u64> {
     let ContainerProgressContext {
         context,
@@ -224,7 +231,7 @@ pub(crate) fn copy_reader_with_progress<R: Read, W: Write>(
         if bytes_read == 0 {
             break;
         }
-        writer.write_all(&buffer[..bytes_read])?;
+        buffer = write(buffer, bytes_read)?;
         bytes_written = bytes_written.saturating_add(bytes_read as u64);
         if total_bytes > 0 {
             maybe_emit_container_byte_progress(
@@ -244,6 +251,59 @@ pub(crate) fn copy_reader_with_progress<R: Read, W: Write>(
     }
 
     Ok(bytes_written)
+}
+
+/// Recycles the buffers that carry decoded bytes between extract threads: from the parallel
+/// libarchive workers to the writer thread, and from a disc copy to its NKit digest workers. A fresh
+/// buffer per chunk is merely wasteful on a native allocator; on wasm the linear memory only ever
+/// grows, so the churn fragments a heap that never hands pages back. Each consumer returns a buffer
+/// once it is done with it, so steady state allocates nothing.
+#[derive(Debug)]
+pub(crate) struct ExtractIoBufferPool {
+    buffers: Mutex<Vec<Vec<u8>>>,
+    buffer_bytes: usize,
+    max_buffers: usize,
+}
+
+impl ExtractIoBufferPool {
+    pub(crate) fn new(buffer_bytes: usize, max_buffers: usize) -> Self {
+        Self {
+            buffers: Mutex::new(Vec::new()),
+            buffer_bytes: buffer_bytes.max(1),
+            max_buffers: max_buffers.max(1),
+        }
+    }
+
+    /// A buffer of exactly `buffer_bytes`, recycled when one is idle. Ownership is what keeps a
+    /// buffer from being handed out twice: `take` pops it off the free list and only `recycle`
+    /// (which consumes the `Vec`) can put it back, so a buffer in flight is unreachable here.
+    pub(crate) fn take(&self) -> Vec<u8> {
+        let mut buffer = match self.buffers.lock() {
+            Ok(mut buffers) => buffers.pop().unwrap_or_default(),
+            Err(_) => Vec::new(),
+        };
+        // Recycled buffers come back truncated to whatever the previous read produced; resizing
+        // restores the full read window and only zeroes the regrown tail.
+        buffer.resize(self.buffer_bytes, 0);
+        buffer
+    }
+
+    /// Buffers waiting to be reused.
+    #[cfg(test)]
+    pub(crate) fn idle_buffers(&self) -> usize {
+        self.buffers.lock().map_or(0, |buffers| buffers.len())
+    }
+
+    pub(crate) fn recycle(&self, buffer: Vec<u8>) {
+        if buffer.capacity() < self.buffer_bytes {
+            return;
+        }
+        if let Ok(mut buffers) = self.buffers.lock()
+            && buffers.len() < self.max_buffers
+        {
+            buffers.push(buffer);
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -544,39 +604,6 @@ impl ExtractHasher {
                 ))
             }
         }
-    }
-}
-
-/// A writer that folds every byte it accepts into an [`ExtractHasher`], so a handler whose output
-/// is produced sequentially can compute a requested `--checksum` during the copy instead of
-/// re-reading the output.
-pub(crate) struct HashingWriter<W> {
-    inner: W,
-    hasher: ExtractHasher,
-}
-
-impl<W: Write> HashingWriter<W> {
-    pub(crate) fn new(inner: W, hasher: ExtractHasher) -> Self {
-        Self { inner, hasher }
-    }
-
-    /// Hand back the hasher once the copy is done; the caller finishes it against the flushed output.
-    pub(crate) fn into_hasher(self) -> ExtractHasher {
-        self.hasher
-    }
-}
-
-impl<W: Write> Write for HashingWriter<W> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let written = self.inner.write(buf)?;
-        self.hasher
-            .update(&buf[..written])
-            .map_err(std::io::Error::other)?;
-        Ok(written)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.flush()
     }
 }
 
@@ -982,7 +1009,50 @@ mod tests {
     }
 
     #[test]
-    fn copy_reader_with_progress_copies_every_byte_and_reports_progress() {
+    fn buffer_pool_hands_out_distinct_buffers_until_they_are_returned() {
+        let pool = ExtractIoBufferPool::new(64, 4);
+        let first = pool.take();
+        let second = pool.take();
+        assert_eq!(first.len(), 64);
+        assert_eq!(second.len(), 64);
+        assert_ne!(
+            first.as_ptr(),
+            second.as_ptr(),
+            "an outstanding buffer must never be handed out a second time"
+        );
+
+        let recycled = first.as_ptr();
+        pool.recycle(first);
+        let third = pool.take();
+        assert_eq!(
+            third.as_ptr(),
+            recycled,
+            "a returned buffer should be reused"
+        );
+        assert_ne!(third.as_ptr(), second.as_ptr());
+    }
+
+    #[test]
+    fn buffer_pool_stops_retaining_past_its_ceiling() {
+        let pool = ExtractIoBufferPool::new(32, 2);
+        for _ in 0..5 {
+            pool.recycle(vec![0u8; 32]);
+        }
+        assert_eq!(pool.buffers.lock().expect("pool lock").len(), 2);
+    }
+
+    #[test]
+    fn buffer_pool_rejects_undersized_buffers() {
+        let pool = ExtractIoBufferPool::new(32, 4);
+        pool.recycle(vec![0u8; 8]);
+        assert!(pool.buffers.lock().expect("pool lock").is_empty());
+        // A short buffer that was never sized for this pool must not become a read window that
+        // silently truncates a chunk.
+        assert_eq!(pool.take().len(), 32);
+    }
+
+    #[test]
+    fn copy_chunks_with_progress_copies_every_byte_and_reports_progress() {
         let temp = TestDir::new("copy");
         let (context, sink) = recording_context(&temp);
         let progress = progress_context(&context, "extract");
@@ -992,12 +1062,15 @@ mod tests {
             .collect::<Vec<_>>();
         let mut reader = payload.as_slice();
         let mut written = Vec::new();
-        let copied = copy_reader_with_progress(
+        let copied = copy_chunks_with_progress(
             &mut reader,
-            &mut written,
             payload.len() as u64,
             &progress,
             "copying",
+            |chunk, len| {
+                written.extend_from_slice(&chunk[..len]);
+                Ok(chunk)
+            },
         )
         .expect("copy");
 
@@ -1010,14 +1083,18 @@ mod tests {
     }
 
     #[test]
-    fn copy_reader_with_progress_stays_silent_without_a_known_total() {
+    fn copy_chunks_with_progress_stays_silent_without_a_known_total() {
         let temp = TestDir::new("copy-unknown");
         let (context, sink) = recording_context(&temp);
         let progress = progress_context(&context, "extract");
 
         let mut reader = b"payload".as_slice();
         let mut written = Vec::new();
-        let copied = copy_reader_with_progress(&mut reader, &mut written, 0, &progress, "copying")
+        let copied =
+            copy_chunks_with_progress(&mut reader, 0, &progress, "copying", |chunk, len| {
+                written.extend_from_slice(&chunk[..len]);
+                Ok(chunk)
+            })
             .expect("copy");
 
         assert_eq!(copied, 7);

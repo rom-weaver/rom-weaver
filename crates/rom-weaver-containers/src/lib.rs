@@ -75,8 +75,8 @@ use constants::{
     Z3DS_MAX_COMPRESSION_LEVEL, Z3DS_MIN_COMPRESSION_LEVEL, copy_progress_buffer_size,
 };
 use extract_support::{
-    ContainerProgressContext, ExtractChunkWriter, ExtractHasher, ExtractedFileChecksum,
-    HashingWriter, attach_extract_checksum_details, copy_reader_with_progress,
+    ContainerProgressContext, ExtractChunkWriter, ExtractHasher, ExtractIoBufferPool,
+    ExtractedFileChecksum, attach_extract_checksum_details, copy_chunks_with_progress,
     create_extract_checksum, decode_tasks_ordered, emit_container_indeterminate_progress,
     emit_container_step_progress, ensure_extract_output_available, hash_extracted_file,
     stream_extract_identity,
