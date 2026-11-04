@@ -516,7 +516,7 @@ The prerelease test reads the **version**, never the package spec - platform pac
 
 | Job | Produces |
 | --- | --- |
-| `semver-check` | nothing - gates the publish on no accidental breaking API change |
+| `semver-plan`, `semver-check` | nothing - `semver-plan` lists the published crates and `semver-check` runs one leg per crate, gating the publish on no accidental breaking API change |
 | `cargo-publish-dry-run` | nothing - gates npm and draft publication on crates.io accepting Cargo metadata |
 | `static-webapp` | `rom-weaver-webapp.tar.gz` on the draft release + signed build provenance |
 | `publish-npm` | 9 platform packages → launcher → unscoped alias, in that order |
@@ -583,7 +583,7 @@ A draft release has no tag until it is published, so every job builds from `need
 
 `cargo-semver-checks` runs as the `semver-check` job in `release.yml` and gates `publish-release`. A compatibility failure leaves the draft unpublished, while the version can still be corrected. The check needs no registry credentials and runs alongside the publishing jobs.
 
-It runs per-crate rather than `--workspace` so a crate with no published baseline (a first release, or a newly added crate) is skipped instead of failing the whole job.
+It runs per-crate rather than `--workspace` so a crate with no published baseline (a first release, or a newly added crate) is skipped instead of failing the whole job. Each crate is its own matrix leg on its own runner, so the slowest crate (`rom-weaver-cli`, about 5.5 minutes of rustdoc builds) sets the time instead of the sum of all five (about 13 minutes); `semver-plan` reads the crate list from `cargo metadata`, so a newly published crate is checked without editing the workflow.
 
 ### Package managers publish last
 

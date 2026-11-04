@@ -35,8 +35,7 @@ test("baseline lookup fails unresolved errors and only skips missing crates", ()
     chmodSync(path, 0o755);
   };
   try {
-    write("cargo", 'if [ "$1" = metadata ]; then echo "{}"; else echo checked; fi');
-    write("jq", "echo published");
+    write("cargo", "echo checked");
     write("curl", 'printf "%s" "$STATUS"; exit "$CURL_EXIT"');
     const script = release
       .split("      - name: Check for accidental breaking API changes")[1]
@@ -58,12 +57,51 @@ test("baseline lookup fails unresolved errors and only skips missing crates", ()
           PATH: `${directory}:/usr/bin:/bin`,
           STATUS: status,
           CURL_EXIT: code,
+          CRATE: "rom-weaver-test",
           CRATES_IO_USER_AGENT: "test",
         },
       });
       assert.equal(result.status === 0, success, `${status}: ${result.stdout} ${result.stderr}`);
       assert.equal(result.stdout.includes("checked"), status === "200" && code === "0");
     }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("the semver plan lists every published workspace crate and refuses an empty list", () => {
+  const scratch = resolve(".agent/release-install");
+  mkdirSync(scratch, { recursive: true });
+  const directory = mkdtempSync(join(scratch, "plan-"));
+  try {
+    const script = release
+      .split("      - name: List published workspace crates")[1]
+      .split("        run: |\n")[1]
+      .split("\n\n  ")[0]
+      .replace(/^          /gm, "");
+    const run = (packages) => {
+      const metadata = join(directory, "metadata.json");
+      const output = join(directory, "output");
+      const members = packages.map(({ id }) => id);
+      writeFileSync(metadata, JSON.stringify({ workspace_members: members, packages: [...packages, { id: "outside", name: "outside", publish: null }] }));
+      writeFileSync(output, "");
+      writeFileSync(join(directory, "cargo"), `#!/bin/sh\ncat ${metadata}\n`);
+      chmodSync(join(directory, "cargo"), 0o755);
+      const result = spawnSync("bash", ["-eu", "-c", script], {
+        encoding: "utf8",
+        env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, GITHUB_OUTPUT: output },
+      });
+      return { output: readFileSync(output, "utf8").trim(), status: result.status };
+    };
+    assert.deepEqual(
+      run([
+        { id: "a", name: "rom-weaver-a", publish: null },
+        { id: "b", name: "rom-weaver-b", publish: [] },
+        { id: "c", name: "rom-weaver-c", publish: ["crates-io"] },
+      ]),
+      { output: 'crates=["rom-weaver-a","rom-weaver-c"]', status: 0 },
+    );
+    assert.notEqual(run([{ id: "b", name: "rom-weaver-b", publish: [] }]).status, 0);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
