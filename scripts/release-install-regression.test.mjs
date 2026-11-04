@@ -11,6 +11,10 @@ for (const name of ["publish-npm", "publish-containers"]) {
     assert.match(job, /needs\.semver-check\.result == 'success'/);
   });
 }
+test("per-crate semver checks hold at most two runners", () => {
+  const job = release.split("  semver-check:\n")[1].split(/\n  [a-z][a-z-]*:\n/)[0];
+  assert.match(job, /\n      max-parallel: 2\n/);
+});
 test("baseline lookup only skips 404 and retries failures", () => {
   assert.match(release, /if \[\[ "\$status" = 404 \]\]/);
   assert.match(release, /--retry 3/);

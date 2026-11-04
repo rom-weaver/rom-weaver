@@ -583,7 +583,7 @@ A draft release has no tag until it is published, so every job builds from `need
 
 `cargo-semver-checks` runs as the `semver-check` job in `release.yml` and gates `publish-release`. A compatibility failure leaves the draft unpublished, while the version can still be corrected. The check needs no registry credentials and runs alongside the publishing jobs.
 
-It runs per-crate rather than `--workspace` so a crate with no published baseline (a first release, or a newly added crate) is skipped instead of failing the whole job. Each crate is its own matrix leg on its own runner, so the slowest crate (`rom-weaver-cli`, about 5.5 minutes of rustdoc builds) sets the time instead of the sum of all five (about 13 minutes); `semver-plan` reads the crate list from `cargo metadata`, so a newly published crate is checked without editing the workflow.
+It runs per-crate rather than `--workspace` so a crate with no published baseline (a first release, or a newly added crate) is skipped instead of failing the whole job. Each crate is its own matrix leg, at most two at a time (`max-parallel: 2`) because the org runs at most 20 jobs at once and a release already peaks near 16. Two legs bring the job from the sum of all five crates (about 13 minutes) to roughly half, for one extra runner; `semver-plan` reads the crate list from `cargo metadata`, so a newly published crate is checked without editing the workflow.
 
 ### Package managers publish last
 

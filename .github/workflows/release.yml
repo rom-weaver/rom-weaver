@@ -427,6 +427,10 @@ jobs:
       actions: write
     strategy:
       fail-fast: false
+      # The org runs at most 20 jobs at once, and a release already peaks near
+      # 16 with main's CI on the merge commit alongside. Two legs at a time keep
+      # the per-crate split to one extra runner.
+      max-parallel: 2
       matrix:
         crate: ${{ fromJSON(needs.semver-plan.outputs.crates) }}
     steps:
