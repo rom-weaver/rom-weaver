@@ -74,6 +74,8 @@ jobs:
       full_native: ${{ steps.classify.outputs.full_native }}
       # The nightly quality jobs: the schedule, manual runs, and the release pull request.
       nightly_checks: ${{ steps.classify.outputs.nightly_checks }}
+      # The advisory quality signals: nightly_checks minus the release pull request.
+      quality_signals: ${{ steps.classify.outputs.quality_signals }}
       cli_platforms: ${{ steps.cli-platforms.outputs.matrix }}
       deploy_targets: ${{ steps.plan.outputs.targets }}
       preview_branch: ${{ steps.plan.outputs.preview_branch }}
@@ -451,7 +453,7 @@ jobs:
     needs: [changes, quality-fast]
     if: >-
       github.ref_type != 'tag'
-      && needs.changes.outputs.nightly_checks == 'true'
+      && needs.changes.outputs.quality_signals == 'true'
       && needs.quality-fast.outputs.matrix != ''
       && needs.quality-fast.outputs.matrix != '[]'
     # Initially advisory: baseline mutation survivors and fuzz/tool costs must be observed before gating.

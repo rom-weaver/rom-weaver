@@ -594,17 +594,17 @@ test("a head ref on a non-pull-request event changes nothing", () => {
 
 test("main pushes keep the full matrix but leave full native coverage and nightly checks to the nightly", () => {
   const release = `${RELEASE_PR_BRANCH_PREFIX}cli`;
-  for (const [eventName, headRef, fullMatrix, fullNative, nightlyChecks] of [
-    ["pull_request", "feature/x", false, false, false],
-    ["pull_request", release, true, true, true],
-    ["push", undefined, true, false, false],
-    ["schedule", undefined, true, true, true],
-    ["workflow_dispatch", undefined, true, true, true],
-    [undefined, undefined, true, true, true],
+  for (const [eventName, headRef, fullMatrix, fullNative, nightlyChecks, qualitySignals] of [
+    ["pull_request", "feature/x", false, false, false, false],
+    ["pull_request", release, true, true, true, false],
+    ["push", undefined, true, false, false, false],
+    ["schedule", undefined, true, true, true, true],
+    ["workflow_dispatch", undefined, true, true, true, true],
+    [undefined, undefined, true, true, true, true],
   ]) {
     assert.deepEqual(
       coverageTiers(eventName, headRef),
-      { fullMatrix, fullNative, nightlyChecks },
+      { fullMatrix, fullNative, nightlyChecks, qualitySignals },
       `${eventName} ${headRef}`,
     );
   }

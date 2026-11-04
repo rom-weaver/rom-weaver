@@ -64,7 +64,10 @@ runMain(() => {
   });
   if (paths)
     process.stdout.write(`changed paths:\n${paths.length ? paths.join("\n") : "(none)"}\n`);
-  const { fullMatrix, fullNative, nightlyChecks } = coverageTiers(eventName, headRef);
+  const { fullMatrix, fullNative, nightlyChecks, qualitySignals } = coverageTiers(
+    eventName,
+    headRef,
+  );
   // An earlier green run of this pull request already tested everything that
   // has not changed since, so a job runs only when the pull request diff and the
   // change since that run both select it. The raw diff above still decides
@@ -76,7 +79,7 @@ runMain(() => {
     : whole;
   const output = `${formatChanges(
     eventName === "schedule" ? scheduledSelection(changes) : changes,
-  )}full_matrix=${fullMatrix}\nfull_native=${fullNative}\nnightly_checks=${nightlyChecks}\ndocker_arm_wasm_cache=${canReuseArmDockerWasm(paths)}\n`;
+  )}full_matrix=${fullMatrix}\nfull_native=${fullNative}\nnightly_checks=${nightlyChecks}\nquality_signals=${qualitySignals}\ndocker_arm_wasm_cache=${canReuseArmDockerWasm(paths)}\n`;
   process.stdout.write(output);
   appendFileSync(process.env.GITHUB_OUTPUT, output);
 });
