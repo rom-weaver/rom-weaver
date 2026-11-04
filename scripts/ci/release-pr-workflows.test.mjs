@@ -75,3 +75,25 @@ test("the perf job times the parity CLI against the latest release", () => {
   assert.ok(compare.run.includes("--threshold 1.10"));
   assert.ok(compare.run.includes("set -euo pipefail"), "tee keeps the comparison's exit status");
 });
+
+test("pushes to a release branch cancel the runs of the commit they replace", () => {
+  const codeql = workflow("codeql.yml").concurrency;
+  assert.equal(codeql["cancel-in-progress"], true);
+  const parity = workflow("parity.yml").concurrency;
+  // Pull request runs share one group per branch; every other event gets a group of its own run.
+  assert.equal(parity.group, "parity-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}");
+  assert.equal(parity["cancel-in-progress"], "${{ github.event_name == 'pull_request' }}");
+});
+
+test("the Release job pushes the release branch once, after every commit it makes", () => {
+  const release = workflow("release.yml").jobs.release;
+  const steps = release.steps;
+  const pushes = steps.filter((step) => /git push/u.test(step.run ?? ""));
+  assert.equal(pushes.length, 1, "one git push step in the release job");
+  assert.equal(steps.at(-1), pushes[0], "the push is the last step");
+  assert.match(pushes[0].if, /!cancelled\(\)/u);
+  for (const step of steps) {
+    if (step === pushes[0]) continue;
+    assert.equal(step.env?.RELEASE_PR_BRANCH, undefined, `${step.name} must not be able to push`);
+  }
+});

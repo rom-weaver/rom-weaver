@@ -186,10 +186,11 @@ jobs:
           ref: ${{ steps.release-pr.outputs.branch }}
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
+      # The commits below stay local until "Push release pull request commits". Every push to the
+      # release branch starts a full CI run, so pushing each commit as it is made started runs that
+      # the next push cancelled; the replacing run then waited for the cancelled one to finish.
       - name: Sync generated release metadata
         if: steps.release-pr.outputs.found == 'true'
-        env:
-          RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
         run: |
           set -euo pipefail
           node scripts/sync-version.mjs
@@ -200,7 +201,6 @@ jobs:
             exit 0
           fi
           git commit -m "chore(release): sync generated metadata"
-          git push origin "HEAD:$RELEASE_PR_BRANCH"
 
       # Lays the section out as highlights plus a collapsed full list, folds
       # prerelease sections into a stable one, and mirrors the result into the
@@ -211,7 +211,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           RELEASE_PR: ${{ steps.release-pr.outputs.number }}
-          RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
           RELEASE_HIGHLIGHTS: ${{ inputs.highlights }}
         run: node scripts/aggregate-release-changelog.mjs
 
@@ -226,6 +225,10 @@ jobs:
           cargo-cache: "false"
           cache-save: "false"
           webapp-deps: "true"
+          # Without the packs the production build below rebuilds all of them from
+          # the Libretro and OpenGood archives (about 2.5 minutes). main's CI keeps
+          # one entry per pack revision, and the restored packs are byte-identical.
+          identify-data-cache: "true"
 
       - name: Resolve tested WASM artifact for screenshots
         if: steps.release-pr.outputs.found == 'true'
@@ -337,8 +340,6 @@ jobs:
 
       - name: Commit docs screenshots
         if: steps.release-pr.outputs.found == 'true'
-        env:
-          RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
         run: |
           set -euo pipefail
           git config user.name github-actions[bot]
@@ -354,6 +355,16 @@ jobs:
             exit 0
           fi
           git commit -m "docs(screenshots): refresh release captures"
+
+      # One push for every commit this job made. It also runs after a failed capture, so the
+      # metadata and changelog commits still reach the pull request as they did when each was
+      # pushed on its own. Nothing is pushed when the job made no commit.
+      - name: Push release pull request commits
+        if: ${{ !cancelled() && steps.release-pr.outputs.found == 'true' }}
+        env:
+          RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
+        run: |
+          set -euo pipefail
           git push origin "HEAD:$RELEASE_PR_BRANCH"
 
   # Gate draft publication on semver checks so a failure leaves a deletable draft.
@@ -521,6 +532,8 @@ jobs:
           cargo-cache: "false"
           cache-save: "false"
           webapp-deps: "true"
+          # Same reason as the screenshot build: restore the packs instead of rebuilding them.
+          identify-data-cache: "true"
 
       - name: Download tested WASM artifact
         if: steps.ci.outputs.available == 'true'
