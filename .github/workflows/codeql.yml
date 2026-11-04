@@ -5,6 +5,10 @@ name: CodeQL
 
 on:
   workflow_dispatch:
+  # Release pull requests get the nightly analysis before anything ships. Every other pull
+  # request skips it; the head-ref prefix MUST match scripts/ci/release-pr.mjs.
+  pull_request:
+    types: [opened, synchronize, reopened]
   schedule:
     # 05:27 UTC daily, off the hour to dodge scheduler congestion.
     - cron: "27 5 * * *"
@@ -19,6 +23,7 @@ concurrency:
 jobs:
   analyze:
     name: Analyze ${{ matrix.language }}
+    if: github.event_name != 'pull_request' || startsWith(github.head_ref, 'release-please--branches--main--components--')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:

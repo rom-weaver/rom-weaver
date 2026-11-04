@@ -13,6 +13,7 @@ These competitor comparisons measure the native CLI, not the browser app. They d
 
 - [Summary](#summary)
 - [Benchmarks in this repository](#benchmarks-in-this-repository)
+- [Performance regressions](#performance-regressions)
 - [Method](#method)
   - [Settings](#settings)
   - [Two chdman behaviors the harness works around](#two-chdman-behaviors-the-harness-works-around)
@@ -55,9 +56,19 @@ Ratios compare wall time. "2× faster" means the reference tool took twice as lo
 | `scripts/bench-command-paths.py` | Elapsed time, peak RSS, and throughput for compress, extract, checksum, patch create, and patch apply | `python3 scripts/bench-command-paths.py` |
 | `scripts/bench-checksum-threading.py` | Checksum scaling from one thread to many | `python3 scripts/bench-checksum-threading.py` |
 | `scripts/bench-solid-extract.py` | Redundant decode when extracting a solid archive in parallel, as user CPU relative to one thread | `python3 scripts/bench-solid-extract.py` |
+| `scripts/bench-compare.py` | One rom-weaver binary against another, case by case, failing on a slowdown ([Performance regressions](#performance-regressions)) | `python3 scripts/bench-compare.py --base <old> --candidate <new> --fixtures <dir> --out <dir>` |
 | `packages/rom-weaver-webapp/tests/wasm/*.bench.mjs` | Browser WASM worker-client and checksum threading | `npm --prefix packages/rom-weaver-webapp run test:browser:wasm:bench` |
 
 `scripts/parity-check.mjs` is the correctness counterpart. It checks that CHD, RVZ, 7z, and ZIP payloads round-trip through rom-weaver and their reference tools in both directions. It compares extracted payload bytes. Archive metadata and compression streams differ between tools, so it cannot compare archive bytes.
+
+## Performance regressions
+
+The `perf` job in `parity.yml` runs `scripts/bench-compare.py` every night and on every release pull request update. It times the CLI that the parity job built against the latest release's `rom-weaver-linux-x64-gnu` binary, which the release built with the same `--release` profile. Both run on one runner, and each round runs both, alternating which goes first, so load that drifts during a case slows both alike.
+
+- **Cases.** RVZ and WIA extract of images that store NKit digests, RVZ and CHD compress, CHD and zip extract, checksum, and xdelta patch apply.
+- **Fixtures.** The script writes a 512 MiB GameCube ISO and a 256 MiB file, and builds the CHD, zip, and patch with the base binary. `rom-weaver compress` stores no NKit digests, so the NKit images come from `cargo run --release -p rom-weaver-containers --example nkit_fixture -- <dir>`, which writes them the way nodtool and NKit do. A slowdown in the extract-side NKit digest check showed only on images like these; no image rom-weaver made itself showed it.
+- **Gate.** A case fails when both its median and its fastest run are more than 10% slower than the release's (`--threshold 1.10`). Interference only adds time, so requiring both keeps one slow run from hiding a regression or inventing one. The job summary has the table, and the `perf-compare` artifact has each case's run times.
+- **Locally.** `--slow-candidate 0.1` sleeps before each candidate command, which proves the gate trips without a real regression. Fixtures are reused when present, so a rerun only times.
 
 ## Method
 
