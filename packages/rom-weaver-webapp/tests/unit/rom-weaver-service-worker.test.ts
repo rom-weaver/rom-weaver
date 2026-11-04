@@ -353,7 +353,7 @@ const loadWorker = async (
     cacheStorage,
     emulatorJsRoute: requireRoute(1),
     fetchStub,
-    identifyPackRoute: requireRoute(3),
+    identifyPackRoute: requireRoute(4),
     networkFirstRoute: requireRoute(0),
     plugin,
     scope,
@@ -611,7 +611,7 @@ describe("service worker bootstrap", () => {
   it("registers the runtime and deferred routes, the precache plugin and the warm-up", async () => {
     const harness = await loadWorker();
 
-    expect(hoisted.routes).toHaveLength(4);
+    expect(hoisted.routes).toHaveLength(5);
     expect(hoisted.precacheAndRoute).toHaveBeenCalledWith(DEFAULT_MANIFEST, {
       ignoreURLParametersMatching: [/^sha256$/],
     });
@@ -932,6 +932,40 @@ describe("navigation requests", () => {
     const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
 
     await expect(response.text()).resolves.toBe("guide");
+  });
+
+  it("answers HEAD for a cached deferred entry from the cache, without a body", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
+    await (
+      await harness.cacheStorage.open(DEFERRED_CACHE_NAME)
+    ).put(DEFERRED_URL, new Response("js", { headers: { "content-length": "2" }, status: 200 }));
+
+    const response = await routed(harness, requireRoute(3), new Request(DEFERRED_URL, { method: "HEAD" }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-length")).toBe("2");
+    expect(response.headers.get("Cross-Origin-Embedder-Policy")).toBe("credentialless");
+    await expect(response.text()).resolves.toBe("");
+    expect(harness.fetchStub.calls).toHaveLength(0);
+  });
+
+  it("answers HEAD for an uncached deferred entry with an empty 200 when the network fails", async () => {
+    const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
+
+    const response = await routed(harness, requireRoute(3), new Request(DEFERRED_URL, { method: "HEAD" }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-length")).toBeNull();
+    expect(harness.fetchStub.calls.map((call) => call.url)).toEqual([DEFERRED_URL]);
+  });
+
+  it("leaves HEAD for other URLs and GET for deferred entries to the other routes", async () => {
+    await loadCompleteWorker({ redirectSourcePaths: [] });
+    const headRoute = requireRoute(3);
+
+    expect(headRoute.match({ request: new Request(DEFERRED_URL), url: new URL(DEFERRED_URL) })).toBe(false);
+    const other = `${APP_ORIGIN}/assets/other.js`;
+    expect(headRoute.match({ request: new Request(other, { method: "HEAD" }), url: new URL(other) })).toBe(false);
   });
 
   it("does not answer from the runtime cache, which may hold a newer deploy", async () => {
