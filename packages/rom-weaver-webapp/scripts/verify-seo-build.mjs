@@ -310,6 +310,14 @@ for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
   )
     throw new Error(`Direct Markdown unnecessarily invokes Functions: ${markdownPath}`);
 }
+// Without a Function route these fall through to the static 404 page.
+for (const discoveryPath of ["/.well-known/ard.json", "/.well-known/ai-catalog.json"]) {
+  if (
+    !matchesFunctionRoute(discoveryPath, functionRoutes.include) ||
+    matchesFunctionRoute(discoveryPath, functionRoutes.exclude)
+  )
+    throw new Error(`Agent discovery catalog is not routed through Functions: ${discoveryPath}`);
+}
 
 assertExcludes(routes, '"/assets/offline-chunk-*"', "offline download chunks Function route");
 const generatedDownloadFiles = fs
