@@ -132,9 +132,12 @@ const emulatorAssetUrl = (path: string) =>
 
 // BIOS files a core always starts with. The yabause core loads
 // `saturn_bios.bin` from its system folder, and EmulatorJS names the
-// downloaded BIOS after the URL's last path segment.
+// downloaded BIOS after the URL's last path segment, minus the query.
+// EmulatorJS keeps its IndexedDB copy under the segment with the query
+// and reuses it while the size matches, so the `sha256` parameter makes
+// a changed file replace it. The service worker ignores that parameter.
 const CORE_BIOS_PATHS: Readonly<Record<string, string>> = {
-  segaSaturn: "emulatorjs/bios/saturn_bios.bin",
+  segaSaturn: "emulatorjs/bios/saturn_bios.bin?sha256=3df8ca51aea8b43d00a2a606b5ffa858ea5256538b5568c7c7a8e5c95a930e91",
 };
 
 const coreBiosUrl = (core: string) => {

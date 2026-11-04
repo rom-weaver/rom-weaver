@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { KeptRomPlayback } from "../../../src/storage/browser/kept-roms.ts";
@@ -774,7 +776,12 @@ describe("EmulatorTestView", () => {
 
     render(withSettings(<EmulatorTestView />));
 
-    expect(await frameBiosUrl("disc.cue")).toMatch(/\/emulatorjs\/bios\/saturn_bios\.bin"/);
+    // jsdom's import.meta.url is not a file URL, so read from the package root.
+    const bios = readFileSync("vendor/emulatorjs/bios/saturn_bios.bin");
+    const sha256 = createHash("sha256").update(bios).digest("hex");
+    expect(await frameBiosUrl("disc.cue")).toMatch(
+      new RegExp(String.raw`/emulatorjs/bios/saturn_bios\.bin\?sha256=${sha256}"`),
+    );
   });
 
   it("starts other cores without a BIOS", async () => {
