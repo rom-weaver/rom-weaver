@@ -71,7 +71,10 @@ function dependencyAvailable(packageName, run, libclang) {
 }
 
 // A stalled mirror or a transient index failure often clears within seconds.
+// Three attempts at this bound keep one stalled step well inside the shortest
+// calling job's timeout, so the script reports its own error first.
 const APT_ATTEMPTS = 3;
+const APT_ATTEMPT_TIMEOUT_MS = 150_000;
 const APT_BACKOFF_MS = [5_000, 15_000];
 
 function sleepSync(ms) {
@@ -136,7 +139,7 @@ export function installAptPackages(
   ];
   withAptRetries(
     "update",
-    () => run("sudo", ["apt-get", ...sourceOptions, "update"], { stdio: "inherit", timeout: 300_000 }),
+    () => run("sudo", ["apt-get", ...sourceOptions, "update"], { stdio: "inherit", timeout: APT_ATTEMPT_TIMEOUT_MS }),
     sleep,
   );
   withAptRetries(
@@ -144,7 +147,7 @@ export function installAptPackages(
     () =>
       run("sudo", ["apt-get", ...sourceOptions, "install", "--yes", ...missing], {
         stdio: "inherit",
-        timeout: 300_000,
+        timeout: APT_ATTEMPT_TIMEOUT_MS,
       }),
     sleep,
   );

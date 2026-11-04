@@ -162,7 +162,7 @@ test("broken or incompatible tools fall back to one bounded apt pass", () => {
   const apt = calls.filter(({ command }) => command === "sudo");
   assert.equal(apt.length, 2);
   assert.deepEqual(apt[1].args.slice(-2), ["cmake", "ccache"]);
-  assert.ok(apt.every(({ options }) => options.timeout === 300_000));
+  assert.ok(apt.every(({ options }) => options.timeout === 150_000));
 });
 
 test("loadable libclang avoids apt; unusable libclang retains fallback", () => {
