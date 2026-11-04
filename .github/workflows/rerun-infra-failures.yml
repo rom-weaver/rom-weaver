@@ -1,0 +1,45 @@
+name: Rerun infrastructure failures
+
+# A job that never got a runner, or lost its runner mid-run, says nothing about
+# the change under test. Rerun such a run once. workflow_run uses this
+# default-branch workflow, never a pull request's workflow code.
+on:
+  workflow_run:
+    workflows: [CI, Nightly parity and performance]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: rerun-infra-failures-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  rerun:
+    name: Rerun failed jobs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # The first attempt only: a second failure is the verdict. Same-repository
+    # runs only, so a fork cannot spend this repository's runner minutes.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure'
+      && github.event.workflow_run.run_attempt == 1
+      && github.event.workflow_run.head_repository.full_name == github.repository
+    permissions:
+      contents: read
+      actions: write
+      checks: read
+    steps:
+      # Do not use workflow_run.head_sha: a CI run from a pull request can name
+      # untrusted code. This ref keeps the script that holds the token trusted.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Rerun when a failed job lost its runner
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: node scripts/ci/rerun-infra-failures.mjs
