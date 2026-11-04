@@ -767,6 +767,26 @@ describe("EmulatorTestView", () => {
     expect(await frameBiosUrl("Zelda v1.1")).toMatch(/\/emulatorjs\/bios\/disksys\.rom"/);
   });
 
+  it("starts a Saturn disc with the bundled BIOS", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    addEntry(entry({ core: "segaSaturn", fileName: "disc.cue", id: "saturn" }));
+
+    render(withSettings(<EmulatorTestView />));
+
+    expect(await frameBiosUrl("disc.cue")).toMatch(/\/emulatorjs\/bios\/saturn_bios\.bin"/);
+  });
+
+  it("starts other cores without a BIOS", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    addEntry(entry({ core: "snes", fileName: "game.sfc", id: "snes" }));
+
+    render(withSettings(<EmulatorTestView />));
+
+    expect(await frameBiosUrl("game.sfc")).toBeUndefined();
+  });
+
   it("replaces the current game without a game list", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);

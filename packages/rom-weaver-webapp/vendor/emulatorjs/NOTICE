@@ -21,3 +21,6 @@ Source: https://github.com/EmulatorJS/EmulatorJS
 Self-hosted BIOS:
 bios/disksys.rom is FreeDiskSysROM 0.1.0 (LGPL-3.0-or-later), a free Famicom Disk
 System BIOS replacement. Source and license: https://github.com/rom-weaver/FreeDiskSysROM
+bios/saturn_bios.bin is SaturnOpenBios v0.2.0-rw.0 (GPL-2.0-or-later), a free
+Sega Saturn BIOS replacement, unmodified boot.rom from the release. Source and
+license: https://github.com/rom-weaver/saturn-open-bios/releases/tag/v0.2.0-rw.0

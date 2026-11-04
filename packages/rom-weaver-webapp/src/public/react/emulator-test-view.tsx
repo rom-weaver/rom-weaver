@@ -127,6 +127,21 @@ const progressValue = (progress: ProgressViewModel) => {
 
 const hasActiveUserGesture = () => typeof navigator !== "undefined" && navigator.userActivation?.isActive === true;
 
+const emulatorAssetUrl = (path: string) =>
+  typeof document === "undefined" ? `/${path}` : new URL(path, document.baseURI).href;
+
+// BIOS files a core always starts with. The yabause core loads
+// `saturn_bios.bin` from its system folder, and EmulatorJS names the
+// downloaded BIOS after the URL's last path segment.
+const CORE_BIOS_PATHS: Readonly<Record<string, string>> = {
+  segaSaturn: "emulatorjs/bios/saturn_bios.bin",
+};
+
+const coreBiosUrl = (core: string) => {
+  const path = CORE_BIOS_PATHS[core];
+  return path ? emulatorAssetUrl(path) : undefined;
+};
+
 type EmulatorTestViewProps = {
   /** False while another workflow tab is shown; the running game pauses until the view returns. */
   active?: boolean;
@@ -225,12 +240,8 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
     [saveId],
   );
   const currentGameName = currentIdentity?.gameName;
-  const dataUrl =
-    typeof document === "undefined" ? "/emulatorjs/data/" : new URL("emulatorjs/data/", document.baseURI).href;
-  const fdsBiosUrl =
-    typeof document === "undefined"
-      ? "/emulatorjs/bios/disksys.rom"
-      : new URL("emulatorjs/bios/disksys.rom", document.baseURI).href;
+  const dataUrl = emulatorAssetUrl("emulatorjs/data/");
+  const fdsBiosUrl = emulatorAssetUrl("emulatorjs/bios/disksys.rom");
 
   useEffect(() => {
     // The test view is about to pull EmulatorJS assets; move them to the front
@@ -1079,7 +1090,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
                         gameId: currentIdentity.gameId,
                         saveId: currentIdentity.saveId,
                         gameLabel: currentGame.fileName,
-                        biosUrl: needsFdsBios ? fdsBiosUrl : undefined,
+                        biosUrl: needsFdsBios ? fdsBiosUrl : coreBiosUrl(currentCore),
                       })}
                       title={`EmulatorJS test for ${currentGame.fileName}`}
                     />
