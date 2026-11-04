@@ -42,7 +42,7 @@ You can also add a ZIP or 7z archive. rom-weaver shows the extraction progress, 
 
 A CHD that rom-weaver identifies as Sony PlayStation or Sega Mega Drive or Genesis opens without extraction. A CHD identified as Sega CD or Mega-CD has no bundled core and does not play. The emulator core reads the CHD directly, so a multi-track CD plays as one file. Add the `.chd` file itself, not an archive that contains it. A CHD for any other platform, including Saturn, is extracted first.
 
-Saturn games start with the bundled [SaturnOpenBios](https://github.com/rom-weaver/saturn-open-bios) BIOS. Earlier versions of rom-weaver used the emulator's built-in BIOS emulation instead, so a save state made with one of them may not resume correctly.
+Saturn games run on the bundled [SaturnOpenBios](https://github.com/rom-weaver/saturn-open-bios) BIOS. Earlier versions of rom-weaver used the emulator's built-in BIOS emulation instead, so a save state made with one of them may not resume correctly.
 
 Saturn games start with the 4 MB RAM expansion cartridge inserted, because some games need it to boot. If a game misbehaves with it, open the emulator's settings, choose **Backend Core Options**, set **yabause addon cartridge** to `none`, then reload Test and start the game again. The emulator's **Restart** button keeps the cartridge. The browser remembers the choice for that game. In-game saves keep working, but loading a save state never restores the cartridge's memory, so a game that uses the cartridge can show broken graphics or freeze after you load one.
 

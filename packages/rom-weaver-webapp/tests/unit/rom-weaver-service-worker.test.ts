@@ -2052,6 +2052,15 @@ describe("BIOS HEAD route", () => {
     expect(harness.fetchStub.calls).toHaveLength(0);
   });
 
+  it("matches the versioned BIOS URL the page requests", async () => {
+    const harness = await loadBiosWorker(new Response("bios", { headers: { "content-length": "4" }, status: 200 }));
+
+    const response = await routed(harness, requireRoute(3), head(`${BIOS_URL}?sha256=${"a".repeat(64)}`));
+
+    expect(response.headers.get("content-length")).toBe("4");
+    expect(harness.fetchStub.calls).toHaveLength(0);
+  });
+
   it("passes a successful network answer through when the file is not cached", async () => {
     const harness = await loadBiosWorker();
     harness.fetchStub.handlers.set(

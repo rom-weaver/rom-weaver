@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { KeptRomPlayback } from "../../../src/storage/browser/kept-roms.ts";
@@ -776,8 +778,9 @@ describe("EmulatorTestView", () => {
 
     render(withSettings(<EmulatorTestView />));
 
-    // jsdom's import.meta.url is not a file URL, so read from the package root.
-    const bios = readFileSync("vendor/emulatorjs/bios/saturn_bios.bin");
+    const bios = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "../../../vendor/emulatorjs/bios/saturn_bios.bin"),
+    );
     const sha256 = createHash("sha256").update(bios).digest("hex");
     expect(await frameBiosUrl("disc.cue")).toMatch(
       new RegExp(String.raw`/emulatorjs/bios/saturn_bios\.bin\?sha256=${sha256}"`),
