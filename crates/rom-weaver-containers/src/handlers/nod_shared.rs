@@ -1103,9 +1103,13 @@ impl ImageDigests {
     fn new(meta: &crate::nod::read::DiscMeta, context: &OperationContext) -> Result<Option<Self>> {
         use digest::Digest;
 
+        // MD5 and SHA-1 hash a disc several times slower than the copy writes it, so they would
+        // bound extraction at their speed. CRC32 and XXH64 catch the same corruption, so the
+        // slow digests are checked only when neither fast one is stored.
+        let fast = meta.crc32.is_some() || meta.xxh64.is_some();
         let crc32 = meta.crc32.map(|_| crc32fast::Hasher::new());
-        let md5 = meta.md5.map(|_| md5::Md5::new());
-        let sha1 = meta.sha1.map(|_| sha1::Sha1::new());
+        let md5 = meta.md5.filter(|_| !fast).map(|_| md5::Md5::new());
+        let sha1 = meta.sha1.filter(|_| !fast).map(|_| sha1::Sha1::new());
         let xxh64 = meta.xxh64.map(|_| xxhash_rust::xxh64::Xxh64::new(0));
         let count = [
             crc32.is_some(),
@@ -1125,6 +1129,8 @@ impl ImageDigests {
         let pool = execution.used_parallelism.then_some(pool);
         debug!(
             digests = count,
+            skipped_md5 = meta.md5.is_some() && md5.is_none(),
+            skipped_sha1 = meta.sha1.is_some() && sha1.is_none(),
             parallel = pool.is_some(),
             effective_threads = execution.effective_threads,
             "NKit image digests compute during the copy"
@@ -1209,24 +1215,31 @@ impl ImageDigests {
         }
     }
 
-    /// Names of the stored digests that differ from the computed ones, in report order.
+    /// Names of the computed digests that differ from the stored ones, in report order.
     fn mismatches(self, meta: &crate::nod::read::DiscMeta) -> Vec<&'static str> {
         use digest::Digest;
 
         [
             (
                 "CRC32",
-                self.crc32.map(|hash| hash.finalize()) != meta.crc32,
+                self.crc32
+                    .is_some_and(|hash| Some(hash.finalize()) != meta.crc32),
             ),
             (
                 "MD5",
-                self.md5.map(|hash| <[u8; 16]>::from(hash.finalize())) != meta.md5,
+                self.md5
+                    .is_some_and(|hash| Some(<[u8; 16]>::from(hash.finalize())) != meta.md5),
             ),
             (
                 "SHA-1",
-                self.sha1.map(|hash| <[u8; 20]>::from(hash.finalize())) != meta.sha1,
+                self.sha1
+                    .is_some_and(|hash| Some(<[u8; 20]>::from(hash.finalize())) != meta.sha1),
             ),
-            ("XXH64", self.xxh64.map(|hash| hash.digest()) != meta.xxh64),
+            (
+                "XXH64",
+                self.xxh64
+                    .is_some_and(|hash| Some(hash.digest()) != meta.xxh64),
+            ),
         ]
         .into_iter()
         .filter_map(|(algorithm, mismatch)| mismatch.then_some(algorithm))

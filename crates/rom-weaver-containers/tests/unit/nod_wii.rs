@@ -1253,11 +1253,11 @@ fn wia_rvz_extract_cancel_mid_copy_removes_output_without_warnings() {
                     .as_array()
                     .unwrap()
                     .len(),
-                5
+                3
             );
             assert_eq!(
                 warnings.load(Ordering::SeqCst),
-                5,
+                3,
                 "warning capture must see the uncancelled run"
             );
         }
@@ -1302,11 +1302,8 @@ fn wia_extract_reports_verification_progress() {
 /// A WIA/RVZ image of a Wii disc with a damaged H3 table and all four NKit digests, with one
 /// raw-data byte flipped so every digest mismatches as well.
 fn wii_image_with_hash_and_digest_damage(format: crate::nod::common::Format) -> Vec<u8> {
-    use crate::nod::io::wia::{WIADisc, WIAFileHeader, WIAGroup, WIARawData};
-    let mut image = disc_image_with_options(
-        &build_wii_image(true, Damage::H3Table),
+    wii_image_with_hash_and_digest_damage_for(
         format,
-        crate::nod::common::Compression::None,
         &crate::nod::write::ProcessOptions {
             digest_crc32: true,
             digest_md5: true,
@@ -1314,6 +1311,20 @@ fn wii_image_with_hash_and_digest_damage(format: crate::nod::common::Format) -> 
             digest_xxh64: true,
             ..Default::default()
         },
+    )
+}
+
+/// [`wii_image_with_hash_and_digest_damage`] storing only the NKit digests `digests` enables.
+fn wii_image_with_hash_and_digest_damage_for(
+    format: crate::nod::common::Format,
+    digests: &crate::nod::write::ProcessOptions,
+) -> Vec<u8> {
+    use crate::nod::io::wia::{WIADisc, WIAFileHeader, WIAGroup, WIARawData};
+    let mut image = disc_image_with_options(
+        &build_wii_image(true, Damage::H3Table),
+        format,
+        crate::nod::common::Compression::None,
+        digests,
     );
     let disc = WIADisc::read_from_bytes(
         &image[size_of::<WIAFileHeader>()..size_of::<WIAFileHeader>() + size_of::<WIADisc>()],
@@ -1359,13 +1370,12 @@ fn wia_rvz_copy_pass_verification_matches_across_thread_budgets() {
                 .iter()
                 .map(|warning| warning.as_str().unwrap().to_string())
                 .collect();
-            assert_eq!(warnings.len(), 5, "{warnings:?}");
+            assert_eq!(warnings.len(), 3, "{warnings:?}");
             assert!(
                 warnings[0].contains("partition 0 hash mismatch"),
                 "{warnings:?}"
             );
-            for (warning, algorithm) in warnings[1..].iter().zip(["CRC32", "MD5", "SHA-1", "XXH64"])
-            {
+            for (warning, algorithm) in warnings[1..].iter().zip(["CRC32", "XXH64"]) {
                 assert!(
                     warning.contains(&format!("NKit {algorithm} checksum mismatch")),
                     "{warning}"
@@ -1550,6 +1560,70 @@ fn wia_extract_checks_each_optional_nkit_digest() {
             );
             assert!(warning.contains("ISO extracted as-is"), "{warning}");
             assert!(temp.join("out/disc.iso").exists());
+        }
+    }
+}
+
+#[test]
+fn wia_rvz_extract_checks_md5_and_sha1_only_without_crc32_or_xxh64() {
+    use crate::nod::write::ProcessOptions;
+    for format in [
+        crate::nod::common::Format::Wia,
+        crate::nod::common::Format::Rvz,
+    ] {
+        for (digests, checked) in [
+            (
+                ProcessOptions {
+                    digest_crc32: true,
+                    digest_md5: true,
+                    digest_sha1: true,
+                    digest_xxh64: true,
+                    ..Default::default()
+                },
+                &["CRC32", "XXH64"][..],
+            ),
+            (
+                ProcessOptions {
+                    digest_crc32: true,
+                    digest_md5: true,
+                    digest_sha1: true,
+                    ..Default::default()
+                },
+                &["CRC32"][..],
+            ),
+            (
+                ProcessOptions {
+                    digest_md5: true,
+                    digest_sha1: true,
+                    digest_xxh64: true,
+                    ..Default::default()
+                },
+                &["XXH64"][..],
+            ),
+            (
+                ProcessOptions {
+                    digest_md5: true,
+                    digest_sha1: true,
+                    ..Default::default()
+                },
+                &["MD5", "SHA-1"][..],
+            ),
+        ] {
+            let image = wii_image_with_hash_and_digest_damage_for(format, &digests);
+            let (_temp, result) = extract_wia_image(&image);
+            let report = result.expect("NKit digest mismatches must warn");
+            let mismatched: Vec<String> = report.details.as_ref().unwrap()["warnings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|warning| {
+                    let warning = warning.as_str().unwrap();
+                    let (_, algorithm) = warning.split_once(" NKit ")?;
+                    let (algorithm, _) = algorithm.split_once(" checksum mismatch")?;
+                    Some(algorithm.to_string())
+                })
+                .collect();
+            assert_eq!(mismatched, checked, "{format:?}");
         }
     }
 }
