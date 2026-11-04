@@ -2639,17 +2639,24 @@ fn patch_apply_rejects_split_7z_volumes() {
         ),
     )
     .expect("patch");
-    for name in [
+    for (index, name) in [
         "split.7z.001",
         "split.7z.002",
         "split.7Z.001",
         "split.7z.1000",
-    ] {
-        let volume = temp.child(name);
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        // One directory per case: on a case-insensitive filesystem (macOS) `split.7Z.001` and
+        // its output would otherwise reuse the `split.7z.001` files.
+        let case_dir = temp.child(format!("case-{index}"));
+        fs::create_dir(case_dir.path()).expect("case dir");
+        let volume = case_dir.child(name);
         let start = if name.ends_with("002") { 16 * 1024 } else { 0 };
         let original = &bytes[start..start + 16 * 1024];
         fs::write(volume.path(), original).expect("volume");
-        let output = temp.child(format!("{name}.out.bin"));
+        let output = case_dir.child(format!("{name}.out.bin"));
         let stderr = stderr_of_failed(&[
             "patch",
             "apply",
