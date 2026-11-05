@@ -12,16 +12,12 @@ fn checksum(data: &[u8]) -> u32 {
 
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let games = [1u8, 3, 2].into_iter().enumerate().map(|(slot, tag)| {
+        // Ownership is the tag alone, so an earlier record with this tag blocks later ones even when unoccupied.
         let candidates = (0..4).map(|record| {
             let base = record * 0x78;
-            layout::Candidate {
-                spans: vec![layout::Span { logical_offset: 0, physical_offset: base, length: 0x78 }],
-                predicates: vec![rules::Condition::new(move |bytes| Ok(
-                    ![0, 255].contains(&bytes[base]) && bytes[base + 1] == tag &&
-                    !(0..record).any(|prior| bytes[prior * 0x78 + 1] == tag) &&
-                    checksum(&bytes[base..base + 0x74]) == u32::from_be_bytes(bytes[base + 0x74..base + 0x78].try_into().unwrap())
-                ))], ..Default::default()
-            }
+            tagged_record_candidate(base, 0x78, record, move |bytes, record| bytes[record * 0x78 + 1] == tag, move |bytes|
+                ![0, 255].contains(&bytes[base]) &&
+                checksum(&bytes[base..base + 0x74]) == u32::from_be_bytes(bytes[base + 0x74..base + 0x78].try_into().unwrap()))
         }).collect();
         GameDefinition {
             fields: [("eggs", "Eggs", 0x66, 100), ("red_feathers", "Red feathers", 0x67, 50), ("gold_feathers", "Gold feathers", 0x68, 10)]
@@ -29,11 +25,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                     .behavior(field::FieldBehavior { group: Some("file".into()), ..Default::default() })).collect(),
             description: "Edits consumables within their basic capacities in one occupied file of canonical 512-byte EEPROM. Selects the first matching file tag and rejects it if damaged; preserves all other records and Stop 'n' Swop data. Capacity upgrades, packed collectibles and byte-swapped images are unsupported. Requires a game-made template.".into(),
             runtime: runtime::Runtime { logical_size: Some(0x78),
-                layout: Some(layout::Layout { groups: vec![layout::Group {
-                    id: "file".into(), logical_offset: 0, logical_length: 0x78,
-                    copies: layout::Copies::Fixed { candidates }, selection: layout::Selection::FirstValid,
-                    write: layout::WritePolicy::Selected, empty: Vec::new(), empty_if_no_signature: false,
-                }] }), after_edit: vec![rules::Store { when: None,
+                layout: Some(single_file_layout(0x78, candidates)), after_edit: vec![rules::Store { when: None,
                     destination: rules::Scalar { offset: 0x74, storage: Storage::U32Be, mask: None },
                     value: rules::ReadValue::new(|bytes| Ok(i64::from(checksum(&bytes[..0x74]))))
                 }], save_format: Some("n64_eeprom_512".into()), ..Default::default()
