@@ -455,9 +455,23 @@ test.each([
   }
 });
 
-test("a workflow never shows the reading words for a fast page drop", async () => {
-  mountWebappRoot({ initialView: "patcher" });
-  await expect.poll(() => document.querySelector("#panel-patcher:not([hidden])")).toBeTruthy();
+test.each([
+  ["patcher", "drop", false],
+  ["home", "pick", true],
+])("a %s fast %s hides reading words (after slow read: %s)", async (view, kind, afterSlowRead) => {
+  mountWebappRoot({ initialView: view });
+  await expect.poll(() => document.querySelector(`#panel-${view}:not([hidden])`)).toBeTruthy();
+  if (afterSlowRead) {
+    const first = slowFolderDrop();
+    const delivery = dispatchSelectionDelivery(document, first.event);
+    try {
+      await expect.poll(() => document.querySelector(".dropveil-text").style.animationName).toBe("none");
+    } finally {
+      first.release();
+      await delivery;
+    }
+    await expect.poll(isDropRouting).toBe(false);
+  }
   // Read the pill as the veil goes up: the reading words start unseen, so a read that
   // ends before their delay never shows them.
   const raisedOpacities = [];
@@ -467,7 +481,7 @@ test("a workflow never shows the reading words for a fast page drop", async () =
   });
   observer.observe(document.querySelector("#column"), { attributeFilter: ["class"] });
   try {
-    sendHomeSelection("drop", [selectionPatch("fast.ips")]);
+    sendHomeSelection(kind, [selectionPatch("fast.ips")]);
     await expect.poll(() => patchNames()).toEqual(["fast.ips"]);
     await expect.poll(isDropRouting).toBe(false);
     expect(raisedOpacities.length).toBeGreaterThan(0);

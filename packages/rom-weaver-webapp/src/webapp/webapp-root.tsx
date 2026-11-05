@@ -393,7 +393,7 @@ const PageFooter = () => {
 
 /* While a picked or dropped selection is read and handed to its workflow, the
    veil stays up and says where the files are going. */
-type DropRouting = { phase: "reading" } | { phase: "opening"; view: WebappView };
+type DropRouting = { phase: "reading"; selection: number } | { phase: "opening"; view: WebappView };
 // Long enough to read the destination over the newly opened workflow.
 const DROP_ROUTING_HOLD_MS = 800;
 
@@ -406,6 +406,7 @@ const DropVeil = ({ dragging, routing }: { dragging: boolean; routing: DropRouti
   else if (dragging) lastRoutingRef.current = null;
   const shown = lastRoutingRef.current;
   const destination = shown?.phase === "opening" ? WORKFLOW_TABS.find((tab) => tab.id === shown.view) : undefined;
+  const phaseKey = shown?.phase === "reading" ? `reading-${shown.selection}` : (destination?.id ?? "release");
   const opening = destination ? localizer.message("ui.drop.opening", { page: destination.label }) : "";
   let announcement = "";
   if (routing?.phase === "reading") announcement = localizer.message("ui.drop.staging");
@@ -413,11 +414,8 @@ const DropVeil = ({ dragging, routing }: { dragging: boolean; routing: DropRouti
   return (
     <>
       <div aria-hidden="true" className="dropveil">
-        {/* Keyed by phase so each change of words replays the pill's entrance. */}
-        <span
-          className={shown?.phase === "reading" ? "dropveil-text is-reading" : "dropveil-text"}
-          key={destination?.id ?? shown?.phase ?? "release"}
-        >
+        {/* Each selection replays the reading delay, even after a previous read finished. */}
+        <span className={shown?.phase === "reading" ? "dropveil-text is-reading" : "dropveil-text"} key={phaseKey}>
           {destination ? (
             destination.icon
           ) : (
@@ -827,7 +825,7 @@ function WebappRoot({
           showDropRouting(routing, holdMs);
         }
       };
-      routeVeil({ phase: "reading" });
+      routeVeil({ phase: "reading", selection });
       const delivery = routingQueueRef.current
         .catch(() => undefined)
         .then(async () => {
