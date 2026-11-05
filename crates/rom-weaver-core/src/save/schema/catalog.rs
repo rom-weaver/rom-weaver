@@ -354,3 +354,22 @@ fn choices(entries: &[(&str, i64)]) -> Vec<FieldChoice> {
         })
         .collect()
 }
+
+/// Edit check that rejects the opened or edited save when any `(current, maximum)` pair has the current value above the maximum.
+fn capacity_check(message: String, pairs: Vec<(rules::Scalar, rules::Scalar)>) -> rules::Check {
+    rules::Check {
+        when: None,
+        assert: rules::Condition::new(move |bytes| {
+            for (current, maximum) in &pairs {
+                if current.read(bytes)? > maximum.read(bytes)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }),
+        code: "save_resource_capacity".into(),
+        message,
+        section_id: None,
+        warning: None,
+    }
+}
