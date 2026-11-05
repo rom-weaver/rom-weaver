@@ -61,6 +61,12 @@ export async function main(cwd = process.cwd(), { prime = true, prune = true } =
   execFileSync("npm", ["ci", "--no-audit", "--no-fund", "--prefix", root], { stdio: "inherit" });
   process.stdout.write("setup-worktree: npm ci (packages/rom-weaver-webapp)\n");
   execFileSync("npm", ["ci", "--no-audit", "--no-fund", "--prefix", join(root, "packages/rom-weaver-webapp")], { stdio: "inherit" });
+  // The pre-commit react-types and react-knip checks import these ignored outputs: the compiled
+  // Lingui catalogs and the generated channel icons that the Vitest browser configs read.
+  for (const script of ["i18n:compile", "icons:channels"]) {
+    process.stdout.write(`setup-worktree: npm run ${script} (packages/rom-weaver-webapp)\n`);
+    execFileSync("npm", ["run", script, "--prefix", join(root, "packages/rom-weaver-webapp")], { stdio: "inherit" });
+  }
 
   const source = join(mainRoot, "packages/rom-weaver-webapp/src/wasm");
   const destination = join(root, "packages/rom-weaver-webapp/src/wasm");

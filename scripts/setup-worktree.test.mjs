@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { HOOK_CARGO_PRIMES, primeHookTargets, shouldPrime } from "./setup-worktree.mjs";
+import { HOOK_CARGO_PRIMES, main, primeHookTargets, shouldPrime } from "./setup-worktree.mjs";
 
 const hook = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../.config/lefthook.yml"), "utf8");
 
@@ -57,3 +57,13 @@ test("branch checkouts prime and detached review checkouts skip unless forced", 
   assert.equal(shouldPrime(repo, []), false);
   assert.equal(shouldPrime(repo, ["--prime"]), true);
 });
+
+// The react-types and react-knip hooks fail in a fresh worktree unless the ignored
+// Lingui catalogs and generated channel icons exist, so setup must produce them.
+for (const script of ["i18n:compile", "icons:channels"]) {
+  test(`setup runs the webapp ${script} script`, () => {
+    const webapp = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../packages/rom-weaver-webapp/package.json"), "utf8"));
+    assert.ok(webapp.scripts[script], `webapp has no ${script} script`);
+    assert.match(main.toString(), new RegExp(`"${script}"`));
+  });
+}
