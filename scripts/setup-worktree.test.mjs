@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { generateHookInputs, HOOK_CARGO_PRIMES, HOOK_INPUT_SCRIPTS, primeHookTargets, shouldPrime } from "./setup-worktree.mjs";
+import { copyIdentifyData, generateHookInputs, HOOK_CARGO_PRIMES, IDENTIFY_DATA_DIR, HOOK_INPUT_SCRIPTS, primeHookTargets, shouldPrime } from "./setup-worktree.mjs";
 
 const hook = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../.config/lefthook.yml"), "utf8");
 
@@ -69,6 +69,25 @@ test("setup generates the webapp hook inputs from scripts the webapp defines", (
     ["npm", "run", "i18n:compile", "--prefix", join("/repo", "packages/rom-weaver-webapp")],
     ["npm", "run", "icons:channels", "--prefix", join("/repo", "packages/rom-weaver-webapp")],
   ]);
+});
+
+test("setup copies the main checkout's identify data that the webapp Vite config reads", (t) => {
+  const mainRoot = mkdtempSync(join(tmpdir(), "setup-worktree-main-"));
+  const root = mkdtempSync(join(tmpdir(), "setup-worktree-root-"));
+  t.after(() => {
+    rmSync(mainRoot, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  });
+  const viteConfig = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../packages/rom-weaver-webapp/scripts/vite-config/identify-data.mjs"), "utf8");
+  assert.match(viteConfig, /"crates", "rom-weaver-cli", "data", "identify", "v1"/);
+  assert.doesNotThrow(() => copyIdentifyData(mainRoot, root), "missing identify data is advisory");
+  assert.equal(existsSync(join(root, IDENTIFY_DATA_DIR)), false);
+  mkdirSync(join(mainRoot, IDENTIFY_DATA_DIR), { recursive: true });
+  writeFileSync(join(mainRoot, IDENTIFY_DATA_DIR, "index.json"), "{}");
+  writeFileSync(join(mainRoot, IDENTIFY_DATA_DIR, "nes.pack.br"), "pack");
+  copyIdentifyData(mainRoot, root);
+  assert.equal(readFileSync(join(root, IDENTIFY_DATA_DIR, "index.json"), "utf8"), "{}");
+  assert.equal(readFileSync(join(root, IDENTIFY_DATA_DIR, "nes.pack.br"), "utf8"), "pack");
 });
 
 // Icon generation launches Chromium; a missing browser must not strand the checkout.

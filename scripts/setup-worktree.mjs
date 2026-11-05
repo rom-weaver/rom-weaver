@@ -69,6 +69,19 @@ export function generateHookInputs(root, run = execFileSync) {
   }
 }
 
+// The webapp Vite config reads the ignored identify data while loading, so the react-knip
+// check needs it too. Building it fetches pinned upstream data, so copy the main checkout's.
+export const IDENTIFY_DATA_DIR = "crates/rom-weaver-cli/data/identify/v1";
+export function copyIdentifyData(mainRoot, root) {
+  const source = join(mainRoot, IDENTIFY_DATA_DIR);
+  if (!existsSync(join(source, "index.json"))) {
+    process.stdout.write("  main checkout has no identify data; run `mise run identify-data` before the pre-commit knip check\n");
+    return;
+  }
+  cpSync(source, join(root, IDENTIFY_DATA_DIR), { recursive: true });
+  process.stdout.write("  copied identify data from main checkout\n");
+}
+
 export async function main(cwd = process.cwd(), { prime = true, prune = true } = {}) {
   const { root, main: mainRoot } = worktreePaths(cwd);
   if (root === mainRoot) throw new Error("setup-worktree: run this from inside a worktree, not the main checkout");
@@ -97,6 +110,7 @@ export async function main(cwd = process.cwd(), { prime = true, prune = true } =
     cpSync(join(source, "third_party"), join(destination, "third_party"), { recursive: true });
     process.stdout.write("  copied third_party/ from main checkout\n");
   }
+  copyIdentifyData(mainRoot, root);
   generateHookInputs(root);
   if (prime) {
     process.stdout.write("setup-worktree: priming pre-commit cargo target dirs (minutes; --no-prime to skip)\n");
