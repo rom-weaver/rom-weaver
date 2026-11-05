@@ -1,13 +1,9 @@
-use super::playstation_card::{BLOCK_SIZE, CARD_SIZE};
+use super::playstation_card::{self, BLOCK_SIZE};
 use super::*;
-use rules::{Check, Condition, ReadValue, Scalar, Store};
-use tracing::debug;
 
-// Fields and the checksum MUST follow this pinned game layout. The game's save spans four
-// card blocks, which the shared single-block card definition cannot describe.
+// Fields and the checksum MUST follow this pinned game layout. The save spans four card blocks,
+// which `playstation_card::definition` validates as one contiguous chain.
 // https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/gran-turismo/saveEditor
-// Directory chain frames (0x51, 0x52, 0x53 with next-block links) follow the card format.
-// https://psx-spx.consoledev.net/controllersandmemorycards/#memory-card-data-format
 const BLOCKS: usize = 4;
 const CHECKSUM: usize = 0x6da4;
 const CHECKED: std::ops::Range<usize> = 0x200..CHECKSUM;
@@ -35,48 +31,6 @@ fn checksum(bytes: &[u8]) -> u32 {
     sums(bytes[CHECKED].iter().copied())
 }
 
-fn directory_xor(bytes: &[u8], block: usize) -> u8 {
-    bytes[block * 0x80..block * 0x80 + 0x7f]
-        .iter()
-        .fold(0, |xor, value| xor ^ value)
-}
-
-/// A four-block file in contiguous ascending blocks, as the card manager writes it to free
-/// space: first frame 0x51 with the file size, then 0x52 frames, then a closing 0x53 frame.
-fn chain_valid(bytes: &[u8], first: usize, product: &[u8]) -> bool {
-    let last = first + BLOCKS - 1;
-    let header_xor = bytes[..0x7f].iter().fold(0, |xor, value| xor ^ value);
-    let start = first * 0x80;
-    let base = first * BLOCK_SIZE;
-    bytes[..2] == *b"MC"
-        && bytes[0x7f] == header_xor
-        && (first..=last).all(|block| {
-            let offset = block * 0x80;
-            let (mode, link) = match block {
-                _ if block == first => (0x51, (block as u16).to_le_bytes()),
-                _ if block == last => (0x53, [0xff, 0xff]),
-                _ => (0x52, (block as u16).to_le_bytes()),
-            };
-            bytes[offset] == mode
-                && bytes[offset + 8..offset + 10] == link
-                && bytes[offset + 0x7f] == directory_xor(bytes, block)
-        })
-        && bytes[start + 4..start + 8] == ((BLOCKS * BLOCK_SIZE) as u32).to_le_bytes()
-        && bytes[start + 0xc..start + 0x16] == *product
-        && bytes[start + 0x16..start + 0x19] == *b"GT\0"
-        && (1..=15)
-            .filter(|other| !(first..=last).contains(other))
-            .all(|other| {
-                let offset = other * 0x80;
-                !matches!(bytes[offset], 0x51..=0x53)
-                    || !(first - 1..last)
-                        .any(|index| bytes[offset + 8..offset + 10] == (index as u16).to_le_bytes())
-            })
-        && bytes[base..base + 2] == *b"SC"
-        && matches!(bytes[base + 2], 0x11..=0x13)
-        && bytes[base + 3] == BLOCKS as u8
-}
-
 fn fields(base: usize) -> Vec<FieldDefinition> {
     vec![
         catalog_field(
@@ -93,77 +47,41 @@ fn fields(base: usize) -> Vec<FieldDefinition> {
     ]
 }
 
+/// `product` is the directory file name: the product code followed by the game's `GT\0`.
 fn profile(region: &str, product: &'static str, first: usize) -> GameDefinition {
     let base = first * BLOCK_SIZE;
-    let check = Check {
-        when: None,
-        assert: Condition::new(move |bytes| {
-            if !chain_valid(bytes, first, product.as_bytes()) {
-                return Ok(false);
-            }
-            let expected = checksum(&bytes[base..base + BLOCKS * BLOCK_SIZE]);
-            Ok(bytes[base + CHECKSUM..base + CHECKSUM + 4] == expected.to_le_bytes()
-                && bytes[base + CHECKED.start..base + CHECKSUM]
-                    .iter()
-                    .any(|value| *value != 0 && *value != 0xff))
-        }),
-        code: "gran_turismo_save".into(),
-        message: "selected blocks are not an initialized four-block Gran Turismo save for this region, or a card, directory, or save checksum is invalid".into(),
-        section_id: None,
-        warning: None,
-    };
-    GameDefinition {
-        fields: fields(base),
-        description: format!(
-            "Edits Gran Turismo {region} in the four contiguous card blocks starting at block {first} of a raw 128 KiB PlayStation memory card. Requires a game-made template; preserves the directory and every other block."
-        ),
-        runtime: runtime::Runtime {
-            checks: vec![check.clone()],
-            recognition: Some(runtime::Recognition {
-                checks: vec![check],
-                reasons: vec![
-                    SaveRecognitionReason::SignatureValid,
-                    SaveRecognitionReason::ChecksumValid,
-                ],
-                confidence: SaveRecognitionConfidence::High,
-                incomplete_confidence: None,
-                selected_reason: true,
-                empty_top_level_reasons: false,
-            }),
-            after_edit: vec![Store {
-                when: None,
-                destination: Scalar {
-                    offset: base + CHECKSUM,
-                    storage: Storage::U32Le,
-                    mask: None,
-                },
-                value: ReadValue::new(move |bytes| {
-                    let value = checksum(&bytes[base..base + BLOCKS * BLOCK_SIZE]);
-                    debug!(value, "recomputed Gran Turismo checksum");
-                    Ok(i64::from(value))
-                }),
-            }],
-            ..Default::default()
+    let mut game = playstation_card::definition(
+        "gran-turismo",
+        "Gran Turismo",
+        region,
+        product,
+        first,
+        BLOCKS,
+        fields(base),
+    );
+    playstation_card::integrity(
+        &mut game,
+        base,
+        &playstation_card::Integrity {
+            code: "gran_turismo_checksum",
+            message: "selected Gran Turismo save checksum is invalid",
+            storage: Storage::U32Le,
+            offsets: &[CHECKSUM],
+            span: BLOCKS * BLOCK_SIZE,
         },
-        ..GameDefinition::new(
-            format!("gran-turismo-{region}-block-{first}"),
-            format!(
-                "Gran Turismo ({region}, card blocks {first}-{})",
-                first + BLOCKS - 1
-            ),
-            "playstation".into(),
-            CARD_SIZE,
-        )
-    }
+        |_| true,
+        checksum,
+    );
+    game
 }
 
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let mut games = Vec::new();
     for first in 1..=15 - (BLOCKS - 1) {
         for (region, product) in [
-            ("europe", "SCES-00984"),
-            ("usa", "SCUS-94194"),
-            ("japan", "SCPS-10045"),
+            ("europe", "SCES-00984GT\0"),
+            ("usa", "SCUS-94194GT\0"),
+            ("japan", "SCPS-10045GT\0"),
         ] {
             games.push(profile(region, product, first));
         }
@@ -173,12 +91,13 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::playstation_card::CARD_SIZE;
     use super::super::ps1_action_support::*;
     use super::*;
 
     const FIRST: usize = 4;
     const BASE: usize = FIRST * BLOCK_SIZE;
-    const PRODUCT: &str = "SCUS-94194";
+    const PRODUCT: &str = "SCUS-94194GT\0";
 
     /// The upstream arithmetic with JavaScript's signed 32-bit bitwise semantics.
     fn js_checksum(bytes: &[u8]) -> u32 {
@@ -224,8 +143,8 @@ mod tests {
             if block == FIRST {
                 bytes[offset + 4..offset + 8].copy_from_slice(&0x8000u32.to_le_bytes());
                 bytes[offset + 0xa..offset + 0xc].copy_from_slice(b"BA");
-                bytes[offset + 0xc..offset + 0x16].copy_from_slice(PRODUCT.as_bytes());
-                bytes[offset + 0x16..offset + 0x19].copy_from_slice(b"GT\0");
+                bytes[offset + 0xc..offset + 0xc + PRODUCT.len()]
+                    .copy_from_slice(PRODUCT.as_bytes());
             }
             bytes[offset + 0x7f] = bytes[offset..offset + 0x7f].iter().fold(0, |x, v| x ^ v);
         }
@@ -318,6 +237,20 @@ mod tests {
     }
 
     #[test]
+    fn accepts_any_title_frame_block_count_byte() {
+        let game = game();
+        let handler = handler(&game);
+        let identity = handler.definitions().remove(0).identity;
+        for count in [0, 1, 2, 3, 5, 0xff] {
+            let mut bytes = card();
+            bytes[BASE + 3] = count;
+            handler
+                .apply(&input(bytes, &identity.id), &identity, &[], false)
+                .unwrap_or_else(|error| panic!("rejected block count byte {count}: {error}"));
+        }
+    }
+
+    #[test]
     fn rejects_out_of_range_values_damage_and_unsupported_chains() {
         let game = game();
         let handler = handler(&game);
@@ -363,7 +296,6 @@ mod tests {
             dir + 0x180 + 8,
             dir + 0x180 + 0x7f,
             BASE,
-            BASE + 3,
             BASE + 0x200,
             BASE + 0x6da3,
             BASE + 0x6da4,

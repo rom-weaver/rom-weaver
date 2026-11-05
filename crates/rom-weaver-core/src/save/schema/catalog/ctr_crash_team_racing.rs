@@ -1,7 +1,6 @@
 use super::playstation_card::{self, BLOCK_SIZE};
 use super::*;
-use rules::{Check, Condition, ReadValue, Scalar, Store};
-use tracing::debug;
+use rules::Condition;
 
 // Fields and the checksum MUST follow this pinned game layout.
 // https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/ctr-crash-team-racing/saveEditor
@@ -181,37 +180,19 @@ fn fields(base: usize) -> Vec<FieldDefinition> {
 }
 
 fn integrity(game: &mut GameDefinition, base: usize) {
-    let check = Check {
-        when: None,
-        assert: Condition::new(move |bytes| {
-            let expected = checksum(&bytes[base..base + BLOCK_SIZE]);
-            Ok(bytes[base + CHECKSUM..base + CHECKSUM + 2] == expected.to_le_bytes())
-        }),
-        code: "ctr_checksum".into(),
-        message: "selected Crash Team Racing block checksum is invalid".into(),
-        section_id: None,
-        warning: None,
-    };
-    game.runtime.checks.push(check.clone());
-    game.runtime
-        .recognition
-        .as_mut()
-        .unwrap()
-        .checks
-        .push(check);
-    game.runtime.after_edit.push(Store {
-        when: None,
-        destination: Scalar {
-            offset: base + CHECKSUM,
+    playstation_card::integrity(
+        game,
+        base,
+        &playstation_card::Integrity {
+            code: "ctr_checksum",
+            message: "selected Crash Team Racing block checksum is invalid",
             storage: Storage::U16Le,
-            mask: None,
+            offsets: &[CHECKSUM],
+            span: BLOCK_SIZE,
         },
-        value: ReadValue::new(move |bytes| {
-            let value = checksum(&bytes[base..base + BLOCK_SIZE]);
-            debug!(value, "recomputed Crash Team Racing checksum");
-            Ok(i64::from(value))
-        }),
-    });
+        |_| true,
+        |block| u32::from(checksum(block)),
+    );
 }
 
 fn profile(region: &str, product: &'static str, block: usize) -> GameDefinition {
@@ -222,6 +203,7 @@ fn profile(region: &str, product: &'static str, block: usize) -> GameDefinition 
         region,
         product,
         block,
+        1,
         fields(base),
     );
     integrity(&mut game, base);
