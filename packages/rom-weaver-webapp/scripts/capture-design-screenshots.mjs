@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import avifEncode, { init as initAvif } from "@jsquash/avif/encode.js";
 import { chromium } from "playwright";
 import { createFirstSampleAssets } from "./first-sample-assets.mjs";
-import { createAvifEncoderPool, defaultWorkerCount, runMagick } from "./capture-image-encoders.mjs";
+import { decodeRgba } from "./optimize-png.mjs";
 import { SCREENSHOT_DIR, syncDocsScreenshotSizes } from "./sync-docs-screenshot-sizes.mjs";
 import {
   DOCS_SCREENSHOT_CASES,
@@ -149,136 +150,102 @@ const prepareScreenshot = async (page, name) => {
   }
 };
 
-const captureConcurrency = () => {
-  const requested = Number(process.env.ROM_WEAVER_SCREENSHOT_CONCURRENCY);
-  return Number.isInteger(requested) && requested > 0 ? requested : defaultWorkerCount();
-};
-
-const captureTasks = () =>
-  DOCS_SCREENSHOT_VIEWPORTS.flatMap((viewport) =>
-    DOCS_SCREENSHOT_THEMES.flatMap((theme) => CAPTURE_CASES.map((captureCase) => ({ captureCase, theme, viewport }))),
-  );
-
-// Crops and encodes one screenshot. Runs beside later page captures: the crop and
-// WebP encode are child processes and AVIF encodes in a worker thread.
-const writeImages = async ({ avifPool, crop, outputName, shot }) => {
-  const cropped = await runMagick(
-    IMAGE_MAGICK,
-    ["png:-", ...(crop ? ["-crop", crop, "+repage"] : []), "-depth", "8", "PNG24:-"],
-    shot,
-  );
-  await Promise.all(
-    DOCS_SCREENSHOT_FORMATS.map(async ({ extension }) => {
-      const image =
-        extension === "avif"
-          ? await avifPool.encode(cropped, 80)
-          : await runMagick(
-              IMAGE_MAGICK,
-              ["png:-", "-define", "webp:lossless=true", "-define", "webp:method=6", "webp:-"],
-              cropped,
-            );
-      if (!image.length) throw new Error(`Screenshot encoder returned no ${extension} data for ${outputName}`);
-      fs.writeFileSync(path.join(OUTPUT_DIR, `${outputName}.${extension}`), image);
-    }),
-  );
-};
-
-const captureOne = async ({ avifPool, browser, captureCase, pendingWrites, theme, viewport }) => {
-  const context = await browser.newContext({
-    colorScheme: theme,
-    deviceScaleFactor: viewport.deviceScaleFactor,
-    hasTouch: viewport.hasTouch,
-    ignoreHTTPSErrors: true,
-    isMobile: viewport.isMobile,
-    viewport: viewport.viewport,
-  });
-  const page = await context.newPage();
-  const outputName = `${captureCase.name}-${viewport.name}-${theme}`;
-  const startedAt = performance.now();
-  const diagnostics = [];
-  const recordDiagnostic = (message) => {
-    diagnostics.push(message.slice(0, 1000));
-    if (diagnostics.length > 20) diagnostics.shift();
-  };
-  page.on("pageerror", (error) => recordDiagnostic(`Page error: ${error.message}`));
-  page.on("console", (message) => {
-    if (message.type() === "error") recordDiagnostic(`Console error: ${message.text()}`);
-  });
-  console.log(`Capturing ${outputName}: ${pageUrl(captureCase.route)}`);
-  try {
-    await page.goto(pageUrl(captureCase.route), { waitUntil: "domcontentloaded" });
-    await waitForDocsScreenshotReady(page, captureCase);
-    if (captureCase.dismissGuide) {
-      const exitGuide = page.getByRole("button", { name: "Leave the guide", exact: true });
-      await exitGuide.evaluate((button) => button.click());
-      await exitGuide.waitFor({ state: "detached" });
-    }
-    await prepareScreenshot(page, captureCase.name);
-    await waitForStableContent(page, captureCase);
-    await assertNoDevBadge(page);
-    await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
-    if (!captureCase.fullScreen) {
-      await page.locator(".dock").evaluate((element) => {
-        element.style.visibility = "hidden";
-      });
-    }
-    const { crop, shot } = captureCase.fullScreen
-      ? await captureScreen(page)
-      : await captureRegion(page, captureCase.target);
-    pendingWrites.push(
-      writeImages({ avifPool, crop, outputName, shot }).then(() => {
-        console.log(
-          `Captured ${path.relative(PACKAGE_DIR, path.join(OUTPUT_DIR, outputName))}.{${CAPTURE_EXTENSION_LIST}} in ${Math.round(performance.now() - startedAt)}ms`,
-        );
-      }),
-    );
-  } catch (error) {
-    const failurePath = path.join(OUTPUT_DIR, `${outputName}-failure.png`);
-    const results = await Promise.allSettled([
-      page.screenshot({ path: failurePath, animations: "disabled", timeout: 5000 }),
-      page.locator("body").innerText({ timeout: 2000 }),
-    ]);
-    const [screenshot, body] = results;
-    process.stderr.write(
-      `Capture failed: ${outputName} after ${Math.round(performance.now() - startedAt)}ms\n` +
-        `URL: ${page.url()}\nTarget: ${captureCase.target}\n` +
-        `Screenshot: ${screenshot.status === "fulfilled" ? failurePath : String(screenshot.reason).slice(0, 1000)}\n` +
-        `Body: ${body.status === "fulfilled" ? body.value.slice(0, 4000) : String(body.reason).slice(0, 1000)}\n` +
-        `${diagnostics.join("\n")}\n`,
-    );
-    throw error;
-  } finally {
-    await context.close();
-  }
-};
-
 const capture = async () => {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  await initAvif(
+    await WebAssembly.compile(
+      fs.readFileSync(path.join(PACKAGE_DIR, "node_modules/@jsquash/avif/codec/enc/avif_enc.wasm")),
+    ),
+  );
   const launchOptions = process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
   const browser = await chromium.launch({ ...launchOptions, headless: true, args: ["--mute-audio"] });
-  const avifPool = createAvifEncoderPool();
   try {
-    // Every capture owns its browser context, so cases run side by side; the first
-    // failure stops new cases and is reported once the running ones settle.
-    const tasks = captureTasks();
-    const pendingWrites = [];
-    let failure;
-    const runSlot = async () => {
-      while (!failure && tasks.length) {
-        try {
-          await captureOne({ ...tasks.shift(), avifPool, browser, pendingWrites });
-        } catch (error) {
-          failure ??= { error };
+    for (const viewport of DOCS_SCREENSHOT_VIEWPORTS) {
+      for (const theme of DOCS_SCREENSHOT_THEMES) {
+        for (const captureCase of CAPTURE_CASES) {
+          const context = await browser.newContext({
+            colorScheme: theme,
+            deviceScaleFactor: viewport.deviceScaleFactor,
+            hasTouch: viewport.hasTouch,
+            ignoreHTTPSErrors: true,
+            isMobile: viewport.isMobile,
+            viewport: viewport.viewport,
+          });
+          const page = await context.newPage();
+          const outputName = `${captureCase.name}-${viewport.name}-${theme}`;
+          const startedAt = performance.now();
+          const diagnostics = [];
+          const recordDiagnostic = (message) => {
+            diagnostics.push(message.slice(0, 1000));
+            if (diagnostics.length > 20) diagnostics.shift();
+          };
+          page.on("pageerror", (error) => recordDiagnostic(`Page error: ${error.message}`));
+          page.on("console", (message) => {
+            if (message.type() === "error") recordDiagnostic(`Console error: ${message.text()}`);
+          });
+          console.log(`Capturing ${outputName}: ${pageUrl(captureCase.route)}`);
+          try {
+            await page.goto(pageUrl(captureCase.route), { waitUntil: "domcontentloaded" });
+            await waitForDocsScreenshotReady(page, captureCase);
+            if (captureCase.dismissGuide) {
+              const exitGuide = page.getByRole("button", { name: "Leave the guide", exact: true });
+              await exitGuide.evaluate((button) => button.click());
+              await exitGuide.waitFor({ state: "detached" });
+            }
+            await prepareScreenshot(page, captureCase.name);
+            await waitForStableContent(page, captureCase);
+            await assertNoDevBadge(page);
+            await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
+            if (!captureCase.fullScreen) {
+              await page.locator(".dock").evaluate((element) => {
+                element.style.visibility = "hidden";
+              });
+            }
+            const { crop, shot } = captureCase.fullScreen
+              ? await captureScreen(page)
+              : await captureRegion(page, captureCase.target);
+            const cropped = execFileSync(
+              IMAGE_MAGICK,
+              ["png:-", ...(crop ? ["-crop", crop, "+repage"] : []), "-depth", "8", "PNG24:-"],
+              { input: shot, maxBuffer: 64 * 1024 * 1024 },
+            );
+            for (const { extension } of DOCS_SCREENSHOT_FORMATS) {
+              const image =
+                extension === "avif"
+                  ? Buffer.from(await avifEncode(decodeRgba(cropped), { quality: 80 }))
+                  : execFileSync(
+                      IMAGE_MAGICK,
+                      ["png:-", "-define", "webp:lossless=true", "-define", "webp:method=6", "webp:-"],
+                      { input: cropped, maxBuffer: 64 * 1024 * 1024 },
+                    );
+              if (!image.length) throw new Error(`Screenshot encoder returned no ${extension} data for ${outputName}`);
+              fs.writeFileSync(path.join(OUTPUT_DIR, `${outputName}.${extension}`), image);
+            }
+            console.log(
+              `Captured ${path.relative(PACKAGE_DIR, path.join(OUTPUT_DIR, outputName))}.{${CAPTURE_EXTENSION_LIST}} in ${Math.round(performance.now() - startedAt)}ms`,
+            );
+          } catch (error) {
+            const failurePath = path.join(OUTPUT_DIR, `${outputName}-failure.png`);
+            const results = await Promise.allSettled([
+              page.screenshot({ path: failurePath, animations: "disabled", timeout: 5000 }),
+              page.locator("body").innerText({ timeout: 2000 }),
+            ]);
+            const [screenshot, body] = results;
+            process.stderr.write(
+              `Capture failed: ${outputName} after ${Math.round(performance.now() - startedAt)}ms\n` +
+                `URL: ${page.url()}\nTarget: ${captureCase.target}\n` +
+                `Screenshot: ${screenshot.status === "fulfilled" ? failurePath : String(screenshot.reason).slice(0, 1000)}\n` +
+                `Body: ${body.status === "fulfilled" ? body.value.slice(0, 4000) : String(body.reason).slice(0, 1000)}\n` +
+                `${diagnostics.join("\n")}\n`,
+            );
+            throw error;
+          } finally {
+            await context.close();
+          }
         }
       }
-    };
-    await Promise.all(Array.from({ length: Math.min(captureConcurrency(), tasks.length) }, runSlot));
-    const writes = await Promise.allSettled(pendingWrites);
-    const writeFailure = writes.find((write) => write.status === "rejected");
-    if (failure) throw failure.error;
-    if (writeFailure) throw writeFailure.reason;
+    }
   } finally {
-    await avifPool.close();
     await browser.close();
   }
 };
