@@ -178,11 +178,13 @@ const createScope = ({
   hasActiveWorker = false,
   href = SW_HREF,
   manifest = DEFAULT_MANIFEST,
+  scope = APP_SCOPE,
   unparsableHref = false,
 }: {
   hasActiveWorker?: boolean;
   href?: string;
   manifest?: PrecacheManifestEntry[];
+  scope?: string;
   unparsableHref?: boolean;
 } = {}) => {
   const listeners = new Map<string, Array<(event: SwEvent) => void>>();
@@ -210,7 +212,7 @@ const createScope = ({
     performance: globalThis.performance,
     registration: {
       active: hasActiveWorker ? { scriptURL: href } : null,
-      scope: APP_SCOPE,
+      scope,
       update: vi.fn(async () => undefined),
     },
     skipWaiting: vi.fn(async () => undefined),
@@ -315,6 +317,7 @@ const loadWorker = async (
     manifest?: PrecacheManifestEntry[];
     omitRedirectList?: boolean;
     redirectSourcePaths?: string[];
+    scope?: string;
     seedCaches?: (cacheStorage: FakeCacheStorage) => Promise<void> | void;
     unparsableHref?: boolean;
   } = {},
@@ -796,6 +799,25 @@ describe("network-first handler", () => {
     const response = await routed(harness, harness.networkFirstRoute, asDocumentRequest(`${APP_ORIGIN}/nope`));
 
     await expect(response.text()).resolves.toBe("missing");
+  });
+
+  it("re-roots the precached 404 document on a sub-path scope", async () => {
+    const harness = await loadWorker({ scope: `${APP_ORIGIN}/rom-weaver/` });
+    const html =
+      '<base href="/" /><a href="/apply-rom-patches">Apply</a><a href="//cdn.test/x">CDN</a><img src="./logo.svg">';
+    setPrecache({
+      "404.html": () => new Response(html, { headers: { "content-length": String(html.length) }, status: 200 }),
+    });
+
+    const response = await routed(
+      harness,
+      harness.networkFirstRoute,
+      asDocumentRequest(`${APP_ORIGIN}/rom-weaver/nope`),
+    );
+
+    await expect(response.text()).resolves.toBe(
+      '<base href="/rom-weaver/" /><a href="/rom-weaver/apply-rom-patches">Apply</a><a href="//cdn.test/x">CDN</a><img src="./logo.svg">',
+    );
   });
 
   it("falls back to the scope root when every other precache lookup misses", async () => {

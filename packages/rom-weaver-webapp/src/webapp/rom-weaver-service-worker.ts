@@ -539,6 +539,18 @@ const matchRouteDocument = async (url: URL) => {
   return undefined;
 };
 
+// The build stamps 404.html with `<base href="/">` and root-relative links, and a reverse proxy strips
+// a sub-path before the server sees it. Re-root the cached copy on this worker's scope, as the Docker
+// image does for the 404 page it serves (BASE_PATH), so an offline unknown route under a sub-path still
+// loads its assets and keeps its links inside the prefix.
+const rerootNotFoundDocument = async (response: Response | undefined) => {
+  if (!response || response.status === 0 || APP_BASE_PATH === "/") return response;
+  const html = (await response.clone().text()).replace(/href="\/(?!\/)/g, `href="${APP_BASE_PATH}`);
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  return new Response(html, { headers, status: response.status, statusText: response.statusText });
+};
+
 const matchCachedResponse = async (request: Request, url: URL) => {
   const credentialless = await ensureCoepModeHydrated();
   const cachedResponse = await caches.match(request);
@@ -549,7 +561,10 @@ const matchCachedResponse = async (request: Request, url: URL) => {
   }
   if (isHtmlRequest(request, url)) {
     const routeDocument = await matchRouteDocument(url);
-    const fallbackDocument = url.pathname === "/" ? await matchPrecache("index.html") : await matchPrecache("404.html");
+    const fallbackDocument =
+      url.pathname === "/"
+        ? await matchPrecache("index.html")
+        : await rerootNotFoundDocument(await matchPrecache("404.html"));
     const html = routeDocument || fallbackDocument || (await matchPrecache("index.html")) || (await matchPrecache("/"));
     return withCrossOriginIsolationHeaders(html, credentialless) || html;
   }
