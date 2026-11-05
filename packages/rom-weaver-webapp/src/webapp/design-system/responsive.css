@@ -225,9 +225,6 @@
     flex: none;
     min-height: 44px;
   }
-  .rw-app .log-dlg .logview .seg-btn {
-    height: 38px;
-  }
   .rw-app .log-dlg .loglevel {
     flex: 1 1 auto;
     min-width: 0;

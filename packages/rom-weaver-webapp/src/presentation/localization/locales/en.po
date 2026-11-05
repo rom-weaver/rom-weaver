@@ -1286,7 +1286,7 @@ msgstr "Choose one ROM to patch."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.body"
-msgstr "Choose Patches & cheats in step 0x03 to build from ordered changes. Modified ROM is the default; switching modes keeps your inputs."
+msgstr "Choose Patches & cheats above the file picker to build from ordered changes. Modified ROM is the default; switching modes keeps your inputs."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

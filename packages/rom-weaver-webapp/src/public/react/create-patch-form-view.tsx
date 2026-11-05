@@ -57,6 +57,7 @@ const CreatePatchFormView = ({
     <section className="panel" id="patch-builder-container">
       <UnifiedDropZone
         {...dropZone}
+        beforeDropZone={sourceModeControls}
         heading={active !== false}
         lead={{
           line1: "ui.hero.createThesis",
@@ -64,16 +65,13 @@ const CreatePatchFormView = ({
         }}
       />
       {sourcesEmpty ? (
-        <>
-          {sourceModeControls}
-          <GhostSteps
-            steps={[
-              { num: "0x02", title: localizer.message("ui.step.original") },
-              { num: "0x03", title: localizer.message("ui.step.modified") },
-              { num: "0x04", title: localizer.message("ui.step.output") },
-            ]}
-          />
-        </>
+        <GhostSteps
+          steps={[
+            { num: "0x02", title: localizer.message("ui.step.original") },
+            { num: "0x03", title: localizer.message("ui.step.modified") },
+            { num: "0x04", title: localizer.message("ui.step.output") },
+          ]}
+        />
       ) : (
         <>
           <WorkflowRomInputStep {...originalStep} />
