@@ -1,0 +1,212 @@
+#!/usr/bin/env node
+
+// Keeps one tracking issue in step with the scheduled CI run: a failing nightly opens it or comments
+// on the open one, and a passing nightly comments "recovered" and closes it. The workflow runs this
+// only on the `schedule` event, after the gate.
+//
+// Required env:
+//   GH_TOKEN            token with issues:write and actions:read
+//   GITHUB_REPOSITORY   owner/repo
+//   GITHUB_RUN_ID       the nightly run
+//   GITHUB_SHA          the commit it tested
+//   NEEDS_JSON          the `needs` context of the alert job as JSON; each entry has a `result`
+
+import process from "node:process";
+import { pathToFileURL } from "node:url";
+
+import { createGitHubApi } from "./github-api.mjs";
+
+// The title and author are the lookup key: they work before the label exists, and the label is only
+// a convenience for filtering. Never retitle the issue without changing this.
+export const ALERT_TITLE = "Nightly CI is failing on main";
+export const ALERT_AUTHOR = "github-actions[bot]";
+export const ALERT_LABEL = "nightly-ci-failure";
+const WORKFLOW_FILE = "ci.yml";
+const LABEL_COLOR = "d73a4a";
+const LABEL_DESCRIPTION = "Opened and closed by the scheduled CI run";
+
+// The job that runs this script is still in progress while it reads the run's jobs, and the gate
+// only reports the failures of the jobs it waits on, which the list already names.
+const UNLISTED_JOBS = new Set(["Nightly alert", "CI gate"]);
+
+const FAILED_CONCLUSIONS = new Set(["failure", "timed_out"]);
+
+// `failing` when any job the alert waits on failed, `recovered` when all of them passed or were
+// skipped, and `unknown` for a cancelled run, which says nothing about the code.
+export function nightlyOutcome(needs) {
+  const results = Object.values(needs).map((need) => need.result);
+  if (results.length === 0) throw new Error("the alert job has no needs to judge");
+  if (results.includes("failure")) return "failing";
+  if (results.every((result) => result === "success" || result === "skipped")) return "recovered";
+  return "unknown";
+}
+
+export function failedJobNames(jobs) {
+  return jobs
+    .filter((job) => FAILED_CONCLUSIONS.has(job.conclusion) && !UNLISTED_JOBS.has(job.name))
+    .map((job) => job.name);
+}
+
+function runLine({ runUrl, sha, repoUrl }) {
+  return `Run: ${runUrl}\nCommit: [\`${sha.slice(0, 12)}\`](${repoUrl}/commit/${sha})`;
+}
+
+export function failureText({ runUrl, sha, repoUrl, failed }) {
+  const jobs = failed.length === 0 ? "none reported" : failed.map((name) => `- ${name}`).join("\n");
+  return `${runLine({ runUrl, sha, repoUrl })}\n\nFailed jobs (advisory jobs that do not fail the run may appear; jobs still running do not):\n${jobs}`;
+}
+
+export function openingText(run) {
+  return `The scheduled CI run failed. Later failing nightlies comment here; the issue closes when a nightly passes.\n\n${failureText(run)}`;
+}
+
+export function recoveryText(run) {
+  return `Recovered: the scheduled CI run passed.\n\n${runLine(run)}`;
+}
+
+// A run's jobs are not a bare array, so the `paginate` helper cannot read them. The total is the
+// only reliable page count; a short page is not proof of the last one.
+export async function listRunJobs({ api, repo, runId }) {
+  const jobs = [];
+  for (let page = 1; ; page += 1) {
+    const response = await api(`/repos/${repo}/actions/runs/${runId}/jobs?per_page=100&page=${page}`);
+    jobs.push(...response.jobs);
+    if (response.jobs.length === 0 || jobs.length >= response.total_count) return jobs;
+  }
+}
+
+// The job names only add detail, so a failed lookup must not keep a red nightly from being reported.
+export async function failedJobsOrNone({ api, repo, runId, warn }) {
+  try {
+    return failedJobNames(await listRunJobs({ api, repo, runId }));
+  } catch (error) {
+    warn(`listing the run's jobs failed; reporting without them: ${error.message}`);
+    return [];
+  }
+}
+
+// A re-run of an older scheduled run keeps the `schedule` event, so without this a passing re-run of
+// last week's nightly would close the issue while today's is still red. A re-attempt of the newest
+// run keeps its id and still counts.
+export async function newestNightlyId({ api, repo, branch }) {
+  const response = await api(
+    `/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/runs?event=schedule&branch=${encodeURIComponent(branch)}&per_page=1`,
+  );
+  return response.workflow_runs[0]?.id;
+}
+
+// Returns the line the job logs. A failed stale-run lookup stops a recovery, because a wrong close
+// is the harmful direction, but never stops a failure from being reported.
+export async function runAlert({ env, api, paginate, warn, notice }) {
+  const { GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: runId, GITHUB_SHA: sha, NEEDS_JSON } = env;
+  const repoUrl = `${env.GITHUB_SERVER_URL ?? "https://github.com"}/${repo}`;
+  const outcome = nightlyOutcome(JSON.parse(NEEDS_JSON));
+  if (outcome !== "unknown") {
+    let newest;
+    try {
+      newest = await newestNightlyId({ api, repo, branch: env.GITHUB_REF_NAME ?? "main" });
+    } catch (error) {
+      if (outcome === "recovered") throw error;
+      warn(`finding the newest scheduled run failed; reporting this one: ${error.message}`);
+      newest = runId;
+    }
+    if (String(newest) !== String(runId)) {
+      notice(`run ${runId} is not the newest scheduled run (${newest ?? "none listed"}); nothing to do`);
+      return `nightly ${outcome}: a newer scheduled run exists; nothing to do`;
+    }
+  }
+  const failed = outcome === "failing" ? await failedJobsOrNone({ api, repo, runId, warn }) : [];
+  const summary = await reconcile({
+    api,
+    paginate,
+    repo,
+    outcome,
+    run: { runUrl: `${repoUrl}/actions/runs/${runId}`, sha, repoUrl },
+    failed,
+    warn,
+  });
+  return `nightly ${outcome}: ${summary}`;
+}
+
+// Oldest first, so a stray duplicate never displaces the issue the alerts were already using. The
+// issues endpoint also returns pull requests. The label is not a match: a person can put it on any
+// issue. Neither is a person's issue with the same title: a passing nightly would close it.
+export async function findAlertIssues({ paginate, repo }) {
+  const open = await paginate(`/repos/${repo}/issues?state=open`);
+  return open
+    .filter((issue) => !issue.pull_request && issue.title === ALERT_TITLE && issue.user?.login === ALERT_AUTHOR)
+    .toSorted((left, right) => left.number - right.number);
+}
+
+// Best effort: a missing label never stops the alert, because the title finds the issue anyway.
+async function ensureLabel({ api, repo, warn }) {
+  try {
+    const existing = await api(`/repos/${repo}/labels/${encodeURIComponent(ALERT_LABEL)}`, {
+      allow404: true,
+    });
+    if (existing) return true;
+    await api(`/repos/${repo}/labels`, {
+      method: "POST",
+      body: { name: ALERT_LABEL, color: LABEL_COLOR, description: LABEL_DESCRIPTION },
+    });
+    return true;
+  } catch (error) {
+    warn(`creating the ${ALERT_LABEL} label failed; the issue is found by title: ${error.message}`);
+    return false;
+  }
+}
+
+const comment = (api, repo, issue, body) =>
+  api(`/repos/${repo}/issues/${issue.number}/comments`, { method: "POST", body: { body } });
+
+export async function reconcile({ api, paginate, repo, outcome, run, failed, warn = () => {} }) {
+  if (outcome === "unknown") return "the run was neither clearly failing nor passing; nothing to do";
+  const [tracking, ...duplicates] = await findAlertIssues({ paginate, repo });
+
+  if (outcome === "recovered") {
+    for (const issue of [tracking, ...duplicates].filter(Boolean)) {
+      await comment(api, repo, issue, recoveryText(run));
+      await api(`/repos/${repo}/issues/${issue.number}`, {
+        method: "PATCH",
+        body: { state: "closed", state_reason: "completed" },
+      });
+    }
+    return tracking ? `closed #${tracking.number}` : "passing, and no tracking issue is open";
+  }
+
+  if (!tracking) {
+    const labelled = await ensureLabel({ api, repo, warn });
+    const created = await api(`/repos/${repo}/issues`, {
+      method: "POST",
+      body: {
+        title: ALERT_TITLE,
+        body: openingText({ ...run, failed }),
+        labels: labelled ? [ALERT_LABEL] : [],
+      },
+    });
+    return `opened #${created.number}`;
+  }
+
+  await comment(api, repo, tracking, failureText({ ...run, failed }));
+  for (const duplicate of duplicates) {
+    await comment(api, repo, duplicate, `Duplicate of #${tracking.number}.`);
+    await api(`/repos/${repo}/issues/${duplicate.number}`, {
+      method: "PATCH",
+      body: { state: "closed", state_reason: "not_planned" },
+    });
+  }
+  return `commented on #${tracking.number}`;
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const apiUrl = process.env.GITHUB_API_URL ?? "https://api.github.com";
+  const { api, paginate } = createGitHubApi({ token: process.env.GH_TOKEN, apiUrl, name: "nightly-alert" });
+  const line = await runAlert({
+    env: process.env,
+    api,
+    paginate,
+    warn: (message) => process.stdout.write(`::warning::${message}\n`),
+    notice: (message) => process.stdout.write(`::notice::${message}\n`),
+  });
+  process.stdout.write(`${line}\n`);
+}

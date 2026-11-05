@@ -24,6 +24,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
   - [`scripts/ci/classify-changes.mjs`](#scriptsciclassify-changesmjs)
   - [`scripts/ci/resolve-wasm-run.mjs`](#scriptsciresolve-wasm-runmjs)
   - [`scripts/ci/rerun-infra-failures.mjs`](#scriptscirerun-infra-failuresmjs)
+  - [`scripts/ci/nightly-alert.mjs`](#scriptscinightly-alertmjs)
   - [`scripts/ci/npm-publish-package.mjs`](#scriptscinpm-publish-packagemjs)
 - [Release fan-out](#release-fan-out)
   - [Containers reuse what the fan-out already built](#containers-reuse-what-the-fan-out-already-built)
@@ -51,7 +52,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
 | `dependabot-auto-merge.yml` | Dependabot PR open/reopen/sync | No | Arm native squash auto-merge for patch and minor updates after required checks pass |
 | `codeql.yml` | nightly (05:27 UTC), release PR, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
-| `parity.yml` | nightly 07:13 UTC, release PR, manual | No | Byte parity against live chdman, dolphin-tool, 7-Zip, and Info-ZIP, with an exact cached CLI; then that CLI's command timings against the latest release ([Performance regressions](performance.md#performance-regressions)) |
+| `parity.yml` | nightly 07:13 UTC, release PR, manual | No | Byte parity against live chdman, dolphin-tool, 7-Zip, and Info-ZIP, with a CLI cached on every build input but the workspace version; then that CLI's command timings against the latest release ([Performance regressions](performance.md#performance-regressions)) |
 | `quality-deep.yml` | weekly Monday 07:17 UTC, manual | No | Mutation shard, long fuzzing, sanitizers, Miri, Kani, property checks, and browser lifecycle/resource checks |
 | `e2e-nightly.yml` | manual | No | Exhaustive browser E2E, service-worker checks, and published-install smoke tests |
 | `cache-cleanup.yml` | completed main-push CI, daily 03:17 UTC fallback, manual | No | Remove closed-PR and superseded Actions caches |
@@ -166,6 +167,7 @@ security ── advisories (warn only, always green)
 | `webapp-static`, `webapp-browser`, `webapp-wasm-browser`, `webapp-e2e`, `webapp-webkit-e2e` | Webapp lint, unit, browser, and E2E suites on the prebuilt module | `CI gate` |
 | `deploy`, `deploy-preview-fast` | Cloudflare Pages deployments | not required |
 | `gate` | Asserts every gating job against its selection flag; reports `CI gate` | branch protection |
+| `nightly-alert` | Opens, updates, or closes the one nightly tracking issue; runs on the `schedule` event only | not required |
 
 - **`changes`** classifies the pull request or push diff once. It also plans the Docker and deployment matrices; deployment planning is a non-gating step on this runner.
   - Rust and vendored C changes select Rust, webapp integration, and the direct WASM browser suite. Rust test, bench, and example sources select the Rust jobs alone, because they enter neither the WASM module nor the release binary. JSON case tables directly in a crate's `tests/fixtures/` also select `webapp-static`, whose unit tests read them, but not `webapp-browser` or `webapp-webkit-e2e`.
@@ -504,6 +506,17 @@ The workflow runs only for the first attempt of a same-repository run that concl
 
 A step that dies to a network timeout inside a job, such as `apt-get`, leaves no runner annotation. `scripts/ci/install-system-dependencies.mjs` retries those itself. A failed Release run is rerun by hand through [`release-retry.yml`](#the-workflows-at-a-glance).
 
+### `scripts/ci/nightly-alert.mjs`
+
+Keeps one tracking issue titled `Nightly CI is failing on main` in step with the scheduled `ci.yml` run, so a red nightly is seen without anyone opening the Actions tab. The `nightly-alert` job runs after `gate` and exists only on the `schedule` event: pull requests, pushes, and manual runs start no runner for it. `security` only warns, and `deploy` and `quality-analysis` are `continue-on-error`, so none of them fails the run or raises the alert. `parity.yml` is a separate scheduled workflow and does not raise it either. The job holds `issues: write` for itself alone; the workflow default stays `contents: read`.
+
+- **A failing nightly** opens the issue when none is open. When one is open, it adds a comment instead: the run link, the commit, and the names of the failed jobs other than the gate, read from the run's job list. Advisory `continue-on-error` jobs can appear in that list, and jobs still running do not. If the job list cannot be read, the alert still goes out, without names.
+- **A passing nightly** comments `Recovered` on the open issue and closes it. A cancelled nightly changes nothing, and neither does a re-run of an older scheduled run: only the newest scheduled `ci.yml` run on the default branch acts. If that lookup fails, a failing run still reports and a passing run fails the job rather than close the issue.
+- **One open issue.** The script finds it by exact title and the `github-actions[bot]` author, and picks the oldest. A stray duplicate gets a pointer to the oldest and is closed. Pull requests and other issues, including a person's issue with the same title and ones someone gave the `nightly-ci-failure` label, are never touched.
+- **The label is optional.** The first alert creates `nightly-ci-failure` when it is missing and attaches it. If that fails, the issue is opened without a label and the title finds it on later nights. Do not retitle the issue by hand while it is open.
+
+The script runs against the REST API with the job's token, so it cannot be tried locally without one; `scripts/ci/nightly-alert.test.mjs` covers it against an in-memory issues API.
+
 ### `scripts/ci/npm-publish-package.mjs`
 
 Publishes one package idempotently. Eleven packages go out per release through three jobs that all need the same three rules: never fail because the version is already on the registry, route prereleases to the `beta` dist-tag, and treat "publish failed but the version is now present" as a concurrent run winning the race rather than an error.
@@ -652,7 +665,7 @@ The cleanup script warns above 9 GiB to leave space within a 10 GiB cache budget
 
 1. `save-if: github.ref == 'refs/heads/main'` on the cargo cache, so branch runs restore but never write. The compiler stores follow the same rule. Ccache has a `CCACHE_MAXSIZE=300M` default, with `1G` in the WASM job: the 300 MB store filled and evicted entries during rebuilds (269 misses, 15 hits, and 14 cleanups in run `37396852534`). The larger WASM store remains bounded; sccache has a `SCCACHE_CACHE_SIZE=1G` limit in the WASM job. Their keys end in the commit SHA, so the superseded-generation sweep below keeps only the newest compatible generation per ref.
 2. `cache-cleanup.yml` runs after CI completes on a push to `main`, with a daily scheduled fallback. It reads every cache page before deleting entries. It removes caches for closed or merged pull requests and older generations only where callers can restore a newer cache by prefix. Rust generations retain their environment hash; all groups retain their ref and cache-version boundaries. Exact-key caches, including finished WASM modules, node_modules, and SDKs, remain available to older branches. The job warns if usage remains above 9 GiB.
-3. `parity.yml` caches only its release CLI binary, keyed without restore prefixes over the Rust/C source and toolchain inputs, and saves only on `main`. The nightly check still installs and runs the current external tools.
+3. `parity.yml` caches only its release CLI binary and the NKit fixture writer built beside it, keyed without restore prefixes over the Rust/C source and toolchain inputs (`scripts/ci/parity-cli-key.mjs`), and saves only on `main`. The key ignores the workspace's own version in `Cargo.toml`, `crates/*/Cargo.toml`, and `Cargo.lock`, so a release pull request reuses the binary the nightly built from the same sources instead of rebuilding it (about 150 seconds). Any other manifest or source change misses. A restored binary reports the previous version; the CLI embeds `CARGO_PKG_VERSION` in `--version`, the xdelta application header, SARIF output, and the identify-data download URL, and neither `scripts/parity-check.mjs` nor `scripts/bench-compare.py` compares any of them (a test fails if either mentions a version). The nightly check still installs and runs the current external tools.
 
 The cleanup runs trusted default-branch code with Actions write permission. It never checks out the commit from the triggering CI run. It does not run on pull-request CI completion; the next main completion or daily fallback removes caches from closed fork and Dependabot pull requests.
 

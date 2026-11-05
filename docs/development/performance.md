@@ -63,7 +63,7 @@ Ratios compare wall time. "2× faster" means the reference tool took twice as lo
 
 ## Performance regressions
 
-The `perf` job in `parity.yml` runs `scripts/bench-compare.py` every night and on every release pull request update. It times the CLI that the parity job built against the latest release's `rom-weaver-linux-x64-gnu` binary, which the release built with the same `--release` profile and LZMA assembler. Both run on one runner, and each round runs both, alternating which goes first, so load that drifts during a case slows both alike.
+The `perf` job in `parity.yml` runs `scripts/bench-compare.py` every night and on every release pull request update. It times the CLI that the parity job built (or restored from cache) against the latest release's `rom-weaver-linux-x64-gnu` binary, which the release built with the same `--release` profile and LZMA assembler. Both run on one runner, and each round runs both, alternating which goes first, so load that drifts during a case slows both alike. The NKit fixture writer is built by the parity job beside the CLI, so the perf job installs no Rust toolchain.
 
 - **Cases.** RVZ and WIA extract of images that store NKit digests, RVZ and CHD compress, CHD and zip extract, checksum, and xdelta patch apply.
 - **Fixtures.** The script writes a 512 MiB GameCube ISO and a 256 MiB file, and builds the CHD, zip, and patch with the base binary. `rom-weaver compress` stores no NKit digests, so the NKit images come from `cargo run --release -p rom-weaver-containers --example nkit_fixture -- <dir>`, which writes them the way nodtool and NKit do. A slowdown in the extract-side NKit digest check showed only on images like these; no image rom-weaver made itself showed it.
