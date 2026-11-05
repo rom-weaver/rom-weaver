@@ -60,7 +60,7 @@ describe("withDocsBase", () => {
   // Both copies resolve ./assets/ to the app root wherever the app is served, so no
   // copy may carry a root-absolute base that would escape a sub-path deployment.
   it.each([
-    ["docs", false, null],
+    ["docs", false, "./"],
     ["docs", true, "../"],
     ["docs/faq", false, "../"],
     ["docs/faq", true, "../../"],

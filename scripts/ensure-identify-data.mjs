@@ -37,7 +37,8 @@ import { TITLE_INDEX_FORMAT } from "../packages/rom-weaver-webapp/src/lib/identi
 
 const scriptDir = resolve(fileURLToPath(new URL(".", import.meta.url)));
 const rootDir = resolve(scriptDir, "..");
-const defaultDataDir = join(rootDir, "crates", "rom-weaver-cli", "data", "identify", "v1");
+export const IDENTIFY_DATA_DIR = join("crates", "rom-weaver-cli", "data", "identify", "v1");
+const defaultDataDir = join(rootDir, IDENTIFY_DATA_DIR);
 const expectedPackNames = [
   ...new Set(
     [...Object.keys(LIBRETRO_PLATFORM_PATHS), ...Object.keys(OPENGOOD_STANDALONE_PLATFORMS)].map(
