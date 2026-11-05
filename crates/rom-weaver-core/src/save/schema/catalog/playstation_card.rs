@@ -86,14 +86,16 @@ pub(super) fn register_check(game: &mut GameDefinition, check: Check) {
         .push(check);
 }
 
-/// Recomputes a little-endian 16-bit checksum at `offset` after every edit.
+/// Recomputes a little-endian 16-bit checksum at `offset` after every edit for which
+/// `when` holds (always when `None`).
 pub(super) fn store_u16_checksum(
     game: &mut GameDefinition,
     offset: usize,
+    when: Option<Condition>,
     compute: impl Fn(&[u8]) -> u16 + Send + Sync + 'static,
 ) {
     game.runtime.after_edit.push(Store {
-        when: None,
+        when,
         destination: Scalar {
             offset,
             storage: Storage::U16Le,

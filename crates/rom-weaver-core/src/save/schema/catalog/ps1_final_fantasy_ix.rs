@@ -34,7 +34,7 @@ fn integrity(game: &mut GameDefinition, base: usize) {
         warning: None,
     };
     playstation_card::register_check(game, check);
-    playstation_card::store_u16_checksum(game, base + CRC_OFFSET, move |bytes| {
+    playstation_card::store_u16_checksum(game, base + CRC_OFFSET, None, move |bytes| {
         crc(&bytes[base + CRC_START..base + CRC_END])
     });
 }

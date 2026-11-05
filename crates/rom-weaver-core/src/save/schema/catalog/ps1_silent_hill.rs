@@ -1,7 +1,6 @@
 use super::playstation_card::{self, BLOCK_SIZE};
 use super::*;
-use rules::{Check, Condition, ReadValue, Scalar, Store};
-use tracing::trace;
+use rules::{Check, Condition};
 
 // The preview table, slot table, and their checksums MUST follow the pinned PS1 layout.
 // https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/silent-hill/saveEditor
@@ -59,24 +58,17 @@ fn integrity(game: &mut GameDefinition, base: usize) {
         warning: None,
     };
     playstation_card::register_check(game, check);
-    playstation_card::store_u16_checksum(game, base + PREVIEW_CHECKSUM, move |bytes| {
+    playstation_card::store_u16_checksum(game, base + PREVIEW_CHECKSUM, None, move |bytes| {
         xor_checksum(&bytes[base + PREVIEWS..base + PREVIEW_CHECKSUM])
     });
     for slot in 0..SLOTS {
         let range = slot_range(base, slot);
-        game.runtime.after_edit.push(Store {
-            when: Some(populated_condition(base, slot)),
-            destination: Scalar {
-                offset: range.end,
-                storage: Storage::U16Le,
-                mask: None,
-            },
-            value: ReadValue::new(move |bytes| {
-                let value = xor_checksum(&bytes[range.clone()]);
-                trace!(slot, value, "recomputed Silent Hill slot checksum");
-                Ok(i64::from(value))
-            }),
-        });
+        playstation_card::store_u16_checksum(
+            game,
+            range.end,
+            Some(populated_condition(base, slot)),
+            move |bytes| xor_checksum(&bytes[range.clone()]),
+        );
     }
 }
 

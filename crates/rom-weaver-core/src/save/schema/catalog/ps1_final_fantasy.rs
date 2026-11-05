@@ -49,7 +49,7 @@ fn integrity(
     };
     playstation_card::register_check(game, check);
     for offset in offsets {
-        playstation_card::store_u16_checksum(game, base + offset, move |bytes| {
+        playstation_card::store_u16_checksum(game, base + offset, None, move |bytes| {
             crc(&bytes[base + start..base + end], eight)
         });
     }
