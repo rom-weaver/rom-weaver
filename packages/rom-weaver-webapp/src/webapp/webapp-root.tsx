@@ -822,10 +822,14 @@ function WebappRoot({
         .then(async () => {
           if (generation !== routingGenerationRef.current) return;
           const dropped = await selected;
-          if (!dropped.length || generation !== routingGenerationRef.current) return;
+          if (generation !== routingGenerationRef.current) return;
           const routeVeil: typeof showDropRouting = (routing, holdMs) => {
             if (veiled) showDropRouting(routing, holdMs);
           };
+          if (!dropped.length) {
+            routeVeil(null);
+            return;
+          }
           // Save backups belong to no workflow. Saves & storage imports them once the rest of the drop is
           // routed, so two dialogs never open at once.
           const backups = dropped.filter((file) => isEmulatorSaveExportName(file.name));

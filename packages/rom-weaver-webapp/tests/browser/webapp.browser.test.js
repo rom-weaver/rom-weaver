@@ -369,18 +369,19 @@ test.each(["pick", "drop"])("Home names the workflow a %s selection opens", asyn
   }
 });
 
-// A dropped folder whose listing waits for `release`, standing in for a slow directory read.
+// A dropped folder holding `file` (empty without one) whose listing waits for `release`, standing in
+// for a slow directory read.
 const slowFolderDrop = (file) => {
   let release;
   const released = new Promise((resolve) => {
     release = resolve;
   });
   let listed = false;
-  const fileEntry = { file: (resolve) => resolve(file), isDirectory: false, isFile: true, name: file.name };
+  const fileEntry = file && { file: (resolve) => resolve(file), isDirectory: false, isFile: true, name: file.name };
   const folder = {
     createReader: () => ({
       readEntries: (resolve) => {
-        if (listed) resolve([]);
+        if (listed || !file) void released.then(() => resolve([]));
         else void released.then(() => resolve([fileEntry]));
         listed = true;
       },
@@ -405,6 +406,16 @@ test("a workflow says it is reading a slow page drop and clears once the files l
   expect(document.querySelector(".dropveil + [role=status]")?.textContent).toBe("Reading files…");
   release();
   await expect.poll(() => patchNames()).toEqual(["folder.ips"]);
+  await expect.poll(isDropRouting).toBe(false);
+});
+
+test.each(["home", "patcher"])("%s clears the reading veil when a dropped folder is empty", async (view) => {
+  mountWebappRoot({ initialView: view });
+  await expect.poll(() => document.querySelector(`#panel-${view}:not([hidden])`)).toBeTruthy();
+  const { event, release } = slowFolderDrop();
+  document.dispatchEvent(event);
+  await expect.poll(isDropRouting).toBe(true);
+  release();
   await expect.poll(isDropRouting).toBe(false);
 });
 
