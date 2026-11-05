@@ -1,5 +1,26 @@
 import { clonePatchFile, getPatchFileCleanup, replacePatchFileCleanup } from "../input/binary-service.ts";
 import type { InputAsset } from "../input/input-assets.ts";
+import { inheritSourceIdentificationPolicy } from "../input/input-identification-policy.ts";
+import { releasePreparedFile } from "./staged-source-cleanup.ts";
+
+/** Ad-hoc properties that preparation and ingest attach to a prepared file and `clonePatchFile` does not copy. */
+const PREPARED_FILE_STATE_KEYS = [
+  "checksumVariants",
+  "checksums",
+  "identification",
+  "identifyRetry",
+  "metadata",
+  "romType",
+  "_precomputedChecksumMs",
+] as const;
+
+const copyPreparedFileState = (from: object, to: object) => {
+  for (const key of PREPARED_FILE_STATE_KEYS) {
+    const value = (from as Record<string, unknown>)[key];
+    if (value !== undefined) (to as Record<string, unknown>)[key] = value;
+  }
+  inheritSourceIdentificationPolicy(from, to);
+};
 
 type SharedEntry = {
   /** Live holders per asset; an asset's prepared copy is cleaned up when its count reaches zero. */
@@ -32,7 +53,7 @@ class SharedInputPreparationCache {
     this.entries.set(source, byKey);
     const existing = byKey.get(key);
     if (existing) {
-      releaseAll(assets);
+      for (const asset of assets) releasePreparedFile(asset.file);
       return this.cloneForHolder(source, key, existing);
     }
     const entry: SharedEntry = { counts: assets.map(() => 0), masters: assets };
@@ -44,6 +65,7 @@ class SharedInputPreparationCache {
     return entry.masters.map((master, index) => {
       entry.counts[index] = (entry.counts[index] ?? 0) + 1;
       const file = clonePatchFile(master.file);
+      copyPreparedFileState(master.file, file);
       replacePatchFileCleanup(file, () => this.release(source, key, entry, index));
       return { ...master, ...(master.checksums ? { checksums: { ...master.checksums } } : {}), file };
     });
@@ -61,9 +83,5 @@ class SharedInputPreparationCache {
 }
 
 const isObject = (value: unknown): value is object => typeof value === "object" && value !== null;
-
-const releaseAll = (assets: InputAsset[]) => {
-  for (const asset of assets) void Promise.resolve(getPatchFileCleanup(asset.file)?.()).catch(() => undefined);
-};
 
 export { SharedInputPreparationCache };

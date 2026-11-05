@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { attachPatchFileCleanup, createOutputFile, getPatchFileCleanup } from "../../src/lib/input/binary-service.ts";
 import type { InputAsset } from "../../src/lib/input/input-assets.ts";
+import { shouldIdentifySource, skipSourceIdentification } from "../../src/lib/input/input-identification-policy.ts";
 import { SharedInputPreparationCache } from "../../src/lib/workflow/shared-input-preparation.ts";
 
 const createAssets = (names: string[], cleanups: Array<() => Promise<void> | void>, sidecar = false): InputAsset[] =>
@@ -48,6 +49,39 @@ describe("SharedInputPreparationCache", () => {
     expect(second[0]?.checksums).toEqual({ crc32: "00" });
     expect(second[0]).not.toBe(first[0]);
     expect(second[0]?.file).not.toBe(first[0]?.file);
+  });
+
+  it("keeps the metadata and precomputed state ingest attached to the prepared file", () => {
+    const cache = new SharedInputPreparationCache();
+    const source = {};
+    const assets = createAssets(["rom.bin"], [vi.fn(async () => undefined)]);
+    const prepared = (assets[0] as InputAsset).file as Record<string, unknown>;
+    const identification = { matches: [], status: "unavailable" };
+    const identifyRetry = Promise.resolve(true);
+    Object.assign(prepared, {
+      checksums: { crc32: "a", md5: "b", sha1: "c" },
+      checksumVariants: [{ label: "headerless" }],
+      identification,
+      identifyRetry,
+      metadata: { cueText: "FILE", format: "GD-ROM" },
+      romType: "gba",
+      _precomputedChecksumMs: 7,
+    });
+    skipSourceIdentification(prepared);
+
+    for (const held of [cache.adopt(source, "k", assets), cache.lease(source, "k") as InputAsset[]]) {
+      const file = (held[0] as InputAsset).file as Record<string, unknown>;
+      expect(file).toMatchObject({
+        checksums: { crc32: "a", md5: "b", sha1: "c" },
+        checksumVariants: [{ label: "headerless" }],
+        identification,
+        identifyRetry,
+        metadata: { cueText: "FILE", format: "GD-ROM" },
+        romType: "gba",
+        _precomputedChecksumMs: 7,
+      });
+      expect(shouldIdentifySource(file)).toBe(false);
+    }
   });
 
   it("does not lease an entry after any of its assets was fully released", async () => {
