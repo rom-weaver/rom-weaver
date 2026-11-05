@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { connect } from "node:tls";
 import { parseArgs } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -305,13 +306,88 @@ async function checkBrowser(origins) {
   }
 }
 
+function servedCertificateName(origin) {
+  const { hostname, port } = new URL(origin);
+  return new Promise((resolvePromise, reject) => {
+    const socket = connect({
+      host: hostname,
+      port: Number(port),
+      servername: "localhost",
+      rejectUnauthorized: false,
+    });
+    socket.once("secureConnect", () => {
+      resolvePromise(socket.getPeerCertificate().subject.CN);
+      socket.end();
+    });
+    socket.once("error", reject);
+  });
+}
+
+// Both documented certificate sources: the default /certs pair and named files. The
+// named pair gets its own CN, so serving the default pair instead fails the check.
+async function startMountedCertificates() {
+  const certs = join(scratch, "certs");
+  await mkdir(certs);
+  await chmod(certs, 0o777);
+  // Generated as the image's own user so the key is readable inside the container.
+  const certificate = (name, key, cert) =>
+    `openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=${name} -keyout /certs/${key} -out /certs/${cert} 2>/dev/null`;
+  docker(
+    "run",
+    "--rm",
+    "--entrypoint",
+    "sh",
+    "--mount",
+    `type=bind,source=${certs},target=/certs`,
+    values.image,
+    "-c",
+    `${certificate("rom-weaver-smoke-pair", "privkey.pem", "fullchain.pem")} && ${certificate("rom-weaver-smoke-named", "site.key", "site.crt")}`,
+  );
+  const mount = ["--mount", `type=bind,source=${certs},target=/certs,readonly`];
+  return {
+    pair: await start("tls-pair", values.image, ["--env", "HTTPS_PORT=8443", ...mount]),
+    named: await start("tls-named", values.image, [
+      "--env",
+      "HTTPS_PORT=8443",
+      "--env",
+      "HTTPS_CERT=/certs/site.crt",
+      "--env",
+      "HTTPS_KEY=/certs/site.key",
+      ...mount,
+    ]),
+  };
+}
+
+async function checkMountedCertificates({ pair, named }) {
+  assert.equal(await servedCertificateName(pair.origin), "rom-weaver-smoke-pair", pair.origin);
+  assert.equal(await servedCertificateName(named.origin), "rom-weaver-smoke-named", named.origin);
+  console.log("PASS mounted HTTPS certificates");
+}
+
 async function checkWebapp() {
   docker("network", "create", id);
   networkCreated = true;
   const web = await start("web", values.image);
   const tls = await start("tls", values.image, ["--env", "HTTPS_PORT=8443"]);
-  await Promise.all([healthy(web.container), healthy(tls.container)]);
+  // Started together so their health waits overlap instead of adding up.
+  const mounted = await startMountedCertificates();
+  await Promise.all(
+    [web, tls, mounted.pair, mounted.named].map(({ container }) => healthy(container)),
+  );
   assert.notEqual(docker("exec", web.container, "id", "-u"), "0");
+  // sws ignores unknown sws.toml keys with only this warning, so a misspelled
+  // option silently falls back to its default.
+  for (const container of [web.container, tls.container]) {
+    const logs = spawnSync("docker", ["logs", container], { encoding: "utf8" });
+    // Unreadable logs (a log driver without read support) would pass the check below.
+    assert.equal(logs.status, 0, `docker logs ${container} failed: ${logs.stderr}`);
+    assert.doesNotMatch(
+      logs.stdout + logs.stderr,
+      /unused configuration manifest key/,
+      "sws.toml has a key static-web-server does not recognize",
+    );
+  }
+  await checkMountedCertificates(mounted);
   for (const [vars, code] of [
     [["HTTPS_CERT=/missing"], 64],
     [["HTTPS_CERT=/missing", "HTTPS_KEY=/missing"], 66],
@@ -367,12 +443,17 @@ async function checkWebapp() {
     "/rom-weaver-weave-v2.schema.json",
     "/openapi.json",
     "/.well-known/api-catalog",
+    "/.vite/manifest.json",
   ]) {
     const response = await fetch(web.origin + path, { signal: AbortSignal.timeout(10_000) });
     assert.equal(response.status, 200, path);
     assert.equal(response.headers.get("cross-origin-embedder-policy"), "require-corp");
     assert.equal(response.headers.get("cross-origin-opener-policy"), "same-origin");
-    if (path.endsWith(".json")) await response.json();
+    // The SPA fallback also answers 200, so parse dotfile paths to prove the
+    // file itself was served.
+    if (path === "/.well-known/api-catalog")
+      assert.ok(Array.isArray((await response.json()).linkset), path);
+    else if (path.endsWith(".json")) await response.json();
     else await response.body?.cancel();
   }
   await checkBrowser([
