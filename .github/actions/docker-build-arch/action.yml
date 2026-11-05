@@ -38,6 +38,13 @@ inputs:
       Push the single-arch image by digest. A pull request leaves this false: a
       fork's token cannot write to the registry, and nothing consumes the image.
     default: "false"
+  export-oci:
+    description: >-
+      Write the single-arch image, with its provenance and SBOM attestations, to this OCI archive
+      path instead of pushing it, and stage its digest for `docker-manifest`. Nothing reaches a
+      registry from this leg; a later job pushes the archive by digest (skopeo copy --all
+      --preserve-digests keeps the digest this reports). Mutually exclusive with `push`.
+    default: ""
   cache-from:
     description: >-
       Import the image's per-arch buildcache ref. Off for a build that skips the
@@ -59,6 +66,9 @@ outputs:
   digest:
     description: Digest of the image this leg built. Empty unless `push` was set.
     value: ${{ steps.build.outputs.digest }}
+  archive-digest:
+    description: Digest of the image index inside the `export-oci` archive. Empty without `export-oci`.
+    value: ${{ steps.oci-digest.outputs.digest }}
 
 runs:
   using: composite
@@ -77,6 +87,7 @@ runs:
     # leg overwrite the other's layers every run, so neither would ever restore.
     - name: Build image
       id: build
+      if: inputs.export-oci == ''
       uses: docker/build-push-action@v7
       with:
         context: ${{ inputs.context }}
@@ -92,6 +103,37 @@ runs:
           || 'type=cacheonly' }}
         cache-from: ${{ inputs.cache-from == 'true' && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache-{2}', inputs.registry-owner, inputs.image, inputs.arch) || '' }}
         cache-to: ${{ inputs.cache-to == 'true' && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache-{2},mode=max', inputs.registry-owner, inputs.image, inputs.arch) || '' }}
+
+    # The same build as above, written to a file instead of a registry, with the attestations a push
+    # would carry. The archive holds one image index (the platform image plus its attestations), whose
+    # digest is the one a registry computes when the archive is pushed unchanged.
+    - name: Build image archive
+      id: archive
+      if: inputs.export-oci != ''
+      uses: docker/build-push-action@v7
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
+        build-args: ${{ inputs.build-args }}
+        labels: ${{ inputs.labels }}
+        platforms: linux/${{ inputs.arch }}
+        provenance: mode=max
+        sbom: true
+        outputs: type=oci,dest=${{ inputs.export-oci }}
+        cache-from: ${{ inputs.cache-from == 'true' && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache-{2}', inputs.registry-owner, inputs.image, inputs.arch) || '' }}
+        cache-to: ${{ inputs.cache-to == 'true' && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache-{2},mode=max', inputs.registry-owner, inputs.image, inputs.arch) || '' }}
+
+    - name: Read the archive digest
+      id: oci-digest
+      if: inputs.export-oci != ''
+      shell: bash
+      env:
+        ARCHIVE: ${{ inputs.export-oci }}
+      run: |
+        set -euo pipefail
+        digest=$(tar -xOf "$ARCHIVE" index.json | jq -er 'if (.manifests | length) == 1 then .manifests[0].digest else error("expected one manifest") end')
+        [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+        echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
     # The Docker exporter cannot carry attestations. A separate cached export
     # MUST keep the published digest and its attestations on the image exporter.
@@ -121,17 +163,17 @@ runs:
     # whichever leg finished last, so the two digests would overwrite each
     # other. The file name is the digest; its contents are never read.
     - name: Stage the digest
-      if: inputs.push == 'true'
+      if: inputs.push == 'true' || inputs.export-oci != ''
       shell: bash
       env:
-        DIGEST: ${{ steps.build.outputs.digest }}
+        DIGEST: ${{ steps.build.outputs.digest || steps.oci-digest.outputs.digest }}
       run: |
         set -euo pipefail
         mkdir -p "${{ github.workspace }}/.cache/agents/scratch/docker-sweep/digests"
         touch "${{ github.workspace }}/.cache/agents/scratch/docker-sweep/digests/${DIGEST#sha256:}"
 
     - name: Upload the digest
-      if: inputs.push == 'true'
+      if: inputs.push == 'true' || inputs.export-oci != ''
       uses: actions/upload-artifact@v7
       with:
         name: docker-digest-${{ inputs.image }}-${{ inputs.arch }}

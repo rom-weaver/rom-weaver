@@ -14,6 +14,14 @@ on:
           have moved past the released commit.
         required: true
         type: string
+      phase:
+        description: >-
+          `build` writes the four single-architecture images to OCI archives and pushes nothing, so
+          it can run before the release gates pass; `publish` pushes those archives and assembles the
+          manifest lists; `all` does both in order.
+        required: false
+        default: all
+        type: string
   workflow_dispatch:
     inputs:
       version:
@@ -22,26 +30,34 @@ on:
         type: string
 
 concurrency:
-  group: docker-publish-${{ inputs.version || github.ref_name }}
+  group: docker-publish-${{ inputs.version || github.ref_name }}-${{ inputs.phase || 'all' }}
   cancel-in-progress: false
 
+# Each job asks for what it needs: the build phase can run before the release gates pass, so it
+# holds no write access to the registry or the attestation store.
 permissions:
-  # Read the run artifacts the npm and static-webapp jobs published.
-  actions: read
-  artifact-metadata: write
-  attestations: write
   contents: read
-  id-token: write
-  packages: write
 
 jobs:
-  # Build each image architecture natively, then join tagless digests into one manifest list.
+  # Build each image architecture natively into an OCI archive, then (in `publish`) push the archives
+  # by digest and join them into one manifest list. Nothing here is pushed to a registry, so the
+  # release can run this beside the npm publish and still push only after every gate has passed.
   build:
     name: Build ${{ matrix.name }} image (${{ matrix.arch }})
+    if: inputs.phase != 'publish'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
+    permissions:
+      # Read the run artifacts the npm and static-webapp jobs published, and the layer cache.
+      actions: read
+      contents: read
+      packages: read
     strategy:
       fail-fast: false
+      # Two at a time keeps the release window at the 16 jobs it peaked at (the org runs at most 20)
+      # while the nine npm packages publish beside these. The webapp legs are the slow pair and the
+      # whole phase still ends before the npm publish does.
+      max-parallel: 2
       matrix:
         include:
           # `build_arg` selects the Dockerfile stage; `artifact` names its prebuilt input.
@@ -163,8 +179,10 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
           tags: type=semver,pattern={{version}},value=${{ steps.policy.outputs.version }}
 
-      # Keep source-build layers in the registry: release tag caches expire from Actions storage before reuse.
-      - name: Build and push image
+      # The archive keeps the image's provenance and SBOM attestations; the `publish` job pushes it
+      # unchanged, so the digest is the one recorded here. Registry cache export writes to the
+      # registry, so it is limited to a standalone dispatch (no `sha`), which has no gate to wait for.
+      - name: Build image archive
         uses: ./.github/actions/docker-build-arch
         with:
           image: ${{ matrix.image }}
@@ -176,15 +194,40 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           arch: ${{ matrix.arch }}
           registry-owner: ${{ github.repository_owner }}
-          push: "true"
+          export-oci: ${{ runner.temp }}/image.tar
           # Export only source-build layers so prebuilt COPY layers do not replace the useful cache.
-          cache-to: ${{ steps.source.outputs.value == 'source' }}
+          cache-to: ${{ steps.source.outputs.value == 'source' && inputs.sha == '' }}
+
+      # Layers are already compressed, so storing the archive uncompressed saves the CPU time.
+      - name: Upload image archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: docker-oci-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/image.tar
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+          # As long as the platform packages the npm publish retries from: a failed publish-containers
+          # rerun pushes these archives rather than rebuilding them.
+          retention-days: 7
 
   publish:
     name: Publish ${{ matrix.name }} image
+    # `build` is skipped when only this phase runs; a failed or cancelled build must still stop it.
+    if: >-
+      !cancelled() && inputs.phase != 'build' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: build
+    permissions:
+      # Read the image archives the build phase uploaded.
+      actions: read
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -226,6 +269,37 @@ jobs:
             type=raw,value=latest,enable=${{ steps.policy.outputs.release == 'true' }}
             type=raw,value=beta
             type=raw,value=nightly
+
+      - name: Download the image archives
+        uses: actions/download-artifact@v8
+        with:
+          pattern: docker-oci-${{ matrix.image }}-*
+          path: ${{ runner.temp }}/oci
+
+      # By digest, no tag: the same registry state `push-by-digest` produced when the build leg
+      # pushed directly. `--all --preserve-digests` copies the attestation manifests and keeps
+      # every digest, so the manifest list below joins exactly what each leg built.
+      - name: Push the image archives by digest
+        shell: bash
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          ARCHIVES: ${{ runner.temp }}/oci
+        run: |
+          set -euo pipefail
+          if ! command -v skopeo >/dev/null; then
+            APT_PACKAGES=skopeo node scripts/ci/install-system-dependencies.mjs
+          fi
+          count=0
+          for archive in "$ARCHIVES"/*/image.tar; do
+            digest=$(tar -xOf "$archive" index.json | jq -er 'if (.manifests | length) == 1 then .manifests[0].digest else error("expected one manifest") end')
+            skopeo copy --retry-times 3 --all --preserve-digests "oci-archive:$archive" "docker://$IMAGE@$digest"
+            # The registry hashes what it stored; anything but the archive's digest is a bad push.
+            test "sha256:$(skopeo inspect --raw "docker://$IMAGE@$digest" | sha256sum | cut -d ' ' -f 1)" = "$digest"
+            echo "pushed $IMAGE@$digest from ${archive#"$ARCHIVES"/}"
+            count=$((count + 1))
+          done
+          # A missing leg would otherwise publish a manifest list advertising one architecture.
+          test "$count" -eq 2
 
       - name: Assemble the manifest list
         id: manifest

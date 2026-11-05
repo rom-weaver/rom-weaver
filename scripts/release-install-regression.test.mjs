@@ -59,7 +59,9 @@ const PUBLISHES = [
   /--draft=false/,
   /git push/,
 ];
-const publishes = (body) => PUBLISHES.some((pattern) => pattern.test(body.replace(/^\s*#.*$/gm, "")));
+// The container build phase pushes nothing; only `phase: publish` calls docker-publish.yml to push.
+const publishes = (body) =>
+  PUBLISHES.some((pattern) => pattern.test(body.replace(/^\s*#.*$/gm, ""))) && !/^\s+phase: build$/m.test(body);
 
 test("every publishing release job requires semver success or the deliberate skip", () => {
   const jobs = jobsOf(release);
@@ -183,4 +185,28 @@ test("the semver plan lists every published workspace crate and refuses an empty
     { output: 'crates=["rom-weaver-a","rom-weaver-c"]\nskipped=false', status: 0 },
   );
   assert.notEqual(run([{ id: "b", name: "rom-weaver-b", version: "0.2.0", publish: [] }]).status, 0);
+});
+
+test("the container build overlaps the npm publish but pushes nothing", () => {
+  const jobs = jobsOf(release);
+  assert.match(jobs["build-containers"], /\n      phase: build\n/);
+  assert.match(jobs["publish-containers"], /\n      phase: publish\n/);
+  assert.match(jobs["publish-containers"], /needs: \[[^\]]*build-containers/);
+  assert.ok(flatten(jobs["publish-containers"]).includes("needs.build-containers.result == 'success'"));
+  // The build needs only the artifacts it consumes, never the publish or the semver gate.
+  assert.match(jobs["build-containers"], /needs: \[release, static-webapp, npm-build\]/);
+  assert.doesNotMatch(jobs["build-containers"].replace(/^\s*#.*$/gm, ""), /publish-npm|semver/);
+  assert.match(jobs["build-containers"], /packages: read/);
+  assert.doesNotMatch(jobs["build-containers"], /packages: write|id-token|attestations/);
+
+  const docker = workflow("docker-publish.yml");
+  const dockerJobs = jobsOf(docker);
+  const build = dockerJobs.build.replace(/^\s*#.*$/gm, "");
+  assert.match(build, /export-oci: /);
+  assert.doesNotMatch(build, /\n\s+push: |push-to-registry|packages: write|id-token|attestations/);
+  assert.match(build, /cache-to: \$\{\{ steps\.source\.outputs\.value == 'source' && inputs\.sha == '' \}\}/);
+  const pushAt = dockerJobs.publish.indexOf("skopeo copy");
+  assert.ok(pushAt > dockerJobs.publish.indexOf("Download the image archives"));
+  assert.ok(pushAt < dockerJobs.publish.indexOf("Assemble the manifest list"));
+  assert.match(dockerJobs.publish, /packages: write/);
 });

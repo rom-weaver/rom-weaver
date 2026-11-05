@@ -27,6 +27,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
   - [`scripts/ci/npm-publish-package.mjs`](#scriptscinpm-publish-packagemjs)
 - [Release fan-out](#release-fan-out)
   - [Containers reuse what the fan-out already built](#containers-reuse-what-the-fan-out-already-built)
+  - [The container build runs before the gates, the push waits for them](#the-container-build-runs-before-the-gates-the-push-waits-for-them)
   - [Multi-arch images](#multi-arch-images)
   - [Draft-first releases](#draft-first-releases)
   - [Package managers publish last](#package-managers-publish-last)
@@ -443,6 +444,8 @@ CI enables `smoke-kind` for source images and the prebuilt webapp image. A cache
 
 The proxy checks execute the Nginx example extracted from the self-hosting guide. They verify subpath redirects as well as direct container requests. The CLI amd64 job also builds `identify-data-verify`, which imports the source data builders inside their clean image stage. This catches omitted modules and eagerly loaded data files even when the main build consumes prebuilt identify data.
 
+`docker-build-arch` pushes by digest with `push`, or, with `export-oci`, writes the image and its attestations to an OCI archive and pushes nothing; the release uses the second form so its container build can run before the publish gates pass.
+
 ### `.github/actions/attest-retry`
 
 Every build-provenance attestation in the repository goes through this, and nothing calls `actions/attest*` directly. It runs the attestation, and on failure runs it once more.
@@ -524,7 +527,8 @@ The script imports nothing outside Node, so the dry-run and publish jobs install
 | `static-webapp` | `rom-weaver-webapp.tar.gz` on the draft release + signed build provenance |
 | `npm-build` | nothing registry-facing - builds and dry-runs the 9 platform packages, attaches the identify data and CLI documentation to the draft; runs beside `semver-check` |
 | `publish-npm` | 9 platform packages → launcher → unscoped alias, in that order; the one npm job that waits for `semver-check` |
-| `publish-containers` | `ghcr.io/rom-weaver/rom-weaver-cli` and `-webapp`, signed provenance |
+| `build-containers` | nothing registry-facing - the four single-architecture images as OCI archives, built beside `publish-npm` |
+| `publish-containers` | `ghcr.io/rom-weaver/rom-weaver-cli` and `-webapp`, signed provenance; pushes the archives after every gate |
 | `publish-release` | flips the draft release to published, creating the tag |
 | `publish-homebrew` | formula commit to `rom-weaver/homebrew-tap` (stable only) |
 | `publish-scoop` | manifest commit to `rom-weaver/scoop-bucket` (stable only) |
@@ -537,11 +541,11 @@ Ordering inside `publish-npm` is load-bearing: the unscoped `rom-weaver` alias i
 
 ### Containers reuse what the fan-out already built
 
-`publish-containers` runs after `static-webapp` and `publish-npm` rather than beside them, because both images are now assembled from artifacts those jobs produce from the same commit:
+`build-containers` waits for `static-webapp` and `npm-build` rather than starting with them, because both images are assembled from artifacts those jobs produce from the same commit (it then runs beside the npm publish, see [the build and publish split](#the-container-build-runs-before-the-gates-the-push-waits-for-them)):
 
 | Image | Consumes | Instead of |
 | --- | --- | --- |
-| `rom-weaver-cli` | `cli-binary-linux-x64-gnu` and `cli-binary-linux-arm64-musl`, the binaries `publish-npm` builds | a second `cargo build --release` of the workspace |
+| `rom-weaver-cli` | `cli-binary-linux-x64-gnu` and `cli-binary-linux-arm64-musl`, the binaries `npm-build` builds | a second `cargo build --release` of the workspace |
 | `rom-weaver-webapp` | `webapp-dist`, the bundle `static-webapp` packages | rustup + WASI SDK + binaryen + a cold wasm build |
 
 The webapp image has a third build arg, `WASM`, which is not part of this release path: it keeps the whole source build and only takes the compiled wasm module from the context. CI uses it on amd64 and eligible ARM pull-request image legs; the release fan-out never sets it, so a fallback-to-source release still compiles everything.
@@ -550,11 +554,19 @@ Each Dockerfile keeps both paths and picks with a build arg (`BINARY`, `DIST`) t
 
 Two consequences worth knowing:
 
-- The CLI runtime is `gcr.io/distroless/cc-debian13`, and the `debian13` (trixie) half of that is load-bearing, not bookworm. The reused binary is linked against the glibc of the `ubuntu-24.04` runner `publish-npm` builds on (2.39), which bookworm's 2.36 cannot load; trixie ships 2.41 and accepts both halves of the switch. `-cc` rather than `-base` supplies the libgcc/libstdc++ the vendored C deps expect. There is no shell in the image.
+- The CLI runtime is `gcr.io/distroless/cc-debian13`, and the `debian13` (trixie) half of that is load-bearing, not bookworm. The reused binary is linked against the glibc of the `ubuntu-24.04` runner `npm-build` builds on (2.39), which bookworm's 2.36 cannot load; trixie ships 2.41 and accepts both halves of the switch. `-cc` rather than `-base` supplies the libgcc/libstdc++ the vendored C deps expect. There is no shell in the image.
 - `static-webapp` packages a raw webapp tarball. The webapp Dockerfile adds the `.br` siblings that its static-web-server expects (`compression-static` in `sws.toml`) after the shared raw artifact is copied. No `.gz` siblings: sws gzips on demand for the rare client without brotli, which keeps ~2.8 MB out of the image.
 - `static-webapp` also owns the **build channel** for everything that is not a Cloudflare deploy. Its bundle becomes both `rom-weaver-webapp.tar.gz` and the container image, so it passes `ROM_WEAVER_CHANNEL` explicitly: `beta` for a prerelease, `prod` otherwise, on the same hyphen test as the rest of the prerelease routing. Without it a prerelease image would claim production while the deploy ladder put the same commit on `beta.rom-weaver.com`. The `deploy` job passes its own channel per target; an unset channel builds as `prod`, which is what a plain `npm run build` by a self-hoster should be.
 
 A prebuilt build deliberately does **not** write the buildcache ref: it has nothing expensive to cache, and exporting its handful of `COPY` layers would evict the source layer graph that the `docker` job in `ci.yml` restores.
+
+### The container build runs before the gates, the push waits for them
+
+`docker-publish.yml` has two phases that `release.yml` calls as two jobs. `build-containers` (`phase: build`) waits only for `static-webapp` and `npm-build`, so the four image builds overlap the npm publish instead of following it. `publish-containers` (`phase: publish`) keeps every gate it had: `static-webapp`, `publish-npm`, the semver gate, and now `build-containers`.
+
+The build phase pushes nothing. Each leg writes its image, with the provenance and SBOM attestations buildx adds, to an OCI archive (`docker-build-arch`'s `export-oci`) and uploads it as `docker-oci-<image>-<arch>` for seven days, like the npm platform packages, so a rerun of a failed `publish-containers` pushes the same archives. Its job token is `packages: read` with no attestation or OIDC grants, and registry cache export is limited to a standalone dispatch, which has no gate to wait for. The publish phase then runs `skopeo copy --all --preserve-digests` for each archive to `ghcr.io/<owner>/<image>@<digest>`, which is what a `push-by-digest` build pushed before, and checks the registry hashes what it stored to the same digest, before assembling and attesting the manifest list exactly as before. The digest read from the archive's `index.json` is the digest the registry reports; this was checked against a local `registry:2` with a two-platform build that carried provenance and SBOM attestations, and the manifest list assembled from the pushed digests listed both platforms and their attestation manifests.
+
+The container build legs run two at a time (`max-parallel: 2`), which is what keeps nine npm publishes plus four image builds inside the 16 jobs the release window peaked at.
 
 ### Multi-arch images
 
@@ -572,7 +584,7 @@ It took `ci.yml` on `main` from roughly 20 minutes to just over two hours.
 
 Two mechanics follow from the split:
 
-- The build legs push **by digest** (`push-by-digest=true`), claiming no tag. Nothing is tagged until a later job runs `docker buildx imagetools create` over both digests, so the two architectures can never race each other for `:nightly` and a half-published tag cannot exist. The digests travel between the jobs as artifacts rather than job outputs, because a matrix leg's outputs collapse to whichever leg finished last. The merge fails outright if it finds fewer than two - a manifest list quietly advertising one architecture pulls fine on amd64 and fails only for the arm64 users it exists for.
+- The build legs produce **digest-addressed** images (CI's nightly legs push them with `push-by-digest=true`; the release writes OCI archives and pushes them by digest later, see above), claiming no tag. Nothing is tagged until a later job runs `docker buildx imagetools create` over both digests, so the two architectures can never race each other for `:nightly` and a half-published tag cannot exist. The digests travel between the jobs as artifacts rather than job outputs, because a matrix leg's outputs collapse to whichever leg finished last. The merge fails outright if it finds fewer than two - a manifest list quietly advertising one architecture pulls fine on amd64 and fails only for the arm64 users it exists for.
 - Attestations name the **manifest list** digest, not either architecture's image: that is what a `docker pull` of the tag resolves against. Per-arch provenance and SBOMs still ride each leg's push.
 
 The registry build cache is keyed per architecture (`<image>:buildcache-amd64`, `<image>:buildcache-arm64`). One shared ref would have each leg overwrite the other's layers on every run, so neither would ever restore.

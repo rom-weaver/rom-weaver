@@ -873,19 +873,41 @@ jobs:
           git commit -m "rom-weaver $VERSION"
           git push
 
-  # Both images are assembled from artifacts these two jobs produce, so this now
-  # runs after them instead of beside them. The serialization is bought back
-  # several times over: the webapp image no longer builds a toolchain and a wasm
-  # module of its own, and the CLI image no longer compiles the workspace.
-  # docker-publish falls back to building from source if either artifact is
-  # missing, which is what a standalone workflow_dispatch gets.
+  # Both images are assembled from artifacts static-webapp and npm-build produce, so the build waits
+  # for those two and then runs beside the npm publish instead of after it. It pushes nothing: each
+  # architecture is written to an OCI archive, and publish-containers pushes the archives (and
+  # assembles the manifest lists) only after the gates below. The serialization the prebuilt
+  # artifacts cost is bought back several times over: the webapp image no longer builds a toolchain
+  # and a wasm module of its own, and the CLI image no longer compiles the workspace.
+  # docker-publish falls back to building from source if either artifact is missing, which is what
+  # a standalone workflow_dispatch gets.
+  build-containers:
+    needs: [release, static-webapp, npm-build]
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.static-webapp.result == 'success' &&
+      needs.npm-build.result == 'success' &&
+      needs.release.outputs.release_created == 'true'
+    permissions:
+      # Read the run artifacts and the layer cache; the build phase cannot write to the registry.
+      actions: read
+      contents: read
+      packages: read
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
+      sha: ${{ needs.release.outputs.sha }}
+      phase: build
+
   publish-containers:
-    needs: [release, semver-plan, semver-check, static-webapp, publish-npm]
+    needs: [release, semver-plan, semver-check, static-webapp, publish-npm, build-containers]
     if: >-
       !cancelled() &&
       needs.release.result == 'success' &&
       needs.static-webapp.result == 'success' &&
       needs.publish-npm.result == 'success' &&
+      needs.build-containers.result == 'success' &&
       (
         needs.semver-check.result == 'success' ||
         (
@@ -901,7 +923,7 @@ jobs:
       # rather than GITHUB_TOKEN, so this is not believed to be load-bearing
       # today - but a reusable workflow gets the caller job's token and never
       # more, so if that ever changes the grant has to exist in both places or
-      # the download fails and both images quietly rebuild from source.
+      # the download fails and the images cannot be pushed.
       actions: read
       artifact-metadata: write
       attestations: write
@@ -912,6 +934,7 @@ jobs:
     with:
       version: ${{ needs.release.outputs.version }}
       sha: ${{ needs.release.outputs.sha }}
+      phase: publish
 
   # Publishing the draft is what creates the tag and stamps the release
   # immutable, so every job that attaches an asset has to come first: assets can
