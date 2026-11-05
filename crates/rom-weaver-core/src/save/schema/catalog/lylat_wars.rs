@@ -18,9 +18,9 @@ fn checksum(bytes: &[u8]) -> u16 {
 const NAME_CODEC: &str = "lylat_wars_ranking_name";
 const RANKING_ENTRIES: usize = 10;
 const MISSIONS_PER_ENTRY: usize = 7;
-const PLANETS: [&str; 15] = [
+const PLANETS: [&str; 16] = [
     "meteo", "area_6", "bolse", "sector_z", "sector_x", "sector_y", "katina", "macbeth", "zoness",
-    "corneria", "titania", "aquas", "fortuna", "solar", "venom",
+    "corneria", "titania", "aquas", "fortuna", "solar", "venom", "venom_2",
 ];
 
 fn mission_flags() -> Vec<FieldDefinition> {
@@ -167,7 +167,7 @@ fn ranking_fields() -> Vec<FieldDefinition> {
                     .collect::<Vec<_>>(),
             ))
             .min(0)
-            .max(14);
+            .max(15);
             fields.push(planet.behavior(behavior()));
             fields.push(
                 catalog_field(
@@ -188,7 +188,7 @@ fn ranking_fields() -> Vec<FieldDefinition> {
                 .bit(3)
                 .behavior(behavior()),
             );
-            for (ally, bit) in [("slippy", 0), ("fox", 1), ("peppy", 2)] {
+            for (ally, bit) in [("slippy", 0), ("falco", 1), ("peppy", 2)] {
                 fields.push(
                     catalog_field(
                         &format!("{mission_id}.{ally}"),
@@ -390,12 +390,12 @@ mod tests {
                 SaveValue::Enum("katina".into()),
             ),
             edit("ranking_1.mission_2.slippy", SaveValue::Bool(true)),
-            edit("ranking_1.mission_2.fox", SaveValue::Bool(false)),
+            edit("ranking_1.mission_2.falco", SaveValue::Bool(false)),
             edit("ranking_1.mission_2.peppy", SaveValue::Bool(true)),
             edit("ranking_1.mission_2.medal", SaveValue::Bool(true)),
             edit(
                 "ranking_3.mission_1.planet",
-                SaveValue::Enum("venom".into()),
+                SaveValue::Enum("venom_2".into()),
             ),
             edit("sound.mode", SaveValue::Enum("headphone".into())),
             edit("sound.music", SaveValue::U32(99)),
@@ -414,11 +414,11 @@ mod tests {
         expected[0x36] = 7;
         let record = 0x5e + 2;
         expected[record] = 200;
-        // Katina planet nibble, +256 hits bit, and Slippy and Peppy without Fox.
+        // Katina planet nibble, +256 hits bit, and Slippy and Peppy without Falco.
         expected[record + 1] = 0x6d;
         expected[0x4b] |= 1 << 1;
         let third = 0x5e + 2 * 0xe;
-        expected[third + 1] = (expected[third + 1] & 0x0f) | 0xe0;
+        expected[third + 1] = (expected[third + 1] & 0x0f) | 0xf0;
         expected[0x14] = 2;
         expected[0x15] = 99;
         expected[0x16] = 0;
