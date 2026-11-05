@@ -432,7 +432,7 @@ Non-cross Linux x86-64 legs also run `scripts/install-jwasm.sh` so the LZMA SDK'
 
 The Windows legs also relocate `CARGO_HOME`/`RUSTUP_HOME` to `D:` and `TMP`/`TEMP` to `RUNNER_TEMP` before the toolchain and cache steps, for the same IOPS reason `rust-windows` does it. The `D:` half is skipped when the runner has no such drive; `windows-11-arm`'s disk layout is not documented.
 
-CI and `npm-publish.yml` both use it, sharing one cache key per platform, so a release restores what CI already built rather than compiling a second, differently-configured copy. `cache-save` and `registry-url` are the only things the two callers set differently.
+CI and `npm-publish.yml` both use it, sharing one cache key per platform, so a release restores what CI already built rather than compiling a second, differently-configured copy. `cache-save`, `registry-url`, and `identify-data-source` are the only things the two callers set differently: CI reads the identify packs from this run's artifact, the release from the cache.
 
 ### `.github/actions/docker-build-arch` and `docker-manifest`
 

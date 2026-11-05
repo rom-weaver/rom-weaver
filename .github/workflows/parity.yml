@@ -20,9 +20,10 @@ permissions:
 
 # A release pull request branch is pushed several times in one Release run, and every push starts
 # this workflow. Only the newest commit's result matters, so a push cancels the run for the one
-# it replaces. Scheduled and manual runs get their own group and are never cancelled.
+# it replaces. The group keys on the pull request ref, so a fork branch with the same name never
+# shares it. Scheduled and manual runs get their own group and are never cancelled.
 concurrency:
-  group: parity-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
+  group: parity-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

@@ -40,8 +40,9 @@ inputs:
   identify-release-tree:
     description: >-
       "build" writes the identify release tree from the restored packs before
-      the package is staged; "prebuilt" expects the caller to have placed it at
-      target/identify-release (the release fan-out downloads it as an artifact).
+      the package is staged; CI and the release fan-out both use it.
+      "prebuilt" expects the caller to have placed the tree at
+      target/identify-release already.
     required: false
     default: prebuilt
   identify-data-source:

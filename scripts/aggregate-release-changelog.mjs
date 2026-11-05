@@ -320,9 +320,8 @@ const run = () => {
     execFileSync("git", ["config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"]);
     execFileSync("git", ["add", changelogPath]);
     execFileSync("git", ["commit", "-m", "chore(release): aggregate release changelog"]);
-    // The release workflow leaves RELEASE_PR_BRANCH unset and pushes every commit it made in one step,
-    // because each push to the release branch starts a full CI run.
-    if (process.env.RELEASE_PR_BRANCH) execFileSync("git", ["push", "origin", `HEAD:${process.env.RELEASE_PR_BRANCH}`]);
+    // The release workflow pushes every commit it made in one step, because each push to the
+    // release branch starts a full CI run.
   }
 
   if (!pullRequest || !result.section) return;
