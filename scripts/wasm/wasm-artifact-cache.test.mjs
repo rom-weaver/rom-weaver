@@ -68,6 +68,9 @@ test("an existing entry is kept and an incomplete one does not restore", () => {
     storeWasmArtifacts({ root, key: "k", files: FILES, sourceDir: path.join(dir, "a") });
     storeWasmArtifacts({ root, key: "k", files: FILES, sourceDir: path.join(dir, "b") });
     assert.equal(fs.readFileSync(path.join(root, "k", FILES[0]), "utf8"), `${FILES[0]}:one`);
+    // A forced rebuild evicts an entry built from an input the key missed.
+    storeWasmArtifacts({ root, key: "k", files: FILES, sourceDir: path.join(dir, "b"), replace: true });
+    assert.equal(fs.readFileSync(path.join(root, "k", FILES[0]), "utf8"), `${FILES[0]}:two`);
 
     fs.rmSync(path.join(root, "k", FILES[1]));
     const out = path.join(dir, "out");
@@ -127,10 +130,10 @@ test("restoring refreshes an entry's recency", () => {
 });
 
 test("path remapping appends to the target rustflags as a TOML array", () => {
-  const args = remapPathArgs({ root: "/w/rom weaver", cargoHome: "/h/.cargo", sysroot: "/h/.rustup/tc", target: "wasm32-wasip1-threads" });
+  const args = remapPathArgs({ cargoHome: "/h/my cargo", sysroot: "/h/.rustup/tc", target: "wasm32-wasip1-threads" });
   assert.deepEqual(args, [
     "--config",
-    'target.wasm32-wasip1-threads.rustflags=["--remap-path-prefix=/w/rom weaver=/rom-weaver","--remap-path-prefix=/h/.cargo=/cargo","--remap-path-prefix=/h/.rustup/tc=/rustc-sysroot"]',
+    'target.wasm32-wasip1-threads.rustflags=["--remap-path-prefix=/h/my cargo=/cargo","--remap-path-prefix=/h/.rustup/tc=/rustc-sysroot"]',
   ]);
 });
 

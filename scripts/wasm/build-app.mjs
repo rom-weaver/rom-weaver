@@ -80,13 +80,14 @@ export function shouldReuseProductionArtifact({ artifact, brotliArtifactOk, fing
   return !force && existsSync(artifact) && brotliArtifactOk === wantBrotli && existsSync(fingerprintFile) && readFileSync(fingerprintFile, "utf8").trim() === wantedFingerprint;
 }
 
-// Rust embeds absolute source paths (panic locations, dependency sources) in
-// the module. Fixed prefixes make the bytes independent of the checkout, Cargo
-// home, and toolchain location, so one checkout's build is valid for another.
+// Rust embeds absolute dependency and toolchain source paths (panic locations)
+// in the module. Fixed prefixes make the bytes independent of the Cargo home and
+// toolchain location. Workspace crates already embed relative paths, and a
+// checkout-specific flag would change every rustc command line and stop sccache
+// from replaying dependencies across worktrees, so the checkout is not remapped.
 // Cargo appends --config rustflags to the list in .cargo/config.toml.
-export function remapPathArgs({ root, cargoHome, sysroot, target }) {
+export function remapPathArgs({ cargoHome, sysroot, target }) {
   const flags = [
-    [root, "/rom-weaver"],
     [cargoHome, "/cargo"],
     [sysroot, "/rustc-sysroot"],
   ].map(([from, to]) => `--remap-path-prefix=${from}=${to}`);
@@ -155,10 +156,10 @@ export function main(argv = process.argv.slice(2), env = process.env) {
     rmSync(fingerprintFile, { force: true });
     process.stdout.write(`reused ${mode} WASM for unchanged inputs from ${join(cache.root, cache.key)}\n`);
   } else {
-    buildArtifact({ mode, root, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env });
+    buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env });
     if (cache) {
       try {
-        storeWasmArtifacts({ ...cache, files: cacheFiles, sourceDir: outDir });
+        storeWasmArtifacts({ ...cache, files: cacheFiles, sourceDir: outDir, replace: force });
       } catch (error) {
         process.stderr.write(`warning: could not store WASM in ${cache.root} (${error.message})\n`);
       }
@@ -171,10 +172,9 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   process.stdout.write(wantBrotli ? `artifacts written to ${outDir} (rom-weaver-app.wasm, rom-weaver-app.wasm.br)\n` : `artifact written to ${artifact}\n`);
 }
 
-function buildArtifact({ mode, root, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env }) {
+function buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env }) {
   process.stdout.write(`building ${target} -> ${artifact}\n`);
   const remap = remapPathArgs({
-    root,
     cargoHome: env.CARGO_HOME || join(homedir(), ".cargo"),
     sysroot: toolVersion("rustc", ["--print", "sysroot"]),
     target,

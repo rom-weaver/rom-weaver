@@ -32,6 +32,14 @@ test("changes CI's webapp build ignores skip the checks", () => {
   assert.deepEqual(planPrePush({ pushed: { refs: 1, commits: [HEAD] }, head: HEAD, changedPaths: [] }).steps, []);
 });
 
+test("the browser reminder follows CI's pull-request selection", () => {
+  const pushed = { refs: 1, commits: [HEAD] };
+  const docs = planPrePush({ pushed, head: HEAD, changedPaths: ["docs/faq.md"], e2e: true });
+  assert.deepEqual(docs.steps, WEBAPP_BUNDLE_STEPS);
+  assert.equal(docs.browser, false);
+  assert.equal(planPrePush({ pushed, head: HEAD, changedPaths: ["packages/rom-weaver-webapp/src/app.tsx"] }).browser, true);
+});
+
 test("an unresolved base runs every check", () => {
   assert.deepEqual(planPrePush({ pushed: { refs: 1, commits: [HEAD] }, head: HEAD, changedPaths: undefined }).steps, WEBAPP_BUNDLE_STEPS);
 });

@@ -50,11 +50,13 @@ export function restoreWasmArtifacts({ root, key, files, outDir }) {
 }
 
 // Entries are staged and renamed into place, so a reader never sees a partial
-// one. An existing entry stays: the same key means the same inputs, and
-// replacing it would break a concurrent restore.
-export function storeWasmArtifacts({ root, key, files, sourceDir, keep = DEFAULT_KEEP }) {
+// one. An existing entry stays unless replace is set: the same key means the
+// same inputs. Replacing evicts an entry built from an input the key missed; a
+// restore that races it fails and builds instead.
+export function storeWasmArtifacts({ root, key, files, sourceDir, keep = DEFAULT_KEEP, replace = false }) {
   const entry = join(root, key);
   mkdirSync(root, { recursive: true });
+  if (replace) rmSync(entry, { recursive: true, force: true });
   if (!existsSync(entry)) {
     const staging = join(root, `.tmp-${key}-${process.pid}`);
     rmSync(staging, { recursive: true, force: true });

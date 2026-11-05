@@ -44,7 +44,8 @@ export function planPrePush({ pushed, head, changedPaths, e2e = false }) {
   if (pushed.commits.length === 0) return { steps: [], reason: "the push only deletes refs" };
   // The checks build the working tree, which only matches a pushed HEAD.
   if (!pushed.commits.includes(head)) return { steps: [], reason: "HEAD is not among the pushed commits" };
-  const selection = classifyChanges(changedPaths ?? [], changedPaths === undefined);
+  // A push to a branch reaches CI as its pull request, whose event narrows webapp_browser.
+  const selection = classifyChanges(changedPaths ?? [], changedPaths === undefined, "pull_request");
   if (!selection.webapp) return { steps: [], reason: "no webapp or published-doc change since the base" };
   const browser = selection.webapp_browser;
   return { steps: browser && e2e ? [...WEBAPP_BUNDLE_STEPS, A11Y_STEP] : WEBAPP_BUNDLE_STEPS, browser };
@@ -68,7 +69,8 @@ function changedSinceBase(remote) {
     .find(Boolean);
   const mergeBase = base && tryGit(["merge-base", base, "HEAD"]);
   if (!mergeBase) return undefined;
-  return git(["diff", "--name-only", `${mergeBase}...HEAD`]).split("\n").filter(Boolean);
+  // --no-renames as in classify-workflow.mjs: a move MUST report its old path too, which can select the webapp.
+  return git(["diff", "--name-only", "--no-renames", `${mergeBase}...HEAD`]).split("\n").filter(Boolean);
 }
 
 // A synchronous read of fd 0 fails with EAGAIN when the pipe git or lefthook
