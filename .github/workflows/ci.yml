@@ -882,6 +882,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     needs: changes
+    # Read-only. A release tag reads the release pull request, its CI run's artifacts, and their
+    # attestations to reuse its signed module.
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+      pull-requests: read
     outputs:
       bundle: ${{ steps.webapp-bundle.outcome }}
       chunk-guard: ${{ steps.chunk-guard.outcome }}
@@ -916,11 +923,47 @@ jobs:
           save: "false"
           restore: ${{ env.RELEASE_PR_WASM != 'true' }}
 
+      # A release tag is created minutes after the release pull request merges, usually before
+      # main's CI for that commit has saved the module, so the cache misses and a rebuild would
+      # delay every deploy. The merged release pull request's own CI run already built and signed
+      # the module for the same tree. Its run is only a candidate: the verifier below checks the
+      # signature, the merged release pull request, and that the signed tree is this commit's.
+      - name: Resolve release pull request for the tag
+        id: tag-release
+        if: github.ref_type == 'tag' && steps.wasm-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.sha }}
+        run: node scripts/ci/resolve-tag-release-pull.mjs
+
+      - name: Resolve tested WASM artifact for the tag
+        id: tag-ci
+        if: steps.tag-release.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.tag-release.outputs.sha }}
+          PR_NUMBER: ${{ steps.tag-release.outputs.pr }}
+        run: node scripts/ci/resolve-wasm-run.mjs
+
+      # Installs nothing unless the artifact verifies; the source build below then runs.
+      - name: Verify and install tested WASM artifact for the tag
+        id: tag-wasm
+        if: steps.tag-ci.outputs.available == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_IDS: ${{ steps.tag-ci.outputs.run_ids }}
+          PR_NUMBER: ${{ steps.tag-release.outputs.pr }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: node scripts/ci/fetch-verified-wasm.mjs
+
       # Keep the hit and miss setup explicit. GitHub expressions cannot use
       # an empty string as the true side of an &&/|| conditional because the
       # empty value falls through to the miss-only input.
       - name: Set up cached WASM environment
-        if: steps.wasm-cache.outputs.cache-hit == 'true'
+        if: steps.wasm-cache.outputs.cache-hit == 'true' || steps.tag-wasm.outputs.verified == 'true'
         uses: ./.github/actions/setup-build-env
         with:
           tools: node rust
@@ -930,7 +973,7 @@ jobs:
           cache-restore: ${{ env.RELEASE_PR_WASM != 'true' }}
 
       - name: Set up WASM build environment
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        if: steps.wasm-cache.outputs.cache-hit != 'true' && steps.tag-wasm.outputs.verified != 'true'
         uses: ./.github/actions/setup-build-env
         with:
           tools: node rust binaryen
@@ -950,7 +993,7 @@ jobs:
       # new generations without losing restores from compatible older commits.
       - name: Restore WASM target artifacts
         id: wasm-target-cache
-        if: steps.wasm-cache.outputs.cache-hit != 'true' && env.RELEASE_PR_WASM != 'true'
+        if: steps.wasm-cache.outputs.cache-hit != 'true' && steps.tag-wasm.outputs.verified != 'true' && env.RELEASE_PR_WASM != 'true'
         uses: actions/cache/restore@v6
         with:
           path: target
@@ -965,7 +1008,7 @@ jobs:
       # The separate non-linking Rust check denies warnings.
       - name: Build production WASM
         id: wasm-build
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        if: steps.wasm-cache.outputs.cache-hit != 'true' && steps.tag-wasm.outputs.verified != 'true'
         env:
           CARGO_LOG: cargo::core::compiler::fingerprint=info
         run: /usr/bin/time -v mise run build-wasm-prod
@@ -993,7 +1036,7 @@ jobs:
 
       # Verified modules MUST reach the cache before an unrelated webapp build can fail.
       - name: Save verified WASM module
-        if: steps.wasm-cache.outputs.cache-hit != 'true' && env.RELEASE_PR_WASM != 'true'
+        if: steps.wasm-build.outcome == 'success' && env.RELEASE_PR_WASM != 'true'
         uses: actions/cache/save@v6
         with:
           key: ${{ steps.wasm-cache.outputs.key }}

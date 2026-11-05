@@ -23,6 +23,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
   - [`scripts/ci/assert-jobs.mjs`](#scriptsciassert-jobsmjs)
   - [`scripts/ci/classify-changes.mjs`](#scriptsciclassify-changesmjs)
   - [`scripts/ci/resolve-wasm-run.mjs`](#scriptsciresolve-wasm-runmjs)
+  - [`scripts/ci/resolve-tag-release-pull.mjs`](#scriptsciresolve-tag-release-pullmjs)
   - [`scripts/ci/fetch-verified-wasm.mjs`](#scriptscifetch-verified-wasmmjs)
   - [`scripts/ci/wasm-manifest.mjs`](#scriptsciwasm-manifestmjs)
   - [`scripts/ci/rerun-infra-failures.mjs`](#scriptscirerun-infra-failuresmjs)
@@ -311,6 +312,8 @@ To reproduce a run, see [Reproduce a CI failure locally](reproduce-ci-locally.md
 
 Release tags (`v*`) trigger this workflow, but every test job carries `if: github.ref_type != 'tag'`. The commit being tagged already passed the same gate on `main`; a tag run exists only to build and deploy the webapp to the channels that tag publishes.
 
+The tag is created minutes after the release pull request merges, usually before `main`'s run for that commit has cached the module. On a cache miss, the `wasm` job finds the merged release pull request whose merge commit is the tagged commit ([`resolve-tag-release-pull.mjs`](#scriptsciresolve-tag-release-pullmjs)) and reuses its CI run's signed module through [`resolve-wasm-run.mjs`](#scriptsciresolve-wasm-runmjs) and [`fetch-verified-wasm.mjs`](#scriptscifetch-verified-wasmmjs), verified against the tagged commit. With no such pull request it tries `main`'s runs of that commit, and it builds from source when nothing verifies.
+
 ### Deploy channels
 
 `changes` resolves the channel list from the ref; `deploy` runs one matrix leg per channel, deploying with Cloudflare Direct Upload and reusing the CI-tested WASM artifact rather than spending Cloudflare build minutes on a second toolchain.
@@ -507,6 +510,10 @@ Two tests pin it. `scripts/ci/classify-changes.test.mjs` covers the path boundar
 Finds the CI run whose `wasm-prod` artifact a release may reuse instead of spending ~6.5 minutes rebuilding the module. The search is by commit, so it would also return runs started by anyone who can push a branch: a pull request whose head is the release commit but whose base is the writer's own branch runs *their* `ci.yml` with the release commit as `head_sha`. The resolver therefore accepts a run only when all of these hold: its `path` is exactly `.github/workflows/ci.yml`, its repository and head repository are this repository, it completed with `success`, and it is either a `push` or manual `workflow_dispatch` run on `main` (both sign as `ci.yml@refs/heads/main`) or a `pull_request` run from a release-please branch whose head is the release pull request's (the number the release passes as `PR_NUMBER`), and that pull request, read from the pulls API, is merged into `main` from this repository's release branch with that head. A run's `pull_requests[]` cannot be used: GitHub fills it from the pull requests open at query time, so after the merge it no longer names the release pull request. Another pull request's run of the same head passes these checks, but its attestation names that pull request's merge ref, so the verifier rejects it. With no number, only runs of `main` qualify. The accepted runs that still have live `wasm-prod` and `wasm-prod-manifest` artifacts, newest first and at most five, go to the verifier as `run_ids`, which installs the first that verifies; a newer run of another pull request from the same head then costs nothing. An optional `PREFERRED_RUN_ID` hint must pass the same checks and match the commit. Release falls back to a source build when nothing qualifies.
 
 Choosing a run proves nothing about its bytes; `fetch-verified-wasm.mjs` does that.
+
+### `scripts/ci/resolve-tag-release-pull.mjs`
+
+Gives a [tag run](#tag-runs) the pull request number and head commit to pass to the resolver. It lists the tagged commit's pull requests, reads each one whose merge commit is the tag, and accepts the first that passes the resolver's own merged-release-pull-request check. With none it returns the tagged commit and no number, which leaves runs of `main` only. Like the resolver, it only picks candidates.
 
 ### `scripts/ci/fetch-verified-wasm.mjs`
 

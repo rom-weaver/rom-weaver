@@ -64,7 +64,9 @@ test("the signing job is separate: only it can mint tokens or attest, and it nev
   assert.deepEqual(writes(ci.jobs["wasm-attest"]).sort(), ["artifact-metadata", "attestations", "id-token"]);
   assert.equal(ci.jobs["wasm-attest"].permissions.contents, "read");
   assert.equal(ci.jobs["wasm-attest"].needs, "wasm");
-  assert.equal(ci.jobs.wasm.permissions, undefined, "the build job keeps the read-only workflow token");
+  // The build job may only read: a release tag reads the release pull request's signed artifact.
+  assert.deepEqual(writes(ci.jobs.wasm), [], "the build job keeps a read-only token");
+  assert.equal(ci.jobs.wasm.permissions["id-token"], undefined, "the build job cannot mint tokens");
   assert.deepEqual(ci.permissions, { contents: "read" });
   for (const { run = "", uses = "" } of ci.jobs["wasm-attest"].steps) {
     assert.doesNotMatch(run, /mise run|cargo |npm /u);
@@ -260,4 +262,30 @@ test("the release pull request's WASM build, which is signed, restores and saves
   const module = action("wasm-cache");
   for (const entry of module.runs.steps.filter((candidate) => CACHE_ACTION.test(candidate.uses ?? "")))
     assert.ok(String(entry.if).startsWith("inputs.restore == 'true' && "), entry.name);
+});
+test("a release tag installs the module only through the verifier, against the tag commit", () => {
+  const job = ci.jobs.wasm;
+  const lookup = step(job, "Resolve release pull request for the tag");
+  assert.equal(lookup.if, "github.ref_type == 'tag' && steps.wasm-cache.outputs.cache-hit != 'true'");
+  assert.equal(lookup.run, "node scripts/ci/resolve-tag-release-pull.mjs");
+  assert.equal(lookup.env.TARGET_SHA, "${{ github.sha }}");
+  const resolve = step(job, "Resolve tested WASM artifact for the tag");
+  assert.equal(resolve.env.TARGET_SHA, "${{ steps.tag-release.outputs.sha }}");
+  assert.equal(resolve.env.PR_NUMBER, "${{ steps.tag-release.outputs.pr }}");
+  const fetch = step(job, "Verify and install tested WASM artifact for the tag");
+  assert.equal(fetch.run, "node scripts/ci/fetch-verified-wasm.mjs");
+  assert.equal(fetch.env.EXPECTED_SHA, "${{ github.sha }}");
+  assert.equal(fetch.env.PR_NUMBER, "${{ steps.tag-release.outputs.pr }}");
+  assert.equal(fetch.env.RUN_IDS, "${{ steps.tag-ci.outputs.run_ids }}", "every candidate, newest first");
+  assert.equal(fetch.id, "tag-wasm");
+  // A failed lookup or verification costs a source build, never the tag's deploys.
+  for (const entry of [lookup, resolve, fetch]) assert.equal(entry["continue-on-error"], true, entry.name);
+  assert.equal(step(job, "Set up cached WASM environment").if, "steps.wasm-cache.outputs.cache-hit == 'true' || steps.tag-wasm.outputs.verified == 'true'");
+  for (const name of ["Set up WASM build environment", "Restore WASM target artifacts", "Build production WASM"])
+    assert.ok(String(step(job, name).if).includes("steps.tag-wasm.outputs.verified != 'true'"), name);
+  assert.equal(step(job, "Save verified WASM module").if.startsWith("steps.wasm-build.outcome == 'success'"), true, "a downloaded module is not cached");
+  assert.equal(job.permissions.actions, "read");
+  assert.equal(job.permissions.attestations, "read");
+  assert.equal(job.permissions["pull-requests"], "read");
+  for (const { run = "", uses = "" } of job.steps) assert.doesNotMatch(`${run} ${uses}`, /--name wasm-prod|download-artifact/u);
 });
