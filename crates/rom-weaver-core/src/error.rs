@@ -368,7 +368,7 @@ pub enum RomWeaverError {
 }
 
 /// The stable code of an i/o failure the webapp distinguishes by its kind.
-fn io_code(source: &io::Error) -> Option<&'static str> {
+pub fn io_error_code(source: &io::Error) -> Option<&'static str> {
     match source.kind() {
         io::ErrorKind::StorageFull => Some(ERROR_CODE_IO_STORAGE_FULL),
         io::ErrorKind::OutOfMemory => Some(ERROR_CODE_RESOURCE_OUT_OF_MEMORY),
@@ -380,7 +380,7 @@ fn io_code(source: &io::Error) -> Option<&'static str> {
 /// whose label wraps the error in context text still carries it (see
 /// [`ValidationCodeError::parse_display_tag`]).
 fn io_code_tag(source: &io::Error) -> String {
-    io_code(source).map_or_else(String::new, |code| format!(" [{code}]"))
+    io_error_code(source).map_or_else(String::new, |code| format!(" [{code}]"))
 }
 
 fn advice_suffix(advice: Option<&str>) -> String {
@@ -482,7 +482,7 @@ impl RomWeaverError {
     pub fn code(&self) -> Option<&str> {
         match self {
             Self::ValidationCode(coded) => Some(coded.code()),
-            Self::Io(source) | Self::IoPath { source, .. } => io_code(source),
+            Self::Io(source) | Self::IoPath { source, .. } => io_error_code(source),
             _ => None,
         }
     }
@@ -513,7 +513,7 @@ impl RomWeaverError {
                 // An i/o code (storage full, out of memory) outranks the fallback: the
                 // failure is about the device, not the data.
                 let io_code = match &other {
-                    Self::Io(source) | Self::IoPath { source, .. } => io_code(source),
+                    Self::Io(source) | Self::IoPath { source, .. } => io_error_code(source),
                     _ => None,
                 };
                 let text = other.to_string();

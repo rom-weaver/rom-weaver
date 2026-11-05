@@ -57,6 +57,7 @@ pub use env::{env_u64, env_u64_opt};
 pub use error::{
     ChdMediaScope, FormatOperationKind, IoOp, IoResultExt, Result, RomWeaverError,
     RomWeaverErrorKind, UnsupportedOp, ValidationCodeError, ValidationField, ValidationFieldValue,
+    io_error_code,
 };
 pub use error_codes::{
     ERROR_CODE_ARCHIVE_READ_FAILED, ERROR_CODE_ARCHIVE_STORAGE_FAILED,

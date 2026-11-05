@@ -1,9 +1,6 @@
 use super::*;
 use rom_weaver_checksum::{ChunkHashWorkers, ChunkHasher, round_robin_groups};
-use rom_weaver_core::{
-    CancellationToken, ERROR_CODE_IO_STORAGE_FULL, ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
-    VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError,
-};
+use rom_weaver_core::{CancellationToken, VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError};
 #[cfg(target_family = "wasm")]
 use std::collections::HashMap;
 #[cfg(target_family = "wasm")]
@@ -904,16 +901,11 @@ macro_rules! nod_extract_only_handler {
 
 pub(crate) use nod_extract_only_handler;
 
-/// A failed nod create. A write that ran out of space or memory is coded so the webapp gives
-/// storage or memory guidance; any other failure is a plain validation error.
+/// The error of a failed nod create: a storage-full or out-of-memory write is coded, anything else is validation.
 fn nod_create_error(format_name: &str, error: &crate::nod::Error) -> RomWeaverError {
     let message = format!("{format_name} create failed: {error}");
     let code = match error {
-        crate::nod::Error::Io(_, source) => match source.kind() {
-            std::io::ErrorKind::StorageFull => Some(ERROR_CODE_IO_STORAGE_FULL),
-            std::io::ErrorKind::OutOfMemory => Some(ERROR_CODE_RESOURCE_OUT_OF_MEMORY),
-            _ => None,
-        },
+        crate::nod::Error::Io(_, source) => rom_weaver_core::io_error_code(source),
         _ => None,
     };
     debug!(format = format_name, code, %message, "nod create failed");
