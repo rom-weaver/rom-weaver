@@ -52,6 +52,8 @@ const relativeImagePaths = (/** @type {string} */ html) =>
  * Point the shell's relative asset URLs at the app root from wherever a static host serves
  * the file: `docs/faq.html` answers at `/docs/faq`, `docs/faq/index.html` at `/docs/faq/`.
  * A fixed `<base href="/">` would send a sub-path deployment's assets to the origin root.
+ * `docs.html` at the app root still gets `./`: soft navigation into a guide moves the URL to
+ * `/docs/<slug>`, and without a base `document.baseURI` would follow it.
  *
  * @param {string} html
  * @param {string} slug
@@ -59,8 +61,8 @@ const relativeImagePaths = (/** @type {string} */ html) =>
  */
 const withDocsBase = (html, slug, directoryIndex) => {
   const depth = slug.split("/").length - (directoryIndex ? 0 : 1);
-  const withImages = relativeImagePaths(html);
-  return depth === 0 ? withImages : withImages.replace("<head>", `<head>\n    <base href="${"../".repeat(depth)}" />`);
+  const base = depth === 0 ? "./" : "../".repeat(depth);
+  return relativeImagePaths(html).replace("<head>", `<head>\n    <base href="${base}" />`);
 };
 
 /**

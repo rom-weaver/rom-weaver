@@ -631,11 +631,9 @@ for (const route of DOC_ROUTES) {
   // The base MUST reach the app root relative to where each copy is served, never the origin root:
   // a sub-path deployment would otherwise request /assets/ from outside its prefix.
   const slugDepth = route.slug.split("/").length;
-  if (slugDepth === 1) {
-    if (docsHtml.includes("<base ")) throw new Error(`${route.slug} extensionless copy must not carry a base`);
-  } else {
-    assertIncludes(docsHtml, `<base href="${"../".repeat(slugDepth - 1)}" />`, `${route.slug} asset base`);
-  }
+  // `./` at the app root keeps document.baseURI there after soft navigation into a guide.
+  const extensionlessBase = slugDepth === 1 ? "./" : "../".repeat(slugDepth - 1);
+  assertIncludes(docsHtml, `<base href="${extensionlessBase}" />`, `${route.slug} asset base`);
   assertIncludes(directoryHtml, `<base href="${"../".repeat(slugDepth)}" />`, `${route.slug} directory asset base`);
   assertIncludes(docsHtml, 'rel="stylesheet" crossorigin href="./assets/', `${route.slug} app stylesheet`);
   const legalPage = isLegalDocRoute(route.slug);
