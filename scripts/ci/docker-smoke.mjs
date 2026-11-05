@@ -293,9 +293,9 @@ async function checkDocsRoutes(context, origin, prefix) {
   }
 }
 
-// The 404 page is a prerendered document served at whatever path missed. Its <base href="/">
-// resolves assets against the origin root, so only a root deployment can hydrate it; behind a
-// subpath proxy the status and prerendered content must still be right.
+// The 404 page is a prerendered document served at whatever path missed. Its <base href> is the
+// only thing that locates its assets and its links, so behind a subpath proxy the image has to be
+// told the prefix (BASE_PATH) for the page to load its assets, hydrate and keep its links inside.
 async function checkNotFoundPage(context, origin, prefix) {
   const page = await context.newPage();
   const failures = [];
@@ -309,12 +309,19 @@ async function checkNotFoundPage(context, origin, prefix) {
   assert.equal(response.status(), 404, url);
   const home = page.locator(".not-found-home");
   await home.waitFor({ state: "attached", timeout: 60_000 });
-  if (prefix === "") {
-    await page.waitForLoadState("networkidle");
-    assert.equal(await page.evaluate(() => crossOriginIsolated), true);
-    assert.deepEqual(failures, [], url);
-    // The stylesheet only loads through <base>, so a styled button proves the assets resolved.
-    assert.notEqual(await home.evaluate((node) => getComputedStyle(node).display), "inline", url);
+  await page.waitForLoadState("networkidle");
+  assert.equal(await page.evaluate(() => crossOriginIsolated), true);
+  assert.deepEqual(failures, [], url);
+  // The stylesheet only loads through <base>, so a styled button proves the assets resolved.
+  assert.notEqual(await home.evaluate((node) => getComputedStyle(node).display), "inline", url);
+  // Hydration must have run: the app base it computes is the page's <base>, not the missed path.
+  assert.equal(new URL(await page.evaluate(() => document.baseURI)).pathname, `${prefix}/`, url);
+  const hrefs = await page.locator("a[href]").evaluateAll((nodes) => nodes.map((node) => node.href));
+  assert.ok(hrefs.length > 0, `${url} has links`);
+  for (const href of hrefs) {
+    const link = new URL(href);
+    if (link.origin === origin)
+      assert.ok(`${link.pathname}`.startsWith(`${prefix}/`), `${url} link ${href} leaves ${prefix}/`);
   }
   console.log(`PASS 404 page for an unknown route: ${origin}${prefix}`);
   await page.close();
@@ -508,6 +515,13 @@ async function checkNotFound(origin, prefix) {
     assert.match(missing.text, /data-page="not-found"/, `${prefix}${path} serves the 404 page`);
     assert.equal(missing.cache, "no-cache", `Cache-Control of ${prefix}${path}`);
     assert.equal(missing.response.headers.get("cross-origin-embedder-policy"), "require-corp");
+    // The served bytes, before any script runs: every root-relative link must already carry the prefix.
+    assert.ok(missing.text.includes(`<base href="${prefix}/" />`), `${prefix}${path} <base>`);
+    assert.deepEqual(
+      missing.text.match(/href="\/(?!\/)[^"]*"/g)?.filter((href) => !href.startsWith(`href="${prefix}/`)) ?? [],
+      [],
+      `${prefix}${path} links outside the prefix`,
+    );
   }
   console.log(`PASS missing paths answer 404 without long caching: ${origin}${prefix}`);
 }
@@ -516,16 +530,18 @@ async function checkWebapp() {
   docker("network", "create", id);
   networkCreated = true;
   const web = await start("web", values.image);
+  // The documented Nginx subpath deployment sets BASE_PATH on the image it proxies to.
+  const sub = await start("sub", values.image, ["--env", "BASE_PATH=/rom-weaver/"]);
   const tls = await start("tls", values.image, ["--env", "HTTPS_PORT=8443"]);
   // Started together so their health waits overlap instead of adding up.
   const mounted = await startMountedCertificates();
   await Promise.all(
-    [web, tls, mounted.pair, mounted.named].map(({ container }) => healthy(container)),
+    [web, sub, tls, mounted.pair, mounted.named].map(({ container }) => healthy(container)),
   );
   assert.notEqual(docker("exec", web.container, "id", "-u"), "0");
   // sws ignores unknown sws.toml keys with only this warning, so a misspelled
   // option silently falls back to its default.
-  for (const container of [web.container, tls.container]) {
+  for (const container of [web.container, sub.container, tls.container]) {
     const logs = spawnSync("docker", ["logs", container], { encoding: "utf8" });
     // Unreadable logs (a log driver without read support) would pass the check below.
     assert.equal(logs.status, 0, `docker logs ${container} failed: ${logs.stderr}`);
@@ -553,10 +569,29 @@ async function checkWebapp() {
       (error) => error.status === code,
     );
   }
+  for (const value of [
+    "rom-weaver/",
+    "/rom-weaver",
+    "//",
+    "/a//b/",
+    "/a/../b/",
+    "/a/./b/",
+    "/a b/",
+    '/a"b/',
+    "/a&b/",
+    "/a#b/",
+    "/a\\b/",
+  ]) {
+    assert.throws(
+      () => docker("run", "--rm", "--env", `BASE_PATH=${value}`, values.image),
+      (error) => error.status === 64 && /BASE_PATH/.test(String(error.stderr ?? error.message)),
+      `BASE_PATH=${value}`,
+    );
+  }
   const markdown = await readFile(values.docs, "utf8");
   const block = /```nginx\n([\s\S]*?)```/.exec(markdown)?.[1];
   assert.ok(block, "the self-hosting guide must include its Nginx configuration");
-  const config = `server { listen 8080; absolute_redirect off;\n${block.replaceAll("127.0.0.1:8080", `${web.container}:8080`)}\n}\n`;
+  const config = `server { listen 8080; absolute_redirect off;\n${block.replaceAll("127.0.0.1:8080", `${sub.container}:8080`)}\n}\n`;
   const configPath = join(scratch, "nginx.conf");
   await writeFile(configPath, config);
   const proxy = await start("proxy", "nginx:alpine", [

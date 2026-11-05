@@ -6,6 +6,7 @@
 #
 # The container serves HTTP on 8080 for an HTTPS reverse proxy. Set HTTPS_PORT
 # for standalone TLS; mount the certificate directory as described in the guide.
+# Set BASE_PATH (for example /rom-weaver/) when a proxy serves it under a subpath.
 services:
   webapp:
     build:
@@ -16,6 +17,7 @@ services:
     ports:
       - "${HTTPS_PORT:-${PORT:-8080}}:8080"
     environment:
+      BASE_PATH: "${BASE_PATH:-}"
       HTTPS_CERT: "${HTTPS_CERT:-}"
       HTTPS_KEY: "${HTTPS_KEY:-}"
       HTTPS_PORT: "${HTTPS_PORT:-}"

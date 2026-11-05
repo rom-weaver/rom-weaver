@@ -72,7 +72,11 @@ To use another host port:
 PORT=3000 docker compose up --detach
 ```
 
-The container serves HTTP on port 8080. Configure your HTTPS proxy with a browser-trusted certificate. For an Nginx subpath route:
+The container serves HTTP on port 8080. Configure your HTTPS proxy with a browser-trusted certificate. For an Nginx subpath route, set `BASE_PATH` on the container to the same prefix and proxy to it:
+
+```bash
+BASE_PATH=/rom-weaver/ docker compose up --detach
+```
 
 ```nginx
 location = /rom-weaver {
@@ -86,7 +90,9 @@ location /rom-weaver/ {
 }
 ```
 
-Keep both trailing slashes: they remove `/rom-weaver/` from forwarded requests. The `proxy_redirect` rules preserve that prefix on redirects, including legacy URLs. The container supplies COOP/COEP headers and precompressed Brotli files. It answers a path with no file, such as a missing `/assets/` chunk or an unknown route, with a real 404 status, because the build prerenders every route to a file. The 404 page references its assets from the origin root, so behind a subpath it keeps its status and text but loads unstyled and its links leave the prefix. Serve rom-weaver from a subdomain when that page matters.
+Keep both trailing slashes: they remove `/rom-weaver/` from forwarded requests. The `proxy_redirect` rules preserve that prefix on redirects, including legacy URLs. The container supplies COOP/COEP headers and precompressed Brotli files. It answers a path with no file, such as a missing `/assets/` chunk or an unknown route, with a real 404 status, because the build prerenders every route to a file.
+
+The proxy strips the prefix, so the container cannot see it. `BASE_PATH` tells the container: it serves the 404 page with its asset and link URLs re-rooted on that prefix, so the page loads styled, runs, and keeps its links inside `/rom-weaver/`. The value must start and end with `/` and use only letters, digits, `.`, `_`, `~`, `-`, and single `/` separators; the container refuses to start on anything else. Unset or `/` serves the page for a root deployment. Without `BASE_PATH` behind a subpath, the 404 page keeps its status and text but loads unstyled and its links leave the prefix. `BASE_PATH` changes only the 404 page; the rest of the app resolves its URLs relative to where it is served.
 
 For a dedicated subdomain, route its `/` location to the same container.
 
