@@ -22,8 +22,9 @@ const step = (job, name) => {
 };
 
 // GitHub expressions in these conditions are also valid JavaScript.
-const evaluate = (expression, { event, ref = "", headRef = "", fork = false, base = "main", wasm = "success" }) =>
-  runInNewContext(expression, {
+const evaluate = (expression, { event, ref = "", headRef = "", fork = false, base = "main", wasm = "success", wasmId = "42" }) =>
+  // Hyphenated names are JavaScript once quoted.
+  runInNewContext(expression.replaceAll("outputs.wasm-artifact-id", 'outputs["wasm-artifact-id"]'), {
     github: {
       event_name: event,
       ref,
@@ -31,7 +32,7 @@ const evaluate = (expression, { event, ref = "", headRef = "", fork = false, bas
       repository: "octo/rom-weaver",
       event: { pull_request: { head: { repo: { full_name: fork ? "attacker/rom-weaver" : "octo/rom-weaver" } }, base: { ref: base } } },
     },
-    needs: { wasm: { result: wasm } },
+    needs: { wasm: { result: wasm, outputs: { "wasm-artifact-id": wasmId } } },
     startsWith: (value, prefix) => value.startsWith(prefix),
   });
 
@@ -53,6 +54,7 @@ test("ci.yml signs the WASM manifest only for runs of main and this repository's
     "the nightly": { event: "schedule", ref: "refs/heads/main" },
     "a build that did not succeed": { event: "push", ref: "refs/heads/main", wasm: "failure" },
     "a skipped build": { event: "push", ref: "refs/heads/main", wasm: "skipped" },
+    "a build that reported no artifact id": { event: "push", ref: "refs/heads/main", wasmId: "" },
   }))
     assert.equal(signs(overrides), false, name);
 });
@@ -202,6 +204,18 @@ test("the release pull request's CI run is a candidate only when its head tree i
   });
 });
 
+// True when `condition` is `prefix (rest)` and the parentheses wrap all of the rest, so no
+// `||` in it can bypass the prefix.
+const gatesWhole = (condition, prefix) => {
+  if (!condition.startsWith(`${prefix}(`) || !condition.endsWith(")")) return false;
+  let depth = 0;
+  const rest = condition.slice(prefix.length);
+  for (const [index, character] of [...rest].entries()) {
+    depth += character === "(" ? 1 : character === ")" ? -1 : 0;
+    if (depth === 0 && index < rest.length - 1) return false;
+  }
+  return depth === 0;
+};
 const action = (name) => load(readFileSync(new URL(`../../.github/actions/${name}/action.yml`, import.meta.url), "utf8"));
 const CACHE_ACTION = /^(actions\/cache(\/restore|\/save)?|Swatinem\/rust-cache)@/u;
 
@@ -225,13 +239,13 @@ test("the release pull request's WASM build, which is signed, restores and saves
   assert.equal(step(job, "Restore built wasm module").with.restore, off);
   for (const name of ["Set up cached WASM environment", "Set up WASM build environment"]) assert.equal(step(job, name).with["cache-restore"], off, name);
   for (const candidate of job.steps.filter((entry) => CACHE_ACTION.test(entry.uses ?? "")))
-    assert.match(String(candidate.if), /(^|&& )(env\.RELEASE_PR_WASM != 'true'|github\.ref == 'refs\/heads\/main')( &&|$)/u, candidate.name);
+    assert.match(String(candidate.if), /^[^|]*(^|&& )(env\.RELEASE_PR_WASM != 'true'|github\.ref == 'refs\/heads\/main')( &&[^|]*|)$/u, candidate.name);
 
   const setup = action("setup-build-env");
   assert.equal(setup.inputs["cache-restore"].default, "true");
   const caching = setup.runs.steps.filter((entry) => CACHE_ACTION.test(entry.uses ?? ""));
   assert.ok(caching.length >= 10, "every cache step is found");
-  for (const entry of caching) assert.ok(String(entry.if).startsWith("inputs.cache-restore == 'true' && ("), entry.name);
+  for (const entry of caching) assert.ok(gatesWhole(String(entry.if), "inputs.cache-restore == 'true' && "), entry.name);
   assert.equal(setup.runs.steps.find((entry) => String(entry.uses).startsWith("jdx/mise-action@")).with.cache, "${{ inputs.cache-restore == 'true' }}", "mise's tool cache too");
   // A local action that caches must be handed the switch and gate its own cache steps on it.
   for (const entry of setup.runs.steps.filter((candidate) => String(candidate.uses ?? "").startsWith("./.github/actions/"))) {
@@ -239,7 +253,7 @@ test("the release pull request's WASM build, which is signed, restores and saves
     const nestedCaching = nested.runs.steps.filter((candidate) => CACHE_ACTION.test(candidate.uses ?? ""));
     if (nestedCaching.length === 0) continue;
     assert.equal(entry.with["cache-restore"], "${{ inputs.cache-restore }}", entry.name);
-    for (const candidate of nestedCaching) assert.ok(String(candidate.if).startsWith("inputs.cache-restore == 'true'"), `${entry.uses}: ${candidate.name}`);
+    for (const candidate of nestedCaching) assert.match(String(candidate.if), /^inputs\.cache-restore == 'true'( && [^|]*)?$/u, `${entry.uses}: ${candidate.name}`);
   }
 
   const module = action("wasm-cache");

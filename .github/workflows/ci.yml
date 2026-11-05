@@ -1055,8 +1055,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     needs: wasm
+    # Never without the id: download-artifact with empty `artifact-ids` downloads every artifact
+    # in the run.
     if: >-
-      needs.wasm.result == 'success' &&
+      needs.wasm.result == 'success' && needs.wasm.outputs.wasm-artifact-id != '' &&
       (
         ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main') ||
         (
