@@ -1317,6 +1317,9 @@ test("the phone console opens one section from Menu, with the dock at its foot r
   document.querySelector("#console-advanced-phone").click();
   await expect.poll(() => document.querySelector("#logpanel-storage .opfs-inspector")).toBeTruthy();
   expect(document.querySelector("#storage-opfs-title")?.textContent).toBe("OPFS");
+  const refreshBounds = document.querySelector(".log-dlg .log-refresh").getBoundingClientRect();
+  expect(refreshBounds.width).toBe(44);
+  expect(refreshBounds.height).toBe(44);
   document.querySelector("#console-advanced-phone").click();
 
   document.querySelector(".log-dlg .dock-menu").click();
