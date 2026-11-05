@@ -549,8 +549,8 @@
   mask-size: 28px 28px;
   animation: weave-drift 1.6s linear infinite paused;
 }
-/* `rw-drop-routing` holds the veil after the drop while Home hands the files
-   to a workflow, so the pill can name it. */
+/* `rw-drop-routing` holds the veil after a pick or drop while the files are
+   read and handed to a workflow, so the pill can name it. */
 .rw-app:is(.rw-page-dragging, .rw-drop-routing) .dropveil {
   visibility: visible;
   opacity: 1;

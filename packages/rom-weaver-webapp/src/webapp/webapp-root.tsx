@@ -391,8 +391,8 @@ const PageFooter = () => {
   );
 };
 
-/* While a routed drop is read and handed to its workflow, the veil stays
-   up and says where the files are going; a drop that stays put never sets it. */
+/* While a picked or dropped selection is read and handed to its workflow, the
+   veil stays up and says where the files are going. */
 type DropRouting = { phase: "reading" } | { phase: "opening"; view: WebappView };
 // Long enough to read the destination over the newly opened workflow.
 const DROP_ROUTING_HOLD_MS = 800;

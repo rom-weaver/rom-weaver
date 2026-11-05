@@ -426,22 +426,22 @@ test.each(["home", "patcher"])("%s clears the reading veil when a dropped folder
 test("a workflow never shows the reading words for a fast page drop", async () => {
   mountWebappRoot({ initialView: "patcher" });
   await expect.poll(() => document.querySelector("#panel-patcher:not([hidden])")).toBeTruthy();
-  let shownText = "";
-  let sampling = true;
-  const sample = () => {
+  // Read the pill as the veil goes up: the reading words start unseen, so a read that
+  // ends before their delay never shows them.
+  const raisedOpacities = [];
+  const observer = new MutationObserver(() => {
     const pill = document.querySelector(".dropveil-text");
-    if (isDropRouting() && pill && Number(getComputedStyle(pill).opacity) > 0) shownText ||= pill.textContent;
-    if (sampling) requestAnimationFrame(sample);
-  };
-  requestAnimationFrame(sample);
+    if (isDropRouting() && pill) raisedOpacities.push(getComputedStyle(pill).opacity);
+  });
+  observer.observe(document.querySelector("#column"), { attributeFilter: ["class"] });
   try {
     sendHomeSelection("drop", [selectionPatch("fast.ips")]);
     await expect.poll(() => patchNames()).toEqual(["fast.ips"]);
     await expect.poll(isDropRouting).toBe(false);
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    expect(shownText).toBe("");
+    expect(raisedOpacities.length).toBeGreaterThan(0);
+    expect(raisedOpacities.every((opacity) => opacity === "0")).toBe(true);
   } finally {
-    sampling = false;
+    observer.disconnect();
   }
 });
 
