@@ -365,6 +365,11 @@ jobs:
           RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
         run: |
           set -euo pipefail
+          git fetch --quiet origin "refs/heads/$RELEASE_PR_BRANCH"
+          if [ -z "$(git rev-list FETCH_HEAD..HEAD)" ]; then
+            echo "No new release pull request commits to push."
+            exit 0
+          fi
           git push origin "HEAD:$RELEASE_PR_BRANCH"
 
   # The crates to check, one matrix leg each. Listing them here keeps a newly published crate

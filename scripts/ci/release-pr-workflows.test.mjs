@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 
@@ -95,5 +97,50 @@ test("the Release job pushes the release branch once, after every commit it make
   for (const step of steps) {
     if (step === pushes[0]) continue;
     assert.equal(step.env?.RELEASE_PR_BRANCH, undefined, `${step.name} must not be able to push`);
+  }
+});
+
+test("the release push skips a run that made no commit, even when the branch moved", () => {
+  const push = workflow("release.yml").jobs.release.steps.at(-1).run;
+  const scratch = resolve(".agent/release-push");
+  mkdirSync(scratch, { recursive: true });
+  const directory = mkdtempSync(join(scratch, "push-"));
+  const git = (cwd, ...args) => {
+    const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+    assert.equal(result.status, 0, `git ${args.join(" ")}: ${result.stderr}`);
+    return result.stdout.trim();
+  };
+  const commit = (cwd, message) =>
+    git(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-qm", message);
+  const run = (cwd) =>
+    spawnSync("bash", ["-eu", "-c", push], {
+      cwd,
+      encoding: "utf8",
+      env: { ...process.env, RELEASE_PR_BRANCH: "release" },
+    });
+  try {
+    const origin = join(directory, "origin.git");
+    git(directory, "init", "-q", "--bare", origin);
+    const job = join(directory, "job");
+    const other = join(directory, "other");
+    git(directory, "clone", "-q", origin, job);
+    commit(job, "base");
+    git(job, "push", "-q", "origin", "HEAD:release");
+    git(directory, "clone", "-q", "--branch", "release", origin, other);
+    commit(other, "outside push");
+    git(other, "push", "-q", "origin", "HEAD:release");
+    const moved = git(origin, "rev-parse", "release");
+
+    const idle = run(job);
+    assert.equal(idle.status, 0, idle.stderr);
+    assert.equal(git(origin, "rev-parse", "release"), moved, "nothing was pushed");
+
+    git(job, "reset", "-q", "--hard", moved);
+    commit(job, "changelog");
+    const busy = run(job);
+    assert.equal(busy.status, 0, busy.stderr);
+    assert.equal(git(origin, "rev-parse", "release"), git(job, "rev-parse", "HEAD"));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });
