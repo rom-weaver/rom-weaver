@@ -94,6 +94,9 @@ test("only the merged release pull request of that head into main enables reuse"
   const none = matrix.map((platform) => ({ ...platform, ci_run_id: "" }));
   assert.deepEqual(planReuse({ repository: REPOSITORY, sha: SHA, pullRequest: PR, matrix, runGh: fakeGh(everything, artifacts, releasePull({ merged: false })) }).matrix, none);
   assert.deepEqual(planReuse({ repository: REPOSITORY, sha: SHA, pullRequest: PR, matrix, runGh: fakeGh(everything, artifacts) }).matrix, matrix.map((platform) => ({ ...platform, ci_run_id: "100" })));
+  // A newer run of another release-prefixed branch with the same head is never the pull request's.
+  const otherBranch = run({ id: 200, head_branch: `${RELEASE_PR_BRANCH_PREFIX}other`, created_at: "2026-10-29T00:00:00Z" });
+  assert.deepEqual(planReuse({ repository: REPOSITORY, sha: SHA, pullRequest: PR, matrix, runGh: fakeGh([otherBranch, run()], artifacts) }).matrix, matrix.map((platform) => ({ ...platform, ci_run_id: "100" })));
 });
 
 test("a missing head commit, pull request, run, or artifact leaves every platform to build", () => {

@@ -4,6 +4,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSy
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import process from "node:process";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 
@@ -56,30 +57,86 @@ test("the release pull request run compiles the binaries it signs with no cache"
   assert.equal(compile.with["cache-restore"], "${{ env.RELEASE_PR_BINARIES != 'true' }}");
   const action = load(readFileSync(new URL("../../.github/actions/build-cli-platform/action.yml", import.meta.url), "utf8"));
   assert.equal(action.inputs["cache-restore"].default, "true");
-  // Every step that restores a cache, or wires one into the compiler, is off without cache-restore.
-  const caching = action.runs.steps.filter((step) => /rust-cache|sccache|actions\/cache|cache@/u.test(step.uses ?? "") || /RUSTC_WRAPPER|SCCACHE|CCACHE/u.test(step.run ?? ""));
-  assert.deepEqual(caching.map((step) => step.name), ["Cache cargo artifacts", "Set up Rust compiler cache", "Configure Rust compiler cache"]);
-  for (const step of caching) assert.match(step.if, /inputs\.cache-restore == 'true'/u, step.name);
-  assert.ok(!action.runs.steps.some((step) => /^\.\/\.github\/actions\/(setup-build-env|wasm-cache)/u.test(step.uses ?? "")), "no nested action restores a cache");
+  // Every step that restores a cache, or wires one into the compiler, is off without cache-restore:
+  // matched on what it uses, its inputs, its environment, and its script.
+  const CACHING = /cache|RUSTC_WRAPPER|COMPILER_LAUNCHER|jdx\/mise-action/iu;
+  const caching = (steps) => steps.filter((step) => CACHING.test(JSON.stringify({ uses: step.uses, with: step.with, env: step.env, run: step.run })));
+  const gated = new Set(["Cache cargo artifacts", "Set up Rust compiler cache", "Configure Rust compiler cache"]);
+  for (const step of caching(action.runs.steps)) {
+    if (gated.has(step.name)) assert.match(step.if, /^inputs\.build != 'cross' && inputs\.cache-restore == 'true'$|^inputs\.cache-restore == 'true'$/u, step.name);
+    else if (step.uses === "./.github/actions/identify-data") assert.equal(step.if, "inputs.identify-data-source == 'cache'", "identify data is cached only in that mode");
+    else if (String(step.uses).startsWith("actions/setup-node@")) assert.equal(step.with["package-manager-cache"], false, step.name);
+    else assert.fail(`${step.name ?? step.uses} may use a cache without cache-restore`);
+  }
+  assert.deepEqual(caching(action.runs.steps).filter((step) => gated.has(step.name)).map((step) => step.name), [...gated]);
+  // CI takes identify data from this run's own artifact, which the binary does not embed.
+  assert.equal(compile.with["identify-data-source"], "artifact");
+  assert.deepEqual(caching(ci.steps).map((step) => step.name ?? step.uses), ["./.github/actions/build-cli-platform"], "the job itself adds no cache");
 });
 
 test("the platform builds hold no OIDC token; only the attest job can sign, and only for the release pull request", () => {
   assert.deepEqual(ci.permissions, { contents: "read" }, "build scripts and third-party actions run in cli-platforms");
   const steps = ci.steps.filter((step) => /release-binary|release-cli-/u.test(JSON.stringify(step)));
-  assert.deepEqual(steps.map((step) => step.name), ["Pack the release binary", "Upload the release binary"]);
+  assert.deepEqual(steps.map((step) => step.name), ["Pack the release binary", "Upload the release binary", "Record the release binary"]);
   for (const step of steps) assert.equal(step.if, "env.RELEASE_PR_BINARIES == 'true'", step.name);
   assert.equal(steps[1].with.name, artifactName("${{ matrix.package }}"));
+  assert.equal(steps[2].env.ARTIFACT_ID, `\${{ steps.${steps[1].id}.outputs.artifact-id }}`);
   assert.ok(!JSON.stringify(ci.steps).includes("attest"), "cli-platforms attests nothing");
 
   assert.deepEqual(attest.permissions, { contents: "read", attestations: "write", "artifact-metadata": "write", "id-token": "write" });
-  assert.equal(attest.needs, "cli-platforms");
+  assert.deepEqual(attest.needs, ["changes", "cli-platforms"]);
   assert.equal(attest["continue-on-error"], true, "an attestation outage must not fail CI");
   for (const [context, expected, label] of releaseCases)
     assert.equal(evaluate(attest.if, context), expected, label ?? "release pull request");
   assert.equal(evaluate(attest.if, { event: "pull_request", headRef: RELEASE, platforms: "failure" }), false, "a failed build is not signed");
-  assert.ok(attest.steps.every((step) => !step.run), "the attest job runs no build or script code");
+  const scripts = attest.steps.filter((step) => step.run);
+  assert.deepEqual(scripts.map((step) => step.name), ["Select the release binaries"], "the attest job runs no build or repository code");
+  assert.doesNotMatch(scripts[0].run, /node|npm|cargo|scripts\//u);
+  const download = attest.steps.find((step) => step.name === "Download the release binaries");
+  assert.equal(download.with.pattern, undefined, "never by name: any job in the run can replace or add an artifact by name");
+  assert.equal(download.with.name, undefined);
+  assert.equal(download.with["artifact-ids"], "${{ steps.binaries.outputs.ids }}");
   const sign = attest.steps.find((step) => step.uses === "./.github/actions/attest-retry");
   assert.equal(sign.with["subject-path"], "release-binaries/release-cli-*/package/bin/*");
+});
+
+test("cli-platforms reports each leg's upload id under its own output, for every platform", () => {
+  const packages = JSON.parse(readFileSync(new URL("../../.github/cli-platforms.json", import.meta.url), "utf8")).map((platform) => platform.package);
+  assert.deepEqual(
+    ciJobs["cli-platforms"].outputs,
+    Object.fromEntries(packages.map((name) => [`artifact-${name}`, `\${{ steps.release-binary-id.outputs.artifact-${name} }}`])),
+  );
+  const record = ci.steps.find((step) => step.id === "release-binary-id");
+  assert.equal(record.env.PACKAGE, "${{ matrix.package }}");
+  assert.equal(record.run, 'echo "artifact-$PACKAGE=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"');
+});
+
+// Runs the attest job's real selection step.
+function selectBinaries(platforms, artifacts) {
+  const directory = mkdtempSync(join(tmpdir(), "rom-weaver-select-"));
+  try {
+    const output = join(directory, "output");
+    writeFileSync(output, "");
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
+    const step = attest.steps.find((candidate) => candidate.id === "binaries");
+    const result = spawnSync("bash", ["-c", step.run], {
+      encoding: "utf8",
+      env: { ...env, GITHUB_OUTPUT: output, PLATFORMS: JSON.stringify(platforms.map((name) => ({ package: name }))), ARTIFACTS: JSON.stringify(artifacts) },
+    });
+    return { status: result.status, outputs: Object.fromEntries(readFileSync(output, "utf8").trim().split("\n").filter(Boolean).map((line) => line.split(/=(.*)/su).slice(0, 2))) };
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+test("the attest job signs exactly the uploads every leg reported, or nothing", () => {
+  assert.deepEqual(selectBinaries(["linux-x64-gnu", "darwin-x64"], { "artifact-linux-x64-gnu": "11", "artifact-darwin-x64": "22", "artifact-win32-x64-msvc": "" }), {
+    status: 0,
+    outputs: { ids: "11,22", single: "" },
+  });
+  assert.deepEqual(selectBinaries(["linux-x64-gnu"], { "artifact-linux-x64-gnu": "11" }).outputs, { ids: "11", single: "release-cli-linux-x64-gnu" });
+  for (const artifacts of [{ "artifact-linux-x64-gnu": "11" }, { "artifact-linux-x64-gnu": "11", "artifact-darwin-x64": "1,2" }, { "artifact-linux-x64-gnu": "11", "artifact-darwin-x64": "0" }])
+    assert.notEqual(selectBinaries(["linux-x64-gnu", "darwin-x64"], artifacts).status, 0, JSON.stringify(artifacts));
 });
 
 test("the release builds from source unless the CI binary is pinned to the release pull request and its tree", () => {

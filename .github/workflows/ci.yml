@@ -1161,6 +1161,20 @@ jobs:
     # holds an OIDC token. `cli-release-attest` signs the release pull request's binaries.
     permissions:
       contents: read
+    # The id of each leg's `release-cli-<package>` upload, one output per package (a leg sets only
+    # its own; GitHub keeps the last value per name). `cli-release-attest` signs only these: any job
+    # in the run can replace an artifact by name, but a replacement gets a new id, and no other job
+    # can change this job's outputs. The names MUST cover .github/cli-platforms.json.
+    outputs:
+      artifact-darwin-arm64: ${{ steps.release-binary-id.outputs.artifact-darwin-arm64 }}
+      artifact-darwin-x64: ${{ steps.release-binary-id.outputs.artifact-darwin-x64 }}
+      artifact-linux-arm64-musl: ${{ steps.release-binary-id.outputs.artifact-linux-arm64-musl }}
+      artifact-linux-ia32-musl: ${{ steps.release-binary-id.outputs.artifact-linux-ia32-musl }}
+      artifact-linux-x64-gnu: ${{ steps.release-binary-id.outputs.artifact-linux-x64-gnu }}
+      artifact-linux-x64-musl: ${{ steps.release-binary-id.outputs.artifact-linux-x64-musl }}
+      artifact-win32-arm64-msvc: ${{ steps.release-binary-id.outputs.artifact-win32-arm64-msvc }}
+      artifact-win32-ia32-msvc: ${{ steps.release-binary-id.outputs.artifact-win32-ia32-msvc }}
+      artifact-win32-x64-msvc: ${{ steps.release-binary-id.outputs.artifact-win32-x64-msvc }}
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
@@ -1233,6 +1247,7 @@ jobs:
           --out release-binary
 
       - name: Upload the release binary
+        id: release-binary-upload
         if: env.RELEASE_PR_BINARIES == 'true'
         uses: actions/upload-artifact@v7
         with:
@@ -1243,6 +1258,15 @@ jobs:
           # A release pull request can wait days for its merge; this is what the release reuses.
           retention-days: 14
 
+      - name: Record the release binary
+        id: release-binary-id
+        if: env.RELEASE_PR_BINARIES == 'true'
+        shell: bash
+        env:
+          PACKAGE: ${{ matrix.package }}
+          ARTIFACT_ID: ${{ steps.release-binary-upload.outputs.artifact-id }}
+        run: echo "artifact-$PACKAGE=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
+
   # Signs the binaries `cli-platforms` uploaded on the release pull request, in a job that runs no
   # build code, so no other CI job can mint provenance. The release accepts only an attestation
   # whose identity is this workflow at `refs/pull/<release pull request>/merge` and whose source
@@ -1252,7 +1276,7 @@ jobs:
     name: Attest release CLI binaries
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    needs: cli-platforms
+    needs: [changes, cli-platforms]
     if: >-
       needs.cli-platforms.result == 'success' &&
       github.event_name == 'pull_request' &&
@@ -1272,11 +1296,31 @@ jobs:
           sparse-checkout: .github/actions
           persist-credentials: false
 
+      # Exactly the uploads `cli-platforms` reported, never a name pattern: another job in the run
+      # (one that restored a poisoned cache) could replace `release-cli-<package>` or add one. Every
+      # leg that ran must have reported a numeric id, or nothing is signed and the release builds
+      # from source.
+      - name: Select the release binaries
+        id: binaries
+        shell: bash
+        env:
+          PLATFORMS: ${{ needs.changes.outputs.cli_platforms }}
+          ARTIFACTS: ${{ toJSON(needs.cli-platforms.outputs) }}
+        run: |
+          set -euo pipefail
+          ids=$(jq -nr --argjson platforms "$PLATFORMS" --argjson artifacts "$ARTIFACTS" '
+            [$platforms[].package | ($artifacts["artifact-" + .] // "") as $id
+              | if ($id | test("^[1-9][0-9]*$")) then $id else error("no artifact id for \(.)") end]
+            | join(",")')
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+          # One artifact downloads into the path itself rather than a directory named for it.
+          echo "single=$(jq -nr --argjson platforms "$PLATFORMS" 'if ($platforms | length) == 1 then "release-cli-" + $platforms[0].package else "" end')" >> "$GITHUB_OUTPUT"
+
       - name: Download the release binaries
         uses: actions/download-artifact@v8
         with:
-          pattern: release-cli-*
-          path: release-binaries
+          artifact-ids: ${{ steps.binaries.outputs.ids }}
+          path: ${{ steps.binaries.outputs.single != '' && format('release-binaries/{0}', steps.binaries.outputs.single) || 'release-binaries' }}
 
       - name: Attest the release binaries
         uses: ./.github/actions/attest-retry
