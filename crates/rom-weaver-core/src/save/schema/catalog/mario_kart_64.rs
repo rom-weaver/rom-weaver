@@ -225,6 +225,8 @@ fn record_fields(
 }
 
 // Layout and checksum rules: https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88/src/lib/templates/mario-kart-64/saveEditor
+// The checksums' second byte wraps like the game (mk64 decomp src/save.c, `(low + 90) % 256`),
+// not like that editor, which lets the addition carry into the first byte.
 // Options, time trials, and best records, unchanged at: https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/mario-kart-64/saveEditor
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let cups = [
