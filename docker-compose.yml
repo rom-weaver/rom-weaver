@@ -12,6 +12,8 @@ services:
     build:
       context: .
       dockerfile: packages/rom-weaver-webapp/Dockerfile
+      # The image needs static-web-server 2.44.1 or later; do not reuse an older cached base.
+      pull: true
     image: ghcr.io/rom-weaver/rom-weaver-webapp:latest
     pull_policy: always
     ports:

@@ -237,6 +237,17 @@ async function redirects(origin, prefix) {
   console.log(`PASS ${count} redirects: ${prefix || "root"}`);
 }
 
+// Pathnames of the page's same-origin links that leave the served prefix.
+const anchorsOutsidePrefix = (page, origin, prefix) =>
+  page.evaluate(
+    ({ pageOrigin, scope }) =>
+      [...document.querySelectorAll("a[href]")]
+        .map((anchor) => new URL(anchor.href, document.baseURI))
+        .filter((url) => url.origin === pageOrigin && !url.pathname.startsWith(scope))
+        .map((url) => url.pathname),
+    { pageOrigin: origin, scope: `${prefix}/` },
+  );
+
 // A sub-path deployment (the documented Nginx proxy) must keep the whole docs experience under
 // its prefix: assets, in-app links, soft navigation, and a reload of the page navigated to.
 async function checkDocsRoutes(context, origin, prefix) {
@@ -250,15 +261,7 @@ async function checkDocsRoutes(context, origin, prefix) {
     if (response.status() >= 400) problems.push(`${response.status()} ${response.url()}`);
   });
   // Rebasing runs after hydration, so poll until the page settles instead of sampling once.
-  const sameOriginAnchorsOutsidePrefix = () =>
-    page.evaluate(
-      ({ pageOrigin, scope }) =>
-        [...document.querySelectorAll("a[href]")]
-          .map((anchor) => new URL(anchor.href, document.baseURI))
-          .filter((url) => url.origin === pageOrigin && !url.pathname.startsWith(scope))
-          .map((url) => url.pathname),
-      { pageOrigin: origin, scope: `${prefix}/` },
-    );
+  const sameOriginAnchorsOutsidePrefix = () => anchorsOutsidePrefix(page, origin, prefix);
   try {
     for (const slug of ["docs", "docs/faq"]) {
       await page.goto(`${origin}${prefix}/${slug}`, { waitUntil: "load" });
@@ -318,13 +321,8 @@ async function checkNotFoundPage(context, origin, prefix) {
   assert.notEqual(await home.evaluate((node) => getComputedStyle(node).display), "inline", url);
   // The base the page resolves against is its <base>, not the missed path.
   assert.equal(new URL(await page.evaluate(() => document.baseURI)).pathname, `${prefix}/`, url);
-  const hrefs = await page.locator("a[href]").evaluateAll((nodes) => nodes.map((node) => node.href));
-  assert.ok(hrefs.length > 0, `${url} has links`);
-  for (const href of hrefs) {
-    const link = new URL(href);
-    if (link.origin === origin)
-      assert.ok(`${link.pathname}`.startsWith(`${prefix}/`), `${url} link ${href} leaves ${prefix}/`);
-  }
+  assert.ok((await page.locator("a[href]").count()) > 0, `${url} has links`);
+  assert.deepEqual(await anchorsOutsidePrefix(page, origin, prefix), [], `${url} links leave ${prefix}/`);
   console.log(`PASS 404 page for an unknown route: ${origin}${prefix}`);
   await page.close();
 }
