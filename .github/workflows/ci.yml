@@ -1157,22 +1157,18 @@ jobs:
     timeout-minutes: 40
     needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    # Read-only: build scripts, proc macros, and third-party actions run here, so this job never
+    # holds an OIDC token. `cli-release-attest` signs the release pull request's binaries.
     permissions:
       contents: read
-      # Signed provenance for the binary a release pull request run hands to the release. Only the
-      # steps below that test RELEASE_PR_BINARIES use these; a fork's token is read-only whatever
-      # is requested here.
-      attestations: write
-      artifact-metadata: write
-      id-token: write
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
       # The release pull request in this repository, which is the commit that ships. The release
       # reuses these binaries (.github/workflows/npm-build.yml) when its tree equals the one built
       # here. The head-ref prefix MUST match scripts/ci/release-pr.mjs; an ordinary pull request,
-      # a push to main, and the nightly never upload them.
-      RELEASE_PR_BINARIES: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--branches--main--components--') && github.event.pull_request.head.repo.full_name == github.repository }}
+      # one into any base but main, a push to main, and the nightly never upload them.
+      RELEASE_PR_BINARIES: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--branches--main--components--') && github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1219,9 +1215,9 @@ jobs:
           npm pack --dry-run --ignore-scripts --json
           "packages/rom-weaver-cli-platforms/${{ matrix.package }}"
 
-      # What the release would otherwise compile again: the staged package without its identify
-      # tree, a build.json naming the tree and every file's sha256, and an attestation of the
-      # binary. The release refuses the artifact on any mismatch and builds from source instead.
+      # What the release would otherwise compile again: the binary alone and a build.json naming
+      # the tree, the commit this run checked out (the pull request's merge commit), and the
+      # binary's sha256. The release regenerates every other package file from its own checkout.
       - name: Pack the release binary
         if: env.RELEASE_PR_BINARIES == 'true'
         shell: bash
@@ -1234,15 +1230,6 @@ jobs:
           --source-sha "$(git rev-parse HEAD)"
           --out release-binary
 
-      # Best effort: without an attestation the release verifies nothing it can trust and builds
-      # from source, which costs time but never correctness, so a Sigstore outage must not fail CI.
-      - name: Attest the release binary
-        if: env.RELEASE_PR_BINARIES == 'true'
-        continue-on-error: true
-        uses: ./.github/actions/attest-retry
-        with:
-          subject-path: release-binary/package/bin/${{ matrix.binary }}
-
       - name: Upload the release binary
         if: env.RELEASE_PR_BINARIES == 'true'
         uses: actions/upload-artifact@v7
@@ -1253,6 +1240,46 @@ jobs:
           overwrite: true
           # A release pull request can wait days for its merge; this is what the release reuses.
           retention-days: 14
+
+  # Signs the binaries `cli-platforms` uploaded on the release pull request, in a job that runs no
+  # build code, so no other CI job can mint provenance. The release accepts only an attestation
+  # whose identity is this workflow at `refs/pull/<release pull request>/merge` and whose source
+  # commit has the release's tree. Best effort: without it the release builds from source, which
+  # costs time but never correctness, so a Sigstore outage must not fail CI.
+  cli-release-attest:
+    name: Attest release CLI binaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: cli-platforms
+    if: >-
+      needs.cli-platforms.result == 'success' &&
+      github.event_name == 'pull_request' &&
+      startsWith(github.head_ref, 'release-please--branches--main--components--') &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.base_ref == 'main'
+    continue-on-error: true
+    permissions:
+      contents: read
+      attestations: write
+      artifact-metadata: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
+      - name: Download the release binaries
+        uses: actions/download-artifact@v8
+        with:
+          pattern: release-cli-*
+          path: release-binaries
+
+      - name: Attest the release binaries
+        uses: ./.github/actions/attest-retry
+        with:
+          subject-path: release-binaries/release-cli-*/package/bin/*
 
   cli-linux-arm64:
     name: CLI target runtime (aarch64-unknown-linux-musl)

@@ -9,7 +9,8 @@
 // `ci_run_id` empty for every platform instead of failing the release.
 //
 // Required env: GITHUB_REPOSITORY, MATRIX (the platform matrix JSON)
-// Optional env: GH_TOKEN, ARTIFACT_SHA (the release pull request's head commit), GITHUB_OUTPUT
+// Optional env: GH_TOKEN, ARTIFACT_SHA (the release pull request's head commit), ARTIFACT_PR (its
+// number; without one nothing is reused), GITHUB_OUTPUT
 
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -21,7 +22,11 @@ import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
 
 const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 
-export function latestReleaseRun(runs, { repository, sha }) {
+// A run of the merged release pull request itself, into main. Another pull request can share the
+// same head commit and branch while targeting a base whose ci.yml its author wrote, so the number
+// and base are what tell them apart. The binary's attestation is pinned to the same pull request
+// (npm-build.yml); this only keeps the release from downloading anything else.
+export function latestReleaseRun(runs, { repository, sha, pullRequest }) {
   return (
     runs
       .filter(
@@ -29,19 +34,23 @@ export function latestReleaseRun(runs, { repository, sha }) {
           run.head_sha === sha &&
           run.event === "pull_request" &&
           run.conclusion === "success" &&
-          run.path?.startsWith(".github/workflows/ci.yml") &&
+          run.path === ".github/workflows/ci.yml" &&
           run.head_repository?.full_name === repository &&
-          run.head_branch?.startsWith(RELEASE_PR_BRANCH_PREFIX),
+          run.head_branch?.startsWith(RELEASE_PR_BRANCH_PREFIX) &&
+          (run.pull_requests ?? []).some(
+            (pull) => String(pull.number) === String(pullRequest) && pull.base?.ref === "main" && pull.base?.repo?.url?.endsWith(`/repos/${repository}`),
+          ),
       )
       .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0] ?? null
   );
 }
 
-export function planReuse({ repository, sha, matrix, runGh = gh }) {
+export function planReuse({ repository, sha, pullRequest, matrix, runGh = gh }) {
   const none = (reason) => ({ matrix: matrix.map((platform) => ({ ...platform, ci_run_id: "" })), reason });
   if (!sha) return none("no release pull request head commit");
+  if (!/^[1-9][0-9]*$/u.test(pullRequest ?? "")) return none("no merged release pull request to reuse from");
   const runs = JSON.parse(runGh(["api", `repos/${repository}/actions/runs?head_sha=${sha}&event=pull_request&status=success&per_page=30`])).workflow_runs;
-  const run = latestReleaseRun(runs ?? [], { repository, sha });
+  const run = latestReleaseRun(runs ?? [], { repository, sha, pullRequest });
   if (!run) return none(`no successful release pull request CI run for ${sha}`);
   const artifacts = JSON.parse(runGh(["api", `repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`])).artifacts ?? [];
   const available = new Set(artifacts.filter((artifact) => !artifact.expired).map((artifact) => artifact.name));
@@ -54,7 +63,7 @@ export function main(env = process.env, runGh = gh) {
   const matrix = JSON.parse(env.MATRIX);
   let result;
   try {
-    result = planReuse({ repository: env.GITHUB_REPOSITORY, sha: env.ARTIFACT_SHA, matrix, runGh });
+    result = planReuse({ repository: env.GITHUB_REPOSITORY, sha: env.ARTIFACT_SHA, pullRequest: env.ARTIFACT_PR, matrix, runGh });
   } catch (error) {
     result = { matrix: matrix.map((platform) => ({ ...platform, ci_run_id: "" })), reason: `lookup failed: ${error.message}` };
   }

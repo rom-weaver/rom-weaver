@@ -37,6 +37,13 @@ on:
         required: false
         default: ""
         type: string
+      artifact-pr:
+        description: >-
+          Number of the merged release pull request into main that built `artifact-sha`. Without it
+          nothing is reused; with it, only that pull request's runs and attestations are accepted.
+        required: false
+        default: ""
+        type: string
     outputs:
       platforms:
         description: The platform matrix, for the publish workflow to fan out over.
@@ -118,6 +125,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MATRIX: ${{ steps.platforms.outputs.matrix }}
           ARTIFACT_SHA: ${{ inputs.artifact-sha }}
+          ARTIFACT_PR: ${{ inputs.artifact-pr }}
         run: node scripts/ci/resolve-cli-binary-run.mjs
 
   # Does not wait for `identify-data`: each leg builds its identify tree from the cached packs
@@ -146,10 +154,17 @@ jobs:
         with:
           ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
-      # The release pull request's CI built every target with this same action and tested it. When its
-      # artifact is for this tree and target, every file matches its recorded hash, and the binary's
-      # attestation verifies as ci.yml's, the release ships those exact bytes and skips the compile
-      # (macOS Intel alone took 13 minutes). Anything else falls through to the build below.
+      # The release pull request's CI built every target with this same action and tested it. The
+      # release ships that binary and skips the compile (macOS Intel alone took 13 minutes) only when
+      # all of these hold; anything else falls through to the build below:
+      #   - build.json names this package, target, and tree, and the artifact holds exactly the
+      #     binary with its recorded hash and a header for this target;
+      #   - the commit build.json names has this release's tree, according to the API, not build.json;
+      #   - the binary is attested by ci.yml run for refs/pull/<artifact-pr>/merge at that commit, from
+      #     that commit's own ci.yml, on a GitHub-hosted runner. Another pull request, even one with
+      #     the same head commit into a base whose workflow its author wrote, signs as its own ref.
+      # Only the binary comes from the artifact; prepare-npm-platform-package.mjs stages every other
+      # file from this checkout.
       - name: Download the binary CI built
         id: ci-binary
         if: matrix.ci_run_id != ''
@@ -189,22 +204,37 @@ jobs:
           TARGET: ${{ matrix.target }}
           BINARY: ${{ matrix.binary }}
           CI_RUN_ID: ${{ matrix.ci_run_id }}
+          ARTIFACT_PR: ${{ inputs.artifact-pr }}
         run: |
           set -uo pipefail
           tree=$(git rev-parse 'HEAD^{tree}')
-          source=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sourceSha' "$CI_BINARY/build.json" || true)
-          if node scripts/ci/cli-release-binary.mjs verify \
-              --package "$PACKAGE" --target "$TARGET" --binary "$BINARY" --tree "$tree" --dir "$CI_BINARY" &&
+          package_dir="packages/rom-weaver-cli-platforms/$PACKAGE"
+          reuse() {
+            [[ "$ARTIFACT_PR" =~ ^[1-9][0-9]*$ ]] || { echo "no release pull request number"; return 1; }
+            node scripts/ci/cli-release-binary.mjs verify \
+              --package "$PACKAGE" --target "$TARGET" --binary "$BINARY" --tree "$tree" --dir "$CI_BINARY" || return 1
+            source=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sourceSha' "$CI_BINARY/build.json") || return 1
+            [[ "$source" =~ ^[0-9a-f]{40}$ ]] || { echo "build.json names no commit"; return 1; }
+            source_tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$source" --jq .tree.sha) || return 1
+            [[ "$source_tree" == "$tree" ]] || { echo "commit $source has tree $source_tree, not $tree"; return 1; }
+            ref="refs/pull/$ARTIFACT_PR/merge"
             gh attestation verify "$CI_BINARY/package/bin/$BINARY" \
               --repo "$GITHUB_REPOSITORY" \
-              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml" \
+              --cert-identity "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/ci.yml@$ref" \
+              --cert-oidc-issuer https://token.actions.githubusercontent.com \
+              --source-ref "$ref" \
               --source-digest "$source" \
-              --deny-self-hosted-runners &&
-            node scripts/ci/cli-release-binary.mjs install --package "$PACKAGE" --dir "$CI_BINARY"; then
+              --signer-digest "$source" \
+              --deny-self-hosted-runners || return 1
+            node scripts/prepare-npm-platform-package.mjs "$PACKAGE" "$CI_BINARY/package/bin/$BINARY"
+          }
+          if reuse; then
             echo "reused=true" >> "$GITHUB_OUTPUT"
             echo "- \`$PACKAGE\`: reused the binary built by [CI run $CI_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID) at \`$source\`" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::warning::$PACKAGE: the CI binary did not verify for tree $tree; building from source"
+            # A staging step that failed partway must not leave its files for the build to keep.
+            git checkout -- "$package_dir" && git clean -fdxq -- "$package_dir"
             echo "reused=false" >> "$GITHUB_OUTPUT"
           fi
 

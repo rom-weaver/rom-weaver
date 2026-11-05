@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import { elf, pe } from "./binary-fixtures.mjs";
-import { install, main, pack, verify } from "./cli-release-binary.mjs";
+import { main, pack, verify } from "./cli-release-binary.mjs";
 
 const TREE = "a".repeat(40);
 const SOURCE = "b".repeat(40);
@@ -34,35 +34,22 @@ function fixture(platform = { name: "linux-x64-gnu", target: "x86_64-unknown-lin
   const out = join(root, "artifact");
   const packed = () =>
     pack({ ...options, root: join(root, "ci"), sourceSha: SOURCE, runId: "123", runAttempt: "1", out });
-  return { root, options, out, packed, platform, releaseRoot: join(root, "release") };
+  return { root, options, out, packed, platform };
 }
 
-test("packs everything but the identify tree and records a hash for each file", () => {
+test("packs the binary alone and records its hash", () => {
   const { root, packed, out } = fixture();
   try {
     const manifest = packed();
-    assert.deepEqual(Object.keys(manifest.files).sort(), ["CLI_NOTICE", "LICENSE", "bin/rom-weaver", "package.json", "third_party/licenses/a.txt"]);
+    // package.json, licenses, notices, and the identify tree never travel: the release stages them
+    // from its own checkout, so only the attested binary comes from CI.
+    assert.deepEqual(Object.keys(manifest.files), ["bin/rom-weaver"]);
+    assert.deepEqual(readdirSync(join(out, "package")), ["bin"]);
+    assert.deepEqual(readdirSync(join(out, "package/bin")), ["rom-weaver"]);
     assert.equal(manifest.files["bin/rom-weaver"], createHash("sha256").update(readFileSync(join(out, "package/bin/rom-weaver"))).digest("hex"));
     assert.equal(manifest.tree, TREE);
     assert.equal(manifest.sourceSha, SOURCE);
     assert.equal(manifest.runId, "123");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("installs the verified files and the release's own identify tree", () => {
-  const { root, packed, out, options, releaseRoot } = fixture();
-  try {
-    packed();
-    verify({ dir: out, ...options });
-    const result = install({ root: releaseRoot, dir: out, name: options.name });
-    const destination = join(releaseRoot, "packages/rom-weaver-cli-platforms", options.name);
-    assert.equal(readFileSync(join(destination, "bin/rom-weaver")).equals(readFileSync(join(out, "package/bin/rom-weaver"))), true);
-    assert.equal(readFileSync(join(destination, "share/identify/index"), "utf8"), "release identify tree\n");
-    assert.throws(() => statSync(join(destination, "share/identify/ci-only")));
-    assert.equal(statSync(join(destination, "bin/rom-weaver")).mode & 0o111, 0o111);
-    assert.equal(result.sha256.length, 64);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -88,15 +75,22 @@ test("refuses an artifact for another tree, package, target, repository, or bina
 test("refuses a changed, added, or removed file", () => {
   for (const tamper of [
     (out) => writeFileSync(join(out, "package/bin/rom-weaver"), "tampered"),
-    (out) => writeFileSync(join(out, "package/CLI_NOTICE"), "different notice\n"),
     (out) => writeFileSync(join(out, "package/extra"), "extra"),
-    (out) => rmSync(join(out, "package/LICENSE")),
+    // A package.json could carry install scripts; the artifact may hold nothing but the binary.
+    (out) => writeFileSync(join(out, "package/package.json"), '{"scripts":{"postinstall":"x"}}\n'),
+    (out) => {
+      writeFileSync(join(out, "package/package.json"), "{}\n");
+      const manifest = JSON.parse(readFileSync(join(out, "build.json"), "utf8"));
+      manifest.files["package.json"] = createHash("sha256").update("{}\n").digest("hex");
+      writeFileSync(join(out, "build.json"), JSON.stringify(manifest));
+    },
+    (out) => rmSync(join(out, "package/bin/rom-weaver")),
   ]) {
     const { root, packed, out, options } = fixture();
     try {
       packed();
       tamper(out);
-      assert.throws(() => verify({ dir: out, ...options }), /differ from build\.json|does not match/);
+      assert.throws(() => verify({ dir: out, ...options }), /differ from build\.json|does not match|ENOENT/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -128,15 +122,27 @@ test("refuses an artifact without a staged binary", () => {
   }
 });
 
-test("the command line packs, verifies, and installs with the workflow's flags", () => {
-  const { root, out, options, releaseRoot } = fixture();
+test("the command line packs and verifies with the workflow's flags", () => {
+  const { root, out, options } = fixture();
   try {
     const flags = ["--package", options.name, "--target", options.target, "--binary", options.binary, "--tree", TREE, "--repository", REPOSITORY];
     const packed = main(["pack", ...flags, "--root", join(root, "ci"), "--source-sha", SOURCE, "--run-id", "9", "--run-attempt", "2", "--out", out], {});
     assert.equal(packed.runAttempt, "2");
     assert.equal(main(["verify", ...flags, "--dir", out], {}).package, options.name);
-    assert.match(main(["install", "--package", options.name, "--dir", out, "--root", releaseRoot], {}).binary, /rom-weaver$/);
+    assert.throws(() => main(["install", "--package", options.name, "--dir", out], {}), /usage/);
     assert.throws(() => main(["unpack"], {}), /usage/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("refuses a symlink in place of the binary", { skip: process.platform === "win32" && "symlinks need privileges on Windows" }, () => {
+  const { root, packed, out, options } = fixture();
+  try {
+    packed();
+    rmSync(join(out, "package/bin/rom-weaver"));
+    symlinkSync("/bin/sh", join(out, "package/bin/rom-weaver"));
+    assert.throws(() => verify({ dir: out, ...options }), /not a regular file/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
