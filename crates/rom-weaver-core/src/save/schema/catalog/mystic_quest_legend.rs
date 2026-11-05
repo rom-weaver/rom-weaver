@@ -310,6 +310,23 @@ fn character_fields(
     fields
 }
 
+/// Current HP, white magic, black magic, and sorcery against their stored maximums for the character block at `block`.
+fn capacity_pairs(block: usize) -> Vec<(Scalar, Scalar)> {
+    let scalar = |offset: usize, storage| Scalar {
+        offset: block + offset,
+        storage,
+        mask: None,
+    };
+    let mut pairs = vec![(scalar(0x1a, Storage::U16Le), scalar(0x1c, Storage::U16Le))];
+    for current in 0x1e..0x21 {
+        pairs.push((
+            scalar(current, Storage::U8),
+            scalar(current + 3, Storage::U8),
+        ));
+    }
+    pairs
+}
+
 // Layout, write rules, and checksum: https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88/src/lib/templates/mystic-quest-legend/saveEditor
 // Current layout and write rules: https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/mystic-quest-legend/saveEditor
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
@@ -339,9 +356,13 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         }
         GameDefinition {
             fields,
-            description: format!("Edits slot {}: money, play time, options, items, key items, battlefield rounds, and per-character experience, HP, magic points, stats, status, and weapon/armor/spell ownership. Stat edits keep the equipment-adjusted and base copies in step; companion changes reset the level marker. Names, equipment slots, locations, and colors are omitted.", slot + 1),
+            description: format!("Edits slot {}: money, play time, options, items, key items, battlefield rounds, and per-character experience, HP, magic points, stats, status, and weapon/armor/spell ownership. Stat edits keep the equipment-adjusted and base copies in step; companion changes reset the level marker. Current HP and magic cannot exceed their maximums. Names, equipment slots, locations, and colors are omitted.", slot + 1),
             signatures: vec![SignatureDefinition { offset: base, bytes: b"FF0!".to_vec() }],
-            runtime: runtime::Runtime { recognition: Some(runtime::Recognition { checks: vec![check.clone()], reasons: vec![SaveRecognitionReason::ChecksumValid], confidence: SaveRecognitionConfidence::High, incomplete_confidence: None, selected_reason: true, empty_top_level_reasons: true }), checks: vec![check], after_edit: vec![Store { when: None, destination: Scalar { offset: base + 4, storage: Storage::U16Le, mask: None }, value: ReadValue::new(move |bytes| Ok(i64::from(checksum(bytes, base)))) }], ..Default::default() },
+            runtime: runtime::Runtime { recognition: Some(runtime::Recognition { checks: vec![check.clone()], reasons: vec![SaveRecognitionReason::ChecksumValid], confidence: SaveRecognitionConfidence::High, incomplete_confidence: None, selected_reason: true, empty_top_level_reasons: true }), checks: vec![check], edit_checks: vec![
+                capacity_check("the Hero's current HP or magic exceeds its maximum".into(), capacity_pairs(base)),
+                // An empty companion slot (level 0xff) holds no character, so its pairs are not checked.
+                Check { when: Some(Condition::new(move |bytes| Ok(bytes[base + 0x66] != 0xff))), ..capacity_check("the companion's current HP or magic exceeds its maximum".into(), capacity_pairs(base + 0x50)) },
+            ], after_edit: vec![Store { when: None, destination: Scalar { offset: base + 4, storage: Storage::U16Le, mask: None }, value: ReadValue::new(move |bytes| Ok(i64::from(checksum(bytes, base)))) }], ..Default::default() },
             ..GameDefinition::new(format!("mystic-quest-legend-slot-{}", slot + 1), format!("Mystic Quest Legend (Slot {})", slot + 1), "snes".into(), 8192)
         }
     }).collect();
@@ -472,6 +493,7 @@ mod tests {
             edit("party.hero.hp", SaveValue::U32(1640)),
             edit("party.hero.max_hp", SaveValue::U32(1640)),
             edit("party.hero.white_magic", SaveValue::U32(99)),
+            edit("party.companion.sorcery", SaveValue::U32(0)),
             edit("party.companion.max_sorcery", SaveValue::U32(0)),
             edit("party.companion.accuracy", SaveValue::U32(200)),
             edit("party.hero.condition.poison", SaveValue::Bool(false)),
@@ -495,6 +517,7 @@ mod tests {
         expected[base + 0x1a..base + 0x1c].copy_from_slice(&1640u16.to_le_bytes());
         expected[base + 0x1c..base + 0x1e].copy_from_slice(&1640u16.to_le_bytes());
         expected[base + 0x1e] = 99;
+        expected[companion + 0x20] = 0;
         expected[companion + 0x23] = 0;
         expected[companion + 0x46] = 200;
         expected[base + 0x27] &= !0x04;
@@ -522,6 +545,58 @@ mod tests {
                 "{field}"
             );
         }
+    }
+
+    #[test]
+    fn current_hp_and_magic_cannot_exceed_their_maximums() {
+        let handler = schemas().remove(0);
+        let mut bytes = slot_template(0);
+        for block in [0, 0x50] {
+            bytes[block + 0x1a..block + 0x1c].copy_from_slice(&100u16.to_le_bytes());
+            bytes[block + 0x1c..block + 0x1e].copy_from_slice(&100u16.to_le_bytes());
+            bytes[block + 0x1e..block + 0x24].copy_from_slice(&[5, 5, 5, 5, 5, 5]);
+        }
+        repair(&mut bytes, 0);
+        let capacity_error = |bytes: &[u8], edits: &[SaveEdit]| {
+            matches!(
+                apply(&handler, bytes.to_vec(), edits),
+                Err(crate::RomWeaverError::ValidationCode(error))
+                    if error.code() == "save_resource_capacity"
+            )
+        };
+        for (field, value) in [
+            ("party.hero.hp", 101),
+            ("party.hero.max_hp", 99),
+            ("party.hero.white_magic", 6),
+            ("party.hero.max_black_magic", 4),
+            ("party.companion.sorcery", 6),
+            ("party.companion.max_hp", 99),
+        ] {
+            assert!(
+                capacity_error(&bytes, &[edit(field, SaveValue::U32(value))]),
+                "{field}"
+            );
+        }
+        let output = apply(
+            &handler,
+            bytes.clone(),
+            &[
+                edit("party.hero.max_sorcery", SaveValue::U32(9)),
+                edit("party.hero.sorcery", SaveValue::U32(9)),
+            ],
+        )
+        .unwrap();
+        assert_eq!(output[0x20], 9);
+        assert_eq!(output[0x23], 9);
+        // An empty companion slot is not checked, but the Hero still is.
+        bytes[0x66] = 0xff;
+        bytes[0x50 + 0x1a] = 101;
+        repair(&mut bytes, 0);
+        assert!(apply(&handler, bytes.clone(), &[edit("money", SaveValue::U32(1))]).is_ok());
+        assert!(capacity_error(
+            &bytes,
+            &[edit("party.hero.hp", SaveValue::U32(101))]
+        ));
     }
 
     #[test]

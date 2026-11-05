@@ -1,4 +1,4 @@
-use super::super::rules::{ReadValue, Scalar, Store};
+use super::super::rules::{Condition, ReadValue, Scalar, Store};
 use super::*;
 use tracing::trace;
 
@@ -18,8 +18,8 @@ const PLAYERS: [(usize, usize, usize); 6] = [
 const LANGUAGES: [&[u8; 8]; 3] = [b"ENGLISH ", b"FRENCH  ", b"GERMAN  "];
 
 /// Slug, label, level-state byte, distance to the world-map copy of that byte (0 for none), and the
-/// bonus rooms that exist for the level. Bit 0 and bit 7 of the byte are the Donkey and Diddy clear
-/// flags; bit N is bonus room N.
+/// bonus rooms that exist for the level. Bits 0 and 7 record who cleared the level (0x01 Donkey Kong,
+/// 0x81 Diddy Kong); bit N is bonus room N.
 const LEVELS: [(&str, &str, usize, usize, &[u8]); 40] = [
     ("jungle_hijinxs", "Jungle Hijinxs", 0x2e, 0, &[1, 2]),
     ("ropey_rampage", "Ropey Rampage", 0x24, 0, &[1, 2]),
@@ -136,24 +136,24 @@ fn progression_fields(prefix: &str, base: usize) -> Vec<FieldDefinition> {
             });
         }
         cleared_effects.push(completion.clone());
-        for (suffix, text, bit) in [
-            ("cleared", "cleared", 0),
-            ("cleared_with_diddy", "cleared with Diddy", 7),
-        ] {
-            fields.push(
-                catalog_field(
-                    &format!("{prefix}.levels.{slug}.{suffix}"),
-                    &format!("{label} {text}"),
-                    state,
-                    Storage::Bit,
-                )
-                .bit(bit)
-                .behavior(field::FieldBehavior {
-                    on_edit: cleared_effects.clone(),
-                    ..Default::default()
-                }),
-            );
-        }
+        fields.push(
+            catalog_field(
+                &format!("{prefix}.levels.{slug}.cleared"),
+                &format!("{label} cleared by"),
+                state,
+                Storage::U8,
+            )
+            .mask(0x81)
+            .choices(choices(&[
+                ("Not cleared", 0),
+                ("Donkey Kong", 0x01),
+                ("Diddy Kong", 0x81),
+            ]))
+            .behavior(field::FieldBehavior {
+                on_edit: cleared_effects,
+                ..Default::default()
+            }),
+        );
         for room in rooms {
             fields.push(
                 catalog_field(
@@ -173,20 +173,21 @@ fn progression_fields(prefix: &str, base: usize) -> Vec<FieldDefinition> {
     fields
 }
 
-// The language is stored as eight ASCII characters at the start of the slot; the first one selects it.
-fn language_field(slot: usize, base: usize) -> FieldDefinition {
+// The language is eight ASCII characters at the start of the save, shared by every slot. Upstream shows it only for
+// European saves; these profiles have no region, so the field is present only when the bytes hold a known string.
+fn language_field() -> FieldDefinition {
     let stores = (0..8)
         .rev()
         .map(|index| Store {
             when: None,
             destination: Scalar {
-                offset: base + index,
+                offset: index,
                 storage: Storage::U8,
                 mask: None,
             },
             value: ReadValue::new(move |bytes| {
                 LANGUAGES
-                    .get(usize::from(bytes[base]))
+                    .get(usize::from(bytes[0]))
                     .map(|text| i64::from(text[index]))
                     .ok_or_else(|| {
                         invalid(
@@ -196,24 +197,23 @@ fn language_field(slot: usize, base: usize) -> FieldDefinition {
             }),
         })
         .collect();
-    catalog_field(
-        &format!("slot_{slot}.language"),
-        "Language",
-        base,
-        Storage::U8,
-    )
-    .choices(choices(&[("English", 0), ("French", 1), ("German", 2)]))
-    .behavior(field::FieldBehavior {
-        read: Some(ReadValue::new(move |bytes| {
-            Ok(match bytes[base] {
-                b'F' => 1,
-                b'G' => 2,
-                _ => 0,
-            })
-        })),
-        on_edit: stores,
-        ..Default::default()
-    })
+    let stored = |bytes: &[u8]| LANGUAGES.iter().position(|text| bytes[..8] == text[..]);
+    catalog_field("options.language", "Language", 0, Storage::U8)
+        .choices(choices(&[("English", 0), ("French", 1), ("German", 2)]))
+        .description(
+            "Shared by every slot; present only when the save holds a European language string."
+                .into(),
+        )
+        .behavior(field::FieldBehavior {
+            present_when: Some(Condition::new(move |bytes| Ok(stored(bytes).is_some()))),
+            read: Some(ReadValue::new(move |bytes| {
+                stored(bytes).map(|index| index as i64).ok_or_else(|| {
+                    invalid("the Donkey Kong Country language string is not recognized")
+                })
+            })),
+            on_edit: stores,
+            ..Default::default()
+        })
 }
 
 fn default() -> GameDefinition {
@@ -284,9 +284,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
             &format!("slot_{slot}.player_{player}"),
             base,
         ));
-        if player == 1 {
-            game.fields.push(language_field(slot, base));
-        }
+        game.fields.push(language_field());
     }
 
     build(games, codecs, true)
@@ -637,43 +635,31 @@ mod tests {
         let handler = schemas().remove(3);
         let base = 0x3fc;
         let bytes = template();
-        let edits = [
+        let cleared = |level: &str, by: &str| {
             edit(
-                "slot_2.player_2.levels.jungle_hijinxs.cleared",
-                SaveValue::Bool(false),
-            ),
+                &format!("slot_2.player_2.levels.{level}.cleared"),
+                SaveValue::Enum(by.into()),
+            )
+        };
+        let edits = [
+            cleared("jungle_hijinxs", "Not cleared"),
             edit(
                 "slot_2.player_2.levels.jungle_hijinxs.bonus_room_2",
                 SaveValue::Bool(true),
             ),
-            edit(
-                "slot_2.player_2.levels.ropey_rampage.cleared",
-                SaveValue::Bool(true),
-            ),
-            edit(
-                "slot_2.player_2.levels.ropey_rampage.cleared_with_diddy",
-                SaveValue::Bool(true),
-            ),
-            edit(
-                "slot_2.player_2.levels.very_gnawty_s_lair.cleared",
-                SaveValue::Bool(true),
-            ),
-            edit(
-                "slot_2.player_2.levels.necky_s_revenge.cleared",
-                SaveValue::Bool(true),
-            ),
-            edit(
-                "slot_2.player_2.levels.gang_plank_galleon.cleared",
-                SaveValue::Bool(true),
-            ),
+            cleared("ropey_rampage", "Diddy Kong"),
+            cleared("very_gnawty_s_lair", "Donkey Kong"),
+            cleared("necky_s_revenge", "Diddy Kong"),
+            cleared("gang_plank_galleon", "Donkey Kong"),
         ];
         let mut expected = bytes.clone();
         expected[base + 0x2e] = 0x06;
         expected[base + 0x24] = 0x81;
         expected[base + 0xf8] = 0x01;
         expected[base + 0x104] = 0x01;
-        expected[base + 0xfc] = 0x01;
-        expected[base + 0xfe] = 0x01;
+        // The boss world-map copy follows the merged value, including Diddy's bit 7.
+        expected[base + 0xfc] = 0x81;
+        expected[base + 0xfe] = 0x81;
         expected[base + 0x76] = 0x01;
         expected[base + 0x80] = 0x01;
         // Counted: 0x2e (two room bits), 0x24 and 0x76 (bit 0 each). The world-map copies (0x80 and above 0xf7) are not.
@@ -686,6 +672,8 @@ mod tests {
         for (_, _, other) in PLAYERS.into_iter().filter(|(_, _, other)| *other != base) {
             assert_eq!(output[other..other + 340], bytes[other..other + 340]);
         }
+        // Diddy's bit without a clear (0x80) is not a choice.
+        assert!(apply(&handler, bytes, &[cleared("ropey_rampage", "raw:128")]).is_err());
     }
 
     #[test]
@@ -696,52 +684,50 @@ mod tests {
         repair(&mut bytes, 0);
         let edit = edit(
             "slot_1.player_1.levels.jungle_hijinxs.cleared",
-            SaveValue::Bool(false),
+            SaveValue::Enum("Not cleared".into()),
         );
         assert!(apply(&handler, bytes, &[edit]).is_err());
     }
 
     #[test]
-    fn language_rewrites_all_eight_characters_and_rejects_unknown_values() {
-        let handler = schemas().remove(2);
-        let base = 0x2a8;
-        let mut bytes = template();
-        bytes[base..base + 8].copy_from_slice(b"ENGLISH ");
+    fn language_is_one_shared_european_field_at_the_start_of_the_save() {
         let choice = |name: &str| SaveValue::Enum(name.into());
-        let mut expected = bytes.clone();
-        expected[base..base + 8].copy_from_slice(b"FRENCH  ");
-        let french = apply(
-            &handler,
-            bytes.clone(),
-            &[edit("slot_2.language", choice("French"))],
-        )
-        .unwrap();
-        assert_eq!(french, expected);
-        expected[base..base + 8].copy_from_slice(b"GERMAN  ");
-        let german = apply(
-            &handler,
-            french.clone(),
-            &[edit("slot_2.language", choice("German"))],
-        )
-        .unwrap();
-        assert_eq!(german, expected);
-        expected[base..base + 8].copy_from_slice(b"ENGLISH ");
-        assert_eq!(
-            apply(
-                &handler,
-                german,
-                &[edit("slot_2.language", choice("English"))]
-            )
-            .unwrap(),
-            expected
-        );
-        assert!(apply(&handler, bytes, &[edit("slot_2.language", choice("raw:3"))]).is_err());
+        let language = |name: &str| edit("options.language", choice(name));
+        let mut bytes = template();
+        bytes[..8].copy_from_slice(b"ENGLISH ");
+        // Every slot and player profile edits the same eight bytes and nothing else.
+        for handler in schemas() {
+            let mut expected = bytes.clone();
+            expected[..8].copy_from_slice(b"FRENCH  ");
+            let french = apply(&handler, bytes.clone(), &[language("French")]).unwrap();
+            assert_eq!(french, expected);
+            expected[..8].copy_from_slice(b"GERMAN  ");
+            let german = apply(&handler, french, &[language("German")]).unwrap();
+            assert_eq!(german, expected);
+            assert_eq!(
+                apply(&handler, german, &[language("English")]).unwrap(),
+                bytes
+            );
+            assert!(apply(&handler, bytes.clone(), &[language("raw:3")]).is_err());
+        }
+        // A save without a language string has no language field and rejects the edit.
+        let handler = schemas().remove(2);
+        let identity = handler.definitions().remove(0).identity;
+        let input = SaveDetectionInput {
+            bytes: template(),
+            selected_game: Some(identity.id.clone()),
+            rom_sha1: None,
+        };
+        let document = handler
+            .apply(&input, &identity, &[], false)
+            .unwrap()
+            .document;
         assert!(
-            schemas()[3]
-                .game
+            document
                 .fields
                 .iter()
-                .all(|field| field.id != "slot_2.language")
+                .all(|field| field.id != "options.language")
         );
+        assert!(apply(&handler, template(), &[language("French")]).is_err());
     }
 }

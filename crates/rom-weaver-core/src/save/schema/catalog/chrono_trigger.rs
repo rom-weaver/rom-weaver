@@ -204,6 +204,21 @@ fn character_fields(index: usize, base: usize) -> Vec<FieldDefinition> {
     fields
 }
 
+fn mp_capacity_check(base: usize) -> Check {
+    capacity_check(
+        "a character's current MP exceeds its maximum".into(),
+        (0..CHARACTERS.len())
+            .map(|index| {
+                let block = base + CHARACTER_BLOCK + index * CHARACTER_STRIDE;
+                (
+                    scalar(block + 0x7, Storage::U16Le),
+                    scalar(block + 0x9, Storage::U16Le),
+                )
+            })
+            .collect(),
+    )
+}
+
 const BUTTONS: [(&str, i64); 7] = [
     ("S", 0x02),
     ("B", 0x08),
@@ -359,9 +374,9 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         }
         GameDefinition {
             fields,
-            description: format!("Edits slot {}: gold, save count, Millennial Fair counters, options, button mapping, party formation, and per-character level, experience, tech points, HP/MP, element, and equipment codes. Level and experience edits refresh the derived experience values. Inventory pairs, techs, base stats, locations, and progression are omitted because they have coupled write rules.", slot + 1),
+            description: format!("Edits slot {}: gold, save count, Millennial Fair counters, options, button mapping, party formation, and per-character level, experience, tech points, HP/MP, element, and equipment codes. Level and experience edits refresh the derived experience values; current MP cannot exceed maximum MP. Inventory pairs, techs, base stats, locations, and progression are omitted because they have coupled write rules.", slot + 1),
             signatures: vec![SignatureDefinition { offset: 0x1ff8 + slot * 2, bytes: vec![0x1b, 0xe4] }],
-            runtime: runtime::Runtime { recognition: Some(runtime::Recognition { checks: vec![check.clone()], reasons: vec![SaveRecognitionReason::ChecksumValid], confidence: SaveRecognitionConfidence::High, incomplete_confidence: None, selected_reason: true, empty_top_level_reasons: true }), checks: vec![check], after_edit: vec![Store { when: None, destination: Scalar { offset: checksum_offset, storage: Storage::U16Le, mask: None }, value: ReadValue::new(move |bytes| Ok(i64::from(checksum(bytes, base)))) }], ..Default::default() },
+            runtime: runtime::Runtime { recognition: Some(runtime::Recognition { checks: vec![check.clone()], reasons: vec![SaveRecognitionReason::ChecksumValid], confidence: SaveRecognitionConfidence::High, incomplete_confidence: None, selected_reason: true, empty_top_level_reasons: true }), checks: vec![check], edit_checks: vec![mp_capacity_check(base)], after_edit: vec![Store { when: None, destination: Scalar { offset: checksum_offset, storage: Storage::U16Le, mask: None }, value: ReadValue::new(move |bytes| Ok(i64::from(checksum(bytes, base)))) }], ..Default::default() },
             ..GameDefinition::new(format!("chrono-trigger-slot-{}", slot + 1), format!("Chrono Trigger (Slot {})", slot + 1), "snes".into(), 8192)
         }
     }).collect();
@@ -542,6 +557,45 @@ mod tests {
                 "{field}"
             );
         }
+    }
+
+    #[test]
+    fn current_mp_cannot_exceed_maximum_mp() {
+        let handler = schemas().remove(2);
+        let block = 2 * SLOT_SIZE + 0x200 + 6 * 0x50;
+        let mut bytes = template(0);
+        bytes[block + 7] = 40;
+        bytes[block + 9] = 40;
+        repair(&mut bytes);
+        let capacity_error = |bytes: &[u8], edits: &[SaveEdit]| {
+            matches!(
+                apply(&handler, bytes.to_vec(), edits),
+                Err(crate::RomWeaverError::ValidationCode(error))
+                    if error.code() == "save_resource_capacity"
+            )
+        };
+        assert!(capacity_error(
+            &bytes,
+            &[edit("party.magus.mp", SaveValue::U32(41))]
+        ));
+        assert!(capacity_error(
+            &bytes,
+            &[edit("party.magus.max_mp", SaveValue::U32(39))]
+        ));
+        let output = apply(
+            &handler,
+            bytes.clone(),
+            &[
+                edit("party.magus.max_mp", SaveValue::U32(99)),
+                edit("party.magus.mp", SaveValue::U32(99)),
+            ],
+        )
+        .unwrap();
+        assert_eq!(output[block + 7], 99);
+        assert_eq!(output[block + 9], 99);
+        bytes[block + 7] = 41;
+        repair(&mut bytes);
+        assert!(capacity_error(&bytes, &[edit("gold", SaveValue::U32(1))]));
     }
 
     #[test]

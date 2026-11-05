@@ -47,7 +47,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         ] {
             fields.push(catalog_field(&format!("buttons.{id}"), &format!("{label} button"), base + offset, Storage::U8).mask(mask).choices(choices(&BUTTONS)));
         }
-        // A circuit's loss counter only exists once the previous circuits are beaten, which the game tracks by the beaten-opponents count.
+        // A circuit's loss counter only exists once that circuit is beaten; the beaten-opponents byte stores the count minus one, four opponents per circuit.
         for (index, circuit) in CIRCUITS.iter().enumerate() {
             let opponents = base + 0x105;
             fields.push(
@@ -175,7 +175,7 @@ mod tests {
                 bytes[other * 0x80 + 0x100] = 1;
                 repair(&mut bytes, other * 0x80);
             }
-            // Seven beaten opponents unlock the minor and major circuits' loss counters only.
+            // Eight beaten opponents (stored as 7) clear the minor and major circuits, unlocking only their loss counters.
             bytes[base + 0x105] = 0x07;
             repair(&mut bytes, base);
             let choice = |name: &str| SaveValue::Enum(name.into());

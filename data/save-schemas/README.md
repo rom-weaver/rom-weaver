@@ -16,7 +16,7 @@ The default registry includes 611 profiles: the original seven game-family defin
 
 | Catalog module | Titles | Profiles | Fields | Creation |
 | --- | ---: | ---: | ---: | --- |
-| `donkey_kong_country.rs` | 1 | 6 | 909 | Template only |
+| `donkey_kong_country.rs` | 1 | 6 | 672 | Template only |
 | `donkey_kong_country_2_diddy_s_kong_quest.rs` | 1 | 3 | 240 | Template only |
 | `donkey_kong_country_3_dixie_kong_s_double_trouble.rs` | 1 | 3 | 42 | Template only |
 | `final_fantasy_nes.rs` | 1 | 1 | 311 | Template only |

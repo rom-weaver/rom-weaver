@@ -1,7 +1,7 @@
 use super::*;
 use tracing::trace;
 
-// Layout and event-flag locations: https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/donkey-kong-country-2-diddy-s-kong-quest/saveEditor
+// Layout, event-flag locations, and the Player 2 mode gate (utils.ts overrideParseContainerItemsShifts): https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/donkey-kong-country-2-diddy-s-kong-quest/saveEditor
 // Original counter layout and checksum: https://github.com/RyudoSynbios/game-tools-collection/tree/fd8ca0beba05723fcfdb5af83c453ba9bea1221a/src/lib/templates/donkey-kong-country-2-diddy-s-kong-quest/saveEditor
 
 const SLOT_SIZE: usize = 0x2a8;
@@ -215,6 +215,19 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                 slot * SLOT_SIZE + player * PLAYER_SIZE,
             ));
         }
+        // Only two-player contest mode (slot mode byte 2) keeps a separate Player 2 block.
+        let mode = slot * SLOT_SIZE + 0xd;
+        let contest = rules::Condition::new(move |bytes| Ok(bytes[mode] == 2));
+        let player_2 = format!("slot_{}.player_2.", slot + 1);
+        for field in game
+            .fields
+            .iter_mut()
+            .filter(|field| field.id.starts_with(&player_2))
+        {
+            field.behavior.present_when = Some(contest.clone());
+        }
+        game.description
+            .push_str(" Player 2 fields appear only in two-player contest mode.");
     }
 
     build(games, codecs, true)
@@ -418,9 +431,11 @@ mod tests {
         bytes[base + 10..base + 12].copy_from_slice(&xor.to_le_bytes());
     }
 
+    // Every slot is in two-player contest mode so both players' fields exist.
     fn template() -> Vec<u8> {
         let mut bytes = vec![0x11; 2048];
         for slot in 0..3 {
+            bytes[slot * SLOT_SIZE + 0xd] = 2;
             repair(&mut bytes, slot);
         }
         bytes
@@ -504,6 +519,55 @@ mod tests {
                 set[offset] = 0x11;
                 repair(&mut set, slot);
                 assert_eq!(apply(&handler, cleared, &[edit(&id, true)]).unwrap(), set);
+            }
+        }
+    }
+
+    #[test]
+    fn player_2_fields_exist_only_in_two_player_contest_mode() {
+        for (slot, handler) in schemas().into_iter().enumerate() {
+            let identity = handler.definitions().remove(0).identity;
+            let player_2 = format!("slot_{}.player_2.", slot + 1);
+            let mode = slot * SLOT_SIZE + 0xd;
+            let flag = format!("{player_2}visited.klubbas_kiosk");
+            let flag_offset = slot * SLOT_SIZE + PLAYER_SIZE + 0xeb;
+            for (value, present) in [(0u8, false), (1, false), (2, true)] {
+                let mut bytes = template();
+                bytes[mode] = value;
+                let input = SaveDetectionInput {
+                    bytes: bytes.clone(),
+                    selected_game: Some(identity.id.clone()),
+                    rom_sha1: None,
+                };
+                let document = handler
+                    .apply(&input, &identity, &[], false)
+                    .unwrap()
+                    .document;
+                let player_2_fields: Vec<_> = document
+                    .fields
+                    .iter()
+                    .filter(|field| field.id.starts_with(&player_2))
+                    .collect();
+                // Five counters and 35 event flags.
+                assert_eq!(
+                    player_2_fields.len(),
+                    if present { 40 } else { 0 },
+                    "mode {value}"
+                );
+                assert!(document.fields.iter().any(|field| {
+                    field
+                        .id
+                        .starts_with(&format!("slot_{}.player_1.", slot + 1))
+                }));
+                let result = apply(&handler, bytes.clone(), &[edit(&flag, false)]);
+                if present {
+                    let mut expected = bytes;
+                    expected[flag_offset] &= !0x10;
+                    repair(&mut expected, slot);
+                    assert_eq!(result.unwrap(), expected);
+                } else {
+                    assert!(result.is_err(), "mode {value}");
+                }
             }
         }
     }

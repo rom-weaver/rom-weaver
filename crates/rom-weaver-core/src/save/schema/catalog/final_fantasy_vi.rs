@@ -119,6 +119,41 @@ fn character_fields(index: usize, base: usize) -> Vec<FieldDefinition> {
     fields
 }
 
+// Boost and cap rule: CalcMaxHPMP and ValidateMaxHP in https://github.com/everything8215/ff6/blob/813013276c952fdd27edcf7b8b86f17291542cbf/src/menu/menu_common.asm
+/// In-game maximum for a stored HP or MP word: bits 14-15 add a 25%, 50%, or 12.5% equipment boost to the 14-bit base, capped at `cap`.
+fn effective_maximum(word: u16, cap: u16) -> u16 {
+    let base = word & 0x3fff;
+    let boost = match word >> 14 {
+        0 => 0,
+        1 => base >> 2,
+        2 => base >> 1,
+        _ => base >> 3,
+    };
+    (base + boost).min(cap)
+}
+
+// The game clamps current HP and MP to the boosted maximum (CheckMaxHP and CheckMaxMP in src/menu/field_menu.asm of the same disassembly).
+fn party_capacity_check(slot: usize, base: usize) -> rules::Check {
+    rules::Check {
+        when: None,
+        assert: rules::Condition::new(move |bytes| {
+            let word = |offset: usize| u16::from_le_bytes([bytes[offset], bytes[offset + 1]]);
+            Ok((0..PARTY_SIZE).all(|index| {
+                let block = base + index * CHARACTER_STRIDE;
+                word(block + 0x9) <= effective_maximum(word(block + 0xb), 9999)
+                    && word(block + 0xd) <= effective_maximum(word(block + 0xf), 999)
+            }))
+        }),
+        code: "save_resource_capacity".into(),
+        message: format!(
+            "a slot {} character's current HP or MP exceeds its maximum",
+            slot + 1
+        ),
+        section_id: None,
+        warning: None,
+    }
+}
+
 // Layout and checksum: https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88/src/lib/templates/final-fantasy-vi/saveEditor
 // Current layout and character fields: https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/final-fantasy-vi/saveEditor
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
@@ -148,11 +183,15 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
             trace!(slot, fields = fields.len(), "built Final Fantasy VI slot fields");
             GameDefinition {
                 fields,
-                description: format!("Edits SNES save slot {}: money, steps, play time, current party group, airship, and per-character level, HP/MP, experience, base stats, party group, and status flags. Names, equipment, espers, abilities, spells, inventory, locations, and progression are omitted because they need name tables or have coupled write rules.", slot + 1),
+                description: format!("Edits SNES save slot {}: money, steps, play time, current party group, airship, and per-character level, HP/MP, experience, base stats, party group, and status flags. Current HP and MP cannot exceed the maximum after its stored equipment boost. Names, equipment, espers, abilities, spells, inventory, locations, and progression are omitted because they need name tables or have coupled write rules.", slot + 1),
                 checksums: vec![ChecksumDefinition {
                     start: Some(base), length: Some(0x9fe),
                     ..ChecksumDefinition::new(ChecksumAlgorithm::Add16Le, base + 0x9fe)
                 }],
+                runtime: runtime::Runtime {
+                    edit_checks: vec![party_capacity_check(slot, base)],
+                    ..Default::default()
+                },
                 ..GameDefinition::new(format!("final-fantasy-vi-slot-{}", slot + 1), format!("Final Fantasy VI (SNES Slot {})", slot + 1), "snes".into(), 8192)
             }
         })
@@ -171,11 +210,25 @@ mod tests {
         bytes[base + 0x9fe..base + 0xa00].copy_from_slice(&sum.to_le_bytes());
     }
 
+    // A 0x5a fill with every character's current HP and MP cleared so they stay within their maximums.
+    fn filled() -> Vec<u8> {
+        let mut bytes = vec![0x5a; 8192];
+        for slot in 0..3 {
+            for index in 0..PARTY_SIZE {
+                let block = slot * SLOT_SIZE + index * CHARACTER_STRIDE;
+                for offset in [0x9, 0xa, 0xd, 0xe] {
+                    bytes[block + offset] = 0;
+                }
+            }
+        }
+        bytes
+    }
+
     #[test]
     fn edits_only_selected_slot_and_repairs_checksum() {
         let handler = schemas().remove(1);
         let identity = handler.definitions().remove(0).identity;
-        let mut bytes = vec![0x5a; 8192];
+        let mut bytes = filled();
         for slot in 0..3 {
             repair(&mut bytes, slot * SLOT_SIZE);
         }
@@ -253,7 +306,7 @@ mod tests {
         let base = 2 * SLOT_SIZE;
         let first = base;
         let last = base + 15 * 0x25;
-        let mut bytes = vec![0x5a; 8192];
+        let mut bytes = filled();
         bytes[base + 0x250] = 0;
         for slot in 0..3 {
             repair(&mut bytes, slot * SLOT_SIZE);
@@ -269,7 +322,8 @@ mod tests {
             edit("airship.x", SaveValue::U32(0x12)),
             edit("airship.y", SaveValue::U32(0x34)),
             edit("party.01.level", SaveValue::U32(99)),
-            edit("party.01.hp", SaveValue::U32(9999)),
+            // 0x5a5a stores base 6746 with a 25% boost, so 8432 is the in-game maximum.
+            edit("party.01.hp", SaveValue::U32(8432)),
             edit("party.01.max_mp", SaveValue::U32(999)),
             edit("party.01.experience", SaveValue::U32(15_000_000)),
             edit("party.01.vigor", SaveValue::U32(128)),
@@ -290,7 +344,7 @@ mod tests {
         expected[base + 0x8b7] = 0x5a & !0x02;
         expected[base + 0x962..base + 0x964].copy_from_slice(&[0x12, 0x34]);
         expected[first + 8] = 99;
-        expected[first + 9..first + 11].copy_from_slice(&9999u16.to_le_bytes());
+        expected[first + 9..first + 11].copy_from_slice(&8432u16.to_le_bytes());
         // The two high bits of the maximum-MP word are not part of the value.
         expected[first + 0xf..first + 0x11].copy_from_slice(&0x43e7u16.to_le_bytes());
         expected[first + 0x11..first + 0x14].copy_from_slice(&15_000_000u32.to_le_bytes()[..3]);
@@ -327,5 +381,51 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn current_hp_and_mp_cannot_exceed_the_boosted_maximum() {
+        let handler = schemas().remove(0);
+        let block = 4 * CHARACTER_STRIDE;
+        let mut bytes = vec![0; 8192];
+        // Base HP 1000 with a 12.5% boost; base MP 800 with a 50% boost that the 999 cap limits.
+        bytes[block + 0xb..block + 0xd].copy_from_slice(&(0xc000u16 | 1000).to_le_bytes());
+        bytes[block + 0xf..block + 0x11].copy_from_slice(&(0x8000u16 | 800).to_le_bytes());
+        repair(&mut bytes, 0);
+        let capacity_error = |edits: &[SaveEdit]| {
+            matches!(
+                apply(&handler, bytes.clone(), edits),
+                Err(crate::RomWeaverError::ValidationCode(error))
+                    if error.code() == "save_resource_capacity"
+            )
+        };
+        let output = apply(
+            &handler,
+            bytes.clone(),
+            &[
+                edit("party.05.hp", SaveValue::U32(1125)),
+                edit("party.05.mp", SaveValue::U32(999)),
+            ],
+        )
+        .unwrap();
+        assert_eq!(output[block + 0x9..block + 0xb], 1125u16.to_le_bytes());
+        assert_eq!(output[block + 0xd..block + 0xf], 999u16.to_le_bytes());
+        assert!(capacity_error(&[edit("party.05.hp", SaveValue::U32(1126))]));
+        assert!(capacity_error(&[
+            edit("party.05.hp", SaveValue::U32(1125)),
+            edit("party.05.max_hp", SaveValue::U32(999)),
+        ]));
+        assert!(capacity_error(&[
+            edit("party.05.mp", SaveValue::U32(900)),
+            edit("party.05.max_mp", SaveValue::U32(599)),
+        ]));
+        let mut over = bytes.clone();
+        over[block + 0x9..block + 0xb].copy_from_slice(&1126u16.to_le_bytes());
+        repair(&mut over, 0);
+        assert!(matches!(
+            apply(&handler, over, &[edit("money", SaveValue::U32(1))]),
+            Err(crate::RomWeaverError::ValidationCode(error))
+                if error.code() == "save_resource_capacity"
+        ));
     }
 }

@@ -229,6 +229,14 @@ fn extra_fields(shift: usize) -> Vec<FieldDefinition> {
             ])),
         );
     }
+    // A non-decimal score digit hides every score instead of failing the whole document; upstream also opens such
+    // saves because it decodes scores leniently.
+    let scores = at(0x1466);
+    let scores_decimal = Condition::new(move |bytes| {
+        Ok(bytes[scores..scores + CITIES.len() * 4]
+            .iter()
+            .all(|byte| byte >> 4 <= 9 && byte & 15 <= 9))
+    });
     for (index, (id, name)) in CITIES.iter().enumerate() {
         fields.push(area_progression(
             &format!("progression.{id}"),
@@ -248,7 +256,11 @@ fn extra_fields(shift: usize) -> Vec<FieldDefinition> {
                     )
                 }
                 .min(0)
-                .max(9999),
+                .max(9999)
+                .behavior(field::FieldBehavior {
+                    present_when: Some(scores_decimal.clone()),
+                    ..Default::default()
+                }),
             );
         }
     }
@@ -331,7 +343,7 @@ fn game(id: &str, region: &str, shift: usize) -> GameDefinition {
     GameDefinition {
         fields,
         description: format!(
-            "Edits Master HP, level, MP, lives, magic, items, Angel HP and SP, area progression, scores, and options for {region}. Level edits update the regional next-level experience value; equipped magic, area progression, and Death Heim edits update their linked flag bytes. Names and city statistics are omitted. Select the save's region explicitly."
+            "Edits Master HP, level, MP, lives, magic, items, Angel HP and SP, area progression, scores, and options for {region}. Level edits update the regional next-level experience value; equipped magic, area progression, and Death Heim edits update their linked flag bytes. Angel HP and SP cannot exceed their stored maximums. Scores are absent when any score byte is not decimal. Names and city statistics are omitted. Select the save's region explicitly."
         ),
         runtime: runtime::Runtime {
             recognition: Some(runtime::Recognition {
@@ -343,6 +355,21 @@ fn game(id: &str, region: &str, shift: usize) -> GameDefinition {
                 empty_top_level_reasons: true,
             }),
             checks: vec![check],
+            edit_checks: vec![capacity_check(
+                "Angel HP or SP exceeds its stored maximum".into(),
+                [
+                    (0x1439, 0x143a, Storage::U8),
+                    (0x1435, 0x1437, Storage::U16Le),
+                ]
+                .into_iter()
+                .map(|(current, maximum, storage)| {
+                    (
+                        scalar(regional(current, shift), storage, None),
+                        scalar(regional(maximum, shift), storage, None),
+                    )
+                })
+                .collect(),
+            )],
             after_edit: vec![Store {
                 when: None,
                 destination: Scalar {
@@ -415,7 +442,7 @@ mod tests {
     fn edits_stable_fields_and_repairs_packed_checksum() {
         let handler = schemas().remove(0);
         let identity = handler.definitions().remove(0).identity;
-        let mut bytes = vec![0x55; 8192];
+        let mut bytes = vec![0x5a; 8192];
         let sum = checksum(&bytes);
         bytes[0x1fec..0x1ff0].copy_from_slice(&sum.to_le_bytes());
         let input = SaveDetectionInput {
@@ -562,6 +589,55 @@ mod tests {
     }
 
     #[test]
+    fn angel_hp_and_sp_cannot_exceed_their_maximums() {
+        let capacity_error = |result: Result<Vec<u8>>| {
+            matches!(
+                result,
+                Err(crate::RomWeaverError::ValidationCode(error))
+                    if error.code() == "save_resource_capacity"
+            )
+        };
+        for (handler, shift) in schemas().into_iter().zip([0usize, 2, 3]) {
+            let mut bytes = vec![0; 8192];
+            bytes[0x1439 - shift] = 10;
+            bytes[0x143a - shift] = 10;
+            bytes[0x1435 - shift..0x1437 - shift].copy_from_slice(&500u16.to_le_bytes());
+            bytes[0x1437 - shift..0x1439 - shift].copy_from_slice(&500u16.to_le_bytes());
+            repair(&mut bytes);
+            for edits in [
+                vec![edit("angel.hp", SaveValue::U32(11))],
+                vec![edit("angel.max_hp", SaveValue::U32(9))],
+                vec![edit("angel.sp", SaveValue::U32(501))],
+                vec![edit("angel.max_sp", SaveValue::U32(499))],
+            ] {
+                assert!(
+                    capacity_error(apply(&handler, bytes.clone(), &edits)),
+                    "shift {shift}: {}",
+                    edits[0].field
+                );
+            }
+            let raised = apply(
+                &handler,
+                bytes.clone(),
+                &[
+                    edit("angel.max_hp", SaveValue::U32(24)),
+                    edit("angel.hp", SaveValue::U32(24)),
+                ],
+            )
+            .unwrap();
+            assert_eq!(raised[0x1439 - shift..0x143b - shift], [24, 24]);
+            let mut over = bytes.clone();
+            over[0x1439 - shift] = 11;
+            repair(&mut over);
+            assert!(capacity_error(apply(
+                &handler,
+                over,
+                &[edit("master.hp", SaveValue::U32(5))]
+            )));
+        }
+    }
+
+    #[test]
     fn region_offsets_are_anchored_to_the_usa_layout() {
         let handler = schemas().remove(1);
         let mut bytes = vec![0; 8192];
@@ -623,7 +699,7 @@ mod tests {
     }
 
     #[test]
-    fn scores_and_ranges_reject_invalid_values_and_bcd() {
+    fn scores_and_ranges_reject_invalid_values() {
         let handler = schemas().remove(0);
         let mut bytes = vec![0; 8192];
         repair(&mut bytes);
@@ -649,9 +725,72 @@ mod tests {
             )
             .is_err()
         );
-        // The game never writes non-decimal score digits, so such a save is not a valid ActRaiser save.
-        bytes[0x1466] = 0x0a;
-        repair(&mut bytes);
-        assert!(apply(&handler, bytes, &[]).is_err());
+    }
+
+    #[test]
+    fn decimal_scores_read_and_edit_and_a_non_decimal_score_hides_only_the_scores() {
+        for (handler, shift) in schemas().into_iter().zip([0usize, 2, 3]) {
+            let identity = handler.definitions().remove(0).identity;
+            let document = |bytes: &[u8]| {
+                let input = SaveDetectionInput {
+                    bytes: bytes.to_vec(),
+                    selected_game: Some(identity.id.clone()),
+                    rom_sha1: None,
+                };
+                handler
+                    .apply(&input, &identity, &[], false)
+                    .unwrap()
+                    .document
+            };
+            let score = |document: &SaveDocument| {
+                document
+                    .fields
+                    .iter()
+                    .find(|field| field.id == "scores.fillmore.act_1")
+                    .map(|field| field.value.clone())
+            };
+            let mut bytes = vec![0; 8192];
+            bytes[0x1466 - shift..0x1468 - shift].copy_from_slice(&[0x34, 0x12]);
+            repair(&mut bytes);
+            assert_eq!(score(&document(&bytes)), Some(SaveValue::U32(1234)));
+            let output = apply(
+                &handler,
+                bytes.clone(),
+                &[edit("scores.fillmore.act_1", SaveValue::U32(999))],
+            )
+            .unwrap();
+            assert_eq!(output[0x1466 - shift..0x1468 - shift], [0x99, 0x09]);
+            // The last score byte of the last city is the end of the checked range.
+            bytes[0x147d - shift] = 0x0a;
+            repair(&mut bytes);
+            let hidden = document(&bytes);
+            assert!(
+                hidden
+                    .fields
+                    .iter()
+                    .all(|field| !field.id.starts_with("scores."))
+            );
+            assert!(hidden.fields.iter().any(|field| field.id == "master.hp"));
+            let mut expected = bytes.clone();
+            expected[0x1246] = 20;
+            repair(&mut expected);
+            assert_eq!(
+                apply(
+                    &handler,
+                    bytes.clone(),
+                    &[edit("master.hp", SaveValue::U32(20))]
+                )
+                .unwrap(),
+                expected
+            );
+            assert!(
+                apply(
+                    &handler,
+                    bytes,
+                    &[edit("scores.fillmore.act_1", SaveValue::U32(1))]
+                )
+                .is_err()
+            );
+        }
     }
 }
