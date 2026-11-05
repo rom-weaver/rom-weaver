@@ -61,7 +61,7 @@ fn game() -> GameDefinition {
         "Validates the system checksum and every valid slot's sum-and-XOR checksum, then repairs them. ",
         "Names, party, items, supports, and Eliwood/Hector tale flags are omitted. ",
         "A suspended chapter keeps its own copy of these values; restart the chapter to see edits. ",
-        "SharkPort wrappers are unsupported; requires a game-made template."
+        "The container layer preserves a SharkPort wrapper; requires a game-made template."
     )
     .into();
     game.signatures = vec![SignatureDefinition {

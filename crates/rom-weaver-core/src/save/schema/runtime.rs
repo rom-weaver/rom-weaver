@@ -478,7 +478,7 @@ impl GameSchema {
             }
         }
         for effect in &self.runtime.after_edit {
-            effect.apply(&mut logical)?;
+            effect.apply_from(original, &mut logical)?;
         }
         for check in self
             .runtime

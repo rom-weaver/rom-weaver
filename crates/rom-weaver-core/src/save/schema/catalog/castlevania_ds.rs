@@ -140,11 +140,43 @@ fn por_digest(bytes: &[u8], start: usize, length: usize) -> [u8; 20] {
     digest
 }
 
+/// The digest variant of upstream's editor, which hashes only the whole 32-bit words of the
+/// range and pads after them: the range with its trailing `length % 4` bytes zeroed.
+fn por_upstream_digest(bytes: &[u8], start: usize, length: usize) -> [u8; 20] {
+    let mut range = bytes[start..start + length].to_vec();
+    range[length - length % 4..].fill(0);
+    Sha1::digest(&range).into()
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PorDigest {
+    Plain,
+    Upstream,
+}
+
+/// The variant that reproduces the stored digest, preferring plain SHA-1 when both match.
+fn por_stored_digest(
+    bytes: &[u8],
+    start: usize,
+    length: usize,
+    stored: usize,
+) -> Option<PorDigest> {
+    let stored = &bytes[stored..stored + 20];
+    if stored == por_digest(bytes, start, length) {
+        Some(PorDigest::Plain)
+    } else if stored == por_upstream_digest(bytes, start, length) {
+        Some(PorDigest::Upstream)
+    } else {
+        None
+    }
+}
+
 fn por_active(bytes: &[u8], slot: usize) -> bool {
     bytes[8 + slot] != 0
 }
 
-/// Checks the stored digest and rewrites each of its five big-endian words after an edit.
+/// Checks the stored digest against plain SHA-1 or the upstream variant, and rewrites each of
+/// its five big-endian words after an edit in the variant the unedited save stored.
 fn por_integrity(
     game: &mut GameDefinition,
     when: Option<rules::Condition>,
@@ -155,7 +187,9 @@ fn por_integrity(
     game.runtime.checks.push(rules::Check {
         when: when.clone(),
         assert: rules::Condition::new(move |bytes| {
-            Ok(bytes[stored..stored + 20] == por_digest(bytes, start, length))
+            let variant = por_stored_digest(bytes, start, length, stored);
+            trace!(start, ?variant, "portrait of ruin stored digest variant");
+            Ok(variant.is_some())
         }),
         code: "save_checksum".into(),
         message: "a Portrait of Ruin SHA-1 checksum is invalid".into(),
@@ -170,8 +204,11 @@ fn por_integrity(
                 storage: Storage::U32Be,
                 mask: None,
             },
-            value: rules::ReadValue::new(move |bytes| {
-                let digest = por_digest(bytes, start, length);
+            value: rules::ReadValue::with_original(move |original, bytes| {
+                let digest = match por_stored_digest(original, start, length, stored) {
+                    Some(PorDigest::Upstream) => por_upstream_digest(bytes, start, length),
+                    Some(PorDigest::Plain) | None => por_digest(bytes, start, length),
+                };
                 Ok(i64::from(u32::from_be_bytes(
                     digest[word * 4..word * 4 + 4].try_into().unwrap(),
                 )))
@@ -191,7 +228,7 @@ fn portrait_of_ruin() -> GameDefinition {
         "Edits gold, difficulty, playtime, and the cleared marker in each initialized slot of a raw 64 KiB Europe/USA/Japan save, ",
         "including the save preview copies. Validates the SHA-1 digests of the system block and every initialized slot, ",
         "then repairs them. Characters, items, map, and mode unlocks are omitted. ",
-        "Collection saves, DSV/DUC wrappers, and Action Replay headers are unsupported; requires a game-made template."
+        "Collection saves, DUC wrappers, and Action Replay headers are unsupported. The container layer preserves a DeSmuME .dsv footer; requires a game-made template."
     )
     .into();
     game.signatures = vec![SignatureDefinition {
@@ -615,7 +652,9 @@ mod tests {
             rom_sha1: None,
         };
         assert!(handler.apply(&valid, &identity, &edits, false).is_ok());
-        // The system block, the last covered slot byte, the digest ends, and slot 4.
+        // The system block, the last covered slot byte (it breaks the plain digest stored
+        // here, and the upstream variant of the flipped range is not the stored digest
+        // either), the digest ends, and slot 4.
         for offset in [
             0x100,
             POR_SYSTEM_LENGTH - 1,
@@ -650,5 +689,109 @@ mod tests {
             };
             assert!(handler.apply(&bad, &identity, &edits, false).is_err());
         }
+    }
+
+    fn por_last_slot_byte(slot: usize) -> usize {
+        POR_SLOT_START + slot * POR_SLOT_STRIDE + POR_SLOT_LENGTH - 1
+    }
+
+    /// A template whose slots 1 and 4 store the digest variant given for each.
+    fn por_variant_input(variants: [PorDigest; 2]) -> (SaveDetectionInput, SaveGameIdentity) {
+        let handler = schemas().remove(2);
+        let identity = handler.definitions().remove(0).identity;
+        let mut bytes = por_template();
+        for (slot, variant) in [0, 3].into_iter().zip(variants) {
+            assert_ne!(bytes[por_last_slot_byte(slot)], 0);
+            let start = POR_SLOT_START + slot * POR_SLOT_STRIDE;
+            let digest = match variant {
+                PorDigest::Plain => por_digest(&bytes, start, POR_SLOT_LENGTH),
+                PorDigest::Upstream => {
+                    let mut range = bytes[start..start + POR_SLOT_LENGTH].to_vec();
+                    *range.last_mut().unwrap() = 0;
+                    Sha1::digest(&range).into()
+                }
+            };
+            let stored = POR_SLOT_DIGEST + slot * POR_SLOT_DIGEST_STRIDE;
+            bytes[stored..stored + 20].copy_from_slice(&digest);
+        }
+        let system = por_digest(&bytes, 0, POR_SYSTEM_LENGTH);
+        bytes[POR_SYSTEM_DIGEST..POR_SYSTEM_DIGEST + 20].copy_from_slice(&system);
+        let input = SaveDetectionInput {
+            bytes,
+            selected_game: Some(identity.id.clone()),
+            rom_sha1: None,
+        };
+        (input, identity)
+    }
+
+    #[test]
+    fn portrait_of_ruin_keeps_the_digest_variant_the_template_stored() {
+        let handler = schemas().remove(2);
+        let edits = [
+            por_edit("slot_1.gold", SaveValue::U32(7)),
+            por_edit("slot_4.gold", SaveValue::U32(9)),
+        ];
+        for variants in [
+            [PorDigest::Upstream, PorDigest::Upstream],
+            [PorDigest::Upstream, PorDigest::Plain],
+            [PorDigest::Plain, PorDigest::Upstream],
+            [PorDigest::Plain, PorDigest::Plain],
+        ] {
+            let (input, identity) = por_variant_input(variants);
+            let out = handler
+                .apply(&input, &identity, &edits, false)
+                .unwrap()
+                .bytes
+                .unwrap();
+            for (slot, variant) in [0, 3].into_iter().zip(variants) {
+                let start = POR_SLOT_START + slot * POR_SLOT_STRIDE;
+                let stored = POR_SLOT_DIGEST + slot * POR_SLOT_DIGEST_STRIDE;
+                let plain = por_digest(&out, start, POR_SLOT_LENGTH);
+                let upstream = por_upstream_digest(&out, start, POR_SLOT_LENGTH);
+                assert_ne!(plain, upstream);
+                let expected = match variant {
+                    PorDigest::Plain => plain,
+                    PorDigest::Upstream => upstream,
+                };
+                assert_eq!(out[stored..stored + 20], expected, "{variants:?} {slot}");
+            }
+            // The repaired output is accepted again and a second edit keeps the variant.
+            let again = [por_edit("slot_1.gold", SaveValue::U32(8))];
+            let next = SaveDetectionInput {
+                bytes: out,
+                ..input
+            };
+            let out = handler
+                .apply(&next, &identity, &again, false)
+                .unwrap()
+                .bytes
+                .unwrap();
+            assert_eq!(
+                por_stored_digest(&out, POR_SLOT_START, POR_SLOT_LENGTH, POR_SLOT_DIGEST),
+                Some(variants[0])
+            );
+        }
+    }
+
+    #[test]
+    fn portrait_of_ruin_upstream_variant_ignores_only_the_trailing_range_bytes() {
+        let handler = schemas().remove(2);
+        let edits = [por_edit("slot_1.gold", SaveValue::U32(1))];
+        let (valid, identity) = por_variant_input([PorDigest::Upstream, PorDigest::Upstream]);
+        let mut last = valid.clone();
+        last.bytes[por_last_slot_byte(0)] ^= 1;
+        assert!(handler.apply(&last, &identity, &edits, false).is_ok());
+        let mut before_last = valid.clone();
+        before_last.bytes[por_last_slot_byte(0) - 1] ^= 1;
+        assert!(
+            handler
+                .apply(&before_last, &identity, &edits, false)
+                .is_err()
+        );
+        // A plain template rejects the same last-byte flip.
+        let (plain, identity) = por_variant_input([PorDigest::Plain, PorDigest::Plain]);
+        let mut last = plain;
+        last.bytes[por_last_slot_byte(0)] ^= 1;
+        assert!(handler.apply(&last, &identity, &edits, false).is_err());
     }
 }
