@@ -224,6 +224,7 @@ pub(in crate::save) mod mario_party;
 pub(in crate::save) mod mario_party_2;
 pub(in crate::save) mod mission_impossible;
 pub(in crate::save) mod mystic_quest_legend;
+pub(in crate::save) mod mystical_ninja_2_starring_goemon;
 pub(in crate::save) mod paper_mario;
 pub(in crate::save) mod playstation_card;
 pub(in crate::save) mod pokemon_generation_i;
@@ -338,6 +339,7 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(kingdom_hearts_chain_of_memories::schemas());
             games.extend(banjo_kazooie::schemas());
             games.extend(ps1_final_fantasy::schemas());
+            games.extend(mystical_ninja_2_starring_goemon::schemas());
             games
         })
         .clone()

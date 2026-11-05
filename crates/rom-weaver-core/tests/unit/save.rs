@@ -342,6 +342,10 @@ fn registry_lists_every_game_with_format_metadata() {
             );
         }
     }
+    expected.extend(
+        ["options", "slot-1", "slot-2", "slot-3"]
+            .map(|part| format!("mystical-ninja-2-starring-goemon-canonical-sram-japan-{part}")),
+    );
     assert_eq!(ids, expected);
     assert!(definitions[3..8].iter().all(|definition| {
         definition.platform == "gba"
