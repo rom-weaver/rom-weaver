@@ -134,11 +134,19 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   if (!wantBrotli) rmSync(`${artifact}.br`, { force: true });
   const cacheFiles = wantBrotli ? ["rom-weaver-app.wasm", "rom-weaver-app.wasm.br"] : ["rom-weaver-app.wasm"];
   const configurationOptions = { root, cwd: process.cwd(), cargoHome: env.CARGO_HOME || join(homedir(), ".cargo"), sinceMs: sourcesReadAt };
-  const configuration = env.ROM_WEAVER_WASM_CACHE === "0" ? undefined : createCargoConfigSnapshot(configurationOptions);
+  let configuration;
+  if (env.ROM_WEAVER_WASM_CACHE !== "0") {
+    try {
+      configuration = createCargoConfigSnapshot(configurationOptions);
+    } catch {
+      configuration = undefined;
+    }
+    if (!configuration?.usable) process.stderr.write("warning: shared WASM cache disabled: could not snapshot Cargo configuration\n");
+  }
   // scripts/wasm is part of the source fingerprint, so this script's flags,
   // remapping, and wasm-opt arguments are keyed through it.
   const cache =
-    env.ROM_WEAVER_WASM_CACHE === "0"
+    !configuration?.usable
       ? undefined
       : {
           root: wasmArtifactCacheRoot(env),
@@ -164,8 +172,15 @@ export function main(argv = process.argv.slice(2), env = process.env) {
     // A source edit during the build, even one reverted since, reaches Cargo's
     // output but not the key, so storing it would serve that edit to a later
     // build of the old sources.
-    const configurationAfter = cache && createCargoConfigSnapshot(configurationOptions);
-    if (cache && (wasmSourcesModifiedSince(root, sourcesReadAt) || createWasmSourceFingerprint(root) !== sourceFingerprint || configurationAfter.fingerprint !== configuration.fingerprint || configurationAfter.state !== configuration.state || configurationAfter.modified)) {
+    let configurationAfter;
+    if (cache) {
+      try {
+        configurationAfter = createCargoConfigSnapshot(configurationOptions);
+      } catch {
+        configurationAfter = undefined;
+      }
+    }
+    if (cache && (!configurationAfter?.usable || wasmSourcesModifiedSince(root, sourcesReadAt) || createWasmSourceFingerprint(root) !== sourceFingerprint || configurationAfter.fingerprint !== configuration.fingerprint || configurationAfter.state !== configuration.state || configurationAfter.modified)) {
       process.stderr.write("warning: WASM build inputs changed during the build; not caching it\n");
     } else if (cache) {
       try {

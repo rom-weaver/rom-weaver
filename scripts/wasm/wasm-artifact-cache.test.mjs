@@ -295,10 +295,62 @@ test("matching checkout configuration shares a path-independent fingerprint", ()
     fs.writeFileSync(path.join(cargoHome, "config.toml"), "[profile.wasm-release]\nopt-level = 3\n");
     const fingerprints = ["aaa", "zzz"].map((name) => {
       const root = path.join(dir, name);
-      fs.mkdirSync(path.join(root, ".cargo"), { recursive: true });
-      fs.writeFileSync(path.join(root, ".cargo", "config.toml"), "[build]\njobs = 2\n");
+      fs.mkdirSync(path.join(root, ".cargo", "profiles"), { recursive: true });
+      fs.writeFileSync(path.join(root, ".cargo", "config.toml"), 'include = ["profiles/build.toml"]\n');
+      fs.writeFileSync(path.join(root, ".cargo", "profiles", "build.toml"), "[build]\njobs = 2\n");
       return createCargoConfigSnapshot({ root, cwd: root, cargoHome }).fingerprint;
     });
     assert.equal(fingerprints[0], fingerprints[1]);
+  });
+});
+
+test("recursive and optional Cargo includes enter the cache fingerprint", () => {
+  withDir((dir) => {
+    const cargoHome = path.join(dir, "home");
+    fs.mkdirSync(cargoHome);
+    const options = { root: dir, cwd: dir, cargoHome };
+    const snapshot = () => createCargoConfigSnapshot(options);
+    const root = path.join(cargoHome, "config.toml");
+    const profile = path.join(cargoHome, "profile.toml");
+    const nested = path.join(cargoHome, "nested.toml");
+    fs.writeFileSync(root, 'include = ["profile.toml"]\n');
+    fs.writeFileSync(profile, 'include = [{ path = "nested.toml", optional = true }]\n[profile.wasm-release]\nopt-level = 3\n');
+    const absent = snapshot();
+    assert.equal(absent.usable, true);
+    fs.writeFileSync(nested, "[profile.wasm-release]\ndebug = false\n");
+    const initial = snapshot();
+    assert.equal(initial.usable, true);
+    assert.notEqual(initial.fingerprint, absent.fingerprint);
+    fs.writeFileSync(nested, "[profile.wasm-release]\ndebug = true\n");
+    assert.notEqual(snapshot().fingerprint, initial.fingerprint);
+    fs.writeFileSync(profile, "[profile.wasm-release]\nopt-level = 1\n");
+    assert.notEqual(snapshot().fingerprint, initial.fingerprint);
+    fs.writeFileSync(profile, 'include = ["config.toml"]\n');
+    assert.equal(snapshot().usable, false);
+    fs.writeFileSync(profile, 'include = ["required.toml"]\n');
+    assert.equal(snapshot().usable, false);
+    fs.writeFileSync(profile, 'include = [{ path = "required.toml", optional = true }, "required.toml"]\n');
+    assert.equal(snapshot().usable, false);
+  });
+});
+
+test("Cargo legacy configuration takes precedence and unsupported input disables caching", () => {
+  withDir((dir) => {
+    const cargoHome = path.join(dir, "home");
+    fs.mkdirSync(cargoHome);
+    const options = { root: dir, cwd: dir, cargoHome };
+    const legacy = path.join(cargoHome, "config");
+    const modern = path.join(cargoHome, "config.toml");
+    fs.writeFileSync(legacy, "[profile.wasm-release]\nopt-level = 3\n");
+    fs.writeFileSync(modern, 'include = ["missing.toml"]\n');
+    assert.equal(createCargoConfigSnapshot(options).usable, true);
+    fs.rmSync(legacy);
+    assert.equal(createCargoConfigSnapshot(options).usable, false);
+    fs.writeFileSync(modern, 'include = "unsupported.toml"\n');
+    assert.equal(createCargoConfigSnapshot(options).usable, false);
+    fs.writeFileSync(modern, 'include = [{ path = "profile.toml", optional = "true" }]\n');
+    assert.equal(createCargoConfigSnapshot(options).usable, false);
+    fs.writeFileSync(modern, "not valid TOML\n");
+    assert.equal(createCargoConfigSnapshot(options).usable, false);
   });
 });
