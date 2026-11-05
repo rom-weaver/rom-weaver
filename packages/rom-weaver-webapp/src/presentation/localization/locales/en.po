@@ -1606,7 +1606,7 @@ msgstr "Couldn't save the result. Free up storage, or choose a folder the browse
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "error.OUTPUT_WRITE_FAILED"
-msgstr "Couldn't save the result. Free up storage, or choose a folder the browser can write to."
+msgstr "Couldn't save the result. Choose a folder the browser is allowed to write to."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
