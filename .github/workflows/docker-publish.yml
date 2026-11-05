@@ -180,8 +180,8 @@ jobs:
           tags: type=semver,pattern={{version}},value=${{ steps.policy.outputs.version }}
 
       # The archive keeps the image's provenance and SBOM attestations; the `publish` job pushes it
-      # unchanged, so the digest is the one recorded here. Registry cache export writes to the
-      # registry, so it is limited to a standalone dispatch (no `sha`), which has no gate to wait for.
+      # unchanged, so the digest is the one recorded here. This leg exports no registry cache: its
+      # token is read-only.
       - name: Build image archive
         uses: ./.github/actions/docker-build-arch
         with:

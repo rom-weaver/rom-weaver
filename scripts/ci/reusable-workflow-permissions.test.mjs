@@ -23,12 +23,14 @@ test("every reusable workflow caller grants what each called job asks for", () =
       const match = typeof job.uses === "string" && job.uses.match(/^\.\/\.github\/workflows\/(.+)$/u);
       if (!match) continue;
       const granted = job.permissions ?? workflow.permissions;
-      // Without an explicit grant the caller passes the repository default, which this cannot see.
-      if (granted === undefined) continue;
+      // Without an explicit grant the caller passes the repository default, which nothing here can
+      // see, so every call must grant explicitly.
+      assert.ok(granted !== undefined, `${name} ${jobName} calls ${match[1]} without a permissions block`);
       const called = workflows[match[1]];
       assert.ok(called, `${name} ${jobName} calls a missing ${match[1]}`);
       for (const [calledName, calledJob] of Object.entries(called.jobs)) {
         const asked = calledJob.permissions ?? called.permissions ?? {};
+        assert.equal(typeof asked, "object", `${match[1]} ${calledName} names each permission it needs`);
         for (const [scope, level] of Object.entries(asked)) {
           const have = typeof granted === "string" ? granted.replace("-all", "") : (granted[scope] ?? "none");
           assert.ok(
