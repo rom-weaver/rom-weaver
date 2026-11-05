@@ -311,6 +311,8 @@ To reproduce a run, see [Reproduce a CI failure locally](reproduce-ci-locally.md
 
 Release tags (`v*`) trigger this workflow, but every test job carries `if: github.ref_type != 'tag'`. The commit being tagged already passed the same gate on `main`; a tag run exists only to build and deploy the webapp to the channels that tag publishes.
 
+The tag is created minutes after the release pull request merges, usually before `main`'s run for that commit has cached the module. On a cache miss, the `wasm` job finds the merged release pull request whose merge commit is the tagged commit and reuses its CI run's signed module through [`resolve-wasm-run.mjs`](#scriptsciresolve-wasm-runmjs) and [`fetch-verified-wasm.mjs`](#scriptscifetch-verified-wasmmjs), verified against the tagged commit. With no such pull request it tries `main`'s runs of that commit, and it builds from source when nothing verifies.
+
 ### Deploy channels
 
 `changes` resolves the channel list from the ref; `deploy` runs one matrix leg per channel, deploying with Cloudflare Direct Upload and reusing the CI-tested WASM artifact rather than spending Cloudflare build minutes on a second toolchain.
