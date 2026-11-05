@@ -87,6 +87,12 @@ const getEngineWorkflowCode = (event: RomWeaverRunJsonEvent): WorkflowErrorCode 
   return ARCHIVE_COMMANDS.has(event.command) ? "COMPRESSION_FAILED" : "INVALID_INPUT";
 };
 
+// The ` [code] (key=value, ...)` tag the engine's Display appends for CLI readers. The structured
+// `error_code`/`error_fields` carry the same facts, so the tag is dropped from displayed text.
+const ENGINE_DISPLAY_TAG = /\s\[[a-z0-9_]+(?:\.[a-z0-9_]+)+\](?: \(.*\))?$/su;
+
+const stripEngineDisplayTag = (message: string): string => message.replace(ENGINE_DISPLAY_TAG, "");
+
 /**
  * Attach the engine's classification of a failed run to `error`: the typed kind, a workflow `code` (unless an
  * earlier layer set one), and the stable engine code and fields under `details.engineCode`/`engineFields`.
@@ -106,6 +112,7 @@ const withRomWeaverFailure = <E extends Error>(
   if (coded.error_code) {
     const fields: RomWeaverEngineErrorFields = coded.error_fields ?? {};
     record.details = { ...record.details, engineCode: coded.error_code, engineFields: fields };
+    record.message = stripEngineDisplayTag(record.message);
   }
   return error;
 };

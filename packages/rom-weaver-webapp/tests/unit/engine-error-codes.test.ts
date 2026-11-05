@@ -42,6 +42,24 @@ describe("engine error codes", () => {
     expect(toRomWeaverError(error).code).toBe("INVALID_INPUT");
   });
 
+  it("drops the CLI tag from a coded failure's message", () => {
+    expect(
+      engineFailure({
+        error_code: "patch.checksum_mismatch",
+        label: "Input checksum mismatch for crc32; expected 55c82206, actual b63cfbcd [patch.checksum_mismatch]",
+      }).message,
+    ).toBe("Input checksum mismatch for crc32; expected 55c82206, actual b63cfbcd");
+    expect(
+      engineFailure({
+        error_code: "extract.max_depth_exceeded",
+        label:
+          "nested extract exceeded max depth of 8 at `a (1).zip` [extract.max_depth_exceeded] (max_depth=8, path=a (1).zip)",
+      }).message,
+    ).toBe("nested extract exceeded max depth of 8 at `a (1).zip`");
+    // An uncoded failure keeps its text, brackets included.
+    expect(engineFailure({ label: "bad entry [see.docs]" }).message).toBe("bad entry [see.docs]");
+  });
+
   it("classifies an uncoded failure by its kind and command, not its text", () => {
     expect(engineFailure({ error_kind: "cancelled", label: "checksum" }).code).toBe("CANCELLED");
     expect(engineFailure({ error_kind: "unknown_format" }).code).toBe("UNSUPPORTED_FORMAT");
