@@ -24,6 +24,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
   - [`scripts/ci/classify-changes.mjs`](#scriptsciclassify-changesmjs)
   - [`scripts/ci/resolve-wasm-run.mjs`](#scriptsciresolve-wasm-runmjs)
   - [`scripts/ci/rerun-infra-failures.mjs`](#scriptscirerun-infra-failuresmjs)
+  - [`scripts/ci/nightly-alert.mjs`](#scriptscinightly-alertmjs)
   - [`scripts/ci/npm-publish-package.mjs`](#scriptscinpm-publish-packagemjs)
 - [Release fan-out](#release-fan-out)
   - [Containers reuse what the fan-out already built](#containers-reuse-what-the-fan-out-already-built)
@@ -166,6 +167,7 @@ security ── advisories (warn only, always green)
 | `webapp-static`, `webapp-browser`, `webapp-wasm-browser`, `webapp-e2e`, `webapp-webkit-e2e` | Webapp lint, unit, browser, and E2E suites on the prebuilt module | `CI gate` |
 | `deploy`, `deploy-preview-fast` | Cloudflare Pages deployments | not required |
 | `gate` | Asserts every gating job against its selection flag; reports `CI gate` | branch protection |
+| `nightly-alert` | Opens, updates, or closes the one nightly tracking issue; runs on the `schedule` event only | not required |
 
 - **`changes`** classifies the pull request or push diff once. It also plans the Docker and deployment matrices; deployment planning is a non-gating step on this runner.
   - Rust and vendored C changes select Rust, webapp integration, and the direct WASM browser suite. Rust test, bench, and example sources select the Rust jobs alone, because they enter neither the WASM module nor the release binary. JSON case tables directly in a crate's `tests/fixtures/` also select `webapp-static`, whose unit tests read them, but not `webapp-browser` or `webapp-webkit-e2e`.
@@ -503,6 +505,17 @@ Reruns a failed `ci.yml` or `parity.yml` run once when one of its jobs lost its 
 The workflow runs only for the first attempt of a same-repository run that concluded `failure`, so a rerun that fails again stays failed and a fork cannot spend runner minutes. It also skips a run whose commit is no longer the head of its branch, because a rerun keeps its original ref and would cancel the newer commit's run in the same concurrency group. `rerun-failed-jobs` reruns every failed job in the run, including a job that failed for its own reasons next to the infrastructure failure. The second attempt decides. A run that ends `cancelled` is never rerun, whether a person cancelled it or its only job lost its runner, because the workflow filters on `failure`; `ci.yml` ends `failure` since its gate job fails.
 
 A step that dies to a network timeout inside a job, such as `apt-get`, leaves no runner annotation. `scripts/ci/install-system-dependencies.mjs` retries those itself. A failed Release run is rerun by hand through [`release-retry.yml`](#the-workflows-at-a-glance).
+
+### `scripts/ci/nightly-alert.mjs`
+
+Keeps one tracking issue titled `Nightly CI is failing on main` in step with the scheduled `ci.yml` run, so a red nightly is seen without anyone opening the Actions tab. The `nightly-alert` job runs after `gate` and exists only on the `schedule` event: pull requests, pushes, and manual runs start no runner for it. `security` only warns, and `deploy` and `quality-analysis` are `continue-on-error`, so none of them fails the run or raises the alert. The job holds `issues: write` for itself alone; the workflow default stays `contents: read`.
+
+- **A failing nightly** opens the issue when none is open. When one is open, it adds a comment instead: the run link, the commit, and the names of the failed jobs, read from the run's job list.
+- **A passing nightly** comments `Recovered` on the open issue and closes it. A cancelled nightly changes nothing.
+- **One open issue.** The script finds it by exact title or by the `nightly-ci-failure` label, whichever matches, and picks the oldest. A stray duplicate gets a pointer to the oldest and is closed. Pull requests and unrelated issues are never touched.
+- **The label is optional.** The first alert creates `nightly-ci-failure` when it is missing and attaches it. If that fails, the issue is opened without a label and the title finds it on later nights. Do not retitle the issue by hand while it is open.
+
+The script runs against the REST API with the job's token, so it cannot be tried locally without one; `scripts/ci/nightly-alert.test.mjs` covers it against an in-memory issues API.
 
 ### `scripts/ci/npm-publish-package.mjs`
 

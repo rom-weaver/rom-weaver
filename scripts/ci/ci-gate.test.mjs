@@ -13,13 +13,15 @@ const expression = (value) =>
     .replace(/\s*\}\}$/u, "");
 
 // Publishers and deploys are deliberately non-gating, `quality-analysis` is
-// advisory, and the advisory scan reports warnings only.
+// advisory, the advisory scan reports warnings only, and `nightly-alert` reports on the gate
+// rather than feeding it.
 const NON_GATING = new Set([
   "gate",
   "deploy",
   "deploy-preview-fast",
   "docker-nightly",
   "docker-prebuilt-nightly",
+  "nightly-alert",
   "quality-analysis",
   "security",
 ]);
