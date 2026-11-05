@@ -233,7 +233,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let games = (0..FILES)
         .map(|file| GameDefinition {
             fields: fields(),
-            description: "Edits mission times, cheats, and options in one occupied file of canonical 512-byte EEPROM. Selects the first record tagged for the file and rejects it if its checksum is damaged; preserves the other records and the EEPROM header. Byte-swapped images are unsupported. Requires a game-made template.".into(),
+            description: "Edits mission times, cheats, and options in one occupied file of a canonical 512-byte EEPROM or a copy padded to 2 KiB. Selects the first record tagged for the file and rejects it if its checksum is damaged; preserves the other records, the EEPROM header, and any trailing padding. Byte-swapped images are unsupported. Requires a game-made template.".into(),
             runtime: runtime::Runtime {
                 logical_size: Some(RECORD_SIZE),
                 layout: Some(single_file_layout(
@@ -245,6 +245,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                 include_implicit_changes: true,
                 ..Default::default()
             },
+            padded_sizes: vec![2048],
             ..GameDefinition::new(
                 format!("goldeneye-007-canonical-eeprom-file-{}", file + 1),
                 format!("GoldenEye 007 (canonical EEPROM, File {})", file + 1),
@@ -527,6 +528,52 @@ mod tests {
     }
 
     #[test]
+    fn padded_2_kib_images_edit_and_keep_their_padding() {
+        let (handler, identity) = test_handler(schemas, 3);
+        let canonical = template(3);
+        let mut padded = canonical.clone();
+        padded
+            .bytes
+            .extend((0..1536).map(|index| (index * 13 + 1) as u8 | 1));
+        let edits = [
+            ("options.music", SaveValue::U32(1)),
+            ("agent.dam_seconds", SaveValue::U32(77)),
+        ];
+        let expected = test_run(schemas, 3, &canonical, &edits).unwrap();
+        let output = test_run(schemas, 3, &padded, &edits).unwrap();
+        assert_eq!(output.len(), 2048);
+        assert_eq!(output[..512], expected[..]);
+        assert_eq!(output[512..], padded.bytes[512..]);
+        assert_ne!(output[..512], canonical.bytes[..]);
+        let document = handler.parse(&padded, &identity).unwrap();
+        assert_eq!(document.save_size, 2048);
+        let reread = handler
+            .parse(
+                &SaveDetectionInput {
+                    bytes: output,
+                    ..padded.clone()
+                },
+                &identity,
+            )
+            .unwrap();
+        let value = |id: &str| {
+            reread
+                .fields
+                .iter()
+                .find(|f| f.id == id)
+                .unwrap()
+                .value
+                .clone()
+        };
+        assert_eq!(value("options.music"), SaveValue::U32(1));
+        assert_eq!(value("agent.dam_seconds"), SaveValue::U32(77));
+        // A damaged payload is still rejected when padding follows it.
+        let mut damaged = padded.clone();
+        damaged.bytes[FIRST_RECORD + 3 * RECORD_SIZE + 0x30] ^= 1;
+        assert!(handler.apply(&damaged, &identity, &[], false).is_err());
+    }
+
+    #[test]
     fn selects_the_tagged_live_record_and_rejects_damage() {
         let (handler, identity) = test_handler(schemas, 3);
         let input = template(3);
@@ -559,7 +606,14 @@ mod tests {
         deleted.bytes[live_base + 8] = 0x83;
         repair(&mut deleted.bytes, 3);
         assert!(handler.apply(&deleted, &identity, &[], false).is_err());
-        for bytes in [vec![0; 512], vec![0xff; 512], vec![0; 511], vec![0; 513]] {
+        let sizes = [511, 513, 1024, 2047, 2049];
+        let sized = sizes.map(|size| {
+            let mut bytes = input.bytes.clone();
+            bytes.resize(size, 0x5a);
+            bytes
+        });
+        let blank = [vec![0; 512], vec![0xff; 512], vec![0; 2048]];
+        for bytes in blank.into_iter().chain(sized) {
             let input = SaveDetectionInput {
                 bytes,
                 ..input.clone()

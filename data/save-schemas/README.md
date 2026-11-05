@@ -68,6 +68,8 @@ Fresh creation uses a verified initializer. Template creation starts from an exi
 
 The A Link to the Past profiles require a valid primary file. They accept a stale backup and replace it from the repaired primary after an edit. They do not recover a damaged primary from its backup. The Super Mario World profiles require matching primary and backup files.
 
+The GoldenEye 007 profiles accept 512-byte EEPROM saves and copies padded to 2 KiB. Edits repair only the selected file's live record; other records, the header, and trailing padding remain unchanged. They require a valid checksum on that record.
+
 The Super Mario 64 profiles accept 512-byte EEPROM saves and copies padded to 2 KiB. Edits repair both copies of the selected Mario file and both options records. Other Mario files and trailing padding remain unchanged. These profiles require valid primary file and options checksums; they do not recover a damaged primary from its backup.
 
 Integer and packed-decimal fields use the full stored range unless the source proves a narrower storage rule. A game can reject combinations that fit the storage. Raw numeric options can include states that normal play does not produce.
@@ -108,7 +110,7 @@ These profiles require explicit game selection and a game-made template. They ex
 | Paper Mario | 4 | Canonical 128 KiB N64 FlashRAM | Coins, Star Pieces, and Star Points; newest occupied record for each file |
 | The Legend of Zelda: Ocarina of Time | 3 | Canonical 32 KiB N64 SRAM | Death count and rupees in the basic wallet range, 0–99; primary/backup recovery and paired writes |
 | Banjo-Kazooie | 3 | Canonical 512 B N64 EEPROM | Eggs, red feathers, and gold feathers; fixed file profiles |
-| GoldenEye 007 | 4 | Canonical 512 B N64 EEPROM | Mission times with their cleared markers, cheats, and options; fixed file profiles |
+| GoldenEye 007 | 4 | Canonical 512 B N64 EEPROM, or padded to 2 KiB | Mission times with their cleared markers, cheats, and options; fixed file profiles |
 | Banjo-Tooie | 3 | Canonical 2 KiB N64 EEPROM | Egg, feather, honeycomb, glowbo, and other inventory counters; fixed file profiles |
 | Donkey Kong 64 | 3 | Canonical 2 KiB N64 EEPROM | Health, characters, basic moves, coins, banana fairies, battle crowns, boss keys, and locks; fixed file profiles |
 | Pokémon Snap | 2 | Canonical 128 KiB N64 FlashRAM | Challenge scores, furthest unlocked course with its mirrored word, and control options; Europe/USA/Australia and Japan profiles |
