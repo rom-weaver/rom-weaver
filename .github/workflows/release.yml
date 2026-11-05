@@ -667,13 +667,46 @@ jobs:
         with:
           subject-path: rom-weaver-webapp.tar.gz
 
+  # Builds, dry-runs and packages everything the npm publish needs, beside the semver check rather than
+  # after it: nothing here writes to a registry or publishes the draft, so only publish-npm waits
+  # for the check. Waits for the cargo dry-run, which finishes in under a minute, so a package
+  # crates.io would reject fails before any macOS or Windows runner is spent, and the nine builds
+  # start after main's CI first wave has thinned.
+  #
+  # The build count keeps the release window at the 16 jobs it peaked at before (the org runs at most
+  # 20 at once): five at a time beside static-webapp when the semver check is skipped, three beside
+  # its two legs when it runs.
+  npm-build:
+    needs: [release, semver-plan, cargo-publish-dry-run]
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.release.outputs.release_created == 'true' &&
+      needs.semver-plan.result == 'success' &&
+      needs.cargo-publish-dry-run.result == 'success'
+    permissions:
+      # The identify data and CLI documentation are attached to the draft and attested here,
+      # and a reusable workflow receives the calling job's token and never more.
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    uses: ./.github/workflows/npm-build.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
+      sha: ${{ needs.release.outputs.sha }}
+      cache-save: false
+      build-parallel: ${{ needs.semver-plan.outputs.skipped == 'true' && 5 || 3 }}
+
+  # The only npm job that writes to a registry, so it is the one that waits for the semver check.
   publish-npm:
-    needs: [release, semver-plan, semver-check, cargo-publish-dry-run]
+    needs: [release, semver-plan, semver-check, cargo-publish-dry-run, npm-build]
     if: >-
       !cancelled() &&
       needs.release.result == 'success' &&
       needs.release.outputs.release_created == 'true' &&
       needs.cargo-publish-dry-run.result == 'success' &&
+      needs.npm-build.result == 'success' &&
       (
         needs.semver-check.result == 'success' ||
         (
@@ -694,7 +727,7 @@ jobs:
     with:
       version: ${{ needs.release.outputs.version }}
       sha: ${{ needs.release.outputs.sha }}
-      cache-save: false
+      platforms: ${{ needs.npm-build.outputs.platforms }}
     secrets:
       NPM_BOOTSTRAP_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
 

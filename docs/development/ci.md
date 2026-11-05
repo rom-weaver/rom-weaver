@@ -60,7 +60,8 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
 | `release.yml` | manual, release PR merge | n/a | Release Please, then the publish fan-out |
 | `release-retry.yml` | manual | n/a | Validate a failed/cancelled Release run and rerun its failed jobs and dependents |
 | `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish |
-| `npm-publish.yml` | called by `release.yml` | n/a | 9 platform packages, launcher, alias |
+| `npm-build.yml` | called by `release.yml` | n/a | Builds and dry-runs the 9 platform packages; identify data and CLI documentation on the draft |
+| `npm-publish.yml` | called by `release.yml` | n/a | Publishes the 9 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io (the `latest`/`beta` channels; `nightly` is pushed from `ci.yml`) |
 | `attestation-dry-run.yml` | manual | No | Prove the release attest steps and both installers' checks without cutting a release |
 | `attestation-dry-run-called.yml` | called by `attestation-dry-run.yml` | No | Prove that attestation permissions survive a reusable-workflow boundary |
@@ -432,7 +433,7 @@ Non-cross Linux x86-64 legs also run `scripts/install-jwasm.sh` so the LZMA SDK'
 
 The Windows legs also relocate `CARGO_HOME`/`RUSTUP_HOME` to `D:` and `TMP`/`TEMP` to `RUNNER_TEMP` before the toolchain and cache steps, for the same IOPS reason `rust-windows` does it. The `D:` half is skipped when the runner has no such drive; `windows-11-arm`'s disk layout is not documented.
 
-CI and `npm-publish.yml` both use it, sharing one cache key per platform, so a release restores what CI already built rather than compiling a second, differently-configured copy. `cache-save`, `registry-url`, and `identify-data-source` are the only things the two callers set differently: CI reads the identify packs from this run's artifact, the release from the cache.
+CI and `npm-build.yml` both use it, sharing one cache key per platform, so a release restores what CI already built rather than compiling a second, differently-configured copy. `cache-save`, `registry-url`, and `identify-data-source` are the only things the two callers set differently: CI reads the identify packs from this run's artifact, the release from the cache.
 
 ### `.github/actions/docker-build-arch` and `docker-manifest`
 
@@ -519,7 +520,8 @@ The prerelease test reads the **version**, never the package spec - platform pac
 | `semver-plan`, `semver-check` | nothing - `semver-plan` lists the published crates (and skips the check when every bump allows breaking changes) and `semver-check` runs one leg per crate, gating the publish on no accidental breaking API change |
 | `cargo-publish-dry-run` | nothing - gates npm and draft publication on crates.io accepting Cargo metadata |
 | `static-webapp` | `rom-weaver-webapp.tar.gz` on the draft release + signed build provenance |
-| `publish-npm` | 9 platform packages → launcher → unscoped alias, in that order |
+| `npm-build` | nothing registry-facing - builds and dry-runs the 9 platform packages, attaches the identify data and CLI documentation to the draft; runs beside `semver-check` |
+| `publish-npm` | 9 platform packages → launcher → unscoped alias, in that order; the one npm job that waits for `semver-check` |
 | `publish-containers` | `ghcr.io/rom-weaver/rom-weaver-cli` and `-webapp`, signed provenance |
 | `publish-release` | flips the draft release to published, creating the tag |
 | `publish-homebrew` | formula commit to `rom-weaver/homebrew-tap` (stable only) |
@@ -581,13 +583,15 @@ A draft release has no tag until it is published, so every job builds from `need
 
 `cargo-publish.yml` is triggered by the resulting `v*` tag push instead of being called by `release.yml`, so no crates.io publish ever runs inside the release fan-out - the fan-out holds no registry credentials and cannot half-publish on failure. Keying off the tag also orders it naturally last: the tag only exists once the draft has been published.
 
-`cargo-semver-checks` runs as the `semver-check` job in `release.yml` and gates `publish-release`. A compatibility failure leaves the draft unpublished, while the version can still be corrected. The check needs no registry credentials and runs alongside the publishing jobs.
+`cargo-semver-checks` runs as the `semver-check` job in `release.yml` and gates `publish-release`. A compatibility failure leaves the draft unpublished, while the version can still be corrected. The check needs no registry credentials. It runs beside `static-webapp` and `npm-build`, and only the jobs that publish wait for it: `publish-npm`, `publish-containers` and `publish-release` (the package-manager pushes follow `publish-release`).
 
 It runs per-crate rather than `--workspace` so a crate with no published baseline (a first release, or a newly added crate) is skipped instead of failing the whole job. Each crate is its own matrix leg, at most two at a time (`max-parallel: 2`) because the org runs at most 20 jobs at once and a release already peaks near 16. Two legs bring the job from the sum of all five crates (about 13 minutes) to roughly half, for one extra runner; `semver-plan` reads the crate list from `cargo metadata`, so a newly published crate is checked without editing the workflow.
 
 `semver-plan` (`scripts/ci/semver-plan.mjs`) also skips the whole check when it can show that every published crate's bump allows breaking changes: the new version is a stable major bump over the latest stable crates.io release, or a 0.x minor bump. `cargo-semver-checks` skips every lint for such a bump anyway (all 260 on 0.23.0) but still builds the rustdoc of both versions, which was 785 seconds of that job. The plan emits an empty matrix and a "skipped: breaking bump allowed" job summary, and `semver-check` is skipped. A patch release, a 404 or failed baseline lookup (the same `curl --retry 3` request the legs make, one request per second), a prerelease, a yanked-only or prerelease-ahead baseline, a version not greater than the baseline, and any mix of crates keep every leg running. The publishing jobs (`publish-npm`, `publish-containers`, `publish-release`) treat `semver-check` as passed when it succeeded, or when it was skipped while `semver-plan` succeeded with `skipped == 'true'`; a failed `semver-plan` also skips `semver-check`, and that skip does not publish.
 
-With the check skipped, the nine platform builds start about 800 seconds earlier, inside the first wave of main's CI on the merge commit. `platform-build` therefore runs at most five legs at a time (`max-parallel: 5`), which keeps the release window at the 16 concurrent jobs it peaked at (modeled from the 0.23.0 timelines of this run and main's CI) instead of nine builds pushing it to 20. The nine dry-runs run three at a time (`max-parallel: 3`), which costs no wall time because `cli-assets` runs for about four minutes beside them.
+`npm-build.yml` builds and dry-runs the nine platform packages beside the semver check instead of after it, so a patch release no longer pays for the check and then the builds in sequence. Nothing in it writes to npm, a registry, or crates.io, or publishes the draft; the identify data and CLI documentation it attaches to the draft are the same kind of upload `static-webapp` already makes before the check finishes. `scripts/release-install-regression.test.mjs` fails if any job that does publish lacks the semver gate, or if `npm-build.yml` gains a publishing step. `npm-build` waits for the cargo dry-run (about 30 seconds), so a package crates.io would reject fails before any macOS or Windows runner is spent.
+
+The org runs at most 20 jobs at once and a release peaked at 16 with main's CI on the merge commit alongside, so the overlap is sized, not unbounded. Modeled from the 0.23.0 release run and main's CI run on its merge commit (both timelines are one sample), nine builds starting inside CI's first wave of nine jobs would peak at 20-22. `platform-build` therefore takes `max-parallel` from the caller: five when the semver check is skipped (static-webapp is the only other long job), three when its two legs overlap the builds. The dry-runs run three at a time, which costs no wall time because `cli-assets` runs for about four minutes beside them. A patch release with the check running is modeled as peaking at 16 and, on its own, finishing about as fast as before; the saving there arrives with the builds shrinking (reusing CI's binaries) rather than from running them concurrently.
 
 ### Package managers publish last
 

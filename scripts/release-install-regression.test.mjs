@@ -39,12 +39,60 @@ test("per-crate semver checks hold at most two runners", () => {
   const job = release.split("  semver-check:\n")[1].split(/\n  [a-z][a-z-]*:\n/)[0];
   assert.match(job, /\n      max-parallel: 2\n/);
 });
-test("npm platform builds hold at most five runners and dry-runs three", () => {
-  const npm = readFileSync(process.env.NPM_PUBLISH_FILE || ".github/workflows/npm-publish.yml", "utf8");
-  const job = npm.split("  platform-build:\n")[1].split(/\n  [a-z][a-z-]*:\n/)[0];
-  assert.match(job, /\n      max-parallel: 5\n/);
-  const dryRun = npm.split("  platform-dry-run:\n")[1].split(/\n  [a-z][a-z-]*:\n/)[0];
-  assert.match(dryRun, /\n      max-parallel: 3\n/);
+const workflow = (name) => readFileSync(`.github/workflows/${name}`, "utf8");
+// Splits a workflow's `jobs:` section into `{ name: body }`.
+const jobsOf = (text) =>
+  Object.fromEntries(
+    text
+      .split("\njobs:\n")[1]
+      .split(/\n(?=  [a-z][a-z-]*:\n)/)
+      .map((body) => [/^  ([a-z][a-z-]*):$/m.exec(body)?.[1], body])
+      .filter(([name]) => name),
+  );
+// Anything that writes to npm, a container registry, crates.io, a package-manager repository, or
+// flips the draft release. A dry run is not one; an upload to the still-draft release is not either.
+const PUBLISHES = [
+  /uses: \.\/\.github\/workflows\/(?:npm-publish|docker-publish)\.yml/,
+  /npm-publish-package\.mjs(?! --dry-run)/,
+  /docker\/login-action/,
+  /cargo publish(?!.*--dry-run)/,
+  /--draft=false/,
+  /git push/,
+];
+const publishes = (body) => PUBLISHES.some((pattern) => pattern.test(body.replace(/^\s*#.*$/gm, "")));
+
+test("every publishing release job requires semver success or the deliberate skip", () => {
+  const jobs = jobsOf(release);
+  const publishing = Object.entries(jobs).filter(([name, body]) => publishes(body) && name !== "release");
+  assert.deepEqual(
+    publishing.map(([name]) => name).sort(),
+    ["publish-containers", "publish-homebrew", "publish-npm", "publish-release", "publish-scoop"],
+  );
+  for (const [name, body] of publishing) {
+    const text = flatten(body);
+    if (name === "publish-homebrew" || name === "publish-scoop")
+      assert.match(text, /needs\.publish-release\.result == 'success'/, `${name} must follow publish-release`);
+    else assert.ok(text.includes(SEMVER_GATE), `${name} lacks the semver gate`);
+  }
+});
+
+test("the npm build workflow publishes nothing, so it may overlap the semver check", () => {
+  const build = workflow("npm-build.yml");
+  for (const [name, body] of Object.entries(jobsOf(build)))
+    assert.equal(publishes(body), false, `npm-build.yml job ${name} publishes`);
+  const npmBuild = jobBody("npm-build");
+  assert.match(npmBuild, /uses: \.\/\.github\/workflows\/npm-build\.yml/);
+  assert.doesNotMatch(npmBuild, /semver-check/);
+  const publish = jobsOf(workflow("npm-publish.yml"));
+  assert.deepEqual(Object.keys(publish).sort(), ["alias", "launcher", "platform"]);
+  assert.ok(flatten(jobBody("publish-npm")).includes("needs.npm-build.result == 'success'"));
+});
+
+test("npm platform builds size themselves for the 20-job cap", () => {
+  const job = jobsOf(workflow("npm-build.yml"))["platform-build"];
+  assert.match(job, /\n      max-parallel: \$\{\{ inputs\.build-parallel \}\}\n/);
+  assert.match(jobBody("npm-build"), /build-parallel: \$\{\{ needs\.semver-plan\.outputs\.skipped == 'true' && 5 \|\| 3 \}\}/);
+  assert.match(jobsOf(workflow("npm-build.yml"))["platform-dry-run"], /\n      max-parallel: 3\n/);
 });
 test("baseline lookup only skips 404 and retries failures", () => {
   assert.match(release, /if \[\[ "\$status" = 404 \]\]/);
