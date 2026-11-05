@@ -60,7 +60,7 @@ test("a stored entry restores into another checkout", () => {
   });
 });
 
-test("an existing entry is kept and an incomplete one does not restore", () => {
+test("an existing entry is kept and an incomplete one is rebuilt", () => {
   withDir((dir) => {
     const root = path.join(dir, "cache");
     writeArtifacts(path.join(dir, "a"), "one");
@@ -77,6 +77,11 @@ test("an existing entry is kept and an incomplete one does not restore", () => {
     fs.mkdirSync(out);
     assert.equal(restoreWasmArtifacts({ root, key: "k", files: FILES, outDir: out }), false);
     assert.deepEqual(fs.readdirSync(out), []);
+
+    // The build that follows the miss stores the complete entry again.
+    storeWasmArtifacts({ root, key: "k", files: FILES, sourceDir: path.join(dir, "a") });
+    assert.equal(restoreWasmArtifacts({ root, key: "k", files: FILES, outDir: out }), true);
+    assert.equal(fs.readFileSync(path.join(out, FILES[1]), "utf8"), `${FILES[1]}:one`);
   });
 });
 
