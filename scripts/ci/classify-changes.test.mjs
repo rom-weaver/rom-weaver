@@ -797,6 +797,8 @@ test("release-time CI helpers select repo lint without compiled stacks", () => {
     "scripts/ci/nightly-alert.mjs",
     "scripts/ci/parity-cli-key.mjs",
     "scripts/ci/rerun-infra-failures.mjs",
+    // Release workflow only.
+    "scripts/ci/semver-plan.mjs",
   ]) {
     assert.deepEqual(selected(classifyFor("pull_request", path)), ["repo_lint"], path);
   }

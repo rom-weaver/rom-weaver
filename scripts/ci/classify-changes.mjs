@@ -46,6 +46,7 @@ export const REPO_LINT_CI_HELPERS = new Set([
   "scripts/ci/publish-apply-video.mjs",
   "scripts/ci/purge-cloudflare-pages-cache.mjs",
   "scripts/ci/rerun-infra-failures.mjs",
+  "scripts/ci/semver-plan.mjs",
 ]);
 
 // Root scripts that no build, image, or CI job imports or runs on a pull
