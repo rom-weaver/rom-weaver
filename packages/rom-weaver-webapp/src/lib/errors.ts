@@ -1,4 +1,6 @@
 import type { WorkflowErrorCode } from "../types/errors.ts";
+import { ROM_WEAVER_WORKFLOW_ERROR_CODES } from "../wasm/generated/rom-weaver-format-metadata.ts";
+import type { RomWeaverEngineErrorCode, RomWeaverEngineErrorFields } from "../workers/rom-weaver/runner-errors.ts";
 
 type RomWeaverErrorCode = WorkflowErrorCode;
 type CodedErrorLike = Error & {
@@ -36,34 +38,30 @@ const OUT_OF_MEMORY_MESSAGE_REGEX =
   /\b(out of memory|cannot enlarge memory|memory allocation|not enough memory|bad alloc|ENOMEM|OOM)\b/i;
 const OUTPUT_WRITE_FAILURE_MESSAGE_REGEX =
   /\b(createwritable|writable|read\/write access|read\/write permission|destination file|output could not be written|modifications are not allowed|no space left|quota|nospc|enospc)\b/i;
-const WORKFLOW_ERROR_CODES = new Set<RomWeaverErrorCode>([
-  "AMBIGUOUS_SELECTION",
-  "ARCHIVE_DEPTH_EXCEEDED",
-  "CANCELLED",
-  "CHECKSUM_MISMATCH",
-  "COMPRESSION_FAILED",
-  "INVALID_INPUT",
-  "INVALID_SETTINGS",
-  "NO_COMPATIBLE_PATCH",
-  "NO_SELECTABLE_CANDIDATE",
-  "OUTPUT_WRITE_FAILED",
-  "PATCH_APPLY_FAILED",
-  "PATCH_CREATE_FAILED",
-  "PATCH_PARSE_FAILED",
-  "PATCH_TARGET_MISMATCH",
-  "SELECTION_NOT_FOUND",
-  "SOURCE_NOT_FOUND",
-  "SOURCE_UNSUPPORTED",
-  "STORAGE_UNAVAILABLE",
-  "UNSUPPORTED_FORMAT",
-  "WORKFLOW_BUSY",
-  "WORKFLOW_DISPOSED",
-  "WORKFLOW_EVENT_BUFFER_OVERFLOW",
-  "WORKFLOW_INVALID_STATE",
-  "WORKFLOW_NOT_READY",
-  "WORKER_FAILED",
-  "WORKER_UNAVAILABLE",
-]);
+const WORKFLOW_ERROR_CODES: ReadonlySet<string> = new Set(ROM_WEAVER_WORKFLOW_ERROR_CODES);
+
+const isWorkflowErrorCode = (code: unknown): code is RomWeaverErrorCode =>
+  typeof code === "string" && WORKFLOW_ERROR_CODES.has(code);
+
+type EngineErrorFields = RomWeaverEngineErrorFields;
+
+/**
+ * The stable engine code and fields of the first error in the cause chain that a failed Rust run classified
+ * (see `withRomWeaverFailure`).
+ */
+const getEngineError = (error: unknown): { code: string; fields: EngineErrorFields } | undefined => {
+  let current = error;
+  for (let depth = 0; current && typeof current === "object" && depth < 8; depth += 1) {
+    const details = (current as CodedErrorLike).details;
+    if (details && typeof details.engineCode === "string")
+      return { code: details.engineCode, fields: (details.engineFields as EngineErrorFields | undefined) ?? {} };
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
+};
+
+const hasEngineErrorCode = (error: unknown, code: RomWeaverEngineErrorCode): boolean =>
+  getEngineError(error)?.code === code;
 
 const getSimpleErrorCode = (lower: string): RomWeaverErrorCode | undefined => {
   if (lower.includes("abort") || lower.includes("cancel")) return "CANCELLED";
@@ -86,9 +84,7 @@ const getPatternErrorCode = (lower: string, message: string): RomWeaverErrorCode
 
 const getWorkflowErrorCode = (error: unknown): RomWeaverErrorCode | null => {
   const code = error instanceof Error ? (error as CodedErrorLike).code : undefined;
-  return typeof code === "string" && WORKFLOW_ERROR_CODES.has(code as RomWeaverErrorCode)
-    ? (code as RomWeaverErrorCode)
-    : null;
+  return isWorkflowErrorCode(code) ? code : null;
 };
 
 const toRomWeaverError = (error: unknown): RomWeaverError => {
@@ -105,6 +101,8 @@ const toRomWeaverError = (error: unknown): RomWeaverError => {
           ? (error as CodedErrorLike).details
           : undefined,
     });
+  // Engine failures arrive with a code from `withRomWeaverFailure`; this text fallback is for errors raised
+  // in the browser (workers, storage, module loading).
   const lower = message.toLowerCase();
   const code = getSimpleErrorCode(lower) || getPatternErrorCode(lower, message);
   return new RomWeaverError(code, message, { cause: error });
@@ -133,4 +131,13 @@ const withAbortSignal = async <T>(operation: Promise<T>, signal?: AbortSignal): 
   });
 };
 
-export { OUT_OF_MEMORY_MESSAGE_REGEX, RomWeaverError, throwIfAborted, toRomWeaverError, withAbortSignal };
+export {
+  getEngineError,
+  hasEngineErrorCode,
+  isWorkflowErrorCode,
+  OUT_OF_MEMORY_MESSAGE_REGEX,
+  RomWeaverError,
+  throwIfAborted,
+  toRomWeaverError,
+  withAbortSignal,
+};

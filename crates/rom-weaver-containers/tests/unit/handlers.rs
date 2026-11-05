@@ -6614,7 +6614,7 @@ mod tests {
             let error = crate::list_regular_archive_entries_with_libarchive(&source, "7z")
                 .expect_err("garbage archive should not list");
             assert!(
-                matches!(error, RomWeaverError::Validation(_)),
+                error.code() == Some(rom_weaver_core::ERROR_CODE_ARCHIVE_READ_FAILED),
                 "unexpected error: {error:?}"
             );
 
@@ -6633,7 +6633,7 @@ mod tests {
             let error = crate::probe_regular_archive_details_with_libarchive(&source, "7z")
                 .expect_err("garbage archive should not probe");
             assert!(
-                matches!(error, RomWeaverError::Validation(_)),
+                error.code() == Some(rom_weaver_core::ERROR_CODE_ARCHIVE_READ_FAILED),
                 "unexpected error: {error:?}"
             );
 
@@ -6667,7 +6667,7 @@ mod tests {
             )
             .expect_err("garbage archive should not extract");
             assert!(
-                matches!(error, RomWeaverError::Validation(_)),
+                error.code() == Some(rom_weaver_core::ERROR_CODE_ARCHIVE_READ_FAILED),
                 "unexpected error: {error:?}"
             );
 

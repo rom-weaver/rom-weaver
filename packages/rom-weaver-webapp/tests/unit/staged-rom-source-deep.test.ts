@@ -420,7 +420,10 @@ describe("StagedRomSourceController selection recovery", () => {
   });
 
   it("converts a cancelled selection into a selection-skipped error", async () => {
-    const cancelled = new Error("Interactive selection was cancelled");
+    const cancelled = Object.assign(new Error("Interactive selection was cancelled"), {
+      code: "CANCELLED",
+      details: { engineCode: "selection.cancelled" },
+    });
     const { controller } = makeController();
     const stage = controller.createInitialSource("input", { name: "cancelled.zip" }, 0);
     prep.prepareInputAssets.mockRejectedValueOnce(cancelled);

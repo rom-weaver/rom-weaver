@@ -1110,17 +1110,21 @@ fn build_libarchive_extract_tasks(
         );
     }
     if should_filter_common && ignored_count > 0 && !tasks.iter().any(|task| !task.is_dir) {
-        return Err(RomWeaverError::Validation(format!(
-            "all extract entries from `{}` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>",
-            source.display()
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            rom_weaver_core::ValidationCodeError::new(rom_weaver_core::ERROR_CODE_EXTRACT_ALL_ENTRIES_IGNORED)
+                .with_message(format!(
+                    "all extract entries from `{}` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>",
+                    source.display()
+                ))
+                .with_field("path", source.display().to_string()),
+        ));
     }
     if kind_filter.enabled() && kind_filtered_count > 0 && !tasks.iter().any(|task| !task.is_dir) {
-        return Err(RomWeaverError::Validation(format!(
-            "no extract entries from `{}` matched {}",
-            source.display(),
-            kind_filter.flag_label()
-        )));
+        return Err(RomWeaverError::no_matching_extract_entries(
+            source,
+            &kind_filter.flag_label(),
+            "",
+        ));
     }
     Ok(tasks)
 }

@@ -475,3 +475,97 @@ fn io_path_appends_access_advice_only_for_permission_denials() {
         Some(std::env::temp_dir().as_path())
     );
 }
+
+#[test]
+fn coded_error_exposes_code_and_fields_and_display_round_trips() {
+    let error = RomWeaverError::ValidationCode(
+        ValidationCodeError::new("wbfs.size_mismatch")
+            .with_message("WBFS size differs")
+            .with_field("actual", 10u64)
+            .with_field("expected", 20u64)
+            .with_field("split", true)
+            .with_field("path", "game [beta].wbfs"),
+    );
+    assert_eq!(error.code(), Some("wbfs.size_mismatch"));
+    let fields = error.fields_json().expect("fields");
+    assert_eq!(fields["actual"], 10);
+    assert_eq!(fields["split"], true);
+
+    // The label fallback recovers the same code and fields, also behind context text.
+    let label = format!("extract failed: {error}");
+    let (code, parsed) = ValidationCodeError::parse_display_tag(&label).expect("tag");
+    assert_eq!(code, "wbfs.size_mismatch");
+    assert_eq!(parsed, Some(fields));
+}
+
+#[test]
+fn parse_display_tag_ignores_text_without_a_trailing_code_tag() {
+    for text in [
+        "validation failed: plain message",
+        "no entries in `game [USA].zip`",
+        "validation failed: see [docs]: more",
+        "message (detail)",
+        "validation failed:[code]",
+        "validation failed: [9bad]",
+    ] {
+        assert_eq!(ValidationCodeError::parse_display_tag(text), None, "{text}");
+    }
+    assert_eq!(
+        ValidationCodeError::parse_display_tag("msg [extract.no_container]"),
+        Some(("extract.no_container".to_owned(), None))
+    );
+    assert_eq!(
+        ValidationCodeError::split_display_tag(
+            "bad patch [patch.file_checksum_invalid] (expected=1)"
+        )
+        .map(|(message, code, _)| (message, code)),
+        Some(("bad patch", "patch.file_checksum_invalid".to_owned()))
+    );
+}
+
+#[test]
+fn with_context_keeps_codes_and_codes_uncoded_errors_on_request() {
+    let coded = RomWeaverError::ValidationCode(
+        ValidationCodeError::new("archive.storage_failed")
+            .with_message("Failed to open '/x'")
+            .with_field("errno", 2),
+    )
+    .with_context("zip list failed while reading entry 0", None);
+    assert_eq!(coded.code(), Some("archive.storage_failed"));
+    assert_eq!(
+        coded.to_string(),
+        "validation failed: zip list failed while reading entry 0: Failed to open '/x' [archive.storage_failed] (errno=2)"
+    );
+
+    let fallback = RomWeaverError::Validation("bad header".to_owned())
+        .with_context("zip list failed", Some("archive.read_failed"));
+    assert_eq!(fallback.code(), Some("archive.read_failed"));
+    assert_eq!(
+        fallback.to_string(),
+        "validation failed: zip list failed: validation failed: bad header [archive.read_failed]"
+    );
+
+    let plain = RomWeaverError::Validation("bad".to_owned()).with_context("ctx", None);
+    assert!(
+        matches!(plain, RomWeaverError::Validation(ref message) if message == "ctx: validation failed: bad")
+    );
+}
+
+#[test]
+fn storage_full_io_errors_carry_the_storage_full_code() {
+    let full = RomWeaverError::Io(io::Error::from(io::ErrorKind::StorageFull));
+    assert_eq!(full.code(), Some("io.storage_full"));
+    let path_full = RomWeaverError::io_path(
+        IoOp::Write,
+        "/out.bin",
+        io::Error::from(io::ErrorKind::StorageFull),
+    );
+    assert_eq!(path_full.code(), Some("io.storage_full"));
+    let wrapped = format!("write failed: {path_full}");
+    assert!(wrapped.ends_with(" [io.storage_full]"), "{wrapped}");
+    assert_eq!(
+        ValidationCodeError::parse_display_tag(&wrapped).map(|(code, _)| code),
+        Some("io.storage_full".to_owned())
+    );
+    assert_eq!(RomWeaverError::Io(io::Error::other("x")).code(), None);
+}

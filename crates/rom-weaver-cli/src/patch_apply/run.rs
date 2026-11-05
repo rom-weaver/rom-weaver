@@ -554,11 +554,14 @@ impl CliApp {
             }
             Ok(labels)
         })();
-        let raw_error = match raw {
-            Ok(labels) => return Ok((labels, None)),
-            Err(error @ RomWeaverError::Validation(_)) if run.disc_context.is_none() => error,
-            Err(error) => return Err(error),
-        };
+        let raw_error =
+            match raw {
+                Ok(labels) => return Ok((labels, None)),
+                Err(
+                    error @ (RomWeaverError::Validation(_) | RomWeaverError::ValidationCode(_)),
+                ) if run.disc_context.is_none() => error,
+                Err(error) => return Err(error),
+            };
         // Only a strippable header or an N64 byte order gives another form,
         // and its size is known before hashing.
         let size_fits = |size: u64| requirements.size.is_none_or(|expected| expected == size);

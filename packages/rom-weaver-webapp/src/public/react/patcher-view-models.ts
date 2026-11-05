@@ -205,6 +205,7 @@ const buildStackViewState = ({
       validationMessage: patchInfo?.validationMessage || "",
       validationState: patchInfo?.validationState || "",
       validationUnreadable: !!patchInfo?.validationUnreadable,
+      validationErrorCode: patchInfo?.validationErrorCode,
       dcp: !!patchInfo?.dcp,
       validationValues: patchInfo?.validationValues || [],
     };

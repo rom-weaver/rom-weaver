@@ -7,6 +7,8 @@ export type OperationStatus = "pending" | "running" | "succeeded" | "unsupported
 
 export type RomWeaverErrorKind = "validation" | "unknown_format" | "unsupported" | "cancelled" | "io" | "thread_pool_build";
 
+export type WorkflowErrorCode = "AMBIGUOUS_SELECTION" | "ARCHIVE_DEPTH_EXCEEDED" | "ARCHIVE_READ_FAILED" | "CANCELLED" | "CHECKSUM_MISMATCH" | "COMPRESSION_FAILED" | "INVALID_INPUT" | "INVALID_SETTINGS" | "NO_COMPATIBLE_PATCH" | "NO_SELECTABLE_CANDIDATE" | "OUTPUT_WRITE_FAILED" | "PATCH_APPLY_FAILED" | "PATCH_CREATE_FAILED" | "PATCH_PARSE_FAILED" | "PATCH_TARGET_MISMATCH" | "SELECTION_NOT_FOUND" | "SOURCE_NOT_FOUND" | "SOURCE_UNSUPPORTED" | "STORAGE_UNAVAILABLE" | "UNSUPPORTED_FORMAT" | "WORKFLOW_BUSY" | "WORKFLOW_DISPOSED" | "WORKFLOW_EVENT_BUFFER_OVERFLOW" | "WORKFLOW_INVALID_STATE" | "WORKFLOW_NOT_READY" | "WORKER_FAILED" | "WORKER_UNAVAILABLE";
+
 export type ThreadMode = "auto" | "fixed";
 
 export type ThreadBudget = "auto" | number;
@@ -21,7 +23,16 @@ export type ProgressEvent = { command: string, family: OperationFamily, format: 
  * source error kind, then classify legacy bare labels. `None` (and omitted)
  * for other event statuses and unclassified legacy messages.
  */
-error_kind?: RomWeaverErrorKind | null, status: OperationStatus, };
+error_kind?: RomWeaverErrorKind | null,
+/**
+ * Stable code of a coded failure (see `error_codes`). The webapp
+ * classifies failures by this code, never by `label` text.
+ */
+error_code?: string | null,
+/**
+ * Fields of the coded failure, such as sizes or the path it names.
+ */
+error_fields?: Record<string, string | number | boolean> | null, status: OperationStatus, };
 
 export type ExtractedFileEntry = {
 /**
@@ -346,6 +357,11 @@ export type PatchPlanVerdict = { index: number, patch: string, format?: string, 
  * from the running intermediate.
  */
 execution?: PatchEndpointSelection, message: string,
+/**
+ * Stable engine error code behind a failed verdict (such as
+ * `patch.file_checksum_invalid`); the message has its tag stripped.
+ */
+error_code?: string,
 /**
  * The failed verdict is a limit of the patch itself (an unsupported feature such as an
  * interactive BSP menu), not a mismatch with the ROM, so no other ROM can fix it.

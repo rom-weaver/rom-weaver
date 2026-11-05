@@ -10,7 +10,7 @@ import {
   getRomWeaverRunEventDetails,
   getRomWeaverRunEventLabel,
 } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
-import { getRomWeaverFailureMessage, withRomWeaverFailureKind } from "../../workers/rom-weaver/runner-errors.ts";
+import { withRomWeaverFailure } from "../../workers/rom-weaver/runner-errors.ts";
 import { toThreadBudget } from "./compression-thread-budget.ts";
 import {
   getPatchValidationRequirements,
@@ -48,6 +48,7 @@ const parsePatchValidatePerPatchEntry = (raw: unknown): PatchValidatePerPatchVer
   if (!Number.isInteger(index) || index < 0) return null;
   return {
     index,
+    ...(typeof record.error_code === "string" ? { errorCode: record.error_code } : {}),
     ...(typeof record.format === "string" ? { format: record.format } : {}),
     ...(typeof record.message === "string" ? { message: record.message } : {}),
     ...(typeof record.patch === "string" ? { patch: record.patch } : {}),
@@ -272,11 +273,8 @@ const invokeRomWeaverPatchValidateWorker = async (
     }),
   );
   if (!(result.ok && result.exitCode === 0)) {
-    const failureMessage = await appendBrowserStorageContext(
-      getRomWeaverFailureMessage(result, "Patch validation failed"),
-      "validate patch output",
-    );
-    throw withRomWeaverFailureKind(new Error(failureMessage), result);
+    const failureMessage = await appendBrowserStorageContext(result, "Patch validation failed");
+    throw withRomWeaverFailure(new Error(failureMessage), result);
   }
 
   const terminal = getTerminalEvent(result);

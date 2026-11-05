@@ -75,15 +75,17 @@ pub fn list_regular_archive_file_entries(
         let mut index = 0usize;
 
         while let Some(entry) = reader.next_entry().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{format_name} list failed while reading entry {index}: {error}"
-            ))
+            entry_read_error(
+                error,
+                format!("{format_name} list failed while reading entry {index}"),
+            )
         })? {
             if entry.is_file() {
                 let entry_path = entry.pathname().map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "{format_name} list failed while decoding entry {index}: {error}"
-                    ))
+                    entry_read_error(
+                        error,
+                        format!("{format_name} list failed while decoding entry {index}"),
+                    )
                 })?;
                 // Legacy ZIP directories may still end in `\`; libarchive only rewrites flagged names.
                 let is_dir_name = entry_path.ends_with('\\');
@@ -140,14 +142,16 @@ pub fn probe_regular_archive(
         let mut index = 0usize;
 
         while let Some(entry) = reader.next_entry().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{format_name} probe failed while reading entry {index}: {error}"
-            ))
+            entry_read_error(
+                error,
+                format!("{format_name} probe failed while reading entry {index}"),
+            )
         })? {
             let entry_path = entry.pathname().map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "{format_name} probe failed while decoding entry {index}: {error}"
-                ))
+                entry_read_error(
+                    error,
+                    format!("{format_name} probe failed while decoding entry {index}"),
+                )
             })?;
             if normalize_archive_name_relaxed(&entry_path).is_empty() {
                 index = index.saturating_add(1);
@@ -222,14 +226,16 @@ fn list_regular_archive_entries_uncached(
         let mut index = 0usize;
 
         while let Some(entry) = reader.next_entry().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{format_name} list failed while reading entry {index}: {error}"
-            ))
+            entry_read_error(
+                error,
+                format!("{format_name} list failed while reading entry {index}"),
+            )
         })? {
             let entry_path = entry.pathname().map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "{format_name} list failed while decoding entry {index}: {error}"
-                ))
+                entry_read_error(
+                    error,
+                    format!("{format_name} list failed while decoding entry {index}"),
+                )
             })?;
             entries.push(RegularArchiveEntryMetadata {
                 index,
@@ -297,9 +303,10 @@ where
         let mut matched = 0usize;
 
         while let Some(entry) = reader.next_entry().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{format_name} extract failed while reading entry {index}: {error}"
-            ))
+            entry_read_error(
+                error,
+                format!("{format_name} extract failed while reading entry {index}"),
+            )
         })? {
             if !selected_indices.contains(&index) {
                 index = index.saturating_add(1);
@@ -307,9 +314,10 @@ where
             }
 
             let entry_path = entry.pathname().map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "{format_name} extract failed while decoding entry {index}: {error}"
-                ))
+                entry_read_error(
+                    error,
+                    format!("{format_name} extract failed while decoding entry {index}"),
+                )
             })?;
             let entry_info = RegularArchiveEntryMetadata {
                 index,
@@ -383,9 +391,10 @@ where
     let result = (|| -> Result<()> {
         let mut index = 0usize;
         while let Some(entry) = reader.next_entry().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{format_name} prefix read failed while reading entry {index}: {error}"
-            ))
+            entry_read_error(
+                error,
+                format!("{format_name} prefix read failed while reading entry {index}"),
+            )
         })? {
             index = index.saturating_add(1);
             if !entry.is_file() {
@@ -445,9 +454,10 @@ where
         let mut index = 0usize;
 
         while let Some(entry) = reader.next_entry().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{format_name} read failed while reading entry {index}: {error}"
-            ))
+            entry_read_error(
+                error,
+                format!("{format_name} read failed while reading entry {index}"),
+            )
         })? {
             if index != expected_index {
                 index = index.saturating_add(1);
@@ -461,9 +471,10 @@ where
             }
 
             let entry_path = entry.pathname().map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "{format_name} read failed while decoding entry {index}: {error}"
-                ))
+                entry_read_error(
+                    error,
+                    format!("{format_name} read failed while decoding entry {index}"),
+                )
             })?;
             let entry_name = normalize_archive_name(&entry_path).ok_or_else(|| {
                 RomWeaverError::Validation(format!(
@@ -543,9 +554,10 @@ pub fn read_nested_regular_archive_entry_prefixes(
         let mut seen = std::collections::BTreeSet::new();
         let mut index = 0usize;
         while let Some(entry) = reader.next_entry().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{format_name} nested read failed while reading entry {index}: {error}"
-            ))
+            entry_read_error(
+                error,
+                format!("{format_name} nested read failed while reading entry {index}"),
+            )
         })? {
             index = index.saturating_add(1);
             if !entry.is_file() {
@@ -628,9 +640,10 @@ fn detect_regular_archive_format(source: &Path, format_name: &str) -> Result<i32
     let mut reader = open_regular_archive_reader(source, format_name)?;
     let result = (|| -> Result<i32> {
         let _ = reader.next_entry().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{format_name} probe failed while reading header: {error}"
-            ))
+            entry_read_error(
+                error,
+                format!("{format_name} probe failed while reading header"),
+            )
         })?;
         Ok(reader.format())
     })();
@@ -686,3 +699,19 @@ fn normalize_archive_name_relaxed(name: &str) -> String {
 #[cfg(test)]
 #[path = "../../tests/unit/libarchive_entries.rs"]
 mod tests;
+
+/// An entry read or decode failure as an archive read error. A coded libarchive
+/// failure carried inside the `io::Error` keeps its code (storage failures stay
+/// storage failures).
+fn entry_read_error(error: io::Error, context: String) -> RomWeaverError {
+    match error.downcast::<RomWeaverError>() {
+        Ok(inner) => inner.with_context(
+            context,
+            Some(rom_weaver_core::ERROR_CODE_ARCHIVE_READ_FAILED),
+        ),
+        Err(error) => RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_ARCHIVE_READ_FAILED,
+            format!("{context}: {error}"),
+        ),
+    }
+}

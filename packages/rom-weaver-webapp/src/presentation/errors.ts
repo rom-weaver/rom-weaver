@@ -1,5 +1,6 @@
 import type { MessageId } from "./localization/catalog.ts";
 import { createLocalizer, type Localizer } from "./localization/index.ts";
+import { getEngineError } from "../lib/errors.ts";
 import { isPatchFileChecksumFailure } from "../public/react/patch-validation-failure.ts";
 
 type CodedErrorLike = Error & {
@@ -71,28 +72,24 @@ const getUserFacingErrorMessage = (error: unknown, localizer: Localizer = create
   if (code === "INVALID_INPUT" && message.toLowerCase().includes("multi-file output")) return message;
   if ((code === "WORKER_FAILED" || code === "COMPRESSION_FAILED") && OUT_OF_MEMORY_MESSAGE_REGEX.test(message))
     return message;
-  if (code === "CHECKSUM_MISMATCH" && getDistinctErrorMessages(error).some(isPatchFileChecksumFailure))
-    return localizer.message("error.PATCH_FILE_DAMAGED");
+  if (isPatchFileChecksumFailure(getEngineError(error)?.code)) return localizer.message("error.PATCH_FILE_DAMAGED");
   const messageId = `error.${code}` as MessageId;
   const localized = localizer.message(messageId, getErrorDetails(error));
   return localized === messageId ? getErrorMessage(error) : localized;
 };
 
-const NO_ROM_IN_ARCHIVE_REGEX = /no extract entries from `([^`]+)` matched --filter rom\b/i;
-// The native diagnostic wraps the archive path in backticks without escaping, so the path itself may contain backticks.
-const ALL_ARCHIVE_ENTRIES_IGNORED_REGEX =
-  /all (?:extract entries|extracted [^`]+ candidates) from `(.+)` were ignored by default filters;/i;
-
 const getNoRomInArchiveMessage = (error: unknown): string => {
-  for (const message of getDistinctErrorMessages(error)) {
-    const ignoredArchivePath = ALL_ARCHIVE_ENTRIES_IGNORED_REGEX.exec(message)?.[1];
-    if (ignoredArchivePath) {
-      const fileName = ignoredArchivePath.split(/[\\/]/).pop() || ignoredArchivePath;
-      return `No usable ROM found in ${fileName}. Choose an archive containing a ROM, or extract it and add the ROM file.`;
-    }
-    const archivePath = NO_ROM_IN_ARCHIVE_REGEX.exec(message)?.[1];
-    if (archivePath) return `No ROM found in ${archivePath.split(/[\\/]/).pop() || archivePath}.`;
-  }
+  const engine = getEngineError(error);
+  const path = typeof engine?.fields.path === "string" ? engine.fields.path : "";
+  const fileName = path.split(/[\\/]/).pop() || path;
+  if (!fileName) return "";
+  if (engine?.code === "extract.all_entries_ignored")
+    return `No usable ROM found in ${fileName}. Choose an archive containing a ROM, or extract it and add the ROM file.`;
+  if (
+    engine?.code === "extract.no_matching_entries" &&
+    String(engine.fields.filter).split("/").includes("--filter rom")
+  )
+    return `No ROM found in ${fileName}.`;
   return "";
 };
 

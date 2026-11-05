@@ -8,6 +8,7 @@ mod context;
 mod disc_sheet;
 mod env;
 mod error;
+mod error_codes;
 mod formatting;
 mod io;
 mod media_topology;
@@ -55,8 +56,17 @@ pub use disc_sheet::{
 pub use env::{env_u64, env_u64_opt};
 pub use error::{
     ChdMediaScope, FormatOperationKind, IoOp, IoResultExt, Result, RomWeaverError,
-    RomWeaverErrorKind, UnsupportedOp, VALIDATION_CODE_EXTRACT_NO_CONTAINER,
-    VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError, ValidationField, ValidationFieldValue,
+    RomWeaverErrorKind, UnsupportedOp, ValidationCodeError, ValidationField, ValidationFieldValue,
+};
+pub use error_codes::{
+    ERROR_CODE_ARCHIVE_READ_FAILED, ERROR_CODE_ARCHIVE_STORAGE_FAILED,
+    ERROR_CODE_DISC_NOT_GAMECUBE_WII, ERROR_CODE_EXTRACT_ALL_ENTRIES_IGNORED,
+    ERROR_CODE_EXTRACT_MAX_DEPTH_EXCEEDED, ERROR_CODE_EXTRACT_NO_MATCHING_ENTRIES,
+    ERROR_CODE_IO_STORAGE_FULL, ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+    ERROR_CODE_PATCH_FILE_CHECKSUM_INVALID, ERROR_CODE_SELECTION_CANCELLED,
+    ERROR_CODE_TRIM_UNSUPPORTED_DISC, ERROR_CODE_WORKFLOW_CODES,
+    VALIDATION_CODE_EXTRACT_NO_CONTAINER, VALIDATION_CODE_WBFS_SIZE_MISMATCH, WorkflowErrorCode,
+    workflow_error_code,
 };
 pub use formatting::format_human_bytes;
 pub use io::{

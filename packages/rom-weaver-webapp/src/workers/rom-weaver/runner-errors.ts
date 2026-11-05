@@ -1,4 +1,9 @@
 import type { RomWeaverRunJsonEvent, RomWeaverRunJsonResult as BaseRomWeaverRunJsonResult } from "../../wasm/index.ts";
+import { ROM_WEAVER_ERROR_CODES } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import type { RomWeaverErrorKind } from "../../wasm/rom-weaver-types.d.ts";
+import { isWorkflowErrorCode } from "../../lib/errors.ts";
+import type { WorkflowErrorCode } from "../../types/errors.ts";
+import { describeError } from "../shared/error-description.ts";
 import {
   getRomWeaverRunEventErrorKind,
   getRomWeaverRunEventLabel,
@@ -6,35 +11,6 @@ import {
 } from "./rom-weaver-run-events.ts";
 
 type RomWeaverRunJsonResult = BaseRomWeaverRunJsonResult<RomWeaverRunJsonEvent, RuntimeValue>;
-
-const getRecordErrorMessage = (record: { message?: unknown; kind?: unknown }) =>
-  typeof record.message === "string" && record.message.trim()
-    ? record.message.trim()
-    : typeof record.kind === "string" && record.kind.trim()
-      ? `rom-weaver error (${record.kind.trim()})`
-      : "";
-
-const getErrorContextSuffix = (context: unknown) => {
-  if (!(context && typeof context === "object")) return "";
-  const record = context as { command?: unknown; stage?: unknown };
-  const command = typeof record.command === "string" ? record.command.trim() : "";
-  const stage = typeof record.stage === "string" ? record.stage.trim() : "";
-  if (!(command || stage)) return "";
-  return ` (${[command ? `command=${command}` : "", stage ? `stage=${stage}` : ""].filter(Boolean).join(", ")})`;
-};
-
-const getErrorMessage = (value: unknown) => {
-  if (!value) return "";
-  if (typeof value === "string") return value.trim();
-  if (value instanceof Error) return String(value.message || "").trim();
-  if (typeof value === "object") {
-    const record = value as { message?: unknown; kind?: unknown; context?: unknown };
-    const message = getRecordErrorMessage(record);
-    if (!message) return "";
-    return `${message}${getErrorContextSuffix(record.context)}`;
-  }
-  return "";
-};
 
 const TRACE_STDERR_LINE_REGEX = /^\d{4}-\d{2}-\d{2}T\S+\s+(?:TRACE|DEBUG|INFO|WARN|ERROR)\s+[\w:]+:/;
 
@@ -66,7 +42,7 @@ const getRomWeaverFailureMessage = (
     if (line) return line;
   }
 
-  const errorMessage = getErrorMessage((result as { error?: unknown } | null | undefined)?.error);
+  const errorMessage = describeError((result as { error?: unknown } | null | undefined)?.error, { context: true });
   if (errorMessage) return errorMessage;
 
   const stderr = getNonTraceStderr(result);
@@ -75,28 +51,64 @@ const getRomWeaverFailureMessage = (
   return fallback;
 };
 
-type RomWeaverFailureKind = NonNullable<ReturnType<typeof getRomWeaverRunEventErrorKind>>;
-
-const getRomWeaverFailureKind = (
-  result: Partial<RomWeaverRunJsonResult> | null | undefined,
-): RomWeaverFailureKind | undefined => {
-  const events = Array.isArray(result?.events) ? result.events : [];
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (!(event && isRomWeaverFailedRunEvent(event))) continue;
-    const kind = getRomWeaverRunEventErrorKind(event);
-    if (kind) return kind;
-  }
-  return undefined;
+type RomWeaverEngineErrorCode = keyof typeof ROM_WEAVER_ERROR_CODES;
+type RomWeaverEngineErrorFields = NonNullable<RomWeaverRunJsonEvent["error_fields"]>;
+type RomWeaverEngineError = Error & {
+  code?: unknown;
+  details?: Record<string, unknown>;
+  kind?: RomWeaverErrorKind;
 };
 
-const withRomWeaverFailureKind = <E extends Error>(
+// Failures of these commands are archive or codec errors.
+const ARCHIVE_COMMANDS: ReadonlySet<string> = new Set(["compress", "extract", "plan-extract-batch"]);
+
+const isEngineErrorCode = (code: string): code is RomWeaverEngineErrorCode =>
+  Object.hasOwn(ROM_WEAVER_ERROR_CODES, code);
+
+const getFailedEvents = (result: Partial<RomWeaverRunJsonResult> | null | undefined): RomWeaverRunJsonEvent[] =>
+  (Array.isArray(result?.events) ? result.events : [])
+    .filter((event): event is RomWeaverRunJsonEvent => !!event && isRomWeaverFailedRunEvent(event))
+    .reverse();
+
+/** The stable engine code of a failed run, if the engine coded its failure. */
+const getRomWeaverFailureCode = (result: Partial<RomWeaverRunJsonResult> | null | undefined): string | undefined =>
+  getFailedEvents(result).find((event) => event.error_code)?.error_code ?? undefined;
+
+/**
+ * The workflow code of an engine failure: its stable code through the generated table, else its typed kind
+ * or command. Never derived from the failure text.
+ */
+const getEngineWorkflowCode = (event: RomWeaverRunJsonEvent): WorkflowErrorCode => {
+  const code = event.error_code;
+  if (code && isEngineErrorCode(code)) return ROM_WEAVER_ERROR_CODES[code];
+  const kind = getRomWeaverRunEventErrorKind(event);
+  if (kind === "cancelled") return "CANCELLED";
+  if (kind === "unknown_format") return "UNSUPPORTED_FORMAT";
+  return ARCHIVE_COMMANDS.has(event.command) ? "COMPRESSION_FAILED" : "INVALID_INPUT";
+};
+
+/**
+ * Attach the engine's classification of a failed run to `error`: the typed kind, a workflow `code` (unless an
+ * earlier layer set one), and the stable engine code and fields under `details.engineCode`/`engineFields`.
+ */
+const withRomWeaverFailure = <E extends Error>(
   error: E,
   result: Partial<RomWeaverRunJsonResult> | null | undefined,
 ): E => {
-  const kind = getRomWeaverFailureKind(result);
-  if (kind) (error as E & { kind?: RomWeaverFailureKind }).kind = kind;
+  const events = getFailedEvents(result);
+  const failure = events[0];
+  if (!failure) return error;
+  const coded = events.find((event) => event.error_code) ?? failure;
+  const record = error as E & RomWeaverEngineError;
+  const kind = events.map(getRomWeaverRunEventErrorKind).find(Boolean);
+  if (kind) record.kind = kind;
+  if (!isWorkflowErrorCode(record.code)) record.code = getEngineWorkflowCode(coded);
+  if (coded.error_code) {
+    const fields: RomWeaverEngineErrorFields = coded.error_fields ?? {};
+    record.details = { ...record.details, engineCode: coded.error_code, engineFields: fields };
+  }
   return error;
 };
 
-export { getRomWeaverFailureMessage, withRomWeaverFailureKind };
+export { getRomWeaverFailureCode, getRomWeaverFailureMessage, withRomWeaverFailure };
+export type { RomWeaverEngineErrorCode, RomWeaverEngineErrorFields };

@@ -5,9 +5,15 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use thiserror::Error;
 #[cfg(feature = "typescript-types")]
 use ts_rs::TS;
+
+use crate::error_codes::ERROR_CODE_IO_STORAGE_FULL;
+
+/// Fields recovered from a rendered `(key=value, ...)` tag.
+type DisplayFields = Map<String, Value>;
 
 pub type Result<T> = std::result::Result<T, RomWeaverError>;
 
@@ -56,15 +62,6 @@ impl RomWeaverErrorKind {
     }
 }
 
-/// Code of the validation error for an extract source no registered container
-/// recognizes. The webapp matches this code (surfaced via typegen) instead of
-/// the message text.
-pub const VALIDATION_CODE_EXTRACT_NO_CONTAINER: &str = "extract.no_container";
-
-/// Code of the validation error for a WBFS file or split set whose total size
-/// differs from its header's. Carries `actual` and `expected` byte fields.
-pub const VALIDATION_CODE_WBFS_SIZE_MISMATCH: &str = "wbfs.size_mismatch";
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidationCodeError {
     code: Cow<'static, str>,
@@ -89,6 +86,48 @@ impl ValidationCodeError {
         &self.fields
     }
 
+    pub fn message(&self) -> Option<&str> {
+        self.message.as_deref()
+    }
+
+    /// The fields as a JSON object for the `error_fields` of a failed event;
+    /// `None` when there are none.
+    pub fn fields_json(&self) -> Option<Map<String, Value>> {
+        (!self.fields.is_empty()).then(|| {
+            self.fields
+                .iter()
+                .map(|field| (field.key.to_owned(), field.value.to_json()))
+                .collect()
+        })
+    }
+
+    /// Recover the code and fields that `Display` rendered at the end of
+    /// `text` as `[code]` or `[code] (key=value, ...)`. Failure reports whose
+    /// label wraps a coded error in context text use this to keep the code.
+    /// A code without a message renders bare and is not recoverable, and a
+    /// text field value containing `, ` splits into extra fields.
+    pub fn parse_display_tag(text: &str) -> Option<(String, Option<DisplayFields>)> {
+        Self::split_display_tag(text).map(|(_, code, fields)| (code, fields))
+    }
+
+    /// [`Self::parse_display_tag`] that also returns the text before the tag.
+    pub fn split_display_tag(text: &str) -> Option<(&str, String, Option<DisplayFields>)> {
+        let text = text.trim_end();
+        let (head, fields) = match text
+            .strip_suffix(')')
+            .and_then(|rest| rest.rsplit_once("] ("))
+        {
+            Some((head, fields)) => (head, Some(fields)),
+            None => (text.strip_suffix(']')?, None),
+        };
+        let (before, code) = head.rsplit_once('[')?;
+        if !(before.is_empty() || before.ends_with(' ')) || !is_display_code(code) {
+            return None;
+        }
+        let fields = fields.and_then(parse_display_fields);
+        Some((before.trim_end(), code.to_owned(), fields))
+    }
+
     pub fn with_message(mut self, message: impl Into<Cow<'static, str>>) -> Self {
         self.message = Some(message.into());
         self
@@ -105,6 +144,37 @@ impl ValidationCodeError {
             value: value.into(),
         });
     }
+}
+
+fn is_display_code(code: &str) -> bool {
+    code.starts_with(|c: char| c.is_ascii_alphabetic())
+        && code
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
+}
+
+fn parse_display_fields(text: &str) -> Option<Map<String, Value>> {
+    text.split(", ")
+        .map(|pair| {
+            let (key, value) = pair.split_once('=')?;
+            let valid_key =
+                !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+            valid_key.then(|| (key.to_owned(), parse_display_field_value(value)))
+        })
+        .collect()
+}
+
+fn parse_display_field_value(value: &str) -> Value {
+    if let Ok(flag) = value.parse::<bool>() {
+        return Value::Bool(flag);
+    }
+    if let Ok(number) = value.parse::<u64>() {
+        return Value::from(number);
+    }
+    if let Ok(number) = value.parse::<i64>() {
+        return Value::from(number);
+    }
+    Value::String(value.to_owned())
 }
 
 impl fmt::Display for ValidationCodeError {
@@ -152,6 +222,18 @@ impl fmt::Display for ValidationFieldValue {
             Self::U64(value) => write!(f, "{value}"),
             Self::Usize(value) => write!(f, "{value}"),
             Self::Text(value) => write!(f, "{value}"),
+        }
+    }
+}
+
+impl ValidationFieldValue {
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Bool(value) => Value::Bool(*value),
+            Self::I64(value) => Value::from(*value),
+            Self::U64(value) => Value::from(*value),
+            Self::Usize(value) => Value::from(*value),
+            Self::Text(value) => Value::String(value.clone()),
         }
     }
 }
@@ -219,13 +301,18 @@ pub enum RomWeaverError {
     Unsupported(UnsupportedOp),
     #[error("operation cancelled")]
     Cancelled,
-    #[error("i/o error: {0}")]
+    #[error("i/o error: {0}{tag}", tag = storage_full_tag(.0))]
     Io(#[from] io::Error),
     /// An i/o failure that knows which path and operation produced it. Prefer
     /// this over the bare [`RomWeaverError::Io`] anywhere a user-supplied path
     /// is opened, created, or removed: `Permission denied (os error 13)` on its
     /// own tells nobody which file to fix.
-    #[error("i/o error: cannot {op} `{}`: {source}{}", path.display(), advice_suffix(advice.as_deref()))]
+    #[error(
+        "i/o error: cannot {op} `{}`: {source}{}{}",
+        path.display(),
+        advice_suffix(advice.as_deref()),
+        storage_full_tag(source)
+    )]
     IoPath {
         op: IoOp,
         path: PathBuf,
@@ -237,6 +324,17 @@ pub enum RomWeaverError {
     },
     #[error("thread pool build failed: {0}")]
     ThreadPoolBuild(String),
+}
+
+/// Tags a storage-full failure with its code, so a report whose label wraps the
+/// error in context text still carries `io.storage_full` (see
+/// [`ValidationCodeError::parse_display_tag`]).
+fn storage_full_tag(source: &io::Error) -> String {
+    if source.kind() == io::ErrorKind::StorageFull {
+        format!(" [{ERROR_CODE_IO_STORAGE_FULL}]")
+    } else {
+        String::new()
+    }
 }
 
 fn advice_suffix(advice: Option<&str>) -> String {
@@ -312,6 +410,72 @@ impl RomWeaverError {
                 Some(path)
             }
             _ => None,
+        }
+    }
+
+    /// A validation error with a stable code and a message.
+    pub fn coded(code: &'static str, message: impl Into<Cow<'static, str>>) -> Self {
+        Self::ValidationCode(ValidationCodeError::new(code).with_message(message))
+    }
+
+    /// No entry of `source` passed the `--filter` kind filter `filter`.
+    /// `detail` is appended to the message (such as the candidate list).
+    pub fn no_matching_extract_entries(source: &Path, filter: &str, detail: &str) -> Self {
+        Self::ValidationCode(
+            ValidationCodeError::new(crate::error_codes::ERROR_CODE_EXTRACT_NO_MATCHING_ENTRIES)
+                .with_message(format!(
+                    "no extract entries from `{}` matched {filter}{detail}",
+                    source.display()
+                ))
+                .with_field("path", source.display().to_string())
+                .with_field("filter", filter.to_string()),
+        )
+    }
+
+    /// The stable code the webapp classifies this error by, if it has one.
+    pub fn code(&self) -> Option<&str> {
+        match self {
+            Self::ValidationCode(coded) => Some(coded.code()),
+            Self::Io(source) | Self::IoPath { source, .. }
+                if source.kind() == io::ErrorKind::StorageFull =>
+            {
+                Some(ERROR_CODE_IO_STORAGE_FULL)
+            }
+            _ => None,
+        }
+    }
+
+    /// The coded error's fields as a JSON object; `None` when there are none.
+    pub fn fields_json(&self) -> Option<Map<String, Value>> {
+        match self {
+            Self::ValidationCode(coded) => coded.fields_json(),
+            _ => None,
+        }
+    }
+
+    /// Prefix the message with `context`. A [`ValidationCodeError`] keeps its
+    /// code and fields; another error becomes a validation error, coded with
+    /// `fallback_code` when one is given.
+    pub fn with_context(
+        self,
+        context: impl fmt::Display,
+        fallback_code: Option<&'static str>,
+    ) -> Self {
+        match self {
+            Self::ValidationCode(mut coded) => {
+                let message = format!("{context}: {}", coded.message().unwrap_or(coded.code()));
+                coded.message = Some(message.into());
+                Self::ValidationCode(coded)
+            }
+            other => {
+                let message = format!("{context}: {other}");
+                match fallback_code {
+                    Some(code) => {
+                        Self::ValidationCode(ValidationCodeError::new(code).with_message(message))
+                    }
+                    None => Self::Validation(message),
+                }
+            }
         }
     }
 

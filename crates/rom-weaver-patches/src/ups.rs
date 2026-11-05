@@ -139,9 +139,12 @@ impl PatchHandler for UpsPatchHandler {
         if scopes.target {
             let actual_output_checksum = crc32_path_cached(&request.output, context)?;
             if actual_output_checksum != output_checksum {
-                return Err(RomWeaverError::Validation(format!(
-                    "Output checksum invalid; expected: {output_checksum:08x}, Actual: {actual_output_checksum:08x}"
-                )));
+                return Err(RomWeaverError::coded(
+                    rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+                    format!(
+                        "Output checksum invalid; expected: {output_checksum:08x}, Actual: {actual_output_checksum:08x}"
+                    ),
+                ));
             }
         }
 
@@ -314,9 +317,12 @@ fn parse_ups_file_with_checksum_validation(
             "UPS checksum chunk exceeded usize",
         )?;
         if actual_patch_checksum != patch_checksum {
-            return Err(RomWeaverError::Validation(format!(
-                "Patch checksum invalid; expected: {patch_checksum:08x}, Actual: {actual_patch_checksum:08x}"
-            )));
+            return Err(RomWeaverError::coded(
+                rom_weaver_core::ERROR_CODE_PATCH_FILE_CHECKSUM_INVALID,
+                format!(
+                    "Patch checksum invalid; expected: {patch_checksum:08x}, Actual: {actual_patch_checksum:08x}"
+                ),
+            ));
         }
     }
 
@@ -395,9 +401,12 @@ fn parse_ups_bytes_with_checksum_validation(
     if validate_patch_checksum {
         let actual_patch_checksum = crc32_bytes(&bytes[..bytes.len() - 4]);
         if actual_patch_checksum != patch_checksum {
-            return Err(RomWeaverError::Validation(format!(
-                "Patch checksum invalid; expected: {patch_checksum:08x}, Actual: {actual_patch_checksum:08x}"
-            )));
+            return Err(RomWeaverError::coded(
+                rom_weaver_core::ERROR_CODE_PATCH_FILE_CHECKSUM_INVALID,
+                format!(
+                    "Patch checksum invalid; expected: {patch_checksum:08x}, Actual: {actual_patch_checksum:08x}"
+                ),
+            ));
         }
     }
 

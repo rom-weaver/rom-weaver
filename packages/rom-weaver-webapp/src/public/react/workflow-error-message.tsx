@@ -2,30 +2,31 @@ import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
 import { StorageFullRecovery } from "./storage-full-recovery.tsx";
 
-/** Display coded workflow errors and native source-staging diagnostics with recovery guidance. */
-const WorkflowErrorMessage = ({ message, onRetry }: { message: string; onRetry?: () => void }) => {
+/**
+ * Display coded workflow errors with recovery guidance. The workflow code comes from `code`, else from the
+ * `CODE: ` prefix `formatCodedErrorForDisplay` writes; engine failures carry theirs from the Rust error code.
+ */
+const WorkflowErrorMessage = ({
+  code: codeProp,
+  message,
+  onRetry,
+}: {
+  code?: string;
+  message: string;
+  onRetry?: () => void;
+}) => {
   const localizer = useUiLocalizer();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
-  const code = /^([A-Z_]+): /.exec(message)?.[1];
-  const archiveDepth =
-    code === "ARCHIVE_DEPTH_EXCEEDED" ||
-    /^validation failed: nested extract exceeded max depth of \d+ at `/i.test(message) ||
-    (code === "COMPRESSION_FAILED" && /\bnested extract exceeded max depth of \d+\b/i.test(message));
+  const code = codeProp ?? /^([A-Z_]+): /.exec(message)?.[1];
+  const archiveDepth = code === "ARCHIVE_DEPTH_EXCEEDED";
+  // Out-of-memory text comes from the browser's wasm runtime, not from engine diagnostics.
   const memory =
     !archiveDepth &&
     (code === "WORKER_FAILED" || code === "COMPRESSION_FAILED") &&
     /\b(out of memory|cannot enlarge memory|memory allocation|not enough memory|allocate memory|bad alloc|ENOMEM|OOM)\b/i.test(
       message,
     );
-  // Open and read failures on a valid archive are storage problems, not archive damage.
-  const storageFailure = /(?:Failed to open|Error reading) '/.test(message);
-  const archiveRead =
-    !(archiveDepth || memory || storageFailure) &&
-    (!code || code === "COMPRESSION_FAILED" || code === "CHECKSUM_MISMATCH") &&
-    /(?:^| Details: )validation failed: (?:[a-z0-9.]+ (?:(?:list|extract) failed while (?:reading|decoding) entry \d+(?: \(`.*?`\))?:|archive is invalid:)|archive read (?:header|data) failed:|unknown libarchive failure\b)/i.test(
-      message,
-    );
-  if (archiveRead) {
+  if (code === "ARCHIVE_READ_FAILED") {
     return (
       <>
         {localizer.message("ui.errorRecovery.archiveRead")}

@@ -964,11 +964,11 @@ impl ContainerHandlerOperations for PbpContainerHandler {
         }
         selections.ensure_all_matched()?;
         if request.kind_filter.enabled() && extract_plan.is_empty() {
-            return Err(RomWeaverError::Validation(format!(
-                "no extract entries from `{}` matched {}",
-                request.source.display(),
-                request.kind_filter.flag_label()
-            )));
+            return Err(RomWeaverError::no_matching_extract_entries(
+                &request.source,
+                &request.kind_filter.flag_label(),
+                "",
+            ));
         }
         if selection_requested && extract_plan.is_empty() {
             return Err(RomWeaverError::Validation(

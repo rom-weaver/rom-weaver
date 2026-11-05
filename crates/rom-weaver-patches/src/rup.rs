@@ -265,11 +265,14 @@ impl PatchHandler for RupPatchHandler {
             output.seek(SeekFrom::Start(0))?;
             let actual_md5 = md5_open_file(&mut output)?;
             if actual_md5 != expected_md5 {
-                return Err(RomWeaverError::Validation(format!(
-                    "RUP target checksum mismatch; expected {}, got {}",
-                    format_md5_hex(expected_md5),
-                    format_md5_hex(actual_md5)
-                )));
+                return Err(RomWeaverError::coded(
+                    rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+                    format!(
+                        "RUP target checksum mismatch; expected {}, got {}",
+                        format_md5_hex(expected_md5),
+                        format_md5_hex(actual_md5)
+                    ),
+                ));
             }
         }
         drop(output);
@@ -694,12 +697,15 @@ fn select_matching_file_for_input<'a>(
                 file.source_md5
             });
             if actual != expected {
-                return Err(RomWeaverError::Validation(format!(
-                    "RUP selected {} endpoint checksum mismatch; expected {}, got {}",
-                    if undo { "reverse" } else { "forward" },
-                    expected,
-                    actual
-                )));
+                return Err(RomWeaverError::coded(
+                    rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+                    format!(
+                        "RUP selected {} endpoint checksum mismatch; expected {}, got {}",
+                        if undo { "reverse" } else { "forward" },
+                        expected,
+                        actual
+                    ),
+                ));
             }
         }
         return Ok(RupSelectedFile {

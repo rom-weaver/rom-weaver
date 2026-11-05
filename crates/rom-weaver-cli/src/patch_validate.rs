@@ -708,7 +708,7 @@ impl CliApp {
                     ),
                     context.single_thread_execution(),
                 )
-                .with_error_kind(error.kind()),
+                .with_error(&error),
             ));
         }
 
@@ -971,6 +971,7 @@ impl CliApp {
                             passed: false,
                             unreadable: false,
                             message,
+                            error_code: None,
                             unsupported: false,
                         });
                     }
@@ -980,13 +981,15 @@ impl CliApp {
                         index,
                         patch_count, "independent patch verdict: failed (probe)"
                     );
+                    let (message, error_code) = split_verdict_message(report.label.clone());
                     decided.push(PerPatchVerdict {
                         index,
                         patch: patch_label,
                         format: report.format.clone(),
                         passed: false,
                         unreadable: false,
-                        message: report.label.clone(),
+                        message,
+                        error_code,
                         unsupported: false,
                     });
                 }
@@ -1082,6 +1085,7 @@ impl CliApp {
                 "format": verdict.format,
                 "status": if verdict.passed { "passed" } else { "failed" },
                 "message": verdict.message,
+                "error_code": verdict.error_code,
                 "unreadable": verdict.unreadable,
             }));
         }
@@ -1220,6 +1224,11 @@ impl CliApp {
                         }
                     }
                 };
+                let (message, error_code) = if passed {
+                    (message, None)
+                } else {
+                    split_verdict_message(message)
+                };
                 let verdict = PerPatchVerdict {
                     index: job.index,
                     patch: job.patch.clone(),
@@ -1227,6 +1236,7 @@ impl CliApp {
                     passed,
                     unreadable,
                     message,
+                    error_code,
                     unsupported,
                 };
                 trace!(
@@ -1449,13 +1459,13 @@ impl CliApp {
             .filter_map(|(entry, failure)| failure.map(|message| (entry, message)))
         {
             entry.input_verdict = PatchInputVerdict::Failed;
-            entry.message = message;
+            (entry.message, entry.error_code) = split_verdict_message(message);
         }
         for (entry, failure) in per_patch.iter_mut().zip(parse_failures) {
             if let Some(message) = failure {
                 entry.input_verdict = PatchInputVerdict::Failed;
                 entry.unreadable = Some(true);
-                entry.message = message;
+                (entry.message, entry.error_code) = split_verdict_message(message);
             }
         }
         Ok(PlanResolution {
@@ -2320,6 +2330,7 @@ fn apply_plan_preflight_verdicts(
             entry.input_verdict = PatchInputVerdict::Failed;
             entry.unreadable = preflight.unreadable.then_some(true);
             entry.message = preflight.message;
+            entry.error_code = preflight.error_code;
             entry.unsupported = preflight.unsupported;
         }
     }
@@ -2477,8 +2488,19 @@ struct PerPatchVerdict {
     passed: bool,
     unreadable: bool,
     message: String,
+    /// Stable code of the failure (see `rom_weaver_core::ERROR_CODE_WORKFLOW_CODES`).
+    error_code: Option<String>,
     /// The handler refused the patch as unsupported rather than judging it against the ROM.
     unsupported: bool,
+}
+
+/// A failed verdict's message without the `[code]` suffix, and that code. The webapp shows the
+/// message on the patch card and branches on the code.
+fn split_verdict_message(message: String) -> (String, Option<String>) {
+    match rom_weaver_core::ValidationCodeError::split_display_tag(&message) {
+        Some((head, code, _)) => (head.to_owned(), Some(code)),
+        None => (message, None),
+    }
 }
 
 #[cfg(test)]

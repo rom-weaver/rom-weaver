@@ -66,7 +66,9 @@ mod legacy_pathname;
 mod read;
 mod write;
 
-pub(crate) use ffi::{check_free_status, check_status_for_ptr, error_from_archive};
+pub(crate) use ffi::{
+    check_free_status, check_status_for_ptr, error_from_archive, read_error_from_archive,
+};
 
 pub use entries::{
     RegularArchiveEntryMetadata, RegularArchiveFileEntry, RegularArchiveProbeFormat,
@@ -397,7 +399,10 @@ mod tests {
             let err = reader
                 .open_filename(&missing, "archive source", 2 * 1024 * 1024, "open failed")
                 .unwrap_err();
-            assert!(matches!(err, RomWeaverError::Validation(_)));
+            assert_eq!(
+                err.code(),
+                Some(rom_weaver_core::ERROR_CODE_ARCHIVE_STORAGE_FAILED)
+            );
             assert!(err.to_string().contains("open failed"));
             Ok(())
         })
@@ -417,12 +422,18 @@ mod tests {
             fs::write(&source, &truncated_bytes[..truncated_bytes.len().min(8)])?;
 
             let err = list_regular_archive_entries(&source, "zip").unwrap_err();
-            assert!(matches!(err, RomWeaverError::Validation(_)));
+            assert_eq!(
+                err.code(),
+                Some(rom_weaver_core::ERROR_CODE_ARCHIVE_READ_FAILED)
+            );
 
             let probe_err =
                 probe_regular_archive_format(&source, "zip", RegularArchiveProbeFormat::Zip)
                     .unwrap_err();
-            assert!(matches!(probe_err, RomWeaverError::Validation(_)));
+            assert_eq!(
+                probe_err.code(),
+                Some(rom_weaver_core::ERROR_CODE_ARCHIVE_READ_FAILED)
+            );
             Ok(())
         })
     }
@@ -456,7 +467,10 @@ mod tests {
             let err = archive
                 .open_filename(&output, "archive output", "open failed")
                 .unwrap_err();
-            assert!(matches!(err, RomWeaverError::Validation(_)));
+            assert_eq!(
+                err.code(),
+                Some(rom_weaver_core::ERROR_CODE_ARCHIVE_STORAGE_FAILED)
+            );
             assert!(err.to_string().contains("open failed"));
             Ok(())
         })

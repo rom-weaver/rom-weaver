@@ -409,10 +409,13 @@ impl CliApp {
     }
 
     fn gamecube_wii_disc_trim_error(path: &Path) -> RomWeaverError {
-        RomWeaverError::Validation(format!(
-            "`{}` is a GameCube/Wii disc, which trim does not support; use `rom-weaver compress` to convert it to RVZ",
-            path.display()
-        ))
+        RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_TRIM_UNSUPPORTED_DISC,
+            format!(
+                "`{}` is a GameCube/Wii disc, which trim does not support; use `rom-weaver compress` to convert it to RVZ",
+                path.display()
+            ),
+        )
     }
 
     /// The rejection for a lone archive input that holds GameCube/Wii discs and no trim-eligible payload.
@@ -422,10 +425,13 @@ impl CliApp {
         } else {
             ("GameCube/Wii discs", "them")
         };
-        RomWeaverError::Validation(format!(
-            "`{}` holds {subject}, which trim does not support; use `rom-weaver compress` to convert {pronoun} to RVZ",
-            archive.display()
-        ))
+        RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_TRIM_UNSUPPORTED_DISC,
+            format!(
+                "`{}` holds {subject}, which trim does not support; use `rom-weaver compress` to convert {pronoun} to RVZ",
+                archive.display()
+            ),
+        )
     }
 
     pub(super) fn collect_trim_input_files(

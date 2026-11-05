@@ -1,3 +1,4 @@
+import { hasEngineErrorCode } from "../lib/errors.ts";
 import OutputCompressionManager from "../lib/compression/output-compression-manager.ts";
 import {
   isArchiveCompressionFormat,
@@ -66,16 +67,8 @@ class RvzInputNotDiscError extends Error {
   }
 }
 
-// The engine rejects a non-GameCube/Wii disc with its disc-format diagnostics (`Unknown disc format`,
-// `the input must be a GameCube or Wii disc image`); those mean the input is not an RVZ candidate.
-const RVZ_NOT_A_DISC_REGEX = /unknown disc format|must be a gamecube or wii disc image/i;
-const isRvzNotADiscFailure = (error: unknown): boolean => {
-  for (let current = error, depth = 0; current instanceof Error && depth < 8; depth += 1) {
-    if (RVZ_NOT_A_DISC_REGEX.test(current.message)) return true;
-    current = current.cause;
-  }
-  return false;
-};
+// The engine codes an RVZ input that is not a GameCube or Wii disc image.
+const isRvzNotADiscFailure = (error: unknown): boolean => hasEngineErrorCode(error, "disc.not_gamecube_wii");
 
 const assertFiles = (files: File[]) => {
   if (files.length === 0) throw new Error("Select at least one file to compress");

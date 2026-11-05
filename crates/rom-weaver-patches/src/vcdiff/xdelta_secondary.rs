@@ -800,9 +800,12 @@ pub(super) fn decode_native_window_sections(
     if validate_checksums && let Some(expected) = window.checksum {
         let actual = adler32(&decoded);
         if actual != expected {
-            return Err(RomWeaverError::Validation(format!(
-                "target window checksum mismatch: expected 0x{expected:08X}, got 0x{actual:08X}"
-            )));
+            return Err(RomWeaverError::coded(
+                rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+                format!(
+                    "target window checksum mismatch: expected 0x{expected:08X}, got 0x{actual:08X}"
+                ),
+            ));
         }
     }
 

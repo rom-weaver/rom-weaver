@@ -25,36 +25,34 @@ describe("presentation errors", () => {
     );
   });
 
+  const engineError = (message: string, engineCode: string, engineFields: Record<string, string>) =>
+    codedError(message, "COMPRESSION_FAILED", { details: { engineCode, engineFields } });
+
   it("shows a plain no-ROM message without the internal path or filter flag", () => {
     const message = "validation failed: no extract entries from `/work/version.rar` matched --filter rom";
-    const formatted = formatCodedErrorForDisplay(codedError(message, "COMPRESSION_FAILED"));
-    expect(formatted).toBe("No ROM found in version.rar.");
-    expect(formatCodedErrorForDisplay(codedError("failed", "WORKER_FAILED", { cause: new Error(message) }))).toBe(
+    const coded = engineError(message, "extract.no_matching_entries", {
+      filter: "--filter rom",
+      path: "/work/version.rar",
+    });
+    expect(formatCodedErrorForDisplay(coded)).toBe("No ROM found in version.rar.");
+    expect(formatCodedErrorForDisplay(codedError("failed", "WORKER_FAILED", { cause: coded }))).toBe(
       "No ROM found in version.rar.",
     );
+    // The text alone no longer classifies: only the engine code does.
+    expect(formatCodedErrorForDisplay(codedError(message, "COMPRESSION_FAILED"))).toMatch(/^COMPRESSION_FAILED: /);
   });
 
-  it.each(["extract entries", "extracted patch create original candidates", "extracted ingest input candidates"])(
-    "offers browser recovery when all %s are ignored",
-    (entries) => {
-      const diagnostic = `validation failed: all ${entries} from \`/work/readme-only.zip\` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>`;
-      const expected =
-        "No usable ROM found in readme-only.zip. Choose an archive containing a ROM, or extract it and add the ROM file.";
-      expect(formatCodedErrorForDisplay(diagnostic)).toBe(expected);
-      expect(formatCodedErrorForDisplay(codedError(diagnostic, "COMPRESSION_FAILED"))).toBe(expected);
-      expect(formatCodedErrorForDisplay(codedError("failed", "WORKER_FAILED", { cause: new Error(diagnostic) }))).toBe(
-        expected,
-      );
+  it.each(["/work/readme-only.zip", "/work/notes `v2`.zip"])(
+    "offers browser recovery when all extract entries of %s are ignored",
+    (path) => {
+      const diagnostic = `validation failed: all extract entries from \`${path}\` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>`;
+      const fileName = path.split("/").pop();
+      const expected = `No usable ROM found in ${fileName}. Choose an archive containing a ROM, or extract it and add the ROM file.`;
+      const coded = engineError(diagnostic, "extract.all_entries_ignored", { path });
+      expect(formatCodedErrorForDisplay(coded)).toBe(expected);
+      expect(formatCodedErrorForDisplay(codedError("failed", "WORKER_FAILED", { cause: coded }))).toBe(expected);
     },
   );
-
-  it("offers browser recovery when the ignored archive name contains a backtick", () => {
-    const diagnostic =
-      "validation failed: all extract entries from `/work/notes `v2`.zip` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>";
-    expect(formatCodedErrorForDisplay(diagnostic)).toBe(
-      "No usable ROM found in notes `v2`.zip. Choose an archive containing a ROM, or extract it and add the ROM file.",
-    );
-  });
 
   it("keeps messages that carry required runtime detail", () => {
     expect(formatCodedErrorForDisplay(codedError("Multi-file output needs an archive", "INVALID_INPUT"))).toBe(

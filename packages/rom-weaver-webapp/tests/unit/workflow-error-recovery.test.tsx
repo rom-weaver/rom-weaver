@@ -57,7 +57,10 @@ describe("workflow error recovery", () => {
     await loadCatalog(locale);
     const diagnostic = "validation failed: nested extract exceeded max depth of 8 at `/work/OOM.zip`";
     const message = formatCodedErrorForDisplay(
-      Object.assign(new Error(diagnostic), { code: "COMPRESSION_FAILED" }),
+      Object.assign(new Error(diagnostic), {
+        code: "ARCHIVE_DEPTH_EXCEEDED",
+        details: { engineCode: "extract.max_depth_exceeded" },
+      }),
       createLocalizer(locale),
     );
     const view = showNotice(message, locale);
@@ -118,11 +121,13 @@ describe("workflow error recovery", () => {
   ])("explains archive read failures in %s with expandable diagnostics", async (locale, advice, detailsLabel) => {
     await loadCatalog(locale);
     for (const detail of ["Truncated ZIP file header", "unknown libarchive failure"]) {
-      const diagnostic = `validation failed: zip list failed while reading entry 0: validation failed: archive read header failed: ${detail}`;
+      const diagnostic = `validation failed: zip list failed while reading entry 0: archive read header failed: ${detail} [archive.read_failed]`;
       for (const message of [
-        diagnostic,
         formatCodedErrorForDisplay(
-          Object.assign(new Error(diagnostic), { code: "COMPRESSION_FAILED" }),
+          Object.assign(new Error(diagnostic), {
+            code: "ARCHIVE_READ_FAILED",
+            details: { engineCode: "archive.read_failed" },
+          }),
           createLocalizer(locale),
         ),
       ]) {
@@ -145,8 +150,9 @@ describe("workflow error recovery", () => {
     "validation failed: zip extract failed while reading entry 0 (`game.bin`): validation failed: archive entry read failed: ZIP bad CRC",
     "validation failed: 7z extract failed while reading entry 2: validation failed: archive read header failed: x",
     "validation failed: zip extract failed while reading entry 0 (`a`b.bin`): validation failed: archive entry read failed: ZIP bad CRC",
-    "CHECKSUM_MISMATCH: Details: validation failed: tar list failed while reading entry 0: validation failed: archive read header failed: Damaged tar archive (bad header checksum)",
-  ])("explains archive failures for other formats and extract-time reads: %s", (message) => {
+    "validation failed: tar list failed while reading entry 0: archive read header failed: Damaged tar archive (bad header checksum)",
+  ])("explains archive failures for other formats and extract-time reads: %s", (diagnostic) => {
+    const message = `ARCHIVE_READ_FAILED: ${diagnostic}`;
     const view = showNotice(message);
     const alert = view.getByRole("alert");
     expect(alert.querySelector(".notice-copy")?.firstChild?.textContent).toBe(
@@ -193,7 +199,7 @@ describe("workflow error recovery", () => {
           status: "ready",
           candidates: [],
           parentCompressions: [],
-          warnings: [{ message: diagnostic }],
+          warnings: [{ code: "ARCHIVE_DEPTH_EXCEEDED", message: diagnostic }],
         },
         removeLabel: "Remove",
         onClear: vi.fn(),

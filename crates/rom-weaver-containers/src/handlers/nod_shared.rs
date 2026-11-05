@@ -708,10 +708,13 @@ impl NodHandlerCore {
             (None, Some(disc)) => format!(" (detected: {} disc)", disc.label()),
             (None, None) => String::new(),
         };
-        RomWeaverError::Validation(format!(
-            "`{name}` is not a GameCube or Wii disc image{detected}; {} create only supports GameCube and Wii disc images",
-            self.format_name()
-        ))
+        RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_DISC_NOT_GAMECUBE_WII,
+            format!(
+                "`{name}` is not a GameCube or Wii disc image{detected}; {} create only supports GameCube and Wii disc images",
+                self.format_name()
+            ),
+        )
     }
 
     /// Open `input` as a disc image without reading its data, so a create request for a
