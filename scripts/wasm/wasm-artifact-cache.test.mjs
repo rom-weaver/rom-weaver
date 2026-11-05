@@ -307,6 +307,19 @@ test("Cargo config snapshots retain changes to an included file's outer director
   });
 });
 
+test("Cargo home parent traversal disables the shared cache", () => {
+  withDir((dir) => {
+    const cargoHome = path.join(dir, "home");
+    fs.mkdirSync(cargoHome);
+    fs.writeFileSync(path.join(cargoHome, "config.toml"), "[profile.wasm-release]\nopt-level = 3\n");
+    const options = { root: dir, cwd: dir, cargoHome };
+    assert.equal(createCargoConfigSnapshot(options).usable, true);
+    for (const home of ["home" + path.sep + ".." + path.sep + "home", cargoHome + path.sep + ".." + path.sep + "home"]) {
+      assert.throws(() => createCargoConfigSnapshot({ ...options, cargoHome: home }), /CARGO_HOME parent components/);
+    }
+  });
+});
+
 test("Cargo configuration directory links disable the shared cache", () => {
   withDir((dir) => {
     const cargoHome = path.join(dir, "home");

@@ -66,6 +66,9 @@ export const createWasmSourceFingerprint = (root) => {
 };
 
 export function createCargoConfigSnapshot({ root, cwd, cargoHome, sinceMs }) {
+  if (cargoHome.split(sep === "\\" ? /[\\/]/ : "/").includes("..")) {
+    throw new Error("CARGO_HOME parent components are not supported by the shared WASM cache");
+  }
   const roots = new Set([resolve(cwd, cargoHome)]);
   for (let directory = resolve(cwd); ; directory = dirname(directory)) {
     roots.add(join(directory, ".cargo"));

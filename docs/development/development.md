@@ -86,7 +86,7 @@ Both WASM build tasks share finished modules between checkouts through `${XDG_CA
 
 The build remaps the Cargo home and Rust sysroot paths that Rust embeds in the module, so the bytes do not depend on where those are installed. The eight most recently used owned entries are kept. A versioned ownership marker identifies cache entries and staging directories; unmarked directories and symlinks are preserved, including entries from earlier cache versions. The build skips caching if source files, Cargo configuration, or metadata for any configuration parent directory change during the build or within one second before its input snapshot, including when a configuration symlink is switched and restored.
 
-If a configuration snapshot cannot be read or parsed, or a configuration path traverses a symlink, the shared cache is disabled and Cargo runs normally. Set `ROM_WEAVER_WASM_FORCE=1` to rebuild and replace both the local artifact and its owned cache entry, `ROM_WEAVER_WASM_CACHE=0` to bypass the cache, or `ROM_WEAVER_WASM_CACHE_DIR` to move it.
+If a configuration snapshot cannot be read or parsed, a configuration path traverses a symlink, or `CARGO_HOME` contains parent (`..`) components, the shared cache is disabled and Cargo runs normally. Set `ROM_WEAVER_WASM_FORCE=1` to rebuild and replace both the local artifact and its owned cache entry, `ROM_WEAVER_WASM_CACHE=0` to bypass the cache, or `ROM_WEAVER_WASM_CACHE_DIR` to move it.
 
 By default, build artifacts are written to `packages/rom-weaver-webapp/src/wasm/`. The binary and attribution outputs are gitignored; runtime source and generated TypeScript remain tracked. To keep a separate artifact directory:
 
