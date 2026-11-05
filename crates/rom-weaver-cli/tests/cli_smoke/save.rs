@@ -103,6 +103,9 @@ fn save_catalog_lists_compiled_games_and_generation_support() {
         "castlevania-circle-of-the-moon",
         "wario-land-ii",
         "zelda-links-awakening-gbc-international",
+        "fire-emblem-the-blazing-blade",
+        "azure-dreams",
+        "castlevania-portrait-of-ruin",
     ] {
         assert!(game_ids.contains(&id), "missing save profile: {id}");
     }

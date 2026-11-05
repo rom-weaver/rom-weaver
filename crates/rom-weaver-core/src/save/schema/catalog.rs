@@ -186,6 +186,7 @@ fn read_at(bytes: &[u8], offset: i64, storage: Storage) -> Result<i64> {
 
 pub(in crate::save) mod actraiser;
 pub(in crate::save) mod advance_wars;
+pub(in crate::save) mod azure_dreams;
 pub(in crate::save) mod banjo_kazooie;
 pub(in crate::save) mod bomberman_64;
 pub(in crate::save) mod builtin_pokemon_gen1;
@@ -211,6 +212,7 @@ pub(in crate::save) mod f_zero_maximum_velocity;
 pub(in crate::save) mod f_zero_x;
 pub(in crate::save) mod final_fantasy_nes;
 pub(in crate::save) mod final_fantasy_vi;
+pub(in crate::save) mod fire_emblem_the_blazing_blade;
 pub(in crate::save) mod game_and_watch_gallery_3;
 pub(in crate::save) mod game_boy_camera;
 pub(in crate::save) mod golden_sun;
@@ -338,6 +340,8 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(kingdom_hearts_chain_of_memories::schemas());
             games.extend(banjo_kazooie::schemas());
             games.extend(ps1_final_fantasy::schemas());
+            games.extend(fire_emblem_the_blazing_blade::schemas());
+            games.extend(azure_dreams::schemas());
             games
         })
         .clone()

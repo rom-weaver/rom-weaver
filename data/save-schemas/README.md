@@ -2,7 +2,7 @@
 
 The application defines its save layouts and editing rules as typed Rust under [`crates/rom-weaver-core/src/save/schema/catalog/`](../../crates/rom-weaver-core/src/save/schema/catalog). This directory keeps the source attribution and license for those definitions. It does not contain runtime schema packs.
 
-The default registry includes 611 profiles: the original seven game-family definitions and 589 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
+The default registry includes 614 profiles: the original seven game-family definitions and 592 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
 
 | Original catalog module | Games |
 | --- | --- |
@@ -115,12 +115,17 @@ These profiles require explicit game selection and a game-made template. They ex
 | Final Fantasy VII | 105 | Single-block save in a raw 128 KiB PS1 card | Gil with its preview and GP |
 | Final Fantasy VIII | 105 | Single-block save in a raw 128 KiB PS1 card | Squall/Laguna gil with the active preview |
 | Castlevania: Rondo of Blood | 1 | Raw 2 KiB PC Engine BRAM, Japan; first record must be DRACULA X | Money and death count in occupied slots |
+| Fire Emblem: The Blazing Blade | 1 | Raw 32 KiB GBA SRAM, Europe/USA/Japan | Funds, playtime, and difficulty in valid slots; Lyn's Tale clear |
+| Azure Dreams | 1 | Raw 8 KiB Game Boy Color save, Europe/USA/Japan | Playtime, adventures, and funds in initialized slots, with save preview copies |
+| Castlevania: Portrait of Ruin | 1 | Raw 64 KiB DS save, Europe/USA/Japan | Gold, difficulty, playtime, and cleared marker in initialized slots, with save preview copies |
 
-The new definitions add 29 titles and 471 profiles. The preceding catalog table describes the original 118 additional profiles. Each PS1 profile selects an exact product code, region, and card block from 1 through 15. It validates allocation metadata and supports only a complete single-block game save. Multi-block saves, standalone save exports, and PC ports remain unsupported. DexDrive and Virtual Game Station card wrappers are preserved by the existing container layer.
+The first batch of new definitions adds 29 titles and 471 profiles. Fire Emblem: The Blazing Blade, Azure Dreams, and Castlevania: Portrait of Ruin add three titles and three profiles. The preceding catalog table describes the original 118 additional profiles. Each PS1 profile selects an exact product code, region, and card block from 1 through 15. It validates allocation metadata and supports only a complete single-block game save. Multi-block saves, standalone save exports, and PC ports remain unsupported. DexDrive and Virtual Game Station card wrappers are preserved by the existing container layer.
 
 Nintendo 64 profiles accept only the stated canonical big-endian byte order. The Minish Cap profile accepts only its stated EEPROM word order. Regional boundaries and omitted fields are recorded in each profile's description.
 
 The definitions derive from [Game Tools Collection revision `6f5d8064050eec83eb4f2a910743c121a70655c9`](https://github.com/RyudoSynbios/game-tools-collection/tree/6f5d8064050eec83eb4f2a910743c121a70655c9). Each catalog module links its exact source directory. Ocarina of Time backup and checksum behavior follows [zeldaret/oot revision `52a510f379afd143aaa0375be9f1e190369572e1`](https://github.com/zeldaret/oot/blob/52a510f379afd143aaa0375be9f1e190369572e1/src/code/z_sram.c). Final Fantasy VIII's CRC lookup variant follows [Hyne revision `54cc50dc133897b9db45f9deab5167e9d14de0fc`](https://github.com/myst6re/hyne/blob/54cc50dc133897b9db45f9deab5167e9d14de0fc/src/SaveData.cpp); its last table entry differs from the standard CCITT table.
+
+The Fire Emblem: The Blazing Blade, Azure Dreams, and Castlevania: Portrait of Ruin definitions derive from [Game Tools Collection revision `15d71340c3f1717745139c2e0774510cd37dfbdd`](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd). Their edits repair each slot's checksum and every save preview copy: Fire Emblem uses a 16-bit word sum and XOR, Azure Dreams the complemented byte sum, and Portrait of Ruin a SHA-1 digest. Portrait of Ruin accepts only the raw 64 KiB save, not DSV or DUC wrappers or the Castlevania collection save. Shining Force III and Shining the Holy Ark have no profile: their saves sit in Sega Saturn backup RAM files whose data blocks are found by walking a per-file block chain, which the fixed-layout schema cannot express.
 
 ## Sources and attribution
 

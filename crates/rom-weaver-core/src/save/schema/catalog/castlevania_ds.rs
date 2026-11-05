@@ -1,9 +1,14 @@
 use super::*;
+use sha1::{Digest, Sha1};
+use tracing::{debug, trace};
 
 // Layouts, salt offsets, fields, and BIOS CRC16: https://github.com/RyudoSynbios/game-tools-collection/tree/6f5d8064050eec83eb4f2a910743c121a70655c9/src/lib/templates/castlevania-dawn-of-sorrow/saveEditor
 // The adjacent castlevania-order-of-ecclesia template and src/lib/utils/common/nintendoDs.ts define Ecclesia and the BIOS algorithm (MIT; LICENSE-GAME-TOOLS-COLLECTION).
+// Portrait of Ruin layout, save preview copies, and SHA-1 checksums: https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/castlevania-portrait-of-ruin/saveEditor
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
-    build((0..2).map(game).collect(), BTreeMap::new(), true)
+    let mut games: Vec<_> = (0..2).map(game).collect();
+    games.push(portrait_of_ruin());
+    build(games, BTreeMap::new(), true)
 }
 
 fn game(version: usize) -> GameDefinition {
@@ -112,6 +117,157 @@ fn game(version: usize) -> GameDefinition {
             integrity(&mut game, start, end, checksum, salt, None);
         }
     }
+    game
+}
+
+const POR_SIZE: usize = 0x10000;
+const POR_SLOTS: usize = 6;
+const POR_SLOT_START: usize = 0x3800;
+const POR_SLOT_STRIDE: usize = 0x1800;
+const POR_SLOT_LENGTH: usize = 0xce9;
+const POR_SYSTEM_LENGTH: usize = 0x2dc;
+const POR_SYSTEM_DIGEST: usize = 0xe000;
+const POR_SLOT_DIGEST: usize = 0xe020;
+const POR_SLOT_DIGEST_STRIDE: usize = 0x20;
+/// Each slot owns a 0x28-byte save preview record in the system block.
+const POR_PREVIEW_STRIDE: usize = 0x28;
+
+/// The game stores the five SHA-1 digest words big-endian, so the digest bytes equal the
+/// stored bytes.
+fn por_digest(bytes: &[u8], start: usize, length: usize) -> [u8; 20] {
+    let digest: [u8; 20] = Sha1::digest(&bytes[start..start + length]).into();
+    trace!(start, length, "portrait of ruin sha-1 checksum");
+    digest
+}
+
+fn por_active(bytes: &[u8], slot: usize) -> bool {
+    bytes[8 + slot] != 0
+}
+
+/// Checks the stored digest and rewrites each of its five big-endian words after an edit.
+fn por_integrity(
+    game: &mut GameDefinition,
+    when: Option<rules::Condition>,
+    start: usize,
+    length: usize,
+    stored: usize,
+) {
+    game.runtime.checks.push(rules::Check {
+        when: when.clone(),
+        assert: rules::Condition::new(move |bytes| {
+            Ok(bytes[stored..stored + 20] == por_digest(bytes, start, length))
+        }),
+        code: "save_checksum".into(),
+        message: "a Portrait of Ruin SHA-1 checksum is invalid".into(),
+        section_id: None,
+        warning: None,
+    });
+    for word in 0..5 {
+        game.runtime.after_edit.push(rules::Store {
+            when: when.clone(),
+            destination: rules::Scalar {
+                offset: stored + word * 4,
+                storage: Storage::U32Be,
+                mask: None,
+            },
+            value: rules::ReadValue::new(move |bytes| {
+                let digest = por_digest(bytes, start, length);
+                Ok(i64::from(u32::from_be_bytes(
+                    digest[word * 4..word * 4 + 4].try_into().unwrap(),
+                )))
+            }),
+        });
+    }
+}
+
+fn portrait_of_ruin() -> GameDefinition {
+    let mut game = GameDefinition::new(
+        "castlevania-portrait-of-ruin".into(),
+        "Castlevania: Portrait of Ruin".into(),
+        "nintendo-ds".into(),
+        POR_SIZE,
+    );
+    game.description = concat!(
+        "Edits gold, difficulty, playtime, and the cleared marker in each initialized slot of a raw 64 KiB Europe/USA/Japan save, ",
+        "including the save preview copies. Validates the SHA-1 digests of the system block and every initialized slot, ",
+        "then repairs them. Characters, items, map, and mode unlocks are omitted. ",
+        "Collection saves, DSV/DUC wrappers, and Action Replay headers are unsupported; requires a game-made template."
+    )
+    .into();
+    game.signatures = vec![SignatureDefinition {
+        offset: 0,
+        bytes: vec![0x64, 0x75, 0xa3, 0x08],
+    }];
+    game.runtime.checks.push(rules::Check {
+        when: None,
+        assert: rules::Condition::new(|bytes| {
+            Ok((0..POR_SLOTS).any(|slot| por_active(bytes, slot)))
+        }),
+        code: "save_empty".into(),
+        message: "no Portrait of Ruin slot is initialized".into(),
+        section_id: None,
+        warning: None,
+    });
+    por_integrity(&mut game, None, 0, POR_SYSTEM_LENGTH, POR_SYSTEM_DIGEST);
+    for slot in 0..POR_SLOTS {
+        let active = rules::Condition::new(move |bytes| Ok(por_active(bytes, slot)));
+        por_integrity(
+            &mut game,
+            Some(active.clone()),
+            POR_SLOT_START + slot * POR_SLOT_STRIDE,
+            POR_SLOT_LENGTH,
+            POR_SLOT_DIGEST + slot * POR_SLOT_DIGEST_STRIDE,
+        );
+        let base = slot * POR_SLOT_STRIDE;
+        let preview = slot * POR_PREVIEW_STRIDE;
+        let number = slot + 1;
+        let behavior = field::FieldBehavior {
+            present_when: Some(active.clone()),
+            editable_when: Some(active),
+            ..Default::default()
+        };
+        let fields = [
+            FieldDefinition::new(
+                format!("slot_{number}.gold"),
+                format!("Slot {number} gold"),
+                0x3fad + base,
+                Storage::U32Le,
+            )
+            .max(99_999_999)
+            .copies(vec![0x30 + preview]),
+            FieldDefinition::new(
+                format!("slot_{number}.difficulty"),
+                format!("Slot {number} difficulty"),
+                0x3f3a + base,
+                Storage::U8,
+            )
+            .choices(choices(&[("normal", 0), ("hard", 1)]))
+            .copies(vec![0x17 + preview]),
+            FieldDefinition::new(
+                format!("slot_{number}.playtime_frames"),
+                format!("Slot {number} playtime frames"),
+                0x28 + preview,
+                Storage::U32Le,
+            )
+            .description("The game stores playtime at 60 frames per second.".into()),
+            FieldDefinition::new(
+                format!("slot_{number}.cleared"),
+                format!("Slot {number} progression cleared"),
+                0x15 + preview,
+                Storage::Bit,
+            )
+            .bit(0),
+        ];
+        game.fields.extend(
+            fields
+                .into_iter()
+                .map(|field| field.behavior(behavior.clone())),
+        );
+    }
+    debug!(
+        fields = game.fields.len(),
+        "built Portrait of Ruin save schema"
+    );
     game
 }
 
@@ -288,6 +444,211 @@ mod tests {
                 empty.bytes[0x10] = 0;
             }
             assert!(handler.apply(&empty, &identity, &edits, false).is_err());
+        }
+    }
+
+    fn digest(hex: &str) -> [u8; 20] {
+        let mut digest = [0u8; 20];
+        for (index, byte) in digest.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(&hex[index * 2..index * 2 + 2], 16).unwrap();
+        }
+        digest
+    }
+
+    #[test]
+    fn por_digest_matches_sha1_reference_vectors_across_padding_boundaries() {
+        // FIPS 180-4 examples, then `bytes(range(n))` digests from Python's hashlib at the
+        // lengths where the message padding changes block count.
+        let long: Vec<u8> = std::iter::repeat_n(b'a', 1_000_000).collect();
+        let cases: [(&[u8], &str); 4] = [
+            (b"", "da39a3ee5e6b4b0d3255bfef95601890afd80709"),
+            (b"abc", "a9993e364706816aba3e25717850c26c9cd0d89d"),
+            (
+                b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+                "84983e441c3bd26ebaae4aa1f95129e5e54670f1",
+            ),
+            (&long, "34aa973cd4c4daa4f61eeb2bdbad27316534016f"),
+        ];
+        for (message, expected) in cases {
+            assert_eq!(por_digest(message, 0, message.len()), digest(expected));
+        }
+        for (length, expected) in [
+            (55, "8ae2d46729cfe68ff927af5eec9c7d1b66d65ac2"),
+            (56, "636e2ec698dac903498e648bd2f3af641d3c88cb"),
+            (63, "6d942da0c4392b123528f2905c713a3ce28364bd"),
+            (64, "c6138d514ffa2135bfce0ed0b8fac65669917ec7"),
+            (65, "69bd728ad6e13cd76ff19751fde427b00e395746"),
+        ] {
+            let message: Vec<u8> = (0..length as u8).collect();
+            assert_eq!(
+                por_digest(&message, 0, message.len()),
+                digest(expected),
+                "length {length}"
+            );
+        }
+    }
+
+    fn por_template() -> Vec<u8> {
+        let mut bytes: Vec<u8> = (0..POR_SIZE)
+            .map(|index| ((index * 17 + (index >> 8) * 3 + 11) & 0xff) as u8)
+            .collect();
+        bytes[..4].copy_from_slice(&[0x64, 0x75, 0xa3, 0x08]);
+        for slot in 0..POR_SLOTS {
+            bytes[8 + slot] = u8::from(slot == 0 || slot == 3);
+        }
+        bytes
+    }
+
+    // SHA-1 digests of the template's system block and slots 1 and 4, before and after the
+    // edits below, computed with Python's hashlib.
+    const POR_BEFORE: [&str; 3] = [
+        "ead9000348ea8e73001f62f7435bd6d88231b968",
+        "f1b81b0273f89cbcb15ce312b5d52a17e11e74e1",
+        "dc5dd213556d7dee5d8b0ede1347ea03c0d4fc12",
+    ];
+    const POR_AFTER: [&str; 3] = [
+        "adf74750e5e2f1b49ccb119424cb14da26284031",
+        "ba1b2535855fe6abdf1976a8a26e375a766ae49c",
+        "01f39da618934807f2fb968116a8aa762c43100e",
+    ];
+
+    fn set_por_digests(bytes: &mut [u8], digests: [&str; 3]) {
+        for (offset, hex) in [
+            (POR_SYSTEM_DIGEST, digests[0]),
+            (POR_SLOT_DIGEST, digests[1]),
+            (POR_SLOT_DIGEST + 3 * POR_SLOT_DIGEST_STRIDE, digests[2]),
+        ] {
+            bytes[offset..offset + 20].copy_from_slice(&digest(hex));
+        }
+    }
+
+    fn por_edit(field: &str, value: SaveValue) -> SaveEdit {
+        SaveEdit {
+            field: field.into(),
+            value,
+        }
+    }
+
+    #[test]
+    fn portrait_of_ruin_edits_repair_previews_and_sha1_digests() {
+        let handler = schemas().remove(2);
+        let identity = handler.definitions().remove(0).identity;
+        assert_eq!(identity.id, "castlevania-portrait-of-ruin");
+        let mut bytes = por_template();
+        set_por_digests(&mut bytes, POR_BEFORE);
+        assert_eq!(
+            por_digest(&bytes, 0, POR_SYSTEM_LENGTH),
+            digest(POR_BEFORE[0])
+        );
+        let input = SaveDetectionInput {
+            bytes,
+            selected_game: Some(identity.id.clone()),
+            rom_sha1: None,
+        };
+        let edits = [
+            por_edit("slot_1.gold", SaveValue::U32(99_999_999)),
+            por_edit("slot_1.difficulty", SaveValue::Enum("hard".into())),
+            por_edit("slot_4.playtime_frames", SaveValue::U32(u32::MAX)),
+            por_edit("slot_4.cleared", SaveValue::Bool(true)),
+            por_edit("slot_4.difficulty", SaveValue::Enum("normal".into())),
+        ];
+        let out = handler
+            .apply(&input, &identity, &edits, false)
+            .unwrap()
+            .bytes
+            .unwrap();
+        let mut expected = input.bytes.clone();
+        let slot_4 = 3 * POR_SLOT_STRIDE;
+        expected[0x3fad..0x3fb1].copy_from_slice(&99_999_999u32.to_le_bytes());
+        expected[0x30..0x34].copy_from_slice(&99_999_999u32.to_le_bytes());
+        expected[0x3f3a] = 1;
+        expected[0x17] = 1;
+        expected[0x28 + 0x78..0x2c + 0x78].copy_from_slice(&u32::MAX.to_le_bytes());
+        expected[0x8d] |= 1;
+        expected[0x3f3a + slot_4] = 0;
+        expected[0x8f] = 0;
+        set_por_digests(&mut expected, POR_AFTER);
+        assert_eq!(out, expected);
+        // Inactive slot records, including their stale digests, stay byte-identical.
+        for slot in [1, 2, 4, 5] {
+            let start = POR_SLOT_START + slot * POR_SLOT_STRIDE;
+            assert_eq!(
+                out[start..start + 0x1800],
+                input.bytes[start..start + 0x1800]
+            );
+            let digest = POR_SLOT_DIGEST + slot * POR_SLOT_DIGEST_STRIDE;
+            assert_eq!(
+                out[digest..digest + 0x20],
+                input.bytes[digest..digest + 0x20]
+            );
+        }
+        let noop = SaveDetectionInput {
+            bytes: out,
+            ..input.clone()
+        };
+        assert!(
+            handler
+                .apply(&noop, &identity, &edits, false)
+                .unwrap()
+                .bytes
+                .is_none()
+        );
+        assert!(
+            handler
+                .apply(&input, &identity, &[], false)
+                .unwrap()
+                .bytes
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn portrait_of_ruin_rejects_corrupt_empty_or_out_of_range_input() {
+        let handler = schemas().remove(2);
+        let identity = handler.definitions().remove(0).identity;
+        let edits = [por_edit("slot_1.gold", SaveValue::U32(1))];
+        let mut bytes = por_template();
+        set_por_digests(&mut bytes, POR_BEFORE);
+        let valid = SaveDetectionInput {
+            bytes,
+            selected_game: Some(identity.id.clone()),
+            rom_sha1: None,
+        };
+        assert!(handler.apply(&valid, &identity, &edits, false).is_ok());
+        // The system block, the last covered slot byte, the digest ends, and slot 4.
+        for offset in [
+            0x100,
+            POR_SYSTEM_LENGTH - 1,
+            POR_SYSTEM_DIGEST,
+            POR_SYSTEM_DIGEST + 19,
+            POR_SLOT_START + POR_SLOT_LENGTH - 1,
+            POR_SLOT_DIGEST + 19,
+            POR_SLOT_START + 3 * POR_SLOT_STRIDE + 7,
+        ] {
+            let mut bad = valid.clone();
+            bad.bytes[offset] ^= 1;
+            assert!(
+                handler.apply(&bad, &identity, &edits, false).is_err(),
+                "offset {offset:#x}"
+            );
+        }
+        // The first byte after the covered range is outside the digest.
+        let mut outside = valid.clone();
+        outside.bytes[POR_SLOT_START + POR_SLOT_LENGTH] ^= 1;
+        assert!(handler.apply(&outside, &identity, &edits, false).is_ok());
+        let blocked = [por_edit("slot_2.gold", SaveValue::U32(1))];
+        assert!(handler.apply(&valid, &identity, &blocked, false).is_err());
+        let too_much = [por_edit("slot_1.gold", SaveValue::U32(100_000_000))];
+        assert!(handler.apply(&valid, &identity, &too_much, false).is_err());
+        let mut none = valid.clone();
+        none.bytes[8..14].fill(0);
+        assert!(handler.apply(&none, &identity, &edits, false).is_err());
+        for size in [0, 0x2000, POR_SIZE - 1, POR_SIZE + 1] {
+            let bad = SaveDetectionInput {
+                bytes: vec![0; size],
+                ..valid.clone()
+            };
+            assert!(handler.apply(&bad, &identity, &edits, false).is_err());
         }
     }
 }
