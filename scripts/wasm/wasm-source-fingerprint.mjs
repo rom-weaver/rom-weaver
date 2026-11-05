@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { isWasmCompilerInput } from "./wasm-compiler-inputs.mjs";
@@ -97,7 +97,8 @@ export function createCargoConfigSnapshot({ root, cwd, cargoHome, sinceMs }) {
     while (true) {
       if (directories.has(directory)) break;
       try {
-        const stats = statSync(directory);
+        const stats = lstatSync(directory);
+        if (stats.isSymbolicLink()) usable = false;
         recordTime(stats);
         state.push([directory, stats.mtimeMs, stats.ctimeMs]);
         directories.add(directory);
@@ -109,7 +110,8 @@ export function createCargoConfigSnapshot({ root, cwd, cargoHome, sinceMs }) {
     }
     let bytes;
     try {
-      const stats = statSync(file);
+      const stats = lstatSync(file);
+      if (stats.isSymbolicLink()) usable = false;
       recordTime(stats);
       const local = relative(root, file);
       const label = !isAbsolute(local) && local.split(sep)[0] !== ".." ? local : file;

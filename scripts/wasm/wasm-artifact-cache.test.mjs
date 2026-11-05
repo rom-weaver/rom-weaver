@@ -17,7 +17,7 @@ import {
 const FILES = ["rom-weaver-app.wasm", "rom-weaver-app.wasm.br"];
 
 const withDir = (run) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver wasm cache "));
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver wasm cache ")));
   try {
     return run(dir);
   } finally {
@@ -304,6 +304,23 @@ test("Cargo config snapshots retain changes to an included file's outer director
     const changed = createCargoConfigSnapshot(options);
     assert.equal(changed.fingerprint, initial.fingerprint);
     assert.equal(changed.modified, true);
+  });
+});
+
+test("Cargo configuration directory links disable the shared cache", () => {
+  withDir((dir) => {
+    const cargoHome = path.join(dir, "home");
+    const target = path.join(dir, "target");
+    const alias = path.join(dir, "alias");
+    fs.mkdirSync(cargoHome);
+    fs.mkdirSync(target);
+    fs.writeFileSync(path.join(target, "profile.toml"), "[profile.wasm-release]\nopt-level = 3\n");
+    fs.symlinkSync(target, alias, "junction");
+    fs.writeFileSync(path.join(cargoHome, "config.toml"), 'include = ["../target/profile.toml"]\n');
+    const options = { root: dir, cwd: dir, cargoHome };
+    assert.equal(createCargoConfigSnapshot(options).usable, true);
+    fs.writeFileSync(path.join(cargoHome, "config.toml"), 'include = ["../alias/profile.toml"]\n');
+    assert.equal(createCargoConfigSnapshot(options).usable, false);
   });
 });
 
