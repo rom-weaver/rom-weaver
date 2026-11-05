@@ -293,6 +293,33 @@ async function checkDocsRoutes(context, origin, prefix) {
   }
 }
 
+// The 404 page is a prerendered document served at whatever path missed. Its <base href="/">
+// resolves assets against the origin root, so only a root deployment can hydrate it; behind a
+// subpath proxy the status and prerendered content must still be right.
+async function checkNotFoundPage(context, origin, prefix) {
+  const page = await context.newPage();
+  const failures = [];
+  page.on("pageerror", (error) => failures.push(`page error: ${error.message}`));
+  const url = `${origin}${prefix}/no-such-route/`;
+  page.on("response", (response) => {
+    if (response.status() >= 400 && response.url() !== url)
+      failures.push(`${response.status()} ${response.url()}`);
+  });
+  const response = await page.goto(url, { waitUntil: "load" });
+  assert.equal(response.status(), 404, url);
+  const home = page.locator(".not-found-home");
+  await home.waitFor({ state: "attached", timeout: 60_000 });
+  if (prefix === "") {
+    await page.waitForLoadState("networkidle");
+    assert.equal(await page.evaluate(() => crossOriginIsolated), true);
+    assert.deepEqual(failures, [], url);
+    // The stylesheet only loads through <base>, so a styled button proves the assets resolved.
+    assert.notEqual(await home.evaluate((node) => getComputedStyle(node).display), "inline", url);
+  }
+  console.log(`PASS 404 page for an unknown route: ${origin}${prefix}`);
+  await page.close();
+}
+
 async function checkBrowser(origins) {
   const require = createRequire(resolve("packages/rom-weaver-webapp/package.json"));
   const { chromium } = require("playwright");
@@ -356,6 +383,7 @@ async function checkBrowser(origins) {
       console.log(
         `PASS browser aliases, isolation, legacy archive apply and exact download bytes: ${origin}${prefix}`,
       );
+      await checkNotFoundPage(context, origin, prefix);
       await context.close();
     }
   } finally {
@@ -422,7 +450,8 @@ async function checkMountedCertificates({ pair, named }) {
 }
 
 // The documented policy (the build's _headers, docs/hosting/self-hosting.md): everything
-// revalidates except the content-addressed /assets/*.
+// revalidates except the content-addressed /assets/*. The image takes sws's own one-year
+// max-age for those, without `immutable`, because a header rule would also tag a 404.
 async function checkCachePolicy(origin, prefix) {
   const get = async (path) => {
     const response = await fetch(`${origin}${prefix}${path}`, {
@@ -439,7 +468,7 @@ async function checkCachePolicy(origin, prefix) {
     ["/docs/faq/", "no-cache"],
     ["/manifest.json", "no-cache"],
     ["/rom-weaver-service-worker.js", "no-cache"],
-    [`/${asset}`, "public, max-age=31536000, immutable"],
+    [`/${asset}`, "max-age=31536000"],
   ];
   for (const [path, cache] of expected) {
     const response = await get(path);
@@ -447,6 +476,40 @@ async function checkCachePolicy(origin, prefix) {
     assert.equal(response.cache, cache, `Cache-Control of ${prefix}${path}`);
   }
   console.log(`PASS Cache-Control matches the documented policy: ${origin}${prefix}`);
+}
+
+// A path that does not exist MUST answer 404, never the app shell with 200. A missing
+// /assets/* file answered 200 with HTML, or with a long cache lifetime, would be stored
+// under a content-addressed URL for a year by browsers and CDNs.
+async function checkNotFound(origin, prefix) {
+  const get = async (path) => {
+    const response = await fetch(`${origin}${prefix}${path}`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+    const text = await response.text();
+    return { cache: response.headers.get("cache-control") ?? "", response, status: response.status, text };
+  };
+  const home = await get("/");
+  const asset = /["'(]\.?\/?(assets\/[^"')?]+)-[^"')?.-]+\.(js|css)/.exec(home.text);
+  assert.ok(asset, "the home page must reference a hashed asset");
+  for (const path of [
+    "/assets/nope-missing.js",
+    `/${asset[1]}-zzzzzzzz.${asset[2]}`,
+    "/assets/nested/missing.wasm",
+  ]) {
+    const missing = await get(path);
+    assert.equal(missing.status, 404, `${prefix}${path}`);
+    assert.doesNotMatch(missing.cache, /immutable|max-age=[1-9]\d{4,}/, `${prefix}${path} cache`);
+  }
+  for (const path of ["/no-such-route/", "/no-such-route", "/docs/no-such-doc/", "/missing.html"]) {
+    const missing = await get(path);
+    assert.equal(missing.status, 404, `${prefix}${path}`);
+    assert.match(missing.response.headers.get("content-type") ?? "", /^text\/html/, path);
+    assert.match(missing.text, /data-page="not-found"/, `${prefix}${path} serves the 404 page`);
+    assert.equal(missing.cache, "no-cache", `Cache-Control of ${prefix}${path}`);
+    assert.equal(missing.response.headers.get("cross-origin-embedder-policy"), "require-corp");
+  }
+  console.log(`PASS missing paths answer 404 without long caching: ${origin}${prefix}`);
 }
 
 async function checkWebapp() {
@@ -534,8 +597,7 @@ async function checkWebapp() {
     assert.equal(response.status, 200, path);
     assert.equal(response.headers.get("cross-origin-embedder-policy"), "require-corp");
     assert.equal(response.headers.get("cross-origin-opener-policy"), "same-origin");
-    // The SPA fallback also answers 200, so parse dotfile paths to prove the
-    // file itself was served.
+    // Parse dotfile paths to prove the file itself was served, not a page.
     if (path === "/.well-known/api-catalog")
       assert.ok(Array.isArray((await response.json()).linkset), path);
     else if (path.endsWith(".json")) await response.json();
@@ -543,6 +605,8 @@ async function checkWebapp() {
   }
   await checkCachePolicy(web.origin, "");
   await checkCachePolicy(proxy.origin, "/rom-weaver");
+  await checkNotFound(web.origin, "");
+  await checkNotFound(proxy.origin, "/rom-weaver");
   await checkBrowser([
     { origin: web.origin, prefix: "" },
     { origin: proxy.origin, prefix: "/rom-weaver" },

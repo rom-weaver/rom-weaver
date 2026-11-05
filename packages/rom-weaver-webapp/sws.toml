@@ -20,14 +20,23 @@ compression-static = true
 # sws compresses every response from scratch.
 compression = true
 
-# SPA fallback for client-side routes; no-log /health endpoint for probes.
-page-fallback = "/srv/index.html"
+# No catch-all page fallback. Every route is prerendered to a file, so a path with
+# no file is a real 404: sws answers it with /srv/404.html (its default page404).
+# A fallback to index.html would answer a missing /assets/* file with 200 HTML,
+# and a browser or CDN would keep that under the content-addressed URL.
+# No-log /health endpoint for probes.
 health = true
 
-# sws's built-in Cache-Control (max-age by content type) is off: it would cache the
-# service worker script for a year and HTML for a day. The [[advanced.headers]]
-# rules below set the same policy as the generated dist/_headers instead.
-cache-control-headers = false
+# sws's built-in Cache-Control (max-age by content type) stays on, and only for
+# files that exist: it gives hashed /assets/* scripts and styles a one-year
+# max-age and a missing path none. The [[advanced.headers]] rules below
+# override it for everything outside /assets/, where it would cache the service
+# worker script for a year and HTML for a day.
+#
+# sws applies a header rule to a 404 as well as to a hit, so a rule on
+# /assets/** with a long max-age would mark every missing hashed URL cacheable
+# for that long. That is why there is no `immutable` rule here.
+cache-control-headers = true
 
 log-level = "info"
 
@@ -463,15 +472,27 @@ source = "**"
 Cross-Origin-Opener-Policy = "same-origin"
 Cross-Origin-Embedder-Policy = "require-corp"
 Cross-Origin-Resource-Policy = "same-origin"
-# Deploys replace the whole asset set, so HTML or the service worker held past a
-# redeploy would reference hashed URLs that now 404. Only /assets/* is immutable.
-Cache-Control = "no-cache"
 
+# Deploys replace the whole asset set, so HTML or the service worker held past a
+# redeploy would reference hashed URLs that now 404. Only /assets/* is cached
+# long, by the built-in policy above.
 [[advanced.headers]]
-source = "/assets/**"
+# Every path except /assets/**, spelled as a glob because sws header rules have
+# no negation: the first path segment is anything but "assets", a prefix of it,
+# or "assets" followed by more name.
+source = "/{,[!a]*,a,a[!s]*,as,as[!s]*,ass,ass[!e]*,asse,asse[!t]*,asset,asset[!s]*,assets[!/]*}"
 
 [advanced.headers.headers]
-Cache-Control = "public, max-age=31536000, immutable"
+Cache-Control = "no-cache"
+
+# The built-in policy skips these /assets/* types, which would then fall back to
+# heuristic caching. Revalidating is cheap with ETag, and a missing file
+# MUST NOT be cached.
+[[advanced.headers]]
+source = "/assets/**/*.{wasm,json,bin}"
+
+[advanced.headers.headers]
+Cache-Control = "no-cache"
 
 [[advanced.headers]]
 # Directory requests MUST match the resolved index path in sws header rules.

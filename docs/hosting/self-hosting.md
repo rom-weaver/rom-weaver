@@ -86,7 +86,7 @@ location /rom-weaver/ {
 }
 ```
 
-Keep both trailing slashes: they remove `/rom-weaver/` from forwarded requests. The `proxy_redirect` rules preserve that prefix on redirects, including legacy URLs. The container supplies COOP/COEP headers, SPA fallbacks, and precompressed Brotli files.
+Keep both trailing slashes: they remove `/rom-weaver/` from forwarded requests. The `proxy_redirect` rules preserve that prefix on redirects, including legacy URLs. The container supplies COOP/COEP headers and precompressed Brotli files. It answers a path with no file, such as a missing `/assets/` chunk or an unknown route, with a real 404 status, because the build prerenders every route to a file. The 404 page references its assets from the origin root, so behind a subpath it keeps its status and text but loads unstyled and its links leave the prefix. Serve rom-weaver from a subdomain when that page matters.
 
 For a dedicated subdomain, route its `/` location to the same container.
 
@@ -170,7 +170,7 @@ Cloudflare-compatible hosts read the generated `_headers` file. On other hosts, 
 
 Earlier releases served the service worker as `cache-service-worker.js`. If your host config still names that path, change it to `rom-weaver-service-worker.js`.
 
-Only `/assets/*` uses immutable caching, because those URLs are content-addressed: build output, including the two identify manifests, carries a hash in the filename, and the identify packs, cheat shards, checksum router, and title index are requested with a `?sha256=` query that changes whenever their bytes do. Do not apply the immutable policy to HTML, the manifest, `robots.txt`, `sitemap.xml`, or other stable filenames.
+The Docker image gives `/assets/*` scripts and styles a one-year `max-age` without `immutable`, and revalidates the other asset types there (WASM, JSON, and binary data): static-web-server tags a missing file with the same headers as a hit, so a long-lived rule on `/assets/*` would let a browser or CDN keep a 404 for a hashed URL that a newer deploy adds. Only `/assets/*` uses long caching, because those URLs are content-addressed: build output, including the two identify manifests, carries a hash in the filename, and the identify packs, cheat shards, checksum router, and title index are requested with a `?sha256=` query that changes whenever their bytes do. Do not apply the immutable policy to HTML, the manifest, `robots.txt`, `sitemap.xml`, or other stable filenames.
 
 ## Cross-origin isolation
 
