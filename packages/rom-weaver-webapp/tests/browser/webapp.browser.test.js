@@ -1,5 +1,6 @@
 import indexHtml from "../../index.html?raw";
 import { captureShellClicks, replayShellSelections } from "../../src/webapp/shell-click-replay.ts";
+import { dispatchSelectionDelivery } from "../../src/lib/input/selection-delivery.ts";
 import { createElement, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, expect, test, vi } from "vitest";
@@ -421,6 +422,37 @@ test.each(["home", "patcher"])("%s clears the reading veil when a dropped folder
   await expect.poll(isDropRouting).toBe(true);
   release();
   await expect.poll(isDropRouting).toBe(false);
+});
+
+test.each([
+  ["home", true],
+  ["home", false],
+  ["patcher", true],
+  ["patcher", false],
+])("%s keeps feedback while a second slow folder waits (first has files: %s)", async (view, hasFiles) => {
+  mountWebappRoot({ initialView: view });
+  await expect.poll(() => document.querySelector(`#panel-${view}:not([hidden])`)).toBeTruthy();
+  const first = slowFolderDrop(hasFiles ? selectionPatch("first.ips") : undefined);
+  const second = slowFolderDrop(selectionPatch("second.ips"));
+  const firstDelivery = dispatchSelectionDelivery(document, first.event);
+  const secondDelivery = dispatchSelectionDelivery(document, second.event);
+  try {
+    await expect.poll(() => getComputedStyle(document.querySelector(".dropveil-text")).opacity).toBe("1");
+    first.release();
+    await firstDelivery;
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(isDropRouting()).toBe(true);
+    expect(dropVeilText()).toBe("Reading files…");
+    expect(document.querySelector(".dropveil + [role=status]")?.textContent).toBe("Reading files…");
+    second.release();
+    await secondDelivery;
+    await expect.poll(() => patchNames()).toEqual(hasFiles ? ["first.ips", "second.ips"] : ["second.ips"]);
+    await expect.poll(isDropRouting).toBe(false);
+  } finally {
+    first.release();
+    second.release();
+    await Promise.all([firstDelivery, secondDelivery]);
+  }
 });
 
 test("a workflow never shows the reading words for a fast page drop", async () => {

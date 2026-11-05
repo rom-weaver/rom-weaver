@@ -575,6 +575,7 @@ function WebappRoot({
   const pendingDropsRef = useRef(new Map<number, () => void>());
   const routingQueueRef = useRef(Promise.resolve());
   const routingGenerationRef = useRef(0);
+  const routingSelectionRef = useRef(0);
   const routeChoiceRef = useRef<(() => void) | null>(null);
   const pageDropIdRef = useRef(0);
   const [dropRoute, setDropRoute] = useState<DropRouteRequest | null>(null);
@@ -820,6 +821,13 @@ function WebappRoot({
     (selected: File[] | Promise<File[]>, directView?: WebappView) => {
       const from = currentViewRef.current;
       const generation = routingGenerationRef.current;
+      const selection = ++routingSelectionRef.current;
+      const routeVeil: typeof showDropRouting = (routing, holdMs) => {
+        if (selection === routingSelectionRef.current && generation === routingGenerationRef.current) {
+          showDropRouting(routing, holdMs);
+        }
+      };
+      routeVeil({ phase: "reading" });
       const delivery = routingQueueRef.current
         .catch(() => undefined)
         .then(async () => {
@@ -827,7 +835,7 @@ function WebappRoot({
           const dropped = await selected;
           if (generation !== routingGenerationRef.current) return;
           if (!dropped.length) {
-            showDropRouting(null);
+            routeVeil(null);
             return;
           }
           // Save backups belong to no workflow. Saves & storage imports them once the rest of the drop is
@@ -836,15 +844,14 @@ function WebappRoot({
           const files = backups.length ? dropped.filter((file) => !backups.includes(file)) : dropped;
           try {
             if (!files.length) {
-              showDropRouting(null);
+              routeVeil(null);
               return;
             }
             if (directView) {
-              showDropRouting(null);
+              routeVeil(null);
               await enqueuePageDrop(directView, files);
               return;
             }
-            showDropRouting({ phase: "reading" });
             const entries = await readDropEntries(files);
             if (generation !== routingGenerationRef.current) return;
             const plan = planDropDestinations(countDropEntries(entries));
@@ -854,14 +861,14 @@ function WebappRoot({
               plan.destinations.length === 1 &&
               entries.every((entry) => isUsableDropFile(only, entry.name, entry.archiveBucket))
             ) {
-              showDropRouting({ phase: "opening", view: only });
+              routeVeil({ phase: "opening", view: only });
               await preloadWorkflowRoute(only).catch(() => undefined);
               if (generation !== routingGenerationRef.current) return;
-              showDropRouting({ phase: "opening", view: only }, DROP_ROUTING_HOLD_MS);
+              routeVeil({ phase: "opening", view: only }, DROP_ROUTING_HOLD_MS);
               await deliverDrop(only, files);
               return;
             }
-            showDropRouting(null);
+            routeVeil(null);
             if (!only) return;
             pageDropIdRef.current += 1;
             setDropRoute({ chooseDestination: true, entries, files, from, id: pageDropIdRef.current });
@@ -878,7 +885,7 @@ function WebappRoot({
           }
         })
         .catch((error: unknown) => {
-          if (generation === routingGenerationRef.current) showDropRouting(null);
+          routeVeil(null);
           throw error;
         });
       routingQueueRef.current = delivery;
@@ -943,9 +950,6 @@ function WebappRoot({
       // handler, so the page-level listener just forwards every file to it.
       const droppedView = state.currentView;
       const needsDestination = notFound || ["home", "docs", "whats-new"].includes(droppedView);
-      // Hold the veil from the drop itself so it never fades out and back in
-      // while the transfer is read.
-      showDropRouting({ phase: "reading" });
       const readFiles = readDataTransferFiles(event.dataTransfer).then((files) => {
         markDropReceived();
         for (const file of files) recordDrop(file.name, droppedAtMs);
@@ -1004,7 +1008,6 @@ function WebappRoot({
     logOpen,
     notFound,
     routeFiles,
-    showDropRouting,
     state.currentView,
     state.settingsDialogOpen,
   ]);
