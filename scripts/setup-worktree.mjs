@@ -53,6 +53,22 @@ export function pruneTargets(cwd) {
   }
 }
 
+// The pre-commit react-types and react-knip checks import these ignored outputs: the compiled
+// Lingui catalogs and the generated channel icons that the Vitest browser configs read.
+// Advisory like pruning: the icons need Playwright's Chromium, which a fresh Playwright
+// version may not have downloaded yet, and the rest of setup still leaves a usable checkout.
+export const HOOK_INPUT_SCRIPTS = ["i18n:compile", "icons:channels"];
+export function generateHookInputs(root, run = execFileSync) {
+  for (const script of HOOK_INPUT_SCRIPTS) {
+    process.stdout.write(`setup-worktree: npm run ${script} (packages/rom-weaver-webapp)\n`);
+    try {
+      run("npm", ["run", script, "--prefix", join(root, "packages/rom-weaver-webapp")], { stdio: "inherit" });
+    } catch (error) {
+      process.stdout.write(`  ${script} failed (${error.message.split("\n")[0]}); the pre-commit type and knip checks need it. If Chromium is missing, run \`npm --prefix packages/rom-weaver-webapp exec playwright -- install chromium\`, then \`npm --prefix packages/rom-weaver-webapp run ${script}\`.\n`);
+    }
+  }
+}
+
 export async function main(cwd = process.cwd(), { prime = true, prune = true } = {}) {
   const { root, main: mainRoot } = worktreePaths(cwd);
   if (root === mainRoot) throw new Error("setup-worktree: run this from inside a worktree, not the main checkout");
@@ -61,12 +77,6 @@ export async function main(cwd = process.cwd(), { prime = true, prune = true } =
   execFileSync("npm", ["ci", "--no-audit", "--no-fund", "--prefix", root], { stdio: "inherit" });
   process.stdout.write("setup-worktree: npm ci (packages/rom-weaver-webapp)\n");
   execFileSync("npm", ["ci", "--no-audit", "--no-fund", "--prefix", join(root, "packages/rom-weaver-webapp")], { stdio: "inherit" });
-  // The pre-commit react-types and react-knip checks import these ignored outputs: the compiled
-  // Lingui catalogs and the generated channel icons that the Vitest browser configs read.
-  for (const script of ["i18n:compile", "icons:channels"]) {
-    process.stdout.write(`setup-worktree: npm run ${script} (packages/rom-weaver-webapp)\n`);
-    execFileSync("npm", ["run", script, "--prefix", join(root, "packages/rom-weaver-webapp")], { stdio: "inherit" });
-  }
 
   const source = join(mainRoot, "packages/rom-weaver-webapp/src/wasm");
   const destination = join(root, "packages/rom-weaver-webapp/src/wasm");
@@ -87,6 +97,7 @@ export async function main(cwd = process.cwd(), { prime = true, prune = true } =
     cpSync(join(source, "third_party"), join(destination, "third_party"), { recursive: true });
     process.stdout.write("  copied third_party/ from main checkout\n");
   }
+  generateHookInputs(root);
   if (prime) {
     process.stdout.write("setup-worktree: priming pre-commit cargo target dirs (minutes; --no-prime to skip)\n");
     await primeHookTargets(root);

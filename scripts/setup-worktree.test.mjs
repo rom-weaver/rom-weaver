@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { HOOK_CARGO_PRIMES, main, primeHookTargets, shouldPrime } from "./setup-worktree.mjs";
+import { generateHookInputs, HOOK_CARGO_PRIMES, HOOK_INPUT_SCRIPTS, primeHookTargets, shouldPrime } from "./setup-worktree.mjs";
 
 const hook = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../.config/lefthook.yml"), "utf8");
 
@@ -60,10 +60,25 @@ test("branch checkouts prime and detached review checkouts skip unless forced", 
 
 // The react-types and react-knip hooks fail in a fresh worktree unless the ignored
 // Lingui catalogs and generated channel icons exist, so setup must produce them.
-for (const script of ["i18n:compile", "icons:channels"]) {
-  test(`setup runs the webapp ${script} script`, () => {
-    const webapp = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../packages/rom-weaver-webapp/package.json"), "utf8"));
-    assert.ok(webapp.scripts[script], `webapp has no ${script} script`);
-    assert.match(main.toString(), new RegExp(`"${script}"`));
-  });
-}
+test("setup generates the webapp hook inputs from scripts the webapp defines", () => {
+  const webapp = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../packages/rom-weaver-webapp/package.json"), "utf8"));
+  for (const script of HOOK_INPUT_SCRIPTS) assert.ok(webapp.scripts[script], `webapp has no ${script} script`);
+  const calls = [];
+  generateHookInputs("/repo", (command, args) => calls.push([command, ...args]));
+  assert.deepEqual(calls, [
+    ["npm", "run", "i18n:compile", "--prefix", join("/repo", "packages/rom-weaver-webapp")],
+    ["npm", "run", "icons:channels", "--prefix", join("/repo", "packages/rom-weaver-webapp")],
+  ]);
+});
+
+// Icon generation launches Chromium; a missing browser must not strand the checkout.
+test("a failing hook input script does not stop setup", () => {
+  const calls = [];
+  assert.doesNotThrow(() =>
+    generateHookInputs("/repo", (_command, args) => {
+      calls.push(args[1]);
+      throw new Error("Executable doesn't exist");
+    }),
+  );
+  assert.deepEqual(calls, ["i18n:compile", "icons:channels"]);
+});
