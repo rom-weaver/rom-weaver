@@ -2,12 +2,14 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { accessSync, constants, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { cargoTargetDir } from "../cargo-target-dir.mjs";
 import { brotliCompressFile } from "./brotli-compress.mjs";
+import { restoreWasmArtifacts, storeWasmArtifacts, wasmArtifactCacheKey, wasmArtifactCacheRoot } from "./wasm-artifact-cache.mjs";
 import { createWasmSourceFingerprint } from "./wasm-source-fingerprint.mjs";
 import { createWasmProdFingerprint } from "./wasm-prod-fingerprint.mjs";
 
@@ -78,6 +80,31 @@ export function shouldReuseProductionArtifact({ artifact, brotliArtifactOk, fing
   return !force && existsSync(artifact) && brotliArtifactOk === wantBrotli && existsSync(fingerprintFile) && readFileSync(fingerprintFile, "utf8").trim() === wantedFingerprint;
 }
 
+// Rust embeds absolute source paths (panic locations, dependency sources) in
+// the module. Fixed prefixes make the bytes independent of the checkout, Cargo
+// home, and toolchain location, so one checkout's build is valid for another.
+// Cargo appends --config rustflags to the list in .cargo/config.toml.
+export function remapPathArgs({ root, cargoHome, sysroot, target }) {
+  const flags = [
+    [root, "/rom-weaver"],
+    [cargoHome, "/cargo"],
+    [sysroot, "/rustc-sysroot"],
+  ].map(([from, to]) => `--remap-path-prefix=${from}=${to}`);
+  return ["--config", `target.${target}.rustflags=${JSON.stringify(flags)}`];
+}
+
+// Environment that reaches rustc or the C compilers as flags. Compiler paths
+// stay out of the cache key: they differ per checkout, and the wrapper scripts
+// they name are part of the source fingerprint.
+const BUILD_FLAG_ENV = /^(?:RUSTFLAGS|CARGO_ENCODED_RUSTFLAGS|CARGO_PROFILE_|CARGO_TARGET_WASM32_|C(?:XX)?FLAGS)/;
+export const buildFlagEnv = (env) =>
+  JSON.stringify(
+    Object.keys(env)
+      .filter((name) => BUILD_FLAG_ENV.test(name))
+      .sort()
+      .map((name) => [name, env[name]]),
+  );
+
 export function main(argv = process.argv.slice(2), env = process.env) {
   const mode = parseMode(argv[0]);
   const root = env.MISE_PROJECT_ROOT;
@@ -93,27 +120,79 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   if (!existsExecutable("cargo")) throw new Error("missing command: cargo");
   if (!existsExecutable(env.WASI_CLANG)) throw new Error(`missing WASI toolchain: ${env.WASI_CLANG} (install WASI SDK)`);
   if (!existsSync(env.WASI_SYSROOT || "")) throw new Error(`missing WASI sysroot: ${env.WASI_SYSROOT}`);
+  if (mode === "prod" && !existsExecutable("wasm-opt")) throw new Error("missing command: wasm-opt (install via mise or brew install binaryen)");
   mkdirSync(outDir, { recursive: true });
 
+  const wantBrotli = mode === "prod" && env.ROM_WEAVER_WASM_NO_BROTLI !== "1";
+  const quality = env.BROTLI_QUALITY || "11";
+  const brotliVersion = `node-zlib libbrotli ${process.versions.brotli}`;
+  const stripVersion = toolVersion(env.WASI_STRIP, ["--version"]);
+  const wasmOptVersion = mode === "prod" ? toolVersion("wasm-opt", ["--version"]) : "";
+  const force = env.ROM_WEAVER_WASM_FORCE === "1";
+  if (!wantBrotli) rmSync(`${artifact}.br`, { force: true });
+  const cacheFiles = wantBrotli ? ["rom-weaver-app.wasm", "rom-weaver-app.wasm.br"] : ["rom-weaver-app.wasm"];
+  // scripts/wasm is part of the source fingerprint, so this script's flags,
+  // remapping, and wasm-opt arguments are keyed through it.
+  const cache =
+    env.ROM_WEAVER_WASM_CACHE === "0"
+      ? undefined
+      : {
+          root: wasmArtifactCacheRoot(env),
+          key: wasmArtifactCacheKey({
+            mode,
+            source: sourceFingerprint,
+            rustc: toolVersion("rustc", ["-vV"]),
+            clang: toolVersion(env.WASI_CLANG, ["--version"]),
+            strip: stripVersion,
+            env: buildFlagEnv(env),
+            wasmOpt: wasmOptVersion,
+            brotli: wantBrotli ? `q${quality} ${brotliVersion}` : "none",
+          }),
+        };
+
+  if (cache && !force && restoreWasmArtifacts({ ...cache, files: cacheFiles, outDir })) {
+    // The production fingerprint describes this checkout's Cargo output, which the cached module did not come from.
+    rmSync(fingerprintFile, { force: true });
+    process.stdout.write(`reused ${mode} WASM for unchanged inputs from ${join(cache.root, cache.key)}\n`);
+  } else {
+    buildArtifact({ mode, root, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env });
+    if (cache) {
+      try {
+        storeWasmArtifacts({ ...cache, files: cacheFiles, sourceDir: outDir });
+      } catch (error) {
+        process.stderr.write(`warning: could not store WASM in ${cache.root} (${error.message})\n`);
+      }
+    }
+  }
+
+  writeFileSync(sourceFingerprintFile, `${sourceFingerprint}\n`);
+  run("node", [join(root, "scripts/gen-third-party-licenses.mjs"), outDir, "--target", "webapp"]);
+  if (outDir !== packageDir) run("node", [join(root, "packages/rom-weaver-webapp/scripts/sync-dist.mjs"), outDir]);
+  process.stdout.write(wantBrotli ? `artifacts written to ${outDir} (rom-weaver-app.wasm, rom-weaver-app.wasm.br)\n` : `artifact written to ${artifact}\n`);
+}
+
+function buildArtifact({ mode, root, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env }) {
   process.stdout.write(`building ${target} -> ${artifact}\n`);
-  run("cargo", ["build", "-p", "rom-weaver-cli", "--no-default-features", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", target]);
+  const remap = remapPathArgs({
+    root,
+    cargoHome: env.CARGO_HOME || join(homedir(), ".cargo"),
+    sysroot: toolVersion("rustc", ["--print", "sysroot"]),
+    target,
+  });
+  run("cargo", ["build", "-p", "rom-weaver-cli", "--no-default-features", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", target, ...remap]);
 
   if (mode === "prod") {
-    if (!existsExecutable("wasm-opt")) throw new Error("missing command: wasm-opt (install via mise or brew install binaryen)");
-    const wantBrotli = env.ROM_WEAVER_WASM_NO_BROTLI === "1" ? 0 : 1;
-    if (!wantBrotli) rmSync(`${artifact}.br`, { force: true });
-    const quality = env.BROTLI_QUALITY || "11";
     const fingerprint = productionFingerprint({
       builtArtifact,
       buildScript: fileURLToPath(import.meta.url),
       quality,
-      wasmOptVersion: toolVersion("wasm-opt", ["--version"]),
+      wasmOptVersion,
       wasmOptArgs: WASM_OPT_ARGS,
-      stripVersion: toolVersion(env.WASI_STRIP, ["--version"]),
-      brotliVersion: `node-zlib libbrotli ${process.versions.brotli}`,
+      stripVersion,
+      brotliVersion,
     });
-    const brotliArtifactOk = wantBrotli === 1 ? existsSync(`${artifact}.br`) : false;
-    if (shouldReuseProductionArtifact({ artifact, brotliArtifactOk, fingerprintFile, wantedFingerprint: fingerprint, wantBrotli: Boolean(wantBrotli), force: env.ROM_WEAVER_WASM_FORCE === "1" })) {
+    const brotliArtifactOk = wantBrotli ? existsSync(`${artifact}.br`) : false;
+    if (shouldReuseProductionArtifact({ artifact, brotliArtifactOk, fingerprintFile, wantedFingerprint: fingerprint, wantBrotli, force })) {
       process.stdout.write("production WASM inputs unchanged; skipping wasm-opt and brotli\n");
     } else {
       rmSync(fingerprintFile, { force: true });
@@ -140,16 +219,10 @@ export function main(argv = process.argv.slice(2), env = process.env) {
       writeFileSync(fingerprintFile, `${fingerprint}\n`);
     }
   } else {
-    rmSync(`${artifact}.br`, { force: true });
     rmSync(fingerprintFile, { force: true });
     cpSync(builtArtifact, artifact);
     run(env.WASI_STRIP, [artifact]);
   }
-
-  writeFileSync(sourceFingerprintFile, `${sourceFingerprint}\n`);
-  run("node", [join(root, "scripts/gen-third-party-licenses.mjs"), outDir, "--target", "webapp"]);
-  if (outDir !== packageDir) run("node", [join(root, "packages/rom-weaver-webapp/scripts/sync-dist.mjs"), outDir]);
-  process.stdout.write(mode === "prod" && env.ROM_WEAVER_WASM_NO_BROTLI !== "1" ? `artifacts written to ${outDir} (rom-weaver-app.wasm, rom-weaver-app.wasm.br)\n` : `artifact written to ${artifact}\n`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

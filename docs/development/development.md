@@ -82,6 +82,8 @@ Open the URL that the server prints. The local certificate may need a browser ex
 
 `npm run dev` rebuilds WASM when the artifact is missing or its recorded source fingerprint differs from the current inputs. Run `mise run build-wasm` directly after changing the installed WASM toolchain or when you need the complete build output.
 
+Both WASM build tasks share finished modules between checkouts through `${XDG_CACHE_HOME:-~/.cache}/rom-weaver/wasm/`. An entry is keyed by the source fingerprint, the build mode, the Rust, WASI SDK, wasm-opt, and Brotli versions, and the compiler-flag environment. A build whose key matches copies the module and skips Cargo, so a new worktree does not repeat a cold build that another checkout already ran. The build remaps the checkout, Cargo home, and Rust sysroot paths that Rust embeds in the module, so the bytes do not depend on where they were built. The eight most recently used entries are kept. Set `ROM_WEAVER_WASM_FORCE=1` to rebuild and replace the local artifact, `ROM_WEAVER_WASM_CACHE=0` to bypass the cache, or `ROM_WEAVER_WASM_CACHE_DIR` to move it.
+
 By default, build artifacts are written to `packages/rom-weaver-webapp/src/wasm/`. The binary and attribution outputs are gitignored; runtime source and generated TypeScript remain tracked. To keep a separate artifact directory:
 
 ```bash
