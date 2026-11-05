@@ -1,5 +1,6 @@
 use super::*;
-use rules::{Check, Condition};
+use rules::{Check, Condition, ReadValue, Scalar, Store};
+use tracing::trace;
 
 pub(super) const CARD_SIZE: usize = 0x20000;
 pub(super) const BLOCK_SIZE: usize = 0x2000;
@@ -72,6 +73,38 @@ pub(super) fn definition(
             CARD_SIZE,
         )
     }
+}
+
+/// Adds a game-specific integrity check to both the edit-time checks and the recognition checks.
+pub(super) fn register_check(game: &mut GameDefinition, check: Check) {
+    game.runtime.checks.push(check.clone());
+    game.runtime
+        .recognition
+        .as_mut()
+        .expect("playstation_card::definition always sets recognition")
+        .checks
+        .push(check);
+}
+
+/// Recomputes a little-endian 16-bit checksum at `offset` after every edit.
+pub(super) fn store_u16_checksum(
+    game: &mut GameDefinition,
+    offset: usize,
+    compute: impl Fn(&[u8]) -> u16 + Send + Sync + 'static,
+) {
+    game.runtime.after_edit.push(Store {
+        when: None,
+        destination: Scalar {
+            offset,
+            storage: Storage::U16Le,
+            mask: None,
+        },
+        value: ReadValue::new(move |bytes| {
+            let value = compute(bytes);
+            trace!(offset, value, "recomputed PlayStation card checksum");
+            Ok(i64::from(value))
+        }),
+    });
 }
 
 #[cfg(test)]

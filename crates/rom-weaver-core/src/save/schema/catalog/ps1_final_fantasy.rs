@@ -47,24 +47,10 @@ fn integrity(
         section_id: None,
         warning: None,
     };
-    game.runtime.checks.push(check.clone());
-    game.runtime
-        .recognition
-        .as_mut()
-        .unwrap()
-        .checks
-        .push(check);
+    playstation_card::register_check(game, check);
     for offset in offsets {
-        game.runtime.after_edit.push(Store {
-            when: None,
-            destination: Scalar {
-                offset: base + offset,
-                storage: Storage::U16Le,
-                mask: None,
-            },
-            value: ReadValue::new(move |bytes| {
-                Ok(i64::from(crc(&bytes[base + start..base + end], eight)))
-            }),
+        playstation_card::store_u16_checksum(game, base + offset, move |bytes| {
+            crc(&bytes[base + start..base + end], eight)
         });
     }
 }

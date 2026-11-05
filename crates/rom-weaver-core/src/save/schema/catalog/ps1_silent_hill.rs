@@ -58,25 +58,9 @@ fn integrity(game: &mut GameDefinition, base: usize) {
         section_id: None,
         warning: None,
     };
-    game.runtime.checks.push(check.clone());
-    game.runtime
-        .recognition
-        .as_mut()
-        .unwrap()
-        .checks
-        .push(check);
-    game.runtime.after_edit.push(Store {
-        when: None,
-        destination: Scalar {
-            offset: base + PREVIEW_CHECKSUM,
-            storage: Storage::U16Le,
-            mask: None,
-        },
-        value: ReadValue::new(move |bytes| {
-            let value = xor_checksum(&bytes[base + PREVIEWS..base + PREVIEW_CHECKSUM]);
-            trace!(base, value, "recomputed Silent Hill preview checksum");
-            Ok(i64::from(value))
-        }),
+    playstation_card::register_check(game, check);
+    playstation_card::store_u16_checksum(game, base + PREVIEW_CHECKSUM, move |bytes| {
+        xor_checksum(&bytes[base + PREVIEWS..base + PREVIEW_CHECKSUM])
     });
     for slot in 0..SLOTS {
         let range = slot_range(base, slot);
@@ -126,16 +110,17 @@ fn slot_fields(base: usize) -> Vec<FieldDefinition> {
             )
             .min(0)
             .max(99),
-            // A zero save count marks the slot as unused, so the minimum is one.
+            // Mirrored into the preview's 16-bit saves count at +0x8. The slot-in-use marker is the
+            // 32-bit total saves at preview +0x0, which this field never writes, so zero is valid.
             catalog_field(
                 &format!("slot_{number}.saves"),
                 &format!("Slot {number} saves"),
                 start + 0xa6,
                 Storage::U16Le,
             )
-            .min(1)
+            .min(0)
             .max(999)
-            .copies(vec![base + PREVIEWS + slot * PREVIEW_ENTRY]),
+            .copies(vec![base + PREVIEWS + slot * PREVIEW_ENTRY + 0x8]),
         ];
         let condition = populated_condition(base, slot);
         for field in &mut slot_fields {
@@ -271,13 +256,18 @@ mod tests {
             let output = apply(&id, &input, &edits).unwrap();
             assert_eq!(output[base + 0x842], 6);
             assert_eq!(&output[base + 0x6a6..base + 0x6a8], &500u16.to_le_bytes());
-            assert_eq!(&output[base + 0x210..base + 0x212], &500u16.to_le_bytes());
+            // Preview entry 2 is at +0x210: saves at +0x8 is mirrored, total saves at +0x0 is not.
+            assert_eq!(&output[base + 0x218..base + 0x21a], &500u16.to_le_bytes());
+            assert_eq!(
+                &output[base + 0x210..base + 0x214],
+                &input[base + 0x210..base + 0x214]
+            );
             assert_eq!(output[base + 0x600 + 0x24a], 99);
             assert_eq!(output[base + 0x600 + 0x27b], 99);
             let mut expected = input.clone();
             expected[base + 0x842] = 6;
             expected[base + 0x6a6..base + 0x6a8].copy_from_slice(&500u16.to_le_bytes());
-            expected[base + 0x210..base + 0x212].copy_from_slice(&500u16.to_le_bytes());
+            expected[base + 0x218..base + 0x21a].copy_from_slice(&500u16.to_le_bytes());
             expected[base + 0x600 + 0x24a] = 99;
             expected[base + 0x600 + 0x27b] = 99;
             let mut reference = expected.clone();
@@ -311,7 +301,7 @@ mod tests {
             &output[base + 0x600 + 0x27c..base + 0x600 + 0x27e],
             &[0x0d, 0x0d]
         );
-        assert_eq!(&output[base + 0x2fc..base + 0x2fe], &[0xcb, 0xcb]);
+        assert_eq!(&output[base + 0x2fc..base + 0x2fe], &[0xe2, 0xe2]);
         for slot in [0usize, 2] {
             let offset = base + 0x380 + slot * 0x280 + 0x27c;
             assert_eq!(&output[offset..offset + 2], &[0x4c, 0x4c]);
@@ -323,7 +313,6 @@ mod tests {
         let id = "silent-hill-usa-block-3";
         let input = fixture("SLUS-00707", 3);
         assert!(apply(id, &input, &[edit("slot_4.health", 1)]).is_err());
-        assert!(apply(id, &input, &[edit("slot_2.saves", 0)]).is_err());
         // A populated entry after an empty one is not listed by the game.
         let mut gap = input.clone();
         let base = 3 * BLOCK_SIZE;
@@ -345,6 +334,13 @@ mod tests {
         let base = 3 * BLOCK_SIZE;
         assert!(apply(id, &input, &[edit("slot_1.health", 7)]).is_err());
         assert!(apply(id, &input, &[edit("slot_1.saves", 1000)]).is_err());
+        // Zero saves is valid: the slot stays listed through the untouched total at preview +0x0.
+        let zero = apply(id, &input, &[edit("slot_2.saves", 0)]).unwrap();
+        assert_eq!(
+            &zero[base + 0x210..base + 0x214],
+            &input[base + 0x210..base + 0x214]
+        );
+        assert_eq!(&zero[base + 0x218..base + 0x21a], &[0, 0]);
         assert!(apply(id, &input, &[edit("slot_1.saves", 999)]).is_ok());
         assert!(apply(id, &input, &[edit("slot_1.continues", 100)]).is_err());
         for offset in [

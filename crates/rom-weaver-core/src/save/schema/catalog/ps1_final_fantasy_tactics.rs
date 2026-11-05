@@ -9,6 +9,8 @@ const CHECKSUM_OFFSET: usize = 0x118;
 const CHECKSUM_WIDTH: usize = 8;
 const CHUNK_SIZE: usize = 0x80;
 const CHUNKS: usize = 0x3c;
+/// Bits of the last checksum byte that a chunk parity covers (60 chunks leave the low 4 unused).
+const UNUSED_MASK: u8 = 0xf0;
 
 /// One parity bit per 128-byte chunk, most significant bit first, over the first 60 chunks with
 /// the stored checksum read as zero. The four unused bits stay set.
@@ -41,9 +43,13 @@ fn integrity(game: &mut GameDefinition, base: usize) {
     let check = Check {
         when: None,
         assert: rules::Condition::new(move |bytes| {
+            let stored = &bytes[base + CHECKSUM_OFFSET..base + CHECKSUM_OFFSET + CHECKSUM_WIDTH];
+            let expected = checksum(&bytes[base..base + BLOCK_SIZE]);
+            // No chunk covers the low nibble of the last byte, so it is not validated.
             Ok(
-                bytes[base + CHECKSUM_OFFSET..base + CHECKSUM_OFFSET + CHECKSUM_WIDTH]
-                    == checksum(&bytes[base..base + BLOCK_SIZE]),
+                stored[..CHECKSUM_WIDTH - 1] == expected[..CHECKSUM_WIDTH - 1]
+                    && stored[CHECKSUM_WIDTH - 1] & UNUSED_MASK
+                        == expected[CHECKSUM_WIDTH - 1] & UNUSED_MASK,
             )
         }),
         code: "final_fantasy_tactics_checksum".into(),
@@ -51,13 +57,7 @@ fn integrity(game: &mut GameDefinition, base: usize) {
         section_id: None,
         warning: None,
     };
-    game.runtime.checks.push(check.clone());
-    game.runtime
-        .recognition
-        .as_mut()
-        .unwrap()
-        .checks
-        .push(check);
+    playstation_card::register_check(game, check);
     // The 64-bit checksum is written as two independent little-endian words.
     for (index, storage) in [Storage::U32Le, Storage::U32Le].into_iter().enumerate() {
         game.runtime.after_edit.push(Store {
@@ -244,13 +244,32 @@ mod tests {
     }
 
     #[test]
+    fn unused_checksum_bits_are_ignored_on_input_and_written_set() {
+        let id = "final-fantasy-tactics-usa-block-4";
+        let base = 4 * BLOCK_SIZE;
+        let mut input = fixture("SCUS-94221", 4);
+        // Saves from other tools may clear the four bits that no chunk covers.
+        input[base + 0x11f] &= 0xf0;
+        assert_eq!(input[base + 0x11f] & 0x0f, 0);
+        assert!(apply(id, &input, &[]).is_ok());
+        let edits = [edit("war_funds", 1234)];
+        let output = apply(id, &input, &edits).unwrap();
+        // As upstream does, an edit writes the unused bits set.
+        assert_eq!(output[base + 0x11f] & 0x0f, 0x0f);
+        assert_eq!(
+            &output[base + 0x118..base + 0x120],
+            &reference(&output[base..base + BLOCK_SIZE])
+        );
+    }
+
+    #[test]
     fn limits_are_enforced_and_damage_is_rejected() {
         let id = "final-fantasy-tactics-usa-block-4";
         let input = fixture("SCUS-94221", 4);
         assert!(apply(id, &input, &[edit("war_funds", 100_000_000)]).is_err());
         assert!(apply(id, &input, &[edit("playtime_seconds", 3_600_000)]).is_err());
         let base = 4 * BLOCK_SIZE;
-        for offset in [0x118, 0x11f, 0x120, 0x1934, 0x1dff] {
+        for offset in [0x118, 0x11e, 0x120, 0x1934, 0x1dff] {
             let mut damaged = input.clone();
             damaged[base + offset] ^= 1;
             assert!(
@@ -258,6 +277,10 @@ mod tests {
                 "accepted damage at {offset:x}"
             );
         }
+        // The high nibble of the last checksum byte is covered by chunks 56 to 59.
+        let mut high = input.clone();
+        high[base + 0x11f] ^= 0x10;
+        assert!(apply(id, &high, &[]).is_err());
         // Bytes after the 60 checksummed chunks are outside the game's checksum.
         let mut tail = input.clone();
         tail[base + 0x1e00] ^= 1;

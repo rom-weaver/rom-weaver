@@ -65,13 +65,7 @@ fn integrity(game: &mut GameDefinition, base: usize) {
         section_id: None,
         warning: None,
     };
-    game.runtime.checks.push(check.clone());
-    game.runtime
-        .recognition
-        .as_mut()
-        .unwrap()
-        .checks
-        .push(check);
+    playstation_card::register_check(game, check);
     for frame in 0..FRAMES {
         let start = base + PAYLOAD + frame * FRAME_SIZE;
         game.runtime.after_edit.push(Store {

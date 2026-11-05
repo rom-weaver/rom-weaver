@@ -1,7 +1,6 @@
 use super::playstation_card::{self, BLOCK_SIZE};
 use super::*;
-use rules::{Check, ReadValue, Scalar, Store};
-use tracing::trace;
+use rules::Check;
 
 // The block CRC and the gil preview copy MUST follow the pinned PS1 layout.
 // https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/final-fantasy-ix/saveEditor
@@ -34,25 +33,9 @@ fn integrity(game: &mut GameDefinition, base: usize) {
         section_id: None,
         warning: None,
     };
-    game.runtime.checks.push(check.clone());
-    game.runtime
-        .recognition
-        .as_mut()
-        .unwrap()
-        .checks
-        .push(check);
-    game.runtime.after_edit.push(Store {
-        when: None,
-        destination: Scalar {
-            offset: base + CRC_OFFSET,
-            storage: Storage::U16Le,
-            mask: None,
-        },
-        value: ReadValue::new(move |bytes| {
-            let value = crc(&bytes[base + CRC_START..base + CRC_END]);
-            trace!(base, value, "recomputed Final Fantasy IX block CRC");
-            Ok(i64::from(value))
-        }),
+    playstation_card::register_check(game, check);
+    playstation_card::store_u16_checksum(game, base + CRC_OFFSET, move |bytes| {
+        crc(&bytes[base + CRC_START..base + CRC_END])
     });
 }
 
