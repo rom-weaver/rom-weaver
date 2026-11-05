@@ -100,6 +100,9 @@ jobs:
       # For merged release PRs, release-please reports the merge commit rather than the PR head.
       sha: ${{ steps.release.outputs.sha }}
       artifact_sha: ${{ steps.artifact-sha.outputs.sha }}
+      # The merged release pull request into main whose CI built `artifact_sha`, or empty. The CLI
+      # binary reuse accepts only binaries attested by this pull request's CI run.
+      artifact_pr: ${{ steps.artifact-sha.outputs.pr }}
     steps:
       - id: release
         uses: googleapis/release-please-action@v5
@@ -118,18 +121,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ steps.release.outputs.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
         run: |
           artifact_sha="$RELEASE_SHA"
+          artifact_pr=""
           if [[ "$GITHUB_EVENT_NAME" == pull_request && -n "$PR_HEAD_SHA" ]]; then
             release_tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$RELEASE_SHA" --jq .tree.sha)
             head_tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$PR_HEAD_SHA" --jq .tree.sha)
             if [[ "$release_tree" == "$head_tree" ]]; then
               artifact_sha="$PR_HEAD_SHA"
+              if [[ "$PR_BASE" == main && "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then artifact_pr="$PR_NUMBER"; fi
             else
               echo "Release and pull request trees differ; requiring a release-commit artifact"
             fi
           fi
           echo "sha=$artifact_sha" >> "$GITHUB_OUTPUT"
+          echo "pr=$artifact_pr" >> "$GITHUB_OUTPUT"
 
       - name: Mark GitHub prerelease
         if: >-
@@ -691,10 +699,16 @@ jobs:
       id-token: write
       attestations: write
       artifact-metadata: write
+      # Finding and downloading the release pull request run's CLI binaries, after checking that
+      # pull request was merged.
+      actions: read
+      pull-requests: read
     uses: ./.github/workflows/npm-build.yml
     with:
       version: ${{ needs.release.outputs.version }}
       sha: ${{ needs.release.outputs.sha }}
+      artifact-sha: ${{ needs.release.outputs.artifact_sha }}
+      artifact-pr: ${{ needs.release.outputs.artifact_pr }}
       cache-save: false
       build-parallel: ${{ needs.semver-plan.outputs.skipped == 'true' && 5 || 3 }}
 

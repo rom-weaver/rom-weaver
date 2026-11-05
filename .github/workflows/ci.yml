@@ -1157,9 +1157,32 @@ jobs:
     timeout-minutes: 40
     needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    # Read-only: build scripts, proc macros, and third-party actions run here, so this job never
+    # holds an OIDC token. `cli-release-attest` signs the release pull request's binaries.
+    permissions:
+      contents: read
+    # The id of each leg's `release-cli-<package>` upload, one output per package (a leg sets only
+    # its own; GitHub keeps the last value per name). `cli-release-attest` signs only these: any job
+    # in the run can replace an artifact by name, but a replacement gets a new id, and no other job
+    # can change this job's outputs. The names MUST cover .github/cli-platforms.json.
+    outputs:
+      artifact-darwin-arm64: ${{ steps.release-binary-id.outputs.artifact-darwin-arm64 }}
+      artifact-darwin-x64: ${{ steps.release-binary-id.outputs.artifact-darwin-x64 }}
+      artifact-linux-arm64-musl: ${{ steps.release-binary-id.outputs.artifact-linux-arm64-musl }}
+      artifact-linux-ia32-musl: ${{ steps.release-binary-id.outputs.artifact-linux-ia32-musl }}
+      artifact-linux-x64-gnu: ${{ steps.release-binary-id.outputs.artifact-linux-x64-gnu }}
+      artifact-linux-x64-musl: ${{ steps.release-binary-id.outputs.artifact-linux-x64-musl }}
+      artifact-win32-arm64-msvc: ${{ steps.release-binary-id.outputs.artifact-win32-arm64-msvc }}
+      artifact-win32-ia32-msvc: ${{ steps.release-binary-id.outputs.artifact-win32-ia32-msvc }}
+      artifact-win32-x64-msvc: ${{ steps.release-binary-id.outputs.artifact-win32-x64-msvc }}
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
+      # The release pull request in this repository, which is the commit that ships. The release
+      # reuses these binaries (.github/workflows/npm-build.yml) when its tree equals the one built
+      # here. The head-ref prefix MUST match scripts/ci/release-pr.mjs; an ordinary pull request,
+      # one into any base but main, a push to main, and the nightly never upload them.
+      RELEASE_PR_BINARIES: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--branches--main--components--') && github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1180,6 +1203,8 @@ jobs:
           msvc-arch: ${{ matrix.msvc_arch }}
           msvc-host: ${{ matrix.msvc_host }}
           cache-save: ${{ github.ref == 'refs/heads/main' }}
+          # The release ships these bytes, so they come from this tree alone.
+          cache-restore: ${{ env.RELEASE_PR_BINARIES != 'true' }}
           identify-release-tree: build
           identify-data-source: artifact
 
@@ -1205,6 +1230,104 @@ jobs:
         run: >-
           npm pack --dry-run --ignore-scripts --json
           "packages/rom-weaver-cli-platforms/${{ matrix.package }}"
+
+      # What the release would otherwise compile again: the binary alone and a build.json naming
+      # the tree, the commit this run checked out (the pull request's merge commit), and the
+      # binary's sha256. The release regenerates every other package file from its own checkout.
+      - name: Pack the release binary
+        if: env.RELEASE_PR_BINARIES == 'true'
+        shell: bash
+        run: >-
+          node scripts/ci/cli-release-binary.mjs pack
+          --package "${{ matrix.package }}"
+          --target "${{ matrix.target }}"
+          --binary "${{ matrix.binary }}"
+          --tree "$(git rev-parse 'HEAD^{tree}')"
+          --source-sha "$(git rev-parse HEAD)"
+          --out release-binary
+
+      - name: Upload the release binary
+        id: release-binary-upload
+        if: env.RELEASE_PR_BINARIES == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-cli-${{ matrix.package }}
+          path: release-binary
+          if-no-files-found: error
+          overwrite: true
+          # A release pull request can wait days for its merge; this is what the release reuses.
+          retention-days: 14
+
+      - name: Record the release binary
+        id: release-binary-id
+        if: env.RELEASE_PR_BINARIES == 'true'
+        shell: bash
+        env:
+          PACKAGE: ${{ matrix.package }}
+          ARTIFACT_ID: ${{ steps.release-binary-upload.outputs.artifact-id }}
+        run: echo "artifact-$PACKAGE=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
+
+  # Signs the binaries `cli-platforms` uploaded on the release pull request, in a job that runs no
+  # build code, so no other CI job can mint provenance. The release accepts only an attestation
+  # whose identity is this workflow at `refs/pull/<release pull request>/merge` and whose source
+  # commit has the release's tree. Best effort: without it the release builds from source, which
+  # costs time but never correctness, so a Sigstore outage must not fail CI.
+  cli-release-attest:
+    name: Attest release CLI binaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: [changes, cli-platforms]
+    if: >-
+      needs.cli-platforms.result == 'success' &&
+      github.event_name == 'pull_request' &&
+      startsWith(github.head_ref, 'release-please--branches--main--components--') &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.base_ref == 'main'
+    continue-on-error: true
+    permissions:
+      contents: read
+      attestations: write
+      artifact-metadata: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
+      # Exactly the uploads `cli-platforms` reported, never a name pattern: another job in the run
+      # (one that restored a poisoned cache) could replace `release-cli-<package>` or add one. Every
+      # leg that ran must have reported a numeric id, or nothing is signed and the release builds
+      # from source.
+      - name: Select the release binaries
+        id: binaries
+        shell: bash
+        env:
+          PLATFORMS: ${{ needs.changes.outputs.cli_platforms }}
+          ARTIFACTS: ${{ toJSON(needs.cli-platforms.outputs) }}
+        run: |
+          set -euo pipefail
+          # Empty `artifact-ids` would download every artifact in the run, so no platform is an error.
+          ids=$(jq -nr --argjson platforms "$PLATFORMS" --argjson artifacts "$ARTIFACTS" '
+            if ($platforms | length) == 0 then error("no platforms") else . end
+            | [$platforms[].package | ($artifacts["artifact-" + .] // "") as $id
+              | if ($id | test("^[1-9][0-9]*$")) then $id else error("no artifact id for \(.)") end]
+            | join(",")')
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+
+      # One artifact found lands in the path itself, several in directories named for them, so the
+      # subject matches either; only artifacts downloaded by id are here.
+      - name: Download the release binaries
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ steps.binaries.outputs.ids }}
+          path: release-binaries
+
+      - name: Attest the release binaries
+        uses: ./.github/actions/attest-retry
+        with:
+          subject-path: release-binaries/**/package/bin/*
 
   cli-linux-arm64:
     name: CLI target runtime (aarch64-unknown-linux-musl)

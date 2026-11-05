@@ -30,6 +30,20 @@ on:
         required: false
         default: 3
         type: number
+      artifact-sha:
+        description: >-
+          Head commit of the release pull request, when its tree equals the release commit's. Its CI
+          run's CLI binaries are reused for the platforms whose artifacts verify.
+        required: false
+        default: ""
+        type: string
+      artifact-pr:
+        description: >-
+          Number of the merged release pull request into main that built `artifact-sha`. Without it
+          nothing is reused; with it, only binaries attested by that pull request's CI run are.
+        required: false
+        default: ""
+        type: string
     outputs:
       platforms:
         description: The platform matrix, for the publish workflow to fan out over.
@@ -87,14 +101,18 @@ jobs:
           subject-path: target/rom-weaver-identify-data*.tar.br
 
   # Resolve the shared CI and release platform matrix once; downstream matrices require job output.
+  # Each entry also carries `ci_run_id`: the release pull request CI run whose binary for that
+  # platform the build below tries to reuse, or empty to build from source.
   plan:
     name: Resolve platform matrix
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
+      actions: read
+      pull-requests: read
     outputs:
-      platforms: ${{ steps.platforms.outputs.matrix }}
+      platforms: ${{ steps.reuse.outputs.matrix }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -102,6 +120,14 @@ jobs:
 
       - id: platforms
         run: node scripts/ci/cli-platform-matrix.mjs
+
+      - id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MATRIX: ${{ steps.platforms.outputs.matrix }}
+          ARTIFACT_SHA: ${{ inputs.artifact-sha }}
+          ARTIFACT_PR: ${{ inputs.artifact-pr }}
+        run: node scripts/ci/resolve-cli-binary-run.mjs
 
   # Does not wait for `identify-data`: each leg builds its identify tree from the cached packs
   # (a cache miss rebuilds them in the leg), so the slowest build starts a minute sooner. publish-npm waits for this whole
@@ -111,6 +137,9 @@ jobs:
     needs: plan
     permissions:
       contents: read
+      # Downloading and verifying the release pull request run's binary.
+      actions: read
+      attestations: read
     strategy:
       fail-fast: false
       # The org runs at most 20 jobs at once and a release peaks near 16 with main's CI on the
@@ -126,8 +155,93 @@ jobs:
         with:
           ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
+      # The release pull request's CI built every target with this same action and tested it. The
+      # release ships that binary and skips the compile (macOS Intel alone took 13 minutes) only when
+      # all of these hold; anything else falls through to the build below:
+      #   - build.json names this package, target, and tree, and the artifact holds exactly the
+      #     binary with its recorded hash and a header for this target;
+      #   - the commit build.json names has this release's tree, according to the API, not build.json;
+      #   - the binary is attested by ci.yml run for refs/pull/<artifact-pr>/merge at that commit, from
+      #     that commit's own ci.yml, on a GitHub-hosted runner. Another pull request, even one with
+      #     the same head commit into a base whose workflow its author wrote, signs as its own ref.
+      # Only the binary comes from the artifact; prepare-npm-platform-package.mjs stages every other
+      # file from this checkout.
+      - name: Download the binary CI built
+        id: ci-binary
+        if: matrix.ci_run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: release-cli-${{ matrix.package }}
+          path: ${{ runner.temp }}/ci-release-binary
+          run-id: ${{ matrix.ci_run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+
+      - uses: actions/setup-node@v7
+        if: steps.ci-binary.outcome == 'success'
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Prepare ROM identify data
+        if: steps.ci-binary.outcome == 'success'
+        uses: ./.github/actions/identify-data
+
+      # The identify tree is not part of the artifact: every run builds it from the shared packs.
+      - name: Build identify release tree
+        if: steps.ci-binary.outcome == 'success'
+        shell: bash
+        run: node scripts/build-identify-release-data.mjs --tree-only
+
+      - name: Verify and install the binary CI built
+        id: reuse
+        if: steps.ci-binary.outcome == 'success'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_BINARY: ${{ runner.temp }}/ci-release-binary
+          PACKAGE: ${{ matrix.package }}
+          TARGET: ${{ matrix.target }}
+          BINARY: ${{ matrix.binary }}
+          CI_RUN_ID: ${{ matrix.ci_run_id }}
+          ARTIFACT_PR: ${{ inputs.artifact-pr }}
+        run: |
+          set -uo pipefail
+          tree=$(git rev-parse 'HEAD^{tree}')
+          package_dir="packages/rom-weaver-cli-platforms/$PACKAGE"
+          reuse() {
+            [[ "$ARTIFACT_PR" =~ ^[1-9][0-9]*$ ]] || { echo "no release pull request number"; return 1; }
+            node scripts/ci/cli-release-binary.mjs verify \
+              --package "$PACKAGE" --target "$TARGET" --binary "$BINARY" --tree "$tree" --dir "$CI_BINARY" || return 1
+            source=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sourceSha' "$CI_BINARY/build.json") || return 1
+            [[ "$source" =~ ^[0-9a-f]{40}$ ]] || { echo "build.json names no commit"; return 1; }
+            source_tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$source" --jq .tree.sha) || return 1
+            [[ "$source_tree" == "$tree" ]] || { echo "commit $source has tree $source_tree, not $tree"; return 1; }
+            ref="refs/pull/$ARTIFACT_PR/merge"
+            gh attestation verify "$CI_BINARY/package/bin/$BINARY" \
+              --repo "$GITHUB_REPOSITORY" \
+              --cert-identity "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/ci.yml@$ref" \
+              --cert-oidc-issuer https://token.actions.githubusercontent.com \
+              --source-ref "$ref" \
+              --source-digest "$source" \
+              --signer-digest "$source" \
+              --deny-self-hosted-runners || return 1
+            node scripts/prepare-npm-platform-package.mjs "$PACKAGE" "$CI_BINARY/package/bin/$BINARY"
+          }
+          if reuse; then
+            echo "reused=true" >> "$GITHUB_OUTPUT"
+            echo "- \`$PACKAGE\`: reused the binary built by [CI run $CI_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID) at \`$source\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::$PACKAGE: the CI binary did not verify for tree $tree; building from source"
+            # A staging step that failed partway must not leave its files for the build to keep.
+            git checkout -- "$package_dir" && git clean -fdxq -- "$package_dir"
+            echo "reused=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # Build with CI's action and per-platform cache so releases reuse tested outputs.
       - uses: ./.github/actions/build-cli-platform
+        if: steps.reuse.outputs.reused != 'true'
         with:
           identify-release-tree: build
           package: ${{ matrix.package }}

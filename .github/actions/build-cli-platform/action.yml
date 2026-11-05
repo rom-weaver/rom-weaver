@@ -37,6 +37,13 @@ inputs:
       Save the cargo cache after a miss. CI saves only on main; the release
       fan-out is restore-only unless its caller says otherwise.
     default: "false"
+  cache-restore:
+    description: >-
+      "false" builds with no cargo or compiler cache. The release pull request
+      CI run builds binaries the release ships as signed (cli-release-attest),
+      and its cache scope can be written by anyone who can push to or retarget
+      that pull request, so it must compile only what its tree holds.
+    default: "true"
   identify-release-tree:
     description: >-
       "build" writes the identify release tree from the restored packs before
@@ -99,6 +106,7 @@ runs:
     # cache entries on the same artifacts. Keyed per entry - the nine platforms
     # share nothing.
     - name: Cache cargo artifacts
+      if: inputs.cache-restore == 'true'
       uses: Swatinem/rust-cache@v2
       with:
         shared-key: cli-platform-${{ inputs.package }}
@@ -108,13 +116,13 @@ runs:
     # rust-cache drops workspace crates; sccache reuses their unchanged compilations.
     # Native wrappers cannot run inside cross-rs containers.
     - name: Set up Rust compiler cache
-      if: inputs.build != 'cross'
+      if: inputs.build != 'cross' && inputs.cache-restore == 'true'
       uses: mozilla-actions/sccache-action@v0.0.11
       with:
         version: v0.17.0
 
     - name: Configure Rust compiler cache
-      if: inputs.build != 'cross'
+      if: inputs.build != 'cross' && inputs.cache-restore == 'true'
       shell: bash
       env:
         CACHE_NAMESPACE: rom-weaver-cli-native-v1-${{ inputs.package }}

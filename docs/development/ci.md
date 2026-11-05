@@ -27,6 +27,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
   - [`scripts/ci/nightly-alert.mjs`](#scriptscinightly-alertmjs)
   - [`scripts/ci/npm-publish-package.mjs`](#scriptscinpm-publish-packagemjs)
 - [Release fan-out](#release-fan-out)
+  - [The release reuses the release pull request's CLI binaries](#the-release-reuses-the-release-pull-requests-cli-binaries)
   - [Containers reuse what the fan-out already built](#containers-reuse-what-the-fan-out-already-built)
   - [The container build runs before the gates, the push waits for them](#the-container-build-runs-before-the-gates-the-push-waits-for-them)
   - [Multi-arch images](#multi-arch-images)
@@ -436,7 +437,7 @@ Non-cross Linux x86-64 legs also run `scripts/install-jwasm.sh` so the LZMA SDK'
 
 The Windows legs also relocate `CARGO_HOME`/`RUSTUP_HOME` to `D:` and `TMP`/`TEMP` to `RUNNER_TEMP` before the toolchain and cache steps, for the same IOPS reason `rust-windows` does it. The `D:` half is skipped when the runner has no such drive; `windows-11-arm`'s disk layout is not documented.
 
-CI and `npm-build.yml` both use it, sharing one cache key per platform, so a release restores what CI already built rather than compiling a second, differently-configured copy. `cache-save`, `registry-url`, and `identify-data-source` are the only things the two callers set differently: CI reads the identify packs from this run's artifact, the release from the cache.
+CI and `npm-build.yml` both use it, sharing one cache key per platform, so a release restores what CI already built rather than compiling a second, differently-configured copy. `cache-save`, `registry-url`, and `identify-data-source` are the only things the two callers set differently: CI reads the identify packs from this run's artifact, the release from the cache. On a release pull request, CI also uploads each built binary for the release to reuse when the trees match; the release skips this action for a platform whose artifact verifies ([details](#the-release-reuses-the-release-pull-requests-cli-binaries)).
 
 ### `.github/actions/docker-build-arch` and `docker-manifest`
 
@@ -552,6 +553,25 @@ Every one of these jobs guards its `if` with `!cancelled()`. `release` needs `ve
 
 Ordering inside `publish-npm` is load-bearing: the unscoped `rom-weaver` alias is a dependency-only pointer at `@rom-weaver/cli`, so publishing it first would make installs resolve a version that is not on the registry yet.
 
+### The release reuses the release pull request's CLI binaries
+
+The release pull request's CI run already builds and tests all nine targets with `build-cli-platform`, so `npm-build.yml` ships those binaries instead of compiling them again when it can prove they are the same build.
+
+On a same-repository release pull request into `main` (and nowhere else: not on ordinary pull requests, a release head opened into another base, pushes to `main`, or the nightly), each `cli-platforms` leg runs `scripts/ci/cli-release-binary.mjs pack` and uploads `release-cli-<package>` for 14 days. The artifact holds the binary alone plus a `build.json` with the tree and commit that were built (the pull request's merge commit), the run id, and the binary's sha256. `cli-platforms` keeps a read-only token: build scripts, proc macros, and third-party actions run there, so it never holds an OIDC token. A separate `cli-release-attest` job, which runs no build code and only on that same release pull request condition, downloads the binaries once every leg passed and attests them with `attest-retry` (best effort, `continue-on-error`, outside the gate).
+
+In the release, the `release` job records `artifact_pr`: the merged release pull request's number, only when its base is `main` and its head tree equals the release commit's (the same check that sets `artifact_sha`). Without it nothing is reused. The `plan` job in `npm-build.yml` checks that the pull request is merged into `main` with that head from this repository's release branch, then looks up the newest successful `ci.yml` pull request run of that head (exact workflow path, this repository's head). It cannot use a run's `pull_requests`, which GitHub fills from the pull requests open at query time, so after the merge it no longer names the release pull request. It skips runs of other branches, and then marks each platform whose artifact is unexpired with `ci_run_id`; a missing run marks none, a lookup error marks none with a warning, and neither fails the release. A run cannot say which pull request it ran for, so a newer run of another pull request from the same branch can be picked; it fails the pinned attestation check below, so that release builds every binary from source. The release pull request's run builds with no cargo or compiler cache (`cache-restore` in `build-cli-platform`): anyone who can push to or retarget that pull request can write its cache scope, and the binaries it signs must be compiled only from its tree. Other jobs in that run still restore caches, and any job in a run can replace or add an artifact by name, so `cli-release-attest` downloads only the artifact ids each `cli-platforms` leg reports as its own job output (`artifact-<package>`), which no other job can change; if any leg's id is missing, nothing is signed, and an id whose artifact was since deleted is skipped; either way the release builds those binaries from source. Each `platform-build` leg then reuses the binary only if all of these hold, and otherwise restores and cleans the package directory and builds from source exactly as before:
+
+- the artifact downloads;
+- `build.json` names this package, target, binary and repository, and its `tree` equals the release commit's tree;
+- the artifact holds exactly the binary, matching its recorded sha256;
+- the binary's ELF, Mach-O or PE header is for the target's architecture and, on Linux, libc (`scripts/ci/binary-target.mjs`), which catches a swapped or mislabeled artifact without running it;
+- the commit `build.json` names has the release commit's tree according to the GitHub API, so `build.json` cannot vouch for itself;
+- `gh attestation verify` accepts the binary with the exact certificate identity `ci.yml@refs/pull/<artifact_pr>/merge`, that commit as both source and signer digest (so the workflow that signed is that commit's own `ci.yml`), and no self-hosted runner. Another pull request that shares the release head but targets a base whose `ci.yml` its author wrote signs as its own `refs/pull/<n>/merge` and is refused.
+
+`build.json` is unsigned, so nothing else comes from the artifact: `scripts/prepare-npm-platform-package.mjs` stages the package from the release checkout around the verified binary, adding the license files, third-party notices, and the identify tree the leg builds itself, exactly as a built leg does. The leg then uploads the same `npm-platform-<package>` and container-binary artifacts as a built leg, so nothing downstream changes. The dry-run still executes the staged binary on each target's oldest supported OS.
+
+What the attestations now claim: the CI attestation says `ci.yml` built the binary on the release pull request's merge commit; the `platform` job's attestation of `rom-weaver-<package>.tar.gz` says `release.yml` packaged that archive from the release commit. For a reused binary the compile happened in the first, and the job summary of the `Build <package>` leg names the CI run and commit. The tree equality is what ties the two commits together, and the npm `--provenance` statement is unchanged (it describes the publish run). A built leg claims everything from `release.yml` as before.
+
 ### Containers reuse what the fan-out already built
 
 `build-containers` waits for `static-webapp` and `npm-build` rather than starting with them, because both images are assembled from artifacts those jobs produce from the same commit (it then runs beside the npm publish, see [the build and publish split](#the-container-build-runs-before-the-gates-the-push-waits-for-them)):
@@ -658,7 +678,7 @@ Every artifact the fan-out publishes carries signed provenance, so what a user c
 
 | Artifact | Attested by |
 | --- | --- |
-| 9 CLI platform archives | `actions/attest-build-provenance` in `npm-publish.yml`'s `platform` job |
+| 9 CLI platform archives | `actions/attest-build-provenance` in `npm-publish.yml`'s `platform` job; the binary inside was either built by that release or attested by the release pull request's CI run (see [the reuse section](#the-release-reuses-the-release-pull-requests-cli-binaries)) |
 | static webapp tarball | the same, in `release.yml`'s `static-webapp` |
 | npm packages | `npm publish --provenance` (`scripts/ci/npm-publish-package.mjs`) |
 | container images | `provenance: mode=max` + `attest-retry`, in `docker-publish.yml` for `latest`/`beta` and in `ci.yml` for `nightly` |

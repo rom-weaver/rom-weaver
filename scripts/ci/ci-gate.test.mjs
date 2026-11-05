@@ -17,6 +17,7 @@ const expression = (value) =>
 // rather than feeding it.
 const NON_GATING = new Set([
   "gate",
+  "cli-release-attest",
   "deploy",
   "deploy-preview-fast",
   "docker-nightly",
