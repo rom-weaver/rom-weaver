@@ -338,6 +338,94 @@ test.each(["history", "soft-link"])("Home cancels file routing on external %s na
   }
 });
 
+const isDropRouting = () => document.querySelector("#column")?.classList.contains("rw-drop-routing");
+const dropVeilText = () => document.querySelector(".dropveil-text")?.textContent;
+
+test.each(["pick", "drop"])("Home names the workflow a %s selection opens", async (kind) => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  let openDestination;
+  let finish;
+  const finished = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const transition = vi.spyOn(document, "startViewTransition").mockImplementationOnce((update) => {
+    openDestination = update;
+    return { ready: Promise.resolve(), finished };
+  });
+  try {
+    sendHomeSelection(kind, [selectionPatch("named.ips")]);
+    await expect.poll(() => typeof openDestination).toBe("function");
+    expect(isDropRouting()).toBe(true);
+    expect(dropVeilText()).toBe("Opening Apply Patches");
+    expect(document.querySelector(".dropveil + [role=status]")?.textContent).toBe("Opening Apply Patches");
+    openDestination();
+    finish();
+    await expect.poll(() => patchNames()).toEqual(["named.ips"]);
+    await expect.poll(isDropRouting).toBe(false);
+  } finally {
+    finish();
+    transition.mockRestore();
+  }
+});
+
+// A dropped folder whose listing waits for `release`, standing in for a slow directory read.
+const slowFolderDrop = (file) => {
+  let release;
+  const released = new Promise((resolve) => {
+    release = resolve;
+  });
+  let listed = false;
+  const fileEntry = { file: (resolve) => resolve(file), isDirectory: false, isFile: true, name: file.name };
+  const folder = {
+    createReader: () => ({
+      readEntries: (resolve) => {
+        if (listed) resolve([]);
+        else void released.then(() => resolve([fileEntry]));
+        listed = true;
+      },
+    }),
+    isDirectory: true,
+    isFile: false,
+    name: "patches",
+  };
+  const event = new Event("drop", { bubbles: true, cancelable: true });
+  const items = [{ getAsFile: () => null, kind: "file", webkitGetAsEntry: () => folder }];
+  Object.defineProperty(event, "dataTransfer", { value: { files: [], items, types: ["Files"] } });
+  return { event, release };
+};
+
+test("a workflow says it is reading a slow page drop and clears once the files land", async () => {
+  mountWebappRoot({ initialView: "patcher" });
+  await expect.poll(() => document.querySelector("#panel-patcher:not([hidden])")).toBeTruthy();
+  const { event, release } = slowFolderDrop(selectionPatch("folder.ips"));
+  document.dispatchEvent(event);
+  await expect.poll(isDropRouting).toBe(true);
+  expect(dropVeilText()).toBe("Reading files…");
+  expect(document.querySelector(".dropveil + [role=status]")?.textContent).toBe("Reading files…");
+  release();
+  await expect.poll(() => patchNames()).toEqual(["folder.ips"]);
+  await expect.poll(isDropRouting).toBe(false);
+});
+
+test("a workflow keeps a fast page drop free of the reading veil", async () => {
+  mountWebappRoot({ initialView: "patcher" });
+  await expect.poll(() => document.querySelector("#panel-patcher:not([hidden])")).toBeTruthy();
+  let routed = false;
+  const observer = new MutationObserver(() => {
+    routed ||= isDropRouting();
+  });
+  observer.observe(document.querySelector("#column"), { attributeFilter: ["class"] });
+  try {
+    sendHomeSelection("drop", [selectionPatch("fast.ips")]);
+    await expect.poll(() => patchNames()).toEqual(["fast.ips"]);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(routed).toBe(false);
+  } finally {
+    observer.disconnect();
+  }
+});
+
 test.each([
   ["home", "Apply Patches", "Apply & download"],
   ["home", "Weave Patches", "Share weave"],

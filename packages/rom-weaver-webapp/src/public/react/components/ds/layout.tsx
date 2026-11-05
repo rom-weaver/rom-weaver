@@ -1,6 +1,6 @@
 import { ChevronDown, Upload } from "lucide-react";
 import { type ReactNode, type Ref, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
+import { DROP_READING_HINT_DELAY_MS, readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
 import { perfNow, recordDrop } from "../../../../lib/runtime/perf-latency.ts";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
 import { useUiLocalizer } from "../../settings-context.tsx";
@@ -292,9 +292,7 @@ const DropZone = ({
         const droppedAtMs = perfNow();
         // Read synchronously so folder entries are captured before the
         // DataTransfer is cleared; folders are flattened into the file list.
-        // Surface a "reading" hint only if the traversal runs long enough to
-        // matter, so plain file drops don't flicker it.
-        const readingTimer = setTimeout(() => setReading(true), 120);
+        const readingTimer = setTimeout(() => setReading(true), DROP_READING_HINT_DELAY_MS);
         void readDataTransferFiles(event.dataTransfer).then((files) => {
           clearTimeout(readingTimer);
           setReading(false);

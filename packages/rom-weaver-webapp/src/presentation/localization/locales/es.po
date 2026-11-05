@@ -4251,7 +4251,7 @@ msgstr "Leyendo"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.staging"
-msgstr "Leyendo archivos soltados…"
+msgstr "Leyendo archivos…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
