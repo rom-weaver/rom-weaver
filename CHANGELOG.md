@@ -1,12 +1,47 @@
 # Changelog
 
-## [0.24.0](https://github.com/rom-weaver/rom-weaver/compare/v0.23.0...v0.24.0) (2026-11-05)
+## [0.24.0](https://github.com/rom-weaver/rom-weaver/releases/tag/v0.24.0) (2026-11-05)
 
+### Highlights
+
+#### New features
+
+* Trim is out of beta: it no longer needs beta tools, and it no longer offers CHD for Xbox XISO images ([#1633](https://github.com/rom-weaver/rom-weaver/issues/1633))
+* Keep the ROMs you test between visits (off by default) and download all your saves as a ZIP backup, from the Test and Storage pages ([#1638](https://github.com/rom-weaver/rom-weaver/issues/1638))
+* Apply Dreamcast DCP patches to GD-ROM discs in the browser, on the Apply page ([#1641](https://github.com/rom-weaver/rom-weaver/issues/1641))
+* Restore the padding of trimmed NDS, GBA, and 3DS ROMs from the Trim page ([#1630](https://github.com/rom-weaver/rom-weaver/issues/1630))
+* Famicom Disk System games now start on the Test page, using a bundled free BIOS ([#1643](https://github.com/rom-weaver/rom-weaver/issues/1643))
+* Saturn games on the Test page now start with a bundled free BIOS ([#1658](https://github.com/rom-weaver/rom-weaver/issues/1658))
+* PSP EBOOT.PBP packages with PSAR data are now kept intact instead of being rejected as PS1 discs ([#1531](https://github.com/rom-weaver/rom-weaver/issues/1531))
+
+#### Improvements
+
+* Home and docs pages load less code, repeat visits open from the offline copy first, and identify data downloads before emulator cores (#1556, #1557, #1558)
+* Trim checks archive members before extracting them, so a GameCube or Wii disc inside an archive, even a nested one, is declined without being written to temp space or browser storage (#1640, #1651)
+* Number fields in Save Editor (still in beta) now have plus and minus buttons and a slider between the lowest and highest value ([#1621](https://github.com/rom-weaver/rom-weaver/issues/1621))
+* To create xdelta patches, choose the xdelta format instead of vcdiff ([#1600](https://github.com/rom-weaver/rom-weaver/issues/1600))
+* Use Compress for GameCube and Wii discs ([#1631](https://github.com/rom-weaver/rom-weaver/issues/1631))
+
+#### Fixes
+
+* WIA and RVZ extraction now verifies the image's integrity hashes, so a corrupted image no longer extracts silently to a different ISO ([#1612](https://github.com/rom-weaver/rom-weaver/issues/1612))
+* Dropping a GD-ROM CHD into the browser no longer hangs on machines with many cores ([#1642](https://github.com/rom-weaver/rom-weaver/issues/1642))
+* Unmarked GD-ROM CUEs now become GD-ROM CHDs and are accepted for DCP patches, instead of being treated as CD discs ([#1654](https://github.com/rom-weaver/rom-weaver/issues/1654))
+* Trimming a GameCube or Wii disc to CHD, ZIP, 7z, or Z3DS now fails with a clear error instead of writing RVZ data under that name ([#1613](https://github.com/rom-weaver/rom-weaver/issues/1613))
+* Archives that contain other archives now keep every ROM and patch ([#1622](https://github.com/rom-weaver/rom-weaver/issues/1622))
+* Browser ZIP and 7z creation now refuses an incomplete split WBFS set instead of producing an archive that cannot extract ([#1597](https://github.com/rom-weaver/rom-weaver/issues/1597))
+* Create no longer offers BPS for ROM pairs too large for BPS to create ([#1615](https://github.com/rom-weaver/rom-weaver/issues/1615))
+* 7z archives that use Deflate64 now extract ([#1611](https://github.com/rom-weaver/rom-weaver/issues/1611))
 
 ### ⚠ BREAKING CHANGES
 
 * stop trimming GameCube and Wii discs ([#1631](https://github.com/rom-weaver/rom-weaver/issues/1631))
 * **cli:** make --format vcdiff write plain VCDIFF ([#1600](https://github.com/rom-weaver/rom-weaver/issues/1600))
+
+<details>
+<summary>All changes</summary>
+
+[Compare v0.23.0...v0.24.0](https://github.com/rom-weaver/rom-weaver/compare/v0.23.0...v0.24.0)
 
 ### Features
 
@@ -19,14 +54,12 @@
 * **webapp:** bundle a free Saturn BIOS for the Saturn core ([#1658](https://github.com/rom-weaver/rom-weaver/issues/1658)) ([efadd9e](https://github.com/rom-weaver/rom-weaver/commit/efadd9ea079d26f3aaf0e18ab4246ee8c7a7f93e))
 * **webapp:** keep tested ROMs and back up saves ([#1638](https://github.com/rom-weaver/rom-weaver/issues/1638)) ([3b3238a](https://github.com/rom-weaver/rom-weaver/commit/3b3238ab88b3af9e3cc7062e5df1c98c134f6627))
 
-
 ### User Experience
 
 * **release:** lead highlights with best feature ([#1486](https://github.com/rom-weaver/rom-weaver/issues/1486)) ([a9dec62](https://github.com/rom-weaver/rom-weaver/commit/a9dec62806c4be47c32bcacb8206684207b03aaa))
 * stop trimming GameCube and Wii discs ([#1631](https://github.com/rom-weaver/rom-weaver/issues/1631)) ([b6178e3](https://github.com/rom-weaver/rom-weaver/commit/b6178e35ceabed7d64acd11e94f2df277c1d60f2))
 * **webapp:** redesign save editor number fields, edit markers and toggles ([#1621](https://github.com/rom-weaver/rom-weaver/issues/1621)) ([541f573](https://github.com/rom-weaver/rom-weaver/commit/541f573cdead5ade28555ff94d22cdec4d686260))
 * **webapp:** use descriptive workflow URLs ([#1579](https://github.com/rom-weaver/rom-weaver/issues/1579)) ([ac40908](https://github.com/rom-weaver/rom-weaver/commit/ac409080026d118eee1ed49d861d14090cba0799))
-
 
 ### Bug Fixes
 
@@ -87,11 +120,9 @@
 * **webapp:** stop duplicate drop cards and invalid disc output choices ([#1614](https://github.com/rom-weaver/rom-weaver/issues/1614)) ([f7e7d45](https://github.com/rom-weaver/rom-weaver/commit/f7e7d45c66023dad1fd5b4d258ae8b5a43677bc7))
 * **webapp:** wait for the boot OPFS sweep before commands ([#1559](https://github.com/rom-weaver/rom-weaver/issues/1559)) ([64f45d1](https://github.com/rom-weaver/rom-weaver/commit/64f45d1cb791a561dd35d1a680eb6fc58a8ffd2f))
 
-
 ### Localization
 
 * **webapp:** use the hex step badge number in every language ([#1509](https://github.com/rom-weaver/rom-weaver/issues/1509)) ([5b58094](https://github.com/rom-weaver/rom-weaver/commit/5b58094f39edd3b2645798c78c35013b9ea94e5c))
-
 
 ### Performance Improvements
 
@@ -103,7 +134,6 @@
 * **webapp:** serve precached routes cache-first from a complete offline copy ([#1557](https://github.com/rom-weaver/rom-weaver/issues/1557)) ([919bd08](https://github.com/rom-weaver/rom-weaver/commit/919bd0836fd82aa7afca907cc8d10d816720c4f7))
 * **webapp:** warm identify packs before emulator cores ([#1558](https://github.com/rom-weaver/rom-weaver/issues/1558)) ([ebfc438](https://github.com/rom-weaver/rom-weaver/commit/ebfc438b3a04335988b021c0dd037af616de292a))
 
-
 ### Documentation
 
 * expand workflow markdown guides ([#1574](https://github.com/rom-weaver/rom-weaver/issues/1574)) ([502a56f](https://github.com/rom-weaver/rom-weaver/commit/502a56f2f5d4e1e5e7223f892739b2156a222c57))
@@ -113,12 +143,10 @@
 * **webapp:** correct the tab href comment ([#1580](https://github.com/rom-weaver/rom-weaver/issues/1580)) ([5bb9232](https://github.com/rom-weaver/rom-weaver/commit/5bb9232026625fe1d6c29ebb340853b48dedb71c))
 * **webapp:** date docs pages in JSON-LD ([#1644](https://github.com/rom-weaver/rom-weaver/issues/1644)) ([58009ed](https://github.com/rom-weaver/rom-weaver/commit/58009edc3918f32141b833d5336f2481ba711776))
 
-
 ### Developer Experience
 
 * drop outdated vitest worktree-name rule ([#1551](https://github.com/rom-weaver/rom-weaver/issues/1551)) ([acbd30a](https://github.com/rom-weaver/rom-weaver/commit/acbd30afdde01f5ab6f9d08fa6098510d56d04b2))
 * show weekly unique visitors in the traffic report ([#1617](https://github.com/rom-weaver/rom-weaver/issues/1617)) ([8174a31](https://github.com/rom-weaver/rom-weaver/commit/8174a3184aa97cdd6fc45d15647b0c300288f04f))
-
 
 ### Dependencies
 
@@ -132,8 +160,8 @@
 * bump the rust-dependencies group with 3 updates ([#1625](https://github.com/rom-weaver/rom-weaver/issues/1625)) ([2bd17b1](https://github.com/rom-weaver/rom-weaver/commit/2bd17b1ea2d0ec6ba2c434225e209ae3f76ad0f6))
 * patch re2js and rustls advisories and CodeQL regex alerts ([#1599](https://github.com/rom-weaver/rom-weaver/issues/1599)) ([f2c7ee7](https://github.com/rom-weaver/rom-weaver/commit/f2c7ee728eae319dc8b7b210cac1e0bcc1a98ca2))
 
-
-### Internal
+<details>
+<summary>Internal</summary>
 
 * add exhaustive apply matrix harnesses and fixtures ([#1588](https://github.com/rom-weaver/rom-weaver/issues/1588)) ([dc2c030](https://github.com/rom-weaver/rom-weaver/commit/dc2c0300496359209854b36a51721e6ee10de468))
 * **apply-matrix:** add CLI and webapp apply, create, trim, compress and extract matrices ([#1616](https://github.com/rom-weaver/rom-weaver/issues/1616)) ([1d661d4](https://github.com/rom-weaver/rom-weaver/commit/1d661d46c97e3ba115ee7be6f76d7ede3391af96))
@@ -167,6 +195,8 @@
 * **webapp:** remove stray test diagnostics ([#1653](https://github.com/rom-weaver/rom-weaver/issues/1653)) ([61b9e24](https://github.com/rom-weaver/rom-weaver/commit/61b9e24c185b8ebc106660d74b34f5c699eaffff))
 * **webapp:** settle the icon render before capturing it ([#1572](https://github.com/rom-weaver/rom-weaver/issues/1572)) ([915e061](https://github.com/rom-weaver/rom-weaver/commit/915e06190bb59f428502aed94eb9426623d20018))
 * **webapp:** wait for the staged trim title ([#1555](https://github.com/rom-weaver/rom-weaver/issues/1555)) ([f747e3e](https://github.com/rom-weaver/rom-weaver/commit/f747e3eb154a71f269e7b4da7cde9304b7c868dc))
+</details>
+</details>
 
 ## [0.23.0](https://github.com/rom-weaver/rom-weaver/releases/tag/v0.23.0) (2026-10-28)
 
