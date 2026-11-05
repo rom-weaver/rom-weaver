@@ -22,11 +22,26 @@ import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
 
 const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 
-// A run of the merged release pull request itself, into main. Another pull request can share the
-// same head commit and branch while targeting a base whose ci.yml its author wrote, so the number
-// and base are what tell them apart. The binary's attestation is pinned to the same pull request
-// (npm-build.yml); this only keeps the release from downloading anything else.
-export function latestReleaseRun(runs, { repository, sha, pullRequest }) {
+// The merged release pull request itself: this repository's release branch at that head commit,
+// into main. Another pull request can share the same head commit and branch while targeting a base
+// whose ci.yml its author wrote, so the number and base are what tell them apart. A run's
+// `pull_requests` cannot: GitHub fills it at query time from the pull requests open now, so after the
+// merge it is empty or names the next release pull request.
+export function isReleasePull(pull, { repository, sha }) {
+  return (
+    pull?.merged === true &&
+    pull.head?.sha === sha &&
+    pull.head?.repo?.full_name === repository &&
+    (pull.head?.ref ?? "").startsWith(RELEASE_PR_BRANCH_PREFIX) &&
+    pull.base?.ref === "main" &&
+    pull.base?.repo?.full_name === repository
+  );
+}
+
+// A successful ci.yml run of that head. A run cannot say which pull request it ran for, so another
+// pull request's run of the same head can be picked; its attestation names that pull request's merge
+// ref, so the platform build rejects it (npm-build.yml) and builds from source.
+export function latestReleaseRun(runs, { repository, sha }) {
   return (
     runs
       .filter(
@@ -36,10 +51,7 @@ export function latestReleaseRun(runs, { repository, sha, pullRequest }) {
           run.conclusion === "success" &&
           run.path === ".github/workflows/ci.yml" &&
           run.head_repository?.full_name === repository &&
-          run.head_branch?.startsWith(RELEASE_PR_BRANCH_PREFIX) &&
-          (run.pull_requests ?? []).some(
-            (pull) => String(pull.number) === String(pullRequest) && pull.base?.ref === "main" && pull.base?.repo?.url?.endsWith(`/repos/${repository}`),
-          ),
+          run.head_branch?.startsWith(RELEASE_PR_BRANCH_PREFIX),
       )
       .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0] ?? null
   );
@@ -49,8 +61,10 @@ export function planReuse({ repository, sha, pullRequest, matrix, runGh = gh }) 
   const none = (reason) => ({ matrix: matrix.map((platform) => ({ ...platform, ci_run_id: "" })), reason });
   if (!sha) return none("no release pull request head commit");
   if (!/^[1-9][0-9]*$/u.test(pullRequest ?? "")) return none("no merged release pull request to reuse from");
+  const pull = JSON.parse(runGh(["api", `repos/${repository}/pulls/${pullRequest}`]));
+  if (!isReleasePull(pull, { repository, sha })) return none(`pull request ${pullRequest} is not the merged release pull request of ${sha} into main`);
   const runs = JSON.parse(runGh(["api", `repos/${repository}/actions/runs?head_sha=${sha}&event=pull_request&status=success&per_page=30`])).workflow_runs;
-  const run = latestReleaseRun(runs ?? [], { repository, sha, pullRequest });
+  const run = latestReleaseRun(runs ?? [], { repository, sha });
   if (!run) return none(`no successful release pull request CI run for ${sha}`);
   const artifacts = JSON.parse(runGh(["api", `repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`])).artifacts ?? [];
   const available = new Set(artifacts.filter((artifact) => !artifact.expired).map((artifact) => artifact.name));

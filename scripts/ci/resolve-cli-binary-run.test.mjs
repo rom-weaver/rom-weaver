@@ -5,14 +5,20 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { artifactName } from "./cli-release-binary.mjs";
-import { latestReleaseRun, main, planReuse } from "./resolve-cli-binary-run.mjs";
+import { isReleasePull, latestReleaseRun, main, planReuse } from "./resolve-cli-binary-run.mjs";
 import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
 
 const REPOSITORY = "rom-weaver/rom-weaver";
 const SHA = "a".repeat(40);
 const matrix = [{ package: "linux-x64-gnu" }, { package: "darwin-x64" }];
 const PR = "1661";
-const pull = (number = 1661, base = "main", repository = REPOSITORY) => ({ number, base: { ref: base, repo: { url: `https://api.github.com/repos/${repository}` } } });
+const releasePull = (overrides = {}) => ({
+  number: 1661,
+  merged: true,
+  head: { sha: SHA, ref: `${RELEASE_PR_BRANCH_PREFIX}cli`, repo: { full_name: REPOSITORY } },
+  base: { ref: "main", repo: { full_name: REPOSITORY } },
+  ...overrides,
+});
 const run = (overrides = {}) => ({
   id: 100,
   head_sha: SHA,
@@ -23,10 +29,18 @@ const run = (overrides = {}) => ({
   head_branch: `${RELEASE_PR_BRANCH_PREFIX}cli`,
   created_at: "2026-10-28T04:33:27Z",
   html_url: "https://example.test/runs/100",
-  pull_requests: [pull()],
+  // GitHub fills this from the pull requests open now; after the merge it names the next one.
+  pull_requests: [{ number: 1700 }],
   ...overrides,
 });
-const fakeGh = (runs, artifacts) => (args) => JSON.stringify(args[1].includes("/artifacts") ? { artifacts } : { workflow_runs: runs });
+const fakeGh =
+  (runs, artifacts, pull = releasePull()) =>
+  (args) => {
+    if (args[1].includes("/artifacts")) return JSON.stringify({ artifacts });
+    if (args[1] === `repos/${REPOSITORY}/pulls/${PR}`) return JSON.stringify(pull);
+    if (args[1].startsWith(`repos/${REPOSITORY}/actions/runs?`)) return JSON.stringify({ workflow_runs: runs });
+    throw new Error(`unexpected: ${args.join(" ")}`);
+  };
 const artifact = (name, expired = false) => ({ name, expired });
 
 test("marks each platform whose CLI binary the release pull request run uploaded", () => {
@@ -43,9 +57,10 @@ test("marks each platform whose CLI binary the release pull request run uploaded
   ]);
 });
 
-test("only a successful ci.yml run of the merged release pull request into main counts", () => {
-  const pick = (overrides) => latestReleaseRun([run(overrides)], { repository: REPOSITORY, sha: SHA, pullRequest: PR });
-  assert.equal(pick({}).id, 100);
+test("only a successful ci.yml run of this repository's release branch at the head counts", () => {
+  const pick = (overrides) => latestReleaseRun([run(overrides)], { repository: REPOSITORY, sha: SHA });
+  assert.equal(pick({}).id, 100, "a run whose pull_requests no longer names the merged pull request");
+  assert.equal(pick({ pull_requests: [] }).id, 100);
   assert.equal(pick({ conclusion: "failure" }), null);
   assert.equal(pick({ event: "push" }), null);
   assert.equal(pick({ path: ".github/workflows/release.yml" }), null);
@@ -53,14 +68,28 @@ test("only a successful ci.yml run of the merged release pull request into main 
   assert.equal(pick({ head_branch: "feature/perf" }), null);
   assert.equal(pick({ head_repository: { full_name: "someone/rom-weaver" } }), null, "a fork's branch with the release prefix");
   assert.equal(pick({ path: ".github/workflows/ci.yml-x.yml" }), null, "a workflow whose path only starts with ci.yml");
+  assert.equal(latestReleaseRun([run({ id: 1 }), run({ id: 2, created_at: "2026-10-28T05:00:00Z" })], { repository: REPOSITORY, sha: SHA }).id, 2);
+});
+
+test("only the merged release pull request of that head into main enables reuse", () => {
+  const is = (overrides) => isReleasePull(releasePull(overrides), { repository: REPOSITORY, sha: SHA });
+  assert.equal(is({}), true);
+  assert.equal(is({ merged: false }), false, "an open or closed pull request");
+  assert.equal(is({ head: { ...releasePull().head, sha: "b".repeat(40) } }), false, "another head commit");
+  assert.equal(is({ head: { ...releasePull().head, ref: "feature/perf" } }), false, "not the release branch");
+  assert.equal(is({ head: { ...releasePull().head, repo: { full_name: "someone/rom-weaver" } } }), false, "a fork's head");
+  assert.equal(is({ head: { ...releasePull().head, repo: null } }), false, "a deleted head repository");
   // Another pull request can share the release head commit and branch while targeting a base whose
-  // ci.yml its author wrote; the number and base tell them apart.
-  assert.equal(pick({ pull_requests: [pull(1700)] }), null, "another pull request with the same head");
-  assert.equal(pick({ pull_requests: [pull(1661, "evil-base")] }), null, "the release head opened into another base");
-  assert.equal(pick({ pull_requests: [pull(1661, "main", "someone/rom-weaver")] }), null, "a base in another repository");
-  assert.equal(pick({ pull_requests: [] }), null, "a run with no pull request");
-  assert.equal(pick({ pull_requests: [pull(1700), pull(1661)] }).id, 100);
-  assert.equal(latestReleaseRun([run({ id: 1 }), run({ id: 2, created_at: "2026-10-28T05:00:00Z" })], { repository: REPOSITORY, sha: SHA, pullRequest: PR }).id, 2);
+  // ci.yml its author wrote.
+  assert.equal(is({ base: { ref: "evil-base", repo: { full_name: REPOSITORY } } }), false, "the release head merged into another base");
+  assert.equal(is({ base: { ref: "main", repo: { full_name: "someone/rom-weaver" } } }), false, "a base in another repository");
+  assert.equal(isReleasePull(null, { repository: REPOSITORY, sha: SHA }), false);
+
+  const everything = [run()];
+  const artifacts = [artifact(artifactName("linux-x64-gnu")), artifact(artifactName("darwin-x64"))];
+  const none = matrix.map((platform) => ({ ...platform, ci_run_id: "" }));
+  assert.deepEqual(planReuse({ repository: REPOSITORY, sha: SHA, pullRequest: PR, matrix, runGh: fakeGh(everything, artifacts, releasePull({ merged: false })) }).matrix, none);
+  assert.deepEqual(planReuse({ repository: REPOSITORY, sha: SHA, pullRequest: PR, matrix, runGh: fakeGh(everything, artifacts) }).matrix, matrix.map((platform) => ({ ...platform, ci_run_id: "100" })));
 });
 
 test("a missing head commit, pull request, run, or artifact leaves every platform to build", () => {

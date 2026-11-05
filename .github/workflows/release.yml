@@ -699,8 +699,10 @@ jobs:
       id-token: write
       attestations: write
       artifact-metadata: write
-      # Finding and downloading the release pull request run's CLI binaries.
+      # Finding and downloading the release pull request run's CLI binaries, after checking that
+      # pull request was merged.
       actions: read
+      pull-requests: read
     uses: ./.github/workflows/npm-build.yml
     with:
       version: ${{ needs.release.outputs.version }}
