@@ -101,6 +101,12 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
+      # The org runs at most 20 jobs at once and main's CI on the merge commit is still in its first
+      # wave of up to nine jobs when these start, now that a skipped semver check no longer delays
+      # them. Five at a time keeps the release window at the 16 jobs it peaked at before; the slowest
+      # leg (darwin-x64) starts in the first group, so the build stage ends within about 20 seconds
+      # of where nine at once would.
+      max-parallel: 5
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.platforms) }}
     runs-on: ${{ matrix.runner }}
@@ -167,6 +173,10 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
+      # `cli-assets` runs for about four minutes beside these nine dry-runs (25 to 122 seconds each),
+      # so three at a time cost no wall time, and with the builds no longer delayed by the semver
+      # check they would otherwise stack nine jobs on the end of main's CI second wave.
+      max-parallel: 3
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.platforms) }}
     # `native_runner`, not `runner`: this leg executes the built binary, and

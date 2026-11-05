@@ -516,7 +516,7 @@ The prerelease test reads the **version**, never the package spec - platform pac
 
 | Job | Produces |
 | --- | --- |
-| `semver-plan`, `semver-check` | nothing - `semver-plan` lists the published crates and `semver-check` runs one leg per crate, gating the publish on no accidental breaking API change |
+| `semver-plan`, `semver-check` | nothing - `semver-plan` lists the published crates (and skips the check when every bump allows breaking changes) and `semver-check` runs one leg per crate, gating the publish on no accidental breaking API change |
 | `cargo-publish-dry-run` | nothing - gates npm and draft publication on crates.io accepting Cargo metadata |
 | `static-webapp` | `rom-weaver-webapp.tar.gz` on the draft release + signed build provenance |
 | `publish-npm` | 9 platform packages → launcher → unscoped alias, in that order |
@@ -584,6 +584,10 @@ A draft release has no tag until it is published, so every job builds from `need
 `cargo-semver-checks` runs as the `semver-check` job in `release.yml` and gates `publish-release`. A compatibility failure leaves the draft unpublished, while the version can still be corrected. The check needs no registry credentials and runs alongside the publishing jobs.
 
 It runs per-crate rather than `--workspace` so a crate with no published baseline (a first release, or a newly added crate) is skipped instead of failing the whole job. Each crate is its own matrix leg, at most two at a time (`max-parallel: 2`) because the org runs at most 20 jobs at once and a release already peaks near 16. Two legs bring the job from the sum of all five crates (about 13 minutes) to roughly half, for one extra runner; `semver-plan` reads the crate list from `cargo metadata`, so a newly published crate is checked without editing the workflow.
+
+`semver-plan` (`scripts/ci/semver-plan.mjs`) also skips the whole check when it can show that every published crate's bump allows breaking changes: the new version is a stable major bump over the latest stable crates.io release, or a 0.x minor bump. `cargo-semver-checks` skips every lint for such a bump anyway (all 260 on 0.23.0) but still builds the rustdoc of both versions, which was 785 seconds of that job. The plan emits an empty matrix and a "skipped: breaking bump allowed" job summary, and `semver-check` is skipped. A patch release, a 404 or failed baseline lookup (the same `curl --retry 3` request the legs make, one request per second), a prerelease, a yanked-only or prerelease-ahead baseline, a version not greater than the baseline, and any mix of crates keep every leg running. The publishing jobs (`publish-npm`, `publish-containers`, `publish-release`) treat `semver-check` as passed when it succeeded, or when it was skipped while `semver-plan` succeeded with `skipped == 'true'`; a failed `semver-plan` also skips `semver-check`, and that skip does not publish.
+
+With the check skipped, the nine platform builds start about 800 seconds earlier, inside the first wave of main's CI on the merge commit. `platform-build` therefore runs at most five legs at a time (`max-parallel: 5`), which keeps the release window at the 16 concurrent jobs it peaked at (modeled from the 0.23.0 timelines of this run and main's CI) instead of nine builds pushing it to 20. The nine dry-runs run three at a time (`max-parallel: 3`), which costs no wall time because `cli-assets` runs for about four minutes beside them.
 
 ### Package managers publish last
 
