@@ -28,11 +28,7 @@ type SharedEntry = {
   masters: InputAsset[];
 };
 
-/**
- * Shares one prepared (extracted) copy of a source between workflows that stage it independently.
- * Each holder gets its own asset objects whose cleanup only releases its hold, so the prepared copy
- * is deleted when the last holder releases it. Sources are matched by object identity.
- */
+/** Shares one prepared copy of a source (matched by object identity) between workflows and deletes it when the last holder releases its clone. */
 class SharedInputPreparationCache {
   private readonly entries = new WeakMap<object, Map<string, SharedEntry>>();
 
