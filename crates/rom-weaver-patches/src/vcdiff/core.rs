@@ -1226,9 +1226,10 @@ pub fn apply_patch_bytes(source: &[u8], patch_bytes: &[u8]) -> Result<Vec<u8>> {
     })?;
     let mut output: Vec<u8> = Vec::new();
     output.try_reserve_exact(target_size).map_err(|err| {
-        RomWeaverError::Validation(format!(
-            "cannot reserve {target_size} bytes for patch target: {err}"
-        ))
+        RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
+            format!("cannot reserve {target_size} bytes for patch target: {err}"),
+        )
     })?;
     tracing::debug!(
         target_size,

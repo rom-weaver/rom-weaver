@@ -111,21 +111,45 @@ impl ValidationCodeError {
     }
 
     /// [`Self::parse_display_tag`] that also returns the text before the tag.
+    /// The tag is the last bracket group holding a dotted code that ends the
+    /// text, so a path such as `Hack [v1.1] (USA).zip` earlier in the label is
+    /// not mistaken for one.
     pub fn split_display_tag(text: &str) -> Option<(&str, String, Option<DisplayFields>)> {
         let text = text.trim_end();
-        let (head, fields) = match text
-            .strip_suffix(')')
-            .and_then(|rest| rest.rsplit_once("] ("))
-        {
-            Some((head, fields)) => (head, Some(fields)),
-            None => (text.strip_suffix(']')?, None),
-        };
-        let (before, code) = head.rsplit_once('[')?;
-        if !(before.is_empty() || before.ends_with(' ')) || !is_display_code(code) {
-            return None;
+        // A field value may contain `, ` or read like a tag. A candidate whose fields do not all
+        // parse as `key=value` pairs is kept as a fallback, unless a candidate further left parses.
+        let mut lenient = None;
+        for (open, _) in text.rmatch_indices('[') {
+            let before = &text[..open];
+            if !(before.is_empty() || before.ends_with(' ')) {
+                continue;
+            }
+            let Some((code, tail)) = text[open + 1..].split_once(']') else {
+                continue;
+            };
+            if !is_display_code(code) {
+                continue;
+            }
+            let fields = match tail {
+                "" => None,
+                _ => match tail
+                    .strip_prefix(" (")
+                    .and_then(|rest| rest.strip_suffix(')'))
+                {
+                    Some(fields) => Some(fields),
+                    None => continue,
+                },
+            };
+            let parsed = fields.map(parse_display_fields);
+            if parsed.as_ref().is_some_and(Option::is_none) {
+                if fields.is_some_and(starts_with_display_field) {
+                    lenient.get_or_insert((before, code));
+                }
+                continue;
+            }
+            return Some((before.trim_end(), code.to_owned(), parsed.flatten()));
         }
-        let fields = fields.and_then(parse_display_fields);
-        Some((before.trim_end(), code.to_owned(), fields))
+        lenient.map(|(before, code)| (before.trim_end(), code.to_owned(), None))
     }
 
     pub fn with_message(mut self, message: impl Into<Cow<'static, str>>) -> Self {
@@ -146,20 +170,37 @@ impl ValidationCodeError {
     }
 }
 
+/// An engine code: dotted lowercase segments such as `patch.checksum_mismatch`.
 fn is_display_code(code: &str) -> bool {
-    code.starts_with(|c: char| c.is_ascii_alphabetic())
-        && code
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
+    let mut segments = 0;
+    for segment in code.split('.') {
+        let valid = !segment.is_empty()
+            && segment
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+        if !valid {
+            return false;
+        }
+        segments += 1;
+    }
+    segments > 1
+}
+
+fn is_display_field_key(key: &str) -> bool {
+    !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn starts_with_display_field(fields: &str) -> bool {
+    fields
+        .split_once('=')
+        .is_some_and(|(key, _)| is_display_field_key(key))
 }
 
 fn parse_display_fields(text: &str) -> Option<Map<String, Value>> {
     text.split(", ")
         .map(|pair| {
             let (key, value) = pair.split_once('=')?;
-            let valid_key =
-                !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
-            valid_key.then(|| (key.to_owned(), parse_display_field_value(value)))
+            is_display_field_key(key).then(|| (key.to_owned(), parse_display_field_value(value)))
         })
         .collect()
 }

@@ -64,6 +64,25 @@ describe("engine error codes", () => {
     expect(engineFailure({ label: "bad entry [see.docs]" }).message).toBe("bad entry [see.docs]");
   });
 
+  it("keeps ROM-name brackets that look like a code when the CLI tag is dropped", () => {
+    const label =
+      "nested extract exceeded max depth of 8 at `/r/Game [v1.1] (Beta).zip` [extract.max_depth_exceeded] (max_depth=8, path=/r/Game [v1.1] (Beta).zip)";
+    const message = engineFailure({ error_code: "extract.max_depth_exceeded", label }).message;
+    expect(message).toBe("nested extract exceeded max depth of 8 at `/r/Game [v1.1] (Beta).zip`");
+    // Cleaning the already clean message again changes nothing.
+    expect(
+      withRomWeaverFailure(new Error(message), failedRun({ error_code: "extract.max_depth_exceeded", label })).message,
+    ).toBe(message);
+    // A bracket group that is not a known engine code is never a tag, even at the end of the text.
+    expect(
+      engineFailure({ error_code: "io.storage_full", label: "write failed for /r/Game [v1.1] [io.storage_full]" })
+        .message,
+    ).toBe("write failed for /r/Game [v1.1]");
+    expect(engineFailure({ error_code: "io.storage_full", label: "write failed for /r/Game [v1.1]" }).message).toBe(
+      "write failed for /r/Game [v1.1]",
+    );
+  });
+
   it("drops the CLI tag from a coded failure message before context is appended", () => {
     const result = failedRun({
       error_code: "io.storage_full",

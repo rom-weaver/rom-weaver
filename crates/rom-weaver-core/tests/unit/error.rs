@@ -524,6 +524,46 @@ fn parse_display_tag_ignores_text_without_a_trailing_code_tag() {
 }
 
 #[test]
+fn split_display_tag_ignores_bracketed_text_in_uncoded_path_labels() {
+    // A ROM name with `[b1] (USA)` and `[v1.1] (Beta)` is path text, not an engine tag.
+    for label in [
+        "patch 1/1: no registered patch handler matched `/r/Hack [b1] (USA).xyz` (resolved from `/o/Hack [b1] (USA).zip`)",
+        "nested extract exceeded max depth of 8 at `/r/Game [v1.1] (Beta).zip`",
+        "failed on /r/Game [v1.1] (Beta)",
+    ] {
+        assert_eq!(
+            ValidationCodeError::split_display_tag(label),
+            None,
+            "{label}"
+        );
+    }
+}
+
+#[test]
+fn split_display_tag_anchors_on_the_code_that_ends_the_text() {
+    let label = "nested extract exceeded max depth of 8 at `/r/Game [v1.1] (Beta).zip` [extract.max_depth_exceeded] (max_depth=8, path=/r/Game [v1.1] (Beta).zip)";
+    let (head, code, fields) = ValidationCodeError::split_display_tag(label).expect("tag");
+    assert_eq!(
+        head,
+        "nested extract exceeded max depth of 8 at `/r/Game [v1.1] (Beta).zip`"
+    );
+    assert_eq!(code, "extract.max_depth_exceeded");
+    let fields = fields.expect("fields");
+    assert_eq!(fields["max_depth"], 8);
+    assert_eq!(fields["path"], "/r/Game [v1.1] (Beta).zip");
+
+    // A field value with a `, ` keeps the code but not the fields.
+    let (head, code, fields) = ValidationCodeError::split_display_tag(
+        "bad [patch.checksum_mismatch] (path=/r/Zelda, The (USA).zip)",
+    )
+    .expect("tag");
+    assert_eq!(
+        (head, code.as_str(), fields),
+        ("bad", "patch.checksum_mismatch", None)
+    );
+}
+
+#[test]
 fn with_context_keeps_codes_and_codes_uncoded_errors_on_request() {
     let coded = RomWeaverError::ValidationCode(
         ValidationCodeError::new("archive.storage_failed")

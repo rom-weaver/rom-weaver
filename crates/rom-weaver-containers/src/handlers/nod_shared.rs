@@ -1,6 +1,9 @@
 use super::*;
 use rom_weaver_checksum::{ChunkHashWorkers, ChunkHasher, round_robin_groups};
-use rom_weaver_core::{CancellationToken, VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError};
+use rom_weaver_core::{
+    CancellationToken, ERROR_CODE_IO_STORAGE_FULL, ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
+    VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError,
+};
 #[cfg(target_family = "wasm")]
 use std::collections::HashMap;
 #[cfg(target_family = "wasm")]
@@ -779,9 +782,7 @@ impl NodHandlerCore {
                 },
                 &process_options,
             )
-            .map_err(|error| {
-                RomWeaverError::Validation(format!("{} create failed: {error}", self.format_name()))
-            });
+            .map_err(|error| nod_create_error(self.format_name(), &error));
         let finalization = cancel.or_cancelled(finalization)?;
         if !finalization.header.is_empty() {
             output.seek(SeekFrom::Start(0))?;
@@ -837,9 +838,7 @@ impl NodHandlerCore {
                 },
                 &process_options,
             )
-            .map_err(|error| {
-                RomWeaverError::Validation(format!("{} create failed: {error}", self.format_name()))
-            });
+            .map_err(|error| nod_create_error(self.format_name(), &error));
         let finalization = cancel.or_cancelled(finalization)?;
         if !finalization.header.is_empty() {
             output_bytes = output_bytes.max(finalization.header.len() as u64);
@@ -904,6 +903,25 @@ macro_rules! nod_extract_only_handler {
 }
 
 pub(crate) use nod_extract_only_handler;
+
+/// A failed nod create. A write that ran out of space or memory is coded so the webapp gives
+/// storage or memory guidance; any other failure is a plain validation error.
+fn nod_create_error(format_name: &str, error: &crate::nod::Error) -> RomWeaverError {
+    let message = format!("{format_name} create failed: {error}");
+    let code = match error {
+        crate::nod::Error::Io(_, source) => match source.kind() {
+            std::io::ErrorKind::StorageFull => Some(ERROR_CODE_IO_STORAGE_FULL),
+            std::io::ErrorKind::OutOfMemory => Some(ERROR_CODE_RESOURCE_OUT_OF_MEMORY),
+            _ => None,
+        },
+        _ => None,
+    };
+    debug!(format = format_name, code, %message, "nod create failed");
+    match code {
+        Some(code) => RomWeaverError::coded(code, message),
+        None => RomWeaverError::Validation(message),
+    }
+}
 
 /// Fails nod's per-block write callback once `cancel` trips, which stops its reader and
 /// compressor threads; the caller reports the error as `Cancelled`.

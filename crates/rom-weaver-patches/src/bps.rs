@@ -1651,8 +1651,12 @@ fn bps_create_usize_len(expected_len: u64, label: &str) -> Result<usize> {
 }
 
 fn try_reserve_exact<T>(vec: &mut Vec<T>, additional: usize, label: &str) -> Result<()> {
-    vec.try_reserve_exact(additional)
-        .map_err(|error| RomWeaverError::Validation(format!("{label} allocation failed: {error}")))
+    vec.try_reserve_exact(additional).map_err(|error| {
+        RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
+            format!("{label} allocation failed: {error}"),
+        )
+    })
 }
 
 fn initial_bps_sorted_target_len(source_len: usize, target_len: usize) -> usize {

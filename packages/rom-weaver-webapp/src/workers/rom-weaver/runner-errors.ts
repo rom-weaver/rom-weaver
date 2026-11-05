@@ -27,13 +27,31 @@ const getNonTraceStderr = (result: Partial<RomWeaverRunJsonResult> | null | unde
 // The ` [code] (key=value, ...)` tag the engine's Display appends for CLI readers. The structured
 // `error_code`/`error_fields` carry the same facts, so the tag is dropped from displayed text. A `detail`
 // field holds the underlying cause (such as which checksum mismatched), so it stays in the message.
-const ENGINE_DISPLAY_TAG = /\s\[[a-z0-9_]+(?:\.[a-z0-9_]+)+\](?: \(.*\))?$/su;
+const ENGINE_TAG_CANDIDATE = /\s\[([a-z0-9_]+(?:\.[a-z0-9_]+)+)\](?= \(|$)/gu;
+const ENGINE_TAG_FIELDS = /^ \(.*\)$/su;
 
-const stripEngineDisplayTag = (message: string, fields: RomWeaverRunJsonEvent["error_fields"]): string => {
-  const stripped = message.replace(ENGINE_DISPLAY_TAG, "");
+// Only the event's own code or a known engine code, ending the text and optionally followed by its fields
+// group, is a tag: a ROM name such as `Game [v1.1] (Beta).zip` has the same shape but is part of the message.
+const stripEngineTag = (text: string, ownCode: string): string => {
+  for (const candidate of [...text.matchAll(ENGINE_TAG_CANDIDATE)].reverse()) {
+    const code = candidate[1] ?? "";
+    const tail = text.slice(candidate.index + candidate[0].length);
+    if ((code === ownCode || isEngineErrorCode(code)) && (tail === "" || ENGINE_TAG_FIELDS.test(tail))) {
+      return text.slice(0, candidate.index);
+    }
+  }
+  return text;
+};
+
+const stripEngineDisplayTag = (
+  message: string,
+  code: string,
+  fields: RomWeaverRunJsonEvent["error_fields"],
+): string => {
+  const stripped = stripEngineTag(message, code);
   // The detail is often a coded error's own Display, so it carries a tag too. Stripping it keeps this idempotent:
   // the message is cleaned again after `getRomWeaverFailureMessage` built it.
-  const detail = typeof fields?.detail === "string" ? fields.detail.replace(ENGINE_DISPLAY_TAG, "") : "";
+  const detail = typeof fields?.detail === "string" ? stripEngineTag(fields.detail, code) : "";
   return detail && !stripped.includes(detail) ? `${stripped}: ${detail}` : stripped;
 };
 
@@ -46,7 +64,7 @@ const getRomWeaverFailureMessage = (
     const event = events[index];
     if (!(event && isRomWeaverFailedRunEvent(event))) continue;
     const label = getRomWeaverRunEventLabel(event).trim();
-    if (label) return event.error_code ? stripEngineDisplayTag(label, event.error_fields) : label;
+    if (label) return event.error_code ? stripEngineDisplayTag(label, event.error_code, event.error_fields) : label;
   }
 
   const nonJsonLines = Array.isArray(result?.nonJsonLines) ? result.nonJsonLines : [];
@@ -119,7 +137,7 @@ const withRomWeaverFailure = <E extends Error>(
   if (coded.error_code) {
     const fields: RomWeaverEngineErrorFields = coded.error_fields ?? {};
     record.details = { ...record.details, engineCode: coded.error_code, engineFields: fields };
-    record.message = stripEngineDisplayTag(record.message, fields);
+    record.message = stripEngineDisplayTag(record.message, coded.error_code, fields);
   }
   return error;
 };

@@ -2507,6 +2507,25 @@ fn split_verdict_message(message: String) -> (String, Option<String>) {
 mod tests {
     use super::*;
 
+    #[test]
+    fn verdict_message_keeps_bracketed_rom_names_that_are_not_engine_codes() {
+        let label = "patch 1/1: no registered patch handler matched `/r/Hack [b1] (USA).xyz` (resolved from `/o/Hack [b1] (USA).zip`)";
+        assert_eq!(
+            split_verdict_message(label.to_owned()),
+            (label.to_owned(), None)
+        );
+        assert_eq!(
+            split_verdict_message(
+                "bad patch for `/r/Hack [v1.1] (USA).xyz` [patch.checksum_mismatch] (expected=1)"
+                    .to_owned()
+            ),
+            (
+                "bad patch for `/r/Hack [v1.1] (USA).xyz`".to_owned(),
+                Some("patch.checksum_mismatch".to_owned())
+            )
+        );
+    }
+
     fn cancelled_context(temp_root: PathBuf) -> OperationContext {
         let cancel = rom_weaver_core::CancellationToken::new();
         cancel.cancel();
