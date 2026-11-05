@@ -8,6 +8,7 @@ import {
   classifyChanges,
   coverageTiers,
   narrowSelection,
+  REPO_LINT_CI_HELPERS,
   ROOT_LEAF_SCRIPTS,
   scheduledSelection,
 } from "./classify-changes.mjs";
@@ -792,12 +793,40 @@ test("release-time CI helpers select repo lint without compiled stacks", () => {
     "scripts/ci/publication-freshness.mjs",
     "scripts/ci/publish-apply-video.mjs",
     "scripts/ci/purge-cloudflare-pages-cache.mjs",
+    // Scheduled or workflow_run only: no pull request job runs them.
+    "scripts/ci/nightly-alert.mjs",
+    "scripts/ci/parity-cli-key.mjs",
+    "scripts/ci/rerun-infra-failures.mjs",
   ]) {
     assert.deepEqual(selected(classifyFor("pull_request", path)), ["repo_lint"], path);
   }
   // No tests of their own, so they stay fail-open.
   for (const path of ["scripts/ci/resolve-wasm-run.mjs", "scripts/ci/run-install-method.mjs"])
     assert.equal(classifyFor("pull_request", path).full, "true", path);
+  // These decide what a pull request runs or how its gate judges it, so they stay fail-open too.
+  for (const path of [
+    "scripts/ci/prior-green-run.mjs",
+    "scripts/ci/assert-jobs.mjs",
+    "scripts/ci/assert-job-groups.mjs",
+  ])
+    assert.equal(classifyFor("pull_request", path).full, "true", path);
+});
+
+// Lint-only selection trusts the helper's own tests, which repo-lint runs.
+// Entries that were already lint-only before this check, without a sibling test:
+const UNTESTED_LINT_ONLY = new Set([
+  // Exercised through the tests of the helpers that import it (cla-gate, nightly-alert, ...).
+  "scripts/ci/github-api.mjs",
+  // Run by the deploy-webapp-pages action, which a failed call fails visibly on the next deploy.
+  "scripts/ci/ensure-cloudflare-pages-project.mjs",
+]);
+test("every lint-only CI helper exists and has its own tests", () => {
+  for (const path of REPO_LINT_CI_HELPERS) {
+    assert.ok(existsSync(new URL(`../../${path}`, import.meta.url)), `${path} does not exist`);
+    if (path.endsWith(".sh") || UNTESTED_LINT_ONLY.has(path)) continue;
+    const tests = path.replace(/\.mjs$/u, ".test.mjs");
+    assert.ok(existsSync(new URL(`../../${tests}`, import.meta.url)), `${path} has no ${tests}`);
+  }
 });
 
 test("pull requests run Lighthouse only when the audited bundle can change", () => {

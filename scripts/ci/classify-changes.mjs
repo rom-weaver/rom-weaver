@@ -23,10 +23,13 @@ const FULL_CI_PLUMBING = new Set([
   "scripts/ci/select-mise-tools.mjs",
 ]);
 
-// These deployment and cleanup helpers have repo-lint coverage and do not
-// affect an application build. New CI helpers stay fail-open below until their
-// consumers have the same proof.
-const REPO_LINT_CI_HELPERS = new Set([
+// These deployment, cleanup, release-time, and scheduled-only helpers have
+// repo-lint coverage and do not affect an application build. No pull request
+// job runs them, so the full matrix would test nothing more than their own
+// tests already do. New CI helpers stay fail-open below until their consumers
+// have the same proof; each entry MUST have a sibling `.test.mjs`
+// (classify-changes.test.mjs checks this).
+export const REPO_LINT_CI_HELPERS = new Set([
   "scripts/ci/cache-cleanup.mjs",
   "scripts/ci/cla-gate.mjs",
   "scripts/ci/cleanup-preview-deployments.sh",
@@ -36,10 +39,13 @@ const REPO_LINT_CI_HELPERS = new Set([
   "scripts/ci/ensure-cloudflare-assets-cache-rule.mjs",
   "scripts/ci/ensure-cloudflare-pages-project.mjs",
   "scripts/ci/github-api.mjs",
+  "scripts/ci/nightly-alert.mjs",
   "scripts/ci/npm-publish-package.mjs",
+  "scripts/ci/parity-cli-key.mjs",
   "scripts/ci/publication-freshness.mjs",
   "scripts/ci/publish-apply-video.mjs",
   "scripts/ci/purge-cloudflare-pages-cache.mjs",
+  "scripts/ci/rerun-infra-failures.mjs",
 ]);
 
 // Root scripts that no build, image, or CI job imports or runs on a pull
