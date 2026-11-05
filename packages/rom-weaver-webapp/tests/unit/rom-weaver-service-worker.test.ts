@@ -820,6 +820,15 @@ describe("network-first handler", () => {
     );
   });
 
+  it("keeps a $ in the sub-path scope literal when re-rooting the 404 document", async () => {
+    const harness = await loadWorker({ scope: `${APP_ORIGIN}/a$$b/` });
+    setPrecache({ "404.html": () => new Response('<base href="/" /><a href="/docs">Docs</a>', { status: 200 }) });
+
+    const response = await routed(harness, harness.networkFirstRoute, asDocumentRequest(`${APP_ORIGIN}/a$$b/nope`));
+
+    await expect(response.text()).resolves.toBe('<base href="/a$$b/" /><a href="/a$$b/docs">Docs</a>');
+  });
+
   it("falls back to the scope root when every other precache lookup misses", async () => {
     const harness = await loadWorker();
     setPrecache({ "/": () => new Response("scope-root", { status: 200 }) });
