@@ -213,19 +213,38 @@ fn fields() -> Vec<FieldDefinition> {
     fields
 }
 
+// A save writes a free record with the next two-bit generation before it frees the old copy. On
+// boot the game frees records with a bad checksum, then walks the live copies of a folder in
+// record order and keeps a later one only when its generation follows the kept one's
+// (`fileValidateSaves`):
+// https://github.com/n64decomp/007/blob/c4356466796c697dfd298010b9bed261f9ed8c6a/src/game/file2.c#L478-L594
 fn owns(bytes: &[u8], file: usize, record: usize) -> bool {
-    let index = bytes[FIRST_RECORD + record * RECORD_SIZE + 8];
-    usize::from(index & 7) == file && index & 0x80 == 0
+    let mut kept: Option<(usize, u8)> = None;
+    for other in 0..RECORDS {
+        let base = FIRST_RECORD + other * RECORD_SIZE;
+        let index = bytes[base + 8];
+        // Bits 0-2 hold the folder and bit 7 marks a free record.
+        if usize::from(index & 0x87) != file
+            || !rare_eeprom::valid(bytes, base, base + 8..base + RECORD_SIZE)
+        {
+            continue;
+        }
+        let generation = index >> 3 & 3;
+        if kept.is_none_or(|(_, previous)| generation == (previous + 1) % 4) {
+            kept = Some((other, generation));
+        }
+    }
+    kept.is_some_and(|(kept, _)| kept == record)
 }
 
 fn candidate(file: usize, record: usize) -> layout::Candidate {
-    let base = FIRST_RECORD + record * RECORD_SIZE;
+    // `owns` picks one record and already requires its checksum.
     tagged_record_candidate(
-        base,
+        FIRST_RECORD + record * RECORD_SIZE,
         RECORD_SIZE,
         record,
         move |bytes, record| owns(bytes, file, record),
-        move |bytes| rare_eeprom::valid(bytes, base, base + 8..base + RECORD_SIZE),
+        |_| true,
     )
 }
 
@@ -233,7 +252,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let games = (0..FILES)
         .map(|file| GameDefinition {
             fields: fields(),
-            description: "Edits mission times, cheats, and options in one occupied file of a canonical 512-byte EEPROM or a copy padded to 2 KiB. Selects the first record tagged for the file and rejects it if its checksum is damaged; preserves the other records, the EEPROM header, and any trailing padding. Byte-swapped images are unsupported. Requires a game-made template.".into(),
+            description: "Edits mission times, cheats, and options in one occupied file of a canonical 512-byte EEPROM or a copy padded to 2 KiB. Selects the live record for the file with a valid checksum that the game loads, preferring a later copy only when it holds the next save generation, and rejects the file when every copy is damaged; preserves the other records, the EEPROM header, and any trailing padding. Byte-swapped images are unsupported. Requires a game-made template.".into(),
             runtime: runtime::Runtime {
                 logical_size: Some(RECORD_SIZE),
                 layout: Some(single_file_layout(
@@ -287,6 +306,49 @@ mod tests {
             selected_game: Some(format!("goldeneye-007-canonical-eeprom-file-{}", file + 1)),
             rom_sha1: None,
         }
+    }
+
+    fn set_index(bytes: &mut [u8], record: usize, index: u8) {
+        bytes[FIRST_RECORD + record * RECORD_SIZE + 8] = index;
+        repair(bytes, record);
+    }
+
+    // Toggles a File 4 cheat and returns the only record that changed, checking its checksum.
+    fn edited_record(input: &SaveDetectionInput) -> usize {
+        let (handler, identity) = test_handler(schemas, 3);
+        let document = handler.parse(input, &identity).unwrap();
+        let field = document
+            .fields
+            .iter()
+            .find(|field| field.id == "cheats.invincible")
+            .unwrap();
+        let SaveValue::Bool(value) = field.value else {
+            panic!("unexpected value {:?}", field.value);
+        };
+        let output = test_run(
+            schemas,
+            3,
+            input,
+            &[("cheats.invincible", SaveValue::Bool(!value))],
+        )
+        .unwrap();
+        assert_eq!(output[..FIRST_RECORD], input.bytes[..FIRST_RECORD]);
+        let end = FIRST_RECORD + RECORDS * RECORD_SIZE;
+        assert_eq!(output[end..], input.bytes[end..]);
+        let changed: Vec<_> = (0..RECORDS)
+            .filter(|record| {
+                let start = FIRST_RECORD + record * RECORD_SIZE;
+                output[start..start + RECORD_SIZE] != input.bytes[start..start + RECORD_SIZE]
+            })
+            .collect();
+        let [record] = changed[..] else {
+            panic!("changed records {changed:?}");
+        };
+        let base = FIRST_RECORD + record * RECORD_SIZE;
+        let [high, low] = reference_checksum(&output[base + 8..base + RECORD_SIZE]);
+        assert_eq!(output[base..base + 4], high.to_be_bytes());
+        assert_eq!(output[base + 4..base + 8], low.to_be_bytes());
+        record
     }
 
     fn live(file: usize) -> usize {
@@ -584,22 +646,12 @@ mod tests {
                 .bytes
                 .is_none()
         );
-        // The first record tagged for the file must be valid even when a later copy is intact.
+        // Damage to every live copy of the file rejects it.
         let mut duplicate = input.clone();
-        let base = FIRST_RECORD + 4 * RECORD_SIZE;
-        duplicate.bytes[base + 8] = 0x03;
-        repair(&mut duplicate.bytes, 4);
-        assert!(
-            test_run(
-                schemas,
-                3,
-                &duplicate,
-                &[("options.music", SaveValue::U32(1))]
-            )
-            .is_ok()
-        );
+        set_index(&mut duplicate.bytes, 4, 0x03);
         let live_base = FIRST_RECORD + 3 * RECORD_SIZE;
         duplicate.bytes[live_base + 0x30] ^= 1;
+        duplicate.bytes[FIRST_RECORD + 4 * RECORD_SIZE + 0x30] ^= 1;
         assert!(handler.apply(&duplicate, &identity, &[], false).is_err());
         // A deleted record and a tag for another file never match.
         let mut deleted = input.clone();
@@ -630,6 +682,25 @@ mod tests {
                 test_run(schemas, 3, &input, &[(field, value)]).is_err(),
                 "{field}"
             );
+        }
+    }
+
+    #[test]
+    fn selects_the_copy_with_the_next_generation() {
+        let input = template(3);
+        // File 4 copies in records 3 and 4, with their two-bit generations in bits 3 and 4.
+        for (first, second, selected) in [(0, 1, 4), (1, 0, 3), (3, 0, 4), (0, 2, 3), (2, 0, 3)] {
+            let mut copies = input.clone();
+            set_index(&mut copies.bytes, 3, 0x03 | first << 3);
+            set_index(&mut copies.bytes, 4, 0x03 | second << 3);
+            assert_eq!(
+                edited_record(&copies),
+                selected,
+                "generations {first} and {second}"
+            );
+            // The game resets a copy with a bad checksum, so the other copy loads.
+            copies.bytes[FIRST_RECORD + selected * RECORD_SIZE + 0x30] ^= 1;
+            assert_eq!(edited_record(&copies), 7 - selected);
         }
     }
 }

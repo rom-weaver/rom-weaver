@@ -216,23 +216,36 @@ fn record_crc(bytes: &[u8]) -> u32 {
     crc32(&bytes[..CHECKSUM_OFFSET])
 }
 
-fn owns(bytes: &[u8], file: usize, record: usize) -> bool {
+// Returns the 24-bit save count of an in-use record tagged for `file` whose CRC is valid.
+fn live_count(bytes: &[u8], file: usize, record: usize) -> Option<u32> {
     let base = record * RECORD_SIZE;
-    // Bit 3 of the health byte marks a file whose Donkey Kong slot is in use.
-    usize::from(bytes[base + TAG_OFFSET] >> 2 & 3) == file && bytes[base + HEALTH_OFFSET] & 8 != 0
+    let record_bytes = &bytes[base..base + RECORD_SIZE];
+    // Bit 3 of the health byte marks a record in use; erased records keep their tag.
+    let in_use = record_bytes[HEALTH_OFFSET] & 8 != 0;
+    let word = &record_bytes[TAG_OFFSET..TAG_OFFSET + 4];
+    let word = u32::from_be_bytes(word.try_into().expect("tag word is four bytes"));
+    let crc_valid = record_bytes[CHECKSUM_OFFSET..] == record_crc(record_bytes).to_be_bytes();
+    (in_use && (word >> 26 & 3) as usize == file && crc_valid).then_some(word >> 2 & 0xff_ffff)
+}
+
+// Each save writes the other copy with the next count, so the game loads the live record with the
+// highest count and lets the later record win a tie (`func_global_asm_8060CBBC`):
+// https://gitlab.com/dk64_decomp/dk64/-/blob/589fef8f140f6d4dfa001ecd7f9c014188a38872/src/global_asm/saveFile.c#L590-697
+fn owns(bytes: &[u8], file: usize, record: usize) -> bool {
+    (0..RECORDS)
+        .filter_map(|other| live_count(bytes, file, other).map(|count| (count, other)))
+        .max()
+        .is_some_and(|(_, newest)| newest == record)
 }
 
 fn candidate(file: usize, record: usize) -> layout::Candidate {
-    let base = record * RECORD_SIZE;
+    // `owns` picks one record and already requires its CRC.
     tagged_record_candidate(
-        base,
+        record * RECORD_SIZE,
         RECORD_SIZE,
         record,
         move |bytes, record| owns(bytes, file, record),
-        move |bytes| {
-            bytes[base + CHECKSUM_OFFSET..base + RECORD_SIZE]
-                == record_crc(&bytes[base..base + RECORD_SIZE]).to_be_bytes()
-        },
+        |_| true,
     )
 }
 
@@ -240,7 +253,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let games = (0..FILES)
         .map(|file| GameDefinition {
             fields: fields(),
-            description: "Edits health, characters, basic moves, coins, fairies, battle crowns, boss keys, and locks in one occupied file of canonical 2 KiB EEPROM. Selects the first record tagged for the file and rejects it if its CRC is damaged; preserves the other records and the system block. Counters, per-level flags, special moves, options and byte-swapped images are unsupported. Requires a game-made template.".into(),
+            description: "Edits health, characters, basic moves, coins, fairies, battle crowns, boss keys, and locks in one occupied file of canonical 2 KiB EEPROM. Selects the in-use record tagged for the file with a valid CRC and the highest save count, as the game does, and rejects the file when every such record is damaged; preserves the other records and the system block. Counters, per-level flags, special moves, options and byte-swapped images are unsupported. Requires a game-made template.".into(),
             runtime: runtime::Runtime {
                 logical_size: Some(RECORD_SIZE),
                 layout: Some(single_file_layout(
@@ -298,6 +311,58 @@ mod tests {
         let base = record * RECORD_SIZE;
         let crc = reference_crc(&bytes[base..base + CHECKSUM_OFFSET]);
         bytes[base + CHECKSUM_OFFSET..base + RECORD_SIZE].copy_from_slice(&crc.to_be_bytes());
+    }
+
+    // Sets a File 1 record's occupancy and 24-bit save count, then repairs its CRC.
+    fn set_record(bytes: &mut [u8], record: usize, occupied: bool, count: u32) {
+        let base = record * RECORD_SIZE;
+        bytes[base + TAG_OFFSET] &= !0x0c;
+        bytes[base + HEALTH_OFFSET] = bytes[base + HEALTH_OFFSET] & !0x08 | u8::from(occupied) << 3;
+        let word = &mut bytes[base + TAG_OFFSET..base + TAG_OFFSET + 4];
+        let value = u32::from_be_bytes(word.try_into().unwrap()) & !(0xff_ffff << 2) | count << 2;
+        word.copy_from_slice(&value.to_be_bytes());
+        repair(bytes, record);
+    }
+
+    // Edits File 1 and returns the only record that changed, checking its repaired CRC.
+    fn edited_record(input: &SaveDetectionInput) -> usize {
+        let (handler, identity) = test_handler(schemas, 0);
+        let document = handler.parse(input, &identity).unwrap();
+        let field = document
+            .fields
+            .iter()
+            .find(|field| field.id == "locks.lock_1")
+            .unwrap();
+        let SaveValue::Bool(value) = field.value else {
+            panic!("unexpected value {:?}", field.value);
+        };
+        let output = test_run(
+            schemas,
+            0,
+            input,
+            &[("locks.lock_1", SaveValue::Bool(!value))],
+        )
+        .unwrap();
+        assert_eq!(output.len(), input.bytes.len());
+        assert_eq!(
+            output[RECORDS * RECORD_SIZE..],
+            input.bytes[RECORDS * RECORD_SIZE..]
+        );
+        let changed: Vec<_> = (0..RECORDS)
+            .filter(|record| {
+                let span = record * RECORD_SIZE..(record + 1) * RECORD_SIZE;
+                output[span.clone()] != input.bytes[span]
+            })
+            .collect();
+        let [record] = changed[..] else {
+            panic!("changed records {changed:?}");
+        };
+        let base = record * RECORD_SIZE;
+        assert_eq!(
+            output[base + CHECKSUM_OFFSET..base + RECORD_SIZE],
+            reference_crc(&output[base..base + CHECKSUM_OFFSET]).to_be_bytes()
+        );
+        record
     }
 
     fn template(file: usize) -> SaveDetectionInput {
@@ -435,26 +500,17 @@ mod tests {
                 "byte {position:#x}"
             );
         }
-        // An empty file has no owner, and a spare record never takes over a damaged one.
+        // An empty file has no owner, and damage to every in-use copy rejects the file.
         let mut empty = input.clone();
         empty.bytes[live + HEALTH_OFFSET] &= !0x08;
         repair(&mut empty.bytes, LIVE[0]);
         assert!(handler.apply(&empty, &identity, &[], false).is_err());
-        let mut spare = input.clone();
-        let spare_base = 3 * RECORD_SIZE;
-        spare.bytes[spare_base + HEALTH_OFFSET] |= 0x08;
-        repair(&mut spare.bytes, 3);
-        assert!(
-            test_run(
-                schemas,
-                0,
-                &spare,
-                &[("locks.lock_1", SaveValue::Bool(true))]
-            )
-            .is_ok()
-        );
-        spare.bytes[live + 0x20] ^= 0x80;
-        assert!(handler.apply(&spare, &identity, &[], false).is_err());
+        let mut copies = input.clone();
+        set_record(&mut copies.bytes, 1, true, 7);
+        set_record(&mut copies.bytes, 3, true, 6);
+        copies.bytes[live + 0x20] ^= 0x80;
+        copies.bytes[3 * RECORD_SIZE + 0x20] ^= 0x80;
+        assert!(handler.apply(&copies, &identity, &[], false).is_err());
         for bytes in [
             vec![0; 2048],
             vec![0xff; 2048],
@@ -467,5 +523,29 @@ mod tests {
             };
             assert!(handler.apply(&input, &identity, &[], false).is_err());
         }
+    }
+
+    #[test]
+    fn selects_the_in_use_copy_with_the_highest_save_count() {
+        let input = template(0);
+        for (first, second, selected) in [(5, 6, 3), (6, 5, 1), (5, 5, 3), (0xff_ffff, 0, 1)] {
+            let mut copies = input.clone();
+            set_record(&mut copies.bytes, 1, true, first);
+            set_record(&mut copies.bytes, 3, true, second);
+            assert_eq!(
+                edited_record(&copies),
+                selected,
+                "counts {first} and {second}"
+            );
+            // The game discards a copy with a bad CRC, so the other copy loads.
+            copies.bytes[selected * RECORD_SIZE + 0x20] ^= 0x80;
+            assert_eq!(edited_record(&copies), selected ^ 2);
+        }
+        // A cleared record keeps its tag but never claims the file, whatever its count.
+        let mut cleared = input.clone();
+        set_record(&mut cleared.bytes, 0, false, 9);
+        set_record(&mut cleared.bytes, 1, true, 1);
+        set_record(&mut cleared.bytes, 3, false, 8);
+        assert_eq!(edited_record(&cleared), 1);
     }
 }
