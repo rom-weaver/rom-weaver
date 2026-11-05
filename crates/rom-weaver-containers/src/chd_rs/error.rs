@@ -185,13 +185,7 @@ impl From<HuffmanError> for Error {
 
 impl From<Error> for std::io::Error {
     fn from(e: Error) -> Self {
-        // Keep an allocation failure recognizable as one through the i/o layer.
-        let kind = if matches!(e, Error::OutOfMemory) {
-            std::io::ErrorKind::OutOfMemory
-        } else {
-            std::io::ErrorKind::Other
-        };
-        std::io::Error::new(kind, e)
+        std::io::Error::other(e)
     }
 }
 

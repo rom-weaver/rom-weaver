@@ -1724,10 +1724,13 @@ impl LibarchiveParallelExtractWriter<'_> {
             ))
         })?;
         output.writer.flush().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{format_name} extract failed while flushing entry {index} (`{}`): {error}",
-                output.archive_name
-            ))
+            RomWeaverError::from(error).with_context(
+                format!(
+                    "{format_name} extract failed while flushing entry {index} (`{}`)",
+                    output.archive_name
+                ),
+                None,
+            )
         })?;
         let LibarchiveOpenExtractOutput {
             hasher,
