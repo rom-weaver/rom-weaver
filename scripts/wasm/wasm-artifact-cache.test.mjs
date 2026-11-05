@@ -96,12 +96,80 @@ test("a failed store leaves no entry or staging directory", () => {
   });
 });
 
+test("storing preserves foreign hash and staging directories in a shared root", () => {
+  withDir((dir) => {
+    const root = path.join(dir, "cache");
+    const built = path.join(dir, "built");
+    writeArtifacts(built, "one");
+    const foreign = ["f".repeat(64), `.tmp-${"e".repeat(64)}-123`];
+    for (const name of foreign) {
+      fs.mkdirSync(path.join(root, name), { recursive: true });
+      fs.writeFileSync(path.join(root, name, "sentinel"), "keep");
+      fs.utimesSync(path.join(root, name), new Date(0), new Date(0));
+    }
+    fs.writeFileSync(path.join(root, foreign[0], ".rom-weaver-wasm-cache-entry"), "invalid marker");
+    fs.utimesSync(path.join(root, foreign[0]), new Date(0), new Date(0));
+    const linked = "d".repeat(64);
+    fs.symlinkSync(path.join(root, foreign[0]), path.join(root, linked), "junction");
+    for (let index = 0; index < 9; index++) {
+      storeWasmArtifacts({ root, key: wasmArtifactCacheKey({ index }), files: FILES, sourceDir: built });
+    }
+    for (const name of foreign) assert.equal(fs.readFileSync(path.join(root, name, "sentinel"), "utf8"), "keep");
+    assert.equal(fs.lstatSync(path.join(root, linked)).isSymbolicLink(), true);
+    assert.equal(fs.readdirSync(root).length, 11);
+  });
+});
+
+test("a store never replaces a foreign directory at its key, even when forced", () => {
+  withDir((dir) => {
+    const root = path.join(dir, "cache");
+    writeArtifacts(path.join(dir, "built"), "one");
+    for (const sentinel of [false, true]) {
+      const key = (sentinel ? "f" : "e").repeat(64);
+      fs.mkdirSync(path.join(root, key), { recursive: true });
+      if (sentinel) fs.writeFileSync(path.join(root, key, "sentinel"), "keep");
+      for (const replace of [false, true]) {
+        assert.throws(() => storeWasmArtifacts({ root, key, files: FILES, sourceDir: path.join(dir, "built"), replace }), /refusing to replace unowned WASM cache entry/);
+        assert.deepEqual(fs.readdirSync(path.join(root, key)), sentinel ? ["sentinel"] : []);
+      }
+    }
+  });
+});
+
+test("empty artifacts and directories in owned entries are rebuilt", () => {
+  withDir((dir) => {
+    const root = path.join(dir, "cache");
+    const built = path.join(dir, "built");
+    const outDir = path.join(dir, "out");
+    writeArtifacts(built, "one");
+    fs.mkdirSync(outDir);
+    storeWasmArtifacts({ root, key: "k", files: FILES, sourceDir: built });
+    for (const directory of [false, true]) {
+      const artifact = path.join(root, "k", FILES[0]);
+      fs.rmSync(artifact, { recursive: true });
+      if (directory) fs.mkdirSync(artifact);
+      else fs.writeFileSync(artifact, "");
+      assert.equal(restoreWasmArtifacts({ root, key: "k", files: FILES, outDir }), false);
+      storeWasmArtifacts({ root, key: "k", files: FILES, sourceDir: built });
+      assert.equal(restoreWasmArtifacts({ root, key: "k", files: FILES, outDir }), true);
+      assert.equal(fs.readFileSync(path.join(outDir, FILES[0]), "utf8"), `${FILES[0]}:one`);
+    }
+  });
+});
+
 test("pruning keeps the most recently used entries and drops stale staging", () => {
-  withDir((root) => {
+  withDir((dir) => {
+    const root = path.join(dir, "cache");
+    const built = path.join(dir, "built");
+    writeArtifacts(built, "one");
     const now = Date.now();
     const key = (char) => char.repeat(64);
-    const make = (name, ageMs) => {
-      fs.mkdirSync(path.join(root, name));
+    const make = (name, ageMs, owned = true) => {
+      if (owned) {
+        const entryKey = name.startsWith(".tmp-") ? name.split("-")[1] : name;
+        storeWasmArtifacts({ root, key: entryKey, files: FILES, sourceDir: built });
+        if (name !== entryKey) fs.renameSync(path.join(root, entryKey), path.join(root, name));
+      } else fs.mkdirSync(path.join(root, name));
       const time = new Date(now - ageMs);
       fs.utimesSync(path.join(root, name), time, time);
     };
@@ -111,8 +179,8 @@ test("pruning keeps the most recently used entries and drops stale staging", () 
     make(`.tmp-${key("d")}-1`, 2 * 60 * 60 * 1000);
     make(`.tmp-${key("e")}-2`, 1000);
     // A cache root moved into a shared directory keeps what this module did not write.
-    make("unrelated", 4000);
-    make(".tmp-unrelated", 2 * 60 * 60 * 1000);
+    make("unrelated", 4000, false);
+    make(".tmp-unrelated", 2 * 60 * 60 * 1000, false);
     fs.writeFileSync(path.join(root, "stray-file"), "");
     pruneWasmArtifacts(root, 2, now);
     assert.deepEqual(fs.readdirSync(root).sort(), [`.tmp-${key("e")}-2`, ".tmp-unrelated", key("b"), key("c"), "stray-file", "unrelated"].sort());
@@ -156,4 +224,12 @@ test("build flag environment keys flags but not checkout-specific compiler paths
     ["CFLAGS_wasm32_wasip1_threads", "-O3"],
     ["RUSTFLAGS", "-Cfoo"],
   ]);
+});
+
+test("compiler flag overrides always change the artifact key", () => {
+  const inputs = { source: "same", env: buildFlagEnv({}) };
+  const original = wasmArtifactCacheKey(inputs);
+  for (const name of ["TARGET_CFLAGS", "TARGET_CXXFLAGS", "HOST_CFLAGS", "HOST_CXXFLAGS", "CC_SHELL_ESCAPED_FLAGS", "CRATE_CC_NO_DEFAULTS"]) {
+    assert.notEqual(wasmArtifactCacheKey({ ...inputs, env: buildFlagEnv({ [name]: "1" }) }), original, name);
+  }
 });

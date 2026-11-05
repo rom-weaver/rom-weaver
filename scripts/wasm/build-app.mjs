@@ -97,7 +97,7 @@ export function remapPathArgs({ cargoHome, sysroot, target }) {
 // Environment that reaches rustc or the C compilers as flags. Compiler paths
 // stay out of the cache key: they differ per checkout, and the wrapper scripts
 // they name are part of the source fingerprint.
-const BUILD_FLAG_ENV = /^(?:RUSTFLAGS|CARGO_ENCODED_RUSTFLAGS|CARGO_PROFILE_|CARGO_TARGET_WASM32_|C(?:XX)?FLAGS)/;
+const BUILD_FLAG_ENV = /^(?:RUSTFLAGS|CARGO_ENCODED_RUSTFLAGS|CARGO_PROFILE_|CARGO_TARGET_WASM32_|(?:(?:HOST|TARGET)_)?C(?:XX)?FLAGS|CC_SHELL_ESCAPED_FLAGS|CRATE_CC_NO_DEFAULTS)/;
 export const buildFlagEnv = (env) =>
   JSON.stringify(
     Object.keys(env)

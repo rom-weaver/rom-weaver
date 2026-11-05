@@ -10,6 +10,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 import { classifyChanges } from "./ci/classify-changes.mjs";
+import { resolveNpmCli } from "./ci/npm-publish-package.mjs";
 
 const WEBAPP = "packages/rom-weaver-webapp";
 
@@ -101,7 +102,8 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   for (const step of plan.steps) {
     log(`${step.label}: ${step.command} ${step.args.join(" ")}`);
     try {
-      execFileSync(step.command, step.args, { cwd: root, stdio: "inherit", env: { ...env, ...step.env } });
+      const npmCli = step.command === "npm" && process.platform === "win32" ? resolveNpmCli({ env }) : undefined;
+      execFileSync(npmCli ? process.execPath : step.command, npmCli ? [npmCli, ...step.args] : step.args, { cwd: root, stdio: "inherit", env: { ...env, ...step.env } });
     } catch (error) {
       throw new Error(`${step.label} failed (${error.message.split("\n")[0]}); fix it, or push with --no-verify to skip these checks`);
     }
