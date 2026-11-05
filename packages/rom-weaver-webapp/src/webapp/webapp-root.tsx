@@ -30,7 +30,7 @@ import {
 } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { WeaveApplySession } from "../lib/weave/weave-session-model.ts";
-import { DROP_READING_HINT_DELAY_MS, readDataTransferFiles } from "../lib/input/dropped-files.ts";
+import { readDataTransferFiles } from "../lib/input/dropped-files.ts";
 import { createLogger } from "../lib/logging.ts";
 import { markDropReceived, markResultPaintedAfterFinish } from "../lib/perf/op-perf-marks.ts";
 import { perfNow, recordDrop } from "../lib/runtime/perf-latency.ts";
@@ -817,7 +817,7 @@ function WebappRoot({
     [actions, enqueuePageDrop, notFound],
   );
   const routeFiles = useCallback(
-    (selected: File[] | Promise<File[]>, veiled = false, directView?: WebappView) => {
+    (selected: File[] | Promise<File[]>, directView?: WebappView) => {
       const from = currentViewRef.current;
       const generation = routingGenerationRef.current;
       const delivery = routingQueueRef.current
@@ -826,11 +826,8 @@ function WebappRoot({
           if (generation !== routingGenerationRef.current) return;
           const dropped = await selected;
           if (generation !== routingGenerationRef.current) return;
-          const routeVeil: typeof showDropRouting = (routing, holdMs) => {
-            if (veiled) showDropRouting(routing, holdMs);
-          };
           if (!dropped.length) {
-            routeVeil(null);
+            showDropRouting(null);
             return;
           }
           // Save backups belong to no workflow. Saves & storage imports them once the rest of the drop is
@@ -839,15 +836,15 @@ function WebappRoot({
           const files = backups.length ? dropped.filter((file) => !backups.includes(file)) : dropped;
           try {
             if (!files.length) {
-              routeVeil(null);
+              showDropRouting(null);
               return;
             }
             if (directView) {
-              routeVeil(null);
+              showDropRouting(null);
               await enqueuePageDrop(directView, files);
               return;
             }
-            routeVeil({ phase: "reading" });
+            showDropRouting({ phase: "reading" });
             const entries = await readDropEntries(files);
             if (generation !== routingGenerationRef.current) return;
             const plan = planDropDestinations(countDropEntries(entries));
@@ -857,14 +854,14 @@ function WebappRoot({
               plan.destinations.length === 1 &&
               entries.every((entry) => isUsableDropFile(only, entry.name, entry.archiveBucket))
             ) {
-              routeVeil({ phase: "opening", view: only });
+              showDropRouting({ phase: "opening", view: only });
               await preloadWorkflowRoute(only).catch(() => undefined);
               if (generation !== routingGenerationRef.current) return;
-              routeVeil({ phase: "opening", view: only }, DROP_ROUTING_HOLD_MS);
+              showDropRouting({ phase: "opening", view: only }, DROP_ROUTING_HOLD_MS);
               await deliverDrop(only, files);
               return;
             }
-            routeVeil(null);
+            showDropRouting(null);
             if (!only) return;
             pageDropIdRef.current += 1;
             setDropRoute({ chooseDestination: true, entries, files, from, id: pageDropIdRef.current });
@@ -881,7 +878,7 @@ function WebappRoot({
           }
         })
         .catch((error: unknown) => {
-          if (veiled && generation === routingGenerationRef.current) showDropRouting(null);
+          if (generation === routingGenerationRef.current) showDropRouting(null);
           throw error;
         });
       routingQueueRef.current = delivery;
@@ -889,8 +886,6 @@ function WebappRoot({
     },
     [deliverDrop, enqueuePageDrop, openStorageTab, showDropRouting],
   );
-  // Picked files show the same reading and destination veil as dropped ones.
-  const routePickedFiles = useCallback((files: File[]) => routeFiles(files, true), [routeFiles]);
   useEffect(
     () =>
       subscribeHostIngest((paths) => {
@@ -950,24 +945,18 @@ function WebappRoot({
       const needsDestination = notFound || ["home", "docs", "whats-new"].includes(droppedView);
       // Hold the veil from the drop itself so it never fades out and back in
       // while the transfer is read.
-      if (needsDestination) showDropRouting({ phase: "reading" });
-      // A drop that stays on this workflow says it is reading only when a folder takes a while.
-      const readingTimer = needsDestination
-        ? undefined
-        : setTimeout(() => showDropRouting({ phase: "reading" }), DROP_READING_HINT_DELAY_MS);
-      const readFiles = readDataTransferFiles(event.dataTransfer)
-        .finally(() => clearTimeout(readingTimer))
-        .then((files) => {
-          markDropReceived();
-          for (const file of files) recordDrop(file.name, droppedAtMs);
-          logger.trace("unified drop zone received files", {
-            count: files.length,
-            names: files.map((file) => file.name),
-            source: "page",
-          });
-          return files;
+      showDropRouting({ phase: "reading" });
+      const readFiles = readDataTransferFiles(event.dataTransfer).then((files) => {
+        markDropReceived();
+        for (const file of files) recordDrop(file.name, droppedAtMs);
+        logger.trace("unified drop zone received files", {
+          count: files.length,
+          names: files.map((file) => file.name),
+          source: "page",
         });
-      trackSelectionDelivery(event, routeFiles(readFiles, true, needsDestination ? undefined : droppedView));
+        return files;
+      });
+      trackSelectionDelivery(event, routeFiles(readFiles, needsDestination ? undefined : droppedView));
     };
     // A workflow that cannot use a drop offers the one that can. This runs in
     // the capture phase, ahead of the tab's own drop zones, and only claims the
@@ -989,12 +978,12 @@ function WebappRoot({
       void readDataTransferFiles(event.dataTransfer).then((files) => {
         if (!files.length || currentViewRef.current !== fromView) return;
         if (needsDestination || (hasBackup && redirect)) {
-          void routeFiles(files, true);
+          void routeFiles(files);
           return;
         }
         if (hasBackup) {
           // Any workflow can receive a backup: it is imported, and the rest stays with this workflow.
-          void routeFiles(files, true, fromView);
+          void routeFiles(files, fromView);
           return;
         }
         pageDropIdRef.current += 1;
@@ -1145,7 +1134,7 @@ function WebappRoot({
                     <div className="panel" hidden={state.currentView !== "home"}>
                       <LoadErrorBoundary area="home" onReload={reloadAfterLoadFailure}>
                         <Suspense fallback={null}>
-                          <HomePageRoute baseUrl={resolvedAssetBaseUrl} onFiles={routePickedFiles} />
+                          <HomePageRoute baseUrl={resolvedAssetBaseUrl} onFiles={routeFiles} />
                         </Suspense>
                       </LoadErrorBoundary>
                     </div>

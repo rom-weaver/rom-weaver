@@ -423,22 +423,39 @@ test.each(["home", "patcher"])("%s clears the reading veil when a dropped folder
   await expect.poll(isDropRouting).toBe(false);
 });
 
-test("a workflow keeps a fast page drop free of the reading veil", async () => {
+test("a workflow never shows the reading words for a fast page drop", async () => {
   mountWebappRoot({ initialView: "patcher" });
   await expect.poll(() => document.querySelector("#panel-patcher:not([hidden])")).toBeTruthy();
-  let routed = false;
-  const observer = new MutationObserver(() => {
-    routed ||= isDropRouting();
-  });
-  observer.observe(document.querySelector("#column"), { attributeFilter: ["class"] });
+  let shownText = "";
+  let sampling = true;
+  const sample = () => {
+    const pill = document.querySelector(".dropveil-text");
+    if (isDropRouting() && pill && Number(getComputedStyle(pill).opacity) > 0) shownText ||= pill.textContent;
+    if (sampling) requestAnimationFrame(sample);
+  };
+  requestAnimationFrame(sample);
   try {
     sendHomeSelection("drop", [selectionPatch("fast.ips")]);
     await expect.poll(() => patchNames()).toEqual(["fast.ips"]);
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    expect(routed).toBe(false);
+    await expect.poll(isDropRouting).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(shownText).toBe("");
   } finally {
-    observer.disconnect();
+    sampling = false;
   }
+});
+
+test("a workflow drops the reading veil when navigation cancels a slow page drop", async () => {
+  mountWebappRoot({ initialView: "patcher" });
+  await expect.poll(() => document.querySelector("#panel-patcher:not([hidden])")).toBeTruthy();
+  const { event, release } = slowFolderDrop(selectionPatch("cancelled.ips"));
+  document.dispatchEvent(event);
+  navRow("Create").click();
+  await expect.poll(() => document.querySelector("#panel-creator:not([hidden])")).toBeTruthy();
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  expect(isDropRouting()).toBe(false);
 });
 
 test.each([

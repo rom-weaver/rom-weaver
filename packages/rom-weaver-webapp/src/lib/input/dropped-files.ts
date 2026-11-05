@@ -114,8 +114,5 @@ const readDataTransferFiles = async (dataTransfer: DroppedFilesTransfer | null):
   return files;
 };
 
-// A drop says it is reading only once the read outlasts this, so plain file drops never flash a hint.
-const DROP_READING_HINT_DELAY_MS = 120;
-
-export { createFileDataTransfer, DROP_READING_HINT_DELAY_MS, readDataTransferFiles };
+export { createFileDataTransfer, readDataTransferFiles };
 export type { DroppedFilesTransfer };
