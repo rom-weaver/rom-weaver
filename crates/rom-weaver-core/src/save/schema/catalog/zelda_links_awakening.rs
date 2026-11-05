@@ -351,6 +351,61 @@ mod tests {
         );
     }
 
+    /// Slot 1 holds 70 bombs against a stored capacity of 60.
+    fn over_capacity_input(identity: &SaveGameIdentity) -> SaveDetectionInput {
+        let mut input = input(identity, false);
+        input.bytes[0x452] = 0x70;
+        input
+    }
+
+    fn validation_code(error: crate::RomWeaverError) -> String {
+        match error {
+            crate::RomWeaverError::ValidationCode(error) => error.code().to_owned(),
+            other => panic!("expected a validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn accepts_an_edit_that_repairs_an_existing_capacity_violation() {
+        let handler = schemas().remove(0);
+        let identity = handler.definitions().remove(0).identity;
+        let input = over_capacity_input(&identity);
+        let mut expected = input.bytes.clone();
+        expected[0x452] = 0x42;
+        let edits = [SaveEdit {
+            field: "slot_1.resources.bombs".into(),
+            value: SaveValue::U32(42),
+        }];
+        assert!(handler.apply(&input, &identity, &edits, true).is_ok());
+        let result = handler.apply(&input, &identity, &edits, false).unwrap();
+        assert_eq!(result.bytes.unwrap(), expected);
+    }
+
+    #[test]
+    fn rejects_edits_that_leave_an_existing_capacity_violation() {
+        let handler = schemas().remove(0);
+        let identity = handler.definitions().remove(0).identity;
+        let input = over_capacity_input(&identity);
+        for (id, value) in [("resources.magic_powder", 5), ("resources.bombs", 65)] {
+            let edits = [SaveEdit {
+                field: format!("slot_1.{id}"),
+                value: SaveValue::U32(value),
+            }];
+            for dry_run in [true, false] {
+                let error = handler
+                    .apply(&input, &identity, &edits, dry_run)
+                    .unwrap_err();
+                assert_eq!(validation_code(error), "save_resource_capacity", "{id}");
+            }
+        }
+        let no_op = [SaveEdit {
+            field: "slot_1.resources.bombs".into(),
+            value: SaveValue::U32(70),
+        }];
+        let error = handler.apply(&input, &identity, &no_op, false).unwrap_err();
+        assert_eq!(validation_code(error), "save_resource_capacity");
+    }
+
     #[test]
     fn rejects_wrong_layout_signature_and_length() {
         let handler = schemas().remove(0);

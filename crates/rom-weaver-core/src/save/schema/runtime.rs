@@ -442,9 +442,6 @@ impl GameSchema {
                 }
             }
         }
-        for check in &self.runtime.edit_checks {
-            check.run(original)?;
-        }
         if !matches!(
             document.integrity.state,
             SaveIntegrityState::Valid | SaveIntegrityState::ValidWithWarnings
@@ -456,6 +453,10 @@ impl GameSchema {
         }
         let mut preview = validate_save_edits(&document, edits)?;
         if !preview.changed {
+            // Nothing is repaired by a no-op, so a rule-violating save still fails.
+            for check in &self.runtime.edit_checks {
+                check.run(original)?;
+            }
             return Ok(SaveEditResult {
                 preview,
                 bytes: None,
