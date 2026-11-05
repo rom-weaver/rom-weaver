@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { posix } from "node:path";
 import test from "node:test";
 
 import { KEY_PATHS, keyHash, normalizeCargoLock, normalizeCargoToml } from "./parity-cli-key.mjs";
@@ -199,14 +200,28 @@ test("the key covers the build inputs and its own definition", () => {
   }
 });
 
-test("every script setup-build-env runs is part of the key", () => {
+test("every key path exists", () => {
+  for (const path of KEY_PATHS) {
+    assert.ok(existsSync(new URL(`../../${path}`, import.meta.url)), `${path} keys nothing`);
+  }
+});
+
+// Each script setup-build-env names, and the local modules those import, decides how the toolchain
+// is set up.
+test("every script setup-build-env runs, and what it imports, is part of the key", () => {
   const action = repoFile(".github/actions/setup-build-env/action.yml");
-  const scripts = [...new Set(action.match(/scripts\/[\w./-]+\.(?:mjs|sh)/gu))];
-  assert.ok(scripts.length > 0, "setup-build-env references no scripts");
+  const named = [...new Set(action.match(/(?<![\w./-])[\w./-]*scripts\/[\w./-]+\.(?:mjs|sh)/gu))];
+  assert.ok(named.length > 0, "setup-build-env references no scripts");
+  const scripts = new Set(named);
+  for (const script of named.filter((path) => path.endsWith(".mjs"))) {
+    for (const [, specifier] of repoFile(script).matchAll(/^import .* from "(\.\.?\/[^"]+)";$/gmu)) {
+      scripts.add(posix.join(posix.dirname(script), specifier));
+    }
+  }
   for (const script of scripts) {
     assert.ok(
       KEY_PATHS.some((path) => script === path || script.startsWith(`${path}/`)),
-      `${script} is run by setup-build-env but not keyed`,
+      `${script} is used by setup-build-env but not keyed`,
     );
   }
 });
@@ -235,6 +250,7 @@ test("parity and perf share one cached CLI and fixture writer", () => {
   const { jobs } = load(repoFile(".github/workflows/parity.yml"));
   const key = jobs.parity.steps.find((s) => s.id === "cli-key");
   assert.match(key.run, /node scripts\/ci\/parity-cli-key\.mjs/u);
+  assert.ok(key.run.includes("set -euo pipefail"), "a key script failure fails this step");
   const restore = jobs.parity.steps.find((s) => s.id === "cli-cache");
   const save = jobs.parity.steps.find((s) => s.name === "Save native CLI");
   const paths = ["target/release/rom-weaver", "target/release/nkit_fixture"];

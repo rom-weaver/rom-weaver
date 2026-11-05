@@ -88,11 +88,44 @@ export async function failedJobsOrNone({ api, repo, runId, warn }) {
 // A re-run of an older scheduled run keeps the `schedule` event, so without this a passing re-run of
 // last week's nightly would close the issue while today's is still red. A re-attempt of the newest
 // run keeps its id and still counts.
-export async function isNewestNightly({ api, repo, runId }) {
+export async function newestNightlyId({ api, repo, branch }) {
   const response = await api(
-    `/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/runs?event=schedule&branch=main&per_page=1`,
+    `/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/runs?event=schedule&branch=${encodeURIComponent(branch)}&per_page=1`,
   );
-  return String(response.workflow_runs[0]?.id) === String(runId);
+  return response.workflow_runs[0]?.id;
+}
+
+// Returns the line the job logs. A failed stale-run lookup stops a recovery, because a wrong close
+// is the harmful direction, but never stops a failure from being reported.
+export async function runAlert({ env, api, paginate, warn, notice }) {
+  const { GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: runId, GITHUB_SHA: sha, NEEDS_JSON } = env;
+  const repoUrl = `${env.GITHUB_SERVER_URL ?? "https://github.com"}/${repo}`;
+  const outcome = nightlyOutcome(JSON.parse(NEEDS_JSON));
+  if (outcome !== "unknown") {
+    let newest;
+    try {
+      newest = await newestNightlyId({ api, repo, branch: env.GITHUB_REF_NAME ?? "main" });
+    } catch (error) {
+      if (outcome === "recovered") throw error;
+      warn(`finding the newest scheduled run failed; reporting this one: ${error.message}`);
+      newest = runId;
+    }
+    if (String(newest) !== String(runId)) {
+      notice(`run ${runId} is not the newest scheduled run (${newest ?? "none listed"}); nothing to do`);
+      return `nightly ${outcome}: a newer scheduled run exists; nothing to do`;
+    }
+  }
+  const failed = outcome === "failing" ? await failedJobsOrNone({ api, repo, runId, warn }) : [];
+  const summary = await reconcile({
+    api,
+    paginate,
+    repo,
+    outcome,
+    run: { runUrl: `${repoUrl}/actions/runs/${runId}`, sha, repoUrl },
+    failed,
+    warn,
+  });
+  return `nightly ${outcome}: ${summary}`;
 }
 
 // Oldest first, so a stray duplicate never displaces the issue the alerts were already using. The
@@ -166,28 +199,14 @@ export async function reconcile({ api, paginate, repo, outcome, run, failed, war
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { GH_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_SHA, NEEDS_JSON } = process.env;
-  const serverUrl = process.env.GITHUB_SERVER_URL ?? "https://github.com";
   const apiUrl = process.env.GITHUB_API_URL ?? "https://api.github.com";
-  const { api, paginate } = createGitHubApi({ token: GH_TOKEN, apiUrl, name: "nightly-alert" });
-  const outcome = nightlyOutcome(JSON.parse(NEEDS_JSON));
-  const repoUrl = `${serverUrl}/${GITHUB_REPOSITORY}`;
-  const warn = (message) => process.stdout.write(`::warning::${message}\n`);
-  const repo = GITHUB_REPOSITORY;
-  if (outcome !== "unknown" && !(await isNewestNightly({ api, repo, runId: GITHUB_RUN_ID }))) {
-    process.stdout.write(`nightly ${outcome}: a newer scheduled run exists; nothing to do\n`);
-    process.exit(0);
-  }
-  const failed =
-    outcome === "failing" ? await failedJobsOrNone({ api, repo, runId: GITHUB_RUN_ID, warn }) : [];
-  const summary = await reconcile({
+  const { api, paginate } = createGitHubApi({ token: process.env.GH_TOKEN, apiUrl, name: "nightly-alert" });
+  const line = await runAlert({
+    env: process.env,
     api,
     paginate,
-    repo: GITHUB_REPOSITORY,
-    outcome,
-    run: { runUrl: `${repoUrl}/actions/runs/${GITHUB_RUN_ID}`, sha: GITHUB_SHA, repoUrl },
-    failed,
-    warn,
+    warn: (message) => process.stdout.write(`::warning::${message}\n`),
+    notice: (message) => process.stdout.write(`::notice::${message}\n`),
   });
-  process.stdout.write(`nightly ${outcome}: ${summary}\n`);
+  process.stdout.write(`${line}\n`);
 }

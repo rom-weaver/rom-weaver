@@ -23,7 +23,8 @@ import { createHash } from "node:crypto";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-// What the native CLI build reads, including every script setup-build-env runs. parity.yml and this
+// What the native CLI build reads, including every script setup-build-env runs and the local
+// modules those import. parity.yml and this
 // script are included so an edit to how the binary is built or keyed starts from a clean cache.
 export const KEY_PATHS = [
   "crates",
@@ -34,8 +35,10 @@ export const KEY_PATHS = [
   ".github/actions/setup-build-env",
   ".github/workflows/parity.yml",
   "scripts/install-jwasm.sh",
-  "scripts/ensure-emulatorjs.mjs",
+  "packages/rom-weaver-webapp/scripts/ensure-emulatorjs.mjs",
+  "scripts/run-main.mjs",
   "scripts/ci/install-system-dependencies.mjs",
+  "scripts/ci/mise-disable-tools.mjs",
   "scripts/ci/select-mise-tools.mjs",
   "scripts/ci/parity-cli-key.mjs",
 ];

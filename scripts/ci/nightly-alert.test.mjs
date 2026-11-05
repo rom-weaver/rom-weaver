@@ -9,12 +9,12 @@ import {
   ALERT_LABEL,
   ALERT_TITLE,
   failedJobNames,
-  failureText,
   failedJobsOrNone,
-  isNewestNightly,
+  failureText,
   listRunJobs,
   nightlyOutcome,
   reconcile,
+  runAlert,
 } from "./nightly-alert.mjs";
 
 const require = createRequire(import.meta.url);
@@ -236,20 +236,76 @@ test("a failed job lookup still reports the failure, without names", async () =>
   });
   assert.deepEqual(failed, []);
   assert.match(warnings[0], /502 bad gateway/u);
-  assert.match(reconcileText(failed), /none reported/u);
+  assert.match(failureText({ ...run, failed }), /none reported/u);
 });
-const reconcileText = (failed) => failureText({ ...run, failed });
+
+// Drives the script's entry point against the fake issues API plus a runs endpoint.
+async function alert(state, { gate, newest, runsFail = false, jobsFail = false }) {
+  const issuesApi = state.api;
+  const logs = [];
+  const api = async (path, options) => {
+    if (path.includes("/actions/workflows/")) {
+      state.calls.push(`GET ${path}`);
+      if (runsFail) throw new Error("503 unavailable");
+      return { workflow_runs: newest === undefined ? [] : [{ id: newest }] };
+    }
+    if (path.includes("/jobs?")) {
+      if (jobsFail) throw new Error("502 bad gateway");
+      return { total_count: 1, jobs: [{ name: "Rust (host)", conclusion: "failure" }] };
+    }
+    return issuesApi(path, options);
+  };
+  const line = await runAlert({
+    env: {
+      GITHUB_REPOSITORY: repo,
+      GITHUB_RUN_ID: "42",
+      GITHUB_SHA: run.sha,
+      GITHUB_REF_NAME: "main",
+      NEEDS_JSON: JSON.stringify({ gate: { result: gate } }),
+    },
+    api,
+    paginate: state.paginate,
+    warn: (message) => logs.push(`warning ${message}`),
+    notice: (message) => logs.push(`notice ${message}`),
+  });
+  return { line, logs };
+}
 
 test("only the newest scheduled run acts on the issue", async () => {
-  const seen = [];
-  const api = (id) => async (path) => {
-    seen.push(path);
-    return { workflow_runs: id === undefined ? [] : [{ id }] };
-  };
-  assert.equal(await isNewestNightly({ api: api(42), repo, runId: "42" }), true);
-  assert.equal(await isNewestNightly({ api: api(43), repo, runId: "42" }), false, "a re-run of an older night");
-  assert.equal(await isNewestNightly({ api: api(undefined), repo, runId: "42" }), false);
-  assert.match(seen[0], /\/actions\/workflows\/ci\.yml\/runs\?event=schedule&branch=main&per_page=1$/u);
+  const stale = fakeGitHub({ issues: [{ number: 7, state: "open", title: ALERT_TITLE }] });
+  const { line, logs } = await alert(stale, { gate: "success", newest: 43 });
+  assert.match(line, /a newer scheduled run exists/u);
+  assert.match(logs[0], /^notice run 42 is not the newest scheduled run \(43\)/u);
+  assert.equal(stale.issues[0].state, "open", "a re-run of an older night closes nothing");
+  assert.ok(
+    stale.calls.some((entry) => entry.endsWith("/actions/workflows/ci.yml/runs?event=schedule&branch=main&per_page=1")),
+  );
+
+  const none = fakeGitHub({ issues: [{ number: 7, state: "open", title: ALERT_TITLE }] });
+  await alert(none, { gate: "failure", newest: undefined });
+  assert.deepEqual(none.issues[0].comments, [], "an empty run list is not this run");
+
+  const newest = fakeGitHub({ issues: [{ number: 7, state: "open", title: ALERT_TITLE }] });
+  assert.equal((await alert(newest, { gate: "success", newest: 42 })).line, "nightly recovered: closed #7");
+});
+
+test("a failed stale-run lookup still reports a failure but never closes the issue", async () => {
+  const failing = fakeGitHub();
+  const { line, logs } = await alert(failing, { gate: "failure", runsFail: true, jobsFail: true });
+  assert.equal(line, "nightly failing: opened #101");
+  assert.ok(logs.some((entry) => /newest scheduled run failed/u.test(entry)));
+  assert.match(failing.issues[0].body, /none reported/u);
+
+  const recovering = fakeGitHub({ issues: [{ number: 7, state: "open", title: ALERT_TITLE }] });
+  await assert.rejects(alert(recovering, { gate: "success", runsFail: true }), /503 unavailable/u);
+  assert.equal(recovering.issues[0].state, "open");
+});
+
+test("a cancelled nightly makes no API call at all", async () => {
+  const state = fakeGitHub();
+  const { line } = await alert(state, { gate: "cancelled", newest: 42 });
+  assert.match(line, /^nightly unknown:/u);
+  assert.deepEqual(state.calls, []);
 });
 
 test("a failed write stops the alert, and the next night converges", async () => {
@@ -298,6 +354,7 @@ test("no job but the alert job can write issues", () => {
 test("the alert job runs the script with the needs context and a read-only checkout", () => {
   const [checkout, alert] = alertJob.steps;
   assert.equal(checkout.with["sparse-checkout"], "scripts/ci");
+  assert.equal(checkout.with["persist-credentials"], false, "the issues token never lands in .git/config");
   assert.equal(alert.run, "node scripts/ci/nightly-alert.mjs");
   assert.equal(alert.env.NEEDS_JSON, "${{ toJSON(needs) }}");
   assert.equal(alert.env.GH_TOKEN, "${{ github.token }}");
