@@ -57,18 +57,6 @@ fn machine_choices() -> Vec<FieldChoice> {
         .collect()
 }
 
-fn id_part(label: &str) -> String {
-    let mut out = String::new();
-    for ch in label.chars() {
-        if ch.is_ascii_alphanumeric() {
-            out.push(ch.to_ascii_lowercase());
-        } else if !out.ends_with('_') && !out.is_empty() {
-            out.push('_');
-        }
-    }
-    out.trim_end_matches('_').to_string()
-}
-
 // A ranking entry is a 1/100 s time (u16) followed by a byte whose high nibble is the machine.
 // The machine is only meaningful, and only editable, when the entry holds a time.
 fn ranking_fields(prefix: &str, label: &str, offset: usize) -> [FieldDefinition; 2] {

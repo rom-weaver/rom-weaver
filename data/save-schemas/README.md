@@ -62,7 +62,7 @@ The default registry includes 611 profiles: the original seven game-family defin
 | `wario_land_ii.rs` | 1 | 1 | 208 | Template only |
 | `yoshis_story.rs` | 1 | 3 | 39 | Template only |
 | `zelda_links_awakening.rs` | 1 | 4 | 288 | Template only |
-| **Total** | **51** | **118** | **7,114** | **2 fresh profiles** |
+| **Total** | **51** | **118** | **11,013** | **2 fresh profiles** |
 
 Fresh creation uses a verified initializer. Template creation starts from an existing valid save and preserves bytes outside the requested edits and integrity repairs. A profile without an initializer cannot create a fresh save.
 
@@ -206,7 +206,7 @@ These six editors use Game Tools Collection revision `75ce8f848b628f202c50daa75d
 | Castlevania: Aria of Sorrow | Level, experience, HP, MP, stats, gold, playtime, and mode unlocks | Raw 32 KiB GBA SRAM; edits update level and gold preview copies. Empty slots cannot be edited. |
 | Castlevania: Circle of the Moon | Level, experience, HP, MP, hearts, bonus pickups, equipment, and playtime | Raw 32 KiB GBA SRAM; edits repair the selected slot checksum. Empty slots stay unchanged. |
 | 1080° Snowboarding | Progression, course unlocks, tricks, contest scores, and audio | 32 KiB SRAM; edits preserve canonical or byte-swapped word order and repair section checksums, the master checksum, and linked contest totals. |
-| Wario Land II | Progression, stage coins, total coins, Flagman D.D high score, 50 stage unlock/clear flags with hidden ending bits, 50 treasures, 50 picture panels, and the final-chapter best time | Raw 32 KiB SRAM; the editor selects the newest section and repairs its checksum. A damaged newest section is rejected. |
+| Wario Land II | Progression, stage coins, total coins, Flagman D.D high score, 50 stage unlock/clear flags with hidden ending bits, 50 treasures, 50 picture panels, and the final-chapter best time (a byte that is not valid BCD reads as its raw value until a valid time is written) | Raw 32 KiB SRAM; the editor selects the newest section and repairs its checksum. A damaged newest section is rejected. |
 | Yoshi's Story | Black and White Yoshi unlocks, audio, and regional continuation fields and language | Canonical 2 KiB EEPROM; separate Europe, USA, and Japan profiles repair the rolling checksum. Japan omits continuation and language fields. |
 | The Legend of Zelda: Link's Awakening | Health, rupees, deaths, resource quantities, key items, and instruments | Raw 8 KiB GB or 32 KiB GBC SRAM; separate layouts and release markers. Empty slots cannot be edited. |
 

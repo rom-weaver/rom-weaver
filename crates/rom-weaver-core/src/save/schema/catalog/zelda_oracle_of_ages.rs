@@ -292,18 +292,6 @@ const SEASONS_DUNGEONS: [(usize, &str); 12] = [
     (0xb, "Hero's Cave (Linked Game)"),
 ];
 
-fn id_part(label: &str) -> String {
-    let mut out = String::new();
-    for ch in label.chars() {
-        if ch.is_ascii_alphanumeric() {
-            out.push(ch.to_ascii_lowercase());
-        } else if !out.ends_with('_') && !out.is_empty() {
-            out.push('_');
-        }
-    }
-    out.trim_end_matches('_').to_string()
-}
-
 fn scalar_field(row: &ScalarRow, base: usize, game: Game) -> Option<FieldDefinition> {
     let (id, label, ages, seasons, kind, max) = *row;
     let offset = base + if game == Game::Ages { ages } else { seasons }?;

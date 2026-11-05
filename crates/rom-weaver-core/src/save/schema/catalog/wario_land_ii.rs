@@ -157,19 +157,6 @@ fn bit_field(id: &str, label: &str, offset: usize, bit: usize) -> FieldDefinitio
     field(id, label, offset + bit / 8, Storage::Bit).bit((bit % 8) as u8)
 }
 
-fn id_part(label: &str) -> String {
-    label
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() {
-                ch.to_ascii_lowercase()
-            } else {
-                '_'
-            }
-        })
-        .collect()
-}
-
 // Fields address stages linearly: stage N uses bit N of each flag bitfield.
 fn stage_fields() -> Vec<FieldDefinition> {
     let mut fields = Vec::new();
@@ -238,18 +225,35 @@ fn stage_fields() -> Vec<FieldDefinition> {
         2,
     ));
     for (index, part) in ["first", "second", "third"].into_iter().enumerate() {
-        fields.push(
-            field(
-                &format!("best_time.{part}"),
-                &format!("Really Final Chapter best time {part} part"),
-                0x2c + index,
-                Storage::BcdBe,
-            )
-            .length(1)
-            .max(59),
-        );
+        fields.push(best_time(part, 0x2c + index));
     }
     fields
+}
+
+// A best-time byte that is not valid BCD reads as its raw value instead of making the whole
+// document unreadable; writing a valid time replaces it. The raw write stores the binary value,
+// then the store re-encodes it as BCD.
+fn best_time(part: &str, offset: usize) -> FieldDefinition {
+    let mut time = field(
+        &format!("best_time.{part}"),
+        &format!("Really Final Chapter best time {part} part"),
+        offset,
+        Storage::U8,
+    )
+    .min(0)
+    .max(59);
+    time.behavior.read = Some(rules::ReadValue::new(move |bytes| {
+        let byte = bytes[offset];
+        Ok(if byte >> 4 > 9 || byte & 15 > 9 {
+            i64::from(byte)
+        } else {
+            i64::from(byte >> 4) * 10 + i64::from(byte & 15)
+        })
+    }));
+    time.behavior.on_edit = vec![byte_store(offset, None, move |bytes| {
+        bcd(i64::from(bytes[offset]))
+    })];
+    time
 }
 
 fn candidate(section: usize) -> layout::Candidate {
@@ -493,14 +497,70 @@ mod tests {
     }
 
     #[test]
-    fn best_time_rejects_values_past_sixty_and_invalid_bcd() {
+    fn treasure_ids_keep_the_one_underscore_per_separator_form() {
+        for treasure in TREASURES {
+            let per_character: String = treasure
+                .chars()
+                .map(|ch| {
+                    if ch.is_ascii_alphanumeric() {
+                        ch.to_ascii_lowercase()
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+            assert_eq!(id_part(treasure), per_character, "{treasure}");
+        }
+    }
+
+    #[test]
+    fn invalid_bcd_best_time_keeps_the_document_readable_until_a_valid_time_is_written() {
         let handler = schemas().remove(0);
         let identity = handler.definitions().remove(0).identity;
         let input = input(&identity, 0);
         assert!(edit(&handler, &input, &[("best_time.first", SaveValue::U32(60))]).is_err());
+        assert!(
+            edit(
+                &handler,
+                &input,
+                &[("best_time.third", SaveValue::U32(100))]
+            )
+            .is_err()
+        );
+
+        let time = DATA_OFFSET + 0x2c;
         let mut bad = input.clone();
-        bad.bytes[DATA_OFFSET + 0x2c] = 0x7a;
+        bad.bytes[time..time + 3].copy_from_slice(&[0x7a, 0x07, 0xff]);
         repair(&mut bad.bytes, 0);
-        assert!(handler.apply(&bad, &identity, &[], false).is_err());
+        let document = handler.parse(&bad, &identity).unwrap();
+        let value = |name: &str| {
+            document
+                .fields
+                .iter()
+                .find(|field| field.id == name)
+                .unwrap_or_else(|| panic!("missing field {name}"))
+                .value
+                .clone()
+        };
+        assert_eq!(value("best_time.first"), SaveValue::U32(0x7a));
+        assert_eq!(value("best_time.second"), SaveValue::U32(7));
+        assert_eq!(value("best_time.third"), SaveValue::U32(0xff));
+        assert_eq!(value("stage_coins"), SaveValue::U32(0));
+
+        let out = edit(
+            &handler,
+            &bad,
+            &[
+                ("stage_coins", SaveValue::U32(12)),
+                ("best_time.first", SaveValue::U32(45)),
+            ],
+        )
+        .unwrap();
+        let mut expected = bad.bytes.clone();
+        expected[DATA_OFFSET + 0x0e..DATA_OFFSET + 0x10].copy_from_slice(&[0x00, 0x12]);
+        expected[time..time + 3].copy_from_slice(&[0x45, 0x07, 0xff]);
+        repair(&mut expected, 0);
+        assert_eq!(out, expected);
+        assert!(edit(&handler, &bad, &[("best_time.third", SaveValue::U32(60))]).is_err());
     }
 }

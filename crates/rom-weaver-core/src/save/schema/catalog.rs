@@ -21,6 +21,42 @@ fn build(
         .collect()
 }
 
+// Single-byte store used by field write hooks; `mask` limits the bits the value replaces.
+fn byte_store(
+    offset: usize,
+    mask: Option<u32>,
+    value: impl Fn(&[u8]) -> i64 + Send + Sync + 'static,
+) -> rules::Store {
+    rules::Store {
+        when: None,
+        destination: rules::Scalar {
+            offset,
+            storage: Storage::U8,
+            mask,
+        },
+        value: rules::ReadValue::new(move |bytes| Ok(value(bytes))),
+    }
+}
+
+// Field IDs are built from this mapping, so changing it renames fields in every catalog game.
+fn id_part(label: &str) -> String {
+    let mut out = String::new();
+    for ch in label.chars() {
+        let ch = if ch == 'é' { 'e' } else { ch };
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_lowercase());
+        } else if !out.ends_with('_') && !out.is_empty() {
+            out.push('_');
+        }
+    }
+    out.trim_end_matches('_').to_string()
+}
+
+// Packs a value from 0 to 99 into one binary-coded decimal byte.
+fn bcd(value: i64) -> i64 {
+    ((value / 10) << 4) | (value % 10)
+}
+
 struct Repetition {
     count: usize,
     start: usize,
@@ -353,4 +389,25 @@ fn choices(entries: &[(&str, i64)]) -> Vec<FieldChoice> {
             value: *value,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn id_part_lowercases_collapses_separators_and_folds_e_acute() {
+        assert_eq!(id_part("Yo-yo"), "yo_yo");
+        assert_eq!(id_part("Pokémon  Flute!"), "pokemon_flute");
+        assert_eq!(id_part("  Ring (1) "), "ring_1");
+        assert_eq!(id_part("???"), "");
+    }
+
+    #[test]
+    fn bcd_packs_two_decimal_digits() {
+        assert_eq!(
+            [bcd(0), bcd(9), bcd(10), bcd(59), bcd(99)],
+            [0, 9, 0x10, 0x59, 0x99]
+        );
+    }
 }

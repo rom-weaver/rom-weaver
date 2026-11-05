@@ -151,37 +151,8 @@ const POWERS: [(&str, &str); 8] = [
     ("super_swim", "Super Swim acquired"),
 ];
 
-fn byte_store(offset: usize, value: impl Fn(&[u8]) -> i64 + Send + Sync + 'static) -> Store {
-    Store {
-        when: None,
-        destination: Scalar {
-            offset,
-            storage: Storage::U8,
-            mask: None,
-        },
-        value: ReadValue::new(move |bytes| Ok(value(bytes))),
-    }
-}
-
 fn bit_field(id: &str, label: &str, offset: usize, bit: u8) -> FieldDefinition {
     catalog_field(id, label, offset, Storage::Bit).bit(bit)
-}
-
-fn slug(label: &str) -> String {
-    let mut out = String::new();
-    for ch in label.chars() {
-        let ch = if ch == 'é' { 'e' } else { ch };
-        if ch.is_ascii_alphanumeric() {
-            out.push(ch.to_ascii_lowercase());
-        } else if !out.ends_with('_') && !out.is_empty() {
-            out.push('_');
-        }
-    }
-    out.trim_end_matches('_').to_string()
-}
-
-fn bcd(value: i64) -> i64 {
-    ((value / 10) << 4) | (value % 10)
 }
 
 // The treasure counter MUST follow the number of set treasure flags after every treasure edit.
@@ -222,7 +193,7 @@ fn time_attack(id: &str, label: &str, offset: usize, partner: usize) -> FieldDef
                 })
             })),
             on_edit: vec![
-                byte_store(partner, move |bytes| {
+                byte_store(partner, None, move |bytes| {
                     let (own, other) = (bytes[offset], bytes[partner]);
                     i64::from(match (own, other) {
                         (0, 0 | UNSET) => UNSET,
@@ -230,7 +201,7 @@ fn time_attack(id: &str, label: &str, offset: usize, partner: usize) -> FieldDef
                         _ => other,
                     })
                 }),
-                byte_store(offset, move |bytes| {
+                byte_store(offset, None, move |bytes| {
                     if bytes[offset] == 0 && bytes[partner] == UNSET {
                         i64::from(UNSET)
                     } else {
@@ -261,7 +232,7 @@ fn golf(course: usize) -> FieldDefinition {
                 i64::from(bytes[offset])
             })
         })),
-        on_edit: vec![byte_store(offset, move |bytes| {
+        on_edit: vec![byte_store(offset, None, move |bytes| {
             i64::from(if bytes[offset] == 0 {
                 UNSET
             } else {
@@ -364,7 +335,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         bit_field("event.time_attack_enabled", "Time Attack enabled", 0x3c1, 1),
     ]);
     for (offset, bit, label) in TREASURES {
-        let mut field = bit_field(&format!("treasure.{}", slug(label)), label, offset, bit);
+        let mut field = bit_field(&format!("treasure.{}", id_part(label)), label, offset, bit);
         field.behavior.on_edit.push(treasure_count_store());
         fields.push(field);
     }

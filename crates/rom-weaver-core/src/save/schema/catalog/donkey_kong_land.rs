@@ -131,17 +131,6 @@ const BOULDERS: [(&str, &str); 3] = [
     ("world_2", "World 2"),
 ];
 
-fn id_part(label: &str) -> String {
-    let mut out = String::new();
-    for ch in label.chars() {
-        if ch.is_ascii_alphanumeric() {
-            out.push(ch.to_ascii_lowercase());
-        } else if !out.ends_with('_') && !out.is_empty() {
-            out.push('_');
-        }
-    }
-    out.trim_end_matches('_').to_string()
-}
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let mut fields = Vec::new();
     let mut signatures = Vec::new();

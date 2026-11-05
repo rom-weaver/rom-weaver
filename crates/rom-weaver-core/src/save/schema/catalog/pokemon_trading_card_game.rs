@@ -245,29 +245,30 @@ const CARDS: [(&str, &str); 228] = [
     ("D51", "Recycle"),
 ];
 
-fn byte_store(
-    offset: usize,
-    mask: Option<u32>,
-    value: impl Fn(&[u8]) -> i64 + Send + Sync + 'static,
-) -> Store {
+// The save preview's album count tracks the cards in the collection (bit 7 clear). The count is
+// moved by the net change across the whole edit set so that edit order and no-op writes cannot
+// skew it, and so a stored count that already differs from a recount keeps its offset.
+fn album_store() -> Store {
+    fn collected(bytes: &[u8]) -> i64 {
+        bytes[CARD_OFFSET + 1..=CARD_OFFSET + CARDS.len()]
+            .iter()
+            .filter(|byte| **byte & 0x80 == 0)
+            .count() as i64
+    }
     Store {
         when: None,
         destination: Scalar {
-            offset,
+            offset: ALBUM_COUNT_OFFSET,
             storage: Storage::U8,
-            mask,
+            mask: None,
         },
-        value: ReadValue::new(move |bytes| Ok(value(bytes))),
+        value: ReadValue::with_original(|original, edited| {
+            let count =
+                i64::from(original[ALBUM_COUNT_OFFSET]) + collected(edited) - collected(original);
+            trace!(count, "updated Pokemon TCG album count");
+            Ok(count)
+        }),
     }
-}
-
-// The save preview's album count follows the number of cards in the collection (bit 7 clear).
-fn album_store(offset: usize, delta: impl Fn(u8) -> i64 + Send + Sync + 'static) -> Store {
-    byte_store(ALBUM_COUNT_OFFSET, None, move |bytes| {
-        let count = i64::from(bytes[ALBUM_COUNT_OFFSET]) + delta(bytes[offset]);
-        trace!(offset, count, "updated Pokemon TCG album count");
-        count
-    })
 }
 
 fn card_fields() -> Vec<FieldDefinition> {
@@ -284,27 +285,18 @@ fn card_fields() -> Vec<FieldDefinition> {
         )
         .mask(0x7f)
         .max(99);
-        count.behavior.on_edit = vec![
-            album_store(offset, |byte| i64::from(byte >> 7)),
-            byte_store(offset, Some(0x80), |_| 0),
-        ];
+        count.behavior.on_edit = vec![byte_store(offset, Some(0x80), |_| 0)];
         fields.push(count);
-        let mut collected = catalog_field(
-            &format!("{id}.collected"),
-            &format!("{prefix} {name} in collection"),
-            offset,
-            Storage::Bit,
-        )
-        .bit(7)
-        .inverted(true);
-        collected.behavior.on_edit =
-            vec![album_store(
+        fields.push(
+            catalog_field(
+                &format!("{id}.collected"),
+                &format!("{prefix} {name} in collection"),
                 offset,
-                |byte| {
-                    if byte & 0x80 == 0 { 1 } else { -1 }
-                },
-            )];
-        fields.push(collected);
+                Storage::Bit,
+            )
+            .bit(7)
+            .inverted(true),
+        );
     }
     fields
 }
@@ -463,7 +455,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     }
     fields.extend(config_fields());
     fields.extend(card_fields());
-    build(vec![GameDefinition { fields, description: "Edits playtime, position, Master Medals, config, Challenge Machine records, mail, and the card album (copies and collection flags, with the save-preview album count). Names and decks are omitted because they need region-specific text tables.".into(), signatures: vec![SignatureDefinition{offset:0,bytes:vec![4,0x21,5]},SignatureDefinition{offset:0x5800,bytes:vec![8]}], checksums: vec![ChecksumDefinition{start:Some(0x5804),length:Some(0xb7),exclude:vec![ChecksumExclusion{offset:0x5804,length:2}],..ChecksumDefinition::new(ChecksumAlgorithm::Add16Le,0x5804)}], ..GameDefinition::new("pokemon-trading-card-game".into(), "Pokémon Trading Card Game".into(), "game-boy-color".into(), 32768)}],BTreeMap::new(),true)
+    build(vec![GameDefinition { fields, description: "Edits playtime, position, Master Medals, config, Challenge Machine records, mail, and the card album (copies and collection flags, with the save-preview album count). Names and decks are omitted because they need region-specific text tables.".into(), signatures: vec![SignatureDefinition{offset:0,bytes:vec![4,0x21,5]},SignatureDefinition{offset:0x5800,bytes:vec![8]}], checksums: vec![ChecksumDefinition{start:Some(0x5804),length:Some(0xb7),exclude:vec![ChecksumExclusion{offset:0x5804,length:2}],..ChecksumDefinition::new(ChecksumAlgorithm::Add16Le,0x5804)}], runtime: runtime::Runtime { after_edit: vec![album_store()], ..Default::default() },..GameDefinition::new("pokemon-trading-card-game".into(), "Pokémon Trading Card Game".into(), "game-boy-color".into(), 32768)}],BTreeMap::new(),true)
 }
 
 #[cfg(test)]
@@ -700,6 +692,81 @@ mod tests {
         assert_eq!(again[0x4101], 0);
         assert_eq!(again[ALBUM_COUNT_OFFSET], 11);
         assert!(run(&fixture, &[("card.001.count", SaveValue::U32(100))]).is_err());
+    }
+
+    #[test]
+    fn album_count_follows_the_net_collection_change_whatever_the_edit_order() {
+        let mut fixture = fixture();
+        // Card 1 is not collected; card 2 already is with three copies.
+        fixture.2.bytes[0x4101] = 0x80;
+        fixture.2.bytes[0x4102] = 0x03;
+        repair(&mut fixture.2.bytes);
+        fn album(
+            fixture: &(SchemaSaveHandler, SaveGameIdentity, SaveDetectionInput),
+            edits: &[(&str, SaveValue)],
+        ) -> (u8, u8, u8) {
+            let (h, id, input) = fixture;
+            let edits: Vec<_> = edits
+                .iter()
+                .map(|(field, value)| SaveEdit {
+                    field: (*field).into(),
+                    value: value.clone(),
+                })
+                .collect();
+            // A write that changes no byte reports no output, so the input stands in for it.
+            let out = h
+                .apply(input, id, &edits, false)
+                .unwrap()
+                .bytes
+                .unwrap_or_else(|| input.bytes.clone());
+            (out[0x4101], out[0x4102], out[ALBUM_COUNT_OFFSET])
+        }
+        // Setting copies also collects the card, so a collected=true in either order adds one.
+        for edits in [
+            [
+                ("card.001.count", SaveValue::U32(2)),
+                ("card.001.collected", SaveValue::Bool(true)),
+            ],
+            [
+                ("card.001.collected", SaveValue::Bool(true)),
+                ("card.001.count", SaveValue::U32(2)),
+            ],
+        ] {
+            assert_eq!(album(&fixture, &edits), (2, 3, 11), "{edits:?}");
+        }
+        // A collected=true on an already collected card is a no-op.
+        assert_eq!(
+            album(&fixture, &[("card.002.collected", SaveValue::Bool(true))]),
+            (0x80, 0x03, 10)
+        );
+        assert_eq!(
+            album(
+                &fixture,
+                &[
+                    ("card.002.collected", SaveValue::Bool(true)),
+                    ("card.002.count", SaveValue::U32(9)),
+                ]
+            ),
+            (0x80, 0x09, 10)
+        );
+        // Un-collecting after a copy edit leaves the card uncollected with its count kept.
+        assert_eq!(
+            album(
+                &fixture,
+                &[
+                    ("card.001.count", SaveValue::U32(2)),
+                    ("card.001.collected", SaveValue::Bool(false)),
+                ]
+            ),
+            (0x82, 0x03, 10)
+        );
+        // A stored count that disagrees with the collection keeps its offset.
+        fixture.2.bytes[ALBUM_COUNT_OFFSET] = 50;
+        repair(&mut fixture.2.bytes);
+        assert_eq!(
+            album(&fixture, &[("card.001.collected", SaveValue::Bool(true))]),
+            (0, 0x03, 51)
+        );
     }
 
     #[test]
