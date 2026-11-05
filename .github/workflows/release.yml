@@ -646,7 +646,7 @@ jobs:
           # tarball would keep it and the container would not, which is exactly
           # the divergence sharing this artifact exists to remove.
           include-hidden-files: true
-          # See the matching upload in npm-publish.yml: an artifact name cannot
+          # See the matching upload in npm-build.yml: an artifact name cannot
           # be reused within a run, so without this a rerun of a failed
           # static-webapp job 409s here instead of retrying.
           overwrite: true
@@ -889,11 +889,17 @@ jobs:
       needs.static-webapp.result == 'success' &&
       needs.npm-build.result == 'success' &&
       needs.release.outputs.release_created == 'true'
+    # GitHub rejects the whole run at startup when a called workflow's job, even one its `if` skips,
+    # asks for more than the caller grants, so this grants what docker-publish.yml's `publish` job
+    # asks for. The `build` job, the only one this phase runs, narrows its own token to read access,
+    # so the build still cannot write to the registry.
     permissions:
-      # Read the run artifacts and the layer cache; the build phase cannot write to the registry.
       actions: read
+      artifact-metadata: write
+      attestations: write
       contents: read
-      packages: read
+      id-token: write
+      packages: write
     uses: ./.github/workflows/docker-publish.yml
     with:
       version: ${{ needs.release.outputs.version }}

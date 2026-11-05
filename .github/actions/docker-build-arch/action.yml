@@ -180,4 +180,5 @@ runs:
         overwrite: true
         path: ${{ github.workspace }}/.cache/agents/scratch/docker-sweep/digests/*
         if-no-files-found: error
-        retention-days: 1
+        # An archive build is pushed by a later job, which a rerun can start days after the build.
+        retention-days: ${{ inputs.export-oci != '' && 7 || 1 }}

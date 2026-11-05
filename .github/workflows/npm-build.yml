@@ -161,7 +161,7 @@ jobs:
           # run's namespace, so without this the documented "rerun the failed
           # jobs" retry (.github/RELEASING.md) would 409 here on every attempt
           # and strand the draft. A rerun rebuilds the same released sha, and
-          # publish-containers was skipped in the failed attempt, so nothing can
+          # build-containers was skipped in the failed attempt, so nothing can
           # be reading the artifact while it is replaced.
           overwrite: true
           retention-days: 7

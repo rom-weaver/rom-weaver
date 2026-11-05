@@ -196,15 +196,17 @@ test("the container build overlaps the npm publish but pushes nothing", () => {
   // The build needs only the artifacts it consumes, never the publish or the semver gate.
   assert.match(jobs["build-containers"], /needs: \[release, static-webapp, npm-build\]/);
   assert.doesNotMatch(jobs["build-containers"].replace(/^\s*#.*$/gm, ""), /publish-npm|semver/);
-  assert.match(jobs["build-containers"], /packages: read/);
-  assert.doesNotMatch(jobs["build-containers"], /packages: write|id-token|attestations/);
+  // The caller must grant what the skipped publish job asks for (GitHub checks it at startup), so
+  // the read-only guarantee lives in the build job's own permissions below.
+  assert.match(jobs["build-containers"], /packages: write/);
 
   const docker = workflow("docker-publish.yml");
   const dockerJobs = jobsOf(docker);
   const build = dockerJobs.build.replace(/^\s*#.*$/gm, "");
   assert.match(build, /export-oci: /);
+  assert.match(build, /\n    permissions:\n(?:\s*\n)?      actions: read\n      contents: read\n      packages: read\n/);
   assert.doesNotMatch(build, /\n\s+push: |push-to-registry|packages: write|id-token|attestations/);
-  assert.match(build, /cache-to: \$\{\{ steps\.source\.outputs\.value == 'source' && inputs\.sha == '' \}\}/);
+  assert.match(build, /cache-to: "false"/);
   const pushAt = dockerJobs.publish.indexOf("skopeo copy");
   assert.ok(pushAt > dockerJobs.publish.indexOf("Download the image archives"));
   assert.ok(pushAt < dockerJobs.publish.indexOf("Assemble the manifest list"));

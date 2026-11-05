@@ -195,8 +195,8 @@ jobs:
           arch: ${{ matrix.arch }}
           registry-owner: ${{ github.repository_owner }}
           export-oci: ${{ runner.temp }}/image.tar
-          # Export only source-build layers so prebuilt COPY layers do not replace the useful cache.
-          cache-to: ${{ steps.source.outputs.value == 'source' && inputs.sha == '' }}
+          # The read-only token cannot write the registry cache; main's CI pushes keep it fresh.
+          cache-to: "false"
 
       # Layers are already compressed, so storing the archive uncompressed saves the CPU time.
       - name: Upload image archive
