@@ -10,7 +10,7 @@ const CHECKSUM_WIDTH: usize = 8;
 const CHUNK_SIZE: usize = 0x80;
 const CHUNKS: usize = 0x3c;
 /// Bits of the last checksum byte that a chunk parity covers (60 chunks leave the low 4 unused).
-const UNUSED_MASK: u8 = 0xf0;
+const COVERED_MASK: u8 = 0xf0;
 
 /// One parity bit per 128-byte chunk, most significant bit first, over the first 60 chunks with
 /// the stored checksum read as zero. The four unused bits stay set.
@@ -48,8 +48,8 @@ fn integrity(game: &mut GameDefinition, base: usize) {
             // No chunk covers the low nibble of the last byte, so it is not validated.
             Ok(
                 stored[..CHECKSUM_WIDTH - 1] == expected[..CHECKSUM_WIDTH - 1]
-                    && stored[CHECKSUM_WIDTH - 1] & UNUSED_MASK
-                        == expected[CHECKSUM_WIDTH - 1] & UNUSED_MASK,
+                    && stored[CHECKSUM_WIDTH - 1] & COVERED_MASK
+                        == expected[CHECKSUM_WIDTH - 1] & COVERED_MASK,
             )
         }),
         code: "final_fantasy_tactics_checksum".into(),
