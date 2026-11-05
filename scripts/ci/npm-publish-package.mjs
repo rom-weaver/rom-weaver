@@ -3,9 +3,36 @@
 // publication; prerelease routing MUST use the version, since package names contain hyphens.
 //
 // Usage: npm-publish-package.mjs [--dry-run] [package-dir]   (default: repository root)
-import { chmodSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, readFileSync, realpathSync } from "node:fs";
+import { delimiter, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+
+// Finds npm's own script so it can be run with this node. `npm` is `npm.cmd` on Windows, which node
+// refuses to spawn without a shell (CVE-2024-27980) and which a shell would need escaped arguments
+// for; `npm.cmd` only runs `node npm-cli.js` anyway. Mirrors the layouts actions/setup-node
+// installs: `<dir>/npm` symlinked into `lib/node_modules/npm` on Linux and macOS, and
+// `<dir>/node_modules/npm` beside `npm.cmd` on Windows. Running from `npm run` or `npx` is covered
+// by `npm_execpath`.
+const resolveNpmCli = ({
+  env = process.env,
+  platform = process.platform,
+  exists = existsSync,
+  realpath = realpathSync,
+} = {}) => {
+  const fromNpm = env.npm_execpath;
+  if (fromNpm && /npm-cli\.c?js$/u.test(fromNpm) && exists(fromNpm)) return fromNpm;
+  for (const directory of (env.PATH ?? "").split(delimiter).filter(Boolean)) {
+    if (platform === "win32") {
+      const cli = join(directory, "node_modules", "npm", "bin", "npm-cli.js");
+      if (exists(join(directory, "npm.cmd")) && exists(cli)) return cli;
+    } else if (exists(join(directory, "npm"))) {
+      const cli = realpath(join(directory, "npm"));
+      if (/npm-cli\.c?js$/u.test(cli)) return cli;
+    }
+  }
+  throw new Error("cannot find npm-cli.js next to npm on PATH");
+};
 
 // Actions artifacts lose executable permissions, which npm preserves when packing.
 // Non-Windows executables MUST regain those permissions before publication.
@@ -25,10 +52,10 @@ const main = async () => {
   const spec = `${manifest.name}@${manifest.version}`;
   const tag = manifest.version.includes("-") ? "beta" : "latest";
   restoreExecutableMode(dir, manifest);
-  const { default: crossSpawn } = await import("cross-spawn");
+  const npmCli = resolveNpmCli();
 
   const runNpm = (args, options) => {
-    const result = crossSpawn.sync("npm", args, options);
+    const result = spawnSync(process.execPath, [npmCli, ...args], options);
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(`npm exited with status ${result.status}`);
   };
@@ -70,6 +97,13 @@ const main = async () => {
   }
 };
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    await main();
+  } catch (error) {
+    process.stderr.write(`${error.message}\n`);
+    process.exitCode = 1;
+  }
+}
 
-export { restoreExecutableMode };
+export { resolveNpmCli, restoreExecutableMode };

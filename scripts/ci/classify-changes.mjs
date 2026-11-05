@@ -231,7 +231,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
       /^(?:Cargo\.toml|Cargo\.lock|\.config\/deny\.toml|package\.json|package-lock\.json)$/.test(
         path,
       ) ||
-      /^\.github\/workflows\/(?:npm-publish|release)\.yml$/.test(path) ||
+      /^\.github\/workflows\/(?:npm-build|npm-publish|release)\.yml$/.test(path) ||
       path.startsWith(".github/actions/build-cli-platform/") ||
       path === ".github/cli-platforms.json" ||
       path.startsWith("packages/rom-weaver-cli-platforms/") ||
