@@ -105,8 +105,13 @@ test("the release push skips a run that made no commit, even when the branch mov
   const scratch = resolve(".agent/release-push");
   mkdirSync(scratch, { recursive: true });
   const directory = mkdtempSync(join(scratch, "push-"));
+  // Git hooks export GIT_DIR, GIT_INDEX_FILE, and friends; inheriting them would point every
+  // command below at the repository running the hook instead of the scratch repositories.
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+  );
   const git = (cwd, ...args) => {
-    const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+    const result = spawnSync("git", args, { cwd, encoding: "utf8", env });
     assert.equal(result.status, 0, `git ${args.join(" ")}: ${result.stderr}`);
     return result.stdout.trim();
   };
@@ -116,7 +121,7 @@ test("the release push skips a run that made no commit, even when the branch mov
     spawnSync("bash", ["-eu", "-c", push], {
       cwd,
       encoding: "utf8",
-      env: { ...process.env, RELEASE_PR_BRANCH: "release" },
+      env: { ...env, RELEASE_PR_BRANCH: "release" },
     });
   try {
     const origin = join(directory, "origin.git");
