@@ -402,6 +402,10 @@ test("a workflow says it is reading a slow page drop and clears once the files l
   const { event, release } = slowFolderDrop(selectionPatch("folder.ips"));
   document.dispatchEvent(event);
   await expect.poll(isDropRouting).toBe(true);
+  const pillOpacity = () => getComputedStyle(document.querySelector(".dropveil-text")).opacity;
+  // The reading words wait unseen at first, so a read that ends quickly never flashes them.
+  expect(pillOpacity()).toBe("0");
+  await expect.poll(pillOpacity).toBe("1");
   expect(dropVeilText()).toBe("Reading files…");
   expect(document.querySelector(".dropveil + [role=status]")?.textContent).toBe("Reading files…");
   release();

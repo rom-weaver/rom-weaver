@@ -395,7 +395,7 @@ const PageFooter = () => {
    up and says where the files are going; a drop that stays put never sets it. */
 type DropRouting = { phase: "reading" } | { phase: "opening"; view: WebappView };
 // Long enough to read the destination over the newly opened workflow.
-const DROP_ROUTING_HOLD_MS = 450;
+const DROP_ROUTING_HOLD_MS = 800;
 
 const DropVeil = ({ dragging, routing }: { dragging: boolean; routing: DropRouting | null }) => {
   const localizer = useUiLocalizer();
@@ -414,7 +414,10 @@ const DropVeil = ({ dragging, routing }: { dragging: boolean; routing: DropRouti
     <>
       <div aria-hidden="true" className="dropveil">
         {/* Keyed by phase so each change of words replays the pill's entrance. */}
-        <span className="dropveil-text" key={destination?.id ?? shown?.phase ?? "release"}>
+        <span
+          className={shown?.phase === "reading" ? "dropveil-text is-reading" : "dropveil-text"}
+          key={destination?.id ?? shown?.phase ?? "release"}
+        >
           {destination ? (
             destination.icon
           ) : (
