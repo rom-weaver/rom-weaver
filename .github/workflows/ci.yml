@@ -1189,6 +1189,8 @@ jobs:
           msvc-arch: ${{ matrix.msvc_arch }}
           msvc-host: ${{ matrix.msvc_host }}
           cache-save: ${{ github.ref == 'refs/heads/main' }}
+          # The release ships these bytes, so they come from this tree alone.
+          cache-restore: ${{ env.RELEASE_PR_BINARIES != 'true' }}
           identify-release-tree: build
           identify-data-source: artifact
 

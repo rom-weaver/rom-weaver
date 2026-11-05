@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import process from "node:process";
 import test from "node:test";
 
 import { artifactName } from "./cli-release-binary.mjs";
@@ -69,6 +70,9 @@ test("only a successful ci.yml run of this repository's release branch at the he
   assert.equal(pick({ head_repository: { full_name: "someone/rom-weaver" } }), null, "a fork's branch with the release prefix");
   assert.equal(pick({ path: ".github/workflows/ci.yml-x.yml" }), null, "a workflow whose path only starts with ci.yml");
   assert.equal(latestReleaseRun([run({ id: 1 }), run({ id: 2, created_at: "2026-10-28T05:00:00Z" })], { repository: REPOSITORY, sha: SHA }).id, 2);
+  const branch = `${RELEASE_PR_BRANCH_PREFIX}cli`;
+  const other = run({ id: 3, head_branch: `${RELEASE_PR_BRANCH_PREFIX}other`, created_at: "2026-10-29T00:00:00Z" });
+  assert.equal(latestReleaseRun([run(), other], { repository: REPOSITORY, sha: SHA, branch }).id, 100, "a newer run of another release-prefixed branch");
 });
 
 test("only the merged release pull request of that head into main enables reuse", () => {
@@ -107,10 +111,19 @@ test("a failing lookup is reported and never fails the release", () => {
   try {
     const output = join(directory, "output");
     writeFileSync(output, "");
-    const result = main({ MATRIX: JSON.stringify(matrix), GITHUB_REPOSITORY: REPOSITORY, ARTIFACT_SHA: SHA, ARTIFACT_PR: PR, GITHUB_OUTPUT: output }, () => {
-      throw new Error("HTTP 500");
-    });
+    const stdout = [];
+    const write = process.stdout.write;
+    process.stdout.write = (chunk) => stdout.push(String(chunk)) > 0;
+    let result;
+    try {
+      result = main({ MATRIX: JSON.stringify(matrix), GITHUB_REPOSITORY: REPOSITORY, ARTIFACT_SHA: SHA, ARTIFACT_PR: PR, GITHUB_OUTPUT: output }, () => {
+        throw new Error("HTTP 500");
+      });
+    } finally {
+      process.stdout.write = write;
+    }
     assert.match(result.reason, /lookup failed: HTTP 500/);
+    assert.ok(stdout.some((line) => line.startsWith("::warning title=CLI binary reuse lookup failed::HTTP 500")), "a broken lookup is visible");
     assert.equal(readFileSync(output, "utf8"), `matrix=${JSON.stringify(matrix.map((platform) => ({ ...platform, ci_run_id: "" })))}\n`);
   } finally {
     rmSync(directory, { recursive: true, force: true });

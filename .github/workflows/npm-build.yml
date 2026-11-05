@@ -40,7 +40,7 @@ on:
       artifact-pr:
         description: >-
           Number of the merged release pull request into main that built `artifact-sha`. Without it
-          nothing is reused; with it, only that pull request's runs and attestations are accepted.
+          nothing is reused; with it, only binaries attested by that pull request's CI run are.
         required: false
         default: ""
         type: string

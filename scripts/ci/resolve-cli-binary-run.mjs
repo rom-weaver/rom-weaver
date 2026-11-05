@@ -38,10 +38,11 @@ export function isReleasePull(pull, { repository, sha }) {
   );
 }
 
-// A successful ci.yml run of that head. A run cannot say which pull request it ran for, so another
-// pull request's run of the same head can be picked; its attestation names that pull request's merge
-// ref, so the platform build rejects it (npm-build.yml) and builds from source.
-export function latestReleaseRun(runs, { repository, sha }) {
+// A successful ci.yml run of that head from the pull request's branch. A run cannot say which pull
+// request it ran for, so another pull request from the same branch can be picked; its attestation
+// names that pull request's merge ref, so the platform build rejects it (npm-build.yml) and builds
+// from source.
+export function latestReleaseRun(runs, { repository, sha, branch = "" }) {
   return (
     runs
       .filter(
@@ -51,7 +52,8 @@ export function latestReleaseRun(runs, { repository, sha }) {
           run.conclusion === "success" &&
           run.path === ".github/workflows/ci.yml" &&
           run.head_repository?.full_name === repository &&
-          run.head_branch?.startsWith(RELEASE_PR_BRANCH_PREFIX),
+          run.head_branch?.startsWith(RELEASE_PR_BRANCH_PREFIX) &&
+          (!branch || run.head_branch === branch),
       )
       .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0] ?? null
   );
@@ -64,7 +66,7 @@ export function planReuse({ repository, sha, pullRequest, matrix, runGh = gh }) 
   const pull = JSON.parse(runGh(["api", `repos/${repository}/pulls/${pullRequest}`]));
   if (!isReleasePull(pull, { repository, sha })) return none(`pull request ${pullRequest} is not the merged release pull request of ${sha} into main`);
   const runs = JSON.parse(runGh(["api", `repos/${repository}/actions/runs?head_sha=${sha}&event=pull_request&status=success&per_page=30`])).workflow_runs;
-  const run = latestReleaseRun(runs ?? [], { repository, sha });
+  const run = latestReleaseRun(runs ?? [], { repository, sha, branch: pull.head.ref });
   if (!run) return none(`no successful release pull request CI run for ${sha}`);
   const artifacts = JSON.parse(runGh(["api", `repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`])).artifacts ?? [];
   const available = new Set(artifacts.filter((artifact) => !artifact.expired).map((artifact) => artifact.name));
@@ -80,6 +82,9 @@ export function main(env = process.env, runGh = gh) {
     result = planReuse({ repository: env.GITHUB_REPOSITORY, sha: env.ARTIFACT_SHA, pullRequest: env.ARTIFACT_PR, matrix, runGh });
   } catch (error) {
     result = { matrix: matrix.map((platform) => ({ ...platform, ci_run_id: "" })), reason: `lookup failed: ${error.message}` };
+    // A lookup that always fails (a missing permission, an API change) would otherwise turn reuse
+    // off for good without anyone noticing.
+    process.stdout.write(`::warning title=CLI binary reuse lookup failed::${error.message.replace(/[\r\n]+/gu, " ")}\n`);
   }
   process.stdout.write(`CLI binary reuse: ${result.reason}\n`);
   const line = `matrix=${JSON.stringify(result.matrix)}\n`;

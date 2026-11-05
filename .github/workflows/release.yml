@@ -101,7 +101,7 @@ jobs:
       sha: ${{ steps.release.outputs.sha }}
       artifact_sha: ${{ steps.artifact-sha.outputs.sha }}
       # The merged release pull request into main whose CI built `artifact_sha`, or empty. The CLI
-      # binary reuse is pinned to this pull request's runs and attestations.
+      # binary reuse accepts only binaries attested by this pull request's CI run.
       artifact_pr: ${{ steps.artifact-sha.outputs.pr }}
     steps:
       - id: release

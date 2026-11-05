@@ -51,6 +51,18 @@ test("CI exposes CLI binaries only for this repository's release pull request in
     assert.equal(evaluate(ci.env.RELEASE_PR_BINARIES, context), expected, label ?? "release pull request");
 });
 
+test("the release pull request run compiles the binaries it signs with no cache", () => {
+  const compile = ci.steps.find((step) => step.uses === "./.github/actions/build-cli-platform");
+  assert.equal(compile.with["cache-restore"], "${{ env.RELEASE_PR_BINARIES != 'true' }}");
+  const action = load(readFileSync(new URL("../../.github/actions/build-cli-platform/action.yml", import.meta.url), "utf8"));
+  assert.equal(action.inputs["cache-restore"].default, "true");
+  // Every step that restores a cache, or wires one into the compiler, is off without cache-restore.
+  const caching = action.runs.steps.filter((step) => /rust-cache|sccache|actions\/cache|cache@/u.test(step.uses ?? "") || /RUSTC_WRAPPER|SCCACHE|CCACHE/u.test(step.run ?? ""));
+  assert.deepEqual(caching.map((step) => step.name), ["Cache cargo artifacts", "Set up Rust compiler cache", "Configure Rust compiler cache"]);
+  for (const step of caching) assert.match(step.if, /inputs\.cache-restore == 'true'/u, step.name);
+  assert.ok(!action.runs.steps.some((step) => /^\.\/\.github\/actions\/(setup-build-env|wasm-cache)/u.test(step.uses ?? "")), "no nested action restores a cache");
+});
+
 test("the platform builds hold no OIDC token; only the attest job can sign, and only for the release pull request", () => {
   assert.deepEqual(ci.permissions, { contents: "read" }, "build scripts and third-party actions run in cli-platforms");
   const steps = ci.steps.filter((step) => /release-binary|release-cli-/u.test(JSON.stringify(step)));
@@ -107,6 +119,7 @@ test("the release builds from source unless the CI binary is pinned to the relea
 
 test("the platform plan marks reusable runs without failing the release", () => {
   const plan = build.jobs.plan;
+  assert.deepEqual(plan.permissions, { contents: "read", actions: "read", "pull-requests": "read" }, "the merged pull request is read");
   assert.equal(plan.outputs.platforms, "${{ steps.reuse.outputs.matrix }}");
   const step = plan.steps.find((candidate) => candidate.id === "reuse");
   assert.equal(step.run, "node scripts/ci/resolve-cli-binary-run.mjs");
