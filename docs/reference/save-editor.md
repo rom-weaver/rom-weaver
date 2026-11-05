@@ -73,6 +73,8 @@ The Generation III slot counts, including PC storage, are 216 for Ruby/Sapphire,
 
 Generation III owned flags also set all three seen copies. Clearing a seen flag also clears its owned flag. Previews include these related changes. Conflicting explicit assignments are rejected.
 
+GoldenEye 007 best times mark easier unset difficulties as cleared, and clearing a time resets those markers. Setting either screen ratio clears the other. Previews include these related changes.
+
 Numeric fields expose the ranges in `save export-schema`. A representable value does not establish a playable combination of progression flags, inventory, or player coordinates.
 
 Zelda dungeon fields cover all 14 dungeon entries. Progression includes the game state, map icon, spawn point, saved world, and named story flags. A file name contains at most six supported ASCII characters.

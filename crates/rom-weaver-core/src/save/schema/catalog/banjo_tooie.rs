@@ -1,5 +1,4 @@
 use super::rare_eeprom;
-use super::rules::Condition;
 use super::*;
 
 // Record tags and checksum range:
@@ -42,19 +41,15 @@ fn owns(bytes: &[u8], file: usize, record: usize) -> bool {
 
 fn candidate(file: usize, record: usize) -> layout::Candidate {
     let base = FIRST_RECORD + record * RECORD_SIZE;
-    layout::Candidate {
-        spans: vec![layout::Span {
-            logical_offset: 0,
-            physical_offset: base,
-            length: RECORD_SIZE,
-        }],
-        predicates: vec![Condition::new(move |bytes| {
-            Ok(owns(bytes, file, record)
-                && !(0..record).any(|prior| owns(bytes, file, prior))
-                && rare_eeprom::valid(bytes, base + CHECKSUM_OFFSET, base..base + CHECKSUM_OFFSET))
-        })],
-        ..Default::default()
-    }
+    tagged_record_candidate(
+        base,
+        RECORD_SIZE,
+        record,
+        move |bytes, record| owns(bytes, file, record),
+        move |bytes| {
+            rare_eeprom::valid(bytes, base + CHECKSUM_OFFSET, base..base + CHECKSUM_OFFSET)
+        },
+    )
 }
 
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
@@ -74,20 +69,10 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
             description: "Edits inventory counters within their game limits in one occupied file of canonical 2 KiB EEPROM. Selects the first record tagged for the file and rejects it if its checksum is damaged; preserves the other records and the shared settings header. Collection flags, per-version bit-shifted fields and byte-swapped images are unsupported. Requires a game-made template.".into(),
             runtime: runtime::Runtime {
                 logical_size: Some(RECORD_SIZE),
-                layout: Some(layout::Layout {
-                    groups: vec![layout::Group {
-                        id: "file".into(),
-                        logical_offset: 0,
-                        logical_length: RECORD_SIZE,
-                        copies: layout::Copies::Fixed {
-                            candidates: (0..RECORDS).map(|record| candidate(file, record)).collect(),
-                        },
-                        selection: layout::Selection::FirstValid,
-                        write: layout::WritePolicy::Selected,
-                        empty: Vec::new(),
-                        empty_if_no_signature: false,
-                    }],
-                }),
+                layout: Some(single_file_layout(
+                    RECORD_SIZE,
+                    (0..RECORDS).map(|record| candidate(file, record)).collect(),
+                )),
                 after_edit: rare_eeprom::stores(CHECKSUM_OFFSET, 0..CHECKSUM_OFFSET),
                 save_format: Some("n64_eeprom_2k".into()),
                 ..Default::default()
@@ -136,37 +121,13 @@ mod tests {
         }
     }
 
-    fn handler(file: usize) -> (SchemaSaveHandler, SaveGameIdentity) {
-        let handler = schemas().remove(file);
-        let identity = handler.definitions().remove(0).identity;
-        (handler, identity)
-    }
-
-    fn run(
-        file: usize,
-        input: &SaveDetectionInput,
-        edits: &[(&str, SaveValue)],
-    ) -> Result<Vec<u8>> {
-        let (handler, identity) = handler(file);
-        let edits: Vec<_> = edits
-            .iter()
-            .map(|(field, value)| SaveEdit {
-                field: (*field).into(),
-                value: value.clone(),
-            })
-            .collect();
-        handler
-            .apply(input, &identity, &edits, false)
-            .map(|result| result.bytes.unwrap_or_else(|| input.bytes.clone()))
-    }
-
     // Record holding each file in the template.
     const LIVE: [usize; FILES] = [1, 0, 2];
 
     #[test]
     fn every_counter_round_trips_and_repairs_only_its_record() {
         for (file, live) in LIVE.into_iter().enumerate() {
-            let (handler, identity) = handler(file);
+            let (handler, identity) = test_handler(schemas, file);
             let input = template(file);
             let base = FIRST_RECORD + live * RECORD_SIZE;
             let document = handler.parse(&input, &identity).unwrap();
@@ -174,7 +135,8 @@ mod tests {
             for (field, (id, _, offset, max)) in document.fields.iter().zip(COUNTERS) {
                 assert_eq!(field.id, id);
                 for value in [0, 1, max as u32] {
-                    let output = run(file, &input, &[(id, SaveValue::U32(value))]).unwrap();
+                    let output =
+                        test_run(schemas, file, &input, &[(id, SaveValue::U32(value))]).unwrap();
                     let mut expected = input.bytes.clone();
                     expected[base + offset..base + offset + 2]
                         .copy_from_slice(&(value as u16).to_be_bytes());
@@ -192,7 +154,15 @@ mod tests {
                     let changed = reread.fields.iter().find(|f| f.id == id).unwrap();
                     assert_eq!(changed.value, SaveValue::U32(value));
                 }
-                assert!(run(file, &input, &[(id, SaveValue::U32(max as u32 + 1))]).is_err());
+                assert!(
+                    test_run(
+                        schemas,
+                        file,
+                        &input,
+                        &[(id, SaveValue::U32(max as u32 + 1))]
+                    )
+                    .is_err()
+                );
             }
         }
     }
@@ -201,7 +171,8 @@ mod tests {
     fn edits_combine_in_one_checksum_pass() {
         let input = template(1);
         let base = FIRST_RECORD;
-        let output = run(
+        let output = test_run(
+            schemas,
             1,
             &input,
             &[
@@ -220,7 +191,7 @@ mod tests {
 
     #[test]
     fn selects_the_tagged_record_and_rejects_damage() {
-        let (handler, identity) = handler(0);
+        let (handler, identity) = test_handler(schemas, 0);
         let input = template(0);
         assert!(
             handler
@@ -236,7 +207,7 @@ mod tests {
         duplicate.bytes[spare..spare + 4].copy_from_slice(b"KHJC");
         duplicate.bytes[spare + 0xa] = 1;
         repair(&mut duplicate.bytes, 3);
-        assert!(run(0, &duplicate, &[("eggs", SaveValue::U32(5))]).is_ok());
+        assert!(test_run(schemas, 0, &duplicate, &[("eggs", SaveValue::U32(5))]).is_ok());
         for position in [0x10, 0x1b7, 0x1b8, 0x1bf] {
             let mut damaged = duplicate.clone();
             damaged.bytes[live + position] ^= 0x40;

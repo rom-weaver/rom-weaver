@@ -220,19 +220,13 @@ fn owns(bytes: &[u8], file: usize, record: usize) -> bool {
 
 fn candidate(file: usize, record: usize) -> layout::Candidate {
     let base = FIRST_RECORD + record * RECORD_SIZE;
-    layout::Candidate {
-        spans: vec![layout::Span {
-            logical_offset: 0,
-            physical_offset: base,
-            length: RECORD_SIZE,
-        }],
-        predicates: vec![Condition::new(move |bytes| {
-            Ok(owns(bytes, file, record)
-                && !(0..record).any(|prior| owns(bytes, file, prior))
-                && rare_eeprom::valid(bytes, base, base + 8..base + RECORD_SIZE))
-        })],
-        ..Default::default()
-    }
+    tagged_record_candidate(
+        base,
+        RECORD_SIZE,
+        record,
+        move |bytes, record| owns(bytes, file, record),
+        move |bytes| rare_eeprom::valid(bytes, base, base + 8..base + RECORD_SIZE),
+    )
 }
 
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
@@ -242,22 +236,13 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
             description: "Edits mission times, cheats, and options in one occupied file of canonical 512-byte EEPROM. Selects the first record tagged for the file and rejects it if its checksum is damaged; preserves the other records and the EEPROM header. Byte-swapped images are unsupported. Requires a game-made template.".into(),
             runtime: runtime::Runtime {
                 logical_size: Some(RECORD_SIZE),
-                layout: Some(layout::Layout {
-                    groups: vec![layout::Group {
-                        id: "file".into(),
-                        logical_offset: 0,
-                        logical_length: RECORD_SIZE,
-                        copies: layout::Copies::Fixed {
-                            candidates: (0..RECORDS).map(|record| candidate(file, record)).collect(),
-                        },
-                        selection: layout::Selection::FirstValid,
-                        write: layout::WritePolicy::Selected,
-                        empty: Vec::new(),
-                        empty_if_no_signature: false,
-                    }],
-                }),
+                layout: Some(single_file_layout(
+                    RECORD_SIZE,
+                    (0..RECORDS).map(|record| candidate(file, record)).collect(),
+                )),
                 after_edit: rare_eeprom::stores(0, 8..RECORD_SIZE),
                 save_format: Some("n64_eeprom_512".into()),
+                include_implicit_changes: true,
                 ..Default::default()
             },
             ..GameDefinition::new(
@@ -303,30 +288,6 @@ mod tests {
         }
     }
 
-    fn handler(file: usize) -> (SchemaSaveHandler, SaveGameIdentity) {
-        let handler = schemas().remove(file);
-        let identity = handler.definitions().remove(0).identity;
-        (handler, identity)
-    }
-
-    fn run(
-        file: usize,
-        input: &SaveDetectionInput,
-        edits: &[(&str, SaveValue)],
-    ) -> Result<Vec<u8>> {
-        let (handler, identity) = handler(file);
-        let edits: Vec<_> = edits
-            .iter()
-            .map(|(field, value)| SaveEdit {
-                field: (*field).into(),
-                value: value.clone(),
-            })
-            .collect();
-        handler
-            .apply(input, &identity, &edits, false)
-            .map(|result| result.bytes.unwrap_or_else(|| input.bytes.clone()))
-    }
-
     fn live(file: usize) -> usize {
         [2, 0, 4, 3][file]
     }
@@ -347,7 +308,7 @@ mod tests {
     #[test]
     fn every_field_round_trips_and_repairs_only_its_record() {
         for file in 0..FILES {
-            let (handler, identity) = handler(file);
+            let (handler, identity) = test_handler(schemas, file);
             let input = template(file);
             let base = FIRST_RECORD + live(file) * RECORD_SIZE;
             let document = handler.parse(&input, &identity).unwrap();
@@ -371,7 +332,8 @@ mod tests {
                     }
                     other => panic!("unexpected value {other:?}"),
                 };
-                let output = run(file, &input, &[(&field.id, value.clone())]).unwrap();
+                let output =
+                    test_run(schemas, file, &input, &[(&field.id, value.clone())]).unwrap();
                 let reread = handler
                     .parse(
                         &SaveDetectionInput {
@@ -417,7 +379,8 @@ mod tests {
             );
         }
         repair(&mut input.bytes, 3);
-        let output = run(
+        let output = test_run(
+            schemas,
             3,
             &input,
             &[
@@ -467,7 +430,13 @@ mod tests {
         set_time(record, 1, 6, 0x3ff);
         set_time(record, 2, 6, 9);
         repair(&mut input.bytes, 2);
-        let output = run(0, &input, &[("00_agent.silo_seconds", SaveValue::U32(0))]).unwrap();
+        let output = test_run(
+            schemas,
+            0,
+            &input,
+            &[("00_agent.silo_seconds", SaveValue::U32(0))],
+        )
+        .unwrap();
         let mut expected = input.bytes.clone();
         let record = &mut expected[base..base + RECORD_SIZE];
         for difficulty in 1..3 {
@@ -481,7 +450,8 @@ mod tests {
     fn screen_modes_exclude_each_other() {
         let input = template(1);
         let base = FIRST_RECORD;
-        let cinema = run(
+        let cinema = test_run(
+            schemas,
             1,
             &input,
             &[("options.screen_ratio_cinema", SaveValue::Bool(true))],
@@ -491,7 +461,8 @@ mod tests {
         assert_eq!(cinema[base + 0xd], 0x00);
         let mut again = input.clone();
         again.bytes = cinema;
-        let wide = run(
+        let wide = test_run(
+            schemas,
             1,
             &again,
             &[("options.screen_ratio_16_9", SaveValue::Bool(true))],
@@ -502,8 +473,62 @@ mod tests {
     }
 
     #[test]
+    fn preview_lists_the_cascaded_and_exclusive_fields() {
+        let (handler, identity) = test_handler(schemas, 0);
+        let mut input = template(0);
+        let base = FIRST_RECORD + 2 * RECORD_SIZE;
+        for difficulty in 0..2 {
+            set_time(&mut input.bytes[base..base + RECORD_SIZE], difficulty, 0, 0);
+        }
+        repair(&mut input.bytes, 2);
+        let edit = |field: &str, value| SaveEdit {
+            field: field.into(),
+            value,
+        };
+        let result = handler
+            .apply(
+                &input,
+                &identity,
+                &[edit("00_agent.dam_seconds", SaveValue::U32(100))],
+                true,
+            )
+            .unwrap();
+        let changes: Vec<_> = result
+            .preview
+            .changes
+            .iter()
+            .map(|change| (change.field.as_str(), change.new_value.clone()))
+            .collect();
+        assert!(changes.contains(&("00_agent.dam_seconds", SaveValue::U32(100))));
+        for field in ["agent.dam_seconds", "secret_agent.dam_seconds"] {
+            assert!(
+                changes.contains(&(field, SaveValue::U32(1023))),
+                "{field}: {changes:?}"
+            );
+        }
+        assert_eq!(changes.len(), 3, "{changes:?}");
+        let result = handler
+            .apply(
+                &template(0),
+                &identity,
+                &[edit("options.screen_ratio_cinema", SaveValue::Bool(true))],
+                true,
+            )
+            .unwrap();
+        let changes: Vec<_> = result
+            .preview
+            .changes
+            .iter()
+            .map(|change| (change.field.as_str(), change.new_value.clone()))
+            .collect();
+        assert!(changes.contains(&("options.screen_ratio_cinema", SaveValue::Bool(true))));
+        assert!(changes.contains(&("options.screen_ratio_16_9", SaveValue::Bool(false))));
+        assert_eq!(changes.len(), 2, "{changes:?}");
+    }
+
+    #[test]
     fn selects_the_tagged_live_record_and_rejects_damage() {
-        let (handler, identity) = handler(3);
+        let (handler, identity) = test_handler(schemas, 3);
         let input = template(3);
         assert!(
             handler
@@ -517,7 +542,15 @@ mod tests {
         let base = FIRST_RECORD + 4 * RECORD_SIZE;
         duplicate.bytes[base + 8] = 0x03;
         repair(&mut duplicate.bytes, 4);
-        assert!(run(3, &duplicate, &[("options.music", SaveValue::U32(1))]).is_ok());
+        assert!(
+            test_run(
+                schemas,
+                3,
+                &duplicate,
+                &[("options.music", SaveValue::U32(1))]
+            )
+            .is_ok()
+        );
         let live_base = FIRST_RECORD + 3 * RECORD_SIZE;
         duplicate.bytes[live_base + 0x30] ^= 1;
         assert!(handler.apply(&duplicate, &identity, &[], false).is_err());
@@ -539,7 +572,10 @@ mod tests {
             } else {
                 SaveValue::Enum("9.9".into())
             };
-            assert!(run(3, &input, &[(field, value)]).is_err(), "{field}");
+            assert!(
+                test_run(schemas, 3, &input, &[(field, value)]).is_err(),
+                "{field}"
+            );
         }
     }
 }

@@ -1,29 +1,13 @@
+use super::rare_eeprom;
 use super::*;
 
-// Rare's 33-bit hash and record tags MUST follow this pinned MIT-licensed source.
-// https://github.com/RyudoSynbios/game-tools-collection/tree/6f5d8064050eec83eb4f2a910743c121a70655c9/src/lib/utils/common/nintendo64/index.ts
+// Record tags MUST follow this pinned MIT-licensed source; the checksum hash is `rare_eeprom`'s.
 // https://github.com/RyudoSynbios/game-tools-collection/tree/6f5d8064050eec83eb4f2a910743c121a70655c9/src/lib/templates/banjo-kazooie/saveEditor
-fn hash(byte: u8, polynomial: u64, shift: u32) -> u64 {
-    let first = polynomial.wrapping_add(u64::from(byte) << (shift & 15)) & 0x1_ffff_ffff;
-    let second = ((first << 63) >> 31 | (first >> 1)) ^ ((first << 44) >> 32);
-    second ^ ((second >> 20) & 0xfff)
-}
 
+// Banjo-Kazooie stores the two Rare words folded into one.
 fn checksum(data: &[u8]) -> u32 {
-    let mut polynomial = 0x1_3108_b3c1;
-    let mut result = 0;
-    let mut shift = 0;
-    for byte in data {
-        polynomial = hash(*byte, polynomial, shift);
-        result ^= polynomial;
-        shift += 7;
-    }
-    for byte in data.iter().rev() {
-        polynomial = hash(*byte, polynomial, shift);
-        result ^= polynomial;
-        shift += 3;
-    }
-    result as u32
+    let [forward, reverse] = rare_eeprom::checksum(data);
+    forward ^ reverse
 }
 
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {

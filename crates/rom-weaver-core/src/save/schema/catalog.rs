@@ -21,6 +21,76 @@ fn build(
         .collect()
 }
 
+// Single-record-group editors (N64 EEPROM and FlashRAM) MUST share this layout: the first valid
+// candidate is selected and every write goes back to it.
+fn single_file_layout(logical_length: usize, candidates: Vec<layout::Candidate>) -> layout::Layout {
+    layout::Layout {
+        groups: vec![layout::Group {
+            id: "file".into(),
+            logical_offset: 0,
+            logical_length,
+            copies: layout::Copies::Fixed { candidates },
+            selection: layout::Selection::FirstValid,
+            write: layout::WritePolicy::Selected,
+            empty: Vec::new(),
+            empty_if_no_signature: false,
+        }],
+    }
+}
+
+// A fixed-size record at `base` is a candidate when it is the first record `owns` accepts and
+// `valid` accepts its bytes (checksum or CRC).
+fn tagged_record_candidate(
+    base: usize,
+    length: usize,
+    record: usize,
+    owns: impl Fn(&[u8], usize) -> bool + Send + Sync + 'static,
+    valid: impl Fn(&[u8]) -> bool + Send + Sync + 'static,
+) -> layout::Candidate {
+    layout::Candidate {
+        spans: vec![layout::Span {
+            logical_offset: 0,
+            physical_offset: base,
+            length,
+        }],
+        predicates: vec![rules::Condition::new(move |bytes| {
+            Ok(owns(bytes, record) && !(0..record).any(|prior| owns(bytes, prior)) && valid(bytes))
+        })],
+        ..Default::default()
+    }
+}
+
+#[cfg(test)]
+fn test_handler(
+    schemas: fn() -> Vec<SchemaSaveHandler>,
+    index: usize,
+) -> (SchemaSaveHandler, SaveGameIdentity) {
+    let handler = schemas().remove(index);
+    let identity = handler.definitions().remove(0).identity;
+    (handler, identity)
+}
+
+// Applies named edits to the handler at `index`; an unchanged save returns its input bytes.
+#[cfg(test)]
+fn test_run(
+    schemas: fn() -> Vec<SchemaSaveHandler>,
+    index: usize,
+    input: &SaveDetectionInput,
+    edits: &[(&str, SaveValue)],
+) -> Result<Vec<u8>> {
+    let (handler, identity) = test_handler(schemas, index);
+    let edits: Vec<_> = edits
+        .iter()
+        .map(|(field, value)| SaveEdit {
+            field: (*field).into(),
+            value: value.clone(),
+        })
+        .collect();
+    handler
+        .apply(input, &identity, &edits, false)
+        .map(|result| result.bytes.unwrap_or_else(|| input.bytes.clone()))
+}
+
 struct Repetition {
     count: usize,
     start: usize,

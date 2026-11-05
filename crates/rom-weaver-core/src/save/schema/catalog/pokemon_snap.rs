@@ -253,20 +253,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                 description: "Edits challenge scores, the unlocked-course progress, and control options in canonical 128 KiB FlashRAM, then recomputes the four-word header hash. Rejects a damaged hash or header; preserves every byte outside the hashed range. Photos, the player name, item and menu unlocks, and byte-swapped images are unsupported. Requires a game-made template.".into(),
                 runtime: runtime::Runtime {
                     logical_size: Some(end),
-                    layout: Some(layout::Layout {
-                        groups: vec![layout::Group {
-                            id: "file".into(),
-                            logical_offset: 0,
-                            logical_length: end,
-                            copies: layout::Copies::Fixed {
-                                candidates: vec![candidate],
-                            },
-                            selection: layout::Selection::FirstValid,
-                            write: layout::WritePolicy::Selected,
-                            empty: Vec::new(),
-                            empty_if_no_signature: false,
-                        }],
-                    }),
+                    layout: Some(single_file_layout(end, vec![candidate])),
                     after_edit: stores(end),
                     save_format: Some("n64_flashram_128k".into()),
                     ..Default::default()
@@ -380,30 +367,6 @@ mod tests {
         }
     }
 
-    fn handler(variant: usize) -> (SchemaSaveHandler, SaveGameIdentity) {
-        let handler = schemas().remove(variant);
-        let identity = handler.definitions().remove(0).identity;
-        (handler, identity)
-    }
-
-    fn run(
-        variant: usize,
-        input: &SaveDetectionInput,
-        edits: &[(&str, SaveValue)],
-    ) -> Result<Vec<u8>> {
-        let (handler, identity) = handler(variant);
-        let edits: Vec<_> = edits
-            .iter()
-            .map(|(field, value)| SaveEdit {
-                field: (*field).into(),
-                value: value.clone(),
-            })
-            .collect();
-        handler
-            .apply(input, &identity, &edits, false)
-            .map(|result| result.bytes.unwrap_or_else(|| input.bytes.clone()))
-    }
-
     #[test]
     fn reference_md4_matches_rfc_vectors() {
         for (message, digest) in [
@@ -442,7 +405,7 @@ mod tests {
     #[test]
     fn edits_round_trip_and_keep_every_other_byte() {
         for (index, variant) in VARIANTS.iter().enumerate() {
-            let (handler, identity) = handler(index);
+            let (handler, identity) = test_handler(schemas, index);
             let input = template(index);
             let shift = variant.shift;
             let document = handler.parse(&input, &identity).unwrap();
@@ -450,13 +413,27 @@ mod tests {
             for (field, (id, _, offset)) in document.fields.iter().zip(SCORES) {
                 assert_eq!(field.id, format!("scores.{id}"));
                 for value in [0u32, 1, 99_999_999] {
-                    let output = run(index, &input, &[(&field.id, SaveValue::U32(value))]).unwrap();
+                    let output = test_run(
+                        schemas,
+                        index,
+                        &input,
+                        &[(&field.id, SaveValue::U32(value))],
+                    )
+                    .unwrap();
                     let mut expected = input.bytes.clone();
                     expected[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
                     repair(&mut expected, variant.end);
                     assert_eq!(output, expected, "{id} = {value}");
                 }
-                assert!(run(index, &input, &[(&field.id, SaveValue::U32(100_000_000))]).is_err());
+                assert!(
+                    test_run(
+                        schemas,
+                        index,
+                        &input,
+                        &[(&field.id, SaveValue::U32(100_000_000))]
+                    )
+                    .is_err()
+                );
             }
             for (course, name) in [
                 "Beach",
@@ -470,7 +447,8 @@ mod tests {
             .into_iter()
             .enumerate()
             {
-                let output = run(
+                let output = test_run(
+                    schemas,
                     index,
                     &input,
                     &[("unlocked_course", SaveValue::Enum(name.into()))],
@@ -498,7 +476,8 @@ mod tests {
                 assert_eq!(field.value, SaveValue::Enum(name.into()));
             }
             assert!(
-                run(
+                test_run(
+                    schemas,
                     index,
                     &input,
                     &[("unlocked_course", SaveValue::Enum("raw:7".into()))]
@@ -511,8 +490,13 @@ mod tests {
                 ("options.control_stick", 1, ["Reverse", "Normal"]),
             ] {
                 for (value, name) in names.iter().enumerate() {
-                    let output =
-                        run(index, &input, &[(id, SaveValue::Enum((*name).into()))]).unwrap();
+                    let output = test_run(
+                        schemas,
+                        index,
+                        &input,
+                        &[(id, SaveValue::Enum((*name).into()))],
+                    )
+                    .unwrap();
                     let mut expected = input.bytes.clone();
                     expected[0x67 - shift] =
                         (expected[0x67 - shift] & !(1 << bit)) | (value as u8) << bit;
@@ -529,20 +513,20 @@ mod tests {
         let mut input = template(1);
         input.bytes[japan_only] ^= 0xff;
         // Past the Japanese range end, the byte is outside the hash and survives an edit.
-        let output = run(1, &input, &[("scores.beach", SaveValue::U32(7))]).unwrap();
+        let output = test_run(schemas, 1, &input, &[("scores.beach", SaveValue::U32(7))]).unwrap();
         assert_eq!(output[japan_only], input.bytes[japan_only]);
         assert_eq!(output[0x1eb1c..], input.bytes[0x1eb1c..]);
         // The same flip is inside the other region's range and breaks its hash.
         let mut other = template(0);
         other.bytes[japan_only] ^= 0xff;
-        let (handler, identity) = handler(0);
+        let (handler, identity) = test_handler(schemas, 0);
         assert!(handler.apply(&other, &identity, &[], false).is_err());
     }
 
     #[test]
     fn rejects_damage_and_wrong_sizes() {
         for (index, variant) in VARIANTS.iter().enumerate() {
-            let (handler, identity) = handler(index);
+            let (handler, identity) = test_handler(schemas, index);
             let input = template(index);
             assert!(
                 handler

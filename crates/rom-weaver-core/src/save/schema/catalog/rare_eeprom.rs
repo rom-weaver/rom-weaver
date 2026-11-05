@@ -1,7 +1,8 @@
 use super::rules::{ReadValue, Scalar, Store};
 use super::*;
 
-// Rare's 64-bit EEPROM record checksum, shared by GoldenEye 007 and Banjo-Tooie. The hash follows
+// Rare's 64-bit EEPROM record checksum, shared by GoldenEye 007, Banjo-Kazooie, and Banjo-Tooie.
+// The hash follows
 // https://github.com/bryc/rare-n64-chksm as ported at this pinned MIT-licensed revision.
 // https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/utils/common/nintendo64/index.ts
 fn hash(byte: u8, polynomial: u64, shift: u32) -> u64 {

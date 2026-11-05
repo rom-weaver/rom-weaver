@@ -1,4 +1,4 @@
-use super::rules::{Condition, ReadValue, Scalar, Store};
+use super::rules::{ReadValue, Scalar, Store};
 use super::*;
 
 // Record tags, flag offsets, and the CRC range:
@@ -224,20 +224,16 @@ fn owns(bytes: &[u8], file: usize, record: usize) -> bool {
 
 fn candidate(file: usize, record: usize) -> layout::Candidate {
     let base = record * RECORD_SIZE;
-    layout::Candidate {
-        spans: vec![layout::Span {
-            logical_offset: 0,
-            physical_offset: base,
-            length: RECORD_SIZE,
-        }],
-        predicates: vec![Condition::new(move |bytes| {
-            Ok(owns(bytes, file, record)
-                && !(0..record).any(|prior| owns(bytes, file, prior))
-                && bytes[base + CHECKSUM_OFFSET..base + RECORD_SIZE]
-                    == record_crc(&bytes[base..base + RECORD_SIZE]).to_be_bytes())
-        })],
-        ..Default::default()
-    }
+    tagged_record_candidate(
+        base,
+        RECORD_SIZE,
+        record,
+        move |bytes, record| owns(bytes, file, record),
+        move |bytes| {
+            bytes[base + CHECKSUM_OFFSET..base + RECORD_SIZE]
+                == record_crc(&bytes[base..base + RECORD_SIZE]).to_be_bytes()
+        },
+    )
 }
 
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
@@ -247,20 +243,10 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
             description: "Edits health, characters, basic moves, coins, fairies, battle crowns, boss keys, and locks in one occupied file of canonical 2 KiB EEPROM. Selects the first record tagged for the file and rejects it if its CRC is damaged; preserves the other records and the system block. Counters, per-level flags, special moves, options and byte-swapped images are unsupported. Requires a game-made template.".into(),
             runtime: runtime::Runtime {
                 logical_size: Some(RECORD_SIZE),
-                layout: Some(layout::Layout {
-                    groups: vec![layout::Group {
-                        id: "file".into(),
-                        logical_offset: 0,
-                        logical_length: RECORD_SIZE,
-                        copies: layout::Copies::Fixed {
-                            candidates: (0..RECORDS).map(|record| candidate(file, record)).collect(),
-                        },
-                        selection: layout::Selection::FirstValid,
-                        write: layout::WritePolicy::Selected,
-                        empty: Vec::new(),
-                        empty_if_no_signature: false,
-                    }],
-                }),
+                layout: Some(single_file_layout(
+                    RECORD_SIZE,
+                    (0..RECORDS).map(|record| candidate(file, record)).collect(),
+                )),
                 after_edit: vec![Store {
                     when: None,
                     destination: Scalar {
@@ -330,30 +316,6 @@ mod tests {
         }
     }
 
-    fn handler(file: usize) -> (SchemaSaveHandler, SaveGameIdentity) {
-        let handler = schemas().remove(file);
-        let identity = handler.definitions().remove(0).identity;
-        (handler, identity)
-    }
-
-    fn run(
-        file: usize,
-        input: &SaveDetectionInput,
-        edits: &[(&str, SaveValue)],
-    ) -> Result<Vec<u8>> {
-        let (handler, identity) = handler(file);
-        let edits: Vec<_> = edits
-            .iter()
-            .map(|(field, value)| SaveEdit {
-                field: (*field).into(),
-                value: value.clone(),
-            })
-            .collect();
-        handler
-            .apply(input, &identity, &edits, false)
-            .map(|result| result.bytes.unwrap_or_else(|| input.bytes.clone()))
-    }
-
     #[test]
     fn crc_matches_the_standard_check_value() {
         assert_eq!(reference_crc(b"123456789"), 0xcbf4_3926);
@@ -363,7 +325,7 @@ mod tests {
     #[test]
     fn every_field_round_trips_and_repairs_only_its_record() {
         for (file, live) in LIVE.into_iter().enumerate() {
-            let (handler, identity) = handler(file);
+            let (handler, identity) = test_handler(schemas, file);
             let input = template(file);
             let base = live * RECORD_SIZE;
             let document = handler.parse(&input, &identity).unwrap();
@@ -375,7 +337,8 @@ mod tests {
                     other => panic!("unexpected value {other:?}"),
                 };
                 for value in values {
-                    let output = run(file, &input, &[(&field.id, value.clone())]).unwrap();
+                    let output =
+                        test_run(schemas, file, &input, &[(&field.id, value.clone())]).unwrap();
                     let reread = handler
                         .parse(
                             &SaveDetectionInput {
@@ -417,7 +380,8 @@ mod tests {
     fn known_offsets_match_the_upstream_layout() {
         let input = template(2);
         let base = 2 * RECORD_SIZE;
-        let output = run(
+        let output = test_run(
+            schemas,
             2,
             &input,
             &[
@@ -443,17 +407,17 @@ mod tests {
         expected[base + 0x36] |= 1;
         repair(&mut expected, 2);
         assert_eq!(output, expected);
-        let output = run(2, &input, &[("max_health", SaveValue::U32(0))]).unwrap();
+        let output = test_run(schemas, 2, &input, &[("max_health", SaveValue::U32(0))]).unwrap();
         let mut expected = input.bytes.clone();
         expected[base + 0x19e] &= !0x06;
         repair(&mut expected, 2);
         assert_eq!(output, expected);
-        assert!(run(2, &input, &[("max_health", SaveValue::U32(4))]).is_err());
+        assert!(test_run(schemas, 2, &input, &[("max_health", SaveValue::U32(4))]).is_err());
     }
 
     #[test]
     fn selects_the_occupied_tagged_record_and_rejects_damage() {
-        let (handler, identity) = handler(0);
+        let (handler, identity) = test_handler(schemas, 0);
         let input = template(0);
         assert!(
             handler
@@ -480,7 +444,15 @@ mod tests {
         let spare_base = 3 * RECORD_SIZE;
         spare.bytes[spare_base + HEALTH_OFFSET] |= 0x08;
         repair(&mut spare.bytes, 3);
-        assert!(run(0, &spare, &[("locks.lock_1", SaveValue::Bool(true))]).is_ok());
+        assert!(
+            test_run(
+                schemas,
+                0,
+                &spare,
+                &[("locks.lock_1", SaveValue::Bool(true))]
+            )
+            .is_ok()
+        );
         spare.bytes[live + 0x20] ^= 0x80;
         assert!(handler.apply(&spare, &identity, &[], false).is_err());
         for bytes in [
