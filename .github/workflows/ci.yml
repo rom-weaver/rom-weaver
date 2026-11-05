@@ -1157,9 +1157,22 @@ jobs:
     timeout-minutes: 40
     needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    permissions:
+      contents: read
+      # Signed provenance for the binary a release pull request run hands to the release. Only the
+      # steps below that test RELEASE_PR_BINARIES use these; a fork's token is read-only whatever
+      # is requested here.
+      attestations: write
+      artifact-metadata: write
+      id-token: write
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
+      # The release pull request in this repository, which is the commit that ships. The release
+      # reuses these binaries (.github/workflows/npm-build.yml) when its tree equals the one built
+      # here. The head-ref prefix MUST match scripts/ci/release-pr.mjs; an ordinary pull request,
+      # a push to main, and the nightly never upload them.
+      RELEASE_PR_BINARIES: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--branches--main--components--') && github.event.pull_request.head.repo.full_name == github.repository }}
     strategy:
       fail-fast: false
       matrix:
@@ -1205,6 +1218,41 @@ jobs:
         run: >-
           npm pack --dry-run --ignore-scripts --json
           "packages/rom-weaver-cli-platforms/${{ matrix.package }}"
+
+      # What the release would otherwise compile again: the staged package without its identify
+      # tree, a build.json naming the tree and every file's sha256, and an attestation of the
+      # binary. The release refuses the artifact on any mismatch and builds from source instead.
+      - name: Pack the release binary
+        if: env.RELEASE_PR_BINARIES == 'true'
+        shell: bash
+        run: >-
+          node scripts/ci/cli-release-binary.mjs pack
+          --package "${{ matrix.package }}"
+          --target "${{ matrix.target }}"
+          --binary "${{ matrix.binary }}"
+          --tree "$(git rev-parse 'HEAD^{tree}')"
+          --source-sha "$(git rev-parse HEAD)"
+          --out release-binary
+
+      # Best effort: without an attestation the release verifies nothing it can trust and builds
+      # from source, which costs time but never correctness, so a Sigstore outage must not fail CI.
+      - name: Attest the release binary
+        if: env.RELEASE_PR_BINARIES == 'true'
+        continue-on-error: true
+        uses: ./.github/actions/attest-retry
+        with:
+          subject-path: release-binary/package/bin/${{ matrix.binary }}
+
+      - name: Upload the release binary
+        if: env.RELEASE_PR_BINARIES == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-cli-${{ matrix.package }}
+          path: release-binary
+          if-no-files-found: error
+          overwrite: true
+          # A release pull request can wait days for its merge; this is what the release reuses.
+          retention-days: 14
 
   cli-linux-arm64:
     name: CLI target runtime (aarch64-unknown-linux-musl)
