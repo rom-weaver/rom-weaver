@@ -24,6 +24,12 @@ const getNonTraceStderr = (result: Partial<RomWeaverRunJsonResult> | null | unde
   return lines.join("\n").trim();
 };
 
+// The ` [code] (key=value, ...)` tag the engine's Display appends for CLI readers. The structured
+// `error_code`/`error_fields` carry the same facts, so the tag is dropped from displayed text.
+const ENGINE_DISPLAY_TAG = /\s\[[a-z0-9_]+(?:\.[a-z0-9_]+)+\](?: \(.*\))?$/su;
+
+const stripEngineDisplayTag = (message: string): string => message.replace(ENGINE_DISPLAY_TAG, "");
+
 const getRomWeaverFailureMessage = (
   result: Partial<RomWeaverRunJsonResult> | null | undefined,
   fallback = "rom-weaver operation failed",
@@ -33,7 +39,7 @@ const getRomWeaverFailureMessage = (
     const event = events[index];
     if (!(event && isRomWeaverFailedRunEvent(event))) continue;
     const label = getRomWeaverRunEventLabel(event).trim();
-    if (label) return label;
+    if (label) return event.error_code ? stripEngineDisplayTag(label) : label;
   }
 
   const nonJsonLines = Array.isArray(result?.nonJsonLines) ? result.nonJsonLines : [];
@@ -86,12 +92,6 @@ const getEngineWorkflowCode = (event: RomWeaverRunJsonEvent): WorkflowErrorCode 
   if (kind === "unknown_format") return "UNSUPPORTED_FORMAT";
   return ARCHIVE_COMMANDS.has(event.command) ? "COMPRESSION_FAILED" : "INVALID_INPUT";
 };
-
-// The ` [code] (key=value, ...)` tag the engine's Display appends for CLI readers. The structured
-// `error_code`/`error_fields` carry the same facts, so the tag is dropped from displayed text.
-const ENGINE_DISPLAY_TAG = /\s\[[a-z0-9_]+(?:\.[a-z0-9_]+)+\](?: \(.*\))?$/su;
-
-const stripEngineDisplayTag = (message: string): string => message.replace(ENGINE_DISPLAY_TAG, "");
 
 /**
  * Attach the engine's classification of a failed run to `error`: the typed kind, a workflow `code` (unless an

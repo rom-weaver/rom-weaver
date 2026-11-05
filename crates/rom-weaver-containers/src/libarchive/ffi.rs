@@ -1,5 +1,8 @@
 use super::*;
-use rom_weaver_core::{ERROR_CODE_ARCHIVE_READ_FAILED, ERROR_CODE_ARCHIVE_STORAGE_FAILED};
+use rom_weaver_core::{
+    ERROR_CODE_ARCHIVE_READ_FAILED, ERROR_CODE_ARCHIVE_STORAGE_FAILED,
+    ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
+};
 
 // The project adapter is appended to archive_string.c to keep conversion state per archive.
 unsafe extern "C" {
@@ -52,8 +55,14 @@ fn archive_error(
     // libarchive's file reader and writer name the file in these failures: the
     // file itself could not be opened or read, a storage problem rather than
     // archive damage.
-    let code = if message.starts_with("Failed to open '") || message.starts_with("Error reading '")
-    {
+    let out_of_memory = match unsafe { archive_errno(archive_ptr) } {
+        0 => false,
+        errno => io::Error::from_raw_os_error(errno).kind() == io::ErrorKind::OutOfMemory,
+    };
+    let code = if out_of_memory {
+        // A decoder that cannot allocate is not archive damage.
+        Some(ERROR_CODE_RESOURCE_OUT_OF_MEMORY)
+    } else if message.starts_with("Failed to open '") || message.starts_with("Error reading '") {
         Some(ERROR_CODE_ARCHIVE_STORAGE_FAILED)
     } else {
         fallback_code

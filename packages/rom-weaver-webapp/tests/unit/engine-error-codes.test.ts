@@ -4,7 +4,11 @@ import { formatCodedErrorForDisplay } from "../../src/presentation/errors.ts";
 import { createLocalizer } from "../../src/presentation/localization/index.ts";
 import { isPatchFileChecksumFailure } from "../../src/public/react/patch-validation-failure.ts";
 import { ROM_WEAVER_ERROR_CODES } from "../../src/wasm/generated/rom-weaver-format-metadata.ts";
-import { getRomWeaverFailureCode, withRomWeaverFailure } from "../../src/workers/rom-weaver/runner-errors.ts";
+import {
+  getRomWeaverFailureCode,
+  getRomWeaverFailureMessage,
+  withRomWeaverFailure,
+} from "../../src/workers/rom-weaver/runner-errors.ts";
 
 type FailedEvent = {
   command?: string;
@@ -58,6 +62,21 @@ describe("engine error codes", () => {
     ).toBe("nested extract exceeded max depth of 8 at `a (1).zip`");
     // An uncoded failure keeps its text, brackets included.
     expect(engineFailure({ label: "bad entry [see.docs]" }).message).toBe("bad entry [see.docs]");
+  });
+
+  it("drops the CLI tag from a coded failure message before context is appended", () => {
+    const result = failedRun({
+      error_code: "io.storage_full",
+      label: "i/o error: No space left on device (os error 51) [io.storage_full]",
+    });
+    expect(getRomWeaverFailureMessage(result)).toBe("i/o error: No space left on device (os error 51)");
+    expect(getRomWeaverFailureMessage(failedRun({ label: "bad entry [see.docs]" }))).toBe("bad entry [see.docs]");
+  });
+
+  it("reports an engine allocation failure as a worker failure", () => {
+    expect(engineFailure({ error_code: "resource.out_of_memory", label: "Cannot allocate memory" }).code).toBe(
+      "WORKER_FAILED",
+    );
   });
 
   it("classifies an uncoded failure by its kind and command, not its text", () => {

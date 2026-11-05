@@ -1230,10 +1230,13 @@ where
                             }
                             let write_at = SystemTime::now();
                             output.write_all(&buffer[..read]).map_err(|error| {
-                                RomWeaverError::Validation(format!(
-                                    "{format_name} extract failed while writing entry {} (`{}`): {error}",
-                                    task.index, task.archive_name
-                                ))
+                                RomWeaverError::from(error).with_context(
+                                    format!(
+                                        "{format_name} extract failed while writing entry {} (`{}`)",
+                                        task.index, task.archive_name
+                                    ),
+                                    None,
+                                )
                             })?;
                             write += write_at.elapsed().unwrap_or_default();
                             let hash_at = SystemTime::now();
@@ -1687,9 +1690,12 @@ impl LibarchiveParallelExtractWriter<'_> {
         })?;
         let archive_name = &output.archive_name;
         output.writer.write_all(&bytes).map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{format_name} extract failed while writing entry {index} (`{archive_name}`): {error}"
-            ))
+            RomWeaverError::from(error).with_context(
+                format!(
+                    "{format_name} extract failed while writing entry {index} (`{archive_name}`)"
+                ),
+                None,
+            )
         })?;
         let delta = bytes.len() as u64;
         output.hasher.update(&bytes)?;

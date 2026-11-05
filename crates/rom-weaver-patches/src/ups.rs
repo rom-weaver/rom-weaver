@@ -448,15 +448,18 @@ fn resolve_apply_target(
         }
     }
 
-    Err(RomWeaverError::Validation(format!(
-        "UPS input validation failed; expected source size/checksum {} / {:08x} or target size/checksum {} / {:08x}, got {} / {:08x}",
-        patch.source_size,
-        patch.source_checksum,
-        patch.target_size,
-        patch.target_checksum,
-        input_len,
-        input_checksum
-    )))
+    Err(RomWeaverError::coded(
+        rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+        format!(
+            "UPS input validation failed; expected source size/checksum {} / {:08x} or target size/checksum {} / {:08x}, got {} / {:08x}",
+            patch.source_size,
+            patch.source_checksum,
+            patch.target_size,
+            patch.target_checksum,
+            input_len,
+            input_checksum
+        ),
+    ))
 }
 
 fn validate_ups_change_ranges(patch: &ParsedUpsPatch) -> Result<()> {

@@ -121,6 +121,9 @@ pub const ERROR_CODE_PATCH_CHECKSUM_MISMATCH: &str = "patch.checksum_mismatch";
 /// A write failed because the storage is full.
 pub const ERROR_CODE_IO_STORAGE_FULL: &str = "io.storage_full";
 
+/// An allocation failed: the operation needs more memory than is available.
+pub const ERROR_CODE_RESOURCE_OUT_OF_MEMORY: &str = "resource.out_of_memory";
+
 /// Each code the webapp distinguishes, with the workflow code it reports as.
 /// Typegen emits this table; a code missing here reaches the webapp uncoded.
 pub const ERROR_CODE_WORKFLOW_CODES: &[(&str, WorkflowErrorCode)] = &[
@@ -172,6 +175,10 @@ pub const ERROR_CODE_WORKFLOW_CODES: &[(&str, WorkflowErrorCode)] = &[
     (
         ERROR_CODE_IO_STORAGE_FULL,
         WorkflowErrorCode::OutputWriteFailed,
+    ),
+    (
+        ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
+        WorkflowErrorCode::WorkerFailed,
     ),
 ];
 

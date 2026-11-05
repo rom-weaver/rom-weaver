@@ -10,7 +10,7 @@ use thiserror::Error;
 #[cfg(feature = "typescript-types")]
 use ts_rs::TS;
 
-use crate::error_codes::ERROR_CODE_IO_STORAGE_FULL;
+use crate::error_codes::{ERROR_CODE_IO_STORAGE_FULL, ERROR_CODE_RESOURCE_OUT_OF_MEMORY};
 
 /// Fields recovered from a rendered `(key=value, ...)` tag.
 type DisplayFields = Map<String, Value>;
@@ -301,7 +301,7 @@ pub enum RomWeaverError {
     Unsupported(UnsupportedOp),
     #[error("operation cancelled")]
     Cancelled,
-    #[error("i/o error: {0}{tag}", tag = storage_full_tag(.0))]
+    #[error("i/o error: {0}{tag}", tag = io_code_tag(.0))]
     Io(#[from] io::Error),
     /// An i/o failure that knows which path and operation produced it. Prefer
     /// this over the bare [`RomWeaverError::Io`] anywhere a user-supplied path
@@ -311,7 +311,7 @@ pub enum RomWeaverError {
         "i/o error: cannot {op} `{}`: {source}{}{}",
         path.display(),
         advice_suffix(advice.as_deref()),
-        storage_full_tag(source)
+        io_code_tag(source)
     )]
     IoPath {
         op: IoOp,
@@ -326,15 +326,20 @@ pub enum RomWeaverError {
     ThreadPoolBuild(String),
 }
 
-/// Tags a storage-full failure with its code, so a report whose label wraps the
-/// error in context text still carries `io.storage_full` (see
-/// [`ValidationCodeError::parse_display_tag`]).
-fn storage_full_tag(source: &io::Error) -> String {
-    if source.kind() == io::ErrorKind::StorageFull {
-        format!(" [{ERROR_CODE_IO_STORAGE_FULL}]")
-    } else {
-        String::new()
+/// The stable code of an i/o failure the webapp distinguishes by its kind.
+fn io_code(source: &io::Error) -> Option<&'static str> {
+    match source.kind() {
+        io::ErrorKind::StorageFull => Some(ERROR_CODE_IO_STORAGE_FULL),
+        io::ErrorKind::OutOfMemory => Some(ERROR_CODE_RESOURCE_OUT_OF_MEMORY),
+        _ => None,
     }
+}
+
+/// Tags a storage-full or out-of-memory failure with its code, so a report
+/// whose label wraps the error in context text still carries it (see
+/// [`ValidationCodeError::parse_display_tag`]).
+fn io_code_tag(source: &io::Error) -> String {
+    io_code(source).map_or_else(String::new, |code| format!(" [{code}]"))
 }
 
 fn advice_suffix(advice: Option<&str>) -> String {
@@ -436,11 +441,7 @@ impl RomWeaverError {
     pub fn code(&self) -> Option<&str> {
         match self {
             Self::ValidationCode(coded) => Some(coded.code()),
-            Self::Io(source) | Self::IoPath { source, .. }
-                if source.kind() == io::ErrorKind::StorageFull =>
-            {
-                Some(ERROR_CODE_IO_STORAGE_FULL)
-            }
+            Self::Io(source) | Self::IoPath { source, .. } => io_code(source),
             _ => None,
         }
     }
@@ -468,8 +469,18 @@ impl RomWeaverError {
                 Self::ValidationCode(coded)
             }
             other => {
-                let message = format!("{context}: {other}");
-                match fallback_code {
+                // An i/o code (storage full, out of memory) outranks the fallback: the
+                // failure is about the device, not the data.
+                let io_code = match &other {
+                    Self::Io(source) | Self::IoPath { source, .. } => io_code(source),
+                    _ => None,
+                };
+                let text = other.to_string();
+                let text = io_code
+                    .and_then(|code| text.strip_suffix(&format!(" [{code}]")))
+                    .unwrap_or(&text);
+                let message = format!("{context}: {text}");
+                match io_code.or(fallback_code) {
                     Some(code) => {
                         Self::ValidationCode(ValidationCodeError::new(code).with_message(message))
                     }

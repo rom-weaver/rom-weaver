@@ -569,3 +569,30 @@ fn storage_full_io_errors_carry_the_storage_full_code() {
     );
     assert_eq!(RomWeaverError::Io(io::Error::other("x")).code(), None);
 }
+
+#[test]
+fn out_of_memory_io_errors_carry_the_out_of_memory_code() {
+    let oom = RomWeaverError::Io(io::Error::from(io::ErrorKind::OutOfMemory));
+    assert_eq!(oom.code(), Some("resource.out_of_memory"));
+    assert!(
+        oom.to_string().ends_with(" [resource.out_of_memory]"),
+        "{oom}"
+    );
+}
+
+#[test]
+fn with_context_keeps_an_io_code_over_the_fallback_without_repeating_its_tag() {
+    let full = RomWeaverError::Io(io::Error::from(io::ErrorKind::StorageFull)).with_context(
+        "zip extract failed while writing entry 0",
+        Some("archive.read_failed"),
+    );
+    assert_eq!(full.code(), Some("io.storage_full"));
+    let text = full.to_string();
+    assert!(
+        text.starts_with(
+            "validation failed: zip extract failed while writing entry 0: i/o error: "
+        ),
+        "{text}"
+    );
+    assert_eq!(text.matches("[io.storage_full]").count(), 1, "{text}");
+}

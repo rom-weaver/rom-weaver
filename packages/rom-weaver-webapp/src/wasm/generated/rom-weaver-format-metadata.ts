@@ -2625,6 +2625,7 @@ export const ROM_WEAVER_ERROR_CODES = {
   "io.storage_full": "OUTPUT_WRITE_FAILED",
   "patch.checksum_mismatch": "CHECKSUM_MISMATCH",
   "patch.file_checksum_invalid": "CHECKSUM_MISMATCH",
+  "resource.out_of_memory": "WORKER_FAILED",
   "selection.cancelled": "CANCELLED",
   "trim.unsupported_disc": "UNSUPPORTED_FORMAT",
   "wbfs.size_mismatch": "INVALID_INPUT"
