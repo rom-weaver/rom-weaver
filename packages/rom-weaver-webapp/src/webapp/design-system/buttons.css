@@ -132,7 +132,7 @@
   flex: 1 1 auto;
   align-items: center;
   justify-content: center;
-  min-inline-size: 0;
+  min-inline-size: 44px;
   min-block-size: 44px;
   padding: var(--sp-xs) 12px;
   font-size: 0.85rem;
