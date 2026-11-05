@@ -199,6 +199,29 @@ test("the key covers the build inputs and its own definition", () => {
   }
 });
 
+test("every script setup-build-env runs is part of the key", () => {
+  const action = repoFile(".github/actions/setup-build-env/action.yml");
+  const scripts = [...new Set(action.match(/scripts\/[\w./-]+\.(?:mjs|sh)/gu))];
+  assert.ok(scripts.length > 0, "setup-build-env references no scripts");
+  for (const script of scripts) {
+    assert.ok(
+      KEY_PATHS.some((path) => script === path || script.startsWith(`${path}/`)),
+      `${script} is run by setup-build-env but not keyed`,
+    );
+  }
+});
+
+test("a table-form third-party version misses the cache", () => {
+  const files = tree();
+  files["crates/rom-weaver-core/Cargo.toml"] += '\n[dependencies.extra]\nversion = "1.0"\n';
+  const bumped = { ...files };
+  bumped["crates/rom-weaver-core/Cargo.toml"] = files["crates/rom-weaver-core/Cargo.toml"].replace(
+    '[dependencies.extra]\nversion = "1.0"',
+    '[dependencies.extra]\nversion = "2.0"',
+  );
+  assert.notEqual(keyOf(bumped), keyOf(files));
+});
+
 // A cache hit restores a CLI that reports the previous release's version. These checks must never
 // compare a version-dependent output (`--version`, the xdelta application header, SARIF, identify
 // setup), or the cache would hide a regression or fail a healthy release.
@@ -224,7 +247,7 @@ test("parity and perf share one cached CLI and fixture writer", () => {
 
   const build = jobs.parity.steps.find((s) => s.name === "Build rom-weaver CLI and NKit fixture writer");
   assert.match(build.run, /cargo build --locked --release -p rom-weaver-containers --example nkit_fixture &\n/u);
-  assert.match(build.run, /cargo build --release -p rom-weaver-cli\n/u);
+  assert.match(build.run, /cargo build --locked --release -p rom-weaver-cli\n/u);
   assert.match(build.run, /wait "\$fixture_build"/u, "a failed fixture build must fail the job");
   assert.ok(build.run.includes("set -euo pipefail"));
 

@@ -52,7 +52,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
 | `dependabot-auto-merge.yml` | Dependabot PR open/reopen/sync | No | Arm native squash auto-merge for patch and minor updates after required checks pass |
 | `codeql.yml` | nightly (05:27 UTC), release PR, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
-| `parity.yml` | nightly 07:13 UTC, release PR, manual | No | Byte parity against live chdman, dolphin-tool, 7-Zip, and Info-ZIP, with an exact cached CLI; then that CLI's command timings against the latest release ([Performance regressions](performance.md#performance-regressions)) |
+| `parity.yml` | nightly 07:13 UTC, release PR, manual | No | Byte parity against live chdman, dolphin-tool, 7-Zip, and Info-ZIP, with a CLI cached on every build input but the workspace version; then that CLI's command timings against the latest release ([Performance regressions](performance.md#performance-regressions)) |
 | `quality-deep.yml` | weekly Monday 07:17 UTC, manual | No | Mutation shard, long fuzzing, sanitizers, Miri, Kani, property checks, and browser lifecycle/resource checks |
 | `e2e-nightly.yml` | manual | No | Exhaustive browser E2E, service-worker checks, and published-install smoke tests |
 | `cache-cleanup.yml` | completed main-push CI, daily 03:17 UTC fallback, manual | No | Remove closed-PR and superseded Actions caches |
@@ -510,9 +510,9 @@ A step that dies to a network timeout inside a job, such as `apt-get`, leaves no
 
 Keeps one tracking issue titled `Nightly CI is failing on main` in step with the scheduled `ci.yml` run, so a red nightly is seen without anyone opening the Actions tab. The `nightly-alert` job runs after `gate` and exists only on the `schedule` event: pull requests, pushes, and manual runs start no runner for it. `security` only warns, and `deploy` and `quality-analysis` are `continue-on-error`, so none of them fails the run or raises the alert. `parity.yml` is a separate scheduled workflow and does not raise it either. The job holds `issues: write` for itself alone; the workflow default stays `contents: read`.
 
-- **A failing nightly** opens the issue when none is open. When one is open, it adds a comment instead: the run link, the commit, and the names of the failed jobs other than the gate, read from the run's job list.
-- **A passing nightly** comments `Recovered` on the open issue and closes it. A cancelled nightly changes nothing.
-- **One open issue.** The script finds it by exact title alone and picks the oldest. A stray duplicate gets a pointer to the oldest and is closed. Pull requests and other issues, including ones someone gave the `nightly-ci-failure` label, are never touched.
+- **A failing nightly** opens the issue when none is open. When one is open, it adds a comment instead: the run link, the commit, and the names of the failed jobs other than the gate, read from the run's job list. Advisory `continue-on-error` jobs can appear in that list, and jobs still running do not. If the job list cannot be read, the alert still goes out, without names.
+- **A passing nightly** comments `Recovered` on the open issue and closes it. A cancelled nightly changes nothing, and neither does a re-run of an older scheduled run: only the newest scheduled `ci.yml` run on `main` acts.
+- **One open issue.** The script finds it by exact title and the `github-actions[bot]` author, and picks the oldest. A stray duplicate gets a pointer to the oldest and is closed. Pull requests and other issues, including a person's issue with the same title and ones someone gave the `nightly-ci-failure` label, are never touched.
 - **The label is optional.** The first alert creates `nightly-ci-failure` when it is missing and attaches it. If that fails, the issue is opened without a label and the title finds it on later nights. Do not retitle the issue by hand while it is open.
 
 The script runs against the REST API with the job's token, so it cannot be tried locally without one; `scripts/ci/nightly-alert.test.mjs` covers it against an in-memory issues API.

@@ -2,7 +2,9 @@
 
 // Prints the cache key for the native CLI that the parity job builds.
 //
-// The key covers everything the build reads, with one exception: the workspace's own version.
+// The key covers the repository files the build reads, with one exception: the workspace's own
+// version. The runner image (its C compiler and system packages) is not keyed; KEY_EPOCH discards
+// the cache when that matters.
 // release-please rewrites it in Cargo.toml, crates/*/Cargo.toml (the path-dependency pins), and
 // Cargo.lock on every release pull request, and that changes the binary only by the
 // `CARGO_PKG_VERSION` strings compiled into it (`--version`, the xdelta application header,
@@ -21,8 +23,8 @@ import { createHash } from "node:crypto";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-// What the native CLI build reads. parity.yml and this script are included so an edit to how the
-// binary is built or keyed starts from a clean cache.
+// What the native CLI build reads, including every script setup-build-env runs. parity.yml and this
+// script are included so an edit to how the binary is built or keyed starts from a clean cache.
 export const KEY_PATHS = [
   "crates",
   "Cargo.lock",
@@ -32,6 +34,9 @@ export const KEY_PATHS = [
   ".github/actions/setup-build-env",
   ".github/workflows/parity.yml",
   "scripts/install-jwasm.sh",
+  "scripts/ensure-emulatorjs.mjs",
+  "scripts/ci/install-system-dependencies.mjs",
+  "scripts/ci/select-mise-tools.mjs",
   "scripts/ci/parity-cli-key.mjs",
 ];
 

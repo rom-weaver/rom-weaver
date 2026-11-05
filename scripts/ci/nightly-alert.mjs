@@ -16,10 +16,12 @@ import { pathToFileURL } from "node:url";
 
 import { createGitHubApi } from "./github-api.mjs";
 
-// The title is the lookup key: it works before the label exists, and the label is only a convenience
-// for filtering. Never retitle the issue without changing this.
+// The title and author are the lookup key: they work before the label exists, and the label is only
+// a convenience for filtering. Never retitle the issue without changing this.
 export const ALERT_TITLE = "Nightly CI is failing on main";
+export const ALERT_AUTHOR = "github-actions[bot]";
 export const ALERT_LABEL = "nightly-ci-failure";
+const WORKFLOW_FILE = "ci.yml";
 const LABEL_COLOR = "d73a4a";
 const LABEL_DESCRIPTION = "Opened and closed by the scheduled CI run";
 
@@ -51,7 +53,7 @@ function runLine({ runUrl, sha, repoUrl }) {
 
 export function failureText({ runUrl, sha, repoUrl, failed }) {
   const jobs = failed.length === 0 ? "none reported" : failed.map((name) => `- ${name}`).join("\n");
-  return `${runLine({ runUrl, sha, repoUrl })}\n\nFailed jobs:\n${jobs}`;
+  return `${runLine({ runUrl, sha, repoUrl })}\n\nFailed jobs (advisory jobs that do not fail the run may appear; jobs still running do not):\n${jobs}`;
 }
 
 export function openingText(run) {
@@ -73,13 +75,33 @@ export async function listRunJobs({ api, repo, runId }) {
   }
 }
 
+// The job names only add detail, so a failed lookup must not keep a red nightly from being reported.
+export async function failedJobsOrNone({ api, repo, runId, warn }) {
+  try {
+    return failedJobNames(await listRunJobs({ api, repo, runId }));
+  } catch (error) {
+    warn(`listing the run's jobs failed; reporting without them: ${error.message}`);
+    return [];
+  }
+}
+
+// A re-run of an older scheduled run keeps the `schedule` event, so without this a passing re-run of
+// last week's nightly would close the issue while today's is still red. A re-attempt of the newest
+// run keeps its id and still counts.
+export async function isNewestNightly({ api, repo, runId }) {
+  const response = await api(
+    `/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/runs?event=schedule&branch=main&per_page=1`,
+  );
+  return String(response.workflow_runs[0]?.id) === String(runId);
+}
+
 // Oldest first, so a stray duplicate never displaces the issue the alerts were already using. The
-// issues endpoint also returns pull requests. Only the title matches: a person can put the label on
-// any issue, and a passing nightly would close it.
+// issues endpoint also returns pull requests. The label is not a match: a person can put it on any
+// issue. Neither is a person's issue with the same title: a passing nightly would close it.
 export async function findAlertIssues({ paginate, repo }) {
   const open = await paginate(`/repos/${repo}/issues?state=open`);
   return open
-    .filter((issue) => !issue.pull_request && issue.title === ALERT_TITLE)
+    .filter((issue) => !issue.pull_request && issue.title === ALERT_TITLE && issue.user?.login === ALERT_AUTHOR)
     .toSorted((left, right) => left.number - right.number);
 }
 
@@ -150,10 +172,14 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { api, paginate } = createGitHubApi({ token: GH_TOKEN, apiUrl, name: "nightly-alert" });
   const outcome = nightlyOutcome(JSON.parse(NEEDS_JSON));
   const repoUrl = `${serverUrl}/${GITHUB_REPOSITORY}`;
+  const warn = (message) => process.stdout.write(`::warning::${message}\n`);
+  const repo = GITHUB_REPOSITORY;
+  if (outcome !== "unknown" && !(await isNewestNightly({ api, repo, runId: GITHUB_RUN_ID }))) {
+    process.stdout.write(`nightly ${outcome}: a newer scheduled run exists; nothing to do\n`);
+    process.exit(0);
+  }
   const failed =
-    outcome === "failing"
-      ? failedJobNames(await listRunJobs({ api, repo: GITHUB_REPOSITORY, runId: GITHUB_RUN_ID }))
-      : [];
+    outcome === "failing" ? await failedJobsOrNone({ api, repo, runId: GITHUB_RUN_ID, warn }) : [];
   const summary = await reconcile({
     api,
     paginate,
@@ -161,7 +187,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     outcome,
     run: { runUrl: `${repoUrl}/actions/runs/${GITHUB_RUN_ID}`, sha: GITHUB_SHA, repoUrl },
     failed,
-    warn: (message) => process.stdout.write(`::warning::${message}\n`),
+    warn,
   });
   process.stdout.write(`nightly ${outcome}: ${summary}\n`);
 }

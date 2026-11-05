@@ -45,7 +45,10 @@ jobs:
       # scripts/ci/parity-cli-key.mjs.
       - name: Compute native CLI cache key
         id: cli-key
-        run: echo "key=$(node scripts/ci/parity-cli-key.mjs)" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          key=$(node scripts/ci/parity-cli-key.mjs)
+          echo "key=$key" >> "$GITHUB_OUTPUT"
 
       - name: Restore native CLI
         id: cli-cache
@@ -121,7 +124,7 @@ jobs:
           fixture_build=$!
           # A failed CLI build ends the step at once; take the background build down with it.
           trap 'kill "$fixture_build" 2>/dev/null || true' EXIT
-          cargo build --release -p rom-weaver-cli
+          cargo build --locked --release -p rom-weaver-cli
           wait "$fixture_build"
           cp "$FIXTURE_TARGET_DIR/release/examples/nkit_fixture" target/release/nkit_fixture
 
