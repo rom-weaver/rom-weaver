@@ -6,29 +6,49 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         "zelda-oracle-of-ages",
         "The Legend of Zelda: Oracle of Ages",
         b"Z21216-0",
+        0x10a,
     )
 }
 
-pub(super) fn oracle_schema(id: &str, name: &str, signature: &[u8]) -> Vec<SchemaSaveHandler> {
+/// `core_offset` is the slot-relative offset of the health byte; max health, heart
+/// pieces, and the packed-BCD rupees follow it. Ages and Seasons place it differently.
+pub(super) fn oracle_schema(
+    id: &str,
+    name: &str,
+    signature: &[u8],
+    core_offset: usize,
+) -> Vec<SchemaSaveHandler> {
     let games = (0..3)
         .map(|slot| {
             let mut fields = Vec::new();
             let base = slot * 0x550;
             for (key, label, offset, storage, max) in [
                 ("mode", "Mode", 0x72, Storage::U16Le, u16::MAX as i64),
-                ("health", "Health quarter-hearts", 0x10a, Storage::U8, 64),
                 (
-                    "max_health",
-                    "Maximum health quarter-hearts",
-                    0x10b,
+                    "health",
+                    "Health quarter-hearts",
+                    core_offset,
                     Storage::U8,
                     64,
                 ),
-                ("heart_pieces", "Heart pieces", 0x10c, Storage::U8, 3),
+                (
+                    "max_health",
+                    "Maximum health quarter-hearts",
+                    core_offset + 1,
+                    Storage::U8,
+                    64,
+                ),
+                (
+                    "heart_pieces",
+                    "Heart pieces",
+                    core_offset + 2,
+                    Storage::U8,
+                    3,
+                ),
                 (
                     "rupees_bcd",
                     "Rupees (packed BCD)",
-                    0x10d,
+                    core_offset + 3,
                     Storage::BcdLe,
                     999,
                 ),
