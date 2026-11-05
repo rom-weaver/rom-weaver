@@ -821,7 +821,11 @@ impl FieldSchema {
             if !choice_names.insert(&choice.name) || !choice_values.insert(choice.value) {
                 return Err(invalid("choice names and values must be unique"));
             }
-            if choice.value < min || choice.value > max {
+            // A gapped mask makes the range check alone too loose, so values must also fit the mask's bits.
+            let outside_mask = raw
+                .mask
+                .is_some_and(|mask| choice.value & !i64::from(mask >> mask.trailing_zeros()) != 0);
+            if choice.value < min || choice.value > max || outside_mask {
                 return Err(invalid("choice values must fit the field range"));
             }
         }

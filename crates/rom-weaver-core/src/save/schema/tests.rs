@@ -68,6 +68,19 @@ fn gapped_masks_are_limited_to_enum_fields_and_keep_other_bits() {
         },
     ];
     assert!(GameSchema::build(game(vec![field("value", 0, Storage::U8).mask(0x81)], 1)).is_err());
+    // 2 is inside the 0..=0x81 range but uses a bit the mask does not cover.
+    let mut outside = choices.clone();
+    outside.push(FieldChoice {
+        name: "Gap".into(),
+        value: 0x02,
+    });
+    assert!(
+        GameSchema::build(game(
+            vec![field("value", 0, Storage::U8).mask(0x81).choices(outside)],
+            1
+        ))
+        .is_err()
+    );
     let schema = handler(game(
         vec![field("value", 0, Storage::U8).mask(0x81).choices(choices)],
         1,
