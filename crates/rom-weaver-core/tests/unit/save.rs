@@ -342,6 +342,34 @@ fn registry_lists_every_game_with_format_metadata() {
             );
         }
     }
+    for block in 1..=15 {
+        expected.extend(
+            ["europe", "usa", "japan"]
+                .iter()
+                .map(|region| format!("ctr-crash-team-racing-{region}-block-{block}")),
+        );
+    }
+    for block in 1..=12 {
+        expected.extend(
+            ["europe", "usa", "japan"]
+                .iter()
+                .map(|region| format!("gran-turismo-{region}-block-{block}")),
+        );
+    }
+    for block in 1..=15 {
+        expected.extend(
+            ["europe", "usa", "japan", "france", "germany", "italy"]
+                .iter()
+                .map(|region| format!("tomb-raider-ii-starring-lara-croft-{region}-block-{block}")),
+        );
+    }
+    for block in 1..=15 {
+        expected.extend(
+            ["europe", "usa", "japan"]
+                .iter()
+                .map(|region| format!("tony-hawk-s-skateboarding-{region}-block-{block}")),
+        );
+    }
     assert_eq!(ids, expected);
     assert!(definitions[3..8].iter().all(|definition| {
         definition.platform == "gba"

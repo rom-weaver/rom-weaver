@@ -1,0 +1,388 @@
+use super::playstation_card::{BLOCK_SIZE, CARD_SIZE};
+use super::*;
+use rules::{Check, Condition, ReadValue, Scalar, Store};
+use tracing::debug;
+
+// Fields and the checksum MUST follow this pinned game layout. The game's save spans four
+// card blocks, which the shared single-block card definition cannot describe.
+// https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/gran-turismo/saveEditor
+// Directory chain frames (0x51, 0x52, 0x53 with next-block links) follow the card format.
+// https://psx-spx.consoledev.net/controllersandmemorycards/#memory-card-data-format
+const BLOCKS: usize = 4;
+const CHECKSUM: usize = 0x6da4;
+const CHECKED: std::ops::Range<usize> = 0x200..CHECKSUM;
+
+/// Two running sums over the checked range: a 16-bit add-then-xor sum and a 16-bit CRC-style
+/// register whose reduction runs before the next message bit is merged in. The upstream editor
+/// keeps both in wider integers, but only their low 16 bits reach the stored value.
+fn sums(data: impl IntoIterator<Item = u8>) -> u32 {
+    let mut sum = 0xaaaau16;
+    let mut register = 0x3770u32;
+    for byte in data {
+        sum = sum.wrapping_add(u16::from(byte)) ^ (u16::from(byte) << 8);
+        for bit in (0..8).rev() {
+            register <<= 1;
+            if register & 0x10000 != 0 {
+                register ^= 0x11021;
+            }
+            register |= u32::from(byte >> bit) & 1;
+        }
+    }
+    u32::from(sum) << 16 | (register & 0xffff)
+}
+
+fn checksum(bytes: &[u8]) -> u32 {
+    sums(bytes[CHECKED].iter().copied())
+}
+
+fn directory_xor(bytes: &[u8], block: usize) -> u8 {
+    bytes[block * 0x80..block * 0x80 + 0x7f]
+        .iter()
+        .fold(0, |xor, value| xor ^ value)
+}
+
+/// A four-block file in contiguous ascending blocks, as the card manager writes it to free
+/// space: first frame 0x51 with the file size, then 0x52 frames, then a closing 0x53 frame.
+fn chain_valid(bytes: &[u8], first: usize, product: &[u8]) -> bool {
+    let last = first + BLOCKS - 1;
+    let header_xor = bytes[..0x7f].iter().fold(0, |xor, value| xor ^ value);
+    let start = first * 0x80;
+    let base = first * BLOCK_SIZE;
+    bytes[..2] == *b"MC"
+        && bytes[0x7f] == header_xor
+        && (first..=last).all(|block| {
+            let offset = block * 0x80;
+            let (mode, link) = match block {
+                _ if block == first => (0x51, (block as u16).to_le_bytes()),
+                _ if block == last => (0x53, [0xff, 0xff]),
+                _ => (0x52, (block as u16).to_le_bytes()),
+            };
+            bytes[offset] == mode
+                && bytes[offset + 8..offset + 10] == link
+                && bytes[offset + 0x7f] == directory_xor(bytes, block)
+        })
+        && bytes[start + 4..start + 8] == ((BLOCKS * BLOCK_SIZE) as u32).to_le_bytes()
+        && bytes[start + 0xc..start + 0x16] == *product
+        && bytes[start + 0x16..start + 0x19] == *b"GT\0"
+        && (1..=15)
+            .filter(|other| !(first..=last).contains(other))
+            .all(|other| {
+                let offset = other * 0x80;
+                !matches!(bytes[offset], 0x51..=0x53)
+                    || !(first - 1..last)
+                        .any(|index| bytes[offset + 8..offset + 10] == (index as u16).to_le_bytes())
+            })
+        && bytes[base..base + 2] == *b"SC"
+        && matches!(bytes[base + 2], 0x11..=0x13)
+        && bytes[base + 3] == BLOCKS as u8
+}
+
+fn fields(base: usize) -> Vec<FieldDefinition> {
+    vec![
+        catalog_field(
+            "playtime_seconds",
+            "Playtime seconds",
+            base + 0x200,
+            Storage::U32Le,
+        )
+        .max(999 * 3600 + 59 * 60 + 59),
+        catalog_field("credits", "Credits", base + 0x204, Storage::U32Le)
+            .max(2_000_000_000)
+            .description("The Japanese release shows this value multiplied by 100.".into()),
+        catalog_field("days", "Days", base + 0x208, Storage::U32Le).max(99_999),
+    ]
+}
+
+fn profile(region: &str, product: &'static str, first: usize) -> GameDefinition {
+    let base = first * BLOCK_SIZE;
+    let check = Check {
+        when: None,
+        assert: Condition::new(move |bytes| {
+            if !chain_valid(bytes, first, product.as_bytes()) {
+                return Ok(false);
+            }
+            let expected = checksum(&bytes[base..base + BLOCKS * BLOCK_SIZE]);
+            Ok(bytes[base + CHECKSUM..base + CHECKSUM + 4] == expected.to_le_bytes()
+                && bytes[base + CHECKED.start..base + CHECKSUM]
+                    .iter()
+                    .any(|value| *value != 0 && *value != 0xff))
+        }),
+        code: "gran_turismo_save".into(),
+        message: "selected blocks are not an initialized four-block Gran Turismo save for this region, or a card, directory, or save checksum is invalid".into(),
+        section_id: None,
+        warning: None,
+    };
+    GameDefinition {
+        fields: fields(base),
+        description: format!(
+            "Edits Gran Turismo {region} in the four contiguous card blocks starting at block {first} of a raw 128 KiB PlayStation memory card. Requires a game-made template; preserves the directory and every other block."
+        ),
+        runtime: runtime::Runtime {
+            checks: vec![check.clone()],
+            recognition: Some(runtime::Recognition {
+                checks: vec![check],
+                reasons: vec![
+                    SaveRecognitionReason::SignatureValid,
+                    SaveRecognitionReason::ChecksumValid,
+                ],
+                confidence: SaveRecognitionConfidence::High,
+                incomplete_confidence: None,
+                selected_reason: true,
+                empty_top_level_reasons: false,
+            }),
+            after_edit: vec![Store {
+                when: None,
+                destination: Scalar {
+                    offset: base + CHECKSUM,
+                    storage: Storage::U32Le,
+                    mask: None,
+                },
+                value: ReadValue::new(move |bytes| {
+                    let value = checksum(&bytes[base..base + BLOCKS * BLOCK_SIZE]);
+                    debug!(value, "recomputed Gran Turismo checksum");
+                    Ok(i64::from(value))
+                }),
+            }],
+            ..Default::default()
+        },
+        ..GameDefinition::new(
+            format!("gran-turismo-{region}-block-{first}"),
+            format!(
+                "Gran Turismo ({region}, card blocks {first}-{})",
+                first + BLOCKS - 1
+            ),
+            "playstation".into(),
+            CARD_SIZE,
+        )
+    }
+}
+
+pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
+    let mut games = Vec::new();
+    for first in 1..=15 - (BLOCKS - 1) {
+        for (region, product) in [
+            ("europe", "SCES-00984"),
+            ("usa", "SCUS-94194"),
+            ("japan", "SCPS-10045"),
+        ] {
+            games.push(profile(region, product, first));
+        }
+    }
+    build(games, BTreeMap::new(), true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::ps1_action_support::*;
+    use super::*;
+
+    const FIRST: usize = 4;
+    const BASE: usize = FIRST * BLOCK_SIZE;
+    const PRODUCT: &str = "SCUS-94194";
+
+    /// The upstream arithmetic with JavaScript's signed 32-bit bitwise semantics.
+    fn js_checksum(bytes: &[u8]) -> u32 {
+        let mut first: i32 = 0xaaaa;
+        let mut second: i32 = 0x3770;
+        for byte in &bytes[BASE + 0x200..BASE + 0x6da4] {
+            let mut int = i32::from(*byte);
+            first = first.wrapping_add(int) ^ (int << 8);
+            for _ in 0..8 {
+                second <<= 1;
+                if second & 0x10000 != 0 {
+                    second ^= 0x11021;
+                }
+                second |= (int >> 7) & 1;
+                int <<= 1;
+            }
+        }
+        ((first << 16) | (second & 0xffff)) as u32
+    }
+
+    fn seal(bytes: &mut [u8]) {
+        let value = js_checksum(bytes);
+        bytes[BASE + 0x6da4..BASE + 0x6da8].copy_from_slice(&value.to_le_bytes());
+    }
+
+    fn card() -> Vec<u8> {
+        let mut bytes = vec![0xa5; CARD_SIZE];
+        bytes[..0x80].fill(0);
+        bytes[..2].copy_from_slice(b"MC");
+        bytes[0x7f] = b'M' ^ b'C';
+        for block in 1..=15 {
+            bytes[block * 0x80..block * 0x80 + 0x80].fill(0);
+        }
+        for block in FIRST..FIRST + 4 {
+            let offset = block * 0x80;
+            let (mode, link) = match block {
+                FIRST => (0x51, (block as u16).to_le_bytes()),
+                _ if block == FIRST + 3 => (0x53, [0xff, 0xff]),
+                _ => (0x52, (block as u16).to_le_bytes()),
+            };
+            bytes[offset] = mode;
+            bytes[offset + 8..offset + 10].copy_from_slice(&link);
+            if block == FIRST {
+                bytes[offset + 4..offset + 8].copy_from_slice(&0x8000u32.to_le_bytes());
+                bytes[offset + 0xa..offset + 0xc].copy_from_slice(b"BA");
+                bytes[offset + 0xc..offset + 0x16].copy_from_slice(PRODUCT.as_bytes());
+                bytes[offset + 0x16..offset + 0x19].copy_from_slice(b"GT\0");
+            }
+            bytes[offset + 0x7f] = bytes[offset..offset + 0x7f].iter().fold(0, |x, v| x ^ v);
+        }
+        bytes[BASE..BASE + 4 * BLOCK_SIZE].fill(0x3c);
+        bytes[BASE..BASE + 4].copy_from_slice(&[b'S', b'C', 0x11, 4]);
+        lcg_fill(&mut bytes[BASE + 0x200..BASE + 0x6da4], 0x6717);
+        seal(&mut bytes);
+        bytes
+    }
+
+    fn game() -> GameDefinition {
+        profile("usa", PRODUCT, FIRST)
+    }
+
+    #[test]
+    fn sums_match_vectors_from_the_javascript_semantics() {
+        // Vectors from the upstream expressions run with 32-bit signed integers.
+        for (data, expected) in [
+            (&[][..], 0xaaaa_3770),
+            (&[0x00], 0xaaaa_36b4),
+            (&[0xff], 0x54a9_367f),
+            (&[1, 2, 3], 0xaab0_5a4f),
+            (b"123456789", 0x9d87_c09f),
+        ] {
+            assert_eq!(sums(data.iter().copied()), expected, "{data:x?}");
+        }
+        // 300 set bytes wrap the 16-bit sum several times.
+        assert_eq!(sums([0xffu8; 300]), 0xa97e_f33f);
+        let template = card();
+        assert_eq!(
+            checksum(&template[BASE..BASE + 4 * BLOCK_SIZE]),
+            js_checksum(&template)
+        );
+        for byte in [0, 0x1ff, 0x200, 0x6da3, 0x6da4] {
+            let mut copy = template.clone();
+            copy[BASE + byte] ^= 0xff;
+            let changed = checksum(&copy[BASE..BASE + 4 * BLOCK_SIZE]);
+            assert_eq!(changed, js_checksum(&copy));
+            let unchanged = changed == checksum(&template[BASE..BASE + 4 * BLOCK_SIZE]);
+            assert_eq!(unchanged, !CHECKED.contains(&byte), "{byte:x}");
+        }
+    }
+
+    #[test]
+    fn every_field_edits_only_itself_and_the_checksum() {
+        let game = game();
+        let template = card();
+        let original = parse_fields(&game, &template);
+        assert_eq!(original.len(), 3);
+        let edits = edit_each_field(&game, &template);
+        assert_eq!(edits.len(), 3);
+        for edit in edits {
+            assert!(
+                edit.stray
+                    .iter()
+                    .all(|index| (BASE + 0x6da4..BASE + 0x6da8).contains(index)),
+                "{}: {:x?}",
+                edit.id,
+                edit.stray
+            );
+            assert_only_changed(&edit, &original, &[]);
+            let stored = &edit.after[BASE + 0x6da4..BASE + 0x6da8];
+            assert_eq!(
+                stored,
+                js_checksum(&edit.after).to_le_bytes(),
+                "{}",
+                edit.id
+            );
+            assert_eq!(edit.after.len(), CARD_SIZE);
+        }
+    }
+
+    #[test]
+    fn spot_checks_use_the_documented_offsets() {
+        let game = game();
+        let edits = edit_each_field(&game, &card());
+        let find = |id: &str| edits.iter().find(|edit| edit.id == id).unwrap();
+        assert_eq!(
+            find("playtime_seconds").after[BASE + 0x200..BASE + 0x204],
+            3_599_999u32.to_le_bytes()
+        );
+        assert_eq!(
+            find("credits").after[BASE + 0x204..BASE + 0x208],
+            2_000_000_000u32.to_le_bytes()
+        );
+        assert_eq!(
+            find("days").after[BASE + 0x208..BASE + 0x20c],
+            99_999u32.to_le_bytes()
+        );
+    }
+
+    #[test]
+    fn rejects_out_of_range_values_damage_and_unsupported_chains() {
+        let game = game();
+        let handler = handler(&game);
+        let identity = handler.definitions().remove(0).identity;
+        let template = card();
+        let source = input(template.clone(), &identity.id);
+        for (field, value) in [
+            ("playtime_seconds", 3_600_000),
+            ("credits", 2_000_000_001),
+            ("days", 100_000),
+        ] {
+            let edit = SaveEdit {
+                field: field.into(),
+                value: SaveValue::U32(value),
+            };
+            assert!(
+                handler.apply(&source, &identity, &[edit], false).is_err(),
+                "{field}"
+            );
+        }
+        let damaged = |index: usize| {
+            let mut bytes = template.clone();
+            bytes[index] ^= 1;
+            handler
+                .apply(&input(bytes, &identity.id), &identity, &[], false)
+                .is_err()
+        };
+        let dir = FIRST * 0x80;
+        for index in [
+            0,
+            0x7f,
+            dir,
+            dir + 4 + 1,
+            dir + 8,
+            dir + 0xc,
+            dir + 0x16,
+            dir + 0x17,
+            dir + 0x7f,
+            dir + 0x80,
+            dir + 0x80 + 8,
+            dir + 0x100,
+            dir + 0x180,
+            dir + 0x180 + 8,
+            dir + 0x180 + 0x7f,
+            BASE,
+            BASE + 3,
+            BASE + 0x200,
+            BASE + 0x6da3,
+            BASE + 0x6da4,
+            BASE + 0x6da7,
+        ] {
+            assert!(damaged(index), "accepted damage at {index:x}");
+        }
+        // Bytes past the checksum are outside every rule, and so is the unused frame.
+        assert!(!damaged(BASE + 0x6da8));
+        assert!(!damaged(BASE + 0x7fff));
+        // An unrelated file linking into the chain makes the directory ambiguous.
+        let mut bytes = template;
+        bytes[0x80] = 0x51;
+        bytes[0x88..0x8a].copy_from_slice(&((FIRST + 1) as u16).to_le_bytes());
+        bytes[0xff] = bytes[0x80..0xff].iter().fold(0, |x, v| x ^ v);
+        assert!(
+            handler
+                .apply(&input(bytes, &identity.id), &identity, &[], false)
+                .is_err()
+        );
+    }
+}

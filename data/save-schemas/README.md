@@ -2,7 +2,7 @@
 
 The application defines its save layouts and editing rules as typed Rust under [`crates/rom-weaver-core/src/save/schema/catalog/`](../../crates/rom-weaver-core/src/save/schema/catalog). This directory keeps the source attribution and license for those definitions. It does not contain runtime schema packs.
 
-The default registry includes 611 profiles: the original seven game-family definitions and 589 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
+The default registry includes 827 profiles: the original seven game-family definitions and 805 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
 
 | Original catalog module | Games |
 | --- | --- |
@@ -114,9 +114,13 @@ These profiles require explicit game selection and a game-made template. They ex
 | Grandia | 75 | Single-block save in a raw 128 KiB PS1 card | Gold pieces |
 | Final Fantasy VII | 105 | Single-block save in a raw 128 KiB PS1 card | Gil with its preview and GP |
 | Final Fantasy VIII | 105 | Single-block save in a raw 128 KiB PS1 card | Squall/Laguna gil with the active preview |
+| CTR: Crash Team Racing | 45 | Single-block save in a raw 128 KiB PS1 card | Character, level, and Scrapbook unlocks; in-use Adventure slots' character, location, and world doors; sound and vibration options; CRC-16 repaired |
+| Gran Turismo | 36 | Four contiguous-block save in a raw 128 KiB PS1 card | Playtime seconds, credits, and days; combined sum/CRC repaired |
+| Tomb Raider II Starring Lara Croft | 90 | Single-block save in a raw 128 KiB PS1 card | Progression, level unlocks and secrets, and options; checksum repaired |
+| Tony Hawk's Skateboarding | 45 | Single-block save in a raw 128 KiB PS1 card | Per-character tape masks and competition medals with the tape counter, best scores, and options; checksum repaired |
 | Castlevania: Rondo of Blood | 1 | Raw 2 KiB PC Engine BRAM, Japan; first record must be DRACULA X | Money and death count in occupied slots |
 
-The new definitions add 29 titles and 471 profiles. The preceding catalog table describes the original 118 additional profiles. Each PS1 profile selects an exact product code, region, and card block from 1 through 15. It validates allocation metadata and supports only a complete single-block game save. Multi-block saves, standalone save exports, and PC ports remain unsupported. DexDrive and Virtual Game Station card wrappers are preserved by the existing container layer.
+The new definitions add 29 titles and 471 profiles. The preceding catalog table describes the original 118 additional profiles. Each PS1 profile selects an exact product code, region, and card block from 1 through 15. It validates allocation metadata and supports only a complete single-block game save. Gran Turismo is the only multi-block profile and accepts only four contiguous, ascending blocks; other multi-block saves, standalone save exports, and PC ports remain unsupported. DexDrive and Virtual Game Station card wrappers are preserved by the existing container layer.
 
 Nintendo 64 profiles accept only the stated canonical big-endian byte order. The Minish Cap profile accepts only its stated EEPROM word order. Regional boundaries and omitted fields are recorded in each profile's description.
 
