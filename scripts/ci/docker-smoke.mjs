@@ -454,7 +454,7 @@ async function checkWebapp() {
   networkCreated = true;
   const web = await start("web", values.image);
   const tls = await start("tls", values.image, ["--env", "HTTPS_PORT=8443"]);
-  // Started together: each first health probe runs about 30s after start.
+  // Started together so their health waits overlap instead of adding up.
   const mounted = await startMountedCertificates();
   await Promise.all(
     [web, tls, mounted.pair, mounted.named].map(({ container }) => healthy(container)),
@@ -464,6 +464,8 @@ async function checkWebapp() {
   // option silently falls back to its default.
   for (const container of [web.container, tls.container]) {
     const logs = spawnSync("docker", ["logs", container], { encoding: "utf8" });
+    // Unreadable logs (a log driver without read support) would pass the check below.
+    assert.equal(logs.status, 0, `docker logs ${container} failed: ${logs.stderr}`);
     assert.doesNotMatch(
       logs.stdout + logs.stderr,
       /unused configuration manifest key/,
