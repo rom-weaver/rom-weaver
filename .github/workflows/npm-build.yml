@@ -1,0 +1,293 @@
+name: Build npm CLI
+
+# Everything the npm publish needs that writes nothing to a registry: the platform builds, their
+# dry-runs on each target's oldest OS, the identify data, and the CLI documentation. release.yml
+# starts this beside the semver check and gates only publish-npm on the check, so a patch release
+# no longer builds after it. Nothing here publishes to npm or flips the draft; the identify data and
+# documentation archives are attached to the still-draft release, as static-webapp's tarball is.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Release version without the v prefix
+        required: true
+        type: string
+      sha:
+        description: >-
+          Commit to build from. The release tag does not exist while the release
+          is still a draft, and github.ref points at main, which may already
+          have moved past the released commit.
+        required: true
+        type: string
+      cache-save:
+        description: Save the Cargo cache after a miss.
+        required: false
+        default: false
+        type: boolean
+      build-parallel:
+        description: Platform builds to run at once; the caller sizes it for the org's 20-job cap.
+        required: false
+        default: 3
+        type: number
+    outputs:
+      platforms:
+        description: The platform matrix, for the publish workflow to fan out over.
+        value: ${{ jobs.plan.outputs.platforms }}
+
+concurrency:
+  group: npm-build-${{ inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  identify-data:
+    name: Package identify data
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Prepare ROM identify data
+        uses: ./.github/actions/identify-data
+      - name: Build identify data archive
+        run: node scripts/build-identify-release-data.mjs
+      - name: Upload identify data artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: identify-release-data
+          path: |
+            target/identify-release/share
+            target/rom-weaver-identify-data*.tar.br
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+      - name: Upload identify data release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release upload "v${{ inputs.version }}"
+          target/rom-weaver-identify-data*.tar.br
+          --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Attest identify data archive
+        uses: ./.github/actions/attest-retry
+        with:
+          subject-path: target/rom-weaver-identify-data*.tar.br
+
+  # Resolve the shared CI and release platform matrix once; downstream matrices require job output.
+  plan:
+    name: Resolve platform matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      platforms: ${{ steps.platforms.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
+
+      - id: platforms
+        run: node scripts/ci/cli-platform-matrix.mjs
+
+  # Does not wait for `identify-data`: each leg builds its identify tree from the cached packs
+  # (a cache miss rebuilds them in the leg), so the slowest build starts a minute sooner. publish-npm waits for this whole
+  # workflow, so nothing is published unless the identify archive was attached and attested.
+  platform-build:
+    name: Build ${{ matrix.package }}
+    needs: plan
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      # The org runs at most 20 jobs at once and a release peaks near 16 with main's CI on the
+      # merge commit alongside, whose first wave is up to nine jobs. The caller sizes this from what
+      # else it runs at the time: five when the semver check is skipped, three when its legs
+      # overlap these builds.
+      max-parallel: ${{ inputs.build-parallel }}
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.platforms) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
+
+      # Build with CI's action and per-platform cache so releases reuse tested outputs.
+      - uses: ./.github/actions/build-cli-platform
+        with:
+          identify-release-tree: build
+          package: ${{ matrix.package }}
+          target: ${{ matrix.target }}
+          build: ${{ matrix.build }}
+          binary: ${{ matrix.binary }}
+          msvc-arch: ${{ matrix.msvc_arch }}
+          msvc-host: ${{ matrix.msvc_host }}
+          cache-save: ${{ inputs.cache-save }}
+          registry-url: https://registry.npmjs.org
+
+      # Preserve compiled packages so publish retries do not rebuild Rust.
+      - name: Upload platform package
+        uses: actions/upload-artifact@v7
+        with:
+          name: npm-platform-${{ matrix.package }}
+          path: packages/rom-weaver-cli-platforms/${{ matrix.package }}
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+      # The multi-platform CLI image consumes these binaries without recompiling the workspace.
+      - name: Upload Linux x64 binary for the container build
+        if: matrix.package == 'linux-x64-gnu'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-binary-linux-x64-gnu
+          path: packages/rom-weaver-cli-platforms/linux-x64-gnu/bin/rom-weaver
+          if-no-files-found: error
+          # Artifact names are immutable within a run and a re-run shares the
+          # run's namespace, so without this the documented "rerun the failed
+          # jobs" retry (.github/RELEASING.md) would 409 here on every attempt
+          # and strand the draft. A rerun rebuilds the same released sha, and
+          # build-containers was skipped in the failed attempt, so nothing can
+          # be reading the artifact while it is replaced.
+          overwrite: true
+          retention-days: 7
+
+      - name: Upload Linux arm64 binary for the container build
+        if: matrix.package == 'linux-arm64-musl'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-binary-linux-arm64-musl
+          path: packages/rom-weaver-cli-platforms/linux-arm64-musl/bin/rom-weaver
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  platform-dry-run:
+    name: Dry-run publish ${{ matrix.package }}
+    needs: [plan, platform-build]
+    if: ${{ needs.platform-build.result == 'success' }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      # `cli-assets` runs for about four minutes beside these nine dry-runs (25 to 122 seconds each),
+      # so three at a time cost no wall time and keep the nine from stacking on the end of main's
+      # CI second wave.
+      max-parallel: 3
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.platforms) }}
+    # `native_runner`, not `runner`: this leg executes the built binary, and
+    # linux-arm64-musl cross-builds on x64 but can only run on arm64.
+    runs-on: ${{ matrix.native_runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
+
+      - name: Download platform package
+        uses: actions/download-artifact@v8
+        with:
+          name: npm-platform-${{ matrix.package }}
+          path: packages/rom-weaver-cli-platforms/${{ matrix.package }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      # Runs the exact staged artifact the publish job will upload, on the
+      # oldest OS this target supports - the only check that a newer build image
+      # did not quietly raise the runtime floor. CI's own verify runs on the
+      # *build* runner, so for Darwin it cannot see that regression at all.
+      # Actions artifacts drop the executable bit; the publish helper restores it
+      # before packing, but this step must not depend on running after it.
+      - name: Verify release CLI
+        shell: bash
+        env:
+          BINARY: packages/rom-weaver-cli-platforms/${{ matrix.package }}/bin/${{ matrix.binary }}
+        run: |
+          set -euo pipefail
+          [[ "$RUNNER_OS" == "Windows" ]] || chmod +x "$BINARY"
+          node scripts/verify-cli-platform.mjs "$BINARY"
+
+      - name: Dry-run platform package publish
+        shell: bash
+        run: node scripts/ci/npm-publish-package.mjs --dry-run packages/rom-weaver-cli-platforms/${{ matrix.package }}
+
+  cli-assets:
+    name: Package CLI documentation
+    needs: platform-build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install build dependencies
+        env:
+          APT_PACKAGES: clang cmake libclang-dev ninja-build pkg-config zip
+        run: node scripts/ci/install-system-dependencies.mjs
+
+      - name: Prepare ROM identify data
+        uses: ./.github/actions/identify-data
+
+      - name: Generate CLI documentation
+        run: cargo run --locked -p rom-weaver-cli --example generate_manpages -- --write
+
+      - name: Package CLI documentation
+        run: |
+          tar -czf rom-weaver-cli-assets.tar.gz -C docs man completions
+          (cd docs && zip -qr ../rom-weaver-cli-assets.zip man completions)
+
+      - name: Upload CLI documentation artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-assets
+          path: |
+            rom-weaver-cli-assets.tar.gz
+            rom-weaver-cli-assets.zip
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+      - name: Upload CLI documentation release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "v${{ inputs.version }}" rom-weaver-cli-assets.tar.gz rom-weaver-cli-assets.zip --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Attest CLI documentation
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: rom-weaver-cli-assets.tar.gz
+
+      - name: Attest Windows CLI documentation
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: rom-weaver-cli-assets.zip

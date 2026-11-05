@@ -373,7 +373,11 @@ jobs:
           git push origin "HEAD:$RELEASE_PR_BRANCH"
 
   # The crates to check, one matrix leg each. Listing them here keeps a newly published crate
-  # from slipping past the semver gate.
+  # from slipping past the semver gate. When every crate's bump allows breaking changes (a 0.x minor
+  # or a major bump) the matrix is empty and `skipped` is true: cargo-semver-checks would skip every
+  # lint for such a bump after spending most of the job building rustdoc. A patch release, a failed
+  # or missing baseline lookup, or any other ambiguity keeps the check running. A failure here fails
+  # the job, which the publish gates below do not accept as a skip.
   semver-plan:
     name: Plan breaking API checks
     needs: release
@@ -385,7 +389,8 @@ jobs:
     permissions:
       contents: read
     outputs:
-      crates: ${{ steps.crates.outputs.crates }}
+      crates: ${{ steps.plan.outputs.crates }}
+      skipped: ${{ steps.plan.outputs.skipped }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -393,27 +398,20 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: List published workspace crates
-        id: crates
-        shell: bash
-        run: |
-          set -euo pipefail
-          crates=$(
-            cargo metadata --no-deps --format-version 1 |
-              jq --compact-output --raw-output '
-                .workspace_members as $members
-                | [
-                    .packages[]
-                    | select(.id as $id | $members | index($id))
-                    | select(.publish != [])
-                    | .name
-                  ]
-              '
-          )
-          test "$crates" != '[]'
-          echo "crates=$crates" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
 
-  # Gate draft publication on semver checks so a failure leaves a deletable draft.
+      - name: List published workspace crates and decide which need a check
+        id: plan
+        env:
+          CRATES_IO_USER_AGENT: rom-weaver-release-workflow (https://github.com/${{ github.repository }})
+        run: node scripts/ci/semver-plan.mjs
+
+  # Gate draft publication on semver checks so a failure leaves a deletable draft. A job that
+  # needs this one accepts it as passed only when it succeeded or semver-plan skipped it on
+  # purpose: see the `semver-check` condition repeated in each publishing job.
   # `!cancelled()` prevents a skipped verify-main-ci dependency from skipping this fan-out.
   # Each crate builds the rustdoc of its current and published versions, which took 13 minutes
   # for all five in one job; separate runners make the slowest crate the whole cost.
@@ -424,6 +422,7 @@ jobs:
       !cancelled() &&
       needs.release.result == 'success' &&
       needs.semver-plan.result == 'success' &&
+      needs.semver-plan.outputs.skipped != 'true' &&
       needs.release.outputs.release_created == 'true'
     runs-on: ubuntu-24.04
     permissions:
@@ -647,7 +646,7 @@ jobs:
           # tarball would keep it and the container would not, which is exactly
           # the divergence sharing this artifact exists to remove.
           include-hidden-files: true
-          # See the matching upload in npm-publish.yml: an artifact name cannot
+          # See the matching upload in npm-build.yml: an artifact name cannot
           # be reused within a run, so without this a rerun of a failed
           # static-webapp job 409s here instead of retrying.
           overwrite: true
@@ -668,14 +667,54 @@ jobs:
         with:
           subject-path: rom-weaver-webapp.tar.gz
 
+  # Builds, dry-runs and packages everything the npm publish needs, beside the semver check rather than
+  # after it: nothing here writes to a registry or publishes the draft, so only publish-npm waits
+  # for the check. Waits for the cargo dry-run, which finishes in under a minute, so a package
+  # crates.io would reject fails before any macOS or Windows runner is spent, and the nine builds
+  # start after main's CI first wave has thinned.
+  #
+  # The build count keeps the release window at the 16 jobs it peaked at before (the org runs at most
+  # 20 at once): five at a time beside static-webapp when the semver check is skipped, three beside
+  # its two legs when it runs.
+  npm-build:
+    needs: [release, semver-plan, cargo-publish-dry-run]
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.release.outputs.release_created == 'true' &&
+      needs.semver-plan.result == 'success' &&
+      needs.cargo-publish-dry-run.result == 'success'
+    permissions:
+      # The identify data and CLI documentation are attached to the draft and attested here,
+      # and a reusable workflow receives the calling job's token and never more.
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    uses: ./.github/workflows/npm-build.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
+      sha: ${{ needs.release.outputs.sha }}
+      cache-save: false
+      build-parallel: ${{ needs.semver-plan.outputs.skipped == 'true' && 5 || 3 }}
+
+  # The only npm job that writes to a registry, so it is the one that waits for the semver check.
   publish-npm:
-    needs: [release, semver-check, cargo-publish-dry-run]
+    needs: [release, semver-plan, semver-check, cargo-publish-dry-run, npm-build]
     if: >-
       !cancelled() &&
       needs.release.result == 'success' &&
       needs.release.outputs.release_created == 'true' &&
       needs.cargo-publish-dry-run.result == 'success' &&
-      needs.semver-check.result == 'success'
+      needs.npm-build.result == 'success' &&
+      (
+        needs.semver-check.result == 'success' ||
+        (
+          needs.semver-check.result == 'skipped' &&
+          needs.semver-plan.result == 'success' &&
+          needs.semver-plan.outputs.skipped == 'true'
+        )
+      )
     permissions:
       contents: write
       id-token: write
@@ -688,7 +727,7 @@ jobs:
     with:
       version: ${{ needs.release.outputs.version }}
       sha: ${{ needs.release.outputs.sha }}
-      cache-save: false
+      platforms: ${{ needs.npm-build.outputs.platforms }}
     secrets:
       NPM_BOOTSTRAP_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
 
@@ -834,28 +873,27 @@ jobs:
           git commit -m "rom-weaver $VERSION"
           git push
 
-  # Both images are assembled from artifacts these two jobs produce, so this now
-  # runs after them instead of beside them. The serialization is bought back
-  # several times over: the webapp image no longer builds a toolchain and a wasm
-  # module of its own, and the CLI image no longer compiles the workspace.
-  # docker-publish falls back to building from source if either artifact is
-  # missing, which is what a standalone workflow_dispatch gets.
-  publish-containers:
-    needs: [release, semver-check, static-webapp, publish-npm]
+  # Both images are assembled from artifacts static-webapp and npm-build produce, so the build waits
+  # for those two and then runs beside the npm publish instead of after it. It pushes nothing: each
+  # architecture is written to an OCI archive, and publish-containers pushes the archives (and
+  # assembles the manifest lists) only after the gates below. The serialization the prebuilt
+  # artifacts cost is bought back several times over: the webapp image no longer builds a toolchain
+  # and a wasm module of its own, and the CLI image no longer compiles the workspace.
+  # docker-publish falls back to building from source if either artifact is missing, which is what
+  # a standalone workflow_dispatch gets.
+  build-containers:
+    needs: [release, static-webapp, npm-build]
     if: >-
       !cancelled() &&
       needs.release.result == 'success' &&
       needs.static-webapp.result == 'success' &&
-      needs.publish-npm.result == 'success' &&
-      needs.semver-check.result == 'success' &&
+      needs.npm-build.result == 'success' &&
       needs.release.outputs.release_created == 'true'
+    # GitHub rejects the whole run at startup when a called workflow's job, even one its `if` skips,
+    # asks for more than the caller grants, so this grants what docker-publish.yml's `publish` job
+    # asks for. The `build` job, the only one this phase runs, narrows its own token to read access,
+    # so the build still cannot write to the registry.
     permissions:
-      # Belt and braces for the artifact download in docker-publish.yml. A
-      # same-run download authenticates with the runner's ACTIONS_RUNTIME_TOKEN
-      # rather than GITHUB_TOKEN, so this is not believed to be load-bearing
-      # today - but a reusable workflow gets the caller job's token and never
-      # more, so if that ever changes the grant has to exist in both places or
-      # the download fails and both images quietly rebuild from source.
       actions: read
       artifact-metadata: write
       attestations: write
@@ -866,6 +904,43 @@ jobs:
     with:
       version: ${{ needs.release.outputs.version }}
       sha: ${{ needs.release.outputs.sha }}
+      phase: build
+
+  publish-containers:
+    needs: [release, semver-plan, semver-check, static-webapp, publish-npm, build-containers]
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.static-webapp.result == 'success' &&
+      needs.publish-npm.result == 'success' &&
+      needs.build-containers.result == 'success' &&
+      (
+        needs.semver-check.result == 'success' ||
+        (
+          needs.semver-check.result == 'skipped' &&
+          needs.semver-plan.result == 'success' &&
+          needs.semver-plan.outputs.skipped == 'true'
+        )
+      ) &&
+      needs.release.outputs.release_created == 'true'
+    permissions:
+      # Belt and braces for the artifact download in docker-publish.yml. A
+      # same-run download authenticates with the runner's ACTIONS_RUNTIME_TOKEN
+      # rather than GITHUB_TOKEN, so this is not believed to be load-bearing
+      # today - but a reusable workflow gets the caller job's token and never
+      # more, so if that ever changes the grant has to exist in both places or
+      # the download fails and the images cannot be pushed.
+      actions: read
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
+      sha: ${{ needs.release.outputs.sha }}
+      phase: publish
 
   # Publishing the draft is what creates the tag and stamps the release
   # immutable, so every job that attaches an asset has to come first: assets can
@@ -879,11 +954,26 @@ jobs:
   publish-release:
     name: Publish draft release
     needs:
-      [release, semver-check, cargo-publish-dry-run, static-webapp, publish-npm, publish-containers]
+      [
+        release,
+        semver-plan,
+        semver-check,
+        cargo-publish-dry-run,
+        static-webapp,
+        publish-npm,
+        publish-containers,
+      ]
     if: >-
       always() &&
       needs.release.outputs.release_created == 'true' &&
-      needs.semver-check.result == 'success' &&
+      (
+        needs.semver-check.result == 'success' ||
+        (
+          needs.semver-check.result == 'skipped' &&
+          needs.semver-plan.result == 'success' &&
+          needs.semver-plan.outputs.skipped == 'true'
+        )
+      ) &&
       needs.cargo-publish-dry-run.result == 'success' &&
       needs.static-webapp.result == 'success' &&
       needs.publish-npm.result == 'success' &&

@@ -23,7 +23,7 @@ export function readPlatformMatrix(file = resolve(repoRoot, ".github/cli-platfor
 //
 // Only `pull_request` and `push` narrow, and an absent EVENT_NAME means the
 // full matrix: a caller that does not pass one (the release fan-out's `plan`
-// job in npm-publish.yml) can never silently publish a subset.
+// job in npm-build.yml) can never silently publish a subset.
 //
 // The release pull request is the exception among pull requests: it is the
 // commit that ships, so it builds all nine targets rather than the one target a
