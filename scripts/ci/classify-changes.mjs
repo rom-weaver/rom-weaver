@@ -24,11 +24,13 @@ const FULL_CI_PLUMBING = new Set([
 ]);
 
 // These deployment, cleanup, release-time, and scheduled-only helpers have
-// repo-lint coverage and do not affect an application build. No pull request
-// job runs them, so the full matrix would test nothing more than their own
-// tests already do. New CI helpers stay fail-open below until their consumers
-// have the same proof; each entry MUST have a sibling `.test.mjs`
-// (classify-changes.test.mjs checks this).
+// repo-lint coverage and do not affect an application build. An ordinary pull
+// request runs them only in non-gating deploy jobs, from the default branch,
+// or not at all (release pull requests select every stack anyway), so the full
+// matrix would test nothing more than their own tests already do. New CI
+// helpers stay fail-open below until their consumers have the same proof; each
+// entry MUST have a sibling `.test.mjs` unless classify-changes.test.mjs names
+// it as an exception.
 export const REPO_LINT_CI_HELPERS = new Set([
   "scripts/ci/cache-cleanup.mjs",
   "scripts/ci/cla-gate.mjs",

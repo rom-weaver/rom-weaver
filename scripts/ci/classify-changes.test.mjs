@@ -793,7 +793,8 @@ test("release-time CI helpers select repo lint without compiled stacks", () => {
     "scripts/ci/publication-freshness.mjs",
     "scripts/ci/publish-apply-video.mjs",
     "scripts/ci/purge-cloudflare-pages-cache.mjs",
-    // Scheduled or workflow_run only: no pull request job runs them.
+    // No ordinary pull request job runs them: the schedule, release pull requests (which select
+    // every stack), a manual dispatch, or default-branch code on workflow_run.
     "scripts/ci/nightly-alert.mjs",
     "scripts/ci/parity-cli-key.mjs",
     "scripts/ci/rerun-infra-failures.mjs",
@@ -817,15 +818,20 @@ test("release-time CI helpers select repo lint without compiled stacks", () => {
 // Lint-only selection trusts the helper's own tests, which repo-lint runs.
 // Entries that were already lint-only before this check, without a sibling test:
 const UNTESTED_LINT_ONLY = new Set([
-  // Exercised through the tests of the helpers that import it (cla-gate, nightly-alert, ...).
+  // Exercised against a local HTTP server by the cla-gate and deployment-status tests. Its
+  // importer prior-green-run.mjs stays fail-open, but the `changes` job runs that on every pull
+  // request whatever the selection, so the full matrix would not test it further.
   "scripts/ci/github-api.mjs",
-  // Run by the deploy-webapp-pages action, which a failed call fails visibly on the next deploy.
+  // Run by the deploy-webapp-pages action in the non-gating preview deploy jobs.
   "scripts/ci/ensure-cloudflare-pages-project.mjs",
+  // Run by the non-gating preview cleanup job.
+  "scripts/ci/cleanup-preview-deployments.sh",
 ]);
 test("every lint-only CI helper exists and has its own tests", () => {
   for (const path of REPO_LINT_CI_HELPERS) {
     assert.ok(existsSync(new URL(`../../${path}`, import.meta.url)), `${path} does not exist`);
-    if (path.endsWith(".sh") || UNTESTED_LINT_ONLY.has(path)) continue;
+    if (UNTESTED_LINT_ONLY.has(path)) continue;
+    assert.match(path, /\.mjs$/u, `${path} needs a test convention before it can be lint-only`);
     const tests = path.replace(/\.mjs$/u, ".test.mjs");
     assert.ok(existsSync(new URL(`../../${tests}`, import.meta.url)), `${path} has no ${tests}`);
   }
