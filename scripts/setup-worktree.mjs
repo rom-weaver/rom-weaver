@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hasCurrentData, IDENTIFY_DATA_DIR } from "./ensure-identify-data.mjs";
 import { createWasmSourceFingerprint } from "./wasm/wasm-source-fingerprint.mjs";
 
 const git = (args, cwd) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -53,6 +54,38 @@ export function pruneTargets(cwd) {
   }
 }
 
+// The pre-commit react-types and react-knip checks import these ignored outputs: the compiled
+// Lingui catalogs and the generated channel icons that the Vitest browser configs read.
+// Advisory like pruning: the icons need Playwright's Chromium, which a fresh Playwright
+// version may not have downloaded yet, and the rest of setup still leaves a usable checkout.
+export const HOOK_INPUT_SCRIPTS = ["i18n:compile", "icons:channels"];
+export function generateHookInputs(root, run = execFileSync) {
+  for (const script of HOOK_INPUT_SCRIPTS) {
+    process.stdout.write(`setup-worktree: npm run ${script} (packages/rom-weaver-webapp)\n`);
+    try {
+      run("npm", ["run", script, "--prefix", join(root, "packages/rom-weaver-webapp")], { stdio: "inherit" });
+    } catch (error) {
+      process.stdout.write(`  ${script} failed (${error.message.split("\n")[0]}); the pre-commit type and knip checks need it. If Chromium is missing, run \`npm --prefix packages/rom-weaver-webapp exec playwright -- install chromium\`, then \`npm --prefix packages/rom-weaver-webapp run ${script}\`.\n`);
+    }
+  }
+}
+
+// The webapp Vite config reads the ignored identify data while loading, so the react-knip
+// check needs it too. Building it fetches pinned upstream data, so copy the main checkout's
+// when it matches this checkout's pins, and never replace data that already does.
+export function copyIdentifyData(mainRoot, root, isCurrent = hasCurrentData) {
+  const destination = join(root, IDENTIFY_DATA_DIR);
+  if (isCurrent(destination)) return;
+  const source = join(mainRoot, IDENTIFY_DATA_DIR);
+  if (!isCurrent(source)) {
+    process.stdout.write("  main checkout has no current identify data; run `mise run identify-data` before the pre-commit knip check\n");
+    return;
+  }
+  rmSync(destination, { recursive: true, force: true });
+  cpSync(source, destination, { recursive: true });
+  process.stdout.write("  copied identify data from main checkout\n");
+}
+
 export async function main(cwd = process.cwd(), { prime = true, prune = true } = {}) {
   const { root, main: mainRoot } = worktreePaths(cwd);
   if (root === mainRoot) throw new Error("setup-worktree: run this from inside a worktree, not the main checkout");
@@ -81,6 +114,8 @@ export async function main(cwd = process.cwd(), { prime = true, prune = true } =
     cpSync(join(source, "third_party"), join(destination, "third_party"), { recursive: true });
     process.stdout.write("  copied third_party/ from main checkout\n");
   }
+  copyIdentifyData(mainRoot, root);
+  generateHookInputs(root);
   if (prime) {
     process.stdout.write("setup-worktree: priming pre-commit cargo target dirs (minutes; --no-prime to skip)\n");
     await primeHookTargets(root);
