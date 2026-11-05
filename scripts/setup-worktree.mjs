@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hasCurrentData, IDENTIFY_DATA_DIR } from "./ensure-identify-data.mjs";
 import { createWasmSourceFingerprint } from "./wasm/wasm-source-fingerprint.mjs";
 
 const git = (args, cwd) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -70,15 +71,18 @@ export function generateHookInputs(root, run = execFileSync) {
 }
 
 // The webapp Vite config reads the ignored identify data while loading, so the react-knip
-// check needs it too. Building it fetches pinned upstream data, so copy the main checkout's.
-export const IDENTIFY_DATA_DIR = "crates/rom-weaver-cli/data/identify/v1";
-export function copyIdentifyData(mainRoot, root) {
+// check needs it too. Building it fetches pinned upstream data, so copy the main checkout's
+// when it matches this checkout's pins, and never replace data that already does.
+export function copyIdentifyData(mainRoot, root, isCurrent = hasCurrentData) {
+  const destination = join(root, IDENTIFY_DATA_DIR);
+  if (isCurrent(destination)) return;
   const source = join(mainRoot, IDENTIFY_DATA_DIR);
-  if (!existsSync(join(source, "index.json"))) {
-    process.stdout.write("  main checkout has no identify data; run `mise run identify-data` before the pre-commit knip check\n");
+  if (!isCurrent(source)) {
+    process.stdout.write("  main checkout has no current identify data; run `mise run identify-data` before the pre-commit knip check\n");
     return;
   }
-  cpSync(source, join(root, IDENTIFY_DATA_DIR), { recursive: true });
+  rmSync(destination, { recursive: true, force: true });
+  cpSync(source, destination, { recursive: true });
   process.stdout.write("  copied identify data from main checkout\n");
 }
 
