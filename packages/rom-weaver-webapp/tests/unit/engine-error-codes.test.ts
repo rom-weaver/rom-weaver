@@ -85,10 +85,34 @@ describe("engine error codes", () => {
     );
   });
 
-  it("reports an engine allocation failure as a worker failure", () => {
+  it("reports engine allocation and storage failures under their own workflow codes", () => {
     expect(engineFailure({ error_code: "resource.out_of_memory", label: "Cannot allocate memory" }).code).toBe(
-      "WORKER_FAILED",
+      "OUT_OF_MEMORY",
     );
+    expect(engineFailure({ error_code: "io.storage_full", label: "i/o error: disk is busy" }).code).toBe(
+      "STORAGE_FULL",
+    );
+  });
+
+  it("keeps an engine code's classification even when its text names another failure", () => {
+    const error = engineFailure({
+      command: "extract",
+      error_code: "extract.no_matching_entries",
+      label: "validation failed: out of memory, no space left, quota",
+    });
+    expect(toRomWeaverError(error).code).toBe("COMPRESSION_FAILED");
+  });
+
+  it.each([
+    ["Cannot enlarge memory arrays", "OUT_OF_MEMORY"],
+    ["Wasm OOM while extracting the archive", "OUT_OF_MEMORY"],
+    ["No space left on device", "STORAGE_FULL"],
+    ["The quota has been exceeded", "STORAGE_FULL"],
+    ["QuotaExceededError", "STORAGE_FULL"],
+    ["Destination file is not writable", "OUTPUT_WRITE_FAILED"],
+    ["Failed to execute 'createWritable' on 'FileSystemFileHandle'", "OUTPUT_WRITE_FAILED"],
+  ])("classifies a browser-raised error by its text: %s", (message, code) => {
+    expect(toRomWeaverError(new Error(message)).code).toBe(code);
   });
 
   it("classifies an uncoded failure by its kind and command, not its text", () => {

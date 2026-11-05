@@ -1310,6 +1310,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "error.SOURCE_UNSUPPORTED",
     message: "rom-weaver can't open this kind of file.",
   }),
+  "error.STORAGE_FULL": msg({
+    id: "error.STORAGE_FULL",
+    message: "Couldn't save the result. Free up storage, or choose a folder the browser can write to.",
+  }),
   "error.STORAGE_UNAVAILABLE": msg({
     id: "error.STORAGE_UNAVAILABLE",
     message: "This browser's file storage isn't available. Reload the page and try again.",

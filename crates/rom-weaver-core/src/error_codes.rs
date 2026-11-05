@@ -28,6 +28,7 @@ pub enum WorkflowErrorCode {
     InvalidSettings,
     NoCompatiblePatch,
     NoSelectableCandidate,
+    OutOfMemory,
     OutputWriteFailed,
     PatchApplyFailed,
     PatchCreateFailed,
@@ -36,6 +37,7 @@ pub enum WorkflowErrorCode {
     SelectionNotFound,
     SourceNotFound,
     SourceUnsupported,
+    StorageFull,
     StorageUnavailable,
     UnsupportedFormat,
     WorkflowBusy,
@@ -60,6 +62,7 @@ impl WorkflowErrorCode {
         Self::InvalidSettings,
         Self::NoCompatiblePatch,
         Self::NoSelectableCandidate,
+        Self::OutOfMemory,
         Self::OutputWriteFailed,
         Self::PatchApplyFailed,
         Self::PatchCreateFailed,
@@ -68,6 +71,7 @@ impl WorkflowErrorCode {
         Self::SelectionNotFound,
         Self::SourceNotFound,
         Self::SourceUnsupported,
+        Self::StorageFull,
         Self::StorageUnavailable,
         Self::UnsupportedFormat,
         Self::WorkflowBusy,
@@ -172,13 +176,10 @@ pub const ERROR_CODE_WORKFLOW_CODES: &[(&str, WorkflowErrorCode)] = &[
         ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
         WorkflowErrorCode::ChecksumMismatch,
     ),
-    (
-        ERROR_CODE_IO_STORAGE_FULL,
-        WorkflowErrorCode::OutputWriteFailed,
-    ),
+    (ERROR_CODE_IO_STORAGE_FULL, WorkflowErrorCode::StorageFull),
     (
         ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
-        WorkflowErrorCode::WorkerFailed,
+        WorkflowErrorCode::OutOfMemory,
     ),
 ];
 

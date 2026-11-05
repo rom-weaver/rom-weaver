@@ -1600,6 +1600,11 @@ msgstr "Couldn't load the practice files. Check your connection and try again."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.STORAGE_FULL"
+msgstr "Couldn't save the result. Free up storage, or choose a folder the browser can write to."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.OUTPUT_WRITE_FAILED"
 msgstr "Couldn't save the result. Free up storage, or choose a folder the browser can write to."
 

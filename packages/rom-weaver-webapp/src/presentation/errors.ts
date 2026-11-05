@@ -1,6 +1,6 @@
 import type { MessageId } from "./localization/catalog.ts";
 import { createLocalizer, type Localizer } from "./localization/index.ts";
-import { getEngineError } from "../lib/errors.ts";
+import { getEngineError, isWorkflowErrorCode } from "../lib/errors.ts";
 import { isPatchFileChecksumFailure } from "../public/react/patch-validation-failure.ts";
 
 type CodedErrorLike = Error & {
@@ -17,8 +17,7 @@ const getErrorDetails = (error: unknown): Record<string, unknown> | undefined =>
   isCodedError(error) && error.details && typeof error.details === "object" ? error.details : undefined;
 
 const getErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-const OUT_OF_MEMORY_MESSAGE_REGEX =
-  /\b(out of memory|cannot enlarge memory|memory allocation|not enough memory|bad alloc|ENOMEM|OOM)\b/i;
+const DISPLAYED_ERROR_CODE_REGEX = /^([A-Z_]+): /;
 
 const normalizeComparableErrorMessage = (message: string): string =>
   String(message || "")
@@ -70,8 +69,7 @@ const getUserFacingErrorMessage = (error: unknown, localizer: Localizer = create
   if (!code) return getErrorMessage(error);
   const message = getErrorMessage(error);
   if (code === "INVALID_INPUT" && message.toLowerCase().includes("multi-file output")) return message;
-  if ((code === "WORKER_FAILED" || code === "COMPRESSION_FAILED") && OUT_OF_MEMORY_MESSAGE_REGEX.test(message))
-    return message;
+  if (code === "OUT_OF_MEMORY") return message;
   if (isPatchFileChecksumFailure(getEngineError(error)?.code)) return localizer.message("error.PATCH_FILE_DAMAGED");
   const messageId = `error.${code}` as MessageId;
   const localized = localizer.message(messageId, getErrorDetails(error));
@@ -108,4 +106,14 @@ const formatCodedErrorForDisplay = (error: unknown, localizer: Localizer = creat
   return `${code}: ${message}`;
 };
 
-export { formatCodedErrorForDisplay, getErrorCode };
+/**
+ * The workflow code of a displayed message: `code` when given, else the `CODE: ` prefix `formatCodedErrorForDisplay`
+ * writes. A prefix that is not a workflow code is ordinary text.
+ */
+const getDisplayedErrorCode = (message: string, code?: string): string | undefined => {
+  if (code) return code;
+  const prefix = DISPLAYED_ERROR_CODE_REGEX.exec(message)?.[1];
+  return isWorkflowErrorCode(prefix) ? prefix : undefined;
+};
+
+export { formatCodedErrorForDisplay, getDisplayedErrorCode, getErrorCode };

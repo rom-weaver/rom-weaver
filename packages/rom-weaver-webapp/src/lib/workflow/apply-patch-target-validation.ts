@@ -21,6 +21,7 @@ import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 // these as a retryable "unknown" so the next readiness pass re-validates.
 const TRANSIENT_VALIDATION_ERROR_CODES: ReadonlySet<string> = new Set([
   "CANCELLED",
+  "OUT_OF_MEMORY",
   "WORKER_FAILED",
   "WORKER_UNAVAILABLE",
 ]);

@@ -36,8 +36,9 @@ const MODULE_IMPORT_FAILURE_MESSAGE_REGEX =
   /\b(importing a module script failed|failed to load module script|failed to fetch dynamically imported module|module script failed to load)\b/i;
 const OUT_OF_MEMORY_MESSAGE_REGEX =
   /\b(out of memory|cannot enlarge memory|memory allocation|not enough memory|bad alloc|ENOMEM|OOM)\b/i;
+const STORAGE_FULL_MESSAGE_REGEX = /\b(no space left|quota|nospc|enospc|storage is full)\b|QuotaExceededError/i;
 const OUTPUT_WRITE_FAILURE_MESSAGE_REGEX =
-  /\b(createwritable|writable|read\/write access|read\/write permission|destination file|output could not be written|modifications are not allowed|no space left|quota|nospc|enospc)\b/i;
+  /\b(createwritable|writable|read\/write access|read\/write permission|destination file|output could not be written|modifications are not allowed)\b/i;
 const WORKFLOW_ERROR_CODES: ReadonlySet<string> = new Set(ROM_WEAVER_WORKFLOW_ERROR_CODES);
 
 const isWorkflowErrorCode = (code: unknown): code is RomWeaverErrorCode =>
@@ -74,8 +75,8 @@ const getPatternErrorCode = (lower: string, message: string): RomWeaverErrorCode
   if (MODULE_IMPORT_FAILURE_MESSAGE_REGEX.test(message)) return "WORKER_FAILED";
   if (lower.includes("checksum")) return "CHECKSUM_MISMATCH";
   if (lower.includes("multi-file output")) return "INVALID_INPUT";
-  if (OUT_OF_MEMORY_MESSAGE_REGEX.test(message))
-    return COMPRESSION_FAILURE_MESSAGE_REGEX.test(message) ? "COMPRESSION_FAILED" : "WORKER_FAILED";
+  if (OUT_OF_MEMORY_MESSAGE_REGEX.test(message)) return "OUT_OF_MEMORY";
+  if (STORAGE_FULL_MESSAGE_REGEX.test(message)) return "STORAGE_FULL";
   if (OUTPUT_WRITE_FAILURE_MESSAGE_REGEX.test(message)) return "OUTPUT_WRITE_FAILED";
   if (COMPRESSION_FAILURE_MESSAGE_REGEX.test(message)) return "COMPRESSION_FAILED";
   if (lower.includes("no input") || lower.includes("no patch")) return "INVALID_INPUT";
@@ -137,6 +138,7 @@ export {
   isWorkflowErrorCode,
   OUT_OF_MEMORY_MESSAGE_REGEX,
   RomWeaverError,
+  STORAGE_FULL_MESSAGE_REGEX,
   throwIfAborted,
   toRomWeaverError,
   withAbortSignal,

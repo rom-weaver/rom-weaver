@@ -37,8 +37,8 @@ describe("workflow error recovery", () => {
     },
   );
 
-  it.each(["WORKER_FAILED: Wasm OOM", "COMPRESSION_FAILED: Compression failed. Details: out of memory"])(
-    "adds CLI recovery to explicit memory exhaustion: %s",
+  it.each(["OUT_OF_MEMORY: Wasm OOM", "OUT_OF_MEMORY: Compression failed. Details: out of memory"])(
+    "adds CLI recovery to an out-of-memory failure: %s",
     (message) => {
       const view = showNotice(message);
       expect(view.getByRole("alert").textContent).toContain(message);
@@ -75,6 +75,10 @@ describe("workflow error recovery", () => {
     "COMPRESSION_FAILED: Archive is invalid",
     "CANCELLED: Workflow was cancelled",
     "CHECKSUM_MISMATCH: Checksum validation failed",
+    "WORKER_FAILED: Wasm OOM",
+    "COMPRESSION_FAILED: Compression failed. Details: out of memory",
+    "INVALID_INPUT: validation failed: cannot enlarge memory",
+    "out of memory",
     "A file named OOM.zip failed",
     "A file named validation failed: nested extract exceeded max depth of 8",
     "validation failed: archive max depth of 8",

@@ -1,4 +1,4 @@
-import { OUT_OF_MEMORY_MESSAGE_REGEX, RomWeaverError, throwIfAborted } from "../../lib/errors.ts";
+import { getEngineError, OUT_OF_MEMORY_MESSAGE_REGEX, RomWeaverError, throwIfAborted } from "../../lib/errors.ts";
 import { createRomWeaverOutputScope } from "../../lib/runtime/run-output-paths.ts";
 import { toRomWeaverOptions } from "../../lib/runtime/run-options.ts";
 import { ensureRomWeaverSuccess } from "../../lib/runtime/run-result-parsing.ts";
@@ -15,6 +15,13 @@ import { browserVfs } from "./workflow-runtime-vfs-cleanup.ts";
 type PbpBundleOptions = {
   onProgress?: Parameters<typeof invokeRomWeaverExtractAllWorker>[1];
   signal?: AbortSignal;
+};
+
+// An engine failure is out-of-memory only by its code; the type and text are the signal for errors the browser raised.
+const isOutOfMemory = (error: unknown): boolean => {
+  const engine = getEngineError(error);
+  if (engine) return engine.code === "resource.out_of_memory";
+  return error instanceof RangeError || (error instanceof Error && OUT_OF_MEMORY_MESSAGE_REGEX.test(error.message));
 };
 
 const preparePbpEmulatorBundle = async (
@@ -111,14 +118,14 @@ const preparePbpEmulatorBundle = async (
     const storageError = await withBrowserOutputStorageFailureContext(error, { operationLabel: "Preparing PBP discs" });
     if (storageError !== error || (error instanceof DOMException && error.name === "QuotaExceededError")) {
       throw new RomWeaverError(
-        "OUTPUT_WRITE_FAILED",
+        "STORAGE_FULL",
         "There is not enough browser storage to prepare every PBP disc. Free browser storage and try again.",
         { cause: error },
       );
     }
-    if (error instanceof RangeError || (error instanceof Error && OUT_OF_MEMORY_MESSAGE_REGEX.test(error.message))) {
+    if (isOutOfMemory(error)) {
       throw new RomWeaverError(
-        "WORKER_FAILED",
+        "OUT_OF_MEMORY",
         "This PBP needs more memory to prepare all of its discs. Close other games or try a browser with more memory.",
         { cause: error },
       );

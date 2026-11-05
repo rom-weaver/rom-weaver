@@ -1,3 +1,4 @@
+import { getDisplayedErrorCode } from "../../presentation/errors.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
 import { StorageFullRecovery } from "./storage-full-recovery.tsx";
@@ -5,6 +6,7 @@ import { StorageFullRecovery } from "./storage-full-recovery.tsx";
 /**
  * Display coded workflow errors with recovery guidance. The workflow code comes from `code`, else from the
  * `CODE: ` prefix `formatCodedErrorForDisplay` writes; engine failures carry theirs from the Rust error code.
+ * A message without either falls back to its text for storage-full recovery only.
  */
 const WorkflowErrorMessage = ({
   code: codeProp,
@@ -17,15 +19,9 @@ const WorkflowErrorMessage = ({
 }) => {
   const localizer = useUiLocalizer();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
-  const code = codeProp ?? /^([A-Z_]+): /.exec(message)?.[1];
+  const code = getDisplayedErrorCode(message, codeProp);
   const archiveDepth = code === "ARCHIVE_DEPTH_EXCEEDED";
-  // Out-of-memory text comes from the browser's wasm runtime, not from engine diagnostics.
-  const memory =
-    !archiveDepth &&
-    (code === "WORKER_FAILED" || code === "COMPRESSION_FAILED") &&
-    /\b(out of memory|cannot enlarge memory|memory allocation|not enough memory|allocate memory|bad alloc|ENOMEM|OOM)\b/i.test(
-      message,
-    );
+  const memory = code === "OUT_OF_MEMORY";
   if (code === "ARCHIVE_READ_FAILED") {
     return (
       <>
@@ -47,7 +43,7 @@ const WorkflowErrorMessage = ({
   return (
     <>
       {message}
-      <StorageFullRecovery message={message} onRetry={onRetry} />
+      <StorageFullRecovery code={code} message={message} onRetry={onRetry} />
       {recovery ? (
         <>
           <br />
