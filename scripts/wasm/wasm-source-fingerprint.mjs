@@ -95,16 +95,17 @@ export function createCargoConfigSnapshot({ root, cwd, cargoHome, sinceMs }) {
     visited.add(file);
     let directory = dirname(file);
     while (true) {
+      if (directories.has(directory)) break;
       try {
         const stats = statSync(directory);
         recordTime(stats);
-        if (!directories.has(directory)) state.push([directory, stats.mtimeMs, stats.ctimeMs]);
+        state.push([directory, stats.mtimeMs, stats.ctimeMs]);
         directories.add(directory);
-        break;
       } catch (error) {
-        if (error.code !== "ENOENT" || directory === dirname(directory)) throw error;
-        directory = dirname(directory);
+        if (error.code !== "ENOENT") throw error;
       }
+      if (directory === dirname(directory)) break;
+      directory = dirname(directory);
     }
     let bytes;
     try {

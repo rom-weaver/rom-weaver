@@ -288,6 +288,25 @@ test("Cargo config snapshots retain writes reverted during a build", () => {
   });
 });
 
+test("Cargo config snapshots retain changes to an included file's outer directories", () => {
+  withDir((dir) => {
+    const cargoHome = path.join(dir, "home");
+    const outer = path.join(dir, "external", "outer");
+    fs.mkdirSync(cargoHome);
+    fs.mkdirSync(path.join(outer, "inner"), { recursive: true });
+    fs.writeFileSync(path.join(cargoHome, "config.toml"), 'include = ["../external/outer/inner/profile.toml"]\n');
+    fs.writeFileSync(path.join(outer, "inner", "profile.toml"), "[profile.wasm-release]\nopt-level = 3\n");
+    const options = { root: dir, cwd: dir, cargoHome, sinceMs: Date.now() + 60_000 };
+    const initial = createCargoConfigSnapshot(options);
+    assert.equal(initial.modified, false);
+    const changedAt = new Date(options.sinceMs + 60_000);
+    fs.utimesSync(outer, changedAt, changedAt);
+    const changed = createCargoConfigSnapshot(options);
+    assert.equal(changed.fingerprint, initial.fingerprint);
+    assert.equal(changed.modified, true);
+  });
+});
+
 test("matching checkout configuration shares a path-independent fingerprint", () => {
   withDir((dir) => {
     const cargoHome = path.join(dir, "home");
