@@ -73,7 +73,7 @@ test("the perf job times the parity CLI against the latest release", () => {
   const base = jobs.perf.steps.find((s) => s.id === "base");
   assert.ok(base.run.includes("rom-weaver-linux-x64-gnu.tar.gz"));
   const fixtures = jobs.perf.steps.find((s) => s.name === "Write NKit fixtures");
-  assert.ok(fixtures.run.includes("--example nkit_fixture"));
+  assert.ok(fixtures.run.includes("candidate/nkit_fixture"), "perf runs the fixture writer the parity job built");
   const compare = jobs.perf.steps.find((s) => s.run?.includes("scripts/bench-compare.py"));
   assert.ok(compare.run.includes("--threshold 1.10"));
   assert.ok(compare.run.includes("set -euo pipefail"), "tee keeps the comparison's exit status");
