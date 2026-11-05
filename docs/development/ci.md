@@ -511,6 +511,8 @@ Publishes one package idempotently. Eleven packages go out per release through t
 
 The prerelease test reads the **version**, never the package spec - platform package names contain hyphens (`@rom-weaver/darwin-arm64`), so matching the spec would tag every platform package as a prerelease.
 
+The script imports nothing outside Node, so the dry-run and publish jobs install no npm dependencies; the Windows legs used to spend 70 to 83 seconds on `npm install` for 196 packages, which existed only to supply `cross-spawn`. It runs npm as `node <npm-cli.js> ...` rather than through `npm.cmd` (which Node cannot spawn without a shell since 20.12, the reason `cross-spawn` was added): `npm_execpath` when run by npm, otherwise the `npm-cli.js` beside the `npm` on `PATH` (symlink target on Linux and macOS, `node_modules/npm/bin` next to `npm.cmd` on Windows, the layouts `actions/setup-node` installs). A layout it does not recognize fails the job loudly instead of guessing.
+
 ## Release fan-out
 
 `release.yml` runs Release Please, then on `release_created`:

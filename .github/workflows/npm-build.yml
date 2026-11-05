@@ -210,9 +210,6 @@ jobs:
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
 
-      - name: Install npm dependencies
-        run: npm install --package-lock=false --ignore-scripts --no-audit --no-fund
-
       # Runs the exact staged artifact the publish job will upload, on the
       # oldest OS this target supports - the only check that a newer build image
       # did not quietly raise the runtime floor. CI's own verify runs on the

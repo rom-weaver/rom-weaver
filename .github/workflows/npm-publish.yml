@@ -72,9 +72,6 @@ jobs:
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
 
-      - name: Install npm dependencies
-        run: npm install --package-lock=false --ignore-scripts --no-audit --no-fund
-
       - name: Publish platform package
         shell: bash
         env:
@@ -143,9 +140,6 @@ jobs:
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
 
-      - name: Install npm dependencies
-        run: npm install --package-lock=false --ignore-scripts --no-audit --no-fund
-
       - name: Add generated CLI documentation to launcher package
         uses: actions/download-artifact@v8
         with:
@@ -174,9 +168,6 @@ jobs:
           node-version: 24
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
-
-      - name: Install npm dependencies
-        run: npm install --package-lock=false --ignore-scripts --no-audit --no-fund
 
       - name: Add generated man pages to alias package
         uses: actions/download-artifact@v8
