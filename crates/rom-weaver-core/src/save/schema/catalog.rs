@@ -187,6 +187,7 @@ fn read_at(bytes: &[u8], offset: i64, storage: Storage) -> Result<i64> {
 pub(in crate::save) mod actraiser;
 pub(in crate::save) mod advance_wars;
 pub(in crate::save) mod banjo_kazooie;
+pub(in crate::save) mod banjo_tooie;
 pub(in crate::save) mod bomberman_64;
 pub(in crate::save) mod builtin_pokemon_gen1;
 pub(in crate::save) mod builtin_pokemon_gen2;
@@ -202,6 +203,7 @@ pub(in crate::save) mod castlevania_ds;
 pub(in crate::save) mod castlevania_harmony_of_dissonance;
 pub(in crate::save) mod chrono_trigger;
 pub(in crate::save) mod diddy_kong_racing;
+pub(in crate::save) mod donkey_kong_64;
 pub(in crate::save) mod donkey_kong_country;
 pub(in crate::save) mod donkey_kong_country_2_diddy_s_kong_quest;
 pub(in crate::save) mod donkey_kong_country_3_dixie_kong_s_double_trouble;
@@ -214,6 +216,7 @@ pub(in crate::save) mod final_fantasy_vi;
 pub(in crate::save) mod game_and_watch_gallery_3;
 pub(in crate::save) mod game_boy_camera;
 pub(in crate::save) mod golden_sun;
+pub(in crate::save) mod goldeneye_007;
 pub(in crate::save) mod kingdom_hearts_chain_of_memories;
 pub(in crate::save) mod kirbys_adventure;
 pub(in crate::save) mod konami_krazy_racers;
@@ -228,9 +231,11 @@ pub(in crate::save) mod paper_mario;
 pub(in crate::save) mod playstation_card;
 pub(in crate::save) mod pokemon_generation_i;
 pub(in crate::save) mod pokemon_generation_ii;
+pub(in crate::save) mod pokemon_snap;
 pub(in crate::save) mod pokemon_trading_card_game;
 pub(in crate::save) mod ps1_final_fantasy;
 pub(in crate::save) mod ps1_single_block;
+pub(in crate::save) mod rare_eeprom;
 pub(in crate::save) mod rondo_of_blood;
 pub(in crate::save) mod secret_of_mana;
 pub(in crate::save) mod shining_force;
@@ -338,6 +343,10 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(kingdom_hearts_chain_of_memories::schemas());
             games.extend(banjo_kazooie::schemas());
             games.extend(ps1_final_fantasy::schemas());
+            games.extend(goldeneye_007::schemas());
+            games.extend(banjo_tooie::schemas());
+            games.extend(donkey_kong_64::schemas());
+            games.extend(pokemon_snap::schemas());
             games
         })
         .clone()

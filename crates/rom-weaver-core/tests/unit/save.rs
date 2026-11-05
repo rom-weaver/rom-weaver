@@ -342,6 +342,13 @@ fn registry_lists_every_game_with_format_metadata() {
             );
         }
     }
+    expected.extend((1..=4).map(|file| format!("goldeneye-007-canonical-eeprom-file-{file}")));
+    expected.extend((1..=3).map(|file| format!("banjo-tooie-canonical-eeprom-file-{file}")));
+    expected.extend((1..=3).map(|file| format!("donkey-kong-64-canonical-eeprom-file-{file}")));
+    expected.extend(
+        ["europe-usa-australia", "japan"]
+            .map(|region| format!("pokemon-snap-canonical-flashram-{region}")),
+    );
     assert_eq!(ids, expected);
     assert!(definitions[3..8].iter().all(|definition| {
         definition.platform == "gba"
