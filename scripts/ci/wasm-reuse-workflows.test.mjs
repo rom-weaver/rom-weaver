@@ -263,55 +263,12 @@ test("the release pull request's WASM build, which is signed, restores and saves
   for (const entry of module.runs.steps.filter((candidate) => CACHE_ACTION.test(candidate.uses ?? "")))
     assert.ok(String(entry.if).startsWith("inputs.restore == 'true' && "), entry.name);
 });
-
-// Runs the real "Resolve release pull request for the tag" step with a stubbed `gh` that serves
-// `pulls` through the real jq, as gh's --jq would.
-function tagRelease(pulls) {
-  const directory = makeTempDir("tag-release-");
-  const bin = join(directory, "bin");
-  mkdirSync(bin);
-  writeFileSync(join(directory, "pulls.json"), JSON.stringify(pulls));
-  writeFileSync(join(bin, "gh"), `#!/bin/sh\n[ "$2" = "repos/octo/rom-weaver/commits/${"c".repeat(40)}/pulls" ] || { echo "unexpected: $*" >&2; exit 1; }\nexec jq -r "$4" "${join(directory, "pulls.json")}"\n`);
-  chmodSync(join(bin, "gh"), 0o755);
-  const output = join(directory, "output");
-  writeFileSync(output, "");
-  const resolve = step(ci.jobs.wasm, "Resolve release pull request for the tag");
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
-  const result = spawnSync("bash", ["-eu", "-c", resolve.run], {
-    encoding: "utf8",
-    env: { ...env, ...resolve.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_OUTPUT: output, GITHUB_REPOSITORY: "octo/rom-weaver", GITHUB_SHA: "c".repeat(40) },
-  });
-  assert.equal(result.status, 0, result.stderr);
-  return Object.fromEntries(readFileSync(output, "utf8").trim().split("\n").map((line) => line.split(/=(.*)/su).slice(0, 2)));
-}
-
-const releasePull = (overrides = {}) => ({
-  number: 7,
-  merged_at: "2026-11-05T05:45:03Z",
-  merge_commit_sha: "c".repeat(40),
-  base: { ref: "main" },
-  head: { ref: releaseBranch, sha: "a".repeat(40), repo: { full_name: "octo/rom-weaver" } },
-  ...overrides,
-});
-
-test("a release tag reuses the merged release pull request's run, else main's runs of the tag commit", () => {
-  assert.equal(step(ci.jobs.wasm, "Resolve release pull request for the tag").env.RELEASE_PR_BRANCH_PREFIX, RELEASE_PR_BRANCH_PREFIX);
-  assert.deepEqual(tagRelease([releasePull()]), { pr: "7", sha: "a".repeat(40) });
-  const mainOnly = { pr: "", sha: "c".repeat(40) };
-  assert.deepEqual(tagRelease([]), mainOnly);
-  for (const overrides of [
-    { merged_at: null },
-    { merge_commit_sha: "d".repeat(40) },
-    { base: { ref: "attacker/base" } },
-    { head: { ref: "feature/wasm", sha: "a".repeat(40), repo: { full_name: "octo/rom-weaver" } } },
-    { head: { ref: releaseBranch, sha: "a".repeat(40), repo: { full_name: "attacker/rom-weaver" } } },
-  ])
-    assert.deepEqual(tagRelease([releasePull(overrides)]), mainOnly, JSON.stringify(overrides));
-});
-
 test("a release tag installs the module only through the verifier, against the tag commit", () => {
   const job = ci.jobs.wasm;
-  assert.equal(step(job, "Resolve release pull request for the tag").if, "github.ref_type == 'tag' && steps.wasm-cache.outputs.cache-hit != 'true'");
+  const lookup = step(job, "Resolve release pull request for the tag");
+  assert.equal(lookup.if, "github.ref_type == 'tag' && steps.wasm-cache.outputs.cache-hit != 'true'");
+  assert.equal(lookup.run, "node scripts/ci/resolve-tag-release-pull.mjs");
+  assert.equal(lookup.env.TARGET_SHA, "${{ github.sha }}");
   const resolve = step(job, "Resolve tested WASM artifact for the tag");
   assert.equal(resolve.env.TARGET_SHA, "${{ steps.tag-release.outputs.sha }}");
   assert.equal(resolve.env.PR_NUMBER, "${{ steps.tag-release.outputs.pr }}");
@@ -321,6 +278,9 @@ test("a release tag installs the module only through the verifier, against the t
   assert.equal(fetch.env.PR_NUMBER, "${{ steps.tag-release.outputs.pr }}");
   assert.equal(fetch.env.RUN_IDS, "${{ steps.tag-ci.outputs.run_ids }}", "every candidate, newest first");
   assert.equal(fetch.id, "tag-wasm");
+  // A failed lookup or verification costs a source build, never the tag's deploys.
+  for (const entry of [lookup, resolve, fetch]) assert.equal(entry["continue-on-error"], true, entry.name);
+  assert.equal(step(job, "Set up cached WASM environment").if, "steps.wasm-cache.outputs.cache-hit == 'true' || steps.tag-wasm.outputs.verified == 'true'");
   for (const name of ["Set up WASM build environment", "Restore WASM target artifacts", "Build production WASM"])
     assert.ok(String(step(job, name).if).includes("steps.tag-wasm.outputs.verified != 'true'"), name);
   assert.equal(step(job, "Save verified WASM module").if.startsWith("steps.wasm-build.outcome == 'success'"), true, "a downloaded module is not cached");

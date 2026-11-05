@@ -934,21 +934,8 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          # MUST match scripts/ci/release-pr.mjs.
-          RELEASE_PR_BRANCH_PREFIX: release-please--branches--main--components--
-        run: |
-          pull=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '
-            [.[] | select(.merged_at != null and .merge_commit_sha == env.GITHUB_SHA and
-              .base.ref == "main" and .head.repo.full_name == env.GITHUB_REPOSITORY and
-              (.head.ref | startswith(env.RELEASE_PR_BRANCH_PREFIX)))]
-            | first // empty | "\(.number) \(.head.sha)"')
-          if [[ -n "$pull" ]]; then
-            read -r pr sha <<< "$pull"
-          else
-            echo "No merged release pull request for $GITHUB_SHA; trying main's runs of it"
-            pr="" sha="$GITHUB_SHA"
-          fi
-          printf 'pr=%s\nsha=%s\n' "$pr" "$sha" >> "$GITHUB_OUTPUT"
+          TARGET_SHA: ${{ github.sha }}
+        run: node scripts/ci/resolve-tag-release-pull.mjs
 
       - name: Resolve tested WASM artifact for the tag
         id: tag-ci
@@ -964,6 +951,7 @@ jobs:
       - name: Verify and install tested WASM artifact for the tag
         id: tag-wasm
         if: steps.tag-ci.outputs.available == 'true'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_IDS: ${{ steps.tag-ci.outputs.run_ids }}
