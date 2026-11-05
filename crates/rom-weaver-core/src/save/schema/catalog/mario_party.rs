@@ -11,7 +11,7 @@ const BOARDS: [(&str, &str); 8] = [
     ("bowsers_magma_mountain", "Bowser's Magma Mountain"),
     ("eternal_star", "Eternal Star"),
 ];
-const CHARACTERS: [(&str, i64); 6] = [
+pub(super) const CHARACTERS: [(&str, i64); 6] = [
     ("mario", 0),
     ("luigi", 1),
     ("peach", 2),
@@ -188,7 +188,7 @@ const RECORDS: [(&str, &str, usize); 8] = [
     ("bumber_ball_maze_3", "Bumber Ball Maze 3", 0x18),
 ];
 
-fn bit_field(id: &str, label: &str, bit_index: usize) -> FieldDefinition {
+pub(super) fn bit_field(id: &str, label: &str, bit_index: usize) -> FieldDefinition {
     catalog_field(id, label, bit_index / 8, Storage::Bit).bit((bit_index % 8) as u8)
 }
 

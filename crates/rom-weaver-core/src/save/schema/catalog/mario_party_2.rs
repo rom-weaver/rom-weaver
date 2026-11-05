@@ -1,3 +1,4 @@
+use super::mario_party::{CHARACTERS, bit_field};
 use super::*;
 use tracing::{debug, trace};
 
@@ -8,14 +9,6 @@ const BOARDS: [(&str, &str); 6] = [
     ("space_land", "Space Land"),
     ("mystery_land", "Mystery Land"),
     ("bowser_land", "Bowser Land"),
-];
-const CHARACTERS: [(&str, i64); 6] = [
-    ("mario", 0),
-    ("luigi", 1),
-    ("peach", 2),
-    ("yoshi", 3),
-    ("wario", 4),
-    ("dk", 5),
 ];
 // Category, slug, label, then the offset and bit of the "played" flag. The "bought"
 // flag is the same bit nine bytes later.
@@ -166,10 +159,6 @@ const RECORDS: [(&str, &str, usize); 6] = [
     ("slot_car_derby_2", "Slot Car Derby course 2", 0x16),
     ("slot_car_derby_3", "Slot Car Derby course 3", 0x18),
 ];
-
-fn bit_field(id: &str, label: &str, bit_index: usize) -> FieldDefinition {
-    catalog_field(id, label, bit_index / 8, Storage::Bit).bit((bit_index % 8) as u8)
-}
 
 fn bit_store(
     offset: usize,
