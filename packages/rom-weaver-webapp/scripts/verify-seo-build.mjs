@@ -86,7 +86,9 @@ for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
   const htmlPath = routePath === "/" ? "index.html" : `${routePath.slice(1)}.html`;
   const markdown = read(markdownPath);
   assertIncludes(markdown, `Canonical: ${SITE_ORIGIN}${routePath}`, `${markdownPath} canonical`);
-  assertIncludes(read(htmlPath), `type="text/markdown" href="${markdownPath}"`, `${htmlPath} Markdown discovery`);
+  // Docs copies carry a `<base>` at the app root and name their Markdown relative to it.
+  const alternateHref = routePath.startsWith("/docs") ? markdownPath.slice(1) : markdownPath;
+  assertIncludes(read(htmlPath), `type="text/markdown" href="${alternateHref}"`, `${htmlPath} Markdown discovery`);
   const markdownResponseHeaders = matchPagesHeaders(parsePagesHeaders(headers), markdownPath);
   assertIncludes(
     markdownResponseHeaders["Content-Type"] ?? "",
@@ -160,7 +162,7 @@ for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
 
 for (const route of DOC_ROUTES) {
   assertIncludes(read(`${route.slug}.md`), `Canonical: https://rom-weaver.com/${route.slug}`, "Markdown canonical");
-  assertIncludes(read(`${route.slug}.html`), `type="text/markdown" href="/${route.slug}.md"`, "Markdown discovery");
+  assertIncludes(read(`${route.slug}.html`), `type="text/markdown" href="${route.slug}.md"`, "Markdown discovery");
 }
 
 for (const route of [

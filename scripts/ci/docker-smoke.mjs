@@ -437,7 +437,7 @@ async function checkCachePolicy(origin, prefix) {
   const expected = [
     ["/", "no-cache"],
     ["/docs/faq/", "no-cache"],
-    ["/manifest.webmanifest", "no-cache"],
+    ["/manifest.json", "no-cache"],
     ["/rom-weaver-service-worker.js", "no-cache"],
     [`/${asset}`, "public, max-age=31536000, immutable"],
   ];

@@ -1,5 +1,5 @@
 import { resolveAssetUrl } from "../public/react/asset-url.ts";
-import { SAMPLE_URL_PATTERN, SITE_ORIGIN } from "./docs-routing.mjs";
+import { isRootPath, mapDocImageUrls, SAMPLE_URL_PATTERN, SITE_ORIGIN } from "./docs-routing.mjs";
 
 /** The base the guides are authored against, and what the served document was rendered with. */
 const AUTHORED_SAMPLE_BASE = `${SITE_ORIGIN}/`;
@@ -48,11 +48,6 @@ const retargetSampleUrls = (html: string, assetBaseUrl: string | undefined): str
   });
 };
 
-const IMAGE_TAG = /<(?:img|source)\b[^>]*>/gi;
-const IMAGE_URL_ATTRIBUTE = /(\b(?:src|srcset)=(["']))(.*?)(\2)/gi;
-// A lone leading slash at the start of a URL candidate; `//host` is protocol-relative and stays.
-const ROOT_PATH_PREFIX = /(^|[\s,])\/(?!\/)/g;
-
 /**
  * Keep a sub-path deployment on its own prefix: guides link to sibling pages and tools
  * by root-absolute path (`/docs/faq`, `/apply-rom-patches`) and to screenshots by
@@ -63,15 +58,9 @@ const rebaseRootUrls = (html: string, appBaseUrl: string): string => {
   const basePath = new URL(appBaseUrl, "https://app.invalid").pathname;
   if (basePath === "/") return html;
   const withLinks = html.replace(ANCHOR_HREF, (match, open, href, close) =>
-    href.startsWith("/") && !href.startsWith("//") ? `${open}${basePath}${href.slice(1)}${close}` : match,
+    isRootPath(href) ? `${open}${basePath}${href.slice(1)}${close}` : match,
   );
-  return withLinks.replace(IMAGE_TAG, (tag) =>
-    tag.replace(
-      IMAGE_URL_ATTRIBUTE,
-      (_attribute, open, _quote, value, close) =>
-        `${open}${value.replace(ROOT_PATH_PREFIX, (_prefix: string, lead: string) => `${lead}${basePath}`)}${close}`,
-    ),
-  );
+  return mapDocImageUrls(withLinks, (url) => (isRootPath(url) ? `${basePath}${url.slice(1)}` : url));
 };
 
 export { AUTHORED_SAMPLE_BASE, rebaseRootUrls, retargetSampleUrls };

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createDocRoute, DOC_SOURCES } from "./docs-content.mjs";
-import { createDocsSeoMetadata, isLegalDocRoute, SITE_ORIGIN } from "./docs-routing.mjs";
+import { createDocsSeoMetadata, isLegalDocRoute, isRootPath, mapDocImageUrls, SITE_ORIGIN } from "./docs-routing.mjs";
 import { SITE_NAME } from "./workflow-seo.mjs";
 
 const docsDirectory = path.resolve(import.meta.dirname, "../../../../docs");
@@ -40,28 +40,13 @@ const replaceBetween = (html, pattern, content) =>
 const replaceMetaContent = (html, attribute, name, content) =>
   replaceBetween(html, new RegExp(`(<meta\\s+${attribute}="${name}"\\s+content=")[^"]*(")`), content);
 
-const ROOT_PATH_IMAGE_TAG = /<(?:img|source)\b[^>]*>/gi;
-const IMAGE_URL_ATTRIBUTE = /\b(src|srcset)=(["'])(.*?)\2/gi;
-// A lone leading slash at the start of a URL candidate; `//host` is protocol-relative and stays.
-const ROOT_PATH_PREFIX = /(^|[\s,])\/(?!\/)/g;
-
 /**
  * Guides name their screenshots by root-absolute path (`/docs/screenshots/x.webp`). Written
  * relative instead, the page's `<base>` resolves them against the app root on any deployment,
  * so a sub-path host does not request them from the origin root before the app has booted.
  */
 const relativeImagePaths = (/** @type {string} */ html) =>
-  html.replace(ROOT_PATH_IMAGE_TAG, (/** @type {string} */ tag) =>
-    tag.replace(
-      IMAGE_URL_ATTRIBUTE,
-      (
-        /** @type {string} */ _attribute,
-        /** @type {string} */ name,
-        /** @type {string} */ quote,
-        /** @type {string} */ value,
-      ) => `${name}=${quote}${value.replace(ROOT_PATH_PREFIX, "$1")}${quote}`,
-    ),
-  );
+  mapDocImageUrls(html, (/** @type {string} */ url) => (isRootPath(url) ? url.slice(1) : url));
 
 /**
  * Point the shell's relative asset URLs at the app root from wherever a static host serves
@@ -108,7 +93,7 @@ const createDocsRouteHtml = (html, route, channel, channelLabel, dateModified) =
   }
   return routeHtml.replace(
     "</head>",
-    `  <link rel="alternate" type="text/markdown" href="/${escapeHtml(route.slug)}.md" />\n  <script type="application/ld+json">${serializeInlineJson(structuredData)}</script>\n  </head>`,
+    `  <link rel="alternate" type="text/markdown" href="${escapeHtml(route.slug)}.md" />\n  <script type="application/ld+json">${serializeInlineJson(structuredData)}</script>\n  </head>`,
   );
 };
 

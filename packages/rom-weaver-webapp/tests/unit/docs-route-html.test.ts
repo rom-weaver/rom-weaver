@@ -33,6 +33,11 @@ describe("createDocsRouteHtml", () => {
     expect(readStructuredData(html)).toMatchObject({ "@type": "TechArticle", headline: "FAQ" });
   });
 
+  it("points the Markdown alternate at the app root through the page base", () => {
+    const html = createDocsRouteHtml(SHELL, route(), "prod", "");
+    expect(html).toContain('type="text/markdown" href="docs/faq.md"');
+  });
+
   it("dates the page only when its last change is known", () => {
     const dated = createDocsRouteHtml(SHELL, route(), "prod", "", "2026-10-01T12:00:00.000Z");
     expect(readStructuredData(dated).dateModified).toBe("2026-10-01T12:00:00.000Z");
