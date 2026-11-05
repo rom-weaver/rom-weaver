@@ -508,11 +508,11 @@ A step that dies to a network timeout inside a job, such as `apt-get`, leaves no
 
 ### `scripts/ci/nightly-alert.mjs`
 
-Keeps one tracking issue titled `Nightly CI is failing on main` in step with the scheduled `ci.yml` run, so a red nightly is seen without anyone opening the Actions tab. The `nightly-alert` job runs after `gate` and exists only on the `schedule` event: pull requests, pushes, and manual runs start no runner for it. `security` only warns, and `deploy` and `quality-analysis` are `continue-on-error`, so none of them fails the run or raises the alert. The job holds `issues: write` for itself alone; the workflow default stays `contents: read`.
+Keeps one tracking issue titled `Nightly CI is failing on main` in step with the scheduled `ci.yml` run, so a red nightly is seen without anyone opening the Actions tab. The `nightly-alert` job runs after `gate` and exists only on the `schedule` event: pull requests, pushes, and manual runs start no runner for it. `security` only warns, and `deploy` and `quality-analysis` are `continue-on-error`, so none of them fails the run or raises the alert. `parity.yml` is a separate scheduled workflow and does not raise it either. The job holds `issues: write` for itself alone; the workflow default stays `contents: read`.
 
-- **A failing nightly** opens the issue when none is open. When one is open, it adds a comment instead: the run link, the commit, and the names of the failed jobs, read from the run's job list.
+- **A failing nightly** opens the issue when none is open. When one is open, it adds a comment instead: the run link, the commit, and the names of the failed jobs other than the gate, read from the run's job list.
 - **A passing nightly** comments `Recovered` on the open issue and closes it. A cancelled nightly changes nothing.
-- **One open issue.** The script finds it by exact title or by the `nightly-ci-failure` label, whichever matches, and picks the oldest. A stray duplicate gets a pointer to the oldest and is closed. Pull requests and unrelated issues are never touched.
+- **One open issue.** The script finds it by exact title alone and picks the oldest. A stray duplicate gets a pointer to the oldest and is closed. Pull requests and other issues, including ones someone gave the `nightly-ci-failure` label, are never touched.
 - **The label is optional.** The first alert creates `nightly-ci-failure` when it is missing and attaches it. If that fails, the issue is opened without a label and the title finds it on later nights. Do not retitle the issue by hand while it is open.
 
 The script runs against the REST API with the job's token, so it cannot be tried locally without one; `scripts/ci/nightly-alert.test.mjs` covers it against an in-memory issues API.

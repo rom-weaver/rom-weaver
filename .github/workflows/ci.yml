@@ -1825,7 +1825,7 @@ jobs:
           'webapp-wasm-browser=${{ needs.webapp-wasm-browser.result }}'
 
   # Keeps one issue open while the nightly fails (scripts/ci/nightly-alert.mjs). The gate covers
-  # every job that can fail the run: `security` only warns, and the deploy and advisory quality jobs
+  # every job that can fail this workflow's run (parity.yml is separate and does not alert): `security` only warns, and the deploy and advisory quality jobs
   # are `continue-on-error`. `issues: write` is granted to this job only, and the job exists only on
   # the `schedule` event: pull requests, pushes, and manual runs never start a runner for it.
   nightly-alert:

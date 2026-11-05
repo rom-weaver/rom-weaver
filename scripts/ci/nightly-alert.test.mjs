@@ -134,15 +134,14 @@ test("unrelated issues and pull requests are never touched", async () => {
     issues: [
       { number: 3, state: "open", title: "Some bug" },
       { number: 4, state: "open", title: ALERT_TITLE, pull_request: {} },
+      { number: 5, state: "open", title: "Docs link broken", labels: [{ name: ALERT_LABEL }] },
     ],
   });
   await call(state, "failing");
-  assert.deepEqual(state.issues[0].comments, []);
-  assert.deepEqual(state.issues[1].comments, []);
-  assert.equal(state.issues.length, 3);
+  for (const issue of state.issues.slice(0, 3)) assert.deepEqual(issue.comments, []);
+  assert.equal(state.issues.length, 4);
   await call(state, "recovered");
-  assert.equal(state.issues[0].state, "open");
-  assert.equal(state.issues[1].state, "open");
+  for (const issue of state.issues.slice(0, 3)) assert.equal(issue.state, "open");
 });
 
 test("a passing nightly comments recovered and closes the issue", async () => {
@@ -182,9 +181,10 @@ test("stray duplicates collapse onto the oldest open issue", async () => {
   assert.equal(open(state).length, 1);
 });
 
-test("failed job names skip passing jobs and the alert job itself", () => {
+test("failed job names skip passing jobs, the gate, and the alert job itself", () => {
   assert.deepEqual(
     failedJobNames([
+      { name: "CI gate", conclusion: "failure" },
       { name: "Rust (host)", conclusion: "failure" },
       { name: "CLI (linux)", conclusion: "success" },
       { name: "Security", conclusion: "timed_out" },

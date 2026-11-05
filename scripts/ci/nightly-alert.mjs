@@ -23,8 +23,9 @@ export const ALERT_LABEL = "nightly-ci-failure";
 const LABEL_COLOR = "d73a4a";
 const LABEL_DESCRIPTION = "Opened and closed by the scheduled CI run";
 
-// The job that runs this script; it is still in progress while it reads the run's jobs.
-const OWN_JOB = "Nightly alert";
+// The job that runs this script is still in progress while it reads the run's jobs, and the gate
+// only reports the failures of the jobs it waits on, which the list already names.
+const UNLISTED_JOBS = new Set(["Nightly alert", "CI gate"]);
 
 const FAILED_CONCLUSIONS = new Set(["failure", "timed_out"]);
 
@@ -40,7 +41,7 @@ export function nightlyOutcome(needs) {
 
 export function failedJobNames(jobs) {
   return jobs
-    .filter((job) => FAILED_CONCLUSIONS.has(job.conclusion) && job.name !== OWN_JOB)
+    .filter((job) => FAILED_CONCLUSIONS.has(job.conclusion) && !UNLISTED_JOBS.has(job.name))
     .map((job) => job.name);
 }
 
@@ -73,15 +74,12 @@ export async function listRunJobs({ api, repo, runId }) {
 }
 
 // Oldest first, so a stray duplicate never displaces the issue the alerts were already using. The
-// issues endpoint also returns pull requests.
+// issues endpoint also returns pull requests. Only the title matches: a person can put the label on
+// any issue, and a passing nightly would close it.
 export async function findAlertIssues({ paginate, repo }) {
   const open = await paginate(`/repos/${repo}/issues?state=open`);
   return open
-    .filter(
-      (issue) =>
-        !issue.pull_request &&
-        (issue.title === ALERT_TITLE || issue.labels?.some((label) => label.name === ALERT_LABEL)),
-    )
+    .filter((issue) => !issue.pull_request && issue.title === ALERT_TITLE)
     .toSorted((left, right) => left.number - right.number);
 }
 
