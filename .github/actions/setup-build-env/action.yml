@@ -433,6 +433,7 @@ runs:
       uses: ./.github/actions/identify-data
       with:
         cache-save: ${{ inputs.cache-save }}
+        cache-restore: ${{ inputs.cache-restore }}
 
     # Keyed on the lock file, whose per-file SHA-256 list fully determines the
     # tree; `ensure-emulatorjs.mjs` re-verifies every restored file against it,

@@ -14,6 +14,11 @@ inputs:
       Save the packs to the Actions cache after a miss. Set to false for
       workflow_run jobs, which are restore-only.
     default: "true"
+  cache-restore:
+    description: >-
+      "false" restores and saves no cache: the packs are built from their
+      pinned sources (setup-build-env `cache-restore`).
+    default: "true"
 
 runs:
   using: composite
@@ -22,6 +27,7 @@ runs:
     # records their sha256), so one cross-OS cache entry serves all runners.
     - name: Restore identify packs
       id: cache
+      if: inputs.cache-restore == 'true'
       uses: actions/cache/restore@v6
       with:
         path: crates/rom-weaver-cli/data/identify/v1
@@ -32,7 +38,7 @@ runs:
     # pack cache above must miss when an input revision changes; this smaller
     # cache lets an unchanged pack skip its expensive Brotli recompression.
     - name: Restore identify Brotli cache
-      if: steps.cache.outputs.cache-hit != 'true'
+      if: inputs.cache-restore == 'true' && steps.cache.outputs.cache-hit != 'true'
       id: brotli-cache
       uses: actions/cache/restore@v6
       with:
@@ -61,7 +67,7 @@ runs:
     # Pull requests can restore main's cache but cannot share caches with other
     # pull requests. Only main saves this large, byte-identical data set.
     - name: Save identify packs
-      if: inputs.cache-save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      if: inputs.cache-restore == 'true' && inputs.cache-save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6
       with:
         path: crates/rom-weaver-cli/data/identify/v1
@@ -71,7 +77,7 @@ runs:
     # Pull requests can read this content-addressed cache but only main can
     # write it, so an untrusted fork cannot poison a future build.
     - name: Save identify Brotli cache
-      if: inputs.cache-save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      if: inputs.cache-restore == 'true' && inputs.cache-save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6
       with:
         path: .cache/identify/brotli

@@ -885,6 +885,9 @@ jobs:
     outputs:
       bundle: ${{ steps.webapp-bundle.outcome }}
       chunk-guard: ${{ steps.chunk-guard.outcome }}
+      # `wasm-attest` signs only this upload. Any job in the run can replace an artifact by name,
+      # but a replacement gets a new id, and no other job can change this job's outputs.
+      wasm-artifact-id: ${{ steps.wasm-artifact.outputs.artifact-id }}
     # Skipped whole rather than started with every step gated off. Webapp tests
     # and `docker-prebuilt` still select this through `changes.webapp`, while
     # every first-party pull request also builds it for its preview.
@@ -999,6 +1002,7 @@ jobs:
       # The wasm module and its brotli sibling are already compressed, so
       # re-compressing them into the artifact only burns time.
       - name: Upload WASM artifact
+        id: wasm-artifact
         uses: actions/upload-artifact@v7
         with:
           name: wasm-prod
@@ -1071,10 +1075,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # By the id `wasm` uploaded, never by name: another job in the run (one that restored a
+      # poisoned cache) could have replaced `wasm-prod`, and this job must not sign that. A missing
+      # id or a deleted artifact fails here, and the release builds the module from source.
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
         with:
-          name: wasm-prod
+          artifact-ids: ${{ needs.wasm.outputs.wasm-artifact-id }}
+          merge-multiple: true
           path: ${{ runner.temp }}/wasm-prod
 
       - name: Write the checksum manifest

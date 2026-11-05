@@ -143,6 +143,7 @@ test("a release pull request artifact is verified at its merge commit, whose tre
   const [probe, verify] = attestationCalls(gh);
   assert.ok(probe.includes("--format") && !probe.includes("--source-digest"));
   assert.equal(probe[probe.indexOf("--cert-identity") + 1], `https://github.com/${REPO}/.github/workflows/ci.yml@refs/pull/7/merge`);
+  assert.ok(probe.at(-1).includes(JSON.stringify(runInvocationPrefix({ repository: REPO, runId: "100" }))), "the probe keeps only this run's attestations");
   assert.equal(verify[verify.indexOf("--source-digest") + 1], MERGE, "the digest read from the certificate is then pinned");
   assert.equal(verify[verify.indexOf("--source-ref") + 1], "refs/pull/7/merge");
   assert.ok(verify.includes("--deny-self-hosted-runners"));
@@ -225,13 +226,12 @@ test("a copy that fails partway removes what it installed", () => {
 });
 
 test("each candidate run is tried, newest first, until one verifies", () => {
-  const runs = { 100: pushRun({ id: 101, head_branch: "attacker" }), 101: pushRun({ id: 101 }) };
   const calls = [];
   const runGh = (args) => {
     calls.push(args);
     const single = /actions\/runs\/(\d+)$/u.exec(args[1] ?? "");
     if (args[0] === "api" && single) return JSON.stringify(single[1] === "100" ? { ...pushRun(), head_branch: "attacker" } : pushRun({ id: 101 }));
-    return stub({ run: runs[101], trees: { [HEAD]: TREE } }).runGh(args);
+    return stub({ run: pushRun({ id: 101 }), trees: { [HEAD]: TREE } }).runGh(args);
   };
   const destination = makeTempDir("wasm-destination-");
   const result = fetchFirstVerifiedWasm({ runIds: ["100", "101"], repository: REPO, expectedSha: HEAD, destination, workDir: makeTempDir("wasm-work-"), runGh });

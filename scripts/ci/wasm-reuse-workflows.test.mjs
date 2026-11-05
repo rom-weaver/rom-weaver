@@ -73,7 +73,13 @@ test("the signing job is separate: only it can mint tokens or attest, and it nev
 test("the signing job attests the manifest of the downloaded artifact, then publishes it", () => {
   const job = ci.jobs["wasm-attest"];
   const download = step(job, "Download WASM artifact");
-  assert.equal(download.with.name, "wasm-prod");
+  assert.equal(download.with.name, undefined, "never by name: any job in the run can replace an artifact by name");
+  assert.equal(download.with["artifact-ids"], "${{ needs.wasm.outputs.wasm-artifact-id }}");
+  assert.equal(download.with["merge-multiple"], true, "the files land in the path itself, not a per-artifact directory");
+  assert.equal(ci.jobs.wasm.outputs["wasm-artifact-id"], "${{ steps.wasm-artifact.outputs.artifact-id }}");
+  const built = step(ci.jobs.wasm, "Upload WASM artifact");
+  assert.equal(built.id, "wasm-artifact");
+  assert.equal(built.with.name, "wasm-prod");
   const manifest = step(job, "Write the checksum manifest");
   assert.match(manifest.run, /node scripts\/ci\/wasm-manifest\.mjs "\$RUNNER_TEMP\/wasm-prod" "\$RUNNER_TEMP\/wasm-manifest\/wasm-prod\.sha256"/u);
   const sign = step(job, "Sign build provenance");
@@ -219,7 +225,7 @@ test("the release pull request's WASM build, which is signed, restores and saves
   assert.equal(step(job, "Restore built wasm module").with.restore, off);
   for (const name of ["Set up cached WASM environment", "Set up WASM build environment"]) assert.equal(step(job, name).with["cache-restore"], off, name);
   for (const candidate of job.steps.filter((entry) => CACHE_ACTION.test(entry.uses ?? "")))
-    assert.match(String(candidate.if), /env\.RELEASE_PR_WASM != 'true'|github\.ref == 'refs\/heads\/main'/u, candidate.name);
+    assert.match(String(candidate.if), /(^|&& )(env\.RELEASE_PR_WASM != 'true'|github\.ref == 'refs\/heads\/main')( &&|$)/u, candidate.name);
 
   const setup = action("setup-build-env");
   assert.equal(setup.inputs["cache-restore"].default, "true");
@@ -227,6 +233,14 @@ test("the release pull request's WASM build, which is signed, restores and saves
   assert.ok(caching.length >= 10, "every cache step is found");
   for (const entry of caching) assert.ok(String(entry.if).startsWith("inputs.cache-restore == 'true' && ("), entry.name);
   assert.equal(setup.runs.steps.find((entry) => String(entry.uses).startsWith("jdx/mise-action@")).with.cache, "${{ inputs.cache-restore == 'true' }}", "mise's tool cache too");
+  // A local action that caches must be handed the switch and gate its own cache steps on it.
+  for (const entry of setup.runs.steps.filter((candidate) => String(candidate.uses ?? "").startsWith("./.github/actions/"))) {
+    const nested = action(entry.uses.slice("./.github/actions/".length));
+    const nestedCaching = nested.runs.steps.filter((candidate) => CACHE_ACTION.test(candidate.uses ?? ""));
+    if (nestedCaching.length === 0) continue;
+    assert.equal(entry.with["cache-restore"], "${{ inputs.cache-restore }}", entry.name);
+    for (const candidate of nestedCaching) assert.ok(String(candidate.if).startsWith("inputs.cache-restore == 'true'"), `${entry.uses}: ${candidate.name}`);
+  }
 
   const module = action("wasm-cache");
   for (const entry of module.runs.steps.filter((candidate) => CACHE_ACTION.test(candidate.uses ?? "")))
