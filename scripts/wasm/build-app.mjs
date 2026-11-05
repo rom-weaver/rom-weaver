@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { cargoTargetDir } from "../cargo-target-dir.mjs";
 import { brotliCompressFile } from "./brotli-compress.mjs";
 import { restoreWasmArtifacts, storeWasmArtifacts, wasmArtifactCacheKey, wasmArtifactCacheRoot } from "./wasm-artifact-cache.mjs";
-import { createWasmSourceFingerprint } from "./wasm-source-fingerprint.mjs";
+import { createWasmSourceFingerprint, wasmSourcesModifiedSince } from "./wasm-source-fingerprint.mjs";
 import { createWasmProdFingerprint } from "./wasm-prod-fingerprint.mjs";
 
 export const parseMode = (value = "dev") => {
@@ -117,6 +117,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   const builtArtifact = join(cargoTargetDir(root, env), target, "wasm-release", "examples", "rom-weaver-app.wasm");
   const fingerprintFile = `${artifact}.prod.sha256`;
   const sourceFingerprintFile = `${artifact}.source.sha256`;
+  const sourcesReadAt = Date.now();
   const sourceFingerprint = createWasmSourceFingerprint(root);
   if (!existsExecutable("cargo")) throw new Error("missing command: cargo");
   if (!existsExecutable(env.WASI_CLANG)) throw new Error(`missing WASI toolchain: ${env.WASI_CLANG} (install WASI SDK)`);
@@ -157,7 +158,12 @@ export function main(argv = process.argv.slice(2), env = process.env) {
     process.stdout.write(`reused ${mode} WASM for unchanged inputs from ${join(cache.root, cache.key)}\n`);
   } else {
     buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env });
-    if (cache) {
+    // A source edit during the build, even one reverted since, reaches Cargo's
+    // output but not the key, so storing it would serve that edit to a later
+    // build of the old sources.
+    if (cache && (wasmSourcesModifiedSince(root, sourcesReadAt) || createWasmSourceFingerprint(root) !== sourceFingerprint)) {
+      process.stderr.write("warning: WASM sources changed during the build; not caching it\n");
+    } else if (cache) {
       try {
         storeWasmArtifacts({ ...cache, files: cacheFiles, sourceDir: outDir, replace: force });
       } catch (error) {

@@ -29,13 +29,32 @@ const collectFiles = (root, path, files) => {
   for (const child of readdirSync(entry)) collectFiles(root, posix.join(path, child), files);
 };
 
-export const createWasmSourceFingerprint = (root) => {
+const wasmSourceFiles = (root) => {
   const files = [...SOURCE_FILES];
   for (const sourceRoot of SOURCE_ROOTS) collectFiles(root, sourceRoot, files);
-  files.sort();
+  return files.sort();
+};
 
+// File timestamps come from a coarse kernel clock that lags Date.now() by a few
+// milliseconds, so a write just after `sinceMs` can carry an earlier time.
+const TIMESTAMP_SLACK_MS = 1000;
+
+// True when a fingerprinted file was written at or after `sinceMs`, which an
+// edit reverted before a later fingerprint still shows. ctime also catches a
+// revert that restored the old mtime (`cp -p`).
+export const wasmSourcesModifiedSince = (root, sinceMs) =>
+  wasmSourceFiles(root).some((path) => {
+    try {
+      const { mtimeMs, ctimeMs } = statSync(join(root, path));
+      return Math.max(mtimeMs, ctimeMs) >= sinceMs - TIMESTAMP_SLACK_MS;
+    } catch {
+      return true;
+    }
+  });
+
+export const createWasmSourceFingerprint = (root) => {
   const hash = createHash("sha256");
-  for (const path of files) {
+  for (const path of wasmSourceFiles(root)) {
     hash.update(path);
     hash.update("\0");
     hash.update(readFileSync(join(root, path)));
