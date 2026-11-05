@@ -73,6 +73,18 @@ describe("engine error codes", () => {
     expect(getRomWeaverFailureMessage(failedRun({ label: "bad entry [see.docs]" }))).toBe("bad entry [see.docs]");
   });
 
+  it("keeps a coded failure's detail field when the CLI tag is dropped", () => {
+    const detail = "checksum mismatch for crc32; expected deadbeef, actual 2cccfa33";
+    const result = failedRun({
+      error_code: "patch.chain.output_mismatch",
+      error_fields: { detail, patch_index: 0 },
+      label: `validation failed: chain step output does not match the patch's declared output checks [patch.chain.output_mismatch] (detail=${detail}, patch_index=0)`,
+    });
+    expect(getRomWeaverFailureMessage(result)).toBe(
+      `validation failed: chain step output does not match the patch's declared output checks: ${detail}`,
+    );
+  });
+
   it("reports an engine allocation failure as a worker failure", () => {
     expect(engineFailure({ error_code: "resource.out_of_memory", label: "Cannot allocate memory" }).code).toBe(
       "WORKER_FAILED",

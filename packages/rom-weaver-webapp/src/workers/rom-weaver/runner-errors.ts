@@ -25,10 +25,15 @@ const getNonTraceStderr = (result: Partial<RomWeaverRunJsonResult> | null | unde
 };
 
 // The ` [code] (key=value, ...)` tag the engine's Display appends for CLI readers. The structured
-// `error_code`/`error_fields` carry the same facts, so the tag is dropped from displayed text.
+// `error_code`/`error_fields` carry the same facts, so the tag is dropped from displayed text. A `detail`
+// field holds the underlying cause (such as which checksum mismatched), so it stays in the message.
 const ENGINE_DISPLAY_TAG = /\s\[[a-z0-9_]+(?:\.[a-z0-9_]+)+\](?: \(.*\))?$/su;
 
-const stripEngineDisplayTag = (message: string): string => message.replace(ENGINE_DISPLAY_TAG, "");
+const stripEngineDisplayTag = (message: string, fields: RomWeaverRunJsonEvent["error_fields"]): string => {
+  const stripped = message.replace(ENGINE_DISPLAY_TAG, "");
+  const detail = fields?.detail;
+  return typeof detail === "string" && detail && !stripped.includes(detail) ? `${stripped}: ${detail}` : stripped;
+};
 
 const getRomWeaverFailureMessage = (
   result: Partial<RomWeaverRunJsonResult> | null | undefined,
@@ -39,7 +44,7 @@ const getRomWeaverFailureMessage = (
     const event = events[index];
     if (!(event && isRomWeaverFailedRunEvent(event))) continue;
     const label = getRomWeaverRunEventLabel(event).trim();
-    if (label) return event.error_code ? stripEngineDisplayTag(label) : label;
+    if (label) return event.error_code ? stripEngineDisplayTag(label, event.error_fields) : label;
   }
 
   const nonJsonLines = Array.isArray(result?.nonJsonLines) ? result.nonJsonLines : [];
@@ -112,7 +117,7 @@ const withRomWeaverFailure = <E extends Error>(
   if (coded.error_code) {
     const fields: RomWeaverEngineErrorFields = coded.error_fields ?? {};
     record.details = { ...record.details, engineCode: coded.error_code, engineFields: fields };
-    record.message = stripEngineDisplayTag(record.message);
+    record.message = stripEngineDisplayTag(record.message, fields);
   }
   return error;
 };
