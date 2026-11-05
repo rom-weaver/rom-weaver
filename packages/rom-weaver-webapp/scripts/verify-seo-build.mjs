@@ -563,12 +563,15 @@ for (const name of DOCS_SCREENSHOT_NAMES) {
 for (const { docsRoute, name } of DOCS_SCREENSHOT_CASES) {
   if (!docsRoute) continue;
   const docsHtml = read(`${docsRoute}.html`);
+  // Relative, so the page's <base> keeps a sub-path deployment off the origin root.
+  if (/(?:^|["\s,])\/docs\/screenshots\//.test(docsHtml))
+    throw new Error(`${docsRoute} must reference its screenshots relative to the app root`);
   for (const { name: viewport } of DOCS_SCREENSHOT_VIEWPORTS) {
     for (const theme of DOCS_SCREENSHOT_THEMES) {
       for (const { extension } of DOCS_SCREENSHOT_FORMATS) {
         assertIncludes(
           docsHtml,
-          `/docs/screenshots/${name}-${viewport}-${theme}.${extension}`,
+          `docs/screenshots/${name}-${viewport}-${theme}.${extension}`,
           `${docsRoute} ${name} ${viewport} ${theme} ${extension} screenshot`,
         );
       }
@@ -623,7 +626,15 @@ for (const route of DOC_ROUTES) {
     '<button aria-expanded="false" aria-label="Theme: Match system" class="tool theme-tool"',
     `${route.slug} React theme control`,
   );
-  assertIncludes(docsHtml, '<base href="/" />', `${route.slug} asset base`);
+  // The base MUST reach the app root relative to where each copy is served, never the origin root:
+  // a sub-path deployment would otherwise request /assets/ from outside its prefix.
+  const slugDepth = route.slug.split("/").length;
+  if (slugDepth === 1) {
+    if (docsHtml.includes("<base ")) throw new Error(`${route.slug} extensionless copy must not carry a base`);
+  } else {
+    assertIncludes(docsHtml, `<base href="${"../".repeat(slugDepth - 1)}" />`, `${route.slug} asset base`);
+  }
+  assertIncludes(directoryHtml, `<base href="${"../".repeat(slugDepth)}" />`, `${route.slug} directory asset base`);
   assertIncludes(docsHtml, 'rel="stylesheet" crossorigin href="./assets/', `${route.slug} app stylesheet`);
   const legalPage = isLegalDocRoute(route.slug);
   assertIncludes(docsHtml, `"@type":"${legalPage ? "WebPage" : "TechArticle"}"`, `${route.slug} structured data`);

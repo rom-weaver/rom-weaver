@@ -1,4 +1,5 @@
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
+import { appPathHref } from "./app-routes.ts";
 import type { Localizer } from "../presentation/localization/index.ts";
 import type { MessageId } from "../presentation/localization/catalog.ts";
 import { getSettingsLabel } from "../presentation/settings.ts";
@@ -43,6 +44,8 @@ type FindEntry = {
 type FindResult = { entry: FindEntry; score: number };
 
 type FindIndex = {
+  /** Where the app is served; guide results from the search resolve against it. */
+  baseHref: string;
   /** Shown before the visitor types: every tool, then the app's own surfaces. */
   browse: readonly FindEntry[];
   /** The static entries: tools, settings, app surfaces, project links. */
@@ -188,8 +191,6 @@ const CLI_GUIDES: readonly CliGuide[] = [
 
 const createStaticEntries = ({ baseHref, donateHref, githubHref, localizer, tabs }: FindSources): FindEntry[] => {
   const message = (id: MessageId) => localizer.message(id);
-  const appBase = new URL(baseHref || "/", "https://rom-weaver.invalid/");
-  const appHref = (path: string) => new URL(path.replace(/^\//, ""), appBase).pathname;
   const tools: FindEntry[] = tabs.map((tab) => {
     const details = TOOL_FIND_DETAILS[tab.id];
     return {
@@ -203,7 +204,7 @@ const createStaticEntries = ({ baseHref, donateHref, githubHref, localizer, tabs
     };
   });
   const cliGuides: FindEntry[] = CLI_GUIDES.map(({ command, hint, href, keywords }) => {
-    const destination = appHref(href);
+    const destination = appPathHref(href, baseHref || "/");
     return {
       action: { type: "view", view: "docs" },
       hint: message(hint),
@@ -319,17 +320,17 @@ const loadGuideRoutes = (): Promise<readonly GuideRoute[]> => {
 const createFindIndex = (sources: FindSources, guides: readonly GuideRoute[] = []): FindIndex => {
   const entries = createStaticEntries(sources);
   const browse = entries.filter((entry) => entry.kind === "tool" || entry.kind === "app");
-  return { browse, entries, guides };
+  return { baseHref: sources.baseHref || "/", browse, entries, guides };
 };
 
-const guideResult = (match: ReturnType<typeof searchDocs>[number], query: string): FindResult => {
+const guideResult = (match: ReturnType<typeof searchDocs>[number], query: string, baseHref: string): FindResult => {
   const highlight = new URLSearchParams({ highlight: query.trim() });
   const anchor = match.entry.id ? `#${match.entry.id}` : "";
   return {
     entry: {
       action: { type: "view", view: "docs" },
       hint: match.route.title,
-      href: `/${match.route.slug}?${highlight}${anchor}`,
+      href: appPathHref(`${match.route.slug}?${highlight}${anchor}`, baseHref),
       id: `guide:${match.route.slug}${anchor}`,
       keywords: "",
       kind: "guide",
@@ -351,7 +352,9 @@ const searchFind = (index: FindIndex, query: string): FindResult[] => {
     const entry = byId.get(match.route.slug);
     return entry ? [{ entry, score: match.score }] : [];
   });
-  const guideMatches = searchDocs(index.guides, query, KIND_LIMIT.guide).map((match) => guideResult(match, query));
+  const guideMatches = searchDocs(index.guides, query, KIND_LIMIT.guide).map((match) =>
+    guideResult(match, query, index.baseHref),
+  );
   const counts: Record<FindKind, number> = { app: 0, guide: 0, setting: 0, tool: 0 };
   return [...staticMatches, ...guideMatches]
     .sort((left, right) => KIND_ORDER[left.entry.kind] - KIND_ORDER[right.entry.kind] || right.score - left.score)

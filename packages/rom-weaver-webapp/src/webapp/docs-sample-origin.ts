@@ -48,4 +48,30 @@ const retargetSampleUrls = (html: string, assetBaseUrl: string | undefined): str
   });
 };
 
-export { AUTHORED_SAMPLE_BASE, retargetSampleUrls };
+const IMAGE_TAG = /<(?:img|source)\b[^>]*>/gi;
+const IMAGE_URL_ATTRIBUTE = /(\b(?:src|srcset)=(["']))(.*?)(\2)/gi;
+// A lone leading slash at the start of a URL candidate; `//host` is protocol-relative and stays.
+const ROOT_PATH_PREFIX = /(^|[\s,])\/(?!\/)/g;
+
+/**
+ * Keep a sub-path deployment on its own prefix: guides link to sibling pages and tools
+ * by root-absolute path (`/docs/faq`, `/apply-rom-patches`) and to screenshots by
+ * `/docs/screenshots/...`, which would otherwise leave `appBaseUrl`. Protocol-relative,
+ * fragment, query, and external URLs stay as authored.
+ */
+const rebaseRootUrls = (html: string, appBaseUrl: string): string => {
+  const basePath = new URL(appBaseUrl, "https://app.invalid").pathname;
+  if (basePath === "/") return html;
+  const withLinks = html.replace(ANCHOR_HREF, (match, open, href, close) =>
+    href.startsWith("/") && !href.startsWith("//") ? `${open}${basePath}${href.slice(1)}${close}` : match,
+  );
+  return withLinks.replace(IMAGE_TAG, (tag) =>
+    tag.replace(
+      IMAGE_URL_ATTRIBUTE,
+      (_attribute, open, _quote, value, close) =>
+        `${open}${value.replace(ROOT_PATH_PREFIX, (_prefix: string, lead: string) => `${lead}${basePath}`)}${close}`,
+    ),
+  );
+};
+
+export { AUTHORED_SAMPLE_BASE, rebaseRootUrls, retargetSampleUrls };

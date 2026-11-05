@@ -40,6 +40,44 @@ const replaceBetween = (html, pattern, content) =>
 const replaceMetaContent = (html, attribute, name, content) =>
   replaceBetween(html, new RegExp(`(<meta\\s+${attribute}="${name}"\\s+content=")[^"]*(")`), content);
 
+const ROOT_PATH_IMAGE_TAG = /<(?:img|source)\b[^>]*>/gi;
+const IMAGE_URL_ATTRIBUTE = /\b(src|srcset)=(["'])(.*?)\2/gi;
+// A lone leading slash at the start of a URL candidate; `//host` is protocol-relative and stays.
+const ROOT_PATH_PREFIX = /(^|[\s,])\/(?!\/)/g;
+
+/**
+ * Guides name their screenshots by root-absolute path (`/docs/screenshots/x.webp`). Written
+ * relative instead, the page's `<base>` resolves them against the app root on any deployment,
+ * so a sub-path host does not request them from the origin root before the app has booted.
+ */
+const relativeImagePaths = (/** @type {string} */ html) =>
+  html.replace(ROOT_PATH_IMAGE_TAG, (/** @type {string} */ tag) =>
+    tag.replace(
+      IMAGE_URL_ATTRIBUTE,
+      (
+        /** @type {string} */ _attribute,
+        /** @type {string} */ name,
+        /** @type {string} */ quote,
+        /** @type {string} */ value,
+      ) => `${name}=${quote}${value.replace(ROOT_PATH_PREFIX, "$1")}${quote}`,
+    ),
+  );
+
+/**
+ * Point the shell's relative asset URLs at the app root from wherever a static host serves
+ * the file: `docs/faq.html` answers at `/docs/faq`, `docs/faq/index.html` at `/docs/faq/`.
+ * A fixed `<base href="/">` would send a sub-path deployment's assets to the origin root.
+ *
+ * @param {string} html
+ * @param {string} slug
+ * @param {boolean} directoryIndex whether this is the `<slug>/index.html` copy
+ */
+const withDocsBase = (html, slug, directoryIndex) => {
+  const depth = slug.split("/").length - (directoryIndex ? 0 : 1);
+  const withImages = relativeImagePaths(html);
+  return depth === 0 ? withImages : withImages.replace("<head>", `<head>\n    <base href="${"../".repeat(depth)}" />`);
+};
+
 /**
  * Stamp route-specific metadata onto the same app document and React shell used
  * by every other top-level page.
@@ -62,8 +100,7 @@ const createDocsRouteHtml = (html, route, channel, channelLabel, dateModified) =
     publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_ORIGIN },
     url: canonicalUrl,
   };
-  let routeHtml = html.replace("<head>", '<head>\n    <base href="/" />');
-  routeHtml = replaceBetween(routeHtml, /(<title>)[^<]*(<\/title>)/, title);
+  let routeHtml = replaceBetween(html, /(<title>)[^<]*(<\/title>)/, title);
   routeHtml = replaceBetween(routeHtml, /(<link\s+rel="canonical"\s+href=")[^"]*(")/, canonicalUrl);
   routeHtml = routeHtml.replace(/(<meta\s+property="og:type"\s+content=")[^"]*(")/, "$1article$2");
   for (const [attribute, name, content] of metadata) {
@@ -75,4 +112,12 @@ const createDocsRouteHtml = (html, route, channel, channelLabel, dateModified) =
   );
 };
 
-export { createDocsRouteHtml, DOC_ROUTES, docsDirectory, docSourcePath, generatedDocsDirectory, readDocRoutes };
+export {
+  createDocsRouteHtml,
+  DOC_ROUTES,
+  docsDirectory,
+  docSourcePath,
+  generatedDocsDirectory,
+  readDocRoutes,
+  withDocsBase,
+};

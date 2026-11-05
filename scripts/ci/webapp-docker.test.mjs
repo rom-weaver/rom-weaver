@@ -128,3 +128,33 @@ test("CI smokes source and prebuilt images and checks clean identify source impo
     assert.match(job, /playwright install --with-deps --only-shell chromium/u);
   }
 });
+
+// The documented cache policy is the generated dist/_headers (docs/hosting/self-hosting.md):
+// everything revalidates except the content-addressed /assets/*. sws's built-in per-type
+// max-age would cache the service worker for a year, so its rules must mirror _headers instead.
+test("sws.toml sends the documented Cache-Control policy", () => {
+  const sws = readFileSync(
+    new URL("../../packages/rom-weaver-webapp/sws.toml", import.meta.url),
+    "utf8",
+  );
+  const headers = readFileSync(
+    new URL("../../packages/rom-weaver-webapp/scripts/vite-config/headers.mjs", import.meta.url),
+    "utf8",
+  );
+  const immutable = /\/assets\/\*\\n {2}! Cache-Control\\n {2}Cache-Control: ([^\\]+)\\n/u.exec(
+    headers,
+  )?.[1];
+  assert.equal(immutable, "public, max-age=31536000, immutable");
+  assert.match(sws, /^cache-control-headers = false$/mu);
+  const rules = new Map(
+    [
+      ...sws.matchAll(
+        /\[\[advanced\.headers\]\][^[]*?source = "([^"]+)"\s*\n\s*\[advanced\.headers\.headers\]\n((?:[^[\n][^\n]*\n|\n|#[^\n]*\n)*)/gu,
+      ),
+    ].map((match) => [match[1], match[2]]),
+  );
+  assert.match(rules.get("**") ?? "", /^Cache-Control = "no-cache"$/mu);
+  assert.match(rules.get("/assets/**") ?? "", new RegExp(`^Cache-Control = "${immutable}"$`, "mu"));
+  const everyCacheRule = [...sws.matchAll(/^Cache-Control = .*$/gmu)];
+  assert.equal(everyCacheRule.length, 2, "only the two policy rules set Cache-Control");
+});

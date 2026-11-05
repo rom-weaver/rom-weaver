@@ -1,7 +1,9 @@
 import { BookOpen, ChevronUp, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createLogger } from "../lib/logging.ts";
+import { appPathHref } from "./app-routes.ts";
 import { DocsDrawerNav, docShelfFor } from "./docs-navigation.tsx";
+import { useAppBaseUrl } from "./use-app-base-url.ts";
 
 const logger = createLogger("docs-bar");
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -64,6 +66,7 @@ const useReadingThread = (sections: DocsBarRoute["sections"]) => {
  */
 const DocsBar = ({ activeIndex, route }: { activeIndex: number; route: DocsBarRoute }) => {
   const [overlay, setOverlay] = useState<Overlay>(null);
+  const appBaseUrl = useAppBaseUrl();
   const [openShelf, setOpenShelf] = useState<string | null>(null);
   const partsButtonRef = useRef<HTMLButtonElement | null>(null);
   const docsButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -204,7 +207,7 @@ const DocsBar = ({ activeIndex, route }: { activeIndex: number; route: DocsBarRo
                 <a
                   aria-current={index - 1 === activeIndex ? "true" : undefined}
                   className={index - 1 < activeIndex ? "is-read" : undefined}
-                  href={part.id ? `#${part.id}` : `/${route.slug}`}
+                  href={part.id ? `#${part.id}` : appPathHref(route.slug, appBaseUrl)}
                   onClick={(event) => {
                     event.preventDefault();
                     jumpTo(part.id);
