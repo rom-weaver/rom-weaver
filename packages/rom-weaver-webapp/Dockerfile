@@ -187,6 +187,8 @@ RUN node /usr/local/bin/compress-static-assets.mjs /dist
 
 # static-web-server serves the generated SPA as a non-root user. HTTPS can be
 # terminated by a reverse proxy or by static-web-server itself.
+# sws.toml relies on static-web-server 2.44.1 or later (no max-age on a 404).
+# Rebuild with `--pull` so a cached older base does not defeat it.
 FROM ghcr.io/static-web-server/static-web-server:2-alpine AS runtime
 USER root
 # The package version follows the Alpine base image; pinning it would make

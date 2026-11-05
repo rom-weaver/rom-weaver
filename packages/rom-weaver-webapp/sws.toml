@@ -27,11 +27,13 @@ compression = true
 # No-log /health endpoint for probes.
 health = true
 
-# sws's built-in Cache-Control (max-age by content type) stays on, and only for
-# files that exist: it gives hashed /assets/* scripts and styles a one-year
-# max-age and a missing path none. The [[advanced.headers]] rules below
-# override it for everything outside /assets/, where it would cache the service
-# worker script for a year and HTML for a day.
+# sws's built-in Cache-Control (max-age by content type) stays on. From sws
+# 2.44.1 it applies only to files that exist (a missing path gets no-cache);
+# earlier releases also tagged a 404 with the file type's max-age, so the image
+# needs 2.44.1 or later. It gives hashed /assets/* scripts and styles a one-year
+# max-age. The [[advanced.headers]] rules below override it for everything
+# outside /assets/, where it would cache the service worker script for a year
+# and HTML for a day.
 #
 # sws applies a header rule to a 404 as well as to a hit, so a rule on
 # /assets/** with a long max-age would mark every missing hashed URL cacheable
@@ -485,9 +487,10 @@ source = "/{,[!a]*,a,a[!s]*,as,as[!s]*,ass,ass[!e]*,asse,asse[!t]*,asset,asset[!
 [advanced.headers.headers]
 Cache-Control = "no-cache"
 
-# The built-in policy skips these /assets/* types, which would then fall back to
-# heuristic caching. Revalidating is cheap with ETag, and a missing file
-# MUST NOT be cached.
+# Revalidate these /assets/* types instead of the built-in max-age. Revalidating
+# is cheap with ETag. Other types under /assets/ (such as the identify packs) keep
+# the built-in policy: one day for types it does not know, one year for scripts,
+# styles and source maps.
 [[advanced.headers]]
 source = "/assets/**/*.{wasm,json,bin}"
 

@@ -309,12 +309,14 @@ async function checkNotFoundPage(context, origin, prefix) {
   assert.equal(response.status(), 404, url);
   const home = page.locator(".not-found-home");
   await home.waitFor({ state: "attached", timeout: 60_000 });
+  // The prerendered root carries aria-busy until the app mounts and releases it.
+  await page.locator("#webapp-root:not([aria-busy])").waitFor({ state: "attached", timeout: 60_000 });
   await page.waitForLoadState("networkidle");
   assert.equal(await page.evaluate(() => crossOriginIsolated), true);
   assert.deepEqual(failures, [], url);
   // The stylesheet only loads through <base>, so a styled button proves the assets resolved.
   assert.notEqual(await home.evaluate((node) => getComputedStyle(node).display), "inline", url);
-  // Hydration must have run: the app base it computes is the page's <base>, not the missed path.
+  // The base the page resolves against is its <base>, not the missed path.
   assert.equal(new URL(await page.evaluate(() => document.baseURI)).pathname, `${prefix}/`, url);
   const hrefs = await page.locator("a[href]").evaluateAll((nodes) => nodes.map((node) => node.href));
   assert.ok(hrefs.length > 0, `${url} has links`);
@@ -456,26 +458,33 @@ async function checkMountedCertificates({ pair, named }) {
   console.log("PASS mounted HTTPS certificates");
 }
 
+// Fetches `path` under the served prefix; `cache` is the Cache-Control value, "" when absent.
+const fetchPath = (origin, prefix) => async (path) => {
+  const response = await fetch(`${origin}${prefix}${path}`, { signal: AbortSignal.timeout(10_000) });
+  const text = await response.text();
+  return { cache: response.headers.get("cache-control") ?? "", response, status: response.status, text };
+};
+
+// The first hashed script or stylesheet the home page references: its path, the name before the
+// hash, and its extension.
+function hashedAsset(html) {
+  const match = /["'(]\.?\/?((assets\/[^"')?]+)-[^"')?.-]+\.(js|css))/.exec(html);
+  assert.ok(match, "the home page must reference a hashed asset");
+  return { ext: match[3], path: match[1], stem: match[2] };
+}
+
 // The documented policy (the build's _headers, docs/hosting/self-hosting.md): everything
 // revalidates except the content-addressed /assets/*. The image takes sws's own one-year
 // max-age for those, without `immutable`, because a header rule would also tag a 404.
 async function checkCachePolicy(origin, prefix) {
-  const get = async (path) => {
-    const response = await fetch(`${origin}${prefix}${path}`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    const text = await response.text();
-    return { cache: response.headers.get("cache-control"), status: response.status, text };
-  };
-  const home = await get("/");
-  const asset = /["'(]\.?\/?(assets\/[^"')?]+\.(?:js|css))/.exec(home.text)?.[1];
-  assert.ok(asset, "the home page must reference a hashed asset");
+  const get = fetchPath(origin, prefix);
+  const asset = hashedAsset((await get("/")).text);
   const expected = [
     ["/", "no-cache"],
     ["/docs/faq/", "no-cache"],
     ["/manifest.json", "no-cache"],
     ["/rom-weaver-service-worker.js", "no-cache"],
-    [`/${asset}`, "max-age=31536000"],
+    [`/${asset.path}`, "max-age=31536000"],
   ];
   for (const [path, cache] of expected) {
     const response = await get(path);
@@ -489,19 +498,11 @@ async function checkCachePolicy(origin, prefix) {
 // /assets/* file answered 200 with HTML, or with a long cache lifetime, would be stored
 // under a content-addressed URL for a year by browsers and CDNs.
 async function checkNotFound(origin, prefix) {
-  const get = async (path) => {
-    const response = await fetch(`${origin}${prefix}${path}`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    const text = await response.text();
-    return { cache: response.headers.get("cache-control") ?? "", response, status: response.status, text };
-  };
-  const home = await get("/");
-  const asset = /["'(]\.?\/?(assets\/[^"')?]+)-[^"')?.-]+\.(js|css)/.exec(home.text);
-  assert.ok(asset, "the home page must reference a hashed asset");
+  const get = fetchPath(origin, prefix);
+  const asset = hashedAsset((await get("/")).text);
   for (const path of [
     "/assets/nope-missing.js",
-    `/${asset[1]}-zzzzzzzz.${asset[2]}`,
+    `/${asset.stem}-zzzzzzzz.${asset.ext}`,
     "/assets/nested/missing.wasm",
   ]) {
     const missing = await get(path);

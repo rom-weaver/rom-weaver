@@ -167,8 +167,8 @@ test("sws.toml sends the documented Cache-Control policy without caching a 404",
       .replaceAll(",", "|")}$`,
     "u",
   );
+  // sws serves `/` through the /index.html rule below, so the leading empty `{,` alternative never matches.
   for (const path of [
-    "/",
     "/index.html",
     "/rom-weaver-service-worker.js",
     "/docs/faq/",
