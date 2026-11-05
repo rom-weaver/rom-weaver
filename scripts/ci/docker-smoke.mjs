@@ -323,12 +323,15 @@ function servedCertificateName(origin) {
   });
 }
 
-// Both documented certificate sources: the default /certs pair and named files.
-async function checkMountedCertificates() {
+// Both documented certificate sources: the default /certs pair and named files. The
+// named pair gets its own CN, so serving the default pair instead fails the check.
+async function startMountedCertificates() {
   const certs = join(scratch, "certs");
   await mkdir(certs);
   await chmod(certs, 0o777);
   // Generated as the image's own user so the key is readable inside the container.
+  const certificate = (name, key, cert) =>
+    `openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=${name} -keyout /certs/${key} -out /certs/${cert} 2>/dev/null`;
   docker(
     "run",
     "--rm",
@@ -338,25 +341,26 @@ async function checkMountedCertificates() {
     `type=bind,source=${certs},target=/certs`,
     values.image,
     "-c",
-    "openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=rom-weaver-smoke " +
-      "-keyout /certs/privkey.pem -out /certs/fullchain.pem 2>/dev/null " +
-      "&& cp /certs/privkey.pem /certs/site.key && cp /certs/fullchain.pem /certs/site.crt",
+    `${certificate("rom-weaver-smoke-pair", "privkey.pem", "fullchain.pem")} && ${certificate("rom-weaver-smoke-named", "site.key", "site.crt")}`,
   );
   const mount = ["--mount", `type=bind,source=${certs},target=/certs,readonly`];
-  const pair = await start("tls-pair", values.image, ["--env", "HTTPS_PORT=8443", ...mount]);
-  const named = await start("tls-named", values.image, [
-    "--env",
-    "HTTPS_PORT=8443",
-    "--env",
-    "HTTPS_CERT=/certs/site.crt",
-    "--env",
-    "HTTPS_KEY=/certs/site.key",
-    ...mount,
-  ]);
-  await Promise.all([healthy(pair.container), healthy(named.container)]);
-  for (const { origin } of [pair, named]) {
-    assert.equal(await servedCertificateName(origin), "rom-weaver-smoke", origin);
-  }
+  return {
+    pair: await start("tls-pair", values.image, ["--env", "HTTPS_PORT=8443", ...mount]),
+    named: await start("tls-named", values.image, [
+      "--env",
+      "HTTPS_PORT=8443",
+      "--env",
+      "HTTPS_CERT=/certs/site.crt",
+      "--env",
+      "HTTPS_KEY=/certs/site.key",
+      ...mount,
+    ]),
+  };
+}
+
+async function checkMountedCertificates({ pair, named }) {
+  assert.equal(await servedCertificateName(pair.origin), "rom-weaver-smoke-pair", pair.origin);
+  assert.equal(await servedCertificateName(named.origin), "rom-weaver-smoke-named", named.origin);
   console.log("PASS mounted HTTPS certificates");
 }
 
@@ -365,7 +369,11 @@ async function checkWebapp() {
   networkCreated = true;
   const web = await start("web", values.image);
   const tls = await start("tls", values.image, ["--env", "HTTPS_PORT=8443"]);
-  await Promise.all([healthy(web.container), healthy(tls.container)]);
+  // Started together: each first health probe runs about 30s after start.
+  const mounted = await startMountedCertificates();
+  await Promise.all(
+    [web, tls, mounted.pair, mounted.named].map(({ container }) => healthy(container)),
+  );
   assert.notEqual(docker("exec", web.container, "id", "-u"), "0");
   // sws ignores unknown sws.toml keys with only this warning, so a misspelled
   // option silently falls back to its default.
@@ -377,7 +385,7 @@ async function checkWebapp() {
       "sws.toml has a key static-web-server does not recognize",
     );
   }
-  await checkMountedCertificates();
+  await checkMountedCertificates(mounted);
   for (const [vars, code] of [
     [["HTTPS_CERT=/missing"], 64],
     [["HTTPS_CERT=/missing", "HTTPS_KEY=/missing"], 66],
