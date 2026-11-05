@@ -692,8 +692,10 @@ fn slot_fields(slot: usize) -> Vec<FieldDefinition> {
 fn option_fields() -> Vec<FieldDefinition> {
     let unlocked = options_initialised();
     let plain = gated(&unlocked);
-    // Unlocking T.T. marks every T.T. record as beaten, as the upstream editor does.
-    let unlock_tt = with_effects(
+    // The game unlocks T.T. only once all 20 record bits (0x7d, 0x7e, and the high nibble of
+    // 0x7f) are set, so the flag reads true only then. Unlocking T.T. marks every T.T. record as
+    // beaten, as the upstream editor does.
+    let mut unlock_tt = with_effects(
         &unlocked,
         vec![
             store(
@@ -709,6 +711,11 @@ fn option_fields() -> Vec<FieldDefinition> {
             }),
         ],
     );
+    unlock_tt.read = Some(ReadValue::new(|bytes| {
+        Ok(i64::from(
+            bytes[0x7d] == 0xff && bytes[0x7e] == 0xff && bytes[0x7f] & 0xf0 == 0xf0,
+        ))
+    }));
     let mut fields = vec![
         flag(
             "general.unlocked_adventure_two".into(),
@@ -1440,6 +1447,64 @@ mod tests {
         assert_eq!(bytes, expected);
         assert_eq!(&bytes[..0x78], &source.bytes[..0x78]);
         assert_eq!(&bytes[0x80..], &source.bytes[0x80..]);
+    }
+
+    #[test]
+    fn tt_unlock_reads_true_only_when_all_twenty_record_bits_are_set() {
+        // Only the first record bit is set, so the game would not unlock T.T. yet.
+        let mut partial = input();
+        partial.bytes[0x7d] = 0x01;
+        partial.bytes[0x7e] = 0x00;
+        partial.bytes[0x7f] &= 0x0f;
+        partial.bytes[0x78] = upstream_options(&partial.bytes);
+        assert_eq!(
+            parsed(&partial, "general.unlocked_tt"),
+            SaveValue::Bool(false)
+        );
+        for (index, (first, second, third)) in [
+            (0xfe, 0xff, 0xf0),
+            (0xff, 0xfe, 0xf0),
+            (0xff, 0xff, 0xe0),
+            (0xff, 0xff, 0xf0),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut bytes = partial.bytes.clone();
+            bytes[0x7d] = first;
+            bytes[0x7e] = second;
+            bytes[0x7f] = (bytes[0x7f] & 0x0f) | third;
+            bytes[0x78] = upstream_options(&bytes);
+            assert_eq!(
+                parsed(
+                    &SaveDetectionInput {
+                        bytes,
+                        ..partial.clone()
+                    },
+                    "general.unlocked_tt"
+                ),
+                SaveValue::Bool(index == 3),
+                "case {index}"
+            );
+        }
+        let unlocked = apply(
+            &partial,
+            &[edit("general.unlocked_tt", SaveValue::Bool(true))],
+        )
+        .unwrap();
+        assert_eq!(&unlocked[0x7d..0x7f], &[0xff, 0xff]);
+        assert_eq!(unlocked[0x7f] >> 4, 0xf);
+        assert_checksums(&unlocked);
+        assert_eq!(
+            parsed(
+                &SaveDetectionInput {
+                    bytes: unlocked,
+                    ..partial
+                },
+                "general.unlocked_tt"
+            ),
+            SaveValue::Bool(true)
+        );
     }
 
     #[test]

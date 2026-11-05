@@ -40,20 +40,21 @@ fn gp_checksum(bytes: &[u8]) -> u16 {
     let sum = bytes[0x180..0x185]
         .iter()
         .enumerate()
-        .fold(0u16, |sum, (index, byte)| {
-            sum.wrapping_add((u16::from(*byte) + 1) * (index as u16 + 1) + index as u16)
+        .fold(0u32, |sum, (index, byte)| {
+            sum.wrapping_add((u32::from(*byte) + 1) * (index as u32 + 1) + index as u32)
         });
-    (sum << 8) | (0x5a + (sum & 0xff))
+    finish_checksum(sum)
 }
 
 fn word(bytes: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes([bytes[offset], bytes[offset + 1], bytes[offset + 2], 0])
 }
 
-// The 16-bit checksums store the low sum byte in the high byte and `0x5a` plus that byte below.
+// The 16-bit checksums store the low sum byte in the high byte and `0x5a` plus that byte, modulo
+// 256, below. The game keeps the second byte separate, so the addition never carries upward.
 fn finish_checksum(sum: u32) -> u16 {
     let low = sum & 0xff;
-    ((low << 8) | (0x5a + low)) as u16
+    ((low << 8) | ((0x5a + low) & 0xff)) as u16
 }
 
 fn time_trial_checksum(bytes: &[u8], base: usize) -> u8 {
@@ -335,13 +336,18 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
 mod tests {
     use super::*;
 
-    // Ports of the upstream checksum loops, written without the module's helper functions.
+    // Ports of the upstream checksum loops, written without the module's helper functions. The game
+    // stores `(low + 90) % 256` as the second byte, so the addition must not carry into the first.
+    fn finish_literal(checksum: u64) -> u16 {
+        let low = (checksum & 0xff) as u16;
+        (low << 8) | ((0x5a + low) % 0x100)
+    }
     fn upstream_gp(bytes: &[u8]) -> u16 {
         let mut checksum = 0u64;
         for (iteration, byte) in bytes[0x180..0x185].iter().enumerate() {
             checksum += (u64::from(*byte) + 1) * (iteration as u64 + 1) + iteration as u64;
         }
-        (((checksum << 8) | (0x5a + (checksum & 0xff))) & 0xffff) as u16
+        finish_literal(checksum)
     }
     fn upstream_time_trials(bytes: &[u8], course: usize) -> u8 {
         let mut checksum = 0u64;
@@ -357,7 +363,7 @@ mod tests {
             checksum += (u64::from(bytes[start + iteration]) + 1) * (iteration as u64 / 0x11 + 1)
                 + iteration as u64 % 0x11;
         }
-        (((checksum << 8) | (0x5a + (checksum & 0xff))) & 0xffff) as u16
+        finish_literal(checksum)
     }
     fn repair(bytes: &mut [u8]) {
         let gp = upstream_gp(bytes);
@@ -471,6 +477,72 @@ mod tests {
         let mut bad = input();
         bad.bytes[0x181] ^= 1;
         assert!(handler.apply(&bad, &identity, &[], false).is_err());
+    }
+
+    // Expected bytes below were derived from the game's checksum routines (mk64 decomp src/save.c,
+    // func_800B578C and func_800B5888), where the second byte is `(low + 90) % 256`.
+    #[test]
+    fn best_records_checksum_wraps_the_second_byte_like_the_game() {
+        let handler = schemas().remove(0);
+        let identity = handler.definitions().remove(0).identity;
+        let mut original = input();
+        // Every record is `c0 27 09` (uncleared) except Luigi Raceway's best 3-lap, `13 2c 00`.
+        for chunk in original.bytes[0x188..0x1b8].chunks_exact_mut(3) {
+            chunk.copy_from_slice(&[0xc0, 0x27, 0x09]);
+        }
+        original.bytes[0x188..0x18b].copy_from_slice(&[0x13, 0x2c, 0x00]);
+        original.bytes[0x1b8..0x1bb].fill(0);
+        // The byte sum ends in 0xa6, and 0xa6 + 0x5a is 0x100, which the game stores as `00`.
+        original.bytes[0x1be..0x1c0].copy_from_slice(&[0xa6, 0x00]);
+        assert_eq!(best_records_checksum(&original.bytes, 0x188), 0xa600);
+        assert!(
+            handler
+                .apply(&original, &identity, &[], false)
+                .unwrap()
+                .bytes
+                .is_none()
+        );
+        let bytes = handler
+            .apply(
+                &original,
+                &identity,
+                &[edit("options.sound_mode", SaveValue::Enum("mono".into()))],
+                false,
+            )
+            .unwrap()
+            .bytes
+            .unwrap();
+        assert_eq!(&bytes[0x1be..0x1c0], &[0xa6, 0x00]);
+    }
+
+    #[test]
+    fn gp_checksum_wraps_the_second_byte_like_the_game() {
+        let handler = schemas().remove(0);
+        let identity = handler.definitions().remove(0).identity;
+        let mut bytes = vec![0; 2048];
+        bytes[0x180..0x185].copy_from_slice(&[0x00, 0x00, 0x3f, 0x00, 0x00]);
+        // The byte sum is 0xd6, and 0xd6 + 0x5a is 0x130, which the game stores as `30`.
+        assert_eq!(gp_checksum(&bytes), 0xd630);
+        // Headphone sound mode sums to 0xdb, stored as `db 35`.
+        let mut source = input();
+        source.bytes[0x180..0x185].copy_from_slice(&[0x00, 0x00, 0x3f, 0x00, 0x01]);
+        source.bytes[0x186..0x188].copy_from_slice(&[0xdb, 0x35]);
+        assert_eq!(
+            parsed(&source, "options.sound_mode"),
+            SaveValue::Enum("headphone".into())
+        );
+        let stereo = handler
+            .apply(
+                &source,
+                &identity,
+                &[edit("options.sound_mode", SaveValue::Enum("stereo".into()))],
+                false,
+            )
+            .unwrap()
+            .bytes
+            .unwrap();
+        assert_eq!(&stereo[0x180..0x185], &[0x00, 0x00, 0x3f, 0x00, 0x00]);
+        assert_eq!(&stereo[0x186..0x188], &[0xd6, 0x30]);
     }
 
     #[test]

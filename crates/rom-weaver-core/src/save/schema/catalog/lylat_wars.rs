@@ -232,7 +232,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     };
     let game = GameDefinition {
         fields,
-        description: "Edits mission completion and medals in normalized 16 Kbit EEPROM. Requires a game-made template.".into(),
+        description: "Edits mission completion and medals, sound and language options, and ranking records in normalized 16 Kbit EEPROM. Requires a game-made template.".into(),
         runtime: runtime::Runtime { require_selection: true, recognition: Some(runtime::Recognition { checks: vec![check.clone()], reasons: vec![SaveRecognitionReason::ChecksumValid], confidence: SaveRecognitionConfidence::High, incomplete_confidence: None, selected_reason: true, empty_top_level_reasons: false }), checks: vec![check], after_edit: vec![Store { when: None, destination: Scalar { offset: 0xfe, storage: Storage::U16Be, mask: None }, value: ReadValue::new(|bytes| Ok(i64::from(checksum(bytes)))) }], save_format: Some("n64_eeprom_16k".into()), save_format_name: Some("Nintendo 64 EEPROM 16 Kbit".into()), ..Default::default() },
         ..GameDefinition::new("lylat-wars".into(), "Lylat Wars / Star Fox 64".into(), "nintendo-64".into(), 2048)
     };

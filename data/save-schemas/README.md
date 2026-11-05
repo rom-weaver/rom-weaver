@@ -172,7 +172,7 @@ The additional handheld, Nintendo 64, and SNES profiles also require explicit se
 | Diddy Kong Racing | Adventure Two mode, Wizpig amulet pieces, balloons, name letters, lobby, world race, boss, and T.T. challenge progress, keys, trophies, event and Taj flags in three occupied slots (progress edits recalculate balloon, amulet, and boss counters); unlock flags and options with their nibble checksum; and best time and lap frames with name letters for 47 vehicle records |
 | Donkey Kong Land | Progression, current level, and playtime in three slots |
 | F-Zero: Maximum Velocity | Championship clear counts and three unlocks in each slot |
-| F-Zero X | Four cup progression values, the Death Race time, five option flags, 600 cup unlock flags, and best lap, place times, and place names in 24 Time Attack records (machine, color, and speed-ratio floats are not editable) |
+| F-Zero X | Four cup progression values, the Death Race time, five option flags, 600 cup unlock flags, and best lap, place times, and place names in 24 Time Attack records, each with its own checksum (a place name is editable only once that place has a time in the source save; machine, color, and speed-ratio floats are not editable) |
 | Final Fantasy VI | Money and battle speed in each slot; location code is read-only |
 | Lylat Wars / Star Fox 64 | Played, completion, and medal flags for 15 planets, sound and language options, and the ten ranking records (name, Arwings, completed missions, and per-mission planet, hits, allies, and medal) |
 | Mario Kart 64 | Mario GP trophies for four cups in four classes, sound mode, and five placings plus the best lap (character and time) for 16 Time Trial courses, with best-record mirrors and all checksums |
