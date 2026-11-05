@@ -186,10 +186,11 @@ jobs:
           ref: ${{ steps.release-pr.outputs.branch }}
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
+      # The commits below stay local until "Push release pull request commits". Every push to the
+      # release branch starts a full CI run, so pushing each commit as it is made started runs that
+      # the next push cancelled; the replacing run then waited for the cancelled one to finish.
       - name: Sync generated release metadata
         if: steps.release-pr.outputs.found == 'true'
-        env:
-          RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
         run: |
           set -euo pipefail
           node scripts/sync-version.mjs
@@ -200,7 +201,6 @@ jobs:
             exit 0
           fi
           git commit -m "chore(release): sync generated metadata"
-          git push origin "HEAD:$RELEASE_PR_BRANCH"
 
       # Lays the section out as highlights plus a collapsed full list, folds
       # prerelease sections into a stable one, and mirrors the result into the
@@ -211,7 +211,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           RELEASE_PR: ${{ steps.release-pr.outputs.number }}
-          RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
           RELEASE_HIGHLIGHTS: ${{ inputs.highlights }}
         run: node scripts/aggregate-release-changelog.mjs
 
@@ -226,6 +225,10 @@ jobs:
           cargo-cache: "false"
           cache-save: "false"
           webapp-deps: "true"
+          # Without the packs the production build below rebuilds all of them from
+          # the Libretro and OpenGood archives (about 2.5 minutes). main's CI keeps
+          # one entry per pack revision, and the restored packs are byte-identical.
+          identify-data-cache: "true"
 
       - name: Resolve tested WASM artifact for screenshots
         if: steps.release-pr.outputs.found == 'true'
@@ -337,8 +340,6 @@ jobs:
 
       - name: Commit docs screenshots
         if: steps.release-pr.outputs.found == 'true'
-        env:
-          RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
         run: |
           set -euo pipefail
           git config user.name github-actions[bot]
@@ -354,12 +355,27 @@ jobs:
             exit 0
           fi
           git commit -m "docs(screenshots): refresh release captures"
+
+      # One push for every commit this job made. It also runs after a failed capture, so the
+      # metadata and changelog commits still reach the pull request as they did when each was
+      # pushed on its own. Nothing is pushed when the job made no commit.
+      - name: Push release pull request commits
+        if: ${{ !cancelled() && steps.release-pr.outputs.found == 'true' }}
+        env:
+          RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin "refs/heads/$RELEASE_PR_BRANCH"
+          if [ -z "$(git rev-list FETCH_HEAD..HEAD)" ]; then
+            echo "No new release pull request commits to push."
+            exit 0
+          fi
           git push origin "HEAD:$RELEASE_PR_BRANCH"
 
-  # Gate draft publication on semver checks so a failure leaves a deletable draft.
-  # `!cancelled()` prevents a skipped verify-main-ci dependency from skipping this fan-out.
-  semver-check:
-    name: Check for breaking API changes
+  # The crates to check, one matrix leg each. Listing them here keeps a newly published crate
+  # from slipping past the semver gate.
+  semver-plan:
+    name: Plan breaking API checks
     needs: release
     if: >-
       !cancelled() &&
@@ -368,8 +384,60 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    outputs:
+      crates: ${{ steps.crates.outputs.crates }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.sha }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: List published workspace crates
+        id: crates
+        shell: bash
+        run: |
+          set -euo pipefail
+          crates=$(
+            cargo metadata --no-deps --format-version 1 |
+              jq --compact-output --raw-output '
+                .workspace_members as $members
+                | [
+                    .packages[]
+                    | select(.id as $id | $members | index($id))
+                    | select(.publish != [])
+                    | .name
+                  ]
+              '
+          )
+          test "$crates" != '[]'
+          echo "crates=$crates" >> "$GITHUB_OUTPUT"
+
+  # Gate draft publication on semver checks so a failure leaves a deletable draft.
+  # `!cancelled()` prevents a skipped verify-main-ci dependency from skipping this fan-out.
+  # Each crate builds the rustdoc of its current and published versions, which took 13 minutes
+  # for all five in one job; separate runners make the slowest crate the whole cost.
+  semver-check:
+    name: Check for breaking API changes (${{ matrix.crate }})
+    needs: [release, semver-plan]
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.semver-plan.result == 'success' &&
+      needs.release.outputs.release_created == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
       # Cache reservation requires Actions write access.
       actions: write
+    strategy:
+      fail-fast: false
+      # The org runs at most 20 jobs at once, and a release already peaks near
+      # 16 with main's CI on the merge commit alongside. Two legs at a time keep
+      # the per-crate split to one extra runner.
+      max-parallel: 2
+      matrix:
+        crate: ${{ fromJSON(needs.semver-plan.outputs.crates) }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -404,43 +472,31 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/cargo-semver-checks
-          key: semver-checks-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: semver-checks-${{ runner.os }}-${{ matrix.crate }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            semver-checks-${{ runner.os }}-
+            semver-checks-${{ runner.os }}-${{ matrix.crate }}-
 
       - name: Check for accidental breaking API changes
         shell: bash
-        # Run per crate so unpublished crates have no baseline to fail against.
-        # cargo-semver-checks compares each crate with its latest crates.io release.
+        # cargo-semver-checks compares the crate with its latest crates.io release. A crate with no
+        # published release has no baseline to fail against.
         run: |
-          mapfile -t names < <(
-            cargo metadata --no-deps --format-version 1 |
-              jq --raw-output '
-                .workspace_members as $members
-                | .packages[]
-                | select(.id as $id | $members | index($id))
-                | select(.publish != [])
-                | .name
-              '
-          )
-
-          for name in "${names[@]}"; do
-            lookup_failed=0
-            status=$(curl --silent --retry 3 --retry-all-errors --fail \
-              --output /dev/null --write-out '%{http_code}' \
-              --user-agent "$CRATES_IO_USER_AGENT" \
-              "https://crates.io/api/v1/crates/$name") || lookup_failed=1
-            if [[ "$status" = 404 ]]; then
-              echo "::notice::$name has no published baseline yet - skipping semver check"
-              continue
-            fi
-            if [[ "$status" != 200 || "$lookup_failed" != 0 ]]; then
-              echo "::error::$name baseline lookup failed (HTTP $status)"
-              exit 1
-            fi
-            cargo semver-checks check-release --package "$name"
-          done
+          lookup_failed=0
+          status=$(curl --silent --retry 3 --retry-all-errors --fail \
+            --output /dev/null --write-out '%{http_code}' \
+            --user-agent "$CRATES_IO_USER_AGENT" \
+            "https://crates.io/api/v1/crates/$CRATE") || lookup_failed=1
+          if [[ "$status" = 404 ]]; then
+            echo "::notice::$CRATE has no published baseline yet - skipping semver check"
+            exit 0
+          fi
+          if [[ "$status" != 200 || "$lookup_failed" != 0 ]]; then
+            echo "::error::$CRATE baseline lookup failed (HTTP $status)"
+            exit 1
+          fi
+          cargo semver-checks check-release --package "$CRATE"
         env:
+          CRATE: ${{ matrix.crate }}
           CRATES_IO_USER_AGENT: rom-weaver-release-workflow (https://github.com/${{ github.repository }})
 
   cargo-publish-dry-run:
@@ -521,6 +577,8 @@ jobs:
           cargo-cache: "false"
           cache-save: "false"
           webapp-deps: "true"
+          # Same reason as the screenshot build: restore the packs instead of rebuilding them.
+          identify-data-cache: "true"
 
       - name: Download tested WASM artifact
         if: steps.ci.outputs.available == 'true'

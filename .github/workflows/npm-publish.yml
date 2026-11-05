@@ -91,9 +91,12 @@ jobs:
       - id: platforms
         run: node scripts/ci/cli-platform-matrix.mjs
 
+  # Does not wait for `identify-data`: each leg builds its identify tree from the cached packs
+  # (a cache miss rebuilds them in the leg), so the slowest build starts a minute sooner. `platform` below still waits for
+  # `identify-data`, so nothing is published unless the identify archive was attached and attested.
   platform-build:
     name: Build ${{ matrix.package }}
-    needs: [plan, identify-data]
+    needs: plan
     permissions:
       contents: read
     strategy:
@@ -106,15 +109,10 @@ jobs:
         with:
           ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
-      - name: Download identify data
-        uses: actions/download-artifact@v8
-        with:
-          name: identify-release-data
-          path: target
-
       # Build with CI's action and per-platform cache so releases reuse tested outputs.
       - uses: ./.github/actions/build-cli-platform
         with:
+          identify-release-tree: build
           package: ${{ matrix.package }}
           target: ${{ matrix.target }}
           build: ${{ matrix.build }}
@@ -281,8 +279,8 @@ jobs:
   # same publish helper in dry-run mode on their target operating systems.
   platform:
     name: Publish ${{ matrix.package }}
-    needs: [plan, platform-dry-run]
-    if: ${{ needs.platform-dry-run.result == 'success' }}
+    needs: [plan, identify-data, platform-dry-run]
+    if: ${{ needs.identify-data.result == 'success' && needs.platform-dry-run.result == 'success' }}
     permissions:
       contents: write
       id-token: write

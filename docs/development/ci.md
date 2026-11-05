@@ -88,6 +88,8 @@ Title text enters commitlint through stdin from an environment variable, never t
 
 The release workflow requires completed, successful push or manual `CI` on the exact main commit. It then creates or refreshes the release pull request. The screenshots reuse that run's `wasm-prod` artifact when changed-path classification produced one; otherwise the job rebuilds WASM from source (~6.5 min). Merging the release pull request is what sets `release_created` and unlocks the publish jobs.
 
+The release job restores the identify packs from main's cache instead of rebuilding them (about 2.5 minutes), and keeps every commit it makes (metadata sync, changelog, screenshots) local until one final push: each push to the release branch starts a full CI run, and a run started by an earlier push had to be cancelled, with the replacing run waiting for the cancellation to finish. The screenshots are built from the release pull request's own tree, not main's `webapp-dist`, because the masthead in `apply-page-*` shows the release version. `parity.yml` cancels the run of the commit a push replaces, as `codeql.yml` already did.
+
 Release screenshot capture waits for loaded tutorial state and visible capture targets instead of instructional text. Each capture logs its duration. On failure, the log includes the route, target, page text, and browser errors; the workflow uploads a failure screenshot and server log as `screenshot-failure-diagnostics` for seven days.
 
 The dispatch takes a `highlights` input: the release notes a person wrote, one per line, drafted by the `release` skill in `.agents/skills/release/SKILL.md` (`/release` in Claude Code, `$release` in Codex) from the commits since the last tag. `scripts/aggregate-release-changelog.mjs` then shapes the version's `CHANGELOG.md` section:
@@ -430,7 +432,7 @@ Non-cross Linux x86-64 legs also run `scripts/install-jwasm.sh` so the LZMA SDK'
 
 The Windows legs also relocate `CARGO_HOME`/`RUSTUP_HOME` to `D:` and `TMP`/`TEMP` to `RUNNER_TEMP` before the toolchain and cache steps, for the same IOPS reason `rust-windows` does it. The `D:` half is skipped when the runner has no such drive; `windows-11-arm`'s disk layout is not documented.
 
-CI and `npm-publish.yml` both use it, sharing one cache key per platform, so a release restores what CI already built rather than compiling a second, differently-configured copy. `cache-save` and `registry-url` are the only things the two callers set differently.
+CI and `npm-publish.yml` both use it, sharing one cache key per platform, so a release restores what CI already built rather than compiling a second, differently-configured copy. `cache-save`, `registry-url`, and `identify-data-source` are the only things the two callers set differently: CI reads the identify packs from this run's artifact, the release from the cache.
 
 ### `.github/actions/docker-build-arch` and `docker-manifest`
 
@@ -514,7 +516,7 @@ The prerelease test reads the **version**, never the package spec - platform pac
 
 | Job | Produces |
 | --- | --- |
-| `semver-check` | nothing - gates the publish on no accidental breaking API change |
+| `semver-plan`, `semver-check` | nothing - `semver-plan` lists the published crates and `semver-check` runs one leg per crate, gating the publish on no accidental breaking API change |
 | `cargo-publish-dry-run` | nothing - gates npm and draft publication on crates.io accepting Cargo metadata |
 | `static-webapp` | `rom-weaver-webapp.tar.gz` on the draft release + signed build provenance |
 | `publish-npm` | 9 platform packages → launcher → unscoped alias, in that order |
@@ -581,7 +583,7 @@ A draft release has no tag until it is published, so every job builds from `need
 
 `cargo-semver-checks` runs as the `semver-check` job in `release.yml` and gates `publish-release`. A compatibility failure leaves the draft unpublished, while the version can still be corrected. The check needs no registry credentials and runs alongside the publishing jobs.
 
-It runs per-crate rather than `--workspace` so a crate with no published baseline (a first release, or a newly added crate) is skipped instead of failing the whole job.
+It runs per-crate rather than `--workspace` so a crate with no published baseline (a first release, or a newly added crate) is skipped instead of failing the whole job. Each crate is its own matrix leg, at most two at a time (`max-parallel: 2`) because the org runs at most 20 jobs at once and a release already peaks near 16. Two legs bring the job from the sum of all five crates (about 13 minutes) to roughly half, for one extra runner; `semver-plan` reads the crate list from `cargo metadata`, so a newly published crate is checked without editing the workflow.
 
 ### Package managers publish last
 

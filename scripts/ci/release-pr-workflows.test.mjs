@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { join } from "node:path";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 
+import { makeTempDir } from "../test-temp-dirs.mjs";
 import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
 
 const require = createRequire(import.meta.url);
@@ -74,4 +77,70 @@ test("the perf job times the parity CLI against the latest release", () => {
   const compare = jobs.perf.steps.find((s) => s.run?.includes("scripts/bench-compare.py"));
   assert.ok(compare.run.includes("--threshold 1.10"));
   assert.ok(compare.run.includes("set -euo pipefail"), "tee keeps the comparison's exit status");
+});
+
+test("pushes to a release branch cancel the runs of the commit they replace", () => {
+  const codeql = workflow("codeql.yml").concurrency;
+  assert.equal(codeql["cancel-in-progress"], true);
+  const parity = workflow("parity.yml").concurrency;
+  // Pull request runs share one group per branch; every other event gets a group of its own run.
+  assert.equal(parity.group, "parity-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}");
+  assert.equal(parity["cancel-in-progress"], "${{ github.event_name == 'pull_request' }}");
+});
+
+test("the Release job pushes the release branch once, after every commit it makes", () => {
+  const release = workflow("release.yml").jobs.release;
+  const steps = release.steps;
+  const pushes = steps.filter((step) => /git push/u.test(step.run ?? ""));
+  assert.equal(pushes.length, 1, "one git push step in the release job");
+  assert.equal(steps.at(-1), pushes[0], "the push is the last step");
+  assert.match(pushes[0].if, /!cancelled\(\)/u);
+  for (const step of steps) {
+    if (step === pushes[0]) continue;
+    assert.equal(step.env?.RELEASE_PR_BRANCH, undefined, `${step.name} must not be able to push`);
+  }
+});
+
+test("the release push skips a run that made no commit, even when the branch moved", () => {
+  const push = workflow("release.yml").jobs.release.steps.at(-1).run;
+  const directory = makeTempDir("rom-weaver-release-push-");
+  // Git hooks export GIT_DIR, GIT_INDEX_FILE, and friends; inheriting them would point every
+  // command below at the repository running the hook instead of the scratch repositories.
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+  );
+  const git = (cwd, ...args) => {
+    const result = spawnSync("git", args, { cwd, encoding: "utf8", env });
+    assert.equal(result.status, 0, `git ${args.join(" ")}: ${result.stderr}`);
+    return result.stdout.trim();
+  };
+  const commit = (cwd, message) =>
+    git(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-qm", message);
+  const run = (cwd) =>
+    spawnSync("bash", ["-eu", "-c", push], {
+      cwd,
+      encoding: "utf8",
+      env: { ...env, RELEASE_PR_BRANCH: "release" },
+    });
+  const origin = join(directory, "origin.git");
+  git(directory, "init", "-q", "--bare", origin);
+  const job = join(directory, "job");
+  const other = join(directory, "other");
+  git(directory, "clone", "-q", origin, job);
+  commit(job, "base");
+  git(job, "push", "-q", "origin", "HEAD:release");
+  git(directory, "clone", "-q", "--branch", "release", origin, other);
+  commit(other, "outside push");
+  git(other, "push", "-q", "origin", "HEAD:release");
+  const moved = git(origin, "rev-parse", "release");
+
+  const idle = run(job);
+  assert.equal(idle.status, 0, idle.stderr);
+  assert.equal(git(origin, "rev-parse", "release"), moved, "nothing was pushed");
+
+  git(job, "reset", "-q", "--hard", moved);
+  commit(job, "changelog");
+  const busy = run(job);
+  assert.equal(busy.status, 0, busy.stderr);
+  assert.equal(git(origin, "rev-parse", "release"), git(job, "rev-parse", "HEAD"));
 });
