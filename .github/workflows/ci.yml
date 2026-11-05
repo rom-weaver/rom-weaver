@@ -1308,24 +1308,26 @@ jobs:
           ARTIFACTS: ${{ toJSON(needs.cli-platforms.outputs) }}
         run: |
           set -euo pipefail
+          # Empty `artifact-ids` would download every artifact in the run, so no platform is an error.
           ids=$(jq -nr --argjson platforms "$PLATFORMS" --argjson artifacts "$ARTIFACTS" '
-            [$platforms[].package | ($artifacts["artifact-" + .] // "") as $id
+            if ($platforms | length) == 0 then error("no platforms") else . end
+            | [$platforms[].package | ($artifacts["artifact-" + .] // "") as $id
               | if ($id | test("^[1-9][0-9]*$")) then $id else error("no artifact id for \(.)") end]
             | join(",")')
           echo "ids=$ids" >> "$GITHUB_OUTPUT"
-          # One artifact downloads into the path itself rather than a directory named for it.
-          echo "single=$(jq -nr --argjson platforms "$PLATFORMS" 'if ($platforms | length) == 1 then "release-cli-" + $platforms[0].package else "" end')" >> "$GITHUB_OUTPUT"
 
+      # One artifact found lands in the path itself, several in directories named for them, so the
+      # subject matches either; only artifacts downloaded by id are here.
       - name: Download the release binaries
         uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ steps.binaries.outputs.ids }}
-          path: ${{ steps.binaries.outputs.single != '' && format('release-binaries/{0}', steps.binaries.outputs.single) || 'release-binaries' }}
+          path: release-binaries
 
       - name: Attest the release binaries
         uses: ./.github/actions/attest-retry
         with:
-          subject-path: release-binaries/release-cli-*/package/bin/*
+          subject-path: release-binaries/**/package/bin/*
 
   cli-linux-arm64:
     name: CLI target runtime (aarch64-unknown-linux-musl)

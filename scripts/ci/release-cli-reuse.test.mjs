@@ -64,10 +64,14 @@ test("the release pull request run compiles the binaries it signs with no cache"
   const gated = new Set(["Cache cargo artifacts", "Set up Rust compiler cache", "Configure Rust compiler cache"]);
   for (const step of caching(action.runs.steps)) {
     if (gated.has(step.name)) assert.match(step.if, /^inputs\.build != 'cross' && inputs\.cache-restore == 'true'$|^inputs\.cache-restore == 'true'$/u, step.name);
-    else if (step.uses === "./.github/actions/identify-data") assert.equal(step.if, "inputs.identify-data-source == 'cache'", "identify data is cached only in that mode");
     else if (String(step.uses).startsWith("actions/setup-node@")) assert.equal(step.with["package-manager-cache"], false, step.name);
     else assert.fail(`${step.name ?? step.uses} may use a cache without cache-restore`);
   }
+  // A local action can cache with no telltale in the step itself: only identify data is allowed,
+  // and only in the mode CI does not use.
+  const local = action.runs.steps.filter((step) => String(step.uses ?? "").startsWith("./"));
+  assert.deepEqual(local.map((step) => step.uses), ["./.github/actions/download-identify-data", "./.github/actions/identify-data"]);
+  assert.equal(local[1].if, "inputs.identify-data-source == 'cache'", "identify data is cached only in that mode");
   assert.deepEqual(caching(action.runs.steps).filter((step) => gated.has(step.name)).map((step) => step.name), [...gated]);
   // CI takes identify data from this run's own artifact, which the binary does not embed.
   assert.equal(compile.with["identify-data-source"], "artifact");
@@ -97,7 +101,10 @@ test("the platform builds hold no OIDC token; only the attest job can sign, and 
   assert.equal(download.with.name, undefined);
   assert.equal(download.with["artifact-ids"], "${{ steps.binaries.outputs.ids }}");
   const sign = attest.steps.find((step) => step.uses === "./.github/actions/attest-retry");
-  assert.equal(sign.with["subject-path"], "release-binaries/release-cli-*/package/bin/*");
+  assert.equal(sign.with["subject-path"], "release-binaries/**/package/bin/*", "one artifact found extracts into the path itself");
+  const select = attest.steps.find((step) => step.id === "binaries");
+  assert.deepEqual(select.env, { PLATFORMS: "${{ needs.changes.outputs.cli_platforms }}", ARTIFACTS: "${{ toJSON(needs.cli-platforms.outputs) }}" });
+  assert.equal(download.with.path, "release-binaries");
 });
 
 test("cli-platforms reports each leg's upload id under its own output, for every platform", () => {
@@ -132,9 +139,10 @@ function selectBinaries(platforms, artifacts) {
 test("the attest job signs exactly the uploads every leg reported, or nothing", () => {
   assert.deepEqual(selectBinaries(["linux-x64-gnu", "darwin-x64"], { "artifact-linux-x64-gnu": "11", "artifact-darwin-x64": "22", "artifact-win32-x64-msvc": "" }), {
     status: 0,
-    outputs: { ids: "11,22", single: "" },
+    outputs: { ids: "11,22" },
   });
-  assert.deepEqual(selectBinaries(["linux-x64-gnu"], { "artifact-linux-x64-gnu": "11" }).outputs, { ids: "11", single: "release-cli-linux-x64-gnu" });
+  assert.deepEqual(selectBinaries(["linux-x64-gnu"], { "artifact-linux-x64-gnu": "11" }).outputs, { ids: "11" });
+  assert.notEqual(selectBinaries([], { "artifact-linux-x64-gnu": "11" }).status, 0, "empty ids would download every artifact in the run");
   for (const artifacts of [{ "artifact-linux-x64-gnu": "11" }, { "artifact-linux-x64-gnu": "11", "artifact-darwin-x64": "1,2" }, { "artifact-linux-x64-gnu": "11", "artifact-darwin-x64": "0" }])
     assert.notEqual(selectBinaries(["linux-x64-gnu", "darwin-x64"], artifacts).status, 0, JSON.stringify(artifacts));
 });
