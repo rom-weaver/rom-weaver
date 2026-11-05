@@ -211,22 +211,16 @@
   .rw-app .log-dlg .settings-body {
     padding-block-end: calc(48px + 2 * var(--sp-l));
   }
-  /**
-   * One row of controls: the Now/Last toggle, the level (or refresh on
-   * storage) taking the free width, then copy/download. The filter has the
-   * row below to itself.
-   */
+  /* Source tabs need their own row to keep translated labels and the level picker readable. */
   .rw-app .log-dlg .log-controls {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: var(--sp-s);
   }
   .rw-app .log-dlg .logview {
     flex: none;
+    flex-basis: 100%;
     min-height: 44px;
-  }
-  .rw-app .log-dlg .logview .seg-btn {
-    height: 38px;
   }
   .rw-app .log-dlg .loglevel {
     flex: 1 1 auto;

@@ -1345,7 +1345,6 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
           {localizer.message("ui.create.needsModified")}
         </NeedsInput>
       ),
-      headerExtra: props.sourceModeControls,
     },
     originalStep: renderSourceStep({
       checksumProgress: getSourceChecksumProgress("original"),

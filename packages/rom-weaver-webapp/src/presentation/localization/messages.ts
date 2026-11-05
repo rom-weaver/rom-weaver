@@ -735,7 +735,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.create.tutorial.cheats.body": msg({
     id: "ui.create.tutorial.cheats.body",
     message:
-      "Choose Patches & cheats in step 0x03 to build from ordered changes. Modified ROM is the default; switching modes keeps your inputs.",
+      "Choose Patches & cheats above the file picker to build from ordered changes. Modified ROM is the default; switching modes keeps your inputs.",
   }),
   "ui.create.tutorial.cheats.tryIt": msg({
     id: "ui.create.tutorial.cheats.tryIt",

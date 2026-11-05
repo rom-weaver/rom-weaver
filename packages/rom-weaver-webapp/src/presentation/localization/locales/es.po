@@ -1286,7 +1286,7 @@ msgstr "Elige una ROM para parchear."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.body"
-msgstr "Elige Parches y trucos en el paso 0x03 para combinar cambios ordenados. ROM modificada es el modo predeterminado; al cambiar de modo se conservan tus archivos."
+msgstr "Elige Parches y trucos encima del selector de archivos para combinar cambios ordenados. ROM modificada es el modo predeterminado; al cambiar de modo se conservan tus archivos."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

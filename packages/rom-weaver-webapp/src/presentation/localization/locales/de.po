@@ -1286,7 +1286,7 @@ msgstr "Ein ROM zum Patchen auswählen."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.body"
-msgstr "Wähle bei Schritt 0x03 Patches & Cheats, um geordnete Änderungen zu kombinieren. Geänderte ROM ist die Voreinstellung; beim Wechsel bleiben deine Eingaben erhalten."
+msgstr "Wähle über der Dateiauswahl Patches & Cheats, um geordnete Änderungen zu kombinieren. Geänderte ROM ist die Voreinstellung; beim Wechsel bleiben deine Eingaben erhalten."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
