@@ -232,6 +232,7 @@
     width: 100%;
   }
   .rw-app .log-dlg .log-refresh {
+    flex-basis: 44px;
     inline-size: 44px;
     height: 44px;
     margin-inline-start: 0;
