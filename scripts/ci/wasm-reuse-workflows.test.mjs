@@ -1,0 +1,194 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+import process from "node:process";
+import test from "node:test";
+import { runInNewContext } from "node:vm";
+
+import { makeTempDir } from "../test-temp-dirs.mjs";
+import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
+
+const require = createRequire(import.meta.url);
+const { load } = require("js-yaml");
+const read = (name) => readFileSync(new URL(`../../.github/workflows/${name}`, import.meta.url), "utf8");
+const ci = load(read("ci.yml"));
+const release = load(read("release.yml"));
+const step = (job, name) => {
+  const found = job.steps.find((candidate) => candidate.name === name);
+  assert.ok(found, `step "${name}" exists`);
+  return found;
+};
+
+// GitHub expressions in these conditions are also valid JavaScript.
+const evaluate = (expression, { event, ref = "", headRef = "", fork = false, base = "main", wasm = "success" }) =>
+  runInNewContext(expression, {
+    github: {
+      event_name: event,
+      ref,
+      head_ref: headRef,
+      repository: "octo/rom-weaver",
+      event: { pull_request: { head: { repo: { full_name: fork ? "attacker/rom-weaver" : "octo/rom-weaver" } }, base: { ref: base } } },
+    },
+    needs: { wasm: { result: wasm } },
+    startsWith: (value, prefix) => value.startsWith(prefix),
+  });
+
+const releaseBranch = `${RELEASE_PR_BRANCH_PREFIX}cli`;
+
+test("ci.yml signs the WASM manifest only for pushes to main and this repository's release pull request", () => {
+  const { if: condition } = ci.jobs["wasm-attest"];
+  const signs = (overrides) => evaluate(condition, overrides);
+  assert.equal(signs({ event: "push", ref: "refs/heads/main" }), true);
+  assert.equal(signs({ event: "pull_request", headRef: releaseBranch }), true);
+  for (const [name, overrides] of Object.entries({
+    "a push to another branch": { event: "push", ref: "refs/heads/feature" },
+    "a tag push": { event: "push", ref: "refs/tags/v1.0.0" },
+    "a feature pull request": { event: "pull_request", headRef: "feature/wasm" },
+    "a pull request into another base": { event: "pull_request", headRef: releaseBranch, base: "attacker/base" },
+    "a fork's release-named branch": { event: "pull_request", headRef: releaseBranch, fork: true },
+    "a manual run": { event: "workflow_dispatch", ref: "refs/heads/main" },
+    "the nightly": { event: "schedule", ref: "refs/heads/main" },
+    "a build that did not succeed": { event: "push", ref: "refs/heads/main", wasm: "failure" },
+    "a skipped build": { event: "push", ref: "refs/heads/main", wasm: "skipped" },
+  }))
+    assert.equal(signs(overrides), false, name);
+});
+
+test("the signing job is separate: only it can mint tokens or attest, and it never builds", () => {
+  const writes = (job) => Object.entries(job.permissions ?? {}).filter(([, level]) => level === "write").map(([scope]) => scope);
+  assert.deepEqual(writes(ci.jobs["wasm-attest"]).sort(), ["artifact-metadata", "attestations", "id-token"]);
+  assert.equal(ci.jobs["wasm-attest"].permissions.contents, "read");
+  assert.equal(ci.jobs["wasm-attest"].needs, "wasm");
+  assert.equal(ci.jobs.wasm.permissions, undefined, "the build job keeps the read-only workflow token");
+  assert.deepEqual(ci.permissions, { contents: "read" });
+  for (const { run = "", uses = "" } of ci.jobs["wasm-attest"].steps) {
+    assert.doesNotMatch(run, /mise run|cargo |npm /u);
+    assert.doesNotMatch(uses, /setup-build-env|cache/u);
+  }
+});
+
+test("the signing job attests the manifest of the downloaded artifact, then publishes it", () => {
+  const job = ci.jobs["wasm-attest"];
+  const download = step(job, "Download WASM artifact");
+  assert.equal(download.with.name, "wasm-prod");
+  const manifest = step(job, "Write the checksum manifest");
+  assert.match(manifest.run, /node scripts\/ci\/wasm-manifest\.mjs "\$RUNNER_TEMP\/wasm-prod" "\$RUNNER_TEMP\/wasm-manifest\/wasm-prod\.sha256"/u);
+  const sign = step(job, "Sign build provenance");
+  assert.equal(sign.uses, "./.github/actions/attest-retry");
+  assert.equal(sign.with["subject-path"], "${{ runner.temp }}/wasm-manifest/wasm-prod.sha256");
+  const upload = step(job, "Upload the checksum manifest");
+  assert.equal(upload.with.name, "wasm-prod-manifest");
+  assert.equal(upload.with.path, sign.with["subject-path"]);
+  const names = job.steps.map((candidate) => candidate.name);
+  assert.ok(names.indexOf(sign.name) < names.indexOf(upload.name), "the artifact exists only once signed");
+});
+
+test("the signing job is not a gate input: a missing signature only costs the release a rebuild", () => {
+  assert.ok(!ci.jobs.gate.needs.includes("wasm-attest"));
+});
+
+const releaseJob = release.jobs.release;
+const staticWebapp = release.jobs["static-webapp"];
+
+test("release.yml never downloads wasm-prod directly; every reuse goes through the verifier", () => {
+  assert.doesNotMatch(read("release.yml"), /gh run download|download-artifact/u);
+  assert.doesNotMatch(read("release.yml"), /--name wasm-prod/u);
+  const fetches = [releaseJob, staticWebapp].flatMap((job) => job.steps.filter((candidate) => candidate.run === "node scripts/ci/fetch-verified-wasm.mjs"));
+  assert.equal(fetches.length, 2);
+});
+
+test("the jobs that reuse the artifact can read attestations, runs, and commits", () => {
+  for (const job of [releaseJob, staticWebapp]) {
+    assert.equal(job.permissions.actions, "read");
+    assert.ok(["read", "write"].includes(job.permissions.attestations));
+    assert.ok(["read", "write"].includes(job.permissions.contents));
+  }
+  assert.equal(releaseJob.permissions.attestations, "read");
+});
+
+test("the screenshot job verifies main's push run against the dispatch commit", () => {
+  const resolve = step(releaseJob, "Resolve tested WASM artifact for screenshots");
+  assert.equal(resolve.env.TARGET_SHA, "${{ github.sha }}");
+  assert.equal(resolve.env.PR_NUMBER, undefined, "no pull request number: push-to-main runs only");
+  const fetch = step(releaseJob, "Verify and install tested WASM artifact for screenshots");
+  assert.equal(fetch.env.EXPECTED_SHA, "${{ github.sha }}");
+  assert.equal(fetch.env.RUN_ID, "${{ steps.screenshot-ci.outputs.run_id }}");
+  assert.equal(fetch.id, "screenshot-wasm");
+});
+
+test("the release package verifies against the released commit and the release pull request", () => {
+  const resolve = step(staticWebapp, "Resolve tested WASM artifact");
+  assert.equal(resolve.env.TARGET_SHA, "${{ needs.release.outputs.artifact_sha }}");
+  assert.equal(resolve.env.PR_NUMBER, "${{ needs.release.outputs.artifact_pr_number }}");
+  const fetch = step(staticWebapp, "Verify and install tested WASM artifact");
+  assert.equal(fetch.env.EXPECTED_SHA, "${{ needs.release.outputs.sha }}");
+  assert.equal(fetch.env.PR_NUMBER, "${{ needs.release.outputs.artifact_pr_number }}");
+  assert.equal(fetch.id, "wasm");
+});
+
+test("every source-build fallback runs unless the artifact was verified", () => {
+  const fallbacks = [
+    [releaseJob, "Set up fallback WASM build for screenshots", "steps.screenshot-wasm.outputs.verified != 'true'"],
+    [releaseJob, "Build fallback WASM for screenshots", "steps.screenshot-wasm.outputs.verified != 'true'"],
+    [staticWebapp, "Set up fallback WASM build", "steps.wasm.outputs.verified != 'true'"],
+    [staticWebapp, "Build fallback WASM artifact", "steps.wasm.outputs.verified != 'true'"],
+  ];
+  for (const [job, name, condition] of fallbacks) {
+    const flat = String(step(job, name).if).replace(/\s+/gu, " ");
+    assert.ok(flat.includes(condition), `${name}: ${flat}`);
+    assert.doesNotMatch(flat, /available/u, `${name} must not trust the unverified availability`);
+  }
+});
+
+// Runs the real "Resolve reusable artifact commit" step with a stubbed `gh` that maps commits to trees.
+function artifactSha({ eventName, headSha, headTree, releaseTree, prNumber = "7" }) {
+  const directory = makeTempDir("artifact-sha-");
+  const bin = join(directory, "bin");
+  mkdirSync(bin);
+  writeFileSync(
+    join(bin, "gh"),
+    `#!/bin/sh
+case "$2" in
+  */git/commits/${"c".repeat(40)}) echo ${releaseTree} ;;
+  */git/commits/${"a".repeat(40)}) echo ${headTree} ;;
+  *) echo "unexpected: $*" >&2; exit 1 ;;
+esac
+`,
+  );
+  chmodSync(join(bin, "gh"), 0o755);
+  const output = join(directory, "output");
+  writeFileSync(output, "");
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
+  const result = spawnSync("bash", ["-eu", "-c", step(releaseJob, "Resolve reusable artifact commit").run], {
+    encoding: "utf8",
+    env: {
+      ...env,
+      PATH: `${bin}:${process.env.PATH}`,
+      GITHUB_OUTPUT: output,
+      GITHUB_REPOSITORY: "octo/rom-weaver",
+      GITHUB_EVENT_NAME: eventName,
+      RELEASE_SHA: "c".repeat(40),
+      PR_HEAD_SHA: headSha,
+      PR_NUMBER: prNumber,
+    },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  return Object.fromEntries(readFileSync(output, "utf8").trim().split("\n").map((line) => line.split(/=(.*)/su).slice(0, 2)));
+}
+
+test("the release pull request's CI run is a candidate only when its head tree is the release tree", () => {
+  assert.deepEqual(artifactSha({ eventName: "pull_request", headSha: "a".repeat(40), headTree: "t1", releaseTree: "t1" }), {
+    sha: "a".repeat(40),
+    pr_number: "7",
+  });
+  assert.deepEqual(artifactSha({ eventName: "pull_request", headSha: "a".repeat(40), headTree: "t1", releaseTree: "t2" }), {
+    sha: "c".repeat(40),
+    pr_number: "",
+  });
+  assert.deepEqual(artifactSha({ eventName: "workflow_dispatch", headSha: "", headTree: "t1", releaseTree: "t1" }), {
+    sha: "c".repeat(40),
+    pr_number: "",
+  });
+});

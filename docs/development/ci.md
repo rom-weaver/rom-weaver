@@ -23,6 +23,8 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
   - [`scripts/ci/assert-jobs.mjs`](#scriptsciassert-jobsmjs)
   - [`scripts/ci/classify-changes.mjs`](#scriptsciclassify-changesmjs)
   - [`scripts/ci/resolve-wasm-run.mjs`](#scriptsciresolve-wasm-runmjs)
+  - [`scripts/ci/fetch-verified-wasm.mjs`](#scriptscifetch-verified-wasmmjs)
+  - [`scripts/ci/wasm-manifest.mjs`](#scriptsciwasm-manifestmjs)
   - [`scripts/ci/rerun-infra-failures.mjs`](#scriptscirerun-infra-failuresmjs)
   - [`scripts/ci/nightly-alert.mjs`](#scriptscinightly-alertmjs)
   - [`scripts/ci/npm-publish-package.mjs`](#scriptscinpm-publish-packagemjs)
@@ -89,7 +91,7 @@ Title text enters commitlint through stdin from an environment variable, never t
 
 `release.yml` creates or refreshes a release pull request only on manual dispatch. Pushes to `main` still run CI and can publish nightly images and deployments; they do not start a stable release. Manual dispatch avoids repeated release-branch updates and cancelled CI runs after each merge.
 
-The release workflow requires completed, successful push or manual `CI` on the exact main commit. It then creates or refreshes the release pull request. The screenshots reuse that run's `wasm-prod` artifact when changed-path classification produced one; otherwise the job rebuilds WASM from source (~6.5 min). Merging the release pull request is what sets `release_created` and unlocks the publish jobs.
+The release workflow requires completed, successful push or manual `CI` on the exact main commit. It then creates or refreshes the release pull request. The screenshots reuse that push run's `wasm-prod` artifact when changed-path classification produced one and its signed provenance verifies (see [`scripts/ci/resolve-wasm-run.mjs`](#scriptsciresolve-wasm-runmjs)); otherwise the job rebuilds WASM from source (~6.5 min). Merging the release pull request is what sets `release_created` and unlocks the publish jobs.
 
 The release job restores the identify packs from main's cache instead of rebuilding them (about 2.5 minutes), and keeps every commit it makes (metadata sync, changelog, screenshots) local until one final push: each push to the release branch starts a full CI run, and a run started by an earlier push had to be cancelled, with the replacing run waiting for the cancellation to finish. The screenshots are built from the release pull request's own tree, not main's `webapp-dist`, because the masthead in `apply-page-*` shows the release version. `parity.yml` cancels the run of the commit a push replaces, as `codeql.yml` already did.
 
@@ -158,6 +160,7 @@ security ── advisories (warn only, always green)
 | `docker-prebuilt` | Builds the webapp image from the `wasm` bundle; pushes webapp `nightly` digests on `main` | `CI gate` |
 | `docker-nightly`, `docker-prebuilt-nightly` | Join each image's digests into its `:nightly` manifest list | not required |
 | `wasm` | Builds the production WASM module and webapp bundle, then runs the worker runtime chunk guard | `CI gate` |
+| `wasm-attest` | Signs a checksum manifest of the `wasm-prod` artifact on `main` pushes and the release pull request, so the release can [reuse the module](#scriptsciresolve-wasm-runmjs) | not required |
 | `rust-lint` | fmt, clippy, typegen drift, thread guards, licenses, dependency policy, fuzz build | `CI gate` |
 | `rust-host` | Linux Rust tests and `cargo publish --dry-run` | `CI gate` |
 | `rust-macos`, `rust-windows` | Rust tests on macOS and Windows (full native runs only) | `CI gate` |
@@ -500,7 +503,24 @@ Two tests pin it. `scripts/ci/classify-changes.test.mjs` covers the path boundar
 
 ### `scripts/ci/resolve-wasm-run.mjs`
 
-Finds the CI run that built `wasm-prod` for a commit, so release packaging ships the exact module CI tested. It accepts an optional `PREFERRED_RUN_ID` hint and **verifies that run is actually for this commit** before trusting it, otherwise searches by commit, and finally confirms the artifact has not expired. Release falls back to a source build when it is unavailable.
+Finds the CI run whose `wasm-prod` artifact a release may reuse instead of spending ~6.5 minutes rebuilding the module. The search is by commit, so it would also return runs started by anyone who can push a branch: a pull request whose head is the release commit but whose base is the writer's own branch runs *their* `ci.yml` with the release commit as `head_sha`. The resolver therefore accepts a run only when all of these hold: its `path` is exactly `.github/workflows/ci.yml`, its repository and head repository are this repository, it completed with `success`, and it is either a `push` run on `main` or a `pull_request` run for the release pull request (the number the release passes as `PR_NUMBER`) from a release-please branch whose `pull_requests[]` entry for that number targets `main`. With no number, only push-to-main runs qualify. The newest accepted run that still has live `wasm-prod` and `wasm-prod-manifest` artifacts wins. An optional `PREFERRED_RUN_ID` hint must pass the same checks and match the commit. Release falls back to a source build when nothing qualifies.
+
+Choosing a run proves nothing about its bytes; `fetch-verified-wasm.mjs` does that.
+
+### `scripts/ci/fetch-verified-wasm.mjs`
+
+Downloads the chosen run's artifact into a scratch directory and installs it into the WASM source directory only when it provably came from trusted code building the tree the release packages. Every failure, including a missing attestation or an unreadable commit, reports `verified=false`, installs nothing, and exits 0, so the release builds from source (slower, never wrong). In order, it:
+
+1. re-applies the resolver's run checks to the run it was given;
+2. runs `gh attestation verify` on the checksum manifest with `--repo`, `--cert-identity` set to the exact signer `https://github.com/<repo>/.github/workflows/ci.yml@refs/heads/main` (push run) or `@refs/pull/<N>/merge` (release pull request), `--source-ref` set to that ref, `--source-digest`, and `--deny-self-hosted-runners`. A pull request run builds the merge commit, which the run API does not report, so its digest is read from the verified certificate and then pinned by a second verification;
+3. requires the signed source commit's tree (`gh api repos/<repo>/git/commits/<sha> --jq .tree.sha`) to equal the tree of the commit the release packages (the release commit; for the screenshots, the dispatch commit). Equal trees mean the `ci.yml` that signed is the one on that commit, so a run of a different workflow file cannot pass even with a valid signature;
+4. checks every downloaded file against the manifest, rejecting a missing, extra, altered, or non-regular file.
+
+The release job needs `actions: read` and `attestations: read` (and `contents` for the commit lookups); `static-webapp` already holds `attestations: write`.
+
+### `scripts/ci/wasm-manifest.mjs`
+
+Writes and checks the `sha256sum`-style manifest that `wasm-attest` signs. The artifact holds roughly 500 files (mostly third-party license texts), so one signed manifest replaces a verification per file. File names are limited to plain relative paths and symlinks are refused. `wasm-attest` runs in its own job with `id-token`, `attestations`, and `artifact-metadata` write, so the `wasm` build job keeps its read-only token, and its `if` limits signing to `main` pushes and same-repository release-please pull requests that target `main`. Its head-ref prefix must match `scripts/ci/release-pr.mjs` like the other copies.
 
 ### `scripts/ci/rerun-infra-failures.mjs`
 

@@ -1029,6 +1029,66 @@ jobs:
         continue-on-error: true
         run: npm --prefix packages/rom-weaver-webapp run check:worker-chunk
 
+  # Signs the `wasm-prod` artifact so a release can reuse it instead of rebuilding the module
+  # (~6.5 min). Its own small job, so `wasm` keeps a read-only token and the signing runs no
+  # build step. The artifact is hundreds of files, so a checksum manifest is signed and
+  # published as `wasm-prod-manifest`; scripts/ci/fetch-verified-wasm.mjs verifies it.
+  # Limited to the runs a release may reuse: pushes to main and this repository's release pull
+  # request. Any other run (a branch, a fork, a pull request into another base) is never
+  # signed, and the release verifies the exact signer identity besides. The head-ref prefix
+  # here MUST match scripts/ci/release-pr.mjs. Non-gating: a missing signature only makes the
+  # release build the module from source.
+  wasm-attest:
+    name: Attest WASM module
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: wasm
+    if: >-
+      needs.wasm.result == 'success' &&
+      (
+        (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.base.ref == 'main' &&
+          startsWith(github.head_ref, 'release-please--branches--main--components--')
+        )
+      )
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-prod
+          path: ${{ runner.temp }}/wasm-prod
+
+      - name: Write the checksum manifest
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/wasm-manifest"
+          node scripts/ci/wasm-manifest.mjs "$RUNNER_TEMP/wasm-prod" "$RUNNER_TEMP/wasm-manifest/wasm-prod.sha256"
+
+      - name: Sign build provenance
+        uses: ./.github/actions/attest-retry
+        with:
+          subject-path: ${{ runner.temp }}/wasm-manifest/wasm-prod.sha256
+
+      # After the signature, so the artifact existing means it was signed.
+      - name: Upload the checksum manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: wasm-prod-manifest
+          overwrite: true
+          if-no-files-found: error
+          path: ${{ runner.temp }}/wasm-manifest/wasm-prod.sha256
+
   # Host-profile Rust lint and metadata checks. The test suite has its own job
   # below so both compile-heavy paths can run at the same time.
   rust-lint:
