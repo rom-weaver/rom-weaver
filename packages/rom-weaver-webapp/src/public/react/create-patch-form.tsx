@@ -1,4 +1,5 @@
 import { ApplyPatchForm } from "./apply-patch-form.tsx";
+import { SharedInputPreparationCache } from "../../lib/workflow/shared-input-preparation.ts";
 import { CreateSourceModeToggle } from "./create-source-mode-toggle.tsx";
 import { countDropEntries, readDropEntries } from "./drop-destination.ts";
 import type { PageFileDrop } from "./patcher-form.ts";
@@ -357,6 +358,7 @@ type InternalCreatePatchFormProps = CreatePatchFormProps & {
   onActivateRomMode?: () => void;
   onBusyChange?: (busy: boolean) => void;
   createWorkflow?: typeof CreateWorkflow;
+  preparationCache?: SharedInputPreparationCache;
   getCreatePatchFormatCandidates?: typeof getCreatePatchFormatCandidates;
 };
 
@@ -390,6 +392,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
   const { onError, onBusyChange } = props;
   const internalProps = props as InternalCreatePatchFormProps;
   const createWorkflowOverride = internalProps.createWorkflow;
+  const { preparationCache } = internalProps;
   const createPatchFormatCandidatesOverride = internalProps.getCreatePatchFormatCandidates;
   const resolveCreatePatchFormatCandidates = useCallback(
     (options: Parameters<typeof getCreatePatchFormatCandidates>[0]) =>
@@ -951,6 +954,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
           ? new CreateWorkflowConstructor({
               ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
               id: `${workflowIdRef.current}:stage:${generation}`,
+              preparationCache,
               selectFile: async (request) =>
                 createSelectFileHandler(request.role === "modified" ? "modified" : "original")(request),
               settings: stagingSettingsRef.current,
@@ -1029,6 +1033,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
   }, [
     clearProgressForStage,
     createWorkflowOverride,
+    preparationCache,
     createProgressHandler,
     createSelectFileHandler,
     modified,
@@ -1095,6 +1100,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
         new (createWorkflowOverride || (await loadBrowserApi()).CreateWorkflow)({
           ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
           id: workflowIdRef.current,
+          preparationCache,
           selectFile: async (request) =>
             createSelectFileHandler(request.role === "modified" ? "modified" : "original")(request),
           settings: toCreateWorkflowSettings(settings, executionOutputName, props.threads),
@@ -1551,6 +1557,7 @@ const entrySourceMode = (entry: CreatePatchFormProps["entry"]) => (entry === "ch
 function CreatePatchForm(props: CreatePatchFormProps) {
   const [sourceMode, setSourceMode] = useState<"rom" | "patches">(entrySourceMode(props.entry));
   const [patchesMounted, setPatchesMounted] = useState(props.entry === "cheats");
+  const [preparationCache] = useState(() => new SharedInputPreparationCache());
   const appliedEntryRef = useRef(props.entry);
   const [internalOriginal, setInternalOriginal] = useState<BinarySource | null>(props.defaultOriginal || null);
   const [romBusy, setRomBusy] = useState(false);
@@ -1630,6 +1637,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       <div hidden={activeMode !== "rom"}>
         <ModifiedRomCreateForm
           {...props}
+          preparationCache={preparationCache}
           active={activeMode === "rom"}
           original={original}
           onOriginalChange={changeOriginal}
@@ -1645,6 +1653,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         <div hidden={activeMode !== "patches"}>
           <ApplyPatchForm
             mode="create"
+            preparationCache={preparationCache}
             active={activeMode === "patches"}
             cheatsPage={props.entry === "cheats"}
             assetBaseUrl={props.assetBaseUrl}

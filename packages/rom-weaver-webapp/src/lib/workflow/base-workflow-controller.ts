@@ -7,6 +7,7 @@ import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import { RomWeaverError, throwIfAborted, toRomWeaverError } from "../errors.ts";
 import { cloneValue, createWorkflowId, createWorkflowProgress } from "./controller-utils.ts";
 import { StagedRomSourceController } from "./staged-rom-source.ts";
+import type { SharedInputPreparationCache } from "./shared-input-preparation.ts";
 import type { SharedRomSourceState, StagedRomSourceControllerOptions } from "./staged-source-types.ts";
 import { WorkflowController } from "./workflow-controller.ts";
 import { traceWorkflowControllerEvent } from "./workflow-tracing.ts";
@@ -86,6 +87,7 @@ abstract class BaseWorkflowController<
   protected readonly runtime: WorkflowRuntime;
   protected readonly validateSources?: SourceValidator<TSource>;
   protected readonly constructorSignal?: AbortSignal;
+  protected readonly preparationCache?: SharedInputPreparationCache;
   protected readonly selectFile?: WorkflowOptions<TSettings>["selectFile"];
   protected readonly workflow: WorkflowKind;
   protected abortController = new AbortController();
@@ -116,6 +118,7 @@ abstract class BaseWorkflowController<
     this.id = options.id || createWorkflowId();
     this.settings = cloneValue(options.settings || {});
     this.constructorSignal = options.signal;
+    this.preparationCache = options.preparationCache;
     // Serialize every actual selection dialog through the single-modal lock at the one place
     // `selectFile` enters the controller, so all callers (this controller and its staged
     // sub-controllers) share one modal without each having to remember to lock.
@@ -209,6 +212,7 @@ abstract class BaseWorkflowController<
       emitProgress: (event) => this.emitProgress(event),
       getPreparedFileName: (asset, fallback) => asset?.fileName || fallback,
       id: this.id,
+      preparationCache: this.preparationCache,
       runtime: this.runtime,
       selectFile: this.selectFile,
       trace: (message, details) => this.trace(message, details),
