@@ -183,7 +183,7 @@ The additional handheld, Nintendo 64, and SNES profiles also require explicit se
 | Wario Land 3 | Coins, language, encoded day/night, and the first three sequential power upgrades |
 | The Legend of Zelda: Oracle of Ages and Oracle of Seasons | Mode, health, maximum health, heart pieces, and rupees in three slots per title |
 
-These definitions derive from [Game Tools Collection commit `8fb075e7c130da9e72c3c46ec8efa447a252ad88`](https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88). Diddy Kong Racing also uses the checksum rules in [DavidSM64/Diddy-Kong-Racing `save_data.c`](https://github.com/DavidSM64/Diddy-Kong-Racing/blob/1339ad6304118207b342fe8669c500efb91969df/src/save_data.c).
+These definitions derive from [Game Tools Collection commit `8fb075e7c130da9e72c3c46ec8efa447a252ad88`](https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88). Diddy Kong Racing also uses the checksum rules in [DavidSM64/Diddy-Kong-Racing `save_data.c`](https://github.com/DavidSM64/Diddy-Kong-Racing/blob/1339ad6304118207b342fe8669c500efb91969df/src/save_data.c). Chrono Trigger slot checksums follow the game's own routine in [dscotton/ct_disassembly `bank_FF.asm`](https://github.com/dscotton/ct_disassembly/blob/eeae27acdb6565e96d1d796a3d60792c250c0aa1/bank_FF.asm#L1301-L1322).
 
 The Genesis definitions accept only their listed odd-byte SRAM dump sizes. They do not accept a contiguous logical save or an arbitrary padded dump.
 

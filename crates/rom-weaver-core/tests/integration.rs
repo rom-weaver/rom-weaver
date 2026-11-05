@@ -2,6 +2,7 @@
 //! dependency graph once. Cargo.toml sets `autotests = false`: declare new
 //! `tests/*.rs` files here; `mise run quality-architecture` reports any that are not.
 
+mod chrono_trigger_save;
 mod disc_sheet_regressions;
 mod no_full_buffer_guard;
 mod save_generation;
