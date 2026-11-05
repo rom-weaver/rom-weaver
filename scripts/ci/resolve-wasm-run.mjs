@@ -1,36 +1,134 @@
 #!/usr/bin/env node
 
+// Finds the CI run whose `wasm-prod` artifact a release may try to reuse. Finding a run proves
+// nothing about its bytes: fetch-verified-wasm.mjs still verifies the attestation before any
+// file is used. This only narrows the search to runs of trusted code, because `gh run list
+// --commit` also returns runs of other workflows files and branches whose head is the same
+// commit (a pull request whose head is the release commit and whose base is an attacker's
+// branch runs the attacker's ci.yml with that head_sha).
+
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
+import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
+
+// Matched exactly: the API reports the workflow file's path, and no other file may stand in.
+export const WORKFLOW_PATH = ".github/workflows/ci.yml";
+export const DEFAULT_BRANCH = "main";
+// Runs of main itself; both sign as ci.yml@refs/heads/main.
+export const MAIN_EVENTS = new Set(["push", "workflow_dispatch"]);
+// The artifact and the checksum manifest that ci.yml's `wasm-attest` job signs.
+export const REQUIRED_ARTIFACTS = ["wasm-prod", "wasm-prod-manifest"];
+
 const gh = (args, env) => execFileSync("gh", args, { encoding: "utf8", env }).trim();
 
-export function resolveWasmRun({ repository, targetSha, preferredRunId = "", env = process.env, runGh = (args) => gh(args, env) }) {
-  let runId = preferredRunId;
-  if (runId) {
-    const runSha = runGh(["api", `repos/${repository}/actions/runs/${runId}`, "--jq", ".head_sha"]);
-    if (runSha !== targetSha) {
-      process.stdout.write(`run ${runId} is for ${runSha}, not ${targetSha} - searching by commit\n`);
-      runId = "";
-    }
+// A pull request number is digits only; anything else is "no pull request", which accepts
+// main's push and dispatch runs alone.
+export const normalizePrNumber = (value) => (/^[1-9][0-9]*$/u.test(String(value ?? "")) ? String(value) : "");
+
+// Pure: true for the merged release pull request itself, from this repository's release branch at
+// `sha`, into main. Another pull request can share that head commit and branch while targeting a
+// base whose ci.yml its author wrote, so the number and base are what tell them apart. A run's
+// `pull_requests` cannot: GitHub fills it at query time from the pull requests open now, so after the
+// merge it is empty or names the next release pull request.
+export function isReleasePull(pull, { repository, prNumber, sha }) {
+  const number = normalizePrNumber(prNumber);
+  return (
+    Boolean(number) &&
+    String(pull?.number) === number &&
+    pull.merged === true &&
+    pull.head?.sha === sha &&
+    pull.head?.repo?.full_name === repository &&
+    typeof pull.head?.ref === "string" &&
+    pull.head.ref.startsWith(RELEASE_PR_BRANCH_PREFIX) &&
+    pull.base?.ref === DEFAULT_BRANCH &&
+    pull.base?.repo?.full_name === repository
+  );
+}
+
+// Reads the pull request for isReleasePull, or null when there is none or it cannot be read, which
+// leaves main's push and dispatch runs alone.
+export function readPull({ repository, prNumber, runGh }) {
+  const number = normalizePrNumber(prNumber);
+  if (!number) return null;
+  try {
+    return JSON.parse(runGh(["api", `repos/${repository}/pulls/${number}`]) || "null");
+  } catch (error) {
+    process.stdout.write(`pull request ${number} could not be read (${error.message}) - runs of main only\n`);
+    return null;
   }
-  if (!runId) runId = runGh(["run", "list", "--repo", repository, "--workflow", "ci.yml", "--commit", targetSha, "--status", "success", "--limit", "1", "--json", "databaseId", "--jq", ".[0].databaseId"]);
-  let available = false;
-  if (runId) available = Number(runGh(["api", `repos/${repository}/actions/runs/${runId}/artifacts`, "--jq", '[.artifacts[] | select(.name == "wasm-prod" and .expired == false)] | length'])) > 0;
-  return { runId, available };
+}
+
+// Pure: true only for a successful run of this repository's own ci.yml on code that is trusted
+// to build the module. A push or manual dispatch run must be on main. A pull request run must be
+// from the release branch of this repository, and `pull` (from readPull) the merged release pull
+// request of its head. A run cannot say which pull request it ran for, so another pull request's
+// run of that head passes here; its attestation names that pull request's merge ref, which
+// fetch-verified-wasm.mjs rejects.
+export function isTrustedRun(run, { repository, prNumber = "", pull = null }) {
+  if (!run || typeof run !== "object") return false;
+  if (run.path !== WORKFLOW_PATH) return false;
+  if (run.status !== "completed" || run.conclusion !== "success") return false;
+  if (run.repository?.full_name !== repository) return false;
+  if (run.head_repository?.full_name !== repository) return false;
+  if (MAIN_EVENTS.has(run.event)) return run.head_branch === DEFAULT_BRANCH;
+  if (run.event === "pull_request") {
+    if (typeof run.head_branch !== "string" || !run.head_branch.startsWith(RELEASE_PR_BRANCH_PREFIX)) return false;
+    return isReleasePull(pull, { repository, prNumber, sha: run.head_sha });
+  }
+  return false;
+}
+
+// Newest first by creation time, then by id, so a rerun that replaced a run wins.
+export const newestFirst = (runs) =>
+  [...runs].sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")) || (b.id ?? 0) - (a.id ?? 0));
+
+export function trustedRuns(runs, { repository, targetSha, prNumber = "", pull = null }) {
+  return newestFirst(runs).filter((run) => run.head_sha === targetSha && isTrustedRun(run, { repository, prNumber, pull }));
+}
+
+export function artifactsAvailable(artifacts) {
+  const live = new Set((artifacts ?? []).filter((artifact) => artifact.expired === false).map((artifact) => artifact.name));
+  return REQUIRED_ARTIFACTS.every((name) => live.has(name));
+}
+
+// Candidates handed to the verifier, newest first. A newer run of another pull request from the
+// same head passes the checks here and only fails verification, so one candidate is not enough.
+export const MAX_CANDIDATES = 5;
+
+export function resolveWasmRun({ repository, targetSha, prNumber = "", preferredRunId = "", env = process.env, runGh = (args) => gh(args, env) }) {
+  const json = (args) => JSON.parse(runGh(args) || "null");
+  const hasArtifacts = (runId) => artifactsAvailable(json(["api", `repos/${repository}/actions/runs/${runId}/artifacts?per_page=100`, "--jq", ".artifacts"]));
+  const options = { repository, targetSha, prNumber, pull: readPull({ repository, prNumber, runGh }) };
+  if (preferredRunId) {
+    const preferred = json(["api", `repos/${repository}/actions/runs/${preferredRunId}`]);
+    if (trustedRuns([preferred], options).length) {
+      const available = hasArtifacts(preferred.id);
+      return { runId: String(preferred.id), runIds: available ? [String(preferred.id)] : [], available };
+    }
+    process.stdout.write(`run ${preferredRunId} is not a trusted ci.yml run for ${targetSha} - searching by commit\n`);
+  }
+  const runs = json(["api", `repos/${repository}/actions/workflows/ci.yml/runs?head_sha=${targetSha}&status=success&per_page=100`, "--jq", ".workflow_runs"]) ?? [];
+  // The newest trusted run can have skipped the WASM build, so keep looking until one has it.
+  const runIds = [];
+  for (const run of trustedRuns(runs, options)) {
+    if (runIds.length === MAX_CANDIDATES) break;
+    if (hasArtifacts(run.id)) runIds.push(String(run.id));
+  }
+  return { runId: runIds[0] ?? "", runIds, available: runIds.length > 0 };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     if (!process.env.GITHUB_REPOSITORY || !process.env.TARGET_SHA) throw new Error("GITHUB_REPOSITORY and TARGET_SHA are required");
-    const { runId, available } = resolveWasmRun({ repository: process.env.GITHUB_REPOSITORY, targetSha: process.env.TARGET_SHA, preferredRunId: process.env.PREFERRED_RUN_ID });
-    const line = `run_id=${runId} available=${available} (sha ${process.env.TARGET_SHA})\n`;
+    const { runId, runIds, available } = resolveWasmRun({ repository: process.env.GITHUB_REPOSITORY, targetSha: process.env.TARGET_SHA, prNumber: normalizePrNumber(process.env.PR_NUMBER), preferredRunId: process.env.PREFERRED_RUN_ID });
+    const line = `run_id=${runId} run_ids=${runIds.join(" ")} available=${available} (sha ${process.env.TARGET_SHA})\n`;
     process.stdout.write(line);
     // Written to stdout directly when unset rather than opening "/dev/stdout",
     // which is a Linux-ism the shell could afford and this cannot.
-    const outputs = `run_id=${runId}\navailable=${available}\n`;
+    const outputs = `run_id=${runId}\nrun_ids=${runIds.join(" ")}\navailable=${available}\n`;
     if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, outputs);
     else process.stdout.write(outputs);
   } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; }

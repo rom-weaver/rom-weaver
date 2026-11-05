@@ -91,6 +91,8 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       actions: read
+      # `gh attestation verify` reads the signed provenance of the reused WASM artifact.
+      attestations: read
       contents: write
       issues: write
       pull-requests: write
@@ -101,7 +103,7 @@ jobs:
       sha: ${{ steps.release.outputs.sha }}
       artifact_sha: ${{ steps.artifact-sha.outputs.sha }}
       # The merged release pull request into main whose CI built `artifact_sha`, or empty. The CLI
-      # binary reuse accepts only binaries attested by this pull request's CI run.
+      # binaries and the WASM module are reused only when attested by this pull request's CI run.
       artifact_pr: ${{ steps.artifact-sha.outputs.pr }}
     steps:
       - id: release
@@ -248,23 +250,24 @@ jobs:
           TARGET_SHA: ${{ github.sha }}
         run: node scripts/ci/resolve-wasm-run.mjs
 
-      - name: Download tested WASM artifact for screenshots
+      # Installs the artifact only if its signed provenance checks out; otherwise it installs
+      # nothing and the fallback build below runs.
+      - name: Verify and install tested WASM artifact for screenshots
+        id: screenshot-wasm
         if: >-
           steps.release-pr.outputs.found == 'true' &&
           steps.screenshot-ci.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ steps.screenshot-ci.outputs.run_id }}
-        run: |
-          gh run download "$RUN_ID" \
-            --repo "$GITHUB_REPOSITORY" \
-            --name wasm-prod \
-            --dir packages/rom-weaver-webapp/src/wasm
+          RUN_IDS: ${{ steps.screenshot-ci.outputs.run_ids }}
+          # The dispatch commit: its own push run signed the artifact.
+          EXPECTED_SHA: ${{ github.sha }}
+        run: node scripts/ci/fetch-verified-wasm.mjs
 
       - name: Set up fallback WASM build for screenshots
         if: >-
           steps.release-pr.outputs.found == 'true' &&
-          steps.screenshot-ci.outputs.available != 'true'
+          steps.screenshot-wasm.outputs.verified != 'true'
         uses: ./.github/actions/setup-build-env
         with:
           tools: node rust binaryen
@@ -276,7 +279,7 @@ jobs:
       - name: Build fallback WASM for screenshots
         if: >-
           steps.release-pr.outputs.found == 'true' &&
-          steps.screenshot-ci.outputs.available != 'true'
+          steps.screenshot-wasm.outputs.verified != 'true'
         run: mise run build-wasm-prod
 
       - name: Verify WASM for screenshots
@@ -554,6 +557,8 @@ jobs:
     permissions:
       actions: read
       contents: write
+      # Checking that the release pull request whose WASM artifact is reused was merged.
+      pull-requests: read
       # Signed provenance for the tarball, matching the platform binaries and
       # the container images.
       attestations: write
@@ -573,8 +578,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ needs.release.outputs.artifact_sha }}
-        # A release PR artifact is reused only when its tree exactly matches the
-        # released commit; otherwise resolution falls back to a source build.
+          PR_NUMBER: ${{ needs.release.outputs.artifact_pr }}
+        # Only a push or manual run of main, or the merged release PR's own run, is a candidate; the next
+        # step verifies its signature. Any failure falls back to a source build.
         run: node scripts/ci/resolve-wasm-run.mjs
 
       - name: Set up static webapp build
@@ -587,19 +593,21 @@ jobs:
           # Same reason as the screenshot build: restore the packs instead of rebuilding them.
           identify-data-cache: "true"
 
-      - name: Download tested WASM artifact
+      # Installs the artifact only if its signed provenance checks out and the signed source
+      # tree equals the released commit's tree; otherwise it installs nothing and the fallback
+      # build below runs.
+      - name: Verify and install tested WASM artifact
+        id: wasm
         if: steps.ci.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ steps.ci.outputs.run_id }}
-        run: |
-          gh run download "$RUN_ID" \
-            --repo "$GITHUB_REPOSITORY" \
-            --name wasm-prod \
-            --dir packages/rom-weaver-webapp/src/wasm
+          RUN_IDS: ${{ steps.ci.outputs.run_ids }}
+          PR_NUMBER: ${{ needs.release.outputs.artifact_pr }}
+          EXPECTED_SHA: ${{ needs.release.outputs.sha }}
+        run: node scripts/ci/fetch-verified-wasm.mjs
 
       - name: Set up fallback WASM build
-        if: steps.ci.outputs.available != 'true'
+        if: steps.wasm.outputs.verified != 'true'
         uses: ./.github/actions/setup-build-env
         with:
           tools: node rust binaryen
@@ -609,7 +617,7 @@ jobs:
           cache-save: "false"
 
       - name: Build fallback WASM artifact
-        if: steps.ci.outputs.available != 'true'
+        if: steps.wasm.outputs.verified != 'true'
         run: mise run build-wasm-prod
 
       - name: Verify WASM artifact

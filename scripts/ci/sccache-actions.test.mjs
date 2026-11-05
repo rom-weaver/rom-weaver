@@ -20,22 +20,24 @@ const step = (name) => {
 const selected = (name, inputs, ref) => {
   const condition = step(name).match(/^      if: (.+)$/mu)?.[1];
   assert.ok(condition, `missing condition: ${name}`);
-  return runInNewContext(condition.replaceAll("inputs.cache-save", "inputs.cacheSave"), {
-    inputs,
+  return runInNewContext(condition.replaceAll("inputs.cache-save", "inputs.cacheSave").replaceAll("inputs.cache-restore", "inputs.cacheRestore"), {
+    inputs: { cacheRestore: "true", ...inputs },
     github: { ref },
   });
 };
 
-for (const [name, sccache, cacheSave, ref, saves, restores] of [
+for (const [name, sccache, cacheSave, ref, saves, restores, cacheRestore] of [
   ["main", "true", "true", "refs/heads/main", true, false],
   ["pull request", "true", "true", "refs/pull/7/merge", false, true],
   ["tag", "true", "true", "refs/tags/v0.15.1", false, true],
   ["restore-only main", "true", "false", "refs/heads/main", false, true],
   ["disabled main", "false", "true", "refs/heads/main", false, false],
   ["disabled pull request", "false", "true", "refs/pull/7/merge", false, false],
+  ["no cache, main", "true", "true", "refs/heads/main", false, false, "false"],
+  ["no cache, release pull request", "true", "true", "refs/pull/7/merge", false, false, "false"],
 ]) {
   test(`sccache persistence: ${name}`, () => {
-    const inputs = { sccache, cacheSave };
+    const inputs = { sccache, cacheSave, ...(cacheRestore ? { cacheRestore } : {}) };
     assert.equal(selected("Cache sccache objects", inputs, ref), saves);
     assert.equal(selected("Restore sccache objects", inputs, ref), restores);
     assert.equal(selected("Install sccache", inputs, ref), sccache === "true");

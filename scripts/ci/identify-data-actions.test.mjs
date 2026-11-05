@@ -139,7 +139,7 @@ test("identify Brotli cache is main-only and has a stable producer directory", (
   assert.ok(save, "identify Brotli cache has no save step");
   assert.match(save, /github\.ref == 'refs\/heads\/main'/u);
   assert.match(save, /steps\.cache\.outputs\.cache-hit != 'true'/u);
-  assert.match(action, /Restore identify Brotli cache\n      if: steps\.cache\.outputs\.cache-hit != 'true'/u);
+  assert.match(action, /Restore identify Brotli cache\n      if: inputs\.cache-restore == 'true' && steps\.cache\.outputs\.cache-hit != 'true'/u);
   assert.match(action, /key: identify-brotli-\$\{\{ runner\.os \}\}-epoch1-\$\{\{ hashFiles\('scripts\/ensure-identify-data\.mjs'/u);
 });
 

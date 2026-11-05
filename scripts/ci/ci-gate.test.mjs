@@ -12,7 +12,8 @@ const expression = (value) =>
     .replace(/^\$\{\{\s*/u, "")
     .replace(/\s*\}\}$/u, "");
 
-// Publishers and deploys are deliberately non-gating, `quality-analysis` is
+// Publishers and deploys are deliberately non-gating, `wasm-attest` only signs the module for
+// the release to reuse (an unsigned one is rebuilt from source), `quality-analysis` is
 // advisory, the advisory scan reports warnings only, and `nightly-alert` reports on the gate
 // rather than feeding it.
 const NON_GATING = new Set([
@@ -25,6 +26,7 @@ const NON_GATING = new Set([
   "nightly-alert",
   "quality-analysis",
   "security",
+  "wasm-attest",
 ]);
 
 // Every `name=${{ needs.<job>... }}` pair a gate step asserts, with the
