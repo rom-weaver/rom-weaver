@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
-import { artifactsAvailable, isTrustedRun, normalizePrNumber, resolveWasmRun, trustedRuns, WORKFLOW_PATH } from "./resolve-wasm-run.mjs";
+import { artifactsAvailable, isReleasePull, isTrustedRun, normalizePrNumber, resolveWasmRun, trustedRuns, WORKFLOW_PATH } from "./resolve-wasm-run.mjs";
 
 const REPO = "octo/rom-weaver";
 const SHA = "a".repeat(40);
@@ -27,10 +27,19 @@ const prRun = (overrides = {}) =>
     id: 2,
     event: "pull_request",
     head_branch: RELEASE_BRANCH,
-    pull_requests: [{ number: 7, base: { ref: "main" } }],
+    // GitHub fills this from the pull requests open now; after the merge it names the next one.
+    pull_requests: [{ number: 8, base: { ref: "main" } }],
     ...overrides,
   });
-const trusted = (run, prNumber = "") => isTrustedRun(run, { repository: REPO, prNumber });
+// The merged release pull request 7, as the pulls API reports it.
+const releasePull = (overrides = {}) => ({
+  number: 7,
+  merged: true,
+  head: { sha: SHA, ref: RELEASE_BRANCH, repo: { full_name: REPO } },
+  base: { ref: "main", repo: { full_name: REPO } },
+  ...overrides,
+});
+const trusted = (run, prNumber = "", pull = releasePull()) => isTrustedRun(run, { repository: REPO, prNumber, pull });
 
 test("a successful push-to-main ci.yml run is trusted with or without a release pull request", () => {
   assert.equal(trusted(pushRun()), true);
@@ -46,14 +55,25 @@ test("the release pull request's own run is trusted only for that number", () =>
   assert.equal(trusted(prRun(), "7 "), false);
 });
 
-test("a pull request run must target main, including when other pull requests share its head", () => {
-  const attackerBase = prRun({ pull_requests: [{ number: 7, base: { ref: "attacker/branch" } }] });
-  assert.equal(trusted(attackerBase, "7"), false);
-  assert.equal(trusted(prRun({ pull_requests: [] }), "7"), false);
-  assert.equal(trusted(prRun({ pull_requests: undefined }), "7"), false);
-  const shared = prRun({ pull_requests: [{ number: 9, base: { ref: "attacker/branch" } }, { number: 7, base: { ref: "main" } }] });
-  assert.equal(trusted(shared, "7"), true);
-  assert.equal(trusted(shared, "9"), false);
+test("a pull request run is trusted only while its pull request is the merged release pull request into main", () => {
+  const head = releasePull().head;
+  const base = releasePull().base;
+  for (const [label, pull] of Object.entries({
+    "an open or closed pull request": releasePull({ merged: false }),
+    "the release head merged into another base": releasePull({ base: { ...base, ref: "attacker/branch" } }),
+    "a base in another repository": releasePull({ base: { ...base, repo: { full_name: "attacker/rom-weaver" } } }),
+    "another head commit": releasePull({ head: { ...head, sha: "b".repeat(40) } }),
+    "not the release branch": releasePull({ head: { ...head, ref: "feature/wasm" } }),
+    "a fork's head": releasePull({ head: { ...head, repo: { full_name: "attacker/rom-weaver" } } }),
+    "a deleted head repository": releasePull({ head: { ...head, repo: null } }),
+    "another number": releasePull({ number: 8 }),
+    "no pull request": null,
+  }))
+    assert.equal(trusted(prRun(), "7", pull), false, label);
+  // The run's own pull_requests never decide: GitHub rewrites it once the pull request merges.
+  for (const pull_requests of [[], undefined, [{ number: 7, base: { ref: "attacker/branch" } }]])
+    assert.equal(trusted(prRun({ pull_requests }), "7"), true, JSON.stringify(pull_requests));
+  assert.equal(isReleasePull(releasePull(), { repository: REPO, prNumber: "7", sha: SHA }), true);
 });
 
 test("a pull request run from a branch that is not a release branch is rejected", () => {
@@ -135,7 +155,7 @@ test("artifacts count only when the module and its signed manifest are both live
 });
 
 // A stubbed `gh`: run listings and per-run artifact lists keyed by what the resolver asks for.
-function stub({ runs = [], artifacts = {}, byId = {} }) {
+function stub({ runs = [], artifacts = {}, byId = {}, pull = releasePull() }) {
   const calls = [];
   const runGh = (args) => {
     calls.push(args);
@@ -145,6 +165,10 @@ function stub({ runs = [], artifacts = {}, byId = {} }) {
     if (artifactsOf) return JSON.stringify(artifacts[artifactsOf[1]] ?? []);
     const single = /actions\/runs\/(\d+)$/u.exec(path);
     if (single) return JSON.stringify(byId[single[1]] ?? null);
+    if (/^repos\/[^/]+\/[^/]+\/pulls\/\d+$/u.test(path)) {
+      if (pull instanceof Error) throw pull;
+      return JSON.stringify(pull);
+    }
     throw new Error(`unexpected gh call: ${args.join(" ")}`);
   };
   return { calls, runGh };
@@ -171,6 +195,15 @@ test("without a pull request number only push-to-main runs resolve", () => {
   assert.deepEqual(resolve(gh), { runId: "", available: false });
   assert.deepEqual(resolve(gh, { prNumber: "7" }), { runId: "20", available: true });
   assert.deepEqual(resolve(gh, { prNumber: "8" }), { runId: "", available: false });
+  assert.ok(gh.calls.some((args) => args[1] === `repos/${REPO}/pulls/7`), "the pull request itself is read");
+});
+
+test("a pull request that is not merged, or cannot be read, leaves only runs of main", () => {
+  const runs = [prRun({ id: 20, created_at: "2026-10-09T00:00:00Z" }), pushRun({ id: 21 })];
+  const artifacts = { 20: BOTH, 21: BOTH };
+  assert.deepEqual(resolve(stub({ runs, artifacts, pull: releasePull({ merged: false }) }), { prNumber: "7" }), { runId: "21", available: true });
+  assert.deepEqual(resolve(stub({ runs, artifacts, pull: new Error("HTTP 502") }), { prNumber: "7" }), { runId: "21", available: true });
+  assert.deepEqual(resolve(stub({ runs, artifacts }), { prNumber: "7" }), { runId: "20", available: true });
 });
 
 test("the resolver skips a newer trusted run that never built the module", () => {

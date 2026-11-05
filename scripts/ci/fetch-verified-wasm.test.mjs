@@ -42,14 +42,23 @@ const pushRun = (overrides = {}) => ({
   ...overrides,
 });
 const prRun = (overrides = {}) =>
-  pushRun({ event: "pull_request", head_branch: `${RELEASE_PR_BRANCH_PREFIX}cli`, pull_requests: [{ number: 7, base: { ref: "main" } }], ...overrides });
+  pushRun({ event: "pull_request", head_branch: `${RELEASE_PR_BRANCH_PREFIX}cli`, pull_requests: [], ...overrides });
+// The merged release pull request 7, as the pulls API reports it.
+const releasePull = (overrides = {}) => ({
+  number: 7,
+  merged: true,
+  head: { sha: HEAD, ref: `${RELEASE_PR_BRANCH_PREFIX}cli`, repo: { full_name: REPO } },
+  base: { ref: "main", repo: { full_name: REPO } },
+  ...overrides,
+});
 
 // A stubbed `gh` that serves one run, two artifacts, and a tree per commit.
-function stub({ run = pushRun(), artifact = FILES, manifest = manifestFor(FILES), trees = {}, verifyError = null, probe = MERGE }) {
+function stub({ run = pushRun(), pull = releasePull(), artifact = FILES, manifest = manifestFor(FILES), trees = {}, verifyError = null, probe = MERGE }) {
   const calls = [];
   const runGh = (args) => {
     calls.push(args);
     if (args[0] === "api" && /actions\/runs\/\d+$/u.test(args[1])) return JSON.stringify(run);
+    if (args[0] === "api" && /^repos\/octo\/rom-weaver\/pulls\/\d+$/u.test(args[1])) return JSON.stringify(pull);
     if (args[0] === "run" && args[1] === "download") {
       const dir = args[args.indexOf("--dir") + 1];
       if (args[args.indexOf("--name") + 1] === "wasm-prod") write(dir, artifact);
@@ -177,6 +186,8 @@ test("runs the resolver would not pick are refused before anything is downloaded
     [attackerPr, "99"],
     [prRun(), "8"],
     [prRun(), ""],
+    [prRun(), "7", releasePull({ merged: false })],
+    [prRun(), "7", releasePull({ base: { ref: "attacker/base", repo: { full_name: REPO } } })],
     [pushRun({ event: "workflow_dispatch", head_branch: "attacker" }), ""],
     [pushRun({ event: "schedule" }), ""],
     [pushRun({ head_branch: "attacker" }), ""],
@@ -184,8 +195,8 @@ test("runs the resolver would not pick are refused before anything is downloaded
     [pushRun({ head_repository: { full_name: "attacker/rom-weaver" } }), ""],
     [pushRun({ id: 101 }), ""],
   ];
-  for (const [run, prNumber] of cases) {
-    const gh = stub({ run, trees: { [HEAD]: TREE, [MERGE]: TREE } });
+  for (const [run, prNumber, pull] of cases) {
+    const gh = stub({ run, pull, trees: { [HEAD]: TREE, [MERGE]: TREE } });
     const { destination, run: attempt } = fetchWith(gh, { prNumber });
     assert.throws(attempt, /not a trusted ci\.yml run/u, JSON.stringify([run.event, run.head_branch, prNumber]));
     assert.ok(!gh.calls.some((args) => args[0] === "run"), "nothing is downloaded");

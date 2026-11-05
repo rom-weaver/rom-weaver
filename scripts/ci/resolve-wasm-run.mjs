@@ -28,10 +28,46 @@ const gh = (args, env) => execFileSync("gh", args, { encoding: "utf8", env }).tr
 // main's push and dispatch runs alone.
 export const normalizePrNumber = (value) => (/^[1-9][0-9]*$/u.test(String(value ?? "")) ? String(value) : "");
 
+// Pure: true for the merged release pull request itself, from this repository's release branch at
+// `sha`, into main. Another pull request can share that head commit and branch while targeting a
+// base whose ci.yml its author wrote, so the number and base are what tell them apart. A run's
+// `pull_requests` cannot: GitHub fills it at query time from the pull requests open now, so after the
+// merge it is empty or names the next release pull request.
+export function isReleasePull(pull, { repository, prNumber, sha }) {
+  const number = normalizePrNumber(prNumber);
+  return (
+    Boolean(number) &&
+    String(pull?.number) === number &&
+    pull.merged === true &&
+    pull.head?.sha === sha &&
+    pull.head?.repo?.full_name === repository &&
+    typeof pull.head?.ref === "string" &&
+    pull.head.ref.startsWith(RELEASE_PR_BRANCH_PREFIX) &&
+    pull.base?.ref === DEFAULT_BRANCH &&
+    pull.base?.repo?.full_name === repository
+  );
+}
+
+// Reads the pull request for isReleasePull, or null when there is none or it cannot be read, which
+// leaves main's push and dispatch runs alone.
+export function readPull({ repository, prNumber, runGh }) {
+  const number = normalizePrNumber(prNumber);
+  if (!number) return null;
+  try {
+    return JSON.parse(runGh(["api", `repos/${repository}/pulls/${number}`]) || "null");
+  } catch (error) {
+    process.stdout.write(`pull request ${number} could not be read (${error.message}) - runs of main only\n`);
+    return null;
+  }
+}
+
 // Pure: true only for a successful run of this repository's own ci.yml on code that is trusted
-// to build the module. A push or manual dispatch run must be on main. A pull request run must be for the given
-// release pull request, which must target main, from the release branch of this repository.
-export function isTrustedRun(run, { repository, prNumber = "" }) {
+// to build the module. A push or manual dispatch run must be on main. A pull request run must be
+// from the release branch of this repository, and `pull` (from readPull) the merged release pull
+// request of its head. A run cannot say which pull request it ran for, so another pull request's
+// run of that head passes here; its attestation names that pull request's merge ref, which
+// fetch-verified-wasm.mjs rejects.
+export function isTrustedRun(run, { repository, prNumber = "", pull = null }) {
   if (!run || typeof run !== "object") return false;
   if (run.path !== WORKFLOW_PATH) return false;
   if (run.status !== "completed" || run.conclusion !== "success") return false;
@@ -39,10 +75,8 @@ export function isTrustedRun(run, { repository, prNumber = "" }) {
   if (run.head_repository?.full_name !== repository) return false;
   if (MAIN_EVENTS.has(run.event)) return run.head_branch === DEFAULT_BRANCH;
   if (run.event === "pull_request") {
-    const number = normalizePrNumber(prNumber);
-    if (!number) return false;
     if (typeof run.head_branch !== "string" || !run.head_branch.startsWith(RELEASE_PR_BRANCH_PREFIX)) return false;
-    return (run.pull_requests ?? []).some((pr) => String(pr?.number) === number && pr?.base?.ref === DEFAULT_BRANCH);
+    return isReleasePull(pull, { repository, prNumber, sha: run.head_sha });
   }
   return false;
 }
@@ -51,8 +85,8 @@ export function isTrustedRun(run, { repository, prNumber = "" }) {
 export const newestFirst = (runs) =>
   [...runs].sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")) || (b.id ?? 0) - (a.id ?? 0));
 
-export function trustedRuns(runs, { repository, targetSha, prNumber = "" }) {
-  return newestFirst(runs).filter((run) => run.head_sha === targetSha && isTrustedRun(run, { repository, prNumber }));
+export function trustedRuns(runs, { repository, targetSha, prNumber = "", pull = null }) {
+  return newestFirst(runs).filter((run) => run.head_sha === targetSha && isTrustedRun(run, { repository, prNumber, pull }));
 }
 
 export function artifactsAvailable(artifacts) {
@@ -63,7 +97,7 @@ export function artifactsAvailable(artifacts) {
 export function resolveWasmRun({ repository, targetSha, prNumber = "", preferredRunId = "", env = process.env, runGh = (args) => gh(args, env) }) {
   const json = (args) => JSON.parse(runGh(args) || "null");
   const hasArtifacts = (runId) => artifactsAvailable(json(["api", `repos/${repository}/actions/runs/${runId}/artifacts?per_page=100`, "--jq", ".artifacts"]));
-  const options = { repository, targetSha, prNumber };
+  const options = { repository, targetSha, prNumber, pull: readPull({ repository, prNumber, runGh }) };
   if (preferredRunId) {
     const preferred = json(["api", `repos/${repository}/actions/runs/${preferredRunId}`]);
     if (trustedRuns([preferred], options).length) return { runId: String(preferred.id), available: hasArtifacts(preferred.id) };

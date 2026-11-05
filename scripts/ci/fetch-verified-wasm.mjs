@@ -25,7 +25,7 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-import { DEFAULT_BRANCH, isTrustedRun, MAIN_EVENTS, normalizePrNumber, WORKFLOW_PATH } from "./resolve-wasm-run.mjs";
+import { DEFAULT_BRANCH, isTrustedRun, MAIN_EVENTS, normalizePrNumber, readPull, WORKFLOW_PATH } from "./resolve-wasm-run.mjs";
 import { checkManifest, MANIFEST_NAME } from "./wasm-manifest.mjs";
 
 const SHA = /^[0-9a-f]{40}$/u;
@@ -70,7 +70,8 @@ export function fetchVerifiedWasm({ repository, runId, prNumber = "", expectedSh
   const number = normalizePrNumber(prNumber);
 
   const run = JSON.parse(runGh(["api", `repos/${repository}/actions/runs/${runId}`]));
-  if (String(run.id) !== runId || !isTrustedRun(run, { repository, prNumber: number })) throw new Error(`run ${runId} is not a trusted ci.yml run`);
+  const pull = run.event === "pull_request" ? readPull({ repository, prNumber: number, runGh }) : null;
+  if (String(run.id) !== runId || !isTrustedRun(run, { repository, prNumber: number, pull })) throw new Error(`run ${runId} is not a trusted ci.yml run`);
   const event = run.event;
   const ref = sourceRefFor({ event, prNumber: number });
   const identity = certIdentityFor({ serverUrl, repository, event, prNumber: number });

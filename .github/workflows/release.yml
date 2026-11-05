@@ -558,6 +558,8 @@ jobs:
     permissions:
       actions: read
       contents: write
+      # Checking that the release pull request whose WASM artifact is reused was merged.
+      pull-requests: read
       # Signed provenance for the tarball, matching the platform binaries and
       # the container images.
       attestations: write

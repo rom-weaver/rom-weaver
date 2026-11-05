@@ -100,11 +100,12 @@ test("release.yml never downloads wasm-prod directly; every reuse goes through t
   assert.equal(fetches.length, 2);
 });
 
-test("the jobs that reuse the artifact can read attestations, runs, and commits", () => {
+test("the jobs that reuse the artifact can read attestations, runs, commits, and pull requests", () => {
   for (const job of [releaseJob, staticWebapp]) {
     assert.equal(job.permissions.actions, "read");
     assert.ok(["read", "write"].includes(job.permissions.attestations));
     assert.ok(["read", "write"].includes(job.permissions.contents));
+    assert.ok(["read", "write"].includes(job.permissions["pull-requests"]), "the release pull request is read to check it was merged");
   }
   assert.equal(releaseJob.permissions.attestations, "read");
 });
