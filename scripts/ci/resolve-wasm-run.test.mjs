@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
-import { artifactsAvailable, isReleasePull, isTrustedRun, normalizePrNumber, resolveWasmRun, trustedRuns, WORKFLOW_PATH } from "./resolve-wasm-run.mjs";
+import { artifactsAvailable, isReleasePull, isTrustedRun, MAX_CANDIDATES, normalizePrNumber, resolveWasmRun, trustedRuns, WORKFLOW_PATH } from "./resolve-wasm-run.mjs";
 
 const REPO = "octo/rom-weaver";
 const SHA = "a".repeat(40);
@@ -180,30 +180,30 @@ test("the resolver ignores an attacker's newer pull request run whose head is th
   const attacker = prRun({ id: 99, created_at: "2026-10-09T00:00:00Z", head_branch: "attacker", pull_requests: [{ number: 99, base: { ref: "attacker/base" } }] });
   const legit = pushRun({ id: 10, created_at: "2026-10-01T00:00:00Z" });
   const gh = stub({ runs: [attacker, legit], artifacts: { 99: BOTH, 10: BOTH } });
-  assert.deepEqual(resolve(gh), { runId: "10", available: true });
+  assert.deepEqual(resolve(gh), { runId: "10", runIds: ["10"], available: true });
   assert.ok(!gh.calls.some((args) => args[1].includes("/runs/99")), "the untrusted run's artifacts are never listed");
 });
 
 test("the resolver lists only successful runs of the exact commit", () => {
   const gh = stub({ runs: [] });
-  assert.deepEqual(resolve(gh), { runId: "", available: false });
+  assert.deepEqual(resolve(gh), { runId: "", runIds: [], available: false });
   assert.equal(gh.calls[0][1], `repos/${REPO}/actions/workflows/ci.yml/runs?head_sha=${SHA}&status=success&per_page=100`);
 });
 
 test("without a pull request number only push-to-main runs resolve", () => {
   const gh = stub({ runs: [prRun({ id: 20 })], artifacts: { 20: BOTH } });
-  assert.deepEqual(resolve(gh), { runId: "", available: false });
-  assert.deepEqual(resolve(gh, { prNumber: "7" }), { runId: "20", available: true });
-  assert.deepEqual(resolve(gh, { prNumber: "8" }), { runId: "", available: false });
+  assert.deepEqual(resolve(gh), { runId: "", runIds: [], available: false });
+  assert.deepEqual(resolve(gh, { prNumber: "7" }), { runId: "20", runIds: ["20"], available: true });
+  assert.deepEqual(resolve(gh, { prNumber: "8" }), { runId: "", runIds: [], available: false });
   assert.ok(gh.calls.some((args) => args[1] === `repos/${REPO}/pulls/7`), "the pull request itself is read");
 });
 
 test("a pull request that is not merged, or cannot be read, leaves only runs of main", () => {
   const runs = [prRun({ id: 20, created_at: "2026-10-09T00:00:00Z" }), pushRun({ id: 21 })];
   const artifacts = { 20: BOTH, 21: BOTH };
-  assert.deepEqual(resolve(stub({ runs, artifacts, pull: releasePull({ merged: false }) }), { prNumber: "7" }), { runId: "21", available: true });
-  assert.deepEqual(resolve(stub({ runs, artifacts, pull: new Error("HTTP 502") }), { prNumber: "7" }), { runId: "21", available: true });
-  assert.deepEqual(resolve(stub({ runs, artifacts }), { prNumber: "7" }), { runId: "20", available: true });
+  assert.deepEqual(resolve(stub({ runs, artifacts, pull: releasePull({ merged: false }) }), { prNumber: "7" }), { runId: "21", runIds: ["21"], available: true });
+  assert.deepEqual(resolve(stub({ runs, artifacts, pull: new Error("HTTP 502") }), { prNumber: "7" }), { runId: "21", runIds: ["21"], available: true });
+  assert.deepEqual(resolve(stub({ runs, artifacts }), { prNumber: "7" }), { runId: "20", runIds: ["20", "21"], available: true });
 });
 
 test("the resolver skips a newer trusted run that never built the module", () => {
@@ -211,23 +211,32 @@ test("the resolver skips a newer trusted run that never built the module", () =>
     runs: [pushRun({ id: 31, created_at: "2026-10-02T00:00:00Z" }), pushRun({ id: 30, created_at: "2026-10-01T00:00:00Z" })],
     artifacts: { 31: [], 30: BOTH },
   });
-  assert.deepEqual(resolve(gh), { runId: "30", available: true });
+  assert.deepEqual(resolve(gh), { runId: "30", runIds: ["30"], available: true });
 });
 
 test("a run with the module but no signed manifest is unavailable", () => {
   const gh = stub({ runs: [pushRun({ id: 40 })], artifacts: { 40: [{ name: "wasm-prod", expired: false }] } });
-  assert.deepEqual(resolve(gh), { runId: "", available: false });
+  assert.deepEqual(resolve(gh), { runId: "", runIds: [], available: false });
 });
 
 test("a preferred run is used only when it is trusted and for the commit", () => {
   const trustedRun = pushRun({ id: 50 });
   const gh = stub({ runs: [], artifacts: { 50: BOTH }, byId: { 50: trustedRun } });
-  assert.deepEqual(resolve(gh, { preferredRunId: "50" }), { runId: "50", available: true });
+  assert.deepEqual(resolve(gh, { preferredRunId: "50" }), { runId: "50", runIds: ["50"], available: true });
 
   const forged = prRun({ id: 51, head_branch: "attacker", pull_requests: [{ number: 51, base: { ref: "attacker/base" } }] });
   const search = stub({ runs: [pushRun({ id: 52 })], artifacts: { 51: BOTH, 52: BOTH }, byId: { 51: forged } });
-  assert.deepEqual(resolve(search, { preferredRunId: "51" }), { runId: "52", available: true });
+  assert.deepEqual(resolve(search, { preferredRunId: "51" }), { runId: "52", runIds: ["52"], available: true });
 
   const otherCommit = stub({ runs: [], byId: { 53: pushRun({ id: 53, head_sha: "b".repeat(40) }) } });
-  assert.deepEqual(resolve(otherCommit, { preferredRunId: "53" }), { runId: "", available: false });
+  assert.deepEqual(resolve(otherCommit, { preferredRunId: "53" }), { runId: "", runIds: [], available: false });
+});
+
+test("the resolver hands the verifier every candidate with the module, newest first, up to a limit", () => {
+  const runs = Array.from({ length: MAX_CANDIDATES + 2 }, (_, index) => pushRun({ id: 60 + index, created_at: `2026-10-${String(10 + index).padStart(2, "0")}T00:00:00Z` }));
+  const artifacts = Object.fromEntries(runs.map((run) => [run.id, run.id === 65 ? [] : BOTH]));
+  const result = resolve(stub({ runs, artifacts }));
+  assert.deepEqual(result.runIds, ["66", "64", "63", "62", "61"], "the newest first, skipping a run without the module");
+  assert.equal(result.runId, "66");
+  assert.equal(result.available, true);
 });

@@ -896,6 +896,11 @@ jobs:
       github.event.pull_request.user.login != 'dependabot[bot]')
     env:
       CARGO_TERM_COLOR: always
+      # The release pull request's module is signed (`wasm-attest`) and shipped, so that run
+      # restores no cache: anyone who can push to or retarget the pull request can write its
+      # cache scope, and a poisoned module, target, compiler, tool, or node_modules entry would
+      # be signed as the clean commit's. The head-ref prefix MUST match scripts/ci/release-pr.mjs.
+      RELEASE_PR_WASM: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == 'main' && startsWith(github.head_ref, 'release-please--branches--main--components--') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -906,6 +911,7 @@ jobs:
         with:
           variant: prod
           save: "false"
+          restore: ${{ env.RELEASE_PR_WASM != 'true' }}
 
       # Keep the hit and miss setup explicit. GitHub expressions cannot use
       # an empty string as the true side of an &&/|| conditional because the
@@ -918,6 +924,7 @@ jobs:
           cargo-cache: "false"
           webapp-deps: "true"
           emulatorjs-cache: ${{ github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true' }}
+          cache-restore: ${{ env.RELEASE_PR_WASM != 'true' }}
 
       - name: Set up WASM build environment
         if: steps.wasm-cache.outputs.cache-hit != 'true'
@@ -933,13 +940,14 @@ jobs:
           sccache: "true"
           webapp-deps: "true"
           emulatorjs-cache: ${{ github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true' }}
+          cache-restore: ${{ env.RELEASE_PR_WASM != 'true' }}
 
       # Cargo MUST validate restored fingerprints; this cache contains build state,
       # not a finished module. The SHA suffix allows successful main builds to save
       # new generations without losing restores from compatible older commits.
       - name: Restore WASM target artifacts
         id: wasm-target-cache
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        if: steps.wasm-cache.outputs.cache-hit != 'true' && env.RELEASE_PR_WASM != 'true'
         uses: actions/cache/restore@v6
         with:
           path: target
@@ -982,7 +990,7 @@ jobs:
 
       # Verified modules MUST reach the cache before an unrelated webapp build can fail.
       - name: Save verified WASM module
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        if: steps.wasm-cache.outputs.cache-hit != 'true' && env.RELEASE_PR_WASM != 'true'
         uses: actions/cache/save@v6
         with:
           key: ${{ steps.wasm-cache.outputs.key }}

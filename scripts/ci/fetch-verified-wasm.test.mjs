@@ -6,7 +6,7 @@ import process from "node:process";
 import test from "node:test";
 
 import { makeTempDir } from "../test-temp-dirs.mjs";
-import { certIdentityFor, certificateDigestArgs, fetchVerifiedWasm, sourceRefFor, verifyArgs } from "./fetch-verified-wasm.mjs";
+import { ATTESTATION_LIMIT, certIdentityFor, certificateDigestArgs, fetchFirstVerifiedWasm, fetchVerifiedWasm, parseRunIds, runInvocationPrefix, sourceRefFor, verifyArgs } from "./fetch-verified-wasm.mjs";
 import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
 import { WORKFLOW_PATH } from "./resolve-wasm-run.mjs";
 import { buildManifest, MANIFEST_NAME } from "./wasm-manifest.mjs";
@@ -100,11 +100,22 @@ test("the signer identity and ref are exact for a main push and for the release 
 test("gh attestation verify pins repo, signer identity, ref, source commit, and hosted runners", () => {
   assert.deepEqual(
     verifyArgs({ file: "m.sha256", repository: REPO, identity: "ID", sourceRef: "REF", sourceDigest: HEAD }),
-    ["attestation", "verify", "m.sha256", "--repo", REPO, "--cert-identity", "ID", "--source-ref", "REF", "--source-digest", HEAD, "--deny-self-hosted-runners"],
+    ["attestation", "verify", "m.sha256", "--repo", REPO, "--cert-identity", "ID", "--source-ref", "REF", "--source-digest", HEAD, "--deny-self-hosted-runners", "--limit", ATTESTATION_LIMIT],
   );
-  const probe = certificateDigestArgs({ file: "m.sha256", repository: REPO, identity: "ID", sourceRef: "REF" });
+  const runPrefix = runInvocationPrefix({ repository: REPO, runId: "100" });
+  assert.equal(runPrefix, `https://github.com/${REPO}/actions/runs/100/attempts/`);
+  const probe = certificateDigestArgs({ file: "m.sha256", repository: REPO, identity: "ID", sourceRef: "REF", runPrefix });
   for (const flag of ["--repo", "--cert-identity", "--source-ref", "--deny-self-hosted-runners"]) assert.ok(probe.includes(flag), flag);
+  assert.equal(probe[probe.indexOf("--limit") + 1], ATTESTATION_LIMIT, "extra attestations of the same manifest cannot hide this run's");
   assert.ok(!probe.includes("--cert-identity-regex") && !probe.includes("-i"));
+});
+
+test("the source digest comes from this run's own attestation, not the first one gh returns", () => {
+  const filter = certificateDigestArgs({ file: "m", repository: REPO, identity: "ID", sourceRef: "REF", runPrefix: runInvocationPrefix({ repository: REPO, runId: "100" }) }).at(-1);
+  const certificate = (run, digest) => ({ verificationResult: { signature: { certificate: { runInvocationURI: `https://github.com/${REPO}/actions/runs/${run}/attempts/1`, sourceRepositoryDigest: digest } } } });
+  const jq = spawnSync("jq", ["-r", filter], { input: JSON.stringify([certificate(1000, "d".repeat(40)), certificate(100, MERGE), certificate(100, MERGE), certificate(1001, "e".repeat(40))]), encoding: "utf8" });
+  assert.equal(jq.status, 0, jq.stderr);
+  assert.equal(jq.stdout.trim(), MERGE, "another run's attestation of the same manifest is ignored; reruns collapse to one digest");
 });
 
 test("a push-to-main artifact is verified against the run's commit and installed", () => {
@@ -120,6 +131,7 @@ test("a push-to-main artifact is verified against the run's commit and installed
     "--source-ref", "refs/heads/main",
     "--source-digest", HEAD,
     "--deny-self-hosted-runners",
+    "--limit", ATTESTATION_LIMIT,
   ]);
 });
 
@@ -204,9 +216,36 @@ test("runs the resolver would not pick are refused before anything is downloaded
   }
 });
 
+test("a copy that fails partway removes what it installed", () => {
+  const gh = stub({ trees: { [HEAD]: TREE } });
+  const { destination, run } = fetchWith(gh);
+  writeFileSync(join(destination, "third_party"), "a file where a directory must go");
+  assert.throws(run);
+  assert.deepEqual(readdirSync(destination), ["third_party"], "only what was there before remains");
+});
+
+test("each candidate run is tried, newest first, until one verifies", () => {
+  const runs = { 100: pushRun({ id: 101, head_branch: "attacker" }), 101: pushRun({ id: 101 }) };
+  const calls = [];
+  const runGh = (args) => {
+    calls.push(args);
+    const single = /actions\/runs\/(\d+)$/u.exec(args[1] ?? "");
+    if (args[0] === "api" && single) return JSON.stringify(single[1] === "100" ? { ...pushRun(), head_branch: "attacker" } : pushRun({ id: 101 }));
+    return stub({ run: runs[101], trees: { [HEAD]: TREE } }).runGh(args);
+  };
+  const destination = makeTempDir("wasm-destination-");
+  const result = fetchFirstVerifiedWasm({ runIds: ["100", "101"], repository: REPO, expectedSha: HEAD, destination, workDir: makeTempDir("wasm-work-"), runGh });
+  assert.equal(result.runId, "101");
+  assert.equal(installed(destination), 3);
+  assert.throws(() => fetchFirstVerifiedWasm({ runIds: ["100"], repository: REPO, expectedSha: HEAD, destination, workDir: makeTempDir("wasm-work-"), runGh }), /run 100: run 100 is not a trusted ci\.yml run/u);
+  assert.throws(() => fetchFirstVerifiedWasm({ runIds: [], repository: REPO, expectedSha: HEAD, destination, workDir: makeTempDir("wasm-work-"), runGh }), /no candidate run/u);
+  assert.deepEqual(parseRunIds(" 1  2\n"), ["1", "2"]);
+  assert.deepEqual(parseRunIds(undefined), []);
+});
+
 test("malformed inputs are refused", () => {
   const gh = stub({ trees: { [HEAD]: TREE } });
-  for (const overrides of [{ runId: "1; rm" }, { runId: "" }, { expectedSha: "main" }, { expectedSha: "" }, { repository: "no-slash" }])
+  for (const overrides of [{ runId: "1; rm" }, { runId: "" }, { expectedSha: "main" }, { expectedSha: "" }, { repository: "no-slash" }, { serverUrl: "https://x/$(id)" }])
     assert.throws(fetchWith(gh, overrides).run, /is not valid/u, JSON.stringify(overrides));
 });
 

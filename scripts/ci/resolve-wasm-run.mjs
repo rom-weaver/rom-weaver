@@ -94,30 +94,41 @@ export function artifactsAvailable(artifacts) {
   return REQUIRED_ARTIFACTS.every((name) => live.has(name));
 }
 
+// Candidates handed to the verifier, newest first. A newer run of another pull request from the
+// same head passes the checks here and only fails verification, so one candidate is not enough.
+export const MAX_CANDIDATES = 5;
+
 export function resolveWasmRun({ repository, targetSha, prNumber = "", preferredRunId = "", env = process.env, runGh = (args) => gh(args, env) }) {
   const json = (args) => JSON.parse(runGh(args) || "null");
   const hasArtifacts = (runId) => artifactsAvailable(json(["api", `repos/${repository}/actions/runs/${runId}/artifacts?per_page=100`, "--jq", ".artifacts"]));
   const options = { repository, targetSha, prNumber, pull: readPull({ repository, prNumber, runGh }) };
   if (preferredRunId) {
     const preferred = json(["api", `repos/${repository}/actions/runs/${preferredRunId}`]);
-    if (trustedRuns([preferred], options).length) return { runId: String(preferred.id), available: hasArtifacts(preferred.id) };
+    if (trustedRuns([preferred], options).length) {
+      const available = hasArtifacts(preferred.id);
+      return { runId: String(preferred.id), runIds: available ? [String(preferred.id)] : [], available };
+    }
     process.stdout.write(`run ${preferredRunId} is not a trusted ci.yml run for ${targetSha} - searching by commit\n`);
   }
   const runs = json(["api", `repos/${repository}/actions/workflows/ci.yml/runs?head_sha=${targetSha}&status=success&per_page=100`, "--jq", ".workflow_runs"]) ?? [];
   // The newest trusted run can have skipped the WASM build, so keep looking until one has it.
-  for (const run of trustedRuns(runs, options)) if (hasArtifacts(run.id)) return { runId: String(run.id), available: true };
-  return { runId: "", available: false };
+  const runIds = [];
+  for (const run of trustedRuns(runs, options)) {
+    if (runIds.length === MAX_CANDIDATES) break;
+    if (hasArtifacts(run.id)) runIds.push(String(run.id));
+  }
+  return { runId: runIds[0] ?? "", runIds, available: runIds.length > 0 };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     if (!process.env.GITHUB_REPOSITORY || !process.env.TARGET_SHA) throw new Error("GITHUB_REPOSITORY and TARGET_SHA are required");
-    const { runId, available } = resolveWasmRun({ repository: process.env.GITHUB_REPOSITORY, targetSha: process.env.TARGET_SHA, prNumber: normalizePrNumber(process.env.PR_NUMBER), preferredRunId: process.env.PREFERRED_RUN_ID });
-    const line = `run_id=${runId} available=${available} (sha ${process.env.TARGET_SHA})\n`;
+    const { runId, runIds, available } = resolveWasmRun({ repository: process.env.GITHUB_REPOSITORY, targetSha: process.env.TARGET_SHA, prNumber: normalizePrNumber(process.env.PR_NUMBER), preferredRunId: process.env.PREFERRED_RUN_ID });
+    const line = `run_id=${runId} run_ids=${runIds.join(" ")} available=${available} (sha ${process.env.TARGET_SHA})\n`;
     process.stdout.write(line);
     // Written to stdout directly when unset rather than opening "/dev/stdout",
     // which is a Linux-ism the shell could afford and this cannot.
-    const outputs = `run_id=${runId}\navailable=${available}\n`;
+    const outputs = `run_id=${runId}\nrun_ids=${runIds.join(" ")}\navailable=${available}\n`;
     if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, outputs);
     else process.stdout.write(outputs);
   } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; }

@@ -260,7 +260,7 @@ jobs:
           steps.screenshot-ci.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ steps.screenshot-ci.outputs.run_id }}
+          RUN_IDS: ${{ steps.screenshot-ci.outputs.run_ids }}
           # The dispatch commit: its own push run signed the artifact.
           EXPECTED_SHA: ${{ github.sha }}
         run: node scripts/ci/fetch-verified-wasm.mjs
@@ -602,7 +602,7 @@ jobs:
         if: steps.ci.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ steps.ci.outputs.run_id }}
+          RUN_IDS: ${{ steps.ci.outputs.run_ids }}
           PR_NUMBER: ${{ needs.release.outputs.artifact_pr_number }}
           EXPECTED_SHA: ${{ needs.release.outputs.sha }}
         run: node scripts/ci/fetch-verified-wasm.mjs

@@ -116,7 +116,7 @@ test("the screenshot job verifies main's push run against the dispatch commit", 
   assert.equal(resolve.env.PR_NUMBER, undefined, "no pull request number: runs of main only");
   const fetch = step(releaseJob, "Verify and install tested WASM artifact for screenshots");
   assert.equal(fetch.env.EXPECTED_SHA, "${{ github.sha }}");
-  assert.equal(fetch.env.RUN_ID, "${{ steps.screenshot-ci.outputs.run_id }}");
+  assert.equal(fetch.env.RUN_IDS, "${{ steps.screenshot-ci.outputs.run_ids }}", "every candidate, newest first");
   assert.equal(fetch.id, "screenshot-wasm");
 });
 
@@ -127,6 +127,7 @@ test("the release package verifies against the released commit and the release p
   const fetch = step(staticWebapp, "Verify and install tested WASM artifact");
   assert.equal(fetch.env.EXPECTED_SHA, "${{ needs.release.outputs.sha }}");
   assert.equal(fetch.env.PR_NUMBER, "${{ needs.release.outputs.artifact_pr_number }}");
+  assert.equal(fetch.env.RUN_IDS, "${{ steps.ci.outputs.run_ids }}", "every candidate, newest first");
   assert.equal(fetch.id, "wasm");
 });
 
@@ -193,4 +194,41 @@ test("the release pull request's CI run is a candidate only when its head tree i
     sha: "c".repeat(40),
     pr_number: "",
   });
+});
+
+const action = (name) => load(readFileSync(new URL(`../../.github/actions/${name}/action.yml`, import.meta.url), "utf8"));
+const CACHE_ACTION = /^(actions\/cache(\/restore|\/save)?|Swatinem\/rust-cache)@/u;
+
+test("the release pull request's WASM build, which is signed, restores and saves no cache", () => {
+  const job = ci.jobs.wasm;
+  const flag = job.env.RELEASE_PR_WASM.replace(/^\$\{\{|\}\}$/gu, "");
+  const isRelease = (overrides) => evaluate(flag, overrides);
+  assert.equal(isRelease({ event: "pull_request", headRef: releaseBranch }), true);
+  for (const overrides of [
+    { event: "pull_request", headRef: "feature/wasm" },
+    { event: "pull_request", headRef: releaseBranch, fork: true },
+    { event: "pull_request", headRef: releaseBranch, base: "attacker/base" },
+    { event: "push", ref: "refs/heads/main" },
+  ])
+    assert.equal(isRelease(overrides), false, JSON.stringify(overrides));
+  // The flag and the signing job agree on which runs are the release pull request's.
+  for (const overrides of [{ event: "pull_request", headRef: releaseBranch }, { event: "pull_request", headRef: releaseBranch, base: "attacker/base" }])
+    assert.equal(isRelease(overrides), evaluate(ci.jobs["wasm-attest"].if, overrides));
+
+  const off = "${{ env.RELEASE_PR_WASM != 'true' }}";
+  assert.equal(step(job, "Restore built wasm module").with.restore, off);
+  for (const name of ["Set up cached WASM environment", "Set up WASM build environment"]) assert.equal(step(job, name).with["cache-restore"], off, name);
+  for (const candidate of job.steps.filter((entry) => CACHE_ACTION.test(entry.uses ?? "")))
+    assert.match(String(candidate.if), /env\.RELEASE_PR_WASM != 'true'|github\.ref == 'refs\/heads\/main'/u, candidate.name);
+
+  const setup = action("setup-build-env");
+  assert.equal(setup.inputs["cache-restore"].default, "true");
+  const caching = setup.runs.steps.filter((entry) => CACHE_ACTION.test(entry.uses ?? ""));
+  assert.ok(caching.length >= 10, "every cache step is found");
+  for (const entry of caching) assert.ok(String(entry.if).startsWith("inputs.cache-restore == 'true' && ("), entry.name);
+  assert.equal(setup.runs.steps.find((entry) => String(entry.uses).startsWith("jdx/mise-action@")).with.cache, "${{ inputs.cache-restore == 'true' }}", "mise's tool cache too");
+
+  const module = action("wasm-cache");
+  for (const entry of module.runs.steps.filter((candidate) => CACHE_ACTION.test(candidate.uses ?? "")))
+    assert.ok(String(entry.if).startsWith("inputs.restore == 'true' && "), entry.name);
 });

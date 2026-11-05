@@ -22,6 +22,11 @@ inputs:
       to the job that does build - permanently, since the key is source-exact
       and never rewritten.
     default: "true"
+  restore:
+    description: >-
+      "false" never restores or saves the module: the caller builds it from
+      source. Only the paths and key are resolved.
+    default: "true"
 
 outputs:
   cache-hit:
@@ -122,7 +127,7 @@ runs:
     # exposes default-branch caches to PRs; PR-written caches remain branch-local.
     - name: Restore built wasm module
       id: cache
-      if: inputs.save != 'false'
+      if: inputs.restore == 'true' && inputs.save != 'false'
       uses: actions/cache@v6
       with:
         key: ${{ steps.key.outputs.key }}
@@ -132,7 +137,7 @@ runs:
     # generated attribution files are recreated by each consumer after setup.
     - name: Restore built wasm module (read-only)
       id: restore
-      if: inputs.save == 'false'
+      if: inputs.restore == 'true' && inputs.save == 'false'
       uses: actions/cache/restore@v6
       with:
         key: ${{ steps.key.outputs.key }}
