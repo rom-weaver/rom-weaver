@@ -289,17 +289,20 @@ jobs:
           if ! command -v skopeo >/dev/null; then
             APT_PACKAGES=skopeo node scripts/ci/install-system-dependencies.mjs
           fi
-          count=0
-          for archive in "$ARCHIVES"/*/image.tar; do
+          # A missing leg would otherwise publish a manifest list advertising one architecture, so
+          # count before anything is pushed.
+          archives=("$ARCHIVES"/*/image.tar)
+          if [ "${#archives[@]}" -ne 2 ] || [ ! -f "${archives[0]}" ]; then
+            echo "::error::expected two image archives, found: ${archives[*]}"
+            exit 1
+          fi
+          for archive in "${archives[@]}"; do
             digest=$(tar -xOf "$archive" index.json | jq -er 'if (.manifests | length) == 1 then .manifests[0].digest else error("expected one manifest") end')
             skopeo copy --retry-times 3 --all --preserve-digests "oci-archive:$archive" "docker://$IMAGE@$digest"
             # The registry hashes what it stored; anything but the archive's digest is a bad push.
             test "sha256:$(skopeo inspect --raw "docker://$IMAGE@$digest" | sha256sum | cut -d ' ' -f 1)" = "$digest"
             echo "pushed $IMAGE@$digest from ${archive#"$ARCHIVES"/}"
-            count=$((count + 1))
           done
-          # A missing leg would otherwise publish a manifest list advertising one architecture.
-          test "$count" -eq 2
 
       - name: Assemble the manifest list
         id: manifest

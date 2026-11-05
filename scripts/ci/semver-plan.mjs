@@ -102,7 +102,7 @@ export function planSemver(crates, lookup) {
 
 export function summaryMarkdown(plan) {
   const rows = plan.decisions.map(
-    (decision) => `| ${decision.name} | ${decision.baseline || "n/a"} | ${decision.version} | ${decision.skip ? "skip" : "check"}: ${decision.reason} |`,
+    (decision) => `| ${decision.name} | ${decision.baseline || "n/a"} | ${decision.version} | ${plan.skipped ? "skip" : "check"}: ${decision.reason} |`,
   );
   return [
     plan.skipped

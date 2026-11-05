@@ -97,6 +97,7 @@ test("mixed crates run the check for every crate", () => {
     { minor: found("0.22.2"), patch: found("1.2.3"), fresh: { status: 404 } },
   );
   assert.equal(result.skipped, false);
+  assert.doesNotMatch(summaryMarkdown(result), /\| skip:/u, "every row runs, so no row says skip");
   assert.deepEqual(result.crates, ["minor", "patch", "fresh"]);
   assert.deepEqual(
     result.decisions.map((decision) => decision.skip),
