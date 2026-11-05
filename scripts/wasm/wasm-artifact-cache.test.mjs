@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { buildFlagEnv, remapPathArgs } from "./build-app.mjs";
+import { createCargoConfigSnapshot } from "./wasm-source-fingerprint.mjs";
 import {
   pruneWasmArtifacts,
   restoreWasmArtifacts,
@@ -232,4 +233,72 @@ test("compiler flag overrides always change the artifact key", () => {
   for (const name of ["TARGET_CFLAGS", "TARGET_CXXFLAGS", "HOST_CFLAGS", "HOST_CXXFLAGS", "CC_SHELL_ESCAPED_FLAGS", "CRATE_CC_NO_DEFAULTS"]) {
     assert.notEqual(wasmArtifactCacheKey({ ...inputs, env: buildFlagEnv({ [name]: "1" }) }), original, name);
   }
+});
+
+test("Cargo home and ancestor config contents invalidate artifact keys", () => {
+  withDir((dir) => {
+    const root = path.join(dir, "checkout");
+    const cargoHome = path.join(dir, "home");
+    fs.mkdirSync(root);
+    fs.mkdirSync(cargoHome);
+    const options = { root, cwd: root, cargoHome };
+    const key = () => wasmArtifactCacheKey({ configuration: createCargoConfigSnapshot(options).fingerprint });
+    for (const directory of [cargoHome, path.join(dir, ".cargo")]) {
+      fs.mkdirSync(directory, { recursive: true });
+      for (const name of ["config", "config.toml"]) {
+        const file = path.join(directory, name);
+        const absent = key();
+        fs.writeFileSync(file, "[profile.wasm-release]\nopt-level = 3\n");
+        const initial = key();
+        assert.notEqual(initial, absent);
+        fs.writeFileSync(file, "[profile.wasm-release]\nopt-level = 1\n");
+        assert.notEqual(key(), initial);
+        fs.writeFileSync(file, Buffer.from([0xff]));
+        const invalidBytes = key();
+        fs.writeFileSync(file, Buffer.from([0xfe]));
+        assert.notEqual(key(), invalidBytes);
+        fs.rmSync(file);
+        assert.equal(key(), absent);
+      }
+    }
+  });
+});
+
+test("Cargo config snapshots retain writes reverted during a build", () => {
+  withDir((dir) => {
+    const cargoHome = path.join(dir, "home");
+    fs.mkdirSync(cargoHome);
+    const file = path.join(cargoHome, "config.toml");
+    fs.writeFileSync(file, "one");
+    const options = { root: dir, cwd: dir, cargoHome, sinceMs: Date.now() };
+    const initial = createCargoConfigSnapshot(options);
+    assert.equal(createCargoConfigSnapshot({ ...options, sinceMs: Date.now() + 60_000 }).modified, false);
+    fs.writeFileSync(file, "two");
+    fs.writeFileSync(file, "one");
+    const reverted = createCargoConfigSnapshot(options);
+    assert.equal(reverted.fingerprint, initial.fingerprint);
+    assert.equal(reverted.modified, true);
+    fs.rmSync(file);
+    const absent = createCargoConfigSnapshot(options);
+    fs.writeFileSync(file, "temporary");
+    fs.rmSync(file);
+    const removed = createCargoConfigSnapshot(options);
+    assert.equal(removed.fingerprint, absent.fingerprint);
+    assert.equal(removed.modified, true);
+  });
+});
+
+test("matching checkout configuration shares a path-independent fingerprint", () => {
+  withDir((dir) => {
+    const cargoHome = path.join(dir, "home");
+    fs.mkdirSync(cargoHome);
+    fs.writeFileSync(path.join(cargoHome, "config.toml"), "[profile.wasm-release]\nopt-level = 3\n");
+    const fingerprints = ["aaa", "zzz"].map((name) => {
+      const root = path.join(dir, name);
+      fs.mkdirSync(path.join(root, ".cargo"), { recursive: true });
+      fs.writeFileSync(path.join(root, ".cargo", "config.toml"), "[build]\njobs = 2\n");
+      return createCargoConfigSnapshot({ root, cwd: root, cargoHome }).fingerprint;
+    });
+    assert.equal(fingerprints[0], fingerprints[1]);
+  });
 });

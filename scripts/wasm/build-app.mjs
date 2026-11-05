@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { cargoTargetDir } from "../cargo-target-dir.mjs";
 import { brotliCompressFile } from "./brotli-compress.mjs";
 import { restoreWasmArtifacts, storeWasmArtifacts, wasmArtifactCacheKey, wasmArtifactCacheRoot } from "./wasm-artifact-cache.mjs";
-import { createWasmSourceFingerprint, wasmSourcesModifiedSince } from "./wasm-source-fingerprint.mjs";
+import { createCargoConfigSnapshot, createWasmSourceFingerprint, wasmSourcesModifiedSince } from "./wasm-source-fingerprint.mjs";
 import { createWasmProdFingerprint } from "./wasm-prod-fingerprint.mjs";
 
 export const parseMode = (value = "dev") => {
@@ -133,6 +133,8 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   const force = env.ROM_WEAVER_WASM_FORCE === "1";
   if (!wantBrotli) rmSync(`${artifact}.br`, { force: true });
   const cacheFiles = wantBrotli ? ["rom-weaver-app.wasm", "rom-weaver-app.wasm.br"] : ["rom-weaver-app.wasm"];
+  const configurationOptions = { root, cwd: process.cwd(), cargoHome: env.CARGO_HOME || join(homedir(), ".cargo"), sinceMs: sourcesReadAt };
+  const configuration = env.ROM_WEAVER_WASM_CACHE === "0" ? undefined : createCargoConfigSnapshot(configurationOptions);
   // scripts/wasm is part of the source fingerprint, so this script's flags,
   // remapping, and wasm-opt arguments are keyed through it.
   const cache =
@@ -143,6 +145,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
           key: wasmArtifactCacheKey({
             mode,
             source: sourceFingerprint,
+            configuration: configuration.fingerprint,
             rustc: toolVersion("rustc", ["-vV"]),
             clang: toolVersion(env.WASI_CLANG, ["--version"]),
             strip: stripVersion,
@@ -161,8 +164,9 @@ export function main(argv = process.argv.slice(2), env = process.env) {
     // A source edit during the build, even one reverted since, reaches Cargo's
     // output but not the key, so storing it would serve that edit to a later
     // build of the old sources.
-    if (cache && (wasmSourcesModifiedSince(root, sourcesReadAt) || createWasmSourceFingerprint(root) !== sourceFingerprint)) {
-      process.stderr.write("warning: WASM sources changed during the build; not caching it\n");
+    const configurationAfter = cache && createCargoConfigSnapshot(configurationOptions);
+    if (cache && (wasmSourcesModifiedSince(root, sourcesReadAt) || createWasmSourceFingerprint(root) !== sourceFingerprint || configurationAfter.fingerprint !== configuration.fingerprint || configurationAfter.state !== configuration.state || configurationAfter.modified)) {
+      process.stderr.write("warning: WASM build inputs changed during the build; not caching it\n");
     } else if (cache) {
       try {
         storeWasmArtifacts({ ...cache, files: cacheFiles, sourceDir: outDir, replace: force });

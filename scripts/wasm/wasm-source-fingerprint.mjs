@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, posix } from "node:path";
+import { dirname, join, posix, relative, resolve } from "node:path";
 import { isWasmCompilerInput } from "./wasm-compiler-inputs.mjs";
 
 const SOURCE_ROOTS = ["crates", "scripts/wasm"];
@@ -62,3 +62,54 @@ export const createWasmSourceFingerprint = (root) => {
   }
   return hash.digest("hex");
 };
+
+export function createCargoConfigSnapshot({ root, cwd, cargoHome, sinceMs }) {
+  const files = new Set();
+  const addDirectory = (directory) => {
+    files.add(join(directory, "config"));
+    files.add(join(directory, "config.toml"));
+  };
+  addDirectory(resolve(cwd, cargoHome));
+  for (let directory = resolve(cwd); ; directory = dirname(directory)) {
+    addDirectory(join(directory, ".cargo"));
+    if (directory === dirname(directory)) break;
+  }
+  const contents = [];
+  const state = [];
+  const directories = new Set();
+  let modified = false;
+  const recordTime = (stats) => {
+    if (Math.max(stats.mtimeMs, stats.ctimeMs) >= sinceMs - TIMESTAMP_SLACK_MS) modified = true;
+  };
+  for (const file of [...files].sort()) {
+    let directory = dirname(file);
+    while (true) {
+      try {
+        const stats = statSync(directory);
+        recordTime(stats);
+        if (!directories.has(directory)) state.push([directory, stats.mtimeMs, stats.ctimeMs]);
+        directories.add(directory);
+        break;
+      } catch (error) {
+        if (error.code !== "ENOENT" || directory === dirname(directory)) throw error;
+        directory = dirname(directory);
+      }
+    }
+    try {
+      const stats = statSync(file);
+      recordTime(stats);
+      const label = dirname(file) === join(resolve(root), ".cargo") ? relative(root, file) : file;
+      contents.push([label, readFileSync(file).toString("base64")]);
+      state.push([file, stats.size, stats.mtimeMs, stats.ctimeMs]);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      state.push([file, null]);
+    }
+  }
+  contents.sort(([left], [right]) => left.localeCompare(right));
+  return {
+    fingerprint: createHash("sha256").update(JSON.stringify(contents)).digest("hex"),
+    state: JSON.stringify(state),
+    modified,
+  };
+}
