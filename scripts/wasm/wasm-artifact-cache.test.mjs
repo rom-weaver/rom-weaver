@@ -91,19 +91,23 @@ test("a failed store leaves no entry or staging directory", () => {
 test("pruning keeps the most recently used entries and drops stale staging", () => {
   withDir((root) => {
     const now = Date.now();
+    const key = (char) => char.repeat(64);
     const make = (name, ageMs) => {
       fs.mkdirSync(path.join(root, name));
       const time = new Date(now - ageMs);
       fs.utimesSync(path.join(root, name), time, time);
     };
-    make("old", 3000);
-    make("mid", 2000);
-    make("new", 1000);
-    make(".tmp-crashed", 2 * 60 * 60 * 1000);
-    make(".tmp-live", 1000);
+    make(key("a"), 3000);
+    make(key("b"), 2000);
+    make(key("c"), 1000);
+    make(`.tmp-${key("d")}-1`, 2 * 60 * 60 * 1000);
+    make(`.tmp-${key("e")}-2`, 1000);
+    // A cache root moved into a shared directory keeps what this module did not write.
+    make("unrelated", 4000);
+    make(".tmp-unrelated", 2 * 60 * 60 * 1000);
     fs.writeFileSync(path.join(root, "stray-file"), "");
     pruneWasmArtifacts(root, 2, now);
-    assert.deepEqual(fs.readdirSync(root).sort(), [".tmp-live", "mid", "new", "stray-file"]);
+    assert.deepEqual(fs.readdirSync(root).sort(), [`.tmp-${key("e")}-2`, ".tmp-unrelated", key("b"), key("c"), "stray-file", "unrelated"].sort());
   });
 });
 
@@ -111,13 +115,14 @@ test("restoring refreshes an entry's recency", () => {
   withDir((dir) => {
     const root = path.join(dir, "cache");
     writeArtifacts(path.join(dir, "a"), "one");
-    for (const key of ["first", "second"]) storeWasmArtifacts({ root, key, files: FILES, sourceDir: path.join(dir, "a") });
+    const [first, second] = ["1".repeat(64), "2".repeat(64)];
+    for (const key of [first, second]) storeWasmArtifacts({ root, key, files: FILES, sourceDir: path.join(dir, "a") });
     const past = new Date(Date.now() - 10_000);
-    fs.utimesSync(path.join(root, "first"), past, past);
-    fs.utimesSync(path.join(root, "second"), new Date(Date.now() - 5000), new Date(Date.now() - 5000));
-    restoreWasmArtifacts({ root, key: "first", files: FILES, outDir: path.join(dir, "a") });
+    fs.utimesSync(path.join(root, first), past, past);
+    fs.utimesSync(path.join(root, second), new Date(Date.now() - 5000), new Date(Date.now() - 5000));
+    restoreWasmArtifacts({ root, key: first, files: FILES, outDir: path.join(dir, "a") });
     pruneWasmArtifacts(root, 1);
-    assert.deepEqual(fs.readdirSync(root), ["first"]);
+    assert.deepEqual(fs.readdirSync(root), [first]);
   });
 });
 

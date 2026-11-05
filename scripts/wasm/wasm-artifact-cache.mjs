@@ -83,12 +83,13 @@ export function pruneWasmArtifacts(root, keep = DEFAULT_KEEP, now = Date.now()) 
       continue;
     }
     if (!stats.isDirectory()) continue;
-    if (name.startsWith(".tmp-")) {
+    if (/^\.tmp-[0-9a-f]{64}-\d+$/.test(name)) {
       // Staging directories of a crashed build; a live build finishes well within the hour.
       if (now - stats.mtimeMs > STALE_TMP_MS) rmSync(path, { recursive: true, force: true });
       continue;
     }
-    entries.push({ path, mtimeMs: stats.mtimeMs });
+    // ROM_WEAVER_WASM_CACHE_DIR MAY name a directory holding other files; only entries this module wrote are pruned.
+    if (/^[0-9a-f]{64}$/.test(name)) entries.push({ path, mtimeMs: stats.mtimeMs });
   }
   entries.sort((a, b) => b.mtimeMs - a.mtimeMs);
   for (const { path } of entries.slice(keep)) rmSync(path, { recursive: true, force: true });

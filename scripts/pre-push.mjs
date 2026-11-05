@@ -30,19 +30,20 @@ export const A11Y_STEP = {
 // git writes one "<local ref> <local sha> <remote ref> <remote sha>" line per
 // pushed ref; an all-zero local sha deletes the remote ref.
 export function pushedCommits(stdin) {
-  return stdin
+  const refs = stdin
     .split(/\r?\n/)
     .map((line) => line.trim().split(/\s+/))
-    .filter((fields) => fields.length === 4 && !/^0+$/.test(fields[1]))
-    .map((fields) => fields[1]);
+    .filter((fields) => fields.length === 4);
+  return { refs: refs.length, commits: refs.map((fields) => fields[1]).filter((sha) => !/^0+$/.test(sha)) };
 }
 
 // changedPaths is undefined when no base resolves; every check then runs, the
 // classifier's own fail-open default.
 export function planPrePush({ pushed, head, changedPaths, e2e = false }) {
-  if (pushed.length === 0) return { steps: [], reason: "the push only deletes refs" };
+  if (pushed.refs === 0) return { steps: [], reason: "git reported no pushed refs" };
+  if (pushed.commits.length === 0) return { steps: [], reason: "the push only deletes refs" };
   // The checks build the working tree, which only matches a pushed HEAD.
-  if (!pushed.includes(head)) return { steps: [], reason: "HEAD is not among the pushed commits" };
+  if (!pushed.commits.includes(head)) return { steps: [], reason: "HEAD is not among the pushed commits" };
   const selection = classifyChanges(changedPaths ?? [], changedPaths === undefined);
   if (!selection.webapp) return { steps: [], reason: "no webapp or published-doc change since the base" };
   const browser = selection.webapp_browser;
