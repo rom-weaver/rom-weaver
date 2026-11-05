@@ -142,11 +142,13 @@ FROM identify-${IDENTIFY_DATA} AS identified
 # artifacts, so it is keyed by arch. Unkeyed, a multi-arch build would point
 # both arches at one `sharing=locked` directory and serialize them onto each
 # other's objects.
+#
+# The shared WASM cache would only add an unrestorable module copy to this layer.
 FROM identified AS wasm-source
 ARG TARGETARCH
 RUN --mount=type=cache,id=webapp-cargo-registry,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,id=webapp-cargo-target-${TARGETARCH},target=/app/target,sharing=locked \
-    node scripts/wasm/build-app.mjs prod
+    ROM_WEAVER_WASM_CACHE=0 node scripts/wasm/build-app.mjs prod
 
 # Callers MUST stage the source-exact module before selecting WASM=prebuilt.
 # Toolchain layers still verify each architecture's SDK and binaryen checksums.
