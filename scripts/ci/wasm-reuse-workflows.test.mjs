@@ -131,10 +131,10 @@ test("the screenshot job verifies main's push run against the dispatch commit", 
 test("the release package verifies against the released commit and the release pull request", () => {
   const resolve = step(staticWebapp, "Resolve tested WASM artifact");
   assert.equal(resolve.env.TARGET_SHA, "${{ needs.release.outputs.artifact_sha }}");
-  assert.equal(resolve.env.PR_NUMBER, "${{ needs.release.outputs.artifact_pr_number }}");
+  assert.equal(resolve.env.PR_NUMBER, "${{ needs.release.outputs.artifact_pr }}");
   const fetch = step(staticWebapp, "Verify and install tested WASM artifact");
   assert.equal(fetch.env.EXPECTED_SHA, "${{ needs.release.outputs.sha }}");
-  assert.equal(fetch.env.PR_NUMBER, "${{ needs.release.outputs.artifact_pr_number }}");
+  assert.equal(fetch.env.PR_NUMBER, "${{ needs.release.outputs.artifact_pr }}");
   assert.equal(fetch.env.RUN_IDS, "${{ steps.ci.outputs.run_ids }}", "every candidate, newest first");
   assert.equal(fetch.id, "wasm");
 });
@@ -183,6 +183,7 @@ esac
       RELEASE_SHA: "c".repeat(40),
       PR_HEAD_SHA: headSha,
       PR_NUMBER: prNumber,
+      PR_BASE: "main",
     },
   });
   assert.equal(result.status, 0, result.stderr);
@@ -192,15 +193,15 @@ esac
 test("the release pull request's CI run is a candidate only when its head tree is the release tree", () => {
   assert.deepEqual(artifactSha({ eventName: "pull_request", headSha: "a".repeat(40), headTree: "t1", releaseTree: "t1" }), {
     sha: "a".repeat(40),
-    pr_number: "7",
+    pr: "7",
   });
   assert.deepEqual(artifactSha({ eventName: "pull_request", headSha: "a".repeat(40), headTree: "t1", releaseTree: "t2" }), {
     sha: "c".repeat(40),
-    pr_number: "",
+    pr: "",
   });
   assert.deepEqual(artifactSha({ eventName: "workflow_dispatch", headSha: "", headTree: "t1", releaseTree: "t1" }), {
     sha: "c".repeat(40),
-    pr_number: "",
+    pr: "",
   });
 });
 
