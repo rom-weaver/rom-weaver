@@ -58,6 +58,7 @@ export const ROOT_LEAF_SCRIPTS = [
   "bench-disc-tools",
   "generate-compressed-disc-sample",
   "markdownlint-no-soft-line-breaks",
+  "pre-push",
   "quality-diff-coverage",
   "quality-fuzz",
   "quality-kani",
