@@ -1046,7 +1046,7 @@ jobs:
     if: >-
       needs.wasm.result == 'success' &&
       (
-        (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+        ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main') ||
         (
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository &&

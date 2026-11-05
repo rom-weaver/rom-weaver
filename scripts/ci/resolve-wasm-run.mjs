@@ -17,17 +17,19 @@ import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
 // Matched exactly: the API reports the workflow file's path, and no other file may stand in.
 export const WORKFLOW_PATH = ".github/workflows/ci.yml";
 export const DEFAULT_BRANCH = "main";
+// Runs of main itself; both sign as ci.yml@refs/heads/main.
+export const MAIN_EVENTS = new Set(["push", "workflow_dispatch"]);
 // The artifact and the checksum manifest that ci.yml's `wasm-attest` job signs.
 export const REQUIRED_ARTIFACTS = ["wasm-prod", "wasm-prod-manifest"];
 
 const gh = (args, env) => execFileSync("gh", args, { encoding: "utf8", env }).trim();
 
 // A pull request number is digits only; anything else is "no pull request", which accepts
-// push-to-main runs alone.
+// main's push and dispatch runs alone.
 export const normalizePrNumber = (value) => (/^[1-9][0-9]*$/u.test(String(value ?? "")) ? String(value) : "");
 
 // Pure: true only for a successful run of this repository's own ci.yml on code that is trusted
-// to build the module. A push run must be on main. A pull request run must be for the given
+// to build the module. A push or manual dispatch run must be on main. A pull request run must be for the given
 // release pull request, which must target main, from the release branch of this repository.
 export function isTrustedRun(run, { repository, prNumber = "" }) {
   if (!run || typeof run !== "object") return false;
@@ -35,7 +37,7 @@ export function isTrustedRun(run, { repository, prNumber = "" }) {
   if (run.status !== "completed" || run.conclusion !== "success") return false;
   if (run.repository?.full_name !== repository) return false;
   if (run.head_repository?.full_name !== repository) return false;
-  if (run.event === "push") return run.head_branch === DEFAULT_BRANCH;
+  if (MAIN_EVENTS.has(run.event)) return run.head_branch === DEFAULT_BRANCH;
   if (run.event === "pull_request") {
     const number = normalizePrNumber(prNumber);
     if (!number) return false;

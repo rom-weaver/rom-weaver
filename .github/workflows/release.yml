@@ -578,7 +578,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ needs.release.outputs.artifact_sha }}
           PR_NUMBER: ${{ needs.release.outputs.artifact_pr_number }}
-        # Only a push-to-main run, or the merged release PR's own run, is a candidate; the next
+        # Only a push or manual run of main, or the merged release PR's own run, is a candidate; the next
         # step verifies its signature. Any failure falls back to a source build.
         run: node scripts/ci/resolve-wasm-run.mjs
 

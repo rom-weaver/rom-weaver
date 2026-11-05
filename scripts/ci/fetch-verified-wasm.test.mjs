@@ -83,6 +83,8 @@ test("the signer identity and ref are exact for a main push and for the release 
   assert.equal(certIdentityFor({ repository: REPO, event: "push", prNumber: "" }), `https://github.com/${REPO}/.github/workflows/ci.yml@refs/heads/main`);
   assert.equal(certIdentityFor({ repository: REPO, event: "pull_request", prNumber: "7" }), `https://github.com/${REPO}/.github/workflows/ci.yml@refs/pull/7/merge`);
   assert.equal(sourceRefFor({ event: "push" }), "refs/heads/main");
+  assert.equal(sourceRefFor({ event: "workflow_dispatch" }), "refs/heads/main");
+  assert.equal(certIdentityFor({ repository: REPO, event: "workflow_dispatch", prNumber: "" }), `https://github.com/${REPO}/.github/workflows/ci.yml@refs/heads/main`);
   assert.equal(sourceRefFor({ event: "pull_request", prNumber: "7" }), "refs/pull/7/merge");
 });
 
@@ -175,7 +177,8 @@ test("runs the resolver would not pick are refused before anything is downloaded
     [attackerPr, "99"],
     [prRun(), "8"],
     [prRun(), ""],
-    [pushRun({ event: "workflow_dispatch" }), ""],
+    [pushRun({ event: "workflow_dispatch", head_branch: "attacker" }), ""],
+    [pushRun({ event: "schedule" }), ""],
     [pushRun({ head_branch: "attacker" }), ""],
     [pushRun({ path: ".github/workflows/evil/.github/workflows/ci.yml" }), ""],
     [pushRun({ head_repository: { full_name: "attacker/rom-weaver" } }), ""],

@@ -61,8 +61,13 @@ test("a pull request run from a branch that is not a release branch is rejected"
   assert.equal(trusted(prRun({ head_branch: `wip-${RELEASE_BRANCH}` }), "7"), false);
 });
 
+test("a manual dispatch run of main is trusted like a push", () => {
+  assert.equal(trusted(pushRun({ event: "workflow_dispatch" }), ""), true);
+  assert.equal(trusted(pushRun({ event: "workflow_dispatch", head_branch: "feature" }), ""), false, "a dispatch of another branch");
+});
+
 test("other events are rejected", () => {
-  for (const event of ["workflow_dispatch", "schedule", "pull_request_target", "workflow_run", "release", "merge_group", ""])
+  for (const event of ["schedule", "pull_request_target", "workflow_run", "release", "merge_group", ""])
     assert.equal(trusted(pushRun({ event }), "7"), false, event);
 });
 

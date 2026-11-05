@@ -6,7 +6,7 @@
 // fail the job: a failed check costs build time, never correctness.
 //
 // What "provably" means, in order:
-//   1. The run is a successful push-to-main or release-pull-request run of this repository's own
+//   1. The run is a successful push or dispatch run of main, or a release pull request run, of this repository's own
 //      ci.yml (the same predicate the resolver applies; it is re-checked here).
 //   2. `gh attestation verify` accepts the checksum manifest that ci.yml's `wasm-attest` job
 //      signed, pinned to this repository, the exact ci.yml signer identity at the run's ref, that
@@ -25,13 +25,13 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-import { DEFAULT_BRANCH, isTrustedRun, normalizePrNumber, WORKFLOW_PATH } from "./resolve-wasm-run.mjs";
+import { DEFAULT_BRANCH, isTrustedRun, MAIN_EVENTS, normalizePrNumber, WORKFLOW_PATH } from "./resolve-wasm-run.mjs";
 import { checkManifest, MANIFEST_NAME } from "./wasm-manifest.mjs";
 
 const SHA = /^[0-9a-f]{40}$/u;
 const gh = (args, env) => execFileSync("gh", args, { encoding: "utf8", env }).trim();
 
-export const sourceRefFor = ({ event, prNumber }) => (event === "push" ? `refs/heads/${DEFAULT_BRANCH}` : `refs/pull/${prNumber}/merge`);
+export const sourceRefFor = ({ event, prNumber }) => (MAIN_EVENTS.has(event) ? `refs/heads/${DEFAULT_BRANCH}` : `refs/pull/${prNumber}/merge`);
 
 export const certIdentityFor = ({ serverUrl = "https://github.com", repository, event, prNumber }) =>
   `${serverUrl}/${repository}/${WORKFLOW_PATH}@${sourceRefFor({ event, prNumber })}`;

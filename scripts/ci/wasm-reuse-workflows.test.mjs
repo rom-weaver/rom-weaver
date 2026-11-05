@@ -37,10 +37,11 @@ const evaluate = (expression, { event, ref = "", headRef = "", fork = false, bas
 
 const releaseBranch = `${RELEASE_PR_BRANCH_PREFIX}cli`;
 
-test("ci.yml signs the WASM manifest only for pushes to main and this repository's release pull request", () => {
+test("ci.yml signs the WASM manifest only for runs of main and this repository's release pull request", () => {
   const { if: condition } = ci.jobs["wasm-attest"];
   const signs = (overrides) => evaluate(condition, overrides);
   assert.equal(signs({ event: "push", ref: "refs/heads/main" }), true);
+  assert.equal(signs({ event: "workflow_dispatch", ref: "refs/heads/main" }), true, "a manual run of main");
   assert.equal(signs({ event: "pull_request", headRef: releaseBranch }), true);
   for (const [name, overrides] of Object.entries({
     "a push to another branch": { event: "push", ref: "refs/heads/feature" },
@@ -48,7 +49,7 @@ test("ci.yml signs the WASM manifest only for pushes to main and this repository
     "a feature pull request": { event: "pull_request", headRef: "feature/wasm" },
     "a pull request into another base": { event: "pull_request", headRef: releaseBranch, base: "attacker/base" },
     "a fork's release-named branch": { event: "pull_request", headRef: releaseBranch, fork: true },
-    "a manual run": { event: "workflow_dispatch", ref: "refs/heads/main" },
+    "a manual run of another branch": { event: "workflow_dispatch", ref: "refs/heads/feature" },
     "the nightly": { event: "schedule", ref: "refs/heads/main" },
     "a build that did not succeed": { event: "push", ref: "refs/heads/main", wasm: "failure" },
     "a skipped build": { event: "push", ref: "refs/heads/main", wasm: "skipped" },
@@ -111,7 +112,7 @@ test("the jobs that reuse the artifact can read attestations, runs, and commits"
 test("the screenshot job verifies main's push run against the dispatch commit", () => {
   const resolve = step(releaseJob, "Resolve tested WASM artifact for screenshots");
   assert.equal(resolve.env.TARGET_SHA, "${{ github.sha }}");
-  assert.equal(resolve.env.PR_NUMBER, undefined, "no pull request number: push-to-main runs only");
+  assert.equal(resolve.env.PR_NUMBER, undefined, "no pull request number: runs of main only");
   const fetch = step(releaseJob, "Verify and install tested WASM artifact for screenshots");
   assert.equal(fetch.env.EXPECTED_SHA, "${{ github.sha }}");
   assert.equal(fetch.env.RUN_ID, "${{ steps.screenshot-ci.outputs.run_id }}");
