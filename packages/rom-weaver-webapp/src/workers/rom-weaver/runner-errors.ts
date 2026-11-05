@@ -31,8 +31,10 @@ const ENGINE_DISPLAY_TAG = /\s\[[a-z0-9_]+(?:\.[a-z0-9_]+)+\](?: \(.*\))?$/su;
 
 const stripEngineDisplayTag = (message: string, fields: RomWeaverRunJsonEvent["error_fields"]): string => {
   const stripped = message.replace(ENGINE_DISPLAY_TAG, "");
-  const detail = fields?.detail;
-  return typeof detail === "string" && detail && !stripped.includes(detail) ? `${stripped}: ${detail}` : stripped;
+  // The detail is often a coded error's own Display, so it carries a tag too. Stripping it keeps this idempotent:
+  // the message is cleaned again after `getRomWeaverFailureMessage` built it.
+  const detail = typeof fields?.detail === "string" ? fields.detail.replace(ENGINE_DISPLAY_TAG, "") : "";
+  return detail && !stripped.includes(detail) ? `${stripped}: ${detail}` : stripped;
 };
 
 const getRomWeaverFailureMessage = (

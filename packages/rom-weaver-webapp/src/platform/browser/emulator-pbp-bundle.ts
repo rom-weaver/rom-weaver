@@ -17,7 +17,7 @@ type PbpBundleOptions = {
   signal?: AbortSignal;
 };
 
-// An engine failure is out-of-memory only by its code; the type and text are the signal for errors the browser raised.
+// A coded engine failure is out-of-memory only by its code; the type and text are the signal for errors without one.
 const isOutOfMemory = (error: unknown): boolean => {
   const engine = getEngineError(error);
   if (engine) return engine.code === "resource.out_of_memory";

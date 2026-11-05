@@ -1,6 +1,6 @@
 use super::*;
 use rom_weaver_core::{
-    ERROR_CODE_ARCHIVE_READ_FAILED, ERROR_CODE_ARCHIVE_STORAGE_FAILED,
+    ERROR_CODE_ARCHIVE_READ_FAILED, ERROR_CODE_ARCHIVE_STORAGE_FAILED, ERROR_CODE_IO_STORAGE_FULL,
     ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
 };
 
@@ -55,13 +55,16 @@ fn archive_error(
     // libarchive's file reader and writer name the file in these failures: the
     // file itself could not be opened or read, a storage problem rather than
     // archive damage.
-    let out_of_memory = match unsafe { archive_errno(archive_ptr) } {
-        0 => false,
-        errno => io::Error::from_raw_os_error(errno).kind() == io::ErrorKind::OutOfMemory,
+    let errno_kind = match unsafe { archive_errno(archive_ptr) } {
+        0 => None,
+        errno => Some(io::Error::from_raw_os_error(errno).kind()),
     };
-    let code = if out_of_memory {
+    let code = if errno_kind == Some(io::ErrorKind::OutOfMemory) {
         // A decoder that cannot allocate is not archive damage.
         Some(ERROR_CODE_RESOURCE_OUT_OF_MEMORY)
+    } else if errno_kind == Some(io::ErrorKind::StorageFull) {
+        // The archive writer's sink records the OS error of a write that ran out of space.
+        Some(ERROR_CODE_IO_STORAGE_FULL)
     } else if message.starts_with("Failed to open '") || message.starts_with("Error reading '") {
         Some(ERROR_CODE_ARCHIVE_STORAGE_FAILED)
     } else {

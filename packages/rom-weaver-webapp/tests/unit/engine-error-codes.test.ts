@@ -85,6 +85,21 @@ describe("engine error codes", () => {
     );
   });
 
+  it("shows a tagged detail once, without its tag, after the thrown error is cleaned again", () => {
+    const cause = "validation failed: chain step checksum mismatch for crc32; expected deadbeef, actual 2cccfa33";
+    const detail = `${cause} [patch.checksum_mismatch]`;
+    const result = failedRun({
+      error_code: "patch.chain.output_mismatch",
+      error_fields: { detail, patch_index: 0 },
+      label: `validation failed: chain step output does not match the patch's declared output checks [patch.chain.output_mismatch] (detail=${detail}, patch_index=0)`,
+    });
+    // The runtime builds the thrown error from the failure message, then `withRomWeaverFailure` cleans it again.
+    const message = withRomWeaverFailure(new Error(getRomWeaverFailureMessage(result)), result).message;
+    expect(message).toBe(
+      `validation failed: chain step output does not match the patch's declared output checks: ${cause}`,
+    );
+  });
+
   it("reports engine allocation and storage failures under their own workflow codes", () => {
     expect(engineFailure({ error_code: "resource.out_of_memory", label: "Cannot allocate memory" }).code).toBe(
       "OUT_OF_MEMORY",

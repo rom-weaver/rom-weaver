@@ -44,7 +44,7 @@ const withBrowserOutputStorageFailureContext = async (
 ): Promise<unknown> => {
   const message = error instanceof Error ? error.message : String(error || "");
   if (BROWSER_OUTPUT_STORAGE_CONTEXT_REGEX.test(message)) return error;
-  // An engine failure is storage-full only by its code; text is the signal for errors the browser raised.
+  // A coded engine failure is storage-full only by its code; text is the signal for errors without one.
   const engine = getEngineError(error);
   const storageFull = engine ? engine.code === "io.storage_full" : STORAGE_FULL_MESSAGE_REGEX.test(message);
   if (!storageFull) return error;
