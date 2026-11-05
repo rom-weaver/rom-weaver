@@ -237,6 +237,62 @@ async function redirects(origin, prefix) {
   console.log(`PASS ${count} redirects: ${prefix || "root"}`);
 }
 
+// A sub-path deployment (the documented Nginx proxy) must keep the whole docs experience under
+// its prefix: assets, in-app links, soft navigation, and a reload of the page navigated to.
+async function checkDocsRoutes(context, origin, prefix) {
+  const page = await context.newPage();
+  const problems = [];
+  page.on("pageerror", (error) => problems.push(`page error: ${error.message}`));
+  page.on("requestfailed", (request) =>
+    problems.push(`request failed: ${request.url()} ${request.failure()?.errorText}`),
+  );
+  page.on("response", (response) => {
+    if (response.status() >= 400) problems.push(`${response.status()} ${response.url()}`);
+  });
+  // Rebasing runs after hydration, so poll until the page settles instead of sampling once.
+  const sameOriginAnchorsOutsidePrefix = () =>
+    page.evaluate(
+      ({ pageOrigin, scope }) =>
+        [...document.querySelectorAll("a[href]")]
+          .map((anchor) => new URL(anchor.href, document.baseURI))
+          .filter((url) => url.origin === pageOrigin && !url.pathname.startsWith(scope))
+          .map((url) => url.pathname),
+      { pageOrigin: origin, scope: `${prefix}/` },
+    );
+  try {
+    for (const slug of ["docs", "docs/faq"]) {
+      await page.goto(`${origin}${prefix}/${slug}`, { waitUntil: "load" });
+      await page.locator("h1").first().waitFor({ state: "visible", timeout: 60_000 });
+      await page.waitForLoadState("networkidle");
+      let escaped = await sameOriginAnchorsOutsidePrefix();
+      for (let attempt = 0; escaped.length > 0 && attempt < 20; attempt += 1) {
+        await delay(250);
+        escaped = await sameOriginAnchorsOutsidePrefix();
+      }
+      assert.deepEqual([...new Set(escaped)], [], `${prefix}/${slug} links leave ${prefix}/`);
+    }
+    await page.goto(`${origin}${prefix}/docs`, { waitUntil: "load" });
+    const link = page.locator(`a[href$="/docs/faq"]`).first();
+    await link.waitFor({ state: "visible", timeout: 60_000 });
+    await page.waitForFunction(
+      (scope) => document.querySelector('a[href$="/docs/faq"]')?.pathname.startsWith(scope),
+      `${prefix}/`,
+    );
+    await link.click();
+    await page.waitForURL((url) => url.pathname.startsWith(`${prefix}/docs/faq`), {
+      timeout: 30_000,
+    });
+    assert.ok(new URL(page.url()).pathname.startsWith(`${prefix}/`), page.url());
+    const reloaded = await page.reload({ waitUntil: "load" });
+    assert.equal(reloaded?.status(), 200, `reload of ${page.url()}`);
+    await page.locator("h1").first().waitFor({ state: "visible", timeout: 60_000 });
+    assert.deepEqual(problems, [], `${origin}${prefix} docs requests`);
+    console.log(`PASS docs routes stay under ${prefix || "/"}: ${origin}${prefix}`);
+  } finally {
+    await page.close();
+  }
+}
+
 async function checkBrowser(origins) {
   const require = createRequire(resolve("packages/rom-weaver-webapp/package.json"));
   const { chromium } = require("playwright");
@@ -247,6 +303,7 @@ async function checkBrowser(origins) {
   try {
     for (const { origin, prefix } of origins) {
       const context = await browser.newContext({ ignoreHTTPSErrors: true });
+      await checkDocsRoutes(context, origin, prefix);
       const page = await context.newPage();
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message));
@@ -364,6 +421,34 @@ async function checkMountedCertificates({ pair, named }) {
   console.log("PASS mounted HTTPS certificates");
 }
 
+// The documented policy (the build's _headers, docs/hosting/self-hosting.md): everything
+// revalidates except the content-addressed /assets/*.
+async function checkCachePolicy(origin, prefix) {
+  const get = async (path) => {
+    const response = await fetch(`${origin}${prefix}${path}`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+    const text = await response.text();
+    return { cache: response.headers.get("cache-control"), status: response.status, text };
+  };
+  const home = await get("/");
+  const asset = /["'(]\.?\/?(assets\/[^"')?]+\.(?:js|css))/.exec(home.text)?.[1];
+  assert.ok(asset, "the home page must reference a hashed asset");
+  const expected = [
+    ["/", "no-cache"],
+    ["/docs/faq/", "no-cache"],
+    ["/manifest.json", "no-cache"],
+    ["/rom-weaver-service-worker.js", "no-cache"],
+    [`/${asset}`, "public, max-age=31536000, immutable"],
+  ];
+  for (const [path, cache] of expected) {
+    const response = await get(path);
+    assert.equal(response.status, 200, `${prefix}${path}`);
+    assert.equal(response.cache, cache, `Cache-Control of ${prefix}${path}`);
+  }
+  console.log(`PASS Cache-Control matches the documented policy: ${origin}${prefix}`);
+}
+
 async function checkWebapp() {
   docker("network", "create", id);
   networkCreated = true;
@@ -456,6 +541,8 @@ async function checkWebapp() {
     else if (path.endsWith(".json")) await response.json();
     else await response.body?.cancel();
   }
+  await checkCachePolicy(web.origin, "");
+  await checkCachePolicy(proxy.origin, "/rom-weaver");
   await checkBrowser([
     { origin: web.origin, prefix: "" },
     { origin: proxy.origin, prefix: "/rom-weaver" },

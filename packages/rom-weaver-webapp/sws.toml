@@ -24,8 +24,10 @@ compression = true
 page-fallback = "/srv/index.html"
 health = true
 
-# Long-lived caching for the content-hashed assets.
-cache-control-headers = true
+# sws's built-in Cache-Control (max-age by content type) is off: it would cache the
+# service worker script for a year and HTML for a day. The [[advanced.headers]]
+# rules below set the same policy as the generated dist/_headers instead.
+cache-control-headers = false
 
 log-level = "info"
 
@@ -461,6 +463,15 @@ source = "**"
 Cross-Origin-Opener-Policy = "same-origin"
 Cross-Origin-Embedder-Policy = "require-corp"
 Cross-Origin-Resource-Policy = "same-origin"
+# Deploys replace the whole asset set, so HTML or the service worker held past a
+# redeploy would reference hashed URLs that now 404. Only /assets/* is immutable.
+Cache-Control = "no-cache"
+
+[[advanced.headers]]
+source = "/assets/**"
+
+[advanced.headers.headers]
+Cache-Control = "public, max-age=31536000, immutable"
 
 [[advanced.headers]]
 # Directory requests MUST match the resolved index path in sws header rules.

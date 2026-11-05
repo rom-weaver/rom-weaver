@@ -157,6 +157,12 @@ describe("searchFind", () => {
     expect(searchFind(index, "inspect")[0]?.entry.href).toBe("/rom-weaver/docs/identify-and-hash-files");
   });
 
+  it("keeps a guide hit inside the self-hosted app base", () => {
+    const index = createFindIndex({ ...sources, baseHref: "https://example.com/rom-weaver/" }, GUIDES);
+    const guide = searchFind(index, "mismatch").find((result) => result.entry.kind === "guide");
+    expect(guide?.entry.href).toBe("/rom-weaver/docs/fix-checksum-errors?highlight=mismatch");
+  });
+
   it("links a guide hit to the guide with the query highlighted", () => {
     const index = createFindIndex(sources, GUIDES);
     const guide = searchFind(index, "mismatch").find((result) => result.entry.kind === "guide");

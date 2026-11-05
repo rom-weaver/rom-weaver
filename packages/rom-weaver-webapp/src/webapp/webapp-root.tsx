@@ -59,6 +59,8 @@ import {
 import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { observePanelHeadFit } from "./panel-head-fit.ts";
+import { appPathHref } from "./app-routes.ts";
+import { useAppBaseUrl } from "./use-app-base-url.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { releaseLargeEntriesOnLargeInput } from "./large-input-release.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
@@ -207,16 +209,6 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     label: "Docs",
   },
 ];
-
-/**
- * Tab hrefs are bare slugs except Docs (`/docs`), and the 404 page is served at
- * whatever path missed, so each resolves against the app base: a doubled slash
- * would be a protocol-relative URL, and a bare `/slug` would escape a
- * subdirectory deployment.
- */
-const appPathHref = (href: string, appBaseUrl: string): string =>
-  // The server render has no window, so its base is the bare "/"; the throwaway origin only lets that parse.
-  new URL(href.replace(/^\/+/, ""), new URL(appBaseUrl, "https://app.invalid")).pathname;
 
 // Keep the trace inspector out of the initial weave, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
@@ -376,14 +368,15 @@ const PanelThreadCount = ({
 
 const PageFooter = () => {
   const localizer = useUiLocalizer();
+  const appBaseUrl = useAppBaseUrl();
   return (
     <footer className="page-footer">
       <span>{localizer.message("ui.footer.local")}</span>
       <span className="page-footer-links">
-        <a className="page-footer-link" href={ABOUT_URL}>
+        <a className="page-footer-link" href={appPathHref(ABOUT_URL, appBaseUrl)}>
           {localizer.message("ui.footer.about")}
         </a>
-        <a className="page-footer-link" href={PRIVACY_URL}>
+        <a className="page-footer-link" href={appPathHref(PRIVACY_URL, appBaseUrl)}>
           {localizer.message("ui.footer.privacy")}
         </a>
       </span>
