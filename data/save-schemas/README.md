@@ -108,7 +108,7 @@ These profiles require explicit game selection and a game-made template. They ex
 | Paper Mario | 4 | Canonical 128 KiB N64 FlashRAM | Coins, Star Pieces, and Star Points; newest occupied record for each file |
 | The Legend of Zelda: Ocarina of Time | 3 | Canonical 32 KiB N64 SRAM | Death count and rupees in the basic wallet range, 0–99; primary/backup recovery and paired writes |
 | Banjo-Kazooie | 3 | Canonical 512 B N64 EEPROM | Eggs, red feathers, and gold feathers; fixed file profiles |
-| Mystical Ninja Starring Goemon 2, Japan | 4 | Canonical 32 KiB N64 SRAM | Sound in the options record; location, character roster, powers, costumes, and per-player stats in each occupied slot; CRC repair per record |
+| Mystical Ninja 2 Starring Goemon, Japan | 4 | Canonical 32 KiB N64 SRAM | Sound in the options record; location, character roster, powers, costumes, and per-player stats in each occupied slot; CRC repair per record |
 | Tekken | 45 | Single-block save in a raw 128 KiB PS1 card | Difficulty and character unlocks |
 | Rayman | 45 | Single-block save in a raw 128 KiB PS1 card | Lives and Tings |
 | Castlevania: Symphony of the Night | 60 | Single-block save in a raw 128 KiB PS1 card | Gold with its preview and experience |
@@ -117,9 +117,9 @@ These profiles require explicit game selection and a game-made template. They ex
 | Final Fantasy VIII | 105 | Single-block save in a raw 128 KiB PS1 card | Squall/Laguna gil with the active preview |
 | Castlevania: Rondo of Blood | 1 | Raw 2 KiB PC Engine BRAM, Japan; first record must be DRACULA X | Money and death count in occupied slots |
 
-The new definitions add 29 titles and 471 profiles. The preceding catalog table describes the original 118 additional profiles. Each PS1 profile selects an exact product code, region, and card block from 1 through 15. It validates allocation metadata and supports only a complete single-block game save. Multi-block saves, standalone save exports, and PC ports remain unsupported. DexDrive and Virtual Game Station card wrappers are preserved by the existing container layer.
+The new definitions add 30 titles and 475 profiles. The preceding catalog table describes the original 118 additional profiles. Each PS1 profile selects an exact product code, region, and card block from 1 through 15. It validates allocation metadata and supports only a complete single-block game save. Multi-block saves, standalone save exports, and PC ports remain unsupported. DexDrive and Virtual Game Station card wrappers are preserved by the existing container layer.
 
-Mystical Ninja Starring Goemon 2 covers the Japanese cartridge-SRAM layout from [Game Tools Collection revision `15d71340c3f1717745139c2e0774510cd37dfbdd`](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/mystical-ninja-2-starring-goemon/saveEditor). The USA and Europe versions, and the other Nintendo 64 games in that revision that store their data only in Controller Pak notes, are not covered because the schema layer has no Controller Pak note container.
+Mystical Ninja 2 Starring Goemon covers the Japanese cartridge-SRAM layout from [Game Tools Collection revision `15d71340c3f1717745139c2e0774510cd37dfbdd`](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/mystical-ninja-2-starring-goemon/saveEditor). The USA and Europe versions, and the other Nintendo 64 games in that revision that store their data only in Controller Pak notes, are not covered because the schema layer has no Controller Pak note container.
 
 Nintendo 64 profiles accept only the stated canonical big-endian byte order. The Minish Cap profile accepts only its stated EEPROM word order. Regional boundaries and omitted fields are recorded in each profile's description.
 

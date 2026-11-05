@@ -14,7 +14,8 @@ const PLAYER_START: usize = 0x7a;
 const PLAYER_SIZE: usize = 0xa;
 
 /// CRC-32/BZIP2 (polynomial `0x04c11db7`, init and xorout `0xffffffff`, no reflection) over one
-/// record. The game ignores the record's first eight bytes, which hold the stored checksum.
+/// record. The game ignores the record's first eight bytes when computing it; the checksum itself
+/// is stored in bytes 4..8.
 fn checksum(record: &[u8]) -> u32 {
     let crc = record
         .iter()
@@ -201,37 +202,39 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
             checksum(&bytes[start..start + length])
                 == u32::from_be_bytes(bytes[start + 4..start + 8].try_into().unwrap())
         };
-        let mut checks = vec![Check {
+        let mut checks = Vec::new();
+        // An empty slot is reported first: its stored CRC is not meaningful.
+        if slot.is_some() {
+            checks.push(Check {
+                when: None,
+                assert: Condition::new(move |bytes| Ok(bytes[start + 8] != 0)),
+                code: "save_slot_empty".into(),
+                message: "The selected Mystical Ninja 2 slot is empty.".into(),
+                section_id: None,
+                warning: None,
+            });
+        }
+        checks.push(Check {
             when: None,
             assert: Condition::new(move |bytes| Ok(valid(bytes))),
             code: "save_checksum_mismatch".into(),
             message: "The Mystical Ninja 2 record checksum is invalid.".into(),
             section_id: None,
             warning: None,
-        }];
+        });
         let (fields, id, name, description) = match slot {
             None => (
                 vec![catalog_field("sound", "Sound", 9, Storage::U8).choices(choices(&[("Stereo", 0), ("Monaural", 1)]))],
                 "mystical-ninja-2-starring-goemon-canonical-sram-japan-options".to_owned(),
-                "Mystical Ninja Starring Goemon 2 (canonical SRAM, Japan, Options)".to_owned(),
+                "Mystical Ninja 2 Starring Goemon (canonical SRAM, Japan, Options)".to_owned(),
                 "Edits the sound setting in the options record of canonical 32 KiB Japanese cartridge SRAM and repairs its CRC. Slots and the other options bytes are preserved; the language byte is read-only. USA and Europe Controller Pak saves and byte-swapped images are unsupported. Requires a game-made template.",
             ),
-            Some(index) => {
-                checks.push(Check {
-                    when: None,
-                    assert: Condition::new(move |bytes| Ok(bytes[start + 8] != 0)),
-                    code: "save_slot_empty".into(),
-                    message: "The selected Mystical Ninja 2 slot is empty.".into(),
-                    section_id: None,
-                    warning: None,
-                });
-                (
-                    slot_fields(start),
-                    format!("mystical-ninja-2-starring-goemon-canonical-sram-japan-slot-{}", index + 1),
-                    format!("Mystical Ninja Starring Goemon 2 (canonical SRAM, Japan, Slot {})", index + 1),
-                    "Edits the location, character roster, powers, costumes and per-player stats of one occupied slot in canonical 32 KiB Japanese cartridge SRAM and repairs the slot CRC. Linked unlock bits are written together. Stage, entry pass and flag data are unsupported, as are USA and Europe Controller Pak saves and byte-swapped images. Requires a game-made template.",
-                )
-            }
+            Some(index) => (
+                slot_fields(start),
+                format!("mystical-ninja-2-starring-goemon-canonical-sram-japan-slot-{}", index + 1),
+                format!("Mystical Ninja 2 Starring Goemon (canonical SRAM, Japan, Slot {})", index + 1),
+                "Edits the location, character roster, powers, costumes and per-player stats of one occupied slot in canonical 32 KiB Japanese cartridge SRAM and repairs the slot CRC. Linked unlock bits are written together. Stage, entry pass and flag data are unsupported, as are USA and Europe Controller Pak saves and byte-swapped images. Requires a game-made template.",
+            ),
         };
         GameDefinition {
             fields,
@@ -545,6 +548,17 @@ mod tests {
         empty[SLOT_START + 8] = 0;
         repair(&mut empty, SLOT_START, SLOT_SIZE);
         assert!(apply(&handlers[1], &empty, &[]).is_err());
+        // An empty slot with a stale CRC reports the empty slot, not a checksum mismatch.
+        let mut stale = original.clone();
+        stale[SLOT_START + 8] = 0;
+        assert_ne!(
+            u32::from_be_bytes(stale[SLOT_START + 4..SLOT_START + 8].try_into().unwrap()),
+            expected_crc(&stale[SLOT_START..SLOT_START + SLOT_SIZE])
+        );
+        let Err(RomWeaverError::ValidationCode(error)) = apply(&handlers[1], &stale, &[]) else {
+            panic!("expected a validation code error");
+        };
+        assert_eq!(error.code(), "save_slot_empty");
         // A damaged neighbouring slot does not block an edit of a healthy one.
         let mut neighbour = original.clone();
         neighbour[SLOT_START + SLOT_SIZE + 20] ^= 1;
