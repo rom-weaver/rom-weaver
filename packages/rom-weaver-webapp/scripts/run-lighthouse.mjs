@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import https from "node:https";
-import net from "node:net";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { findFreePort, startPreviewServer, stopPreviewServer } from "./preview-process.mjs";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = path.resolve(PACKAGE_ROOT, "..", "..");
@@ -35,83 +34,11 @@ export function evaluateThreshold(value, threshold, higherIsBetter) {
   return "pass";
 }
 
-// A fixed port collides with a preview server the developer already has up and
-// with a second worktree auditing in parallel; PORT stays honoured so a run can
-// be pinned when something else has to reach it.
-const findFreePort = () =>
-  new Promise((resolve, reject) => {
-    const probe = net.createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address();
-      probe.close(() => resolve(port));
-    });
-  });
-
+// PORT stays honoured so a run can be pinned when something else has to reach it.
 const resolvePort = () => {
   const configured = Number.parseInt(process.env.PORT || "", 10);
   return Number.isFinite(configured) ? Promise.resolve(configured) : findFreePort();
 };
-
-const waitForServer = (origin) =>
-  new Promise((resolve, reject) => {
-    const deadline = Date.now() + 15000;
-    const attempt = () => {
-      const request = https.get(origin, { rejectUnauthorized: false }, (response) => {
-        response.resume();
-        if ((response.statusCode || 500) < 500) resolve();
-        else retry();
-      });
-      request.on("error", retry);
-      request.setTimeout(1000, () => request.destroy());
-    };
-    const retry = () => {
-      if (Date.now() >= deadline) reject(new Error("preview server did not become ready within 15 seconds"));
-      else setTimeout(attempt, 100);
-    };
-    attempt();
-  });
-
-const startPreviewServer = async (port, origin) => {
-  const server = spawn(process.execPath, ["scripts/dev-server.mjs", "preview", "--port", String(port)], {
-    cwd: PACKAGE_ROOT,
-    env: process.env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  let output = "";
-  server.stdout.on("data", (chunk) => {
-    output += chunk;
-  });
-  server.stderr.on("data", (chunk) => {
-    output += chunk;
-  });
-  const exited = new Promise((_, reject) => {
-    server.once("exit", (code) => reject(new Error(`preview server exited with ${code}\n${output}`)));
-  });
-  try {
-    await Promise.race([waitForServer(origin), exited]);
-  } catch (error) {
-    // A readiness timeout leaves a spawned server nobody owns, holding the port
-    // against the next attempt.
-    await stopPreviewServer(server);
-    throw error;
-  }
-  return server;
-};
-
-const stopPreviewServer = (server) =>
-  new Promise((resolve) => {
-    if (server.exitCode !== null) {
-      resolve();
-      return;
-    }
-    const timeout = setTimeout(() => server.kill("SIGKILL"), 5000);
-    server.once("exit", () => {
-      clearTimeout(timeout);
-      resolve();
-    });
-    server.kill("SIGTERM");
-  });
 
 const verifyProductionBuild = () => {
   const identify = spawnSync(process.execPath, [path.join(REPO_ROOT, "scripts", "ensure-identify-data.mjs")], {
@@ -272,7 +199,7 @@ export async function main() {
   verifyProductionBuild();
   const port = await resolvePort();
   const origin = `https://localhost:${port}`;
-  const server = await startPreviewServer(port, origin);
+  const server = await startPreviewServer(PACKAGE_ROOT, port, origin);
   const rows = [];
   let failures = 0;
   try {

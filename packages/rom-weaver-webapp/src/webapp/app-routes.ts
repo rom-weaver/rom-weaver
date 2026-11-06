@@ -68,7 +68,6 @@ const matchAppRoute = (pathname?: string, basePath = APP_BASE_PATH): WebappView 
   if (route === "") return "home";
   const slug = route.replace(/\.html$/u, "");
   if (slug === "docs" || slug.startsWith("docs/")) return readDocsSlugFromPathname(path, basePath) ? "docs" : null;
-  if (slug !== route && (slug === "ppf-undo" || slug === "tools")) return null;
   return Object.hasOwn(ROUTE_SLUG_TO_VIEW, slug) ? (ROUTE_SLUG_TO_VIEW[slug] ?? null) : null;
 };
 
