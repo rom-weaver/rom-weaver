@@ -95,7 +95,7 @@ const NavRow = ({
 }: {
   className: string;
   entry: NavEntry;
-  /** Only the sidebar copy owns the `tab-<id>` ids the panels are labelled by. */
+  /** Prefix for the row ids; set only on sidebar copies. */
   idPrefix?: string;
   localizer: Localizer;
   onNavigate?: () => void;
@@ -119,7 +119,7 @@ const NavRow = ({
   const rowClass = join(className, entry.className);
   // The phone Menu hides the full label behind the short one, so the full one names the row.
   const name = entry.title ?? (entry.shortLabel ? entry.label : undefined);
-  // The sidebar copy is found by its `tab-<id>`; the Menu sheet copy needs its own
+  // A sidebar copy is found by its prefixed id; the Menu sheet copy needs its own
   // handle, which stays off the sidebar so the prerendered shell does not carry it.
   const navId = idPrefix ? undefined : entry.id;
   if (entry.href) {

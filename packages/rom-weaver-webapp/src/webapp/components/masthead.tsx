@@ -178,7 +178,10 @@ const Masthead = ({
   const showRailLevel = useCallback((level: "docs" | "tools") => {
     flushSync(() => setRailLevel(level));
     // The control that was pressed is now hidden, so focus moves to its counterpart.
-    document.querySelector<HTMLElement>(level === "docs" ? ".docs-rail-back" : "#tools-docs")?.focus();
+    // Without preventScroll the focus would scroll the level away from the current guide.
+    document
+      .querySelector<HTMLElement>(level === "docs" ? ".docs-rail-back" : "#tools-docs")
+      ?.focus({ preventScroll: true });
   }, []);
   const menuRoute = useRef(`${currentTab}:${docsSlug}`);
   useEffect(() => {

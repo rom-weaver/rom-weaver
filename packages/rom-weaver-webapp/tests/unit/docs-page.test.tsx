@@ -799,7 +799,7 @@ Fixture description.
     renderDocsShell("docs/cli");
     expect(document.querySelector(".dock")).not.toBeNull();
     expect(document.querySelector(".side-nav .docs-rail-back")?.getAttribute("aria-label")).toBe("Back to tools");
-    expect(document.querySelector(".side-nav .nav-group")?.textContent).not.toContain("Settings");
+    expect(document.querySelector(".rail-level-docs .nav-row")).toBeNull();
     const drawer = document.querySelector("#docs-drawer") as HTMLElement;
     fireEvent.click(document.querySelector(".docs-bar-open") as HTMLElement);
     expect(drawer.hidden).toBe(false);
