@@ -13,9 +13,9 @@ import {
 } from "../src/webapp/api-catalog.mjs";
 import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { resolveSiteOrigin } from "./vite-config/channel.mjs";
-import { LEGACY_WORKFLOW_ROUTES } from "./vite-config/root-static-assets.mjs";
 import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
 import {
+  LEGACY_WORKFLOW_ROUTES,
   SITE_ALTERNATE_NAMES,
   SITE_NAME,
   WORKFLOW_ENTRY_ROUTES,
