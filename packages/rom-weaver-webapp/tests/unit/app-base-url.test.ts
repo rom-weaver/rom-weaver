@@ -71,6 +71,13 @@ describe("matchAppRoute", () => {
     expect(unresolved).toEqual([]);
   });
 
+  test("resolves a path whose leading slashes a host merged", () => {
+    expect(matchAppRoute("//rom-weaver/", "/rom-weaver/")).toBe("home");
+    expect(matchAppRoute("//rom-weaver/apply-rom-patches", "/rom-weaver/")).toBe("patcher");
+    expect(matchAppRoute("//rom-weaver/docs/faq", "/rom-weaver/")).toBe("docs");
+    expect(matchAppRoute("//apply-rom-patches", "/")).toBe("patcher");
+  });
+
   test("never reads a segment above the base as a route", () => {
     expect(matchAppRoute("/a/apply-rom-patches", "/")).toBeNull();
     expect(matchAppRoute("/rom-weaver/apply-rom-patches", "/")).toBeNull();

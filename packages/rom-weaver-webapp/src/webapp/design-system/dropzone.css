@@ -402,6 +402,11 @@
   border: 1px solid var(--seam);
   border-radius: var(--r-s);
 }
+.rw-app .workflow-about h2 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
 
 .rw-app .drop.staging {
   color: var(--ink-3);
@@ -998,6 +1003,12 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   z-index: 1002 !important;
   overflow: visible !important;
 }
+/* A lifted control can overlap its own target - the swap button straddles the
+   Modified header. Equal z-indexes would let the later sibling win the hit
+   test, so the lift sits one layer above the target. */
+.rw-app .sample-tutorial-lift {
+  z-index: 1003 !important;
+}
 /* Absolute, in document coordinates, so the page scrolls the ring along with
    the row it frames - on the compositor, with no main-thread work per frame. A
    fixed ring has to be re-placed from a scroll handler, which can only ever
@@ -1034,7 +1045,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   position: fixed;
   inset-inline: var(--gutter);
   bottom: calc(var(--dock-h, max(0px, env(safe-area-inset-bottom))) + 18px);
-  z-index: 1003;
+  z-index: 1004;
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
   gap: var(--sp-l);
