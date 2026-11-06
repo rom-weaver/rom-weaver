@@ -848,15 +848,18 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
     }
     sendEarlyHints(res, pagesHeaders, path.extname(asset.resolvedPath) === ".html");
     const isDocument = path.extname(asset.resolvedPath) === ".html";
+    const status = asset.resolvedPath === fallbackPath && filePath !== fallbackPath ? 404 : 200;
     send(
       res,
-      asset.resolvedPath === fallbackPath && filePath !== fallbackPath ? 404 : 200,
+      status,
       {
         "Cache-Control": isDocument ? "no-cache" : "public, max-age=31536000, immutable",
         "Content-Type": getContentType(asset.resolvedPath),
         ...(asset.brotli ? { Vary: "Accept-Encoding" } : {}),
         ...(encoded ? { "Content-Encoding": "br" } : {}),
         ...pagesHeaders,
+        // Pages answers every miss with no-store; an /assets/* `_headers` rule must not make a 404 immutable.
+        ...(status === 404 ? { "Cache-Control": "no-store" } : {}),
       },
       req.method === "HEAD" ? null : encoded ? asset.brotli : asset.data,
       securityOptions,
