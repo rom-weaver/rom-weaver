@@ -15,6 +15,7 @@ const logger = createLogger("rom-weaver-runner");
 
 let inputSelectionHandler: InputSelectionHandler | undefined;
 let inputSelectionChain: Promise<unknown> = Promise.resolve();
+let inputSelectionRequestCount = 0;
 let runnerLifecycleControl: RunnerLifecycleControl | null = null;
 let runnerModulePromise: Promise<RunnerModule> | undefined;
 
@@ -38,7 +39,11 @@ const summarizeInputSelectionRequest = (request: string): Record<string, unknown
   }
 };
 
+/** How many prompts the runner has raised so far; callers compare two readings to learn whether work in between asked the user. */
+const getInputSelectionRequestCount = () => inputSelectionRequestCount;
+
 const resolveInputSelection: InputSelectionHandler = (request) => {
+  inputSelectionRequestCount += 1;
   const run = inputSelectionChain
     .catch(() => undefined)
     .then(() => {
@@ -87,6 +92,7 @@ const warmupRomWeaverRunner = async (threads?: RuntimeValue) => {
 };
 
 export {
+  getInputSelectionRequestCount,
   markRomWeaverRunnerStale,
   noteRomWeaverIoBatch,
   recycleWarmRomWeaverRunner,

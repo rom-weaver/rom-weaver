@@ -2,6 +2,7 @@ import type { WorkflowKind } from "../../types/progress.ts";
 import type { CandidateSelectionRequest, SelectFile, SelectionCandidate } from "../../types/selection.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime-types.ts";
+import { getInputSelectionRequestCount } from "../../workers/rom-weaver/runner-control.ts";
 import { RomWeaverError, toRomWeaverError } from "../errors.ts";
 import { getInputPreparationMetrics, type InputAsset } from "../input/input-assets.ts";
 import {
@@ -589,6 +590,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
       this.trace?.("source.stage.prepare.shared", { fileName: stage.state.fileName, role: stage.state.role });
       return shared;
     }
+    const promptsBefore = getInputSelectionRequestCount();
     const assets = await prepareInputAssets(
       stage.source as never,
       options as never,
@@ -596,8 +598,10 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
       this.runtime,
       selectedArchiveEntry,
     );
-    // A preparation that raised selection requests is not final yet, so it is not shared.
-    return cache && !requests.length ? cache.adopt(stage.source, cacheKey, assets) : assets;
+    // A preparation that raised selection requests is not final yet, and one that asked the user
+    // inside the runner holds that answer, so neither is shared: the other form must ask again.
+    const prompted = requests.length > 0 || getInputSelectionRequestCount() !== promptsBefore;
+    return cache && !prompted ? cache.adopt(stage.source, cacheKey, assets) : assets;
   }
 
   private setSelectedCandidate(stage: SharedRomStagedSource<TSource, TState>, candidateId: string): void {

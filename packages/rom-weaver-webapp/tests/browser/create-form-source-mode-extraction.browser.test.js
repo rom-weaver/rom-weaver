@@ -4,6 +4,13 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import { CreatePatchForm } from "../../src/public/react/create-patch-form.tsx";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
+import {
+  clickCandidateSelectionOption,
+  getCandidateSelectionCloseButton,
+  getCandidateSelectionList,
+  loadFixtureFile,
+  MULTI_ROM_ZIP,
+} from "./patcher-test-shared.js";
 
 let mountedRoot = null;
 
@@ -115,4 +122,58 @@ test("Create extracts a zipped Original once when it is added in Patches & cheat
     .toContain("original.bin");
   await settle();
   expect(countPreparations()).toBe(1);
+});
+
+test("Create asks for a new archive entry choice after a source mode switch", async () => {
+  const original = await loadFixtureFile(MULTI_ROM_ZIP, "application/zip");
+
+  mountedRoot = createRoot(document.getElementById("app"));
+  mountedRoot.render(createElement(CreatePatchForm, { defaultOriginal: original }));
+
+  await expect.poll(() => !!getCandidateSelectionList(), { timeout: 20_000, message: "first prompt" }).toBe(true);
+  await clickCandidateSelectionOption("game.bin");
+  await expect
+    .poll(() => document.querySelector("#patch-builder-row-original .card")?.textContent || "", {
+      message: "picked entry shown",
+      timeout: 20_000,
+    })
+    .toContain("game.bin");
+  expect(getCandidateSelectionList()).toBeNull();
+
+  await clickSourceMode("Patches & cheats");
+  await expect
+    .poll(() => !!getCandidateSelectionList(), { message: "prompt after mode switch", timeout: 20_000 })
+    .toBe(true);
+  await clickCandidateSelectionOption("bonus.sfc");
+  await expect
+    .poll(() => document.querySelector("#rom-weaver-list-input-stack")?.textContent || "", { timeout: 20_000 })
+    .toContain("bonus.sfc");
+});
+
+test("Create asks for a new archive entry choice when the Original is removed and added again", async () => {
+  const original = await loadFixtureFile(MULTI_ROM_ZIP, "application/zip");
+
+  mountedRoot = createRoot(document.getElementById("app"));
+  mountedRoot.render(createElement(CreatePatchForm, { defaultOriginal: original }));
+
+  await expect.poll(() => !!getCandidateSelectionList(), { message: "first prompt", timeout: 20_000 }).toBe(true);
+  await clickCandidateSelectionOption("game.bin");
+  await expect
+    .poll(() => document.querySelector("#patch-builder-row-original .card")?.textContent || "", { timeout: 20_000 })
+    .toContain("game.bin");
+
+  const remove = document.querySelector(
+    "#patch-builder-row-original button[title='Clear original ROM'], #patch-builder-row-original button[aria-label='Clear original ROM']",
+  );
+  if (!(remove instanceof HTMLButtonElement)) throw new Error("Missing remove Original button");
+  remove.click();
+  await expect
+    .poll(() => document.querySelector("#patch-builder-row-original .card")?.textContent || "", { timeout: 20_000 })
+    .not.toContain("game.bin");
+
+  selectFileInput(document.getElementById("patch-builder-input-file-unified"), original);
+  await expect
+    .poll(() => !!getCandidateSelectionList(), { message: "prompt after re-adding", timeout: 20_000 })
+    .toBe(true);
+  getCandidateSelectionCloseButton()?.click();
 });
