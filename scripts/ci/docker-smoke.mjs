@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { connect } from "node:tls";
 import { parseArgs } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -236,6 +237,96 @@ async function redirects(origin, prefix) {
   console.log(`PASS ${count} redirects: ${prefix || "root"}`);
 }
 
+// Pathnames of the page's same-origin links that leave the served prefix.
+const anchorsOutsidePrefix = (page, origin, prefix) =>
+  page.evaluate(
+    ({ pageOrigin, scope }) =>
+      [...document.querySelectorAll("a[href]")]
+        .map((anchor) => new URL(anchor.href, document.baseURI))
+        .filter((url) => url.origin === pageOrigin && !url.pathname.startsWith(scope))
+        .map((url) => url.pathname),
+    { pageOrigin: origin, scope: `${prefix}/` },
+  );
+
+// A sub-path deployment (the documented Nginx proxy) must keep the whole docs experience under
+// its prefix: assets, in-app links, soft navigation, and a reload of the page navigated to.
+async function checkDocsRoutes(context, origin, prefix) {
+  const page = await context.newPage();
+  const problems = [];
+  page.on("pageerror", (error) => problems.push(`page error: ${error.message}`));
+  page.on("requestfailed", (request) =>
+    problems.push(`request failed: ${request.url()} ${request.failure()?.errorText}`),
+  );
+  page.on("response", (response) => {
+    if (response.status() >= 400) problems.push(`${response.status()} ${response.url()}`);
+  });
+  // Rebasing runs after hydration, so poll until the page settles instead of sampling once.
+  const sameOriginAnchorsOutsidePrefix = () => anchorsOutsidePrefix(page, origin, prefix);
+  try {
+    for (const slug of ["docs", "docs/faq"]) {
+      await page.goto(`${origin}${prefix}/${slug}`, { waitUntil: "load" });
+      await page.locator("h1").first().waitFor({ state: "visible", timeout: 60_000 });
+      await page.waitForLoadState("networkidle");
+      let escaped = await sameOriginAnchorsOutsidePrefix();
+      for (let attempt = 0; escaped.length > 0 && attempt < 20; attempt += 1) {
+        await delay(250);
+        escaped = await sameOriginAnchorsOutsidePrefix();
+      }
+      assert.deepEqual([...new Set(escaped)], [], `${prefix}/${slug} links leave ${prefix}/`);
+    }
+    await page.goto(`${origin}${prefix}/docs`, { waitUntil: "load" });
+    const link = page.locator(`a[href$="/docs/faq"]`).first();
+    await link.waitFor({ state: "visible", timeout: 60_000 });
+    await page.waitForFunction(
+      (scope) => document.querySelector('a[href$="/docs/faq"]')?.pathname.startsWith(scope),
+      `${prefix}/`,
+    );
+    await link.click();
+    await page.waitForURL((url) => url.pathname.startsWith(`${prefix}/docs/faq`), {
+      timeout: 30_000,
+    });
+    assert.ok(new URL(page.url()).pathname.startsWith(`${prefix}/`), page.url());
+    const reloaded = await page.reload({ waitUntil: "load" });
+    assert.equal(reloaded?.status(), 200, `reload of ${page.url()}`);
+    await page.locator("h1").first().waitFor({ state: "visible", timeout: 60_000 });
+    assert.deepEqual(problems, [], `${origin}${prefix} docs requests`);
+    console.log(`PASS docs routes stay under ${prefix || "/"}: ${origin}${prefix}`);
+  } finally {
+    await page.close();
+  }
+}
+
+// The 404 page is a prerendered document served at whatever path missed. Its <base href> is the
+// only thing that locates its assets and its links, so behind a subpath proxy the image has to be
+// told the prefix (BASE_PATH) for the page to load its assets, hydrate and keep its links inside.
+async function checkNotFoundPage(context, origin, prefix) {
+  const page = await context.newPage();
+  const failures = [];
+  page.on("pageerror", (error) => failures.push(`page error: ${error.message}`));
+  const url = `${origin}${prefix}/no-such-route/`;
+  page.on("response", (response) => {
+    if (response.status() >= 400 && response.url() !== url)
+      failures.push(`${response.status()} ${response.url()}`);
+  });
+  const response = await page.goto(url, { waitUntil: "load" });
+  assert.equal(response.status(), 404, url);
+  const home = page.locator(".not-found-home");
+  await home.waitFor({ state: "attached", timeout: 60_000 });
+  // The prerendered root carries aria-busy until the app mounts and releases it.
+  await page.locator("#webapp-root:not([aria-busy])").waitFor({ state: "attached", timeout: 60_000 });
+  await page.waitForLoadState("networkidle");
+  assert.equal(await page.evaluate(() => crossOriginIsolated), true);
+  assert.deepEqual(failures, [], url);
+  // The stylesheet only loads through <base>, so a styled button proves the assets resolved.
+  assert.notEqual(await home.evaluate((node) => getComputedStyle(node).display), "inline", url);
+  // The base the page resolves against is its <base>, not the missed path.
+  assert.equal(new URL(await page.evaluate(() => document.baseURI)).pathname, `${prefix}/`, url);
+  assert.ok((await page.locator("a[href]").count()) > 0, `${url} has links`);
+  assert.deepEqual(await anchorsOutsidePrefix(page, origin, prefix), [], `${url} links leave ${prefix}/`);
+  console.log(`PASS 404 page for an unknown route: ${origin}${prefix}`);
+  await page.close();
+}
+
 async function checkBrowser(origins) {
   const require = createRequire(resolve("packages/rom-weaver-webapp/package.json"));
   const { chromium } = require("playwright");
@@ -246,6 +337,7 @@ async function checkBrowser(origins) {
   try {
     for (const { origin, prefix } of origins) {
       const context = await browser.newContext({ ignoreHTTPSErrors: true });
+      await checkDocsRoutes(context, origin, prefix);
       const page = await context.newPage();
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message));
@@ -298,6 +390,7 @@ async function checkBrowser(origins) {
       console.log(
         `PASS browser aliases, isolation, legacy archive apply and exact download bytes: ${origin}${prefix}`,
       );
+      await checkNotFoundPage(context, origin, prefix);
       await context.close();
     }
   } finally {
@@ -305,13 +398,175 @@ async function checkBrowser(origins) {
   }
 }
 
+function servedCertificateName(origin) {
+  const { hostname, port } = new URL(origin);
+  return new Promise((resolvePromise, reject) => {
+    const socket = connect({
+      host: hostname,
+      port: Number(port),
+      servername: "localhost",
+      rejectUnauthorized: false,
+    });
+    socket.once("secureConnect", () => {
+      resolvePromise(socket.getPeerCertificate().subject.CN);
+      socket.end();
+    });
+    socket.once("error", reject);
+  });
+}
+
+// Both documented certificate sources: the default /certs pair and named files. The
+// named pair gets its own CN, so serving the default pair instead fails the check.
+async function startMountedCertificates() {
+  const certs = join(scratch, "certs");
+  await mkdir(certs);
+  await chmod(certs, 0o777);
+  // Generated as the image's own user so the key is readable inside the container.
+  const certificate = (name, key, cert) =>
+    `openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=${name} -keyout /certs/${key} -out /certs/${cert} 2>/dev/null`;
+  docker(
+    "run",
+    "--rm",
+    "--entrypoint",
+    "sh",
+    "--mount",
+    `type=bind,source=${certs},target=/certs`,
+    values.image,
+    "-c",
+    `${certificate("rom-weaver-smoke-pair", "privkey.pem", "fullchain.pem")} && ${certificate("rom-weaver-smoke-named", "site.key", "site.crt")}`,
+  );
+  const mount = ["--mount", `type=bind,source=${certs},target=/certs,readonly`];
+  return {
+    pair: await start("tls-pair", values.image, ["--env", "HTTPS_PORT=8443", ...mount]),
+    named: await start("tls-named", values.image, [
+      "--env",
+      "HTTPS_PORT=8443",
+      "--env",
+      "HTTPS_CERT=/certs/site.crt",
+      "--env",
+      "HTTPS_KEY=/certs/site.key",
+      ...mount,
+    ]),
+  };
+}
+
+async function checkMountedCertificates({ pair, named }) {
+  assert.equal(await servedCertificateName(pair.origin), "rom-weaver-smoke-pair", pair.origin);
+  assert.equal(await servedCertificateName(named.origin), "rom-weaver-smoke-named", named.origin);
+  console.log("PASS mounted HTTPS certificates");
+}
+
+// Fetches `path` under the served prefix; `cache` is the Cache-Control value, "" when absent.
+const fetchPath = (origin, prefix) => async (path) => {
+  const response = await fetch(`${origin}${prefix}${path}`, { signal: AbortSignal.timeout(10_000) });
+  const text = await response.text();
+  return { cache: response.headers.get("cache-control") ?? "", response, status: response.status, text };
+};
+
+// The first hashed script or stylesheet the home page references: its path, the name before the
+// hash, and its extension.
+function hashedAsset(html) {
+  const match = /["'(]\.?\/?((assets\/[^"')?]+)-[^"')?.-]+\.(js|css))/.exec(html);
+  assert.ok(match, "the home page must reference a hashed asset");
+  return { ext: match[3], path: match[1], stem: match[2] };
+}
+
+// The documented policy (the build's _headers, docs/hosting/self-hosting.md): everything
+// revalidates except the content-addressed /assets/*. The image takes sws's own one-year
+// max-age for those, without `immutable`, because a header rule would also tag a 404.
+async function checkCachePolicy(origin, prefix) {
+  const get = fetchPath(origin, prefix);
+  const asset = hashedAsset((await get("/")).text);
+  const expected = [
+    ["/", "no-cache"],
+    ["/docs/faq/", "no-cache"],
+    ["/apply-rom-patches/", "no-cache"],
+    ["/.well-known/api-catalog", "no-cache"],
+    ["/manifest.json", "no-cache"],
+    ["/rom-weaver-service-worker.js", "no-cache"],
+    [`/${asset.path}`, "max-age=31536000"],
+  ];
+  for (const [path, cache] of expected) {
+    const response = await get(path);
+    assert.equal(response.status, 200, `${prefix}${path}`);
+    assert.equal(response.cache, cache, `Cache-Control of ${prefix}${path}`);
+  }
+  console.log(`PASS Cache-Control matches the documented policy: ${origin}${prefix}`);
+}
+
+// A path that does not exist MUST answer 404, never the app shell with 200. A missing
+// /assets/* file answered 200 with HTML, or with a long cache lifetime, would be stored
+// under a content-addressed URL for a year by browsers and CDNs.
+async function checkNotFound(origin, prefix) {
+  const get = fetchPath(origin, prefix);
+  const asset = hashedAsset((await get("/")).text);
+  for (const path of [
+    "/assets/nope-missing.js",
+    `/${asset.stem}-zzzzzzzz.${asset.ext}`,
+    "/assets/nested/missing.wasm",
+  ]) {
+    const missing = await get(path);
+    assert.equal(missing.status, 404, `${prefix}${path}`);
+    assert.doesNotMatch(missing.cache, /immutable|max-age=[1-9]\d{4,}/, `${prefix}${path} cache`);
+  }
+  // The header rule for everything outside /assets/ is a glob: names that start like "assets" must not escape it.
+  for (const path of [
+    "/no-such-route/",
+    "/no-such-route",
+    "/docs/no-such-doc/",
+    "/missing.html",
+    "/a",
+    "/asset/x",
+    "/assetsx/y",
+  ]) {
+    const missing = await get(path);
+    assert.equal(missing.status, 404, `${prefix}${path}`);
+    assert.match(missing.response.headers.get("content-type") ?? "", /^text\/html/, path);
+    assert.match(missing.text, /data-page="not-found"/, `${prefix}${path} serves the 404 page`);
+    assert.equal(missing.cache, "no-cache", `Cache-Control of ${prefix}${path}`);
+    assert.equal(missing.response.headers.get("cross-origin-embedder-policy"), "require-corp");
+    // The served bytes, before any script runs: every root-relative link must already carry the prefix.
+    assert.ok(missing.text.includes(`<base href="${prefix}/" />`), `${prefix}${path} <base>`);
+    assert.deepEqual(
+      missing.text.match(/href="\/(?!\/)[^"]*"/g)?.filter((href) => !href.startsWith(`href="${prefix}/`)) ?? [],
+      [],
+      `${prefix}${path} links outside the prefix`,
+    );
+  }
+  console.log(`PASS missing paths answer 404 without long caching: ${origin}${prefix}`);
+}
+
 async function checkWebapp() {
   docker("network", "create", id);
   networkCreated = true;
   const web = await start("web", values.image);
+  // The documented Nginx subpath deployment sets BASE_PATH on the image it proxies to.
+  const sub = await start("sub", values.image, ["--env", "BASE_PATH=/rom-weaver/"]);
+  // Proxies spell the prefix without the outer slashes; the container accepts that too.
+  const bare = await start("bare", values.image, ["--env", "BASE_PATH=rom-weaver"]);
   const tls = await start("tls", values.image, ["--env", "HTTPS_PORT=8443"]);
-  await Promise.all([healthy(web.container), healthy(tls.container)]);
+  // Started together so their health waits overlap instead of adding up.
+  const mounted = await startMountedCertificates();
+  await Promise.all(
+    [web, sub, bare, tls, mounted.pair, mounted.named].map(({ container }) => healthy(container)),
+  );
+  const barePage = await fetch(`${bare.origin}/no-such-route/`);
+  assert.equal(barePage.status, 404);
+  assert.ok((await barePage.text()).includes('<base href="/rom-weaver/" />'), "BASE_PATH=rom-weaver is normalized");
   assert.notEqual(docker("exec", web.container, "id", "-u"), "0");
+  // sws ignores unknown sws.toml keys with only this warning, so a misspelled
+  // option silently falls back to its default.
+  for (const container of [web.container, sub.container, bare.container, tls.container]) {
+    const logs = spawnSync("docker", ["logs", container], { encoding: "utf8" });
+    // Unreadable logs (a log driver without read support) would pass the check below.
+    assert.equal(logs.status, 0, `docker logs ${container} failed: ${logs.stderr}`);
+    assert.doesNotMatch(
+      logs.stdout + logs.stderr,
+      /unused configuration manifest key/,
+      "sws.toml has a key static-web-server does not recognize",
+    );
+  }
+  await checkMountedCertificates(mounted);
   for (const [vars, code] of [
     [["HTTPS_CERT=/missing"], 64],
     [["HTTPS_CERT=/missing", "HTTPS_KEY=/missing"], 66],
@@ -329,10 +584,33 @@ async function checkWebapp() {
       (error) => error.status === code,
     );
   }
+  // A read-only root filesystem leaves the re-rooted 404 page nowhere to go.
+  assert.throws(
+    () => docker("run", "--rm", "--read-only", "--env", "BASE_PATH=/rom-weaver/", values.image),
+    (error) => error.status === 73 && /--tmpfs \/tmp/.test(String(error.stderr ?? error.message)),
+    "BASE_PATH on a read-only root",
+  );
+  for (const value of [
+    "//",
+    "/a//b/",
+    "/a/../b/",
+    "/a/./b/",
+    "/a b/",
+    '/a"b/',
+    "/a&b/",
+    "/a#b/",
+    "/a\\b/",
+  ]) {
+    assert.throws(
+      () => docker("run", "--rm", "--env", `BASE_PATH=${value}`, values.image),
+      (error) => error.status === 64 && /BASE_PATH/.test(String(error.stderr ?? error.message)),
+      `BASE_PATH=${value}`,
+    );
+  }
   const markdown = await readFile(values.docs, "utf8");
   const block = /```nginx\n([\s\S]*?)```/.exec(markdown)?.[1];
   assert.ok(block, "the self-hosting guide must include its Nginx configuration");
-  const config = `server { listen 8080; absolute_redirect off;\n${block.replaceAll("127.0.0.1:8080", `${web.container}:8080`)}\n}\n`;
+  const config = `server { listen 8080; absolute_redirect off;\n${block.replaceAll("127.0.0.1:8080", `${sub.container}:8080`)}\n}\n`;
   const configPath = join(scratch, "nginx.conf");
   await writeFile(configPath, config);
   const proxy = await start("proxy", "nginx:alpine", [
@@ -367,14 +645,22 @@ async function checkWebapp() {
     "/rom-weaver-weave-v2.schema.json",
     "/openapi.json",
     "/.well-known/api-catalog",
+    "/.vite/manifest.json",
   ]) {
     const response = await fetch(web.origin + path, { signal: AbortSignal.timeout(10_000) });
     assert.equal(response.status, 200, path);
     assert.equal(response.headers.get("cross-origin-embedder-policy"), "require-corp");
     assert.equal(response.headers.get("cross-origin-opener-policy"), "same-origin");
-    if (path.endsWith(".json")) await response.json();
+    // Parse dotfile paths to prove the file itself was served, not a page.
+    if (path === "/.well-known/api-catalog")
+      assert.ok(Array.isArray((await response.json()).linkset), path);
+    else if (path.endsWith(".json")) await response.json();
     else await response.body?.cancel();
   }
+  await checkCachePolicy(web.origin, "");
+  await checkCachePolicy(proxy.origin, "/rom-weaver");
+  await checkNotFound(web.origin, "");
+  await checkNotFound(proxy.origin, "/rom-weaver");
   await checkBrowser([
     { origin: web.origin, prefix: "" },
     { origin: proxy.origin, prefix: "/rom-weaver" },

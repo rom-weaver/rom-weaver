@@ -1286,7 +1286,7 @@ msgstr "Elige una ROM para parchear."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.body"
-msgstr "Elige Parches y trucos en el paso 0x03 para combinar cambios ordenados. ROM modificada es el modo predeterminado; al cambiar de modo se conservan tus archivos."
+msgstr "Elige Parches y trucos encima del selector de archivos para combinar cambios ordenados. ROM modificada es el modo predeterminado; al cambiar de modo se conservan tus archivos."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1600,8 +1600,13 @@ msgstr "No se pudo cargar el ejemplo. Inténtalo de nuevo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.STORAGE_FULL"
+msgstr "No se pudo guardar el resultado. Libera espacio de almacenamiento o elige una carpeta en la que el navegador pueda escribir."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.OUTPUT_WRITE_FAILED"
-msgstr "No se pudo escribir la salida."
+msgstr "No se pudo guardar el resultado. Elige una carpeta en la que el navegador tenga permiso para escribir."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4251,7 +4256,7 @@ msgstr "Leyendo"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.staging"
-msgstr "Leyendo archivos soltados…"
+msgstr "Leyendo archivos…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -302,6 +302,7 @@ const toPatchStageInfo = (
     validationLabel: validation.validationLabel,
     validationMessage: validation.validationMessage,
     validationState: validation.validationState,
+    validationErrorCode: patch.patchValidation?.errorCode,
     validationUnreadable: !!patch.patchValidation?.unreadable,
     validationValues: validation.validationValues,
     wasDecompressed: patch.wasDecompressed,

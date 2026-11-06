@@ -1,5 +1,5 @@
 import { resolveAssetUrl } from "../public/react/asset-url.ts";
-import { SAMPLE_URL_PATTERN, SITE_ORIGIN } from "./docs-routing.mjs";
+import { isRootPath, mapDocImageUrls, SAMPLE_URL_PATTERN, SITE_ORIGIN } from "./docs-routing.mjs";
 
 /** The base the guides are authored against, and what the served document was rendered with. */
 const AUTHORED_SAMPLE_BASE = `${SITE_ORIGIN}/`;
@@ -48,4 +48,19 @@ const retargetSampleUrls = (html: string, assetBaseUrl: string | undefined): str
   });
 };
 
-export { AUTHORED_SAMPLE_BASE, retargetSampleUrls };
+/**
+ * Keep a sub-path deployment on its own prefix: guides link to sibling pages and tools
+ * by root-absolute path (`/docs/faq`, `/apply-rom-patches`) and to screenshots by
+ * `/docs/screenshots/...`, which would otherwise leave `appBaseUrl`. Protocol-relative,
+ * fragment, query, and external URLs stay as authored.
+ */
+const rebaseRootUrls = (html: string, appBaseUrl: string): string => {
+  const basePath = new URL(appBaseUrl, "https://app.invalid").pathname;
+  if (basePath === "/") return html;
+  const withLinks = html.replace(ANCHOR_HREF, (match, open, href, close) =>
+    isRootPath(href) ? `${open}${basePath}${href.slice(1)}${close}` : match,
+  );
+  return mapDocImageUrls(withLinks, (url) => (isRootPath(url) ? `${basePath}${url.slice(1)}` : url));
+};
+
+export { AUTHORED_SAMPLE_BASE, rebaseRootUrls, retargetSampleUrls };

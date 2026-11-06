@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { type ReactNode, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -793,29 +793,51 @@ describe("sample tutorial step card", () => {
     expect(screen.getByText(/Switch to Simple/)).toBeTruthy();
   });
 
-  it("changes the live view from the guide comparison without advancing", async () => {
-    const Workbench = () => {
-      const [detailed, setDetailed] = useState(false);
-      return (
-        <RomWeaverSettingsProvider settings={{ detailedViewEnabled: detailed }}>
-          <div className="rw-app">
-            <div className="workflow-panel-head">
-              <label className="panel-view-toggle">
-                <input
-                  checked={detailed}
-                  onChange={(event) => setDetailed(event.currentTarget.checked)}
-                  type="checkbox"
-                />
-                <span>Detailed</span>
-              </label>
-            </div>
-            <TutorialSection id="tutorial-first" label="First drawer" />
-            <ViewGuide />
+  const InteractiveViewWorkbench = () => {
+    const [detailed, setDetailed] = useState(false);
+    return (
+      <RomWeaverSettingsProvider settings={{ detailedViewEnabled: detailed }}>
+        <div className="rw-app">
+          <div className="workflow-panel-head">
+            <label className="panel-view-toggle">
+              <input
+                checked={detailed}
+                onChange={(event) => setDetailed(event.currentTarget.checked)}
+                type="checkbox"
+              />
+              <span>Detailed</span>
+            </label>
           </div>
-        </RomWeaverSettingsProvider>
-      );
-    };
-    render(<Workbench />);
+          <TutorialSection id="tutorial-first" label="First drawer" />
+          <ViewGuide />
+        </div>
+      </RomWeaverSettingsProvider>
+    );
+  };
+
+  it.each([false, true])("changes the live view before the target state commits (frame connected: %s)", (connect) => {
+    const frames: FrameRequestCallback[] = [];
+    const frame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => frames.push(callback));
+    try {
+      render(<InteractiveViewWorkbench />);
+      act(() => {
+        if (connect) {
+          expect(frames).toHaveLength(1);
+          frames[0]?.(0);
+          expect(document.querySelector("#tutorial-first.sample-tutorial-target")).toBeTruthy();
+        }
+        fireEvent.click(screen.getByRole("button", { name: /^Detailed\b/, pressed: false }));
+      });
+      expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
+      expect(screen.getByText(/You're in Detailed view/)).toBeTruthy();
+      expect(document.querySelector(".sample-tutorial-dialog")?.getAttribute("data-step")).toBe("1");
+    } finally {
+      frame.mockRestore();
+    }
+  });
+
+  it("changes the live view from the guide comparison without advancing", async () => {
+    render(<InteractiveViewWorkbench />);
     await waitFor(() => expect(document.querySelector("#tutorial-first.sample-tutorial-target")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /^Detailed\b/, pressed: false }));
     expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);

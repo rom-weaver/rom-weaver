@@ -296,10 +296,15 @@ fn selection_fallback_reports_prompt_cancellation() {
     let initial = vec!["missing.nes".to_string()];
 
     let error = run_selection_fallback(&app, &handler, &initial).expect_err("cancel should fail");
-    assert!(matches!(
-        error,
-        RomWeaverError::Validation(message) if message.contains("interactive selection was cancelled")
-    ));
+    assert_eq!(
+        error.code(),
+        Some(rom_weaver_core::ERROR_CODE_SELECTION_CANCELLED)
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("interactive selection was cancelled")
+    );
     assert_eq!(
         *handler
             .extract_requests
@@ -1351,7 +1356,8 @@ fn validate_patch_apply_expected_checksums_uses_hints_for_match_and_mismatch() {
     )
     .expect_err("mismatching hint should fail");
     assert!(
-        matches!(error, RomWeaverError::Validation(ref message) if message.contains("checksum mismatch for crc32")),
+        error.code() == Some(rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH)
+            && error.to_string().contains("checksum mismatch for crc32"),
         "unexpected error: {error:?}"
     );
 

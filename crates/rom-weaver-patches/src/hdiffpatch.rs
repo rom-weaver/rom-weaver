@@ -1323,14 +1323,16 @@ fn apply_hdiffsf20_with_diff(
         .map_err(|_| RomWeaverError::Validation("HDIFFSF20 new size overflowed usize".into()))?;
     let parsed = parse_hdiffsf20_steps(diff, old_data.len(), new_data_size, header.cover_count)?;
 
-    // `new_data_size` is an attacker-controlled varint; `try_reserve_exact` turns
-    // an oversized declared size into a validation error rather than aborting the
-    // process on a multi-gigabyte `vec![0u8; n]`.
+    // `new_data_size` is an attacker-controlled varint, but `parse_hdiffsf20_steps`
+    // already bounds it by the data the patch can produce, so a refused reservation
+    // is memory pressure; `try_reserve_exact` reports it as out of memory rather
+    // than aborting the process on a multi-gigabyte `vec![0u8; n]`.
     let mut output = Vec::new();
     output.try_reserve_exact(new_data_size).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "HDIFFSF20 declared new_data_size {new_data_size} exceeds allocatable memory"
-        ))
+        RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
+            format!("cannot reserve {new_data_size} bytes for the HDIFFSF20 output"),
+        )
     })?;
     output.resize(new_data_size, 0);
     let mut targets = Vec::with_capacity(parsed.steps.len());

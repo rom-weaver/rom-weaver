@@ -1,7 +1,9 @@
 import { ChevronLeft, ChevronRight, Monitor, Terminal } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { appPathHref } from "./app-routes.ts";
 import { DOC_SOURCES, docGroupTitle, groupDocNavigationRoutes } from "./docs-routing.mjs";
 import { preloadDocsRouteHtml } from "./workflow-routes.tsx";
+import { useAppBaseUrl } from "./use-app-base-url.ts";
 import { useDocShelfState, type DocShelfState } from "./use-doc-shelf-state.ts";
 
 type DocsAudience = "browser" | "cli";
@@ -115,26 +117,29 @@ const GuideLink = ({
   onNavigate?: () => void;
   onSelectOverview?: () => void;
   route: DocNavRoute;
-}) => (
-  <a
-    aria-current={route.slug === currentSlug ? "page" : undefined}
-    // The visible label MAY drop "(CLI)"; the accessible name keeps it for readers who skipped the switch.
-    aria-label={docsLabelFor(route, audience) === route.label ? undefined : route.label}
-    href={`/${route.slug}`}
-    id={id}
-    onClick={(event) => {
-      onNavigate?.();
-      if (route.slug !== "docs" || !onSelectOverview) return;
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      event.preventDefault();
-      onSelectOverview();
-    }}
-    onFocus={() => warmDocsHtml(route.slug)}
-    onPointerEnter={() => warmDocsHtml(route.slug)}
-  >
-    {docsLabelFor(route, audience)}
-  </a>
-);
+}) => {
+  const appBaseUrl = useAppBaseUrl();
+  return (
+    <a
+      aria-current={route.slug === currentSlug ? "page" : undefined}
+      // The visible label MAY drop "(CLI)"; the accessible name keeps it for readers who skipped the switch.
+      aria-label={docsLabelFor(route, audience) === route.label ? undefined : route.label}
+      href={appPathHref(route.slug, appBaseUrl)}
+      id={id}
+      onClick={(event) => {
+        onNavigate?.();
+        if (route.slug !== "docs" || !onSelectOverview) return;
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        onSelectOverview();
+      }}
+      onFocus={() => warmDocsHtml(route.slug)}
+      onPointerEnter={() => warmDocsHtml(route.slug)}
+    >
+      {docsLabelFor(route, audience)}
+    </a>
+  );
+};
 
 /** Desktop rail: the same groups and audience switch as the phone drawer, as open-in-place shelves. */
 const DocsNav = ({
@@ -309,6 +314,7 @@ const DocsDrawerNav = ({
   openShelf: string | null;
 }) => {
   const [audience, setAudience] = useDocsAudience(currentSlug);
+  const appBaseUrl = useAppBaseUrl();
   const currentShelf = docShelfFor(currentSlug);
   const shelf = openShelf ? DOC_SHELVES.find((entry) => entry.title === openShelf) : undefined;
   if (shelf) {
@@ -373,7 +379,7 @@ const DocsDrawerNav = ({
             <a
               aria-current={route.slug === currentSlug ? "page" : undefined}
               className="docs-row is-link"
-              href={`/${route.slug}`}
+              href={appPathHref(route.slug, appBaseUrl)}
               onClick={onNavigate}
               onFocus={() => warmDocsHtml(route.slug)}
             >

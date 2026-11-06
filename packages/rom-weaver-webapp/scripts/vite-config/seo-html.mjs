@@ -4,6 +4,7 @@ import { Lexer } from "marked";
 import { createDocsMarkdown, readDocLastmod } from "../docs-discovery.mjs";
 import { readNoticesLastmod } from "../notices-lastmod.mjs";
 import { docSourcePath } from "../../src/webapp/docs-pages.mjs";
+import { ROOT_BASE_TAG } from "../../src/webapp/pwa/document-base.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
 import {
   BETA_ROUTE_TITLES,
@@ -101,7 +102,7 @@ export const createNotFoundHtml = (html, channel, channelLabel) => {
   // base:"./" relative asset URLs resolve wrong at any nested path without this.
   let notFoundHtml = html
     .replace("<html ", '<html data-page="not-found" ')
-    .replace("<head>", '<head>\n    <base href="/" />')
+    .replace("<head>", `<head>\n    ${ROOT_BASE_TAG}`)
     .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
     .replace(/(<meta\s+name="robots"\s+content=")[^"]*(")/, "$1noindex$2")
     .replace(

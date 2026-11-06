@@ -18,6 +18,7 @@ fn check(slot: usize) -> Check {
 }
 
 // Layout and checksum rules: https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88/src/lib/templates/mission-impossible/saveEditor
+// Controller options, unchanged at: https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/mission-impossible/saveEditor
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let mut fields = Vec::new();
     let mut stores = Vec::new();
@@ -39,6 +40,29 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                 .max(max),
             );
         }
+        // The slot CRC covers the controller bytes, so the existing CRC store repairs them.
+        fields.push(
+            FieldDefinition::new(
+                format!("slot_{}.configuration", index + 1),
+                format!("Slot {} controller configuration", index + 1),
+                base + 0x11,
+                Storage::U8,
+            )
+            .choices(choices(&[("right_handed", 0), ("left_handed", 1)]))
+            .min(0)
+            .max(1),
+        );
+        fields.push(
+            FieldDefinition::new(
+                format!("slot_{}.aiming_mode", index + 1),
+                format!("Slot {} aiming mode", index + 1),
+                base + 0x10,
+                Storage::U8,
+            )
+            .choices(choices(&[("normal", 1), ("reverse", 0xff)]))
+            .min(1)
+            .max(0xff),
+        );
         stores.push(Store {
             when: None,
             destination: Scalar {
@@ -107,5 +131,94 @@ mod tests {
         let mut bad = input();
         bad.bytes[0x21] ^= 1;
         assert!(handler.apply(&bad, &identity, &[], false).is_err());
+    }
+
+    fn bitwise_crc32(bytes: &[u8]) -> u32 {
+        let mut crc = u32::MAX;
+        for byte in bytes {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                crc = if crc & 1 == 1 {
+                    (crc >> 1) ^ 0xedb8_8320
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+        !crc
+    }
+
+    #[test]
+    fn controller_fields_decode_edit_and_repair_every_slot_crc() {
+        let handler = schemas().remove(0);
+        let identity = handler.definitions().remove(0).identity;
+        let mut original = input();
+        for slot in 0..4 {
+            original.bytes[slot * 0x20 + 0x10] = 1;
+            original.bytes[slot * 0x20 + 0x11] = 0;
+            let base = slot * 0x20;
+            let crc = bitwise_crc32(&original.bytes[base..base + 0x1c]);
+            original.bytes[base + 0x1c..base + 0x20].copy_from_slice(&crc.to_be_bytes());
+        }
+        let document = handler.parse(&original, &identity).unwrap();
+        let value = |id: &str| {
+            document
+                .fields
+                .iter()
+                .find(|field| field.id == id)
+                .unwrap()
+                .value
+                .clone()
+        };
+        assert_eq!(
+            value("slot_3.aiming_mode"),
+            SaveValue::Enum("normal".into())
+        );
+        assert_eq!(
+            value("slot_3.configuration"),
+            SaveValue::Enum("right_handed".into())
+        );
+        let edits: Vec<_> = (1..=4)
+            .flat_map(|slot| {
+                [
+                    SaveEdit {
+                        field: format!("slot_{slot}.aiming_mode"),
+                        value: SaveValue::Enum("reverse".into()),
+                    },
+                    SaveEdit {
+                        field: format!("slot_{slot}.configuration"),
+                        value: SaveValue::Enum("left_handed".into()),
+                    },
+                ]
+            })
+            .collect();
+        let bytes = handler
+            .apply(&original, &identity, &edits, false)
+            .unwrap()
+            .bytes
+            .unwrap();
+        for slot in 0..4 {
+            let base = slot * 0x20;
+            assert_eq!(bytes[base + 0x10], 0xff);
+            assert_eq!(bytes[base + 0x11], 1);
+            assert_eq!(
+                &bytes[base + 0x1c..base + 0x20],
+                &bitwise_crc32(&bytes[base..base + 0x1c]).to_be_bytes()
+            );
+            for offset in (0..0x1c).filter(|offset| !matches!(offset, 0x10 | 0x11)) {
+                assert_eq!(bytes[base + offset], original.bytes[base + offset]);
+            }
+        }
+        assert_eq!(&bytes[0x80..], &original.bytes[0x80..]);
+        let mut invalid = edits.clone();
+        invalid[1].value = SaveValue::Enum("raw:2".into());
+        assert!(
+            handler
+                .apply(&original, &identity, &invalid, false)
+                .is_err()
+        );
+        let mut corrupt = original.clone();
+        corrupt.bytes[0x60 + 0x10] ^= 0x80;
+        assert!(handler.apply(&corrupt, &identity, &edits, false).is_err());
     }
 }

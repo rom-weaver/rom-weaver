@@ -1,6 +1,7 @@
 import type { ParsedBundleCreateResult } from "../../types/bundle.ts";
 import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
+import type { SharedInputPreparationCache } from "../../lib/workflow/shared-input-preparation.ts";
 import type { ParsedWeaveCreateResult, ParsedWeavePatchInput } from "../../types/weave.ts";
 import type { ApplySettings } from "../../types/settings.ts";
 import type { RomLookupResultRequest } from "./use-rom-lookup.ts";
@@ -81,6 +82,8 @@ type ApplyPatchFormProps = {
   assetBaseUrl?: string;
   mode?: ApplyPatchFormMode;
   cheatsPage?: boolean;
+  /** Shares prepared inputs with another form that stages the same source objects. */
+  preparationCache?: SharedInputPreparationCache;
   inputs?: BinarySource[];
   patches?: BinarySource[];
   settings?: ApplyPatchFormSettings;

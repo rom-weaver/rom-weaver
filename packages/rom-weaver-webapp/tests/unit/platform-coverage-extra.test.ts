@@ -53,7 +53,7 @@ import {
   forwardCreatePatchProgress,
   forwardRomSpecificProgress,
 } from "../../src/platform/shared/workflow-runtime-progress.ts";
-import { getRomWeaverFailureMessage, withRomWeaverFailureKind } from "../../src/workers/rom-weaver/runner-errors.ts";
+import { getRomWeaverFailureMessage, withRomWeaverFailure } from "../../src/workers/rom-weaver/runner-errors.ts";
 
 class FakeFileHandle {
   kind = "file" as const;
@@ -302,7 +302,7 @@ describe("runner failure messages", () => {
     );
     expect(getRomWeaverFailureMessage(null, "fallback")).toBe("fallback");
     const error = new Error("wrapped");
-    expect(withRomWeaverFailureKind(error, { events: [{ status: "failed", error_kind: "validation" }] })).toBe(error);
+    expect(withRomWeaverFailure(error, { events: [{ status: "failed", error_kind: "validation" }] })).toBe(error);
     expect((error as Error & { kind?: string }).kind).toBe("validation");
   });
 

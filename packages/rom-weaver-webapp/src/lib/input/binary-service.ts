@@ -163,6 +163,11 @@ const attachPatchFileCleanup = (file: PatchFileInstance, cleanup?: () => Promise
   return file;
 };
 
+const replacePatchFileCleanup = (file: PatchFileInstance, cleanup?: () => Promise<void> | void): PatchFileInstance => {
+  (file as CleanablePatchFile)._cleanup = createCleanupOnce(cleanup);
+  return file;
+};
+
 const getPatchFileCleanup = (file: PatchFileInstance): (() => Promise<void> | void) | undefined =>
   (file as CleanablePatchFile)._cleanup;
 
@@ -459,6 +464,7 @@ export {
   getPatchFileBlob,
   getPatchFileBytes,
   getPatchFileCleanup,
+  replacePatchFileCleanup,
   getPatchFileExternalSource,
   getPatchFileHandle,
   getPatchFileSourceAccess,

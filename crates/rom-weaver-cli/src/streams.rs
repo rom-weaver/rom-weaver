@@ -149,6 +149,8 @@ fn report_error(
             crate::native_output::error_event(command, "stream", code, &error.to_string(), status);
         if event.status == OperationStatus::Failed {
             event.error_kind = Some(error.kind());
+            event.error_code = error.code().map(str::to_owned);
+            event.error_fields = error.fields_json();
         }
         reporter.emit(event);
     } else {
