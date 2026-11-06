@@ -815,9 +815,54 @@ describe("network-first handler", () => {
       asDocumentRequest(`${APP_ORIGIN}/rom-weaver/nope`),
     );
 
+    expect(response.status).toBe(404);
     await expect(response.text()).resolves.toBe(
       '<base href="/rom-weaver/" /><a href="/rom-weaver/apply-rom-patches">Apply</a><a href="//cdn.test/x">CDN</a><img src="./logo.svg">',
     );
+  });
+
+  it("answers an offline miss with the 404 status at the root too", async () => {
+    const harness = await loadWorker();
+    setPrecache({ "404.html": () => new Response('<base href="/" /><a href="/docs">Docs</a>', { status: 200 }) });
+
+    const response = await routed(harness, harness.networkFirstRoute, asDocumentRequest(`${APP_ORIGIN}/nope`));
+
+    expect(response.status).toBe(404);
+    await expect(response.text()).resolves.toBe('<base href="/" /><a href="/docs">Docs</a>');
+  });
+
+  it("does not prefix a 404 document that is already re-rooted", async () => {
+    const harness = await loadWorker({ scope: `${APP_ORIGIN}/rom-weaver/` });
+    const html = '<base href="/rom-weaver/" /><a href="/rom-weaver/docs">Docs</a>';
+    setPrecache({ "404.html": () => new Response(html, { status: 200 }) });
+
+    const response = await routed(
+      harness,
+      harness.networkFirstRoute,
+      asDocumentRequest(`${APP_ORIGIN}/rom-weaver/nope`),
+    );
+
+    await expect(response.text()).resolves.toBe(html);
+  });
+
+  it("looks routes up without the sub-path prefix", async () => {
+    const harness = await loadWorker({ scope: `${APP_ORIGIN}/rom-weaver/` });
+    setPrecache({
+      "404.html": () => new Response("not-found", { status: 200 }),
+      "apply-rom-patches/index.html": () => new Response("apply-route", { status: 200 }),
+      "index.html": () => new Response("app-root", { status: 200 }),
+    });
+
+    for (const [path, body] of [
+      ["/rom-weaver/apply-rom-patches", "apply-route"],
+      ["/rom-weaver/apply-rom-patches/", "apply-route"],
+      ["/rom-weaver/", "app-root"],
+      ["/rom-weaver", "app-root"],
+    ] as const) {
+      const response = await routed(harness, harness.networkFirstRoute, asDocumentRequest(`${APP_ORIGIN}${path}`));
+      expect(response.status, path).toBe(200);
+      await expect(response.text(), path).resolves.toBe(body);
+    }
   });
 
   it("keeps a $ in the sub-path scope literal when re-rooting the 404 document", async () => {

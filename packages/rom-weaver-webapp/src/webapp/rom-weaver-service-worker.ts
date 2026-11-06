@@ -531,22 +531,38 @@ const fetchAndUpdateCache = async (request: Request, onHeaders?: () => void): Pr
   return withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
 };
 
+// Precache keys and the redirect list are written for the origin root, but they resolve against this
+// worker's URL. Under /rom-weaver/, /rom-weaver/apply-rom-patches is the key "apply-rom-patches/index.html"
+// and the scope root is "/", so strip the scope prefix before any lookup.
+const scopePath = (pathname: string) => {
+  if (pathname === APP_BASE_PATH.slice(0, -1)) return "/";
+  return pathname.startsWith(APP_BASE_PATH) ? `/${pathname.slice(APP_BASE_PATH.length)}` : pathname;
+};
+
 const matchRouteDocument = async (url: URL) => {
-  for (const candidate of routeDocumentCandidates(url.pathname)) {
+  for (const candidate of routeDocumentCandidates(scopePath(url.pathname))) {
     const response = (await matchPrecache(candidate)) ?? (await deferredPrecache.match(candidate));
     if (response) return response;
   }
   return undefined;
 };
 
-// 404.html is built for the origin root (`<base href="/">`, root-relative links); re-root it on this
-// worker's scope so it works under a sub-path. A replacer function keeps `$` in the scope literal.
-const rerootNotFoundDocument = async (response: Response | undefined) => {
-  if (!response || response.status === 0 || APP_BASE_PATH === "/") return response;
-  const html = (await response.clone().text()).replace(/href="\/(?!\/)/g, () => `href="${APP_BASE_PATH}`);
-  const headers = new Headers(response.headers);
+const ROOT_BASE_TAG = '<base href="/" />'; // pinned by verify-seo-build.mjs
+
+// The offline answer for a path this build lacks: the 404 page at the same URL with a 404 status (the
+// precached copy came from /404.html as a 200). 404.html is built for the origin root, so re-root it on
+// this worker's scope under a sub-path, unless it already carries another base so it is never prefixed
+// twice. A replacer function keeps `$` in the scope literal.
+const notFoundDocument = async () => {
+  const precached = await matchPrecache("404.html");
+  if (!precached || precached.status === 0) return precached;
+  let html = await precached.clone().text();
+  if (APP_BASE_PATH !== "/" && html.includes(ROOT_BASE_TAG)) {
+    html = html.replace(/href="\/(?!\/)/g, () => `href="${APP_BASE_PATH}`);
+  }
+  const headers = new Headers(precached.headers);
   headers.delete("content-length");
-  return new Response(html, { headers, status: response.status, statusText: response.statusText });
+  return new Response(html, { headers, status: 404, statusText: "Not Found" });
 };
 
 const matchCachedResponse = async (request: Request, url: URL) => {
@@ -560,9 +576,7 @@ const matchCachedResponse = async (request: Request, url: URL) => {
   if (isHtmlRequest(request, url)) {
     const routeDocument = await matchRouteDocument(url);
     const fallbackDocument =
-      url.pathname === "/"
-        ? await matchPrecache("index.html")
-        : await rerootNotFoundDocument(await matchPrecache("404.html"));
+      scopePath(url.pathname) === "/" ? await matchPrecache("index.html") : await notFoundDocument();
     const html = routeDocument || fallbackDocument || (await matchPrecache("index.html")) || (await matchPrecache("/"));
     return withCrossOriginIsolationHeaders(html, credentialless) || html;
   }
@@ -592,8 +606,9 @@ const isRedirectSourcePath = (pathname: string) =>
   typeof __REDIRECT_SOURCE_PATHS__ === "undefined" || redirectSourcePaths.has(pathname);
 
 const matchPrecachedNavigation = async (url: URL) => {
-  if (!offlineCopyRequestedEnabled || isRedirectSourcePath(url.pathname)) return undefined;
-  if (url.pathname === "/") return await matchPrecache("index.html");
+  const pathname = scopePath(url.pathname);
+  if (!offlineCopyRequestedEnabled || isRedirectSourcePath(pathname)) return undefined;
+  if (pathname === "/") return await matchPrecache("index.html");
   return await matchRouteDocument(url);
 };
 
