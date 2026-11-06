@@ -52,4 +52,11 @@ Before renaming, the page checks the folder again. Nothing is renamed when:
 - another file already has one of the new names;
 - a file changed after the list was shown.
 
-If a rename fails partway, the page puts the files back under their old names and names any file it could not. Keep the tab open until the rename finishes. If the tab closes during a rename, some files can keep a temporary name such as `ff7.disc01.rw-1a2b3c4d-0.bin`: the old name `ff7.disc01.bin` with `.rw-` and a code added. Rename those back by hand.
+If a rename fails partway, the page puts the files back under their old names and names any file it could not. Keep the tab open until the rename finishes. If the tab closes during a rename, the folder can be left half renamed:
+
+- some files keep a temporary name such as `ff7.disc01.rw-1a2b3c4d-0.bin`, which is the old name `ff7.disc01.bin` with `.rw-` and a code added;
+- some files already have their new name;
+- a `.cue` can still name its old track files;
+- the playlist can be empty.
+
+Rename the files by hand until each `.cue` names its track files as they are, delete an empty playlist, and then make the playlist again.

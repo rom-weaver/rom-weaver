@@ -181,8 +181,8 @@ const preflight = async ({ directory, renames, playlist, planned }: RenamePlayli
 
 /**
  * Rename files where they are, rewrite renamed sheets, and write the playlist. Each file moves to
- * a temporary name first, so swapped or case-only names never meet. Any failure puts the folder
- * back.
+ * a temporary name first, so swapped or case-only names never meet. On failure it puts back what
+ * it can and names the rest in its error.
  */
 const renamePlaylistFolder = async (request: RenamePlaylistFolderRequest) => {
   const { directory, renames, playlist } = request;
