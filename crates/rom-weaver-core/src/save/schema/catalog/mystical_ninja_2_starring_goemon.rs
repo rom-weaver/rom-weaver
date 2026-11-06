@@ -203,11 +203,17 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                 == u32::from_be_bytes(bytes[start + 4..start + 8].try_into().unwrap())
         };
         let mut checks = Vec::new();
-        // An empty slot is reported first: its stored CRC is not meaningful.
+        // A slot is empty only when its record is all zeros or its CRC is valid and the occupied
+        // marker is clear. A non-zero record that fails the CRC (damaged, or in a byte order this
+        // module does not support, where the marker byte lands elsewhere) is never called empty.
         if slot.is_some() {
             checks.push(Check {
                 when: None,
-                assert: Condition::new(move |bytes| Ok(bytes[start + 8] != 0)),
+                assert: Condition::new(move |bytes| {
+                    let record = &bytes[start..start + length];
+                    let empty = record.iter().all(|byte| *byte == 0) || (valid(bytes) && record[8] == 0);
+                    Ok(!empty)
+                }),
                 code: "save_slot_empty".into(),
                 message: "The selected Mystical Ninja 2 slot is empty.".into(),
                 section_id: None,
@@ -511,6 +517,39 @@ mod tests {
         );
     }
 
+    fn error_code(result: Result<Vec<u8>>) -> String {
+        let Err(RomWeaverError::ValidationCode(error)) = result else {
+            panic!("expected a validation code error");
+        };
+        error.code().to_owned()
+    }
+
+    #[test]
+    fn word_swapped_slot_is_present_not_empty() {
+        let handlers = schemas();
+        let mut original = fixture();
+        // Put the occupied marker where a word-swapped image maps it to a zero byte.
+        original[SLOT_START + 8] = 5;
+        original[SLOT_START + 11] = 0;
+        repair(&mut original, SLOT_START, SLOT_SIZE);
+        let mut swapped = original.clone();
+        for word in swapped.chunks_exact_mut(4) {
+            word.reverse();
+        }
+        // The swapped marker byte reads as zero, but the record is not empty.
+        assert_eq!(swapped[SLOT_START + 8], 0);
+        assert!(
+            swapped[SLOT_START..SLOT_START + SLOT_SIZE]
+                .iter()
+                .any(|byte| *byte != 0)
+        );
+        assert_eq!(
+            error_code(apply(&handlers[1], &swapped, &[])),
+            "save_checksum_mismatch"
+        );
+        assert!(apply(&handlers[1], &original, &[]).is_ok());
+    }
+
     #[test]
     fn damaged_empty_and_out_of_range_inputs_are_rejected() {
         let handlers = schemas();
@@ -548,17 +587,28 @@ mod tests {
         empty[SLOT_START + 8] = 0;
         repair(&mut empty, SLOT_START, SLOT_SIZE);
         assert!(apply(&handlers[1], &empty, &[]).is_err());
-        // An empty slot with a stale CRC reports the empty slot, not a checksum mismatch.
+        // A non-zero record with a stale CRC is damaged, not empty.
         let mut stale = original.clone();
         stale[SLOT_START + 8] = 0;
         assert_ne!(
             u32::from_be_bytes(stale[SLOT_START + 4..SLOT_START + 8].try_into().unwrap()),
             expected_crc(&stale[SLOT_START..SLOT_START + SLOT_SIZE])
         );
-        let Err(RomWeaverError::ValidationCode(error)) = apply(&handlers[1], &stale, &[]) else {
-            panic!("expected a validation code error");
-        };
-        assert_eq!(error.code(), "save_slot_empty");
+        assert_eq!(
+            error_code(apply(&handlers[1], &stale, &[])),
+            "save_checksum_mismatch"
+        );
+        // A valid CRC with a clear marker, and an all-zero record, are both empty.
+        assert_eq!(
+            error_code(apply(&handlers[1], &empty, &[])),
+            "save_slot_empty"
+        );
+        let mut zeroed = original.clone();
+        zeroed[SLOT_START..SLOT_START + SLOT_SIZE].fill(0);
+        assert_eq!(
+            error_code(apply(&handlers[1], &zeroed, &[])),
+            "save_slot_empty"
+        );
         // A damaged neighbouring slot does not block an edit of a healthy one.
         let mut neighbour = original.clone();
         neighbour[SLOT_START + SLOT_SIZE + 20] ^= 1;
