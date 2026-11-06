@@ -670,6 +670,7 @@
   grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   padding-block-end: 0;
   overflow: hidden;
+  scrollbar-gutter: auto;
 }
 .rw-app .rail-level {
   grid-area: 1 / 1;
@@ -680,19 +681,19 @@
     opacity 0.32s var(--ease),
     visibility 0s;
 }
-.rw-app .docs-rail[data-level="tools"] .rail-docs,
-.rw-app .docs-rail[data-level="docs"] .rail-tools {
+.rw-app .docs-rail[data-level="tools"] .rail-level-docs,
+.rw-app .docs-rail[data-level="docs"] .rail-level-tools {
   transition-delay: 0s, 0s, 0.32s;
 }
-.rw-app .rail-docs {
+.rw-app .rail-level-docs {
   z-index: 1;
   background: var(--chassis);
 }
-.rw-app .docs-rail[data-level="tools"] .rail-docs {
+.rw-app .docs-rail[data-level="tools"] .rail-level-docs {
   visibility: hidden;
   transform: translateX(100%);
 }
-.rw-app .docs-rail[data-level="docs"] .rail-tools {
+.rw-app .docs-rail[data-level="docs"] .rail-level-tools {
   visibility: hidden;
   opacity: 0.35;
   transform: translateX(-28%);

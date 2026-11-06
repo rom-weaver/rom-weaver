@@ -142,7 +142,7 @@ describe("the navigation both layouts share", () => {
       withSettings(<Masthead {...mastheadProps} currentTab="docs" docsSlug="docs/faq" onSelectTab={onSelectTab} />),
     );
     const rail = container.querySelector(".docs-rail") as HTMLElement;
-    const tools = container.querySelector(".rail-tools .side-nav") as HTMLElement;
+    const tools = container.querySelector(".rail-level-tools .side-nav") as HTMLElement;
     const docs = rowNamed(tools, "Docs");
     expect(rail.dataset.level).toBe("docs");
     // Overview owns `tab-docs`; the tool rail's copy of Docs MUST NOT repeat it.

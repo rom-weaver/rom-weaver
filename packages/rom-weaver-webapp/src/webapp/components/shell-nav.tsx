@@ -56,7 +56,7 @@ type NavEntry = {
   title?: string;
   /** The phone Menu's label, where the full one would wrap its tile; the full one stays the name. */
   shortLabel?: string;
-  /** Decoration after the label, such as the chevron of a row that opens a nested navigation. */
+  /** Decoration rendered after the label. */
   trailing?: ReactNode;
 };
 type NavSectionData = { entries: NavEntry[]; id: string; title: string; content?: ReactNode };
@@ -178,7 +178,7 @@ const SideNav = ({
   sections,
 }: {
   appearance: ReactNode;
-  /** A second copy of the rail, such as the one under the docs navigation, MUST NOT reuse `tab-`. */
+  /** Prefix for row ids; only the copy the panels are labelled by MAY use `tab-`. */
   idPrefix?: string;
   localizer: Localizer;
   navLabel: string;
