@@ -423,7 +423,7 @@ const useLocalApplyPatchFormSession = ({
     hasStrictInputChecksumMismatch &&
     stagedPatchInfos
       .filter((info) => info.checksumPreflightMismatch === true)
-      .every((info) => isPatchFileChecksumFailure(info.validationMessage ?? ""));
+      .every((info) => isPatchFileChecksumFailure(info.validationErrorCode));
   const inputNoticeMessage = failurePlacement === "input" ? failureMessage : "";
   const patchNoticeMessage = failurePlacement === "patch" ? failureMessage : "";
   const outputRuntimeNoticeMessage = outputErrorMessage || (failurePlacement === "output" ? failureMessage : "");

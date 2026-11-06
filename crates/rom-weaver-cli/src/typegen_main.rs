@@ -36,15 +36,14 @@ use rom_weaver_containers::{
     z3ds_subtype_metadata,
 };
 use rom_weaver_core::{
-    CONTAINER_FILTER_FILE_EXTENSIONS, OperationFamily, OperationStatus,
+    CONTAINER_FILTER_FILE_EXTENSIONS, ERROR_CODE_WORKFLOW_CODES, OperationFamily, OperationStatus,
     PATCH_FILTER_FILE_EXTENSIONS, PatchApplyDirection, PatchEndpointSelection, ProgressEvent,
     RAW_SAVE_FILE_EXTENSIONS, ROM_FILTER_FILE_EXTENSIONS, RomWeaverErrorKind, SaveChangePreview,
     SaveConstraint, SaveContainerKind, SaveDocument, SaveEdit, SaveEditResult, SaveField,
     SaveFieldChange, SaveFieldKind, SaveGameCandidate, SaveGameDefinition, SaveGameIdentity,
     SaveIntegrity, SaveIntegrityIssue, SaveIntegrityState, SaveRecognition,
     SaveRecognitionConfidence, SaveRecognitionOutcome, SaveRecognitionReason, SaveSection,
-    SaveValue, ThreadBudget, ThreadExecution, ThreadMode, VALIDATION_CODE_EXTRACT_NO_CONTAINER,
-    VALIDATION_CODE_WBFS_SIZE_MISMATCH,
+    SaveValue, ThreadBudget, ThreadExecution, ThreadMode, WorkflowErrorCode,
 };
 use rom_weaver_patches::PatchRegistry;
 use serde_json::{Map, Value, json};
@@ -186,6 +185,7 @@ fn render_types() -> String {
         export_decl::<OperationFamily>(&config),
         export_decl::<OperationStatus>(&config),
         export_decl::<RomWeaverErrorKind>(&config),
+        export_decl::<WorkflowErrorCode>(&config),
         export_decl::<ThreadMode>(&config),
         export_decl::<ThreadBudget>(&config),
         export_decl::<ThreadExecution>(&config),
@@ -354,7 +354,7 @@ fn export_decl<T: TS>(config: &ts_rs::Config) -> String {
 
 fn render_metadata() -> String {
     format!(
-        "{METADATA_HEADER}{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
+        "{METADATA_HEADER}{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
         render_ts_const(
             "ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY",
             create_patch_format_policy_value()
@@ -414,7 +414,11 @@ fn render_metadata() -> String {
             save_file_extensions_value()
         ),
         render_ts_const("ROM_WEAVER_WEAVE_FILE_NAMES", weave_file_names_value()),
-        render_ts_const("ROM_WEAVER_VALIDATION_CODES", validation_codes_value()),
+        render_ts_const("ROM_WEAVER_ERROR_CODES", error_codes_value()),
+        render_ts_const(
+            "ROM_WEAVER_WORKFLOW_ERROR_CODES",
+            json!(WorkflowErrorCode::ALL)
+        ),
         "export const ROM_WEAVER_FORMAT_METADATA = {\n  archiveFormats: ROM_WEAVER_ARCHIVE_FORMATS,\n  compression: ROM_WEAVER_COMPRESSION_METADATA,\n  containerFormatAliases: ROM_WEAVER_CONTAINER_FORMAT_ALIASES,\n  containerFormats: ROM_WEAVER_CONTAINER_FORMATS,\n  createContainerFormats: ROM_WEAVER_CREATE_CONTAINER_FORMATS,\n  createPatchFormatPolicy: ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY,\n  discImagePolicy: ROM_WEAVER_DISC_IMAGE_POLICY,\n  fileFilters: ROM_WEAVER_FILE_FILTERS,\n  patchFormats: ROM_WEAVER_PATCH_FORMATS,\n  z3dsSubtypes: ROM_WEAVER_Z3DS_SUBTYPES,\n} as const;",
     )
 }
@@ -838,11 +842,13 @@ fn weave_file_names_value() -> Value {
     })
 }
 
-fn validation_codes_value() -> Value {
-    json!({
-        "extractNoContainer": VALIDATION_CODE_EXTRACT_NO_CONTAINER,
-        "wbfsSizeMismatch": VALIDATION_CODE_WBFS_SIZE_MISMATCH,
-    })
+fn error_codes_value() -> Value {
+    Value::Object(
+        ERROR_CODE_WORKFLOW_CODES
+            .iter()
+            .map(|(code, workflow)| ((*code).to_owned(), json!(workflow)))
+            .collect(),
+    )
 }
 
 fn error_kind_prefixes_value() -> Value {

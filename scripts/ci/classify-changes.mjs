@@ -58,6 +58,7 @@ export const ROOT_LEAF_SCRIPTS = [
   "bench-disc-tools",
   "generate-compressed-disc-sample",
   "markdownlint-no-soft-line-breaks",
+  "pre-push",
   "quality-diff-coverage",
   "quality-fuzz",
   "quality-kani",
@@ -339,6 +340,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     if (
       path === "packages/rom-weaver-webapp/Dockerfile" ||
       path === "packages/rom-weaver-webapp/sws.toml" ||
+      path === "packages/rom-weaver-webapp/scripts/docker-entrypoint.sh" ||
       path === "docs/hosting/self-hosting.md" ||
       path === "packages/rom-weaver-webapp/scripts/compress-static-assets.mjs"
     ) {

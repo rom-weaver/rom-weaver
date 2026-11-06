@@ -23,6 +23,7 @@ import {
   keepResourceTimingsRecording,
   withMeasuredEncodedSize,
 } from "./pwa/response-encoded-size.ts";
+import { ROOT_BASE_TAG } from "./pwa/document-base.mjs";
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 import { createServiceWorkerCachePolicy, findStaleServiceWorkerCaches } from "./pwa/service-worker-cache-policy.ts";
 
@@ -531,13 +532,45 @@ const fetchAndUpdateCache = async (request: Request, onHeaders?: () => void): Pr
   return withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
 };
 
+// Precache keys and redirect sources are relative to the scope root, so lookups MUST drop the scope prefix
+// (/rom-weaver/apply-rom-patches -> apply-rom-patches/index.html).
+const scopePath = (pathname: string) => {
+  if (pathname === APP_BASE_PATH.slice(0, -1)) return "/";
+  return pathname.startsWith(APP_BASE_PATH) ? `/${pathname.slice(APP_BASE_PATH.length)}` : pathname;
+};
+
+// Built documents point at the origin root: 404.html has `<base href="/">`, and a route's index copy has
+// `<base href="../">`, which only reaches the root from a trailing-slash URL. Under a sub-path scope, re-root
+// either on the scope. A document that already carries another base is left alone, so it is never prefixed twice.
+const ROUTE_BASE_PATTERN = /<base href="(?:\.\.\/)+" \/>/;
+const rerootHtml = (html: string) => {
+  if (APP_BASE_PATH === "/" || !(html.includes(ROOT_BASE_TAG) || ROUTE_BASE_PATTERN.test(html))) return html;
+  // A replacer function keeps `$` in the scope literal.
+  return html.replace(ROUTE_BASE_PATTERN, ROOT_BASE_TAG).replace(/href="\/(?!\/)/g, () => `href="${APP_BASE_PATH}`);
+};
+
+const rerootDocument = async (response: Response | undefined, status = response?.status) => {
+  if (!response || response.status === 0) return response;
+  if (APP_BASE_PATH === "/" && status === response.status) return response;
+  const html = await response.clone().text();
+  const rerooted = rerootHtml(html);
+  if (rerooted === html && status === response.status) return response;
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  const statusText = status === response.status ? response.statusText : "Not Found";
+  return new Response(rerooted, { headers, status, statusText });
+};
+
 const matchRouteDocument = async (url: URL) => {
-  for (const candidate of routeDocumentCandidates(url.pathname)) {
+  for (const candidate of routeDocumentCandidates(scopePath(url.pathname))) {
     const response = (await matchPrecache(candidate)) ?? (await deferredPrecache.match(candidate));
-    if (response) return response;
+    if (response) return await rerootDocument(response);
   }
   return undefined;
 };
+
+// The offline answer for a path this build lacks: the 404 page at the same URL. It is precached from a 200.
+const notFoundDocument = async () => await rerootDocument(await matchPrecache("404.html"), 404);
 
 const matchCachedResponse = async (request: Request, url: URL) => {
   const credentialless = await ensureCoepModeHydrated();
@@ -549,7 +582,8 @@ const matchCachedResponse = async (request: Request, url: URL) => {
   }
   if (isHtmlRequest(request, url)) {
     const routeDocument = await matchRouteDocument(url);
-    const fallbackDocument = url.pathname === "/" ? await matchPrecache("index.html") : await matchPrecache("404.html");
+    const fallbackDocument =
+      scopePath(url.pathname) === "/" ? await matchPrecache("index.html") : await notFoundDocument();
     const html = routeDocument || fallbackDocument || (await matchPrecache("index.html")) || (await matchPrecache("/"));
     return withCrossOriginIsolationHeaders(html, credentialless) || html;
   }
@@ -579,8 +613,9 @@ const isRedirectSourcePath = (pathname: string) =>
   typeof __REDIRECT_SOURCE_PATHS__ === "undefined" || redirectSourcePaths.has(pathname);
 
 const matchPrecachedNavigation = async (url: URL) => {
-  if (!offlineCopyRequestedEnabled || isRedirectSourcePath(url.pathname)) return undefined;
-  if (url.pathname === "/") return await matchPrecache("index.html");
+  const pathname = scopePath(url.pathname);
+  if (!offlineCopyRequestedEnabled || isRedirectSourcePath(pathname)) return undefined;
+  if (pathname === "/") return await matchPrecache("index.html");
   return await matchRouteDocument(url);
 };
 

@@ -75,6 +75,17 @@ pub struct ProgressEvent {
     /// for other event statuses and unclassified legacy messages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_kind: Option<crate::RomWeaverErrorKind>,
+    /// Stable code of a coded failure (see `error_codes`). The webapp
+    /// classifies failures by this code, never by `label` text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+    /// Fields of the coded failure, such as sizes or the path it names.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "typescript-types",
+        ts(type = "Record<string, string | number | boolean> | null")
+    )]
+    pub error_fields: Option<serde_json::Map<String, Value>>,
     pub status: OperationStatus,
 }
 
@@ -111,6 +122,8 @@ impl ProgressEvent {
                 .and_then(|value| value.thread_fallback_reason.clone()),
             elapsed_ms: None,
             error_kind: None,
+            error_code: None,
+            error_fields: None,
             status: OperationStatus::Pending,
         }
     }

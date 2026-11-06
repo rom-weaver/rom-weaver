@@ -516,6 +516,28 @@ const readDocsSlugFromPathname = (pathname) => {
  */
 const isLegalDocRoute = (slug) => slug === "docs/about" || slug === "docs/notices" || slug === "docs/privacy";
 
+/**
+ * A path that starts at the origin root (`/docs/faq`). `//host` is protocol-relative, so it is not one.
+ *
+ * @param {string} url
+ */
+const isRootPath = (url) => url.startsWith("/") && !url.startsWith("//");
+
+/**
+ * Rewrite every `src` and `srcset` URL on the `<img>` and `<source>` tags of rendered doc HTML.
+ * `srcset` is split into its candidates (URL and descriptor tokens), so each URL is mapped alone.
+ *
+ * @param {string} html
+ * @param {(url: string) => string} mapUrl
+ */
+const mapDocImageUrls = (html, mapUrl) =>
+  html.replace(/<(?:img|source)\b[^>]*>/gi, (tag) =>
+    tag.replace(/\b(src|srcset)=(["'])(.*?)\2/gi, (_attribute, name, quote, value) => {
+      const mapped = name.toLowerCase() === "src" ? mapUrl(value) : value.replace(/[^\s,]+/g, mapUrl);
+      return `${name}=${quote}${mapped}${quote}`;
+    }),
+  );
+
 export {
   createDocsSeoMetadata,
   DOC_SOURCES,
@@ -523,6 +545,8 @@ export {
   groupDocNavigationRoutes,
   groupDocRoutes,
   isLegalDocRoute,
+  isRootPath,
+  mapDocImageUrls,
   readDocsSlugFromPathname,
   SAMPLE_URL_PATTERN,
   SITE_ORIGIN,

@@ -100,6 +100,8 @@ Fixtures cannot cover every input. Keep platform CI and [real-device checks](mob
 
 Before pushing webapp or published-doc changes, check the generated bundle, even when lint and pre-commit hooks pass.
 
+The pre-push hook runs steps 1 and 2 when CI's change classifier (`scripts/ci/classify-changes.mjs`) selects the webapp build for the commits since the default branch. It skips them for other pushes and when the pushed commits are not the checked-out `HEAD`. A production WASM module that another checkout already built for the same inputs is copied rather than rebuilt ([development guide](development.md#build-and-run-the-webapp)). Set `ROM_WEAVER_PRE_PUSH_E2E=1` to add `test:e2e:a11y` on the same bundle for UI changes, or push with `--no-verify` to skip the hook.
+
 1. Prepare the worktree with the [development guide](development.md#linked-worktrees). Use a production WASM build from the current sources (`mise run build-wasm-prod`); a development module is not comparable to CI's optimized artifact.
 2. From the repository root, build the production channel and run the chunk and Brotli sidecar guard:
 

@@ -1546,11 +1546,6 @@ const LogsStoragePanel = ({
             OPFS
           </h3>
         ) : null}
-        {/* Desktop lays the view toggle, the filter, and the level out as one
-            row (dialogs.css). A phone gives the controls their row and the
-            filter the next one to itself: sharing a row there left the toggle
-            ellipsing its labels while the filter shrank to a slot too narrow to
-            read what you had typed. */}
         <div className="log-controls">
           {tab === "logs" && hasPrevious ? (
             <LogViewToggle localizer={localizer} onChange={onViewChange} showingPrevious={showingPrevious} />

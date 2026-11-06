@@ -300,6 +300,8 @@ type RuntimePatchValidateOptions = Partial<Omit<PatchValidateCommand, "input" | 
 /** One patch's verdict from an independent-mode `patch-validate` call, index-aligned to the patches
  * passed in. `status: "failed"` carries the reason in `message`; other patches are unaffected. */
 type PatchValidatePerPatchVerdict = {
+  /** Stable engine code of a failed verdict (see `ROM_WEAVER_ERROR_CODES`). */
+  errorCode?: string;
   format?: string;
   index: number;
   message?: string;

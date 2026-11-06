@@ -725,7 +725,7 @@ describe("page-level drag and drop", () => {
     await waitFor(() => expect(column()).not.toContain("rw-drop-routing"), { timeout: 2000 });
   });
 
-  it("routes a file picked on the landing page without raising the drop veil", async () => {
+  it("raises the drop veil for a file picked on the landing page", async () => {
     const { called, container } = await renderRoot({ currentView: "home" });
     const input = container.querySelector<HTMLInputElement>("#home-file-input");
     if (!input) throw new Error("The landing page rendered no file input");
@@ -738,7 +738,7 @@ describe("page-level drag and drop", () => {
 
     await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("patcher"));
     observer.disconnect();
-    expect(seen.some((className) => className.includes("rw-drop-routing"))).toBe(false);
+    expect(seen.some((className) => className.includes("rw-drop-routing"))).toBe(true);
   });
 
   it("sends a save dropped alone on the landing page to Test", async () => {

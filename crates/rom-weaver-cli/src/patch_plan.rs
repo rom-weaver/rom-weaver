@@ -102,6 +102,11 @@ pub struct PatchPlanVerdict {
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub execution: Option<PatchEndpointSelection>,
     pub message: String,
+    /// Stable engine error code behind a failed verdict (such as
+    /// `patch.file_checksum_invalid`); the message has its tag stripped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub error_code: Option<String>,
     /// The failed verdict is a limit of the patch itself (an unsupported feature such as an
     /// interactive BSP menu), not a mismatch with the ROM, so no other ROM can fix it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -800,6 +805,7 @@ pub(crate) fn resolve_verification_plan(
                 unreadable: None,
                 execution: base_execution,
                 message,
+                error_code: None,
                 unsupported: false,
                 expected_predecessor: None,
             }
@@ -912,6 +918,7 @@ pub(crate) fn resolve_verification_plan(
                 unreadable: None,
                 execution,
                 message,
+                error_code: None,
                 unsupported: false,
                 expected_predecessor,
             }

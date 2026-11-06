@@ -94,12 +94,15 @@ describe("validateApplyPatchTarget transient-failure handling", () => {
     expect(stage.state.patchValidation?.status).toBe("unknown");
   });
 
-  it("records 'unknown' when the worker fails transiently", async () => {
-    const stage = createStage();
-    const validatePatch = vi.fn().mockRejectedValue(new RomWeaverError("WORKER_FAILED", "worker crashed"));
-    await validateApplyPatchTarget(stage, createTarget(), preflight, createAdapters(validatePatch));
-    expect(stage.state.patchValidation?.status).toBe("unknown");
-  });
+  it.each(["WORKER_FAILED", "OUT_OF_MEMORY"] as const)(
+    "records 'unknown' when validation fails with %s",
+    async (code) => {
+      const stage = createStage();
+      const validatePatch = vi.fn().mockRejectedValue(new RomWeaverError(code, "worker crashed"));
+      await validateApplyPatchTarget(stage, createTarget(), preflight, createAdapters(validatePatch));
+      expect(stage.state.patchValidation?.status).toBe("unknown");
+    },
+  );
 
   it("records 'unknown' when the abort signal already fired (even for a generic worker error)", async () => {
     const stage = createStage();

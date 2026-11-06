@@ -7,7 +7,7 @@ import {
   type SettingsState,
 } from "../../src/webapp/settings/settings-state.ts";
 import { createWebappRootController, readWorkflowViewFromPath } from "../../src/webapp/webapp-controller.ts";
-import { readCreatorModeFromSearch, removeCreatorModeFromSearch } from "../../src/webapp/app-routes.ts";
+import { appPathHref, readCreatorModeFromSearch, removeCreatorModeFromSearch } from "../../src/webapp/app-routes.ts";
 
 const createStorage = () => {
   const entries = new Map<string, string>();
@@ -279,5 +279,19 @@ describe("descriptive URL migration", () => {
       controller.selectView(view);
       expect(window.location.pathname).toBe(`${prefix}${canonical}`);
     }
+  });
+});
+
+describe("appPathHref", () => {
+  it("keeps root deployments on root paths", () => {
+    expect(appPathHref("/docs/faq", "/")).toBe("/docs/faq");
+    expect(appPathHref("apply-rom-patches", "/")).toBe("/apply-rom-patches");
+  });
+
+  it("re-roots rooted and bare paths on a sub-path base, keeping query and fragment", () => {
+    const base = "https://host.test/rom-weaver/";
+    expect(appPathHref("/docs/faq#files", base)).toBe("/rom-weaver/docs/faq#files");
+    expect(appPathHref("docs?highlight=a+b#x", base)).toBe("/rom-weaver/docs?highlight=a+b#x");
+    expect(appPathHref("//docs", base)).toBe("/rom-weaver/docs");
   });
 });

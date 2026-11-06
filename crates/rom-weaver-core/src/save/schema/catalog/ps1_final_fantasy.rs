@@ -1,6 +1,6 @@
 use super::playstation_card::{self, BLOCK_SIZE};
 use super::*;
-use rules::{Condition, ReadValue, Scalar, Store};
+use rules::{Check, Condition, ReadValue, Scalar, Store};
 
 // CRC ranges and preview writes MUST follow the pinned PS1 layouts, excluding PC ports.
 // https://github.com/RyudoSynbios/game-tools-collection/tree/6f5d8064050eec83eb4f2a910743c121a70655c9/src/lib/templates/final-fantasy-vii/saveEditor
@@ -30,20 +30,29 @@ fn integrity(
     offsets: &[usize],
     eight: bool,
 ) {
-    let level = if eight { 0x194 } else { 0x204 };
-    playstation_card::integrity(
-        game,
-        base,
-        &playstation_card::Integrity {
-            code: "final_fantasy_crc",
-            message: "selected Final Fantasy block checksum is invalid",
-            storage: Storage::U16Le,
-            offsets,
-            span: BLOCK_SIZE,
-        },
-        move |block| (1..=99).contains(&block[level]),
-        move |block| u32::from(crc(&block[start..end], eight)),
-    );
+    let offsets = offsets.to_vec();
+    let checked_offsets = offsets.clone();
+    let check = Check {
+        when: None,
+        assert: Condition::new(move |bytes| {
+            let expected = crc(&bytes[base + start..base + end], eight).to_le_bytes();
+            let level = bytes[base + if eight { 0x194 } else { 0x204 }];
+            Ok((1..=99).contains(&level)
+                && checked_offsets
+                    .iter()
+                    .all(|offset| bytes[base + offset..base + offset + 2] == expected))
+        }),
+        code: "final_fantasy_crc".into(),
+        message: "selected Final Fantasy block checksum is invalid".into(),
+        section_id: None,
+        warning: None,
+    };
+    playstation_card::register_check(game, check);
+    for offset in offsets {
+        playstation_card::store_checksum(game, base + offset, Storage::U16Le, None, move |bytes| {
+            i64::from(crc(&bytes[base + start..base + end], eight))
+        });
+    }
 }
 
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {

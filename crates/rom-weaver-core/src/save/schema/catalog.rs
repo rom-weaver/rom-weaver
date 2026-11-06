@@ -234,6 +234,11 @@ pub(in crate::save) mod pokemon_trading_card_game;
 #[cfg(test)]
 mod ps1_action_support;
 pub(in crate::save) mod ps1_final_fantasy;
+pub(in crate::save) mod ps1_final_fantasy_ix;
+pub(in crate::save) mod ps1_final_fantasy_tactics;
+pub(in crate::save) mod ps1_kagero_deception_ii;
+pub(in crate::save) mod ps1_resident_evil;
+pub(in crate::save) mod ps1_silent_hill;
 pub(in crate::save) mod ps1_single_block;
 pub(in crate::save) mod rondo_of_blood;
 pub(in crate::save) mod secret_of_mana;
@@ -348,6 +353,11 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(gran_turismo::schemas());
             games.extend(tomb_raider_ii_starring_lara_croft::schemas());
             games.extend(tony_hawk_s_skateboarding::schemas());
+            games.extend(ps1_final_fantasy_ix::schemas());
+            games.extend(ps1_final_fantasy_tactics::schemas());
+            games.extend(ps1_kagero_deception_ii::schemas());
+            games.extend(ps1_resident_evil::schemas());
+            games.extend(ps1_silent_hill::schemas());
             games
         })
         .clone()
@@ -363,4 +373,75 @@ fn choices(entries: &[(&str, i64)]) -> Vec<FieldChoice> {
             value: *value,
         })
         .collect()
+}
+
+/// Edit check that rejects the opened or edited save when any `(current, maximum)` pair has the current value above the maximum.
+fn capacity_check(message: String, pairs: Vec<(rules::Scalar, rules::Scalar)>) -> rules::Check {
+    rules::Check {
+        when: None,
+        assert: rules::Condition::new(move |bytes| {
+            for (current, maximum) in &pairs {
+                if current.read(bytes)? > maximum.read(bytes)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }),
+        code: "save_resource_capacity".into(),
+        message,
+        section_id: None,
+        warning: None,
+    }
+}
+
+// Fixed-width arcade-style names store each permitted character as its ASCII code.
+// Shorter names are padded with `fill`, and `terminated` names also end with a 0 byte
+// whenever the field has room for one.
+fn ascii_name_codec(
+    characters: &str,
+    max_chars: usize,
+    fill: u32,
+    terminated: bool,
+    label: &str,
+) -> text::TextCodec {
+    let error = |code: &str, message: String| text::TextError {
+        code: code.into(),
+        message,
+    };
+    text::TextCodec {
+        unit: text::TextUnit::U8,
+        max_chars,
+        max_units: None,
+        terminators: if terminated { vec![0] } else { vec![] },
+        skip: vec![],
+        fill,
+        write_terminator: terminated.then_some(0),
+        lane: None,
+        mapping: text::TextMapping::Table {
+            ranges: vec![],
+            glyphs: characters
+                .chars()
+                .map(|character| (character, u32::from(character)))
+                .collect(),
+            aliases: BTreeMap::new(),
+        },
+        decode_invalid: text::DecodeInvalid::Replacement { character: '?' },
+        missing_terminator: text::MissingTerminator::Accept,
+        errors: text::TextErrors {
+            decode_invalid: error(
+                "save_text_codec",
+                format!("the save has unsupported {label} text"),
+            ),
+            encode_invalid: error(
+                "save_name_charset",
+                format!("the {label} contains a character the game cannot store"),
+            ),
+            missing_terminator: error("save_text_codec", format!("the {label} has no terminator")),
+            too_long: error(
+                "save_name_length",
+                format!("the {label} is longer than {max_chars} characters"),
+            ),
+        },
+        encode_transforms: vec![],
+    }
 }

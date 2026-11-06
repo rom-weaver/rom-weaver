@@ -86,7 +86,9 @@ for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
   const htmlPath = routePath === "/" ? "index.html" : `${routePath.slice(1)}.html`;
   const markdown = read(markdownPath);
   assertIncludes(markdown, `Canonical: ${SITE_ORIGIN}${routePath}`, `${markdownPath} canonical`);
-  assertIncludes(read(htmlPath), `type="text/markdown" href="${markdownPath}"`, `${htmlPath} Markdown discovery`);
+  // Docs copies carry a `<base>` at the app root and name their Markdown relative to it.
+  const alternateHref = routePath.startsWith("/docs") ? markdownPath.slice(1) : markdownPath;
+  assertIncludes(read(htmlPath), `type="text/markdown" href="${alternateHref}"`, `${htmlPath} Markdown discovery`);
   const markdownResponseHeaders = matchPagesHeaders(parsePagesHeaders(headers), markdownPath);
   assertIncludes(
     markdownResponseHeaders["Content-Type"] ?? "",
@@ -160,7 +162,7 @@ for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
 
 for (const route of DOC_ROUTES) {
   assertIncludes(read(`${route.slug}.md`), `Canonical: https://rom-weaver.com/${route.slug}`, "Markdown canonical");
-  assertIncludes(read(`${route.slug}.html`), `type="text/markdown" href="/${route.slug}.md"`, "Markdown discovery");
+  assertIncludes(read(`${route.slug}.html`), `type="text/markdown" href="${route.slug}.md"`, "Markdown discovery");
 }
 
 for (const route of [
@@ -337,6 +339,15 @@ if (/^\s+Link:.*\brel\s*=\s*"?(?:preload|modulepreload)\b/im.test(headers))
 // The 404 body is served at whatever URL missed, so its relative asset URLs
 // need an absolute base to resolve at nested paths.
 assertIncludes(notFoundHtml, '<base href="/" />', "404 asset base");
+// The Docker entrypoint re-roots this page under a sub-path by rewriting href="/..." only;
+// any other root-relative URL would keep pointing at the origin root.
+const rootRelativeNotFoundUrls = notFoundHtml.match(
+  /\s(?:src|srcset|imagesrcset|action|formaction|poster|data)="\/(?!\/)[^"]*"|url\(\s*["']?\/(?!\/)/g,
+);
+if (rootRelativeNotFoundUrls)
+  throw new Error(
+    `404.html has root-relative URLs the sub-path re-rooters miss: ${rootRelativeNotFoundUrls.slice(0, 5).join(", ")}`,
+  );
 assertIncludes(notFoundHtml, '<meta name="robots" content="noindex" />', "404 robots metadata");
 assertIncludes(notFoundHtml, 'data-page="not-found"', "404 app state");
 assertIncludes(notFoundHtml, 'aria-label="404: Page not found"', "404 heading");
@@ -563,12 +574,15 @@ for (const name of DOCS_SCREENSHOT_NAMES) {
 for (const { docsRoute, name } of DOCS_SCREENSHOT_CASES) {
   if (!docsRoute) continue;
   const docsHtml = read(`${docsRoute}.html`);
+  // Relative, so the page's <base> keeps a sub-path deployment off the origin root.
+  if (/(?:^|["\s,])\/docs\/screenshots\//.test(docsHtml))
+    throw new Error(`${docsRoute} must reference its screenshots relative to the app root`);
   for (const { name: viewport } of DOCS_SCREENSHOT_VIEWPORTS) {
     for (const theme of DOCS_SCREENSHOT_THEMES) {
       for (const { extension } of DOCS_SCREENSHOT_FORMATS) {
         assertIncludes(
           docsHtml,
-          `/docs/screenshots/${name}-${viewport}-${theme}.${extension}`,
+          `docs/screenshots/${name}-${viewport}-${theme}.${extension}`,
           `${docsRoute} ${name} ${viewport} ${theme} ${extension} screenshot`,
         );
       }
@@ -623,7 +637,13 @@ for (const route of DOC_ROUTES) {
     '<button aria-expanded="false" aria-label="Theme: Match system" class="tool theme-tool"',
     `${route.slug} React theme control`,
   );
-  assertIncludes(docsHtml, '<base href="/" />', `${route.slug} asset base`);
+  // The base MUST reach the app root relative to where each copy is served, never the origin root:
+  // a sub-path deployment would otherwise request /assets/ from outside its prefix.
+  const slugDepth = route.slug.split("/").length;
+  // `./` at the app root keeps document.baseURI there after soft navigation into a guide.
+  const extensionlessBase = slugDepth === 1 ? "./" : "../".repeat(slugDepth - 1);
+  assertIncludes(docsHtml, `<base href="${extensionlessBase}" />`, `${route.slug} asset base`);
+  assertIncludes(directoryHtml, `<base href="${"../".repeat(slugDepth)}" />`, `${route.slug} directory asset base`);
   assertIncludes(docsHtml, 'rel="stylesheet" crossorigin href="./assets/', `${route.slug} app stylesheet`);
   const legalPage = isLegalDocRoute(route.slug);
   assertIncludes(docsHtml, `"@type":"${legalPage ? "WebPage" : "TechArticle"}"`, `${route.slug} structured data`);

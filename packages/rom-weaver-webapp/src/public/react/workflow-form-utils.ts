@@ -29,13 +29,17 @@ const formatOptionalElapsedMs = (elapsedMs: number | undefined) =>
 // source type.
 type SourceNoticeState = {
   status?: string;
-  warnings?: readonly { message?: string }[];
+  warnings?: readonly { code?: string; message?: string }[];
 };
 
 // True when a workflow source failed to prepare or carries warnings; drives the form's queue-blocked
 // banner and the input card's invalid state.
 const hasSourceQueueWarning = (source: SourceNoticeState | null | undefined) =>
   !!source && (source.status === "failed" || (source.warnings?.length ?? 0) > 0);
+
+// The workflow code of the first coded warning, for recovery guidance beside the notice.
+const getSourceNoticeCode = (source: SourceNoticeState | null | undefined) =>
+  source?.warnings?.find((warning) => warning.code)?.code;
 
 const getSourceNoticeMessage = (source: SourceNoticeState | null | undefined) => {
   if (!source) return "";
@@ -83,6 +87,7 @@ export {
   formatChecksumTiming,
   formatElapsedMs,
   formatOptionalElapsedMs,
+  getSourceNoticeCode,
   getSourceNoticeLevel,
   getSourceNoticeMessage,
   hasSourceQueueWarning,

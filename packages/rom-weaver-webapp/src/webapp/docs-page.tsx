@@ -9,12 +9,14 @@ import { RelatedStrip } from "./components/related-strip.tsx";
 import { DocsToolLinks } from "./components/docs-tool-links.tsx";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes, readDocsSlugFromPathname } from "./docs-routing.mjs";
+import { appPathHref } from "./app-routes.ts";
 import { findSearchToken } from "./docs-search.mjs";
-import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "./docs-sample-origin.ts";
+import { AUTHORED_SAMPLE_BASE, rebaseRootUrls, retargetSampleUrls } from "./docs-sample-origin.ts";
 import { DocsBar } from "./docs-bar.tsx";
 import { focusMainLanding } from "./focus-main.ts";
 import { docShelfFor, docsLabelFor, useDocsAudience, type DocsAudience } from "./docs-navigation.tsx";
 import { GITHUB_URL } from "./project-links.ts";
+import { useAppBaseUrl } from "./use-app-base-url.ts";
 import { useReadingProgress } from "./use-reading-progress.ts";
 
 import { useDocShelfState, type DocShelfState } from "./use-doc-shelf-state.ts";
@@ -209,6 +211,7 @@ const SectionRail = ({
   initializing: boolean;
   route: DocRoute;
 }) => {
+  const appBaseUrl = useAppBaseUrl();
   const parts = [{ id: null, label: "Introduction" }, ...route.sections];
   return (
     <nav aria-label="On this page" className={initializing ? "warp-rail is-initializing" : "warp-rail"}>
@@ -221,7 +224,7 @@ const SectionRail = ({
           <li key={part.id ?? "introduction"}>
             <OutlineLink
               current={index - 1 === activeIndex}
-              href={part.id ? `/${route.slug}#${part.id}` : `/${route.slug}`}
+              href={appPathHref(part.id ? `${route.slug}#${part.id}` : route.slug, appBaseUrl)}
               label={part.label}
               onNavigate={
                 part.id
@@ -250,63 +253,69 @@ const DocsIndex = ({
   currentSlug: string;
   onShelfToggle: (title: string, open: boolean) => void;
   openShelves: DocShelfState;
-}) => (
-  <nav aria-label="All documentation" className="docs-index">
-    {DOC_SHELVES.map((shelf) => {
-      const routes = shelf.routes.filter((entry) => entry.slug !== currentSlug);
-      return (
-        <details
-          className="docs-index-shelf"
-          key={shelf.title}
-          onToggle={(event) => onShelfToggle(shelf.title, event.currentTarget.open)}
-          open={openShelves[shelf.title]}
-        >
-          <summary>
-            <h2 className="docs-index-title">{shelf.title}</h2>
-            <span className="docs-index-count">{`${routes.length} ${routes.length === 1 ? "page" : "pages"}`}</span>
-          </summary>
-          <ul>
-            {routes.map((entry) => (
-              <li key={entry.slug}>
-                <a
-                  href={`/${entry.slug}`}
-                  onFocus={() => warmDocsHtml(entry.slug)}
-                  onPointerEnter={() => warmDocsHtml(entry.slug)}
-                >
-                  <span className="docs-index-label">{entry.label}</span>
-                  <span className="docs-index-blurb">{entry.description}</span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        </details>
-      );
-    })}
-  </nav>
-);
+}) => {
+  const appBaseUrl = useAppBaseUrl();
+  return (
+    <nav aria-label="All documentation" className="docs-index">
+      {DOC_SHELVES.map((shelf) => {
+        const routes = shelf.routes.filter((entry) => entry.slug !== currentSlug);
+        return (
+          <details
+            className="docs-index-shelf"
+            key={shelf.title}
+            onToggle={(event) => onShelfToggle(shelf.title, event.currentTarget.open)}
+            open={openShelves[shelf.title]}
+          >
+            <summary>
+              <h2 className="docs-index-title">{shelf.title}</h2>
+              <span className="docs-index-count">{`${routes.length} ${routes.length === 1 ? "page" : "pages"}`}</span>
+            </summary>
+            <ul>
+              {routes.map((entry) => (
+                <li key={entry.slug}>
+                  <a
+                    href={appPathHref(entry.slug, appBaseUrl)}
+                    onFocus={() => warmDocsHtml(entry.slug)}
+                    onPointerEnter={() => warmDocsHtml(entry.slug)}
+                  >
+                    <span className="docs-index-label">{entry.label}</span>
+                    <span className="docs-index-blurb">{entry.description}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </details>
+        );
+      })}
+    </nav>
+  );
+};
 
-const DocsFaqPreview = () => (
-  <section aria-labelledby="docs-faq-title" className="docs-faq-preview">
-    <div className="docs-faq-heading">
-      <h2 id="docs-faq-title">Quick answers</h2>
-      <a href="/docs/faq">Read the full FAQ</a>
-    </div>
-    <div className="docs-faq-list">
-      <div className="docs-faq-item">
-        <h3>Do my files get uploaded?</h3>
-        <p>No. The webapp reads, patches, and writes files on your device.</p>
+const DocsFaqPreview = () => {
+  const appBaseUrl = useAppBaseUrl();
+  return (
+    <section aria-labelledby="docs-faq-title" className="docs-faq-preview">
+      <div className="docs-faq-heading">
+        <h2 id="docs-faq-title">Quick answers</h2>
+        <a href={appPathHref("docs/faq", appBaseUrl)}>Read the full FAQ</a>
       </div>
-      <div className="docs-faq-item">
-        <h3>Which patch format should I use?</h3>
-        <p>Applying a patch? Use the file you were given. Creating one? BPS is a good cartridge default.</p>
+      <div className="docs-faq-list">
+        <div className="docs-faq-item">
+          <h3>Do my files get uploaded?</h3>
+          <p>No. The webapp reads, patches, and writes files on your device.</p>
+        </div>
+        <div className="docs-faq-item">
+          <h3>Which patch format should I use?</h3>
+          <p>Applying a patch? Use the file you were given. Creating one? BPS is a good cartridge default.</p>
+        </div>
+        <div className="docs-faq-item">
+          <h3>Why does my ROM not match?</h3>
+          <p>The region, revision, header, byte order, archive entry, or patch order differs from the author's file.</p>
+        </div>
       </div>
-      <div className="docs-faq-item">
-        <h3>Why does my ROM not match?</h3>
-        <p>The region, revision, header, byte order, archive entry, or patch order differs from the author's file.</p>
-      </div>
-    </div>
-  </section>
-);
+    </section>
+  );
+};
 
 /** Reading order is route order, which is the order the shelves themselves list. */
 const docsNeighbour = (slug: string, step: -1 | 1) => {
@@ -323,27 +332,30 @@ const OnwardLink = ({
   audience: DocsAudience;
   direction: "next" | "previous";
   route: DocRoute;
-}) => (
-  <a
-    aria-label={`${direction === "next" ? "Next" : "Previous"}: ${docsLabelFor(route, audience)}`}
-    className="docs-step"
-    data-direction={direction}
-    href={`/${route.slug}`}
-    onClick={(event) => {
-      // Soft navigation replaces the page under this footer link; land on the new page.
-      if (!(event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey))
-        focusMainLanding();
-    }}
-    onFocus={() => warmDocsHtml(route.slug)}
-    onPointerEnter={() => warmDocsHtml(route.slug)}
-  >
-    {direction === "previous" ? <ChevronLeft aria-hidden="true" /> : null}
-    <span className="docs-step-copy">
-      <small>{direction === "next" ? "Next" : "Previous"}</small> <b>{docsLabelFor(route, audience)}</b>
-    </span>
-    {direction === "next" ? <ChevronRight aria-hidden="true" /> : null}
-  </a>
-);
+}) => {
+  const appBaseUrl = useAppBaseUrl();
+  return (
+    <a
+      aria-label={`${direction === "next" ? "Next" : "Previous"}: ${docsLabelFor(route, audience)}`}
+      className="docs-step"
+      data-direction={direction}
+      href={appPathHref(route.slug, appBaseUrl)}
+      onClick={(event) => {
+        // Soft navigation replaces the page under this footer link; land on the new page.
+        if (!(event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey))
+          focusMainLanding();
+      }}
+      onFocus={() => warmDocsHtml(route.slug)}
+      onPointerEnter={() => warmDocsHtml(route.slug)}
+    >
+      {direction === "previous" ? <ChevronLeft aria-hidden="true" /> : null}
+      <span className="docs-step-copy">
+        <small>{direction === "next" ? "Next" : "Previous"}</small> <b>{docsLabelFor(route, audience)}</b>
+      </span>
+      {direction === "next" ? <ChevronRight aria-hidden="true" /> : null}
+    </a>
+  );
+};
 
 /**
  * The end of the guide: the way on, the way back, and (on phones, where the
@@ -484,6 +496,7 @@ const DocsPage = ({
   const pageTurned = useDocsPageTurned(route.slug);
   const { onShelfToggle, openShelves } = useDocShelfState(DOC_SHELVES);
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
+  const appBaseUrl = useAppBaseUrl();
   const initialHighlight = readDocsHighlight();
   const [highlightQuery, setHighlightQuery] = useState(initialHighlight.query);
   const [highlightSection, setHighlightSection] = useState<string | null>(initialHighlight.sectionId);
@@ -492,7 +505,10 @@ const DocsPage = ({
   // The deployment's own base applies after mount, and only re-renders the
   // guides where the two differ.
   const [sampleBase, setSampleBase] = useState(AUTHORED_SAMPLE_BASE);
-  const html = useMemo(() => retargetSampleUrls(routeHtml, sampleBase), [routeHtml, sampleBase]);
+  const html = useMemo(
+    () => rebaseRootUrls(retargetSampleUrls(routeHtml, sampleBase), appBaseUrl),
+    [appBaseUrl, routeHtml, sampleBase],
+  );
   useEffect(() => {
     if (!(active && html)) return undefined;
     const article = document.querySelector<HTMLElement>(".docs-article");
@@ -589,7 +605,7 @@ const DocsPage = ({
         <section className="docs-panel">
           {hub ? null : (
             <nav aria-label="Breadcrumb" className="docs-crumb">
-              <a href={`/${HUB_SLUG}`}>Docs</a>
+              <a href={appPathHref(HUB_SLUG, appBaseUrl)}>Docs</a>
               <span aria-hidden="true">/</span>
               <span>{docShelfFor(route.slug)?.title}</span>
             </nav>

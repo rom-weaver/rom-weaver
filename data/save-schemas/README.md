@@ -2,7 +2,7 @@
 
 The application defines its save layouts and editing rules as typed Rust under [`crates/rom-weaver-core/src/save/schema/catalog/`](../../crates/rom-weaver-core/src/save/schema/catalog). This directory keeps the source attribution and license for those definitions. It does not contain runtime schema packs.
 
-The default registry includes 824 profiles: the original seven game-family definitions and 802 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
+The default registry includes 1199 profiles: the original seven game-family definitions and 1177 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
 
 | Original catalog module | Games |
 | --- | --- |
@@ -16,8 +16,8 @@ The default registry includes 824 profiles: the original seven game-family defin
 
 | Catalog module | Titles | Profiles | Fields | Creation |
 | --- | ---: | ---: | ---: | --- |
-| `donkey_kong_country.rs` | 1 | 6 | 24 | Template only |
-| `donkey_kong_country_2_diddy_s_kong_quest.rs` | 1 | 3 | 30 | Template only |
+| `donkey_kong_country.rs` | 1 | 6 | 672 | Template only |
+| `donkey_kong_country_2_diddy_s_kong_quest.rs` | 1 | 3 | 240 | Template only |
 | `donkey_kong_country_3_dixie_kong_s_double_trouble.rs` | 1 | 3 | 42 | Template only |
 | `final_fantasy_nes.rs` | 1 | 1 | 311 | Template only |
 | `mario_party.rs` | 1 | 1 | 15 | Template only |
@@ -36,20 +36,20 @@ The default registry includes 824 profiles: the original seven game-family defin
 | `f_zero.rs` | 1 | 1 | 663 | Template only |
 | `game_and_watch_gallery_3.rs` | 1 | 1 | 10 | Template only |
 | `kirbys_adventure.rs` | 1 | 9 | 27 | Template only |
-| `actraiser.rs` | 1 | 3 | 9 | Template only |
+| `actraiser.rs` | 1 | 3 | 126 | Template only |
 | `capcom_gba_eeprom.rs` | 2 | 2 | 70 | Template only |
-| `chrono_trigger.rs` | 1 | 3 | 6 | Template only |
+| `chrono_trigger.rs` | 1 | 3 | 324 | Template only |
 | `diddy_kong_racing.rs` | 1 | 1 | 9 | Template only |
 | `donkey_kong_land.rs` | 1 | 1 | 15 | Template only |
 | `f_zero_maximum_velocity.rs` | 1 | 1 | 12 | Template only |
 | `f_zero_x.rs` | 1 | 1 | 5 | Template only |
-| `final_fantasy_vi.rs` | 1 | 3 | 9 | Template only |
+| `final_fantasy_vi.rs` | 1 | 3 | 993 | Template only |
 | `lylat_wars.rs` | 1 | 1 | 15 | Template only |
 | `mario_kart_64.rs` | 1 | 1 | 16 | Template only |
 | `mission_impossible.rs` | 1 | 1 | 16 | Template only |
-| `mystic_quest_legend.rs` | 1 | 3 | 9 | Template only |
+| `mystic_quest_legend.rs` | 1 | 3 | 486 | Template only |
 | `pokemon_trading_card_game.rs` | 1 | 1 | 14 | Template only |
-| `super_punch_out.rs` | 1 | 8 | 24 | Template only |
+| `super_punch_out.rs` | 1 | 8 | 88 | Template only |
 | `wario_land_3.rs` | 1 | 1 | 6 | Template only |
 | `zelda_oracle_of_ages.rs` | 1 | 3 | 15 | Template only |
 | `zelda_oracle_of_seasons.rs` | 1 | 3 | 15 | Template only |
@@ -118,13 +118,20 @@ These profiles require explicit game selection and a game-made template. They ex
 | Gran Turismo | 33 | Five contiguous-block save in a raw 128 KiB PS1 card | Playtime seconds, credits, and days; combined sum/CRC repaired |
 | Tomb Raider II Starring Lara Croft | 90 | Single-block save in a raw 128 KiB PS1 card | Progression, level unlocks and secrets, and options; checksum repaired |
 | Tony Hawk's Skateboarding | 45 | Single-block save in a raw 128 KiB PS1 card | Per-character tape masks and competition medals with the tape counter, best scores, and options; checksum repaired |
+| Final Fantasy IX | 105 | Single-block save in a raw 128 KiB PS1 card | Gil with its preview and playtime ticks; block CRC-16 |
+| Final Fantasy Tactics | 30 | Single-block save in a raw 128 KiB PS1 card | War funds and playtime seconds; 60-chunk parity checksum |
+| Kagero: Deception II | 45 | Single-block save in a raw 128 KiB PS1 card | Clear count, slain enemies, Ark, total Ark, playtime frames, and endings; per-frame checksums |
+| Resident Evil | 150 | Single-block save in a raw 128 KiB PS1 card | Health, ink ribbons used, playtime ticks, poison, and special unlocks; original and Director's Cut releases, no game checksum |
+| Silent Hill | 45 | Single-block save in a raw 128 KiB PS1 card | Health, game clear count, continues, and saves in each populated slot with its preview; xor checksums |
 | Castlevania: Rondo of Blood | 1 | Raw 2 KiB PC Engine BRAM, Japan; first record must be DRACULA X | Money and death count in occupied slots |
 
-The additional save editors table lists 33 titles and 684 profiles. The preceding catalog table describes the original 118 additional profiles. Each PS1 profile selects an exact product code, region, and card block from 1 through 15. It validates allocation metadata and supports only a complete single-block game save. Gran Turismo is the only multi-block profile and accepts only five contiguous, ascending blocks; other multi-block saves, standalone save exports, and PC ports remain unsupported. DexDrive and Virtual Game Station card wrappers are preserved by the existing container layer.
+The additional save editors table lists 38 titles and 1059 profiles. The preceding catalog table describes the original 118 additional profiles. Each PS1 profile selects an exact product code, region, and card block from 1 through 15. It validates allocation metadata and supports only a complete single-block game save. Gran Turismo is the only multi-block profile and accepts only five contiguous, ascending blocks; other multi-block saves, standalone save exports, and PC ports remain unsupported. DexDrive and Virtual Game Station card wrappers are preserved by the existing container layer.
+
+The PlayStation role-playing batch adds five titles and 375 profiles. Chrono Cross is not included: its slot data is stored in a bespoke bit-packed compressed stream that cannot be rewritten without a verified codec. The Silent Hill profiles omit the options section, which the game copies into every Silent Hill block. They expose only populated slots, in the order the game lists them. Resident Evil excludes the Windows port.
 
 Nintendo 64 profiles accept only the stated canonical big-endian byte order. The Minish Cap profile accepts only its stated EEPROM word order. Regional boundaries and omitted fields are recorded in each profile's description.
 
-Most definitions derive from [Game Tools Collection revision `6f5d8064050eec83eb4f2a910743c121a70655c9`](https://github.com/RyudoSynbios/game-tools-collection/tree/6f5d8064050eec83eb4f2a910743c121a70655c9); CTR: Crash Team Racing, Gran Turismo, Tomb Raider II Starring Lara Croft, and Tony Hawk's Skateboarding derive from [revision `15d71340c3f1717745139c2e0774510cd37dfbdd`](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd). Each catalog module links its exact source directory. Ocarina of Time backup and checksum behavior follows [zeldaret/oot revision `52a510f379afd143aaa0375be9f1e190369572e1`](https://github.com/zeldaret/oot/blob/52a510f379afd143aaa0375be9f1e190369572e1/src/code/z_sram.c). Final Fantasy VIII's CRC lookup variant follows [Hyne revision `54cc50dc133897b9db45f9deab5167e9d14de0fc`](https://github.com/myst6re/hyne/blob/54cc50dc133897b9db45f9deab5167e9d14de0fc/src/SaveData.cpp); its last table entry differs from the standard CCITT table.
+Most definitions derive from [Game Tools Collection revision `6f5d8064050eec83eb4f2a910743c121a70655c9`](https://github.com/RyudoSynbios/game-tools-collection/tree/6f5d8064050eec83eb4f2a910743c121a70655c9); CTR: Crash Team Racing, Gran Turismo, Tomb Raider II Starring Lara Croft, Tony Hawk's Skateboarding, and the five PlayStation role-playing titles (Final Fantasy IX, Final Fantasy Tactics, Kagero: Deception II, Resident Evil, and Silent Hill) derive from [revision `15d71340c3f1717745139c2e0774510cd37dfbdd`](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd). Each catalog module links its exact source directory. Ocarina of Time backup and checksum behavior follows [zeldaret/oot revision `52a510f379afd143aaa0375be9f1e190369572e1`](https://github.com/zeldaret/oot/blob/52a510f379afd143aaa0375be9f1e190369572e1/src/code/z_sram.c). Final Fantasy VIII's CRC lookup variant follows [Hyne revision `54cc50dc133897b9db45f9deab5167e9d14de0fc`](https://github.com/myst6re/hyne/blob/54cc50dc133897b9db45f9deab5167e9d14de0fc/src/SaveData.cpp); its last table entry differs from the standard CCITT table. Final Fantasy IX's block CRC is CRC-16/MCRF4XX, checked against the [CRC catalogue](https://reveng.sourceforge.io/crc-catalogue/16.htm#crc.cat.crc-16-mcrf4xx).
 
 ## Sources and attribution
 
@@ -173,21 +180,23 @@ The additional handheld, Nintendo 64, and SNES profiles also require explicit se
 | Final Fight One | Opponents defeated, options, character colors, and character/color values in five ranking records |
 | Super Street Fighter II Turbo Revival | VS points, options, and 13 challenge times |
 | Chrono Trigger | Gold in each of three slots; the first inventory item code is read-only |
-| Diddy Kong Racing | Adventure Two mode, Wizpig amulet pieces, and balloons in three occupied slots |
+| Diddy Kong Racing | Adventure Two mode, Wizpig amulet pieces, balloons, name letters, lobby, world race, boss, and T.T. challenge progress, keys, trophies, event and Taj flags in three occupied slots (progress edits recalculate balloon, amulet, and boss counters); unlock flags and options with their nibble checksum; and best time and lap frames with name letters for 47 vehicle records |
 | Donkey Kong Land | Progression, current level, and playtime in three slots |
 | F-Zero: Maximum Velocity | Championship clear counts and three unlocks in each slot |
-| F-Zero X | Four cup progression values and the Death Race time |
+| F-Zero X | Four cup progression values, the Death Race time, five option flags, 600 cup unlock flags, and best lap, place times, and place names in 24 Time Attack records, each with its own checksum (a place name is editable only once that place has a time in the source save; machine, color, and speed-ratio floats are not editable) |
 | Final Fantasy VI | Money and battle speed in each slot; location code is read-only |
-| Lylat Wars / Star Fox 64 | Played, completion, and medal flags for Corneria, Meteo, and Sector Y |
-| Mario Kart 64 | Mario GP trophies for four cups in four classes |
-| Mission: Impossible | Music, sound-effects, audio-mode, and screen-ratio options in four records |
+| Lylat Wars / Star Fox 64 | Played, completion, and medal flags for 15 planets, sound and language options, and the ten ranking records (name, Arwings, completed missions, and per-mission planet, hits, allies, and medal) |
+| Mario Kart 64 | Mario GP trophies for four cups in four classes, sound mode, and five placings plus the best lap (character and time) for 16 Time Trial courses, with best-record mirrors and all checksums |
+| Mario Party | Coins, stars, items, board records, Mini-Game House and Island state, minigame records, language, and sound; Koopa Troopa space is not editable |
+| Mario Party 2 | Coins, unlocks, board play counts, Mini-Game Land flags with the Driver's Ed unlock rule, Mini-Game Coaster saves, records, language, and sound |
+| Mission: Impossible | Music, sound-effects, audio-mode, screen-ratio, controller configuration, and aiming-mode options in four records; mission location is not editable |
 | Mystic Quest Legend | Money, location code, and hero level in each slot |
 | Pokémon Trading Card Game | Playtime, position, location with both preview copies, and eight Master Medals with their total |
 | Super Punch-Out!! | Losses in eight profiles; wins and championship progression are read-only |
 | Wario Land 3 | Coins, language, encoded day/night, and the first three sequential power upgrades |
 | The Legend of Zelda: Oracle of Ages and Oracle of Seasons | Mode, health, maximum health, heart pieces, and rupees in three slots per title |
 
-These definitions derive from [Game Tools Collection commit `8fb075e7c130da9e72c3c46ec8efa447a252ad88`](https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88). Diddy Kong Racing also uses the checksum rules in [DavidSM64/Diddy-Kong-Racing `save_data.c`](https://github.com/DavidSM64/Diddy-Kong-Racing/blob/1339ad6304118207b342fe8669c500efb91969df/src/save_data.c).
+These definitions derive from [Game Tools Collection commit `8fb075e7c130da9e72c3c46ec8efa447a252ad88`](https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88). Diddy Kong Racing also uses the checksum rules in [DavidSM64/Diddy-Kong-Racing `save_data.c`](https://github.com/DavidSM64/Diddy-Kong-Racing/blob/1339ad6304118207b342fe8669c500efb91969df/src/save_data.c). The deepened Diddy Kong Racing, F-Zero X, Lylat Wars, Mario Kart 64, Mario Party, Mario Party 2, and Mission: Impossible fields follow [Game Tools Collection commit `15d71340c3f1717745139c2e0774510cd37dfbdd`](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd). Those seven templates are identical at the earlier and later revisions. The Mario Kart 64 checksums' second byte wraps at 256 like the game ([mk64 decomp `src/save.c`](https://github.com/n64decomp/mk64/blob/master/src/save.c)), not like Game Tools Collection, which carries the overflow into the first byte. Chrono Trigger slot checksums follow the game's own routine in [dscotton/ct_disassembly `bank_FF.asm`](https://github.com/dscotton/ct_disassembly/blob/eeae27acdb6565e96d1d796a3d60792c250c0aa1/bank_FF.asm#L1301-L1322).
 
 The Genesis definitions accept only their listed odd-byte SRAM dump sizes. They do not accept a contiguous logical save or an arbitrary padded dump.
 

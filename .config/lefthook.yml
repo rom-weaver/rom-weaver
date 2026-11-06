@@ -157,3 +157,11 @@ commit-msg:
   commands:
     strip-ai-attribution:
       run: node ./scripts/strip-ai-attribution.mjs {1}
+
+pre-push:
+  commands:
+    # Lint and pre-commit checks pass on bundles that still break CI's chunk
+    # guard; the script selects with CI's classifier, so other pushes skip it.
+    webapp-bundle:
+      use_stdin: true
+      run: node ./scripts/pre-push.mjs {1}

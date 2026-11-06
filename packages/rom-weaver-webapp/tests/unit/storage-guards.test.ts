@@ -67,12 +67,12 @@ describe("browser storage estimate and output guard", () => {
     });
     expect(wrapped).toMatchObject({
       cause: quota,
-      code: "OUTPUT_WRITE_FAILED",
+      code: "STORAGE_FULL",
       details: { operationLabel: "extract", requiredBytes: 0 },
       name: "OutputStorageError",
     });
     expect(await withBrowserOutputStorageFailureContext("quota", { operationLabel: "save" })).toMatchObject({
-      code: "OUTPUT_WRITE_FAILED",
+      code: "STORAGE_FULL",
       details: { operationLabel: "save" },
     });
     expect(
@@ -80,5 +80,18 @@ describe("browser storage estimate and output guard", () => {
     ).toEqual(expect.objectContaining({ message: "already [storage: guarded]" }));
     const regular = new Error("network failed");
     await expect(withBrowserOutputStorageFailureContext(regular, { operationLabel: "save" })).resolves.toBe(regular);
+  });
+
+  it("decides an engine failure by its code and never by its text", async () => {
+    const engineError = (message: string, engineCode: string) =>
+      Object.assign(new Error(message), { code: "COMPRESSION_FAILED", details: { engineCode } });
+    const full = engineError("write failed", "io.storage_full");
+    expect(await withBrowserOutputStorageFailureContext(full, { operationLabel: "extract" })).toMatchObject({
+      cause: full,
+      code: "STORAGE_FULL",
+      details: { operationLabel: "extract" },
+    });
+    const other = engineError("No space left on device", "extract.no_matching_entries");
+    await expect(withBrowserOutputStorageFailureContext(other, { operationLabel: "extract" })).resolves.toBe(other);
   });
 });

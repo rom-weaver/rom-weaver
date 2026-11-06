@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveAssetUrl } from "../../src/public/react/asset-url.ts";
-import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "../../src/webapp/docs-sample-origin.ts";
+import { AUTHORED_SAMPLE_BASE, rebaseRootUrls, retargetSampleUrls } from "../../src/webapp/docs-sample-origin.ts";
 
 const PRODUCTION = "https://rom-weaver.com";
 const PREVIEW = "https://pr-225.rom-weaver-preview.pages.dev/";
@@ -97,5 +97,38 @@ describe("retargetSampleUrls", () => {
     it("returns links untouched on the production origin", () => {
       expect(retargetSampleUrls(LINKS, AUTHORED_SAMPLE_BASE)).toBe(LINKS);
     });
+  });
+});
+
+describe("rebaseRootUrls", () => {
+  const LINKS =
+    '<a href="/docs/faq#files">faq</a> <a href="/apply-rom-patches?mode=rom&amp;x=1">apply</a> ' +
+    '<a href="//cdn.example/x">cdn</a> <a href="#top">top</a> <a href="https://example.com/a">out</a> ' +
+    '<a class="x" href="docs/faq">bare</a> <code>/docs/faq</code>';
+
+  const IMAGES =
+    '<picture><source srcset="/docs/screenshots/a.avif 1x, /docs/screenshots/a@2x.avif 2x" type="image/avif">' +
+    '<img src="/docs/screenshots/a.webp" alt="/docs/x"></picture> <img src="//cdn.example/b.png"> ' +
+    '<img src="https://example.com/c.png"> <img src="docs/screenshots/d.png">';
+
+  it("leaves a root deployment byte-identical", () => {
+    expect(rebaseRootUrls(LINKS + IMAGES, "/")).toBe(LINKS + IMAGES);
+    expect(rebaseRootUrls(LINKS + IMAGES, "http://localhost:4173/")).toBe(LINKS + IMAGES);
+  });
+
+  it("moves root-absolute screenshots under the sub-path", () => {
+    expect(rebaseRootUrls(IMAGES, "https://host.test/rom-weaver/")).toBe(
+      '<picture><source srcset="/rom-weaver/docs/screenshots/a.avif 1x, /rom-weaver/docs/screenshots/a@2x.avif 2x" type="image/avif">' +
+        '<img src="/rom-weaver/docs/screenshots/a.webp" alt="/docs/x"></picture> <img src="//cdn.example/b.png"> ' +
+        '<img src="https://example.com/c.png"> <img src="docs/screenshots/d.png">',
+    );
+  });
+
+  it("moves root-absolute anchors under the sub-path and leaves every other href alone", () => {
+    expect(rebaseRootUrls(LINKS, "https://host.test/rom-weaver/")).toBe(
+      '<a href="/rom-weaver/docs/faq#files">faq</a> <a href="/rom-weaver/apply-rom-patches?mode=rom&amp;x=1">apply</a> ' +
+        '<a href="//cdn.example/x">cdn</a> <a href="#top">top</a> <a href="https://example.com/a">out</a> ' +
+        '<a class="x" href="docs/faq">bare</a> <code>/docs/faq</code>',
+    );
   });
 });

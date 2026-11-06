@@ -37,8 +37,9 @@ const forceVite = force === "vite" || force === "all";
 if (String(process.env.ROM_WEAVER_PREVIEW_SKIP_BUILD || "") === "1") {
   log("warn", "ROM_WEAVER_PREVIEW_SKIP_BUILD=1 set; skipping build gate");
 } else {
-  // Cargo performs the authoritative source/dependency freshness check. The
-  // production build caches only its deterministic post-processing tail.
+  // The production build reuses a shared module built from the same sources
+  // and toolchain; otherwise Cargo performs the source/dependency freshness
+  // check and only the deterministic post-processing tail is cached.
   run("mise", ["run", "build-wasm-prod"], {
     env: forceWasm ? { ...process.env, ROM_WEAVER_WASM_FORCE: "1" } : process.env,
     label: "build-wasm-prod",

@@ -8,7 +8,7 @@ import {
   API_CATALOG_PATH,
   OPENAPI_PATH,
 } from "../../src/webapp/api-catalog.mjs";
-import { createDocsRouteHtml, DOC_ROUTES, docSourcePath } from "../../src/webapp/docs-pages.mjs";
+import { createDocsRouteHtml, DOC_ROUTES, docSourcePath, withDocsBase } from "../../src/webapp/docs-pages.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
 import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
 import { createRootManifestSource } from "./channel.mjs";
@@ -196,8 +196,8 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         const directoryIndexPath = path.join(distDir, route.slug, "index.html");
         fs.mkdirSync(path.dirname(extensionlessPath), { recursive: true });
         fs.mkdirSync(path.dirname(directoryIndexPath), { recursive: true });
-        fs.writeFileSync(extensionlessPath, docsHtml);
-        fs.writeFileSync(directoryIndexPath, docsHtml);
+        fs.writeFileSync(extensionlessPath, withDocsBase(docsHtml, route.slug, false));
+        fs.writeFileSync(directoryIndexPath, withDocsBase(docsHtml, route.slug, true));
         const source = DOC_SOURCES.find((entry) => entry.slug === route.slug);
         writeDocsMarkdown(path.join(distDir, `${route.slug}.md`), source, docSourcePath(source), siteOrigin);
       }
