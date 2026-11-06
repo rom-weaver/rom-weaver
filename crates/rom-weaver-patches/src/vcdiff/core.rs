@@ -1219,7 +1219,14 @@ pub fn apply_patch_bytes(source: &[u8], patch_bytes: &[u8]) -> Result<Vec<u8>> {
         ));
     }
 
-    let target_size = usize::try_from(patch.target_size()?).map_err(|_| {
+    let declared_size = patch.target_size()?;
+    crate::ensure_plausible_output_len(
+        "VCDIFF",
+        declared_size,
+        source.len() as u64,
+        patch_bytes.len() as u64,
+    )?;
+    let target_size = usize::try_from(declared_size).map_err(|_| {
         RomWeaverError::Validation(
             "patch target is too large to fit in memory on this platform".into(),
         )

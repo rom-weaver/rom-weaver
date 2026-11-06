@@ -3383,29 +3383,9 @@ fn apply_patch_bytes_rejects_invalid_borrowed_segment_ranges() {
     }
 }
 
+// A declared size beyond the plausibility bound is a corrupt patch, not memory pressure.
 #[test]
-fn apply_patch_bytes_rejects_unallocatable_target_size() {
-    let patch = build_patch(TestPatch {
-        windows: vec![TestWindow {
-            win_indicator: 0,
-            source_segment_size: None,
-            source_segment_position: None,
-            target_window_size: u64::MAX,
-            checksum: None,
-            data: Vec::new(),
-            inst: Vec::new(),
-            addr: Vec::new(),
-        }],
-        ..Default::default()
-    });
-    let error = apply_patch_bytes(b"", &patch).unwrap_err();
-    assert!(error.to_string().contains("patch target"), "{error}");
-}
-
-// On a 32-bit target the size no longer converts to `usize`, which is a plain validation error.
-#[cfg(target_pointer_width = "64")]
-#[test]
-fn apply_patch_bytes_codes_an_unallocatable_target_as_out_of_memory() {
+fn apply_patch_bytes_rejects_an_implausible_target_size() {
     let patch = build_patch(TestPatch {
         windows: vec![TestWindow {
             win_indicator: 0,
@@ -3422,7 +3402,7 @@ fn apply_patch_bytes_codes_an_unallocatable_target_as_out_of_memory() {
     let error = apply_patch_bytes(b"", &patch).unwrap_err();
     assert_eq!(
         error.code(),
-        Some(rom_weaver_core::ERROR_CODE_RESOURCE_OUT_OF_MEMORY),
+        Some(crate::VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE),
         "{error}"
     );
 }
