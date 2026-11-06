@@ -372,6 +372,10 @@ fn registry_lists_every_game_with_format_metadata() {
                 .map(|region| format!("tony-hawk-s-skateboarding-{region}-block-{block}")),
         );
     }
+    expected.extend(
+        ["options", "slot-1", "slot-2", "slot-3"]
+            .map(|part| format!("mystical-ninja-2-starring-goemon-canonical-sram-japan-{part}")),
+    );
     expected.extend((1..=4).map(|file| format!("goldeneye-007-canonical-eeprom-file-{file}")));
     expected.extend((1..=3).map(|file| format!("banjo-tooie-canonical-eeprom-file-{file}")));
     expected.extend((1..=3).map(|file| format!("donkey-kong-64-canonical-eeprom-file-{file}")));

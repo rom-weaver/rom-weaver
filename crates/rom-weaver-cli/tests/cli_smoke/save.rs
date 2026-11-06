@@ -81,6 +81,8 @@ fn save_catalog_lists_compiled_games_and_generation_support() {
         "goldeneye-007-canonical-eeprom-file-4",
         "pokemon-snap-canonical-flashram-japan",
         "bomberman-64-canonical-eeprom-slot-1",
+        "mystical-ninja-2-starring-goemon-canonical-sram-japan-options",
+        "mystical-ninja-2-starring-goemon-canonical-sram-japan-slot-3",
         "castlevania-harmony-of-dissonance",
         "game-boy-camera",
         "golden-sun-file-1",
@@ -423,6 +425,66 @@ fn save_goldeneye_edit_rewrites_the_record_checksum() {
     assert_eq!(
         report["details"]["save_editor"]["document"]["integrity"]["state"],
         "valid"
+    );
+}
+
+#[test]
+fn save_goemon_2_edits_repair_the_slot_crc_and_preserve_other_records() {
+    // CRC-32/BZIP2 over the 0x130-byte slot record with its first eight bytes ignored.
+    fn repair(bytes: &mut [u8]) {
+        let mut crc = 0xffff_ffffu32;
+        for (index, byte) in bytes[0x10..0x140].iter().enumerate() {
+            crc ^= u32::from(if index < 8 { 0 } else { *byte }) << 24;
+            for _ in 0..8 {
+                crc = (crc << 1) ^ if crc >> 31 != 0 { 0x04c1_1db7 } else { 0 };
+            }
+        }
+        bytes[0x14..0x18].copy_from_slice(&(!crc).to_be_bytes());
+    }
+    let temp = setup_temp_dir();
+    let source = temp.child("goemon2.sra");
+    let output = temp.child("goemon2-edited.sra");
+    let mut bytes = vec![0x5a; 32768];
+    bytes[0x18] = 3;
+    repair(&mut bytes);
+    fs::write(source.path(), &bytes).unwrap();
+    let game = "mystical-ninja-2-starring-goemon-canonical-sram-japan-slot-1";
+    run_single_json_event(
+        &[
+            "save",
+            "set",
+            source.path().to_str().unwrap(),
+            "player_1.coins=999",
+            "chain_pipe=true",
+            "--game",
+            game,
+            "--output",
+            output.path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let mut expected = bytes.clone();
+    expected[0x10 + 0x7a + 4..0x10 + 0x7a + 6].copy_from_slice(&999u16.to_be_bytes());
+    expected[0x10 + 0x22] |= 0x04;
+    repair(&mut expected);
+    assert_eq!(fs::read(output.path()).unwrap(), expected);
+    assert_eq!(fs::read(source.path()).unwrap(), bytes);
+    let report = run_single_json_event(
+        &[
+            "save",
+            "inspect",
+            output.path().to_str().unwrap(),
+            "--game",
+            game,
+            "--json",
+        ],
+        0,
+    );
+    // The CRC is a closure rule, so the schema reports no declarative checksums.
+    assert_eq!(
+        report["details"]["save_editor"]["document"]["integrity"]["state"],
+        "valid_with_warnings"
     );
 }
 

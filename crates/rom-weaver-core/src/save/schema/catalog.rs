@@ -390,6 +390,7 @@ pub(in crate::save) mod mario_party;
 pub(in crate::save) mod mario_party_2;
 pub(in crate::save) mod mission_impossible;
 pub(in crate::save) mod mystic_quest_legend;
+pub(in crate::save) mod mystical_ninja_2_starring_goemon;
 pub(in crate::save) mod paper_mario;
 pub(in crate::save) mod playstation_card;
 pub(in crate::save) mod pokemon_generation_i;
@@ -521,6 +522,7 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(gran_turismo::schemas());
             games.extend(tomb_raider_ii_starring_lara_croft::schemas());
             games.extend(tony_hawk_s_skateboarding::schemas());
+            games.extend(mystical_ninja_2_starring_goemon::schemas());
             games.extend(goldeneye_007::schemas());
             games.extend(banjo_tooie::schemas());
             games.extend(donkey_kong_64::schemas());
