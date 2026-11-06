@@ -1156,6 +1156,67 @@ test("guided Apply scrolls its first card back on screen when More opens the res
   await page.viewport(1280, 900);
 });
 
+test("guided Apply scrolls its first card clear of the dock again when the first reveal scroll is cut short", async () => {
+  // The browser can drop a smooth scroll and still send scrollend, with the page
+  // where it started. That MUST NOT count as the reveal landing.
+  await page.viewport(390, 844);
+  const scrollBy = vi.spyOn(window, "scrollBy").mockImplementationOnce(() => {
+    window.setTimeout(() => window.dispatchEvent(new Event("scrollend")), 5);
+  });
+  mountWebappRoot({ initialView: "patcher" });
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
+  window.scrollTo({ behavior: "instant", top: 0 });
+  document.querySelector(".sample-tutorial-start-primary").click();
+
+  await expect
+    .poll(() => document.querySelector('.sample-tutorial-dialog[data-step="1"]')?.dataset.anchored)
+    .toBe("true");
+  const guide = document.querySelector(".sample-tutorial-dialog");
+  const dock = document.querySelector(".rw-app .dock-pad").getBoundingClientRect();
+  await expect.poll(() => guide.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight - dock.height);
+  expect(scrollBy.mock.calls.length).toBeGreaterThan(1);
+  scrollBy.mockRestore();
+  await page.viewport(1280, 900);
+});
+
+test("guided Apply scrolls its card clear of the dock again when the More reveal scroll is cut short", async () => {
+  // Scrolling first spends the row's re-reveals, so More's reveal has no budget
+  // left to retry with.
+  await page.viewport(390, 844);
+  mountWebappRoot({ initialView: "patcher" });
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
+  document.querySelector(".sample-tutorial-start-primary").click();
+
+  await expect
+    .poll(() => document.querySelector('.sample-tutorial-dialog[data-step="1"]')?.dataset.anchored)
+    .toBe("true");
+  const guide = document.querySelector(".sample-tutorial-dialog");
+  const dock = document.querySelector(".rw-app .dock-pad").getBoundingClientRect();
+  await expect.poll(() => guide.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight - dock.height);
+  const folded = guide.getBoundingClientRect().height;
+
+  const scrollBy = vi.spyOn(window, "scrollBy").mockImplementationOnce(() => {
+    window.setTimeout(() => window.dispatchEvent(new Event("scrollend")), 5);
+  });
+  window.dispatchEvent(new WheelEvent("wheel"));
+  guide.querySelector(".sample-tutorial-more").click();
+  await expect.poll(() => guide.getBoundingClientRect().height).toBeGreaterThan(folded);
+  await expect
+    .poll(() => guide.getBoundingClientRect().bottom, { timeout: 3000 })
+    .toBeLessThanOrEqual(window.innerHeight - dock.height);
+  expect(scrollBy.mock.calls.length).toBeGreaterThan(1);
+  scrollBy.mockRestore();
+  await page.viewport(1280, 900);
+});
+
 test("guided Apply opens no drawers on desktop and keeps its last row and Apply button on screen", async () => {
   // The step before ends at the page bottom. A reveal measured from that row,
   // still in state while the new one connects, scrolled the page back up and

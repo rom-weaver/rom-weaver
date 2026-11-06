@@ -344,6 +344,75 @@ fn registry_lists_every_game_with_format_metadata() {
         }
     }
     expected.extend(["fire-emblem-the-blazing-blade", "azure-dreams"].map(str::to_owned));
+    for block in 1..=15 {
+        expected.extend(
+            ["europe", "usa", "japan"]
+                .iter()
+                .map(|region| format!("ctr-crash-team-racing-{region}-block-{block}")),
+        );
+    }
+    for block in 1..=11 {
+        expected.extend(
+            ["europe", "usa", "japan"]
+                .iter()
+                .map(|region| format!("gran-turismo-{region}-block-{block}")),
+        );
+    }
+    for block in 1..=15 {
+        expected.extend(
+            ["europe", "usa", "japan", "france", "germany", "italy"]
+                .iter()
+                .map(|region| format!("tomb-raider-ii-starring-lara-croft-{region}-block-{block}")),
+        );
+    }
+    for block in 1..=15 {
+        expected.extend(
+            ["europe", "usa", "japan"]
+                .iter()
+                .map(|region| format!("tony-hawk-s-skateboarding-{region}-block-{block}")),
+        );
+    }
+    expected.extend((1..=4).map(|file| format!("goldeneye-007-canonical-eeprom-file-{file}")));
+    expected.extend((1..=3).map(|file| format!("banjo-tooie-canonical-eeprom-file-{file}")));
+    expected.extend((1..=3).map(|file| format!("donkey-kong-64-canonical-eeprom-file-{file}")));
+    expected.extend(
+        ["europe-usa-australia", "japan"]
+            .map(|region| format!("pokemon-snap-canonical-flashram-{region}")),
+    );
+    for (game, regions) in [
+        (
+            "final-fantasy-ix",
+            &[
+                "europe", "usa", "japan", "france", "germany", "italy", "spain",
+            ][..],
+        ),
+        ("final-fantasy-tactics", &["usa", "japan"][..]),
+        ("kagero-deception-ii", &["europe", "usa", "japan"][..]),
+        (
+            "resident-evil",
+            &[
+                "europe",
+                "directorscut-europe",
+                "usa",
+                "directorscut-usa",
+                "japan",
+                "directorscut-japan",
+                "france",
+                "directorscut-france",
+                "germany",
+                "directorscut-germany",
+            ][..],
+        ),
+        ("silent-hill", &["europe", "usa", "japan"][..]),
+    ] {
+        for block in 1..=15 {
+            expected.extend(
+                regions
+                    .iter()
+                    .map(|region| format!("{game}-{region}-block-{block}")),
+            );
+        }
+    }
     assert_eq!(ids, expected);
     assert!(definitions[3..8].iter().all(|definition| {
         definition.platform == "gba"
