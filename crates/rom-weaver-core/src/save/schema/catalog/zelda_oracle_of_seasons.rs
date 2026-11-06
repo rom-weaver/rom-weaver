@@ -6,6 +6,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         "zelda-oracle-of-seasons",
         "The Legend of Zelda: Oracle of Seasons",
         b"Z11216-0",
+        0x102,
     )
 }
 
@@ -13,10 +14,8 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn seasons_signature_is_distinct_and_required() {
-        let handler = schemas().remove(0);
-        let identity = handler.definitions().remove(0).identity;
+    /// A blank Seasons save whose three slots carry the signature and a valid checksum.
+    fn input() -> SaveDetectionInput {
         let mut bytes = vec![0; 8192];
         for slot in 0..3 {
             let base = slot * 0x550;
@@ -28,11 +27,18 @@ mod tests {
                 });
             bytes[base + 0x10..base + 0x12].copy_from_slice(&sum.to_le_bytes());
         }
-        let input = SaveDetectionInput {
+        SaveDetectionInput {
             bytes,
-            selected_game: Some(identity.id.clone()),
+            selected_game: Some("zelda-oracle-of-seasons-slot-1".into()),
             rom_sha1: None,
-        };
+        }
+    }
+
+    #[test]
+    fn seasons_signature_is_distinct_and_required() {
+        let handler = schemas().remove(0);
+        let identity = handler.definitions().remove(0).identity;
+        let input = input();
         assert!(
             handler
                 .apply(&input, &identity, &[], false)
@@ -43,5 +49,33 @@ mod tests {
         let mut ages = input.clone();
         ages.bytes[0x12..0x1a].copy_from_slice(b"Z21216-0");
         assert!(handler.apply(&ages, &identity, &[], false).is_err());
+    }
+
+    #[test]
+    fn core_values_use_the_seasons_offsets_not_the_ages_ones() {
+        let handler = schemas().remove(0);
+        let identity = handler.definitions().remove(0).identity;
+        let input = input();
+        let edit = |field: &str, value| SaveEdit {
+            field: field.into(),
+            value: SaveValue::U32(value),
+        };
+        let out = handler
+            .apply(
+                &input,
+                &identity,
+                &[
+                    edit("health", 12),
+                    edit("max_health", 20),
+                    edit("heart_pieces", 3),
+                    edit("rupees_bcd", 999),
+                ],
+                false,
+            )
+            .unwrap()
+            .bytes
+            .unwrap();
+        assert_eq!(&out[0x102..0x108], &[12, 20, 3, 0x99, 0x09, 0]);
+        assert_eq!(&out[0x10a..0x10e], &[0; 4]);
     }
 }
