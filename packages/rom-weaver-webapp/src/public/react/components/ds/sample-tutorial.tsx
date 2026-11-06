@@ -1129,10 +1129,18 @@ const SampleTutorial = ({
         revealsLeft = Math.max(revealsLeft, 1);
       }
     };
-    // The reveal has landed: settle the pair against the viewport it reached.
+    // The reveal has landed: settle the pair against the viewport it reached. A
+    // scrollend that stops short of the target is a scroll the browser cut off,
+    // so the reveal runs again rather than leaving the card behind the dock.
     const onScrollEnd = () => {
       if (revealTo === null) return;
+      const cutShort = Math.abs(revealTo - window.scrollY) > 1;
       revealTo = null;
+      if (cutShort && revealsLeft > 0) {
+        revealsLeft -= 1;
+        placeAndReveal(false);
+        return;
+      }
       place(false);
     };
     // The row grows as its drawers expand, so re-reveal once each size change
