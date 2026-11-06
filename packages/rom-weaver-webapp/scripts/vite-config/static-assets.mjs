@@ -10,7 +10,7 @@ import {
 } from "../../src/webapp/api-catalog.mjs";
 import { createDocsRouteHtml, DOC_ROUTES, docSourcePath, withDocsBase } from "../../src/webapp/docs-pages.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
-import { LEGACY_WORKFLOW_ROUTES, WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
+import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
 import { createRootManifestSource } from "./channel.mjs";
 import { copyEmulatorJsAssets } from "./emulatorjs.mjs";
 import { rootDir } from "./paths.mjs";
@@ -20,6 +20,7 @@ import {
   generatedLicenseAssetSources,
   generatedSampleAssetPaths,
   getGeneratedSampleAsset,
+  LEGACY_WORKFLOW_ROUTES,
   rootStaticAssetSourcesForChannel,
 } from "./root-static-assets.mjs";
 import { withRoutePreloadLinks } from "./route-preload.mjs";

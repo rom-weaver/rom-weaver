@@ -1,6 +1,7 @@
 import { DOC_ROUTES } from "../../src/webapp/docs-pages.mjs";
 import { readDocsSlugFromPathname } from "../../src/webapp/docs-routing.mjs";
-import { LEGACY_WORKFLOW_ROUTES, WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
+import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
+import { LEGACY_WORKFLOW_ROUTES } from "./root-static-assets.mjs";
 
 const PRERENDER_RUNTIME_SLOT = '<span class="shell-identity" hidden=""></span>';
 const PRERENDER_THREADS_SLOT = '<span class="shell-threads-identity" hidden=""></span>';
