@@ -10,8 +10,8 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     )
 }
 
-/// `core_offset` is the slot-relative offset of the health byte; max health, heart
-/// pieces, and the packed-BCD rupees follow it. Ages and Seasons place it differently.
+/// Builds the three Oracle save slots; `core_offset` is the slot-relative health byte,
+/// followed by max health, heart pieces, and two-byte BCD rupees.
 pub(super) fn oracle_schema(
     id: &str,
     name: &str,
