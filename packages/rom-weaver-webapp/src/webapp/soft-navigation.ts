@@ -1,4 +1,4 @@
-import { readWorkflowViewFromPath } from "./webapp-controller.ts";
+import { matchAppRoute } from "./app-routes.ts";
 
 const isPlainLeftClick = (event: MouseEvent) =>
   event.button === 0 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
@@ -12,7 +12,7 @@ const getSoftNavigationUrl = (event: MouseEvent, anchor: HTMLAnchorElement, curr
   const href = anchor.getAttribute("href");
   const url = new URL(href?.startsWith("#") ? href : anchor.href, currentUrl.href);
   if (url.origin !== currentUrl.origin || url.protocol !== currentUrl.protocol) return null;
-  if (!readWorkflowViewFromPath(url.pathname)) return null;
+  if (!matchAppRoute(url.pathname)) return null;
   return url;
 };
 

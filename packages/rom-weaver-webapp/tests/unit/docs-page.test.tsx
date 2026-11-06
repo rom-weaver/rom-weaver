@@ -12,6 +12,13 @@ import { SITE_ORIGIN, DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
 import { navigatorWith } from "./navigator-test-utils.ts";
 import { preloadCatalog } from "../../src/presentation/localization/index.ts";
 
+const appBase = vi.hoisted(() => ({ path: "/" }));
+vi.mock("../../src/webapp/app-base.ts", () => ({
+  get APP_BASE_PATH() {
+    return appBase.path;
+  },
+}));
+
 // Guide HTML ships as one lazy chunk per page; rendering a guide synchronously
 // requires its HTML resolved first, exactly as the app preloads before mount.
 beforeAll(async () => {
@@ -101,6 +108,7 @@ describe("DocsPage", () => {
     `;
   });
   afterEach(() => {
+    appBase.path = "/";
     window.history.replaceState({}, "", "/");
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -1055,6 +1063,7 @@ Fixture description.
   });
 
   it("preserves the deployment subpath in tool links", () => {
+    appBase.path = "/rom-weaver/";
     window.history.replaceState({}, "", "/rom-weaver/docs/use-cheats");
     render(<DocsPage active slug="docs/use-cheats" />);
     expect(
@@ -1082,6 +1091,7 @@ Fixture description.
   it.each(["docs", "docs/faq", "docs/apply-rom-patches"])(
     "keeps every in-app link on /rom-weaver/ for %s on a sub-path deployment",
     (slug) => {
+      appBase.path = "/rom-weaver/";
       window.history.replaceState({}, "", `/rom-weaver/${slug}`);
       render(
         <RomWeaverSettingsProvider settings={{ language: "en" }}>

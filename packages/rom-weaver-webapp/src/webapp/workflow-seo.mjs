@@ -1,3 +1,5 @@
+import { readExtensionlessRoutePath } from "./app-route-path.mjs";
+
 const SITE_NAME = "rom-weaver";
 const SITE_ALTERNATE_NAMES = Object.freeze(["RomWeaver", "Rom Weaver", "rom weaver"]);
 
@@ -88,13 +90,16 @@ const WORKFLOW_ENTRY_ROUTES = Object.freeze({
   }),
 });
 
-/** @param {string} pathname @returns {keyof typeof WORKFLOW_ENTRY_ROUTES | null} */
-const readWorkflowEntryFromPathname = (pathname) => {
-  const segments = pathname.trim().toLowerCase().split("/").filter(Boolean);
-  if (segments.includes("docs")) return null;
-  if (segments.at(-1) === "index.html") segments.pop();
-  const slug = (segments.at(-1) || "").replace(/\.html$/, "");
-  return Object.hasOwn(WORKFLOW_ENTRY_ROUTES, slug) ? /** @type {keyof typeof WORKFLOW_ENTRY_ROUTES} */ (slug) : null;
+/**
+ * @param {string | undefined} pathname
+ * @param {string} [basePath]
+ * @returns {keyof typeof WORKFLOW_ENTRY_ROUTES | null}
+ */
+const readWorkflowEntryFromPathname = (pathname, basePath = "/") => {
+  const slug = readExtensionlessRoutePath(pathname, basePath);
+  return slug !== null && Object.hasOwn(WORKFLOW_ENTRY_ROUTES, slug)
+    ? /** @type {keyof typeof WORKFLOW_ENTRY_ROUTES} */ (slug)
+    : null;
 };
 
 // Beta tools stay out of WORKFLOW_SEO_ROUTES (no sitemap, no Markdown twin) but still need their own page title.

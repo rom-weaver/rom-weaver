@@ -159,12 +159,15 @@ const loadWebapp = async (options?: {
   offlineCopy?: boolean;
   notFound?: boolean;
   prerendered?: boolean;
+  servedView?: string;
   url?: string;
 }) => {
   vi.resetModules();
   mocks.renders.length = 0;
   window.history.replaceState({}, "", options?.url ?? "/apply-rom-patches");
   document.documentElement.dataset.page = options?.notFound ? "not-found" : "app";
+  if (options?.servedView) document.documentElement.dataset.view = options.servedView;
+  else delete document.documentElement.dataset.view;
   document.documentElement.dataset.betaToolsEnabled = options?.betaTools ? "true" : "false";
   document.documentElement.dataset.offlineCopyEnabled = options?.offlineCopy === false ? "false" : "true";
   document.body.innerHTML = `<div id="webapp-root" aria-busy="true">${
@@ -315,11 +318,26 @@ describe("boot", () => {
   });
 
   it("waits for the docs route html on a docs document", async () => {
-    await loadWebapp({ url: "/docs/getting-started" });
+    await loadWebapp({ url: "/docs/get-started" });
 
     expect(mocks.preloadWorkflowRoute).toHaveBeenCalledWith("docs");
     expect(mocks.preloadDocsRouteHtml).toHaveBeenCalledTimes(1);
     expect(latest().docsSlug).toBeTruthy();
+  });
+
+  it("hydrates the view the served document was prerendered as, not the one its path names", async () => {
+    await loadWebapp({ prerendered: true, servedView: "home", url: "/create-rom-patch" });
+
+    expect(mocks.renders[0]?.state.currentView).toBe("home");
+  });
+
+  it("renders an unmatched path as not-found where it stands, without adopting the served shell", async () => {
+    await loadWebapp({ offlineCopy: false, prerendered: true, servedView: "home", url: "/no-such-route" });
+
+    expect(latest().notFound).toBe(true);
+    expect(window.location.pathname).toBe("/no-such-route");
+    // Hydration would read the shell's offline-copy chip (off); a fresh client root loads the saved settings.
+    expect(mocks.renders[0]?.state.settings.offlineCopyEnabled).toBe(true);
   });
 
   it("skips the route preload and the history rewrite on the not-found document", async () => {
@@ -862,17 +880,17 @@ describe("routing", () => {
   });
 
   it("scrolls to the anchor when one docs page links to another", async () => {
-    await loadWebapp({ url: "/docs/getting-started" });
+    await loadWebapp({ url: "/docs/get-started" });
     const target = document.createElement("h2");
     target.id = "install";
     document.body.append(target);
     const scrollIntoView = vi.fn();
     target.scrollIntoView = scrollIntoView;
 
-    clickAnchor("/docs/cli#install");
+    clickAnchor("/docs/faq#install");
     await flush();
 
-    expect(window.location.pathname).toBe("/docs/cli");
+    expect(window.location.pathname).toBe("/docs/faq");
     expect(latest().state.currentView).toBe("docs");
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
   });

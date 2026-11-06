@@ -240,8 +240,12 @@ test("beta tool pages get their own title, social titles, and channel badge", ()
 
 test("task entries resolve static-host variants and avoid documentation paths", () => {
   for (const [slug, route] of Object.entries(WORKFLOW_ENTRY_ROUTES)) {
-    for (const pathname of [`/${slug}`, `/${slug}/`, `/roms/${slug}.html`, `/roms/${slug}/index.html`]) {
+    for (const pathname of [`/${slug}`, `/${slug}/`, `/${slug}.html`, `/${slug}/index.html`]) {
       assert.equal(readWorkflowEntryFromPathname(pathname), slug);
+    }
+    for (const pathname of [`/roms/${slug}`, `/roms/${slug}.html`, `/roms/${slug}/index.html`]) {
+      assert.equal(readWorkflowEntryFromPathname(pathname, "/roms/"), slug);
+      assert.equal(readWorkflowEntryFromPathname(pathname), null);
     }
     assert.equal(readWorkflowEntryFromPathname(`/docs/${slug}`), null);
     assert.ok(createSitemapSource().includes(`<loc>https://rom-weaver.com/${slug}</loc>`));
