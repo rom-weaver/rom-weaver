@@ -11,7 +11,7 @@ import {
   isRomWeaverLiveRunEvent,
   isRomWeaverTerminalRunEvent,
 } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
-import { getRomWeaverFailureMessage, withRomWeaverFailureKind } from "../../workers/rom-weaver/runner-errors.ts";
+import { getRomWeaverFailureMessage, withRomWeaverFailure } from "../../workers/rom-weaver/runner-errors.ts";
 import { getPathBaseName } from "../path-utils.ts";
 import { markWasmFirstProgress } from "../perf/op-perf-marks.ts";
 import type { WireRecord } from "./strict-wire-values.ts";
@@ -340,7 +340,7 @@ const toSimpleProgress = (event: RomWeaverRunJsonEvent): SimpleRuntimeProgress |
 
 const ensureRomWeaverSuccess = (result: RomWeaverRunJsonResult, fallbackMessage: string) => {
   if (result.ok && result.exitCode === 0) return;
-  throw withRomWeaverFailureKind(new Error(getRomWeaverFailureMessage(result, fallbackMessage)), result);
+  throw withRomWeaverFailure(new Error(getRomWeaverFailureMessage(result, fallbackMessage)), result);
 };
 
 export type { RomWeaverRunJsonResult };

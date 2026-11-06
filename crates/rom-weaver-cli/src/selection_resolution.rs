@@ -297,10 +297,13 @@ impl CliApp {
                     context,
                 )?;
                 if selected_entries.is_empty() {
-                    return Err(RomWeaverError::Validation(format!(
-                        "interactive selection was cancelled for `{}`",
-                        source.display()
-                    )));
+                    return Err(RomWeaverError::coded(
+                        rom_weaver_core::ERROR_CODE_SELECTION_CANCELLED,
+                        format!(
+                            "interactive selection was cancelled for `{}`",
+                            source.display()
+                        ),
+                    ));
                 }
 
                 let retry_request = ContainerExtractRequest {
@@ -417,10 +420,13 @@ impl CliApp {
                         .collect()
                 };
                 if selected_indexes.is_empty() {
-                    return Err(RomWeaverError::Validation(format!(
-                        "interactive selection was cancelled for `{}`",
-                        source.display()
-                    )));
+                    return Err(RomWeaverError::coded(
+                        rom_weaver_core::ERROR_CODE_SELECTION_CANCELLED,
+                        format!(
+                            "interactive selection was cancelled for `{}`",
+                            source.display()
+                        ),
+                    ));
                 }
                 // Expand each chosen logical ROM back to its member files so a disc's sheet + tracks
                 // all extract together.

@@ -70,6 +70,9 @@ pub struct OperationReport {
     pub thread_execution: Option<ThreadExecution>,
     /// Canonical kind of the source error, when this report represents a failure.
     pub error_kind: Option<crate::RomWeaverErrorKind>,
+    /// Stable code and fields of the source error, when it has one.
+    pub error_code: Option<String>,
+    pub error_fields: Option<serde_json::Map<String, Value>>,
     pub status: OperationStatus,
 }
 
@@ -92,6 +95,8 @@ impl OperationReport {
             percent,
             thread_execution,
             error_kind: None,
+            error_code: None,
+            error_fields: None,
             status,
         }
     }
@@ -134,9 +139,16 @@ impl OperationReport {
         error: RomWeaverError,
         thread_execution: Option<ThreadExecution>,
     ) -> Self {
-        let error_kind = error.kind();
-        Self::failed(family, format, stage, error.to_string(), thread_execution)
-            .with_error_kind(error_kind)
+        Self::failed(family, format, stage, error.to_string(), thread_execution).with_error(&error)
+    }
+
+    /// Attach the source error's kind, code, and fields when the report label
+    /// adds context.
+    pub fn with_error(mut self, error: &RomWeaverError) -> Self {
+        self.error_kind = Some(error.kind());
+        self.error_code = error.code().map(str::to_owned);
+        self.error_fields = error.fields_json();
+        self
     }
 
     /// Attach the source error kind when the report label adds context.
@@ -186,6 +198,17 @@ impl OperationReport {
             | OperationStatus::Unsupported
             | OperationStatus::Cancelled => None,
         };
+        let (error_code, error_fields) = match self.status {
+            OperationStatus::Failed | OperationStatus::Unsupported => match self.error_code {
+                Some(code) => (Some(code), self.error_fields),
+                None => crate::ValidationCodeError::parse_display_tag(&self.label)
+                    .map_or((None, None), |(code, fields)| (Some(code), fields)),
+            },
+            OperationStatus::Pending
+            | OperationStatus::Running
+            | OperationStatus::Succeeded
+            | OperationStatus::Cancelled => (None, None),
+        };
         crate::ProgressEvent {
             command: command.into(),
             family: self.family,
@@ -196,6 +219,8 @@ impl OperationReport {
             percent: self.percent,
             elapsed_ms: None,
             error_kind,
+            error_code,
+            error_fields,
             status: self.status,
             ..crate::ProgressEvent::from_thread_execution(thread_execution)
         }
@@ -287,11 +312,11 @@ impl ContainerExtractRequest {
             .kind_filter
             .matches_payload_or_container_name(output_name)
         {
-            return Err(RomWeaverError::Validation(format!(
-                "no extract entries from `{}` matched {}",
-                self.source.display(),
-                self.kind_filter.flag_label()
-            )));
+            return Err(RomWeaverError::no_matching_extract_entries(
+                &self.source,
+                &self.kind_filter.flag_label(),
+                "",
+            ));
         }
         Ok(())
     }

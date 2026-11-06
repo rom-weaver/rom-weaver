@@ -52,6 +52,65 @@ fn padded_sizes_cannot_expand_the_editable_payload() {
 }
 
 #[test]
+fn gapped_masks_are_limited_to_enum_fields_and_keep_other_bits() {
+    let choices = vec![
+        FieldChoice {
+            name: "None".into(),
+            value: 0,
+        },
+        FieldChoice {
+            name: "Low".into(),
+            value: 0x01,
+        },
+        FieldChoice {
+            name: "Both".into(),
+            value: 0x81,
+        },
+    ];
+    assert!(GameSchema::build(game(vec![field("value", 0, Storage::U8).mask(0x81)], 1)).is_err());
+    // 2 is inside the 0..=0x81 range but uses a bit the mask does not cover.
+    let mut outside = choices.clone();
+    outside.push(FieldChoice {
+        name: "Gap".into(),
+        value: 0x02,
+    });
+    assert!(
+        GameSchema::build(game(
+            vec![field("value", 0, Storage::U8).mask(0x81).choices(outside)],
+            1
+        ))
+        .is_err()
+    );
+    let schema = handler(game(
+        vec![field("value", 0, Storage::U8).mask(0x81).choices(choices)],
+        1,
+    ));
+    let input = SaveDetectionInput {
+        bytes: vec![0x7f],
+        selected_game: Some(identity(&schema).id),
+        rom_sha1: None,
+    };
+    let edit = |name: &str| SaveEdit {
+        field: "value".into(),
+        value: SaveValue::Enum(name.into()),
+    };
+    let document = schema
+        .apply(&input, &identity(&schema), &[], false)
+        .unwrap()
+        .document;
+    assert_eq!(document.fields[0].value, SaveValue::Enum("Low".into()));
+    let result = schema
+        .apply(&input, &identity(&schema), &[edit("Both")], false)
+        .unwrap();
+    assert_eq!(result.bytes, Some(vec![0xff]));
+    assert!(
+        schema
+            .apply(&input, &identity(&schema), &[edit("raw:128")], false)
+            .is_err()
+    );
+}
+
+#[test]
 fn configured_recognition_and_checks_use_the_unpadded_payload() {
     let mut raw = game(vec![field("value", 1, Storage::U8)], 4);
     raw.padded_sizes = vec![8];

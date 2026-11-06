@@ -153,6 +153,8 @@ fn with_progress_sink_swaps_the_sink_emit_reaches() {
         thread_fallback_reason: None,
         elapsed_ms: None,
         error_kind: None,
+        error_code: None,
+        error_fields: None,
         status: OperationStatus::Running,
     };
     context.emit(event);

@@ -754,8 +754,7 @@ impl CliApp {
                     patches.iter().map(|patch| patch.leaf_path.clone()),
                 );
                 if matches!(&rom_error, RomWeaverError::Cancelled)
-                    || matches!(&rom_error, RomWeaverError::Validation(message)
-                        if message.contains("interactive selection was cancelled"))
+                    || rom_error.code() == Some(rom_weaver_core::ERROR_CODE_SELECTION_CANCELLED)
                 {
                     return Err(rom_error);
                 }

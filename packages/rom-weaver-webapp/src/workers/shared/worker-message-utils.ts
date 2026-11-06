@@ -21,46 +21,6 @@ const stampWorkerTransportMessage = <T>(message: T): T => {
   } as T;
 };
 
-/** Reads a string-valued field off an error-like object; "" when absent or blank. */
-const readErrorString = (error: object, key: "message" | "stack"): string => {
-  const value = key in error ? (error as Record<string, WorkerMessageValue>)[key] : null;
-  return typeof value === "string" ? value : "";
-};
-
-/**
- * An ErrnoError carries no message, only a numeric errno, so it needs its own
- * wording. Returns "" when the error is not one.
- */
-const describeErrnoError = (error: object): string => {
-  const name = "name" in error ? (error as { name?: WorkerMessageValue }).name : null;
-  const errno = "errno" in error ? (error as { errno?: WorkerMessageValue }).errno : null;
-  if (name !== "ErrnoError") return "";
-  if (!(typeof errno === "number" || typeof errno === "string")) return "";
-  if (String(errno) === "2") return "Worker filesystem file not found while preparing disc output.";
-  return `Worker filesystem error ${errno} while preparing disc output.`;
-};
-
-const describeErrorObject = (error: object): string => {
-  const message = readErrorString(error, "message");
-  if (message) return message;
-  const stack = readErrorString(error, "stack");
-  if (stack) return stack;
-  const errno = describeErrnoError(error);
-  if (errno) return errno;
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
-};
-
-const getWorkerErrorMessage = <T>(error: T): string => {
-  if (typeof error === "string") return error;
-  if (error instanceof Error) return error.stack || error.message;
-  if (error && typeof error === "object") return describeErrorObject(error);
-  return error ? String(error) : "Worker crashed";
-};
-
 const removeUncloneableWorkerResponseFields = <T>(message: T) => {
   if (!message || typeof message !== "object") return null;
   const sanitized = { ...(message as WorkerMessageRecord) };
@@ -95,4 +55,4 @@ const postCloneSafeWorkerMessage = <T>(
   }
 };
 
-export { getWorkerErrorMessage, postCloneSafeWorkerMessage };
+export { postCloneSafeWorkerMessage };

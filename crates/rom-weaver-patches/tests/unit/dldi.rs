@@ -792,6 +792,45 @@ fn apply_rejects_an_input_slot_that_declares_more_than_the_file_holds() {
 }
 
 #[test]
+fn apply_rejects_an_implausible_driver_size_as_a_corrupt_patch() {
+    let temp = TestDir::new();
+    let input_path = temp.child("huge-driver.nds");
+    let patch_path = temp.child("huge-driver.dldi");
+    let output_path = temp.child("huge-driver-output.nds");
+
+    let slot_offset = 0x200;
+    let input = build_test_app_with_slot(slot_offset, 12, 0x0200_0000i32, "Default driver");
+    fs::write(&input_path, &input).expect("input fixture");
+
+    // A truncated driver whose header advertises 2^40 bytes, far beyond any plausible output.
+    let mut patch = build_test_dldi_driver(
+        8,
+        0xBF80_0000u32 as i32,
+        "Test Driver",
+        FIX_ALL | FIX_GLUE | FIX_GOT | FIX_BSS,
+    );
+    patch[DO_DRIVER_SIZE] = 40;
+    fs::write(&patch_path, &patch).expect("patch fixture");
+
+    let error = DldiPatchHandler::new(&DLDI)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("an implausible driver size must be rejected");
+    assert_eq!(
+        error.code(),
+        Some(crate::VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE),
+        "{error}"
+    );
+    assert!(!output_path.exists(), "no output may be created");
+}
+
+#[test]
 fn create_rejects_inputs_whose_dldi_section_moved() {
     let temp = TestDir::new();
     let original = build_test_app_with_slot(0x200, 8, 0x0200_0000i32, "Default driver");

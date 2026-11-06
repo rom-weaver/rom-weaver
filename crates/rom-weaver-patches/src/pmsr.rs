@@ -600,8 +600,9 @@ fn apply_pmsr_record_chunk(
 fn validate_paper_mario_source(input_path: &Path) -> Result<()> {
     let source_len = fs::metadata(input_path)?.len();
     if source_len != PAPER_MARIO_USA10_FILE_SIZE {
-        return Err(RomWeaverError::Validation(
-            "Source ROM checksum mismatch".into(),
+        return Err(RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+            "Source ROM checksum mismatch",
         ));
     }
 
@@ -616,8 +617,9 @@ fn validate_paper_mario_source(input_path: &Path) -> Result<()> {
         hasher.update(&buffer[..read]);
     }
     if hasher.finalize() != PAPER_MARIO_USA10_CRC32 {
-        return Err(RomWeaverError::Validation(
-            "Source ROM checksum mismatch".into(),
+        return Err(RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+            "Source ROM checksum mismatch",
         ));
     }
     Ok(())
