@@ -806,8 +806,9 @@ const resolveBarePath = (filePath, callback) => {
 };
 
 // `/route` and `/route/` resolve to the same file path, so the bare answer is kept under its own key.
-const resolvePreviewPath = (cache, filePath, pathname, callback) => {
-  if (pathname.endsWith("/")) {
+// The dist directory itself is the site root, whichever way the URL spells it, so it has no `.html` sibling.
+const resolvePreviewPath = (cache, distDir, filePath, pathname, callback) => {
+  if (pathname.endsWith("/") || filePath === distDir) {
     callback({ filePath });
     return;
   }
@@ -863,7 +864,7 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
     return;
   }
 
-  resolvePreviewPath(cache, filePath, pathname, (resolution) => {
+  resolvePreviewPath(cache, distDir, filePath, pathname, (resolution) => {
     if (resolution.redirect) {
       // A relative target keeps any prefix a proxy stripped.
       const { search } = new URL(req.url, "https://localhost");

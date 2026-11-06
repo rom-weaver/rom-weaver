@@ -104,13 +104,26 @@ test("preview redirects a bare directory with no .html file to its last segment,
   assert.equal(response.headers["cache-control"], "no-store");
 });
 
-test("preview answers the bare and slash forms of a path the same way whichever is requested first", async () => {
+test("preview keeps a separate answer for the bare and slash forms of a path whichever is requested first", async () => {
   assert.equal((await get("/route/", "text/html")).body, ROUTE_PAGE);
   assert.equal((await get("/route", "text/html")).body, FLAT_ROUTE_PAGE);
   assert.equal((await get("/docs/guide/", "text/html")).status, 200);
   const response = await get("/docs/guide", "text/html");
   assert.equal(response.status, 308);
   assert.equal(response.headers.location, "guide/");
+});
+
+test("preview serves the site root for a URL that spells it with an encoded slash, not a sibling of dist", async () => {
+  fs.writeFileSync(path.join(workDir, "package", "dist.html"), "<!doctype html><title>outside dist</title>");
+  const response = await get("/%2F", "text/html");
+  assert.equal(response.status, 200);
+  assert.doesNotMatch(response.body, /outside dist/);
+});
+
+test("preview serves 404.html at /404 with a 200, as Pages does", async () => {
+  const response = await get("/404", "text/html");
+  assert.equal(response.status, 200);
+  assert.equal(response.body, NOT_FOUND_PAGE);
 });
 
 test("preview serves a directory index at its trailing-slash URL", async () => {
