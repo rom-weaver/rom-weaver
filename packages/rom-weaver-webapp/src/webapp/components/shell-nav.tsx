@@ -73,6 +73,8 @@ const fullNameFor = (tab: WorkflowTab) => {
   return tab.label.toLowerCase().includes(tab.railLabel.toLowerCase()) ? tab.label : undefined;
 };
 
+const ariaCurrentFor = (current: NavEntry["current"]) => (current === true ? "page" : current || undefined);
+
 const activateOnClick = (event: React.MouseEvent, run: () => void) => {
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
@@ -123,7 +125,7 @@ const NavRow = ({
   if (entry.href) {
     return (
       <a
-        aria-current={entry.current === true ? "page" : entry.current || undefined}
+        aria-current={ariaCurrentFor(entry.current)}
         aria-label={name}
         className={rowClass}
         data-nav={navId}
