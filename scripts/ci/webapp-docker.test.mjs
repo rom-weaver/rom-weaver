@@ -129,12 +129,9 @@ test("CI smokes source and prebuilt images and checks clean identify source impo
   }
 });
 
-// The documented cache policy is the generated dist/_headers (docs/hosting/self-hosting.md):
-// everything revalidates except the content-addressed /assets/*. sws also sends a header rule's
-// value on a 404, so the image cannot copy the `/assets/*` immutable rule: it would let a
-// browser or CDN keep a missing hashed URL for a year. sws's built-in policy covers those files
-// instead, and the no-cache rules must cover every path outside /assets/ so the built-in year
-// never reaches HTML or the service worker.
+// The cache policy is the generated dist/_headers: everything revalidates except /assets/*.
+// sws sends a header rule's value on a 404 too, so the image leaves the long /assets/* lifetime to
+// its built-in policy, and the no-cache rules MUST cover every path outside /assets/.
 test("sws.toml sends the documented Cache-Control policy without caching a 404", () => {
   const sws = readFileSync(
     new URL("../../packages/rom-weaver-webapp/sws.toml", import.meta.url),

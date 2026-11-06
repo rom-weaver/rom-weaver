@@ -20,27 +20,18 @@ compression-static = true
 # sws compresses every response from scratch.
 compression = true
 
-# Do not set page404 here: a TOML value overrides the --page404 the Docker entrypoint passes
-# for BASE_PATH, so the 404 page would lose its sub-path re-rooting.
+# There is no page-fallback: every route is a prerendered file, so a path with none is a real 404
+# served from /srv/404.html. A 200 index.html fallback would let a CDN keep HTML under a missing
+# hashed /assets/* URL.
 #
-# No catch-all page fallback. Every route is prerendered to a file, so a path with
-# no file is a real 404: sws answers it with /srv/404.html (its default page404).
-# A fallback to index.html would answer a missing /assets/* file with 200 HTML,
-# and a browser or CDN would keep that under the content-addressed URL.
+# Do not set page404: a TOML value overrides the --page404 the entrypoint passes for BASE_PATH.
+#
 # No-log /health endpoint for probes.
 health = true
 
-# sws's built-in Cache-Control (max-age by content type) stays on. From sws
-# 2.44.1 it applies only to files that exist (a missing path gets no-cache);
-# earlier releases also tagged a 404 with the file type's max-age, so the image
-# needs 2.44.1 or later. It gives hashed /assets/* scripts and styles a one-year
-# max-age. The [[advanced.headers]] rules below override it for everything
-# outside /assets/, where it would cache the service worker script for a year
-# and HTML for a day.
-#
-# sws applies a header rule to a 404 as well as to a hit, so a rule on
-# /assets/** with a long max-age would mark every missing hashed URL cacheable
-# for that long. That is why there is no `immutable` rule here.
+# The built-in per-type max-age gives hashed /assets/* scripts and styles a year. From sws 2.44.1 it
+# skips missing files, which get no-cache. The header rules below set no-cache outside /assets/,
+# and none sets a long max-age, because sws applies header rules to a 404 as well.
 cache-control-headers = true
 
 log-level = "info"

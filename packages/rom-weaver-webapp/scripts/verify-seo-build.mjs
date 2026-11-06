@@ -339,8 +339,8 @@ if (/^\s+Link:.*\brel\s*=\s*"?(?:preload|modulepreload)\b/im.test(headers))
 // The 404 body is served at whatever URL missed, so its relative asset URLs
 // need an absolute base to resolve at nested paths.
 assertIncludes(notFoundHtml, '<base href="/" />', "404 asset base");
-// The Docker entrypoint and the service worker re-root this page under a sub-path by rewriting
-// href="/..." only; any other root-relative URL would keep pointing at the origin root.
+// The Docker entrypoint re-roots this page under a sub-path by rewriting href="/..." only;
+// any other root-relative URL would keep pointing at the origin root.
 const rootRelativeNotFoundUrls = notFoundHtml.match(
   /\s(?:src|srcset|imagesrcset|action|formaction|poster|data)="\/(?!\/)[^"]*"|url\(\s*["']?\/(?!\/)/g,
 );
