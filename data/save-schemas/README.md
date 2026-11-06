@@ -34,35 +34,35 @@ The default registry includes 1199 profiles: the original seven game-family defi
 | `wario_land_super_mario_land_3.rs` | 1 | 1 | 210 | Template only |
 | `zelda_a_link_to_the_past.rs` | 1 | 3 | 381 | File 1 fresh; all profiles template |
 | `f_zero.rs` | 1 | 1 | 663 | Template only |
-| `game_and_watch_gallery_3.rs` | 1 | 1 | 10 | Template only |
+| `game_and_watch_gallery_3.rs` | 1 | 1 | 47 | Template only |
 | `kirbys_adventure.rs` | 1 | 9 | 27 | Template only |
 | `actraiser.rs` | 1 | 3 | 126 | Template only |
 | `capcom_gba_eeprom.rs` | 2 | 2 | 70 | Template only |
 | `chrono_trigger.rs` | 1 | 3 | 324 | Template only |
 | `diddy_kong_racing.rs` | 1 | 1 | 9 | Template only |
-| `donkey_kong_land.rs` | 1 | 1 | 15 | Template only |
-| `f_zero_maximum_velocity.rs` | 1 | 1 | 12 | Template only |
+| `donkey_kong_land.rs` | 1 | 1 | 369 | Template only |
+| `f_zero_maximum_velocity.rs` | 1 | 1 | 1938 | Template only |
 | `f_zero_x.rs` | 1 | 1 | 5 | Template only |
 | `final_fantasy_vi.rs` | 1 | 3 | 993 | Template only |
 | `lylat_wars.rs` | 1 | 1 | 15 | Template only |
 | `mario_kart_64.rs` | 1 | 1 | 16 | Template only |
 | `mission_impossible.rs` | 1 | 1 | 16 | Template only |
 | `mystic_quest_legend.rs` | 1 | 3 | 486 | Template only |
-| `pokemon_trading_card_game.rs` | 1 | 1 | 14 | Template only |
+| `pokemon_trading_card_game.rs` | 1 | 1 | 506 | Template only |
 | `super_punch_out.rs` | 1 | 8 | 88 | Template only |
-| `wario_land_3.rs` | 1 | 1 | 6 | Template only |
-| `zelda_oracle_of_ages.rs` | 1 | 3 | 15 | Template only |
-| `zelda_oracle_of_seasons.rs` | 1 | 3 | 15 | Template only |
+| `wario_land_3.rs` | 1 | 1 | 193 | Template only |
+| `zelda_oracle_of_ages.rs` | 1 | 3 | 381 | Template only |
+| `zelda_oracle_of_seasons.rs` | 1 | 3 | 348 | Template only |
 | `sonic_3.rs` | 1 | 3 | 136 | Template only |
 | `shining_force.rs` | 1 | 3 | 54 | Template only |
 | `soleil.rs` | 1 | 5 | 84 | Template only |
 | `castlevania_aria_of_sorrow.rs` | 1 | 1 | 38 | Template only |
 | `castlevania_circle_of_the_moon.rs` | 1 | 1 | 96 | Template only |
 | `snowboarding_1080.rs` | 1 | 1 | 74 | Template only |
-| `wario_land_ii.rs` | 1 | 1 | 4 | Template only |
+| `wario_land_ii.rs` | 1 | 1 | 208 | Template only |
 | `yoshis_story.rs` | 1 | 3 | 39 | Template only |
 | `zelda_links_awakening.rs` | 1 | 4 | 288 | Template only |
-| **Total** | **51** | **118** | **7,114** | **2 fresh profiles** |
+| **Total** | **51** | **118** | **11,013** | **2 fresh profiles** |
 
 Fresh creation uses a verified initializer. Template creation starts from an existing valid save and preserves bytes outside the requested edits and integrity repairs. A profile without an initializer cannot create a fresh save.
 
@@ -167,7 +167,7 @@ F-Zero, Game & Watch Gallery 3, and Kirby's Adventure derive from Game Tools Col
 | Title | Layout and write rules | Supported edits |
 | --- | --- | --- |
 | F-Zero | [Source](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/f-zero/saveEditor) | Master Class unlocks, best laps, ranked times, and cars; three league checksums repaired. |
-| Game & Watch Gallery 3 | [Source](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/game-and-watch-gallery-3/saveEditor) | Game unlocks and Very Hard mode flags; additive checksum repaired. Scores and pending games omitted. |
+| Game & Watch Gallery 3 | Sources: [`75ce8f8`](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/game-and-watch-gallery-3/saveEditor), [`15d7134`](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/game-and-watch-gallery-3/saveEditor) | Game unlocks, Very Hard mode flags, the 35 high scores (one decimal digit per byte), and the suspended game's score and misses; additive checksum repaired. |
 | Kirby's Adventure | [Source](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/kirby-s-adventure/saveEditor) | Current level in three slots and three region layouts; animation bytes and slot checksums repaired. Door and progression edits omitted. |
 
 These profiles require explicit selection and a game-made template. F-Zero accepts 2 KiB raw SRAM; the other two games accept 8 KiB. Edits preserve unrelated bytes.
@@ -181,8 +181,8 @@ The additional handheld, Nintendo 64, and SNES profiles also require explicit se
 | Super Street Fighter II Turbo Revival | VS points, options, and 13 challenge times |
 | Chrono Trigger | Gold in each of three slots; the first inventory item code is read-only |
 | Diddy Kong Racing | Adventure Two mode, Wizpig amulet pieces, balloons, name letters, lobby, world race, boss, and T.T. challenge progress, keys, trophies, event and Taj flags in three occupied slots (progress edits recalculate balloon, amulet, and boss counters); unlock flags and options with their nibble checksum; and best time and lap frames with name letters for 47 vehicle records |
-| Donkey Kong Land | Progression, current level, and playtime in three slots |
-| F-Zero: Maximum Velocity | Championship clear counts and three unlocks in each slot |
+| Donkey Kong Land | Progression, current level, playtime, bomb and boulder flags, 34 unlocked levels, and 80 visited level and bonus-room flags in three slots |
+| F-Zero: Maximum Velocity | Championship clear counts, unlocks, unlocked machine count, options, 16 circuit clears, 160 machine/difficulty/series clears, and 231 ranking times with machines per slot |
 | F-Zero X | Four cup progression values, the Death Race time, five option flags, 600 cup unlock flags, and best lap, place times, and place names in 24 Time Attack records, each with its own checksum (a place name is editable only once that place has a time in the source save; machine, color, and speed-ratio floats are not editable) |
 | Final Fantasy VI | Money and battle speed in each slot; location code is read-only |
 | Lylat Wars / Star Fox 64 | Played, completion, and medal flags for 15 planets, sound and language options, and the ten ranking records (name, Arwings, completed missions, and per-mission planet, hits, allies, and medal) |
@@ -191,12 +191,14 @@ The additional handheld, Nintendo 64, and SNES profiles also require explicit se
 | Mario Party 2 | Coins, unlocks, board play counts, Mini-Game Land flags with the Driver's Ed unlock rule, Mini-Game Coaster saves, records, language, and sound |
 | Mission: Impossible | Music, sound-effects, audio-mode, screen-ratio, controller configuration, and aiming-mode options in four records; mission location is not editable |
 | Mystic Quest Legend | Money, location code, and hero level in each slot |
-| Pokémon Trading Card Game | Playtime, position, location with both preview copies, and eight Master Medals with their total |
+| Pokémon Trading Card Game | Playtime, position, location with both preview copies, eight Master Medals with their total, config, Challenge Machine records, 15 mail slots, and the 228-card album (copies and collection flags with the save-preview album count). Names and decks omitted |
 | Super Punch-Out!! | Losses in eight profiles; wins and championship progression are read-only |
-| Wario Land 3 | Coins, language, encoded day/night, and the first three sequential power upgrades |
-| The Legend of Zelda: Oracle of Ages and Oracle of Seasons | Mode, health, maximum health, heart pieces, and rupees in three slots per title |
+| Wario Land 3 | Coins, language, encoded day/night, the first eight sequential power upgrades, events, 100 treasures with the treasure counter, musical coins, Time Attack times, and golf records |
+| The Legend of Zelda: Oracle of Ages and Oracle of Seasons | Mode, linked ID, death count, health, maximum health, heart pieces, rupees, bombchus, Gasha seeds, equipment levels, flute, tradable item, ring box level, message speed, slates (Ages), ore chunks and current season (Seasons), key item, essence, seed, tune/season, and warp flags, and small keys and dungeon items in three slots per title. Rings, item slots, ammunition seed counts, names, and location omitted |
 
 These definitions derive from [Game Tools Collection commit `8fb075e7c130da9e72c3c46ec8efa447a252ad88`](https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88). Diddy Kong Racing also uses the checksum rules in [DavidSM64/Diddy-Kong-Racing `save_data.c`](https://github.com/DavidSM64/Diddy-Kong-Racing/blob/1339ad6304118207b342fe8669c500efb91969df/src/save_data.c). The deepened Diddy Kong Racing, F-Zero X, Lylat Wars, Mario Kart 64, Mario Party, Mario Party 2, and Mission: Impossible fields follow [Game Tools Collection commit `15d71340c3f1717745139c2e0774510cd37dfbdd`](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd). Those seven templates are identical at the earlier and later revisions. The Mario Kart 64 checksums' second byte wraps at 256 like the game ([mk64 decomp `src/save.c`](https://github.com/n64decomp/mk64/blob/master/src/save.c)), not like Game Tools Collection, which carries the overflow into the first byte. Chrono Trigger slot checksums follow the game's own routine in [dscotton/ct_disassembly `bank_FF.asm`](https://github.com/dscotton/ct_disassembly/blob/eeae27acdb6565e96d1d796a3d60792c250c0aa1/bank_FF.asm#L1301-L1322).
+
+The Game Boy and Game Boy Color deepenings (Donkey Kong Land, Game & Watch Gallery 3, Pokémon Trading Card Game, the two Zelda Oracle games, Wario Land II, and Wario Land 3) and the F-Zero: Maximum Velocity deepening also use [Game Tools Collection revision `15d71340c3f1717745139c2e0774510cd37dfbdd`](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd) for their added fields. Their upstream templates match the earlier revisions. The Oracle of Seasons profiles now use the Seasons offsets for health, heart pieces, and rupees; they previously used the Oracle of Ages offsets.
 
 The Genesis definitions accept only their listed odd-byte SRAM dump sizes. They do not accept a contiguous logical save or an arbitrary padded dump.
 
@@ -217,7 +219,7 @@ These six editors use Game Tools Collection revision `75ce8f848b628f202c50daa75d
 | Castlevania: Aria of Sorrow | Level, experience, HP, MP, stats, gold, playtime, and mode unlocks | Raw 32 KiB GBA SRAM; edits update level and gold preview copies. Empty slots cannot be edited. |
 | Castlevania: Circle of the Moon | Level, experience, HP, MP, hearts, bonus pickups, equipment, and playtime | Raw 32 KiB GBA SRAM; edits repair the selected slot checksum. Empty slots stay unchanged. |
 | 1080° Snowboarding | Progression, course unlocks, tricks, contest scores, and audio | 32 KiB SRAM; edits preserve canonical or byte-swapped word order and repair section checksums, the master checksum, and linked contest totals. |
-| Wario Land II | Progression, stage coins, total coins, and Flagman D.D high score | Raw 32 KiB SRAM; the editor selects the newest section and repairs its checksum. A damaged newest section is rejected. |
+| Wario Land II | Progression, stage coins, total coins, Flagman D.D high score, 50 stage unlock/clear flags with hidden ending bits, 50 treasures, 50 picture panels, and the final-chapter best time (a byte that is not valid BCD reads as its raw value until a valid time is written) | Raw 32 KiB SRAM; the editor selects the newest section and repairs its checksum. A damaged newest section is rejected. |
 | Yoshi's Story | Black and White Yoshi unlocks, audio, and regional continuation fields and language | Canonical 2 KiB EEPROM; separate Europe, USA, and Japan profiles repair the rolling checksum. Japan omits continuation and language fields. |
 | The Legend of Zelda: Link's Awakening | Health, rupees, deaths, resource quantities, key items, and instruments | Raw 8 KiB GB or 32 KiB GBC SRAM; separate layouts and release markers. Empty slots cannot be edited. |
 
@@ -226,7 +228,7 @@ The source directories contain each game's `template.ts` layout and `utils.ts` w
 - [Aria of Sorrow](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/castlevania-aria-of-sorrow/saveEditor)
 - [Circle of the Moon](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/castlevania-circle-of-the-moon/saveEditor)
 - [1080° Snowboarding](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/1080-snowboarding/saveEditor)
-- [Wario Land II](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/wario-land-ii/saveEditor)
+- [Wario Land II](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/wario-land-ii/saveEditor) and [at `15d7134`](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/wario-land-ii/saveEditor)
 - [Yoshi's Story](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/yoshi-s-story/saveEditor)
 - [Link's Awakening](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/legend-of-zelda-the-link-s-awakening/saveEditor)
 
