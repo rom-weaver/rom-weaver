@@ -2,7 +2,7 @@
 
 The application defines its save layouts and editing rules as typed Rust under [`crates/rom-weaver-core/src/save/schema/catalog/`](../../crates/rom-weaver-core/src/save/schema/catalog). This directory keeps the source attribution and license for those definitions. It does not contain runtime schema packs.
 
-The default registry includes 611 profiles: the original seven game-family definitions and 589 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
+The default registry includes 986 profiles: the original seven game-family definitions and 964 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
 
 | Original catalog module | Games |
 | --- | --- |
@@ -114,13 +114,20 @@ These profiles require explicit game selection and a game-made template. They ex
 | Grandia | 75 | Single-block save in a raw 128 KiB PS1 card | Gold pieces |
 | Final Fantasy VII | 105 | Single-block save in a raw 128 KiB PS1 card | Gil with its preview and GP |
 | Final Fantasy VIII | 105 | Single-block save in a raw 128 KiB PS1 card | Squall/Laguna gil with the active preview |
+| Final Fantasy IX | 105 | Single-block save in a raw 128 KiB PS1 card | Gil with its preview and playtime ticks; block CRC-16 |
+| Final Fantasy Tactics | 30 | Single-block save in a raw 128 KiB PS1 card | War funds and playtime seconds; 60-chunk parity checksum |
+| Kagero: Deception II | 45 | Single-block save in a raw 128 KiB PS1 card | Clear count, slain enemies, Ark, total Ark, playtime frames, and endings; per-frame checksums |
+| Resident Evil | 150 | Single-block save in a raw 128 KiB PS1 card | Health, ink ribbons used, playtime ticks, poison, and special unlocks; original and Director's Cut releases, no game checksum |
+| Silent Hill | 45 | Single-block save in a raw 128 KiB PS1 card | Health, game clear count, continues, and saves in each populated slot with its preview; xor checksums |
 | Castlevania: Rondo of Blood | 1 | Raw 2 KiB PC Engine BRAM, Japan; first record must be DRACULA X | Money and death count in occupied slots |
 
 The new definitions add 29 titles and 471 profiles. The preceding catalog table describes the original 118 additional profiles. Each PS1 profile selects an exact product code, region, and card block from 1 through 15. It validates allocation metadata and supports only a complete single-block game save. Multi-block saves, standalone save exports, and PC ports remain unsupported. DexDrive and Virtual Game Station card wrappers are preserved by the existing container layer.
 
+The PlayStation role-playing batch adds five titles and 375 profiles. Chrono Cross is not included: its slot data is stored in a bespoke bit-packed compressed stream that cannot be rewritten without a verified codec. The Silent Hill profiles omit the options section, which the game copies into every Silent Hill block. They expose only populated slots, in the order the game lists them. Resident Evil excludes the Windows port.
+
 Nintendo 64 profiles accept only the stated canonical big-endian byte order. The Minish Cap profile accepts only its stated EEPROM word order. Regional boundaries and omitted fields are recorded in each profile's description.
 
-The definitions derive from [Game Tools Collection revision `6f5d8064050eec83eb4f2a910743c121a70655c9`](https://github.com/RyudoSynbios/game-tools-collection/tree/6f5d8064050eec83eb4f2a910743c121a70655c9). Each catalog module links its exact source directory. Ocarina of Time backup and checksum behavior follows [zeldaret/oot revision `52a510f379afd143aaa0375be9f1e190369572e1`](https://github.com/zeldaret/oot/blob/52a510f379afd143aaa0375be9f1e190369572e1/src/code/z_sram.c). Final Fantasy VIII's CRC lookup variant follows [Hyne revision `54cc50dc133897b9db45f9deab5167e9d14de0fc`](https://github.com/myst6re/hyne/blob/54cc50dc133897b9db45f9deab5167e9d14de0fc/src/SaveData.cpp); its last table entry differs from the standard CCITT table.
+The definitions derive from [Game Tools Collection revision `6f5d8064050eec83eb4f2a910743c121a70655c9`](https://github.com/RyudoSynbios/game-tools-collection/tree/6f5d8064050eec83eb4f2a910743c121a70655c9); the five PlayStation role-playing titles (Final Fantasy IX, Final Fantasy Tactics, Kagero: Deception II, Resident Evil, and Silent Hill) derive from [revision `15d71340c3f1717745139c2e0774510cd37dfbdd`](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd). Each catalog module links its exact source directory. Ocarina of Time backup and checksum behavior follows [zeldaret/oot revision `52a510f379afd143aaa0375be9f1e190369572e1`](https://github.com/zeldaret/oot/blob/52a510f379afd143aaa0375be9f1e190369572e1/src/code/z_sram.c). Final Fantasy VIII's CRC lookup variant follows [Hyne revision `54cc50dc133897b9db45f9deab5167e9d14de0fc`](https://github.com/myst6re/hyne/blob/54cc50dc133897b9db45f9deab5167e9d14de0fc/src/SaveData.cpp); its last table entry differs from the standard CCITT table. Final Fantasy IX's block CRC is CRC-16/MCRF4XX, checked against the [CRC catalogue](https://reveng.sourceforge.io/crc-catalogue/16.htm#crc.cat.crc-16-mcrf4xx).
 
 ## Sources and attribution
 

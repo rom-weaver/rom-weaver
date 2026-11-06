@@ -230,6 +230,11 @@ pub(in crate::save) mod pokemon_generation_i;
 pub(in crate::save) mod pokemon_generation_ii;
 pub(in crate::save) mod pokemon_trading_card_game;
 pub(in crate::save) mod ps1_final_fantasy;
+pub(in crate::save) mod ps1_final_fantasy_ix;
+pub(in crate::save) mod ps1_final_fantasy_tactics;
+pub(in crate::save) mod ps1_kagero_deception_ii;
+pub(in crate::save) mod ps1_resident_evil;
+pub(in crate::save) mod ps1_silent_hill;
 pub(in crate::save) mod ps1_single_block;
 pub(in crate::save) mod rondo_of_blood;
 pub(in crate::save) mod secret_of_mana;
@@ -338,6 +343,11 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(kingdom_hearts_chain_of_memories::schemas());
             games.extend(banjo_kazooie::schemas());
             games.extend(ps1_final_fantasy::schemas());
+            games.extend(ps1_final_fantasy_ix::schemas());
+            games.extend(ps1_final_fantasy_tactics::schemas());
+            games.extend(ps1_kagero_deception_ii::schemas());
+            games.extend(ps1_resident_evil::schemas());
+            games.extend(ps1_silent_hill::schemas());
             games
         })
         .clone()

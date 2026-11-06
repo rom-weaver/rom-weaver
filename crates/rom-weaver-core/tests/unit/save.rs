@@ -342,6 +342,40 @@ fn registry_lists_every_game_with_format_metadata() {
             );
         }
     }
+    for (game, regions) in [
+        (
+            "final-fantasy-ix",
+            &[
+                "europe", "usa", "japan", "france", "germany", "italy", "spain",
+            ][..],
+        ),
+        ("final-fantasy-tactics", &["usa", "japan"][..]),
+        ("kagero-deception-ii", &["europe", "usa", "japan"][..]),
+        (
+            "resident-evil",
+            &[
+                "europe",
+                "directorscut-europe",
+                "usa",
+                "directorscut-usa",
+                "japan",
+                "directorscut-japan",
+                "france",
+                "directorscut-france",
+                "germany",
+                "directorscut-germany",
+            ][..],
+        ),
+        ("silent-hill", &["europe", "usa", "japan"][..]),
+    ] {
+        for block in 1..=15 {
+            expected.extend(
+                regions
+                    .iter()
+                    .map(|region| format!("{game}-{region}-block-{block}")),
+            );
+        }
+    }
     assert_eq!(ids, expected);
     assert!(definitions[3..8].iter().all(|definition| {
         definition.platform == "gba"
