@@ -36,6 +36,8 @@ const stageFixturePackage = () => {
   fs.writeFileSync(path.join(packageDir, "dist", "404.html"), NOT_FOUND_PAGE);
   fs.mkdirSync(path.join(packageDir, "dist", "route"));
   fs.writeFileSync(path.join(packageDir, "dist", "route", "index.html"), ROUTE_PAGE);
+  fs.mkdirSync(path.join(packageDir, "dist", "docs", "guide"), { recursive: true });
+  fs.writeFileSync(path.join(packageDir, "dist", "docs", "guide", "index.html"), ROUTE_PAGE);
   return packageDir;
 };
 
@@ -92,6 +94,12 @@ test("preview redirects a bare directory to its trailing-slash form with a relat
   assert.equal(response.status, 308);
   assert.equal(response.headers.location, "route/?a=1");
   assert.equal(response.headers["cache-control"], "no-store");
+});
+
+test("preview redirects a nested bare directory to its last segment only", async () => {
+  const response = await get("/docs/guide", "text/html");
+  assert.equal(response.status, 308);
+  assert.equal(response.headers.location, "guide/");
 });
 
 test("preview serves a directory index at its trailing-slash URL", async () => {

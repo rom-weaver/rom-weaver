@@ -755,10 +755,12 @@ const readPreviewBrotliFile = (resolvedPath, sourceData, callback) => {
   });
 };
 
+const previewCacheKey = (allowFallback, filePath) => `${allowFallback ? "1" : "0"}:${filePath}`;
+
 // Treat dist as immutable for a preview session so repeated asset reads do not
 // add disk I/O and compression time to the performance measurements.
 const readPreviewAsset = (cache, filePath, fallbackPath, allowFallback, callback) => {
-  const cacheKey = `${allowFallback ? "1" : "0"}:${filePath}`;
+  const cacheKey = previewCacheKey(allowFallback, filePath);
   const cached = cache.get(cacheKey);
   if (cached) {
     callback(null, cached);
@@ -789,9 +791,14 @@ const sendEarlyHints = (res, pagesHeaders, isDocument) => {
 };
 
 // Route documents carry <base href="../">, which resolves only from the trailing-slash URL, so redirect there as
-// static-web-server does. A relative target keeps any prefix a proxy stripped.
-const redirectBareDirectory = (filePath, pathname, req, res, securityOptions, next) => {
-  if (pathname.endsWith("/")) {
+// static-web-server does. A relative target keeps any prefix a proxy stripped. A path
+// the asset cache already holds is a file, so it skips the stat the cache exists to avoid.
+const redirectBareDirectory = (cache, filePath, pathname, req, res, securityOptions, next) => {
+  if (
+    pathname.endsWith("/") ||
+    cache.has(previewCacheKey(true, filePath)) ||
+    cache.has(previewCacheKey(false, filePath))
+  ) {
     next();
     return;
   }
@@ -851,7 +858,7 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
     return;
   }
 
-  redirectBareDirectory(filePath, pathname, req, res, securityOptions, () => {
+  redirectBareDirectory(cache, filePath, pathname, req, res, securityOptions, () => {
     // Cloudflare Pages answers a missed navigation with 404.html at the URL that
     // missed, so the preview does the same: that is the only way to exercise the
     // page at a nested path, where its <base> tag decides every link.
