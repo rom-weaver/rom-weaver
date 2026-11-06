@@ -1110,17 +1110,21 @@ fn build_libarchive_extract_tasks(
         );
     }
     if should_filter_common && ignored_count > 0 && !tasks.iter().any(|task| !task.is_dir) {
-        return Err(RomWeaverError::Validation(format!(
-            "all extract entries from `{}` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>",
-            source.display()
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            rom_weaver_core::ValidationCodeError::new(rom_weaver_core::ERROR_CODE_EXTRACT_ALL_ENTRIES_IGNORED)
+                .with_message(format!(
+                    "all extract entries from `{}` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>",
+                    source.display()
+                ))
+                .with_field("path", source.display().to_string()),
+        ));
     }
     if kind_filter.enabled() && kind_filtered_count > 0 && !tasks.iter().any(|task| !task.is_dir) {
-        return Err(RomWeaverError::Validation(format!(
-            "no extract entries from `{}` matched {}",
-            source.display(),
-            kind_filter.flag_label()
-        )));
+        return Err(RomWeaverError::no_matching_extract_entries(
+            source,
+            &kind_filter.flag_label(),
+            "",
+        ));
     }
     Ok(tasks)
 }
@@ -1226,10 +1230,13 @@ where
                             }
                             let write_at = SystemTime::now();
                             output.write_all(&buffer[..read]).map_err(|error| {
-                                RomWeaverError::Validation(format!(
-                                    "{format_name} extract failed while writing entry {} (`{}`): {error}",
-                                    task.index, task.archive_name
-                                ))
+                                RomWeaverError::from(error).with_context(
+                                    format!(
+                                        "{format_name} extract failed while writing entry {} (`{}`)",
+                                        task.index, task.archive_name
+                                    ),
+                                    None,
+                                )
                             })?;
                             write += write_at.elapsed().unwrap_or_default();
                             let hash_at = SystemTime::now();
@@ -1683,9 +1690,12 @@ impl LibarchiveParallelExtractWriter<'_> {
         })?;
         let archive_name = &output.archive_name;
         output.writer.write_all(&bytes).map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{format_name} extract failed while writing entry {index} (`{archive_name}`): {error}"
-            ))
+            RomWeaverError::from(error).with_context(
+                format!(
+                    "{format_name} extract failed while writing entry {index} (`{archive_name}`)"
+                ),
+                None,
+            )
         })?;
         let delta = bytes.len() as u64;
         output.hasher.update(&bytes)?;
@@ -1714,10 +1724,13 @@ impl LibarchiveParallelExtractWriter<'_> {
             ))
         })?;
         output.writer.flush().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{format_name} extract failed while flushing entry {index} (`{}`): {error}",
-                output.archive_name
-            ))
+            RomWeaverError::from(error).with_context(
+                format!(
+                    "{format_name} extract failed while flushing entry {index} (`{}`)",
+                    output.archive_name
+                ),
+                None,
+            )
         })?;
         let LibarchiveOpenExtractOutput {
             hasher,

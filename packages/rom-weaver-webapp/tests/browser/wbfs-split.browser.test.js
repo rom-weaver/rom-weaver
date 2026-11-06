@@ -78,9 +78,17 @@ test("WASM extracts a split WBFS set byte for byte and rejects a set with a miss
     } finally {
       await Promise.all(result.outputs.map((output) => output.dispose()));
     }
-    await expect(extractAll(source, parts.slice(0, 1))).rejects.toThrow(
-      /Invalid WBFS file size.*\[wbfs\.size_mismatch\] \(actual=\d+, expected=\d+\)/i,
+    const missingPart = await extractAll(source, parts.slice(0, 1)).then(
+      () => null,
+      (cause) => cause,
     );
+    expect(missingPart?.message).toMatch(/Invalid WBFS file size/i);
+    expect(missingPart.message).not.toContain("[wbfs.size_mismatch]");
+    expect(missingPart.details?.engineCode).toBe("wbfs.size_mismatch");
+    expect(missingPart.details?.engineFields).toMatchObject({
+      actual: expect.any(Number),
+      expected: expect.any(Number),
+    });
   } finally {
     await resetRomWeaverRunner();
   }
@@ -98,7 +106,7 @@ test("WASM refuses a multi-disc WBFS with the single-disc error instead of extra
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toContain("Only single WBFS discs are supported");
     // The size-mismatch advice in the extract form is for split sets; a multi-disc image must not get it.
-    expect(error.message).not.toContain("[wbfs.size_mismatch]");
+    expect(error.details?.engineCode).not.toBe("wbfs.size_mismatch");
   } finally {
     await resetRomWeaverRunner();
   }

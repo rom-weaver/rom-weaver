@@ -159,7 +159,7 @@ describe("stored-block PBP emulator preparation", () => {
   it("reports real quota failures without returning a partial bundle", async () => {
     state.extract.mockRejectedValue(new DOMException("Quota exceeded", "QuotaExceededError"));
     await expect(preparePbpEmulatorBundle(workerIo, source(), "Game.pbp", 2)).rejects.toMatchObject({
-      code: "OUTPUT_WRITE_FAILED",
+      code: "STORAGE_FULL",
       message: expect.stringContaining("every PBP disc"),
     });
     expect(state.readBlob).not.toHaveBeenCalled();
@@ -167,10 +167,45 @@ describe("stored-block PBP emulator preparation", () => {
     expect(state.stagedCleanup).toHaveBeenCalledOnce();
   });
 
+  const engineFailure = (message: string, engineCode: string, base: Error = new Error(message)) =>
+    Object.assign(base, { code: "COMPRESSION_FAILED", details: { engineCode } });
+
+  it("reports an engine storage-full code without needing storage text, and ignores storage text under another code", async () => {
+    state.extract.mockRejectedValue(engineFailure("write failed", "io.storage_full"));
+    await expect(preparePbpEmulatorBundle(workerIo, source(), "Game.pbp", 2)).rejects.toMatchObject({
+      code: "STORAGE_FULL",
+    });
+    const other = engineFailure("No space left on device", "extract.no_matching_entries");
+    state.extract.mockRejectedValue(other);
+    await expect(preparePbpEmulatorBundle(workerIo, source(), "Game.pbp", 2)).rejects.toBe(other);
+  });
+
+  it("reports an engine out-of-memory code, and ignores memory text or a RangeError under another code", async () => {
+    state.extract.mockRejectedValue(engineFailure("Cannot allocate memory", "resource.out_of_memory"));
+    await expect(preparePbpEmulatorBundle(workerIo, source(), "Game.pbp", 2)).rejects.toMatchObject({
+      code: "OUT_OF_MEMORY",
+    });
+    for (const other of [
+      engineFailure("out of memory", "extract.no_matching_entries"),
+      engineFailure("bad", "extract.no_matching_entries", new RangeError("bad")),
+    ]) {
+      state.extract.mockRejectedValue(other);
+      await expect(preparePbpEmulatorBundle(workerIo, source(), "Game.pbp", 2)).rejects.toBe(other);
+    }
+  });
+
   it("reports memory failure while copying a large archive", async () => {
     state.readBlob.mockRejectedValue(new RangeError("Array buffer allocation failed"));
     await expect(preparePbpEmulatorBundle(workerIo, source(), "Game.pbp", 2)).rejects.toMatchObject({
+      code: "OUT_OF_MEMORY",
       message: expect.stringContaining("more memory"),
+    });
+  });
+
+  it("reports memory text from an uncoded browser error as out of memory", async () => {
+    state.readBlob.mockRejectedValue(new Error("Cannot enlarge memory arrays"));
+    await expect(preparePbpEmulatorBundle(workerIo, source(), "Game.pbp", 2)).rejects.toMatchObject({
+      code: "OUT_OF_MEMORY",
     });
     expect(state.cleanup).toHaveBeenCalledOnce();
     expect(state.stagedCleanup).toHaveBeenCalledOnce();

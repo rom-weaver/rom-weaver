@@ -400,6 +400,16 @@ pub(crate) fn ensure_plausible_output_size(
     patch_path: &Path,
 ) -> Result<()> {
     let patch_len = std::fs::metadata(patch_path)?.len();
+    ensure_plausible_output_len(format, output_size, source_len, patch_len)
+}
+
+/// [`ensure_plausible_output_size`] for a patch already held in memory.
+pub(crate) fn ensure_plausible_output_len(
+    format: &str,
+    output_size: u64,
+    source_len: u64,
+    patch_len: u64,
+) -> Result<()> {
     let limit = plausible_output_limit(source_len, patch_len);
     if output_size <= limit {
         return Ok(());

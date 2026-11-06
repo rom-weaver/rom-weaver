@@ -3383,8 +3383,9 @@ fn apply_patch_bytes_rejects_invalid_borrowed_segment_ranges() {
     }
 }
 
+// A declared size beyond the plausibility bound is a corrupt patch, not memory pressure.
 #[test]
-fn apply_patch_bytes_rejects_unallocatable_target_size() {
+fn apply_patch_bytes_rejects_an_implausible_target_size() {
     let patch = build_patch(TestPatch {
         windows: vec![TestWindow {
             win_indicator: 0,
@@ -3399,5 +3400,9 @@ fn apply_patch_bytes_rejects_unallocatable_target_size() {
         ..Default::default()
     });
     let error = apply_patch_bytes(b"", &patch).unwrap_err();
-    assert!(error.to_string().contains("patch target"), "{error}");
+    assert_eq!(
+        error.code(),
+        Some(crate::VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE),
+        "{error}"
+    );
 }

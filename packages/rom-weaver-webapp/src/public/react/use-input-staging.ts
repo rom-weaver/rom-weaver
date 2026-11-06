@@ -8,6 +8,7 @@ import {
   isCompressedInputFileName,
   sortRomInputs,
 } from "./apply-session-inputs.ts";
+import { getEngineError } from "../../lib/errors.ts";
 import { getTraceSourceSummaries, logUiError } from "./apply-session-logging.ts";
 import type { StageGenerationMachine } from "./apply-session-staging-state-machine.ts";
 import type { useLocalPatcherSessionState } from "./apply-session-state.ts";
@@ -293,7 +294,12 @@ const useInputStaging = (context: InputStagingContext) => {
           const key = getPatchKey(patch, snapshot.patches);
           const info = next[key];
           if (info?.validationState === "verifying") {
-            next[key] = { ...info, validationMessage: error.message, validationState: "invalid" };
+            next[key] = {
+              ...info,
+              validationErrorCode: getEngineError(error)?.code,
+              validationMessage: error.message,
+              validationState: "invalid",
+            };
           }
         }
         return next;

@@ -732,9 +732,12 @@ impl CliApp {
                 )));
             };
             if actual_value != expected_value {
-                return Err(RomWeaverError::Validation(format!(
-                    "{scope} checksum mismatch for {algorithm}; expected {expected_value}, actual {actual_value}"
-                )));
+                return Err(RomWeaverError::coded(
+                    rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+                    format!(
+                        "{scope} checksum mismatch for {algorithm}; expected {expected_value}, actual {actual_value}"
+                    ),
+                ));
             }
         }
 

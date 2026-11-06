@@ -66,7 +66,9 @@ mod legacy_pathname;
 mod read;
 mod write;
 
-pub(crate) use ffi::{check_free_status, check_status_for_ptr, error_from_archive};
+pub(crate) use ffi::{
+    check_free_status, check_status_for_ptr, error_from_archive, read_error_from_archive,
+};
 
 pub use entries::{
     RegularArchiveEntryMetadata, RegularArchiveFileEntry, RegularArchiveProbeFormat,
@@ -397,7 +399,10 @@ mod tests {
             let err = reader
                 .open_filename(&missing, "archive source", 2 * 1024 * 1024, "open failed")
                 .unwrap_err();
-            assert!(matches!(err, RomWeaverError::Validation(_)));
+            assert_eq!(
+                err.code(),
+                Some(rom_weaver_core::ERROR_CODE_ARCHIVE_STORAGE_FAILED)
+            );
             assert!(err.to_string().contains("open failed"));
             Ok(())
         })
@@ -417,12 +422,18 @@ mod tests {
             fs::write(&source, &truncated_bytes[..truncated_bytes.len().min(8)])?;
 
             let err = list_regular_archive_entries(&source, "zip").unwrap_err();
-            assert!(matches!(err, RomWeaverError::Validation(_)));
+            assert_eq!(
+                err.code(),
+                Some(rom_weaver_core::ERROR_CODE_ARCHIVE_READ_FAILED)
+            );
 
             let probe_err =
                 probe_regular_archive_format(&source, "zip", RegularArchiveProbeFormat::Zip)
                     .unwrap_err();
-            assert!(matches!(probe_err, RomWeaverError::Validation(_)));
+            assert_eq!(
+                probe_err.code(),
+                Some(rom_weaver_core::ERROR_CODE_ARCHIVE_READ_FAILED)
+            );
             Ok(())
         })
     }
@@ -456,7 +467,10 @@ mod tests {
             let err = archive
                 .open_filename(&output, "archive output", "open failed")
                 .unwrap_err();
-            assert!(matches!(err, RomWeaverError::Validation(_)));
+            assert_eq!(
+                err.code(),
+                Some(rom_weaver_core::ERROR_CODE_ARCHIVE_STORAGE_FAILED)
+            );
             assert!(err.to_string().contains("open failed"));
             Ok(())
         })
@@ -566,6 +580,31 @@ mod tests {
             }
             Ok(())
         })
+    }
+
+    // The archive writer's sink records a failed write's OS error on the handle; a full disk
+    // MUST report `io.storage_full` so the webapp offers its storage recovery.
+    #[cfg(unix)]
+    #[test]
+    fn archive_error_codes_a_storage_full_errno() {
+        // ENOSPC on Linux and macOS.
+        const ENOSPC: i32 = 28;
+        let ptr = unsafe { archive_read_new() };
+        assert!(!ptr.is_null());
+        unsafe {
+            sys::archive_set_error(
+                ptr,
+                ENOSPC,
+                c"%s".as_ptr(),
+                c"No space left on device".as_ptr(),
+            );
+        }
+        let error = ffi::error_from_archive(ptr, "zip write failed");
+        unsafe { archive_read_free(ptr) };
+        assert_eq!(
+            error.code(),
+            Some(rom_weaver_core::ERROR_CODE_IO_STORAGE_FULL)
+        );
     }
 
     const NORMALIZATION_ZIP: &[u8] = b"\x50\x4b\x03\x04\x14\x00\x00\x08\x00\x00\xd5\x14\x55\x5d\xc2\x54\xf8\xdd\x09\x00\x00\x00\x09\x00\x00\x00\x0a\x00\x00\x00\x63\x61\x66\x65\xcc\x81\x2e\x62\x69\x6e\x70\x61\x79\x6c\x6f\x61\x64\x2d\x30\x50\x4b\x03\x04\x14\x00\x00\x08\x00\x00\xd5\x14\x55\x5d\x54\x64\xff\xaa\x09\x00\x00\x00\x09\x00\x00\x00\x09\x00\x00\x00\x63\x61\x66\xc3\xa9\x2e\x62\x69\x6e\x70\x61\x79\x6c\x6f\x61\x64\x2d\x31\x50\x4b\x01\x02\x14\x03\x14\x00\x00\x08\x00\x00\xd5\x14\x55\x5d\xc2\x54\xf8\xdd\x09\x00\x00\x00\x09\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xb4\x81\x00\x00\x00\x00\x63\x61\x66\x65\xcc\x81\x2e\x62\x69\x6e\x50\x4b\x01\x02\x14\x03\x14\x00\x00\x08\x00\x00\xd5\x14\x55\x5d\x54\x64\xff\xaa\x09\x00\x00\x00\x09\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xb4\x81\x31\x00\x00\x00\x63\x61\x66\xc3\xa9\x2e\x62\x69\x6e\x50\x4b\x05\x06\x00\x00\x00\x00\x02\x00\x02\x00\x6f\x00\x00\x00\x61\x00\x00\x00\x00\x00";

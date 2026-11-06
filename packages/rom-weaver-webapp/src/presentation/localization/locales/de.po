@@ -1600,8 +1600,13 @@ msgstr "Das Beispiel konnte nicht geladen werden. Versuche es erneut."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.STORAGE_FULL"
+msgstr "Das Ergebnis konnte nicht gespeichert werden. Gib Speicherplatz frei oder wähle einen Ordner, in den der Browser schreiben kann."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.OUTPUT_WRITE_FAILED"
-msgstr "Die Ausgabe konnte nicht geschrieben werden."
+msgstr "Das Ergebnis konnte nicht gespeichert werden. Wähle einen Ordner, in den der Browser schreiben darf."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

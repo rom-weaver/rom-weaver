@@ -1600,8 +1600,13 @@ msgstr "No se pudo cargar el ejemplo. Inténtalo de nuevo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.STORAGE_FULL"
+msgstr "No se pudo guardar el resultado. Libera espacio de almacenamiento o elige una carpeta en la que el navegador pueda escribir."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.OUTPUT_WRITE_FAILED"
-msgstr "No se pudo escribir la salida."
+msgstr "No se pudo guardar el resultado. Elige una carpeta en la que el navegador tenga permiso para escribir."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

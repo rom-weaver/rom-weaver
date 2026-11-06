@@ -100,6 +100,8 @@ type PatchStackItemState = {
   validationValues: string[];
   validationMessage: string;
   validationUnreadable: boolean;
+  /** Stable engine code of a failed verdict (see `ROM_WEAVER_ERROR_CODES`). */
+  validationErrorCode?: string;
   /** A Dreamcast `.dcp`: the card hides the track, header, byte-order, basis, and checks controls. */
   dcp?: boolean;
   validationActualValue: string;

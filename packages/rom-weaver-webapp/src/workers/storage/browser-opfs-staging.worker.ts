@@ -1,6 +1,7 @@
 import { CHROMIUM_SYNC_WRITE_NO_SPACE_COUNT } from "../../wasm/browser-opfs-proxy-protocol.ts";
 import { getManagedOpfsFileHandle, removeManagedOpfsPath } from "../protocol/opfs-path.ts";
-import { getWorkerErrorMessage, postCloneSafeWorkerMessage } from "../shared/worker-message-utils.ts";
+import { describeError } from "../shared/error-description.ts";
+import { postCloneSafeWorkerMessage } from "../shared/worker-message-utils.ts";
 
 // OPFS list/list-metadata/remove/truncate/write worker. Input staging (copying a Blob into OPFS) was retired - browser
 // inputs now read directly via the per-thread FileReaderSync fast path or the OPFS proxy handle (see
@@ -241,7 +242,10 @@ workerScope.onmessage = (event: MessageEvent<StorageRequest>) => {
     .catch((error) => {
       postCloneSafeWorkerMessage(workerScope, {
         action: "stage-error",
-        error: { message: getWorkerErrorMessage(error), name: (error as { name?: unknown })?.name?.toString() },
+        error: {
+          message: describeError(error, { serialize: true, stack: true }) || "Worker crashed",
+          name: (error as { name?: unknown })?.name?.toString(),
+        },
         requestId: request.requestId,
         success: false,
       } satisfies StorageResponse);

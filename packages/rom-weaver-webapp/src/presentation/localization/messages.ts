@@ -1283,7 +1283,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "error.OUTPUT_WRITE_FAILED": msg({
     id: "error.OUTPUT_WRITE_FAILED",
-    message: "Couldn't save the result. Free up storage, or choose a folder the browser can write to.",
+    message: "Couldn't save the result. Choose a folder the browser is allowed to write to.",
   }),
   "error.PATCH_APPLY_FAILED": msg({
     id: "error.PATCH_APPLY_FAILED",
@@ -1309,6 +1309,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "error.SOURCE_UNSUPPORTED": msg({
     id: "error.SOURCE_UNSUPPORTED",
     message: "rom-weaver can't open this kind of file.",
+  }),
+  "error.STORAGE_FULL": msg({
+    id: "error.STORAGE_FULL",
+    message: "Couldn't save the result. Free up storage, or choose a folder the browser can write to.",
   }),
   "error.STORAGE_UNAVAILABLE": msg({
     id: "error.STORAGE_UNAVAILABLE",

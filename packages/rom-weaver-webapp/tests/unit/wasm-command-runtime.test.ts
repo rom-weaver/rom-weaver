@@ -44,8 +44,8 @@ const succeededResult = (details: unknown, elapsedMs = 250) => ({
   stderr: "",
 });
 
-const failedResult = (label: string) => ({
-  events: [{ details: {}, label, status: "failed" }],
+const failedResult = (label: string, errorCode?: string) => ({
+  events: [{ details: {}, label, status: "failed", ...(errorCode ? { error_code: errorCode } : {}) }],
   exitCode: 2,
   ok: false,
   stderr: "",
@@ -654,7 +654,8 @@ describe("output-producing runtime workers", () => {
   it("reports the engine's GameCube/Wii refusal as an unsupported trim input that points to Compress", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(
       failedResult(
-        "validation failed: `/game.iso` is a GameCube/Wii disc, which trim does not support; use `rom-weaver compress` to convert it to RVZ",
+        "validation failed: `/game.iso` is a GameCube/Wii disc, which trim does not support; use `rom-weaver compress` to convert it to RVZ [trim.unsupported_disc]",
+        "trim.unsupported_disc",
       ),
     );
     await expect(
@@ -670,7 +671,8 @@ describe("output-producing runtime workers", () => {
     for (const holds of ["a GameCube/Wii disc", "GameCube/Wii discs"]) {
       mocks.runRomWeaverJson.mockResolvedValue(
         failedResult(
-          `validation failed: \`/Kururin Squash! (Japan).7z\` holds ${holds}, which trim does not support; use \`rom-weaver compress\` to convert it to RVZ`,
+          `validation failed: \`/Kururin Squash! (Japan).7z\` holds ${holds}, which trim does not support; use \`rom-weaver compress\` to convert it to RVZ [trim.unsupported_disc]`,
+          "trim.unsupported_disc",
         ),
       );
       await expect(

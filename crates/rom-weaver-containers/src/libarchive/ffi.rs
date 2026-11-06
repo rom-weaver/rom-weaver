@@ -1,4 +1,8 @@
 use super::*;
+use rom_weaver_core::{
+    ERROR_CODE_ARCHIVE_READ_FAILED, ERROR_CODE_ARCHIVE_STORAGE_FAILED, ERROR_CODE_IO_STORAGE_FULL,
+    ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
+};
 
 // The project adapter is appended to archive_string.c to keep conversion state per archive.
 unsafe extern "C" {
@@ -33,22 +37,62 @@ pub(crate) fn check_free_status(status: i32, context: &str) -> Result<()> {
 }
 
 pub(crate) fn error_from_archive(archive_ptr: *mut archive, context: &str) -> RomWeaverError {
+    archive_error(archive_ptr, context, None)
+}
+
+/// [`error_from_archive`] for the read side: a failure that is not a storage
+/// problem is coded as an archive read failure (damaged or unreadable data).
+pub(crate) fn read_error_from_archive(archive_ptr: *mut archive, context: &str) -> RomWeaverError {
+    archive_error(archive_ptr, context, Some(ERROR_CODE_ARCHIVE_READ_FAILED))
+}
+
+fn archive_error(
+    archive_ptr: *mut archive,
+    context: &str,
+    fallback_code: Option<&'static str>,
+) -> RomWeaverError {
+    let message = archive_error_message(archive_ptr);
+    // libarchive's file reader and writer name the file in these failures: the
+    // file itself could not be opened or read, a storage problem rather than
+    // archive damage.
+    let errno_kind = match unsafe { archive_errno(archive_ptr) } {
+        0 => None,
+        errno => Some(io::Error::from_raw_os_error(errno).kind()),
+    };
+    let code = if errno_kind == Some(io::ErrorKind::OutOfMemory) {
+        // A decoder that cannot allocate is not archive damage.
+        Some(ERROR_CODE_RESOURCE_OUT_OF_MEMORY)
+    } else if errno_kind == Some(io::ErrorKind::StorageFull) {
+        // The archive writer's sink records the OS error of a write that ran out of space.
+        Some(ERROR_CODE_IO_STORAGE_FULL)
+    } else if message.starts_with("Failed to open '") || message.starts_with("Error reading '") {
+        Some(ERROR_CODE_ARCHIVE_STORAGE_FAILED)
+    } else {
+        fallback_code
+    };
+    let message = format!("{context}: {message}");
+    match code {
+        Some(code) => RomWeaverError::coded(code, message),
+        None => RomWeaverError::Validation(message),
+    }
+}
+
+fn archive_error_message(archive_ptr: *mut archive) -> String {
     unsafe {
         let error_ptr = archive_error_string(archive_ptr);
         if !error_ptr.is_null() {
             let message = CStr::from_ptr(error_ptr).to_string_lossy().into_owned();
             if !message.trim().is_empty() {
-                return RomWeaverError::Validation(format!("{context}: {message}"));
+                return message;
             }
         }
 
         let error_number = archive_errno(archive_ptr);
-        let message = if error_number != 0 {
+        if error_number != 0 {
             io::Error::from_raw_os_error(error_number).to_string()
         } else {
             "unknown libarchive failure".to_string()
-        };
-        RomWeaverError::Validation(format!("{context}: {message}"))
+        }
     }
 }
 #[cfg(any(not(windows), test))]

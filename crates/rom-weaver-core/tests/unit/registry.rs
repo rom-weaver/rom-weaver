@@ -19,6 +19,8 @@ fn into_event_preserves_thread_fallback_metadata() {
             thread_fallback_reason: Some("operation not supported on this platform".to_string()),
         }),
         error_kind: None,
+        error_code: None,
+        error_fields: None,
         status: OperationStatus::Succeeded,
     };
 
@@ -175,6 +177,8 @@ fn guard_report(stage: &str) -> OperationReport {
         percent: None,
         thread_execution: None,
         error_kind: None,
+        error_code: None,
+        error_fields: None,
         status: OperationStatus::Succeeded,
     }
 }
@@ -523,7 +527,11 @@ fn ensure_single_output_selected_rejects_an_output_the_kind_filter_excludes() {
         .expect_err("a filtered-out output must fail");
     assert_eq!(
         error.to_string(),
-        "validation failed: no extract entries from `/roms/game.chd` matched --filter rom"
+        "validation failed: no extract entries from `/roms/game.chd` matched --filter rom [extract.no_matching_entries] (path=/roms/game.chd, filter=--filter rom)"
+    );
+    assert_eq!(
+        error.code(),
+        Some(crate::ERROR_CODE_EXTRACT_NO_MATCHING_ENTRIES)
     );
     // The same output passes once the filter admits its kind.
     assert!(
@@ -724,6 +732,8 @@ fn patch_report(stage: &str) -> OperationReport {
         percent: None,
         thread_execution: None,
         error_kind: None,
+        error_code: None,
+        error_fields: None,
         status: OperationStatus::Succeeded,
     }
 }
