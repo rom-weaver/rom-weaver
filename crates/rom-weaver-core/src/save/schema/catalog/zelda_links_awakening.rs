@@ -358,13 +358,6 @@ mod tests {
         input
     }
 
-    fn validation_code(error: crate::RomWeaverError) -> String {
-        match error {
-            crate::RomWeaverError::ValidationCode(error) => error.code().to_owned(),
-            other => panic!("expected a validation error, got {other:?}"),
-        }
-    }
-
     #[test]
     fn accepts_an_edit_that_repairs_an_existing_capacity_violation() {
         let handler = schemas().remove(0);
@@ -395,7 +388,11 @@ mod tests {
                 let error = handler
                     .apply(&input, &identity, &edits, dry_run)
                     .unwrap_err();
-                assert_eq!(validation_code(error), "save_resource_capacity", "{id}");
+                assert_eq!(
+                    crate::save::tests::error_code(error),
+                    "save_resource_capacity",
+                    "{id}"
+                );
             }
         }
         let no_op = [SaveEdit {
@@ -403,7 +400,10 @@ mod tests {
             value: SaveValue::U32(70),
         }];
         let error = handler.apply(&input, &identity, &no_op, false).unwrap_err();
-        assert_eq!(validation_code(error), "save_resource_capacity");
+        assert_eq!(
+            crate::save::tests::error_code(error),
+            "save_resource_capacity"
+        );
     }
 
     #[test]
