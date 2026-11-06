@@ -446,6 +446,10 @@ impl GameSchema {
             document.integrity.state,
             SaveIntegrityState::Valid | SaveIntegrityState::ValidWithWarnings
         ) {
+            // A save that already breaks an edit rule keeps that rule's specific error.
+            for check in &self.runtime.edit_checks {
+                check.run(original)?;
+            }
             return Err(validation(
                 "save_integrity_invalid",
                 "the save failed schema integrity checks",
