@@ -781,7 +781,7 @@ Fixture description.
     ["de", "Zurück zu den Werkzeugen", "Suchen"],
   ])("localizes the Docs navigation controls in %s", (language, back, find) => {
     render(docsShell("docs", "docs", language));
-    expect(document.querySelector('.side-nav a[href="/apply-rom-patches"]')?.textContent).toBe(back);
+    expect(document.querySelector(".side-nav .docs-rail-back")?.getAttribute("aria-label")).toBe(back);
     fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
     expect(document.querySelector("#menu-sheet .find-input")?.getAttribute("aria-label")).toBe(find);
   });
