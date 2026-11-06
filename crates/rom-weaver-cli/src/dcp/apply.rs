@@ -76,9 +76,10 @@ where
                 let delta = extract_entry(dcp, entry)?;
                 let patched = rom_weaver_patches::xdelta::apply_patch_bytes(&source, &delta)
                     .map_err(|err| {
-                        RomWeaverError::Validation(format!(
-                            "failed to apply `.dcp` delta for `{target}`: {err}"
-                        ))
+                        err.with_context(
+                            format!("failed to apply `.dcp` delta for `{target}`"),
+                            None,
+                        )
                     })?;
                 tracing::trace!(
                     target,
