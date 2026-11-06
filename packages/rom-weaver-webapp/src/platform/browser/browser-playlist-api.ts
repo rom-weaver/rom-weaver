@@ -1,5 +1,6 @@
 import { invokeRomWeaverPlaylistPlan } from "../../lib/runtime/wasm-playlist-commands.ts";
 import type { LogLevel } from "../../types/logging.ts";
+import { getBaseName } from "../../storage/shared/path-utils.ts";
 import type { PlaylistDryRunPlan } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 import { registerBrowserVirtualFile } from "../../workers/protocol/browser-virtual-files.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
@@ -47,8 +48,6 @@ const SYSTEM_FILE_NAMES: ReadonlySet<string> = new Set([".ds_store", "thumbs.db"
 
 const CONTROL_CHARACTERS = /\p{Cc}/u;
 const PLAYLIST_FILE = /\.m3u8?$/i;
-
-const getBaseName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
 const isSystemFile = (path: string) => {
   const name = getBaseName(path);

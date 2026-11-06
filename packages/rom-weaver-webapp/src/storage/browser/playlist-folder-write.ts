@@ -1,4 +1,5 @@
 import { createLogger } from "../../lib/logging.ts";
+import { writeBlobToFileHandle } from "./file-handle-write.ts";
 import { createIdbObjectStore } from "./idb-object-store.ts";
 
 // File System Access members that TypeScript's DOM library does not declare.
@@ -87,17 +88,6 @@ const assertAbsent = async (directory: FileSystemDirectoryHandle, name: string) 
   throw new Error(`"${name}" appeared in the folder while renaming; nothing was overwritten.`);
 };
 
-const writeFile = async (handle: FileSystemFileHandle, data: Blob) => {
-  const writable = await handle.createWritable();
-  try {
-    await writable.write(data);
-  } catch (error) {
-    await writable.abort(error).catch(() => undefined);
-    throw error;
-  }
-  await writable.close();
-};
-
 /** Create `fileName` in the folder, refusing any existing name that differs only in case. */
 const createFolderFile = async (directory: FileSystemDirectoryHandle, fileName: string, text: string) => {
   const { names } = await listFolder(directory);
@@ -105,7 +95,7 @@ const createFolderFile = async (directory: FileSystemDirectoryHandle, fileName: 
   if (taken) throw new Error(`"${taken}" already exists in "${directory.name}"; nothing was overwritten.`);
   const handle = await directory.getFileHandle(fileName, { create: true });
   try {
-    await writeFile(handle, new Blob([text], { type: "audio/x-mpegurl" }));
+    await writeBlobToFileHandle(handle, new Blob([text], { type: "audio/x-mpegurl" }));
   } catch (error) {
     await directory.removeEntry(fileName).catch(() => undefined);
     throw error;
@@ -162,7 +152,7 @@ const undoJournal = async (journal: PlaylistRenameJournal): Promise<string[]> =>
   const save = () => saveJournal(journal).catch((error) => logger.warn("could not save undo progress", { error }));
   for (const sheet of [...journal.sheets].reverse()) {
     try {
-      await writeFile(await directory.getFileHandle(sheet.name), new Blob([sheet.bytes]));
+      await writeBlobToFileHandle(await directory.getFileHandle(sheet.name), new Blob([sheet.bytes]));
       journal.sheets = journal.sheets.filter((entry) => entry !== sheet);
       await save();
     } catch (error) {
@@ -281,7 +271,7 @@ const renamePlaylistFolder = async (request: RenamePlaylistFolderRequest) => {
         if (typeof rename.text !== "string" || !bytes) continue;
         journal.sheets.push({ name: rename.to, bytes });
         await saveJournal(journal);
-        await writeFile(handles[index] as FileSystemFileHandle, new Blob([rename.text]));
+        await writeBlobToFileHandle(handles[index] as FileSystemFileHandle, new Blob([rename.text]));
       }
       journal.playlist = playlist.fileName;
       await saveJournal(journal);
