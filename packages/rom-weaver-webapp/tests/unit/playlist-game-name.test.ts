@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { checkGameName } from "../../src/storage/browser/playlist-game-name.ts";
 
-// The longest file a rename makes is `<game> (Disc 99) (Track 99).bin`, 26 bytes past the game name.
+// The longest file a rename makes is `<game> (Disc 99) (Track 99).bin`.
 const LONGEST_GAME_NAME_BYTES = 255 - " (Disc 99) (Track 99).bin".length;
 
 describe("checkGameName", () => {

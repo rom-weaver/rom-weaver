@@ -16,7 +16,7 @@ Use Make playlist to list every disc of a multi-disc game in an `.m3u` file, so 
 1. Open [Make playlist](https://rom-weaver.com/create-m3u-playlist).
 2. Drop the discs of one game, with the track files their sheets name, or select **Open game folder** and pick the folder that holds them.
 3. Check the disc list. Discs are ordered by the number in names such as `Disc 1`, `(Disc 2)`, and `.disc02`. Track files such as `.bin` are not listed as discs of their own.
-4. Type a **Game name** to name the playlist, or keep the name taken from the first disc.
+4. Type a **Game name** to name the playlist, or keep the name taken from the first disc. Discs named only by number, such as `Disc 1.cue`, give no name, so type one.
 5. Select **Download**, then save the `.m3u` in the folder that holds the discs.
 
 When the folder holds discs of more than one game, choose the game in the **Game** list.

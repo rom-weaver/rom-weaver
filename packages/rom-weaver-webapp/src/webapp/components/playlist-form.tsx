@@ -89,6 +89,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   const handledDropRef = useRef(0);
   const planRunRef = useRef(0);
   const surveyRef = useRef<BrowserPlaylistPlan | null>(null);
+  const plannedSourceRef = useRef<PlaylistSource | null>(null);
   const busyRef = useRef(false);
   const nameProblem = checkGameName(name);
 
@@ -122,7 +123,8 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   // plan at once; later changes wait for typing to pause.
   useEffect(() => {
     if (!source) return;
-    const delay = surveyRef.current ? PLAN_DELAY_MS : 0;
+    const delay = plannedSourceRef.current === source ? PLAN_DELAY_MS : 0;
+    plannedSourceRef.current = source;
     const run = planRunRef.current + 1;
     planRunRef.current = run;
     const abort = new AbortController();
@@ -134,8 +136,9 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
         const typedName = nameProblem ? "" : name.trim();
         try {
           // Discs named only by number give the engine no game name, so a survey that failed unnamed runs again with the typed one.
+          const cachedSurvey = surveyRef.current;
           const all =
-            surveyRef.current ??
+            cachedSurvey ??
             (await planBrowserPlaylist({ files: source.files, name: typedName || undefined, signal: abort.signal }));
           if (planRunRef.current !== run) return;
           if (!typedName) surveyRef.current = all;
@@ -143,8 +146,9 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
           const discs = all.discs.some((disc) => disc.game !== all.discs[0]?.game)
             ? all.discs.filter((disc) => disc.game === (game || all.discs[0]?.game)).map((disc) => disc.path)
             : undefined;
+          // A survey planned with the typed name is already the plan.
           const next =
-            discs || typedName
+            discs || (typedName && cachedSurvey)
               ? await planBrowserPlaylist({
                   discs,
                   files: source.files,

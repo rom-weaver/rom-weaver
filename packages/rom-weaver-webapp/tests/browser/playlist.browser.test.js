@@ -124,6 +124,16 @@ describe("planBrowserPlaylist", () => {
     expect(lines(plan.text)).toEqual(["Disc 1.cue", "Disc 2.cue"]);
   });
 
+  test("words an .mds refusal without the command-line flag", async () => {
+    const failure = planBrowserPlaylist({
+      files: [at("Game (Disc 1).mds", ["mds"]), at("Game (Disc 1).mdf", [track(1)])],
+      name: "Game",
+      renameInPlace: true,
+    });
+    await expect(failure).rejects.toThrow("Cannot rename `Game (Disc 1).mds`");
+    await expect(failure).rejects.not.toThrow("--rename");
+  });
+
   test("refuses two dropped files with the same name", async () => {
     await expect(
       planBrowserPlaylist({ files: [at("Game.iso", [track(1)]), at("Game.iso", [track(2)])] }),
