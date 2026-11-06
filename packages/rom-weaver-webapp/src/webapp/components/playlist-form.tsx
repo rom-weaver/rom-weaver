@@ -131,6 +131,8 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   const games = useMemo(() => [...new Set((survey?.discs ?? []).map((disc) => disc.game))], [survey]);
   const allAtTop = !!plan && plan.discs.every((disc) => !disc.path.includes("/"));
   const canRename = canWriteFolders && !!source?.directory;
+  // Discs in subfolders cannot be renamed in place, so a choice left from another folder or game is ignored.
+  const renaming = rename && canRename && allAtTop;
 
   // Plan again whenever the inputs, the game, or the name change. A newer run wins. New files
   // plan at once; later changes wait for typing to pause.
@@ -140,8 +142,9 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     const run = planRunRef.current + 1;
     planRunRef.current = run;
     const abort = new AbortController();
+    // The shown plan is stale from here on, so actions wait for the new one.
+    setPlanning(true);
     const timer = setTimeout(() => {
-      setPlanning(true);
       void (async () => {
         const { planBrowserPlaylist } = await import("../../platform/browser/browser-playlist-api.ts");
         const typedName = nameProblem ? "" : name.trim();
@@ -353,7 +356,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   } else {
     folderHint = "Open the game's folder to save the playlist into it or rename its discs.";
   }
-  const renameNote = rename && canRename ? renameReason : "";
+  const renameNote = renaming ? renameReason : "";
 
   return (
     <section className="panel" id="playlist-container">
@@ -465,7 +468,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
             {planning && !plan ? <p role="status">Reading the disc sheets…</p> : null}
             {plan ? (
               <div className="cards" id="playlist-entries">
-                {(renamePlan && rename ? renamePlan.entries : plan.entries).map((line, index) => (
+                {(renamePlan && renaming ? renamePlan.entries : plan.entries).map((line, index) => (
                   <FileCard
                     key={line}
                     meta={<span className="meta-fmt mono">Disc {index + 1}</span>}
@@ -483,7 +486,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
           <StepSection num="0x03" title="Save" woven={!!done}>
             <label className="checkrow">
               <input
-                checked={rename && canRename}
+                checked={renaming}
                 disabled={!canRename || locked || !allAtTop}
                 id="playlist-rename-discs"
                 onChange={(event) => setRename(event.currentTarget.checked)}
@@ -495,7 +498,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
               </span>
             </label>
             {renameNote ? <Notice level="warn">Can't rename these discs: {renameNote}</Notice> : null}
-            {rename && renamePlan ? (
+            {renaming && renamePlan ? (
               <div className="cards" id="playlist-renames">
                 {renamePlan.renames.map((entry) => (
                   <FileCard
@@ -518,7 +521,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
               </Notice>
             )}
             <div className="outbar">
-              {rename && canRename ? (
+              {renaming ? (
                 <RunButton
                   disabled={!(actionsReady && renamePlan)}
                   icon={<FolderPen aria-hidden="true" />}
