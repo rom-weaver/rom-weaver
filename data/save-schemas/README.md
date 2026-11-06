@@ -122,7 +122,7 @@ These profiles require explicit game selection and a game-made template. They ex
 | Final Fantasy VIII | 105 | Single-block save in a raw 128 KiB PS1 card | Squall/Laguna gil with the active preview |
 | Castlevania: Rondo of Blood | 1 | Raw 2 KiB PC Engine BRAM, Japan; first record must be DRACULA X | Money and death count in occupied slots |
 
-The new definitions add 29 titles and 471 profiles. The preceding catalog table describes the original 118 additional profiles. Each PS1 profile selects an exact product code, region, and card block from 1 through 15. It validates allocation metadata and supports only a complete single-block game save. Multi-block saves, standalone save exports, and PC ports remain unsupported. DexDrive and Virtual Game Station card wrappers are preserved by the existing container layer.
+The new definitions add 33 titles and 483 profiles. The preceding catalog table describes the original 118 additional profiles. Each PS1 profile selects an exact product code, region, and card block from 1 through 15. It validates allocation metadata and supports only a complete single-block game save. Multi-block saves, standalone save exports, and PC ports remain unsupported. DexDrive and Virtual Game Station card wrappers are preserved by the existing container layer.
 
 Nintendo 64 profiles accept only the stated canonical big-endian byte order. The Minish Cap profile accepts only its stated EEPROM word order. Regional boundaries and omitted fields are recorded in each profile's description.
 

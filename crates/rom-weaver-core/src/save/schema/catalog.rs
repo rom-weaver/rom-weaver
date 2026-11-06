@@ -21,8 +21,7 @@ fn build(
         .collect()
 }
 
-// Single-record-group editors (N64 EEPROM and FlashRAM) MUST share this layout: the first valid
-// candidate is selected and every write goes back to it.
+// One record group: the first valid candidate is read and receives the edit.
 fn single_file_layout(logical_length: usize, candidates: Vec<layout::Candidate>) -> layout::Layout {
     layout::Layout {
         groups: vec![layout::Group {

@@ -116,8 +116,9 @@ fn bit_field(id: &str, label: &str, offset: usize, bit: u8) -> FieldDefinition {
     in_file(catalog_field(id, label, offset - UPSTREAM_SHIFT, Storage::Bit).bit(bit))
 }
 
-fn exclusive_screen_modes(widescreen: &mut FieldDefinition, cinema: &mut FieldDefinition) {
-    // Cinema is a bit in the control-style byte and replaces the widescreen bit.
+fn exclusive_screen_modes(wide: &mut FieldDefinition, cinema: &mut FieldDefinition) {
+    // Screen is a three-way Full/Wide/Cinema option: Cinema (control-style byte) and Wide are
+    // mutually exclusive. The 16:9 ratio bit (0x2d bit 7) is independent.
     let cinema_flag = Scalar {
         offset: 0x2c - UPSTREAM_SHIFT,
         storage: Storage::U8,
@@ -126,10 +127,10 @@ fn exclusive_screen_modes(widescreen: &mut FieldDefinition, cinema: &mut FieldDe
     let wide_flag = Scalar {
         offset: 0x2d - UPSTREAM_SHIFT,
         storage: Storage::U8,
-        mask: Some(0x80),
+        mask: Some(0x40),
     };
     for (field, set, clear) in [
-        (widescreen, wide_flag.clone(), cinema_flag.clone()),
+        (wide, wide_flag.clone(), cinema_flag.clone()),
         (cinema, cinema_flag, wide_flag),
     ] {
         field.behavior.on_edit.push(Store {
@@ -143,7 +144,7 @@ fn exclusive_screen_modes(widescreen: &mut FieldDefinition, cinema: &mut FieldDe
 fn fields() -> Vec<FieldDefinition> {
     let mut fields = vec![in_file(catalog_field(
         "all_unlocked",
-        "All levels and 00 Agent difficulty unlocked",
+        "All levels and 007 difficulty unlocked",
         0x29 - UPSTREAM_SHIFT,
         Storage::Bool,
     ))];
@@ -201,15 +202,19 @@ fn fields() -> Vec<FieldDefinition> {
     for (id, label, offset, bit) in OPTIONS {
         fields.push(bit_field(&format!("options.{id}"), label, offset, bit));
     }
-    let mut widescreen = bit_field("options.screen_ratio_16_9", "Screen ratio 16:9", 0x2d, 7);
-    let mut cinema = bit_field(
-        "options.screen_ratio_cinema",
-        "Screen ratio cinema",
-        0x2c,
-        3,
-    );
-    exclusive_screen_modes(&mut widescreen, &mut cinema);
-    fields.extend([widescreen, cinema]);
+    fields.push(bit_field(
+        "options.screen_ratio_16_9",
+        "Screen ratio 16:9",
+        0x2d,
+        7,
+    ));
+    let mut cinema = bit_field("options.screen_ratio_cinema", "Screen mode cinema", 0x2c, 3);
+    let wide = fields
+        .iter_mut()
+        .find(|field| field.id == "options.screen_wide")
+        .expect("OPTIONS defines screen_wide");
+    exclusive_screen_modes(wide, &mut cinema);
+    fields.push(cinema);
     fields
 }
 
@@ -296,7 +301,7 @@ mod tests {
         for (record, tag) in TAGS.iter().enumerate() {
             let base = FIRST_RECORD + record * RECORD_SIZE;
             bytes[base + 8] = *tag;
-            // Known option bytes: control style 5, widescreen set, cinema clear.
+            // Known option bytes: control style 5, 16:9 ratio set, Wide and Cinema clear.
             bytes[base + 0xc] = 0x05;
             bytes[base + 0xd] = 0x80;
             repair(&mut bytes, record);
@@ -513,6 +518,43 @@ mod tests {
     fn screen_modes_exclude_each_other() {
         let input = template(1);
         let base = FIRST_RECORD;
+        let wide = test_run(
+            schemas,
+            1,
+            &input,
+            &[("options.screen_wide", SaveValue::Bool(true))],
+        )
+        .unwrap();
+        assert_eq!(wide[base + 0xc], 0x05);
+        assert_eq!(wide[base + 0xd], 0x80 | 0x40);
+        let mut again = input.clone();
+        again.bytes = wide;
+        let cinema = test_run(
+            schemas,
+            1,
+            &again,
+            &[("options.screen_ratio_cinema", SaveValue::Bool(true))],
+        )
+        .unwrap();
+        assert_eq!(cinema[base + 0xc], 0x05 | 0x08);
+        assert_eq!(cinema[base + 0xd], 0x80);
+        again.bytes = cinema;
+        let wide_again = test_run(
+            schemas,
+            1,
+            &again,
+            &[("options.screen_wide", SaveValue::Bool(true))],
+        )
+        .unwrap();
+        assert_eq!(wide_again[base + 0xc], 0x05);
+        assert_eq!(wide_again[base + 0xd], 0x80 | 0x40);
+    }
+
+    #[test]
+    fn cinema_leaves_the_independent_16_9_ratio_alone() {
+        let input = template(1);
+        let base = FIRST_RECORD;
+        assert_eq!(input.bytes[base + 0xd], 0x80);
         let cinema = test_run(
             schemas,
             1,
@@ -521,18 +563,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(cinema[base + 0xc], 0x05 | 0x08);
-        assert_eq!(cinema[base + 0xd], 0x00);
-        let mut again = input.clone();
-        again.bytes = cinema;
-        let wide = test_run(
-            schemas,
-            1,
-            &again,
-            &[("options.screen_ratio_16_9", SaveValue::Bool(true))],
-        )
-        .unwrap();
-        assert_eq!(wide[base + 0xc], 0x05);
-        assert_eq!(wide[base + 0xd], 0x80);
+        assert_eq!(cinema[base + 0xd] & 0x80, 0x80);
     }
 
     #[test]
@@ -570,9 +601,14 @@ mod tests {
             );
         }
         assert_eq!(changes.len(), 3, "{changes:?}");
+        let mut wide = template(0);
+        for record in 0..RECORDS {
+            wide.bytes[FIRST_RECORD + record * RECORD_SIZE + 0xd] |= 0x40;
+            repair(&mut wide.bytes, record);
+        }
         let result = handler
             .apply(
-                &template(0),
+                &wide,
                 &identity,
                 &[edit("options.screen_ratio_cinema", SaveValue::Bool(true))],
                 true,
@@ -585,7 +621,7 @@ mod tests {
             .map(|change| (change.field.as_str(), change.new_value.clone()))
             .collect();
         assert!(changes.contains(&("options.screen_ratio_cinema", SaveValue::Bool(true))));
-        assert!(changes.contains(&("options.screen_ratio_16_9", SaveValue::Bool(false))));
+        assert!(changes.contains(&("options.screen_wide", SaveValue::Bool(false))));
         assert_eq!(changes.len(), 2, "{changes:?}");
     }
 

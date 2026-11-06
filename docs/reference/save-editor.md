@@ -73,7 +73,7 @@ The Generation III slot counts, including PC storage, are 216 for Ruby/Sapphire,
 
 Generation III owned flags also set all three seen copies. Clearing a seen flag also clears its owned flag. Previews include these related changes. Conflicting explicit assignments are rejected.
 
-GoldenEye 007 best times mark easier unset difficulties as cleared, and clearing a time resets those markers. Setting either screen ratio clears the other. Previews include these related changes.
+GoldenEye 007 best times mark easier unset difficulties as cleared, and clearing a time resets those markers. Setting Wide or Cinema screen mode clears the other; the 16:9 ratio option is independent. Previews include these related changes.
 
 Numeric fields expose the ranges in `save export-schema`. A representable value does not establish a playable combination of progression flags, inventory, or player coordinates.
 
