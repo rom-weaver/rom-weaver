@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
-import { WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
+import { LEGACY_WORKFLOW_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "../docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "../first-sample-assets.mjs";
 import { generatedChannelAssetPath, generatedSocialPreviewPath } from "../generated-icon-assets.mjs";
@@ -95,26 +95,6 @@ export const redirectSourcePaths = () => {
     if (match && !/[*:]/.test(match[1])) paths.push(match[1]);
   }
   return paths;
-};
-
-export const LEGACY_WORKFLOW_ROUTES = {
-  apply: "apply-rom-patches",
-  "apply-patch": "apply-rom-patches",
-  bundle: "weave-rom-patches",
-  "bundle-patches": "weave-rom-patches",
-  create: "create-rom-patch",
-  "create-patch": "create-rom-patch",
-  identify: "identify-rom",
-  test: "play-rom",
-  trim: "trim-rom",
-  weave: "weave-rom-patches",
-  "apply-patches": "apply-rom-patches",
-  "weave-patches": "weave-rom-patches",
-  "save-editor": "rom-save-editor",
-  checksum: "file-checksum",
-  compress: "compress-files",
-  extract: "extract-files",
-  "test-rom": "play-rom",
 };
 
 const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel, siteOrigin) => {
