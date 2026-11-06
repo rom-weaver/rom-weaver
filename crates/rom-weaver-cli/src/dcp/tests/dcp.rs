@@ -460,3 +460,46 @@ fn apply_dcp_errors_when_delta_source_missing() {
         rom_weaver_core::RomWeaverError::Validation(_)
     ));
 }
+
+/// A VCDIFF patch whose single window declares `target_size` bytes of output
+/// and carries no data, instructions or addresses.
+fn oversized_target_delta(target_size: u64) -> Vec<u8> {
+    fn varint(mut value: u64) -> Vec<u8> {
+        let mut groups = vec![(value & 0x7f) as u8];
+        value >>= 7;
+        while value > 0 {
+            groups.push((value & 0x7f) as u8 | 0x80);
+            value >>= 7;
+        }
+        groups.reverse();
+        groups
+    }
+    let target = varint(target_size);
+    // Delta indicator, then the empty data, instruction and address sections.
+    let mut window = target;
+    window.extend_from_slice(&[0, 0, 0, 0]);
+    let mut patch = vec![0xd6, 0xc3, 0xc4, 0x00, 0x00, 0x00];
+    patch.extend(varint(window.len() as u64));
+    patch.extend(window);
+    patch
+}
+
+#[test]
+fn apply_dcp_keeps_the_engine_code_of_a_failed_delta() {
+    let mut fs = flat_gdrom(&[("TEST.BIN", HELLO_SOURCE)]);
+    let dcp = build_dcp(&[("TEST.BIN.xdelta", &oversized_target_delta(1 << 50))]);
+    let err = match apply_dcp(&mut Cursor::new(dcp), &mut fs, |_| Ok(())) {
+        Ok(_) => panic!("expected the oversized delta to be rejected"),
+        Err(e) => e,
+    };
+    assert_eq!(
+        err.code(),
+        Some(rom_weaver_patches::VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE),
+        "{err}"
+    );
+    assert!(
+        err.to_string()
+            .contains("failed to apply `.dcp` delta for `TEST.BIN`"),
+        "{err}"
+    );
+}

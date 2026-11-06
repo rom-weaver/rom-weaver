@@ -11,6 +11,46 @@ require_tls_files() {
   fi
 }
 
+# The build stamps 404.html with `<base href="/">` and root-relative links, so under a
+# reverse-proxy sub-path (which the proxy strips before this server sees it) the page's
+# assets and links would leave the prefix. BASE_PATH names that prefix; a copy of the page
+# re-rooted on it goes to a writable directory and replaces sws's default 404 page, because
+# the image runs as non-root and /srv stays read-only.
+base_path=${BASE_PATH:-/}
+rerooted_404_dir=/tmp/rom-weaver-404
+
+# A prefix is spelled /rom-weaver, rom-weaver/ or /rom-weaver/ depending on the proxy, so accept
+# all of them and settle on the leading and trailing slash the rewrite below needs.
+case $base_path in
+  /*) ;;
+  *) base_path=/$base_path ;;
+esac
+case $base_path in
+  */) ;;
+  *) base_path=$base_path/ ;;
+esac
+case $base_path in
+  *[!A-Za-z0-9._~/-]* | *//* | */./* | */../*)
+    echo "BASE_PATH=${BASE_PATH:-} is not a path prefix such as /rom-weaver/ (letters, digits, . _ ~ - and single / separators)" >&2
+    exit 64
+    ;;
+esac
+
+if [ "$base_path" != "/" ]; then
+  if ! mkdir -p "$rerooted_404_dir" 2>/dev/null; then
+    echo "BASE_PATH needs a writable $rerooted_404_dir; with --read-only, add --tmpfs /tmp" >&2
+    exit 73
+  fi
+  sed -e "s#href=\"/\([^/\"]\)#href=\"${base_path}\1#g" -e "s#href=\"/\"#href=\"${base_path}\"#g" \
+    /srv/404.html >"$rerooted_404_dir/404.html"
+  if ! grep -qF "<base href=\"$base_path\" />" "$rerooted_404_dir/404.html"; then
+    echo "BASE_PATH could not be applied: /srv/404.html has no <base href=\"/\" /> to re-root" >&2
+    exit 70
+  fi
+  set -- "$@" --page404 "$rerooted_404_dir/404.html"
+  echo "BASE_PATH=$base_path: the 404 page keeps its links inside $base_path; the proxy must strip that prefix" >&2
+fi
+
 if [ -n "${HTTPS_PORT:-}" ]; then
   cert_path=${HTTPS_CERT:-}
   key_path=${HTTPS_KEY:-}

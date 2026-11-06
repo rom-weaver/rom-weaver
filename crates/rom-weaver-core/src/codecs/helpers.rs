@@ -20,9 +20,10 @@ pub(super) fn decode_exact(
             // growth would overshoot it by up to 2x and overflow 32-bit wasm at 1 GiB.
             let grow = (expected - start).min(start.max(DECODE_CHUNK_BYTES));
             output.try_reserve_exact(grow).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "{codec} decoded output allocation failed: {error}"
-                ))
+                RomWeaverError::coded(
+                    crate::ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
+                    format!("{codec} decoded output allocation failed: {error}"),
+                )
             })?;
         }
         output.resize(start + chunk_len, 0);

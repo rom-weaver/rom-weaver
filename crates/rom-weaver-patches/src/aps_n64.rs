@@ -520,8 +520,9 @@ fn validate_n64_source(input_path: &Path, expected: &ApsN64Header) -> Result<()>
     let mut input = File::open(input_path)?;
     let input_len = input.metadata()?.len();
     if input_len < APS_N64_CART_ID_OFFSET + 3 || input_len < APS_N64_CRC_OFFSET + 8 {
-        return Err(RomWeaverError::Validation(
-            "Source ROM checksum mismatch".into(),
+        return Err(RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+            "Source ROM checksum mismatch",
         ));
     }
 
@@ -534,8 +535,9 @@ fn validate_n64_source(input_path: &Path, expected: &ApsN64Header) -> Result<()>
     input.read_exact(&mut crc)?;
 
     if cart_id != expected.cart_id || crc != expected.crc {
-        return Err(RomWeaverError::Validation(
-            "Source ROM checksum mismatch".into(),
+        return Err(RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+            "Source ROM checksum mismatch",
         ));
     }
     Ok(())

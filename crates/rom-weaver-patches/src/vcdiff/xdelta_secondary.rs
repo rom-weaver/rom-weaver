@@ -561,10 +561,10 @@ impl XdeltaLzmaSectionEncoder {
             )
         };
         if init_status != lzma_sys::LZMA_OK {
-            return Err(RomWeaverError::Validation(format!(
-                "xdelta lzma secondary encode init failed: {}",
-                lzma_status_name(init_status)
-            )));
+            return Err(lzma_status_error(
+                "xdelta lzma secondary encode init failed",
+                init_status,
+            ));
         }
 
         Ok(Self {
@@ -618,10 +618,10 @@ impl XdeltaLzmaSectionEncoder {
                 }
                 value if value == lzma_sys::LZMA_STREAM_END => return Ok(()),
                 other => {
-                    return Err(RomWeaverError::Validation(format!(
-                        "xdelta lzma secondary encode failed: {}",
-                        lzma_status_name(other)
-                    )));
+                    return Err(lzma_status_error(
+                        "xdelta lzma secondary encode failed",
+                        other,
+                    ));
                 }
             }
         }
@@ -633,6 +633,16 @@ impl Drop for XdeltaLzmaSectionEncoder {
         unsafe {
             liblzma_sys::lzma_end(&mut self.stream);
         }
+    }
+}
+
+/// An lzma failure; an allocation failure is coded so the webapp gives memory guidance.
+fn lzma_status_error(context: &str, status: liblzma_sys::lzma_ret) -> RomWeaverError {
+    let message = format!("{context}: {}", lzma_status_name(status));
+    if status == liblzma_sys::LZMA_MEM_ERROR {
+        RomWeaverError::coded(rom_weaver_core::ERROR_CODE_RESOURCE_OUT_OF_MEMORY, message)
+    } else {
+        RomWeaverError::Validation(message)
     }
 }
 
@@ -800,9 +810,12 @@ pub(super) fn decode_native_window_sections(
     if validate_checksums && let Some(expected) = window.checksum {
         let actual = adler32(&decoded);
         if actual != expected {
-            return Err(RomWeaverError::Validation(format!(
-                "target window checksum mismatch: expected 0x{expected:08X}, got 0x{actual:08X}"
-            )));
+            return Err(RomWeaverError::coded(
+                rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+                format!(
+                    "target window checksum mismatch: expected 0x{expected:08X}, got 0x{actual:08X}"
+                ),
+            ));
         }
     }
 

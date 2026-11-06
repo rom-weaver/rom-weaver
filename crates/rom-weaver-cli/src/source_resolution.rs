@@ -481,9 +481,7 @@ impl CliApp {
                 context,
             )
             .map_err(|error| {
-                if matches!(&error, RomWeaverError::Validation(message)
-                    if message.starts_with("no extract entries from "))
-                {
+                if error.code() == Some(rom_weaver_core::ERROR_CODE_EXTRACT_NO_MATCHING_ENTRIES) {
                     return error;
                 }
                 RomWeaverError::Validation(format!(
@@ -652,19 +650,28 @@ impl CliApp {
                 source = %current_source.display(),
                 "auto-extract failed: interactive selection cancelled while all candidates were ignored"
             );
-            return Err(RomWeaverError::Validation(format!(
-                "interactive selection was cancelled for `{}`",
-                current_source.display()
-            )));
+            return Err(RomWeaverError::coded(
+                rom_weaver_core::ERROR_CODE_SELECTION_CANCELLED,
+                format!(
+                    "interactive selection was cancelled for `{}`",
+                    current_source.display()
+                ),
+            ));
         }
         trace!(
             source = %current_source.display(),
             "auto-extract failed: all candidates ignored and no interactive selection"
         );
-        Err(RomWeaverError::Validation(format!(
-            "all extracted {source_label} candidates from `{}` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>",
-            current_source.display()
-        )))
+        Err(RomWeaverError::ValidationCode(
+            rom_weaver_core::ValidationCodeError::new(
+                rom_weaver_core::ERROR_CODE_EXTRACT_ALL_ENTRIES_IGNORED,
+            )
+            .with_message(format!(
+                "all extracted {source_label} candidates from `{}` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>",
+                current_source.display()
+            ))
+            .with_field("path", current_source.display().to_string()),
+        ))
     }
 
     fn filter_kind_auto_extract_candidates(
@@ -706,11 +713,11 @@ impl CliApp {
         );
         if filtered.is_empty() {
             let choices = Self::render_checksum_candidate_choices(&candidates);
-            return Err(RomWeaverError::Validation(format!(
-                "no extract entries from `{}` matched {}; candidates: {choices}",
-                current_source.display(),
-                kind_filter.flag_label()
-            )));
+            return Err(RomWeaverError::no_matching_extract_entries(
+                current_source,
+                &kind_filter.flag_label(),
+                &format!("; candidates: {choices}"),
+            ));
         }
         Ok(filtered)
     }
@@ -749,10 +756,13 @@ impl CliApp {
                 candidate_count = candidates.len(),
                 "auto-extract failed: interactive ambiguous candidate selection cancelled"
             );
-            return Err(RomWeaverError::Validation(format!(
-                "interactive selection was cancelled for `{}`",
-                current_source.display()
-            )));
+            return Err(RomWeaverError::coded(
+                rom_weaver_core::ERROR_CODE_SELECTION_CANCELLED,
+                format!(
+                    "interactive selection was cancelled for `{}`",
+                    current_source.display()
+                ),
+            ));
         }
         let choices = Self::render_checksum_candidate_choices(&candidates);
         trace!(

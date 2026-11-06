@@ -1,8 +1,4 @@
-import type {
-  RomWeaverErrorKind,
-  RomWeaverWorkerErrorContext,
-  RomWeaverWorkerErrorKind,
-} from "../rom-weaver-types.d.ts";
+import type { RomWeaverErrorKind, RomWeaverWorkerErrorKind } from "../rom-weaver-types.d.ts";
 import { ROM_WEAVER_ERROR_KIND_PREFIXES } from "../generated/rom-weaver-format-metadata.ts";
 
 /**
@@ -62,48 +58,6 @@ export function resolveWorkerErrorKind(
   }
 
   return "unknown";
-}
-
-function readWorkerContextFields(input: unknown): RomWeaverWorkerErrorContext {
-  if (!input || typeof input !== "object") {
-    return {};
-  }
-  const record = input as Record<string, unknown>;
-  const format = record.format;
-
-  return {
-    command: typeof record.command === "string" ? record.command : undefined,
-    family: typeof record.family === "string" ? record.family : undefined,
-    format: typeof format === "string" || format === null ? (format as string | null) : undefined,
-    stage: typeof record.stage === "string" ? record.stage : undefined,
-  };
-}
-
-export function readWorkerErrorContext(input: unknown): RomWeaverWorkerErrorContext | undefined {
-  if (!input || typeof input !== "object") {
-    return undefined;
-  }
-  const record = input as Record<string, unknown>;
-
-  const fromContext = readWorkerContextFields(record.context);
-  const fromInput = readWorkerContextFields(input);
-  const context = {
-    command: fromContext.command ?? fromInput.command,
-    family: fromContext.family ?? fromInput.family,
-    format: fromContext.format === undefined ? fromInput.format : fromContext.format,
-    stage: fromContext.stage ?? fromInput.stage,
-  };
-
-  if (
-    context.command === undefined &&
-    context.family === undefined &&
-    context.format === undefined &&
-    context.stage === undefined
-  ) {
-    return undefined;
-  }
-
-  return context;
 }
 
 // Fallback for errors that reach JS without the typed kind: classify the bare

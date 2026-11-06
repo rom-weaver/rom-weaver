@@ -2614,10 +2614,54 @@ export const ROM_WEAVER_WEAVE_FILE_NAMES = {
   "weave": "rom-weaver-weave.json"
 } as const;
 
-export const ROM_WEAVER_VALIDATION_CODES = {
-  "extractNoContainer": "extract.no_container",
-  "wbfsSizeMismatch": "wbfs.size_mismatch"
+export const ROM_WEAVER_ERROR_CODES = {
+  "archive.read_failed": "ARCHIVE_READ_FAILED",
+  "archive.storage_failed": "COMPRESSION_FAILED",
+  "disc.not_gamecube_wii": "UNSUPPORTED_FORMAT",
+  "extract.all_entries_ignored": "COMPRESSION_FAILED",
+  "extract.max_depth_exceeded": "ARCHIVE_DEPTH_EXCEEDED",
+  "extract.no_container": "UNSUPPORTED_FORMAT",
+  "extract.no_matching_entries": "COMPRESSION_FAILED",
+  "io.storage_full": "STORAGE_FULL",
+  "patch.checksum_mismatch": "CHECKSUM_MISMATCH",
+  "patch.file_checksum_invalid": "CHECKSUM_MISMATCH",
+  "resource.out_of_memory": "OUT_OF_MEMORY",
+  "selection.cancelled": "CANCELLED",
+  "trim.unsupported_disc": "UNSUPPORTED_FORMAT",
+  "wbfs.size_mismatch": "INVALID_INPUT"
 } as const;
+
+export const ROM_WEAVER_WORKFLOW_ERROR_CODES = [
+  "AMBIGUOUS_SELECTION",
+  "ARCHIVE_DEPTH_EXCEEDED",
+  "ARCHIVE_READ_FAILED",
+  "CANCELLED",
+  "CHECKSUM_MISMATCH",
+  "COMPRESSION_FAILED",
+  "INVALID_INPUT",
+  "INVALID_SETTINGS",
+  "NO_COMPATIBLE_PATCH",
+  "NO_SELECTABLE_CANDIDATE",
+  "OUT_OF_MEMORY",
+  "OUTPUT_WRITE_FAILED",
+  "PATCH_APPLY_FAILED",
+  "PATCH_CREATE_FAILED",
+  "PATCH_PARSE_FAILED",
+  "PATCH_TARGET_MISMATCH",
+  "SELECTION_NOT_FOUND",
+  "SOURCE_NOT_FOUND",
+  "SOURCE_UNSUPPORTED",
+  "STORAGE_FULL",
+  "STORAGE_UNAVAILABLE",
+  "UNSUPPORTED_FORMAT",
+  "WORKFLOW_BUSY",
+  "WORKFLOW_DISPOSED",
+  "WORKFLOW_EVENT_BUFFER_OVERFLOW",
+  "WORKFLOW_INVALID_STATE",
+  "WORKFLOW_NOT_READY",
+  "WORKER_FAILED",
+  "WORKER_UNAVAILABLE"
+] as const;
 
 export const ROM_WEAVER_FORMAT_METADATA = {
   archiveFormats: ROM_WEAVER_ARCHIVE_FORMATS,

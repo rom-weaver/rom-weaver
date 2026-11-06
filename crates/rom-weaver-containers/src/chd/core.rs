@@ -338,14 +338,13 @@ impl ChdContainerHandler {
         })?);
         session.stream_with_progress(thread_count, None, &CancellationToken::new(), |chunk| {
             std::io::Write::write_all(&mut sink, chunk).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to write `{}`: {error}",
-                    output.display()
-                ))
+                RomWeaverError::from(error)
+                    .with_context(format!("failed to write `{}`", output.display()), None)
             })
         })?;
         std::io::Write::flush(&mut sink).map_err(|error| {
-            RomWeaverError::Validation(format!("failed to flush `{}`: {error}", output.display()))
+            RomWeaverError::from(error)
+                .with_context(format!("failed to flush `{}`", output.display()), None)
         })
     }
 

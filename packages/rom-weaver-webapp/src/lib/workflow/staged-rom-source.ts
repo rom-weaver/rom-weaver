@@ -2,6 +2,7 @@ import type { WorkflowKind } from "../../types/progress.ts";
 import type { CandidateSelectionRequest, SelectFile, SelectionCandidate } from "../../types/selection.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime-types.ts";
+import { getInputSelectionRequestCount } from "../../workers/rom-weaver/runner-control.ts";
 import { RomWeaverError, toRomWeaverError } from "../errors.ts";
 import { getInputPreparationMetrics, type InputAsset } from "../input/input-assets.ts";
 import {
@@ -32,6 +33,7 @@ import {
   isInteractiveSelectionCancelledError,
 } from "./staged-source-selection.ts";
 import { projectSelectionCandidates } from "./selection-candidate-projection.ts";
+import type { SharedInputPreparationCache } from "./shared-input-preparation.ts";
 import type {
   PreparationProgress,
   SessionIdFactory,
@@ -74,6 +76,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
   private readonly getSessionId?: SessionIdFactory<TState["role"]>;
   private readonly getSourceId: SourceIdFactory<TState["role"]>;
   private readonly id: string;
+  private readonly preparationCache?: SharedInputPreparationCache;
   private readonly releasePreparedOnSelection: "always" | "when-empty";
   private readonly runtime: WorkflowRuntime;
   private readonly selectFile?: SelectFile;
@@ -88,6 +91,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     this.getSessionId = options.getSessionId;
     this.getSourceId = options.getSourceId;
     this.id = options.id;
+    this.preparationCache = options.preparationCache;
     this.releasePreparedOnSelection = options.releasePreparedOnSelection || "when-empty";
     this.runtime = options.runtime;
     this.selectFile = options.selectFile;
@@ -574,13 +578,30 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     requests: CandidateSelectionRequest[],
     selectedArchiveEntry: string | undefined,
   ): Promise<InputAsset[]> {
-    return prepareInputAssets(
+    const options = this.createPreparationOptions(stage, requests);
+    const cache = this.preparationCache;
+    const cacheKey = [
+      stage.index,
+      selectedArchiveEntry ?? "",
+      (options as { input?: { containerInputsEnabled?: boolean } }).input?.containerInputsEnabled !== false,
+    ].join("|");
+    const shared = cache?.lease(stage.source, cacheKey);
+    if (shared) {
+      this.trace?.("source.stage.prepare.shared", { fileName: stage.state.fileName, role: stage.state.role });
+      return shared;
+    }
+    const promptsBefore = getInputSelectionRequestCount();
+    const assets = await prepareInputAssets(
       stage.source as never,
-      this.createPreparationOptions(stage, requests) as never,
+      options as never,
       stage.index,
       this.runtime,
       selectedArchiveEntry,
     );
+    // A preparation that raised selection requests, or whose runner asked the user to pick, holds
+    // an answer that MUST NOT be shared.
+    const prompted = requests.length > 0 || getInputSelectionRequestCount() !== promptsBefore;
+    return cache && !prompted ? cache.adopt(stage.source, cacheKey, assets) : assets;
   }
 
   private setSelectedCandidate(stage: SharedRomStagedSource<TSource, TState>, candidateId: string): void {

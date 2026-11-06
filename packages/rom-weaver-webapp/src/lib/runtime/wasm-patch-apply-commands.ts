@@ -8,7 +8,7 @@ import type {
 import { createRomWeaverCommand } from "../../wasm/index.ts";
 import type { PatchBasisMode } from "../../wasm/index.ts";
 import { getRomWeaverRunEventFormat } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
-import { getRomWeaverFailureMessage, withRomWeaverFailureKind } from "../../workers/rom-weaver/runner-errors.ts";
+import { withRomWeaverFailure } from "../../workers/rom-weaver/runner-errors.ts";
 import { getPathBaseName } from "../path-utils.ts";
 import { toThreadBudget } from "./compression-thread-budget.ts";
 import {
@@ -146,10 +146,7 @@ const throwPatchApplyFailure = async ({
   result: RomWeaverJsonResult;
   threadArg: ReturnType<typeof toThreadBudget>;
 }): Promise<never> => {
-  const failureMessage = await appendBrowserStorageContext(
-    getRomWeaverFailureMessage(result, "Patch apply failed"),
-    "apply patch output",
-  );
+  const failureMessage = await appendBrowserStorageContext(result, "Patch apply failed");
   const traceContext = isTraceEnabled(input.logLevel)
     ? ` [context: hasBpsPatch=${String(hasBpsPatch)} hasXdeltaPatch=${String(
         hasXdeltaPatch,
@@ -166,9 +163,9 @@ const throwPatchApplyFailure = async ({
           .join(" | ")
       : "";
     if (traceTail)
-      throw withRomWeaverFailureKind(new Error(`${failureMessage}${traceContext} [trace: ${traceTail}]`), result);
+      throw withRomWeaverFailure(new Error(`${failureMessage}${traceContext} [trace: ${traceTail}]`), result);
   }
-  throw withRomWeaverFailureKind(new Error(`${failureMessage}${traceContext}`), result);
+  throw withRomWeaverFailure(new Error(`${failureMessage}${traceContext}`), result);
 };
 
 const getPatchApplyExecution = (input: RuntimePatchApplyWorkerInput, outputPath: string) => {

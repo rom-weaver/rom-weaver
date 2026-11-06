@@ -7,7 +7,8 @@ import type {
   RomWeaverWorkerErrorKind,
   RomWeaverWorkerSerializedError,
 } from "../rom-weaver-types.d.ts";
-import { readWorkerErrorContext, resolveWorkerErrorKind } from "./worker-error-utils.ts";
+import { readWorkerErrorContext } from "../../workers/shared/error-description.ts";
+import { resolveWorkerErrorKind } from "./worker-error-utils.ts";
 import type {
   RomWeaverWorkerRequest,
   RomWeaverWorkerResponse,

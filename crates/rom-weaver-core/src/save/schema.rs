@@ -762,7 +762,7 @@ impl FieldSchema {
             }
             if mask == 0 {
                 return Err(invalid(
-                    "field mask must be nonzero, contiguous, and fit its storage",
+                    "field mask must be nonzero, fit its storage, and be contiguous unless the field has choices",
                 ));
             }
             let storage_mask = if storage_len == 4 {
@@ -771,9 +771,13 @@ impl FieldSchema {
                 (1u32 << (storage_len * 8)) - 1
             };
             let shifted = mask >> mask.trailing_zeros();
-            if mask & !storage_mask != 0 || shifted & shifted.wrapping_add(1) != 0 {
+            // A gap in an enum field's mask is safe: writes reject values with bits outside the mask, and the
+            // choices list every allowed value. Numeric fields need a contiguous range.
+            if mask & !storage_mask != 0
+                || (raw.choices.is_empty() && shifted & shifted.wrapping_add(1) != 0)
+            {
                 return Err(invalid(
-                    "field mask must be nonzero, contiguous, and fit its storage",
+                    "field mask must be nonzero, fit its storage, and be contiguous unless the field has choices",
                 ));
             }
             intrinsic_max = i64::from(shifted);
@@ -817,7 +821,11 @@ impl FieldSchema {
             if !choice_names.insert(&choice.name) || !choice_values.insert(choice.value) {
                 return Err(invalid("choice names and values must be unique"));
             }
-            if choice.value < min || choice.value > max {
+            // A gapped mask makes the range check alone too loose, so values must also fit the mask's bits.
+            let outside_mask = raw
+                .mask
+                .is_some_and(|mask| choice.value & !i64::from(mask >> mask.trailing_zeros()) != 0);
+            if choice.value < min || choice.value > max || outside_mask {
                 return Err(invalid("choice values must fit the field range"));
             }
         }

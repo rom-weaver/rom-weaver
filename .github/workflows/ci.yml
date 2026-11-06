@@ -339,6 +339,7 @@ jobs:
         run: >-
           node --test
           scripts/markdownlint-no-soft-line-breaks.test.mjs
+          scripts/pre-push.test.mjs
           scripts/quality-diff-coverage.test.mjs
           scripts/quality-fuzz.test.mjs
           scripts/quality-kani.test.mjs

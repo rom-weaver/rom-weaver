@@ -783,7 +783,7 @@ fn past_eof_source_checksum_errors_match_across_apply_paths() {
         &source,
         &patch,
         Some(
-            "validation failed: Source checksum invalid at offset 74; expected: fffe, Actual: ffff",
+            "validation failed: Source checksum invalid at offset 74; expected: fffe, Actual: ffff [patch.checksum_mismatch]",
         ),
     );
 }
@@ -798,7 +798,7 @@ fn past_eof_target_checksum_errors_match_across_apply_paths() {
         &source,
         &patch,
         Some(
-            "validation failed: Target checksum invalid at offset 74; expected: fffe, Actual: ffff",
+            "validation failed: Target checksum invalid at offset 74; expected: fffe, Actual: ffff [patch.checksum_mismatch]",
         ),
     );
 }
@@ -861,10 +861,10 @@ fn assert_past_eof_paths(source: &[u8], target: &[u8], patch: &[u8], error: Opti
         );
         if let Some(expected) = error {
             let actual = result.expect_err("invalid checksum must fail");
-            assert!(matches!(
-                actual,
-                rom_weaver_core::RomWeaverError::Validation(_)
-            ));
+            assert_eq!(
+                actual.code(),
+                Some(rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH)
+            );
             assert_eq!(
                 actual.to_string(),
                 expected,
