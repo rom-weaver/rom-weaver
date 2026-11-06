@@ -1,5 +1,6 @@
 use super::*;
-use rules::{Check, Condition};
+use rules::{Check, Condition, ReadValue, Scalar, Store};
+use tracing::trace;
 
 pub(super) const CARD_SIZE: usize = 0x20000;
 pub(super) const BLOCK_SIZE: usize = 0x2000;
@@ -74,6 +75,41 @@ pub(super) fn definition(
     }
 }
 
+/// Adds a game-specific integrity check to the load/post-edit checks and the recognition checks.
+pub(super) fn register_check(game: &mut GameDefinition, check: Check) {
+    game.runtime.checks.push(check.clone());
+    game.runtime
+        .recognition
+        .as_mut()
+        .expect("playstation_card::definition always sets recognition")
+        .checks
+        .push(check);
+}
+
+/// Recomputes the checksum stored at `offset` as `storage` after every edit for which `when`
+/// holds (always when `None`).
+pub(super) fn store_checksum(
+    game: &mut GameDefinition,
+    offset: usize,
+    storage: Storage,
+    when: Option<Condition>,
+    compute: impl Fn(&[u8]) -> i64 + Send + Sync + 'static,
+) {
+    game.runtime.after_edit.push(Store {
+        when,
+        destination: Scalar {
+            offset,
+            storage,
+            mask: None,
+        },
+        value: ReadValue::new(move |bytes| {
+            let value = compute(bytes);
+            trace!(offset, value, "recomputed PlayStation card checksum");
+            Ok(value)
+        }),
+    });
+}
+
 #[cfg(test)]
 pub(super) fn fixture(product: &str, block: usize) -> Vec<u8> {
     let mut bytes = vec![0xa5; CARD_SIZE];
@@ -95,4 +131,46 @@ pub(super) fn fixture(product: &str, block: usize) -> Vec<u8> {
     bytes[base..base + 4].copy_from_slice(&[b'S', b'C', 0x11, 1]);
     bytes[base + 0x200] = 1;
     bytes
+}
+
+#[cfg(test)]
+pub(super) fn apply(
+    schemas: fn() -> Vec<SchemaSaveHandler>,
+    id: &str,
+    bytes: &[u8],
+    edits: &[SaveEdit],
+) -> crate::Result<Vec<u8>> {
+    let handler = schemas()
+        .into_iter()
+        .find(|handler| handler.definitions()[0].identity.id == id)
+        .unwrap();
+    let identity = handler.definitions()[0].identity.clone();
+    handler
+        .apply(
+            &SaveDetectionInput {
+                bytes: bytes.to_vec(),
+                selected_game: Some(id.into()),
+                rom_sha1: None,
+            },
+            &identity,
+            edits,
+            false,
+        )
+        .map(|result| result.bytes.unwrap_or_else(|| bytes.to_vec()))
+}
+
+#[cfg(test)]
+pub(super) fn edit(field: &str, value: u32) -> SaveEdit {
+    SaveEdit {
+        field: field.into(),
+        value: SaveValue::U32(value),
+    }
+}
+
+#[cfg(test)]
+pub(super) fn flag(field: &str, value: bool) -> SaveEdit {
+    SaveEdit {
+        field: field.into(),
+        value: SaveValue::Bool(value),
+    }
 }
