@@ -1,10 +1,11 @@
 import { BookOpen } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { createLogger } from "../../../../lib/logging.ts";
 import { markDropReceived } from "../../../../lib/perf/op-perf-marks.ts";
 import type { MessageId } from "../../../../presentation/localization/catalog.ts";
 import { resolveAssetUrl } from "../../asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useUiLocalizer } from "../../settings-context.tsx";
+import { HeroDetailsContext } from "./hero-details-context.tsx";
 import { DropZone, InfoPopover, StepSection } from "./layout.tsx";
 
 /**
@@ -109,6 +110,7 @@ const UnifiedDropZone = ({
   const localizer = useUiLocalizer();
   const inputRef = useRef<HTMLInputElement>(null);
   const big = Boolean(dropZoneProps.big);
+  const heroDetails = useContext(HeroDetailsContext);
   const emit = (files: File[]) => {
     // Open the perceived-latency window: a drop/selection just began, measured against the first wasm
     // progress event (see lib/perf/op-perf-marks.ts → romweaver:before-start).
@@ -173,7 +175,7 @@ const UnifiedDropZone = ({
         onFiles={emit}
       />
       {afterDropZone}
-      {big && (onboarding || guide || supportedFormats) ? (
+      {big && (onboarding || guide || supportedFormats || heroDetails) ? (
         <div className="hero-help">
           {onboarding || guide ? (
             <div className={extraGuides?.length ? "hero-help-links has-extra-guides" : "hero-help-links"}>
@@ -190,6 +192,7 @@ const UnifiedDropZone = ({
               {supportedFormats}
             </details>
           ) : null}
+          {heroDetails}
         </div>
       ) : null}
     </StepSection>

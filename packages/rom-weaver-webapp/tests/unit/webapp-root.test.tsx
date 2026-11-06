@@ -2,7 +2,7 @@
 import http from "node:http";
 import { CHANNEL_BADGE } from "../../src/webapp/build-channel.ts";
 import { APP_VERSION } from "../../src/webapp/build-version.ts";
-import { WORKFLOW_ENTRY_ROUTES, withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
+import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES, withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { preloadCatalog } from "../../src/presentation/localization/index.ts";
@@ -812,6 +812,39 @@ describe("page metadata per view", () => {
       }
     },
   );
+
+  it("gives every indexed tool page an introduction of its own", async () => {
+    const pages: {
+      currentView: WebappRootProps["state"]["currentView"];
+      workflowEntry?: keyof typeof WORKFLOW_ENTRY_ROUTES;
+    }[] = [
+      ...(Object.keys(WORKFLOW_SEO_ROUTES) as (keyof typeof WORKFLOW_SEO_ROUTES)[])
+        .filter((view) => view !== "home")
+        .map((view) => ({ currentView: view })),
+      ...(Object.keys(WORKFLOW_ENTRY_ROUTES) as (keyof typeof WORKFLOW_ENTRY_ROUTES)[]).map((workflowEntry) => ({
+        currentView: WORKFLOW_ENTRY_ROUTES[workflowEntry].view,
+        workflowEntry,
+      })),
+    ];
+    const headings = [];
+    for (const page of pages) {
+      const root = await renderRoot(page);
+      const about = await waitFor(() => {
+        const disclosure = root.container.querySelector(
+          `#panel-${page.currentView} .hero-help > details.workflow-about`,
+        );
+        expect(disclosure).not.toBeNull();
+        return disclosure;
+      });
+      expect(about?.querySelector("summary")?.textContent).toBe("How it works");
+      expect(about?.querySelectorAll("p")).toHaveLength(3);
+      headings.push(about?.querySelector("h2")?.textContent);
+      root.unmount();
+    }
+
+    expect(headings.every(Boolean)).toBe(true);
+    expect(new Set(headings).size).toBe(pages.length);
+  });
 
   it("updates PPF undo metadata after navigating from Apply", async () => {
     const canonical = document.createElement("link");

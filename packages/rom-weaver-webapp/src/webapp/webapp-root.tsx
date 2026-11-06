@@ -71,6 +71,8 @@ import { LoadErrorBoundary } from "./components/load-error-boundary.tsx";
 import { PausedGameBanner } from "./components/paused-game-banner.tsx";
 import { RelatedStrip } from "./components/related-strip.tsx";
 import { Masthead } from "./components/shell.tsx";
+import { HeroDetailsContext } from "../public/react/components/ds/hero-details-context.tsx";
+import { WorkflowAbout } from "./components/workflow-about.tsx";
 import type { WorkflowTab } from "./components/shell.tsx";
 // Static, unlike the routes: a deploy that is waiting has already replaced
 // the old hashed chunks on the host, so a lazy banner could no longer load.
@@ -107,7 +109,7 @@ import {
   TrimPatchRoute,
   WhatsNewPageRoute,
 } from "./workflow-routes.tsx";
-import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES, withChannelBadge } from "./workflow-seo.mjs";
+import { activeWorkflowEntry, WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES, withChannelBadge } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS: WorkflowTab[] = [
   {
@@ -232,9 +234,8 @@ const syncWorkflowSeoMetadata = (view: WebappView, workflowEntry: WebappRootProp
   }
   let route: { title: string; description: string; slug: string } | undefined =
     WORKFLOW_SEO_ROUTES[view as keyof typeof WORKFLOW_SEO_ROUTES];
-  if (workflowEntry && WORKFLOW_ENTRY_ROUTES[workflowEntry].view === view) {
-    route = WORKFLOW_ENTRY_ROUTES[workflowEntry];
-  }
+  const entry = activeWorkflowEntry(view, workflowEntry);
+  if (entry) route = WORKFLOW_ENTRY_ROUTES[entry];
   if (!route) {
     const tab = WORKFLOW_TABS.find((entry) => entry.id === view);
     document.title = withChannelBadge(tab ? `${tab.label} | rom-weaver` : "rom-weaver", CHANNEL_BADGE);
@@ -1034,19 +1035,23 @@ function WebappRoot({
           </WorkflowPanelHead>
         )}
         <div className="workflow-body">
-          {/* A route that fails to load takes down only its own panel, so the others keep their staged work. */}
-          <LoadErrorBoundary area={view} onReload={reloadAfterLoadFailure}>
-            {/* Only ever engages for a tab switch: the landing route is preloaded before the first mount. */}
-            <Suspense
-              fallback={
-                <h1 className="sr-only">
-                  {view === "whats-new" ? "What's new" : WORKFLOW_TABS.find((tab) => tab.id === view)?.label}
-                </h1>
-              }
-            >
-              {form}
-            </Suspense>
-          </LoadErrorBoundary>
+          <HeroDetailsContext.Provider
+            value={<WorkflowAbout routeKey={activeWorkflowEntry(view, workflowEntry) ?? view} />}
+          >
+            {/* A route that fails to load takes down only its own panel, so the others keep their staged work. */}
+            <LoadErrorBoundary area={view} onReload={reloadAfterLoadFailure}>
+              {/* Only ever engages for a tab switch: the landing route is preloaded before the first mount. */}
+              <Suspense
+                fallback={
+                  <h1 className="sr-only">
+                    {view === "whats-new" ? "What's new" : WORKFLOW_TABS.find((tab) => tab.id === view)?.label}
+                  </h1>
+                }
+              >
+                {form}
+              </Suspense>
+            </LoadErrorBoundary>
+          </HeroDetailsContext.Provider>
         </div>
       </section>
     ) : null;

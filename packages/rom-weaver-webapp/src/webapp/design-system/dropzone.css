@@ -402,6 +402,11 @@
   border: 1px solid var(--seam);
   border-radius: var(--r-s);
 }
+.rw-app .workflow-about h2 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
 
 .rw-app .drop.staging {
   color: var(--ink-3);
