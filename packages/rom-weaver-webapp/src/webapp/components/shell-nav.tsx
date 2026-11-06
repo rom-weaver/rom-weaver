@@ -40,7 +40,8 @@ type NavEntry = {
   /** Rendered but not shown: a beta row before the client setting is known. */
   hidden?: boolean;
   className?: string;
-  current?: boolean;
+  /** `true` marks the page itself; `"location"` marks the section the page belongs to. */
+  current?: boolean | "location";
   /** Opens in a new tab: the row keeps its href and takes the external guard. */
   external?: boolean;
   href?: string;
@@ -55,6 +56,8 @@ type NavEntry = {
   title?: string;
   /** The phone Menu's label, where the full one would wrap its tile; the full one stays the name. */
   shortLabel?: string;
+  /** Decoration rendered after the label. */
+  trailing?: ReactNode;
 };
 type NavSectionData = { entries: NavEntry[]; id: string; title: string; content?: ReactNode };
 
@@ -69,6 +72,8 @@ const fullNameFor = (tab: WorkflowTab) => {
   if (!tab.railLabel) return undefined;
   return tab.label.toLowerCase().includes(tab.railLabel.toLowerCase()) ? tab.label : undefined;
 };
+
+const ariaCurrentFor = (current: NavEntry["current"]) => (current === true ? "page" : current || undefined);
 
 const activateOnClick = (event: React.MouseEvent, run: () => void) => {
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -90,7 +95,7 @@ const NavRow = ({
 }: {
   className: string;
   entry: NavEntry;
-  /** Only the sidebar copy owns the `tab-<id>` ids the panels are labelled by. */
+  /** Prefix for the row ids; set only on sidebar copies. */
   idPrefix?: string;
   localizer: Localizer;
   onNavigate?: () => void;
@@ -108,18 +113,19 @@ const NavRow = ({
           ("Trim ROM") cannot also contain the chip as visible text (axe
           label-content-name-mismatch), while unnamed rows still read it. */}
       {entry.beta ? <span className="nav-beta" data-label={localizer.message("ui.tools.beta")} /> : null}
+      {entry.trailing}
     </>
   );
   const rowClass = join(className, entry.className);
   // The phone Menu hides the full label behind the short one, so the full one names the row.
   const name = entry.title ?? (entry.shortLabel ? entry.label : undefined);
-  // The sidebar copy is found by its `tab-<id>`; the Menu sheet copy needs its own
+  // A sidebar copy is found by its prefixed id; the Menu sheet copy needs its own
   // handle, which stays off the sidebar so the prerendered shell does not carry it.
   const navId = idPrefix ? undefined : entry.id;
   if (entry.href) {
     return (
       <a
-        aria-current={entry.current ? "page" : undefined}
+        aria-current={ariaCurrentFor(entry.current)}
         aria-label={name}
         className={rowClass}
         data-nav={navId}
@@ -166,11 +172,14 @@ const NavRow = ({
  */
 const SideNav = ({
   appearance,
+  idPrefix = "tab-",
   localizer,
   navLabel,
   sections,
 }: {
   appearance: ReactNode;
+  /** Prefix for row ids; only the copy the panels are labelled by MAY use `tab-`. */
+  idPrefix?: string;
   localizer: Localizer;
   navLabel: string;
   sections: NavSectionData[];
@@ -181,7 +190,7 @@ const SideNav = ({
         {section.title ? <h2 className="nav-group-label">{section.title}</h2> : null}
         {section.entries.map((entry) => (
           <div hidden={entry.hidden} key={entry.id}>
-            <NavRow className="nav-row" entry={entry} idPrefix="tab-" localizer={localizer} />
+            <NavRow className="nav-row" entry={entry} idPrefix={idPrefix} localizer={localizer} />
           </div>
         ))}
         {section.content}

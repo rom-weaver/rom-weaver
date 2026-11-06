@@ -462,7 +462,7 @@
   font-size: 0.7rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 .rw-app .guide-nav-list {
   display: grid;
@@ -563,25 +563,25 @@
 }
 
 @media (hover: hover) {
-  .rw-app .nav-row:not([aria-current="page"]):hover {
+  .rw-app .nav-row:not([aria-current]):hover {
     color: var(--ink);
     background: var(--well);
   }
 }
-.rw-app .nav-row:not([aria-current="page"]):active {
+.rw-app .nav-row:not([aria-current]):active {
   color: var(--ink);
   background: var(--plate-2);
 }
-.rw-app .nav-row[aria-current="page"] {
+.rw-app .nav-row[aria-current] {
   color: var(--ink);
   background: color-mix(in oklab, var(--thread) 12%, var(--well));
 }
-.rw-app .nav-row[aria-current="page"] svg {
+.rw-app .nav-row[aria-current] svg {
   color: var(--thread-text);
   opacity: 1;
 }
 @media (forced-colors: active) {
-  .rw-app .nav-row[aria-current="page"] {
+  .rw-app .nav-row[aria-current] {
     color: SelectedItemText;
     background: SelectedItem;
   }
@@ -603,7 +603,7 @@
 .rw-app .nav-beta::before {
   content: attr(data-label);
 }
-.rw-app .nav-row[aria-current="page"] .nav-beta {
+.rw-app .nav-row[aria-current] .nav-beta {
   color: inherit;
 }
 .rw-app .nav-support,
@@ -652,13 +652,104 @@
    brand and the build facts stay put however long the list of destinations
    grows. On the phone the column is just the page header: the rail is gone and
    its sections live in the Menu sheet instead. */
-.rw-app .side-rail {
+.rw-app .side-rail,
+.rw-app .rail-level {
   flex: 1 1 auto;
   min-block-size: 0;
   padding-block-end: var(--sp-m);
   overflow-y: auto;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
+}
+/* On a docs page the rail holds two levels in one cell, each scrolling on its
+   own: the docs navigation rolls over the tool rail from the inline end, and
+   the level not shown turns invisible once its slide ends, which also takes it
+   out of the tab order. */
+.rw-app .docs-rail {
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  padding-block-end: 0;
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+.rw-app .rail-level {
+  grid-area: 1 / 1;
+  /* A level turns visible at once, so focus can move into it on the same press,
+     and hides only after its slide ends. */
+  transition:
+    transform 0.32s var(--ease),
+    opacity 0.32s var(--ease),
+    visibility 0s;
+}
+.rw-app .docs-rail[data-level="tools"] .rail-level-docs,
+.rw-app .docs-rail[data-level="docs"] .rail-level-tools {
+  transition-delay: 0s, 0s, 0.32s;
+}
+.rw-app .rail-level-docs {
+  z-index: 1;
+  background: var(--chassis);
+}
+.rw-app .docs-rail[data-level="tools"] .rail-level-docs {
+  visibility: hidden;
+  transform: translateX(100%);
+}
+.rw-app .docs-rail[data-level="docs"] .rail-level-tools {
+  visibility: hidden;
+  opacity: 0.35;
+  transform: translateX(-28%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .rail-level {
+    transition: none;
+  }
+}
+.rw-app .docs-rail-head {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: center;
+  padding-block: var(--sp-xs) var(--sp-s);
+  margin-block-end: var(--sp-xs);
+  border-block-end: 1px solid var(--seam);
+}
+.rw-app .docs-rail-back {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: 32px;
+  block-size: 32px;
+  padding: 0;
+  color: var(--ink);
+  appearance: none;
+  cursor: pointer;
+  background: var(--plate);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+}
+@media (hover: hover) {
+  .rw-app .docs-rail-back:hover {
+    background: var(--well);
+  }
+}
+.rw-app .docs-rail-back:active {
+  background: var(--plate-2);
+}
+.rw-app .docs-rail-back svg,
+.rw-app .docs-rail-title svg {
+  width: 16px;
+  height: 16px;
+}
+.rw-app .docs-rail-title {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--thread-text);
+}
+.rw-app .nav-row-drill {
+  flex: none;
+  margin-inline-start: auto;
 }
 
 /* ── desktop top bar ──

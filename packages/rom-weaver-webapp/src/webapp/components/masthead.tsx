@@ -1,4 +1,15 @@
-import { ArrowLeft, HardDrive, Heart, House, Info, Newspaper, ScrollText, Search, Settings } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronRight,
+  HardDrive,
+  Heart,
+  House,
+  Info,
+  Newspaper,
+  ScrollText,
+  Search,
+  Settings,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { appPathHref } from "../app-routes.ts";
@@ -149,6 +160,29 @@ const Masthead = ({
     if (focusFind) document.querySelector<HTMLInputElement>("#menu-sheet .find-input")?.focus();
   }, []);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+  /* Desktop docs pages stack the docs navigation over the tool rail; the arrow
+     rolls it back without leaving the page. */
+  const [railLevel, setRailLevel] = useState(railLevelFor(currentTab));
+  useEffect(() => {
+    if (currentTab !== "docs") {
+      setRailLevel("tools");
+      return;
+    }
+    // Coming from a tool, the docs level mounts rolled back; opening it two frames
+    // later, after its closed position has been styled, lets the slide play.
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => setRailLevel("docs"));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [currentTab]);
+  const showRailLevel = useCallback((level: "docs" | "tools") => {
+    flushSync(() => setRailLevel(level));
+    // The control that was pressed is now hidden, so focus moves to its counterpart.
+    // Without preventScroll the focus would scroll the level away from the current guide.
+    document
+      .querySelector<HTMLElement>(level === "docs" ? ".docs-rail-back" : "#tools-docs")
+      ?.focus({ preventScroll: true });
+  }, []);
   const menuRoute = useRef(`${currentTab}:${docsSlug}`);
   useEffect(() => {
     const route = `${currentTab}:${docsSlug}`;
@@ -428,19 +462,47 @@ const Masthead = ({
     tabs,
   ]);
 
+  // The sidebar's Docs row opens the nested docs navigation.
+  const railSections: NavSectionData[] = useMemo(
+    () =>
+      sections.map((section) => ({
+        ...section,
+        entries: section.entries.map((entry) => {
+          if (entry.id !== "docs") return entry;
+          const onDocs = currentTab === "docs";
+          return {
+            ...entry,
+            current: onDocs ? "location" : entry.current,
+            onSelect: onDocs ? () => showRailLevel("docs") : entry.onSelect,
+            trailing: <ChevronRight aria-hidden="true" className="nav-row-drill" />,
+          };
+        }),
+      })),
+    [currentTab, showRailLevel, sections],
+  );
   // Desktop only: phones reach the docs through the docs bar above the dock.
   const docsSections: NavSectionData[] = [
     {
-      id: "project",
+      id: "docs-head",
       title: "",
-      entries: [
-        {
-          id: "back-to-tools",
-          label: localizer.message("ui.docs.backToTools"),
-          href: appPathHref("apply-rom-patches", homeHref),
-          icon: <ArrowLeft aria-hidden="true" />,
-        },
-      ],
+      entries: [],
+      content: (
+        <div className="docs-rail-head">
+          <button
+            aria-label={localizer.message("ui.docs.backToTools")}
+            className="docs-rail-back"
+            onClick={() => showRailLevel("tools")}
+            title={localizer.message("ui.docs.backToTools")}
+            type="button"
+          >
+            <ArrowLeft aria-hidden="true" />
+          </button>
+          <h2 className="docs-rail-title">
+            {tabs.find((tab) => tab.id === "docs")?.icon}
+            {localizer.message("ui.nav.docs")}
+          </h2>
+        </div>
+      ),
     },
     {
       id: "docs",
@@ -526,6 +588,15 @@ const Masthead = ({
       }}
     />
   );
+  const toolRail = (idPrefix?: string) => (
+    <SideNav
+      appearance={appearanceTiles("rail", true)}
+      idPrefix={idPrefix}
+      localizer={localizer}
+      navLabel={navLabel}
+      sections={railSections}
+    />
+  );
   const projectTiles = (
     <ProjectTiles
       confirmExternalNavigation={confirmExternalNavigation}
@@ -579,14 +650,16 @@ const Masthead = ({
             </div>
           </div>
           {/* Desktop: every destination the app has, named, in one column. */}
-          <aside className="side-rail">
-            <SideNav
-              appearance={appearanceTiles("rail", true)}
-              localizer={localizer}
-              navLabel={navLabel}
-              sections={currentTab === "docs" ? docsSections : sections}
-            />
-          </aside>
+          {currentTab === "docs" ? (
+            <aside className="side-rail docs-rail" data-level={railLevel}>
+              <div className="rail-level rail-level-docs">
+                <SideNav appearance={null} localizer={localizer} navLabel={navLabel} sections={docsSections} />
+              </div>
+              <div className="rail-level rail-level-tools">{toolRail("tools-")}</div>
+            </aside>
+          ) : (
+            <aside className="side-rail">{toolRail()}</aside>
+          )}
         </div>
         {/* Desktop top bar: the one box that reaches everything, and the controls
           that change this browser rather than the app. No destinations, so
@@ -693,6 +766,9 @@ const Masthead = ({
     </>
   );
 };
+
+/** The desktop rail starts on the docs level only on a docs page. */
+const railLevelFor = (tab: string): "docs" | "tools" => (tab === "docs" ? "docs" : "tools");
 
 /** `/` MUST keep typing into a field; only a bare `/` on the page opens Find. */
 const isTextEntryTarget = (target: EventTarget | null) => {

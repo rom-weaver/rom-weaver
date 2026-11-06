@@ -80,10 +80,10 @@ describe("the navigation both layouts share", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
 
     const side = container.querySelector(".side-nav") as HTMLElement;
-    expect(rowNamed(side, "Back to tools").getAttribute("href")).toBe("/apply-rom-patches");
+    expect(side.querySelector(".docs-rail-back")?.getAttribute("aria-label")).toBe("Back to tools");
     expect(rowNamed(side, "Overview").getAttribute("href")).toBe("/docs");
     expect(side.querySelector(".guide-nav")).not.toBeNull();
-    expect(side.querySelectorAll(".nav-row")).toHaveLength(1);
+    expect(side.querySelectorAll(".nav-row")).toHaveLength(0);
     expect(container.querySelector(".dock")).not.toBeNull();
     // The phone's docs controls belong to the docs page (DocsBar), not the shell.
     expect(within(container).queryByRole("button", { name: "Browse docs" })).toBeNull();
@@ -134,6 +134,31 @@ describe("the navigation both layouts share", () => {
     }
     expect(onOpenStatus).toHaveBeenCalledTimes(2);
     expect(onOpenLog).toHaveBeenCalledTimes(1);
+  });
+
+  it("rolls the docs navigation back to the tools and over again without leaving the guide", () => {
+    const onSelectTab = vi.fn();
+    const { container } = render(
+      withSettings(<Masthead {...mastheadProps} currentTab="docs" docsSlug="docs/faq" onSelectTab={onSelectTab} />),
+    );
+    const rail = container.querySelector(".docs-rail") as HTMLElement;
+    const tools = container.querySelector(".rail-level-tools .side-nav") as HTMLElement;
+    const docs = rowNamed(tools, "Docs");
+    expect(rail.dataset.level).toBe("docs");
+    // Overview owns `tab-docs`; the tool rail's copy of Docs MUST NOT repeat it.
+    expect(container.querySelectorAll("#tab-docs")).toHaveLength(1);
+    expect(docs.getAttribute("aria-current")).toBe("location");
+
+    fireEvent.click(container.querySelector(".docs-rail-back") as HTMLButtonElement);
+    expect(rail.dataset.level).toBe("tools");
+    expect(document.activeElement).toBe(docs);
+
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+    docs.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(rail.dataset.level).toBe("docs");
+    expect(document.activeElement).toBe(container.querySelector(".docs-rail-back"));
+    expect(onSelectTab).not.toHaveBeenCalled();
   });
 
   it("leaves Overview links to the URL router while reading a guide", () => {

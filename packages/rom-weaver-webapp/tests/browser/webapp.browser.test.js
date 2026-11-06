@@ -633,6 +633,28 @@ test("Docs topic headings keep their width and wrapping when expanded", async ()
   await page.viewport(1280, 900);
 });
 
+test("rolling the desktop docs rail back and over keeps the docs list where the reader left it", async () => {
+  await page.viewport(1280, 600);
+  mountWebappRoot({ initialView: "docs" });
+  await expect.poll(() => document.querySelector(".docs-rail .guide-nav")).toBeTruthy();
+  const rail = document.querySelector(".docs-rail");
+  const docsLevel = rail.querySelector(".rail-level-docs");
+  await expect.poll(() => docsLevel.scrollHeight > docsLevel.clientHeight).toBe(true);
+  docsLevel.scrollTop = 200;
+  const scrolled = docsLevel.scrollTop;
+  expect(scrolled).toBeGreaterThan(0);
+
+  rail.querySelector(".docs-rail-back").click();
+  expect(rail.dataset.level).toBe("tools");
+  expect(document.activeElement?.id).toBe("tools-docs");
+  document.querySelector("#tools-docs").click();
+  expect(rail.dataset.level).toBe("docs");
+  expect(document.activeElement).toBe(rail.querySelector(".docs-rail-back"));
+  expect(docsLevel.scrollTop).toBe(scrolled);
+  expect(rail.scrollLeft).toBe(0);
+  await page.viewport(1280, 900);
+});
+
 test("mobile Docs docks one docs bar on the workflow dock and opens everything from it", async () => {
   await page.viewport(390, 844);
   mountWebappRoot({ initialView: "docs" });
@@ -703,7 +725,7 @@ test("mobile Docs docks one docs bar on the workflow dock and opens everything f
   await page.viewport(1000, 844);
   // Desktop keeps the rails: the bar's layer leaves the layout entirely.
   await expect.poll(() => bar.getClientRects().length).toBe(0);
-  expect(document.querySelector('.side-nav a[href="/apply-rom-patches"]')?.textContent).toBe("Back to tools");
+  expect(document.querySelector(".side-nav .docs-rail-back")?.getAttribute("aria-label")).toBe("Back to tools");
   await page.viewport(1280, 900);
 });
 
