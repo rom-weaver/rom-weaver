@@ -39,7 +39,7 @@ const summarizeInputSelectionRequest = (request: string): Record<string, unknown
   }
 };
 
-/** How many prompts the runner has raised so far; callers compare two readings to learn whether work in between asked the user. */
+/** Number of input selection prompts the runner has raised since the module loaded. */
 const getInputSelectionRequestCount = () => inputSelectionRequestCount;
 
 const resolveInputSelection: InputSelectionHandler = (request) => {

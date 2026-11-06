@@ -599,7 +599,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
       selectedArchiveEntry,
     );
     // A preparation that raised selection requests is not final yet, and one that asked the user
-    // inside the runner holds that answer, so neither is shared: the other form must ask again.
+    // inside the runner holds that answer, so neither is shared: the other form MUST ask again.
     const prompted = requests.length > 0 || getInputSelectionRequestCount() !== promptsBefore;
     return cache && !prompted ? cache.adopt(stage.source, cacheKey, assets) : assets;
   }
