@@ -1,6 +1,7 @@
 import { Download, FolderOpen, FolderPen, Save } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
+import { getErrorMessage } from "../../lib/errors.ts";
 import type { BrowserPlaylistPlan, PlaylistSourceFile } from "../../platform/browser/browser-playlist-api.ts";
 import { checkGameName } from "../../storage/browser/playlist-game-name.ts";
 import { canWritePlaylistFolders } from "../../storage/browser/playlist-folder-support.ts";
@@ -37,8 +38,6 @@ type PlaylistFormProps = {
 type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: (options: { id?: string; mode: "read" | "readwrite" }) => Promise<FileSystemDirectoryHandle>;
 };
-
-const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 const isAbort = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
 
@@ -112,6 +111,10 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   const games = useMemo(() => [...new Set((survey?.discs ?? []).map((disc) => disc.game))], [survey]);
   const allAtTop = !!plan && plan.discs.every((disc) => !disc.path.includes("/"));
   const canRename = canWriteFolders && !!source?.directory;
+  // A click must ask for folder access while it still counts as a user action, so the writer loads before the click.
+  useEffect(() => {
+    if (canRename) void import("../../storage/browser/playlist-folder-write.ts");
+  }, [canRename]);
   // Discs in subfolders cannot be renamed in place, so a choice left from another folder or game is ignored.
   const renaming = rename && canRename && allAtTop;
 
@@ -130,9 +133,12 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
         const { planBrowserPlaylist } = await import("../../platform/browser/browser-playlist-api.ts");
         const typedName = nameProblem ? "" : name.trim();
         try {
-          const all = surveyRef.current ?? (await planBrowserPlaylist({ files: source.files, signal: abort.signal }));
+          // Discs named only by number give the engine no game name, so a survey that failed unnamed runs again with the typed one.
+          const all =
+            surveyRef.current ??
+            (await planBrowserPlaylist({ files: source.files, name: typedName || undefined, signal: abort.signal }));
           if (planRunRef.current !== run) return;
-          surveyRef.current = all;
+          if (!typedName) surveyRef.current = all;
           setSurvey(all);
           const discs = all.discs.some((disc) => disc.game !== all.discs[0]?.game)
             ? all.discs.filter((disc) => disc.game === (game || all.discs[0]?.game)).map((disc) => disc.path)
@@ -168,13 +174,13 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
           } catch (cause) {
             if (planRunRef.current !== run || isAbort(cause)) return;
             setRenamePlan(null);
-            setRenameReason(errorText(cause));
+            setRenameReason(getErrorMessage(cause));
           }
         } catch (cause) {
           if (planRunRef.current !== run || isAbort(cause)) return;
           setPlan(null);
           setRenamePlan(null);
-          setError(errorText(cause));
+          setError(getErrorMessage(cause));
         } finally {
           if (planRunRef.current === run) setPlanning(false);
         }
@@ -224,7 +230,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     try {
       await action();
     } catch (cause) {
-      if (!isAbort(cause)) setError(errorText(cause));
+      if (!isAbort(cause)) setError(getErrorMessage(cause));
     } finally {
       busyRef.current = false;
       setBusy(null);
@@ -294,7 +300,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     actions: {
       download: {
         description: "Download the .m3u playlist.",
-        enabled: !!plan && !busy && !planning,
+        enabled: !!plan && !busy && !planning && !nameProblem,
         execute: () => download(),
       },
     },

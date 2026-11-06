@@ -7,7 +7,6 @@ const canWritePlaylistFolders = () =>
   typeof (window as { showDirectoryPicker?: unknown }).showDirectoryPicker === "function" &&
   typeof FileSystemFileHandle !== "undefined" &&
   typeof (FileSystemFileHandle.prototype as { move?: unknown }).move === "function" &&
-  typeof indexedDB !== "undefined" &&
   !!globalThis.navigator?.locks;
 
 export { canWritePlaylistFolders };

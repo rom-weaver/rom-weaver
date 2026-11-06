@@ -1,3 +1,4 @@
+import { getErrorMessage } from "../../lib/errors.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { writeBlobToFileHandle } from "./file-handle-write.ts";
 
@@ -41,8 +42,6 @@ const PLAYLIST_FOLDER_UNSUPPORTED = "PLAYLIST_FOLDER_UNSUPPORTED";
 const foldName = (name: string) => name.normalize("NFC").toLowerCase();
 
 const isNotFound = (error: unknown) => error instanceof DOMException && error.name === "NotFoundError";
-
-const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /** Ask for write access. Callers MUST call this first in a click handler, while it still counts as a user action. */
 const requestPlaylistFolderAccess = async (directory: FileSystemDirectoryHandle) => {
@@ -127,7 +126,7 @@ const undoJournal = async (journal: PlaylistRenameJournal): Promise<string[]> =>
     try {
       await writeBlobToFileHandle(await directory.getFileHandle(sheet.name), new Blob([sheet.bytes]));
     } catch (error) {
-      failures.push(`restore the text of "${sheet.name}" (${errorMessage(error)})`);
+      failures.push(`restore the text of "${sheet.name}" (${getErrorMessage(error)})`);
     }
   }
   if (journal.pending) {
@@ -143,7 +142,7 @@ const undoJournal = async (journal: PlaylistRenameJournal): Promise<string[]> =>
       await assertAbsent(directory, move.from);
       await moveFile(await directory.getFileHandle(move.to), move.from);
     } catch (error) {
-      failures.push(`rename "${move.to}" back to "${move.from}" (${errorMessage(error)})`);
+      failures.push(`rename "${move.to}" back to "${move.from}" (${getErrorMessage(error)})`);
     }
   }
   return failures;
@@ -222,11 +221,11 @@ const renamePlaylistFolder = async (request: RenamePlaylistFolderRequest) => {
     } catch (error) {
       const failures = await undoJournal(journal);
       if (!failures.length && (error as { code?: unknown }).code === PLAYLIST_FOLDER_UNSUPPORTED) throw error;
-      logger.warn("playlist rename rolled back", { error: errorMessage(error), failures });
+      logger.warn("playlist rename rolled back", { error: getErrorMessage(error), failures });
       throw new Error(
         failures.length
-          ? `${errorMessage(error)} rom-weaver could not ${failures.join("; ")}.`
-          : `${errorMessage(error)} The folder was put back as it was.`,
+          ? `${getErrorMessage(error)} rom-weaver could not ${failures.join("; ")}.`
+          : `${getErrorMessage(error)} The folder was put back as it was.`,
         { cause: error },
       );
     }

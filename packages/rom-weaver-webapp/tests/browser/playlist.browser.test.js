@@ -109,6 +109,21 @@ describe("planBrowserPlaylist", () => {
     await expect(failure).rejects.not.toThrow(WORKER_OPFS_MOUNTPOINT);
   });
 
+  test("asks for a game name when the discs are named only by number, and plans with one", async () => {
+    const files = [
+      at("Disc 1.cue", [sheet("Disc 1.bin")]),
+      at("Disc 1.bin", [track(1)]),
+      at("Disc 2.cue", [sheet("Disc 2.bin")]),
+      at("Disc 2.bin", [track(2)]),
+    ];
+    const failure = planBrowserPlaylist({ files });
+    await expect(failure).rejects.toThrow("Type a game name");
+    await expect(failure).rejects.not.toThrow("--name");
+    const plan = await planBrowserPlaylist({ files, name: "FF7" });
+    expect(plan.file_name).toBe("FF7.m3u");
+    expect(lines(plan.text)).toEqual(["Disc 1.cue", "Disc 2.cue"]);
+  });
+
   test("refuses two dropped files with the same name", async () => {
     await expect(
       planBrowserPlaylist({ files: [at("Game.iso", [track(1)]), at("Game.iso", [track(2)])] }),
@@ -205,4 +220,29 @@ test("renames the discs in the picked folder where the browser can move files, a
     ),
     "notes.txt": "keep",
   });
+});
+
+test("plans a playlist for discs named only by number once a game name is typed", async () => {
+  mountForm();
+  const transfer = new DataTransfer();
+  for (const [name, content] of [
+    ["Disc 1.cue", sheet("Disc 1.bin")],
+    ["Disc 1.bin", track(1)],
+    ["Disc 2.cue", sheet("Disc 2.bin")],
+    ["Disc 2.bin", track(2)],
+  ]) {
+    transfer.items.add(new File([content], name));
+  }
+  await expect.poll(() => document.querySelector("#playlist-input-picker")).toBeTruthy();
+  const picker = document.querySelector("#playlist-input-picker");
+  picker.files = transfer.files;
+  picker.dispatchEvent(new Event("change", { bubbles: true }));
+  await expect
+    .poll(() => document.querySelector('#playlist-container [role="alert"]')?.textContent ?? "")
+    .toContain("Type a game name");
+  typeInto(document.querySelector("#playlist-name"), "FF7");
+  await enabledButton("#playlist-download");
+  const download = await commands.clickAndReadDownload("#playlist-download");
+  expect(download.suggestedFilename).toBe("FF7.m3u");
+  expect(lines(atob(download.contentBase64))).toEqual(["Disc 1.cue", "Disc 2.cue"]);
 });

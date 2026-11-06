@@ -132,7 +132,13 @@ const planBrowserPlaylist = async ({
     };
   } catch (error) {
     // Engine messages name the mounted copies; show the paths from the picked folder instead.
-    if (error instanceof Error) error.message = error.message.replaceAll(`${root}/`, "");
+    // The engine words some refusals for its command line; the form has a game name field and no flags.
+    if (error instanceof Error) {
+      error.message = error.message
+        .replaceAll(`${root}/`, "")
+        .replace("; pass --name", ". Type a game name")
+        .replace("--rename cannot rename", "Cannot rename");
+    }
     throw error;
   } finally {
     for (const release of unregister) release();
