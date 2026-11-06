@@ -84,6 +84,21 @@ describe("PlaylistForm", () => {
     expect((screen.getByRole("checkbox", { name: /Rename the discs/ }) as HTMLInputElement).disabled).toBe(true);
   });
 
+  it("opens the folder picker when the button is clicked before the page has checked for support", async () => {
+    render(<PlaylistForm onSessionChange={vi.fn()} />);
+    support.canWrite = true;
+    const picker = vi.fn(async () => {
+      throw new DOMException("The user aborted a request.", "AbortError");
+    });
+    Object.defineProperty(window, "showDirectoryPicker", { configurable: true, value: picker });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Open game folder" }));
+      await waitFor(() => expect(picker).toHaveBeenCalledWith({ id: "rom-weaver-playlist", mode: "read" }));
+    } finally {
+      Reflect.deleteProperty(window, "showDirectoryPicker");
+    }
+  });
+
   it("offers to put back the files of an interrupted rename", async () => {
     support.canWrite = true;
     support.interrupted = { folderName: "FF7" };

@@ -249,7 +249,8 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
 
   const openFolder = () => {
     const picker = (window as DirectoryPickerWindow).showDirectoryPicker;
-    if (!(canWriteFolders && picker)) {
+    // Check now rather than read canWriteFolders: it is set after the first render, and a click can come first.
+    if (!(canWritePlaylistFolders() && picker)) {
       folderInputRef.current?.click();
       return;
     }
