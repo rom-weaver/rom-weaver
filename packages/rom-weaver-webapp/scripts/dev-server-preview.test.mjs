@@ -10,14 +10,15 @@ import { findFreePort, startPreviewServer, stopPreviewServer } from "./preview-p
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_DIR = path.dirname(SCRIPTS_DIR);
 const NOT_FOUND_PAGE = "<!doctype html><title>fixture not found</title>";
+const ROUTE_PAGE = "<!doctype html><title>fixture route</title>";
 
 let workDir;
 let server;
 let port;
 
 // The preview server serves `<its own package>/dist`, so run a copy of it from a throwaway package whose
-// sibling scripts, sources and dependencies are the real ones and whose dist holds only `404.html` and the
-// `index.html` that the startup check requires. The real dist stays untouched, and the test needs no build.
+// sibling scripts, sources and dependencies are the real ones and whose dist holds only `404.html`, a `route/` directory
+// and the `index.html` that the startup check requires. The real dist stays untouched, and the test needs no build.
 const stageFixturePackage = () => {
   const packageDir = path.join(workDir, "package");
   const scriptsDir = path.join(packageDir, "scripts");
@@ -33,6 +34,8 @@ const stageFixturePackage = () => {
   fs.mkdirSync(path.join(packageDir, "dist"));
   fs.writeFileSync(path.join(packageDir, "dist", "index.html"), "<!doctype html><title>fixture</title>");
   fs.writeFileSync(path.join(packageDir, "dist", "404.html"), NOT_FOUND_PAGE);
+  fs.mkdirSync(path.join(packageDir, "dist", "route"));
+  fs.writeFileSync(path.join(packageDir, "dist", "route", "index.html"), ROUTE_PAGE);
   return packageDir;
 };
 
@@ -82,4 +85,17 @@ test("preview answers a missed navigation with the 404 page and no-store", async
   assert.match(response.headers["content-type"], /^text\/html\b/);
   assert.equal(response.headers["cache-control"], "no-store");
   assert.equal(response.body, NOT_FOUND_PAGE);
+});
+
+test("preview redirects a bare directory to its trailing-slash form with a relative target", async () => {
+  const response = await get("/route?a=1", "text/html");
+  assert.equal(response.status, 308);
+  assert.equal(response.headers.location, "route/?a=1");
+  assert.equal(response.headers["cache-control"], "no-store");
+});
+
+test("preview serves a directory index at its trailing-slash URL", async () => {
+  const response = await get("/route/", "text/html");
+  assert.equal(response.status, 200);
+  assert.equal(response.body, ROUTE_PAGE);
 });

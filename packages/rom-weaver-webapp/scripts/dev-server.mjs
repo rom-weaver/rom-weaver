@@ -826,6 +826,22 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
     return;
   }
 
+  // The route documents carry `<base href="../">`, which only resolves right from the URL
+  // with a trailing slash. static-web-server answers a bare directory with a redirect to
+  // that form, so the preview does too. The target is relative, so it keeps the prefix a
+  // prefix-stripping proxy removed.
+  if (!pathname.endsWith("/") && fs.statSync(filePath, { throwIfNoEntry: false })?.isDirectory()) {
+    const { search } = new URL(req.url, "https://localhost");
+    send(
+      res,
+      308,
+      { Location: `${path.posix.basename(pathname)}/${search}`, "Cache-Control": "no-store" },
+      null,
+      securityOptions,
+    );
+    return;
+  }
+
   // Cloudflare Pages answers a missed navigation with 404.html at the URL that
   // missed, so the preview does the same: that is the only way to exercise the
   // page at a nested path, where its <base> tag decides every link.
