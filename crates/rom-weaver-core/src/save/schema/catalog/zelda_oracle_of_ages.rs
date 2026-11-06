@@ -336,17 +336,11 @@ fn flag_field(row: &FlagRow, base: usize, twins: &[Twin]) -> FieldDefinition {
         .find(|(twin_source, source_bit, _, _)| *twin_source == offset && *source_bit == bit)
     {
         let (source, source_bit) = (base + offset, bit);
-        field.behavior.on_edit.push(rules::Store {
-            when: None,
-            destination: rules::Scalar {
-                offset: base + twin_offset,
-                storage: Storage::U8,
-                mask: Some(1 << twin_bit),
-            },
-            value: rules::ReadValue::new(move |bytes| {
-                Ok(i64::from(bytes[source] >> source_bit & 1))
-            }),
-        });
+        field.behavior.on_edit.push(byte_store(
+            base + twin_offset,
+            Some(1 << twin_bit),
+            move |bytes| i64::from(bytes[source] >> source_bit & 1),
+        ));
     }
     field
 }
@@ -440,34 +434,17 @@ pub(super) fn oracle_schema(
                 fields.push(field);
             }
             fields.extend(SCALARS.iter().filter_map(|row| scalar_field(row, base, game)));
-            fields.push(
-                catalog_field("options.message_speed", "Message speed", base + 0x89, Storage::U8)
-                    .min(1)
-                    .max(5)
-                    .behavior(field::FieldBehavior {
-                        read: Some(rules::ReadValue::new(move |bytes| {
-                            Ok(i64::from(bytes[base + 0x89]) + 1)
-                        })),
-                        on_edit: vec![rules::Store {
-                            when: None,
-                            destination: rules::Scalar {
-                                offset: base + 0x89,
-                                storage: Storage::U8,
-                                mask: None,
-                            },
-                            value: rules::ReadValue::new(move |bytes| {
-                                Ok(i64::from(bytes[base + 0x89]) - 1)
-                            }),
-                        }],
-                        ..Default::default()
-                    }),
-            );
+            fields.push(stored_plus_one(
+                "options.message_speed",
+                "Message speed",
+                base + 0x89,
+            ));
             fields.extend(flags.iter().map(|row| flag_field(row, base, twins)));
             fields.extend(dungeon_fields(game, base));
             GameDefinition {
                 fields,
                 description: format!(
-                    "Edits core values, equipment levels, key items, essences, seeds, dungeon items, and warp flags in slot {}. Rings, item slots, seed counts, names, and location are omitted. Select the occupied slot explicitly.",
+                    "Edits core values, equipment levels, key items, essences, seeds, dungeon items, and warp flags in slot {}. Item slots, seed counts, names, and location are omitted. Select the occupied slot explicitly.",
                     slot + 1
                 ),
                 signatures: vec![SignatureDefinition {

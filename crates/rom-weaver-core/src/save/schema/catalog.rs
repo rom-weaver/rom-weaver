@@ -21,7 +21,7 @@ fn build(
         .collect()
 }
 
-// Single-byte store used by field write hooks; `mask` limits the bits the value replaces.
+// Single-byte store; `mask` limits the bits the value replaces.
 fn byte_store(
     offset: usize,
     mask: Option<u32>,
@@ -55,6 +55,32 @@ fn id_part(label: &str) -> String {
 // Packs a value from 0 to 99 into one binary-coded decimal byte.
 fn bcd(value: i64) -> i64 {
     ((value / 10) << 4) | (value % 10)
+}
+
+// Decodes a packed BCD byte. A byte that is not valid BCD reads as its raw value, so one bad
+// byte does not make the whole document unreadable.
+fn bcd_or_raw(byte: u8) -> i64 {
+    if byte >> 4 > 9 || byte & 15 > 9 {
+        i64::from(byte)
+    } else {
+        i64::from(byte >> 4) * 10 + i64::from(byte & 15)
+    }
+}
+
+// A 1 to 5 setting the game stores as 0 to 4 in one byte: reads add one, edits subtract one.
+fn stored_plus_one(id: &str, label: &str, offset: usize) -> FieldDefinition {
+    catalog_field(id, label, offset, Storage::U8)
+        .min(1)
+        .max(5)
+        .behavior(field::FieldBehavior {
+            read: Some(rules::ReadValue::new(move |bytes| {
+                Ok(i64::from(bytes[offset]) + 1)
+            })),
+            on_edit: vec![byte_store(offset, None, move |bytes| {
+                i64::from(bytes[offset]) - 1
+            })],
+            ..Default::default()
+        })
 }
 
 struct Repetition {

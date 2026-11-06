@@ -10,6 +10,9 @@ fn location_preview(bytes: &[u8]) -> Result<i64> {
 }
 
 const ALBUM_COUNT_OFFSET: usize = 0x58fe;
+// Cards to collect: 228 minus one for each unowned phantom card (Venusaur Lv64 and Mew Lv15).
+const ALBUM_TOTAL_OFFSET: usize = 0x58ff;
+const PHANTOM_CARDS: [usize; 2] = [10, 161];
 const CARD_OFFSET: usize = 0x4100;
 const MAIL_OFFSET: usize = 0x582d;
 
@@ -247,28 +250,38 @@ const CARDS: [(&str, &str); 228] = [
 
 // The save preview's album count tracks the cards in the collection (bit 7 clear). The count is
 // moved by the net change across the whole edit set so that edit order and no-op writes cannot
-// skew it, and so a stored count that already differs from a recount keeps its offset.
-fn album_store() -> Store {
+// skew it, and so a stored count that already differs from a recount keeps its offset. The total
+// to collect moves the same way with the phantom cards, which the game leaves out until owned.
+fn album_stores() -> Vec<Store> {
     fn collected(bytes: &[u8]) -> i64 {
         bytes[CARD_OFFSET + 1..=CARD_OFFSET + CARDS.len()]
             .iter()
             .filter(|byte| **byte & 0x80 == 0)
             .count() as i64
     }
-    Store {
+    fn phantoms(bytes: &[u8]) -> i64 {
+        PHANTOM_CARDS
+            .iter()
+            .filter(|card| bytes[CARD_OFFSET + **card] & 0x80 == 0)
+            .count() as i64
+    }
+    let store = |offset, value: fn(&[u8]) -> i64, label: &'static str| Store {
         when: None,
         destination: Scalar {
-            offset: ALBUM_COUNT_OFFSET,
+            offset,
             storage: Storage::U8,
             mask: None,
         },
-        value: ReadValue::with_original(|original, edited| {
-            let count =
-                i64::from(original[ALBUM_COUNT_OFFSET]) + collected(edited) - collected(original);
-            trace!(count, "updated Pokemon TCG album count");
+        value: ReadValue::with_original(move |original, edited| {
+            let count = i64::from(original[offset]) + value(edited) - value(original);
+            trace!(count, label, "updated Pokemon TCG album count");
             Ok(count)
         }),
-    }
+    };
+    vec![
+        store(ALBUM_COUNT_OFFSET, collected, "collected"),
+        store(ALBUM_TOTAL_OFFSET, phantoms, "total"),
+    ]
 }
 
 fn card_fields() -> Vec<FieldDefinition> {
@@ -325,14 +338,7 @@ fn config_fields() -> Vec<FieldDefinition> {
                 ],
                 ..Default::default()
             }),
-        catalog_field("config.print_quality", "Print quality", 0x3, Storage::U8)
-            .min(1)
-            .max(5)
-            .behavior(field::FieldBehavior {
-                read: Some(ReadValue::new(|bytes| Ok(i64::from(bytes[0x3]) + 1))),
-                on_edit: vec![byte_store(0x3, None, |bytes| i64::from(bytes[0x3]) - 1)],
-                ..Default::default()
-            }),
+        stored_plus_one("config.print_quality", "Print quality", 0x3),
         catalog_field(
             "challenge_machine.unlocked",
             "Challenge Machine unlocked",
@@ -455,7 +461,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     }
     fields.extend(config_fields());
     fields.extend(card_fields());
-    build(vec![GameDefinition { fields, description: "Edits playtime, position, Master Medals, config, Challenge Machine records, mail, and the card album (copies and collection flags, with the save-preview album count). Names and decks are omitted because they need region-specific text tables.".into(), signatures: vec![SignatureDefinition{offset:0,bytes:vec![4,0x21,5]},SignatureDefinition{offset:0x5800,bytes:vec![8]}], checksums: vec![ChecksumDefinition{start:Some(0x5804),length:Some(0xb7),exclude:vec![ChecksumExclusion{offset:0x5804,length:2}],..ChecksumDefinition::new(ChecksumAlgorithm::Add16Le,0x5804)}], runtime: runtime::Runtime { after_edit: vec![album_store()], ..Default::default() },..GameDefinition::new("pokemon-trading-card-game".into(), "Pokémon Trading Card Game".into(), "game-boy-color".into(), 32768)}],BTreeMap::new(),true)
+    build(vec![GameDefinition { fields, description: "Edits playtime, position, Master Medals, config, Challenge Machine records, mail, and the card album (copies and collection flags, with the save-preview album count). Names and decks are omitted because they need region-specific text tables.".into(), signatures: vec![SignatureDefinition{offset:0,bytes:vec![4,0x21,5]},SignatureDefinition{offset:0x5800,bytes:vec![8]}], checksums: vec![ChecksumDefinition{start:Some(0x5804),length:Some(0xb7),exclude:vec![ChecksumExclusion{offset:0x5804,length:2}],..ChecksumDefinition::new(ChecksumAlgorithm::Add16Le,0x5804)}], runtime: runtime::Runtime { after_edit: album_stores(), ..Default::default() },..GameDefinition::new("pokemon-trading-card-game".into(), "Pokémon Trading Card Game".into(), "game-boy-color".into(), 32768)}],BTreeMap::new(),true)
 }
 
 #[cfg(test)]
@@ -779,5 +785,30 @@ mod tests {
         fixture.2.bytes[0x410a] = 0x80;
         repair(&mut fixture.2.bytes);
         assert!(run(&fixture, &[("card.010.collected", SaveValue::Bool(true))]).is_err());
+    }
+
+    #[test]
+    fn album_total_follows_the_phantom_cards() {
+        let mut fixture = fixture();
+        fixture.2.bytes[0x410a] = 0x80;
+        fixture.2.bytes[0x41a1] = 0x80;
+        fixture.2.bytes[ALBUM_TOTAL_OFFSET] = 226;
+        repair(&mut fixture.2.bytes);
+        let total = |edits: &[(&str, SaveValue)]| run(&fixture, edits).unwrap()[ALBUM_TOTAL_OFFSET];
+        assert_eq!(total(&[("card.010.collected", SaveValue::Bool(true))]), 227);
+        assert_eq!(total(&[("card.161.collected", SaveValue::Bool(true))]), 227);
+        assert_eq!(
+            total(&[
+                ("card.010.collected", SaveValue::Bool(true)),
+                ("card.161.collected", SaveValue::Bool(true)),
+            ]),
+            228
+        );
+        // Setting copies collects the card, and an ordinary card leaves the total alone.
+        assert_eq!(total(&[("card.010.count", SaveValue::U32(2))]), 227);
+        assert_eq!(
+            total(&[("card.002.collected", SaveValue::Bool(false))]),
+            226
+        );
     }
 }

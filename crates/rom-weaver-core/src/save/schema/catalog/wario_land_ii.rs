@@ -186,18 +186,14 @@ fn stage_fields() -> Vec<FieldDefinition> {
             .find(|(index, _)| step == 4 && *index == chapter)
         {
             let (offset, bit, ending) = (CLEARED_OFFSET + stage / 8, stage % 8, *ending);
-            cleared.behavior.on_edit.push(rules::Store {
-                when: None,
-                destination: rules::Scalar {
-                    offset: ENDING_OFFSET,
-                    storage: Storage::U8,
-                    mask: Some(1 << ending),
-                },
-                value: rules::ReadValue::new(move |bytes| {
+            cleared.behavior.on_edit.push(byte_store(
+                ENDING_OFFSET,
+                Some(1 << ending),
+                move |bytes| {
                     trace!(chapter, "synchronized Wario Land II ending bit");
-                    Ok(i64::from(bytes[offset] >> bit & 1))
-                }),
-            });
+                    i64::from(bytes[offset] >> bit & 1)
+                },
+            ));
         }
         fields.push(cleared);
         fields.push(bit_field(
@@ -243,12 +239,7 @@ fn best_time(part: &str, offset: usize) -> FieldDefinition {
     .min(0)
     .max(59);
     time.behavior.read = Some(rules::ReadValue::new(move |bytes| {
-        let byte = bytes[offset];
-        Ok(if byte >> 4 > 9 || byte & 15 > 9 {
-            i64::from(byte)
-        } else {
-            i64::from(byte >> 4) * 10 + i64::from(byte & 15)
-        })
+        Ok(bcd_or_raw(bytes[offset]))
     }));
     time.behavior.on_edit = vec![byte_store(offset, None, move |bytes| {
         bcd(i64::from(bytes[offset]))

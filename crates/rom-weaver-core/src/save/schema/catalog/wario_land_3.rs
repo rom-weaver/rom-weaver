@@ -2,6 +2,7 @@ use super::super::rules::{Condition, ReadValue, Scalar, Store};
 use super::*;
 
 const TREASURE_COUNT_OFFSET: usize = 0x3bd;
+const POWER_OFFSET: usize = 0x3c0;
 const UNSET: u8 = 0xaa;
 
 // Every treasure flag in the Treasures tab as (byte offset, bit, label). The game keeps the
@@ -186,10 +187,8 @@ fn time_attack(id: &str, label: &str, offset: usize, partner: usize) -> FieldDef
                 let (own, other) = (bytes[offset], bytes[partner]);
                 Ok(if own == UNSET && other == UNSET {
                     0
-                } else if own >> 4 > 9 || own & 15 > 9 {
-                    i64::from(own)
                 } else {
-                    i64::from(own >> 4) * 10 + i64::from(own & 15)
+                    bcd_or_raw(own)
                 })
             })),
             on_edit: vec![
@@ -243,31 +242,54 @@ fn golf(course: usize) -> FieldDefinition {
     })
 }
 
+// The eight power upgrades share one level byte. Each control writes only its own bit, so the
+// byte is first re-encoded as one bit per upgrade (`power_requests_store`), the bits then record the
+// requested states of any batch in any order, and `power_level_store` turns the requests back
+// into the level. A request raises the level to its upgrade or lowers it to the one before; when
+// requests conflict, a cleared upgrade wins over a set one. Upgrades whose requested state matches
+// the saved one change nothing.
 fn power(id: &str, label: &str, level: u8) -> FieldDefinition {
-    // Each control uses a distinct request bit, then stores the sequential upgrade level.
-    FieldDefinition::new(id.into(), label.into(), 0x3c0, Storage::Bit)
+    catalog_field(id, label, POWER_OFFSET, Storage::Bit)
         .bit(level - 1)
         .behavior(field::FieldBehavior {
             read: Some(ReadValue::new(move |bytes| {
-                Ok(i64::from(bytes[0x3c0] >= level))
+                Ok(i64::from(bytes[POWER_OFFSET] >= level))
             })),
-            on_edit: vec![Store {
-                when: None,
-                destination: Scalar {
-                    offset: 0x3c0,
-                    storage: Storage::U8,
-                    mask: None,
-                },
-                value: ReadValue::new(move |bytes| {
-                    Ok(i64::from(if bytes[0x3c0] & (1 << (level - 1)) != 0 {
-                        level
-                    } else {
-                        level - 1
-                    }))
-                }),
-            }],
             ..Default::default()
         })
+}
+
+// Before edits: one bit per upgrade, set for every upgrade the saved level already includes.
+fn power_requests_store() -> Store {
+    byte_store(POWER_OFFSET, None, |bytes| {
+        i64::from((1u16 << bytes[POWER_OFFSET].min(8)) - 1)
+    })
+}
+
+// After edits: the level that results from the requested upgrade states against the saved level.
+fn power_level_store() -> Store {
+    Store {
+        when: None,
+        destination: Scalar {
+            offset: POWER_OFFSET,
+            storage: Storage::U8,
+            mask: None,
+        },
+        value: ReadValue::with_original(|original, edited| {
+            let saved = original[POWER_OFFSET];
+            let (requests, level) = (edited[POWER_OFFSET], saved.min(8));
+            let wanted = |upgrade: u8| requests >> (upgrade - 1) & 1 != 0;
+            let raised = (level + 1..=8).rfind(|upgrade| wanted(*upgrade));
+            let cleared = (1..=level).find(|upgrade| !wanted(*upgrade));
+            if raised.is_none() && cleared.is_none() {
+                return Ok(i64::from(saved));
+            }
+            let level = raised.map_or(level, |upgrade| level.max(upgrade));
+            let level = cleared.map_or(level, |upgrade| level.min(upgrade - 1));
+            trace!(level, "recomputed Wario Land 3 power level");
+            Ok(i64::from(level))
+        }),
+    }
 }
 
 // Layout: https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88/src/lib/templates/wario-land-3/saveEditor
@@ -380,6 +402,11 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                 length: Some(0x6c),
                 ..ChecksumDefinition::new(ChecksumAlgorithm::Add16Be, 0x791)
             }],
+            runtime: runtime::Runtime {
+                before_edit: vec![power_requests_store()],
+                after_edit: vec![power_level_store()],
+                ..Default::default()
+            },
             ..GameDefinition::new(
                 "wario-land-3".into(),
                 "Wario Land 3".into(),
@@ -580,6 +607,74 @@ mod tests {
             let out = apply(&full, &[(field, SaveValue::Bool(false))]).unwrap();
             assert_eq!(out, expected(&full, &[(0x3c0, level - 1)]), "{field} off");
         }
+    }
+
+    #[test]
+    fn power_batches_follow_the_requested_states_in_any_order() {
+        let mut full = input();
+        full.bytes[0x3c0] = 8;
+        repair(&mut full.bytes);
+        let upper = [
+            "power.super_charge",
+            "power.super_ground_pound",
+            "power.super_jump",
+            "power.super_swim",
+        ];
+        let all = [
+            "power.ground_pound",
+            "power.swim",
+            "power.head_smash",
+            "power.throw",
+            "power.super_charge",
+            "power.super_ground_pound",
+            "power.super_jump",
+            "power.super_swim",
+        ];
+        let clear = |fields: &[&str]| {
+            let edits: Vec<_> = fields
+                .iter()
+                .map(|f| (*f, SaveValue::Bool(false)))
+                .collect();
+            apply(&full, &edits).unwrap()
+        };
+        for rotate in 0..4 {
+            let mut order = upper;
+            order.rotate_left(rotate);
+            assert_eq!(clear(&order), expected(&full, &[(0x3c0, 4)]), "{order:?}");
+            order.reverse();
+            assert_eq!(clear(&order), expected(&full, &[(0x3c0, 4)]), "{order:?}");
+        }
+        let mut reversed = all;
+        reversed.reverse();
+        assert_eq!(clear(&all), expected(&full, &[(0x3c0, 0)]));
+        assert_eq!(clear(&reversed), expected(&full, &[(0x3c0, 0)]));
+        // A request that matches the saved state changes nothing, alone or in a batch.
+        let kept = [("power.ground_pound", SaveValue::Bool(true))];
+        assert_eq!(apply(&full, &kept).unwrap(), full.bytes);
+        let mixed = [
+            ("power.ground_pound", SaveValue::Bool(true)),
+            ("coins_bcd", SaveValue::U32(5)),
+        ];
+        assert_eq!(apply(&full, &mixed).unwrap(), {
+            let mut bytes = full.bytes.clone();
+            bytes[0x388..0x38a].copy_from_slice(&[0, 5]);
+            repair(&mut bytes);
+            bytes
+        });
+        // Clearing an upgrade the save does not have changes nothing.
+        let mut low = input();
+        low.bytes[0x3c0] = 3;
+        repair(&mut low.bytes);
+        let off = [("power.super_swim", SaveValue::Bool(false))];
+        assert_eq!(apply(&low, &off).unwrap(), low.bytes);
+        // Setting a later upgrade raises the level to it, and a cleared upgrade wins over a set one, so the conflicting request is rejected.
+        let up = [("power.super_jump", SaveValue::Bool(true))];
+        assert_eq!(apply(&low, &up).unwrap(), expected(&low, &[(0x3c0, 7)]));
+        let conflict = [
+            ("power.super_jump", SaveValue::Bool(true)),
+            ("power.swim", SaveValue::Bool(false)),
+        ];
+        assert!(apply(&low, &conflict).is_err());
     }
 
     #[test]
