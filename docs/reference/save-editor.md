@@ -149,7 +149,7 @@ The built-in definitions use the shared storage, layout, checksum, recovery, and
 
 Adding or changing a game definition requires an application update. The CLI does not load layout packs, and the browser does not import them. `save export-schema` exports the fields of an inspected save for user interfaces and automation. Its JSON output is not an importable game definition.
 
-Integer and packed-decimal fields use their stored range unless a definition sets a narrower constraint. A stored value or combination can still be invalid during play. Link’s Awakening accepts an edit when its result keeps every quantity within its stored capacity, so an edit can repair a save that already exceeds one. An edit whose result still exceeds a capacity is rejected and writes nothing. Unknown numeric choice values appear as `raw:<decimal>` and survive unrelated edits.
+Integer and packed-decimal fields use their stored range unless a definition sets a narrower constraint. A stored value or combination can still be invalid during play. Link’s Awakening, Final Fantasy VI, Chrono Trigger, ActRaiser, and Mystic Quest Legend accept an edit when its result keeps every quantity within its stored capacity, so an edit can repair a save that already exceeds one. An edit whose result still exceeds a capacity is rejected and writes nothing. Unknown numeric choice values appear as `raw:<decimal>` and survive unrelated edits.
 
 ## Save containers
 
