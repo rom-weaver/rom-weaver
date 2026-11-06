@@ -1,35 +1,23 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import fs from "node:fs";
 import https from "node:https";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test, { after, before } from "node:test";
 import { fileURLToPath } from "node:url";
+import { findFreePort, startPreviewServer, stopPreviewServer } from "./preview-process.mjs";
 
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_DIR = path.dirname(SCRIPTS_DIR);
 const NOT_FOUND_PAGE = "<!doctype html><title>fixture not found</title>";
-const STARTUP_TIMEOUT_MS = 60_000;
 
 let workDir;
 let server;
 let port;
 
-const findFreePort = () =>
-  new Promise((resolve, reject) => {
-    const probe = net.createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port: freePort } = probe.address();
-      probe.close(() => resolve(freePort));
-    });
-  });
-
 // The preview server serves `<its own package>/dist`, so run a copy of it from a throwaway package whose
-// sibling scripts, sources and dependencies are the real ones and whose dist holds only the two pages the
-// 404 paths read. The real dist stays untouched, and the test needs no build.
+// sibling scripts, sources and dependencies are the real ones and whose dist holds only `404.html` and the
+// `index.html` that the startup check requires. The real dist stays untouched, and the test needs no build.
 const stageFixturePackage = () => {
   const packageDir = path.join(workDir, "package");
   const scriptsDir = path.join(packageDir, "scripts");
@@ -45,46 +33,8 @@ const stageFixturePackage = () => {
   fs.mkdirSync(path.join(packageDir, "dist"));
   fs.writeFileSync(path.join(packageDir, "dist", "index.html"), "<!doctype html><title>fixture</title>");
   fs.writeFileSync(path.join(packageDir, "dist", "404.html"), NOT_FOUND_PAGE);
-  return scriptsDir;
+  return packageDir;
 };
-
-const startPreviewServer = (scriptsDir, previewPort) =>
-  new Promise((resolve, reject) => {
-    const child = spawn(
-      process.execPath,
-      [path.join(scriptsDir, "dev-server.mjs"), "preview", "--port", String(previewPort)],
-      {
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
-    let output = "";
-    const timer = setTimeout(() => reject(new Error(`preview server did not start:\n${output}`)), STARTUP_TIMEOUT_MS);
-    const onOutput = (chunk) => {
-      output += chunk;
-      // The certificate line prints once the listeners are up.
-      if (output.includes("Self-signed certificate:")) {
-        clearTimeout(timer);
-        resolve(child);
-      }
-    };
-    child.stdout.setEncoding("utf8").on("data", onOutput);
-    child.stderr.setEncoding("utf8").on("data", onOutput);
-    child.once("exit", (code) => {
-      clearTimeout(timer);
-      reject(new Error(`preview server exited with ${code} before it was ready:\n${output}`));
-    });
-  });
-
-const stopPreviewServer = (child) =>
-  new Promise((resolve) => {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      resolve();
-      return;
-    }
-    child.removeAllListeners("exit");
-    child.once("exit", () => resolve());
-    child.kill("SIGTERM");
-  });
 
 const get = (pathname, accept) =>
   new Promise((resolve, reject) => {
@@ -108,7 +58,7 @@ const get = (pathname, accept) =>
 before(async () => {
   workDir = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-preview-404-"));
   port = await findFreePort();
-  server = await startPreviewServer(stageFixturePackage(), port);
+  server = await startPreviewServer(stageFixturePackage(), port, `https://127.0.0.1:${port}`);
 });
 
 after(async () => {
