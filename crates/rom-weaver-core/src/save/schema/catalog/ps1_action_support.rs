@@ -23,19 +23,17 @@ pub(super) fn handler(game: &GameDefinition) -> SchemaSaveHandler {
     build(vec![game.clone()], BTreeMap::new(), true).remove(0)
 }
 
-fn width(storage: Storage) -> usize {
-    match storage {
-        Storage::U8 | Storage::I8 | Storage::Bool | Storage::Bit => 1,
-        Storage::U16Le | Storage::U16Be | Storage::I16Le | Storage::I16Be => 2,
-        Storage::U24Le | Storage::U24Be => 3,
-        Storage::U32Le | Storage::U32Be | Storage::I32Le | Storage::I32Be => 4,
-        other => panic!("unexpected storage {other:?}"),
-    }
-}
-
 /// The bits of byte `index` that the field owns, per its own storage description.
 fn owned_bits(field: &FieldDefinition, index: usize) -> u8 {
-    if index < field.offset || index >= field.offset + width(field.storage) {
+    if index < field.offset
+        || index
+            >= field.offset
+                + field
+                    .storage
+                    .properties(field.length)
+                    .expect("field storage is valid")
+                    .0
+    {
         return 0;
     }
     match (field.storage, field.bit, field.mask) {

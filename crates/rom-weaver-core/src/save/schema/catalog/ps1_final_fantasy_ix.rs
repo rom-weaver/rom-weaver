@@ -1,6 +1,5 @@
 use super::playstation_card::{self, BLOCK_SIZE};
 use super::*;
-use rules::Check;
 
 // The block CRC and the gil preview copy MUST follow the pinned PS1 layout.
 // https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/final-fantasy-ix/saveEditor
@@ -31,24 +30,18 @@ fn crc(bytes: &[u8]) -> u16 {
 }
 
 fn integrity(game: &mut GameDefinition, base: usize) {
-    let check = Check {
-        when: None,
-        assert: rules::Condition::new(move |bytes| {
-            let expected = crc(&bytes[base + CRC_START..base + CRC_END]).to_le_bytes();
-            Ok(bytes[base + CRC_OFFSET..base + CRC_OFFSET + 2] == expected)
-        }),
-        code: "final_fantasy_ix_crc".into(),
-        message: "selected Final Fantasy IX block checksum is invalid".into(),
-        section_id: None,
-        warning: None,
-    };
-    playstation_card::register_check(game, check);
-    playstation_card::store_checksum(
+    playstation_card::integrity(
         game,
-        base + CRC_OFFSET,
-        Storage::U16Le,
-        None,
-        move |bytes| i64::from(crc(&bytes[base + CRC_START..base + CRC_END])),
+        base,
+        &playstation_card::Integrity {
+            code: "final_fantasy_ix_crc",
+            message: "selected Final Fantasy IX block checksum is invalid",
+            storage: Storage::U16Le,
+            offsets: &[CRC_OFFSET],
+            span: BLOCK_SIZE,
+        },
+        |_| true,
+        |block| u32::from(crc(&block[CRC_START..CRC_END])),
     );
 }
 

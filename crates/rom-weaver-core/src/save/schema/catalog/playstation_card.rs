@@ -13,8 +13,9 @@ fn directory_xor(bytes: &[u8], block: usize) -> u8 {
 }
 
 /// Whether `blocks` contiguous ascending blocks from `first` form an initialized save of
-/// `product`, as the card manager writes it to free space: a 0x51 frame with the file size, 0x52
-/// frames, then a closing 0x53 frame (a lone file is a single 0x51 frame).
+/// `product`: a 0x51 frame with the file size, 0x52 frames, then a closing 0x53 frame (a lone file
+/// is a single 0x51 frame). Fragmented files are unsupported, so the file must occupy contiguous
+/// ascending blocks.
 fn valid(bytes: &[u8], product: &str, first: usize, blocks: usize) -> bool {
     let last = first + blocks - 1;
     let start = first * 0x80;
@@ -234,23 +235,46 @@ pub(super) fn store_checksum(
 
 #[cfg(test)]
 pub(super) fn fixture(product: &str, block: usize) -> Vec<u8> {
+    fixture_blocks(product, block, 1)
+}
+
+/// A card holding one save of `blocks` contiguous blocks from `block`.
+#[cfg(test)]
+pub(super) fn fixture_blocks(product: &str, block: usize, blocks: usize) -> Vec<u8> {
     let mut bytes = vec![0xa5; CARD_SIZE];
     bytes[..0x80].fill(0);
     bytes[..2].copy_from_slice(b"MC");
     bytes[0x7f] = b'M' ^ b'C';
-    let directory = block * 0x80;
-    bytes[directory..directory + 0x80].fill(0);
-    bytes[directory] = 0x51;
-    bytes[directory + 4..directory + 8].copy_from_slice(&(BLOCK_SIZE as u32).to_le_bytes());
-    bytes[directory + 8..directory + 10].fill(0xff);
-    bytes[directory + 0xa..directory + 0xc].copy_from_slice(b"BA");
-    bytes[directory + 0xc..directory + 0x16].copy_from_slice(product.as_bytes());
-    bytes[directory + 0x7f] = bytes[directory..directory + 0x7f]
-        .iter()
-        .fold(0, |xor, value| xor ^ value);
+    let last = block + blocks - 1;
+    for current in block..=last {
+        let directory = current * 0x80;
+        bytes[directory..directory + 0x80].fill(0);
+        let link = if current == last {
+            0xffff
+        } else {
+            current as u16
+        };
+        let mode = match current {
+            _ if current == block => 0x51,
+            _ if current == last => 0x53,
+            _ => 0x52,
+        };
+        bytes[directory] = mode;
+        bytes[directory + 8..directory + 10].copy_from_slice(&link.to_le_bytes());
+        if current == block {
+            bytes[directory + 4..directory + 8]
+                .copy_from_slice(&((blocks * BLOCK_SIZE) as u32).to_le_bytes());
+            bytes[directory + 0xa..directory + 0xc].copy_from_slice(b"BA");
+            bytes[directory + 0xc..directory + 0xc + product.len()]
+                .copy_from_slice(product.as_bytes());
+        }
+        bytes[directory + 0x7f] = bytes[directory..directory + 0x7f]
+            .iter()
+            .fold(0, |xor, value| xor ^ value);
+    }
     let base = block * BLOCK_SIZE;
-    bytes[base..base + BLOCK_SIZE].fill(0);
-    bytes[base..base + 4].copy_from_slice(&[b'S', b'C', 0x11, 1]);
+    bytes[base..base + blocks * BLOCK_SIZE].fill(0);
+    bytes[base..base + 4].copy_from_slice(&[b'S', b'C', 0x11, blocks as u8]);
     bytes[base + 0x200] = 1;
     bytes
 }

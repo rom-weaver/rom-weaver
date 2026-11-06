@@ -124,31 +124,7 @@ mod tests {
     }
 
     fn card() -> Vec<u8> {
-        let mut bytes = vec![0xa5; CARD_SIZE];
-        bytes[..0x80].fill(0);
-        bytes[..2].copy_from_slice(b"MC");
-        bytes[0x7f] = b'M' ^ b'C';
-        for block in 1..=15 {
-            bytes[block * 0x80..block * 0x80 + 0x80].fill(0);
-        }
-        for block in FIRST..FIRST + BLOCKS {
-            let offset = block * 0x80;
-            let (mode, link) = match block {
-                FIRST => (0x51, (block as u16).to_le_bytes()),
-                _ if block == FIRST + BLOCKS - 1 => (0x53, [0xff, 0xff]),
-                _ => (0x52, (block as u16).to_le_bytes()),
-            };
-            bytes[offset] = mode;
-            bytes[offset + 8..offset + 10].copy_from_slice(&link);
-            if block == FIRST {
-                bytes[offset + 4..offset + 8]
-                    .copy_from_slice(&((BLOCKS * BLOCK_SIZE) as u32).to_le_bytes());
-                bytes[offset + 0xa..offset + 0xc].copy_from_slice(b"BA");
-                bytes[offset + 0xc..offset + 0xc + PRODUCT.len()]
-                    .copy_from_slice(PRODUCT.as_bytes());
-            }
-            bytes[offset + 0x7f] = bytes[offset..offset + 0x7f].iter().fold(0, |x, v| x ^ v);
-        }
+        let mut bytes = playstation_card::fixture_blocks(PRODUCT, FIRST, BLOCKS);
         bytes[BASE..BASE + BLOCKS * BLOCK_SIZE].fill(0x3c);
         bytes[BASE..BASE + 4].copy_from_slice(&[b'S', b'C', 0x11, BLOCKS as u8]);
         lcg_fill(&mut bytes[BASE + 0x200..BASE + 0x6da4], 0x6717);
