@@ -1001,6 +1001,9 @@ const SampleTutorial = ({
     let settle = 0;
     let scrollStart = 0;
     let revealsLeft = GUIDE_REVEALS;
+    // One retry per reveal when the browser cuts its scroll short; it does not
+    // draw on the re-reveal budget, which scrolling by the reader may have spent.
+    let cutShortRetries = 0;
     let rowHeight = targetEl.getBoundingClientRect().height;
     let cardHeight = dialog.getBoundingClientRect().height;
     // Where the running reveal scroll will land, while it runs. A placement made
@@ -1060,7 +1063,8 @@ const SampleTutorial = ({
     // is headed - once placed they ride the page, so this is the only chance.
     // The guide does the scrolling: the reader never has to go looking for the
     // row a step describes.
-    const placeAndReveal = (glide: boolean) => {
+    const placeAndReveal = (glide: boolean, retrying = false) => {
+      if (!retrying) cutShortRetries = 1;
       const rect = targetEl.getBoundingClientRect();
       // The lifted control is part of the step - the view step's switch sits in
       // the panel heading above the row - so the reveal keeps it in view too.
@@ -1136,9 +1140,9 @@ const SampleTutorial = ({
       if (revealTo === null) return;
       const cutShort = Math.abs(revealTo - window.scrollY) > 1;
       revealTo = null;
-      if (cutShort && revealsLeft > 0) {
-        revealsLeft -= 1;
-        placeAndReveal(false);
+      if (cutShort && cutShortRetries > 0) {
+        cutShortRetries -= 1;
+        placeAndReveal(false, true);
         return;
       }
       place(false);
