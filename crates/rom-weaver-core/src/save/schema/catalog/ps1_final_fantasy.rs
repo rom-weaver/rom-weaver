@@ -49,8 +49,8 @@ fn integrity(
     };
     playstation_card::register_check(game, check);
     for offset in offsets {
-        playstation_card::store_u16_checksum(game, base + offset, None, move |bytes| {
-            crc(&bytes[base + start..base + end], eight)
+        playstation_card::store_checksum(game, base + offset, Storage::U16Le, None, move |bytes| {
+            i64::from(crc(&bytes[base + start..base + end], eight))
         });
     }
 }

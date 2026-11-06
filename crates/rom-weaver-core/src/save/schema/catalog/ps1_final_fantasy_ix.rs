@@ -9,6 +9,15 @@ use rules::Check;
 const CRC_START: usize = 0;
 const CRC_END: usize = 0x13fe;
 const CRC_OFFSET: usize = 0x13fe;
+const RELEASES: [(&str, &str, u32); 7] = [
+    ("europe", "SLES-02965", 50),
+    ("usa", "SLUS-01251", 60),
+    ("japan", "SLPS-02000", 60),
+    ("france", "SLES-02966", 50),
+    ("germany", "SLES-02967", 50),
+    ("italy", "SLES-02968", 50),
+    ("spain", "SLES-02969", 50),
+];
 
 fn crc(bytes: &[u8]) -> u16 {
     let mut value = 0xffffu16;
@@ -34,24 +43,20 @@ fn integrity(game: &mut GameDefinition, base: usize) {
         warning: None,
     };
     playstation_card::register_check(game, check);
-    playstation_card::store_u16_checksum(game, base + CRC_OFFSET, None, move |bytes| {
-        crc(&bytes[base + CRC_START..base + CRC_END])
-    });
+    playstation_card::store_checksum(
+        game,
+        base + CRC_OFFSET,
+        Storage::U16Le,
+        None,
+        move |bytes| i64::from(crc(&bytes[base + CRC_START..base + CRC_END])),
+    );
 }
 
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let mut games = Vec::new();
     for block in 1..=15 {
         let base = block * BLOCK_SIZE;
-        for (region, product, ticks_per_second) in [
-            ("europe", "SLES-02965", 50),
-            ("usa", "SLUS-01251", 60),
-            ("japan", "SLPS-02000", 60),
-            ("france", "SLES-02966", 50),
-            ("germany", "SLES-02967", 50),
-            ("italy", "SLES-02968", 50),
-            ("spain", "SLES-02969", 50),
-        ] {
+        for (region, product, ticks_per_second) in RELEASES {
             let fields = vec![
                 catalog_field("gil", "Gil", base + 0xee8, Storage::U32Le)
                     .min(0)
@@ -64,7 +69,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                     Storage::U32Le,
                 )
                 .min(0)
-                .max(2_160_000 * ticks_per_second - 1)
+                .max(2_160_000 * i64::from(ticks_per_second) - 1)
                 .description(
                     format!("The game counts {ticks_per_second} ticks per second in this region; the maximum is 599 hours 59 minutes 59 seconds."),
                 ),
@@ -86,30 +91,14 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
 
 #[cfg(test)]
 mod tests {
+    use super::playstation_card::{apply, edit};
     use super::*;
-
-    const PRODUCTS: [(&str, &str, u32); 7] = [
-        ("europe", "SLES-02965", 50),
-        ("usa", "SLUS-01251", 60),
-        ("japan", "SLPS-02000", 60),
-        ("france", "SLES-02966", 50),
-        ("germany", "SLES-02967", 50),
-        ("italy", "SLES-02968", 50),
-        ("spain", "SLES-02969", 50),
-    ];
 
     #[test]
     fn crc_has_the_catalogue_check_value() {
         assert_eq!(crc(b"123456789"), 0x6f91);
         assert_eq!(crc(&[]), 0xffff);
         assert_eq!(crc(&[0]), 0x0f87);
-    }
-
-    fn handler(id: &str) -> SchemaSaveHandler {
-        schemas()
-            .into_iter()
-            .find(|handler| handler.definitions()[0].identity.id == id)
-            .unwrap()
     }
 
     // Payload bytes follow a fixed pattern that the expected CRC below was computed from
@@ -125,32 +114,6 @@ mod tests {
         bytes
     }
 
-    fn apply(
-        id: &str,
-        bytes: &[u8],
-        edits: &[SaveEdit],
-    ) -> crate::Result<crate::save::SaveEditResult> {
-        let handler = handler(id);
-        let identity = handler.definitions()[0].identity.clone();
-        handler.apply(
-            &SaveDetectionInput {
-                bytes: bytes.to_vec(),
-                selected_game: Some(id.into()),
-                rom_sha1: None,
-            },
-            &identity,
-            edits,
-            false,
-        )
-    }
-
-    fn edit(field: &str, value: u32) -> SaveEdit {
-        SaveEdit {
-            field: field.into(),
-            value: SaveValue::U32(value),
-        }
-    }
-
     #[test]
     fn fixture_crc_matches_the_independent_value() {
         let bytes = fixture("SLUS-01251", 2);
@@ -163,12 +126,12 @@ mod tests {
 
     #[test]
     fn edits_mirror_gil_and_repair_the_crc_in_every_region() {
-        for (region, product, ticks) in PRODUCTS {
+        for (region, product, ticks) in RELEASES {
             let id = format!("final-fantasy-ix-{region}-block-2");
             let input = fixture(product, 2);
             let base = 2 * BLOCK_SIZE;
             let edits = [edit("gil", 9_999_999), edit("playtime_ticks", ticks * 3600)];
-            let output = apply(&id, &input, &edits).unwrap().bytes.unwrap();
+            let output = apply(schemas, &id, &input, &edits).unwrap();
             assert_eq!(
                 &output[base + 0xee8..base + 0xeec],
                 &9_999_999u32.to_le_bytes()
@@ -195,8 +158,7 @@ mod tests {
                     assert_eq!(after, before, "{id} at {index:x}");
                 }
             }
-            let again = apply(&id, &output, &edits).unwrap();
-            assert_eq!(again.bytes.unwrap_or_else(|| output.clone()), output);
+            assert_eq!(apply(schemas, &id, &output, &edits).unwrap(), output);
         }
     }
 
@@ -204,12 +166,11 @@ mod tests {
     fn gil_edit_matches_an_independent_crc() {
         let input = fixture("SLUS-01251", 2);
         let output = apply(
+            schemas,
             "final-fantasy-ix-usa-block-2",
             &input,
             &[edit("gil", 9_999_999)],
         )
-        .unwrap()
-        .bytes
         .unwrap();
         let base = 2 * BLOCK_SIZE;
         assert_eq!(
@@ -222,12 +183,29 @@ mod tests {
     fn limits_are_enforced_and_damage_is_rejected() {
         let input = fixture("SLUS-01251", 2);
         let id = "final-fantasy-ix-usa-block-2";
-        assert!(apply(id, &input, &[edit("gil", 10_000_000)]).is_err());
-        assert!(apply(id, &input, &[edit("playtime_ticks", 2_160_000 * 60)]).is_err());
-        assert!(apply(id, &input, &[edit("playtime_ticks", 2_160_000 * 60 - 1)]).is_ok());
+        assert!(apply(schemas, id, &input, &[edit("gil", 10_000_000)]).is_err());
+        assert!(
+            apply(
+                schemas,
+                id,
+                &input,
+                &[edit("playtime_ticks", 2_160_000 * 60)]
+            )
+            .is_err()
+        );
+        assert!(
+            apply(
+                schemas,
+                id,
+                &input,
+                &[edit("playtime_ticks", 2_160_000 * 60 - 1)]
+            )
+            .is_ok()
+        );
         let europe = fixture("SLES-02965", 2);
         assert!(
             apply(
+                schemas,
                 "final-fantasy-ix-europe-block-2",
                 &europe,
                 &[edit("playtime_ticks", 2_160_000 * 50)]
@@ -239,14 +217,14 @@ mod tests {
             let mut damaged = input.clone();
             damaged[base + offset] ^= 1;
             assert!(
-                apply(id, &damaged, &[]).is_err(),
+                apply(schemas, id, &damaged, &[]).is_err(),
                 "accepted damage at {offset:x}"
             );
         }
         let mut other_block = input.clone();
         other_block[BLOCK_SIZE * 3 + 0x300] ^= 1;
-        assert!(apply(id, &other_block, &[]).is_ok());
+        assert!(apply(schemas, id, &other_block, &[]).is_ok());
         let wrong_product = fixture("SLUS-01252", 2);
-        assert!(apply(id, &wrong_product, &[]).is_err());
+        assert!(apply(schemas, id, &wrong_product, &[]).is_err());
     }
 }

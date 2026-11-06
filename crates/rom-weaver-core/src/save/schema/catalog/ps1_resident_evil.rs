@@ -63,13 +63,16 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                 )
                 .bit(5),
             ];
+            let (id, title, region) = match region.strip_prefix("directorscut-") {
+                Some(region) => (
+                    "resident-evil-directorscut",
+                    "Resident Evil Director's Cut",
+                    region,
+                ),
+                None => ("resident-evil", "Resident Evil", region),
+            };
             games.push(playstation_card::definition(
-                "resident-evil",
-                "Resident Evil",
-                region,
-                product,
-                block,
-                fields,
+                id, title, region, product, block, fields,
             ));
         }
     }
@@ -78,16 +81,10 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
 
 #[cfg(test)]
 mod tests {
+    use super::playstation_card::{apply, edit, flag};
     use super::*;
 
-    fn handler(id: &str) -> SchemaSaveHandler {
-        schemas()
-            .into_iter()
-            .find(|handler| handler.definitions()[0].identity.id == id)
-            .unwrap()
-    }
-
-    // Every payload byte is distinct so a write to a wrong offset changes the comparison.
+    // Neighboring payload bytes differ so a write to a wrong offset changes the comparison.
     fn fixture(product: &str, block: usize) -> Vec<u8> {
         let mut bytes = playstation_card::fixture(product, block);
         let base = block * BLOCK_SIZE;
@@ -97,37 +94,6 @@ mod tests {
         bytes
     }
 
-    fn apply(id: &str, bytes: &[u8], edits: &[SaveEdit]) -> crate::Result<Vec<u8>> {
-        let handler = handler(id);
-        let identity = handler.definitions()[0].identity.clone();
-        handler
-            .apply(
-                &SaveDetectionInput {
-                    bytes: bytes.to_vec(),
-                    selected_game: Some(id.into()),
-                    rom_sha1: None,
-                },
-                &identity,
-                edits,
-                false,
-            )
-            .map(|result| result.bytes.unwrap_or_else(|| bytes.to_vec()))
-    }
-
-    fn edit(field: &str, value: u32) -> SaveEdit {
-        SaveEdit {
-            field: field.into(),
-            value: SaveValue::U32(value),
-        }
-    }
-
-    fn flag(field: &str, value: bool) -> SaveEdit {
-        SaveEdit {
-            field: field.into(),
-            value: SaveValue::Bool(value),
-        }
-    }
-
     #[test]
     fn edits_only_the_selected_fields_in_every_release() {
         for (region, product, ticks) in RELEASES {
@@ -135,6 +101,7 @@ mod tests {
             let input = fixture(product, 9);
             let base = 9 * BLOCK_SIZE;
             let output = apply(
+                schemas,
                 &id,
                 &input,
                 &[
@@ -172,20 +139,47 @@ mod tests {
                     assert_eq!(after, before, "{id} at {index:x}");
                 }
             }
-            assert_eq!(apply(&id, &output, &[]).unwrap(), output);
+            assert_eq!(apply(schemas, &id, &output, &[]).unwrap(), output);
         }
+    }
+
+    #[test]
+    fn directors_cut_profiles_keep_their_ids_and_read_as_the_edition() {
+        let mut names = Vec::new();
+        for handler in schemas() {
+            for definition in handler.definitions() {
+                let identity = &definition.identity;
+                if identity.id.ends_with("-usa-block-1") {
+                    names.push((identity.id.clone(), identity.name.clone()));
+                }
+            }
+        }
+        assert_eq!(
+            names,
+            [
+                (
+                    "resident-evil-usa-block-1".to_string(),
+                    "Resident Evil (usa, card block 1)".to_string()
+                ),
+                (
+                    "resident-evil-directorscut-usa-block-1".to_string(),
+                    "Resident Evil Director's Cut (usa, card block 1)".to_string()
+                ),
+            ]
+        );
     }
 
     #[test]
     fn limits_are_enforced_and_card_damage_is_rejected() {
         let id = "resident-evil-usa-block-9";
         let input = fixture("SLUS-00170", 9);
-        assert!(apply(id, &input, &[edit("health", 141)]).is_err());
-        assert!(apply(id, &input, &[edit("ink_ribbons_used", 100)]).is_err());
-        assert!(apply(id, &input, &[edit("playtime_ticks", 360_000 * 60)]).is_err());
+        assert!(apply(schemas, id, &input, &[edit("health", 141)]).is_err());
+        assert!(apply(schemas, id, &input, &[edit("ink_ribbons_used", 100)]).is_err());
+        assert!(apply(schemas, id, &input, &[edit("playtime_ticks", 360_000 * 60)]).is_err());
         let europe = fixture("SLES-00200", 9);
         assert!(
             apply(
+                schemas,
                 "resident-evil-europe-block-9",
                 &europe,
                 &[edit("playtime_ticks", 360_000 * 50)]
@@ -194,18 +188,19 @@ mod tests {
         );
         assert!(
             apply(
+                schemas,
                 "resident-evil-europe-block-9",
                 &europe,
                 &[edit("playtime_ticks", 360_000 * 50 - 1)]
             )
             .is_ok()
         );
-        assert!(apply(id, &fixture("SLUS-00551", 9), &[]).is_err());
+        assert!(apply(schemas, id, &fixture("SLUS-00551", 9), &[]).is_err());
         let mut damaged = input.clone();
         damaged[9 * 0x80] ^= 0x01;
-        assert!(apply(id, &damaged, &[]).is_err());
+        assert!(apply(schemas, id, &damaged, &[]).is_err());
         let mut short = input;
         short.pop();
-        assert!(apply(id, &short, &[]).is_err());
+        assert!(apply(schemas, id, &short, &[]).is_err());
     }
 }

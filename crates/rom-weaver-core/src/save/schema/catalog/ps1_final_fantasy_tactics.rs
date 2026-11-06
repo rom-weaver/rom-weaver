@@ -1,7 +1,6 @@
 use super::playstation_card::{self, BLOCK_SIZE};
 use super::*;
-use rules::{Check, ReadValue, Scalar, Store};
-use tracing::trace;
+use rules::Check;
 
 // The parity checksum MUST follow the pinned PS1 layout.
 // https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/final-fantasy-tactics/saveEditor
@@ -11,6 +10,7 @@ const CHUNK_SIZE: usize = 0x80;
 const CHUNKS: usize = 0x3c;
 /// Bits of the last checksum byte that a chunk parity covers (60 chunks leave the low 4 unused).
 const COVERED_MASK: u8 = 0xf0;
+const RELEASES: [(&str, &str); 2] = [("usa", "SCUS-94221"), ("japan", "SLPS-00770")];
 
 /// One parity bit per 128-byte chunk, most significant bit first, over the first 60 chunks with
 /// the stored checksum read as zero. The four unused bits stay set.
@@ -59,25 +59,18 @@ fn integrity(game: &mut GameDefinition, base: usize) {
     };
     playstation_card::register_check(game, check);
     // The 64-bit checksum is written as two independent little-endian words.
-    for (index, storage) in [Storage::U32Le, Storage::U32Le].into_iter().enumerate() {
-        game.runtime.after_edit.push(Store {
-            when: None,
-            destination: Scalar {
-                offset: base + CHECKSUM_OFFSET + index * 4,
-                storage,
-                mask: None,
-            },
-            value: ReadValue::new(move |bytes| {
+    for index in 0..2 {
+        playstation_card::store_checksum(
+            game,
+            base + CHECKSUM_OFFSET + index * 4,
+            Storage::U32Le,
+            None,
+            move |bytes| {
                 let value = checksum(&bytes[base..base + BLOCK_SIZE]);
-                trace!(
-                    base,
-                    word = index,
-                    "recomputed Final Fantasy Tactics checksum"
-                );
                 let word = &value[index * 4..index * 4 + 4];
-                Ok(i64::from(u32::from_le_bytes(word.try_into().unwrap())))
-            }),
-        });
+                i64::from(u32::from_le_bytes(word.try_into().unwrap()))
+            },
+        );
     }
 }
 
@@ -85,7 +78,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let mut games = Vec::new();
     for block in 1..=15 {
         let base = block * BLOCK_SIZE;
-        for (region, product) in [("usa", "SCUS-94221"), ("japan", "SLPS-00770")] {
+        for (region, product) in RELEASES {
             let fields = vec![
                 catalog_field("war_funds", "War funds", base + 0x1934, Storage::U32Le)
                     .min(0)
@@ -116,16 +109,10 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
 
 #[cfg(test)]
 mod tests {
+    use super::playstation_card::{apply, edit};
     use super::*;
 
     const FIXTURE_CHECKSUM: [u8; 8] = [0x0d, 0xed, 0x0f, 0xdf, 0x1a, 0x93, 0x15, 0x0f];
-
-    fn handler(id: &str) -> SchemaSaveHandler {
-        schemas()
-            .into_iter()
-            .find(|handler| handler.definitions()[0].identity.id == id)
-            .unwrap()
-    }
 
     // A literal port of the upstream bit loop, deliberately structured differently from
     // `checksum` so the two implementations cannot share a mistake.
@@ -170,30 +157,6 @@ mod tests {
         bytes
     }
 
-    fn apply(id: &str, bytes: &[u8], edits: &[SaveEdit]) -> crate::Result<Vec<u8>> {
-        let handler = handler(id);
-        let identity = handler.definitions()[0].identity.clone();
-        handler
-            .apply(
-                &SaveDetectionInput {
-                    bytes: bytes.to_vec(),
-                    selected_game: Some(id.into()),
-                    rom_sha1: None,
-                },
-                &identity,
-                edits,
-                false,
-            )
-            .map(|result| result.bytes.unwrap_or_else(|| bytes.to_vec()))
-    }
-
-    fn edit(field: &str, value: u32) -> SaveEdit {
-        SaveEdit {
-            field: field.into(),
-            value: SaveValue::U32(value),
-        }
-    }
-
     #[test]
     fn checksum_matches_the_literal_upstream_port() {
         assert_eq!(
@@ -209,7 +172,7 @@ mod tests {
 
     #[test]
     fn edits_repair_the_checksum_and_preserve_everything_else() {
-        for (region, product) in [("usa", "SCUS-94221"), ("japan", "SLPS-00770")] {
+        for (region, product) in RELEASES {
             let id = format!("final-fantasy-tactics-{region}-block-4");
             let input = fixture(product, 4);
             let base = 4 * BLOCK_SIZE;
@@ -217,7 +180,7 @@ mod tests {
                 edit("war_funds", 99_999_999),
                 edit("playtime_seconds", 3_599_999),
             ];
-            let output = apply(&id, &input, &edits).unwrap();
+            let output = apply(schemas, &id, &input, &edits).unwrap();
             assert_eq!(
                 &output[base + 0x1934..base + 0x1938],
                 &99_999_999u32.to_le_bytes()
@@ -239,7 +202,7 @@ mod tests {
                     assert_eq!(after, before, "{id} at {index:x}");
                 }
             }
-            assert_eq!(apply(&id, &output, &edits).unwrap(), output);
+            assert_eq!(apply(schemas, &id, &output, &edits).unwrap(), output);
         }
     }
 
@@ -251,9 +214,9 @@ mod tests {
         // Saves from other tools may clear the four bits that no chunk covers.
         input[base + 0x11f] &= 0xf0;
         assert_eq!(input[base + 0x11f] & 0x0f, 0);
-        assert!(apply(id, &input, &[]).is_ok());
+        assert!(apply(schemas, id, &input, &[]).is_ok());
         let edits = [edit("war_funds", 1234)];
-        let output = apply(id, &input, &edits).unwrap();
+        let output = apply(schemas, id, &input, &edits).unwrap();
         // As upstream does, an edit writes the unused bits set.
         assert_eq!(output[base + 0x11f] & 0x0f, 0x0f);
         assert_eq!(
@@ -266,25 +229,25 @@ mod tests {
     fn limits_are_enforced_and_damage_is_rejected() {
         let id = "final-fantasy-tactics-usa-block-4";
         let input = fixture("SCUS-94221", 4);
-        assert!(apply(id, &input, &[edit("war_funds", 100_000_000)]).is_err());
-        assert!(apply(id, &input, &[edit("playtime_seconds", 3_600_000)]).is_err());
+        assert!(apply(schemas, id, &input, &[edit("war_funds", 100_000_000)]).is_err());
+        assert!(apply(schemas, id, &input, &[edit("playtime_seconds", 3_600_000)]).is_err());
         let base = 4 * BLOCK_SIZE;
         for offset in [0x118, 0x11e, 0x120, 0x1934, 0x1dff] {
             let mut damaged = input.clone();
             damaged[base + offset] ^= 1;
             assert!(
-                apply(id, &damaged, &[]).is_err(),
+                apply(schemas, id, &damaged, &[]).is_err(),
                 "accepted damage at {offset:x}"
             );
         }
         // The high nibble of the last checksum byte is covered by chunks 56 to 59.
         let mut high = input.clone();
         high[base + 0x11f] ^= 0x10;
-        assert!(apply(id, &high, &[]).is_err());
+        assert!(apply(schemas, id, &high, &[]).is_err());
         // Bytes after the 60 checksummed chunks are outside the game's checksum.
         let mut tail = input.clone();
         tail[base + 0x1e00] ^= 1;
-        assert!(apply(id, &tail, &[]).is_ok());
-        assert!(apply(id, &fixture("SLPS-00770", 4), &[]).is_err());
+        assert!(apply(schemas, id, &tail, &[]).is_ok());
+        assert!(apply(schemas, id, &fixture("SLPS-00770", 4), &[]).is_err());
     }
 }

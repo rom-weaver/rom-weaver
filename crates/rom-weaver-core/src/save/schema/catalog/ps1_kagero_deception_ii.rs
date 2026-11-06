@@ -1,13 +1,9 @@
 use super::playstation_card::{self, BLOCK_SIZE};
 use super::*;
-use rules::{Check, Condition, ReadValue, Scalar, Store};
-use tracing::trace;
+use rules::{Check, Condition};
 
 // The 0x7f-byte frame layout and per-frame checksum MUST follow the pinned PS1 layout.
 // https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/kagero-deception-ii/saveEditor
-// The save payload starts at block offset 0x200 and is split into 60 frames of 0x80 bytes; each
-// frame holds 0x7f data bytes followed by `xor(data) + 1`. Upstream offsets address the
-// concatenated data bytes, so each field offset is mapped into its frame here.
 const PAYLOAD: usize = 0x200;
 const FRAME_SIZE: usize = 0x80;
 const FRAME_DATA: usize = 0x7f;
@@ -68,19 +64,13 @@ fn integrity(game: &mut GameDefinition, base: usize) {
     playstation_card::register_check(game, check);
     for frame in 0..FRAMES {
         let start = base + PAYLOAD + frame * FRAME_SIZE;
-        game.runtime.after_edit.push(Store {
-            when: None,
-            destination: Scalar {
-                offset: start + FRAME_DATA,
-                storage: Storage::U8,
-                mask: None,
-            },
-            value: ReadValue::new(move |bytes| {
-                let value = frame_checksum(&bytes[start..start + FRAME_SIZE]);
-                trace!(frame, value, "recomputed Kagero frame checksum");
-                Ok(i64::from(value))
-            }),
-        });
+        playstation_card::store_checksum(
+            game,
+            start + FRAME_DATA,
+            Storage::U8,
+            None,
+            move |bytes| i64::from(frame_checksum(&bytes[start..start + FRAME_SIZE])),
+        );
     }
 }
 
@@ -156,14 +146,8 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
 
 #[cfg(test)]
 mod tests {
+    use super::playstation_card::{apply, edit, flag};
     use super::*;
-
-    fn handler(id: &str) -> SchemaSaveHandler {
-        schemas()
-            .into_iter()
-            .find(|handler| handler.definitions()[0].identity.id == id)
-            .unwrap()
-    }
 
     // Frame 14 is all zero so a single edited byte can drive its xor to 0xff, where the stored
     // `xor + 1` wraps to zero.
@@ -183,37 +167,6 @@ mod tests {
             bytes[start + FRAME_DATA] = checksum;
         }
         bytes
-    }
-
-    fn apply(id: &str, bytes: &[u8], edits: &[SaveEdit]) -> crate::Result<Vec<u8>> {
-        let handler = handler(id);
-        let identity = handler.definitions()[0].identity.clone();
-        handler
-            .apply(
-                &SaveDetectionInput {
-                    bytes: bytes.to_vec(),
-                    selected_game: Some(id.into()),
-                    rom_sha1: None,
-                },
-                &identity,
-                edits,
-                false,
-            )
-            .map(|result| result.bytes.unwrap_or_else(|| bytes.to_vec()))
-    }
-
-    fn edit(field: &str, value: u32) -> SaveEdit {
-        SaveEdit {
-            field: field.into(),
-            value: SaveValue::U32(value),
-        }
-    }
-
-    fn flag(field: &str, value: bool) -> SaveEdit {
-        SaveEdit {
-            field: field.into(),
-            value: SaveValue::Bool(value),
-        }
     }
 
     // Expected shifted offsets and card offsets come from an independent Python port of the
@@ -280,7 +233,7 @@ mod tests {
                 flag("ending_4", true),
                 flag("ending_2", false),
             ];
-            let output = apply(&id, &input, &edits).unwrap();
+            let output = apply(schemas, &id, &input, &edits).unwrap();
             assert_eq!(output[base + offsets[0]], 99);
             assert_eq!(output[base + offsets[1]], 200);
             assert_eq!(
@@ -327,7 +280,7 @@ mod tests {
                     assert_eq!(after, before, "{id} at {index:x}");
                 }
             }
-            assert_eq!(apply(&id, &output, &edits).unwrap(), output);
+            assert_eq!(apply(schemas, &id, &output, &edits).unwrap(), output);
         }
     }
 
@@ -338,10 +291,10 @@ mod tests {
         let base = 6 * BLOCK_SIZE;
         let frame = base + 0x200 + 14 * 0x80;
         assert_eq!(input[frame + 0x7f], 1);
-        let output = apply(id, &input, &[edit("ark", 0xff)]).unwrap();
+        let output = apply(schemas, id, &input, &[edit("ark", 0xff)]).unwrap();
         assert_eq!(output[frame + 0x1b], 0xff);
         assert_eq!(output[frame + 0x7f], 0);
-        let back = apply(id, &output, &[edit("ark", 0)]).unwrap();
+        let back = apply(schemas, id, &output, &[edit("ark", 0)]).unwrap();
         assert_eq!(back, input);
     }
 
@@ -350,10 +303,18 @@ mod tests {
         let id = "kagero-deception-ii-usa-block-6";
         let input = fixture("SLUS-00677", 6);
         let base = 6 * BLOCK_SIZE;
-        assert!(apply(id, &input, &[edit("clear_count", 100)]).is_err());
-        assert!(apply(id, &input, &[edit("total_ark", 10_000_000)]).is_err());
-        assert!(apply(id, &input, &[edit("ark", 10_000_000)]).is_err());
-        assert!(apply(id, &input, &[edit("playtime_frames", 216_000 * 60)]).is_err());
+        assert!(apply(schemas, id, &input, &[edit("clear_count", 100)]).is_err());
+        assert!(apply(schemas, id, &input, &[edit("total_ark", 10_000_000)]).is_err());
+        assert!(apply(schemas, id, &input, &[edit("ark", 10_000_000)]).is_err());
+        assert!(
+            apply(
+                schemas,
+                id,
+                &input,
+                &[edit("playtime_frames", 216_000 * 60)]
+            )
+            .is_err()
+        );
         for frame in [0, 1, 14, 59] {
             let checksum = base + 0x200 + frame * 0x80 + 0x7f;
             let data = base + 0x200 + frame * 0x80 + 3;
@@ -361,7 +322,7 @@ mod tests {
                 let mut damaged = input.clone();
                 damaged[offset] ^= 1;
                 assert!(
-                    apply(id, &damaged, &[]).is_err(),
+                    apply(schemas, id, &damaged, &[]).is_err(),
                     "accepted damage at {offset:x}"
                 );
             }
@@ -369,7 +330,7 @@ mod tests {
         // The icon header and the bytes past the last frame are outside the frame checksums.
         let mut header = input.clone();
         header[base + 0x100] ^= 1;
-        assert!(apply(id, &header, &[]).is_ok());
-        assert!(apply(id, &fixture("SLES-01967", 6), &[]).is_err());
+        assert!(apply(schemas, id, &header, &[]).is_ok());
+        assert!(apply(schemas, id, &fixture("SLES-01967", 6), &[]).is_err());
     }
 }

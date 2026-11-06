@@ -4,9 +4,7 @@ use rules::{Check, Condition};
 
 // The preview table, slot table, and their checksums MUST follow the pinned PS1 layout.
 // https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/silent-hill/saveEditor
-// A block holds a preview table (11 entries of 0xc bytes) and up to 11 slots of 0x280 bytes.
-// Every checksum is the xor of its bytes, stored in both bytes of a 16-bit value. The options
-// section is not exposed: the game copies it into every Silent Hill block, which a
+// The options section is not exposed: the game copies it into every Silent Hill block, which a
 // single-block profile cannot keep consistent.
 const PREVIEWS: usize = 0x204;
 const PREVIEW_ENTRY: usize = 0xc;
@@ -15,6 +13,11 @@ const SLOTS: usize = 11;
 const SLOT_START: usize = 0x380;
 const SLOT_SIZE: usize = 0x280;
 const SLOT_CHECKSUM: usize = 0x27c;
+const RELEASES: [(&str, &str); 3] = [
+    ("europe", "SLES-01514"),
+    ("usa", "SLUS-00707"),
+    ("japan", "SLPM-86192"),
+];
 
 fn xor_checksum(bytes: &[u8]) -> u16 {
     let xor = bytes.iter().fold(0u8, |xor, value| xor ^ value);
@@ -58,16 +61,25 @@ fn integrity(game: &mut GameDefinition, base: usize) {
         warning: None,
     };
     playstation_card::register_check(game, check);
-    playstation_card::store_u16_checksum(game, base + PREVIEW_CHECKSUM, None, move |bytes| {
-        xor_checksum(&bytes[base + PREVIEWS..base + PREVIEW_CHECKSUM])
-    });
+    playstation_card::store_checksum(
+        game,
+        base + PREVIEW_CHECKSUM,
+        Storage::U16Le,
+        None,
+        move |bytes| {
+            i64::from(xor_checksum(
+                &bytes[base + PREVIEWS..base + PREVIEW_CHECKSUM],
+            ))
+        },
+    );
     for slot in 0..SLOTS {
         let range = slot_range(base, slot);
-        playstation_card::store_u16_checksum(
+        playstation_card::store_checksum(
             game,
             range.end,
+            Storage::U16Le,
             Some(populated_condition(base, slot)),
-            move |bytes| xor_checksum(&bytes[range.clone()]),
+            move |bytes| i64::from(xor_checksum(&bytes[range.clone()])),
         );
     }
 }
@@ -102,8 +114,8 @@ fn slot_fields(base: usize) -> Vec<FieldDefinition> {
             )
             .min(0)
             .max(99),
-            // Mirrored into the preview's 16-bit saves count at +0x8. The slot-in-use marker is the
-            // 32-bit total saves at preview +0x0, which this field never writes, so zero is valid.
+            // Mirrored into the preview's 16-bit saves count at +0x8. Zero is valid: the slot-in-use
+            // marker is the total saves at preview +0x0, which this field never writes.
             catalog_field(
                 &format!("slot_{number}.saves"),
                 &format!("Slot {number} saves"),
@@ -128,11 +140,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let mut games = Vec::new();
     for block in 1..=15 {
         let base = block * BLOCK_SIZE;
-        for (region, product) in [
-            ("europe", "SLES-01514"),
-            ("usa", "SLUS-00707"),
-            ("japan", "SLPM-86192"),
-        ] {
+        for (region, product) in RELEASES {
             let mut game = playstation_card::definition(
                 "silent-hill",
                 "Silent Hill",
@@ -150,14 +158,8 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
 
 #[cfg(test)]
 mod tests {
+    use super::playstation_card::{apply, edit};
     use super::*;
-
-    fn handler(id: &str) -> SchemaSaveHandler {
-        schemas()
-            .into_iter()
-            .find(|handler| handler.definitions()[0].identity.id == id)
-            .unwrap()
-    }
 
     fn refresh(bytes: &mut [u8], base: usize) {
         let previews = xor_checksum(&bytes[base + PREVIEWS..base + PREVIEW_CHECKSUM]);
@@ -190,30 +192,6 @@ mod tests {
         bytes
     }
 
-    fn apply(id: &str, bytes: &[u8], edits: &[SaveEdit]) -> crate::Result<Vec<u8>> {
-        let handler = handler(id);
-        let identity = handler.definitions()[0].identity.clone();
-        handler
-            .apply(
-                &SaveDetectionInput {
-                    bytes: bytes.to_vec(),
-                    selected_game: Some(id.into()),
-                    rom_sha1: None,
-                },
-                &identity,
-                edits,
-                false,
-            )
-            .map(|result| result.bytes.unwrap_or_else(|| bytes.to_vec()))
-    }
-
-    fn edit(field: &str, value: u32) -> SaveEdit {
-        SaveEdit {
-            field: field.into(),
-            value: SaveValue::U32(value),
-        }
-    }
-
     #[test]
     fn fixture_checksums_match_the_independent_values() {
         let bytes = fixture("SLUS-00707", 3);
@@ -231,11 +209,7 @@ mod tests {
 
     #[test]
     fn edits_mirror_the_save_count_and_repair_the_touched_checksums() {
-        for (region, product) in [
-            ("europe", "SLES-01514"),
-            ("usa", "SLUS-00707"),
-            ("japan", "SLPM-86192"),
-        ] {
+        for (region, product) in RELEASES {
             let id = format!("silent-hill-{region}-block-3");
             let input = fixture(product, 3);
             let base = 3 * BLOCK_SIZE;
@@ -245,7 +219,7 @@ mod tests {
                 edit("slot_2.game_clear", 99),
                 edit("slot_2.continues", 99),
             ];
-            let output = apply(&id, &input, &edits).unwrap();
+            let output = apply(schemas, &id, &input, &edits).unwrap();
             assert_eq!(output[base + 0x842], 6);
             assert_eq!(&output[base + 0x6a6..base + 0x6a8], &500u16.to_le_bytes());
             // Preview entry 2 is at +0x210: saves at +0x8 is mirrored, total saves at +0x0 is not.
@@ -275,7 +249,7 @@ mod tests {
             reference[base + 0x2fc] = preview_xor;
             reference[base + 0x2fd] = preview_xor;
             assert_eq!(output, reference, "{id}");
-            assert_eq!(apply(&id, &output, &edits).unwrap(), output);
+            assert_eq!(apply(schemas, &id, &output, &edits).unwrap(), output);
         }
     }
 
@@ -284,6 +258,7 @@ mod tests {
         let input = fixture("SLUS-00707", 3);
         let base = 3 * BLOCK_SIZE;
         let output = apply(
+            schemas,
             "silent-hill-usa-block-3",
             &input,
             &[edit("slot_2.health", 6), edit("slot_2.saves", 500)],
@@ -304,14 +279,14 @@ mod tests {
     fn unused_slots_are_not_editable_and_stay_untouched() {
         let id = "silent-hill-usa-block-3";
         let input = fixture("SLUS-00707", 3);
-        assert!(apply(id, &input, &[edit("slot_4.health", 1)]).is_err());
+        assert!(apply(schemas, id, &input, &[edit("slot_4.health", 1)]).is_err());
         // A populated entry after an empty one is not listed by the game.
         let mut gap = input.clone();
         let base = 3 * BLOCK_SIZE;
         gap[base + PREVIEWS + 4 * PREVIEW_ENTRY] = 1;
         refresh(&mut gap, base);
-        assert!(apply(id, &gap, &[edit("slot_5.health", 1)]).is_err());
-        let output = apply(id, &input, &[edit("slot_1.health", 1)]).unwrap();
+        assert!(apply(schemas, id, &gap, &[edit("slot_5.health", 1)]).is_err());
+        let output = apply(schemas, id, &input, &[edit("slot_1.health", 1)]).unwrap();
         let unused = base + 0x380 + 3 * 0x280;
         assert_eq!(
             output[unused..unused + 0x280],
@@ -324,17 +299,17 @@ mod tests {
         let id = "silent-hill-usa-block-3";
         let input = fixture("SLUS-00707", 3);
         let base = 3 * BLOCK_SIZE;
-        assert!(apply(id, &input, &[edit("slot_1.health", 7)]).is_err());
-        assert!(apply(id, &input, &[edit("slot_1.saves", 1000)]).is_err());
+        assert!(apply(schemas, id, &input, &[edit("slot_1.health", 7)]).is_err());
+        assert!(apply(schemas, id, &input, &[edit("slot_1.saves", 1000)]).is_err());
         // Zero saves is valid: the slot stays listed through the untouched total at preview +0x0.
-        let zero = apply(id, &input, &[edit("slot_2.saves", 0)]).unwrap();
+        let zero = apply(schemas, id, &input, &[edit("slot_2.saves", 0)]).unwrap();
         assert_eq!(
             &zero[base + 0x210..base + 0x214],
             &input[base + 0x210..base + 0x214]
         );
         assert_eq!(&zero[base + 0x218..base + 0x21a], &[0, 0]);
-        assert!(apply(id, &input, &[edit("slot_1.saves", 999)]).is_ok());
-        assert!(apply(id, &input, &[edit("slot_1.continues", 100)]).is_err());
+        assert!(apply(schemas, id, &input, &[edit("slot_1.saves", 999)]).is_ok());
+        assert!(apply(schemas, id, &input, &[edit("slot_1.continues", 100)]).is_err());
         for offset in [
             0x2fc,
             0x2fd,
@@ -347,7 +322,7 @@ mod tests {
             let mut damaged = input.clone();
             damaged[base + offset] ^= 1;
             assert!(
-                apply(id, &damaged, &[]).is_err(),
+                apply(schemas, id, &damaged, &[]).is_err(),
                 "accepted damage at {offset:x}"
             );
         }
@@ -355,8 +330,11 @@ mod tests {
         for offset in [0x380 + 3 * 0x280 + 5, 0x300 + 5] {
             let mut tolerated = input.clone();
             tolerated[base + offset] ^= 1;
-            assert!(apply(id, &tolerated, &[]).is_ok(), "rejected {offset:x}");
+            assert!(
+                apply(schemas, id, &tolerated, &[]).is_ok(),
+                "rejected {offset:x}"
+            );
         }
-        assert!(apply(id, &fixture("SLES-01514", 3), &[]).is_err());
+        assert!(apply(schemas, id, &fixture("SLES-01514", 3), &[]).is_err());
     }
 }
