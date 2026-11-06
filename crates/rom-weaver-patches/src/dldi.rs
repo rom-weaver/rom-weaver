@@ -424,16 +424,19 @@ fn prepare_dldi_patch(
     // `driver_size_bytes` derives from a single attacker-controlled log2 byte (up
     // to 1<<63). The parse path intentionally tolerates a truncated driver payload
     // (see `apply_accepts_truncated_patch_payload`), so the size cannot be bounded
-    // by the patch slice length; instead `try_reserve` bounds it against allocatable
-    // memory and turns an oversized declaration into a validation error before any
-    // output file is created.
+    // by the patch slice length; instead the plausibility check above rejects corrupt
+    // sizes, and `try_reserve` turns a plausible size the allocator still refuses
+    // into an out-of-memory error before any output file is created.
     let mut slot = Vec::new();
     slot.try_reserve_exact(patch_header.driver_size_bytes)
         .map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "DLDI driver size {} byte(s) exceeds allocatable memory",
-                patch_header.driver_size_bytes
-            ))
+            RomWeaverError::coded(
+                rom_weaver_core::ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
+                format!(
+                    "cannot reserve {} byte(s) for the DLDI driver slot",
+                    patch_header.driver_size_bytes
+                ),
+            )
         })?;
     slot.resize(patch_header.driver_size_bytes, 0);
     let existing_slot_len = available_len_usize.min(patch_header.driver_size_bytes);
