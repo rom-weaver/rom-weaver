@@ -764,8 +764,9 @@ const SampleTutorial = ({
   const stepPlacement = step?.placement;
   const stepTarget = step?.target;
   const selectView = (detailed: boolean) => {
-    if (!targetEl) return;
-    const toggle = findLift(targetEl, VIEW_TOGGLE_SELECTOR)?.querySelector<HTMLInputElement>("input[type='checkbox']");
+    const target = stepTarget ? findShown(stepTarget) : null;
+    if (!target) return;
+    const toggle = findLift(target, VIEW_TOGGLE_SELECTOR)?.querySelector<HTMLInputElement>("input[type='checkbox']");
     if (toggle && !toggle.disabled && toggle.checked !== detailed) toggle.click();
   };
   const endGuide = () => {

@@ -108,7 +108,10 @@ describe("ChecksumWorkflowController", () => {
 
   it("reports host selection cancellation as skipped during staging and calculation", async () => {
     const { controller, run } = setup();
-    const cancellation = new Error("validation error: interactive selection was cancelled for `/work/game.zip`");
+    const cancellation = Object.assign(
+      new Error("validation error: interactive selection was cancelled for `/work/game.zip` [selection.cancelled]"),
+      { code: "CANCELLED", details: { engineCode: "selection.cancelled" } },
+    );
     run.mockRejectedValueOnce(cancellation);
     await expect(controller.setInput(source)).rejects.toMatchObject({
       code: "WORKFLOW_SELECTION_SKIPPED",

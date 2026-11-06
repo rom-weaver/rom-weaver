@@ -9,7 +9,7 @@ type CreateSourceModeToggleProps = {
 const CreateSourceModeToggle = ({ value, onChange, disabled }: CreateSourceModeToggleProps) => {
   const localizer = useUiLocalizer();
   return (
-    <fieldset className="seg">
+    <fieldset className="seg create-source-mode">
       <legend className="sr-only">{localizer.message("ui.create.sourceMode.label")}</legend>
       {(["rom", "patches"] as const).map((mode) => (
         <button

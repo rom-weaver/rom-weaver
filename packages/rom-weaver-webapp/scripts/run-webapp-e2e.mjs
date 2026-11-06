@@ -776,6 +776,10 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if (missedResponse?.status() !== 404) {
       throw new Error(`missed nested path returned ${missedResponse?.status()}, expected 404`);
     }
+    const missedCache = missedResponse.headers()["cache-control"] ?? "";
+    if (/immutable|max-age=[1-9]/.test(missedCache)) {
+      throw new Error(`missed nested path is cacheable (Cache-Control: ${missedCache})`);
+    }
     await page.locator(".not-found-page").waitFor({ state: "visible" });
     await page.locator("#webapp-root:not([aria-busy])").waitFor({ state: "attached" });
     const notFoundLinks = await page.evaluate(() => ({

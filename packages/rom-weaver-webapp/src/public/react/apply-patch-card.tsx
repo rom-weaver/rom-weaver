@@ -287,6 +287,7 @@ const PatchCard = ({
           {verdict === "bad" ? (
             <PatchFaultWell
               dcp={item.dcp}
+              errorCode={item.validationErrorCode}
               message={item.validationMessage}
               overrideAvailable={overrideAvailable}
               unreadable={item.validationUnreadable}

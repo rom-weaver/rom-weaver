@@ -80,7 +80,7 @@ test("withBrowserOutputStorageFailureContext annotates output write errors", asy
   );
 
   expect(error).toMatchObject({
-    code: "OUTPUT_WRITE_FAILED",
+    code: "STORAGE_FULL",
     details: {
       operationLabel: "extract output",
     },

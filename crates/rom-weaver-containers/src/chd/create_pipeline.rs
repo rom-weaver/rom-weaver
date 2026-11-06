@@ -425,7 +425,8 @@ impl ChdContainerHandler {
             .finish()
             .map_err(|error| Self::chd_write_error(output, error))?;
         output_file.flush().map_err(|error| {
-            RomWeaverError::Validation(format!("failed to flush `{}`: {error}", output.display()))
+            RomWeaverError::from(error)
+                .with_context(format!("failed to flush `{}`", output.display()), None)
         })
     }
 

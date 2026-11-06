@@ -46,7 +46,10 @@ const OFFLINE_PAGES = [
   { expectedView: "test", label: "test canonical document", path: "play-rom/index.html" },
   { expectedNotFound: true, label: "not found", path: "404.html" },
 ];
-const OFFLINE_ONLY_PAGES = [{ expectedNotFound: true, label: "unknown first offline visit", path: "not-a-real-route" }];
+// The worker answers a path the build lacks with the 404 page and a 404 status, not a 200.
+const OFFLINE_ONLY_PAGES = [
+  { expectedNotFound: true, expectedStatus: 404, label: "unknown first offline visit", path: "not-a-real-route" },
+];
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -231,7 +234,10 @@ const enableBetaToolsForRouteChecks = async (page) => {
 };
 
 const assertPageState = (pageCase, response, state, phase) => {
-  if (response?.status() !== 200) throw new Error(`${phase} ${pageCase.label} returned ${response?.status()}`);
+  const expectedStatus = pageCase.expectedStatus ?? 200;
+  if (response?.status() !== expectedStatus) {
+    throw new Error(`${phase} ${pageCase.label} returned ${response?.status()}, expected ${expectedStatus}`);
+  }
   const pageReady = state.controller && state.crossOriginIsolated && state.ready;
   if (!pageReady || state.serviceWorkerState?.serviceWorkerStatus !== "active") {
     throw new Error(`${phase} ${pageCase.label} was not controlled, isolated, and ready: ${JSON.stringify(state)}`);
@@ -350,6 +356,7 @@ try {
   for (const pageCase of [...OFFLINE_PAGES, ...OFFLINE_ONLY_PAGES]) {
     const failuresBefore = requestFailures.length;
     const httpErrorsBefore = httpErrors.length;
+    const consoleErrorsBefore = consoleErrors.length;
     const offlineResponse = await page.goto(new URL(pageCase.path, ROOT_URL).href, {
       timeout: PAGE_TIMEOUT_MS,
       waitUntil: "networkidle",
@@ -385,9 +392,18 @@ try {
     if (routeFailures.length > 0) {
       throw new Error(`Offline ${pageCase.label} had failed requests: ${JSON.stringify(routeFailures, null, 2)}`);
     }
-    const routeHttpErrors = httpErrors.slice(httpErrorsBefore);
+    // The page's own expected status (the worker's 404 page) is the answer under test, not an error.
+    const routeHttpErrors = httpErrors
+      .slice(httpErrorsBefore)
+      .filter((error) => !(error.resourceType === "document" && error.status === pageCase.expectedStatus));
     if (routeHttpErrors.length > 0) {
       throw new Error(`Offline ${pageCase.label} had HTTP errors: ${JSON.stringify(routeHttpErrors, null, 2)}`);
+    }
+    // Chromium logs the expected non-200 document itself as a console error; drop that one line.
+    if (pageCase.expectedStatus) {
+      const logged = new RegExp(`status of ${pageCase.expectedStatus}\\b`);
+      const index = consoleErrors.findIndex((message, at) => at >= consoleErrorsBefore && logged.test(message));
+      if (index !== -1) consoleErrors.splice(index, 1);
     }
     offlinePages.push({ path: pageCase.path || "/", state: summarizePageState(offlineState) });
   }

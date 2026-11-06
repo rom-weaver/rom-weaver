@@ -54,6 +54,8 @@ type StagedInputInfo = {
   validationMessage?: string;
   validationState?: string;
   validationUnreadable?: boolean;
+  /** Stable engine code of a failed verdict (see `ROM_WEAVER_ERROR_CODES`). */
+  validationErrorCode?: string;
   dcp?: boolean;
   validationValues?: string[];
   sourceTitles?: string[];

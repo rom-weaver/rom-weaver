@@ -4,6 +4,7 @@ import type { CandidateSelectionRequest, SelectFile, SelectionCandidate } from "
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime-types.ts";
 import type { InputAsset } from "../input/input-assets.ts";
+import type { SharedInputPreparationCache } from "./shared-input-preparation.ts";
 
 type SharedRomSourceRole = Extract<WorkflowProgressRole, "input" | "modified" | "original" | "patch">;
 type SharedSourceStatus = "empty" | "failed" | "loading" | "needsSelection" | "ready";
@@ -91,6 +92,7 @@ type StagedRomSourceControllerOptions<TState extends SharedRomSourceState> = {
   getSessionId?: SessionIdFactory<TState["role"]>;
   getSourceId: SourceIdFactory<TState["role"]>;
   id: string;
+  preparationCache?: SharedInputPreparationCache;
   releasePreparedOnSelection?: "always" | "when-empty";
   runtime: WorkflowRuntime;
   selectFile?: SelectFile;

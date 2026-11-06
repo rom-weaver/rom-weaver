@@ -424,9 +424,12 @@ fn parse_bps_metadata(path: &Path) -> Result<BpsMetadata> {
         "BPS checksum chunk exceeded usize",
     )?;
     if actual_patch_checksum != patch_checksum {
-        return Err(RomWeaverError::Validation(format!(
-            "Patch checksum invalid; expected: {patch_checksum:x}, Actual: {actual_patch_checksum:x}"
-        )));
+        return Err(RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_PATCH_FILE_CHECKSUM_INVALID,
+            format!(
+                "Patch checksum invalid; expected: {patch_checksum:x}, Actual: {actual_patch_checksum:x}"
+            ),
+        ));
     }
 
     Ok(BpsMetadata {
@@ -564,9 +567,12 @@ fn parse_bps_file_with_checksum_validation(
             "BPS checksum chunk exceeded usize",
         )?;
         if actual_patch_checksum != patch_checksum {
-            return Err(RomWeaverError::Validation(format!(
-                "Patch checksum invalid; expected: {patch_checksum:x}, Actual: {actual_patch_checksum:x}"
-            )));
+            return Err(RomWeaverError::coded(
+                rom_weaver_core::ERROR_CODE_PATCH_FILE_CHECKSUM_INVALID,
+                format!(
+                    "Patch checksum invalid; expected: {patch_checksum:x}, Actual: {actual_patch_checksum:x}"
+                ),
+            ));
         }
     }
 
@@ -666,9 +672,12 @@ fn parse_bps_bytes_with_checksum_validation(
     if validate_patch_checksum {
         let actual_patch_checksum = crc32_bytes(&bytes[..bytes.len() - 4]);
         if actual_patch_checksum != patch_checksum {
-            return Err(RomWeaverError::Validation(format!(
-                "Patch checksum invalid; expected: {patch_checksum:x}, Actual: {actual_patch_checksum:x}"
-            )));
+            return Err(RomWeaverError::coded(
+                rom_weaver_core::ERROR_CODE_PATCH_FILE_CHECKSUM_INVALID,
+                format!(
+                    "Patch checksum invalid; expected: {patch_checksum:x}, Actual: {actual_patch_checksum:x}"
+                ),
+            ));
         }
     }
 
@@ -1642,8 +1651,12 @@ fn bps_create_usize_len(expected_len: u64, label: &str) -> Result<usize> {
 }
 
 fn try_reserve_exact<T>(vec: &mut Vec<T>, additional: usize, label: &str) -> Result<()> {
-    vec.try_reserve_exact(additional)
-        .map_err(|error| RomWeaverError::Validation(format!("{label} allocation failed: {error}")))
+    vec.try_reserve_exact(additional).map_err(|error| {
+        RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
+            format!("{label} allocation failed: {error}"),
+        )
+    })
 }
 
 fn initial_bps_sorted_target_len(source_len: usize, target_len: usize) -> usize {
@@ -2112,9 +2125,12 @@ fn validate_input_file(
 
     let actual_checksum = crc32_path_cached(source_path, context)?;
     if actual_checksum != expected_checksum {
-        return Err(RomWeaverError::Validation(format!(
-            "Input checksum invalid; expected: {expected_checksum:x}, Actual: {actual_checksum:x}"
-        )));
+        return Err(RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+            format!(
+                "Input checksum invalid; expected: {expected_checksum:x}, Actual: {actual_checksum:x}"
+            ),
+        ));
     }
 
     source.seek(SeekFrom::Start(0))?;
@@ -2143,9 +2159,12 @@ fn validate_output_file(
 
     let actual_checksum = crc32_path_cached(output_path, context)?;
     if actual_checksum != expected_checksum {
-        return Err(RomWeaverError::Validation(format!(
-            "Output checksum invalid; expected: {expected_checksum:x}, Actual: {actual_checksum:x}"
-        )));
+        return Err(RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+            format!(
+                "Output checksum invalid; expected: {expected_checksum:x}, Actual: {actual_checksum:x}"
+            ),
+        ));
     }
 
     Ok(())

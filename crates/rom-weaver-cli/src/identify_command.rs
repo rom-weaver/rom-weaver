@@ -898,7 +898,7 @@ impl CliApp {
                         format!("failed to read stdin input: {error}"),
                         None,
                     )
-                    .with_error_kind(error.kind()),
+                    .with_error(&error),
                 );
             }
         };

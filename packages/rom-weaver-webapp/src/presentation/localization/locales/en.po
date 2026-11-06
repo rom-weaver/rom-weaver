@@ -1286,7 +1286,7 @@ msgstr "Choose one ROM to patch."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.body"
-msgstr "Choose Patches & cheats in step 0x03 to build from ordered changes. Modified ROM is the default; switching modes keeps your inputs."
+msgstr "Choose Patches & cheats above the file picker to build from ordered changes. Modified ROM is the default; switching modes keeps your inputs."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1600,8 +1600,13 @@ msgstr "Couldn't load the practice files. Check your connection and try again."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "error.OUTPUT_WRITE_FAILED"
+msgid "error.STORAGE_FULL"
 msgstr "Couldn't save the result. Free up storage, or choose a folder the browser can write to."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.OUTPUT_WRITE_FAILED"
+msgstr "Couldn't save the result. Choose a folder the browser is allowed to write to."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4251,7 +4256,7 @@ msgstr "Reading"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.staging"
-msgstr "Reading dropped files…"
+msgstr "Reading files…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

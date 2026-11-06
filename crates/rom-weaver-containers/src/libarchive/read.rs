@@ -79,7 +79,7 @@ impl ReadArchive {
         for (name, support) in REGULAR_ARCHIVE_SUPPORT {
             let status = unsafe { support(self.as_ptr()) };
             if status != ARCHIVE_OK {
-                return Err(error_from_archive(
+                return Err(read_error_from_archive(
                     self.as_ptr(),
                     &format!("{context} while enabling {name}"),
                 ));
@@ -154,7 +154,7 @@ impl ReadArchive {
     pub(crate) fn next_entry(&mut self) -> io::Result<Option<ReadArchiveEntry<'_>>> {
         let entry = self
             .next_entry_ptr("archive read header failed")
-            .map_err(|error| io::Error::other(error.to_string()))?;
+            .map_err(io::Error::other)?;
         Ok(entry.map(|ptr| ReadArchiveEntry { archive: self, ptr }))
     }
 
@@ -198,7 +198,7 @@ impl ReadArchive {
             return Ok(0);
         }
         if read < 0 {
-            return Err(error_from_archive(self.as_ptr(), context));
+            return Err(read_error_from_archive(self.as_ptr(), context));
         }
         let read = usize::try_from(read).map_err(|_| {
             RomWeaverError::Validation(format!(
@@ -247,7 +247,10 @@ impl ReadArchive {
     }
 
     fn check_status(&self, status: i32, context: &str) -> Result<()> {
-        check_status_for_ptr(status, self.as_ptr(), context)
+        match status {
+            ARCHIVE_OK | ARCHIVE_WARN => Ok(()),
+            _ => Err(read_error_from_archive(self.as_ptr(), context)),
+        }
     }
 
     fn as_ptr(&self) -> *mut archive {
@@ -382,7 +385,7 @@ impl<'a> ReadArchiveEntry<'a> {
     }
 
     fn io_error(&self, context: &str) -> io::Error {
-        io::Error::other(error_from_archive(self.archive.as_ptr(), context).to_string())
+        io::Error::other(read_error_from_archive(self.archive.as_ptr(), context).to_string())
     }
 }
 

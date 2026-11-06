@@ -517,8 +517,6 @@
 .rw-app .home-install-methods {
   justify-self: start;
   max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 .rw-app .home-install-doc {
   width: fit-content;

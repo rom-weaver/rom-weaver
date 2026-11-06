@@ -1076,4 +1076,41 @@ Fixture description.
     expect(screen.getByRole("link", { name: applyLabel }).getAttribute("href")).toBe("/apply-cheats");
     expect(screen.getByRole("link", { name: createLabel }).getAttribute("href")).toBe("/create-rom-cheat-patch");
   });
+
+  // The prerendered pages are written against "/"; on a sub-path deployment every
+  // in-app link must pick up the prefix once the app knows where it is served.
+  it.each(["docs", "docs/faq", "docs/apply-rom-patches"])(
+    "keeps every in-app link on /rom-weaver/ for %s on a sub-path deployment",
+    (slug) => {
+      window.history.replaceState({}, "", `/rom-weaver/${slug}`);
+      render(
+        <RomWeaverSettingsProvider settings={{ language: "en" }}>
+          <Masthead
+            currentTab="docs"
+            docsSlug={slug}
+            homeHref="/rom-weaver/"
+            onSelectTab={() => undefined}
+            onOpenWhatsNew={() => undefined}
+            onOpenLog={() => undefined}
+            onOpenSettings={() => undefined}
+            onOpenStatus={() => undefined}
+            tabs={[{ id: "docs", group: "project", label: "Docs", href: "/rom-weaver/docs", icon: <svg /> }]}
+          />
+          <DocsPage active slug={slug} />
+        </RomWeaverSettingsProvider>,
+      );
+
+      const rooted = [...document.querySelectorAll("a[href]")]
+        .map((link) => link.getAttribute("href") ?? "")
+        .filter((href) => href.startsWith("/") && !href.startsWith("//"));
+      expect(rooted.length).toBeGreaterThan(20);
+      expect(rooted.filter((href) => !href.startsWith("/rom-weaver/"))).toEqual([]);
+
+      const rootedImages = [...document.querySelectorAll("img[src], source[srcset]")]
+        .flatMap((element) => (element.getAttribute("src") ?? element.getAttribute("srcset") ?? "").split(","))
+        .map((candidate) => candidate.trim().split(/\s+/)[0] ?? "")
+        .filter((url) => url.startsWith("/") && !url.startsWith("//"));
+      expect(rootedImages.filter((url) => !url.startsWith("/rom-weaver/"))).toEqual([]);
+    },
+  );
 });
