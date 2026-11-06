@@ -53,7 +53,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                 );
             }
             games.push(playstation_card::definition(
-                "tekken", "Tekken", region, product, block, fields,
+                "tekken", "Tekken", region, product, block, 1, fields,
             ));
         }
         for (region, product) in [
@@ -70,7 +70,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                 })
                 .collect();
             games.push(playstation_card::definition(
-                "rayman", "Rayman", region, product, block, fields,
+                "rayman", "Rayman", region, product, block, 1, fields,
             ));
         }
         for (region, product, shift) in [
@@ -99,6 +99,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                 region,
                 product,
                 block,
+                1,
                 fields,
             ));
         }
@@ -115,7 +116,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                     .max(9999999),
             ];
             games.push(playstation_card::definition(
-                "grandia", "Grandia", region, product, block, fields,
+                "grandia", "Grandia", region, product, block, 1, fields,
             ));
         }
     }

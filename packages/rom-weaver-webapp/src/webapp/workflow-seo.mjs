@@ -102,6 +102,15 @@ const readWorkflowEntryFromPathname = (pathname, basePath = "/") => {
     : null;
 };
 
+/**
+ * The entry route a page opened on, while that entry's own view is shown; null on any other view.
+ * @param {string} view
+ * @param {keyof typeof WORKFLOW_ENTRY_ROUTES | null | undefined} workflowEntry
+ * @returns {keyof typeof WORKFLOW_ENTRY_ROUTES | null}
+ */
+const activeWorkflowEntry = (view, workflowEntry) =>
+  workflowEntry && WORKFLOW_ENTRY_ROUTES[workflowEntry].view === view ? workflowEntry : null;
+
 // Beta tools stay out of WORKFLOW_SEO_ROUTES (no sitemap, no Markdown twin) but still need their own page title.
 const BETA_ROUTE_TITLES = Object.freeze({
   "rom-save-editor": `Save Editor | ${SITE_NAME}`,
@@ -117,6 +126,7 @@ const BETA_ROUTE_TITLES = Object.freeze({
 const withChannelBadge = (title, badge) => (badge ? title.replace(SITE_NAME, `${SITE_NAME} ${badge}`) : title);
 
 export {
+  activeWorkflowEntry,
   WORKFLOW_ENTRY_ROUTES,
   readWorkflowEntryFromPathname,
   BETA_ROUTE_TITLES,

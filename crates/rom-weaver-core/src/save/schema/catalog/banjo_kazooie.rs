@@ -1,55 +1,32 @@
+use super::rare_eeprom;
 use super::*;
 
-// Rare's 33-bit hash and record tags MUST follow this pinned MIT-licensed source.
-// https://github.com/RyudoSynbios/game-tools-collection/tree/6f5d8064050eec83eb4f2a910743c121a70655c9/src/lib/utils/common/nintendo64/index.ts
+// Record tags MUST follow this pinned MIT-licensed source; the checksum hash is `rare_eeprom`'s.
 // https://github.com/RyudoSynbios/game-tools-collection/tree/6f5d8064050eec83eb4f2a910743c121a70655c9/src/lib/templates/banjo-kazooie/saveEditor
-fn hash(byte: u8, polynomial: u64, shift: u32) -> u64 {
-    let first = polynomial.wrapping_add(u64::from(byte) << (shift & 15)) & 0x1_ffff_ffff;
-    let second = ((first << 63) >> 31 | (first >> 1)) ^ ((first << 44) >> 32);
-    second ^ ((second >> 20) & 0xfff)
-}
 
+// Banjo-Kazooie stores the two Rare words folded into one.
 fn checksum(data: &[u8]) -> u32 {
-    let mut polynomial = 0x1_3108_b3c1;
-    let mut result = 0;
-    let mut shift = 0;
-    for byte in data {
-        polynomial = hash(*byte, polynomial, shift);
-        result ^= polynomial;
-        shift += 7;
-    }
-    for byte in data.iter().rev() {
-        polynomial = hash(*byte, polynomial, shift);
-        result ^= polynomial;
-        shift += 3;
-    }
-    result as u32
+    let [forward, reverse] = rare_eeprom::checksum(data);
+    forward ^ reverse
 }
 
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let games = [1u8, 3, 2].into_iter().enumerate().map(|(slot, tag)| {
-        let candidates = (0..4).map(|record| {
+        // The game maps each file to the first record whose checksum and magic pass, so a damaged earlier copy never blocks a later one:
+        // https://gitlab.com/banjo.decomp/banjo-kazooie/-/blob/e8d31fa53645616fcac6e051543222b973a2edb0/src/core2/code_B5E00.c#L34-71
+        let owns = move |bytes: &[u8], record: usize| {
             let base = record * 0x78;
-            layout::Candidate {
-                spans: vec![layout::Span { logical_offset: 0, physical_offset: base, length: 0x78 }],
-                predicates: vec![rules::Condition::new(move |bytes| Ok(
-                    ![0, 255].contains(&bytes[base]) && bytes[base + 1] == tag &&
-                    !(0..record).any(|prior| bytes[prior * 0x78 + 1] == tag) &&
-                    checksum(&bytes[base..base + 0x74]) == u32::from_be_bytes(bytes[base + 0x74..base + 0x78].try_into().unwrap())
-                ))], ..Default::default()
-            }
-        }).collect();
+            bytes[base + 1] == tag && ![0, 255].contains(&bytes[base]) &&
+                checksum(&bytes[base..base + 0x74]) == u32::from_be_bytes(bytes[base + 0x74..base + 0x78].try_into().unwrap())
+        };
+        let candidates = (0..4).map(|record| tagged_record_candidate(record * 0x78, 0x78, record, owns, |_| true)).collect();
         GameDefinition {
             fields: [("eggs", "Eggs", 0x66, 100), ("red_feathers", "Red feathers", 0x67, 50), ("gold_feathers", "Gold feathers", 0x68, 10)]
                 .into_iter().map(|(id, label, offset, max)| FieldDefinition::new(id.into(), label.into(), offset, Storage::U8).max(max)
                     .behavior(field::FieldBehavior { group: Some("file".into()), ..Default::default() })).collect(),
-            description: "Edits consumables within their basic capacities in one occupied file of canonical 512-byte EEPROM. Selects the first matching file tag and rejects it if damaged; preserves all other records and Stop 'n' Swop data. Capacity upgrades, packed collectibles and byte-swapped images are unsupported. Requires a game-made template.".into(),
+            description: "Edits consumables within their basic capacities in one occupied file of canonical 512-byte EEPROM. Selects the first record tagged for the file that passes its checks, as the game does, and rejects the file when none does; preserves all other records and Stop 'n' Swop data. Capacity upgrades, packed collectibles and byte-swapped images are unsupported. Requires a game-made template.".into(),
             runtime: runtime::Runtime { logical_size: Some(0x78),
-                layout: Some(layout::Layout { groups: vec![layout::Group {
-                    id: "file".into(), logical_offset: 0, logical_length: 0x78,
-                    copies: layout::Copies::Fixed { candidates }, selection: layout::Selection::FirstValid,
-                    write: layout::WritePolicy::Selected, empty: Vec::new(), empty_if_no_signature: false,
-                }] }), after_edit: vec![rules::Store { when: None,
+                layout: Some(single_file_layout(0x78, candidates)), after_edit: vec![rules::Store { when: None,
                     destination: rules::Scalar { offset: 0x74, storage: Storage::U32Be, mask: None },
                     value: rules::ReadValue::new(|bytes| Ok(i64::from(checksum(&bytes[..0x74]))))
                 }], save_format: Some("n64_eeprom_512".into()), ..Default::default()
@@ -128,13 +105,30 @@ mod tests {
                         .is_err()
                 );
             }
-            let mut ambiguous = input.clone();
-            ambiguous.bytes[1] = tag;
-            assert!(
-                handler
-                    .apply(&ambiguous, &identity, &[edit], false)
-                    .is_err()
-            );
+            // The game skips an earlier record that fails its checks and loads the first valid one.
+            let mut damaged_earlier = input.clone();
+            damaged_earlier.bytes[1] = tag;
+            let output = handler
+                .apply(
+                    &damaged_earlier,
+                    &identity,
+                    std::slice::from_ref(&edit),
+                    false,
+                )
+                .unwrap()
+                .bytes
+                .unwrap();
+            expected[1] = tag;
+            assert_eq!(output, expected);
+            let mut copies = input.clone();
+            copies.bytes.copy_within(base..base + 0x78, 0);
+            let output = handler
+                .apply(&copies, &identity, &[edit], false)
+                .unwrap()
+                .bytes
+                .unwrap();
+            assert_eq!(output[0x66], 100);
+            assert_eq!(output[0x78..], copies.bytes[0x78..]);
         }
     }
 }

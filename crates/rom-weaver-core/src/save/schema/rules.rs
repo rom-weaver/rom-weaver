@@ -97,7 +97,7 @@ impl Scalar {
     }
 }
 
-type ReadCallback = dyn Fn(&[u8]) -> Result<i64> + Send + Sync;
+type ReadCallback = dyn Fn(&[u8], &[u8]) -> Result<i64> + Send + Sync;
 type ConditionCallback = dyn Fn(&[u8]) -> Result<bool> + Send + Sync;
 
 #[derive(Clone)]
@@ -105,10 +105,20 @@ pub struct ReadValue(Arc<ReadCallback>);
 
 impl ReadValue {
     pub fn new(read: impl Fn(&[u8]) -> Result<i64> + Send + Sync + 'static) -> Self {
+        Self(Arc::new(move |_original, bytes| read(bytes)))
+    }
+    /// Builds a value that also reads the save as it was before any edit, as `(original, bytes)`.
+    /// Only `Store::apply_from` passes the unedited save; `eval`, `Store::apply`, and the after-edit read pass the edited bytes as `original`.
+    pub fn with_original(
+        read: impl Fn(&[u8], &[u8]) -> Result<i64> + Send + Sync + 'static,
+    ) -> Self {
         Self(Arc::new(read))
     }
     pub fn eval(&self, bytes: &[u8]) -> Result<i64> {
-        (self.0)(bytes)
+        (self.0)(bytes, bytes)
+    }
+    pub fn eval_from(&self, original: &[u8], bytes: &[u8]) -> Result<i64> {
+        (self.0)(original, bytes)
     }
 }
 
@@ -180,6 +190,13 @@ impl Store {
         self.destination.validate(size)
     }
     pub fn apply(&self, bytes: &mut [u8]) -> Result<()> {
+        self.apply_with(None, bytes)
+    }
+    /// Applies the store to edited `bytes`, passing the unedited `original` to the value.
+    pub fn apply_from(&self, original: &[u8], bytes: &mut [u8]) -> Result<()> {
+        self.apply_with(Some(original), bytes)
+    }
+    fn apply_with(&self, original: Option<&[u8]>, bytes: &mut [u8]) -> Result<()> {
         if self
             .when
             .as_ref()
@@ -187,7 +204,10 @@ impl Store {
             .transpose()?
             .unwrap_or(true)
         {
-            let value = self.value.eval(bytes)?;
+            let value = match original {
+                Some(original) => self.value.eval_from(original, bytes)?,
+                None => self.value.eval(bytes)?,
+            };
             self.destination.write(bytes, value)?;
         }
         Ok(())

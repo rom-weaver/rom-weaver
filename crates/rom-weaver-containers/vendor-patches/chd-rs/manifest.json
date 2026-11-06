@@ -191,6 +191,18 @@
       "tests": [
         "cargo test -p rom-weaver-containers chd"
       ]
+    },
+    {
+      "file": "0015-storage-full-error.patch",
+      "stage": "integration",
+      "reason": "Map std::io::ErrorKind::StorageFull to a new Error::StorageFull instead of Error::Unknown, so a CHD create that runs out of space reports io.storage_full. The variant follows Unknown to keep the libchdr discriminants.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib handlers_tests::tests::chd_create_codes_a_full_output_disk_as_storage_full -- --exact"
+      ]
     }
   ]
 }

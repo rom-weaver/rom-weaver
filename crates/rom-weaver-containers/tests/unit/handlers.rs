@@ -3078,6 +3078,47 @@ mod tests {
         }
     }
 
+    // /dev/full stands in for a full output disk. The default codecs cover the compressed
+    // writer, `store` the uncompressed one.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn chd_create_codes_a_full_output_disk_as_storage_full() {
+        let temp_dir = temp_dir_path("chd-create-storage-full");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input = temp_dir.join("disc.iso");
+        fs::write(&input, vec![0x5a_u8; 0x20000]).expect("fixture");
+        for codec in [None, Some("store".to_string())] {
+            let request = ContainerCreateRequest {
+                rvz_block_size: None,
+                archive_names: None,
+                inputs: vec![input.clone()],
+                output: PathBuf::from("/dev/full"),
+                format: "chd".to_string(),
+                codec: codec.clone(),
+                level: None,
+                parent: None,
+            };
+
+            let error = ChdContainerHandler
+                .create(&request, &test_context(&temp_dir, 2))
+                .expect_err("a full output disk must fail the create");
+
+            assert_eq!(
+                error.code(),
+                Some(rom_weaver_core::ERROR_CODE_IO_STORAGE_FULL),
+                "codec {codec:?}: unexpected error: {error}"
+            );
+            assert!(
+                error
+                    .to_string()
+                    .contains("failed to write CHD `/dev/full`:"),
+                "codec {codec:?}: unexpected error: {error}"
+            );
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
     // /dev/full fails every write with ENOSPC, which stands in for a full output disk.
     #[cfg(target_os = "linux")]
     #[test]
