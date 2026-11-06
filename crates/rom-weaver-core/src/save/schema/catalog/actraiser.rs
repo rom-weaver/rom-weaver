@@ -3,12 +3,7 @@ use super::*;
 use tracing::trace;
 
 fn checksum(bytes: &[u8]) -> u32 {
-    let (xor, sum) = (0..0x1fec)
-        .step_by(2)
-        .fold((0u16, 0u16), |(xor, sum), offset| {
-            let word = u16::from_le_bytes([bytes[offset], bytes[offset + 1]]);
-            (xor ^ word, sum.wrapping_add(word))
-        });
+    let (sum, xor) = sum_and_xor(bytes, 0..0x1fec);
     trace!(xor, sum, "computed ActRaiser checksum");
     (u32::from(xor) << 16) | u32::from(sum)
 }

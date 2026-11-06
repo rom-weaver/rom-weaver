@@ -302,6 +302,7 @@ fn registry_lists_every_game_with_format_metadata() {
             "sonic-rush",
             "castlevania-dawn-of-sorrow",
             "castlevania-order-of-ecclesia",
+            "castlevania-portrait-of-ruin",
             "game-boy-camera",
             "kingdom-hearts-chain-of-memories",
         ]
@@ -342,6 +343,7 @@ fn registry_lists_every_game_with_format_metadata() {
             );
         }
     }
+    expected.extend(["fire-emblem-the-blazing-blade", "azure-dreams"].map(str::to_owned));
     for block in 1..=15 {
         expected.extend(
             ["europe", "usa", "japan"]

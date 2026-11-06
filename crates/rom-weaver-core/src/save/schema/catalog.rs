@@ -322,6 +322,16 @@ fn extend_fields(
     }
 }
 
+/// Wrapping sum and XOR of the little-endian 16-bit words in `range`.
+fn sum_and_xor(bytes: &[u8], range: std::ops::Range<usize>) -> (u16, u16) {
+    bytes[range]
+        .chunks_exact(2)
+        .map(|word| u16::from_le_bytes([word[0], word[1]]))
+        .fold((0u16, 0u16), |(sum, xor), word| {
+            (sum.wrapping_add(word), xor ^ word)
+        })
+}
+
 fn read_at(bytes: &[u8], offset: i64, storage: Storage) -> Result<i64> {
     let offset =
         usize::try_from(offset).map_err(|_| invalid("save read offset is out of range"))?;
@@ -335,6 +345,7 @@ fn read_at(bytes: &[u8], offset: i64, storage: Storage) -> Result<i64> {
 
 pub(in crate::save) mod actraiser;
 pub(in crate::save) mod advance_wars;
+pub(in crate::save) mod azure_dreams;
 pub(in crate::save) mod banjo_kazooie;
 pub(in crate::save) mod banjo_tooie;
 pub(in crate::save) mod bomberman_64;
@@ -363,6 +374,7 @@ pub(in crate::save) mod f_zero_maximum_velocity;
 pub(in crate::save) mod f_zero_x;
 pub(in crate::save) mod final_fantasy_nes;
 pub(in crate::save) mod final_fantasy_vi;
+pub(in crate::save) mod fire_emblem_the_blazing_blade;
 pub(in crate::save) mod game_and_watch_gallery_3;
 pub(in crate::save) mod game_boy_camera;
 pub(in crate::save) mod golden_sun;
@@ -503,6 +515,8 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(kingdom_hearts_chain_of_memories::schemas());
             games.extend(banjo_kazooie::schemas());
             games.extend(ps1_final_fantasy::schemas());
+            games.extend(fire_emblem_the_blazing_blade::schemas());
+            games.extend(azure_dreams::schemas());
             games.extend(ctr_crash_team_racing::schemas());
             games.extend(gran_turismo::schemas());
             games.extend(tomb_raider_ii_starring_lara_croft::schemas());
