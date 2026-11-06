@@ -1,14 +1,20 @@
 import { useEffect, useState } from "react";
+import { STORAGE_FULL_MESSAGE_REGEX } from "../../lib/errors.ts";
+import { getDisplayedErrorCode } from "../../presentation/errors.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { listKeptRoms } from "../../storage/browser/kept-roms.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
 
-const StorageFullRecovery = ({ message, onRetry }: { message: string; onRetry?: () => void }) => {
+/**
+ * Kept-ROM usage and cleanup shortcuts for a storage-full failure. A coded message (`code`, else its `CODE: `
+ * prefix) is storage-full only when the code says so; an uncoded browser message is matched by its text.
+ */
+const StorageFullRecovery = ({ code, message, onRetry }: { code?: string; message: string; onRetry?: () => void }) => {
   const localizer = useUiLocalizer();
   const [usage, setUsage] = useState<{ bytes: number; cleaned: boolean } | null>(null);
-  const quotaMessage = /\b(no space left|quota|nospc|enospc|storage is full)\b|QuotaExceededError/i.test(message)
-    ? message
-    : "";
+  const displayedCode = getDisplayedErrorCode(message, code);
+  const storageFull = displayedCode ? displayedCode === "STORAGE_FULL" : STORAGE_FULL_MESSAGE_REGEX.test(message);
+  const quotaMessage = storageFull ? message : "";
   useEffect(() => {
     setUsage(null);
     if (!quotaMessage) return;

@@ -59,6 +59,8 @@ import {
 import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { observePanelHeadFit } from "./panel-head-fit.ts";
+import { appPathHref } from "./app-routes.ts";
+import { useAppBaseUrl } from "./use-app-base-url.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { releaseLargeEntriesOnLargeInput } from "./large-input-release.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
@@ -207,16 +209,6 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     label: "Docs",
   },
 ];
-
-/**
- * Tab hrefs are bare slugs except Docs (`/docs`), and the 404 page is served at
- * whatever path missed, so each resolves against the app base: a doubled slash
- * would be a protocol-relative URL, and a bare `/slug` would escape a
- * subdirectory deployment.
- */
-const appPathHref = (href: string, appBaseUrl: string): string =>
-  // The server render has no window, so its base is the bare "/"; the throwaway origin only lets that parse.
-  new URL(href.replace(/^\/+/, ""), new URL(appBaseUrl, "https://app.invalid")).pathname;
 
 // Keep the trace inspector out of the initial weave, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
@@ -376,14 +368,15 @@ const PanelThreadCount = ({
 
 const PageFooter = () => {
   const localizer = useUiLocalizer();
+  const appBaseUrl = useAppBaseUrl();
   return (
     <footer className="page-footer">
       <span>{localizer.message("ui.footer.local")}</span>
       <span className="page-footer-links">
-        <a className="page-footer-link" href={ABOUT_URL}>
+        <a className="page-footer-link" href={appPathHref(ABOUT_URL, appBaseUrl)}>
           {localizer.message("ui.footer.about")}
         </a>
-        <a className="page-footer-link" href={PRIVACY_URL}>
+        <a className="page-footer-link" href={appPathHref(PRIVACY_URL, appBaseUrl)}>
           {localizer.message("ui.footer.privacy")}
         </a>
       </span>
@@ -391,11 +384,11 @@ const PageFooter = () => {
   );
 };
 
-/* While a routed drop is read and handed to its workflow, the veil stays
-   up and says where the files are going; a drop that stays put never sets it. */
-type DropRouting = { phase: "reading" } | { phase: "opening"; view: WebappView };
+/* While a picked or dropped selection is read and handed to its workflow, the
+   veil stays up and says where the files are going. */
+type DropRouting = { phase: "reading"; selection: number } | { phase: "opening"; view: WebappView };
 // Long enough to read the destination over the newly opened workflow.
-const DROP_ROUTING_HOLD_MS = 450;
+const DROP_ROUTING_HOLD_MS = 800;
 
 const DropVeil = ({ dragging, routing }: { dragging: boolean; routing: DropRouting | null }) => {
   const localizer = useUiLocalizer();
@@ -406,12 +399,16 @@ const DropVeil = ({ dragging, routing }: { dragging: boolean; routing: DropRouti
   else if (dragging) lastRoutingRef.current = null;
   const shown = lastRoutingRef.current;
   const destination = shown?.phase === "opening" ? WORKFLOW_TABS.find((tab) => tab.id === shown.view) : undefined;
+  const phaseKey = shown?.phase === "reading" ? `reading-${shown.selection}` : (destination?.id ?? "release");
   const opening = destination ? localizer.message("ui.drop.opening", { page: destination.label }) : "";
+  let announcement = "";
+  if (routing?.phase === "reading") announcement = localizer.message("ui.drop.staging");
+  else if (routing) announcement = opening;
   return (
     <>
       <div aria-hidden="true" className="dropveil">
-        {/* Keyed by phase so each change of words replays the pill's entrance. */}
-        <span className="dropveil-text" key={destination?.id ?? shown?.phase ?? "release"}>
+        {/* Each selection replays the reading delay, even after a previous read finished. */}
+        <span className={shown?.phase === "reading" ? "dropveil-text is-reading" : "dropveil-text"} key={phaseKey}>
           {destination ? (
             destination.icon
           ) : (
@@ -428,7 +425,7 @@ const DropVeil = ({ dragging, routing }: { dragging: boolean; routing: DropRouti
         </span>
       </div>
       <p className="sr-only" role="status">
-        {routing ? opening : ""}
+        {announcement}
       </p>
     </>
   );
@@ -569,6 +566,7 @@ function WebappRoot({
   const pendingDropsRef = useRef(new Map<number, () => void>());
   const routingQueueRef = useRef(Promise.resolve());
   const routingGenerationRef = useRef(0);
+  const routingSelectionRef = useRef(0);
   const routeChoiceRef = useRef<(() => void) | null>(null);
   const pageDropIdRef = useRef(0);
   const [dropRoute, setDropRoute] = useState<DropRouteRequest | null>(null);
@@ -811,18 +809,26 @@ function WebappRoot({
     [actions, enqueuePageDrop, notFound],
   );
   const routeFiles = useCallback(
-    (selected: File[] | Promise<File[]>, fromDrop = false, directView?: WebappView) => {
+    (selected: File[] | Promise<File[]>, directView?: WebappView) => {
       const from = currentViewRef.current;
       const generation = routingGenerationRef.current;
+      const selection = ++routingSelectionRef.current;
+      const routeVeil: typeof showDropRouting = (routing, holdMs) => {
+        if (selection === routingSelectionRef.current && generation === routingGenerationRef.current) {
+          showDropRouting(routing, holdMs);
+        }
+      };
+      routeVeil({ phase: "reading", selection });
       const delivery = routingQueueRef.current
         .catch(() => undefined)
         .then(async () => {
           if (generation !== routingGenerationRef.current) return;
           const dropped = await selected;
-          if (!dropped.length || generation !== routingGenerationRef.current) return;
-          const routeVeil: typeof showDropRouting = (routing, holdMs) => {
-            if (fromDrop) showDropRouting(routing, holdMs);
-          };
+          if (generation !== routingGenerationRef.current) return;
+          if (!dropped.length) {
+            routeVeil(null);
+            return;
+          }
           // Save backups belong to no workflow. Saves & storage imports them once the rest of the drop is
           // routed, so two dialogs never open at once.
           const backups = dropped.filter((file) => isEmulatorSaveExportName(file.name));
@@ -833,10 +839,10 @@ function WebappRoot({
               return;
             }
             if (directView) {
+              routeVeil(null);
               await enqueuePageDrop(directView, files);
               return;
             }
-            routeVeil({ phase: "reading" });
             const entries = await readDropEntries(files);
             if (generation !== routingGenerationRef.current) return;
             const plan = planDropDestinations(countDropEntries(entries));
@@ -870,7 +876,7 @@ function WebappRoot({
           }
         })
         .catch((error: unknown) => {
-          if (fromDrop && generation === routingGenerationRef.current) showDropRouting(null);
+          routeVeil(null);
           throw error;
         });
       routingQueueRef.current = delivery;
@@ -935,9 +941,6 @@ function WebappRoot({
       // handler, so the page-level listener just forwards every file to it.
       const droppedView = state.currentView;
       const needsDestination = notFound || ["home", "docs", "whats-new"].includes(droppedView);
-      // Hold the veil from the drop itself so it never fades out and back in
-      // while the transfer is read.
-      if (needsDestination) showDropRouting({ phase: "reading" });
       const readFiles = readDataTransferFiles(event.dataTransfer).then((files) => {
         markDropReceived();
         for (const file of files) recordDrop(file.name, droppedAtMs);
@@ -948,7 +951,7 @@ function WebappRoot({
         });
         return files;
       });
-      trackSelectionDelivery(event, routeFiles(readFiles, true, needsDestination ? undefined : droppedView));
+      trackSelectionDelivery(event, routeFiles(readFiles, needsDestination ? undefined : droppedView));
     };
     // A workflow that cannot use a drop offers the one that can. This runs in
     // the capture phase, ahead of the tab's own drop zones, and only claims the
@@ -970,12 +973,12 @@ function WebappRoot({
       void readDataTransferFiles(event.dataTransfer).then((files) => {
         if (!files.length || currentViewRef.current !== fromView) return;
         if (needsDestination || (hasBackup && redirect)) {
-          void routeFiles(files, true);
+          void routeFiles(files);
           return;
         }
         if (hasBackup) {
           // Any workflow can receive a backup: it is imported, and the rest stays with this workflow.
-          void routeFiles(files, true, fromView);
+          void routeFiles(files, fromView);
           return;
         }
         pageDropIdRef.current += 1;
@@ -996,7 +999,6 @@ function WebappRoot({
     logOpen,
     notFound,
     routeFiles,
-    showDropRouting,
     state.currentView,
     state.settingsDialogOpen,
   ]);

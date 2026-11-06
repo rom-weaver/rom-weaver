@@ -148,6 +148,8 @@ type ApplyWorkflowPatchState = {
   /** A Dreamcast `.dcp`: it runs alone on the whole disc, with no header, checksum, or track options. */
   dcp?: boolean;
   patchValidation?: {
+    /** Stable engine code of a failed verdict (see `ROM_WEAVER_ERROR_CODES`). */
+    errorCode?: string;
     message?: string;
     /** `deferred`: a previous-basis mid-chain patch whose input state is only provable during the
      * apply itself - deliberately NOT dry-run against the original ROM (that reports false

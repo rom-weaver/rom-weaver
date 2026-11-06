@@ -762,7 +762,7 @@ fn trim_rejects_gamecube_wii_discs_and_points_to_compress() {
             assert_eq!(
                 terminal["label"],
                 format!(
-                    "validation failed: `{}` is a GameCube/Wii disc, which trim does not support; use `rom-weaver compress` to convert it to RVZ",
+                    "validation failed: `{}` is a GameCube/Wii disc, which trim does not support; use `rom-weaver compress` to convert it to RVZ [trim.unsupported_disc]",
                     source.display()
                 ),
                 "{extra:?}"
@@ -946,7 +946,7 @@ fn trim_rejects_a_lone_archive_that_holds_only_gamecube_wii_discs() {
             assert_eq!(
                 terminal["label"],
                 format!(
-                    "validation failed: `{}` holds a GameCube/Wii disc, which trim does not support; {COMPRESS_HINT} it to RVZ",
+                    "validation failed: `{}` holds a GameCube/Wii disc, which trim does not support; {COMPRESS_HINT} it to RVZ [trim.unsupported_disc]",
                     archive.display()
                 ),
                 "{name} {extra:?}"
@@ -1031,7 +1031,7 @@ fn trim_classifies_gamecube_wii_discs_in_archives_without_extracting_them() {
                 assert_eq!(
                     terminal["label"],
                     format!(
-                        "validation failed: `{}` holds a GameCube/Wii disc, which trim does not support; {COMPRESS_HINT} it to RVZ",
+                        "validation failed: `{}` holds a GameCube/Wii disc, which trim does not support; {COMPRESS_HINT} it to RVZ [trim.unsupported_disc]",
                         archive.path().display()
                     ),
                     "{case}"
@@ -1187,7 +1187,7 @@ fn trim_reads_the_header_of_a_compressed_disc_without_extracting_it() {
     assert_eq!(
         terminal["label"],
         format!(
-            "validation failed: `{}` holds a GameCube/Wii disc, which trim does not support; {COMPRESS_HINT} it to RVZ",
+            "validation failed: `{}` holds a GameCube/Wii disc, which trim does not support; {COMPRESS_HINT} it to RVZ [trim.unsupported_disc]",
             gz.path().display()
         )
     );

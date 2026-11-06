@@ -1286,7 +1286,7 @@ msgstr "Ein ROM zum Patchen auswählen."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.body"
-msgstr "Wähle bei Schritt 0x03 Patches & Cheats, um geordnete Änderungen zu kombinieren. Geänderte ROM ist die Voreinstellung; beim Wechsel bleiben deine Eingaben erhalten."
+msgstr "Wähle über der Dateiauswahl Patches & Cheats, um geordnete Änderungen zu kombinieren. Geänderte ROM ist die Voreinstellung; beim Wechsel bleiben deine Eingaben erhalten."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1600,8 +1600,13 @@ msgstr "Das Beispiel konnte nicht geladen werden. Versuche es erneut."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.STORAGE_FULL"
+msgstr "Das Ergebnis konnte nicht gespeichert werden. Gib Speicherplatz frei oder wähle einen Ordner, in den der Browser schreiben kann."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.OUTPUT_WRITE_FAILED"
-msgstr "Die Ausgabe konnte nicht geschrieben werden."
+msgstr "Das Ergebnis konnte nicht gespeichert werden. Wähle einen Ordner, in den der Browser schreiben darf."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4251,7 +4256,7 @@ msgstr "Lesen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.staging"
-msgstr "Abgelegte Dateien werden gelesen…"
+msgstr "Dateien werden gelesen…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

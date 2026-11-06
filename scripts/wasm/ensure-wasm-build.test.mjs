@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { shouldBuildWasm } from "../../packages/rom-weaver-webapp/scripts/ensure-wasm-build.mjs";
-import { createWasmSourceFingerprint } from "./wasm-source-fingerprint.mjs";
+import { createWasmSourceFingerprint, wasmSourcesModifiedSince } from "./wasm-source-fingerprint.mjs";
 
 test("skips the dev WASM build when the copied artifact matches its source fingerprint", () => {
   assert.equal(
@@ -71,6 +71,31 @@ test("WASM source fingerprints change with compiler inputs", () => {
     fs.mkdirSync(path.join(root, "crates/example/src"), { recursive: true });
     fs.writeFileSync(path.join(root, "crates/example/src/embedded.json"), '{"value":1}');
     assert.notEqual(createWasmSourceFingerprint(root), sourceFingerprint);
+  } finally {
+    fs.rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("an edit reverted since a source read still counts as modified", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-wasm-source-"));
+  try {
+    const past = new Date(Date.now() - 60_000);
+    const source = path.join(root, "crates/example/lib.rs");
+    for (const file of ["Cargo.lock", "Cargo.toml", ".cargo/config.toml", ".config/mise.toml", "crates/example/lib.rs"]) {
+      fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+      fs.writeFileSync(path.join(root, file), "one");
+      fs.utimesSync(path.join(root, file), past, past);
+    }
+    // ctime cannot be backdated, so wait out the check's timestamp slack.
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
+    const readAt = Date.now();
+    assert.equal(wasmSourcesModifiedSince(root, readAt), false);
+    fs.writeFileSync(source, "two");
+    fs.writeFileSync(source, "one");
+    // A revert that also restores the old mtime still updates ctime.
+    fs.utimesSync(source, past, past);
+    assert.equal(wasmSourcesModifiedSince(root, readAt), true);
   } finally {
     fs.rmSync(root, { force: true, recursive: true });
   }
