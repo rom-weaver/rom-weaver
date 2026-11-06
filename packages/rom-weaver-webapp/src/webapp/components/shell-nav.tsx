@@ -40,7 +40,8 @@ type NavEntry = {
   /** Rendered but not shown: a beta row before the client setting is known. */
   hidden?: boolean;
   className?: string;
-  current?: boolean;
+  /** `true` marks the page itself; `"location"` marks the section the page belongs to. */
+  current?: boolean | "location";
   /** Opens in a new tab: the row keeps its href and takes the external guard. */
   external?: boolean;
   href?: string;
@@ -55,6 +56,8 @@ type NavEntry = {
   title?: string;
   /** The phone Menu's label, where the full one would wrap its tile; the full one stays the name. */
   shortLabel?: string;
+  /** Decoration after the label, such as the chevron of a row that opens a nested navigation. */
+  trailing?: ReactNode;
 };
 type NavSectionData = { entries: NavEntry[]; id: string; title: string; content?: ReactNode };
 
@@ -108,6 +111,7 @@ const NavRow = ({
           ("Trim ROM") cannot also contain the chip as visible text (axe
           label-content-name-mismatch), while unnamed rows still read it. */}
       {entry.beta ? <span className="nav-beta" data-label={localizer.message("ui.tools.beta")} /> : null}
+      {entry.trailing}
     </>
   );
   const rowClass = join(className, entry.className);
@@ -119,7 +123,7 @@ const NavRow = ({
   if (entry.href) {
     return (
       <a
-        aria-current={entry.current ? "page" : undefined}
+        aria-current={entry.current === true ? "page" : entry.current || undefined}
         aria-label={name}
         className={rowClass}
         data-nav={navId}
@@ -166,11 +170,14 @@ const NavRow = ({
  */
 const SideNav = ({
   appearance,
+  idPrefix = "tab-",
   localizer,
   navLabel,
   sections,
 }: {
   appearance: ReactNode;
+  /** A second copy of the rail, such as the one under the docs navigation, MUST NOT reuse `tab-`. */
+  idPrefix?: string;
   localizer: Localizer;
   navLabel: string;
   sections: NavSectionData[];
@@ -181,7 +188,7 @@ const SideNav = ({
         {section.title ? <h2 className="nav-group-label">{section.title}</h2> : null}
         {section.entries.map((entry) => (
           <div hidden={entry.hidden} key={entry.id}>
-            <NavRow className="nav-row" entry={entry} idPrefix="tab-" localizer={localizer} />
+            <NavRow className="nav-row" entry={entry} idPrefix={idPrefix} localizer={localizer} />
           </div>
         ))}
         {section.content}

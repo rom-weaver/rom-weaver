@@ -1,4 +1,15 @@
-import { ArrowLeft, HardDrive, Heart, House, Info, Newspaper, ScrollText, Search, Settings } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronRight,
+  HardDrive,
+  Heart,
+  House,
+  Info,
+  Newspaper,
+  ScrollText,
+  Search,
+  Settings,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { appPathHref } from "../app-routes.ts";
@@ -149,6 +160,26 @@ const Masthead = ({
     if (focusFind) document.querySelector<HTMLInputElement>("#menu-sheet .find-input")?.focus();
   }, []);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+  /* Desktop docs pages stack the docs navigation over the tool rail; the arrow
+     rolls it back without leaving the page. */
+  const [docsRailOpen, setDocsRailOpen] = useState(currentTab === "docs");
+  useEffect(() => {
+    if (currentTab !== "docs") {
+      setDocsRailOpen(false);
+      return;
+    }
+    // Coming from a tool, the docs level mounts rolled back; opening it two frames
+    // later, after its closed position has been styled, lets the slide play.
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => setDocsRailOpen(true));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [currentTab]);
+  const rollDocsRail = useCallback((open: boolean) => {
+    flushSync(() => setDocsRailOpen(open));
+    // The control that was pressed is now hidden, so focus moves to its counterpart.
+    document.querySelector<HTMLElement>(open ? ".docs-rail-back" : "#rail-docs")?.focus();
+  }, []);
   const menuRoute = useRef(`${currentTab}:${docsSlug}`);
   useEffect(() => {
     const route = `${currentTab}:${docsSlug}`;
@@ -428,19 +459,48 @@ const Masthead = ({
     tabs,
   ]);
 
+  /* The sidebar's copy: Docs opens a nested navigation there, so it carries a
+     chevron, stays marked on every docs page, and on one rolls the docs back over. */
+  const railSections: NavSectionData[] = useMemo(
+    () =>
+      sections.map((section) => ({
+        ...section,
+        entries: section.entries.map((entry) => {
+          if (entry.id !== "docs") return entry;
+          const onDocs = currentTab === "docs";
+          return {
+            ...entry,
+            current: onDocs ? "location" : entry.current,
+            onSelect: onDocs ? () => rollDocsRail(true) : entry.onSelect,
+            trailing: <ChevronRight aria-hidden="true" className="nav-row-drill" />,
+          };
+        }),
+      })),
+    [currentTab, rollDocsRail, sections],
+  );
   // Desktop only: phones reach the docs through the docs bar above the dock.
   const docsSections: NavSectionData[] = [
     {
-      id: "project",
+      id: "docs-head",
       title: "",
-      entries: [
-        {
-          id: "back-to-tools",
-          label: localizer.message("ui.docs.backToTools"),
-          href: appPathHref("apply-rom-patches", homeHref),
-          icon: <ArrowLeft aria-hidden="true" />,
-        },
-      ],
+      entries: [],
+      content: (
+        <div className="docs-rail-head">
+          <button
+            aria-label={localizer.message("ui.docs.backToTools")}
+            className="docs-rail-back"
+            onClick={() => rollDocsRail(false)}
+            title={localizer.message("ui.docs.backToTools")}
+            type="button"
+          >
+            <ArrowLeft aria-hidden="true" />
+          </button>
+          <h2 className="docs-rail-title">
+            {tabs.find((tab) => tab.id === "docs")?.icon}
+            {localizer.message("ui.nav.docs")}
+          </h2>
+        </div>
+      ),
     },
     {
       id: "docs",
@@ -579,14 +639,32 @@ const Masthead = ({
             </div>
           </div>
           {/* Desktop: every destination the app has, named, in one column. */}
-          <aside className="side-rail">
-            <SideNav
-              appearance={appearanceTiles("rail", true)}
-              localizer={localizer}
-              navLabel={navLabel}
-              sections={currentTab === "docs" ? docsSections : sections}
-            />
-          </aside>
+          {currentTab === "docs" ? (
+            <aside className="side-rail docs-rail" data-level={docsRailOpen ? "docs" : "tools"}>
+              {/* Docs comes first so its Overview link is the rail's first current page. */}
+              <div className="rail-level rail-docs">
+                <SideNav appearance={null} localizer={localizer} navLabel={navLabel} sections={docsSections} />
+              </div>
+              <div className="rail-level rail-tools">
+                <SideNav
+                  appearance={appearanceTiles("rail", true)}
+                  idPrefix="rail-"
+                  localizer={localizer}
+                  navLabel={navLabel}
+                  sections={railSections}
+                />
+              </div>
+            </aside>
+          ) : (
+            <aside className="side-rail">
+              <SideNav
+                appearance={appearanceTiles("rail", true)}
+                localizer={localizer}
+                navLabel={navLabel}
+                sections={railSections}
+              />
+            </aside>
+          )}
         </div>
         {/* Desktop top bar: the one box that reaches everything, and the controls
           that change this browser rather than the app. No destinations, so

@@ -583,14 +583,14 @@ Fixture description.
     expect(document.querySelector('a[href="/docs/cli-apply"]')).toBeTruthy();
   });
 
-  it("reveals the active guide through the outer side-rail", async () => {
+  it("reveals the active guide through its scrolling rail level", async () => {
     vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(400);
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
       if (this.matches('a[aria-current="page"]')) return { top: 800, bottom: 830, height: 30 } as DOMRect;
       return { top: 0, bottom: 400, height: 400 } as DOMRect;
     });
     const { container } = render(
-      <div className="side-rail">
+      <div className="rail-level">
         <DocsNavigation currentSlug="docs/privacy" />
       </div>,
     );
@@ -798,7 +798,7 @@ Fixture description.
   it("keeps Find in the global Menu sheet beside the separate docs drawer", async () => {
     renderDocsShell("docs/cli");
     expect(document.querySelector(".dock")).not.toBeNull();
-    expect(document.querySelector('.side-nav a[href="/apply-rom-patches"]')?.textContent).toBe("Back to tools");
+    expect(document.querySelector(".side-nav .docs-rail-back")?.getAttribute("aria-label")).toBe("Back to tools");
     expect(document.querySelector(".side-nav .nav-group")?.textContent).not.toContain("Settings");
     const drawer = document.querySelector("#docs-drawer") as HTMLElement;
     fireEvent.click(document.querySelector(".docs-bar-open") as HTMLElement);

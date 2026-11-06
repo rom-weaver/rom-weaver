@@ -165,7 +165,7 @@ const DocsNav = ({
   const positionedSlug = useRef<string | null>(null);
   useIsomorphicLayoutEffect(() => {
     const nav = navRef.current;
-    const scrollport = nav?.closest<HTMLElement>(".side-rail");
+    const scrollport = nav?.closest<HTMLElement>(".rail-level");
     if (!(nav && scrollport) || positionedSlug.current === currentSlug) return;
     const current = nav.querySelector<HTMLAnchorElement>('a[aria-current="page"]');
     if (!current) {

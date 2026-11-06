@@ -703,7 +703,7 @@ test("mobile Docs docks one docs bar on the workflow dock and opens everything f
   await page.viewport(1000, 844);
   // Desktop keeps the rails: the bar's layer leaves the layout entirely.
   await expect.poll(() => bar.getClientRects().length).toBe(0);
-  expect(document.querySelector('.side-nav a[href="/apply-rom-patches"]')?.textContent).toBe("Back to tools");
+  expect(document.querySelector(".side-nav .docs-rail-back")?.getAttribute("aria-label")).toBe("Back to tools");
   await page.viewport(1280, 900);
 });
 
