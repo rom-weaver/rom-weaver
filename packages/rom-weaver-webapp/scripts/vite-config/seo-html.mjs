@@ -214,6 +214,10 @@ const WORKFLOW_MARKDOWN_GUIDES = {
     slug: "docs/undo-ppf-browser",
     sections: ["Restore the saved bytes", "Check the restored copy"],
   },
+  "create-m3u-playlist": {
+    slug: "docs/make-playlist-browser",
+    sections: ["Download a playlist", "Save it into the game's folder", "Rename the discs"],
+  },
   "trim-rom": {
     slug: "docs/trim-roms-browser",
     sections: ["Open Trim", "Save a trimmed copy", "Restore padding"],

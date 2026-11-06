@@ -1701,6 +1701,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.extractGuide": msg({ id: "ui.hero.extractGuide", message: "Read the Extract guide" }),
   "ui.hero.identifyGuide": msg({ id: "ui.hero.identifyGuide", message: "Read the Identify guide" }),
   "ui.hero.ppfUndoGuide": msg({ id: "ui.hero.ppfUndoGuide", message: "Read the PPF undo guide" }),
+  "ui.hero.playlistGuide": msg({ id: "ui.hero.playlistGuide", message: "Read the playlist guide" }),
   "ui.hero.saveGuide": msg({ id: "ui.hero.saveGuide", message: "Read the Save Editor guide" }),
   "ui.hero.testGuide": msg({ id: "ui.hero.testGuide", message: "Read the Test guide" }),
   "ui.hero.trimGuide": msg({ id: "ui.hero.trimGuide", message: "Read the Trim guide" }),
@@ -1719,6 +1720,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.hero.trimDescription",
     message:
       "Remove unused padding from Nintendo DS/DSi, Game Boy Advance, Nintendo 3DS, and Xbox XISO images, or pad a trimmed ROM back to full size.",
+  }),
+  "ui.hero.playlistDescription": msg({
+    id: "ui.hero.playlistDescription",
+    message: "List every disc of a multi-disc game in an .m3u playlist, so an emulator can change discs.",
   }),
   "ui.hero.toolsDescription": msg({
     id: "ui.hero.toolsDescription",
@@ -1750,6 +1755,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.identifyThesis": msg({
     id: "ui.hero.identifyThesis",
     message: "Identify your ROM.",
+  }),
+  "ui.hero.playlistThesis": msg({
+    id: "ui.hero.playlistThesis",
+    message: "Make a disc playlist.",
   }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",
@@ -1905,6 +1914,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.docs.toolIdentify": msg({ id: "ui.docs.toolIdentify", message: "Identify ROMs" }),
   "ui.docs.toolTest": msg({ id: "ui.docs.toolTest", message: "Test ROMs" }),
   "ui.docs.toolTrim": msg({ id: "ui.docs.toolTrim", message: "Trim ROMs" }),
+  "ui.docs.toolPlaylist": msg({ id: "ui.docs.toolPlaylist", message: "Make disc playlists" }),
   "ui.docs.toolSave": msg({ id: "ui.docs.toolSave", message: "Edit game saves" }),
   "ui.docs.toolUndo": msg({ id: "ui.docs.toolUndo", message: "Undo PPF patches" }),
   "ui.related.heading": msg({ id: "ui.related.heading", message: "Related" }),

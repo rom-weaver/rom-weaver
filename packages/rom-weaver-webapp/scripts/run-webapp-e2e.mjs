@@ -71,6 +71,7 @@ const LINK_AUDIT_WORKFLOW_ROUTES = [
   "bundle-patches",
   "extract",
   "trim-rom",
+  "create-m3u-playlist",
   "ppf-undo",
   "save-editor",
   "whats-new",
@@ -943,9 +944,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
           await scanLiveApp(page, `${tab} (${viewport.label}, ${theme})`);
         }
       }
-      // Trim, PPF undo and Save Editor are named rows under their own group
-      // heading, which is what supplies the noun their short label drops.
-      for (const tab of ["trim", "ppf-undo", "save-editor"]) {
+      // Trim, Playlist, PPF undo and Save Editor are named rows under their own
+      // group heading, which is what supplies the noun their short label drops.
+      for (const tab of ["trim", "playlist", "ppf-undo", "save-editor"]) {
         await openNav();
         await navRow(tab).click();
         await page.locator(`#panel-${tab}:not([hidden])`).waitFor({ state: "visible" });

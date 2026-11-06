@@ -14,6 +14,7 @@ const WORKFLOW_GUIDES = {
   extract: { path: "docs/extract-files-browser", label: "ui.hero.extractGuide" },
   identify: { path: "docs/identify-roms-browser", label: "ui.hero.identifyGuide" },
   ppfUndo: { path: "docs/undo-ppf-browser", label: "ui.hero.ppfUndoGuide" },
+  playlist: { path: "docs/make-playlist-browser", label: "ui.hero.playlistGuide" },
   save: { path: "docs/edit-gen3-saves", label: "ui.hero.saveGuide" },
   test: { path: "docs/test-roms", label: "ui.hero.testGuide" },
   trim: { path: "docs/trim-roms-browser", label: "ui.hero.trimGuide" },

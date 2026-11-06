@@ -123,16 +123,24 @@ impl CliApp {
             }
         }
         match super::playlist::plan_job(args) {
-            Ok(job) => self.plan_succeeded(
-                command,
-                OperationFamily::Command,
-                "dry run: would write the playlist; nothing written",
-                job.writes()
-                    .iter()
-                    .map(|path| path.display().to_string())
-                    .collect(),
-                Vec::new(),
-            ),
+            Ok(job) => {
+                let plan = json!(job.dry_run_plan());
+                self.plan_report(
+                    command,
+                    OperationFamily::Command,
+                    "dry run: would write the playlist; nothing written",
+                    (
+                        job.writes()
+                            .iter()
+                            .map(|path| path.display().to_string())
+                            .collect(),
+                        Vec::new(),
+                        Vec::new(),
+                    ),
+                    false,
+                    Some(("playlist", plan)),
+                )
+            }
             Err(error) => self.finish(command, super::playlist::playlist_failure(error)),
         }
     }
@@ -483,6 +491,7 @@ impl CliApp {
             &format!("dry run: {command} only reads; no changes planned"),
             (Vec::new(), Vec::new(), Vec::new()),
             true,
+            None,
         )
     }
 
@@ -564,6 +573,7 @@ impl CliApp {
             label,
             (writes, downloads, notes),
             read_only,
+            None,
         )
     }
 
@@ -574,10 +584,11 @@ impl CliApp {
         label: &str,
         (writes, downloads, notes): (Vec<String>, Vec<String>, Vec<String>),
         read_only: bool,
+        command_details: Option<(&str, Value)>,
     ) -> AppRunOutcome {
         let mut report =
             OperationReport::succeeded(family, None, "plan", label.to_string(), Some(100.0), None);
-        report.details = Some(json!({
+        let mut details = json!({
             "dry_run": true,
             "command": command,
             "writes": writes,
@@ -585,7 +596,11 @@ impl CliApp {
             "read_only": read_only,
             "outputs_unknown": !read_only && writes.is_empty(),
             "notes": notes,
-        }));
+        });
+        if let (Some((key, value)), Some(object)) = (command_details, details.as_object_mut()) {
+            object.insert(key.to_string(), value);
+        }
+        report.details = Some(details);
         self.finish(command, report)
     }
 }

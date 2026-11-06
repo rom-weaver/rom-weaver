@@ -3639,6 +3639,12 @@ pub struct PlaylistCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub flat: bool,
+    /// Plan renaming the discs `<game> (Disc N)` where they are, for the browser to carry out.
+    /// Only a dry run accepts it.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub rename_in_place: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -7,6 +7,7 @@ type WorkflowView =
   | "identify"
   | "trim"
   | "ppf-undo"
+  | "playlist"
   | "save-editor"
   | "test";
 /** "home" is the apex landing route: a WebappView the shell renders, but not a workflow. */
@@ -47,6 +48,10 @@ type PpfUndoSessionState = {
   active: boolean;
 };
 
+type PlaylistSessionState = {
+  active: boolean;
+};
+
 type CompressSessionState = {
   active: boolean;
 };
@@ -82,6 +87,7 @@ const createEmptyTrimSessionState = (): TrimSessionState => ({
 });
 
 const createEmptyPpfUndoSessionState = (): PpfUndoSessionState => ({ active: false });
+const createEmptyPlaylistSessionState = (): PlaylistSessionState => ({ active: false });
 const createEmptyCompressSessionState = (): CompressSessionState => ({ active: false });
 
 const createEmptySaveEditorSessionState = (): SaveEditorSessionState => ({ active: false });
@@ -91,6 +97,7 @@ export type {
   CreatorSessionState,
   PatcherSessionState,
   StartupState,
+  PlaylistSessionState,
   PpfUndoSessionState,
   SaveEditorSessionState,
   TrimSessionState,
@@ -102,6 +109,7 @@ export {
   createEmptyCompressSessionState,
   createEmptyCreatorSessionState,
   createEmptyPatcherSessionState,
+  createEmptyPlaylistSessionState,
   createEmptyPpfUndoSessionState,
   createEmptySaveEditorSessionState,
   createEmptyTrimSessionState,

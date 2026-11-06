@@ -39,6 +39,7 @@ type PendingChangeInputState = {
   creatorState?: CreatorState;
   trimState?: TrimState;
   ppfUndoActive?: RuntimeValue;
+  playlistActive?: RuntimeValue;
   compressActive?: RuntimeValue;
   saveEditorActive?: RuntimeValue;
   patchStackState?: PendingPatchStackState;
@@ -102,6 +103,7 @@ const getPendingChangeState = ({
   creatorState,
   trimState,
   ppfUndoActive,
+  playlistActive,
   compressActive,
   saveEditorActive,
   patcherFormEdited,
@@ -123,6 +125,7 @@ const getPendingChangeState = ({
   settings: settingsDraftHasChanges(webappState),
   test: false,
   "ppf-undo": !!ppfUndoActive,
+  playlist: !!playlistActive,
   "save-editor": !!saveEditorActive,
   trim: trimHasPendingChanges(trimState),
 });
@@ -135,6 +138,7 @@ const shouldWarnBeforeUnload = (state: PendingChangeInputState): boolean => {
     pendingChangeState.compress ||
     pendingChangeState.trim ||
     pendingChangeState["ppf-undo"] ||
+    pendingChangeState.playlist ||
     pendingChangeState["save-editor"] ||
     pendingChangeState.settings
   );
@@ -152,6 +156,8 @@ const getUnloadConfirmationMessage = (state: PendingChangeInputState): string =>
   if (pendingChangeState.compress) return "You have an in-progress compression session. Reload and lose those changes?";
   if (pendingChangeState.trim) return "You have an in-progress trim session. Reload and lose those changes?";
   if (pendingChangeState["ppf-undo"]) return "You have an in-progress PPF undo session. Reload and lose those changes?";
+  if (pendingChangeState.playlist)
+    return "Discs are being renamed. Leaving now can leave them half renamed. Leave anyway?";
   if (pendingChangeState["save-editor"]) return "You have unsaved save edits. Reload and lose those changes?";
   if (pendingChangeState.patcher) return "You have an in-progress patching session. Reload and lose those changes?";
   return "";

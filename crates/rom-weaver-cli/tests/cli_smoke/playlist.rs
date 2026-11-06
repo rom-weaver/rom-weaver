@@ -223,6 +223,16 @@ fn playlist_dry_run_reports_the_playlist_it_would_write() {
         json["details"]["writes"],
         serde_json::json!([out.path().to_str().expect("p")])
     );
+    assert_eq!(
+        json["details"]["playlist"],
+        serde_json::json!({
+            "entries": ["Game (Disc 1).chd"],
+            "discs": [{ "path": disc.path().to_str().expect("p"), "game": "Game" }],
+            "file_name": "Game.m3u",
+            "text": "Game (Disc 1).chd\n",
+            "renames": [],
+        })
+    );
     assert!(!out.path().exists(), "dry run must not write the playlist");
 }
 

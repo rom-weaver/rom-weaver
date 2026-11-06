@@ -51,6 +51,7 @@ Guided runs in the app: [Apply](https://rom-weaver.com/apply-rom-patches?guide=a
 | Decompress RVZ to ISO | [Extract an ISO from RVZ](how-to/convert-rvz-to-iso-browser.md) |
 | Compress ISO or BIN/CUE to CHD | [Create a CHD](how-to/convert-to-chd-browser.md) |
 | Decompress CHD to ISO, BIN/CUE, or GDI | [Extract a disc from CHD](how-to/extract-chd-browser.md) |
+| Let an emulator change discs of a multi-disc game | [Make an M3U playlist](how-to/make-playlist-browser.md) |
 | Compress a GameCube or Wii ISO | [Compress ISO to RVZ](how-to/convert-to-rvz-browser.md) |
 | Compress a Nintendo 3DS ROM | [Create a Z3DS file](how-to/convert-to-z3ds-browser.md) |
 | Decompress Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX | [Extract a Nintendo 3DS file](how-to/extract-z3ds-browser.md) |
@@ -94,6 +95,7 @@ Procedures for specific tasks.
 - [Compress 3DS ROMs to Z3DS or ZCCI](how-to/convert-to-z3ds-browser.md)
 - [Decompress Z3DS or ZCCI to CCI](how-to/extract-z3ds-browser.md)
 - [Trim a ROM](how-to/trim-roms-browser.md)
+- [Make an M3U playlist](how-to/make-playlist-browser.md)
 - [Undo a PPF patch](how-to/undo-ppf-browser.md)
 - [Use the online ROM tester](how-to/test-roms-in-browser.md)
 - [Fix a source ROM checksum mismatch](how-to/fix-checksum-errors.md)

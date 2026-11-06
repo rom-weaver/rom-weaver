@@ -4215,6 +4215,11 @@ msgstr "Lies die Identify-Anleitung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.playlistGuide"
+msgstr "Lies die Playlist-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.ppfUndoGuide"
 msgstr "Lies die PPF-Undo-Anleitung"
 
@@ -4502,6 +4507,11 @@ msgstr "Alle zurücksetzen"
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.group.resources"
 msgstr "Ressourcen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.playlistDescription"
+msgstr "Liste alle Discs eines Spiels mit mehreren Discs in einer .m3u-Playlist auf, damit ein Emulator die Disc wechseln kann."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5685,6 +5695,11 @@ msgstr "ROMs kürzen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolPlaylist"
+msgstr "Disc-Playlists erstellen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
 msgstr "Behalte das Spiel."
 
@@ -5737,6 +5752,11 @@ msgstr "Codes eingeben"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.unchanged"
 msgstr "Unverändert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.playlistThesis"
+msgstr "Erstelle eine Disc-Playlist."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

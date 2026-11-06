@@ -1,6 +1,7 @@
 import { type ComponentType, lazy } from "react";
 import { createLogger } from "../lib/logging.ts";
 import type { ApplyPatchFormProps, CreatePatchFormProps, TrimPatchFormProps } from "../public/react/public-types.ts";
+import type { PlaylistFormProps } from "./components/playlist-form.tsx";
 import type { PpfUndoFormProps } from "./components/ppf-undo-form.tsx";
 import type { SaveEditorProps } from "./components/save-editor.tsx";
 import type { IdentifyFormProps } from "./components/identify-form.tsx";
@@ -38,6 +39,7 @@ type WorkflowRouteProps = {
     pageDrop?: import("../public/react/public-types.ts").PageFileDrop | null;
   };
   "ppf-undo": PpfUndoFormProps;
+  playlist: PlaylistFormProps;
   "save-editor": SaveEditorProps;
   trim: TrimPatchFormProps;
   "whats-new": WhatsNewPageProps;
@@ -128,6 +130,9 @@ const TestRoute = createWorkflowRoute("test", () =>
 const PpfUndoRoute = createWorkflowRoute("ppf-undo", () =>
   import("./components/ppf-undo-form.tsx").then((module) => ({ default: module.PpfUndoForm })),
 );
+const PlaylistRoute = createWorkflowRoute("playlist", () =>
+  import("./components/playlist-form.tsx").then((module) => ({ default: module.PlaylistForm })),
+);
 const SaveEditorRoute = createWorkflowRoute("save-editor", () =>
   import("./components/save-editor.tsx").then((module) => ({ default: module.SaveEditor })),
 );
@@ -150,6 +155,7 @@ const WORKFLOW_ROUTES = {
   patcher: PatcherRoute,
   test: TestRoute,
   "ppf-undo": PpfUndoRoute,
+  playlist: PlaylistRoute,
   "save-editor": SaveEditorRoute,
   trim: TrimRoute,
   "whats-new": WhatsNewRoute,
@@ -166,6 +172,7 @@ const ExtractRouteForm = ExtractRoute.Component;
 const HomePageRoute = HomeRoute.Component;
 const IdentifyRouteForm = IdentifyRoute.Component;
 const PpfUndoRouteForm = PpfUndoRoute.Component;
+const PlaylistRouteForm = PlaylistRoute.Component;
 const SaveEditorRouteForm = SaveEditorRoute.Component;
 const TrimPatchRoute = TrimRoute.Component;
 const WhatsNewPageRoute = WhatsNewRoute.Component;
@@ -194,6 +201,7 @@ export {
   IdentifyRouteForm,
   preloadDocsRouteHtml,
   preloadWorkflowRoute,
+  PlaylistRouteForm,
   PpfUndoRouteForm,
   SaveEditorRouteForm,
   TrimPatchRoute,

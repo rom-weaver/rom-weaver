@@ -51,6 +51,7 @@ const devPrerenderRoute = (url) => {
     return { docsSlug: "docs", view: WORKFLOW_ENTRY_ROUTES[routeSlug].view, workflowEntry: routeSlug };
   }
   const directView = {
+    "create-m3u-playlist": "playlist",
     "ppf-undo": "ppf-undo",
     "save-editor": "save-editor",
     "rom-save-editor": "save-editor",
@@ -130,6 +131,7 @@ export const prerenderWebappShell = (prerenderedShells) => ({
         prerenderedShells.set("extract", await render("extract"));
         prerenderedShells.set("trim", await render("trim"));
         prerenderedShells.set("ppf-undo", await render("ppf-undo"));
+        prerenderedShells.set("playlist", await render("playlist"));
         prerenderedShells.set("save-editor", await render("save-editor"));
         prerenderedShells.set("test", await render("test"));
         prerenderedShells.set("whats-new", await render("whats-new"));

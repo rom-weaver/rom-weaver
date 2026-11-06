@@ -1,6 +1,6 @@
 # Make an M3U playlist from the CLI
 
-Build an `.m3u` playlist for a multi-disc game with `rom-weaver playlist`, so an emulator such as RetroArch can change discs.
+Build an `.m3u` playlist for a multi-disc game with `rom-weaver playlist`, so an emulator such as RetroArch can change discs. To make one without a terminal, see [Make an M3U playlist in the browser](make-playlist-browser.md).
 
 <!-- START doctoc -->
 ## Table of contents

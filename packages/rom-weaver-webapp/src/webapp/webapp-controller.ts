@@ -23,12 +23,14 @@ import {
   type CreatorSessionState,
   createEmptyCreatorSessionState,
   createEmptyPatcherSessionState,
+  createEmptyPlaylistSessionState,
   createEmptyPpfUndoSessionState,
   createEmptySaveEditorSessionState,
   createEmptyTrimSessionState,
   createEmptyValidationState,
   type PatcherSessionState,
   type StartupState,
+  type PlaylistSessionState,
   type PpfUndoSessionState,
   type SaveEditorSessionState,
   type TrimSessionState,
@@ -49,6 +51,7 @@ const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
   "identify",
   "trim",
   "ppf-undo",
+  "playlist",
   "save-editor",
   "test",
   "whats-new",
@@ -90,6 +93,7 @@ type WebappState = {
   currentView: WebappView;
   patcherSession: PatcherSessionState;
   ppfUndoSession: PpfUndoSessionState;
+  playlistSession: PlaylistSessionState;
   saveEditorSession: SaveEditorSessionState;
   trimSession: TrimSessionState;
   settingsDialogOpen: boolean;
@@ -192,6 +196,7 @@ const createWebappRootController = (options: ControllerOptions) => {
       status: "loading",
     },
     ppfUndoSession: createEmptyPpfUndoSessionState(),
+    playlistSession: createEmptyPlaylistSessionState(),
     saveEditorSession: createEmptySaveEditorSessionState(),
     trimSession: createEmptyTrimSessionState(),
     validation: emptyValidation(),
@@ -343,6 +348,7 @@ const createWebappRootController = (options: ControllerOptions) => {
         settingsDialogOpen: false,
         startup: { message: "", status: "ready" },
         ppfUndoSession: createEmptyPpfUndoSessionState(),
+        playlistSession: createEmptyPlaylistSessionState(),
         saveEditorSession: createEmptySaveEditorSessionState(),
         trimSession: createEmptyTrimSessionState(),
         validation: emptyValidation(),
@@ -514,6 +520,11 @@ const createWebappRootController = (options: ControllerOptions) => {
       const nextActive = !!active;
       if (store.getState().ppfUndoSession.active === nextActive) return;
       setState({ ppfUndoSession: { active: nextActive } });
+    },
+    setPlaylistSessionState(active: unknown) {
+      const nextActive = !!active;
+      if (store.getState().playlistSession.active === nextActive) return;
+      setState({ playlistSession: { active: nextActive } });
     },
     setCompressSessionState(active: unknown) {
       const nextActive = !!active;
