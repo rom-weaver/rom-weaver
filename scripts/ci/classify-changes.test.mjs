@@ -123,6 +123,7 @@ test("Docker changes select only the affected images", () => {
   assert.equal(classify("Dockerfile").docker_cli, "true");
   assert.equal(classify("packages/rom-weaver-webapp/Dockerfile").docker_webapp, "true");
   assert.equal(classify("packages/rom-weaver-webapp/scripts/docker-entrypoint.sh").docker_webapp, "true");
+  assert.equal(classify("packages/rom-weaver-webapp/scripts/docker-entrypoint.sh").docker_cli, "false");
   assert.equal(classify(".dockerignore").docker_cli, "true");
   assert.equal(classify("packages/rom-weaver-webapp/Dockerfile").docker_cli, "false");
 });
@@ -264,6 +265,7 @@ test("a pull request builds arm64 only for image definition changes", () => {
     ["Cargo.toml", "false", "false"],
     ["packages/rom-weaver-webapp/sws.toml", "false", "false"],
     ["packages/rom-weaver-webapp/scripts/compress-static-assets.mjs", "false", "false"],
+    ["packages/rom-weaver-webapp/scripts/docker-entrypoint.sh", "false", "false"],
   ]) {
     const result = classifyFor("pull_request", path);
     assert.equal(result.docker_cli_arm64, cliArm64, path);
