@@ -227,7 +227,7 @@ fn create_uncompressed_rust_raw_reports_unreadable_inputs_and_outputs() {
             ),
         )
         .expect_err("an unwritable output path must be reported");
-    assert!(err.to_string().contains("failed to create"), "{err}");
+    assert!(err.to_string().contains("cannot create"), "{err}");
 
     // A source shorter than the declared logical size fails while reading.
     let err = handler
@@ -513,7 +513,7 @@ fn compressed_create_rejects_degenerate_geometry_and_unwritable_outputs() {
             ),
         )
         .expect_err("an unwritable output path must be reported");
-    assert!(err.to_string().contains("failed to create"), "{err}");
+    assert!(err.to_string().contains("cannot create"), "{err}");
 
     let err = handler
         .create_compressed_rust_raw(
@@ -659,4 +659,48 @@ fn open_create_parent_rejects_mismatched_parents() {
     );
 
     let _ = fs::remove_dir_all(&dir);
+}
+
+// The open failure is an `IoPath`, so a full disk (no free inodes, a full FAT directory)
+// keeps its `io.storage_full` code. A directory stands in for an unopenable output.
+#[test]
+fn create_output_file_reports_the_open_failure_as_io() {
+    let dir = scratch_dir("create-output-io");
+
+    let err = ChdContainerHandler::create_output_file(&dir).expect_err("a directory is no file");
+
+    assert!(
+        matches!(
+            &err,
+            RomWeaverError::IoPath {
+                op: rom_weaver_core::IoOp::Create,
+                path,
+                ..
+            } if *path == *dir
+        ),
+        "{err}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// An allocation failure in the writer cannot be forced portably, so the mapping is
+// checked directly.
+#[test]
+fn chd_write_error_keeps_the_out_of_memory_code() {
+    let output = Path::new("/roms/disc.chd");
+
+    let err = ChdContainerHandler::chd_write_error(output, crate::chd_rs::Error::OutOfMemory);
+    assert_eq!(
+        err.code(),
+        Some(rom_weaver_core::ERROR_CODE_RESOURCE_OUT_OF_MEMORY),
+        "{err}"
+    );
+    assert!(
+        err.to_string()
+            .contains("failed to write CHD `/roms/disc.chd`:"),
+        "{err}"
+    );
+
+    let err = ChdContainerHandler::chd_write_error(output, crate::chd_rs::Error::CompressionError);
+    assert_eq!(err.code(), None, "{err}");
 }

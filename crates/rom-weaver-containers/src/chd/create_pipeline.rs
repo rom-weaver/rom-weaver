@@ -388,10 +388,7 @@ impl ChdContainerHandler {
             .truncate(true)
             .open(output)
             .map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to create `{}`: {error}",
-                    output.display()
-                ))
+                RomWeaverError::io_path(rom_weaver_core::IoOp::Create, output, error)
             })?;
         Ok(BufWriter::with_capacity(8 * 1024 * 1024, file))
     }
@@ -432,14 +429,13 @@ impl ChdContainerHandler {
 
     fn chd_write_error(output: &Path, error: crate::chd_rs::Error) -> RomWeaverError {
         let context = format!("failed to write CHD `{}`", output.display());
-        match error {
-            // Rebuilt as an i/o error so the failure keeps its `io.storage_full` code.
-            crate::chd_rs::Error::StorageFull => {
-                RomWeaverError::from(std::io::Error::from(std::io::ErrorKind::StorageFull))
-                    .with_context(context, None)
-            }
-            error => RomWeaverError::Validation(format!("{context}: {error}")),
-        }
+        // Rebuilt as an i/o error so the failure keeps its i/o code.
+        let kind = match error {
+            crate::chd_rs::Error::StorageFull => std::io::ErrorKind::StorageFull,
+            crate::chd_rs::Error::OutOfMemory => std::io::ErrorKind::OutOfMemory,
+            error => return RomWeaverError::Validation(format!("{context}: {error}")),
+        };
+        RomWeaverError::from(std::io::Error::from(kind)).with_context(context, None)
     }
 }
 
