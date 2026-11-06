@@ -96,7 +96,7 @@ fn value(document: &crate::save::SaveDocument, id: &str) -> SaveValue {
         .clone()
 }
 
-fn error_code(error: crate::RomWeaverError) -> String {
+pub(in crate::save) fn error_code(error: crate::RomWeaverError) -> String {
     match error {
         crate::RomWeaverError::ValidationCode(error) => error.code().to_owned(),
         other => panic!("expected a coded validation error, got {other:?}"),

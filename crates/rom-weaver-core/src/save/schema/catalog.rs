@@ -547,7 +547,7 @@ fn choices(entries: &[(&str, i64)]) -> Vec<FieldChoice> {
         .collect()
 }
 
-/// Edit check that rejects the opened or edited save when any `(current, maximum)` pair has the current value above the maximum.
+/// Edit check that rejects an edited save when any `(current, maximum)` pair has the current value above the maximum.
 fn capacity_check(message: String, pairs: Vec<(rules::Scalar, rules::Scalar)>) -> rules::Check {
     rules::Check {
         when: None,

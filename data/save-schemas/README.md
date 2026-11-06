@@ -72,7 +72,7 @@ The GoldenEye 007 profiles accept 512-byte EEPROM saves and copies padded to 2 K
 
 The Super Mario 64 profiles accept 512-byte EEPROM saves and copies padded to 2 KiB. Edits repair both copies of the selected Mario file and both options records. Other Mario files and trailing padding remain unchanged. These profiles require valid primary file and options checksums; they do not recover a damaged primary from its backup.
 
-Integer and packed-decimal fields use the full stored range unless the source proves a narrower storage rule. A game can reject combinations that fit the storage. Raw numeric options can include states that normal play does not produce.
+Integer and packed-decimal fields use the full stored range unless the source proves a narrower storage rule. A game can reject combinations that fit the storage. A definition can also require that the edited result satisfy a rule, such as current quantities not exceeding capacity. An edit passes when its result satisfies the rule, so an edit can repair a save that already breaks it, unless the definition also disables editing for that violation through a document check (A Link to the Past does). An edit whose result still breaks the rule is rejected with that rule's error code and nothing is written; a save that already breaks a rule keeps the rule's code even when a document check also disables editing. Raw numeric options can include states that normal play does not produce.
 
 The Generation I and II definitions use Rust loops and shared constructors for repeated Pokédex fields. Their field IDs and byte locations remain unchanged. Shared choices define `fast` (1), `medium` (3), and `slow` (5). Every Pokémon profile requires a template.
 
