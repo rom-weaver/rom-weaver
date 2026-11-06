@@ -50,9 +50,7 @@ fn valid(bytes: &[u8], product: &str, first: usize, blocks: usize) -> bool {
             })
         && bytes[base..base + 2] == *b"SC"
         && matches!(bytes[base + 2], 0x11..=0x13)
-        // Multi-block saves skip the title frame's block count: the directory chain validates it,
-        // and the upstream editor for the only such game never reads that byte.
-        && (blocks > 1 || bytes[base + 3] == 1)
+        && usize::from(bytes[base + 3]) == blocks
         && bytes[base + 0x200..base + blocks * BLOCK_SIZE]
             .iter()
             .any(|value| *value != 0 && *value != 0xff);

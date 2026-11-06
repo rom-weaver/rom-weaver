@@ -349,7 +349,7 @@ fn registry_lists_every_game_with_format_metadata() {
                 .map(|region| format!("ctr-crash-team-racing-{region}-block-{block}")),
         );
     }
-    for block in 1..=12 {
+    for block in 1..=11 {
         expected.extend(
             ["europe", "usa", "japan"]
                 .iter()

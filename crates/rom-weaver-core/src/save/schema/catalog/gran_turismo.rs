@@ -1,10 +1,10 @@
 use super::playstation_card::{self, BLOCK_SIZE};
 use super::*;
 
-// Fields and the checksum MUST follow this pinned game layout. The save spans four card blocks,
+// Fields and the checksum MUST follow this pinned game layout. The save spans five card blocks,
 // which `playstation_card::definition` validates as one contiguous chain.
 // https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/gran-turismo/saveEditor
-const BLOCKS: usize = 4;
+const BLOCKS: usize = 5;
 const CHECKSUM: usize = 0x6da4;
 const CHECKED: std::ops::Range<usize> = 0x200..CHECKSUM;
 
@@ -131,25 +131,26 @@ mod tests {
         for block in 1..=15 {
             bytes[block * 0x80..block * 0x80 + 0x80].fill(0);
         }
-        for block in FIRST..FIRST + 4 {
+        for block in FIRST..FIRST + BLOCKS {
             let offset = block * 0x80;
             let (mode, link) = match block {
                 FIRST => (0x51, (block as u16).to_le_bytes()),
-                _ if block == FIRST + 3 => (0x53, [0xff, 0xff]),
+                _ if block == FIRST + BLOCKS - 1 => (0x53, [0xff, 0xff]),
                 _ => (0x52, (block as u16).to_le_bytes()),
             };
             bytes[offset] = mode;
             bytes[offset + 8..offset + 10].copy_from_slice(&link);
             if block == FIRST {
-                bytes[offset + 4..offset + 8].copy_from_slice(&0x8000u32.to_le_bytes());
+                bytes[offset + 4..offset + 8]
+                    .copy_from_slice(&((BLOCKS * BLOCK_SIZE) as u32).to_le_bytes());
                 bytes[offset + 0xa..offset + 0xc].copy_from_slice(b"BA");
                 bytes[offset + 0xc..offset + 0xc + PRODUCT.len()]
                     .copy_from_slice(PRODUCT.as_bytes());
             }
             bytes[offset + 0x7f] = bytes[offset..offset + 0x7f].iter().fold(0, |x, v| x ^ v);
         }
-        bytes[BASE..BASE + 4 * BLOCK_SIZE].fill(0x3c);
-        bytes[BASE..BASE + 4].copy_from_slice(&[b'S', b'C', 0x11, 4]);
+        bytes[BASE..BASE + BLOCKS * BLOCK_SIZE].fill(0x3c);
+        bytes[BASE..BASE + 4].copy_from_slice(&[b'S', b'C', 0x11, BLOCKS as u8]);
         lcg_fill(&mut bytes[BASE + 0x200..BASE + 0x6da4], 0x6717);
         seal(&mut bytes);
         bytes
@@ -175,15 +176,15 @@ mod tests {
         assert_eq!(sums([0xffu8; 300]), 0xa97e_f33f);
         let template = card();
         assert_eq!(
-            checksum(&template[BASE..BASE + 4 * BLOCK_SIZE]),
+            checksum(&template[BASE..BASE + BLOCKS * BLOCK_SIZE]),
             js_checksum(&template)
         );
         for byte in [0, 0x1ff, 0x200, 0x6da3, 0x6da4] {
             let mut copy = template.clone();
             copy[BASE + byte] ^= 0xff;
-            let changed = checksum(&copy[BASE..BASE + 4 * BLOCK_SIZE]);
+            let changed = checksum(&copy[BASE..BASE + BLOCKS * BLOCK_SIZE]);
             assert_eq!(changed, js_checksum(&copy));
-            let unchanged = changed == checksum(&template[BASE..BASE + 4 * BLOCK_SIZE]);
+            let unchanged = changed == checksum(&template[BASE..BASE + BLOCKS * BLOCK_SIZE]);
             assert_eq!(unchanged, !CHECKED.contains(&byte), "{byte:x}");
         }
     }
@@ -237,16 +238,66 @@ mod tests {
     }
 
     #[test]
-    fn accepts_any_title_frame_block_count_byte() {
+    fn edits_credits_of_a_five_block_card_and_reseals_the_checksum() {
         let game = game();
         let handler = handler(&game);
         let identity = handler.definitions().remove(0).identity;
-        for count in [0, 1, 2, 3, 5, 0xff] {
+        let template = card();
+        assert_eq!(
+            template[FIRST * 0x80 + 4..FIRST * 0x80 + 8],
+            [0, 0xa0, 0, 0]
+        );
+        let result = handler
+            .apply(
+                &input(template.clone(), &identity.id),
+                &identity,
+                &[SaveEdit {
+                    field: "credits".into(),
+                    value: SaveValue::U32(1_234_567),
+                }],
+                false,
+            )
+            .unwrap();
+        let after = result.bytes.expect("the edit changes the card");
+        assert_eq!(after.len(), CARD_SIZE);
+        assert_eq!(
+            after[BASE + 0x204..BASE + 0x208],
+            1_234_567u32.to_le_bytes()
+        );
+        assert_eq!(
+            after[BASE + CHECKSUM..BASE + CHECKSUM + 4],
+            js_checksum(&after).to_le_bytes()
+        );
+        assert_ne!(
+            after[BASE + CHECKSUM..BASE + CHECKSUM + 4],
+            template[BASE + CHECKSUM..BASE + CHECKSUM + 4]
+        );
+        let changed: Vec<usize> = (0..CARD_SIZE)
+            .filter(|index| template[*index] != after[*index])
+            .collect();
+        assert!(
+            changed
+                .iter()
+                .all(|index| (BASE + 0x204..BASE + 0x208).contains(index)
+                    || (BASE + CHECKSUM..BASE + CHECKSUM + 4).contains(index)),
+            "{changed:x?}"
+        );
+    }
+
+    #[test]
+    fn rejects_a_title_frame_block_count_other_than_the_file_size() {
+        let game = game();
+        let handler = handler(&game);
+        let identity = handler.definitions().remove(0).identity;
+        for count in [0, 1, 4, 6, 0xff] {
             let mut bytes = card();
             bytes[BASE + 3] = count;
-            handler
-                .apply(&input(bytes, &identity.id), &identity, &[], false)
-                .unwrap_or_else(|error| panic!("rejected block count byte {count}: {error}"));
+            assert!(
+                handler
+                    .apply(&input(bytes, &identity.id), &identity, &[], false)
+                    .is_err(),
+                "accepted block count byte {count}"
+            );
         }
     }
 
@@ -271,9 +322,15 @@ mod tests {
                 "{field}"
             );
         }
+        // Directory damage re-seals the frame's XOR so the mode, link, size, and product checks
+        // each reject it on their own; a flipped XOR byte is the one case left to the XOR check.
         let damaged = |index: usize| {
             let mut bytes = template.clone();
             bytes[index] ^= 1;
+            if index < 0x800 && index % 0x80 != 0x7f {
+                let frame = index / 0x80 * 0x80;
+                bytes[frame + 0x7f] = bytes[frame..frame + 0x7f].iter().fold(0, |x, v| x ^ v);
+            }
             handler
                 .apply(&input(bytes, &identity.id), &identity, &[], false)
                 .is_err()
@@ -292,9 +349,12 @@ mod tests {
             dir + 0x80,
             dir + 0x80 + 8,
             dir + 0x100,
+            dir + 0x100 + 8,
             dir + 0x180,
             dir + 0x180 + 8,
-            dir + 0x180 + 0x7f,
+            dir + 0x200,
+            dir + 0x200 + 8,
+            dir + 0x200 + 0x7f,
             BASE,
             BASE + 0x200,
             BASE + 0x6da3,

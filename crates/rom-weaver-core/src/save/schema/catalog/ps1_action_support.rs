@@ -1,7 +1,6 @@
 use super::*;
 
-// Shared by the PlayStation action-game tests: edits every editable field of a profile in
-// turn and reports what changed, so each module only states its own integrity rules.
+// Edits each editable field of a profile in turn and records the bytes each edit changes.
 
 pub(super) struct FieldEdit {
     pub id: String,
