@@ -755,12 +755,10 @@ const readPreviewBrotliFile = (resolvedPath, sourceData, callback) => {
   });
 };
 
-const previewCacheKey = (allowFallback, filePath) => `${allowFallback ? "1" : "0"}:${filePath}`;
-
 // Treat dist as immutable for a preview session so repeated asset reads do not
 // add disk I/O and compression time to the performance measurements.
 const readPreviewAsset = (cache, filePath, fallbackPath, allowFallback, callback) => {
-  const cacheKey = previewCacheKey(allowFallback, filePath);
+  const cacheKey = `${allowFallback ? "1" : "0"}:${filePath}`;
   const cached = cache.get(cacheKey);
   if (cached) {
     callback(null, cached);
@@ -791,22 +789,14 @@ const sendEarlyHints = (res, pagesHeaders, isDocument) => {
 };
 
 // Route documents carry <base href="../">, which resolves only from the trailing-slash URL, so redirect there as
-// static-web-server does. A relative target keeps any prefix a proxy stripped. A path
-// the asset cache already holds is a file, so it skips the stat the cache exists to avoid.
+// static-web-server does. A relative target keeps any prefix a proxy stripped. The answer is kept in the asset cache
+// under its own key, because `/route` and `/route/` resolve to the same file path.
 const redirectBareDirectory = (cache, filePath, pathname, req, res, securityOptions, next) => {
-  if (
-    pathname.endsWith("/") ||
-    cache.has(previewCacheKey(true, filePath)) ||
-    cache.has(previewCacheKey(false, filePath))
-  ) {
+  if (pathname.endsWith("/")) {
     next();
     return;
   }
-  fs.stat(filePath, (statError, stats) => {
-    if (statError || !stats.isDirectory()) {
-      next();
-      return;
-    }
+  const redirectToSlashForm = () => {
     const { search } = new URL(req.url, "https://localhost");
     send(
       res,
@@ -815,6 +805,19 @@ const redirectBareDirectory = (cache, filePath, pathname, req, res, securityOpti
       null,
       securityOptions,
     );
+  };
+  const directoryKey = `directory:${filePath}`;
+  const isDirectory = cache.get(directoryKey);
+  if (isDirectory !== undefined) {
+    if (isDirectory) redirectToSlashForm();
+    else next();
+    return;
+  }
+  fs.stat(filePath, (statError, stats) => {
+    const found = !statError && stats.isDirectory();
+    cache.set(directoryKey, found);
+    if (found) redirectToSlashForm();
+    else next();
   });
 };
 

@@ -102,6 +102,13 @@ test("preview redirects a nested bare directory to its last segment only", async
   assert.equal(response.headers.location, "guide/");
 });
 
+test("preview still redirects a bare directory after its trailing-slash form was served", async () => {
+  assert.equal((await get("/docs/guide/", "text/html")).status, 200);
+  const response = await get("/docs/guide", "text/html");
+  assert.equal(response.status, 308);
+  assert.equal(response.headers.location, "guide/");
+});
+
 test("preview serves a directory index at its trailing-slash URL", async () => {
   const response = await get("/route/", "text/html");
   assert.equal(response.status, 200);
