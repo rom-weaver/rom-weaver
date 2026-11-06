@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, test } from "vitest";
 import { commands } from "vitest/browser";
 import { planBrowserPlaylist } from "../../src/platform/browser/browser-playlist-api.ts";
+import { canWritePlaylistFolders } from "../../src/storage/browser/playlist-folder-support.ts";
 import { PlaylistForm } from "../../src/webapp/components/playlist-form.tsx";
 import { WORKER_OPFS_MOUNTPOINT } from "../../src/workers/shared/worker-storage/storage-layout.ts";
 
@@ -162,6 +163,14 @@ const typeInto = (input, value) => {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 };
 
+const seedFolder = async (folder, files) => {
+  for (const [name, content] of Object.entries(files)) {
+    const writable = await (await folder.getFileHandle(name, { create: true })).createWritable();
+    await writable.write(content);
+    await writable.close();
+  }
+};
+
 const listFolder = async (directory) => {
   const files = {};
   for await (const entry of directory.values()) files[entry.name] = await (await entry.getFile()).text();
@@ -170,17 +179,12 @@ const listFolder = async (directory) => {
 
 test("renames the discs in the picked folder where the browser can move files, and points to the CLI elsewhere", async () => {
   // Chrome and Edge offer both; Safari moves files only inside its private storage and has no picker.
-  const canWriteFolders =
-    typeof window.showDirectoryPicker === "function" && typeof FileSystemFileHandle.prototype.move === "function";
+  const canWriteFolders = canWritePlaylistFolders();
   const root = await navigator.storage.getDirectory();
   folderName = `playlist-folder-${crypto.randomUUID()}`;
   const folder = await root.getDirectoryHandle(folderName, { create: true });
   const seed = ff7Files();
-  for (const [name, content] of Object.entries(seed)) {
-    const writable = await (await folder.getFileHandle(name, { create: true })).createWritable();
-    await writable.write(content);
-    await writable.close();
-  }
+  await seedFolder(folder, seed);
   if (!canWriteFolders) {
     mountForm();
     const transfer = new DataTransfer();
@@ -234,22 +238,14 @@ test("renames the discs in the picked folder where the browser can move files, a
 
 test("clears the rename choice when another folder is opened", async () => {
   // Only Chrome and Edge can pick a folder and move its files; elsewhere the choice is always off.
-  if (
-    !(typeof window.showDirectoryPicker === "function" && typeof FileSystemFileHandle.prototype.move === "function")
-  ) {
-    return;
-  }
+  if (!canWritePlaylistFolders()) return;
   const root = await navigator.storage.getDirectory();
   folderName = `playlist-folder-${crypto.randomUUID()}`;
   const parent = await root.getDirectoryHandle(folderName, { create: true });
   const folders = [];
-  for (const name of ["first", "second"]) {
+  for (const name of ["disc-set-a", "disc-set-b"]) {
     const folder = await parent.getDirectoryHandle(name, { create: true });
-    for (const [file, content] of Object.entries(ff7Files())) {
-      const writable = await (await folder.getFileHandle(file, { create: true })).createWritable();
-      await writable.write(content);
-      await writable.close();
-    }
+    await seedFolder(folder, ff7Files());
     folders.push(folder);
   }
   let opened = 0;
@@ -262,8 +258,10 @@ test("clears the rename choice when another folder is opened", async () => {
   await expect.poll(() => document.querySelector("#playlist-rename-discs").checked).toBe(true);
 
   buttonNamed("Open game folder").click();
-  await expect.poll(() => opened).toBe(2);
-  await expect.poll(() => document.querySelector("#playlist-rename-discs").checked).toBe(false);
+  // The checkbox reads unchecked while a folder's plan is pending, so check it only once the new plan is in.
+  await expect.poll(() => document.querySelector("#playlist-container")?.textContent ?? "").toContain("disc-set-b");
+  await enabledButton("#playlist-rename-discs");
+  expect(document.querySelector("#playlist-rename-discs").checked).toBe(false);
   expect(document.querySelector("#playlist-renames")).toBeNull();
 });
 
