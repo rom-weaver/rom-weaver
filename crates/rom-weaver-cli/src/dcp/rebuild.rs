@@ -148,10 +148,10 @@ where
                 let source_bytes = source.read_file(source_entry)?;
                 let patched = rom_weaver_patches::xdelta::apply_patch_bytes(&source_bytes, &delta)
                     .map_err(|err| {
-                        RomWeaverError::Validation(format!(
-                            "failed to apply `.dcp` delta for `{}`: {err}",
-                            file.path
-                        ))
+                        err.with_context(
+                            format!("failed to apply `.dcp` delta for `{}`", file.path),
+                            None,
+                        )
                     })?;
                 return emit(&patched);
             }
