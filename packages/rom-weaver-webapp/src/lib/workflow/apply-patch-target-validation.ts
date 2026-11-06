@@ -5,7 +5,7 @@ import type {
   PatchValidateResult,
   WorkflowRuntime,
 } from "../../types/workflow-runtime-adapter.ts";
-import { toRomWeaverError } from "../errors.ts";
+import { getEngineError, toRomWeaverError } from "../errors.ts";
 import { getPatchFileExternalSource } from "../input/binary-service.ts";
 import type { InputAsset } from "../input/input-assets.ts";
 import {
@@ -21,6 +21,7 @@ import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 // these as a retryable "unknown" so the next readiness pass re-validates.
 const TRANSIENT_VALIDATION_ERROR_CODES: ReadonlySet<string> = new Set([
   "CANCELLED",
+  "OUT_OF_MEMORY",
   "WORKER_FAILED",
   "WORKER_UNAVAILABLE",
 ]);
@@ -105,9 +106,15 @@ const applyPatchVerdict = <TSource>(
   target: InputAsset,
   validationKey: string,
   startedAt: number,
-  verdict: { message: string; status: "valid" | "invalid" | "unknown" | "deferred"; unreadable?: boolean },
+  verdict: {
+    errorCode?: string;
+    message: string;
+    status: "valid" | "invalid" | "unknown" | "deferred";
+    unreadable?: boolean;
+  },
 ) => {
   stage.state.patchValidation = {
+    ...(verdict.errorCode ? { errorCode: verdict.errorCode } : {}),
     message: verdict.message,
     status: verdict.status,
     targetInputId: target.id,
@@ -239,6 +246,7 @@ const applyPlanValidationResult = <TSource>(
           ? "deferred"
           : "unknown";
   applyPatchVerdict(prepared.entry.stage, prepared.entry.target, validationKey, startedAt, {
+    errorCode: planVerdict.error_code,
     message:
       planVerdict.message ||
       (status === "valid"
@@ -273,6 +281,7 @@ const applyPerPatchValidationResult = <TSource>(
   validationKey: string,
 ) => {
   applyPatchVerdict(prepared.entry.stage, prepared.entry.target, validationKey, startedAt, {
+    errorCode: verdict.errorCode,
     message:
       verdict.message ||
       (verdict.status === "passed" ? "Patch validation passed" : "Patch cannot be applied to this ROM"),
@@ -426,6 +435,7 @@ const validatePreparedGroup = async <TSource>(
     const transient = adapters.signal.aborted || TRANSIENT_VALIDATION_ERROR_CODES.has(normalized.code);
     for (const { entry, startedAt, validationKey } of prepared) {
       applyPatchVerdict(entry.stage, entry.target, validationKey, startedAt, {
+        errorCode: getEngineError(error)?.code,
         message: normalized.message,
         status: transient ? "unknown" : "invalid",
       });

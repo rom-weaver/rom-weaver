@@ -1,6 +1,7 @@
 import { ArrowLeft, HardDrive, Heart, House, Info, Newspaper, ScrollText, Search, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { appPathHref } from "../app-routes.ts";
 import { DocsNavigation } from "../docs-navigation.tsx";
 import { BrandMark } from "./brand-mark.tsx";
 import { FIND_SHORTCUT_HINT, FindPalette } from "./find-palette.tsx";
@@ -437,7 +438,7 @@ const Masthead = ({
         {
           id: "back-to-tools",
           label: localizer.message("ui.docs.backToTools"),
-          href: "/apply-rom-patches",
+          href: appPathHref("apply-rom-patches", homeHref),
           icon: <ArrowLeft aria-hidden="true" />,
         },
       ],

@@ -98,10 +98,17 @@ impl CliApp {
                     max_depth = MAX_NESTED_EXTRACT_DEPTH,
                     "nested archive extraction failed: exceeded max depth"
                 );
-                return Err(RomWeaverError::Validation(format!(
-                    "nested extract exceeded max depth of {MAX_NESTED_EXTRACT_DEPTH} at `{}`",
-                    source.display()
-                )));
+                return Err(RomWeaverError::ValidationCode(
+                    rom_weaver_core::ValidationCodeError::new(
+                        rom_weaver_core::ERROR_CODE_EXTRACT_MAX_DEPTH_EXCEEDED,
+                    )
+                    .with_message(format!(
+                        "nested extract exceeded max depth of {MAX_NESTED_EXTRACT_DEPTH} at `{}`",
+                        source.display()
+                    ))
+                    .with_field("max_depth", MAX_NESTED_EXTRACT_DEPTH)
+                    .with_field("path", source.display().to_string()),
+                ));
             }
             if nested_count >= MAX_NESTED_EXTRACT_ARCHIVES {
                 trace!(
@@ -431,11 +438,13 @@ impl CliApp {
 
     /// The planner's refusal to extract an archive whose every entry is ignored or unrelated.
     fn is_empty_nested_selection_error(error: &RomWeaverError) -> bool {
-        let RomWeaverError::Validation(message) = error else {
-            return false;
-        };
-        message.contains("were ignored by default filters")
-            || (message.contains("no extract entries from") && message.contains("matched"))
+        matches!(
+            error.code(),
+            Some(
+                rom_weaver_core::ERROR_CODE_EXTRACT_ALL_ENTRIES_IGNORED
+                    | rom_weaver_core::ERROR_CODE_EXTRACT_NO_MATCHING_ENTRIES
+            )
+        )
     }
 
     pub(super) fn should_probe_nested_candidate(

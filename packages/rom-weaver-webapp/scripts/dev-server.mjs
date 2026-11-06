@@ -839,24 +839,27 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
     }
     const encoded = Boolean(asset.brotli) && acceptsBrotli(req);
     // `_headers` last so the deployed file wins wherever it and the preview server both
-    // speak. The explicit no-COOP/COEP mode is the exception: its purpose is to
+    // speak. There are two exceptions. The explicit no-COOP/COEP mode: its purpose is to
     // prove that the service worker can add isolation without help from either
-    // source of preview headers.
+    // source of preview headers. And a 404, where Pages replaces whatever Cache-Control
+    // the rules gave with no-store, so a 404 MUST NOT keep an /assets/* rule's long lifetime.
     const pagesHeaders = matchPagesHeaders(pagesRules, pathname);
     if (!securityOptions.crossOriginIsolation) {
       for (const header of Object.keys(CROSS_ORIGIN_ISOLATION_HEADERS)) delete pagesHeaders[header];
     }
     sendEarlyHints(res, pagesHeaders, path.extname(asset.resolvedPath) === ".html");
     const isDocument = path.extname(asset.resolvedPath) === ".html";
+    const status = asset.resolvedPath === fallbackPath && filePath !== fallbackPath ? 404 : 200;
     send(
       res,
-      asset.resolvedPath === fallbackPath && filePath !== fallbackPath ? 404 : 200,
+      status,
       {
         "Cache-Control": isDocument ? "no-cache" : "public, max-age=31536000, immutable",
         "Content-Type": getContentType(asset.resolvedPath),
         ...(asset.brotli ? { Vary: "Accept-Encoding" } : {}),
         ...(encoded ? { "Content-Encoding": "br" } : {}),
         ...pagesHeaders,
+        ...(status === 404 ? { "Cache-Control": "no-store" } : {}),
       },
       req.method === "HEAD" ? null : encoded ? asset.brotli : asset.data,
       securityOptions,

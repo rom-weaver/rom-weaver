@@ -16,6 +16,7 @@ import type { BinarySource } from "./patcher-form.ts";
 import {
   formatElapsedMs,
   getSourceNoticeLevel,
+  getSourceNoticeCode,
   getSourceNoticeMessage,
   hasSourceQueueWarning,
 } from "./workflow-form-utils.ts";
@@ -89,7 +90,7 @@ const buildCreateSourceStep = ({
     </Notice>
   ) : sourceNoticeMessage ? (
     <Notice id={`patch-builder-${role}-error-message`} level={getSourceNoticeLevel(sourceState)}>
-      <WorkflowErrorMessage message={sourceNoticeMessage} />
+      <WorkflowErrorMessage code={getSourceNoticeCode(sourceState)} message={sourceNoticeMessage} />
     </Notice>
   ) : null;
   return {

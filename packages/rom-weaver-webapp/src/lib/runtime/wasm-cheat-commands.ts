@@ -3,7 +3,7 @@ import type { CheatRecord, ClassifiedCheatRecord } from "../cheats/model.ts";
 import type { CheatPatchSnapshot, CheatWriteConflict } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 import { createRomWeaverCommand } from "../../wasm/index.ts";
 import { getRomWeaverRunEventDetails } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
-import { withRomWeaverFailureKind } from "../../workers/rom-weaver/runner-errors.ts";
+import { withRomWeaverFailure } from "../../workers/rom-weaver/runner-errors.ts";
 import { toRomWeaverOptions } from "./run-options.ts";
 import { ensureRomWeaverSuccess, getTerminalEvent } from "./run-result-parsing.ts";
 import { asRecord, getCommandResult } from "./strict-wire-values.ts";
@@ -21,7 +21,7 @@ const parseCheatCommandResult = (result: RomWeaverJsonResult): RomWeaverCheatRes
   const terminal = getTerminalEvent(result);
   const cheats = getCommandResult(terminal ? getRomWeaverRunEventDetails(terminal) : undefined, "cheats");
   if (!(cheats && Array.isArray(cheats.records) && Array.isArray(cheats.conflicts))) {
-    throw withRomWeaverFailureKind(new Error("Cheat classification result was missing or malformed"), result);
+    throw withRomWeaverFailure(new Error("Cheat classification result was missing or malformed"), result);
   }
   const patches = cheats.patches;
   if (
@@ -39,7 +39,7 @@ const parseCheatCommandResult = (result: RomWeaverJsonResult): RomWeaverCheatRes
         );
       }))
   ) {
-    throw withRomWeaverFailureKind(new Error("Cheat patch snapshots were malformed"), result);
+    throw withRomWeaverFailure(new Error("Cheat patch snapshots were malformed"), result);
   }
   return {
     conflicts: cheats.conflicts as CheatWriteConflict[],

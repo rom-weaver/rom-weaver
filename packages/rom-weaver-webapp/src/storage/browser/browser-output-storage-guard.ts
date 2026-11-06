@@ -1,3 +1,4 @@
+import { getEngineError, STORAGE_FULL_MESSAGE_REGEX } from "../../lib/errors.ts";
 import type { BrowserStorageManagerLike } from "./browser-storage-estimate.ts";
 
 type BrowserOutputStorageGuardOptions = {
@@ -8,11 +9,10 @@ type BrowserOutputStorageGuardOptions = {
 
 type CodedOutputStorageError = Error & {
   cause?: unknown;
-  code: "OUTPUT_WRITE_FAILED";
+  code: "STORAGE_FULL";
   details?: Record<string, unknown>;
 };
 
-const BROWSER_OUTPUT_STORAGE_FAILURE_REGEX = /\b(no space left|quota|nospc|enospc)\b/i;
 const BROWSER_OUTPUT_STORAGE_CONTEXT_REGEX = /\[storage:/i;
 
 const toNonNegativeByteCount = (value: unknown): number | null => {
@@ -27,7 +27,7 @@ const createOutputStorageError = (
 ): CodedOutputStorageError => {
   const error = new Error(message) as CodedOutputStorageError;
   error.name = "OutputStorageError";
-  error.code = "OUTPUT_WRITE_FAILED";
+  error.code = "STORAGE_FULL";
   error.details = details;
   if (cause !== undefined) error.cause = cause;
   return error;
@@ -44,7 +44,10 @@ const withBrowserOutputStorageFailureContext = async (
 ): Promise<unknown> => {
   const message = error instanceof Error ? error.message : String(error || "");
   if (BROWSER_OUTPUT_STORAGE_CONTEXT_REGEX.test(message)) return error;
-  if (!BROWSER_OUTPUT_STORAGE_FAILURE_REGEX.test(message)) return error;
+  // A coded engine failure is storage-full only by its code; text is the signal for errors without one.
+  const engine = getEngineError(error);
+  const storageFull = engine ? engine.code === "io.storage_full" : STORAGE_FULL_MESSAGE_REGEX.test(message);
+  if (!storageFull) return error;
 
   const requiredByteCount = toNonNegativeByteCount(requiredBytes);
   return createOutputStorageError(

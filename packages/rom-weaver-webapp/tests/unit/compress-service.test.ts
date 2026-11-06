@@ -157,12 +157,16 @@ describe("compress service", () => {
     expect(probe).toHaveBeenCalledTimes(2);
   });
 
-  it.each([
-    "failed to open input `dvd.iso` for rvz create: disc format error: Unknown disc format",
-    "the input must be a GameCube or Wii disc image",
-  ])("reports a non-disc RVZ input in plain words: %s", async (engineMessage) => {
+  it("reports a non-disc RVZ input in plain words", async () => {
+    const engineMessage =
+      "`dvd.iso` is not a GameCube or Wii disc image; rvz create only supports GameCube and Wii disc images [disc.not_gamecube_wii]";
     const { cleanup, create, runtime } = makeRuntime();
-    create.mockRejectedValue(Object.assign(new Error(engineMessage), { code: "COMPRESSION_FAILED" }));
+    create.mockRejectedValue(
+      Object.assign(new Error(engineMessage), {
+        code: "UNSUPPORTED_FORMAT",
+        details: { engineCode: "disc.not_gamecube_wii" },
+      }),
+    );
     const probe = async () => ({ entries: [], recommendedFormat: "rvz" });
     Object.assign(runtime.compression, { probe });
     const failure = await compressFiles([file("dvd.iso", new Uint8Array(2048))], options("rvz"), runtime).catch(
@@ -170,7 +174,7 @@ describe("compress service", () => {
     );
     expect(failure).toBeInstanceOf(RvzInputNotDiscError);
     expect((failure as RvzInputNotDiscError).fileName).toBe("dvd.iso");
-    expect((failure as Error).message).not.toContain("Unknown disc format");
+    expect((failure as Error).message).not.toContain("disc.not_gamecube_wii");
     expect((failure as Error).cause).toBeInstanceOf(Error);
     expect(cleanup).not.toHaveBeenCalled();
   });

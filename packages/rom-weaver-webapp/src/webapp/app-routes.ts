@@ -111,6 +111,17 @@ const readAppBaseUrl = (): string => {
   return baseUrl.href;
 };
 
+/**
+ * Re-roots an in-app path (`/docs/faq#a`, `apply-rom-patches`) on the app base so
+ * a sub-path deployment keeps its prefix. Leading slashes are dropped first: a
+ * doubled slash would be a protocol-relative URL.
+ */
+const appPathHref = (href: string, appBaseUrl: string): string => {
+  // The server render has no window, so its base is the bare "/"; the throwaway origin only lets that parse.
+  const url = new URL(href.replace(/^\/+/, ""), new URL(appBaseUrl, "https://app.invalid"));
+  return `${url.pathname}${url.search}${url.hash}`;
+};
+
 type CreatorMode = "cheats" | "rom";
 
 /** `?mode=rom` or `?mode=cheats` asks Create to switch how the modification is supplied. */
@@ -132,6 +143,7 @@ const removeCreatorModeFromSearch = (search: string): string =>
 
 export {
   appendCreatorMode,
+  appPathHref,
   type CreatorMode,
   readAppBaseUrl,
   readCreatorModeFromSearch,

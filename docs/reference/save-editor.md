@@ -47,7 +47,7 @@ The Save Editor changes persistent game data. It does not change emulator save s
 
 The Pokémon handlers cover the English layouts named above. A matching file size alone does not prove support.
 
-The default registry also includes 593 fixed profiles for 81 title groups. The [catalog](../../data/save-schemas/README.md) lists their profile counts, exact editable scope, accepted physical variants, and creation support.
+The default registry also includes 980 fixed profiles for 90 title groups. The [catalog](../../data/save-schemas/README.md) lists their profile counts, exact editable scope, accepted physical variants, and creation support.
 
 ## Editable fields
 
@@ -72,6 +72,8 @@ Generation III inventory fields include empty slots. Each slot has an item ID an
 The Generation III slot counts, including PC storage, are 216 for Ruby/Sapphire, 236 for Emerald, and 216 for FireRed/LeafGreen. PC quantities remain unencrypted. Bag quantities retain the game's encryption.
 
 Generation III owned flags also set all three seen copies. Clearing a seen flag also clears its owned flag. Previews include these related changes. Conflicting explicit assignments are rejected.
+
+GoldenEye 007 best times mark easier unset difficulties as cleared, and clearing a time resets those markers. Setting Wide or Cinema screen mode clears the other; the 16:9 ratio option is independent. Previews include these related changes.
 
 Numeric fields expose the ranges in `save export-schema`. A representable value does not establish a playable combination of progression flags, inventory, or player coordinates.
 
@@ -139,9 +141,9 @@ Procedures: [Create saves in the browser](../how-to/create-game-saves-browser.md
 
 ## Built-in schema catalog
 
-The application includes every supported game definition in its default registry. The catalog contains 615 profiles: the original Pokémon, Super Mario World, and A Link to the Past definitions and 593 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. The catalog and its profile counts are in [`data/save-schemas/README.md`](../../data/save-schemas/README.md).
+The application includes every supported game definition in its default registry. The catalog contains 1002 profiles: the original Pokémon, Super Mario World, and A Link to the Past definitions and 980 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. The catalog and its profile counts are in [`data/save-schemas/README.md`](../../data/save-schemas/README.md).
 
-The 593 additional profiles require explicit game selection. The original game families retain automatic recognition.
+The 980 additional profiles require explicit game selection. The original game families retain automatic recognition.
 
 A profile represents one fixed slot, player, region, or storage variant. Profile count is not title count. A compatible physical format or save size does not make an unrecognized game editable.
 

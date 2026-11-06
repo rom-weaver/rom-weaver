@@ -346,6 +346,47 @@ fn registry_lists_every_game_with_format_metadata() {
         ["options", "slot-1", "slot-2", "slot-3"]
             .map(|part| format!("mystical-ninja-2-starring-goemon-canonical-sram-japan-{part}")),
     );
+    expected.extend((1..=4).map(|file| format!("goldeneye-007-canonical-eeprom-file-{file}")));
+    expected.extend((1..=3).map(|file| format!("banjo-tooie-canonical-eeprom-file-{file}")));
+    expected.extend((1..=3).map(|file| format!("donkey-kong-64-canonical-eeprom-file-{file}")));
+    expected.extend(
+        ["europe-usa-australia", "japan"]
+            .map(|region| format!("pokemon-snap-canonical-flashram-{region}")),
+    );
+    for (game, regions) in [
+        (
+            "final-fantasy-ix",
+            &[
+                "europe", "usa", "japan", "france", "germany", "italy", "spain",
+            ][..],
+        ),
+        ("final-fantasy-tactics", &["usa", "japan"][..]),
+        ("kagero-deception-ii", &["europe", "usa", "japan"][..]),
+        (
+            "resident-evil",
+            &[
+                "europe",
+                "directorscut-europe",
+                "usa",
+                "directorscut-usa",
+                "japan",
+                "directorscut-japan",
+                "france",
+                "directorscut-france",
+                "germany",
+                "directorscut-germany",
+            ][..],
+        ),
+        ("silent-hill", &["europe", "usa", "japan"][..]),
+    ] {
+        for block in 1..=15 {
+            expected.extend(
+                regions
+                    .iter()
+                    .map(|region| format!("{game}-{region}-block-{block}")),
+            );
+        }
+    }
     assert_eq!(ids, expected);
     assert!(definitions[3..8].iter().all(|definition| {
         definition.platform == "gba"

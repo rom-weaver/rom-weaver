@@ -3,7 +3,7 @@ import type { LogLevel } from "../../types/logging.ts";
 import type { RuntimeThreadBudgetInput, WorkflowRuntimeLog } from "../../types/workflow-runtime-adapter.ts";
 import { createRomWeaverCommand } from "../../wasm/index.ts";
 import { getRomWeaverRunEventDetails } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
-import { withRomWeaverFailureKind } from "../../workers/rom-weaver/runner-errors.ts";
+import { withRomWeaverFailure } from "../../workers/rom-weaver/runner-errors.ts";
 import { getPathBaseName } from "../path-utils.ts";
 import { toThreadBudget } from "./compression-thread-budget.ts";
 import { parseIdentifyCommandResult, parseIdentifyTitleSearchResult, parseIngestResult } from "./ingest-result.ts";
@@ -152,7 +152,7 @@ const invokeRomWeaverIngestWorker = async (
   const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
   const parsed = parseIngestResult(details);
   if (!parsed) {
-    throw withRomWeaverFailureKind(new Error("Ingest result was missing or malformed"), result);
+    throw withRomWeaverFailure(new Error("Ingest result was missing or malformed"), result);
   }
   return { ...parsed, timing: getRunResultTiming(result) };
 };
@@ -206,7 +206,7 @@ const invokeRomWeaverIdentifyHashWorker = async (
   const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
   const parsed = parseIdentifyCommandResult(details);
   if (!parsed) {
-    throw withRomWeaverFailureKind(new Error("Identify result was missing or malformed"), result);
+    throw withRomWeaverFailure(new Error("Identify result was missing or malformed"), result);
   }
   return { ...parsed, timing: getRunResultTiming(result) };
 };
@@ -267,7 +267,7 @@ const invokeRomWeaverIdentifyNameWorker = async (
   const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
   const parsed = parseIdentifyCommandResult(details);
   if (!parsed) {
-    throw withRomWeaverFailureKind(new Error("Identify result was missing or malformed"), result);
+    throw withRomWeaverFailure(new Error("Identify result was missing or malformed"), result);
   }
   return { ...parsed, timing: getRunResultTiming(result) };
 };
@@ -326,7 +326,7 @@ const invokeRomWeaverIdentifyTitlesWorker = async (
   const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
   const parsed = parseIdentifyTitleSearchResult(details);
   if (!parsed) {
-    throw withRomWeaverFailureKind(new Error("Identify title search result was missing or malformed"), result);
+    throw withRomWeaverFailure(new Error("Identify title search result was missing or malformed"), result);
   }
   return { ...parsed, timing: getRunResultTiming(result) };
 };

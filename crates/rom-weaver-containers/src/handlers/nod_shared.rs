@@ -708,10 +708,13 @@ impl NodHandlerCore {
             (None, Some(disc)) => format!(" (detected: {} disc)", disc.label()),
             (None, None) => String::new(),
         };
-        RomWeaverError::Validation(format!(
-            "`{name}` is not a GameCube or Wii disc image{detected}; {} create only supports GameCube and Wii disc images",
-            self.format_name()
-        ))
+        RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_DISC_NOT_GAMECUBE_WII,
+            format!(
+                "`{name}` is not a GameCube or Wii disc image{detected}; {} create only supports GameCube and Wii disc images",
+                self.format_name()
+            ),
+        )
     }
 
     /// Open `input` as a disc image without reading its data, so a create request for a
@@ -776,9 +779,7 @@ impl NodHandlerCore {
                 },
                 &process_options,
             )
-            .map_err(|error| {
-                RomWeaverError::Validation(format!("{} create failed: {error}", self.format_name()))
-            });
+            .map_err(|error| nod_create_error(self.format_name(), &error));
         let finalization = cancel.or_cancelled(finalization)?;
         if !finalization.header.is_empty() {
             output.seek(SeekFrom::Start(0))?;
@@ -834,9 +835,7 @@ impl NodHandlerCore {
                 },
                 &process_options,
             )
-            .map_err(|error| {
-                RomWeaverError::Validation(format!("{} create failed: {error}", self.format_name()))
-            });
+            .map_err(|error| nod_create_error(self.format_name(), &error));
         let finalization = cancel.or_cancelled(finalization)?;
         if !finalization.header.is_empty() {
             output_bytes = output_bytes.max(finalization.header.len() as u64);
@@ -901,6 +900,20 @@ macro_rules! nod_extract_only_handler {
 }
 
 pub(crate) use nod_extract_only_handler;
+
+/// The error of a failed nod create: a storage-full or out-of-memory write is coded, anything else is validation.
+fn nod_create_error(format_name: &str, error: &crate::nod::Error) -> RomWeaverError {
+    let message = format!("{format_name} create failed: {error}");
+    let code = match error {
+        crate::nod::Error::Io(_, source) => rom_weaver_core::io_error_code(source),
+        _ => None,
+    };
+    debug!(format = format_name, code, %message, "nod create failed");
+    match code {
+        Some(code) => RomWeaverError::coded(code, message),
+        None => RomWeaverError::Validation(message),
+    }
+}
 
 /// Fails nod's per-block write callback once `cancel` trips, which stops its reader and
 /// compressor threads; the caller reports the error as `Cancelled`.

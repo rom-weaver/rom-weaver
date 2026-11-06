@@ -1,3 +1,4 @@
+import { hasEngineErrorCode } from "../errors.ts";
 import type { LogLevel } from "../../types/logging.ts";
 import type { ApplySettings } from "../../types/settings.ts";
 import type {
@@ -26,8 +27,6 @@ import { runRomWeaverJson, relaySimpleProgress } from "./wasm-command-shared.ts"
 
 const TRIM_UNSUPPORTED_MESSAGE = "This input does not support trimming";
 const GAMECUBE_WII_COMPRESS_HINT = "Use Compress to convert GameCube and Wii discs to RVZ.";
-/** Part of the engine's refusal for a GameCube/Wii disc, or an archive holding discs (`trim_detection.rs`). */
-const GAMECUBE_WII_TRIM_REJECTION = /GameCube\/Wii discs?, which trim does not support/;
 
 const invokeRomWeaverTrimWorker = async (
   input: RuntimeTrimWorkerInput,
@@ -76,7 +75,7 @@ const invokeRomWeaverTrimWorker = async (
     } catch (error) {
       // The engine refuses a lone GameCube/Wii disc outright (Compress writes those as RVZ); report it
       // the way an unsupported input is reported so the staging probe flags it before any run.
-      if (error instanceof Error && GAMECUBE_WII_TRIM_REJECTION.test(error.message)) {
+      if (hasEngineErrorCode(error, "trim.unsupported_disc")) {
         throw Object.assign(new Error(`${TRIM_UNSUPPORTED_MESSAGE}. ${GAMECUBE_WII_COMPRESS_HINT}`), {
           code: "TRIM_UNSUPPORTED",
         });

@@ -5,7 +5,7 @@ import type { PatchInputRef } from "../../types/workflow-runtime-types.ts";
 import { createRomWeaverCommand } from "../../wasm/index.ts";
 import type { RomWeaverCommandBranchArgs } from "../../wasm/index.ts";
 import { getRomWeaverRunEventDetails } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
-import { withRomWeaverFailureKind } from "../../workers/rom-weaver/runner-errors.ts";
+import { withRomWeaverFailure } from "../../workers/rom-weaver/runner-errors.ts";
 import { parseWeaveCreateResult, parseWeaveParseResult } from "./weave-result.ts";
 import { emitRuntimeTrace, toRomWeaverOptions } from "./run-options.ts";
 import { ensureRomWeaverSuccess, getLastEvent } from "./run-result-parsing.ts";
@@ -73,7 +73,7 @@ const invokeRomWeaverWeaveParseWorker = async (
   const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
   const parsed = parseWeaveParseResult(details);
   if (!parsed) {
-    throw withRomWeaverFailureKind(new Error("Weave parse result was missing or malformed"), result);
+    throw withRomWeaverFailure(new Error("Weave parse result was missing or malformed"), result);
   }
   return parsed;
 };
@@ -229,7 +229,7 @@ const invokeRomWeaverWeaveCreateWorker = async (
   const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
   const parsed = parseWeaveCreateResult(details);
   if (!parsed) {
-    throw withRomWeaverFailureKind(new Error("Weave create result was missing or malformed"), result);
+    throw withRomWeaverFailure(new Error("Weave create result was missing or malformed"), result);
   }
   return parsed;
 };

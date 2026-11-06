@@ -356,11 +356,11 @@ impl ContainerHandlerOperations for StreamContainerHandler {
             .kind_filter
             .matches_payload_or_container_name(&output_name)
         {
-            return Err(RomWeaverError::Validation(format!(
-                "no extract entries from `{}` matched {}",
-                request.source.display(),
-                request.kind_filter.flag_label()
-            )));
+            return Err(RomWeaverError::no_matching_extract_entries(
+                &request.source,
+                &request.kind_filter.flag_label(),
+                "",
+            ));
         }
 
         trace!(

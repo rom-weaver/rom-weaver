@@ -2251,11 +2251,11 @@ fn ensure_disc_outputs_produced(
     media_label: &str,
 ) -> Result<()> {
     if request.kind_filter.enabled() && produced_outputs.is_empty() {
-        return Err(RomWeaverError::Validation(format!(
-            "no extract entries from `{}` matched {}",
-            request.source.display(),
-            request.kind_filter.flag_label()
-        )));
+        return Err(RomWeaverError::no_matching_extract_entries(
+            &request.source,
+            &request.kind_filter.flag_label(),
+            "",
+        ));
     }
     if selection_requested && produced_outputs.is_empty() {
         return Err(RomWeaverError::Validation(format!(

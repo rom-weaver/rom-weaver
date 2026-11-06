@@ -1,5 +1,6 @@
 import indexHtml from "../../index.html?raw";
 import { captureShellClicks, replayShellSelections } from "../../src/webapp/shell-click-replay.ts";
+import { dispatchSelectionDelivery } from "../../src/lib/input/selection-delivery.ts";
 import { createElement, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, expect, test, vi } from "vitest";
@@ -336,6 +337,171 @@ test.each(["history", "soft-link"])("Home cancels file routing on external %s na
     document.removeEventListener("click", navigate);
     link.remove();
   }
+});
+
+const isDropRouting = () => document.querySelector("#column")?.classList.contains("rw-drop-routing");
+const dropVeilText = () => document.querySelector(".dropveil-text")?.textContent;
+
+test.each(["pick", "drop"])("Home names the workflow a %s selection opens", async (kind) => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  let openDestination;
+  let finish;
+  const finished = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const transition = vi.spyOn(document, "startViewTransition").mockImplementationOnce((update) => {
+    openDestination = update;
+    return { ready: Promise.resolve(), finished };
+  });
+  try {
+    sendHomeSelection(kind, [selectionPatch("named.ips")]);
+    await expect.poll(() => typeof openDestination).toBe("function");
+    expect(isDropRouting()).toBe(true);
+    expect(dropVeilText()).toBe("Opening Apply Patches");
+    expect(document.querySelector(".dropveil + [role=status]")?.textContent).toBe("Opening Apply Patches");
+    openDestination();
+    finish();
+    await expect.poll(() => patchNames()).toEqual(["named.ips"]);
+    await expect.poll(isDropRouting).toBe(false);
+  } finally {
+    finish();
+    transition.mockRestore();
+  }
+});
+
+// A dropped folder holding `file` (empty without one) whose listing waits for `release`, standing in
+// for a slow directory read.
+const slowFolderDrop = (file) => {
+  let release;
+  const released = new Promise((resolve) => {
+    release = resolve;
+  });
+  let listed = false;
+  const fileEntry = file && { file: (resolve) => resolve(file), isDirectory: false, isFile: true, name: file.name };
+  const folder = {
+    createReader: () => ({
+      readEntries: (resolve) => {
+        if (listed || !file) void released.then(() => resolve([]));
+        else void released.then(() => resolve([fileEntry]));
+        listed = true;
+      },
+    }),
+    isDirectory: true,
+    isFile: false,
+    name: "patches",
+  };
+  const event = new Event("drop", { bubbles: true, cancelable: true });
+  const items = [{ getAsFile: () => null, kind: "file", webkitGetAsEntry: () => folder }];
+  Object.defineProperty(event, "dataTransfer", { value: { files: [], items, types: ["Files"] } });
+  return { event, release };
+};
+
+test("a workflow says it is reading a slow page drop and clears once the files land", async () => {
+  mountWebappRoot({ initialView: "patcher" });
+  await expect.poll(() => document.querySelector("#panel-patcher:not([hidden])")).toBeTruthy();
+  const { event, release } = slowFolderDrop(selectionPatch("folder.ips"));
+  document.dispatchEvent(event);
+  await expect.poll(isDropRouting).toBe(true);
+  const pillOpacity = () => getComputedStyle(document.querySelector(".dropveil-text")).opacity;
+  // The reading words wait unseen at first, so a read that ends quickly never flashes them.
+  expect(pillOpacity()).toBe("0");
+  await expect.poll(pillOpacity).toBe("1");
+  expect(dropVeilText()).toBe("Reading files…");
+  expect(document.querySelector(".dropveil + [role=status]")?.textContent).toBe("Reading files…");
+  release();
+  await expect.poll(() => patchNames()).toEqual(["folder.ips"]);
+  await expect.poll(isDropRouting).toBe(false);
+});
+
+test.each(["home", "patcher"])("%s clears the reading veil when a dropped folder is empty", async (view) => {
+  mountWebappRoot({ initialView: view });
+  await expect.poll(() => document.querySelector(`#panel-${view}:not([hidden])`)).toBeTruthy();
+  const { event, release } = slowFolderDrop();
+  document.dispatchEvent(event);
+  await expect.poll(isDropRouting).toBe(true);
+  release();
+  await expect.poll(isDropRouting).toBe(false);
+});
+
+test.each([
+  ["home", true],
+  ["home", false],
+  ["patcher", true],
+  ["patcher", false],
+])("%s keeps feedback while a second slow folder waits (first has files: %s)", async (view, hasFiles) => {
+  mountWebappRoot({ initialView: view });
+  await expect.poll(() => document.querySelector(`#panel-${view}:not([hidden])`)).toBeTruthy();
+  const first = slowFolderDrop(hasFiles ? selectionPatch("first.ips") : undefined);
+  const second = slowFolderDrop(selectionPatch("second.ips"));
+  const firstDelivery = dispatchSelectionDelivery(document, first.event);
+  const secondDelivery = dispatchSelectionDelivery(document, second.event);
+  try {
+    await expect.poll(() => getComputedStyle(document.querySelector(".dropveil-text")).opacity).toBe("1");
+    first.release();
+    await firstDelivery;
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(isDropRouting()).toBe(true);
+    expect(dropVeilText()).toBe("Reading files…");
+    expect(document.querySelector(".dropveil + [role=status]")?.textContent).toBe("Reading files…");
+    second.release();
+    await secondDelivery;
+    await expect.poll(() => patchNames()).toEqual(hasFiles ? ["first.ips", "second.ips"] : ["second.ips"]);
+    await expect.poll(isDropRouting).toBe(false);
+  } finally {
+    first.release();
+    second.release();
+    await Promise.all([firstDelivery, secondDelivery]);
+  }
+});
+
+test.each([
+  ["patcher", "drop", false],
+  ["home", "pick", true],
+])("a %s fast %s hides reading words (after slow read: %s)", async (view, kind, afterSlowRead) => {
+  mountWebappRoot({ initialView: view });
+  await expect.poll(() => document.querySelector(`#panel-${view}:not([hidden])`)).toBeTruthy();
+  if (afterSlowRead) {
+    const first = slowFolderDrop();
+    const delivery = dispatchSelectionDelivery(document, first.event);
+    try {
+      await expect.poll(() => document.querySelector(".dropveil-text").style.animationName).toBe("none");
+    } finally {
+      first.release();
+      await delivery;
+    }
+    await expect.poll(isDropRouting).toBe(false);
+  }
+  // Read the pill as the veil goes up: the reading words start unseen, so a read that
+  // ends before their delay never shows them.
+  const raisedOpacities = [];
+  const observer = new MutationObserver(() => {
+    const pill = document.querySelector(".dropveil-text");
+    if (isDropRouting() && pill) raisedOpacities.push(getComputedStyle(pill).opacity);
+  });
+  observer.observe(document.querySelector("#column"), { attributeFilter: ["class"] });
+  try {
+    sendHomeSelection(kind, [selectionPatch("fast.ips")]);
+    await expect.poll(() => patchNames()).toEqual(["fast.ips"]);
+    await expect.poll(isDropRouting).toBe(false);
+    expect(raisedOpacities.length).toBeGreaterThan(0);
+    expect(raisedOpacities.every((opacity) => opacity === "0")).toBe(true);
+  } finally {
+    observer.disconnect();
+  }
+});
+
+test("a workflow drops the reading veil when navigation cancels a slow page drop", async () => {
+  mountWebappRoot({ initialView: "patcher" });
+  await expect.poll(() => document.querySelector("#panel-patcher:not([hidden])")).toBeTruthy();
+  const { event, release } = slowFolderDrop(selectionPatch("cancelled.ips"));
+  document.dispatchEvent(event);
+  navRow("Create").click();
+  await expect.poll(() => document.querySelector("#panel-creator:not([hidden])")).toBeTruthy();
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  expect(isDropRouting()).toBe(false);
 });
 
 test.each([
@@ -990,6 +1156,67 @@ test("guided Apply scrolls its first card back on screen when More opens the res
   await page.viewport(1280, 900);
 });
 
+test("guided Apply scrolls its first card clear of the dock again when the first reveal scroll is cut short", async () => {
+  // The browser can drop a smooth scroll and still send scrollend, with the page
+  // where it started. That MUST NOT count as the reveal landing.
+  await page.viewport(390, 844);
+  const scrollBy = vi.spyOn(window, "scrollBy").mockImplementationOnce(() => {
+    window.setTimeout(() => window.dispatchEvent(new Event("scrollend")), 5);
+  });
+  mountWebappRoot({ initialView: "patcher" });
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
+  window.scrollTo({ behavior: "instant", top: 0 });
+  document.querySelector(".sample-tutorial-start-primary").click();
+
+  await expect
+    .poll(() => document.querySelector('.sample-tutorial-dialog[data-step="1"]')?.dataset.anchored)
+    .toBe("true");
+  const guide = document.querySelector(".sample-tutorial-dialog");
+  const dock = document.querySelector(".rw-app .dock-pad").getBoundingClientRect();
+  await expect.poll(() => guide.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight - dock.height);
+  expect(scrollBy.mock.calls.length).toBeGreaterThan(1);
+  scrollBy.mockRestore();
+  await page.viewport(1280, 900);
+});
+
+test("guided Apply scrolls its card clear of the dock again when the More reveal scroll is cut short", async () => {
+  // Scrolling first spends the row's re-reveals, so More's reveal has no budget
+  // left to retry with.
+  await page.viewport(390, 844);
+  mountWebappRoot({ initialView: "patcher" });
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
+  document.querySelector(".sample-tutorial-start-primary").click();
+
+  await expect
+    .poll(() => document.querySelector('.sample-tutorial-dialog[data-step="1"]')?.dataset.anchored)
+    .toBe("true");
+  const guide = document.querySelector(".sample-tutorial-dialog");
+  const dock = document.querySelector(".rw-app .dock-pad").getBoundingClientRect();
+  await expect.poll(() => guide.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight - dock.height);
+  const folded = guide.getBoundingClientRect().height;
+
+  const scrollBy = vi.spyOn(window, "scrollBy").mockImplementationOnce(() => {
+    window.setTimeout(() => window.dispatchEvent(new Event("scrollend")), 5);
+  });
+  window.dispatchEvent(new WheelEvent("wheel"));
+  guide.querySelector(".sample-tutorial-more").click();
+  await expect.poll(() => guide.getBoundingClientRect().height).toBeGreaterThan(folded);
+  await expect
+    .poll(() => guide.getBoundingClientRect().bottom, { timeout: 3000 })
+    .toBeLessThanOrEqual(window.innerHeight - dock.height);
+  expect(scrollBy.mock.calls.length).toBeGreaterThan(1);
+  scrollBy.mockRestore();
+  await page.viewport(1280, 900);
+});
+
 test("guided Apply opens no drawers on desktop and keeps its last row and Apply button on screen", async () => {
   // The step before ends at the page bottom. A reveal measured from that row,
   // still in state while the new one connects, scrolled the page back up and
@@ -1151,6 +1378,9 @@ test("the phone console opens one section from Menu, with the dock at its foot r
   document.querySelector("#console-advanced-phone").click();
   await expect.poll(() => document.querySelector("#logpanel-storage .opfs-inspector")).toBeTruthy();
   expect(document.querySelector("#storage-opfs-title")?.textContent).toBe("OPFS");
+  const refreshBounds = document.querySelector(".log-dlg .log-refresh").getBoundingClientRect();
+  expect(refreshBounds.width).toBe(44);
+  expect(refreshBounds.height).toBe(44);
   document.querySelector("#console-advanced-phone").click();
 
   document.querySelector(".log-dlg .dock-menu").click();

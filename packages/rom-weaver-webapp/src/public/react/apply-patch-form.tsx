@@ -735,6 +735,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             new ApplyWorkflow({
               ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
               id: workflowIdRef.current,
+              preparationCache: props.preparationCache,
               retainUncompressedOutput,
               selectFile: async (request) => {
                 if (request.role === "input") {
@@ -767,7 +768,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     );
     if (workflowHandle.peek() === workflow) workflowSnapshotStore.setWorkflow(workflow);
     return workflow;
-  }, [resolvedAssetBaseUrl, retainUncompressedOutput, workflowHandle, workflowSnapshotStore]);
+  }, [props.preparationCache, resolvedAssetBaseUrl, retainUncompressedOutput, workflowHandle, workflowSnapshotStore]);
 
   useEffect(
     () => () => {

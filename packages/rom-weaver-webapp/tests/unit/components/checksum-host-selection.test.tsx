@@ -38,7 +38,10 @@ describe("ChecksumForm host selection", () => {
         }),
       );
       if (!selected?.length)
-        throw new Error("validation error: interactive selection was cancelled for `/work/dup.zip`");
+        throw Object.assign(new Error("validation error: interactive selection was cancelled for `/work/dup.zip`"), {
+          code: "CANCELLED",
+          details: { engineCode: "selection.cancelled" },
+        });
       return { checksums, fileName: "game.bin", size: source.size };
     });
     render(<ChecksumForm />);

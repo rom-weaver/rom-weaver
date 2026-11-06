@@ -764,8 +764,9 @@ const SampleTutorial = ({
   const stepPlacement = step?.placement;
   const stepTarget = step?.target;
   const selectView = (detailed: boolean) => {
-    if (!targetEl) return;
-    const toggle = findLift(targetEl, VIEW_TOGGLE_SELECTOR)?.querySelector<HTMLInputElement>("input[type='checkbox']");
+    const target = stepTarget ? findShown(stepTarget) : null;
+    if (!target) return;
+    const toggle = findLift(target, VIEW_TOGGLE_SELECTOR)?.querySelector<HTMLInputElement>("input[type='checkbox']");
     if (toggle && !toggle.disabled && toggle.checked !== detailed) toggle.click();
   };
   const endGuide = () => {
@@ -1000,6 +1001,9 @@ const SampleTutorial = ({
     let settle = 0;
     let scrollStart = 0;
     let revealsLeft = GUIDE_REVEALS;
+    // One retry per reveal when the browser cuts its scroll short; it does not
+    // draw on the re-reveal budget, which scrolling by the reader may have spent.
+    let cutShortRetries = 0;
     let rowHeight = targetEl.getBoundingClientRect().height;
     let cardHeight = dialog.getBoundingClientRect().height;
     // Where the running reveal scroll will land, while it runs. A placement made
@@ -1059,7 +1063,8 @@ const SampleTutorial = ({
     // is headed - once placed they ride the page, so this is the only chance.
     // The guide does the scrolling: the reader never has to go looking for the
     // row a step describes.
-    const placeAndReveal = (glide: boolean) => {
+    const placeAndReveal = (glide: boolean, retrying = false) => {
+      if (!retrying) cutShortRetries = 1;
       const rect = targetEl.getBoundingClientRect();
       // The lifted control is part of the step - the view step's switch sits in
       // the panel heading above the row - so the reveal keeps it in view too.
@@ -1128,10 +1133,18 @@ const SampleTutorial = ({
         revealsLeft = Math.max(revealsLeft, 1);
       }
     };
-    // The reveal has landed: settle the pair against the viewport it reached.
+    // The reveal has landed: settle the pair against the viewport it reached. A
+    // scrollend that stops short of the target is a scroll the browser cut off,
+    // so the reveal runs again rather than leaving the card behind the dock.
     const onScrollEnd = () => {
       if (revealTo === null) return;
+      const cutShort = Math.abs(revealTo - window.scrollY) > 1;
       revealTo = null;
+      if (cutShort && cutShortRetries > 0) {
+        cutShortRetries -= 1;
+        placeAndReveal(false, true);
+        return;
+      }
       place(false);
     };
     // The row grows as its drawers expand, so re-reveal once each size change

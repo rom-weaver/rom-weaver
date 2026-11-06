@@ -346,7 +346,7 @@ impl CliApp {
                     ),
                     context.single_thread_execution(),
                 )
-                .with_error_kind(error.kind()),
+                .with_error(&error),
             )
         };
         let mut current_input = std::mem::take(&mut state.current_input);
@@ -420,7 +420,7 @@ impl CliApp {
                     ),
                     inputs.context.single_thread_execution(),
                 )
-                .with_error_kind(error.kind()),
+                .with_error(&error),
             ));
         }
         Ok(apply_output)

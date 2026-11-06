@@ -1015,6 +1015,7 @@ function ApplyWorkflowFormView({
             ) : null}
           </>
         }
+        beforeDropZone={createModeControls}
         big={workflowEmpty}
         guide={guide}
         heroLabel={localizer.message("ui.apply.drop.hero")}
@@ -1135,7 +1136,6 @@ function ApplyWorkflowFormView({
             const renderPatchStep = (stack?: CheatStackRenderState) => (
               <ApplyPatchListStep
                 title={createPage ? localizer.message("ui.create.changes") : undefined}
-                headerExtra={createModeControls}
                 cheats={stack}
                 weaveMeta={weaveMeta}
                 weaveOutputCheckHint={!!weaveTools?.hasOptionalEntries}

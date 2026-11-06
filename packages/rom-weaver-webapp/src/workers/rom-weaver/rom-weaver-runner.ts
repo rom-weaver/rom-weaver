@@ -56,7 +56,7 @@ import {
   getRomWeaverRunEventElapsedMs,
   isRomWeaverTerminalRunEvent,
 } from "./rom-weaver-run-events.ts";
-import { getRomWeaverFailureMessage, withRomWeaverFailureKind } from "./runner-errors.ts";
+import { getRomWeaverFailureMessage, withRomWeaverFailure } from "./runner-errors.ts";
 import { createRunnerPool, type RunnerPool } from "./runner-pool.ts";
 import { createOperationScheduler, type OperationScheduler } from "./runner-scheduler.ts";
 
@@ -766,15 +766,12 @@ const invokeRomWeaverPlanExtractBatchWorker = async (input: {
     toRomWeaverOptions({ logLevel: input.logLevel, onLog: input.onLog, signal: input.signal }),
   );
   if (!(result.ok && result.exitCode === 0)) {
-    throw withRomWeaverFailureKind(
-      new Error(getRomWeaverFailureMessage(result, "Extract batch planning failed")),
-      result,
-    );
+    throw withRomWeaverFailure(new Error(getRomWeaverFailureMessage(result, "Extract batch planning failed")), result);
   }
   const events = Array.isArray(result.events) ? result.events : [];
   const terminal = events.length ? events.at(-1) : null;
   const plan = parseRomWeaverBatchPlan(terminal ? getRomWeaverRunEventDetails(terminal) : undefined);
-  if (!plan) throw withRomWeaverFailureKind(new Error("Extract batch plan was missing or malformed"), result);
+  if (!plan) throw withRomWeaverFailure(new Error("Extract batch plan was missing or malformed"), result);
   return plan;
 };
 
@@ -855,5 +852,5 @@ export {
   runRomWeaverJson,
   setInputSelectionHandler,
   warmupRomWeaverRunner,
-  withRomWeaverFailureKind,
+  withRomWeaverFailure,
 };

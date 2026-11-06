@@ -46,6 +46,7 @@ const releasePreparedRomSourceAndWait = async <TSource, TState extends SharedRom
 export {
   cloneParentCompressions,
   normalizeParentCompressions,
+  releasePreparedFile,
   releasePreparedRomSource,
   releasePreparedRomSourceAndWait,
 };

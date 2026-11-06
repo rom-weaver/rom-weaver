@@ -11,7 +11,7 @@ import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-z
 import { EXTRACT_FORMAT_GUIDES, WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { ProgressEvent, PublicOutput } from "../../types/workflow-runtime-types.ts";
-import { ROM_WEAVER_VALIDATION_CODES } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import { getEngineError } from "../../lib/errors.ts";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 
 type ExtractFormProps = { pageDrop?: PageFileDrop | null };
@@ -31,32 +31,21 @@ const isWbfsContinuation = (file: File, stem: string): boolean =>
 const binCount = (entries: { filename: string }[]): number =>
   entries.filter((entry) => /\.bin$/i.test(entry.filename)).length;
 const zipName = (file: File): string => `${file.name.replace(/\.[^.]+$/, "") || "extracted"}.zip`;
-// Rust reports these failures as validation codes, rendered as `[code]` (plus `(key=value, ...)` fields)
-// after the message. The runtime names the file by its internal storage path, so a file that is not an
-// archive gets a plain message.
-const codeTag = (code: string): string => `[${code}]`;
-const NOT_A_CONTAINER_TAG = codeTag(ROM_WEAVER_VALIDATION_CODES.extractNoContainer);
-// The WBFS reader rejects a file, or split set, whose total size differs from its header's size. The
-// code carries the sizes of the last (split-aware) attempt.
-const WBFS_SIZE_TAG = codeTag(ROM_WEAVER_VALIDATION_CODES.wbfsSizeMismatch);
-const WBFS_SIZE_FIELDS_PATTERN = /^ \(actual=(\d+), expected=(\d+)\)/;
-const wbfsSizeFields = (message: string): [number, number] | undefined => {
-  const tagIndex = message.lastIndexOf(WBFS_SIZE_TAG);
-  if (tagIndex < 0) return undefined;
-  const fields = WBFS_SIZE_FIELDS_PATTERN.exec(message.slice(tagIndex + WBFS_SIZE_TAG.length));
-  return fields ? [Number(fields[1]), Number(fields[2])] : undefined;
-};
 const wbfsSizeMessage = (file: File, actual: number, expected: number): string =>
   actual < expected
     ? `${file.name} is shorter than its WBFS header says. If it is split, add it together with every .wbf1, .wbf2, ... part; otherwise the file is incomplete.`
     : `${file.name} and its parts are longer than its WBFS header says. Remove any .wbf part that does not belong to this set.`;
+// The runtime names the file by its internal storage path, so the engine's coded failures get a message that
+// names the user's file. A WBFS size mismatch carries the sizes of the last (split-aware) attempt.
 const errorMessage = (cause: unknown, file?: File): string => {
   const message = cause instanceof Error ? cause.message : String(cause);
   if (!file) return message;
-  if (message.includes(NOT_A_CONTAINER_TAG))
+  const engine = getEngineError(cause);
+  if (engine?.code === "extract.no_container")
     return `${file.name} is not an archive or disc image that Extract can open.`;
-  const wbfsSize = wbfsSizeFields(message);
-  if (wbfsSize) return wbfsSizeMessage(file, ...wbfsSize);
+  const { actual, expected } = engine?.fields ?? {};
+  if (engine?.code === "wbfs.size_mismatch" && typeof actual === "number" && typeof expected === "number")
+    return wbfsSizeMessage(file, actual, expected);
   return message;
 };
 
