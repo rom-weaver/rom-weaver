@@ -1739,6 +1739,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
       "Use the ROM tester to play supported games in your browser. Open a ROM, ZIP, or 7z file. Your files stay on your device.",
   }),
   "ui.hero.supportedFormats": msg({ id: "ui.hero.supportedFormats", message: "Supported formats" }),
+  "ui.hero.howItWorks": msg({ id: "ui.hero.howItWorks", message: "How it works" }),
   "ui.hero.createThesis": msg({
     id: "ui.hero.createThesis",
     message: "Create a ROM patch.",
@@ -1748,6 +1749,194 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "On-device. Offline support. No telemetry.",
   }),
   "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Online ROM patcher." }),
+  "ui.about.applyTitle": msg({ id: "ui.about.applyTitle", message: "About the online ROM patcher" }),
+  "ui.about.applyBody1": msg({
+    id: "ui.about.applyBody1",
+    message:
+      "Apply an IPS, BPS, UPS, xdelta, or PPF patch to the ROM it was made for, then download the patched game. You can add a ZIP, 7z, or RAR archive without unpacking it first.",
+  }),
+  "ui.about.applyBody2": msg({
+    id: "ui.about.applyBody2",
+    message:
+      "A patch only works on the exact ROM its author used. BPS patches record that ROM's checksum, so Checks shows a match or a mismatch before you apply. A mismatch usually means the wrong region or revision, a header, or a copy that is already patched.",
+  }),
+  "ui.about.applyBody3": msg({
+    id: "ui.about.applyBody3",
+    message:
+      "Add several patches to apply them in order, or add supported cheat codes. Choose a plain file or a compressed output. Your original ROM stays unchanged.",
+  }),
+  "ui.about.applyCheatsTitle": msg({ id: "ui.about.applyCheatsTitle", message: "About applying cheat codes" }),
+  "ui.about.applyCheatsBody1": msg({
+    id: "ui.about.applyCheatsBody1",
+    message:
+      "Write supported cheat codes into a copy of your ROM and download it. The changes are part of the game file, so it needs no cheat engine.",
+  }),
+  "ui.about.applyCheatsBody2": msg({
+    id: "ui.about.applyCheatsBody2",
+    message:
+      "Pick codes from the built-in list or enter your own. rom-weaver detects the system and code type, and you can override them, for example to choose the exact GameShark or Action Replay version of a Game Boy Advance code.",
+  }),
+  "ui.about.applyCheatsBody3": msg({
+    id: "ui.about.applyCheatsBody3",
+    message:
+      "Cheats share the patch order with any IPS, BPS, or other patches you add. To share a set of cheats as a file, create a patch from cheat codes instead.",
+  }),
+  "ui.about.weaveTitle": msg({ id: "ui.about.weaveTitle", message: "About patch weaves" }),
+  "ui.about.weaveBody1": msg({
+    id: "ui.about.weaveBody1",
+    message:
+      "A weave packs several ROM patches into one ZIP or 7z file, together with the order they apply in and the checksums of the ROM they expect. Use it for a release that needs more than one patch.",
+  }),
+  "ui.about.weaveBody2": msg({
+    id: "ui.about.weaveBody2",
+    message:
+      "Leave the ROM out for a patch-only release, so each player supplies their own copy. Include the ROM only when you may redistribute it, such as your own homebrew.",
+  }),
+  "ui.about.weaveBody3": msg({
+    id: "ui.about.weaveBody3",
+    message:
+      "Give each patch a name, description, version, and author, and add input or output checks with known CRC32, MD5, SHA-1, or size values.",
+  }),
+  "ui.about.createTitle": msg({ id: "ui.about.createTitle", message: "About creating ROM patches" }),
+  "ui.about.createBody1": msg({
+    id: "ui.about.createBody1",
+    message:
+      "Compare a clean ROM with your edited copy and download the difference as a small patch. Share the patch instead of the game; each player applies it to their own original.",
+  }),
+  "ui.about.createBody2": msg({
+    id: "ui.about.createBody2",
+    message:
+      "Choose BPS, IPS, IPS32, UPS, xdelta, VCDIFF, PPF, or another supported format. BPS records the checksums of the original and the patched ROM, so players can tell whether they have the right file.",
+  }),
+  "ui.about.createBody3": msg({
+    id: "ui.about.createBody3",
+    message: "Create can also combine an ordered set of patches and cheat codes into one patch for the clean ROM.",
+  }),
+  "ui.about.createCheatsTitle": msg({ id: "ui.about.createCheatsTitle", message: "About cheat code patches" }),
+  "ui.about.createCheatsBody1": msg({
+    id: "ui.about.createCheatsBody1",
+    message:
+      "Turn supported cheat codes into a patch file. Applying the patch writes the codes into the ROM, so the game needs no cheat engine.",
+  }),
+  "ui.about.createCheatsBody2": msg({
+    id: "ui.about.createCheatsBody2",
+    message:
+      "Add the original ROM, pick codes from the built-in list or enter your own, and choose a patch format such as BPS or IPS. Other patches can join the cheats in the same patch.",
+  }),
+  "ui.about.createCheatsBody3": msg({
+    id: "ui.about.createCheatsBody3",
+    message:
+      "Share the small patch instead of the ROM. To change your own copy straight away, apply cheat codes instead.",
+  }),
+  "ui.about.checksumTitle": msg({ id: "ui.about.checksumTitle", message: "About the checksum calculator" }),
+  "ui.about.checksumBody1": msg({
+    id: "ui.about.checksumBody1",
+    message:
+      "Calculate the CRC32, MD5, and SHA-1 checksums of a ROM or any other file, and add SHA-256 or another algorithm in Options.",
+  }),
+  "ui.about.checksumBody2": msg({
+    id: "ui.about.checksumBody2",
+    message:
+      "Paste an expected value to compare it with the result. Patch authors and ROM databases publish checksums, so a match confirms that you have the exact file they describe.",
+  }),
+  "ui.about.checksumBody3": msg({
+    id: "ui.about.checksumBody3",
+    message:
+      "Checksum can hash the files inside an archive too. To find out which game a checksum belongs to, use Identify.",
+  }),
+  "ui.about.compressTitle": msg({ id: "ui.about.compressTitle", message: "About compressing ROMs and disc images" }),
+  "ui.about.compressBody1": msg({
+    id: "ui.about.compressBody1",
+    message:
+      "Compress ISO, BIN/CUE, or GDI disc images to CHD, a format many emulators read directly. A CD or GD-ROM with many tracks becomes one smaller file.",
+  }),
+  "ui.about.compressBody2": msg({
+    id: "ui.about.compressBody2",
+    message:
+      "Convert GameCube and Wii ISO images to RVZ, the compressed format Dolphin uses, and pack Nintendo 3DS ROMs as Z3DS. ZIP and 7z work for any set of files.",
+  }),
+  "ui.about.compressBody3": msg({
+    id: "ui.about.compressBody3",
+    message: "Open Options to change the codec or compression level. To turn CHD or RVZ back into ISO, use Extract.",
+  }),
+  "ui.about.extractTitle": msg({ id: "ui.about.extractTitle", message: "About extracting CHD, RVZ, and archives" }),
+  "ui.about.extractBody1": msg({
+    id: "ui.about.extractBody1",
+    message:
+      "Decompress a CHD to ISO for DVD-based games, to BIN/CUE for CDs, or to GDI with its tracks for Dreamcast GD-ROMs. Convert GameCube and Wii RVZ files back to ISO.",
+  }),
+  "ui.about.extractBody2": msg({
+    id: "ui.about.extractBody2",
+    message:
+      "Extract also opens ZIP, 7z, and other archives, plus Nintendo 3DS Z3DS, ZCCI, ZCXI, ZCIA, and Z3DSX files. Download one file, or several as a single ZIP.",
+  }),
+  "ui.about.extractBody3": msg({
+    id: "ui.about.extractBody3",
+    message:
+      "Use it when an emulator, disc tool, or patch needs the uncompressed image. To compress files instead, use Compress.",
+  }),
+  "ui.about.identifyTitle": msg({ id: "ui.about.identifyTitle", message: "About the ROM identifier" }),
+  "ui.about.identifyBody1": msg({
+    id: "ui.about.identifyBody1",
+    message:
+      "Identify a ROM by its checksum. Add a file, or paste a CRC32, MD5, or SHA-1 value, and rom-weaver searches its local ROM database.",
+  }),
+  "ui.about.identifyBody2": msg({
+    id: "ui.about.identifyBody2",
+    message:
+      "A match shows the recorded game name, region, and revision, so you can tell whether you have the release a patch or guide asks for.",
+  }),
+  "ui.about.identifyBody3": msg({
+    id: "ui.about.identifyBody3",
+    message: "Identify also lists known cheat codes for a matched game, and can pass the ROM straight to Apply.",
+  }),
+  "ui.about.trimTitle": msg({ id: "ui.about.trimTitle", message: "About trimming ROMs" }),
+  "ui.about.trimBody1": msg({
+    id: "ui.about.trimBody1",
+    message:
+      "Nintendo DS, Game Boy Advance, and Nintendo 3DS dumps and Xbox XISO images often carry unused padding. Trim removes it and downloads a smaller copy.",
+  }),
+  "ui.about.trimBody2": msg({
+    id: "ui.about.trimBody2",
+    message: "Keep the original for future patches. Trim can also pad a trimmed ROM back to full size.",
+  }),
+  "ui.about.trimBody3": msg({
+    id: "ui.about.trimBody3",
+    message:
+      "The download defaults to ZIP for DS and GBA ROMs and Z3DS for 3DS ROMs. GameCube and Wii discs cannot be trimmed; convert them to RVZ with Compress instead.",
+  }),
+  "ui.about.ppfUndoTitle": msg({ id: "ui.about.ppfUndoTitle", message: "About undoing PPF patches" }),
+  "ui.about.ppfUndoBody1": msg({
+    id: "ui.about.ppfUndoBody1",
+    message:
+      "A PPF3 patch can store the original bytes it replaces. PPF Undo reads that undo data and restores the ROM as it was before the patch.",
+  }),
+  "ui.about.ppfUndoBody2": msg({
+    id: "ui.about.ppfUndoBody2",
+    message:
+      "Add the patched ROM and the exact PPF3 patch that changed it. The patch must contain undo data. This tool cannot undo other patches or rebuild bytes the patch did not save.",
+  }),
+  "ui.about.ppfUndoBody3": msg({
+    id: "ui.about.ppfUndoBody3",
+    message:
+      "PPF patches are common for PlayStation games. Check the restored copy against a known checksum before you patch it again.",
+  }),
+  "ui.about.testTitle": msg({ id: "ui.about.testTitle", message: "About the online ROM tester" }),
+  "ui.about.testBody1": msg({
+    id: "ui.about.testBody1",
+    message:
+      "Play a ROM in your browser with EmulatorJS to check that a game or a fresh patch works. Test runs NES, SNES, Game Boy, Game Boy Advance, Nintendo 64, Nintendo DS, PlayStation, and other supported games.",
+  }),
+  "ui.about.testBody2": msg({
+    id: "ui.about.testBody2",
+    message:
+      "Open a ROM, ZIP, or 7z file, or send a patched result straight from Apply. Saves stay in your browser, and you can export and restore them.",
+  }),
+  "ui.about.testBody3": msg({
+    id: "ui.about.testBody3",
+    message:
+      "A game that starts is not proof that it is the exact ROM a patch needs; use Checksum or Identify for that. GameCube, Wii, Nintendo 3DS, Dreamcast, and PlayStation 2 games need an emulator for that platform.",
+  }),
   "ui.hero.testThesis": msg({
     id: "ui.hero.testThesis",
     message: "Test your ROM online.",

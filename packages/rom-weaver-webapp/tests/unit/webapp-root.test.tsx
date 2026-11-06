@@ -2,8 +2,9 @@
 import http from "node:http";
 import { CHANNEL_BADGE } from "../../src/webapp/build-channel.ts";
 import { APP_VERSION } from "../../src/webapp/build-version.ts";
-import { WORKFLOW_ENTRY_ROUTES, withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
+import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES, withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { preloadCatalog } from "../../src/presentation/localization/index.ts";
 import { createEmptyVitePageUpdateState, getPageUpdateState } from "../../src/webapp/page-update-state.ts";
@@ -18,6 +19,13 @@ import { emptyIdentifyDeployment } from "./empty-identify-deployment.ts";
 vi.mock("../../src/platform/browser/identify-packs.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../src/platform/browser/identify-packs.ts")>()),
   loadIdentifyIndexAndCatalog: vi.fn(async () => emptyIdentifyDeployment),
+}));
+
+const appBase = vi.hoisted(() => ({ path: "/" }));
+vi.mock("../../src/webapp/app-base.ts", () => ({
+  get APP_BASE_PATH() {
+    return appBase.path;
+  },
 }));
 
 const mocks = vi.hoisted(() => ({
@@ -98,7 +106,6 @@ const baseState = () => {
 
 const renderRoot = async ({
   currentView = "patcher" as WebappRootProps["state"]["currentView"],
-  assetBaseUrl,
   workflowEntry,
   notFound = false,
   serviceWorkerStatus = null as WebappRootProps["serviceWorkerCache"]["serviceWorkerStatus"],
@@ -108,7 +115,6 @@ const renderRoot = async ({
   updateReady = false,
 }: {
   currentView?: WebappRootProps["state"]["currentView"];
-  assetBaseUrl?: string;
   workflowEntry?: WebappRootProps["workflowEntry"];
   notFound?: boolean;
   serviceWorkerStatus?: WebappRootProps["serviceWorkerCache"]["serviceWorkerStatus"];
@@ -125,7 +131,6 @@ const renderRoot = async ({
   const root = (confirmationDialog = createEmptyConfirmationDialogState()) => (
     <WebappRoot
       actions={actions}
-      assetBaseUrl={assetBaseUrl}
       workflowEntry={workflowEntry}
       confirmationDialog={confirmationDialog}
       notFound={notFound}
@@ -189,6 +194,7 @@ beforeEach(() => {
 });
 
 beforeEach(() => {
+  appBase.path = "/";
   vi.spyOn(http, "request");
   window.history.replaceState({}, "", "/");
   window.localStorage.clear();
@@ -317,9 +323,120 @@ describe("the workbench shell", () => {
     expect(container.querySelector(".not-found-docs")?.textContent).toBe("Dokumentation durchsuchen");
   });
 
+  // A bare relative href depends on the document URL or <base>, so only a rooted path counts as inside.
+  const outsideBase = (container: HTMLElement, base: string) =>
+    [...container.querySelectorAll<HTMLAnchorElement>("a[href]")]
+      .map((link) => link.getAttribute("href") ?? "")
+      .filter((href) => !href.startsWith("#"))
+      .filter((href) => {
+        if (/^[a-z][a-z0-9+.-]*:/iu.test(href)) {
+          const url = new URL(href);
+          return url.origin === window.location.origin && !url.pathname.startsWith(base);
+        }
+        return !href.startsWith(base);
+      });
+
+  it.each([
+    "patcher",
+    "weave",
+    "creator",
+    "checksum",
+    "compress",
+    "extract",
+    "identify",
+    "trim",
+    "ppf-undo",
+    "save-editor",
+    "test",
+    "home",
+    "docs",
+    "whats-new",
+  ] as const)("keeps every same-origin link of the %s view inside a sub-path base", async (currentView) => {
+    appBase.path = "/rom-weaver/";
+    window.history.replaceState({}, "", "/rom-weaver/");
+    const { container } = await renderRoot({ currentView });
+
+    expect(container.querySelectorAll("a[href]").length).toBeGreaterThan(5);
+    expect(outsideBase(container, "/rom-weaver/")).toEqual([]);
+  });
+
+  // The prerender is written for the origin root: a bare href would resolve against whichever document URL
+  // serves it, so every anchor MUST be rooted, a fragment, or carry a scheme.
+  it.each([
+    ["patcher", "docs"],
+    ["weave", "docs"],
+    ["creator", "docs"],
+    ["checksum", "docs"],
+    ["compress", "docs"],
+    ["extract", "docs"],
+    ["identify", "docs"],
+    ["trim", "docs"],
+    ["ppf-undo", "docs"],
+    ["save-editor", "docs"],
+    ["test", "docs"],
+    ["home", "docs"],
+    ["whats-new", "docs"],
+    ["docs", "docs"],
+    ["docs", "docs/faq"],
+    ["docs", "docs/apply-rom-patches"],
+    ["docs", "docs/use-cheats"],
+  ] as const)("prerenders %s (%s) with rooted links only", async (currentView, docsSlug) => {
+    await preloadWorkflowRoute(currentView);
+    const { actions } = createActions();
+    const html = renderToString(
+      <WebappRoot
+        actions={actions}
+        confirmationDialog={createEmptyConfirmationDialogState()}
+        docsSlug={docsSlug}
+        pageUpdate={getPageUpdateState({
+          serviceWorkerCache: { updateReady: false },
+          vite: createEmptyVitePageUpdateState(),
+        })}
+        serviceWorkerCache={createServiceWorkerCacheState()}
+        state={{ ...baseState(), currentView }}
+        urlSession={null}
+      />,
+    );
+    const hrefs = [...html.matchAll(/<a\b[^>]*?\shref="([^"]*)"/gu)].map((match) => match[1] ?? "");
+    expect(hrefs.length).toBeGreaterThan(5);
+    expect(hrefs.filter((href) => !/^(?:\/(?!\/)|#|[a-z][a-z0-9+.-]*:)/iu.test(href))).toEqual([]);
+  });
+
+  it("prerenders the not-found view with rooted links only", () => {
+    const { actions } = createActions();
+    const html = renderToString(
+      <WebappRoot
+        actions={actions}
+        confirmationDialog={createEmptyConfirmationDialogState()}
+        notFound
+        pageUpdate={getPageUpdateState({
+          serviceWorkerCache: { updateReady: false },
+          vite: createEmptyVitePageUpdateState(),
+        })}
+        serviceWorkerCache={createServiceWorkerCacheState()}
+        state={baseState()}
+        urlSession={null}
+      />,
+    );
+    const hrefs = [...html.matchAll(/<a\b[^>]*?\shref="([^"]*)"/gu)].map((match) => match[1] ?? "");
+    expect(hrefs.length).toBeGreaterThan(5);
+    expect(hrefs.filter((href) => !/^(?:\/(?!\/)|#|[a-z][a-z0-9+.-]*:)/iu.test(href))).toEqual([]);
+  });
+
+  it("keeps every same-origin link of the not-found view inside a sub-path base", async () => {
+    appBase.path = "/rom-weaver/";
+    window.history.replaceState({}, "", "/rom-weaver/no-such-route");
+    const { container } = await renderRoot({ notFound: true });
+
+    expect(container.querySelectorAll("a[href]").length).toBeGreaterThan(5);
+    expect(outsideBase(container, "/rom-weaver/")).toEqual([]);
+  });
+
   it("keeps not-found links and tab loads inside a subdirectory deployment", async () => {
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
-    const { container } = await renderRoot({ assetBaseUrl: "https://example.test/rom-weaver/", notFound: true });
+    appBase.path = "/rom-weaver/";
+    window.history.replaceState({}, "", "/rom-weaver/no-such-route");
+    const { container } = await renderRoot({ notFound: true });
 
     expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/rom-weaver/apply-rom-patches");
     expect(container.querySelector(".not-found-docs")?.getAttribute("href")).toBe("/rom-weaver/docs");
@@ -812,6 +929,39 @@ describe("page metadata per view", () => {
       }
     },
   );
+
+  it("gives every indexed tool page an introduction of its own", async () => {
+    const pages: {
+      currentView: WebappRootProps["state"]["currentView"];
+      workflowEntry?: keyof typeof WORKFLOW_ENTRY_ROUTES;
+    }[] = [
+      ...(Object.keys(WORKFLOW_SEO_ROUTES) as (keyof typeof WORKFLOW_SEO_ROUTES)[])
+        .filter((view) => view !== "home")
+        .map((view) => ({ currentView: view })),
+      ...(Object.keys(WORKFLOW_ENTRY_ROUTES) as (keyof typeof WORKFLOW_ENTRY_ROUTES)[]).map((workflowEntry) => ({
+        currentView: WORKFLOW_ENTRY_ROUTES[workflowEntry].view,
+        workflowEntry,
+      })),
+    ];
+    const headings = [];
+    for (const page of pages) {
+      const root = await renderRoot(page);
+      const about = await waitFor(() => {
+        const disclosure = root.container.querySelector(
+          `#panel-${page.currentView} .hero-help > details.workflow-about`,
+        );
+        expect(disclosure).not.toBeNull();
+        return disclosure;
+      });
+      expect(about?.querySelector("summary")?.textContent).toBe("How it works");
+      expect(about?.querySelectorAll("p")).toHaveLength(3);
+      headings.push(about?.querySelector("h2")?.textContent);
+      root.unmount();
+    }
+
+    expect(headings.every(Boolean)).toBe(true);
+    expect(new Set(headings).size).toBe(pages.length);
+  });
 
   it("updates PPF undo metadata after navigating from Apply", async () => {
     const canonical = document.createElement("link");

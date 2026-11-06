@@ -489,8 +489,8 @@ assertIncludes(
 assertIncludes(read("create/index.html"), WORKFLOW_SEO_ROUTES.creator.description, "static-host create description");
 assertIncludes(extractHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.extract.slug}"`, "extract canonical");
 assertIncludes(extractHtml, WORKFLOW_SEO_ROUTES.extract.description, "extract description");
-assertIncludes(extractHtml, 'href="docs/extract-chd"', "extract CHD to ISO guide link");
-assertIncludes(extractHtml, 'href="docs/convert-rvz-to-iso"', "extract RVZ to ISO guide link");
+assertIncludes(extractHtml, 'href="/docs/extract-chd"', "extract CHD to ISO guide link");
+assertIncludes(extractHtml, 'href="/docs/convert-rvz-to-iso"', "extract RVZ to ISO guide link");
 assertIncludes(read("extract/index.html"), WORKFLOW_SEO_ROUTES.extract.description, "static-host extract description");
 assertIncludes(
   identifyHtml,
@@ -508,17 +508,17 @@ assertIncludes(testHtml, WORKFLOW_SEO_ROUTES.test.description, "test description
 assertIncludes(read("test/index.html"), WORKFLOW_SEO_ROUTES.test.description, "static-host test description");
 assertIncludes(
   applyHtml,
-  'aria-current="page" aria-label="Apply Patches" class="nav-row" href="apply-rom-patches" id="tab-patcher"',
+  'aria-current="page" aria-label="Apply Patches" class="nav-row" href="/apply-rom-patches" id="tab-patcher"',
   "apply prerendered workflow",
 );
 assertIncludes(
   weaveHtml,
-  'aria-current="page" aria-label="Weave Patches" class="nav-row" href="weave-rom-patches" id="tab-weave"',
+  'aria-current="page" aria-label="Weave Patches" class="nav-row" href="/weave-rom-patches" id="tab-weave"',
   "bundle prerendered workflow",
 );
 assertIncludes(
   createHtml,
-  'aria-current="page" aria-label="Create Patch" class="nav-row" href="create-rom-patch" id="tab-creator"',
+  'aria-current="page" aria-label="Create Patch" class="nav-row" href="/create-rom-patch" id="tab-creator"',
   "create prerendered workflow",
 );
 assertIncludes(identifyHtml, 'id="panel-identify"', "identify prerendered workflow");

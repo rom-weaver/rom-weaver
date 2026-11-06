@@ -14,7 +14,6 @@ import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/wor
 import { createRootManifestSource } from "./channel.mjs";
 import { copyEmulatorJsAssets } from "./emulatorjs.mjs";
 import { rootDir } from "./paths.mjs";
-import { rootRelativeAnchors } from "./route-copy-html.mjs";
 import { PRERENDER_ROOT } from "./prerender-shell.mjs";
 import {
   createLlmsSource,
@@ -36,6 +35,16 @@ import {
   readDocLastmods,
 } from "./seo-html.mjs";
 
+// The view this document's shell was rendered as.
+const stampView = (html, view) => html.replace(/<html\b[^>]*/u, `$& data-view="${view}"`);
+
+// The view a prerendered shell key stands for.
+const shellView = (key) => {
+  if (key === "notFound") return null;
+  if (key === "docs" || key.startsWith("docs/")) return "docs";
+  return WORKFLOW_ENTRY_ROUTES[key]?.view ?? key;
+};
+
 const copyFile = (from, to) => {
   fs.mkdirSync(path.dirname(to), { recursive: true });
   fs.copyFileSync(from, to);
@@ -48,6 +57,13 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
     closeBundle() {
       const distDir = path.resolve(rootDir, outDir);
       copyEmulatorJsAssets(distDir);
+      // The app finds its base from the URL of its own chunks, which holds only while they sit directly in <base>/assets/.
+      const nestedAssets = fs
+        .readdirSync(path.join(distDir, "assets"), { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name);
+      if (nestedAssets.length)
+        throw new Error(`rom-weaver-static-assets: dist/assets must be flat, found ${nestedAssets.join(", ")}`);
       const rootStaticAssetSources = rootStaticAssetSourcesForChannel(channel);
       for (const assetPath of Object.keys(rootStaticAssetSources)) {
         const outputPath = path.join(distDir, assetPath);
@@ -80,13 +96,15 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
       const withShell = (view) => {
         const shell = prerenderedShells.get(view);
         if (!shell) throw new Error(`rom-weaver-static-assets: no prerendered shell for ${view}`);
-        return indexHtml.replace(homeRoot, PRERENDER_ROOT(shell));
+        const html = indexHtml.replace(homeRoot, PRERENDER_ROOT(shell));
+        const stamped = shellView(view);
+        return stamped ? stampView(html, stamped) : html;
       };
       // Only the apex carries the site-level WebSite entity.
       fs.writeFileSync(
         path.join(distDir, "index.html"),
         injectLdJson(
-          createWorkflowRouteHtml(indexHtml, WORKFLOW_SEO_ROUTES.home, channel, channelLabel),
+          createWorkflowRouteHtml(stampView(indexHtml, "home"), WORKFLOW_SEO_ROUTES.home, channel, channelLabel),
           WORKFLOW_SEO_ROUTES.home,
           true,
         ),
@@ -245,11 +263,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         const routeDir = path.join(distDir, slug);
         fs.mkdirSync(routeDir, { recursive: true });
         fs.writeFileSync(path.join(distDir, `${slug}.html`), html);
-        // Served at /<slug>/, where a crawler ignoring <base> would resolve bare anchor hrefs one level too deep.
-        fs.writeFileSync(
-          path.join(routeDir, "index.html"),
-          rootRelativeAnchors(html).replace("<head>", '<head>\n    <base href="../" />'),
-        );
+        fs.writeFileSync(path.join(routeDir, "index.html"), html.replace("<head>", '<head>\n    <base href="../" />'));
       }
       fs.writeFileSync(path.join(distDir, "robots.txt"), createRobotsSource(channel));
       // Static hosts without redirect rules MUST retain usable legacy documents.

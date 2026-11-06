@@ -327,6 +327,36 @@ async function checkNotFoundPage(context, origin, prefix) {
   await page.close();
 }
 
+// Every document type keeps its own URL and its links inside the prefix once hydration has rebased them.
+async function checkAppBaseRoutes(context, origin, prefix) {
+  const page = await context.newPage();
+  try {
+    for (const [route, selector] of [
+      ["/", "#panel-home"],
+      ["/apply-rom-patches", "#rom-weaver-input-file-unified"],
+      ["/play-rom", "#panel-test"],
+      ["/no-such-route", ".not-found-home"],
+    ]) {
+      const url = `${origin}${prefix}${route}`;
+      await page.goto(url, { waitUntil: "load" });
+      await page.locator(selector).first().waitFor({ state: "attached", timeout: 60_000 });
+      await page.locator("#webapp-root:not([aria-busy])").waitFor({ state: "attached", timeout: 60_000 });
+      await page.waitForLoadState("networkidle");
+      let escaped = await anchorsOutsidePrefix(page, origin, prefix);
+      for (let attempt = 0; escaped.length > 0 && attempt < 20; attempt += 1) {
+        await delay(250);
+        escaped = await anchorsOutsidePrefix(page, origin, prefix);
+      }
+      assert.deepEqual([...new Set(escaped)], [], `${url} links leave ${prefix}/`);
+      assert.ok((await page.locator("a[href]").count()) > 0, `${url} has links`);
+      assert.equal(new URL(page.url()).pathname, `${prefix}${route}`, `${url} keeps its URL`);
+    }
+    console.log(`PASS app routes keep their URL and links under ${prefix}/: ${origin}`);
+  } finally {
+    await page.close();
+  }
+}
+
 async function checkBrowser(origins) {
   const require = createRequire(resolve("packages/rom-weaver-webapp/package.json"));
   const { chromium } = require("playwright");
@@ -391,6 +421,7 @@ async function checkBrowser(origins) {
         `PASS browser aliases, isolation, legacy archive apply and exact download bytes: ${origin}${prefix}`,
       );
       await checkNotFoundPage(context, origin, prefix);
+      await checkAppBaseRoutes(context, origin, prefix);
       await context.close();
     }
   } finally {

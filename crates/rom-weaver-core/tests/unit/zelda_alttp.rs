@@ -464,19 +464,21 @@ fn rejects_unrelated_edits_when_an_exposed_value_is_invalid() {
     let document = handler().parse(&input, &definition().identity).unwrap();
     assert_eq!(document.integrity.state, SaveIntegrityState::Invalid);
     assert!(document.fields.iter().all(|field| !field.editable));
-    assert!(
-        handler()
-            .apply(
-                &input,
-                &definition().identity,
-                &[SaveEdit {
-                    field: "slot_1.resources.rupees".into(),
-                    value: SaveValue::U32(999),
-                }],
-                false,
-            )
-            .is_err()
-    );
+    let error = handler()
+        .apply(
+            &input,
+            &definition().identity,
+            &[SaveEdit {
+                field: "slot_1.resources.rupees".into(),
+                value: SaveValue::U32(999),
+            }],
+            false,
+        )
+        .unwrap_err();
+    match error {
+        RomWeaverError::ValidationCode(error) => assert_eq!(error.code(), "save_inventory"),
+        other => panic!("expected a validation error, got {other:?}"),
+    }
 }
 
 #[test]

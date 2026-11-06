@@ -62,7 +62,6 @@ import { CHANNEL_BADGE } from "./build-channel.ts";
 import { observePanelHeadFit } from "./panel-head-fit.ts";
 import { appPathHref } from "./app-routes.ts";
 import { useAppBaseUrl } from "./use-app-base-url.ts";
-import { readAppBaseUrl } from "./webapp-controller.ts";
 import { releaseLargeEntriesOnLargeInput } from "./large-input-release.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { DropRouteRequest } from "./components/drop-route-dialog.tsx";
@@ -72,6 +71,8 @@ import { LoadErrorBoundary } from "./components/load-error-boundary.tsx";
 import { PausedGameBanner } from "./components/paused-game-banner.tsx";
 import { RelatedStrip } from "./components/related-strip.tsx";
 import { Masthead } from "./components/shell.tsx";
+import { HeroDetailsContext } from "../public/react/components/ds/hero-details-context.tsx";
+import { WorkflowAbout } from "./components/workflow-about.tsx";
 import type { WorkflowTab } from "./components/shell.tsx";
 // Static, unlike the routes: a deploy that is waiting has already replaced
 // the old hashed chunks on the host, so a lazy banner could no longer load.
@@ -109,7 +110,7 @@ import {
   TrimPatchRoute,
   WhatsNewPageRoute,
 } from "./workflow-routes.tsx";
-import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES, withChannelBadge } from "./workflow-seo.mjs";
+import { activeWorkflowEntry, WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES, withChannelBadge } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS: WorkflowTab[] = [
   {
@@ -213,7 +214,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   },
   {
     group: "project",
-    href: "/docs",
+    href: "docs",
     icon: <BookOpen aria-hidden="true" />,
     id: "docs",
     label: "Docs",
@@ -242,9 +243,8 @@ const syncWorkflowSeoMetadata = (view: WebappView, workflowEntry: WebappRootProp
   }
   let route: { title: string; description: string; slug: string } | undefined =
     WORKFLOW_SEO_ROUTES[view as keyof typeof WORKFLOW_SEO_ROUTES];
-  if (workflowEntry && WORKFLOW_ENTRY_ROUTES[workflowEntry].view === view) {
-    route = WORKFLOW_ENTRY_ROUTES[workflowEntry];
-  }
+  const entry = activeWorkflowEntry(view, workflowEntry);
+  if (entry) route = WORKFLOW_ENTRY_ROUTES[entry];
   if (!route) {
     const tab = WORKFLOW_TABS.find((entry) => entry.id === view);
     document.title = withChannelBadge(tab ? `${tab.label} | rom-weaver` : "rom-weaver", CHANNEL_BADGE);
@@ -465,8 +465,9 @@ const ActivityFinishMarker = () => {
   return null;
 };
 
-const NotFoundPage = ({ assetBaseUrl, onSelectTab }: { assetBaseUrl: string; onSelectTab: (id: string) => void }) => {
+const NotFoundPage = ({ onSelectTab }: { onSelectTab: (id: string) => void }) => {
   const localizer = useUiLocalizer();
+  const appBaseUrl = useAppBaseUrl();
   return (
     <section aria-labelledby="not-found-title" className="not-found-page">
       <div className="not-found-content">
@@ -480,11 +481,11 @@ const NotFoundPage = ({ assetBaseUrl, onSelectTab }: { assetBaseUrl: string; onS
         </h1>
         <p className="not-found-copy">{localizer.message("ui.notFound.copy")}</p>
         <div className="not-found-actions">
-          <a className="btn primary not-found-home" href={appPathHref("apply-rom-patches", assetBaseUrl)}>
+          <a className="btn primary not-found-home" href={appPathHref("apply-rom-patches", appBaseUrl)}>
             <House aria-hidden="true" />
             {localizer.message("ui.home.applyPatchCta")}
           </a>
-          <a className="btn ghost not-found-docs" href={appPathHref("docs", assetBaseUrl)}>
+          <a className="btn ghost not-found-docs" href={appPathHref("docs", appBaseUrl)}>
             <BookOpen aria-hidden="true" />
             {localizer.message("ui.notFound.browseDocs")}
           </a>
@@ -507,14 +508,10 @@ function WebappRoot({
   workflowEntry = null,
   creatorMode = null,
   notFound: initiallyNotFound = false,
-  assetBaseUrl,
 }: WebappRootProps) {
   const [recoveredDrop, setRecoveredDrop] = useState(false);
   const notFound = initiallyNotFound && !recoveredDrop;
-  // The prerendered shell resolves asset links against "/" (no window to read
-  // the origin from), so hydration passes the same value and only the render
-  // after it adopts the real base - otherwise React sees every href mismatch.
-  const resolvedAssetBaseUrl = assetBaseUrl ?? readAppBaseUrl();
+  const resolvedAssetBaseUrl = useAppBaseUrl();
   useEntryAnimationLock();
   useEffect(() => {
     if (notFound) return;
@@ -732,15 +729,10 @@ function WebappRoot({
     pendingViewRef.current = null;
     selectViewWithTransition(() => actions.onSelectView("whats-new"));
   }, [actions, cancelFileRouting]);
-  // Docs guides live one level down (`/docs/<slug>`), so a bare slug would resolve to `/docs/apply-rom-patches`, the Apply guide, not the tool.
-  const resolveTabHrefs = notFound || state.currentView === "docs";
-  // One identity per shell, so Find's index is not rebuilt on every render of the 404 page.
+  // One identity per base, so Find's index is not rebuilt on every render.
   const mastheadTabs = useMemo(
-    () =>
-      resolveTabHrefs
-        ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: appPathHref(tab.href, resolvedAssetBaseUrl) }))
-        : WORKFLOW_TABS,
-    [resolveTabHrefs, resolvedAssetBaseUrl],
+    () => WORKFLOW_TABS.map((tab) => ({ ...tab, href: appPathHref(tab.href, resolvedAssetBaseUrl) })),
+    [resolvedAssetBaseUrl],
   );
 
   // The settings console draws its own copy of the phone dock: a modal makes the real one inert.
@@ -1044,19 +1036,23 @@ function WebappRoot({
           </WorkflowPanelHead>
         )}
         <div className="workflow-body">
-          {/* A route that fails to load takes down only its own panel, so the others keep their staged work. */}
-          <LoadErrorBoundary area={view} onReload={reloadAfterLoadFailure}>
-            {/* Only ever engages for a tab switch: the landing route is preloaded before the first mount. */}
-            <Suspense
-              fallback={
-                <h1 className="sr-only">
-                  {view === "whats-new" ? "What's new" : WORKFLOW_TABS.find((tab) => tab.id === view)?.label}
-                </h1>
-              }
-            >
-              {form}
-            </Suspense>
-          </LoadErrorBoundary>
+          <HeroDetailsContext.Provider
+            value={<WorkflowAbout routeKey={activeWorkflowEntry(view, workflowEntry) ?? view} />}
+          >
+            {/* A route that fails to load takes down only its own panel, so the others keep their staged work. */}
+            <LoadErrorBoundary area={view} onReload={reloadAfterLoadFailure}>
+              {/* Only ever engages for a tab switch: the landing route is preloaded before the first mount. */}
+              <Suspense
+                fallback={
+                  <h1 className="sr-only">
+                    {view === "whats-new" ? "What's new" : WORKFLOW_TABS.find((tab) => tab.id === view)?.label}
+                  </h1>
+                }
+              >
+                {form}
+              </Suspense>
+            </LoadErrorBoundary>
+          </HeroDetailsContext.Provider>
         </div>
       </section>
     ) : null;
@@ -1129,7 +1125,7 @@ function WebappRoot({
             <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />
             <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
               {notFound ? (
-                <NotFoundPage assetBaseUrl={resolvedAssetBaseUrl} onSelectTab={handleSelectTab} />
+                <NotFoundPage onSelectTab={handleSelectTab} />
               ) : (
                 <>
                   {isViewMounted("home") ? (

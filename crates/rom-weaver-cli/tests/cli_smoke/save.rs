@@ -76,7 +76,13 @@ fn save_catalog_lists_compiled_games_and_generation_support() {
         "final-fantasy-viii-usa-block-1",
         "advance-wars",
         "banjo-kazooie-canonical-eeprom-file-1",
+        "banjo-tooie-canonical-eeprom-file-3",
+        "donkey-kong-64-canonical-eeprom-file-2",
+        "goldeneye-007-canonical-eeprom-file-4",
+        "pokemon-snap-canonical-flashram-japan",
         "bomberman-64-canonical-eeprom-slot-1",
+        "mystical-ninja-2-starring-goemon-canonical-sram-japan-options",
+        "mystical-ninja-2-starring-goemon-canonical-sram-japan-slot-3",
         "castlevania-harmony-of-dissonance",
         "game-boy-camera",
         "golden-sun-file-1",
@@ -103,6 +109,13 @@ fn save_catalog_lists_compiled_games_and_generation_support() {
         "castlevania-circle-of-the-moon",
         "wario-land-ii",
         "zelda-links-awakening-gbc-international",
+        "fire-emblem-the-blazing-blade",
+        "azure-dreams",
+        "castlevania-portrait-of-ruin",
+        "ctr-crash-team-racing-usa-block-1",
+        "gran-turismo-usa-block-1",
+        "tomb-raider-ii-starring-lara-croft-usa-block-1",
+        "tony-hawk-s-skateboarding-usa-block-1",
     ] {
         assert!(game_ids.contains(&id), "missing save profile: {id}");
     }
@@ -364,6 +377,114 @@ fn save_yoshi_edits_preserve_packed_options_and_repair_eeprom_checksum() {
     assert_eq!(
         report["details"]["save_editor"]["document"]["integrity"]["state"],
         "valid"
+    );
+}
+
+#[test]
+fn save_goldeneye_edit_rewrites_the_record_checksum() {
+    // Checksum words from a Python port of the upstream Rare hash over bytes 0x28..0x80.
+    fn set_checksum(bytes: &mut [u8], words: [u32; 2]) {
+        bytes[0x20..0x24].copy_from_slice(&words[0].to_be_bytes());
+        bytes[0x24..0x28].copy_from_slice(&words[1].to_be_bytes());
+    }
+    let temp = setup_temp_dir();
+    let source = temp.child("goldeneye.eep");
+    let output = temp.child("goldeneye-edited.eep");
+    let mut bytes = vec![0xa5; 512];
+    bytes[0x28] = 0;
+    set_checksum(&mut bytes, [0x6cc7_086e, 0x185c_1885]);
+    fs::write(source.path(), &bytes).unwrap();
+    let args = [
+        "save",
+        "set",
+        source.path().to_str().unwrap(),
+        "options.music=18",
+        "--game",
+        "goldeneye-007-canonical-eeprom-file-1",
+        "--output",
+        output.path().to_str().unwrap(),
+        "--json",
+    ];
+    run_single_json_event(&args, 0);
+    let mut expected = bytes.clone();
+    expected[0x2a] = 18;
+    set_checksum(&mut expected, [0x5e7a_f2ee, 0x59e4_e83d]);
+    assert_eq!(fs::read(output.path()).unwrap(), expected);
+    assert_eq!(fs::read(source.path()).unwrap(), bytes);
+    let report = run_single_json_event(
+        &[
+            "save",
+            "inspect",
+            output.path().to_str().unwrap(),
+            "--game",
+            "goldeneye-007-canonical-eeprom-file-1",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        report["details"]["save_editor"]["document"]["integrity"]["state"],
+        "valid"
+    );
+}
+
+#[test]
+fn save_goemon_2_edits_repair_the_slot_crc_and_preserve_other_records() {
+    // CRC-32/BZIP2 over the 0x130-byte slot record with its first eight bytes ignored.
+    fn repair(bytes: &mut [u8]) {
+        let mut crc = 0xffff_ffffu32;
+        for (index, byte) in bytes[0x10..0x140].iter().enumerate() {
+            crc ^= u32::from(if index < 8 { 0 } else { *byte }) << 24;
+            for _ in 0..8 {
+                crc = (crc << 1) ^ if crc >> 31 != 0 { 0x04c1_1db7 } else { 0 };
+            }
+        }
+        bytes[0x14..0x18].copy_from_slice(&(!crc).to_be_bytes());
+    }
+    let temp = setup_temp_dir();
+    let source = temp.child("goemon2.sra");
+    let output = temp.child("goemon2-edited.sra");
+    let mut bytes = vec![0x5a; 32768];
+    bytes[0x18] = 3;
+    repair(&mut bytes);
+    fs::write(source.path(), &bytes).unwrap();
+    let game = "mystical-ninja-2-starring-goemon-canonical-sram-japan-slot-1";
+    run_single_json_event(
+        &[
+            "save",
+            "set",
+            source.path().to_str().unwrap(),
+            "player_1.coins=999",
+            "chain_pipe=true",
+            "--game",
+            game,
+            "--output",
+            output.path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let mut expected = bytes.clone();
+    expected[0x10 + 0x7a + 4..0x10 + 0x7a + 6].copy_from_slice(&999u16.to_be_bytes());
+    expected[0x10 + 0x22] |= 0x04;
+    repair(&mut expected);
+    assert_eq!(fs::read(output.path()).unwrap(), expected);
+    assert_eq!(fs::read(source.path()).unwrap(), bytes);
+    let report = run_single_json_event(
+        &[
+            "save",
+            "inspect",
+            output.path().to_str().unwrap(),
+            "--game",
+            game,
+            "--json",
+        ],
+        0,
+    );
+    // The CRC is a closure rule, so the schema reports no declarative checksums.
+    assert_eq!(
+        report["details"]["save_editor"]["document"]["integrity"]["state"],
+        "valid_with_warnings"
     );
 }
 

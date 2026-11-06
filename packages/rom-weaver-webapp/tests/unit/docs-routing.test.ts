@@ -25,17 +25,17 @@ describe("readDocsSlugFromPathname", () => {
     expect(readDocsSlugFromPathname("/DOCS/FAQ")).toBe("docs/faq");
   });
 
-  it("falls back to docs root for an unknown slug", () => {
-    expect(readDocsSlugFromPathname("/docs/not-a-real-page")).toBe("docs");
+  it("is null for an unknown slug", () => {
+    expect(readDocsSlugFromPathname("/docs/not-a-real-page")).toBeNull();
   });
 
-  it("falls back to docs root when there is no docs segment", () => {
-    expect(readDocsSlugFromPathname("/apply-patch")).toBe("docs");
+  it("is null when there is no docs segment", () => {
+    expect(readDocsSlugFromPathname("/apply-patch")).toBeNull();
   });
 
-  it("falls back to docs root for an empty pathname", () => {
-    expect(readDocsSlugFromPathname("")).toBe("docs");
-    expect(readDocsSlugFromPathname(undefined)).toBe("docs");
+  it("is null for an empty pathname", () => {
+    expect(readDocsSlugFromPathname("")).toBeNull();
+    expect(readDocsSlugFromPathname(undefined)).toBeNull();
   });
 
   it("strips a trailing index.html", () => {
@@ -50,8 +50,11 @@ describe("readDocsSlugFromPathname", () => {
     expect(readDocsSlugFromPathname("/docs/faq/")).toBe("docs/faq");
   });
 
-  it("uses the last docs segment when docs appears more than once", () => {
-    expect(readDocsSlugFromPathname("/docs/docs/faq")).toBe("docs/faq");
+  it("reads the slug below the app base only", () => {
+    expect(readDocsSlugFromPathname("/rom-weaver/docs/faq", "/rom-weaver/")).toBe("docs/faq");
+    expect(readDocsSlugFromPathname("/rom-weaver/docs/faq", "/")).toBeNull();
+    expect(readDocsSlugFromPathname("/docs/docs/faq", "/docs/")).toBe("docs/faq");
+    expect(readDocsSlugFromPathname("/docs/docs/faq", "/")).toBeNull();
   });
 });
 

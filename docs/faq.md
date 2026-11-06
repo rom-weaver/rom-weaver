@@ -108,7 +108,10 @@ Find rom-weaver guides for ROM patching, checksum errors, supported files, priva
 
 ### What does a source ROM checksum mismatch mean?
 
-Work through [Fix a source ROM checksum mismatch](how-to/fix-checksum-errors.md).
+<!-- The one FAQ answer, an exception to the link-only rule: search results
+     show this entry for the error text, so it answers before it links. -->
+
+Your ROM is not the exact file the patch was made for. The usual causes are the wrong region or revision, a header, or a copy that is already patched. Work through [Fix a source ROM checksum mismatch](how-to/fix-checksum-errors.md).
 
 ### Does patch order matter?
 

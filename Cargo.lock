@@ -1891,6 +1891,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "sha1",
  "strsim",
  "thiserror",
  "tracing",

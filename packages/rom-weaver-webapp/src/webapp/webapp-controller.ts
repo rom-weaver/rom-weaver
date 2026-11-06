@@ -15,7 +15,8 @@ import {
   validateSettingsDraft,
 } from "./settings/settings-state.ts";
 import { setThemePreference } from "./theme.ts";
-import { readAppBaseUrl, readRouteSegments, readWorkflowViewFromPath, VIEW_TO_ROUTE_SLUG } from "./app-routes.ts";
+import { APP_BASE_PATH } from "./app-base.ts";
+import { matchAppRoute, readAppBaseUrl, VIEW_TO_ROUTE_SLUG } from "./app-routes.ts";
 import { createStore } from "./vanilla-store.ts";
 import {
   type CompressSessionState,
@@ -73,14 +74,14 @@ type RouteHistoryMode = "none" | "push" | "replace";
 const writeWorkflowViewToPath = (view: WebappView, historyMode: RouteHistoryMode): void => {
   if (typeof window === "undefined") return;
   if (historyMode === "none") return;
-  if (view === "docs" && readRouteSegments().includes("docs")) return;
-  const entry = readWorkflowEntryFromPathname(window.location.pathname);
+  if (view === "docs" && matchAppRoute() === "docs") return;
+  const entry = readWorkflowEntryFromPathname(window.location.pathname, APP_BASE_PATH);
   if (entry && WORKFLOW_ENTRY_ROUTES[entry].view === view) return;
   const nextUrl = new URL(VIEW_TO_ROUTE_SLUG[view], readAppBaseUrl());
   nextUrl.search = window.location.search;
   const currentUrl = new URL(window.location.href);
   // Console deep links MUST survive canonicalizing aliases of the same workflow.
-  if (currentUrl.hash.startsWith("#console-") && readWorkflowViewFromPath(currentUrl.pathname) === view) {
+  if (currentUrl.hash.startsWith("#console-") && matchAppRoute(currentUrl.pathname) === view) {
     nextUrl.hash = currentUrl.hash;
   }
   if (nextUrl.href === currentUrl.href) return;
@@ -181,7 +182,7 @@ const createWebappRootController = (options: ControllerOptions) => {
   // A direct route MUST keep its requested view through the first render. The
   // server emitted that route's shell, while beta settings only control later
   // navigation from the app chrome.
-  const initialView = readWorkflowViewFromPath() || DEFAULT_WORKFLOW_VIEW;
+  const initialView = matchAppRoute() || DEFAULT_WORKFLOW_VIEW;
   writeWorkflowViewToPath(initialView, options.initialHistoryMode ?? "replace");
   const store = createStore<WebappState>(() => ({
     compressSession: createEmptyCompressSessionState(),
@@ -571,4 +572,4 @@ const createWebappRootController = (options: ControllerOptions) => {
   };
 };
 
-export { areSettingsEqual, createWebappRootController, readAppBaseUrl, readWorkflowViewFromPath };
+export { areSettingsEqual, createWebappRootController };

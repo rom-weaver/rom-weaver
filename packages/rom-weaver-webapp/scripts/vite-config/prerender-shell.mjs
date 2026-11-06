@@ -43,7 +43,7 @@ const devPrerenderRoute = (url) => {
   const segments = pathname.toLowerCase().split("/").filter(Boolean);
   if (segments.at(-1) === "index.html") segments.pop();
   const slug = segments.at(-1) || "";
-  if (segments.includes("docs")) return { docsSlug: readDocsSlugFromPathname(pathname), view: "docs" };
+  if (segments.includes("docs")) return { docsSlug: readDocsSlugFromPathname(pathname) ?? "docs", view: "docs" };
   // No route segment is the app base itself, which serves the landing page.
   if (!slug) return { docsSlug: "docs", view: "home" };
   const routeSlug = slug.replace(/\.html$/, "");

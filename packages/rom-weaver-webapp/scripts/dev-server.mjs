@@ -671,6 +671,8 @@ const canCompressBrotliOnTheFly = (filePath, data) =>
 const resolveDistRequestPath = (distDir, requestUrl) => {
   const parsed = new URL(requestUrl || "/", "https://localhost");
   const decodedPath = decodeURIComponent(parsed.pathname || "/");
+  // A NUL byte makes fs.stat throw synchronously, which would end the process.
+  if (decodedPath.includes("\0")) return null;
   const normalizedPath = path.normalize(decodedPath).replace(PARENT_DIRECTORY_PREFIX_REGEX, "");
   const filePath = path.join(distDir, normalizedPath);
   const resolvedPath = path.resolve(filePath);
@@ -786,6 +788,42 @@ const sendEarlyHints = (res, pagesHeaders, isDocument) => {
   res.writeEarlyHints({ link: preloadLinks });
 };
 
+// Cloudflare Pages answers a path without a trailing slash from the file itself, then from `<path>.html` with a 200,
+// and only then with a 308 to `<path>/` when `<path>/index.html` exists. The route documents rely on that order:
+// `<route>.html` and `<route>/index.html` carry different <base> tags, so each resolves only at its own URL.
+// https://github.com/cloudflare/workers-sdk/blob/main/packages/pages-shared/asset-server/handler.ts
+const resolveBarePath = (filePath, callback) => {
+  const isFile = (candidate, next) => fs.stat(candidate, (error, stats) => next(!error && stats.isFile()));
+  isFile(filePath, (fileExists) => {
+    if (fileExists) return callback({ filePath });
+    isFile(`${filePath}.html`, (htmlExists) => {
+      if (htmlExists) return callback({ filePath: `${filePath}.html` });
+      isFile(path.join(filePath, "index.html"), (indexExists) =>
+        callback(indexExists ? { redirect: true } : { filePath }),
+      );
+    });
+  });
+};
+
+// `/route` and `/route/` resolve to the same file path, so the bare answer is kept under its own key.
+// The dist directory itself is the site root, whichever way the URL spells it, so it has no `.html` sibling.
+const resolvePreviewPath = (cache, distDir, filePath, pathname, callback) => {
+  if (pathname.endsWith("/") || filePath === distDir) {
+    callback({ filePath });
+    return;
+  }
+  const cacheKey = `bare:${filePath}`;
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    callback(cached);
+    return;
+  }
+  resolveBarePath(filePath, (resolution) => {
+    cache.set(cacheKey, resolution);
+    callback(resolution);
+  });
+};
+
 const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRules = []) => {
   if (req.method !== "GET" && req.method !== "HEAD") {
     send(res, 405, { Allow: "GET, HEAD" }, "Method Not Allowed", securityOptions);
@@ -826,44 +864,59 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
     return;
   }
 
-  // Cloudflare Pages answers a missed navigation with 404.html at the URL that
-  // missed, so the preview does the same: that is the only way to exercise the
-  // page at a nested path, where its <base> tag decides every link.
-  const fallbackPath = path.join(distDir, "404.html");
-  const acceptHeader = req.headers.accept || "";
-  const allowFallback = acceptHeader.includes("text/html") || !path.extname(filePath);
-  readPreviewAsset(cache, filePath, fallbackPath, allowFallback, (readError, asset) => {
-    if (readError) {
-      send(res, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not Found", securityOptions);
+  resolvePreviewPath(cache, distDir, filePath, pathname, (resolution) => {
+    if (resolution.redirect) {
+      // A relative target keeps any prefix a proxy stripped.
+      const { search } = new URL(req.url, "https://localhost");
+      send(
+        res,
+        308,
+        { Location: `${path.posix.basename(pathname)}/${search}`, "Cache-Control": "no-store" },
+        null,
+        securityOptions,
+      );
       return;
     }
-    const encoded = Boolean(asset.brotli) && acceptsBrotli(req);
-    // `_headers` last so the deployed file wins wherever it and the preview server both
-    // speak. There are two exceptions. The explicit no-COOP/COEP mode: its purpose is to
-    // prove that the service worker can add isolation without help from either
-    // source of preview headers. And a 404, where Pages replaces whatever Cache-Control
-    // the rules gave with no-store, so a 404 MUST NOT keep an /assets/* rule's long lifetime.
-    const pagesHeaders = matchPagesHeaders(pagesRules, pathname);
-    if (!securityOptions.crossOriginIsolation) {
-      for (const header of Object.keys(CROSS_ORIGIN_ISOLATION_HEADERS)) delete pagesHeaders[header];
-    }
-    sendEarlyHints(res, pagesHeaders, path.extname(asset.resolvedPath) === ".html");
-    const isDocument = path.extname(asset.resolvedPath) === ".html";
-    const status = asset.resolvedPath === fallbackPath && filePath !== fallbackPath ? 404 : 200;
-    send(
-      res,
-      status,
-      {
-        "Cache-Control": isDocument ? "no-cache" : "public, max-age=31536000, immutable",
-        "Content-Type": getContentType(asset.resolvedPath),
-        ...(asset.brotli ? { Vary: "Accept-Encoding" } : {}),
-        ...(encoded ? { "Content-Encoding": "br" } : {}),
-        ...pagesHeaders,
-        ...(status === 404 ? { "Cache-Control": "no-store" } : {}),
-      },
-      req.method === "HEAD" ? null : encoded ? asset.brotli : asset.data,
-      securityOptions,
-    );
+    const assetPath = resolution.filePath;
+    // Cloudflare Pages answers a missed navigation with 404.html at the URL that
+    // missed, so the preview does the same: that is the only way to exercise the
+    // page at a nested path, where its <base> tag decides every link.
+    const fallbackPath = path.join(distDir, "404.html");
+    const acceptHeader = req.headers.accept || "";
+    const allowFallback = acceptHeader.includes("text/html") || !path.extname(filePath);
+    readPreviewAsset(cache, assetPath, fallbackPath, allowFallback, (readError, asset) => {
+      if (readError) {
+        send(res, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not Found", securityOptions);
+        return;
+      }
+      const encoded = Boolean(asset.brotli) && acceptsBrotli(req);
+      // `_headers` last so the deployed file wins wherever it and the preview server both
+      // speak. There are two exceptions. The explicit no-COOP/COEP mode: its purpose is to
+      // prove that the service worker can add isolation without help from either
+      // source of preview headers. And a 404, where Pages replaces whatever Cache-Control
+      // the rules gave with no-store, so a 404 MUST NOT keep an /assets/* rule's long lifetime.
+      const pagesHeaders = matchPagesHeaders(pagesRules, pathname);
+      if (!securityOptions.crossOriginIsolation) {
+        for (const header of Object.keys(CROSS_ORIGIN_ISOLATION_HEADERS)) delete pagesHeaders[header];
+      }
+      sendEarlyHints(res, pagesHeaders, path.extname(asset.resolvedPath) === ".html");
+      const isDocument = path.extname(asset.resolvedPath) === ".html";
+      const status = asset.resolvedPath === fallbackPath && assetPath !== fallbackPath ? 404 : 200;
+      send(
+        res,
+        status,
+        {
+          "Cache-Control": isDocument ? "no-cache" : "public, max-age=31536000, immutable",
+          "Content-Type": getContentType(asset.resolvedPath),
+          ...(asset.brotli ? { Vary: "Accept-Encoding" } : {}),
+          ...(encoded ? { "Content-Encoding": "br" } : {}),
+          ...pagesHeaders,
+          ...(status === 404 ? { "Cache-Control": "no-store" } : {}),
+        },
+        req.method === "HEAD" ? null : encoded ? asset.brotli : asset.data,
+        securityOptions,
+      );
+    });
   });
 };
 

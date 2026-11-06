@@ -91,11 +91,11 @@ describe("UnifiedDropZone", () => {
     expect(links?.nextElementSibling?.matches("details.hero-formats-help")).toBe(true);
   });
 
-  it("prerenders the guide link relative to the page, like the nav links", () => {
-    // Before hydration the app base is unknown; a root-absolute href would
-    // leave a sub-path deployment on a missing page.
+  it("prerenders the guide link root-absolute, like the nav links", () => {
+    // The prerender is written for the origin root so a crawler finds a valid link; the client
+    // resolves it against the app base once hydrated.
     const html = renderToString(<UnifiedDropZone big guide={WORKFLOW_GUIDES.apply} onFiles={() => undefined} />);
-    expect(html).toContain('href="docs/apply-rom-patches"');
+    expect(html).toContain('href="/docs/apply-rom-patches"');
   });
 
   it.each(Object.entries(WORKFLOW_GUIDES))("links the %s guide to a published doc", (_workflow, guide) => {

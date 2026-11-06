@@ -9,6 +9,7 @@ import { RelatedStrip } from "./components/related-strip.tsx";
 import { DocsToolLinks } from "./components/docs-tool-links.tsx";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes, readDocsSlugFromPathname } from "./docs-routing.mjs";
+import { APP_BASE_PATH } from "./app-base.ts";
 import { appPathHref } from "./app-routes.ts";
 import { findSearchToken } from "./docs-search.mjs";
 import { AUTHORED_SAMPLE_BASE, rebaseRootUrls, retargetSampleUrls } from "./docs-sample-origin.ts";
@@ -64,7 +65,7 @@ const docsHtmlPending = new Map<string, Promise<void>>();
 const resolveDocsSlug = (slug?: string): string => {
   if (slug) return findDocsRoute(slug).slug;
   if (typeof window === "undefined") return HUB_SLUG;
-  return findDocsRoute(readDocsSlugFromPathname(window.location.pathname)).slug;
+  return findDocsRoute(readDocsSlugFromPathname(window.location.pathname, APP_BASE_PATH) ?? HUB_SLUG).slug;
 };
 
 // The served document already carries the guide it is standing on: importing
@@ -142,7 +143,7 @@ const useDocsHtml = (slug: string, active: boolean): string | undefined => {
       () => {
         // A visible guide can recover from a stale chunk manifest by asking
         // the server for its prerendered route, which carries current assets.
-        if (live && active && readDocsSlugFromPathname(window.location.pathname) === slug) {
+        if (live && active && readDocsSlugFromPathname(window.location.pathname, APP_BASE_PATH) === slug) {
           window.location.assign(window.location.href);
         }
       },
