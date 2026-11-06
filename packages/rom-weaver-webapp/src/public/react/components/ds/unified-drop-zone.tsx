@@ -1,5 +1,5 @@
 import { BookOpen } from "lucide-react";
-import { type ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { type ReactNode, useRef, useContext } from "react";
 import { createLogger } from "../../../../lib/logging.ts";
 import { markDropReceived } from "../../../../lib/perf/op-perf-marks.ts";
 import type { MessageId } from "../../../../presentation/localization/catalog.ts";
@@ -72,11 +72,7 @@ type UnifiedDropZoneProps = {
 const HeroGuideLink = ({ guide }: { guide: WorkflowGuide }) => {
   const localizer = useUiLocalizer();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
-  // The prerender cannot know where the app is served. Emit the
-  // document-relative form the nav links use, which resolves from any route
-  // before hydration, then resolve against the app base once it is known.
-  const [href, setHref] = useState(guide.path);
-  useEffect(() => setHref(resolveAssetUrl(assetBaseUrl, guide.path)), [assetBaseUrl, guide.path]);
+  const href = resolveAssetUrl(assetBaseUrl, guide.path);
   return (
     <a className="hero-guide" href={href}>
       <BookOpen aria-hidden="true" />

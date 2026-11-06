@@ -2,7 +2,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getDefaultSettings } from "../../../src/webapp/settings/settings-schema.ts";
 import { setThemePreference } from "../../../src/webapp/theme.ts";
-import { createWebappRootController, readWorkflowViewFromPath } from "../../../src/webapp/webapp-controller.ts";
+import { matchAppRoute } from "../../../src/webapp/app-routes.ts";
+import { createWebappRootController } from "../../../src/webapp/webapp-controller.ts";
+
+const appBase = vi.hoisted(() => ({ path: "/" }));
+vi.mock("../../../src/webapp/app-base.ts", () => ({
+  get APP_BASE_PATH() {
+    return appBase.path;
+  },
+}));
 
 const createStorage = () => {
   const entries = new Map<string, string>();
@@ -28,6 +36,7 @@ const createController = (storage = createStorage()) =>
 
 // Exercise settings through the public store read, subscribe, and mutation methods.
 beforeEach(() => {
+  appBase.path = "/";
   window.history.replaceState({}, "", "/");
 });
 
@@ -130,7 +139,7 @@ describe("createWebappRootController over the vanilla store", () => {
     window.history.replaceState({}, "", "/create-rom-patch");
     const controller = createController();
     expect(controller.getState().currentView).toBe("creator");
-    expect(readWorkflowViewFromPath()).toBe("creator");
+    expect(matchAppRoute()).toBe("creator");
     expect(window.location.pathname).toBe("/create-rom-patch");
   });
 
@@ -146,7 +155,7 @@ describe("createWebappRootController over the vanilla store", () => {
     window.history.replaceState({}, "", "/identify-rom");
     const enabledController = createController(storage);
     expect(enabledController.getState().currentView).toBe("identify");
-    expect(readWorkflowViewFromPath()).toBe("identify");
+    expect(matchAppRoute()).toBe("identify");
     expect(window.location.pathname).toBe("/identify-rom");
   });
 
@@ -155,7 +164,7 @@ describe("createWebappRootController over the vanilla store", () => {
     const controller = createController();
 
     expect(controller.getState().currentView).toBe("test");
-    expect(readWorkflowViewFromPath()).toBe("test");
+    expect(matchAppRoute()).toBe("test");
     expect(controller.selectView("patcher")).toBe("patcher");
     expect(window.location.pathname).toBe("/apply-rom-patches");
     expect(controller.selectView("test")).toBe("test");
@@ -163,13 +172,22 @@ describe("createWebappRootController over the vanilla store", () => {
   });
 
   it("resolves a candidate URL without changing the current browser path", () => {
-    expect(readWorkflowViewFromPath("/docs/apply-rom-patches")).toBe("docs");
-    expect(readWorkflowViewFromPath("/create-rom-patch")).toBe("creator");
-    expect(readWorkflowViewFromPath("/identify-rom")).toBe("identify");
+    expect(matchAppRoute("/docs/apply-rom-patches")).toBe("docs");
+    expect(matchAppRoute("/create-rom-patch")).toBe("creator");
+    expect(matchAppRoute("/identify-rom")).toBe("identify");
     expect(window.location.pathname).toBe("/");
   });
 
+  it("opens the landing page at a self-hosted base without rewriting the address", () => {
+    appBase.path = "/rom-weaver/";
+    window.history.replaceState({}, "", "/rom-weaver/");
+    const controller = createController();
+    expect(controller.getState().currentView).toBe("home");
+    expect(window.location.pathname).toBe("/rom-weaver/");
+  });
+
   it("preserves a self-hosted subpath while switching workflows", () => {
+    appBase.path = "/rom-weaver/";
     window.history.replaceState({}, "", "/rom-weaver/create-rom-patch/");
     const controller = createController();
     expect(controller.getState().currentView).toBe("creator");
@@ -178,8 +196,9 @@ describe("createWebappRootController over the vanilla store", () => {
   });
 
   it("normalizes a static-host index page to its clean route", () => {
+    appBase.path = "/rom-weaver/";
     window.history.replaceState({}, "", "/rom-weaver/weave/index.html");
-    expect(readWorkflowViewFromPath()).toBe("weave");
+    expect(matchAppRoute()).toBe("weave");
     const controller = createController();
     expect(controller.getState().currentView).toBe("weave");
     expect(window.location.pathname).toBe("/rom-weaver/weave-rom-patches");
@@ -188,6 +207,7 @@ describe("createWebappRootController over the vanilla store", () => {
   it.each(["bundle", "bundle-patches", "bundle.html", "bundle-patches/index.html"])(
     "canonicalizes the legacy route %s and preserves its query",
     (route) => {
+      appBase.path = "/rom-weaver/";
       window.history.replaceState({}, "", `/rom-weaver/${route}?bundle=old.json`);
       const controller = createController();
       expect(controller.getState().currentView).toBe("weave");
@@ -197,10 +217,11 @@ describe("createWebappRootController over the vanilla store", () => {
   );
 
   it("keeps nested docs routes and returns to the app root", () => {
+    appBase.path = "/rom-weaver/";
     window.history.replaceState({}, "", "/rom-weaver/docs/apply-rom-patches");
     const controller = createController();
     expect(controller.getState().currentView).toBe("docs");
-    expect(readWorkflowViewFromPath()).toBe("docs");
+    expect(matchAppRoute()).toBe("docs");
     expect(window.location.pathname).toBe("/rom-weaver/docs/apply-rom-patches");
 
     controller.selectView("creator");

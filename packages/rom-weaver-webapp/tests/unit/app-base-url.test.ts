@@ -1,59 +1,91 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { resolveAssetUrl } from "../../src/public/react/asset-url.ts";
 import { readGuidedSampleFromSearch, resolveGuidedSampleHref } from "../../src/public/react/guided-sample-start.ts";
-import { readAppBaseUrl } from "../../src/webapp/webapp-controller.ts";
+import { matchAppRoute, readAppBaseUrl } from "../../src/webapp/app-routes.ts";
 
-const at = (path: string) => {
-  window.history.replaceState({}, "", path);
-  return readAppBaseUrl();
-};
+const appBase = vi.hoisted(() => ({ path: "/" }));
+vi.mock("../../src/webapp/app-base.ts", () => ({
+  get APP_BASE_PATH() {
+    return appBase.path;
+  },
+}));
+
+afterEach(() => {
+  appBase.path = "/";
+});
+
+describe("matchAppRoute", () => {
+  test.each(["/", "/rom-weaver/", "/docs/", "/apply/"])("resolves routes below the base %s", (base) => {
+    expect(matchAppRoute(base, base)).toBe("home");
+    expect(matchAppRoute(base.slice(0, -1), base)).toBe("home");
+    expect(matchAppRoute(`${base}index.html`, base)).toBe("home");
+    expect(matchAppRoute(`${base}create-rom-patch/`, base)).toBe("creator");
+    expect(matchAppRoute(`${base}create-rom-patch`, base)).toBe("creator");
+    expect(matchAppRoute(`${base}create-rom-patch.html`, base)).toBe("creator");
+    expect(matchAppRoute(`${base}create-rom-patch/index.html`, base)).toBe("creator");
+    expect(matchAppRoute(`${base}Create-ROM-Patch`, base)).toBe("creator");
+    expect(matchAppRoute(`${base}apply-cheats`, base)).toBe("patcher");
+    expect(matchAppRoute(`${base}docs`, base)).toBe("docs");
+    expect(matchAppRoute(`${base}docs/faq`, base)).toBe("docs");
+    expect(matchAppRoute(`${base}docs/faq.html`, base)).toBe("docs");
+    expect(matchAppRoute(`${base}docs/nope`, base)).toBeNull();
+    expect(matchAppRoute(`${base}x/`, base)).toBeNull();
+    expect(matchAppRoute(`${base}x.html`, base)).toBeNull();
+    expect(matchAppRoute(`${base}x/index.html`, base)).toBeNull();
+    expect(matchAppRoute(`${base}constructor`, base)).toBeNull();
+  });
+
+  test("keeps the unsupported HTML suffix of ppf-undo and tools unresolved", () => {
+    expect(matchAppRoute("/ppf-undo", "/")).toBe("ppf-undo");
+    expect(matchAppRoute("/tools", "/")).toBe("ppf-undo");
+    expect(matchAppRoute("/ppf-undo.html", "/")).toBeNull();
+    expect(matchAppRoute("/tools.html", "/")).toBeNull();
+    expect(matchAppRoute("/rom-weaver/tools.html", "/rom-weaver/")).toBeNull();
+  });
+
+  test("resolves a path whose leading slashes a host merged", () => {
+    expect(matchAppRoute("//rom-weaver/", "/rom-weaver/")).toBe("home");
+    expect(matchAppRoute("//rom-weaver/apply-rom-patches", "/rom-weaver/")).toBe("patcher");
+    expect(matchAppRoute("//rom-weaver/docs/faq", "/rom-weaver/")).toBe("docs");
+    expect(matchAppRoute("//apply-rom-patches", "/")).toBe("patcher");
+  });
+
+  test("never reads a segment above the base as a route", () => {
+    expect(matchAppRoute("/a/apply-rom-patches", "/")).toBeNull();
+    expect(matchAppRoute("/rom-weaver/apply-rom-patches", "/")).toBeNull();
+    expect(matchAppRoute("/apply-rom-patches", "/rom-weaver/")).toBeNull();
+    expect(matchAppRoute("/rom-weaver-x/", "/rom-weaver/")).toBeNull();
+    expect(matchAppRoute("/docs/docs/faq", "/docs/")).toBe("docs");
+    expect(matchAppRoute("/docs/docs/faq", "/")).toBeNull();
+    expect(matchAppRoute("/apply/apply", "/apply/")).toBe("patcher");
+    expect(matchAppRoute("/apply/apply", "/")).toBeNull();
+  });
+
+  test("reads the page location and the served base by default", () => {
+    appBase.path = "/rom-weaver/";
+    window.history.replaceState({}, "", "/rom-weaver/");
+    expect(matchAppRoute()).toBe("home");
+    window.history.replaceState({}, "", "/rom-weaver/no-such-route");
+    expect(matchAppRoute()).toBeNull();
+    window.history.replaceState({}, "", "/");
+  });
+});
 
 describe("readAppBaseUrl", () => {
-  beforeEach(() => {
+  test("is the served base, wherever the page sits below it", () => {
+    appBase.path = "/rom-weaver/";
+    window.history.replaceState({}, "", "/rom-weaver/docs/faq?x=1#frag");
+    expect(readAppBaseUrl()).toBe(`${window.location.origin}/rom-weaver/`);
+    window.history.replaceState({}, "", "/rom-weaver/no-such-route/");
+    expect(readAppBaseUrl()).toBe(`${window.location.origin}/rom-weaver/`);
     window.history.replaceState({}, "", "/");
   });
 
-  test("strips a route segment, with or without a trailing slash", () => {
-    expect(new URL(at("/apply-patch/")).pathname).toBe("/");
-    expect(new URL(at("/apply-patch")).pathname).toBe("/");
-    expect(new URL(at("/apply-patch.html")).pathname).toBe("/");
-    expect(new URL(at("/create-rom-patch")).pathname).toBe("/");
-    expect(new URL(at("/create-rom-patch.html")).pathname).toBe("/");
-    expect(new URL(at("/trim-rom/")).pathname).toBe("/");
-  });
-
-  test("keeps a sub-path deployment prefix", () => {
-    expect(new URL(at("/roms/apply-patch/")).pathname).toBe("/roms/");
-    expect(new URL(at("/roms/create-rom-patch")).pathname).toBe("/roms/");
-    expect(new URL(at("/roms/")).pathname).toBe("/roms/");
-  });
-
-  test("handles the root and an explicit index.html", () => {
-    expect(new URL(at("/")).pathname).toBe("/");
-    expect(new URL(at("/index.html")).pathname).toBe("/");
-    expect(new URL(at("/roms/index.html")).pathname).toBe("/roms/");
-  });
-
-  test("uses the stamped <base> on the 404 page instead of the missed path", () => {
-    const base = document.createElement("base");
-    base.href = "/";
-    document.head.append(base);
-    document.documentElement.dataset.page = "not-found";
-    try {
-      expect(new URL(at("/assets/")).pathname).toBe("/");
-      base.href = "/roms/";
-      expect(new URL(at("/roms/missing/deeper/")).pathname).toBe("/roms/");
-    } finally {
-      base.remove();
-      delete document.documentElement.dataset.page;
-    }
-  });
-
-  test("drops any query and hash so it is usable as a base", () => {
-    const base = new URL(at("/apply-patch/?weave=first-weave.zip#frag"));
-    expect(base.search).toBe("");
-    expect(base.hash).toBe("");
+  test("is the origin root for a root deployment", () => {
+    window.history.replaceState({}, "", "/apply-rom-patches");
+    expect(readAppBaseUrl()).toBe(`${window.location.origin}/`);
+    window.history.replaceState({}, "", "/");
   });
 });
 

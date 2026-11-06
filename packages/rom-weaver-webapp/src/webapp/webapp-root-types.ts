@@ -38,11 +38,6 @@ type WebappRootProps = {
   creatorMode?: CreatorMode | null;
   /** Render the normal app chrome with a not-found workbench. */
   notFound?: boolean;
-  /**
-   * Base for asset and home links. Hydration passes "/" to match the prerendered
-   * shell; later renders omit it and fall back to `readAppBaseUrl()`.
-   */
-  assetBaseUrl?: string;
   state: {
     creatorSession: CreatorSessionState;
     compressSession: { active: boolean };

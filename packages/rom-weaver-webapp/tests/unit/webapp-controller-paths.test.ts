@@ -6,8 +6,20 @@ import {
   serializeSettingsForStorage,
   type SettingsState,
 } from "../../src/webapp/settings/settings-state.ts";
-import { createWebappRootController, readWorkflowViewFromPath } from "../../src/webapp/webapp-controller.ts";
-import { appPathHref, readCreatorModeFromSearch, removeCreatorModeFromSearch } from "../../src/webapp/app-routes.ts";
+import { createWebappRootController } from "../../src/webapp/webapp-controller.ts";
+import {
+  appPathHref,
+  matchAppRoute,
+  readCreatorModeFromSearch,
+  removeCreatorModeFromSearch,
+} from "../../src/webapp/app-routes.ts";
+
+const appBase = vi.hoisted(() => ({ path: "/" }));
+vi.mock("../../src/webapp/app-base.ts", () => ({
+  get APP_BASE_PATH() {
+    return appBase.path;
+  },
+}));
 
 const createStorage = () => {
   const entries = new Map<string, string>();
@@ -51,6 +63,7 @@ const createController = ({
   });
 
 beforeEach(() => {
+  appBase.path = "/";
   window.history.replaceState({}, "", "/");
 });
 
@@ -155,21 +168,26 @@ describe("selectView with a leave guard", () => {
 });
 
 describe("the landing route at the app base", () => {
+  beforeEach(() => {
+    appBase.path = "/roms/";
+  });
+
   it.each(["constructor", "toString", "__proto__"])("rejects inherited route names %s", (slug) => {
-    expect(readWorkflowViewFromPath(`/roms/${slug}.html`)).toBeNull();
-    expect(readWorkflowViewFromPath(`/roms/${slug}`)).toBeNull();
+    expect(matchAppRoute(`/roms/${slug}.html`)).toBeNull();
+    expect(matchAppRoute(`/roms/${slug}`)).toBeNull();
   });
 
   it.each(["weave", "weave-patches", "bundle", "bundle-patches"])("preserves the HTML alias for %s", (slug) => {
-    expect(readWorkflowViewFromPath(`/roms/${slug}.html`)).toBe("weave");
+    expect(matchAppRoute(`/roms/${slug}.html`)).toBe("weave");
   });
   it.each(["ppf-undo", "tools"])("keeps the unsupported HTML suffix for %s unresolved", (slug) => {
-    expect(readWorkflowViewFromPath(`/roms/${slug}.html`)).toBeNull();
+    expect(matchAppRoute(`/roms/${slug}.html`)).toBeNull();
   });
 
   it("resolves a bare app base to the landing page, and every workflow slug to its own view", () => {
-    expect(readWorkflowViewFromPath("/")).toBe("home");
-    expect(readWorkflowViewFromPath("/index.html")).toBe("home");
+    appBase.path = "/";
+    expect(matchAppRoute("/")).toBe("home");
+    expect(matchAppRoute("/index.html")).toBe("home");
     for (const [route, view] of [
       ["/apply", "patcher"],
       ["/apply-patch", "patcher"],
@@ -188,15 +206,15 @@ describe("the landing route at the app base", () => {
       ["/trim", "trim"],
       ["/trim-rom", "trim"],
     ] as const) {
-      expect(readWorkflowViewFromPath(route)).toBe(view);
+      expect(matchAppRoute(route)).toBe(view);
     }
-    // A sub-path deployment's own base is indistinguishable from a missing page
-    // by pathname alone, so it stays unresolved and falls back to Apply.
-    expect(readWorkflowViewFromPath("/rom-weaver/")).toBeNull();
-    expect(readWorkflowViewFromPath("/missing")).toBeNull();
+    expect(matchAppRoute("/roms/", "/roms/")).toBe("home");
+    expect(matchAppRoute("/roms", "/roms/")).toBe("home");
+    expect(matchAppRoute("/missing")).toBeNull();
   });
 
   it("writes the app base back to the address bar when the landing page is selected", () => {
+    appBase.path = "/rom-weaver/";
     window.history.replaceState({}, "", "/rom-weaver/create-rom-patch");
     const controller = createController();
     expect(controller.getState().currentView).toBe("creator");
@@ -236,6 +254,10 @@ describe("Create mode requests", () => {
 });
 
 describe("task entry routes", () => {
+  beforeEach(() => {
+    appBase.path = "/roms/";
+  });
+
   it.each([
     ["apply-cheats", "patcher"],
     ["create-rom-cheat-patch", "creator"],
@@ -243,7 +265,7 @@ describe("task entry routes", () => {
     window.history.replaceState({}, "", `/roms/${slug}/index.html`);
     const controller = createController({});
     expect(controller.getState().currentView).toBe(view);
-    expect(readWorkflowViewFromPath(`/roms/${slug}.html`)).toBe(view);
+    expect(matchAppRoute(`/roms/${slug}.html`)).toBe(view);
     expect(controller.selectView(view)).toBe(view);
     expect(window.location.pathname).toBe(`/roms/${slug}/index.html`);
     controller.selectView("checksum");
@@ -262,9 +284,10 @@ describe("descriptive URL migration", () => {
     ["test-rom", "play-rom", "test"],
   ] as const)("preserves %s aliases and selects %s canonically", (legacy, canonical, view) => {
     for (const prefix of ["/", "/roms/"]) {
+      appBase.path = prefix;
       for (const slug of [legacy, canonical]) {
         for (const suffix of ["", "/", ".html", "/index.html"]) {
-          expect(readWorkflowViewFromPath(`${prefix}${slug}${suffix}`)).toBe(view);
+          expect(matchAppRoute(`${prefix}${slug}${suffix}`)).toBe(view);
         }
       }
       window.history.replaceState({}, "", `${prefix}${legacy}?guide=apply#console-storage`);

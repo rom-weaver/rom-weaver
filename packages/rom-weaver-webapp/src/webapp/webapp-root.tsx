@@ -61,7 +61,6 @@ import { CHANNEL_BADGE } from "./build-channel.ts";
 import { observePanelHeadFit } from "./panel-head-fit.ts";
 import { appPathHref } from "./app-routes.ts";
 import { useAppBaseUrl } from "./use-app-base-url.ts";
-import { readAppBaseUrl } from "./webapp-controller.ts";
 import { releaseLargeEntriesOnLargeInput } from "./large-input-release.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { DropRouteRequest } from "./components/drop-route-dialog.tsx";
@@ -205,7 +204,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   },
   {
     group: "project",
-    href: "/docs",
+    href: "docs",
     icon: <BookOpen aria-hidden="true" />,
     id: "docs",
     label: "Docs",
@@ -456,8 +455,9 @@ const ActivityFinishMarker = () => {
   return null;
 };
 
-const NotFoundPage = ({ assetBaseUrl, onSelectTab }: { assetBaseUrl: string; onSelectTab: (id: string) => void }) => {
+const NotFoundPage = ({ onSelectTab }: { onSelectTab: (id: string) => void }) => {
   const localizer = useUiLocalizer();
+  const appBaseUrl = useAppBaseUrl();
   return (
     <section aria-labelledby="not-found-title" className="not-found-page">
       <div className="not-found-content">
@@ -471,11 +471,11 @@ const NotFoundPage = ({ assetBaseUrl, onSelectTab }: { assetBaseUrl: string; onS
         </h1>
         <p className="not-found-copy">{localizer.message("ui.notFound.copy")}</p>
         <div className="not-found-actions">
-          <a className="btn primary not-found-home" href={appPathHref("apply-rom-patches", assetBaseUrl)}>
+          <a className="btn primary not-found-home" href={appPathHref("apply-rom-patches", appBaseUrl)}>
             <House aria-hidden="true" />
             {localizer.message("ui.home.applyPatchCta")}
           </a>
-          <a className="btn ghost not-found-docs" href={appPathHref("docs", assetBaseUrl)}>
+          <a className="btn ghost not-found-docs" href={appPathHref("docs", appBaseUrl)}>
             <BookOpen aria-hidden="true" />
             {localizer.message("ui.notFound.browseDocs")}
           </a>
@@ -498,14 +498,10 @@ function WebappRoot({
   workflowEntry = null,
   creatorMode = null,
   notFound: initiallyNotFound = false,
-  assetBaseUrl,
 }: WebappRootProps) {
   const [recoveredDrop, setRecoveredDrop] = useState(false);
   const notFound = initiallyNotFound && !recoveredDrop;
-  // The prerendered shell resolves asset links against "/" (no window to read
-  // the origin from), so hydration passes the same value and only the render
-  // after it adopts the real base - otherwise React sees every href mismatch.
-  const resolvedAssetBaseUrl = assetBaseUrl ?? readAppBaseUrl();
+  const resolvedAssetBaseUrl = useAppBaseUrl();
   useEntryAnimationLock();
   useEffect(() => {
     if (notFound) return;
@@ -723,15 +719,10 @@ function WebappRoot({
     pendingViewRef.current = null;
     selectViewWithTransition(() => actions.onSelectView("whats-new"));
   }, [actions, cancelFileRouting]);
-  // Docs guides live one level down (`/docs/<slug>`), so a bare slug would resolve to `/docs/apply-rom-patches`, the Apply guide, not the tool.
-  const resolveTabHrefs = notFound || state.currentView === "docs";
-  // One identity per shell, so Find's index is not rebuilt on every render of the 404 page.
+  // One identity per base, so Find's index is not rebuilt on every render.
   const mastheadTabs = useMemo(
-    () =>
-      resolveTabHrefs
-        ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: appPathHref(tab.href, resolvedAssetBaseUrl) }))
-        : WORKFLOW_TABS,
-    [resolveTabHrefs, resolvedAssetBaseUrl],
+    () => WORKFLOW_TABS.map((tab) => ({ ...tab, href: appPathHref(tab.href, resolvedAssetBaseUrl) })),
+    [resolvedAssetBaseUrl],
   );
 
   // The settings console draws its own copy of the phone dock: a modal makes the real one inert.
@@ -1123,7 +1114,7 @@ function WebappRoot({
             <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />
             <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
               {notFound ? (
-                <NotFoundPage assetBaseUrl={resolvedAssetBaseUrl} onSelectTab={handleSelectTab} />
+                <NotFoundPage onSelectTab={handleSelectTab} />
               ) : (
                 <>
                   {isViewMounted("home") ? (

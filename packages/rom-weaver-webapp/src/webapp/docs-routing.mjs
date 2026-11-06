@@ -1,3 +1,4 @@
+import { readExtensionlessRoutePath } from "./app-route-path.mjs";
 import { SITE_NAME } from "./workflow-seo.mjs";
 
 const SITE_ORIGIN = "https://rom-weaver.com";
@@ -491,20 +492,16 @@ const createDocsSeoMetadata = (route, channelLabel = "") => {
   };
 };
 
-/** @param {string} pathname */
-const readDocsSlugFromPathname = (pathname) => {
-  const segments = String(pathname || "")
-    .toLowerCase()
-    .split("/")
-    .filter(Boolean);
-  if (segments.at(-1) === "index.html") segments.pop();
-  const docsIndex = segments.lastIndexOf("docs");
-  if (docsIndex < 0) return "docs";
-  const slug = segments
-    .slice(docsIndex)
-    .join("/")
-    .replace(/\.html$/, "");
-  return DOC_SOURCES.some((source) => source.slug === slug) ? slug : "docs";
+/**
+ * The published guide slug a pathname addresses, or `null` when it addresses none.
+ *
+ * @param {string | undefined} pathname
+ * @param {string} [basePath]
+ * @returns {string | null}
+ */
+const readDocsSlugFromPathname = (pathname, basePath = "/") => {
+  const slug = readExtensionlessRoutePath(pathname, basePath);
+  return DOC_SOURCES.some((source) => source.slug === slug) ? slug : null;
 };
 
 /**

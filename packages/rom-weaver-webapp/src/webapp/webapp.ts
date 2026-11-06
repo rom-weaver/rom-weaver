@@ -17,7 +17,14 @@ import { setByteUnitSystem } from "../presentation/formatting/index.ts";
 import { resetBrowserTransientOpfs, startBrowserOpfsBootCleanup } from "../storage/browser/browser-opfs-cleanup.ts";
 import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/runner-control.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
-import { type CreatorMode, readCreatorModeFromSearch, removeCreatorModeFromSearch } from "./app-routes.ts";
+import { APP_BASE_PATH } from "./app-base.ts";
+import {
+  type CreatorMode,
+  matchAppRoute,
+  readAppBaseUrl,
+  readCreatorModeFromSearch,
+  removeCreatorModeFromSearch,
+} from "./app-routes.ts";
 import { readWorkflowEntryFromPathname } from "./workflow-seo.mjs";
 import { readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { recordFirstVisit } from "./last-seen-version.ts";
@@ -36,7 +43,7 @@ import {
   shouldWarnBeforeUnload,
 } from "./unload-guard.ts";
 import { readUrlSessionRequest } from "./url-session/url-session-request.ts";
-import { createWebappRootController, readAppBaseUrl, readWorkflowViewFromPath } from "./webapp-controller.ts";
+import { createWebappRootController } from "./webapp-controller.ts";
 import { readPwaState } from "./components/shell.tsx";
 import { getSoftNavigationUrl } from "./soft-navigation.ts";
 import { resolveThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
@@ -225,7 +232,8 @@ const applySettingsToRuntime = (settings: SettingsState) => {
   });
 };
 
-let isNotFoundPage = document.documentElement.dataset.page === "not-found";
+// A path the app does not serve is the not-found page where it stands, whatever document the host sent.
+let isNotFoundPage = document.documentElement.dataset.page === "not-found" || matchAppRoute() === null;
 // Old weave links used the Apply route's query/hash state. Keep guided
 // samples and URL sessions shareable, but replace their route before React
 // chooses a workflow. Direct ROM/patch sessions remain on Apply.
@@ -242,7 +250,7 @@ const replaceLegacyWeaveRoute = (): boolean => {
     currentUrl = new URL(window.location.href);
   }
   const params = currentUrl.searchParams;
-  const currentView = readWorkflowViewFromPath(currentUrl.pathname);
+  const currentView = matchAppRoute(currentUrl.pathname);
   const hasWeaveSession = params.has("weave") || params.has("bundle");
   const hasDirectSession = !hasWeaveSession && (params.has("rom") || params.has("patch"));
   const hasLegacyWeaveGuide = currentView === "patcher" && ["weave", "bundle"].includes(params.get("guide") || "");
@@ -266,7 +274,7 @@ let pendingCreatorMode: CreatorMode | null = null;
 let creatorModeInUrl = false;
 const takeCreatorModeFromUrl = () => {
   const mode = readCreatorModeFromSearch(window.location.search);
-  if (!mode || readWorkflowViewFromPath() !== "creator") return;
+  if (!mode || matchAppRoute() !== "creator") return;
   pendingCreatorMode = mode;
   creatorModeInUrl = true;
 };
@@ -278,9 +286,9 @@ const dropCreatorModeFromUrl = () => {
   window.history.replaceState(window.history.state, "", url);
 };
 takeCreatorModeFromUrl();
-// Which static document the host actually served, captured after legacy weave
-// links have been normalized but before the controller writes its route.
-const servedDocumentView: WebappView = readWorkflowViewFromPath() ?? "home";
+// The view the served document was prerendered as. Dev serves unstamped documents, which follow the route.
+const servedDocumentView: WebappView =
+  (document.documentElement.dataset.view as WebappView | undefined) ?? matchAppRoute() ?? "home";
 
 // `?weave=` / `?rom=&patch=` URL API, parsed once per page lifetime. The
 // params stay in the address bar so the session URL remains shareable; only
@@ -498,7 +506,9 @@ const renderWebappRoot = (): undefined => {
       if (!hadPrerenderedShell) appRootElement.dataset.shellAbsent = "true";
       // Always drained, shell or not, so the inline capture listener stops here.
       captureShellClicks();
-      shouldHydrate = hadPrerenderedShell && !weaveRouteWasReplaced;
+      // A not-found page over any other document has no markup to adopt.
+      const servedNotFoundDocument = document.documentElement.dataset.page === "not-found";
+      shouldHydrate = hadPrerenderedShell && !weaveRouteWasReplaced && (!isNotFoundPage || servedNotFoundDocument);
       if (!shouldHydrate) appRoot = createRoot(appRootElement);
     }
   }
@@ -526,7 +536,6 @@ const renderWebappRoot = (): undefined => {
       }
     : state;
   const webappRoot = createElement(WebappClientRoot, {
-    assetBaseUrl: shouldHydrate ? "/" : readAppBaseUrl(),
     actions: {
       onCancelConfirmation: () => closeConfirmationDialog(false),
       onCloseSettings: () => {
@@ -632,8 +641,8 @@ const renderWebappRoot = (): undefined => {
       onCancel: () => closeAgentApprovalDialog(false),
       onConfirm: () => closeAgentApprovalDialog(true),
     },
-    docsSlug: readDocsSlugFromPathname(window.location.pathname),
-    workflowEntry: readWorkflowEntryFromPathname(window.location.pathname),
+    docsSlug: readDocsSlugFromPathname(window.location.pathname, APP_BASE_PATH) ?? "docs",
+    workflowEntry: readWorkflowEntryFromPathname(window.location.pathname, APP_BASE_PATH),
     // The prerendered shell cannot know the query; the render after hydration applies it.
     creatorMode: shouldHydrate ? null : pendingCreatorMode,
     notFound: isNotFoundPage,
@@ -714,7 +723,7 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   const syncRouteFromUrl = (scrollTo?: () => void) => {
     if (isNotFoundPage) return;
     replaceLegacyWeaveRoute();
-    const view = readWorkflowViewFromPath();
+    const view = matchAppRoute();
     if (!view) return;
     const guide = readGuidedSampleFromSearch(window.location.search);
     const applyRoute = () => {
@@ -782,7 +791,7 @@ const initializeWebapp = () => {
   renderWebappRoot();
 
   // Weave sessions open the weave workflow. Direct ROM/patch sessions use Apply.
-  const initialMode = urlSessionParse.request?.kind === "weave" ? "weave" : readWorkflowViewFromPath() || "patcher";
+  const initialMode = urlSessionParse.request?.kind === "weave" ? "weave" : matchAppRoute() || "patcher";
   webappController.setStartupState("ready");
   webappController.activateInitialView(initialMode, {
     fallbackOnError: true,
