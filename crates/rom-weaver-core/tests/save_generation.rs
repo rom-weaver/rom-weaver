@@ -5,7 +5,7 @@ fn registry_enforces_each_profiles_generation_capability() {
     let registry = SaveGameRegistry::default();
     let supported = registry.generation_definitions();
     let definitions = registry.definitions();
-    assert_eq!(definitions.len(), 1002);
+    assert_eq!(definitions.len(), 1218);
     assert_eq!(supported.len(), 4);
     for definition in definitions {
         let id = &definition.identity.id;

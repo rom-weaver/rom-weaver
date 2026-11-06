@@ -96,7 +96,7 @@ fn value(document: &crate::save::SaveDocument, id: &str) -> SaveValue {
         .clone()
 }
 
-fn error_code(error: crate::RomWeaverError) -> String {
+pub(in crate::save) fn error_code(error: crate::RomWeaverError) -> String {
     match error {
         crate::RomWeaverError::ValidationCode(error) => error.code().to_owned(),
         other => panic!("expected a coded validation error, got {other:?}"),
@@ -302,6 +302,7 @@ fn registry_lists_every_game_with_format_metadata() {
             "sonic-rush",
             "castlevania-dawn-of-sorrow",
             "castlevania-order-of-ecclesia",
+            "castlevania-portrait-of-ruin",
             "game-boy-camera",
             "kingdom-hearts-chain-of-memories",
         ]
@@ -341,6 +342,35 @@ fn registry_lists_every_game_with_format_metadata() {
                     .map(|region| format!("{game}-{region}-block-{block}")),
             );
         }
+    }
+    expected.extend(["fire-emblem-the-blazing-blade", "azure-dreams"].map(str::to_owned));
+    for block in 1..=15 {
+        expected.extend(
+            ["europe", "usa", "japan"]
+                .iter()
+                .map(|region| format!("ctr-crash-team-racing-{region}-block-{block}")),
+        );
+    }
+    for block in 1..=11 {
+        expected.extend(
+            ["europe", "usa", "japan"]
+                .iter()
+                .map(|region| format!("gran-turismo-{region}-block-{block}")),
+        );
+    }
+    for block in 1..=15 {
+        expected.extend(
+            ["europe", "usa", "japan", "france", "germany", "italy"]
+                .iter()
+                .map(|region| format!("tomb-raider-ii-starring-lara-croft-{region}-block-{block}")),
+        );
+    }
+    for block in 1..=15 {
+        expected.extend(
+            ["europe", "usa", "japan"]
+                .iter()
+                .map(|region| format!("tony-hawk-s-skateboarding-{region}-block-{block}")),
+        );
     }
     expected.extend(
         ["options", "slot-1", "slot-2", "slot-3"]

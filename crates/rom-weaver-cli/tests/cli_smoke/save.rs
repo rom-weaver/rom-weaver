@@ -109,6 +109,13 @@ fn save_catalog_lists_compiled_games_and_generation_support() {
         "castlevania-circle-of-the-moon",
         "wario-land-ii",
         "zelda-links-awakening-gbc-international",
+        "fire-emblem-the-blazing-blade",
+        "azure-dreams",
+        "castlevania-portrait-of-ruin",
+        "ctr-crash-team-racing-usa-block-1",
+        "gran-turismo-usa-block-1",
+        "tomb-raider-ii-starring-lara-croft-usa-block-1",
+        "tony-hawk-s-skateboarding-usa-block-1",
     ] {
         assert!(game_ids.contains(&id), "missing save profile: {id}");
     }

@@ -108,8 +108,7 @@ impl ReadValue {
         Self(Arc::new(move |_original, bytes| read(bytes)))
     }
     /// Builds a value that also reads the save as it was before any edit, as `(original, bytes)`.
-    /// Only `Store::apply_from` passes unedited bytes; `eval` and `Store::apply` pass the edited
-    /// bytes for both.
+    /// Only `Store::apply_from` passes the unedited save; `eval`, `Store::apply`, and the after-edit read pass the edited bytes as `original`.
     pub fn with_original(
         read: impl Fn(&[u8], &[u8]) -> Result<i64> + Send + Sync + 'static,
     ) -> Self {

@@ -322,6 +322,16 @@ fn extend_fields(
     }
 }
 
+/// Wrapping sum and XOR of the little-endian 16-bit words in `range`.
+fn sum_and_xor(bytes: &[u8], range: std::ops::Range<usize>) -> (u16, u16) {
+    bytes[range]
+        .chunks_exact(2)
+        .map(|word| u16::from_le_bytes([word[0], word[1]]))
+        .fold((0u16, 0u16), |(sum, xor), word| {
+            (sum.wrapping_add(word), xor ^ word)
+        })
+}
+
 fn read_at(bytes: &[u8], offset: i64, storage: Storage) -> Result<i64> {
     let offset =
         usize::try_from(offset).map_err(|_| invalid("save read offset is out of range"))?;
@@ -335,6 +345,7 @@ fn read_at(bytes: &[u8], offset: i64, storage: Storage) -> Result<i64> {
 
 pub(in crate::save) mod actraiser;
 pub(in crate::save) mod advance_wars;
+pub(in crate::save) mod azure_dreams;
 pub(in crate::save) mod banjo_kazooie;
 pub(in crate::save) mod banjo_tooie;
 pub(in crate::save) mod bomberman_64;
@@ -351,6 +362,7 @@ pub(in crate::save) mod castlevania_circle_of_the_moon;
 pub(in crate::save) mod castlevania_ds;
 pub(in crate::save) mod castlevania_harmony_of_dissonance;
 pub(in crate::save) mod chrono_trigger;
+pub(in crate::save) mod ctr_crash_team_racing;
 pub(in crate::save) mod diddy_kong_racing;
 pub(in crate::save) mod donkey_kong_64;
 pub(in crate::save) mod donkey_kong_country;
@@ -362,10 +374,12 @@ pub(in crate::save) mod f_zero_maximum_velocity;
 pub(in crate::save) mod f_zero_x;
 pub(in crate::save) mod final_fantasy_nes;
 pub(in crate::save) mod final_fantasy_vi;
+pub(in crate::save) mod fire_emblem_the_blazing_blade;
 pub(in crate::save) mod game_and_watch_gallery_3;
 pub(in crate::save) mod game_boy_camera;
 pub(in crate::save) mod golden_sun;
 pub(in crate::save) mod goldeneye_007;
+pub(in crate::save) mod gran_turismo;
 pub(in crate::save) mod kingdom_hearts_chain_of_memories;
 pub(in crate::save) mod kirbys_adventure;
 pub(in crate::save) mod konami_krazy_racers;
@@ -383,6 +397,8 @@ pub(in crate::save) mod pokemon_generation_i;
 pub(in crate::save) mod pokemon_generation_ii;
 pub(in crate::save) mod pokemon_snap;
 pub(in crate::save) mod pokemon_trading_card_game;
+#[cfg(test)]
+mod ps1_action_support;
 pub(in crate::save) mod ps1_final_fantasy;
 pub(in crate::save) mod ps1_final_fantasy_ix;
 pub(in crate::save) mod ps1_final_fantasy_tactics;
@@ -407,6 +423,8 @@ pub(in crate::save) mod super_mario_world;
 pub(in crate::save) mod super_metroid;
 pub(in crate::save) mod super_punch_out;
 pub(in crate::save) mod super_smash_bros;
+pub(in crate::save) mod tomb_raider_ii_starring_lara_croft;
+pub(in crate::save) mod tony_hawk_s_skateboarding;
 pub(in crate::save) mod wario_land_3;
 pub(in crate::save) mod wario_land_4;
 pub(in crate::save) mod wario_land_ii;
@@ -498,6 +516,12 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(kingdom_hearts_chain_of_memories::schemas());
             games.extend(banjo_kazooie::schemas());
             games.extend(ps1_final_fantasy::schemas());
+            games.extend(fire_emblem_the_blazing_blade::schemas());
+            games.extend(azure_dreams::schemas());
+            games.extend(ctr_crash_team_racing::schemas());
+            games.extend(gran_turismo::schemas());
+            games.extend(tomb_raider_ii_starring_lara_croft::schemas());
+            games.extend(tony_hawk_s_skateboarding::schemas());
             games.extend(mystical_ninja_2_starring_goemon::schemas());
             games.extend(goldeneye_007::schemas());
             games.extend(banjo_tooie::schemas());
@@ -525,7 +549,7 @@ fn choices(entries: &[(&str, i64)]) -> Vec<FieldChoice> {
         .collect()
 }
 
-/// Edit check that rejects the opened or edited save when any `(current, maximum)` pair has the current value above the maximum.
+/// Edit check that rejects an edited save when any `(current, maximum)` pair has the current value above the maximum.
 fn capacity_check(message: String, pairs: Vec<(rules::Scalar, rules::Scalar)>) -> rules::Check {
     rules::Check {
         when: None,

@@ -47,7 +47,7 @@ The Save Editor changes persistent game data. It does not change emulator save s
 
 The Pokémon handlers cover the English layouts named above. A matching file size alone does not prove support.
 
-The default registry also includes 980 fixed profiles for 90 title groups. The [catalog](../../data/save-schemas/README.md) lists their profile counts, exact editable scope, accepted physical variants, and creation support.
+The default registry also includes 1196 fixed profiles for 96 title groups. The [catalog](../../data/save-schemas/README.md) lists their profile counts, exact editable scope, accepted physical variants, and creation support.
 
 ## Editable fields
 
@@ -141,9 +141,9 @@ Procedures: [Create saves in the browser](../how-to/create-game-saves-browser.md
 
 ## Built-in schema catalog
 
-The application includes every supported game definition in its default registry. The catalog contains 1002 profiles: the original Pokémon, Super Mario World, and A Link to the Past definitions and 980 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. The catalog and its profile counts are in [`data/save-schemas/README.md`](../../data/save-schemas/README.md).
+The application includes every supported game definition in its default registry. The catalog contains 1218 profiles: the original Pokémon, Super Mario World, and A Link to the Past definitions and 1196 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. The catalog and its profile counts are in [`data/save-schemas/README.md`](../../data/save-schemas/README.md).
 
-The 980 additional profiles require explicit game selection. The original game families retain automatic recognition.
+The 1196 additional profiles require explicit game selection. The original game families retain automatic recognition.
 
 A profile represents one fixed slot, player, region, or storage variant. Profile count is not title count. A compatible physical format or save size does not make an unrecognized game editable.
 
@@ -151,7 +151,7 @@ The built-in definitions use the shared storage, layout, checksum, recovery, and
 
 Adding or changing a game definition requires an application update. The CLI does not load layout packs, and the browser does not import them. `save export-schema` exports the fields of an inspected save for user interfaces and automation. Its JSON output is not an importable game definition.
 
-Integer and packed-decimal fields use their stored range unless a definition sets a narrower constraint. A stored value or combination can still be invalid during play. Unknown numeric choice values appear as `raw:<decimal>` and survive unrelated edits.
+Integer and packed-decimal fields use their stored range unless a definition sets a narrower constraint. A stored value or combination can still be invalid during play. Link’s Awakening, Final Fantasy VI, Chrono Trigger, ActRaiser, and Mystic Quest Legend accept an edit when its result keeps every quantity within its stored capacity, so an edit can repair a save that already exceeds one. An edit whose result still exceeds a capacity is rejected with that rule's error code and writes nothing. Unknown numeric choice values appear as `raw:<decimal>` and survive unrelated edits.
 
 ## Save containers
 
