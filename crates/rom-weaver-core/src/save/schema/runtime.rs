@@ -20,7 +20,8 @@ pub struct Runtime {
     pub document_checks: Vec<Check>,
     pub edit_checks: Vec<Check>,
     /// Applied to the working copy before any field is written, so field writes start from an
-    /// encoding that `after_edit` stores convert back. Not run when generating a new save.
+    /// encoding that `after_edit` stores convert back. Layout schemas run it when generating a new
+    /// save (generation applies their initial values as edits); non-layout generation skips it.
     pub before_edit: Vec<Store>,
     pub after_edit: Vec<Store>,
     pub recovery: Option<Recovery>,

@@ -248,10 +248,9 @@ const CARDS: [(&str, &str); 228] = [
     ("D51", "Recycle"),
 ];
 
-// The save preview's album count tracks the cards in the collection (bit 7 clear). The count is
-// moved by the net change across the whole edit set so that edit order and no-op writes cannot
-// skew it, and so a stored count that already differs from a recount keeps its offset. The total
-// to collect moves the same way with the phantom cards, which the game leaves out until owned.
+// The album count and total move by the net change across the whole edit set, so edit order and
+// no-op writes cannot skew them and a stored value that differs from a recount keeps its offset.
+// The total counts a phantom card (Venusaur Lv64, Mew Lv15) only once it is owned.
 fn album_stores() -> Vec<Store> {
     fn collected(bytes: &[u8]) -> i64 {
         bytes[CARD_OFFSET + 1..=CARD_OFFSET + CARDS.len()]
@@ -265,18 +264,12 @@ fn album_stores() -> Vec<Store> {
             .filter(|card| bytes[CARD_OFFSET + **card] & 0x80 == 0)
             .count() as i64
     }
-    let store = |offset, value: fn(&[u8]) -> i64, label: &'static str| Store {
-        when: None,
-        destination: Scalar {
-            offset,
-            storage: Storage::U8,
-            mask: None,
-        },
-        value: ReadValue::with_original(move |original, edited| {
+    let store = |offset, value: fn(&[u8]) -> i64, label: &'static str| {
+        byte_store_from_original(offset, None, move |original, edited| {
             let count = i64::from(original[offset]) + value(edited) - value(original);
             trace!(count, label, "updated Pokemon TCG album count");
             Ok(count)
-        }),
+        })
     };
     vec![
         store(ALBUM_COUNT_OFFSET, collected, "collected"),

@@ -27,6 +27,24 @@ fn byte_store(
     mask: Option<u32>,
     value: impl Fn(&[u8]) -> i64 + Send + Sync + 'static,
 ) -> rules::Store {
+    byte_store_value(
+        offset,
+        mask,
+        rules::ReadValue::new(move |bytes| Ok(value(bytes))),
+    )
+}
+
+// Like `byte_store`, but the value also reads the save as it was before any edit, as
+// `(original, edited)`.
+fn byte_store_from_original(
+    offset: usize,
+    mask: Option<u32>,
+    value: impl Fn(&[u8], &[u8]) -> Result<i64> + Send + Sync + 'static,
+) -> rules::Store {
+    byte_store_value(offset, mask, rules::ReadValue::with_original(value))
+}
+
+fn byte_store_value(offset: usize, mask: Option<u32>, value: rules::ReadValue) -> rules::Store {
     rules::Store {
         when: None,
         destination: rules::Scalar {
@@ -34,7 +52,7 @@ fn byte_store(
             storage: Storage::U8,
             mask,
         },
-        value: rules::ReadValue::new(move |bytes| Ok(value(bytes))),
+        value,
     }
 }
 

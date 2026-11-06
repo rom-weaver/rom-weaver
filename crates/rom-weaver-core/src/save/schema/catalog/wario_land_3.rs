@@ -242,12 +242,9 @@ fn golf(course: usize) -> FieldDefinition {
     })
 }
 
-// The eight power upgrades share one level byte. Each control writes only its own bit, so the
-// byte is first re-encoded as one bit per upgrade (`power_requests_store`), the bits then record the
-// requested states of any batch in any order, and `power_level_store` turns the requests back
-// into the level. A request raises the level to its upgrade or lowers it to the one before; when
-// requests conflict, a cleared upgrade wins over a set one. Upgrades whose requested state matches
-// the saved one change nothing.
+// The eight upgrades share one level byte: `power_requests_store` re-encodes it as one request bit
+// per upgrade before field writes, and `power_level_store` turns the requested states back into a
+// level.
 fn power(id: &str, label: &str, level: u8) -> FieldDefinition {
     catalog_field(id, label, POWER_OFFSET, Storage::Bit)
         .bit(level - 1)
@@ -268,28 +265,20 @@ fn power_requests_store() -> Store {
 
 // After edits: the level that results from the requested upgrade states against the saved level.
 fn power_level_store() -> Store {
-    Store {
-        when: None,
-        destination: Scalar {
-            offset: POWER_OFFSET,
-            storage: Storage::U8,
-            mask: None,
-        },
-        value: ReadValue::with_original(|original, edited| {
-            let saved = original[POWER_OFFSET];
-            let (requests, level) = (edited[POWER_OFFSET], saved.min(8));
-            let wanted = |upgrade: u8| requests >> (upgrade - 1) & 1 != 0;
-            let raised = (level + 1..=8).rfind(|upgrade| wanted(*upgrade));
-            let cleared = (1..=level).find(|upgrade| !wanted(*upgrade));
-            if raised.is_none() && cleared.is_none() {
-                return Ok(i64::from(saved));
-            }
-            let level = raised.map_or(level, |upgrade| level.max(upgrade));
-            let level = cleared.map_or(level, |upgrade| level.min(upgrade - 1));
-            trace!(level, "recomputed Wario Land 3 power level");
-            Ok(i64::from(level))
-        }),
-    }
+    byte_store_from_original(POWER_OFFSET, None, |original, edited| {
+        let saved = original[POWER_OFFSET];
+        let (requests, level) = (edited[POWER_OFFSET], saved.min(8));
+        let wanted = |upgrade: u8| requests >> (upgrade - 1) & 1 != 0;
+        let raised = (level + 1..=8).rfind(|upgrade| wanted(*upgrade));
+        let cleared = (1..=level).find(|upgrade| !wanted(*upgrade));
+        if raised.is_none() && cleared.is_none() {
+            return Ok(i64::from(saved));
+        }
+        let level = raised.map_or(level, |upgrade| level.max(upgrade));
+        let level = cleared.map_or(level, |upgrade| level.min(upgrade - 1));
+        trace!(level, "recomputed Wario Land 3 power level");
+        Ok(i64::from(level))
+    })
 }
 
 // Layout: https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88/src/lib/templates/wario-land-3/saveEditor
@@ -483,6 +472,32 @@ mod tests {
                 .bytes
                 .is_none()
         );
+    }
+
+    #[test]
+    fn power_level_byte_is_kept_unless_an_upgrade_changes() {
+        let handler = schemas().remove(0);
+        let identity = handler.definitions().remove(0).identity;
+        let mut input = input();
+        input.bytes[0x3c0] = 0xaa;
+        repair(&mut input.bytes);
+        let apply = |field: &str, value: SaveValue| {
+            handler
+                .apply(
+                    &input,
+                    &identity,
+                    &[SaveEdit {
+                        field: field.into(),
+                        value,
+                    }],
+                    false,
+                )
+                .unwrap()
+                .bytes
+                .unwrap()
+        };
+        assert_eq!(apply("coins_bcd", SaveValue::U32(987))[0x3c0], 0xaa);
+        assert_eq!(apply("power.super_swim", SaveValue::Bool(false))[0x3c0], 7);
     }
 
     #[test]
