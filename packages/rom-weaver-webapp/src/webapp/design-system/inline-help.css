@@ -127,5 +127,5 @@
 }
 
 .rw-app:has(.sample-tutorial-layer) {
-  --info-pop-z: 1004;
+  --info-pop-z: 1005;
 }

@@ -85,6 +85,9 @@ pub enum Error {
     UnsupportedFormat,
     /// Unknown error.
     Unknown,
+    /// The storage device has no space left for a write.
+    /// This has no libchdr equivalent, so it follows the libchdr-compatible variants.
+    StorageFull,
 }
 
 impl std::error::Error for Error {}
@@ -121,6 +124,7 @@ impl Display for Error {
             Error::NoAsyncOperation => f.write_str("no async operation in progress"),
             Error::UnsupportedFormat => f.write_str("unsupported format"),
             Error::Unknown => f.write_str("undocumented error"),
+            Error::StorageFull => f.write_str("no storage space"),
         }
     }
 }
@@ -172,6 +176,7 @@ impl From<std::io::Error> for Error {
             ErrorKind::UnexpectedEof => Error::ReadError,
             ErrorKind::Unsupported => Error::NotSupported,
             ErrorKind::OutOfMemory => Error::OutOfMemory,
+            ErrorKind::StorageFull => Error::StorageFull,
             _ => Error::Unknown,
         }
     }

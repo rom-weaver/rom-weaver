@@ -1,13 +1,15 @@
 /**
- * The route below the app base: lowercase, without `index.html` or a trailing slash, and `""` for the base itself.
- * Returns `null` when the pathname is outside the base. A trailing `.html` is kept for the caller to judge.
+ * The lowercased route below `basePath` (`""` for the base itself, `null` outside it), keeping any `.html` suffix.
  *
  * @param {string | undefined} pathname
  * @param {string} [basePath] Ends with `/`.
  * @returns {string | null}
  */
 const readRoutePath = (pathname, basePath = "/") => {
-  const path = String(pathname || "").trim();
+  // A host that merges slashes serves `//rom-weaver/` as `/rom-weaver/`.
+  const path = String(pathname || "")
+    .trim()
+    .replace(/^\/{2,}/u, "/");
   if (path === basePath.slice(0, -1)) return "";
   if (!path.startsWith(basePath)) return null;
   const segments = path.slice(basePath.length).toLowerCase().split("/").filter(Boolean);
