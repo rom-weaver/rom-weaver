@@ -2,6 +2,7 @@ import { Download, FolderOpen, FolderPen, Save } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import type { BrowserPlaylistPlan, PlaylistSourceFile } from "../../platform/browser/browser-playlist-api.ts";
+import { checkGameName } from "../../storage/browser/playlist-game-name.ts";
 import { canWritePlaylistFolders } from "../../storage/browser/playlist-folder-support.ts";
 import { resolveAssetUrl } from "../../public/react/asset-url.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
@@ -21,10 +22,6 @@ const MAX_FOLDER_DEPTH = 3;
 const MAX_FOLDER_FILES = 2000;
 const PLAN_DELAY_MS = 250;
 
-// Characters and names that Windows, macOS, or Linux cannot give a file.
-const RESERVED_NAME_CHARACTERS = /[<>:"/\\|?*\p{Cc}]/u;
-const RESERVED_WINDOWS_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
-
 type PlaylistSource = {
   files: PlaylistSourceFile[];
   /** The picked folder, when the browser can change files in it. */
@@ -39,16 +36,6 @@ type PlaylistFormProps = {
 
 type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: (options: { id?: string; mode: "read" | "readwrite" }) => Promise<FileSystemDirectoryHandle>;
-};
-
-const checkGameName = (name: string) => {
-  const trimmed = name.trim();
-  if (!trimmed) return "";
-  if (RESERVED_NAME_CHARACTERS.test(trimmed)) return 'A game name cannot contain < > : " / \\ | ? or *.';
-  if (RESERVED_WINDOWS_NAMES.test(trimmed)) return `Windows reserves the name "${trimmed}".`;
-  if (/[. ]$/.test(name)) return "A game name cannot end with a dot or a space.";
-  if (`${trimmed} (Disc 99).cue`.length > 255) return "That game name is too long for a file name.";
-  return "";
 };
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
