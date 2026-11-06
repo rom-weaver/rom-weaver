@@ -204,6 +204,8 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     setPlan(null);
     setRenamePlan(null);
     setRenameReason("");
+    // Renaming moves files, so a new folder starts without the last folder's choice.
+    setRename(false);
     setGame("");
     setError("");
     setDone("");

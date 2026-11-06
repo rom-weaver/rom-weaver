@@ -232,6 +232,41 @@ test("renames the discs in the picked folder where the browser can move files, a
   });
 });
 
+test("clears the rename choice when another folder is opened", async () => {
+  // Only Chrome and Edge can pick a folder and move its files; elsewhere the choice is always off.
+  if (
+    !(typeof window.showDirectoryPicker === "function" && typeof FileSystemFileHandle.prototype.move === "function")
+  ) {
+    return;
+  }
+  const root = await navigator.storage.getDirectory();
+  folderName = `playlist-folder-${crypto.randomUUID()}`;
+  const parent = await root.getDirectoryHandle(folderName, { create: true });
+  const folders = [];
+  for (const name of ["first", "second"]) {
+    const folder = await parent.getDirectoryHandle(name, { create: true });
+    for (const [file, content] of Object.entries(ff7Files())) {
+      const writable = await (await folder.getFileHandle(file, { create: true })).createWritable();
+      await writable.write(content);
+      await writable.close();
+    }
+    folders.push(folder);
+  }
+  let opened = 0;
+  Object.defineProperty(window, "showDirectoryPicker", { configurable: true, value: async () => folders[opened++] });
+  mountForm();
+  await expect.poll(() => buttonNamed("Open game folder")?.disabled).toBe(false);
+  buttonNamed("Open game folder").click();
+  await expect.poll(() => document.querySelector("#playlist-entries")?.textContent ?? "").toContain("ff7.disc02.cue");
+  (await enabledButton("#playlist-rename-discs")).click();
+  await expect.poll(() => document.querySelector("#playlist-rename-discs").checked).toBe(true);
+
+  buttonNamed("Open game folder").click();
+  await expect.poll(() => opened).toBe(2);
+  await expect.poll(() => document.querySelector("#playlist-rename-discs").checked).toBe(false);
+  expect(document.querySelector("#playlist-renames")).toBeNull();
+});
+
 test("plans a playlist for discs named only by number once a game name is typed", async () => {
   mountForm();
   const transfer = new DataTransfer();
