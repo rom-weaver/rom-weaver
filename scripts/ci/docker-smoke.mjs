@@ -327,8 +327,7 @@ async function checkNotFoundPage(context, origin, prefix) {
   await page.close();
 }
 
-// Every document type keeps its own URL and its links inside the prefix once hydration has rebased them:
-// the base itself shows the landing page, a task route shows its workflow, and a miss shows not-found in place.
+// Every document type keeps its own URL and its links inside the prefix once hydration has rebased them.
 async function checkAppBaseRoutes(context, origin, prefix) {
   const page = await context.newPage();
   try {

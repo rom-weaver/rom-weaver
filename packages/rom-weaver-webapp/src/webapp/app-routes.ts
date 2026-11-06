@@ -78,7 +78,7 @@ const matchAppRoute = (pathname?: string, basePath = APP_BASE_PATH): WebappView 
  * which points inside the current route.
  */
 const readAppBaseUrl = (): string =>
-  typeof window === "undefined" ? "/" : new URL(APP_BASE_PATH, window.location.href).href;
+  typeof window === "undefined" ? "/" : new URL(APP_BASE_PATH, window.location.origin).href;
 
 /**
  * Re-roots an in-app path (`/docs/faq#a`, `apply-rom-patches`) on the app base so

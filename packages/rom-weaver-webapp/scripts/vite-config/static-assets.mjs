@@ -35,10 +35,10 @@ import {
   readDocLastmods,
 } from "./seo-html.mjs";
 
-// The client hydrates from the view stamped here and renders anything else from scratch.
+// The view this document's shell was rendered as.
 const stampView = (html, view) => html.replace(/<html\b[^>]*/u, `$& data-view="${view}"`);
 
-// The view a shell is rendered as: a guide slug is Docs, a task-entry slug is its workflow, and the 404 page has none.
+// The view a prerendered shell key stands for.
 const shellView = (key) => {
   if (key === "notFound") return null;
   if (key === "docs" || key.startsWith("docs/")) return "docs";
