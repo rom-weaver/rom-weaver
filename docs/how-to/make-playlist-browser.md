@@ -52,4 +52,4 @@ Before renaming, the page checks the folder again. Nothing is renamed when:
 - another file already has one of the new names;
 - a file changed after the list was shown.
 
-If a rename fails partway, the page puts the files back under their old names. If it cannot, or the tab closes during the rename, the page shows that a rename stopped partway the next time you open Make playlist. Select **Put the files back** to restore the old names.
+If a rename fails partway, the page puts the files back under their old names and names any file it could not. Keep the tab open until the rename finishes. If the tab closes during a rename, some files can keep a temporary name such as `ff7.disc01.rw-1a2b3c4d-0.bin`: the old name `ff7.disc01.bin` with `.rw-` and a code added. Rename those back by hand.

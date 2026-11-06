@@ -1,5 +1,4 @@
 import { createLogger } from "../../lib/logging.ts";
-import { createIdbObjectStore } from "./idb-object-store.ts";
 import { requestKeptRomFile } from "./kept-rom-files.ts";
 import { registerBrowserTransientOpfsPath, waitForBrowserOpfsBootCleanup } from "./browser-opfs-cleanup.ts";
 
@@ -28,11 +27,40 @@ type KeptRom = {
 
 type KeptRomPlayback = { file: File; dispose: () => Promise<void> };
 
-const { open: openDatabase, transaction } = createIdbObjectStore(DATABASE_NAME, STORE_NAME, {
-  blocked: "Kept ROM storage is upgrading. Close other rom-weaver tabs and try again.",
-  unavailable: "Kept ROM storage is unavailable.",
-  failed: "Kept ROM index update failed.",
-});
+const openDatabase = (): Promise<IDBDatabase> =>
+  new Promise((resolve, reject) => {
+    const request = indexedDB.open(DATABASE_NAME, 1);
+    let blocked = false;
+    request.onupgradeneeded = () => request.result.createObjectStore(STORE_NAME);
+    request.onblocked = () => {
+      blocked = true;
+      reject(new Error("Kept ROM storage is upgrading. Close other rom-weaver tabs and try again."));
+    };
+    request.onerror = () => reject(request.error || new Error("Kept ROM storage is unavailable."));
+    request.onsuccess = () => {
+      const database = request.result;
+      database.onversionchange = () => database.close();
+      if (blocked) database.close();
+      else resolve(database);
+    };
+  });
+
+const transaction = async <T>(
+  mode: IDBTransactionMode,
+  action: (store: IDBObjectStore) => IDBRequest<T>,
+): Promise<T> => {
+  const database = await openDatabase();
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      const tx = database.transaction(STORE_NAME, mode);
+      const request = action(tx.objectStore(STORE_NAME));
+      tx.oncomplete = () => resolve(request.result);
+      tx.onerror = tx.onabort = () => reject(tx.error || request.error || new Error("Kept ROM index update failed."));
+    });
+  } finally {
+    database.close();
+  }
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));

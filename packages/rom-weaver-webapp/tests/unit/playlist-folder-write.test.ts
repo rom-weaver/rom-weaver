@@ -1,29 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-const memory = vi.hoisted(() => ({ records: new Map<string, unknown>() }));
-
-vi.mock("../../src/storage/browser/idb-object-store.ts", () => ({
-  createIdbObjectStore: () => ({
-    open: () => Promise.reject(new Error("unused")),
-    transaction: async (_mode: string, action: (store: unknown) => { result: unknown }) =>
-      action({
-        delete: (key: string) => ({ result: memory.records.delete(key) }),
-        // Kept as is: the real store clones directory handles, which a test double cannot be.
-        get: (key: string) => ({ result: memory.records.get(key) }),
-        put: (value: unknown, key: string) => {
-          memory.records.set(key, value);
-          return { result: key };
-        },
-      }).result,
-  }),
-}));
-
-import {
-  readInterruptedPlaylistRename,
-  renamePlaylistFolder,
-  savePlaylistToFolder,
-  undoInterruptedPlaylistRename,
-} from "../../src/storage/browser/playlist-folder-write.ts";
+import { renamePlaylistFolder, savePlaylistToFolder } from "../../src/storage/browser/playlist-folder-write.ts";
 
 type FakeFile = { bytes: Uint8Array<ArrayBuffer>; lastModified: number };
 type Fault = (operation: "move" | "write", name: string) => boolean;
@@ -155,7 +131,6 @@ const ff7Request = (folder: FakeFolder) => ({
 let held = false;
 
 beforeEach(() => {
-  memory.records.clear();
   held = false;
   vi.stubGlobal("navigator", {
     locks: {
@@ -187,7 +162,6 @@ describe("renamePlaylistFolder", () => {
       "Final Fantasy VII.m3u": "Final Fantasy VII (Disc 1).cue\n",
       "notes.txt": "keep",
     });
-    expect(memory.records.size).toBe(0);
   });
 
   it("swaps names and changes only their case without losing a file", async () => {
@@ -252,7 +226,6 @@ describe("renamePlaylistFolder", () => {
     await expect(renamePlaylistFolder(ff7Request(folder))).rejects.toThrow("The folder was put back as it was.");
     expect(failed).toBe(true);
     expect(folder.snapshot()).toEqual(before);
-    expect(memory.records.size).toBe(0);
   });
 
   it("keeps a playlist another program wrote during the rename", async () => {
@@ -268,26 +241,19 @@ describe("renamePlaylistFolder", () => {
       '"Final Fantasy VII.m3u" already exists in "FF7"; nothing was overwritten.',
     );
     expect(folder.snapshot()).toEqual({ ...before, "Final Fantasy VII.m3u": "theirs\n" });
-    expect(memory.records.size).toBe(0);
   });
 
-  it("keeps a journal when the rollback fails and undoes it later", async () => {
+  it("names the files it could not put back", async () => {
     const folder = ff7Folder();
-    const before = folder.snapshot();
-    let undoBlocked = true;
-    folder.fault = (op, current) =>
-      (op === "write" && current === "Final Fantasy VII.m3u") ||
-      (undoBlocked && op === "move" && current.includes(".rw-") && current.includes("sbi"));
-    await expect(renamePlaylistFolder(ff7Request(folder))).rejects.toThrow("could not rename");
-    const interrupted = await readInterruptedPlaylistRename();
-    expect(interrupted?.folderName).toBe("FF7");
-    await expect(renamePlaylistFolder(ff7Request(folder))).rejects.toThrow("Undo the interrupted rename");
-    undoBlocked = false;
-    folder.fault = () => false;
-    if (!interrupted) throw new Error("expected an interrupted rename");
-    await undoInterruptedPlaylistRename(interrupted);
-    expect(folder.snapshot()).toEqual(before);
-    expect(await readInterruptedPlaylistRename()).toBeNull();
+    folder.fault = (op, current) => op === "move" && current.includes(".rw-") && current.includes("sbi");
+    await expect(renamePlaylistFolder(ff7Request(folder))).rejects.toThrow(
+      /rom-weaver could not rename "ff7\.disc01\.rw-[0-9a-f]{8}-2\.sbi" back to "ff7\.disc01\.sbi"/,
+    );
+    expect(
+      Object.keys(folder.snapshot())
+        .filter((name) => !name.includes(".rw-"))
+        .sort(),
+    ).toEqual(["ff7.disc01.bin", "ff7.disc01.cue", "notes.txt"]);
   });
 
   it("refuses to run while another rename holds the folder lock", async () => {

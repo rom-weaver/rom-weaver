@@ -7,8 +7,6 @@ import { PlaylistForm } from "../../../src/webapp/components/playlist-form.tsx";
 const support = vi.hoisted(() => ({
   canWrite: false,
   download: vi.fn(async (_blob: Blob, _name: string, _options: unknown) => undefined),
-  interrupted: null as null | { folderName: string },
-  undo: vi.fn(async (_record: unknown) => undefined),
 }));
 
 const PLAN = {
@@ -28,13 +26,6 @@ vi.mock("../../../src/platform/browser/browser-playlist-api.ts", () => ({
 vi.mock("../../../src/platform/browser/browser-download.ts", () => ({ triggerBrowserDownload: support.download }));
 vi.mock("../../../src/storage/browser/playlist-folder-support.ts", () => ({
   canWritePlaylistFolders: () => support.canWrite,
-}));
-vi.mock("../../../src/storage/browser/playlist-folder-write.ts", () => ({
-  readInterruptedPlaylistRename: async () => support.interrupted,
-  undoInterruptedPlaylistRename: async (record: unknown) => {
-    await support.undo(record);
-    support.interrupted = null;
-  },
 }));
 
 const dropDiscs = async () => {
@@ -67,9 +58,7 @@ const folderHandle = (name: string, tree: FolderTree): FileSystemDirectoryHandle
 beforeEach(() => {
   vi.mocked(planBrowserPlaylist).mockImplementation(async () => PLAN);
   support.canWrite = false;
-  support.interrupted = null;
   support.download.mockClear();
-  support.undo.mockClear();
 });
 
 describe("PlaylistForm", () => {
@@ -153,16 +142,5 @@ describe("PlaylistForm", () => {
     } finally {
       Reflect.deleteProperty(window, "showDirectoryPicker");
     }
-  });
-
-  it("offers to put back the files of an interrupted rename", async () => {
-    support.canWrite = true;
-    support.interrupted = { folderName: "FF7" };
-    render(<PlaylistForm onSessionChange={vi.fn()} />);
-
-    fireEvent.click(await screen.findByRole("button", { name: "Put the files back" }));
-    await screen.findByText("Put back the files in FF7");
-    expect(support.undo).toHaveBeenCalledWith({ folderName: "FF7" });
-    expect(screen.queryByRole("button", { name: "Put the files back" })).toBeNull();
   });
 });

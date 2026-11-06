@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import type { BrowserPlaylistPlan, PlaylistSourceFile } from "../../platform/browser/browser-playlist-api.ts";
 import { canWritePlaylistFolders } from "../../storage/browser/playlist-folder-support.ts";
-import type { InterruptedPlaylistRename } from "../../storage/browser/playlist-folder-write.ts";
 import { resolveAssetUrl } from "../../public/react/asset-url.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
 import { FileCard } from "../../public/react/components/ds/file-card.tsx";
@@ -97,10 +96,9 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   const [renamePlan, setRenamePlan] = useState<BrowserPlaylistPlan | null>(null);
   const [renameReason, setRenameReason] = useState("");
   const [planning, setPlanning] = useState(false);
-  const [busy, setBusy] = useState<"open" | "save" | "rename" | "undo" | null>(null);
+  const [busy, setBusy] = useState<"open" | "save" | "rename" | null>(null);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
-  const [interrupted, setInterrupted] = useState<InterruptedPlaylistRename | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const handledDropRef = useRef(0);
   const planRunRef = useRef(0);
@@ -110,14 +108,10 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
 
   useEffect(() => {
     // Read after hydration: the prerendered page cannot know the browser.
-    if (!canWritePlaylistFolders()) return;
-    setCanWriteFolders(true);
-    void import("../../storage/browser/playlist-folder-write.ts")
-      .then((module) => module.readInterruptedPlaylistRename())
-      .then(setInterrupted, () => undefined);
+    setCanWriteFolders(canWritePlaylistFolders());
   }, []);
   useEffect(() => {
-    onSessionChange(busy === "rename" || busy === "undo");
+    onSessionChange(busy === "rename");
   }, [busy, onSessionChange]);
   useEffect(() => {
     if (busy || planning) setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { stage: "Make playlist", state: "running" });
@@ -297,33 +291,15 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     void runAction("rename", async () => {
       const folder = await import("../../storage/browser/playlist-folder-write.ts");
       await folder.requestPlaylistFolderAccess(directory);
-      try {
-        await folder.renamePlaylistFolder({
-          directory,
-          planned,
-          playlist: { fileName: renamePlan.file_name, text: renamePlan.text },
-          renames: renamePlan.renames,
-        });
-      } finally {
-        setInterrupted(await folder.readInterruptedPlaylistRename());
-      }
+      await folder.renamePlaylistFolder({
+        directory,
+        planned,
+        playlist: { fileName: renamePlan.file_name, text: renamePlan.text },
+        renames: renamePlan.renames,
+      });
       setRename(false);
       await reloadFolder(directory);
       setDone(`Renamed ${renamePlan.renames.length} files and saved ${renamePlan.file_name} in ${directory.name}`);
-    });
-  };
-
-  const undoInterrupted = () => {
-    if (!interrupted) return;
-    void runAction("undo", async () => {
-      const folder = await import("../../storage/browser/playlist-folder-write.ts");
-      try {
-        await folder.undoInterruptedPlaylistRename(interrupted);
-      } finally {
-        setInterrupted(await folder.readInterruptedPlaylistRename());
-      }
-      setDone(`Put back the files in ${interrupted.folderName}`);
-      if (source?.directory) await reloadFolder(source.directory);
     });
   };
 
@@ -360,21 +336,12 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
 
   return (
     <section className="panel" id="playlist-container">
-      {interrupted ? (
-        <Notice level="warn">
-          A rename in "{interrupted.folderName}" stopped partway.{" "}
-          <button className="btn slim ghost" disabled={locked} onClick={undoInterrupted} type="button">
-            {busy === "undo" ? "Putting files back…" : "Put the files back"}
-          </button>
-        </Notice>
-      ) : null}
-      {/* Without a source the steps below are hidden, so a failed folder pick or an undo reports here. */}
+      {/* Without a source the steps below are hidden, so a failed folder pick reports here. */}
       {!source && error ? (
         <Notice level="error" onDismiss={() => setError("")}>
           {error}
         </Notice>
       ) : null}
-      {!source && done ? <Notice level="info">{done}</Notice> : null}
       <UnifiedDropZone
         addLabel="Replace the discs"
         // Below the drop target, not in the header: on phones the whole header is the add-files button.
