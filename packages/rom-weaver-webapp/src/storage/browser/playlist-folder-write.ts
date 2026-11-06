@@ -273,9 +273,9 @@ const renamePlaylistFolder = async (request: RenamePlaylistFolderRequest) => {
         await saveJournal(journal);
         await writeBlobToFileHandle(handles[index] as FileSystemFileHandle, new Blob([rename.text]));
       }
+      await createFolderFile(directory, playlist.fileName, playlist.text);
       journal.playlist = playlist.fileName;
       await saveJournal(journal);
-      await createFolderFile(directory, playlist.fileName, playlist.text);
     } catch (error) {
       const failures = await undoJournal(journal);
       if (!failures.length) await clearJournal().catch(() => undefined);

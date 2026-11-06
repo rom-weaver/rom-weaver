@@ -255,6 +255,22 @@ describe("renamePlaylistFolder", () => {
     expect(memory.records.size).toBe(0);
   });
 
+  it("keeps a playlist another program wrote during the rename", async () => {
+    const folder = ff7Folder();
+    const before = folder.snapshot();
+    folder.fault = (op, current) => {
+      if (op === "write" && current === "Final Fantasy VII (Disc 1).cue") {
+        folder.files.set("Final Fantasy VII.m3u", { bytes: new TextEncoder().encode("theirs\n"), lastModified: 1000 });
+      }
+      return false;
+    };
+    await expect(renamePlaylistFolder(ff7Request(folder))).rejects.toThrow(
+      '"Final Fantasy VII.m3u" already exists in "FF7"; nothing was overwritten.',
+    );
+    expect(folder.snapshot()).toEqual({ ...before, "Final Fantasy VII.m3u": "theirs\n" });
+    expect(memory.records.size).toBe(0);
+  });
+
   it("keeps a journal when the rollback fails and undoes it later", async () => {
     const folder = ff7Folder();
     const before = folder.snapshot();
