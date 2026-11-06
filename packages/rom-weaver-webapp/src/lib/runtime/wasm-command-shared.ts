@@ -1,11 +1,14 @@
 import { waitForBrowserOpfsBootCleanup } from "../../storage/browser/browser-opfs-cleanup.ts";
-import { withBrowserOutputStorageFailureContext } from "../../storage/browser/browser-output-storage-guard.ts";
 import {
   formatBrowserStorageEstimateState,
   getBrowserStorageEstimateState,
 } from "../../storage/browser/browser-storage-estimate.ts";
 import type { PatchBasisMode } from "../../wasm/index.ts";
-import { getRomWeaverFailureMessage, withRomWeaverFailureKind } from "../../workers/rom-weaver/runner-errors.ts";
+import {
+  getRomWeaverFailureCode,
+  getRomWeaverFailureMessage,
+  withRomWeaverFailure,
+} from "../../workers/rom-weaver/runner-errors.ts";
 import type { runRomWeaverJson as runRomWeaverJsonType } from "../../workers/rom-weaver/rom-weaver-runner.ts";
 import { toSimpleProgress } from "./run-result-parsing.ts";
 import type { RomWeaverRunJsonResult } from "./run-result-parsing.ts";
@@ -28,9 +31,10 @@ const relaySimpleProgress =
     if (progress) onProgress?.(progress);
   };
 
-const appendBrowserStorageContext = async (message: string, operationLabel: string) => {
-  const contextualized = await withBrowserOutputStorageFailureContext(new Error(message), { operationLabel });
-  if (!(contextualized instanceof Error) || contextualized.name !== "OutputStorageError") return message;
+// The engine codes a write that ran out of storage as `io.storage_full`; add the browser storage estimate.
+const appendBrowserStorageContext = async (result: RomWeaverRunJsonResult, fallbackMessage: string) => {
+  const message = getRomWeaverFailureMessage(result, fallbackMessage);
+  if (getRomWeaverFailureCode(result) !== "io.storage_full") return message;
   const state = await getBrowserStorageEstimateState();
   return `${message} [storage: ${formatBrowserStorageEstimateState(state)}]`;
 };
@@ -40,12 +44,10 @@ const throwRomWeaverFailureWithBrowserOutputContext = async (
   fallbackMessage: string,
   operationLabel: string,
 ): Promise<never> => {
-  const message = getRomWeaverFailureMessage(result, fallbackMessage);
-  const contextualized = await withBrowserOutputStorageFailureContext(new Error(message), {
-    operationLabel,
-  });
-  const error = contextualized instanceof Error ? contextualized : new Error(String(contextualized || message));
-  throw withRomWeaverFailureKind(error, result);
+  const error = withRomWeaverFailure(new Error(getRomWeaverFailureMessage(result, fallbackMessage)), result);
+  if (getRomWeaverFailureCode(result) === "io.storage_full")
+    Object.assign(error, { details: { ...(error as { details?: object }).details, operationLabel } });
+  throw error;
 };
 
 const normalizeN64ByteOrder = (

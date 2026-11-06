@@ -87,19 +87,22 @@ const toFaultDetail = (message: string, localizer: Localizer): string => {
  * and what to do next (naming the 0x04 override toggle when it is offered). */
 export const PatchFaultWell = ({
   dcp,
+  errorCode,
   message,
   overrideAvailable,
   unreadable,
 }: {
   /** A DCP fault already says what to change, so no generic hint follows it. */
   dcp?: boolean;
+  /** Stable engine code of the failed verdict. */
+  errorCode?: string;
   message: string;
   overrideAvailable?: boolean;
   unreadable?: boolean;
 }) => {
   const localizer = useUiLocalizer();
   let hint = localizer.message("ui.patch.validationMismatchHint");
-  if (isPatchFileChecksumFailure(message)) {
+  if (isPatchFileChecksumFailure(errorCode)) {
     hint = localizer.message("ui.patch.validationCorruptHint");
   } else if (unreadable) {
     hint = localizer.message("ui.patch.validationUnreadableHint");

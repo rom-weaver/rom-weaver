@@ -8,6 +8,8 @@ mise run build-wasm
 mise run build-wasm-prod
 ```
 
+`build-app.mjs` copies a finished module from the shared cache in `wasm-artifact-cache.mjs` when another checkout already built the same inputs. The [development guide](../../docs/development/development.md#build-and-run-the-webapp) lists the key inputs and overrides.
+
 Production WASM sidecars use Brotli quality 11 with Node's default 22-bit window. The larger 24-bit window used for other build assets increased the compressed module size in the measured production build. Both paths preserve the decoded WASM bytes.
 
 Use `run-browser-cli.mjs` when a smoke test must run in a real browser. It is a developer tool, not a supported application API. Use the native Rust CLI for command-line work.

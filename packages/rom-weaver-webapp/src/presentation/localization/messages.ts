@@ -735,7 +735,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.create.tutorial.cheats.body": msg({
     id: "ui.create.tutorial.cheats.body",
     message:
-      "Choose Patches & cheats in step 0x03 to build from ordered changes. Modified ROM is the default; switching modes keeps your inputs.",
+      "Choose Patches & cheats above the file picker to build from ordered changes. Modified ROM is the default; switching modes keeps your inputs.",
   }),
   "ui.create.tutorial.cheats.tryIt": msg({
     id: "ui.create.tutorial.cheats.tryIt",
@@ -1283,7 +1283,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "error.OUTPUT_WRITE_FAILED": msg({
     id: "error.OUTPUT_WRITE_FAILED",
-    message: "Couldn't save the result. Free up storage, or choose a folder the browser can write to.",
+    message: "Couldn't save the result. Choose a folder the browser is allowed to write to.",
   }),
   "error.PATCH_APPLY_FAILED": msg({
     id: "error.PATCH_APPLY_FAILED",
@@ -1309,6 +1309,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "error.SOURCE_UNSUPPORTED": msg({
     id: "error.SOURCE_UNSUPPORTED",
     message: "rom-weaver can't open this kind of file.",
+  }),
+  "error.STORAGE_FULL": msg({
+    id: "error.STORAGE_FULL",
+    message: "Couldn't save the result. Free up storage, or choose a folder the browser can write to.",
   }),
   "error.STORAGE_UNAVAILABLE": msg({
     id: "error.STORAGE_UNAVAILABLE",
@@ -1573,7 +1577,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.drop.opening": msg({ id: "ui.drop.opening", message: "Opening {page}" }),
   "ui.drop.release": msg({ id: "ui.drop.release", message: "Release to add files" }),
-  "ui.drop.staging": msg({ id: "ui.drop.staging", message: "Reading dropped files…" }),
+  "ui.drop.staging": msg({ id: "ui.drop.staging", message: "Reading files…" }),
   "ui.drop.tap": msg({ id: "ui.drop.tap", message: "Tap to choose files" }),
   "ui.drop.unusedInputs": msg({
     id: "ui.drop.unusedInputs",

@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
-import { appendCreatorMode, readAppBaseUrl, VIEW_TO_ROUTE_SLUG } from "../app-routes.ts";
+import { appendCreatorMode, appPathHref, VIEW_TO_ROUTE_SLUG } from "../app-routes.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { DOC_SOURCES } from "../docs-routing.mjs";
 import { RELATED_LINKS } from "../related-links.ts";
+import { useAppBaseUrl } from "../use-app-base-url.ts";
 
 type RelatedStripProps = {
   /** A `WebappView` id (workflow result) or a docs slug (guide tools). */
@@ -26,8 +26,7 @@ type RelatedStripProps = {
  */
 const RelatedStrip = ({ entryKey, onSelectTab }: RelatedStripProps) => {
   const localizer = useUiLocalizer();
-  const [appBaseUrl, setAppBaseUrl] = useState("/");
-  useEffect(() => setAppBaseUrl(readAppBaseUrl()), []);
+  const appBaseUrl = useAppBaseUrl();
   const entry = RELATED_LINKS[entryKey];
   const tools = entry?.tools ?? [];
   const guideRoute = entry?.guide ? DOC_SOURCES.find((route) => route.slug === entry.guide?.slug) : undefined;
@@ -49,8 +48,7 @@ const RelatedStrip = ({ entryKey, onSelectTab }: RelatedStripProps) => {
                 <a
                   className="related-row related-row-tool"
                   href={appendCreatorMode(
-                    new URL(tool.entry ?? VIEW_TO_ROUTE_SLUG[tool.view], new URL(appBaseUrl, "https://app.invalid"))
-                      .pathname,
+                    appPathHref(tool.entry ?? VIEW_TO_ROUTE_SLUG[tool.view], appBaseUrl),
                     tool.mode,
                   )}
                 >
@@ -66,7 +64,7 @@ const RelatedStrip = ({ entryKey, onSelectTab }: RelatedStripProps) => {
         })}
         {guideRoute ? (
           <li>
-            <a className="related-row related-row-guide" href={`/${guideRoute.slug}`}>
+            <a className="related-row related-row-guide" href={appPathHref(guideRoute.slug, appBaseUrl)}>
               <span className="related-kind mono">{localizer.message("ui.related.kindGuide")}</span>
               <span className="related-label">{guideRoute.label}</span>
               <span className="related-hint">{localizer.message("ui.related.hintGuide")}</span>

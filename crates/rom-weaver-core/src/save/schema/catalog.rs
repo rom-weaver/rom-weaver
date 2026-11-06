@@ -435,6 +435,77 @@ fn choices(entries: &[(&str, i64)]) -> Vec<FieldChoice> {
         .collect()
 }
 
+/// Edit check that rejects the opened or edited save when any `(current, maximum)` pair has the current value above the maximum.
+fn capacity_check(message: String, pairs: Vec<(rules::Scalar, rules::Scalar)>) -> rules::Check {
+    rules::Check {
+        when: None,
+        assert: rules::Condition::new(move |bytes| {
+            for (current, maximum) in &pairs {
+                if current.read(bytes)? > maximum.read(bytes)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }),
+        code: "save_resource_capacity".into(),
+        message,
+        section_id: None,
+        warning: None,
+    }
+}
+
+// Fixed-width arcade-style names store each permitted character as its ASCII code.
+// Shorter names are padded with `fill`, and `terminated` names also end with a 0 byte
+// whenever the field has room for one.
+fn ascii_name_codec(
+    characters: &str,
+    max_chars: usize,
+    fill: u32,
+    terminated: bool,
+    label: &str,
+) -> text::TextCodec {
+    let error = |code: &str, message: String| text::TextError {
+        code: code.into(),
+        message,
+    };
+    text::TextCodec {
+        unit: text::TextUnit::U8,
+        max_chars,
+        max_units: None,
+        terminators: if terminated { vec![0] } else { vec![] },
+        skip: vec![],
+        fill,
+        write_terminator: terminated.then_some(0),
+        lane: None,
+        mapping: text::TextMapping::Table {
+            ranges: vec![],
+            glyphs: characters
+                .chars()
+                .map(|character| (character, u32::from(character)))
+                .collect(),
+            aliases: BTreeMap::new(),
+        },
+        decode_invalid: text::DecodeInvalid::Replacement { character: '?' },
+        missing_terminator: text::MissingTerminator::Accept,
+        errors: text::TextErrors {
+            decode_invalid: error(
+                "save_text_codec",
+                format!("the save has unsupported {label} text"),
+            ),
+            encode_invalid: error(
+                "save_name_charset",
+                format!("the {label} contains a character the game cannot store"),
+            ),
+            missing_terminator: error("save_text_codec", format!("the {label} has no terminator")),
+            too_long: error(
+                "save_name_length",
+                format!("the {label} is longer than {max_chars} characters"),
+            ),
+        },
+        encode_transforms: vec![],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

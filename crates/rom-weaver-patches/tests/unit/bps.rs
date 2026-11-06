@@ -22,7 +22,7 @@ use super::{
     common_prefix_len_limited, copy_target_range, crc32_bytes, encode_action_header,
     encode_signed_offset, initial_bps_sorted_target_len, next_bps_sorted_target_len,
     parse_bps_bytes, parse_bps_bytes_with_checksum_validation, push_varint, read_bps_create_data,
-    repeated_byte_run_len, validate_output_file,
+    repeated_byte_run_len, try_reserve_exact, validate_output_file,
 };
 use crate::{
     BPS,
@@ -2434,4 +2434,21 @@ fn parse_honors_patch_integrity_policy_without_skipping_structure() {
         .parse(&patch_path, &ignore)
         .expect_err("Ignore must still reject malformed structure");
     assert!(error.to_string().contains("too small"), "{error}");
+}
+
+#[test]
+fn a_refused_reservation_is_coded_as_out_of_memory() {
+    let error = try_reserve_exact(&mut Vec::<u8>::new(), usize::MAX, "BPS test buffer")
+        .expect_err("an impossible reservation must fail");
+    assert_eq!(
+        error.code(),
+        Some(rom_weaver_core::ERROR_CODE_RESOURCE_OUT_OF_MEMORY),
+        "{error}"
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("BPS test buffer allocation failed"),
+        "{error}"
+    );
 }

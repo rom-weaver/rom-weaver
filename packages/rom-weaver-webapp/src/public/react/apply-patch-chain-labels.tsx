@@ -18,7 +18,7 @@ export const chainChipText = (
   patchLabels: readonly string[],
 ): { text: string; warn?: boolean } | null => {
   const verdict = item.chainVerdict;
-  if (item.validationState === "invalid" && isPatchFileChecksumFailure(item.validationMessage)) {
+  if (item.validationState === "invalid" && isPatchFileChecksumFailure(item.validationErrorCode)) {
     return { text: localizer.message("ui.patchChecks.corrupt"), warn: true };
   }
   // The patch itself is unreadable, so no ROM was checked and the chip must not blame the ROM.

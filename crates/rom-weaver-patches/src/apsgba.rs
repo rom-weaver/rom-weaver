@@ -517,10 +517,13 @@ fn apply_apsgba_patch_in_memory(
             let source_slice = source.get(offset..offset + source_len).unwrap_or_default();
             let actual = crc16_bytes(source_slice);
             if actual != record.source_crc16 {
-                return Err(RomWeaverError::Validation(format!(
-                    "Source checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
-                    record.source_crc16, actual
-                )));
+                return Err(RomWeaverError::coded(
+                    rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+                    format!(
+                        "Source checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
+                        record.source_crc16, actual
+                    ),
+                ));
             }
         }
 
@@ -537,10 +540,13 @@ fn apply_apsgba_patch_in_memory(
             let output_slice = output.get(offset..offset + write_len).unwrap_or_default();
             let actual = crc16_bytes(output_slice);
             if actual != record.target_crc16 {
-                return Err(RomWeaverError::Validation(format!(
-                    "Target checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
-                    record.target_crc16, actual
-                )));
+                return Err(RomWeaverError::coded(
+                    rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+                    format!(
+                        "Target checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
+                        record.target_crc16, actual
+                    ),
+                ));
             }
         }
     }
@@ -564,10 +570,13 @@ fn apply_apsgba_patch_in_place(
         if validate_checksums {
             let actual_source_crc16 = crc16_bytes(&source_block[..source_len]);
             if actual_source_crc16 != record.source_crc16 {
-                return Err(RomWeaverError::Validation(format!(
-                    "Source checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
-                    record.source_crc16, actual_source_crc16
-                )));
+                return Err(RomWeaverError::coded(
+                    rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+                    format!(
+                        "Source checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
+                        record.source_crc16, actual_source_crc16
+                    ),
+                ));
             }
         }
 
@@ -589,10 +598,13 @@ fn apply_apsgba_patch_in_place(
         if validate_checksums {
             let actual_target_crc16 = crc16_bytes(&patched_block[..write_len]);
             if actual_target_crc16 != record.target_crc16 {
-                return Err(RomWeaverError::Validation(format!(
-                    "Target checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
-                    record.target_crc16, actual_target_crc16
-                )));
+                return Err(RomWeaverError::coded(
+                    rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+                    format!(
+                        "Target checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
+                        record.target_crc16, actual_target_crc16
+                    ),
+                ));
             }
         }
     }
@@ -651,10 +663,13 @@ fn prepare_apsgba_write(
     if validate_checksums {
         let actual_source_crc16 = crc16_bytes(&source_block);
         if actual_source_crc16 != record.source_crc16 {
-            return Err(RomWeaverError::Validation(format!(
-                "Source checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
-                record.source_crc16, actual_source_crc16
-            )));
+            return Err(RomWeaverError::coded(
+                rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+                format!(
+                    "Source checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
+                    record.source_crc16, actual_source_crc16
+                ),
+            ));
         }
     }
 
@@ -668,10 +683,13 @@ fn prepare_apsgba_write(
     if validate_checksums {
         let actual_target_crc16 = crc16_bytes(&patched);
         if actual_target_crc16 != record.target_crc16 {
-            return Err(RomWeaverError::Validation(format!(
-                "Target checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
-                record.target_crc16, actual_target_crc16
-            )));
+            return Err(RomWeaverError::coded(
+                rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+                format!(
+                    "Target checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
+                    record.target_crc16, actual_target_crc16
+                ),
+            ));
         }
     }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
-import { createDocsRouteHtml, DOC_ROUTES } from "../../src/webapp/docs-pages.mjs";
+import { createDocsRouteHtml, DOC_ROUTES, withDocsBase } from "../../src/webapp/docs-pages.mjs";
 import { createDocsSeoMetadata } from "../../src/webapp/docs-routing.mjs";
 
 const SHELL = [
@@ -33,6 +33,11 @@ describe("createDocsRouteHtml", () => {
     expect(readStructuredData(html)).toMatchObject({ "@type": "TechArticle", headline: "FAQ" });
   });
 
+  it("points the Markdown alternate at the app root through the page base", () => {
+    const html = createDocsRouteHtml(SHELL, route(), "prod", "");
+    expect(html).toContain('type="text/markdown" href="docs/faq.md"');
+  });
+
   it("dates the page only when its last change is known", () => {
     const dated = createDocsRouteHtml(SHELL, route(), "prod", "", "2026-10-01T12:00:00.000Z");
     expect(readStructuredData(dated).dateModified).toBe("2026-10-01T12:00:00.000Z");
@@ -46,6 +51,46 @@ describe("createDocsRouteHtml", () => {
     const html = createDocsRouteHtml(SHELL, route({ title }), "prod", "");
     expect(html).not.toContain("<script>alert(1)</script>");
     expect(readStructuredData(html).headline).toBe(title);
+  });
+});
+
+describe("withDocsBase", () => {
+  const baseOf = (html: string) => html.match(/<base href="([^"]*)" \/>/)?.[1] ?? null;
+
+  // Both copies resolve ./assets/ to the app root wherever the app is served, so no
+  // copy may carry a root-absolute base that would escape a sub-path deployment.
+  it.each([
+    ["docs", false, "./"],
+    ["docs", true, "../"],
+    ["docs/faq", false, "../"],
+    ["docs/faq", true, "../../"],
+  ])("resolves %s (directory index: %s) to the app root", (slug, directoryIndex, expected) => {
+    expect(baseOf(withDocsBase(SHELL, slug, directoryIndex))).toBe(expected);
+  });
+
+  it("never emits a root-absolute base for any published guide", () => {
+    for (const { slug } of DOC_ROUTES) {
+      for (const directoryIndex of [false, true]) {
+        expect(baseOf(withDocsBase(SHELL, slug, directoryIndex)) ?? "").not.toBe("/");
+      }
+    }
+  });
+
+  it("writes screenshot paths relative so the base resolves them on any deployment", () => {
+    const html = SHELL.replace(
+      "</body>",
+      '<picture><source srcset="/docs/screenshots/a.avif 1x, /docs/screenshots/a@2x.avif 2x"><img src="/docs/screenshots/a.webp"></picture><img src="//cdn.example/b.png"></body>',
+    );
+    for (const directoryIndex of [false, true]) {
+      const out = withDocsBase(html, "docs/faq", directoryIndex);
+      expect(out).toContain('srcset="docs/screenshots/a.avif 1x, docs/screenshots/a@2x.avif 2x"');
+      expect(out).toContain('<img src="docs/screenshots/a.webp">');
+      expect(out).toContain('<img src="//cdn.example/b.png">');
+    }
+  });
+
+  it("leaves the route metadata pass free of a base", () => {
+    expect(createDocsRouteHtml(SHELL, route(), "prod", "")).not.toContain("<base");
   });
 });
 

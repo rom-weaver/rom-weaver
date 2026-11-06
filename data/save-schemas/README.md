@@ -16,8 +16,8 @@ The default registry includes 611 profiles: the original seven game-family defin
 
 | Catalog module | Titles | Profiles | Fields | Creation |
 | --- | ---: | ---: | ---: | --- |
-| `donkey_kong_country.rs` | 1 | 6 | 24 | Template only |
-| `donkey_kong_country_2_diddy_s_kong_quest.rs` | 1 | 3 | 30 | Template only |
+| `donkey_kong_country.rs` | 1 | 6 | 672 | Template only |
+| `donkey_kong_country_2_diddy_s_kong_quest.rs` | 1 | 3 | 240 | Template only |
 | `donkey_kong_country_3_dixie_kong_s_double_trouble.rs` | 1 | 3 | 42 | Template only |
 | `final_fantasy_nes.rs` | 1 | 1 | 311 | Template only |
 | `mario_party.rs` | 1 | 1 | 15 | Template only |
@@ -36,20 +36,20 @@ The default registry includes 611 profiles: the original seven game-family defin
 | `f_zero.rs` | 1 | 1 | 663 | Template only |
 | `game_and_watch_gallery_3.rs` | 1 | 1 | 47 | Template only |
 | `kirbys_adventure.rs` | 1 | 9 | 27 | Template only |
-| `actraiser.rs` | 1 | 3 | 9 | Template only |
+| `actraiser.rs` | 1 | 3 | 126 | Template only |
 | `capcom_gba_eeprom.rs` | 2 | 2 | 70 | Template only |
-| `chrono_trigger.rs` | 1 | 3 | 6 | Template only |
+| `chrono_trigger.rs` | 1 | 3 | 324 | Template only |
 | `diddy_kong_racing.rs` | 1 | 1 | 9 | Template only |
 | `donkey_kong_land.rs` | 1 | 1 | 369 | Template only |
 | `f_zero_maximum_velocity.rs` | 1 | 1 | 1938 | Template only |
 | `f_zero_x.rs` | 1 | 1 | 5 | Template only |
-| `final_fantasy_vi.rs` | 1 | 3 | 9 | Template only |
+| `final_fantasy_vi.rs` | 1 | 3 | 993 | Template only |
 | `lylat_wars.rs` | 1 | 1 | 15 | Template only |
 | `mario_kart_64.rs` | 1 | 1 | 16 | Template only |
 | `mission_impossible.rs` | 1 | 1 | 16 | Template only |
-| `mystic_quest_legend.rs` | 1 | 3 | 9 | Template only |
+| `mystic_quest_legend.rs` | 1 | 3 | 486 | Template only |
 | `pokemon_trading_card_game.rs` | 1 | 1 | 506 | Template only |
-| `super_punch_out.rs` | 1 | 8 | 24 | Template only |
+| `super_punch_out.rs` | 1 | 8 | 88 | Template only |
 | `wario_land_3.rs` | 1 | 1 | 193 | Template only |
 | `zelda_oracle_of_ages.rs` | 1 | 3 | 381 | Template only |
 | `zelda_oracle_of_seasons.rs` | 1 | 3 | 348 | Template only |
@@ -169,21 +169,23 @@ The additional handheld, Nintendo 64, and SNES profiles also require explicit se
 | Final Fight One | Opponents defeated, options, character colors, and character/color values in five ranking records |
 | Super Street Fighter II Turbo Revival | VS points, options, and 13 challenge times |
 | Chrono Trigger | Gold in each of three slots; the first inventory item code is read-only |
-| Diddy Kong Racing | Adventure Two mode, Wizpig amulet pieces, and balloons in three occupied slots |
+| Diddy Kong Racing | Adventure Two mode, Wizpig amulet pieces, balloons, name letters, lobby, world race, boss, and T.T. challenge progress, keys, trophies, event and Taj flags in three occupied slots (progress edits recalculate balloon, amulet, and boss counters); unlock flags and options with their nibble checksum; and best time and lap frames with name letters for 47 vehicle records |
 | Donkey Kong Land | Progression, current level, playtime, bomb and boulder flags, 34 unlocked levels, and 80 visited level and bonus-room flags in three slots |
 | F-Zero: Maximum Velocity | Championship clear counts, unlocks, unlocked machine count, options, 16 circuit clears, 160 machine/difficulty/series clears, and 231 ranking times with machines per slot |
-| F-Zero X | Four cup progression values and the Death Race time |
+| F-Zero X | Four cup progression values, the Death Race time, five option flags, 600 cup unlock flags, and best lap, place times, and place names in 24 Time Attack records, each with its own checksum (a place name is editable only once that place has a time in the source save; machine, color, and speed-ratio floats are not editable) |
 | Final Fantasy VI | Money and battle speed in each slot; location code is read-only |
-| Lylat Wars / Star Fox 64 | Played, completion, and medal flags for Corneria, Meteo, and Sector Y |
-| Mario Kart 64 | Mario GP trophies for four cups in four classes |
-| Mission: Impossible | Music, sound-effects, audio-mode, and screen-ratio options in four records |
+| Lylat Wars / Star Fox 64 | Played, completion, and medal flags for 15 planets, sound and language options, and the ten ranking records (name, Arwings, completed missions, and per-mission planet, hits, allies, and medal) |
+| Mario Kart 64 | Mario GP trophies for four cups in four classes, sound mode, and five placings plus the best lap (character and time) for 16 Time Trial courses, with best-record mirrors and all checksums |
+| Mario Party | Coins, stars, items, board records, Mini-Game House and Island state, minigame records, language, and sound; Koopa Troopa space is not editable |
+| Mario Party 2 | Coins, unlocks, board play counts, Mini-Game Land flags with the Driver's Ed unlock rule, Mini-Game Coaster saves, records, language, and sound |
+| Mission: Impossible | Music, sound-effects, audio-mode, screen-ratio, controller configuration, and aiming-mode options in four records; mission location is not editable |
 | Mystic Quest Legend | Money, location code, and hero level in each slot |
 | Pokémon Trading Card Game | Playtime, position, location with both preview copies, eight Master Medals with their total, config, Challenge Machine records, 15 mail slots, and the 228-card album (copies and collection flags with the save-preview album count). Names and decks omitted |
 | Super Punch-Out!! | Losses in eight profiles; wins and championship progression are read-only |
 | Wario Land 3 | Coins, language, encoded day/night, the first eight sequential power upgrades, events, 100 treasures with the treasure counter, musical coins, Time Attack times, and golf records |
 | The Legend of Zelda: Oracle of Ages and Oracle of Seasons | Mode, linked ID, death count, health, maximum health, heart pieces, rupees, bombchus, Gasha seeds, equipment levels, flute, tradable item, ring box level, message speed, slates (Ages), ore chunks and current season (Seasons), key item, essence, seed, tune/season, and warp flags, and small keys and dungeon items in three slots per title. Rings, item slots, ammunition seed counts, names, and location omitted |
 
-These definitions derive from [Game Tools Collection commit `8fb075e7c130da9e72c3c46ec8efa447a252ad88`](https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88). Diddy Kong Racing also uses the checksum rules in [DavidSM64/Diddy-Kong-Racing `save_data.c`](https://github.com/DavidSM64/Diddy-Kong-Racing/blob/1339ad6304118207b342fe8669c500efb91969df/src/save_data.c).
+These definitions derive from [Game Tools Collection commit `8fb075e7c130da9e72c3c46ec8efa447a252ad88`](https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88). Diddy Kong Racing also uses the checksum rules in [DavidSM64/Diddy-Kong-Racing `save_data.c`](https://github.com/DavidSM64/Diddy-Kong-Racing/blob/1339ad6304118207b342fe8669c500efb91969df/src/save_data.c). The deepened Diddy Kong Racing, F-Zero X, Lylat Wars, Mario Kart 64, Mario Party, Mario Party 2, and Mission: Impossible fields follow [Game Tools Collection commit `15d71340c3f1717745139c2e0774510cd37dfbdd`](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd). Those seven templates are identical at the earlier and later revisions. The Mario Kart 64 checksums' second byte wraps at 256 like the game ([mk64 decomp `src/save.c`](https://github.com/n64decomp/mk64/blob/master/src/save.c)), not like Game Tools Collection, which carries the overflow into the first byte. Chrono Trigger slot checksums follow the game's own routine in [dscotton/ct_disassembly `bank_FF.asm`](https://github.com/dscotton/ct_disassembly/blob/eeae27acdb6565e96d1d796a3d60792c250c0aa1/bank_FF.asm#L1301-L1322).
 
 The Game Boy and Game Boy Color deepenings (Donkey Kong Land, Game & Watch Gallery 3, Pokémon Trading Card Game, the two Zelda Oracle games, Wario Land II, and Wario Land 3) and the F-Zero: Maximum Velocity deepening also use [Game Tools Collection revision `15d71340c3f1717745139c2e0774510cd37dfbdd`](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd) for their added fields. Their upstream templates match the earlier revisions. The Oracle of Seasons profiles now use the Seasons offsets for health, heart pieces, and rupees; they previously used the Oracle of Ages offsets.
 

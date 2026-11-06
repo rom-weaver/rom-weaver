@@ -1,14 +1,12 @@
 import { ArrowRight } from "lucide-react";
-import { useEffect, useState } from "react";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { RELATED_LINKS } from "../related-links.ts";
-import { appendCreatorMode, readAppBaseUrl, VIEW_TO_ROUTE_SLUG } from "../app-routes.ts";
+import { appendCreatorMode, appPathHref, VIEW_TO_ROUTE_SLUG } from "../app-routes.ts";
+import { useAppBaseUrl } from "../use-app-base-url.ts";
 
 const DocsToolLinks = ({ slug }: { slug: string }) => {
   const localizer = useUiLocalizer();
-  const [appBaseUrl, setAppBaseUrl] = useState("/");
-  // Match prerendered hrefs during hydration, then preserve a deployment's subpath.
-  useEffect(() => setAppBaseUrl(readAppBaseUrl()), []);
+  const appBaseUrl = useAppBaseUrl();
   const tools = RELATED_LINKS[slug]?.tools ?? [];
   if (tools.length === 0) return null;
   const label = localizer.message("ui.docs.tools");
@@ -21,11 +19,7 @@ const DocsToolLinks = ({ slug }: { slug: string }) => {
           <li data-beta={tool.beta ? "true" : undefined} key={tool.view}>
             <a
               className="btn ghost docs-tool"
-              href={appendCreatorMode(
-                new URL(tool.entry ?? VIEW_TO_ROUTE_SLUG[tool.view], new URL(appBaseUrl, "https://app.invalid"))
-                  .pathname,
-                tool.mode,
-              )}
+              href={appendCreatorMode(appPathHref(tool.entry ?? VIEW_TO_ROUTE_SLUG[tool.view], appBaseUrl), tool.mode)}
             >
               {localizer.message(tool.labelId)}
               <ArrowRight aria-hidden="true" size={14} />

@@ -413,6 +413,7 @@ fn prepare_dldi_patch(
     let patch_end = patch_offset_u64
         .checked_add(patch_len_u64)
         .ok_or_else(|| RomWeaverError::Validation("DLDI patch range overflowed".into()))?;
+    crate::ensure_plausible_output_len("DLDI", patch_end, input_len, patch.len() as u64)?;
     if patch_end > input_len {
         warnings.push(format!(
             "input file ended before the DLDI patch slot; extending output from {} to {} byte(s)",
@@ -423,16 +424,27 @@ fn prepare_dldi_patch(
     // `driver_size_bytes` derives from a single attacker-controlled log2 byte (up
     // to 1<<63). The parse path intentionally tolerates a truncated driver payload
     // (see `apply_accepts_truncated_patch_payload`), so the size cannot be bounded
-    // by the patch slice length; instead `try_reserve` bounds it against allocatable
-    // memory and turns an oversized declaration into a validation error before any
-    // output file is created.
+    // by the patch slice length; instead the plausibility check above rejects sizes
+    // past the shared bound, a `Vec` cannot hold more than `isize::MAX` bytes (that
+    // is a corrupt size, not memory pressure), and `try_reserve` turns a size the
+    // allocator still refuses into an out-of-memory error before any output file
+    // is created.
+    if isize::try_from(patch_header.driver_size_bytes).is_err() {
+        return Err(RomWeaverError::Validation(format!(
+            "DLDI driver size {} byte(s) is too large for this platform",
+            patch_header.driver_size_bytes
+        )));
+    }
     let mut slot = Vec::new();
     slot.try_reserve_exact(patch_header.driver_size_bytes)
         .map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "DLDI driver size {} byte(s) exceeds allocatable memory",
-                patch_header.driver_size_bytes
-            ))
+            RomWeaverError::coded(
+                rom_weaver_core::ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
+                format!(
+                    "cannot reserve {} byte(s) for the DLDI driver slot",
+                    patch_header.driver_size_bytes
+                ),
+            )
         })?;
     slot.resize(patch_header.driver_size_bytes, 0);
     let existing_slot_len = available_len_usize.min(patch_header.driver_size_bytes);

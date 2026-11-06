@@ -72,7 +72,11 @@ To use another host port:
 PORT=3000 docker compose up --detach
 ```
 
-The container serves HTTP on port 8080. Configure your HTTPS proxy with a browser-trusted certificate. For an Nginx subpath route:
+The container serves HTTP on port 8080. Configure your HTTPS proxy with a browser-trusted certificate. For an Nginx subpath route, set `BASE_PATH` on the container to the same prefix and proxy to it:
+
+```bash
+BASE_PATH=/rom-weaver/ docker compose up --detach
+```
 
 ```nginx
 location = /rom-weaver {
@@ -86,7 +90,9 @@ location /rom-weaver/ {
 }
 ```
 
-Keep both trailing slashes: they remove `/rom-weaver/` from forwarded requests. The `proxy_redirect` rules preserve that prefix on redirects, including legacy URLs. The container supplies COOP/COEP headers, SPA fallbacks, and precompressed Brotli files.
+Keep both trailing slashes: they remove `/rom-weaver/` from forwarded requests. The `proxy_redirect` rules preserve that prefix on redirects, including legacy URLs. The container supplies COOP/COEP headers and precompressed Brotli files. It answers a path with no file, such as a missing `/assets/` chunk or an unknown route, with a real 404 status, because the build prerenders every route to a file.
+
+The proxy strips the prefix, so the container cannot see it. `BASE_PATH` tells the container: it serves the 404 page with its asset and link URLs re-rooted on that prefix, so the page loads styled, runs, and keeps its links inside `/rom-weaver/`. The leading and trailing `/` are optional, so `rom-weaver`, `/rom-weaver`, and `/rom-weaver/` all mean the same. Use only letters, digits, `.`, `_`, `~`, `-`, and single `/` separators; the container refuses to start on anything else, and logs the effective prefix when it starts. With `--read-only`, add `--tmpfs /tmp`, where the re-rooted page is written. Unset or `/` serves the page for a root deployment. Without `BASE_PATH` behind a subpath, the 404 page keeps its status and text but loads unstyled and its links leave the prefix. `BASE_PATH` changes only the 404 page; the rest of the app resolves its URLs relative to where it is served.
 
 For a dedicated subdomain, route its `/` location to the same container.
 
@@ -130,7 +136,7 @@ tar --extract --gzip \
   --directory rom-weaver-webapp
 ```
 
-Serve the extracted `rom-weaver-webapp` directory from an HTTPS static host, preserve its directory structure, and configure the [host requirements](#cross-origin-isolation) below. A subdomain is simplest; for a subpath, redirect its bare path to a trailing slash, such as `/rom-weaver` to `/rom-weaver/`.
+Serve the extracted `rom-weaver-webapp` directory from an HTTPS static host, preserve its directory structure, and configure the [host requirements](#cross-origin-isolation) below. A subdomain is simplest; for a subpath, redirect its bare path to a trailing slash, such as `/rom-weaver` to `/rom-weaver/`. `404.html` is built for the origin root, so under a subpath, including a GitHub Pages project site, re-root it once before upload or it loads unstyled and its links leave the prefix: `sed -e 's#href="/\([^/"]\)#href="/rom-weaver/\1#g' -e 's#href="/"#href="/rom-weaver/"#g' 404.html > 404.rerooted.html && mv 404.rerooted.html 404.html`.
 
 To pin a release, use its tag in the release-download URL:
 
@@ -157,7 +163,7 @@ Set `ROM_WEAVER_SITE_ORIGIN` to the origin you serve the build from, for example
 
 Upload everything under `packages/rom-weaver-webapp/dist/` to your HTTPS host. Preserve the directory structure. The build includes raw assets and `.br` sidecars for compressible immutable assets. Configure your host to serve a sidecar with `Content-Encoding: br` when the client accepts Brotli, and the raw asset otherwise. Docker and the Cloudflare Pages integration handle this negotiation. A generic host can instead compress the raw assets itself.
 
-The build includes directory-index pages for its workflow and documentation routes, so ordinary static servers can resolve direct visits and refreshes without rewrite configuration. A server that disables directory indexes must instead fall back to `index.html` for those navigation requests. Redirect `/rom-weaver` to `/rom-weaver/` when using a subpath so relative assets, History API routes, and the service-worker scope resolve consistently. Explicit directory-document URLs such as `/apply-rom-patches/index.html` are normalized in the browser to the clean `/apply-rom-patches` route without another request. The Docker image and Cloudflare Pages permanently redirect old `/weave`, `/bundle`, and `/bundle-patches` forms to `/weave-rom-patches`, preserving query strings. Configure equivalent redirects on other static hosts.
+The build includes directory-index pages for its workflow and documentation routes, so ordinary static servers can resolve direct visits and refreshes without rewrite configuration. A server that disables directory indexes must instead map each known route to its `<route>/index.html` and answer every other path with `404.html` and a 404 status. Do not use a catch-all fallback to `index.html`: it turns every broken link into a 200 page, and it would store HTML under a missing hashed `/assets/` URL. In Nginx, use `try_files $uri $uri.html $uri/index.html =404;` with `error_page 404 /404.html;`. Redirect `/rom-weaver` to `/rom-weaver/` when using a subpath so relative assets, History API routes, and the service-worker scope resolve consistently. Explicit directory-document URLs such as `/apply-rom-patches/index.html` are normalized in the browser to the clean `/apply-rom-patches` route without another request. The Docker image and Cloudflare Pages permanently redirect old `/weave`, `/bundle`, and `/bundle-patches` forms to `/weave-rom-patches`, preserving query strings. Configure equivalent redirects on other static hosts.
 
 The Docker image and a plain static host do not run the Cloudflare Pages Functions in `packages/rom-weaver-webapp/functions`. Without them there is no `/mcp` endpoint for [MCP clients](../how-to/use-mcp.md), and HTML routes ignore `Accept: text/markdown` requests; the `.md` URLs remain static files.
 
@@ -170,7 +176,7 @@ Cloudflare-compatible hosts read the generated `_headers` file. On other hosts, 
 
 Earlier releases served the service worker as `cache-service-worker.js`. If your host config still names that path, change it to `rom-weaver-service-worker.js`.
 
-Only `/assets/*` uses immutable caching, because those URLs are content-addressed: build output, including the two identify manifests, carries a hash in the filename, and the identify packs, cheat shards, checksum router, and title index are requested with a `?sha256=` query that changes whenever their bytes do. Do not apply the immutable policy to HTML, the manifest, `robots.txt`, `sitemap.xml`, or other stable filenames.
+The Docker image gives `/assets/*` scripts and styles a one-year `max-age` without `immutable`, and revalidates WASM, JSON, and `.bin` files there. Other types, such as the identify packs, keep static-web-server's default of one day. The image does not use a header rule for the long lifetime because static-web-server tags a missing file with a rule's headers as well as a hit, so a long-lived rule on `/assets/*` would let a browser or CDN keep a 404 for a hashed URL that a newer deploy adds. The image needs static-web-server 2.44.1 or later, whose built-in policy skips missing files. Only `/assets/*` uses long caching, because those URLs are content-addressed: build output, including the two identify manifests, carries a hash in the filename, and the identify packs, cheat shards, checksum router, and title index are requested with a `?sha256=` query that changes whenever their bytes do. Do not apply the immutable policy to HTML, the manifest, `robots.txt`, `sitemap.xml`, or other stable filenames.
 
 ## Cross-origin isolation
 

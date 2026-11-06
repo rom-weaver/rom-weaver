@@ -1,5 +1,5 @@
 import { Lexer, Marked, Parser, Renderer } from "marked";
-import { docGroupTitle, DOC_SOURCES, SITE_ORIGIN, siteSamplePath } from "./docs-routing.mjs";
+import { docGroupTitle, DOC_SOURCES, mapDocImageUrls, SITE_ORIGIN, siteSamplePath } from "./docs-routing.mjs";
 
 // Build-time only. `marked` must never reach a browser weave: the client
 // imports already-rendered HTML from `virtual:rom-weaver-docs` instead. Build
@@ -174,16 +174,7 @@ const rewriteDocImage = (href, sourceFile) => {
 };
 
 /** @param {string} html @param {string} sourceFile */
-const rewriteRawDocImages = (html, sourceFile) =>
-  html.replace(/<(?:img|source)\b[^>]*>/gi, (tag) =>
-    tag.replace(/\b(src|srcset)=(['"])(.*?)\2/gi, (_attribute, name, quote, value) => {
-      const rewritten =
-        name.toLowerCase() === "src"
-          ? rewriteDocImage(value, sourceFile)
-          : String(value).replace(/[^\s,]+/g, (candidate) => rewriteDocImage(candidate, sourceFile));
-      return `${name}=${quote}${rewritten}${quote}`;
-    }),
-  );
+const rewriteRawDocImages = (html, sourceFile) => mapDocImageUrls(html, (url) => rewriteDocImage(url, sourceFile));
 
 // Lucide's `link` glyph (https://lucide.dev/icons/link), inlined because this
 // HTML is a marked render-time string, so the lucide-react component the rest
