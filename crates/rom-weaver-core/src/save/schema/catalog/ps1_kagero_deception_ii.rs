@@ -135,6 +135,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                 region,
                 product,
                 block,
+                1,
                 fields,
             );
             integrity(&mut game, base);

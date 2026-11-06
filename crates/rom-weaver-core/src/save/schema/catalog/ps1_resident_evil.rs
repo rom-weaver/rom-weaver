@@ -72,7 +72,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                 None => ("resident-evil", "Resident Evil", region),
             };
             games.push(playstation_card::definition(
-                id, title, region, product, block, fields,
+                id, title, region, product, block, 1, fields,
             ));
         }
     }
