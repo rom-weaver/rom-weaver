@@ -671,6 +671,8 @@ const canCompressBrotliOnTheFly = (filePath, data) =>
 const resolveDistRequestPath = (distDir, requestUrl) => {
   const parsed = new URL(requestUrl || "/", "https://localhost");
   const decodedPath = decodeURIComponent(parsed.pathname || "/");
+  // A NUL byte makes fs.stat throw synchronously, which would end the process.
+  if (decodedPath.includes("\0")) return null;
   const normalizedPath = path.normalize(decodedPath).replace(PARENT_DIRECTORY_PREFIX_REGEX, "");
   const filePath = path.join(distDir, normalizedPath);
   const resolvedPath = path.resolve(filePath);
@@ -786,6 +788,29 @@ const sendEarlyHints = (res, pagesHeaders, isDocument) => {
   res.writeEarlyHints({ link: preloadLinks });
 };
 
+// Route documents carry <base href="../">, which resolves only from the trailing-slash URL, so redirect there as
+// static-web-server does. A relative target keeps any prefix a proxy stripped.
+const redirectBareDirectory = (filePath, pathname, req, res, securityOptions, next) => {
+  if (pathname.endsWith("/")) {
+    next();
+    return;
+  }
+  fs.stat(filePath, (statError, stats) => {
+    if (statError || !stats.isDirectory()) {
+      next();
+      return;
+    }
+    const { search } = new URL(req.url, "https://localhost");
+    send(
+      res,
+      308,
+      { Location: `${path.posix.basename(pathname)}/${search}`, "Cache-Control": "no-store" },
+      null,
+      securityOptions,
+    );
+  });
+};
+
 const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRules = []) => {
   if (req.method !== "GET" && req.method !== "HEAD") {
     send(res, 405, { Allow: "GET, HEAD" }, "Method Not Allowed", securityOptions);
@@ -826,60 +851,46 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
     return;
   }
 
-  // The route documents carry `<base href="../">`, which only resolves right from the URL
-  // with a trailing slash. static-web-server answers a bare directory with a redirect to
-  // that form, so the preview does too. The target is relative, so it keeps the prefix a
-  // prefix-stripping proxy removed.
-  if (!pathname.endsWith("/") && fs.statSync(filePath, { throwIfNoEntry: false })?.isDirectory()) {
-    const { search } = new URL(req.url, "https://localhost");
-    send(
-      res,
-      308,
-      { Location: `${path.posix.basename(pathname)}/${search}`, "Cache-Control": "no-store" },
-      null,
-      securityOptions,
-    );
-    return;
-  }
-
-  // Cloudflare Pages answers a missed navigation with 404.html at the URL that
-  // missed, so the preview does the same: that is the only way to exercise the
-  // page at a nested path, where its <base> tag decides every link.
-  const fallbackPath = path.join(distDir, "404.html");
-  const acceptHeader = req.headers.accept || "";
-  const allowFallback = acceptHeader.includes("text/html") || !path.extname(filePath);
-  readPreviewAsset(cache, filePath, fallbackPath, allowFallback, (readError, asset) => {
-    if (readError) {
-      send(res, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not Found", securityOptions);
-      return;
-    }
-    const encoded = Boolean(asset.brotli) && acceptsBrotli(req);
-    // `_headers` last so the deployed file wins wherever it and the preview server both
-    // speak. There are two exceptions. The explicit no-COOP/COEP mode: its purpose is to
-    // prove that the service worker can add isolation without help from either
-    // source of preview headers. And a 404, where Pages replaces whatever Cache-Control
-    // the rules gave with no-store, so a 404 MUST NOT keep an /assets/* rule's long lifetime.
-    const pagesHeaders = matchPagesHeaders(pagesRules, pathname);
-    if (!securityOptions.crossOriginIsolation) {
-      for (const header of Object.keys(CROSS_ORIGIN_ISOLATION_HEADERS)) delete pagesHeaders[header];
-    }
-    sendEarlyHints(res, pagesHeaders, path.extname(asset.resolvedPath) === ".html");
-    const isDocument = path.extname(asset.resolvedPath) === ".html";
-    const status = asset.resolvedPath === fallbackPath && filePath !== fallbackPath ? 404 : 200;
-    send(
-      res,
-      status,
-      {
-        "Cache-Control": isDocument ? "no-cache" : "public, max-age=31536000, immutable",
-        "Content-Type": getContentType(asset.resolvedPath),
-        ...(asset.brotli ? { Vary: "Accept-Encoding" } : {}),
-        ...(encoded ? { "Content-Encoding": "br" } : {}),
-        ...pagesHeaders,
-        ...(status === 404 ? { "Cache-Control": "no-store" } : {}),
-      },
-      req.method === "HEAD" ? null : encoded ? asset.brotli : asset.data,
-      securityOptions,
-    );
+  redirectBareDirectory(filePath, pathname, req, res, securityOptions, () => {
+    // Cloudflare Pages answers a missed navigation with 404.html at the URL that
+    // missed, so the preview does the same: that is the only way to exercise the
+    // page at a nested path, where its <base> tag decides every link.
+    const fallbackPath = path.join(distDir, "404.html");
+    const acceptHeader = req.headers.accept || "";
+    const allowFallback = acceptHeader.includes("text/html") || !path.extname(filePath);
+    readPreviewAsset(cache, filePath, fallbackPath, allowFallback, (readError, asset) => {
+      if (readError) {
+        send(res, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not Found", securityOptions);
+        return;
+      }
+      const encoded = Boolean(asset.brotli) && acceptsBrotli(req);
+      // `_headers` last so the deployed file wins wherever it and the preview server both
+      // speak. There are two exceptions. The explicit no-COOP/COEP mode: its purpose is to
+      // prove that the service worker can add isolation without help from either
+      // source of preview headers. And a 404, where Pages replaces whatever Cache-Control
+      // the rules gave with no-store, so a 404 MUST NOT keep an /assets/* rule's long lifetime.
+      const pagesHeaders = matchPagesHeaders(pagesRules, pathname);
+      if (!securityOptions.crossOriginIsolation) {
+        for (const header of Object.keys(CROSS_ORIGIN_ISOLATION_HEADERS)) delete pagesHeaders[header];
+      }
+      sendEarlyHints(res, pagesHeaders, path.extname(asset.resolvedPath) === ".html");
+      const isDocument = path.extname(asset.resolvedPath) === ".html";
+      const status = asset.resolvedPath === fallbackPath && filePath !== fallbackPath ? 404 : 200;
+      send(
+        res,
+        status,
+        {
+          "Cache-Control": isDocument ? "no-cache" : "public, max-age=31536000, immutable",
+          "Content-Type": getContentType(asset.resolvedPath),
+          ...(asset.brotli ? { Vary: "Accept-Encoding" } : {}),
+          ...(encoded ? { "Content-Encoding": "br" } : {}),
+          ...pagesHeaders,
+          ...(status === 404 ? { "Cache-Control": "no-store" } : {}),
+        },
+        req.method === "HEAD" ? null : encoded ? asset.brotli : asset.data,
+        securityOptions,
+      );
+    });
   });
 };
 

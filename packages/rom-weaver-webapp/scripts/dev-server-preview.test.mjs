@@ -17,8 +17,8 @@ let server;
 let port;
 
 // The preview server serves `<its own package>/dist`, so run a copy of it from a throwaway package whose
-// sibling scripts, sources and dependencies are the real ones and whose dist holds only `404.html`, a `route/` directory
-// and the `index.html` that the startup check requires. The real dist stays untouched, and the test needs no build.
+// sibling scripts, sources and dependencies are the real ones and whose dist holds only the fixture files below.
+// The real dist stays untouched, and the test needs no build.
 const stageFixturePackage = () => {
   const packageDir = path.join(workDir, "package");
   const scriptsDir = path.join(packageDir, "scripts");
@@ -98,4 +98,16 @@ test("preview serves a directory index at its trailing-slash URL", async () => {
   const response = await get("/route/", "text/html");
   assert.equal(response.status, 200);
   assert.equal(response.body, ROUTE_PAGE);
+});
+
+test("preview answers a path segment longer than the file system allows without ending the process", async () => {
+  const response = await get(`/${"a".repeat(300)}`, "text/html");
+  assert.equal(response.status, 404);
+  assert.equal((await get("/route/", "text/html")).status, 200);
+});
+
+test("preview refuses a path with a NUL byte without ending the process", async () => {
+  const response = await get("/%00", "text/html");
+  assert.equal(response.status, 403);
+  assert.equal((await get("/route/", "text/html")).status, 200);
 });
