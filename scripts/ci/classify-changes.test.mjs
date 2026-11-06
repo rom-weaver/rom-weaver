@@ -122,6 +122,7 @@ test("fixtures consumed by WASM browser tests select the runtime suite", () => {
 test("Docker changes select only the affected images", () => {
   assert.equal(classify("Dockerfile").docker_cli, "true");
   assert.equal(classify("packages/rom-weaver-webapp/Dockerfile").docker_webapp, "true");
+  assert.equal(classify("packages/rom-weaver-webapp/scripts/docker-entrypoint.sh").docker_webapp, "true");
   assert.equal(classify(".dockerignore").docker_cli, "true");
   assert.equal(classify("packages/rom-weaver-webapp/Dockerfile").docker_cli, "false");
 });

@@ -237,6 +237,17 @@ async function redirects(origin, prefix) {
   console.log(`PASS ${count} redirects: ${prefix || "root"}`);
 }
 
+// Pathnames of the page's same-origin links that leave the served prefix.
+const anchorsOutsidePrefix = (page, origin, prefix) =>
+  page.evaluate(
+    ({ pageOrigin, scope }) =>
+      [...document.querySelectorAll("a[href]")]
+        .map((anchor) => new URL(anchor.href, document.baseURI))
+        .filter((url) => url.origin === pageOrigin && !url.pathname.startsWith(scope))
+        .map((url) => url.pathname),
+    { pageOrigin: origin, scope: `${prefix}/` },
+  );
+
 // A sub-path deployment (the documented Nginx proxy) must keep the whole docs experience under
 // its prefix: assets, in-app links, soft navigation, and a reload of the page navigated to.
 async function checkDocsRoutes(context, origin, prefix) {
@@ -250,15 +261,7 @@ async function checkDocsRoutes(context, origin, prefix) {
     if (response.status() >= 400) problems.push(`${response.status()} ${response.url()}`);
   });
   // Rebasing runs after hydration, so poll until the page settles instead of sampling once.
-  const sameOriginAnchorsOutsidePrefix = () =>
-    page.evaluate(
-      ({ pageOrigin, scope }) =>
-        [...document.querySelectorAll("a[href]")]
-          .map((anchor) => new URL(anchor.href, document.baseURI))
-          .filter((url) => url.origin === pageOrigin && !url.pathname.startsWith(scope))
-          .map((url) => url.pathname),
-      { pageOrigin: origin, scope: `${prefix}/` },
-    );
+  const sameOriginAnchorsOutsidePrefix = () => anchorsOutsidePrefix(page, origin, prefix);
   try {
     for (const slug of ["docs", "docs/faq"]) {
       await page.goto(`${origin}${prefix}/${slug}`, { waitUntil: "load" });
@@ -291,6 +294,37 @@ async function checkDocsRoutes(context, origin, prefix) {
   } finally {
     await page.close();
   }
+}
+
+// The 404 page is a prerendered document served at whatever path missed. Its <base href> is the
+// only thing that locates its assets and its links, so behind a subpath proxy the image has to be
+// told the prefix (BASE_PATH) for the page to load its assets, hydrate and keep its links inside.
+async function checkNotFoundPage(context, origin, prefix) {
+  const page = await context.newPage();
+  const failures = [];
+  page.on("pageerror", (error) => failures.push(`page error: ${error.message}`));
+  const url = `${origin}${prefix}/no-such-route/`;
+  page.on("response", (response) => {
+    if (response.status() >= 400 && response.url() !== url)
+      failures.push(`${response.status()} ${response.url()}`);
+  });
+  const response = await page.goto(url, { waitUntil: "load" });
+  assert.equal(response.status(), 404, url);
+  const home = page.locator(".not-found-home");
+  await home.waitFor({ state: "attached", timeout: 60_000 });
+  // The prerendered root carries aria-busy until the app mounts and releases it.
+  await page.locator("#webapp-root:not([aria-busy])").waitFor({ state: "attached", timeout: 60_000 });
+  await page.waitForLoadState("networkidle");
+  assert.equal(await page.evaluate(() => crossOriginIsolated), true);
+  assert.deepEqual(failures, [], url);
+  // The stylesheet only loads through <base>, so a styled button proves the assets resolved.
+  assert.notEqual(await home.evaluate((node) => getComputedStyle(node).display), "inline", url);
+  // The base the page resolves against is its <base>, not the missed path.
+  assert.equal(new URL(await page.evaluate(() => document.baseURI)).pathname, `${prefix}/`, url);
+  assert.ok((await page.locator("a[href]").count()) > 0, `${url} has links`);
+  assert.deepEqual(await anchorsOutsidePrefix(page, origin, prefix), [], `${url} links leave ${prefix}/`);
+  console.log(`PASS 404 page for an unknown route: ${origin}${prefix}`);
+  await page.close();
 }
 
 async function checkBrowser(origins) {
@@ -356,6 +390,7 @@ async function checkBrowser(origins) {
       console.log(
         `PASS browser aliases, isolation, legacy archive apply and exact download bytes: ${origin}${prefix}`,
       );
+      await checkNotFoundPage(context, origin, prefix);
       await context.close();
     }
   } finally {
@@ -421,25 +456,35 @@ async function checkMountedCertificates({ pair, named }) {
   console.log("PASS mounted HTTPS certificates");
 }
 
+// Fetches `path` under the served prefix; `cache` is the Cache-Control value, "" when absent.
+const fetchPath = (origin, prefix) => async (path) => {
+  const response = await fetch(`${origin}${prefix}${path}`, { signal: AbortSignal.timeout(10_000) });
+  const text = await response.text();
+  return { cache: response.headers.get("cache-control") ?? "", response, status: response.status, text };
+};
+
+// The first hashed script or stylesheet the home page references: its path, the name before the
+// hash, and its extension.
+function hashedAsset(html) {
+  const match = /["'(]\.?\/?((assets\/[^"')?]+)-[^"')?.-]+\.(js|css))/.exec(html);
+  assert.ok(match, "the home page must reference a hashed asset");
+  return { ext: match[3], path: match[1], stem: match[2] };
+}
+
 // The documented policy (the build's _headers, docs/hosting/self-hosting.md): everything
-// revalidates except the content-addressed /assets/*.
+// revalidates except the content-addressed /assets/*. The image takes sws's own one-year
+// max-age for those, without `immutable`, because a header rule would also tag a 404.
 async function checkCachePolicy(origin, prefix) {
-  const get = async (path) => {
-    const response = await fetch(`${origin}${prefix}${path}`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    const text = await response.text();
-    return { cache: response.headers.get("cache-control"), status: response.status, text };
-  };
-  const home = await get("/");
-  const asset = /["'(]\.?\/?(assets\/[^"')?]+\.(?:js|css))/.exec(home.text)?.[1];
-  assert.ok(asset, "the home page must reference a hashed asset");
+  const get = fetchPath(origin, prefix);
+  const asset = hashedAsset((await get("/")).text);
   const expected = [
     ["/", "no-cache"],
     ["/docs/faq/", "no-cache"],
+    ["/apply-rom-patches/", "no-cache"],
+    ["/.well-known/api-catalog", "no-cache"],
     ["/manifest.json", "no-cache"],
     ["/rom-weaver-service-worker.js", "no-cache"],
-    [`/${asset}`, "public, max-age=31536000, immutable"],
+    [`/${asset.path}`, "max-age=31536000"],
   ];
   for (const [path, cache] of expected) {
     const response = await get(path);
@@ -449,20 +494,69 @@ async function checkCachePolicy(origin, prefix) {
   console.log(`PASS Cache-Control matches the documented policy: ${origin}${prefix}`);
 }
 
+// A path that does not exist MUST answer 404, never the app shell with 200. A missing
+// /assets/* file answered 200 with HTML, or with a long cache lifetime, would be stored
+// under a content-addressed URL for a year by browsers and CDNs.
+async function checkNotFound(origin, prefix) {
+  const get = fetchPath(origin, prefix);
+  const asset = hashedAsset((await get("/")).text);
+  for (const path of [
+    "/assets/nope-missing.js",
+    `/${asset.stem}-zzzzzzzz.${asset.ext}`,
+    "/assets/nested/missing.wasm",
+  ]) {
+    const missing = await get(path);
+    assert.equal(missing.status, 404, `${prefix}${path}`);
+    assert.doesNotMatch(missing.cache, /immutable|max-age=[1-9]\d{4,}/, `${prefix}${path} cache`);
+  }
+  // The header rule for everything outside /assets/ is a glob: names that start like "assets" must not escape it.
+  for (const path of [
+    "/no-such-route/",
+    "/no-such-route",
+    "/docs/no-such-doc/",
+    "/missing.html",
+    "/a",
+    "/asset/x",
+    "/assetsx/y",
+  ]) {
+    const missing = await get(path);
+    assert.equal(missing.status, 404, `${prefix}${path}`);
+    assert.match(missing.response.headers.get("content-type") ?? "", /^text\/html/, path);
+    assert.match(missing.text, /data-page="not-found"/, `${prefix}${path} serves the 404 page`);
+    assert.equal(missing.cache, "no-cache", `Cache-Control of ${prefix}${path}`);
+    assert.equal(missing.response.headers.get("cross-origin-embedder-policy"), "require-corp");
+    // The served bytes, before any script runs: every root-relative link must already carry the prefix.
+    assert.ok(missing.text.includes(`<base href="${prefix}/" />`), `${prefix}${path} <base>`);
+    assert.deepEqual(
+      missing.text.match(/href="\/(?!\/)[^"]*"/g)?.filter((href) => !href.startsWith(`href="${prefix}/`)) ?? [],
+      [],
+      `${prefix}${path} links outside the prefix`,
+    );
+  }
+  console.log(`PASS missing paths answer 404 without long caching: ${origin}${prefix}`);
+}
+
 async function checkWebapp() {
   docker("network", "create", id);
   networkCreated = true;
   const web = await start("web", values.image);
+  // The documented Nginx subpath deployment sets BASE_PATH on the image it proxies to.
+  const sub = await start("sub", values.image, ["--env", "BASE_PATH=/rom-weaver/"]);
+  // Proxies spell the prefix without the outer slashes; the container accepts that too.
+  const bare = await start("bare", values.image, ["--env", "BASE_PATH=rom-weaver"]);
   const tls = await start("tls", values.image, ["--env", "HTTPS_PORT=8443"]);
   // Started together so their health waits overlap instead of adding up.
   const mounted = await startMountedCertificates();
   await Promise.all(
-    [web, tls, mounted.pair, mounted.named].map(({ container }) => healthy(container)),
+    [web, sub, bare, tls, mounted.pair, mounted.named].map(({ container }) => healthy(container)),
   );
+  const barePage = await fetch(`${bare.origin}/no-such-route/`);
+  assert.equal(barePage.status, 404);
+  assert.ok((await barePage.text()).includes('<base href="/rom-weaver/" />'), "BASE_PATH=rom-weaver is normalized");
   assert.notEqual(docker("exec", web.container, "id", "-u"), "0");
   // sws ignores unknown sws.toml keys with only this warning, so a misspelled
   // option silently falls back to its default.
-  for (const container of [web.container, tls.container]) {
+  for (const container of [web.container, sub.container, bare.container, tls.container]) {
     const logs = spawnSync("docker", ["logs", container], { encoding: "utf8" });
     // Unreadable logs (a log driver without read support) would pass the check below.
     assert.equal(logs.status, 0, `docker logs ${container} failed: ${logs.stderr}`);
@@ -490,10 +584,33 @@ async function checkWebapp() {
       (error) => error.status === code,
     );
   }
+  // A read-only root filesystem leaves the re-rooted 404 page nowhere to go.
+  assert.throws(
+    () => docker("run", "--rm", "--read-only", "--env", "BASE_PATH=/rom-weaver/", values.image),
+    (error) => error.status === 73 && /--tmpfs \/tmp/.test(String(error.stderr ?? error.message)),
+    "BASE_PATH on a read-only root",
+  );
+  for (const value of [
+    "//",
+    "/a//b/",
+    "/a/../b/",
+    "/a/./b/",
+    "/a b/",
+    '/a"b/',
+    "/a&b/",
+    "/a#b/",
+    "/a\\b/",
+  ]) {
+    assert.throws(
+      () => docker("run", "--rm", "--env", `BASE_PATH=${value}`, values.image),
+      (error) => error.status === 64 && /BASE_PATH/.test(String(error.stderr ?? error.message)),
+      `BASE_PATH=${value}`,
+    );
+  }
   const markdown = await readFile(values.docs, "utf8");
   const block = /```nginx\n([\s\S]*?)```/.exec(markdown)?.[1];
   assert.ok(block, "the self-hosting guide must include its Nginx configuration");
-  const config = `server { listen 8080; absolute_redirect off;\n${block.replaceAll("127.0.0.1:8080", `${web.container}:8080`)}\n}\n`;
+  const config = `server { listen 8080; absolute_redirect off;\n${block.replaceAll("127.0.0.1:8080", `${sub.container}:8080`)}\n}\n`;
   const configPath = join(scratch, "nginx.conf");
   await writeFile(configPath, config);
   const proxy = await start("proxy", "nginx:alpine", [
@@ -534,8 +651,7 @@ async function checkWebapp() {
     assert.equal(response.status, 200, path);
     assert.equal(response.headers.get("cross-origin-embedder-policy"), "require-corp");
     assert.equal(response.headers.get("cross-origin-opener-policy"), "same-origin");
-    // The SPA fallback also answers 200, so parse dotfile paths to prove the
-    // file itself was served.
+    // Parse dotfile paths to prove the file itself was served, not a page.
     if (path === "/.well-known/api-catalog")
       assert.ok(Array.isArray((await response.json()).linkset), path);
     else if (path.endsWith(".json")) await response.json();
@@ -543,6 +659,8 @@ async function checkWebapp() {
   }
   await checkCachePolicy(web.origin, "");
   await checkCachePolicy(proxy.origin, "/rom-weaver");
+  await checkNotFound(web.origin, "");
+  await checkNotFound(proxy.origin, "/rom-weaver");
   await checkBrowser([
     { origin: web.origin, prefix: "" },
     { origin: proxy.origin, prefix: "/rom-weaver" },

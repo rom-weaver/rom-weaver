@@ -129,23 +129,17 @@ test("CI smokes source and prebuilt images and checks clean identify source impo
   }
 });
 
-// The documented cache policy is the generated dist/_headers (docs/hosting/self-hosting.md):
-// everything revalidates except the content-addressed /assets/*. sws's built-in per-type
-// max-age would cache the service worker for a year, so its rules must mirror _headers instead.
-test("sws.toml sends the documented Cache-Control policy", () => {
+// The cache policy is the generated dist/_headers: everything revalidates except /assets/*.
+// sws sends a header rule's value on a 404 too, so the image leaves the long /assets/* lifetime to
+// its built-in policy, and the no-cache rules MUST cover every path outside /assets/.
+test("sws.toml sends the documented Cache-Control policy without caching a 404", () => {
   const sws = readFileSync(
     new URL("../../packages/rom-weaver-webapp/sws.toml", import.meta.url),
     "utf8",
   );
-  const headers = readFileSync(
-    new URL("../../packages/rom-weaver-webapp/scripts/vite-config/headers.mjs", import.meta.url),
-    "utf8",
-  );
-  const immutable = /\/assets\/\*\\n {2}! Cache-Control\\n {2}Cache-Control: ([^\\]+)\\n/u.exec(
-    headers,
-  )?.[1];
-  assert.equal(immutable, "public, max-age=31536000, immutable");
-  assert.match(sws, /^cache-control-headers = false$/mu);
+  assert.match(sws, /^cache-control-headers = true$/mu);
+  assert.doesNotMatch(sws, /^page-fallback\b/mu, "a page fallback answers a missing file with 200");
+  assert.doesNotMatch(sws, /^Cache-Control = ".*(?:max-age|immutable)/mu);
   const rules = new Map(
     [
       ...sws.matchAll(
@@ -153,8 +147,41 @@ test("sws.toml sends the documented Cache-Control policy", () => {
       ),
     ].map((match) => [match[1], match[2]]),
   );
-  assert.match(rules.get("**") ?? "", /^Cache-Control = "no-cache"$/mu);
-  assert.match(rules.get("/assets/**") ?? "", new RegExp(`^Cache-Control = "${immutable}"$`, "mu"));
-  const everyCacheRule = [...sws.matchAll(/^Cache-Control = .*$/gmu)];
-  assert.equal(everyCacheRule.length, 2, "only the two policy rules set Cache-Control");
+  const noCache = [...rules].filter(([, body]) => /^Cache-Control = "no-cache"$/mu.test(body));
+  assert.deepEqual(
+    noCache.map(([source]) => source).filter((source) => !source.startsWith("/assets/")),
+    ["/{,[!a]*,a,a[!s]*,as,as[!s]*,ass,ass[!e]*,asse,asse[!t]*,asset,asset[!s]*,assets[!/]*}"],
+  );
+  // sws globs let `*` cross `/`; translate the one rule that needs it to a regular expression.
+  const [source] = noCache.map(([name]) => name).filter((name) => !name.startsWith("/assets/"));
+  const pattern = new RegExp(
+    `^${source
+      .replaceAll(/[.+?^$()|\\]/gu, "\\$&")
+      .replaceAll("[!", "[^")
+      .replaceAll("*", ".*")
+      .replaceAll("{", "(?:")
+      .replaceAll("}", ")")
+      .replaceAll(",", "|")}$`,
+    "u",
+  );
+  // sws serves `/` through the /index.html rule below, so the leading empty `{,` alternative never matches.
+  for (const path of [
+    "/index.html",
+    "/rom-weaver-service-worker.js",
+    "/docs/faq/",
+    "/a",
+    "/as/x",
+    "/assetsx/y",
+    "/b/assets/x.js",
+  ])
+    assert.match(path, pattern, `${path} must revalidate`);
+  for (const path of ["/assets/index-aBcD1234.js", "/assets/nested/x.wasm", "/assets/"])
+    assert.doesNotMatch(path, pattern, `${path} must keep the asset policy`);
+  const assetTypes = rules.get("/assets/**/*.{wasm,json,bin}") ?? "";
+  assert.match(assetTypes, /^Cache-Control = "no-cache"$/mu);
+  assert.equal(
+    [...sws.matchAll(/^Cache-Control = .*$/gmu)].length,
+    2,
+    "only the two no-cache rules set Cache-Control",
+  );
 });

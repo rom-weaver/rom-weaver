@@ -340,6 +340,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     if (
       path === "packages/rom-weaver-webapp/Dockerfile" ||
       path === "packages/rom-weaver-webapp/sws.toml" ||
+      path === "packages/rom-weaver-webapp/scripts/docker-entrypoint.sh" ||
       path === "docs/hosting/self-hosting.md" ||
       path === "packages/rom-weaver-webapp/scripts/compress-static-assets.mjs"
     ) {

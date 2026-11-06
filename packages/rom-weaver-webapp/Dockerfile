@@ -189,6 +189,8 @@ RUN node /usr/local/bin/compress-static-assets.mjs /dist
 
 # static-web-server serves the generated SPA as a non-root user. HTTPS can be
 # terminated by a reverse proxy or by static-web-server itself.
+# sws.toml relies on static-web-server 2.44.1 or later (no max-age on a 404).
+# Rebuild with `--pull` so a cached older base does not defeat it.
 FROM ghcr.io/static-web-server/static-web-server:2-alpine AS runtime
 USER root
 # The package version follows the Alpine base image; pinning it would make
@@ -202,6 +204,12 @@ COPY packages/rom-weaver-webapp/sws.toml /etc/sws.toml
 # for 0755 and lossy for anything setuid or sticky.
 COPY --chmod=0755 packages/rom-weaver-webapp/scripts/docker-entrypoint.sh /usr/local/bin/rom-weaver-docker-entrypoint
 COPY --from=compressed /dist /srv
+# Fail the build, not the first missing asset in production, when the base image is older than
+# the cache policy needs or the 404 page is not the root-built page the entrypoint re-roots.
+RUN static-web-server --version >/tmp/sws-version \
+    && awk '/^Version:/ { found = 1; split($2, v, "."); if (v[1] < 2 || (v[1] == 2 && (v[2] < 44 || (v[2] == 44 && v[3] < 1)))) { print "static-web-server " $2 " is older than 2.44.1; rebuild with --pull" > "/dev/stderr"; exit 1 } } END { if (!found) { print "could not read the static-web-server version" > "/dev/stderr"; exit 1 } }' /tmp/sws-version \
+    && rm /tmp/sws-version \
+    && { grep -qF '<base href="/" />' /srv/404.html || { echo '/srv/404.html has no <base href="/" /> for the entrypoint to re-root' >&2; exit 1; }; }
 USER sws
 EXPOSE 8080
 # Single `$`, not `$$`. Docker performs no build-time expansion here, so the
