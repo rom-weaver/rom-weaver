@@ -173,6 +173,16 @@ fn extend_fields(
     }
 }
 
+/// Wrapping sum and XOR of the little-endian 16-bit words in `range`.
+fn sum_and_xor(bytes: &[u8], range: std::ops::Range<usize>) -> (u16, u16) {
+    bytes[range]
+        .chunks_exact(2)
+        .map(|word| u16::from_le_bytes([word[0], word[1]]))
+        .fold((0u16, 0u16), |(sum, xor), word| {
+            (sum.wrapping_add(word), xor ^ word)
+        })
+}
+
 fn read_at(bytes: &[u8], offset: i64, storage: Storage) -> Result<i64> {
     let offset =
         usize::try_from(offset).map_err(|_| invalid("save read offset is out of range"))?;

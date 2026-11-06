@@ -652,23 +652,23 @@ mod tests {
             rom_sha1: None,
         };
         assert!(handler.apply(&valid, &identity, &edits, false).is_ok());
-        // The system block, the last covered slot byte (it breaks the plain digest stored
-        // here, and the upstream variant of the flipped range is not the stored digest
-        // either), the digest ends, and slot 4.
-        for offset in [
-            0x100,
-            POR_SYSTEM_LENGTH - 1,
-            POR_SYSTEM_DIGEST,
-            POR_SYSTEM_DIGEST + 19,
-            POR_SLOT_START + POR_SLOT_LENGTH - 1,
-            POR_SLOT_DIGEST + 19,
-            POR_SLOT_START + 3 * POR_SLOT_STRIDE + 7,
+        for (offset, label) in [
+            (0x100, "system block"),
+            (POR_SYSTEM_LENGTH - 1, "last system byte"),
+            (POR_SYSTEM_DIGEST, "system digest start"),
+            (POR_SYSTEM_DIGEST + 19, "system digest end"),
+            (
+                POR_SLOT_START + POR_SLOT_LENGTH - 1,
+                "last covered slot byte",
+            ),
+            (POR_SLOT_DIGEST + 19, "slot digest end"),
+            (POR_SLOT_START + 3 * POR_SLOT_STRIDE + 7, "slot 4"),
         ] {
             let mut bad = valid.clone();
             bad.bytes[offset] ^= 1;
             assert!(
                 handler.apply(&bad, &identity, &edits, false).is_err(),
-                "offset {offset:#x}"
+                "{label} at offset {offset:#x}"
             );
         }
         // The first byte after the covered range is outside the digest.

@@ -13,25 +13,15 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     build(vec![game()], BTreeMap::new(), true)
 }
 
-/// Sum and XOR of the little-endian 16-bit words in `start..end`.
-fn sum_and_xor(bytes: &[u8], start: usize, end: usize) -> (u16, u16) {
-    bytes[start..end]
-        .chunks_exact(2)
-        .map(|word| u16::from_le_bytes([word[0], word[1]]))
-        .fold((0u16, 0u16), |(sum, xor), word| {
-            (sum.wrapping_add(word), xor ^ word)
-        })
-}
-
 fn system_checksum(bytes: &[u8]) -> u16 {
-    let (sum, xor) = sum_and_xor(bytes, 0, SYSTEM_END);
+    let (sum, xor) = sum_and_xor(bytes, 0..SYSTEM_END);
     trace!(sum, xor, "fire emblem system checksum");
     sum.wrapping_add(xor)
 }
 
 fn slot_checksum(bytes: &[u8], slot: usize) -> u32 {
     let start = SLOT_START + slot * SLOT_SIZE;
-    let (sum, xor) = sum_and_xor(bytes, start, start + SLOT_SIZE);
+    let (sum, xor) = sum_and_xor(bytes, start..start + SLOT_SIZE);
     trace!(slot, sum, xor, "fire emblem slot checksum");
     u32::from(sum) | (u32::from(xor) << 16)
 }
