@@ -413,6 +413,7 @@ fn prepare_dldi_patch(
     let patch_end = patch_offset_u64
         .checked_add(patch_len_u64)
         .ok_or_else(|| RomWeaverError::Validation("DLDI patch range overflowed".into()))?;
+    crate::ensure_plausible_output_len("DLDI", patch_end, input_len, patch.len() as u64)?;
     if patch_end > input_len {
         warnings.push(format!(
             "input file ended before the DLDI patch slot; extending output from {} to {} byte(s)",
