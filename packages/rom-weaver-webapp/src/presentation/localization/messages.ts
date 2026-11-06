@@ -1921,6 +1921,22 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message:
       "PPF patches are common for PlayStation games. Check the restored copy against a known checksum before you patch it again.",
   }),
+  "ui.about.playlistTitle": msg({ id: "ui.about.playlistTitle", message: "About M3U playlists" }),
+  "ui.about.playlistBody1": msg({
+    id: "ui.about.playlistBody1",
+    message:
+      "An .m3u playlist lists the discs of a multi-disc game in order. Emulators such as RetroArch read it so you can change discs.",
+  }),
+  "ui.about.playlistBody2": msg({
+    id: "ui.about.playlistBody2",
+    message:
+      "Add the discs of one game. They are ordered by the number in their names, such as Disc 1 or .disc02, and track files such as .bin are left out.",
+  }),
+  "ui.about.playlistBody3": msg({
+    id: "ui.about.playlistBody3",
+    message:
+      "Download the playlist. In Chrome or Edge on a computer you can also save it into the game's folder and rename the discs to match. Nothing is uploaded.",
+  }),
   "ui.about.testTitle": msg({ id: "ui.about.testTitle", message: "About the online ROM tester" }),
   "ui.about.testBody1": msg({
     id: "ui.about.testBody1",
