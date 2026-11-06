@@ -21,6 +21,75 @@ fn build(
         .collect()
 }
 
+// One record group: the first valid candidate is read and receives the edit.
+fn single_file_layout(logical_length: usize, candidates: Vec<layout::Candidate>) -> layout::Layout {
+    layout::Layout {
+        groups: vec![layout::Group {
+            id: "file".into(),
+            logical_offset: 0,
+            logical_length,
+            copies: layout::Copies::Fixed { candidates },
+            selection: layout::Selection::FirstValid,
+            write: layout::WritePolicy::Selected,
+            empty: Vec::new(),
+            empty_if_no_signature: false,
+        }],
+    }
+}
+
+// A fixed-size record at `base` is a candidate when it is the first record `owns` accepts and
+// `valid` accepts its bytes (checksum or CRC).
+fn tagged_record_candidate(
+    base: usize,
+    length: usize,
+    record: usize,
+    owns: impl Fn(&[u8], usize) -> bool + Send + Sync + 'static,
+    valid: impl Fn(&[u8]) -> bool + Send + Sync + 'static,
+) -> layout::Candidate {
+    layout::Candidate {
+        spans: vec![layout::Span {
+            logical_offset: 0,
+            physical_offset: base,
+            length,
+        }],
+        predicates: vec![rules::Condition::new(move |bytes| {
+            Ok(owns(bytes, record) && !(0..record).any(|prior| owns(bytes, prior)) && valid(bytes))
+        })],
+        ..Default::default()
+    }
+}
+
+#[cfg(test)]
+fn test_handler(
+    schemas: fn() -> Vec<SchemaSaveHandler>,
+    index: usize,
+) -> (SchemaSaveHandler, SaveGameIdentity) {
+    let handler = schemas().remove(index);
+    let identity = handler.definitions().remove(0).identity;
+    (handler, identity)
+}
+
+// Applies named edits to the handler at `index`; an unchanged save returns its input bytes.
+#[cfg(test)]
+fn test_run(
+    schemas: fn() -> Vec<SchemaSaveHandler>,
+    index: usize,
+    input: &SaveDetectionInput,
+    edits: &[(&str, SaveValue)],
+) -> Result<Vec<u8>> {
+    let (handler, identity) = test_handler(schemas, index);
+    let edits: Vec<_> = edits
+        .iter()
+        .map(|(field, value)| SaveEdit {
+            field: (*field).into(),
+            value: value.clone(),
+        })
+        .collect();
+    handler
+        .apply(input, &identity, &edits, false)
+        .map(|result| result.bytes.unwrap_or_else(|| input.bytes.clone()))
+}
+
 // Single-byte store; `mask` limits the bits the value replaces.
 fn byte_store(
     offset: usize,
@@ -267,6 +336,7 @@ fn read_at(bytes: &[u8], offset: i64, storage: Storage) -> Result<i64> {
 pub(in crate::save) mod actraiser;
 pub(in crate::save) mod advance_wars;
 pub(in crate::save) mod banjo_kazooie;
+pub(in crate::save) mod banjo_tooie;
 pub(in crate::save) mod bomberman_64;
 pub(in crate::save) mod builtin_pokemon_gen1;
 pub(in crate::save) mod builtin_pokemon_gen2;
@@ -283,6 +353,7 @@ pub(in crate::save) mod castlevania_harmony_of_dissonance;
 pub(in crate::save) mod chrono_trigger;
 pub(in crate::save) mod ctr_crash_team_racing;
 pub(in crate::save) mod diddy_kong_racing;
+pub(in crate::save) mod donkey_kong_64;
 pub(in crate::save) mod donkey_kong_country;
 pub(in crate::save) mod donkey_kong_country_2_diddy_s_kong_quest;
 pub(in crate::save) mod donkey_kong_country_3_dixie_kong_s_double_trouble;
@@ -295,6 +366,7 @@ pub(in crate::save) mod final_fantasy_vi;
 pub(in crate::save) mod game_and_watch_gallery_3;
 pub(in crate::save) mod game_boy_camera;
 pub(in crate::save) mod golden_sun;
+pub(in crate::save) mod goldeneye_007;
 pub(in crate::save) mod gran_turismo;
 pub(in crate::save) mod kingdom_hearts_chain_of_memories;
 pub(in crate::save) mod kirbys_adventure;
@@ -310,6 +382,7 @@ pub(in crate::save) mod paper_mario;
 pub(in crate::save) mod playstation_card;
 pub(in crate::save) mod pokemon_generation_i;
 pub(in crate::save) mod pokemon_generation_ii;
+pub(in crate::save) mod pokemon_snap;
 pub(in crate::save) mod pokemon_trading_card_game;
 #[cfg(test)]
 mod ps1_action_support;
@@ -320,6 +393,7 @@ pub(in crate::save) mod ps1_kagero_deception_ii;
 pub(in crate::save) mod ps1_resident_evil;
 pub(in crate::save) mod ps1_silent_hill;
 pub(in crate::save) mod ps1_single_block;
+pub(in crate::save) mod rare_eeprom;
 pub(in crate::save) mod rondo_of_blood;
 pub(in crate::save) mod secret_of_mana;
 pub(in crate::save) mod shining_force;
@@ -433,6 +507,10 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(gran_turismo::schemas());
             games.extend(tomb_raider_ii_starring_lara_croft::schemas());
             games.extend(tony_hawk_s_skateboarding::schemas());
+            games.extend(goldeneye_007::schemas());
+            games.extend(banjo_tooie::schemas());
+            games.extend(donkey_kong_64::schemas());
+            games.extend(pokemon_snap::schemas());
             games.extend(ps1_final_fantasy_ix::schemas());
             games.extend(ps1_final_fantasy_tactics::schemas());
             games.extend(ps1_kagero_deception_ii::schemas());

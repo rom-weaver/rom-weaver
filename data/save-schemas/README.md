@@ -2,7 +2,7 @@
 
 The application defines its save layouts and editing rules as typed Rust under [`crates/rom-weaver-core/src/save/schema/catalog/`](../../crates/rom-weaver-core/src/save/schema/catalog). This directory keeps the source attribution and license for those definitions. It does not contain runtime schema packs.
 
-The default registry includes 1199 profiles: the original seven game-family definitions and 1177 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
+The default registry includes 1211 profiles: the original seven game-family definitions and 1189 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
 
 | Original catalog module | Games |
 | --- | --- |
@@ -68,6 +68,8 @@ Fresh creation uses a verified initializer. Template creation starts from an exi
 
 The A Link to the Past profiles require a valid primary file. They accept a stale backup and replace it from the repaired primary after an edit. They do not recover a damaged primary from its backup. The Super Mario World profiles require matching primary and backup files.
 
+The GoldenEye 007 profiles accept 512-byte EEPROM saves and copies padded to 2 KiB. Edits repair only the selected file's live record; other records, the header, and trailing padding remain unchanged. They require a valid checksum on that record.
+
 The Super Mario 64 profiles accept 512-byte EEPROM saves and copies padded to 2 KiB. Edits repair both copies of the selected Mario file and both options records. Other Mario files and trailing padding remain unchanged. These profiles require valid primary file and options checksums; they do not recover a damaged primary from its backup.
 
 Integer and packed-decimal fields use the full stored range unless the source proves a narrower storage rule. A game can reject combinations that fit the storage. Raw numeric options can include states that normal play does not produce.
@@ -108,6 +110,10 @@ These profiles require explicit game selection and a game-made template. They ex
 | Paper Mario | 4 | Canonical 128 KiB N64 FlashRAM | Coins, Star Pieces, and Star Points; newest occupied record for each file |
 | The Legend of Zelda: Ocarina of Time | 3 | Canonical 32 KiB N64 SRAM | Death count and rupees in the basic wallet range, 0–99; primary/backup recovery and paired writes |
 | Banjo-Kazooie | 3 | Canonical 512 B N64 EEPROM | Eggs, red feathers, and gold feathers; fixed file profiles |
+| GoldenEye 007 | 4 | Canonical 512 B N64 EEPROM, or padded to 2 KiB | Mission times with their cleared markers, cheats, and options; fixed file profiles |
+| Banjo-Tooie | 3 | Canonical 2 KiB N64 EEPROM | Egg, feather, honeycomb, glowbo, and other inventory counters; fixed file profiles |
+| Donkey Kong 64 | 3 | Canonical 2 KiB N64 EEPROM | Health, characters, basic moves, coins, banana fairies, battle crowns, boss keys, and locks; fixed file profiles |
+| Pokémon Snap | 2 | Canonical 128 KiB N64 FlashRAM | Challenge scores, furthest unlocked course with its mirrored word, and control options; Europe/USA/Australia and Japan profiles |
 | Tekken | 45 | Single-block save in a raw 128 KiB PS1 card | Difficulty and character unlocks |
 | Rayman | 45 | Single-block save in a raw 128 KiB PS1 card | Lives and Tings |
 | Castlevania: Symphony of the Night | 60 | Single-block save in a raw 128 KiB PS1 card | Gold with its preview and experience |
@@ -125,7 +131,7 @@ These profiles require explicit game selection and a game-made template. They ex
 | Silent Hill | 45 | Single-block save in a raw 128 KiB PS1 card | Health, game clear count, continues, and saves in each populated slot with its preview; xor checksums |
 | Castlevania: Rondo of Blood | 1 | Raw 2 KiB PC Engine BRAM, Japan; first record must be DRACULA X | Money and death count in occupied slots |
 
-The additional save editors table lists 38 titles and 1059 profiles. The preceding catalog table describes the original 118 additional profiles. Each PS1 profile selects an exact product code, region, and card block from 1 through 15. It validates allocation metadata and supports only a complete single-block game save. Gran Turismo is the only multi-block profile and accepts only five contiguous, ascending blocks; other multi-block saves, standalone save exports, and PC ports remain unsupported. DexDrive and Virtual Game Station card wrappers are preserved by the existing container layer.
+The additional save editors table lists 42 titles and 1071 profiles. The preceding catalog table describes the original 118 additional profiles. Each PS1 profile selects an exact product code, region, and card block from 1 through 15. It validates allocation metadata and supports only a complete single-block game save. Gran Turismo is the only multi-block profile and accepts only five contiguous, ascending blocks; other multi-block saves, standalone save exports, and PC ports remain unsupported. DexDrive and Virtual Game Station card wrappers are preserved by the existing container layer.
 
 The PlayStation role-playing batch adds five titles and 375 profiles. Chrono Cross is not included: its slot data is stored in a bespoke bit-packed compressed stream that cannot be rewritten without a verified codec. The Silent Hill profiles omit the options section, which the game copies into every Silent Hill block. They expose only populated slots, in the order the game lists them. Resident Evil excludes the Windows port.
 
@@ -209,6 +215,15 @@ The Genesis definitions accept only their listed odd-byte SRAM dump sizes. They 
 | Soleil (Crusader of Centy) | 512 B, 4,608 B, 8,704 B, 12,800 B, or 64 KiB | Current and maximum health, Malins, two equipped animals, and location in each present slot |
 
 The Genesis field offsets derive from [Game Tools Collection commit `8fb075e7c130da9e72c3c46ec8efa447a252ad88`](https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88). The Sonic 3 checksum and block layout also follow [jcfields/sonic3-save-editor `save format.md`](https://gitlab.com/jcfields/sonic3-save-editor/-/blob/8b740b670ff8e46f7c35ff8fac98169efccfe3b9/save%20format.md).
+
+The GoldenEye 007, Banjo-Tooie, Donkey Kong 64, and Pokémon Snap editors use [Game Tools Collection revision `15d71340c3f1717745139c2e0774510cd37dfbdd`](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd). Their module comments link the exact `saveEditor` directories:
+
+- [GoldenEye 007](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/goldeneye-007/saveEditor): five 0x60-byte EEPROM records; a 64-bit Rare checksum over bytes 8 through 0x5f. As the game's [`fileValidateSaves`](https://github.com/n64decomp/007/blob/c4356466796c697dfd298010b9bed261f9ed8c6a/src/game/file2.c#L478-L594) does, the editor skips records with a bad checksum and keeps the first live copy of the file unless a later copy holds the next two-bit save generation.
+- [Banjo-Tooie](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/banjo-tooie/saveEditor): four 0x1c0-byte records marked `KHJC`; the same Rare checksum over bytes 0 through 0x1b7. Only counters stored before offset 0xa6 are exposed because later fields shift by version.
+- [Donkey Kong 64](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/donkey-kong-64/saveEditor): four 0x1ac-byte records; CRC-32 over bytes 0 through 0x1a7. As the game's loader in [`saveFile.c`](https://gitlab.com/dk64_decomp/dk64/-/blob/589fef8f140f6d4dfa001ecd7f9c014188a38872/src/global_asm/saveFile.c#L590-697) does, the editor selects the in-use record tagged for the file with a valid CRC and the highest 24-bit save count, the later record on a tie. Counters and per-level flags in the word-swapped bit stream are not exposed.
+- [Pokémon Snap](https://github.com/RyudoSynbios/game-tools-collection/tree/15d71340c3f1717745139c2e0774510cd37dfbdd/src/lib/templates/pokemon-snap/saveEditor): a four-word MD4 state over big-endian words at the start of the FlashRAM; the Japan profile uses a shorter hashed range and four-byte-earlier option offsets. Photos, names, and item and menu unlocks are not exposed.
+
+The Rare checksum follows [bryc/rare-n64-chksm](https://github.com/bryc/rare-n64-chksm). Blast Corps (Controller Pak notes), and The Legend of Zelda: Majora's Mask (region-dependent slot, owl-save, and backup layout) from the same revision are not implemented.
 
 ## Additional handheld and Nintendo 64 profiles
 

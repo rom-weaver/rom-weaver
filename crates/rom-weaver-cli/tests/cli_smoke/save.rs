@@ -76,6 +76,10 @@ fn save_catalog_lists_compiled_games_and_generation_support() {
         "final-fantasy-viii-usa-block-1",
         "advance-wars",
         "banjo-kazooie-canonical-eeprom-file-1",
+        "banjo-tooie-canonical-eeprom-file-3",
+        "donkey-kong-64-canonical-eeprom-file-2",
+        "goldeneye-007-canonical-eeprom-file-4",
+        "pokemon-snap-canonical-flashram-japan",
         "bomberman-64-canonical-eeprom-slot-1",
         "castlevania-harmony-of-dissonance",
         "game-boy-camera",
@@ -361,6 +365,54 @@ fn save_yoshi_edits_preserve_packed_options_and_repair_eeprom_checksum() {
             output.path().to_str().unwrap(),
             "--game",
             "yoshis-story-canonical-eeprom-usa",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        report["details"]["save_editor"]["document"]["integrity"]["state"],
+        "valid"
+    );
+}
+
+#[test]
+fn save_goldeneye_edit_rewrites_the_record_checksum() {
+    // Checksum words from a Python port of the upstream Rare hash over bytes 0x28..0x80.
+    fn set_checksum(bytes: &mut [u8], words: [u32; 2]) {
+        bytes[0x20..0x24].copy_from_slice(&words[0].to_be_bytes());
+        bytes[0x24..0x28].copy_from_slice(&words[1].to_be_bytes());
+    }
+    let temp = setup_temp_dir();
+    let source = temp.child("goldeneye.eep");
+    let output = temp.child("goldeneye-edited.eep");
+    let mut bytes = vec![0xa5; 512];
+    bytes[0x28] = 0;
+    set_checksum(&mut bytes, [0x6cc7_086e, 0x185c_1885]);
+    fs::write(source.path(), &bytes).unwrap();
+    let args = [
+        "save",
+        "set",
+        source.path().to_str().unwrap(),
+        "options.music=18",
+        "--game",
+        "goldeneye-007-canonical-eeprom-file-1",
+        "--output",
+        output.path().to_str().unwrap(),
+        "--json",
+    ];
+    run_single_json_event(&args, 0);
+    let mut expected = bytes.clone();
+    expected[0x2a] = 18;
+    set_checksum(&mut expected, [0x5e7a_f2ee, 0x59e4_e83d]);
+    assert_eq!(fs::read(output.path()).unwrap(), expected);
+    assert_eq!(fs::read(source.path()).unwrap(), bytes);
+    let report = run_single_json_event(
+        &[
+            "save",
+            "inspect",
+            output.path().to_str().unwrap(),
+            "--game",
+            "goldeneye-007-canonical-eeprom-file-1",
             "--json",
         ],
         0,
