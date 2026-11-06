@@ -788,36 +788,38 @@ const sendEarlyHints = (res, pagesHeaders, isDocument) => {
   res.writeEarlyHints({ link: preloadLinks });
 };
 
-// Route documents carry <base href="../">, which resolves only from the trailing-slash URL, so redirect there as
-// static-web-server does. A relative target keeps any prefix a proxy stripped. The answer is kept in the asset cache
-// under its own key, because `/route` and `/route/` resolve to the same file path.
-const redirectBareDirectory = (cache, filePath, pathname, req, res, securityOptions, next) => {
+// Cloudflare Pages answers a path without a trailing slash from the file itself, then from `<path>.html` with a 200,
+// and only then with a 308 to `<path>/` when `<path>/index.html` exists. The route documents rely on that order:
+// `<route>.html` and `<route>/index.html` carry different <base> tags, so each resolves only at its own URL.
+// https://github.com/cloudflare/workers-sdk/blob/main/packages/pages-shared/asset-server/handler.ts
+const resolveBarePath = (filePath, callback) => {
+  const isFile = (candidate, next) => fs.stat(candidate, (error, stats) => next(!error && stats.isFile()));
+  isFile(filePath, (fileExists) => {
+    if (fileExists) return callback({ filePath });
+    isFile(`${filePath}.html`, (htmlExists) => {
+      if (htmlExists) return callback({ filePath: `${filePath}.html` });
+      isFile(path.join(filePath, "index.html"), (indexExists) =>
+        callback(indexExists ? { redirect: true } : { filePath }),
+      );
+    });
+  });
+};
+
+// `/route` and `/route/` resolve to the same file path, so the bare answer is kept under its own key.
+const resolvePreviewPath = (cache, filePath, pathname, callback) => {
   if (pathname.endsWith("/")) {
-    next();
+    callback({ filePath });
     return;
   }
-  const redirectToSlashForm = () => {
-    const { search } = new URL(req.url, "https://localhost");
-    send(
-      res,
-      308,
-      { Location: `${path.posix.basename(pathname)}/${search}`, "Cache-Control": "no-store" },
-      null,
-      securityOptions,
-    );
-  };
-  const directoryKey = `directory:${filePath}`;
-  const isDirectory = cache.get(directoryKey);
-  if (isDirectory !== undefined) {
-    if (isDirectory) redirectToSlashForm();
-    else next();
+  const cacheKey = `bare:${filePath}`;
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    callback(cached);
     return;
   }
-  fs.stat(filePath, (statError, stats) => {
-    const found = !statError && stats.isDirectory();
-    cache.set(directoryKey, found);
-    if (found) redirectToSlashForm();
-    else next();
+  resolveBarePath(filePath, (resolution) => {
+    cache.set(cacheKey, resolution);
+    callback(resolution);
   });
 };
 
@@ -861,14 +863,27 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
     return;
   }
 
-  redirectBareDirectory(cache, filePath, pathname, req, res, securityOptions, () => {
+  resolvePreviewPath(cache, filePath, pathname, (resolution) => {
+    if (resolution.redirect) {
+      // A relative target keeps any prefix a proxy stripped.
+      const { search } = new URL(req.url, "https://localhost");
+      send(
+        res,
+        308,
+        { Location: `${path.posix.basename(pathname)}/${search}`, "Cache-Control": "no-store" },
+        null,
+        securityOptions,
+      );
+      return;
+    }
+    const assetPath = resolution.filePath;
     // Cloudflare Pages answers a missed navigation with 404.html at the URL that
     // missed, so the preview does the same: that is the only way to exercise the
     // page at a nested path, where its <base> tag decides every link.
     const fallbackPath = path.join(distDir, "404.html");
     const acceptHeader = req.headers.accept || "";
     const allowFallback = acceptHeader.includes("text/html") || !path.extname(filePath);
-    readPreviewAsset(cache, filePath, fallbackPath, allowFallback, (readError, asset) => {
+    readPreviewAsset(cache, assetPath, fallbackPath, allowFallback, (readError, asset) => {
       if (readError) {
         send(res, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not Found", securityOptions);
         return;
@@ -885,7 +900,7 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
       }
       sendEarlyHints(res, pagesHeaders, path.extname(asset.resolvedPath) === ".html");
       const isDocument = path.extname(asset.resolvedPath) === ".html";
-      const status = asset.resolvedPath === fallbackPath && filePath !== fallbackPath ? 404 : 200;
+      const status = asset.resolvedPath === fallbackPath && assetPath !== fallbackPath ? 404 : 200;
       send(
         res,
         status,

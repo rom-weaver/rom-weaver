@@ -11,6 +11,7 @@ const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_DIR = path.dirname(SCRIPTS_DIR);
 const NOT_FOUND_PAGE = "<!doctype html><title>fixture not found</title>";
 const ROUTE_PAGE = "<!doctype html><title>fixture route</title>";
+const FLAT_ROUTE_PAGE = "<!doctype html><title>fixture flat route</title>";
 
 let workDir;
 let server;
@@ -36,6 +37,7 @@ const stageFixturePackage = () => {
   fs.writeFileSync(path.join(packageDir, "dist", "404.html"), NOT_FOUND_PAGE);
   fs.mkdirSync(path.join(packageDir, "dist", "route"));
   fs.writeFileSync(path.join(packageDir, "dist", "route", "index.html"), ROUTE_PAGE);
+  fs.writeFileSync(path.join(packageDir, "dist", "route.html"), FLAT_ROUTE_PAGE);
   fs.mkdirSync(path.join(packageDir, "dist", "docs", "guide"), { recursive: true });
   fs.writeFileSync(path.join(packageDir, "dist", "docs", "guide", "index.html"), ROUTE_PAGE);
   return packageDir;
@@ -89,20 +91,22 @@ test("preview answers a missed navigation with the 404 page and no-store", async
   assert.equal(response.body, NOT_FOUND_PAGE);
 });
 
-test("preview redirects a bare directory to its trailing-slash form with a relative target", async () => {
+test("preview answers a bare route from its .html file, as Pages does, and keeps the query", async () => {
   const response = await get("/route?a=1", "text/html");
+  assert.equal(response.status, 200);
+  assert.equal(response.body, FLAT_ROUTE_PAGE);
+});
+
+test("preview redirects a bare directory with no .html file to its last segment, keeping the query", async () => {
+  const response = await get("/docs/guide?a=1", "text/html");
   assert.equal(response.status, 308);
-  assert.equal(response.headers.location, "route/?a=1");
+  assert.equal(response.headers.location, "guide/?a=1");
   assert.equal(response.headers["cache-control"], "no-store");
 });
 
-test("preview redirects a nested bare directory to its last segment only", async () => {
-  const response = await get("/docs/guide", "text/html");
-  assert.equal(response.status, 308);
-  assert.equal(response.headers.location, "guide/");
-});
-
-test("preview still redirects a bare directory after its trailing-slash form was served", async () => {
+test("preview answers the bare and slash forms of a path the same way whichever is requested first", async () => {
+  assert.equal((await get("/route/", "text/html")).body, ROUTE_PAGE);
+  assert.equal((await get("/route", "text/html")).body, FLAT_ROUTE_PAGE);
   assert.equal((await get("/docs/guide/", "text/html")).status, 200);
   const response = await get("/docs/guide", "text/html");
   assert.equal(response.status, 308);
