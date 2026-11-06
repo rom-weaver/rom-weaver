@@ -431,10 +431,15 @@ impl ChdContainerHandler {
     }
 
     fn chd_write_error(output: &Path, error: crate::chd_rs::Error) -> RomWeaverError {
-        RomWeaverError::Validation(format!(
-            "failed to write CHD `{}`: {error}",
-            output.display()
-        ))
+        let context = format!("failed to write CHD `{}`", output.display());
+        match error {
+            // Rebuilt as an i/o error so the failure keeps its `io.storage_full` code.
+            crate::chd_rs::Error::StorageFull => {
+                RomWeaverError::from(std::io::Error::from(std::io::ErrorKind::StorageFull))
+                    .with_context(context, None)
+            }
+            error => RomWeaverError::Validation(format!("{context}: {error}")),
+        }
     }
 }
 
