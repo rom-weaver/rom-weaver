@@ -131,7 +131,7 @@ fn slot_fields(base: usize) -> Vec<FieldDefinition> {
     ];
     for (index, (id, label, offset)) in costumes.into_iter().enumerate() {
         let source = base + offset;
-        // Owning a costume also sets its "bought" bit; bit `index` of the two bytes at +0x31.
+        // Owning a costume also sets its "bought" bit.
         fields.push(
             bit_field(&format!("costume.{id}"), label, source, 0).behavior(field::FieldBehavior {
                 on_edit: vec![copy_bit(
@@ -148,7 +148,7 @@ fn slot_fields(base: usize) -> Vec<FieldDefinition> {
         let prefix = format!("player_{}", player + 1);
         let name = format!("Player {}", player + 1);
         fields.extend([
-            // The editor shows lives as the stored byte minus one, with a displayed range of 2 to 99.
+            // Game Tools Collection shows lives as the stored byte minus one (2 to 99).
             catalog_field(
                 &format!("{prefix}.lives"),
                 &format!("{name} lives (stored value)"),
