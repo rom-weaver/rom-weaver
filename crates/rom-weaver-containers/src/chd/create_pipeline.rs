@@ -387,14 +387,10 @@ impl ChdContainerHandler {
             .read(true)
             .truncate(true)
             .open(output)
-            .map_err(|error| Self::create_output_error(output, error))?;
+            .map_err(|error| {
+                RomWeaverError::io_path(rom_weaver_core::IoOp::Create, output, error)
+            })?;
         Ok(BufWriter::with_capacity(8 * 1024 * 1024, file))
-    }
-
-    /// Kept as an i/o error so a disk with no free inodes still reports `io.storage_full`.
-    fn create_output_error(output: &Path, error: std::io::Error) -> RomWeaverError {
-        RomWeaverError::from(error)
-            .with_context(format!("failed to create `{}`", output.display()), None)
     }
 
     /// Adds the media metadata, which goes before the hunks like chdman.
@@ -433,8 +429,7 @@ impl ChdContainerHandler {
 
     fn chd_write_error(output: &Path, error: crate::chd_rs::Error) -> RomWeaverError {
         let context = format!("failed to write CHD `{}`", output.display());
-        // Rebuilt as an i/o error so the failure keeps its `io.storage_full` or
-        // `resource.out_of_memory` code.
+        // Rebuilt as an i/o error so the failure keeps its i/o code.
         let kind = match error {
             crate::chd_rs::Error::StorageFull => std::io::ErrorKind::StorageFull,
             crate::chd_rs::Error::OutOfMemory => std::io::ErrorKind::OutOfMemory,
