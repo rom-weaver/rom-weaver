@@ -20,6 +20,9 @@ compression-static = true
 # sws compresses every response from scratch.
 compression = true
 
+# Do not set page404 here: a TOML value overrides the --page404 the Docker entrypoint passes
+# for BASE_PATH, so the 404 page would lose its sub-path re-rooting.
+#
 # No catch-all page fallback. Every route is prerendered to a file, so a path with
 # no file is a real 404: sws answers it with /srv/404.html (its default page404).
 # A fallback to index.html would answer a missing /assets/* file with 200 HTML,

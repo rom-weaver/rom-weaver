@@ -19,23 +19,28 @@ require_tls_files() {
 base_path=${BASE_PATH:-/}
 rerooted_404_dir=/tmp/rom-weaver-404
 
+# A prefix is spelled /rom-weaver, rom-weaver/ or /rom-weaver/ depending on the proxy, so accept
+# all of them and settle on the leading and trailing slash the rewrite below needs.
 case $base_path in
-  /) ;;
-  /*/) ;;
-  *)
-    echo "BASE_PATH must start and end with /, for example /rom-weaver/" >&2
-    exit 64
-    ;;
+  /*) ;;
+  *) base_path=/$base_path ;;
+esac
+case $base_path in
+  */) ;;
+  *) base_path=$base_path/ ;;
 esac
 case $base_path in
   *[!A-Za-z0-9._~/-]* | *//* | */./* | */../*)
-    echo "BASE_PATH may only contain letters, digits, . _ ~ - and single / separators" >&2
+    echo "BASE_PATH=${BASE_PATH:-} is not a path prefix such as /rom-weaver/ (letters, digits, . _ ~ - and single / separators)" >&2
     exit 64
     ;;
 esac
 
 if [ "$base_path" != "/" ]; then
-  mkdir -p "$rerooted_404_dir"
+  if ! mkdir -p "$rerooted_404_dir" 2>/dev/null; then
+    echo "BASE_PATH needs a writable $rerooted_404_dir; with --read-only, add --tmpfs /tmp" >&2
+    exit 73
+  fi
   sed -e "s#href=\"/\([^/\"]\)#href=\"${base_path}\1#g" -e "s#href=\"/\"#href=\"${base_path}\"#g" \
     /srv/404.html >"$rerooted_404_dir/404.html"
   if ! grep -qF "<base href=\"$base_path\" />" "$rerooted_404_dir/404.html"; then
@@ -43,6 +48,7 @@ if [ "$base_path" != "/" ]; then
     exit 70
   fi
   set -- "$@" --page404 "$rerooted_404_dir/404.html"
+  echo "BASE_PATH=$base_path: the 404 page keeps its links inside $base_path; the proxy must strip that prefix" >&2
 fi
 
 if [ -n "${HTTPS_PORT:-}" ]; then

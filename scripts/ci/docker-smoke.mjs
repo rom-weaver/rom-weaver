@@ -480,6 +480,8 @@ async function checkCachePolicy(origin, prefix) {
   const expected = [
     ["/", "no-cache"],
     ["/docs/faq/", "no-cache"],
+    ["/apply-rom-patches/", "no-cache"],
+    ["/.well-known/api-catalog", "no-cache"],
     ["/manifest.json", "no-cache"],
     ["/rom-weaver-service-worker.js", "no-cache"],
     [`/${asset.path}`, "max-age=31536000"],
@@ -507,7 +509,16 @@ async function checkNotFound(origin, prefix) {
     assert.equal(missing.status, 404, `${prefix}${path}`);
     assert.doesNotMatch(missing.cache, /immutable|max-age=[1-9]\d{4,}/, `${prefix}${path} cache`);
   }
-  for (const path of ["/no-such-route/", "/no-such-route", "/docs/no-such-doc/", "/missing.html"]) {
+  // The header rule for everything outside /assets/ is a glob: names that start like "assets" must not escape it.
+  for (const path of [
+    "/no-such-route/",
+    "/no-such-route",
+    "/docs/no-such-doc/",
+    "/missing.html",
+    "/a",
+    "/asset/x",
+    "/assetsx/y",
+  ]) {
     const missing = await get(path);
     assert.equal(missing.status, 404, `${prefix}${path}`);
     assert.match(missing.response.headers.get("content-type") ?? "", /^text\/html/, path);
@@ -531,16 +542,21 @@ async function checkWebapp() {
   const web = await start("web", values.image);
   // The documented Nginx subpath deployment sets BASE_PATH on the image it proxies to.
   const sub = await start("sub", values.image, ["--env", "BASE_PATH=/rom-weaver/"]);
+  // Proxies spell the prefix without the outer slashes; the container accepts that too.
+  const bare = await start("bare", values.image, ["--env", "BASE_PATH=rom-weaver"]);
   const tls = await start("tls", values.image, ["--env", "HTTPS_PORT=8443"]);
   // Started together so their health waits overlap instead of adding up.
   const mounted = await startMountedCertificates();
   await Promise.all(
-    [web, sub, tls, mounted.pair, mounted.named].map(({ container }) => healthy(container)),
+    [web, sub, bare, tls, mounted.pair, mounted.named].map(({ container }) => healthy(container)),
   );
+  const barePage = await fetch(`${bare.origin}/no-such-route/`);
+  assert.equal(barePage.status, 404);
+  assert.ok((await barePage.text()).includes('<base href="/rom-weaver/" />'), "BASE_PATH=rom-weaver is normalized");
   assert.notEqual(docker("exec", web.container, "id", "-u"), "0");
   // sws ignores unknown sws.toml keys with only this warning, so a misspelled
   // option silently falls back to its default.
-  for (const container of [web.container, sub.container, tls.container]) {
+  for (const container of [web.container, sub.container, bare.container, tls.container]) {
     const logs = spawnSync("docker", ["logs", container], { encoding: "utf8" });
     // Unreadable logs (a log driver without read support) would pass the check below.
     assert.equal(logs.status, 0, `docker logs ${container} failed: ${logs.stderr}`);
@@ -568,9 +584,13 @@ async function checkWebapp() {
       (error) => error.status === code,
     );
   }
+  // A read-only root filesystem leaves the re-rooted 404 page nowhere to go.
+  assert.throws(
+    () => docker("run", "--rm", "--read-only", "--env", "BASE_PATH=/rom-weaver/", values.image),
+    (error) => error.status === 73 && /--tmpfs \/tmp/.test(String(error.stderr ?? error.message)),
+    "BASE_PATH on a read-only root",
+  );
   for (const value of [
-    "rom-weaver/",
-    "/rom-weaver",
     "//",
     "/a//b/",
     "/a/../b/",
