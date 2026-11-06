@@ -3,6 +3,9 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { resolveAssetUrl } from "../../src/public/react/asset-url.ts";
 import { readGuidedSampleFromSearch, resolveGuidedSampleHref } from "../../src/public/react/guided-sample-start.ts";
 import { matchAppRoute, readAppBaseUrl } from "../../src/webapp/app-routes.ts";
+import { DOC_ROUTES } from "../../src/webapp/docs-pages.mjs";
+import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
+import { LEGACY_WORKFLOW_ROUTES } from "../../scripts/vite-config/root-static-assets.mjs";
 
 const appBase = vi.hoisted(() => ({ path: "/" }));
 vi.mock("../../src/webapp/app-base.ts", () => ({
@@ -36,12 +39,36 @@ describe("matchAppRoute", () => {
     expect(matchAppRoute(`${base}constructor`, base)).toBeNull();
   });
 
-  test("keeps the unsupported HTML suffix of ppf-undo and tools unresolved", () => {
-    expect(matchAppRoute("/ppf-undo", "/")).toBe("ppf-undo");
-    expect(matchAppRoute("/tools", "/")).toBe("ppf-undo");
-    expect(matchAppRoute("/ppf-undo.html", "/")).toBeNull();
-    expect(matchAppRoute("/tools.html", "/")).toBeNull();
-    expect(matchAppRoute("/rom-weaver/tools.html", "/rom-weaver/")).toBeNull();
+  test.each(["/", "/rom-weaver/"])(
+    "resolves the PPF undo page and its legacy slug with and without .html below %s",
+    (base) => {
+      for (const slug of ["ppf-undo", "tools"]) {
+        for (const suffix of ["", "/", ".html", "/index.html"]) {
+          expect(matchAppRoute(`${base}${slug}${suffix}`, base)).toBe("ppf-undo");
+        }
+      }
+    },
+  );
+
+  // The build writes `<slug>.html` and `<slug>/index.html` for each of these; a static host serves them with
+  // 200, so the client has to resolve every one or it paints not-found over a real page.
+  test("resolves every route document the build writes", () => {
+    // The home page's empty slug is `index.html`, which the first test covers.
+    const slugs = [
+      ...Object.values(WORKFLOW_SEO_ROUTES).map(({ slug }) => slug),
+      ...Object.values(WORKFLOW_ENTRY_ROUTES).map(({ slug }) => slug),
+      ...Object.keys(LEGACY_WORKFLOW_ROUTES),
+      ...DOC_ROUTES.map(({ slug }) => slug),
+      "rom-save-editor",
+      "tools",
+      "whats-new",
+    ].filter(Boolean);
+    const unresolved = ["/", "/rom-weaver/"].flatMap((base) =>
+      slugs.flatMap((slug) =>
+        [`${base}${slug}.html`, `${base}${slug}/index.html`].filter((path) => matchAppRoute(path, base) === null),
+      ),
+    );
+    expect(unresolved).toEqual([]);
   });
 
   test("resolves a path whose leading slashes a host merged", () => {

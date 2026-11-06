@@ -180,8 +180,8 @@ describe("the landing route at the app base", () => {
   it.each(["weave", "weave-patches", "bundle", "bundle-patches"])("preserves the HTML alias for %s", (slug) => {
     expect(matchAppRoute(`/roms/${slug}.html`)).toBe("weave");
   });
-  it.each(["ppf-undo", "tools"])("keeps the unsupported HTML suffix for %s unresolved", (slug) => {
-    expect(matchAppRoute(`/roms/${slug}.html`)).toBeNull();
+  it.each(["ppf-undo", "tools"])("resolves the HTML alias for %s to the PPF undo page", (slug) => {
+    expect(matchAppRoute(`/roms/${slug}.html`)).toBe("ppf-undo");
   });
 
   it("resolves a bare app base to the landing page, and every workflow slug to its own view", () => {
