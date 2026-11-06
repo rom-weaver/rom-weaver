@@ -660,3 +660,51 @@ fn open_create_parent_rejects_mismatched_parents() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+// ENOSPC on open (no free inodes, a full FAT directory) and an allocation failure in
+// the writer cannot be forced portably, so the mappings are checked directly.
+#[test]
+fn create_errors_keep_storage_full_and_out_of_memory_codes() {
+    let output = Path::new("/roms/disc.chd");
+
+    let err = ChdContainerHandler::create_output_error(
+        output,
+        std::io::Error::from(std::io::ErrorKind::StorageFull),
+    );
+    assert_eq!(
+        err.code(),
+        Some(rom_weaver_core::ERROR_CODE_IO_STORAGE_FULL),
+        "{err}"
+    );
+    assert!(
+        err.to_string()
+            .contains("failed to create `/roms/disc.chd`:"),
+        "{err}"
+    );
+
+    let err = ChdContainerHandler::create_output_error(
+        output,
+        std::io::Error::from(std::io::ErrorKind::NotFound),
+    );
+    assert_eq!(err.code(), None, "{err}");
+    assert!(
+        err.to_string()
+            .contains("failed to create `/roms/disc.chd`:"),
+        "{err}"
+    );
+
+    let err = ChdContainerHandler::chd_write_error(output, crate::chd_rs::Error::OutOfMemory);
+    assert_eq!(
+        err.code(),
+        Some(rom_weaver_core::ERROR_CODE_RESOURCE_OUT_OF_MEMORY),
+        "{err}"
+    );
+    assert!(
+        err.to_string()
+            .contains("failed to write CHD `/roms/disc.chd`:"),
+        "{err}"
+    );
+
+    let err = ChdContainerHandler::chd_write_error(output, crate::chd_rs::Error::CompressionError);
+    assert_eq!(err.code(), None, "{err}");
+}
