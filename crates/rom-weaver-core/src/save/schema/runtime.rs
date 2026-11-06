@@ -19,6 +19,10 @@ pub struct Runtime {
     pub checks: Vec<Check>,
     pub document_checks: Vec<Check>,
     pub edit_checks: Vec<Check>,
+    /// Applied to the working copy before any field is written, so field writes start from an
+    /// encoding that `after_edit` stores convert back. Layout schemas run it when generating a new
+    /// save (generation applies their initial values as edits); non-layout generation skips it.
+    pub before_edit: Vec<Store>,
     pub after_edit: Vec<Store>,
     pub recovery: Option<Recovery>,
     pub include_implicit_changes: bool,
@@ -156,10 +160,10 @@ impl Runtime {
                 }
             }
         }
-        if self.after_edit.len() > MAX_COMPONENTS {
+        if self.before_edit.len() > MAX_COMPONENTS || self.after_edit.len() > MAX_COMPONENTS {
             return Err(invalid("game write effects exceed 4096 entries"));
         }
-        for effect in &self.after_edit {
+        for effect in self.before_edit.iter().chain(&self.after_edit) {
             effect.validate(size)?;
         }
         Ok(())
@@ -463,6 +467,9 @@ impl GameSchema {
             });
         }
         let mut logical = original.to_vec();
+        for effect in &self.runtime.before_edit {
+            effect.apply(&mut logical)?;
+        }
         let mut touched = Vec::new();
         for edit in edits {
             let field = self
@@ -478,7 +485,7 @@ impl GameSchema {
             }
         }
         for effect in &self.runtime.after_edit {
-            effect.apply(&mut logical)?;
+            effect.apply_from(original, &mut logical)?;
         }
         for check in self
             .runtime

@@ -90,6 +90,86 @@ fn test_run(
         .map(|result| result.bytes.unwrap_or_else(|| input.bytes.clone()))
 }
 
+// Single-byte store; `mask` limits the bits the value replaces.
+fn byte_store(
+    offset: usize,
+    mask: Option<u32>,
+    value: impl Fn(&[u8]) -> i64 + Send + Sync + 'static,
+) -> rules::Store {
+    byte_store_value(
+        offset,
+        mask,
+        rules::ReadValue::new(move |bytes| Ok(value(bytes))),
+    )
+}
+
+// Like `byte_store`, but the value also reads the save as it was before any edit, as
+// `(original, edited)`.
+fn byte_store_from_original(
+    offset: usize,
+    mask: Option<u32>,
+    value: impl Fn(&[u8], &[u8]) -> Result<i64> + Send + Sync + 'static,
+) -> rules::Store {
+    byte_store_value(offset, mask, rules::ReadValue::with_original(value))
+}
+
+fn byte_store_value(offset: usize, mask: Option<u32>, value: rules::ReadValue) -> rules::Store {
+    rules::Store {
+        when: None,
+        destination: rules::Scalar {
+            offset,
+            storage: Storage::U8,
+            mask,
+        },
+        value,
+    }
+}
+
+// Field IDs are built from this mapping, so changing it renames fields in every catalog game.
+fn id_part(label: &str) -> String {
+    let mut out = String::new();
+    for ch in label.chars() {
+        let ch = if ch == 'é' { 'e' } else { ch };
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_lowercase());
+        } else if !out.ends_with('_') && !out.is_empty() {
+            out.push('_');
+        }
+    }
+    out.trim_end_matches('_').to_string()
+}
+
+// Packs a value from 0 to 99 into one binary-coded decimal byte.
+fn bcd(value: i64) -> i64 {
+    ((value / 10) << 4) | (value % 10)
+}
+
+// Decodes a packed BCD byte. A byte that is not valid BCD reads as its raw value, so one bad
+// byte does not make the whole document unreadable.
+fn bcd_or_raw(byte: u8) -> i64 {
+    if byte >> 4 > 9 || byte & 15 > 9 {
+        i64::from(byte)
+    } else {
+        i64::from(byte >> 4) * 10 + i64::from(byte & 15)
+    }
+}
+
+// A 1 to 5 setting the game stores as 0 to 4 in one byte: reads add one, edits subtract one.
+fn stored_plus_one(id: &str, label: &str, offset: usize) -> FieldDefinition {
+    catalog_field(id, label, offset, Storage::U8)
+        .min(1)
+        .max(5)
+        .behavior(field::FieldBehavior {
+            read: Some(rules::ReadValue::new(move |bytes| {
+                Ok(i64::from(bytes[offset]) + 1)
+            })),
+            on_edit: vec![byte_store(offset, None, move |bytes| {
+                i64::from(bytes[offset]) - 1
+            })],
+            ..Default::default()
+        })
+}
+
 struct Repetition {
     count: usize,
     start: usize,
@@ -303,6 +383,11 @@ pub(in crate::save) mod pokemon_generation_ii;
 pub(in crate::save) mod pokemon_snap;
 pub(in crate::save) mod pokemon_trading_card_game;
 pub(in crate::save) mod ps1_final_fantasy;
+pub(in crate::save) mod ps1_final_fantasy_ix;
+pub(in crate::save) mod ps1_final_fantasy_tactics;
+pub(in crate::save) mod ps1_kagero_deception_ii;
+pub(in crate::save) mod ps1_resident_evil;
+pub(in crate::save) mod ps1_silent_hill;
 pub(in crate::save) mod ps1_single_block;
 pub(in crate::save) mod rare_eeprom;
 pub(in crate::save) mod rondo_of_blood;
@@ -416,6 +501,11 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(banjo_tooie::schemas());
             games.extend(donkey_kong_64::schemas());
             games.extend(pokemon_snap::schemas());
+            games.extend(ps1_final_fantasy_ix::schemas());
+            games.extend(ps1_final_fantasy_tactics::schemas());
+            games.extend(ps1_kagero_deception_ii::schemas());
+            games.extend(ps1_resident_evil::schemas());
+            games.extend(ps1_silent_hill::schemas());
             games
         })
         .clone()
@@ -501,5 +591,26 @@ fn ascii_name_codec(
             ),
         },
         encode_transforms: vec![],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn id_part_lowercases_collapses_separators_and_folds_e_acute() {
+        assert_eq!(id_part("Yo-yo"), "yo_yo");
+        assert_eq!(id_part("Pokémon  Flute!"), "pokemon_flute");
+        assert_eq!(id_part("  Ring (1) "), "ring_1");
+        assert_eq!(id_part("???"), "");
+    }
+
+    #[test]
+    fn bcd_packs_two_decimal_digits() {
+        assert_eq!(
+            [bcd(0), bcd(9), bcd(10), bcd(59), bcd(99)],
+            [0, 9, 0x10, 0x59, 0x99]
+        );
     }
 }
