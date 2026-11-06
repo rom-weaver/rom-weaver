@@ -51,8 +51,24 @@ mod tests {
         bytes
     }
 
-    // Expected values come from an instruction-level port of the ROM routine, cross-checked
-    // against mikearnos/snessum `fix_chrono_trigger`.
+    /// Wraps `slot_words` with the slot marker and stored checksum of a valid save.
+    fn slot_input(
+        slot: usize,
+        words: &[(usize, u16)],
+        stored_checksum: u16,
+        game: &str,
+    ) -> SaveDetectionInput {
+        let mut bytes = slot_words(slot, words);
+        bytes[0x1ff8 + slot * 2..0x1ffa + slot * 2].copy_from_slice(&[0x1b, 0xe4]);
+        bytes[0x1ff0 + slot * 2..0x1ff2 + slot * 2].copy_from_slice(&stored_checksum.to_le_bytes());
+        SaveDetectionInput {
+            bytes,
+            selected_game: Some(game.into()),
+            rom_sha1: None,
+        }
+    }
+
+    // https://github.com/mikearnos/snessum/blob/5c2d71fcfc989b407f79c01eccdbae6034436824/snessum.c#L145-L158
     #[test]
     fn checksum_matches_game_adc_chain_vectors() {
         let ramp: Vec<u8> = (0..8192).map(|offset| offset as u8).collect();
@@ -132,5 +148,49 @@ mod tests {
         bad = input.clone();
         bad.bytes.pop();
         assert!(handler.apply(&bad, &identity, &[], false).is_err());
+    }
+
+    #[test]
+    fn edit_accepts_and_writes_the_games_checksum_after_a_carry() {
+        let handler = schemas().remove(0);
+        let game = handler.definitions().remove(0).identity;
+        let input = slot_input(0, &[(0, 0x0001), (2, 0xfffe)], 0xffff, &game.id);
+        let output = handler
+            .apply(
+                &input,
+                &game,
+                &[SaveEdit {
+                    field: "gold".into(),
+                    value: SaveValue::U32(1),
+                }],
+                false,
+            )
+            .expect("a save with the game's own checksum must be editable")
+            .bytes
+            .expect("edited bytes");
+        assert_eq!(output[0x5e0..0x5e3], [0x01, 0x00, 0x00]);
+        assert_eq!(
+            output[0x1ff0..0x1ff2],
+            [0x00, 0x00],
+            "edit must store the game's checksum"
+        );
+    }
+
+    #[test]
+    fn first_item_reads_the_first_inventory_byte() {
+        let handler = schemas().remove(1);
+        let game = handler.definitions().remove(0).identity;
+        let input = slot_input(1, &[(0, 0x00c4), (0x2c4, 0x7700)], 0x77c4, &game.id);
+        let document = handler.parse(&input, &game).expect("valid slot 2");
+        let first_item = document
+            .fields
+            .iter()
+            .find(|field| field.id == "inventory.first_item")
+            .expect("first item field");
+        assert_eq!(
+            first_item.value,
+            SaveValue::U32(0xc4),
+            "first item must come from slot offset 0x0"
+        );
     }
 }
