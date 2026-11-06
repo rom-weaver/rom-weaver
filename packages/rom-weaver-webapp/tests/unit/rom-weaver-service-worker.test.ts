@@ -909,18 +909,22 @@ describe("navigation requests", () => {
     omitRedirectList?: boolean;
     redirectSourcePaths?: string[];
     runtimeEntries?: Record<string, string>;
+    scope?: string;
   }) =>
     loadWorker({
       hasActiveWorker: options.hasActiveWorker,
       manifest: COMPLETE_MANIFEST,
       omitRedirectList: options.omitRedirectList,
       redirectSourcePaths: options.redirectSourcePaths,
+      scope: options.scope,
       seedCaches: async (cacheStorage) => {
+        // Precache keys resolve against the registration scope.
+        const base = options.scope ?? APP_SCOPE;
         const core = await cacheStorage.open(PRECACHE_NAME);
-        await core.put(`${APP_ORIGIN}/index.html?__WB_REVISION__=r1`, new Response("x"));
-        if (!options.missingCore) await core.put(`${APP_ORIGIN}/assets/app.js`, new Response("x"));
+        await core.put(`${base}index.html?__WB_REVISION__=r1`, new Response("x"));
+        if (!options.missingCore) await core.put(`${base}assets/app.js`, new Response("x"));
         if (!options.missingDeferred) {
-          await (await cacheStorage.open(DEFERRED_CACHE_NAME)).put(DEFERRED_URL, new Response("x"));
+          await (await cacheStorage.open(DEFERRED_CACHE_NAME)).put(`${base}assets/deferred.js`, new Response("x"));
         }
         const runtime = await cacheStorage.open(RUNTIME_CACHE_NAME);
         for (const [url, body] of Object.entries(options.runtimeEntries ?? {}))
@@ -1025,6 +1029,62 @@ describe("navigation requests", () => {
     const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/newer`));
 
     await expect(response.text()).resolves.toBe("newer-network");
+  });
+
+  it("serves a route cache-first under a sub-path scope with its base re-rooted on the scope", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [], scope: `${APP_ORIGIN}/rom-weaver/` });
+    setPrecache({
+      "docs/guide/index.html": () =>
+        new Response('<base href="../../" /><a href="/docs">Docs</a><script src="./assets/app.js"></script>', {
+          headers: { "content-length": "999" },
+          status: 200,
+        }),
+      "index.html": () => new Response("root", { status: 200 }),
+    });
+
+    const response = await routed(
+      harness,
+      harness.networkFirstRoute,
+      asNavigationRequest(`${APP_ORIGIN}/rom-weaver/docs/guide`),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toBe(
+      '<base href="/rom-weaver/" /><a href="/rom-weaver/docs">Docs</a><script src="./assets/app.js"></script>',
+    );
+    expect(harness.fetchStub.calls).toHaveLength(0);
+  });
+
+  it("serves the scope root from index.html cache-first under a sub-path scope", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [], scope: `${APP_ORIGIN}/rom-weaver/` });
+    precachedDocs();
+
+    const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/rom-weaver/`));
+
+    await expect(response.text()).resolves.toBe("root");
+    expect(harness.fetchStub.calls).toHaveLength(0);
+  });
+
+  it("leaves a redirect alias under a sub-path scope to the server", async () => {
+    const harness = await loadCompleteWorker({
+      redirectSourcePaths: ["/apply", "/apply/"],
+      scope: `${APP_ORIGIN}/rom-weaver/`,
+    });
+    precachedDocs();
+    setPrecache({ "apply/index.html": () => new Response("legacy", { status: 200 }) });
+    harness.fetchStub.handlers.set(
+      `${APP_ORIGIN}/rom-weaver/apply/`,
+      () => new Response(null, { headers: { location: "/rom-weaver/apply-rom-patches" }, status: 301 }),
+    );
+
+    const response = await routed(
+      harness,
+      harness.networkFirstRoute,
+      asNavigationRequest(`${APP_ORIGIN}/rom-weaver/apply/`),
+    );
+
+    expect(response.status).toBe(301);
+    expect(harness.fetchStub.calls).toHaveLength(1);
   });
 
   it("keeps an unknown path network-first so the server decides", async () => {

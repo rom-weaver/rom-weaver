@@ -23,6 +23,7 @@ import {
   keepResourceTimingsRecording,
   withMeasuredEncodedSize,
 } from "./pwa/response-encoded-size.ts";
+import { ROOT_BASE_TAG } from "./pwa/document-base.mjs";
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 import { createServiceWorkerCachePolicy, findStaleServiceWorkerCaches } from "./pwa/service-worker-cache-policy.ts";
 
@@ -531,39 +532,45 @@ const fetchAndUpdateCache = async (request: Request, onHeaders?: () => void): Pr
   return withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
 };
 
-// Precache keys and the redirect list are written for the origin root, but they resolve against this
-// worker's URL. Under /rom-weaver/, /rom-weaver/apply-rom-patches is the key "apply-rom-patches/index.html"
-// and the scope root is "/", so strip the scope prefix before any lookup.
+// Precache keys and redirect sources are relative to the scope root, so lookups MUST drop the scope prefix
+// (/rom-weaver/apply-rom-patches -> apply-rom-patches/index.html).
 const scopePath = (pathname: string) => {
   if (pathname === APP_BASE_PATH.slice(0, -1)) return "/";
   return pathname.startsWith(APP_BASE_PATH) ? `/${pathname.slice(APP_BASE_PATH.length)}` : pathname;
 };
 
+// Built documents point at the origin root: 404.html has `<base href="/">`, and a route's index copy has
+// `<base href="../">`, which only reaches the root from a trailing-slash URL. Under a sub-path scope, re-root
+// either on the scope. A document that already carries another base is left alone, so it is never prefixed twice.
+const ROUTE_BASE_PATTERN = /<base href="(?:\.\.\/)+" \/>/;
+const rerootHtml = (html: string) => {
+  if (APP_BASE_PATH === "/" || !(html.includes(ROOT_BASE_TAG) || ROUTE_BASE_PATTERN.test(html))) return html;
+  // A replacer function keeps `$` in the scope literal.
+  return html.replace(ROUTE_BASE_PATTERN, ROOT_BASE_TAG).replace(/href="\/(?!\/)/g, () => `href="${APP_BASE_PATH}`);
+};
+
+const rerootDocument = async (response: Response | undefined, status = response?.status) => {
+  if (!response || response.status === 0) return response;
+  if (APP_BASE_PATH === "/" && status === response.status) return response;
+  const html = await response.clone().text();
+  const rerooted = rerootHtml(html);
+  if (rerooted === html && status === response.status) return response;
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  const statusText = status === response.status ? response.statusText : "Not Found";
+  return new Response(rerooted, { headers, status, statusText });
+};
+
 const matchRouteDocument = async (url: URL) => {
   for (const candidate of routeDocumentCandidates(scopePath(url.pathname))) {
     const response = (await matchPrecache(candidate)) ?? (await deferredPrecache.match(candidate));
-    if (response) return response;
+    if (response) return await rerootDocument(response);
   }
   return undefined;
 };
 
-const ROOT_BASE_TAG = '<base href="/" />'; // pinned by verify-seo-build.mjs
-
-// The offline answer for a path this build lacks: the 404 page at the same URL with a 404 status (the
-// precached copy came from /404.html as a 200). 404.html is built for the origin root, so re-root it on
-// this worker's scope under a sub-path, unless it already carries another base so it is never prefixed
-// twice. A replacer function keeps `$` in the scope literal.
-const notFoundDocument = async () => {
-  const precached = await matchPrecache("404.html");
-  if (!precached || precached.status === 0) return precached;
-  let html = await precached.clone().text();
-  if (APP_BASE_PATH !== "/" && html.includes(ROOT_BASE_TAG)) {
-    html = html.replace(/href="\/(?!\/)/g, () => `href="${APP_BASE_PATH}`);
-  }
-  const headers = new Headers(precached.headers);
-  headers.delete("content-length");
-  return new Response(html, { headers, status: 404, statusText: "Not Found" });
-};
+// The offline answer for a path this build lacks: the 404 page at the same URL. It is precached from a 200.
+const notFoundDocument = async () => await rerootDocument(await matchPrecache("404.html"), 404);
 
 const matchCachedResponse = async (request: Request, url: URL) => {
   const credentialless = await ensureCoepModeHydrated();
