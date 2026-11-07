@@ -176,7 +176,7 @@ impl PatchHandler for RupPatchHandler {
         );
         let patch = parse_rup_file(patch_path)?;
         let scopes = context.patch_check_scopes();
-        let mut selected = select_matching_file_for_input(
+        let selected = select_matching_file_for_input(
             &patch,
             &request.input,
             scopes.source,
@@ -195,50 +195,19 @@ impl PatchHandler for RupPatchHandler {
             fs::create_dir_all(parent)?;
         }
         let undo = selected.undo;
-        let mut step_input = request.input.clone();
-        let mut step_count = 0usize;
-        let mut record_count = 0usize;
-        let mut canonical_n64_output = false;
-        let mut first_execution = None;
-        let step_output = loop {
-            let may_chain = rup_chain_may_continue(&patch, &selected);
-            let step_output = if may_chain {
-                temp_path(context, "rup-chain-step", Some("bin"))?
-            } else {
-                request.output.clone()
-            };
-            let execution =
-                apply_rup_entry(&selected, &step_input, &step_output, scopes.target, context)?;
-            step_count += 1;
-            record_count += selected.file.records.len();
-            canonical_n64_output |= selected.normalized_input.canonical_n64_output;
-            first_execution.get_or_insert(execution);
-            let next = if may_chain {
-                next_chain_entry(&patch, &selected, &step_output, context)?
-            } else {
-                None
-            };
-            let finished_intermediate = (step_count > 1).then(|| step_input.clone());
-            drop(selected);
-            if let Some(path) = finished_intermediate {
-                let _ = fs::remove_file(path);
-            }
-            let Some(next) = next else {
-                break step_output;
-            };
-            debug!(
-                format = self.descriptor.name,
-                next_variant = next.variant,
-                undo,
-                "rup chain continues with next entry"
-            );
-            selected = next;
-            step_input = step_output;
+        let chain = RupChain {
+            patch: &patch,
+            format: self.descriptor.name,
+            input: &request.input,
+            output: &request.output,
+            verify_target: scopes.target,
         };
-        if step_output != request.output {
-            drop(crate::copy_input_to_output(&step_output, &request.output)?);
-            let _ = fs::remove_file(&step_output);
-        }
+        let RupChainOutcome {
+            step_count,
+            record_count,
+            canonical_n64_output,
+            first_execution,
+        } = apply_rup_chain(&chain, selected, context)?;
 
         let checksum_suffix = checksum_validation_suffix(scopes.source && scopes.target);
         let chain_suffix = if step_count > 1 {
@@ -719,16 +688,107 @@ fn select_matching_file_for_input<'a>(
     }
 }
 
+/// Fixed inputs of one chained apply: the parsed patch, where the first step reads and the last
+/// step writes, and whether each step verifies its target MD5.
+struct RupChain<'a> {
+    patch: &'a ParsedRupPatch,
+    format: &'a str,
+    input: &'a Path,
+    output: &'a Path,
+    verify_target: bool,
+}
+
+/// Paths and checks for one entry application.
+#[derive(Clone, Copy)]
+struct RupStepPaths<'a> {
+    original_input: &'a Path,
+    output_path: &'a Path,
+    verify_target: bool,
+}
+
+/// Totals gathered while applying a chain of file entries.
+struct RupChainOutcome {
+    step_count: usize,
+    record_count: usize,
+    canonical_n64_output: bool,
+    first_execution: Option<ThreadExecution>,
+}
+
+/// Applies `first` and every later entry whose input MD5 matches the previous step's output,
+/// writing the final result to the chain output and removing intermediate files.
+fn apply_rup_chain<'a>(
+    chain: &RupChain<'a>,
+    first: RupSelectedFile<'a>,
+    context: &OperationContext,
+) -> Result<RupChainOutcome> {
+    let undo = first.undo;
+    let mut selected = first;
+    let mut step_input = chain.input.to_path_buf();
+    let mut outcome = RupChainOutcome {
+        step_count: 0,
+        record_count: 0,
+        canonical_n64_output: false,
+        first_execution: None,
+    };
+    let step_output = loop {
+        let may_chain = rup_chain_may_continue(chain.patch, &selected);
+        let step_output = if may_chain {
+            temp_path(context, "rup-chain-step", Some("bin"))?
+        } else {
+            chain.output.to_path_buf()
+        };
+        let step = RupStepPaths {
+            original_input: &step_input,
+            output_path: &step_output,
+            verify_target: chain.verify_target,
+        };
+        let execution = apply_rup_entry(&selected, &step, context)?;
+        outcome.step_count += 1;
+        outcome.record_count += selected.file.records.len();
+        outcome.canonical_n64_output |= selected.normalized_input.canonical_n64_output;
+        outcome.first_execution.get_or_insert(execution);
+        let next = if may_chain {
+            next_chain_entry(chain.patch, &selected, &step_output, context)?
+        } else {
+            None
+        };
+        let finished_intermediate = (outcome.step_count > 1).then(|| step_input.clone());
+        drop(selected);
+        if let Some(path) = finished_intermediate {
+            let _ = fs::remove_file(path);
+        }
+        let Some(next) = next else {
+            break step_output;
+        };
+        debug!(
+            format = chain.format,
+            next_variant = next.variant,
+            undo,
+            "rup chain continues with next entry"
+        );
+        selected = next;
+        step_input = step_output;
+    };
+    if step_output != chain.output {
+        drop(crate::copy_input_to_output(&step_output, chain.output)?);
+        let _ = fs::remove_file(&step_output);
+    }
+    Ok(outcome)
+}
+
 /// Applies one file entry: seeds `output_path` from the normalized input,
 /// XORs the records, applies overflow, verifies the entry's target MD5 when
 /// `verify_target` is set, and restores the input's header or container.
 fn apply_rup_entry(
     selected: &RupSelectedFile<'_>,
-    original_input: &Path,
-    output_path: &Path,
-    verify_target: bool,
+    step: &RupStepPaths<'_>,
     context: &OperationContext,
 ) -> Result<ThreadExecution> {
+    let RupStepPaths {
+        original_input,
+        output_path,
+        verify_target,
+    } = *step;
     let file = selected.file;
     let undo = selected.undo;
     let normalized_input = &selected.normalized_input;
