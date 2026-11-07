@@ -688,8 +688,8 @@ fn relocate_pointer_range(slot: &mut [u8], patch: &[u8], reloc: PointerRelocatio
         relocation,
         section_label,
     } = reloc;
-    let (start_index, end_index) =
-        section_indexes(patch, start_offset, end_offset, ddmem_start, section_label)?;
+    let start_index = slot_index(patch, start_offset, ddmem_start, section_label)?;
+    let end_index = slot_index(patch, end_offset, ddmem_start, section_label)?;
     // dlditool's loop over an empty or inverted range runs zero times.
     if end_index <= start_index {
         return Ok(());
@@ -713,8 +713,8 @@ fn relocate_pointer_range(slot: &mut [u8], patch: &[u8], reloc: PointerRelocatio
 
 fn clear_bss(slot: &mut [u8], patch: &[u8], ddmem_start: i64) -> Result<()> {
     let label = "DLDI BSS";
-    let (start_index, end_index) =
-        section_indexes(patch, DO_BSS_START, DO_BSS_END, ddmem_start, label)?;
+    let start_index = slot_index(patch, DO_BSS_START, ddmem_start, label)?;
+    let end_index = slot_index(patch, DO_BSS_END, ddmem_start, label)?;
     if end_index == start_index {
         return Ok(());
     }
@@ -728,24 +728,12 @@ fn clear_bss(slot: &mut [u8], patch: &[u8], ddmem_start: i64) -> Result<()> {
     Ok(())
 }
 
-/// Resolves a section's address pair to indexes relative to the start of the driver slot.
-fn section_indexes(
-    patch: &[u8],
-    start_offset: usize,
-    end_offset: usize,
-    ddmem_start: i64,
-    section_label: &str,
-) -> Result<(i64, i64)> {
-    let start_address = i64::from(read_addr_i32(patch, start_offset)?);
-    let end_address = i64::from(read_addr_i32(patch, end_offset)?);
-
-    let start_index = start_address
+/// Resolves the section address stored at `offset` to an index relative to the start of the
+/// driver slot.
+fn slot_index(patch: &[u8], offset: usize, ddmem_start: i64, section_label: &str) -> Result<i64> {
+    i64::from(read_addr_i32(patch, offset)?)
         .checked_sub(ddmem_start)
-        .ok_or_else(|| RomWeaverError::Validation(format!("{section_label} range underflowed")))?;
-    let end_index = end_address
-        .checked_sub(ddmem_start)
-        .ok_or_else(|| RomWeaverError::Validation(format!("{section_label} range underflowed")))?;
-    Ok((start_index, end_index))
+        .ok_or_else(|| RomWeaverError::Validation(format!("{section_label} range underflowed")))
 }
 
 /// Converts a non-empty slot-relative index pair to offsets, refusing the negative or inverted

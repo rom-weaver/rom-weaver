@@ -469,11 +469,17 @@ enum ParsedDpsRecord {
 }
 
 impl ParsedDpsRecord {
-    fn writes_nothing(&self) -> bool {
-        match self {
+    /// Like [Self::output_end], but 0 for a record that writes nothing: dpspatcher moves no bytes
+    /// for it, so it does not grow the output.
+    fn written_output_end(&self) -> Result<u64> {
+        let writes_nothing = match self {
             ParsedDpsRecord::CopyFromSource { length, .. } => *length == 0,
             ParsedDpsRecord::EmbeddedData { data, .. } => data.is_empty(),
+        };
+        if writes_nothing {
+            return Ok(0);
         }
+        self.output_end()
     }
 
     fn output_end(&self) -> Result<u64> {
@@ -659,9 +665,7 @@ fn parse_dps_file(path: &Path, mode: DpsParseMode) -> Result<ParsedDpsPatch> {
             }
         };
 
-        if !record.writes_nothing() {
-            output_size = output_size.max(record.output_end()?);
-        }
+        output_size = output_size.max(record.written_output_end()?);
         records.push(record);
     }
 
@@ -828,9 +832,7 @@ fn parse_dps_bytes(bytes: &[u8], mode: DpsParseMode) -> Result<ParsedDpsPatch> {
             }
         };
 
-        if !record.writes_nothing() {
-            output_size = output_size.max(record.output_end()?);
-        }
+        output_size = output_size.max(record.written_output_end()?);
         records.push(record);
     }
 
