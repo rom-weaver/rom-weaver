@@ -639,6 +639,9 @@ impl PatchRegistry {
             return None;
         };
 
+        if prefix.starts_with(APS_N64_SIGNATURE) && is_apsgba_with_aps10_magic(path) {
+            return self.probe_signature_match(path, "APS GBA", "apsgba");
+        }
         if let Some(handler) =
             self.probe_prefix_signature(path, &prefix, ebp_extension, xdelta_extension)
         {
@@ -774,6 +777,16 @@ fn is_xdelta_extension(path: &Path) -> bool {
             let name = name.to_ascii_lowercase();
             name.ends_with(".xdelta") || name.ends_with(".delta") || name.ends_with(".dat")
         })
+}
+
+/// An APSGBA patch whose source size has 0x30 as its low byte starts with `APS10`, the N64 magic.
+/// It is told apart by structure: the file is a header plus whole 64 KiB records and does not
+/// parse as an N64 APS patch.
+fn is_apsgba_with_aps10_magic(path: &Path) -> bool {
+    let Ok(metadata) = fs::metadata(path) else {
+        return false;
+    };
+    apsgba::is_apsgba_record_length(metadata.len()) && !aps_n64::is_aps_n64_patch(path)
 }
 
 fn read_signature_prefix(path: &Path, max_len: usize) -> Option<Vec<u8>> {
