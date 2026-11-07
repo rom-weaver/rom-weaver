@@ -564,12 +564,27 @@ fn parse_pat_reader<R: BufRead>(mut reader: R, mode: PatLineMode) -> Result<Pars
     })
 }
 
-/// Whether `line` begins with an 8-digit hex offset, the shape every record starts with.
+/// Whether `line` is shaped like a record: it begins with an 8-digit hex offset, or it has an
+/// offset-like first field followed by two 2-digit hex byte fields. The second form catches a
+/// record whose offset is damaged (`0000001G: 11 BB`) while titles and `fc /b` headers, which
+/// never end in two hex byte fields, stay plain free text.
 fn looks_like_pat_record(line: &str) -> bool {
-    line.split_whitespace()
-        .next()
-        .and_then(|field| field.get(..8))
+    let mut fields = line.split_whitespace();
+    let Some(first) = fields.next() else {
+        return false;
+    };
+    if first
+        .get(..8)
         .is_some_and(|offset| offset.bytes().all(|byte| byte.is_ascii_hexdigit()))
+    {
+        return true;
+    }
+    let is_byte_field =
+        |field: &str| field.len() == 2 && field.bytes().all(|b| b.is_ascii_hexdigit());
+    matches!(
+        (fields.next(), fields.next(), fields.next()),
+        (Some(source), Some(modified), None) if is_byte_field(source) && is_byte_field(modified)
+    )
 }
 
 fn parse_pat_record(line: &str) -> Option<PatRecord> {

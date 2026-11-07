@@ -5,7 +5,7 @@ use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler, Patch
 use super::{
     PatPatchHandler, build_pat_parse_label, collect_pat_chunk_records_for_chunk,
     create_pat_patch_parallel, create_pat_patch_streaming, has_pat_record_signature,
-    parse_pat_file, parse_pat_record,
+    looks_like_pat_record, parse_pat_file, parse_pat_record,
 };
 use crate::shared::threading::parallel_chunked_capability;
 use crate::{
@@ -712,5 +712,52 @@ fn apply_tolerates_free_text_lines_between_records() {
 fn parse_still_tolerates_comments_and_blank_lines_beside_records() {
     let (result, _temp, output) = apply_pat_text(b"\xef\xbb\xbf# bom comment\n\n00000001 62 42\n");
     result.expect("comments and blank lines are allowed");
+    assert_eq!(fs::read(output).expect("output"), b"aBc");
+}
+
+/// A record-shaped line is damaged when any field is bad, so it warns; titles and `fc /b`
+/// headers are free text and stay silent.
+#[test]
+fn record_shape_covers_damaged_offsets_and_values_but_not_free_text() {
+    for (line, expected) in [
+        ("0000001G: 11 BB", true),
+        ("0000001G 11 BB", true),
+        ("0000001: 11 BB", true),
+        ("00000011: 1G BB", true),
+        ("00000011 11 B", true),
+        ("00000011: 11 BB ;note", true),
+        ("Comparing files a.bin and B.BIN", false),
+        ("FC: no differences encountered", false),
+        ("My Hack v1.0", false),
+        ("comment line", false),
+        ("# note", false),
+        ("", false),
+    ] {
+        assert_eq!(looks_like_pat_record(line), expected, "{line:?}");
+    }
+}
+
+#[test]
+fn apply_warns_for_a_record_with_a_damaged_offset() {
+    for line in ["0000001G: 11 BB", "0000001G 11 BB"] {
+        let text = format!("00000000 61 41\n{line}\n00000002 63 43\n");
+        let (result, _temp, output) = apply_pat_text(text.as_bytes());
+        let report = result.unwrap_or_else(|error| panic!("{line}: {error}"));
+        assert_eq!(
+            report.label,
+            "applied PAT patch with 2 record(s): 2 forward / 0 reverse; warning=PAT skipped 1 line(s) that are not valid records (line 2)",
+            "{line}"
+        );
+        assert_eq!(fs::read(output).expect("output"), b"AbC", "{line}");
+    }
+}
+
+#[test]
+fn apply_keeps_fc_headers_silent() {
+    let (result, _temp, output) = apply_pat_text(
+        b"Comparing files a.bin and B.BIN\n00000001: 62 42\nFC: no differences encountered\n",
+    );
+    let report = result.expect("apply");
+    assert!(!report.label.contains("warning="), "{}", report.label);
     assert_eq!(fs::read(output).expect("output"), b"aBc");
 }
