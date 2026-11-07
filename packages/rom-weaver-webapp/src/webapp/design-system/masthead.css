@@ -301,8 +301,8 @@
 .rw-app .sub-status[data-sw="update"] {
   color: var(--care-text);
 }
-.rw-app .sub-status[data-sw="update"] svg {
-  animation: update-nudge 2.4s ease-in-out infinite;
+.rw-app .sub-status[data-sw="update"] svg[data-nudge] {
+  animation: update-nudge 2.4s ease-in-out;
 }
 .rw-app .sub-status[data-sw="installing"] {
   color: var(--thread-text);
@@ -333,8 +333,8 @@
 .rw-app .nav-runtime[data-sw="disabled"] {
   color: var(--ink-3);
 }
-.rw-app .nav-runtime[data-sw="update"] svg {
-  animation: update-nudge 2.4s ease-in-out infinite;
+.rw-app .nav-runtime[data-sw="update"] svg[data-nudge] {
+  animation: update-nudge 2.4s ease-in-out;
 }
 .rw-app .nav-runtime[data-sw="installing"] svg:not(.sw-progress-ring) {
   animation: install-nudge 2.4s ease-in-out infinite;

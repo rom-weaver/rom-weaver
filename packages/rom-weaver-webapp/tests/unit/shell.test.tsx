@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -528,5 +528,36 @@ describe("offline status glyphs", () => {
     ["installing", "monitor-down"],
   ] as const)("shows the %s state with its standalone symbol", (state, name) => {
     expect(renderToStaticMarkup(<RuntimeGlyph state={state} />)).toContain("lucide-" + name);
+  });
+
+  describe("the update nudge", () => {
+    const setVisibility = (state: DocumentVisibilityState) => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+    };
+    afterEach(() => {
+      Reflect.deleteProperty(document, "visibilityState");
+    });
+
+    it("plays as soon as a visible page shows the update glyph", async () => {
+      setVisibility("visible");
+      const { container } = render(<RuntimeGlyph state="update" />);
+      await waitFor(() => expect(container.querySelector("svg[data-nudge]")).not.toBeNull());
+    });
+
+    it("waits for a hidden page to become visible", async () => {
+      setVisibility("hidden");
+      const { container } = render(<RuntimeGlyph state="update" />);
+      expect(container.querySelector("svg[data-nudge]")).toBeNull();
+
+      setVisibility("visible");
+      fireEvent(document, new Event("visibilitychange"));
+      await waitFor(() => expect(container.querySelector("svg[data-nudge]")).not.toBeNull());
+    });
+
+    it("leaves every other state still", () => {
+      setVisibility("visible");
+      const { container } = render(<RuntimeGlyph state="active" />);
+      expect(container.querySelector("svg[data-nudge]")).toBeNull();
+    });
   });
 });

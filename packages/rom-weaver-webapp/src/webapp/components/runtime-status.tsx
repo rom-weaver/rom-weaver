@@ -228,12 +228,37 @@ const ProgressRingGlyph = ({ percent }: { percent: number }) => {
   );
 };
 
+/** True once `active` holds while the tab is visible, so a one-shot cue is not spent on a page nobody is looking at. */
+const useCueWhenVisible = (active: boolean): boolean => {
+  const [cue, setCue] = useState(false);
+  useEffect(() => {
+    if (!active) {
+      setCue(false);
+      return undefined;
+    }
+    if (document.visibilityState === "visible") {
+      setCue(true);
+      return undefined;
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      setCue(true);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [active]);
+  return cue;
+};
+
 const RuntimeGlyph = ({ state, percent = null }: { state: RuntimeState; percent?: number | null }) => {
+  // The update glyph bounces once, when the visitor can see it, instead of looping.
+  const nudge = useCueWhenVisible(state === "update");
   if (state === "installing" && typeof percent === "number") {
     return <ProgressRingGlyph percent={percent} />;
   }
   const Icon = RUNTIME_ICONS[state];
-  return <Icon aria-hidden="true" />;
+  return <Icon aria-hidden="true" data-nudge={nudge ? "" : undefined} />;
 };
 
 /** The parser-time resolver MUST keep the status and text hooks in sync before hydration. */
