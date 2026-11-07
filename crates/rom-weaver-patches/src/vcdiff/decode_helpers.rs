@@ -58,6 +58,81 @@ pub(super) fn native_decode_error(
         window.output_offset
     ))
 }
+
+/// First default-code-table COPY mode that reads a one-byte "same" cache index instead of a
+/// varint address (RFC 3284 section 5.3 with 4 near and 3 same slots).
+const COPY_MODE_SAME_START: u8 = 6;
+
+/// Walks a window's instruction section with the default code table before the instruction
+/// engine runs. It rejects instructions that write past the declared target window (xdelta3's
+/// "size too large"), so a hostile size never reaches an allocation, and sections with bytes the
+/// instructions never consume (xdelta3's "extra data section" and "extra address section").
+pub(super) fn ensure_instructions_match_sections(
+    window: &WindowIndex,
+    data: &[u8],
+    inst: &[u8],
+    addr: &[u8],
+) -> Result<()> {
+    let invalid = |message: &str| {
+        native_decode_error(OxideltaDecodeError::InvalidInput(message.into()), window)
+    };
+    let code_table = default_code_table();
+    let mut inst_pos = 0usize;
+    let mut data_pos = 0usize;
+    let mut addr_pos = 0usize;
+    let mut written = 0u64;
+
+    while let Some(&opcode) = inst.get(inst_pos) {
+        inst_pos += 1;
+        let entry = code_table[usize::from(opcode)];
+        for (kind, table_size) in [(entry.type1, entry.size1), (entry.type2, entry.size2)] {
+            if kind == XD3_NOOP {
+                continue;
+            }
+            let size = if table_size == 0 {
+                let (size, consumed) = oxidelta_varint::read_u32(&inst[inst_pos..])
+                    .map_err(|error| invalid(&format!("bad instruction size: {error}")))?;
+                inst_pos += consumed;
+                size
+            } else {
+                u32::from(table_size)
+            };
+            written += u64::from(size);
+            if written > window.target_window_size {
+                return Err(invalid("instruction size too large for the target window"));
+            }
+            match kind {
+                XD3_ADD => data_pos += size as usize,
+                XD3_RUN => data_pos += 1,
+                _ => {
+                    let remaining = addr.get(addr_pos..).unwrap_or_default();
+                    addr_pos += if kind - XD3_CPY < COPY_MODE_SAME_START {
+                        oxidelta_varint::read_u64(remaining)
+                            .map_err(|error| invalid(&format!("address decode: {error}")))?
+                            .1
+                    } else {
+                        1
+                    };
+                }
+            }
+            if data_pos > data.len() {
+                return Err(invalid("data section underflow"));
+            }
+            if addr_pos > addr.len() {
+                return Err(invalid("address section underflow"));
+            }
+        }
+    }
+
+    if data_pos < data.len() {
+        return Err(invalid("extra data section"));
+    }
+    if addr_pos < addr.len() {
+        return Err(invalid("extra address section"));
+    }
+    Ok(())
+}
+
 pub(super) fn read_section<R: Read + Seek>(
     reader: &mut R,
     start: u64,
