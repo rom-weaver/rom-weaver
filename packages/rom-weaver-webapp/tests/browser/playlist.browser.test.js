@@ -162,6 +162,18 @@ const typeInto = (input, value) => {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 };
 
+const seedFolder = async (folder, files) => {
+  for (const [name, content] of Object.entries(files)) {
+    const writable = await (await folder.getFileHandle(name, { create: true })).createWritable();
+    await writable.write(content);
+    await writable.close();
+  }
+};
+
+// Chrome and Edge offer both; Safari moves files only inside its private storage and has no picker.
+const browserCanWriteFolders = () =>
+  typeof window.showDirectoryPicker === "function" && typeof FileSystemFileHandle.prototype.move === "function";
+
 const listFolder = async (directory) => {
   const files = {};
   for await (const entry of directory.values()) files[entry.name] = await (await entry.getFile()).text();
@@ -169,18 +181,12 @@ const listFolder = async (directory) => {
 };
 
 test("renames the discs in the picked folder where the browser can move files, and points to the CLI elsewhere", async () => {
-  // Chrome and Edge offer both; Safari moves files only inside its private storage and has no picker.
-  const canWriteFolders =
-    typeof window.showDirectoryPicker === "function" && typeof FileSystemFileHandle.prototype.move === "function";
+  const canWriteFolders = browserCanWriteFolders();
   const root = await navigator.storage.getDirectory();
   folderName = `playlist-folder-${crypto.randomUUID()}`;
   const folder = await root.getDirectoryHandle(folderName, { create: true });
   const seed = ff7Files();
-  for (const [name, content] of Object.entries(seed)) {
-    const writable = await (await folder.getFileHandle(name, { create: true })).createWritable();
-    await writable.write(content);
-    await writable.close();
-  }
+  await seedFolder(folder, seed);
   if (!canWriteFolders) {
     mountForm();
     const transfer = new DataTransfer();
@@ -230,6 +236,34 @@ test("renames the discs in the picked folder where the browser can move files, a
     ),
     "notes.txt": "keep",
   });
+});
+
+test("clears the rename choice when another folder is opened", async () => {
+  if (!browserCanWriteFolders()) return;
+  const root = await navigator.storage.getDirectory();
+  folderName = `playlist-folder-${crypto.randomUUID()}`;
+  const parent = await root.getDirectoryHandle(folderName, { create: true });
+  const folders = [];
+  for (const name of ["disc-set-a", "disc-set-b"]) {
+    const folder = await parent.getDirectoryHandle(name, { create: true });
+    await seedFolder(folder, ff7Files());
+    folders.push(folder);
+  }
+  let opened = 0;
+  Object.defineProperty(window, "showDirectoryPicker", { configurable: true, value: async () => folders[opened++] });
+  mountForm();
+  await expect.poll(() => buttonNamed("Open game folder")?.disabled).toBe(false);
+  buttonNamed("Open game folder").click();
+  await expect.poll(() => document.querySelector("#playlist-entries")?.textContent ?? "").toContain("ff7.disc02.cue");
+  (await enabledButton("#playlist-rename-discs")).click();
+  await expect.poll(() => document.querySelector("#playlist-rename-discs").checked).toBe(true);
+
+  buttonNamed("Open game folder").click();
+  // The checkbox reads unchecked while a folder's plan is pending, so check it only once the new plan is in.
+  await expect.poll(() => document.querySelector("#playlist-container")?.textContent ?? "").toContain("disc-set-b");
+  await enabledButton("#playlist-rename-discs");
+  expect(document.querySelector("#playlist-rename-discs").checked).toBe(false);
+  expect(document.querySelector("#playlist-renames")).toBeNull();
 });
 
 test("plans a playlist for discs named only by number once a game name is typed", async () => {

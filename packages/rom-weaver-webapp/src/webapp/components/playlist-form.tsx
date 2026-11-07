@@ -116,7 +116,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   useEffect(() => {
     if (canRename) void import("../../storage/browser/playlist-folder-write.ts");
   }, [canRename]);
-  // Discs in subfolders cannot be renamed in place, so a choice left from another folder or game is ignored.
+  // Discs in subfolders cannot be renamed in place, so a choice made for another game is ignored.
   const renaming = rename && canRename && allAtTop;
 
   // Plan again whenever the inputs, the game, or the name change. A newer run wins. New files
@@ -204,6 +204,8 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     setPlan(null);
     setRenamePlan(null);
     setRenameReason("");
+    // Renaming moves files, so a new folder starts without the last folder's choice.
+    setRename(false);
     setGame("");
     setError("");
     setDone("");
