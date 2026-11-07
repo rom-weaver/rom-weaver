@@ -646,16 +646,52 @@ fn apply_rejects_invalid_unicode_codepoint() {
 }
 
 #[test]
-fn apply_rejects_unbounded_print_message_loop() {
-    // 0xA4 appends arg0's decimal string to the frame message buffer, then 0x02
-    // jumps back to offset 0 -> an infinite print-append loop. Without the
-    // message-buffer cap this grows the buffer until OOM; the cap turns it into
-    // a clean validation error well within the step budget.
-    let mut patch = vec![0xA4];
-    push_word(&mut patch, u32::MAX); // 10-char decimal string per iteration
-    patch.push(0x02);
-    push_word(&mut patch, 0); // jump back to offset 0
-    assert_bsp_program_error(&patch, vec![0x00], "print message buffer exceeded");
+fn message_buffer_overflow_is_discarded_without_failing_the_patch() {
+    // Programs from the BSP audit (bsp/gaps). Each fills the message buffer past rom-weaver's
+    // 1 MiB cap, then clears or prints it and writes one byte; the reference engine has no cap
+    // and succeeds, and the spec ("String handling") says the excess is silently discarded.
+    let input: Vec<u8> = (0..16).collect();
+    let with_first_byte = |byte: u8| {
+        let mut expected = input.clone();
+        expected[0] = byte;
+        expected
+    };
+    let cases = [
+        (
+            "bufstring 70000 x 16 bytes, clearbuf",
+            "8401000000 00a01f0000009b0140017011010006000000a71841060000000030313233343536373839616263646566 00",
+            0x41,
+        ),
+        (
+            "bufchar U+10000 x 300000, clearbuf",
+            "840100000000a200000100 9b014001e0930400060000 00a7184206000000 00",
+            0x42,
+        ),
+        (
+            "bufstring 70000 x 16 bytes, printbuf",
+            "8401000000 00a01f0000009b0140017011010006000000a61841060000000030313233343536373839616263646566 00",
+            0x41,
+        ),
+    ];
+    for (name, patch_hex, expected_byte) in cases {
+        let patch = decode_hex(&patch_hex.replace(' ', ""));
+        let output = apply_bsp_patch_bytes(&patch, input.clone(), None)
+            .unwrap_or_else(|error| panic!("{name}: {error}"));
+        assert_eq!(output, with_first_byte(expected_byte), "{name}");
+    }
+}
+
+#[test]
+fn print_of_a_string_over_the_message_cap_is_truncated_without_failing_the_patch() {
+    // `print .m; writebyte 0x43; exit 0` with a 1 MiB + 1 byte string at .m (audit
+    // print_string_1MiB_plus1.bsp; the reference engine prints it whole and succeeds).
+    let mut patch = decode_hex("680c0000001843 0600000000".replace(' ', "").as_str());
+    patch.extend(std::iter::repeat_n(b'a', (1 << 20) + 1));
+    patch.push(0);
+    let output = apply_bsp_patch_bytes(&patch, (0..16).collect(), None).expect("apply");
+    let mut expected: Vec<u8> = (0..16).collect();
+    expected[0] = 0x43;
+    assert_eq!(output, expected);
 }
 
 #[test]

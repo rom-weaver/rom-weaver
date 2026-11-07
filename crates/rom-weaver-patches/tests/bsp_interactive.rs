@@ -1,4 +1,10 @@
-use std::{fs, path::PathBuf, sync::Arc};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::Arc,
+    thread,
+    time::{Duration, Instant},
+};
 
 use rom_weaver_core::{
     CancellationToken, NoopProgressSink, OperationContext, PatchApplyRequest, PatchValidateRequest,
@@ -25,11 +31,15 @@ impl Scratch {
     }
 
     fn context(&self, threads: usize) -> OperationContext {
+        self.context_with_cancel(threads, CancellationToken::new())
+    }
+
+    fn context_with_cancel(&self, threads: usize, cancel: CancellationToken) -> OperationContext {
         OperationContext::new(
             ThreadBudget::Fixed(threads),
             self.0.join("scratch"),
             Arc::new(NoopProgressSink),
-            CancellationToken::new(),
+            cancel,
         )
     }
 }
@@ -111,4 +121,97 @@ fn validate_rejects_interactive_bsp_menu_without_changing_input() {
         "unexpected error: {error}"
     );
     assert_eq!(fs::read(&input).expect("input"), [0]);
+}
+
+/// `print "first"; bufstring "two"; bufchar '!'; printbuf; print "third"; exit 0`, with the
+/// three NUL-terminated strings placed right after the 26 bytes of code.
+fn printing_patch() -> Vec<u8> {
+    let mut patch = Vec::new();
+    patch.push(0x68); // print
+    patch.extend_from_slice(&26u32.to_le_bytes());
+    patch.push(0xA0); // bufstring
+    patch.extend_from_slice(&32u32.to_le_bytes());
+    patch.push(0xA2); // bufchar
+    patch.extend_from_slice(&u32::from(b'!').to_le_bytes());
+    patch.push(0xA6); // printbuf
+    patch.push(0x68); // print
+    patch.extend_from_slice(&36u32.to_le_bytes());
+    patch.push(0x06); // exit
+    patch.extend_from_slice(&0u32.to_le_bytes());
+    assert_eq!(patch.len(), 26);
+    patch.extend_from_slice(b"first\0two\0third\0");
+    patch
+}
+
+#[test]
+fn printed_messages_reach_the_apply_report_in_order() {
+    let temp = Scratch::new();
+    let input = temp.0.join("print-input.bin");
+    let patch_path = temp.0.join("print.bsp");
+    fs::write(&input, [7]).expect("input");
+    fs::write(&patch_path, printing_patch()).expect("patch");
+    let handler = PatchRegistry::new().find_by_name("BSP").expect("BSP");
+
+    for threads in [1, 2] {
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: temp.0.join(format!("print-output-{threads}.bin")),
+                },
+                &temp.context(threads),
+            )
+            .expect("a printing script applies");
+        assert!(
+            report
+                .label
+                .ends_with("; warning=first; warning=two!; warning=third"),
+            "messages must be listed in print order: {}",
+            report.label
+        );
+    }
+}
+
+#[test]
+fn cancellation_stops_a_runaway_script_within_a_bounded_time() {
+    let temp = Scratch::new();
+    let input = temp.0.join("loop-input.bin");
+    let patch_path = temp.0.join("loop.bsp");
+    let output = temp.0.join("loop-output.bin");
+    fs::write(&input, [0]).expect("input");
+    // `jump 0`: loops until the step budget (billions of steps) would trip.
+    let mut patch = vec![0x02];
+    patch.extend_from_slice(&0u32.to_le_bytes());
+    fs::write(&patch_path, patch).expect("patch");
+    let handler = PatchRegistry::new().find_by_name("BSP").expect("BSP");
+
+    let cancel = CancellationToken::new();
+    let canceller = {
+        let cancel = cancel.clone();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(100));
+            cancel.cancel();
+        })
+    };
+    let started = Instant::now();
+    let error = handler
+        .apply(
+            &PatchApplyRequest {
+                input,
+                patches: vec![patch_path],
+                output: output.clone(),
+            },
+            &temp.context_with_cancel(1, cancel),
+        )
+        .expect_err("a cancelled script must stop");
+    canceller.join().expect("canceller thread");
+
+    assert_eq!(error.kind(), RomWeaverErrorKind::Cancelled, "{error}");
+    assert!(
+        started.elapsed() < Duration::from_secs(30),
+        "cancellation took {:?}",
+        started.elapsed()
+    );
+    assert!(!output.exists(), "a cancelled BSP must not leave an output");
 }

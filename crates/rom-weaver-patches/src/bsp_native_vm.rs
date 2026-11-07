@@ -8,8 +8,8 @@ use std::{
 };
 
 use rom_weaver_core::{
-    DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, RomWeaverError,
-    SharedBlockCacheReader, SharedThreadPool, UnsupportedOp,
+    CancellationToken, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+    RomWeaverError, SharedBlockCacheReader, SharedThreadPool, UnsupportedOp,
 };
 use sha1::{Digest, Sha1};
 use tracing::debug;
@@ -37,11 +37,20 @@ const BSP_MAX_STACK_LEN: usize = 1 << 24;
 /// 256-word variable file plus an owned copy of the selected patch region), so a
 /// self-referential `bsppatch` would OOM long before the step budget trips.
 const BSP_MAX_PATCH_DEPTH: usize = 256;
-/// Upper bound on the per-frame print message buffer. The print opcodes
-/// (0xA0-0xA5) append attacker-controlled text/chars/numbers every iteration and
-/// only 0xA6/0xA7 clear it, so a `print; jump` loop within the step budget could
-/// grow it unbounded and OOM; this caps it to a validation error instead.
+/// Upper bound on the per-frame print message buffer and on a single decoded string. The
+/// print opcodes (0xA0-0xA5) append attacker-controlled text/chars/numbers every
+/// iteration and only 0xA6/0xA7 clear it, so a `print; jump` loop within the step
+/// budget could grow it unbounded and OOM. Excess characters are silently
+/// discarded, as the BSP spec's "String handling" section requires.
 const BSP_MAX_MESSAGE_BUFFER_LEN: usize = 1 << 20;
+/// Steps between cancellation polls in `execute`: frequent enough to stop a runaway
+/// script promptly, rare enough that the atomic load is invisible next to the opcode work.
+const BSP_CANCEL_POLL_INTERVAL_STEPS: u64 = 1 << 12;
+/// How many `print`/`printbuf` messages one run keeps for the apply report; later ones are
+/// only counted so a print loop cannot grow the report without bound.
+const BSP_MAX_REPORTED_MESSAGES: usize = 64;
+/// Longest message kept for the apply report, in bytes (cut at a character boundary).
+const BSP_MAX_REPORTED_MESSAGE_BYTES: usize = 4096;
 
 #[derive(Clone, Copy)]
 enum StepControl {
@@ -52,6 +61,15 @@ enum StepControl {
 enum VmOutcome {
     Success,
     Failure(u32),
+    Cancelled,
+}
+
+/// Result of a successful BSP run: the output length and the `print`/`printbuf` messages the
+/// script produced, in execution order.
+#[derive(Debug)]
+pub(crate) struct BspApplyOutcome {
+    pub(crate) written: u64,
+    pub(crate) messages: Vec<String>,
 }
 
 enum PatchSpace {
@@ -121,6 +139,9 @@ struct Frame {
     stack: VecDeque<u32>,
     waiting_var: Option<u8>,
     message_buffer: String,
+    /// Set once an append was cut short by the buffer cap; further appends are discarded
+    /// until the buffer is printed or cleared.
+    message_overflowed: bool,
 }
 
 impl Frame {
@@ -132,7 +153,14 @@ impl Frame {
             stack: VecDeque::new(),
             waiting_var: None,
             message_buffer: String::new(),
+            message_overflowed: false,
         }
+    }
+
+    /// Empties the message buffer, returning its contents and re-enabling appends.
+    fn take_message_buffer(&mut self) -> String {
+        self.message_overflowed = false;
+        std::mem::take(&mut self.message_buffer)
     }
 }
 
@@ -286,6 +314,10 @@ struct BspVm<'pool> {
     suspended_frames: Vec<Frame>,
     dirty: bool,
     sha1: [u8; 20],
+    cancel: CancellationToken,
+    /// Messages printed so far, capped at `BSP_MAX_REPORTED_MESSAGES`.
+    messages: Vec<String>,
+    suppressed_messages: usize,
     _thread_pool: std::marker::PhantomData<&'pool SharedThreadPool>,
 }
 
@@ -336,8 +368,16 @@ impl<'pool> BspVm<'pool> {
             suspended_frames: Vec::new(),
             dirty: true,
             sha1: [0; 20],
+            cancel: CancellationToken::new(),
+            messages: Vec::new(),
+            suppressed_messages: 0,
             _thread_pool: std::marker::PhantomData,
         })
+    }
+
+    fn with_cancellation(mut self, cancel: CancellationToken) -> Self {
+        self.cancel = cancel;
+        self
     }
 
     fn execute(&mut self) -> VmResult<VmOutcome> {
@@ -349,6 +389,10 @@ impl<'pool> BspVm<'pool> {
                 return Err(format!(
                     "BSP script exceeded its instruction budget of {budget} steps (possible infinite loop)"
                 ));
+            }
+            if steps.is_multiple_of(BSP_CANCEL_POLL_INTERVAL_STEPS) && self.cancel.is_cancelled() {
+                debug!(steps, "BSP script cancelled");
+                return Ok(VmOutcome::Cancelled);
             }
             let opcode = self.next_patch_byte()?;
             let args = self.opcode_parameters(opcode)?;
@@ -567,15 +611,48 @@ impl<'pool> BspVm<'pool> {
         Ok(end as u32)
     }
 
-    fn push_message(&mut self, text: &str) -> VmResult<()> {
+    /// Appends to the message buffer, keeping only the whole characters that fit under the cap.
+    /// Once something is discarded the rest is too, until the buffer is printed or cleared.
+    fn push_message(&mut self, text: &str) {
         let frame = self.top_frame_mut();
-        if frame.message_buffer.len().saturating_add(text.len()) > BSP_MAX_MESSAGE_BUFFER_LEN {
-            return Err(format!(
-                "BSP print message buffer exceeded the maximum size of {BSP_MAX_MESSAGE_BUFFER_LEN} bytes"
-            ));
+        if frame.message_overflowed {
+            return;
         }
-        frame.message_buffer.push_str(text);
-        Ok(())
+        let room = BSP_MAX_MESSAGE_BUFFER_LEN - frame.message_buffer.len();
+        let kept = if text.len() <= room {
+            text
+        } else {
+            frame.message_overflowed = true;
+            &text[..floor_char_boundary(text, room)]
+        };
+        frame.message_buffer.push_str(kept);
+    }
+
+    /// Records a printed message for the apply report. Empty messages carry nothing to show.
+    fn report_message(&mut self, message: &str) {
+        if message.is_empty() {
+            return;
+        }
+        if self.messages.len() >= BSP_MAX_REPORTED_MESSAGES {
+            self.suppressed_messages += 1;
+            return;
+        }
+        let kept = &message[..floor_char_boundary(message, BSP_MAX_REPORTED_MESSAGE_BYTES)];
+        debug!(bytes = message.len(), "BSP script printed a message");
+        self.messages.push(kept.to_string());
+    }
+
+    /// Takes the printed messages, with a final note when some were not kept.
+    fn take_messages(&mut self) -> Vec<String> {
+        let mut messages = std::mem::take(&mut self.messages);
+        if self.suppressed_messages > 0 {
+            messages.push(format!(
+                "{} further BSP message(s) not shown",
+                self.suppressed_messages
+            ));
+            self.suppressed_messages = 0;
+        }
+        messages
     }
 
     fn get_file_byte(&mut self, position: u32) -> VmResult<u8> {
@@ -685,24 +762,41 @@ impl<'pool> BspVm<'pool> {
         Ok(())
     }
 
+    /// Decodes the NUL-terminated UTF-8 string at `address`, validating all of it but keeping
+    /// only the whole characters that fit under `BSP_MAX_MESSAGE_BUFFER_LEN`.
     fn utf8_decode(&self, mut address: u32) -> VmResult<String> {
-        let mut bytes = Vec::new();
+        let mut decoded = String::new();
+        let mut truncated = false;
+        let mut pending = [0u8; 4];
+        let mut pending_len = 0usize;
+        let mut sequence_len = 0usize;
         loop {
             let next = self.get_patch_byte(address)?;
             address = address.wrapping_add(1);
             if next == 0 {
                 break;
             }
-            if bytes.len() >= BSP_MAX_MESSAGE_BUFFER_LEN {
-                return Err(format!(
-                    "BSP decoded string exceeded the maximum size of {BSP_MAX_MESSAGE_BUFFER_LEN} bytes"
-                ));
+            if pending_len == 0 {
+                sequence_len = utf8_sequence_len(next)?;
             }
-            bytes.push(next);
+            pending[pending_len] = next;
+            pending_len += 1;
+            if pending_len < sequence_len {
+                continue;
+            }
+            let character = std::str::from_utf8(&pending[..pending_len])
+                .map_err(|_| "invalid UTF-8 string".to_string())?;
+            pending_len = 0;
+            if !truncated && decoded.len() + character.len() <= BSP_MAX_MESSAGE_BUFFER_LEN {
+                decoded.push_str(character);
+            } else {
+                truncated = true;
+            }
         }
-        let decoded =
-            std::str::from_utf8(&bytes).map_err(|_| "invalid UTF-8 string".to_string())?;
-        Ok(decoded.to_string())
+        if pending_len != 0 {
+            return Err("invalid UTF-8 string".to_string());
+        }
+        Ok(decoded)
     }
 
     fn update_hashes(&mut self) -> VmResult<()> {
@@ -1058,7 +1152,8 @@ impl<'pool> BspVm<'pool> {
                 Ok(StepControl::Continue)
             }
             0x68 | 0x69 => {
-                let _ = self.utf8_decode(args[0])?;
+                let text = self.utf8_decode(args[0])?;
+                self.report_message(&text);
                 Ok(StepControl::Continue)
             }
             0x6A | 0x6B => {
@@ -1306,7 +1401,7 @@ impl<'pool> BspVm<'pool> {
             }
             0xA0 | 0xA1 => {
                 let text = self.utf8_decode(args[0])?;
-                self.push_message(&text)?;
+                self.push_message(&text);
                 Ok(StepControl::Continue)
             }
             0xA2 | 0xA3 => {
@@ -1318,20 +1413,21 @@ impl<'pool> BspVm<'pool> {
                     let c = char::from_u32(character)
                         .ok_or_else(|| "invalid Unicode character".to_string())?;
                     let mut buf = [0u8; 4];
-                    self.push_message(c.encode_utf8(&mut buf))?;
+                    self.push_message(c.encode_utf8(&mut buf));
                 }
                 Ok(StepControl::Continue)
             }
             0xA4 | 0xA5 => {
-                self.push_message(&args[0].to_string())?;
+                self.push_message(&args[0].to_string());
                 Ok(StepControl::Continue)
             }
             0xA6 => {
-                self.top_frame_mut().message_buffer.clear();
+                let message = self.top_frame_mut().take_message_buffer();
+                self.report_message(&message);
                 Ok(StepControl::Continue)
             }
             0xA7 => {
-                self.top_frame_mut().message_buffer.clear();
+                self.top_frame_mut().take_message_buffer();
                 Ok(StepControl::Continue)
             }
             0xA8 | 0xA9 => {
@@ -1668,41 +1764,65 @@ fn vm_execution_error(message: &str) -> RomWeaverError {
     RomWeaverError::Validation(format!("BSP patch execution failed: {message}"))
 }
 
+/// Number of bytes the sequence introduced by lead byte `lead` spans, or an error when no valid
+/// UTF-8 sequence starts with it.
+fn utf8_sequence_len(lead: u8) -> VmResult<usize> {
+    match lead {
+        0x01..=0x7F => Ok(1),
+        0xC2..=0xDF => Ok(2),
+        0xE0..=0xEF => Ok(3),
+        0xF0..=0xF4 => Ok(4),
+        _ => Err("invalid UTF-8 string".to_string()),
+    }
+}
+
+/// Largest index at or below `index` that falls on a character boundary of `text`.
+fn floor_char_boundary(text: &str, index: usize) -> usize {
+    (0..=index.min(text.len()))
+        .rev()
+        .find(|&candidate| text.is_char_boundary(candidate))
+        .unwrap_or(0)
+}
+
+fn finish_vm(mut vm: BspVm<'_>) -> Result<BspApplyOutcome, RomWeaverError> {
+    match vm.execute() {
+        Ok(VmOutcome::Success) => Ok(BspApplyOutcome {
+            written: vm.output_len() as u64,
+            messages: vm.take_messages(),
+        }),
+        Ok(VmOutcome::Failure(code)) => Err(RomWeaverError::Validation(format!(
+            "BSP patch script exited with failure status {}",
+            code as i64
+        ))),
+        Ok(VmOutcome::Cancelled) => Err(RomWeaverError::Cancelled),
+        Err(message) => Err(vm_execution_error(&message)),
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn apply_bsp_patch_file_native(
     patch_bytes: &[u8],
     file_path: &Path,
     pool: Option<&SharedThreadPool>,
 ) -> Result<u64, RomWeaverError> {
-    let mut vm = BspVm::new(patch_bytes, file_path, pool).map_err(|message| {
+    let vm = BspVm::new(patch_bytes, file_path, pool).map_err(|message| {
         RomWeaverError::Validation(format!("BSP patch execution failed: {message}"))
     })?;
-    match vm.execute() {
-        Ok(VmOutcome::Success) => Ok(vm.output_len() as u64),
-        Ok(VmOutcome::Failure(code)) => Err(RomWeaverError::Validation(format!(
-            "BSP patch script exited with failure status {}",
-            code as i64
-        ))),
-        Err(message) => Err(vm_execution_error(&message)),
-    }
+    finish_vm(vm).map(|outcome| outcome.written)
 }
 
 pub(crate) fn apply_bsp_patch_file_native_from_path(
     patch_path: &Path,
     file_path: &Path,
     pool: Option<&SharedThreadPool>,
-) -> Result<u64, RomWeaverError> {
-    let mut vm = BspVm::new_from_patch_path(patch_path, file_path, pool).map_err(|message| {
-        RomWeaverError::Validation(format!("BSP patch execution failed: {message}"))
-    })?;
-    match vm.execute() {
-        Ok(VmOutcome::Success) => Ok(vm.output_len() as u64),
-        Ok(VmOutcome::Failure(code)) => Err(RomWeaverError::Validation(format!(
-            "BSP patch script exited with failure status {}",
-            code as i64
-        ))),
-        Err(message) => Err(vm_execution_error(&message)),
-    }
+    cancel: &CancellationToken,
+) -> Result<BspApplyOutcome, RomWeaverError> {
+    let vm = BspVm::new_from_patch_path(patch_path, file_path, pool)
+        .map_err(|message| {
+            RomWeaverError::Validation(format!("BSP patch execution failed: {message}"))
+        })?
+        .with_cancellation(cancel.clone());
+    finish_vm(vm)
 }
 
 #[cfg(test)]

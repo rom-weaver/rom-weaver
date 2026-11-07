@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File, OpenOptions},
-    io::{BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write},
+    io::{BufReader, Read, Seek, SeekFrom, Write},
     path::Path,
 };
 
@@ -145,7 +145,12 @@ impl PatchHandler for SolidPatchHandler {
         if validate_checksums {
             validate_source_checksum(parsed.source_md5, &request.input)?;
         }
-        let write_plan = plan_patch_writes(&parsed, &request.input, patch_path)?;
+        let write_plan = plan_patch_writes(
+            &parsed,
+            &request.input,
+            patch_path,
+            fs::metadata(patch_path)?.len(),
+        )?;
         let thread_capability = parallel_per_record_capability(parsed.primitives.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         if let Some(parent) = request.output.parent() {
@@ -199,7 +204,12 @@ impl PatchHandler for SolidPatchHandler {
         if validate_checksums {
             validate_source_checksum(parsed.source_md5, &request.input)?;
         }
-        plan_patch_writes(&parsed, &request.input, patch_path)?;
+        plan_patch_writes(
+            &parsed,
+            &request.input,
+            patch_path,
+            fs::metadata(patch_path)?.len(),
+        )?;
         let checksum_suffix = checksum_validation_suffix(validate_checksums);
         Ok(crate::patch_success_report(
             self.descriptor,
@@ -338,7 +348,8 @@ impl PatchHandler for SolidPatchHandler {
         let replay_path = context
             .temp_paths()
             .next_path("solid-create-replay", Some("bin"));
-        let write_plan = plan_patch_writes(&parsed, &request.original, &replay_path)?;
+        let write_plan =
+            plan_patch_writes(&parsed, &request.original, &replay_path, patch.len() as u64)?;
         apply_parsed_patch_to_file(
             &parsed,
             write_plan,
@@ -735,23 +746,45 @@ fn parse_solid_patch_bytes(bytes: &[u8]) -> Result<ParsedSolidPatch> {
 }
 
 /// Plans the primitive writes against `source_path`, reporting an impossible plan as a corrupt
-/// `patch_path`.
+/// `patch_path`, and refuses a patch whose writes or resize would build an implausibly large
+/// output (gaps and extensions are zero-filled, so a corrupt address would size the output).
 fn plan_patch_writes(
     parsed: &ParsedSolidPatch,
     source_path: &Path,
     patch_path: &Path,
+    patch_len: u64,
 ) -> Result<(Vec<PrimitiveWritePlan>, usize)> {
-    let source_len = usize_from_u64(fs::metadata(source_path)?.len(), "SOLID source length")?;
-    build_primitive_write_plans(parsed, source_len).map_err(|error| {
-        debug!(patch = %patch_path.display(), %error, "SOLID write plan rejected");
-        let detail = match error {
-            RomWeaverError::Validation(message) => message,
-            other => other.to_string(),
-        };
-        RomWeaverError::Validation(format!(
-            "SOLID patch `{}` is corrupt: {detail}",
-            patch_path.display()
-        ))
+    let source_len = fs::metadata(source_path)?.len();
+    let plan =
+        build_primitive_write_plans(parsed, usize_from_u64(source_len, "SOLID source length")?)
+            .map_err(|error| {
+                debug!(patch = %patch_path.display(), %error, "SOLID write plan rejected");
+                let detail = match error {
+                    RomWeaverError::Validation(message) => message,
+                    other => other.to_string(),
+                };
+                RomWeaverError::Validation(format!(
+                    "SOLID patch `{}` is corrupt: {detail}",
+                    patch_path.display()
+                ))
+            })?;
+    let peak_len = peak_output_len(parsed, plan.1)?;
+    crate::ensure_plausible_output_len("SOLID", peak_len, source_len, patch_len)?;
+    Ok(plan)
+}
+
+/// Largest length the output reaches while applying: the primitive writes, the expansion data
+/// ending past them, or a truncate target above them.
+fn peak_output_len(parsed: &ParsedSolidPatch, required_output_len: usize) -> Result<u64> {
+    let written_len = required_output_len as u64;
+    Ok(match parsed.resize {
+        ResizeAction::None => written_len,
+        ResizeAction::Expand { address, size } => written_len.max(checked_add_u64(
+            address,
+            size,
+            "SOLID resizeFileAddr + resizeFileDataSize overflow",
+        )?),
+        ResizeAction::Truncate { size } => written_len.max(size),
     })
 }
 
@@ -832,14 +865,13 @@ fn apply_solid_writes_and_resize_to_file(
     )?;
     output.flush()?;
     drop(output);
-    apply_resize_action_to_file(parsed, output_path, context)
+    apply_resize_action_to_file(parsed, output_path)
 }
 
-fn apply_resize_action_to_file(
-    parsed: &ParsedSolidPatch,
-    output_path: &Path,
-    context: &OperationContext,
-) -> Result<()> {
+/// Applies the `modFileAction` resize like the author's reference: expansion data overwrites
+/// the output at `resizeFileAddr` (extending it, zero-filling any gap, when it runs past the
+/// end) and a truncate sets the length, zero-extending a shorter output.
+fn apply_resize_action_to_file(parsed: &ParsedSolidPatch, output_path: &Path) -> Result<()> {
     match parsed.resize {
         ResizeAction::None => {}
         ResizeAction::Expand { address, size } => {
@@ -848,83 +880,20 @@ fn apply_resize_action_to_file(
                     "SOLID expansion payload length does not match resizeFileDataSize".into(),
                 ));
             }
-            let output_len = fs::metadata(output_path)?.len();
-            if address > output_len {
-                return Err(RomWeaverError::ValidationCode(
-                    solid_validation_code("SOLID_RESIZE_ADDR_EXCEEDED_OUTPUT_LENGTH")
-                        .with_message("SOLID resizeFileAddr exceeds output length")
-                        .with_field("resize_addr", address)
-                        .with_field("output_len", output_len),
-                ));
-            }
             if size == 0 {
                 return Ok(());
             }
-
-            let temp_path = context
-                .temp_paths()
-                .next_path("solid-apply-expand", Some("bin"));
-            if let Some(parent) = temp_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            let mut output = File::open(output_path)?;
-            let temp_file = File::create(&temp_path)?;
-            let mut temp = BufWriter::new(temp_file);
-            copy_file_range(&mut output, &mut temp, 0, address)?;
-            temp.write_all(&parsed.expansion_data)?;
-            copy_file_range(
-                &mut output,
-                &mut temp,
-                address,
-                output_len.saturating_sub(address),
-            )?;
-            temp.flush()?;
-            drop(temp);
-
-            if let Err(error) = fs::rename(&temp_path, output_path) {
-                if error.kind() == ErrorKind::AlreadyExists
-                    || error.kind() == ErrorKind::PermissionDenied
-                {
-                    fs::remove_file(output_path)?;
-                    fs::rename(&temp_path, output_path)?;
-                } else {
-                    let _ = fs::remove_file(&temp_path);
-                    return Err(error.into());
-                }
-            }
+            let mut output = OpenOptions::new().write(true).open(output_path)?;
+            output.seek(SeekFrom::Start(address))?;
+            output.write_all(&parsed.expansion_data)?;
+            output.flush()?;
         }
         ResizeAction::Truncate { size } => {
-            let output_len = fs::metadata(output_path)?.len();
-            if size > output_len {
-                return Err(RomWeaverError::ValidationCode(
-                    solid_validation_code("SOLID_TRUNCATE_SIZE_EXCEEDED_OUTPUT_LENGTH")
-                        .with_message("SOLID truncate size exceeds output length")
-                        .with_field("truncate_size", size)
-                        .with_field("output_len", output_len),
-                ));
-            }
             OpenOptions::new()
                 .write(true)
                 .open(output_path)?
                 .set_len(size)?;
         }
-    }
-    Ok(())
-}
-
-fn copy_file_range(reader: &mut File, writer: &mut dyn Write, start: u64, len: u64) -> Result<()> {
-    if len == 0 {
-        return Ok(());
-    }
-    reader.seek(SeekFrom::Start(start))?;
-    let mut remaining = len;
-    let mut buffer = [0u8; 64 * 1024];
-    while remaining > 0 {
-        let chunk_len = usize::try_from(remaining.min(buffer.len() as u64))
-            .map_err(|_| RomWeaverError::Validation("SOLID copy chunk exceeded usize".into()))?;
-        reader.read_exact(&mut buffer[..chunk_len])?;
-        writer.write_all(&buffer[..chunk_len])?;
-        remaining -= chunk_len as u64;
     }
     Ok(())
 }
@@ -958,13 +927,6 @@ fn build_primitive_write_plans(
         }
 
         let start = usize_from_u64(cursor, "SOLID primitive address")?;
-        // Primitives may extend the output but never leave a hole; a start past the end is a
-        // corrupt address that would otherwise size the output from garbage.
-        if start > required_output_len {
-            return Err(RomWeaverError::Validation(format!(
-                "SOLID primitive {primitive_index} writes at offset {start}, past the end of the {required_output_len}-byte output"
-            )));
-        }
         let len = primitive.write_len();
         let end = checked_add_usize(start, len, "SOLID primitive write end")?;
         required_output_len = required_output_len.max(end);

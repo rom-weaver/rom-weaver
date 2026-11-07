@@ -598,38 +598,53 @@ fn validate_rejects_an_input_that_matches_neither_side() {
     assert!(error.to_string().contains("UPS input validation failed"));
 }
 
+/// Records (as raw patch bytes) whose xor bytes run past or start beyond the
+/// 8-byte output, with the output byte-for-byte as byuu/Flips produce it: the
+/// bytes past the end are dropped and the rest are applied.
+fn out_of_range_record_cases() -> Vec<(&'static str, Vec<u8>, &'static [u8])> {
+    let mut straddle = Vec::new();
+    super::push_varint(&mut straddle, 6);
+    straddle.extend_from_slice(&[1, 2, 3, 4]);
+    straddle.push(0);
+
+    let mut beyond = Vec::new();
+    super::push_varint(&mut beyond, 1 << 40);
+    beyond.extend_from_slice(&[9, 9]);
+    beyond.push(0);
+
+    // Longer than one 4 MiB write chunk, so later chunks start past the end.
+    let mut oversized = Vec::new();
+    super::push_varint(&mut oversized, 0);
+    oversized.extend(std::iter::repeat_n(1u8, 5 * 1024 * 1024));
+    oversized.push(0);
+
+    vec![
+        ("straddle", straddle, b"ABCDEFFJ"),
+        ("beyond", beyond, b"ABCDEFGH"),
+        ("oversized", oversized, b"@CBEDGFI"),
+    ]
+}
+
 #[test]
-fn validate_rejects_a_change_past_the_declared_sizes() {
-    let temp = TestDir::new();
-    let source_path = temp.child("range-source.bin");
-    let patch_path = temp.child("range.ups");
-
+fn validate_accepts_a_change_past_the_declared_sizes() {
     let source = b"ABCDEFGH";
-    let target = b"ABCDEFGH";
-    // A record at offset 6 carrying four xor bytes runs two bytes past the
-    // eight-byte working size.
-    let mut records = Vec::new();
-    super::push_varint(&mut records, 6);
-    records.extend_from_slice(&[1, 2, 3, 4]);
-    records.push(0);
+    for (name, records, target) in out_of_range_record_cases() {
+        let temp = TestDir::new();
+        let source_path = temp.child("range-source.bin");
+        let patch_path = temp.child("range.ups");
+        fs::write(&source_path, source).expect("source fixture");
+        fs::write(&patch_path, build_ups_patch(source, target, &records)).expect("patch fixture");
 
-    fs::write(&source_path, source).expect("source fixture");
-    fs::write(&patch_path, build_ups_patch(source, target, &records)).expect("patch fixture");
-
-    let error = UpsPatchHandler::new(&UPS)
-        .validate(
-            &PatchValidateRequest {
-                input: source_path,
-                patches: vec![patch_path],
-            },
-            &test_context_with_threads(&temp, 1),
-        )
-        .expect_err("an out-of-bounds change must be rejected");
-    assert!(
-        error
-            .to_string()
-            .contains("UPS change exceeds declared patch file bounds")
-    );
+        UpsPatchHandler::new(&UPS)
+            .validate(
+                &PatchValidateRequest {
+                    input: source_path,
+                    patches: vec![patch_path],
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .unwrap_or_else(|error| panic!("{name}: validate must accept it: {error}"));
+    }
 }
 
 #[test]
@@ -916,43 +931,76 @@ fn apply_without_source_checks_falls_back_to_the_target_size_and_to_equal_sizes(
 }
 
 #[test]
-fn apply_rejects_a_change_past_the_output_length() {
+fn apply_drops_xor_bytes_past_the_output_length() {
     let temp = TestDir::new();
     let source = b"ABCDEFGH";
-    let target = b"ABCDEFGH";
 
-    // The record starts inside the file but its four xor bytes run past the end.
-    let mut records = Vec::new();
-    super::push_varint(&mut records, 6);
-    records.extend_from_slice(&[1, 2, 3, 4]);
-    records.push(0);
-    let patch = build_ups_patch(source, target, &records);
+    // Both the single-threaded and the pooled apply path must drop the excess
+    // bytes and let the target checksum judge the result.
+    for (name, records, target) in out_of_range_record_cases() {
+        for threads in [1usize, 4] {
+            let source_path = temp.child(&format!("oob-source-{name}-{threads}.bin"));
+            let patch_path = temp.child(&format!("oob-{name}-{threads}.ups"));
+            let output_path = temp.child(&format!("oob-output-{name}-{threads}.bin"));
+            fs::write(&source_path, source).expect("source fixture");
+            fs::write(&patch_path, build_ups_patch(source, target, &records))
+                .expect("patch fixture");
 
-    // Both the single-threaded and the pooled apply path must refuse it.
-    for threads in [1usize, 4] {
-        let source_path = temp.child(&format!("oob-source-{threads}.bin"));
-        let patch_path = temp.child(&format!("oob-{threads}.ups"));
-        let output_path = temp.child(&format!("oob-output-{threads}.bin"));
-        fs::write(&source_path, source).expect("source fixture");
-        fs::write(&patch_path, &patch).expect("patch fixture");
-
-        let error = UpsPatchHandler::new(&UPS)
-            .apply(
-                &PatchApplyRequest {
-                    input: source_path,
-                    patches: vec![patch_path],
-                    output: output_path,
-                },
-                &test_context_with_threads(&temp, threads),
-            )
-            .expect_err("an out-of-bounds change must be rejected");
-        assert!(
-            error
-                .to_string()
-                .contains("UPS change exceeds declared patch file bounds"),
-            "unexpected error at {threads} thread(s): {error}"
-        );
+            UpsPatchHandler::new(&UPS)
+                .apply(
+                    &PatchApplyRequest {
+                        input: source_path,
+                        patches: vec![patch_path],
+                        output: output_path.clone(),
+                    },
+                    &test_context_with_threads(&temp, threads),
+                )
+                .unwrap_or_else(|error| panic!("{name} at {threads} thread(s): {error}"));
+            assert_eq!(
+                fs::read(output_path).expect("output"),
+                target,
+                "{name} at {threads} thread(s)"
+            );
+        }
     }
+}
+
+#[test]
+fn apply_rejects_an_implausibly_large_declared_target_size_before_writing() {
+    let temp = TestDir::new();
+    let source = b"ABCDEFGH";
+    let source_path = temp.child("huge-source.bin");
+    let patch_path = temp.child("huge.ups");
+    let output_path = temp.child("huge-output.bin");
+
+    // Valid source CRC, 8 GiB target size, bogus target CRC: flips refuses it
+    // as "too big" without ever creating the output.
+    let mut patch = super::UPS_MAGIC.to_vec();
+    super::push_varint(&mut patch, source.len() as u64);
+    super::push_varint(&mut patch, 1 << 33);
+    patch.extend_from_slice(&super::crc32_bytes(source).to_le_bytes());
+    patch.extend_from_slice(&0xdead_beef_u32.to_le_bytes());
+    let patch_checksum = super::crc32_bytes(&patch);
+    patch.extend_from_slice(&patch_checksum.to_le_bytes());
+    fs::write(&source_path, source).expect("source fixture");
+    fs::write(&patch_path, patch).expect("patch fixture");
+
+    let error = UpsPatchHandler::new(&UPS)
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("an implausible target size must be rejected");
+    assert_eq!(
+        error.code(),
+        Some(crate::VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE),
+        "{error}"
+    );
+    assert!(!output_path.exists(), "no output may be created");
 }
 
 #[test]
