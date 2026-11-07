@@ -799,20 +799,19 @@ fn add_usize_u64_reports_an_addition_overflow() {
 #[test]
 fn null_terminated_header_reads_report_bad_shapes() {
     assert_eq!(
-        super::read_null_terminated_string(b"HDIFF13&nocomp\0rest", 1024).expect("header"),
-        ("HDIFF13&nocomp".to_string(), 15)
+        super::read_null_terminated_bytes(b"HDIFF13&nocomp\0rest", 1024).expect("header"),
+        (b"HDIFF13&nocomp".to_vec(), 15)
     );
     assert!(
-        super::read_null_terminated_string(b"no terminator", 1024)
+        super::read_null_terminated_bytes(b"no terminator", 1024)
             .expect_err("missing terminator")
             .to_string()
             .contains("HDiffPatch header was missing null terminator")
     );
-    assert!(
-        super::read_null_terminated_string(&[0xFF, 0xFE, 0x00], 1024)
-            .expect_err("non utf8")
-            .to_string()
-            .contains("HDiffPatch header contained non-UTF8 bytes")
+    // The header is raw bytes: patch.c only reads the compressor name for compressed chunks.
+    assert_eq!(
+        super::read_null_terminated_bytes(&[0xFF, 0xFE, 0x00], 1024).expect("non utf8"),
+        (vec![0xFF, 0xFE], 3)
     );
 }
 
@@ -884,7 +883,7 @@ fn file_parser_decodes_multi_byte_varints_and_bools() {
 fn file_parser_rejects_headers_longer_than_the_scan_limit() {
     let mut parser = super::HdiffFileParser::new(b"ABCD".as_slice(), 4);
     let error = parser
-        .read_null_terminated_string(4)
+        .read_null_terminated_bytes(4)
         .expect_err("no terminator within the limit");
     assert!(
         error
@@ -894,15 +893,11 @@ fn file_parser_rejects_headers_longer_than_the_scan_limit() {
 }
 
 #[test]
-fn file_parser_rejects_non_utf8_headers() {
+fn file_parser_reads_non_utf8_headers_as_raw_bytes() {
     let mut parser = super::HdiffFileParser::new([0xFFu8, 0x00].as_slice(), 2);
-    let error = parser
-        .read_null_terminated_string(1024)
-        .expect_err("non utf8 header");
-    assert!(
-        error
-            .to_string()
-            .contains("HDiffPatch header contained non-UTF8 bytes")
+    assert_eq!(
+        parser.read_null_terminated_bytes(1024).expect("raw header"),
+        vec![0xFF]
     );
 }
 
@@ -2562,6 +2557,63 @@ fn hdiffsf20_raw_payload_ignores_an_unusable_compressor_name() {
             "{name}"
         );
     }
+}
+
+#[test]
+fn raw_patches_ignore_a_compressor_name_that_is_not_utf8() {
+    let old = b"abcd";
+    let hdiff13 = build_uncompressed_hdiff13_patch(b"old", b"replacement").expect("patch");
+    let mut rle = Vec::new();
+    write_var_u64(&mut rle, 4);
+    let payload = sf20_step_payload(&sf20_cover(0x00, 0, 4), &rle, &[]);
+    let sf20 = build_hdiffsf20_header(4, 4, 1, &payload);
+    for (magic, patch, old, expected) in [
+        (
+            "HDIFF13",
+            hdiff13,
+            b"old".as_slice(),
+            b"replacement".as_slice(),
+        ),
+        ("HDIFFSF20", sf20, old.as_slice(), old.as_slice()),
+    ] {
+        for name in [&[0xFFu8][..], b"zs\xC3", b"\xFE\xFFnocomp"] {
+            let prefix = format!("{magic}&nocomp\0");
+            let mut renamed = format!("{magic}&").into_bytes();
+            renamed.extend_from_slice(name);
+            renamed.push(0);
+            renamed.extend_from_slice(&patch[prefix.len()..]);
+
+            assert_eq!(
+                write_patch_and_apply(old, &renamed, 1)
+                    .unwrap_or_else(|error| panic!("{magic} {name:?}: {error}")),
+                expected,
+                "{magic} {name:?}"
+            );
+
+            let temp = TestDir::new();
+            let patch_path = temp.child("raw.hdiff");
+            fs::write(&patch_path, &renamed).expect("patch");
+            let report = HdiffPatchHandler::new(&HDIFFPATCH)
+                .parse(&patch_path, &test_context_with_threads(&temp, 1))
+                .unwrap_or_else(|error| panic!("{magic} {name:?}: {error}"));
+            assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+        }
+    }
+}
+
+#[test]
+fn hdiff13_compressed_chunk_with_a_name_that_is_not_utf8_is_unrecognized() {
+    let patch = build_zstd_hdiff13_patch(b"old", &vec![b'A'; 4096]);
+    let prefix = b"HDIFF13&zstd\0";
+    let mut renamed = b"HDIFF13&\xFF\xFEzstd\0".to_vec();
+    renamed.extend_from_slice(&patch[prefix.len()..]);
+    let error = write_patch_and_apply(b"old", &renamed, 1).expect_err("non-UTF-8 plugin name");
+    let message = error.to_string();
+    assert!(
+        message.contains("HDIFF_COMPRESSION_UNRECOGNIZED"),
+        "{message}"
+    );
+    assert!(!message.contains("non-UTF8"), "{message}");
 }
 
 #[test]

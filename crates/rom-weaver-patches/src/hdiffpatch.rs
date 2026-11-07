@@ -351,11 +351,23 @@ impl HdiffCompression {
         }
     }
 
+    /// Parses a raw header name; a name that is not UTF-8 matches no compressor.
+    fn parse_bytes(value: &[u8]) -> Result<Self> {
+        match std::str::from_utf8(value) {
+            Ok(text) => Self::parse(text),
+            Err(_) => Err(RomWeaverError::ValidationCode(
+                hdiff_validation_code("HDIFF_COMPRESSION_UNRECOGNIZED")
+                    .with_message("HDiffPatch compression is not recognized")
+                    .with_field("compression", String::from_utf8_lossy(value).into_owned()),
+            )),
+        }
+    }
+
     /// Resolves the header's compressor name only when a chunk is actually compressed;
     /// patch.c never consults the name for a patch whose chunks are all stored raw.
-    fn resolve(value: &str, has_compressed_chunks: bool) -> Result<Self> {
+    fn resolve(value: &[u8], has_compressed_chunks: bool) -> Result<Self> {
         if has_compressed_chunks {
-            Self::parse(value)
+            Self::parse_bytes(value)
         } else {
             Ok(Self::NoComp)
         }
@@ -498,15 +510,12 @@ impl<R: Read> HdiffFileParser<R> {
         decode_hdiff_varint(tag_bits, first_byte, || self.read_u8(label))
     }
 
-    fn read_null_terminated_string(&mut self, max_len: usize) -> Result<String> {
+    fn read_null_terminated_bytes(&mut self, max_len: usize) -> Result<Vec<u8>> {
         let mut bytes = Vec::new();
         for _ in 0..max_len {
             let byte = self.read_u8("header")?;
             if byte == 0 {
-                let text = std::str::from_utf8(bytes.as_slice()).map_err(|_| {
-                    RomWeaverError::Validation("HDiffPatch header contained non-UTF8 bytes".into())
-                })?;
-                return Ok(text.to_string());
+                return Ok(bytes);
             }
             bytes.push(byte);
         }
@@ -609,15 +618,15 @@ fn parse_hdiff_patch_file(path: &Path) -> Result<ParsedPatchVariant> {
     reject_unsupported_layout(reader.fill_buf()?)?;
     let mut parser = HdiffFileParser::new(reader, file_len);
 
-    let header_text = parser.read_null_terminated_string(1024)?;
-    let parts = header_text.split('&').collect::<Vec<_>>();
+    let header_text = parser.read_null_terminated_bytes(1024)?;
+    let parts = header_text.split(|&byte| byte == b'&').collect::<Vec<_>>();
     if parts.len() < 2 {
         return Err(RomWeaverError::Validation(
             "HDiffPatch header is incomplete".into(),
         ));
     }
 
-    let magic = parts[0];
+    let magic = String::from_utf8_lossy(parts[0]);
     let compression_name = parts[1];
 
     let variant = if magic == "HDIFF13" {
@@ -694,7 +703,7 @@ fn parse_hdiff_patch_file(path: &Path) -> Result<ParsedPatchVariant> {
         }
 
         ParsedPatchVariant::Directory19(ParsedHdiffDir19 {
-            compression: HdiffCompression::parse(compression_name)?,
+            compression: HdiffCompression::parse_bytes(compression_name)?,
             old_data_size: input_sum_size,
             new_data_size: output_sum_size,
         })
@@ -702,7 +711,7 @@ fn parse_hdiff_patch_file(path: &Path) -> Result<ParsedPatchVariant> {
         return Err(RomWeaverError::ValidationCode(
             hdiff_validation_code("HDIFF_MAGIC_UNSUPPORTED")
                 .with_message("HDiffPatch magic is not supported")
-                .with_field("magic", magic),
+                .with_field("magic", magic.as_ref()),
         ));
     };
 
@@ -738,15 +747,15 @@ fn check_hdiffsf20_header_sizes(
 #[cfg(test)]
 fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
     reject_unsupported_layout(raw)?;
-    let (header_text, mut index) = read_null_terminated_string(raw, 1024)?;
-    let parts = header_text.split('&').collect::<Vec<_>>();
+    let (header_text, mut index) = read_null_terminated_bytes(raw, 1024)?;
+    let parts = header_text.split(|&byte| byte == b'&').collect::<Vec<_>>();
     if parts.len() < 2 {
         return Err(RomWeaverError::Validation(
             "HDiffPatch header is incomplete".into(),
         ));
     }
 
-    let magic = parts[0];
+    let magic = String::from_utf8_lossy(parts[0]);
     let compression_name = parts[1];
 
     let variant = if magic == "HDIFF13" {
@@ -826,7 +835,7 @@ fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
         }
 
         ParsedPatchVariant::Directory19(ParsedHdiffDir19 {
-            compression: HdiffCompression::parse(compression_name)?,
+            compression: HdiffCompression::parse_bytes(compression_name)?,
             old_data_size: input_sum_size,
             new_data_size: output_sum_size,
         })
@@ -834,7 +843,7 @@ fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
         return Err(RomWeaverError::ValidationCode(
             hdiff_validation_code("HDIFF_MAGIC_UNSUPPORTED")
                 .with_message("HDiffPatch magic is not supported")
-                .with_field("magic", magic),
+                .with_field("magic", magic.as_ref()),
         ));
     };
 
@@ -2270,14 +2279,11 @@ fn take_new_diff<'a>(
 }
 
 #[cfg(test)]
-fn read_null_terminated_string(bytes: &[u8], max_len: usize) -> Result<(String, usize)> {
+fn read_null_terminated_bytes(bytes: &[u8], max_len: usize) -> Result<(Vec<u8>, usize)> {
     let limit = bytes.len().min(max_len);
     for index in 0..limit {
         if bytes[index] == 0 {
-            let text = std::str::from_utf8(&bytes[..index]).map_err(|_| {
-                RomWeaverError::Validation("HDiffPatch header contained non-UTF8 bytes".into())
-            })?;
-            return Ok((text.to_string(), index + 1));
+            return Ok((bytes[..index].to_vec(), index + 1));
         }
     }
 
