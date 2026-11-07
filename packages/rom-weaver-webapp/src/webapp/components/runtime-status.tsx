@@ -1,6 +1,6 @@
 import { Globe, MonitorCheck, MonitorDown, MonitorOff, MonitorUp } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import type { MessageId } from "../../presentation/localization/catalog.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
@@ -228,12 +228,72 @@ const ProgressRingGlyph = ({ percent }: { percent: number }) => {
   );
 };
 
-const RuntimeGlyph = ({ state, percent = null }: { state: RuntimeState; percent?: number | null }) => {
+// The update nudge plays once per page load, on the first rendered glyph that claims it.
+let hasNudged = false;
+
+const claimNudge = (svg: SVGSVGElement | null): boolean => {
+  if (hasNudged || !svg || svg.getClientRects().length === 0) return false;
+  hasNudged = true;
+  return true;
+};
+
+/**
+ * Cues the update nudge on the first rendered glyph once `isEligible` holds and the tab is visible, so a hidden
+ * glyph or background page does not spend it. Callers MUST attach `svgRef` to the animated svg.
+ */
+const useUpdateNudge = (isEligible: boolean) => {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [isCued, setIsCued] = useState(false);
+  useEffect(() => {
+    if (!isEligible) {
+      setIsCued(false);
+      return undefined;
+    }
+    const cue = () => {
+      if (claimNudge(svgRef.current)) setIsCued(true);
+    };
+    if (document.visibilityState === "visible") {
+      cue();
+      return undefined;
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      cue();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [isEligible]);
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!(svg && isCued)) return undefined;
+    const clearCue = () => setIsCued(false);
+    svg.addEventListener("animationend", clearCue);
+    svg.addEventListener("animationcancel", clearCue);
+    return () => {
+      svg.removeEventListener("animationend", clearCue);
+      svg.removeEventListener("animationcancel", clearCue);
+    };
+  }, [isCued]);
+  return { isCued, svgRef };
+};
+
+/** Only a glyph with `nudge` MAY claim and play the page's one update nudge. */
+const RuntimeGlyph = ({
+  nudge = false,
+  percent = null,
+  state,
+}: {
+  nudge?: boolean;
+  percent?: number | null;
+  state: RuntimeState;
+}) => {
+  const { isCued: shouldNudge, svgRef } = useUpdateNudge(nudge && state === "update");
   if (state === "installing" && typeof percent === "number") {
     return <ProgressRingGlyph percent={percent} />;
   }
   const Icon = RUNTIME_ICONS[state];
-  return <Icon aria-hidden="true" />;
+  return <Icon aria-hidden="true" data-nudge={shouldNudge ? "" : undefined} ref={svgRef} />;
 };
 
 /** The parser-time resolver MUST keep the status and text hooks in sync before hydration. */
@@ -261,7 +321,7 @@ const StatusChip = ({
     title={title}
     type="button"
   >
-    <RuntimeGlyph percent={percent} state={state} />
+    <RuntimeGlyph nudge percent={percent} state={state} />
     <span className="sub-status-text">{label}</span>
     {percent === null ? null : <span className="sub-status-percent">{`${percent}%`}</span>}
   </button>

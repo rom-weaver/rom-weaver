@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import {
   describeWarmupUnit,
@@ -528,5 +528,104 @@ describe("offline status glyphs", () => {
     ["installing", "monitor-down"],
   ] as const)("shows the %s state with its standalone symbol", (state, name) => {
     expect(renderToStaticMarkup(<RuntimeGlyph state={state} />)).toContain("lucide-" + name);
+  });
+
+  describe("the update nudge", () => {
+    // The nudge claim is page-wide module state, so each test loads a fresh copy of the glyph.
+    const loadGlyph = async () => (await import("../../src/webapp/components/shell.tsx")).RuntimeGlyph;
+    const setVisibility = (state: DocumentVisibilityState) => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+    };
+    // happy-dom does no layout, so a glyph counts as rendered only when its box list says so.
+    const setRendered = (isRendered: boolean) =>
+      vi
+        .spyOn(SVGElement.prototype, "getClientRects")
+        .mockImplementation(() => (isRendered ? [new DOMRect()] : []) as unknown as DOMRectList);
+    const nudged = (container: HTMLElement) => container.querySelectorAll("svg[data-nudge]").length;
+    beforeEach(() => {
+      vi.resetModules();
+      setVisibility("visible");
+      setRendered(true);
+    });
+    afterEach(() => {
+      Reflect.deleteProperty(document, "visibilityState");
+      vi.restoreAllMocks();
+    });
+
+    it("plays as soon as a visible page shows the update glyph", async () => {
+      const Glyph = await loadGlyph();
+      const { container } = render(<Glyph nudge state="update" />);
+      await waitFor(() => expect(nudged(container)).toBe(1));
+    });
+
+    it("waits for a hidden page to become visible", async () => {
+      setVisibility("hidden");
+      const Glyph = await loadGlyph();
+      const { container } = render(<Glyph nudge state="update" />);
+      expect(nudged(container)).toBe(0);
+
+      setVisibility("visible");
+      fireEvent(document, new Event("visibilitychange"));
+      await waitFor(() => expect(nudged(container)).toBe(1));
+    });
+
+    it.each([
+      ["finishing", (svg: SVGElement) => fireEvent.animationEnd(svg)],
+      ["cancelling", (svg: SVGElement) => fireEvent(svg, new Event("animationcancel"))],
+    ])("clears the cue when the animation stops by %s", async (_name, stop) => {
+      const Glyph = await loadGlyph();
+      const { container } = render(<Glyph nudge state="update" />);
+      await waitFor(() => expect(nudged(container)).toBe(1));
+
+      stop(container.querySelector("svg") as SVGElement);
+      expect(nudged(container)).toBe(0);
+    });
+
+    it("lets only one of several rendered glyphs play", async () => {
+      const Glyph = await loadGlyph();
+      const { container } = render(
+        <>
+          <Glyph nudge state="update" />
+          <Glyph nudge state="update" />
+        </>,
+      );
+      await waitFor(() => expect(nudged(container)).toBe(1));
+    });
+
+    it("leaves a glyph that is not rendered unclaimed for one that is", async () => {
+      const Glyph = await loadGlyph();
+      setRendered(false);
+      const hidden = render(<Glyph nudge state="update" />);
+      expect(nudged(hidden.container)).toBe(0);
+
+      setRendered(true);
+      const shown = render(<Glyph nudge state="update" />);
+      await waitFor(() => expect(nudged(shown.container)).toBe(1));
+    });
+
+    it("does not cue a glyph that mounts after the page has already nudged", async () => {
+      const Glyph = await loadGlyph();
+      const first = render(<Glyph nudge state="update" />);
+      await waitFor(() => expect(nudged(first.container)).toBe(1));
+      first.unmount();
+
+      const second = render(<Glyph nudge state="update" />);
+      expect(nudged(second.container)).toBe(0);
+    });
+
+    it("keeps a glyph that did not opt in still, so the legend never claims the nudge", async () => {
+      const Glyph = await loadGlyph();
+      const legend = render(<Glyph state="update" />);
+      expect(nudged(legend.container)).toBe(0);
+
+      const chip = render(<Glyph nudge state="update" />);
+      await waitFor(() => expect(nudged(chip.container)).toBe(1));
+    });
+
+    it("leaves every other state still", async () => {
+      const Glyph = await loadGlyph();
+      const { container } = render(<Glyph nudge state="active" />);
+      expect(nudged(container)).toBe(0);
+    });
   });
 });
