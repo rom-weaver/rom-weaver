@@ -367,7 +367,7 @@ const Masthead = ({
              glyph along with the status chips, or hydration mismatches. */
           icon: (
             <span className="nav-runtime" data-sw={runtimeState}>
-              <RuntimeGlyph percent={runtimePercent} state={runtimeState} />
+              <RuntimeGlyph nudge percent={runtimePercent} state={runtimeState} />
             </span>
           ),
           id: "status",

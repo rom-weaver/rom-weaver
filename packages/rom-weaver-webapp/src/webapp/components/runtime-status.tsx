@@ -1,6 +1,6 @@
 import { Globe, MonitorCheck, MonitorDown, MonitorOff, MonitorUp } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import type { MessageId } from "../../presentation/localization/catalog.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
@@ -228,37 +228,73 @@ const ProgressRingGlyph = ({ percent }: { percent: number }) => {
   );
 };
 
-/** True once `active` holds while the tab is visible, so a one-shot cue is not spent on a page nobody is looking at. */
-const useCueWhenVisible = (active: boolean): boolean => {
-  const [cue, setCue] = useState(false);
+// The update nudge plays once per page load, on the first rendered glyph that claims it.
+let hasNudged = false;
+
+const claimNudge = (svg: SVGSVGElement | null): boolean => {
+  if (hasNudged || !svg || svg.getClientRects().length === 0) return false;
+  hasNudged = true;
+  return true;
+};
+
+/**
+ * Cues the update nudge on the first rendered glyph once `active` holds while the tab is visible, so it is not
+ * spent on a hidden glyph or a page nobody is looking at. The ref goes on the animated svg, which clears the
+ * cue when its animation ends or is cancelled by the glyph being hidden.
+ */
+const useUpdateNudge = (active: boolean, enabled: boolean) => {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [isCued, setIsCued] = useState(false);
   useEffect(() => {
-    if (!active) {
-      setCue(false);
+    if (!(active && enabled)) {
+      setIsCued(false);
       return undefined;
     }
+    const cue = () => {
+      if (claimNudge(svgRef.current)) setIsCued(true);
+    };
     if (document.visibilityState === "visible") {
-      setCue(true);
+      cue();
       return undefined;
     }
     const onVisibilityChange = () => {
       if (document.visibilityState !== "visible") return;
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      setCue(true);
+      cue();
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [active]);
-  return cue;
+  }, [active, enabled]);
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!(svg && isCued)) return undefined;
+    const clearCue = () => setIsCued(false);
+    svg.addEventListener("animationend", clearCue);
+    svg.addEventListener("animationcancel", clearCue);
+    return () => {
+      svg.removeEventListener("animationend", clearCue);
+      svg.removeEventListener("animationcancel", clearCue);
+    };
+  }, [isCued]);
+  return { isCued, svgRef };
 };
 
-const RuntimeGlyph = ({ state, percent = null }: { state: RuntimeState; percent?: number | null }) => {
-  // The update glyph bounces once, when the visitor can see it, instead of looping.
-  const nudge = useCueWhenVisible(state === "update");
+/** `nudge` marks a glyph the stylesheet animates; the legend's copies stay still and must not claim the nudge. */
+const RuntimeGlyph = ({
+  nudge = false,
+  percent = null,
+  state,
+}: {
+  nudge?: boolean;
+  percent?: number | null;
+  state: RuntimeState;
+}) => {
+  const { isCued: shouldNudge, svgRef } = useUpdateNudge(state === "update", nudge);
   if (state === "installing" && typeof percent === "number") {
     return <ProgressRingGlyph percent={percent} />;
   }
   const Icon = RUNTIME_ICONS[state];
-  return <Icon aria-hidden="true" data-nudge={nudge ? "" : undefined} />;
+  return <Icon aria-hidden="true" data-nudge={shouldNudge ? "" : undefined} ref={svgRef} />;
 };
 
 /** The parser-time resolver MUST keep the status and text hooks in sync before hydration. */
@@ -286,7 +322,7 @@ const StatusChip = ({
     title={title}
     type="button"
   >
-    <RuntimeGlyph percent={percent} state={state} />
+    <RuntimeGlyph nudge percent={percent} state={state} />
     <span className="sub-status-text">{label}</span>
     {percent === null ? null : <span className="sub-status-percent">{`${percent}%`}</span>}
   </button>
