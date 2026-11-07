@@ -532,10 +532,9 @@ function WebappRoot({
   let updateBannerKind: UpdateBannerKind | null = updatedSince.announce ? "updated" : null;
   if (updateReadyOpen) updateBannerKind = "ready";
   const dismissUpdateBanner = () => {
-    if (updateBannerKind === "updated") {
-      updatedSince.acknowledge();
-      return;
-    }
+    // The "updated" banner would otherwise replace a dismissed "ready" one, needing a second dismissal.
+    if (updatedSince.announce) updatedSince.acknowledge();
+    if (updateBannerKind === "updated") return;
     if (previewRuntimeState !== null) {
       setPreviewUpdateDismissed(true);
       return;
