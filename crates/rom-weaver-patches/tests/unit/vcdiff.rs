@@ -1113,6 +1113,54 @@ fn create_xdelta_patch_supports_explicit_djw_and_fgk_secondary_modes() {
 }
 
 #[test]
+fn create_xdelta_patch_forced_fgk_handles_a_promoted_zero_weight_parent() {
+    // 0,1,0,2,2,1,1 is the shortest symbol sequence that sends the FGK model through the
+    // promote branch for the parent of the remaining zeros; it must not fail a forced `fgk`.
+    let expected = [0u8, 1, 0, 2, 2, 1, 1, 0, 1, 2, 0, 1];
+
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let modified_path = temp.join("modified.bin");
+    let patch_path = temp.join("update.xdelta");
+    let output_path = temp.join("output.bin");
+    fs::write(&input_path, b"").expect("write input");
+    fs::write(&modified_path, expected).expect("write modified");
+
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
+    handler
+        .create(
+            &PatchCreateRequest {
+                original: input_path.clone(),
+                modified: modified_path,
+                output: patch_path.clone(),
+                format: "xdelta".into(),
+            },
+            &test_context_with_threads(1)
+                .with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::Fgk),
+        )
+        .expect("forced fgk create");
+
+    let patch = fs::read(&patch_path).expect("read patch");
+    let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
+    assert_eq!(
+        parsed.secondary_compressor_id,
+        Some(XDELTA_FGK_SECONDARY_ID)
+    );
+
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context(),
+        )
+        .expect("apply forced fgk patch");
+    assert_eq!(fs::read(output_path).expect("read output"), expected);
+}
+
+#[test]
 fn create_vcdiff_patch_from_empty_source_round_trips() {
     let input = Vec::new();
     let expected = b"streamed-from-empty-source".repeat(1024);
@@ -2438,12 +2486,25 @@ fn decode_secondary_fgk_state_new_rejects_zero_alphabet() {
 #[test]
 fn decode_secondary_fgk_round_trips() {
     // Repeats over a small alphabet drive many adaptive weight updates and
-    // block promotions in the FGK tree, round-tripping end to end. (Larger
-    // alphabets currently trip an encoder-side tree bug, so keep this minimal.)
+    // block promotions in the FGK tree, round-tripping end to end.
     let input = b"ABAB".repeat(40);
     let payload = xdelta_fgk_compress(&input).expect("compress fgk");
     let decoded = decode_fgk_secondary(&payload, input.len()).expect("decode fgk");
     assert_eq!(decoded, input);
+}
+
+#[test]
+fn xdelta_fgk_compress_matches_the_reference_when_a_zero_weight_parent_is_promoted() {
+    // The third distinct symbol lands the tree in xdelta3-fgk.h's "parent of the remaining
+    // zeros" promote branch. Expected bytes come from an independent transliteration of
+    // xdelta3-fgk.h.
+    let input = [0u8, 1, 0, 2, 2, 1, 1];
+    let payload = xdelta_fgk_compress(&input).expect("compress fgk");
+    assert_eq!(payload, [0x00, 0x00, 0x02, 0xc0, 0x16]);
+    assert_eq!(
+        decode_fgk_secondary(&payload, input.len()).expect("decode fgk"),
+        input
+    );
 }
 
 #[test]
@@ -2476,7 +2537,6 @@ fn decode_secondary_try_decode_xdelta_djw_sections_handles_flags() {
 
 #[test]
 fn decode_secondary_try_decode_xdelta_fgk_sections_handles_flags() {
-    // Two-symbol payload keeps the FGK encoder off its large-alphabet tree bug.
     let original = b"ABABABABABABABABABAB".to_vec();
     let fgk = xdelta_fgk_compress(&original).expect("compress fgk");
     let mut data_section = Vec::new();
