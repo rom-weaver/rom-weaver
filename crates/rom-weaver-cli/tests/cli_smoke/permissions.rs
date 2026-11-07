@@ -177,3 +177,204 @@ fn missing_input_is_still_reported_as_missing() {
         "a missing input must keep its own wording: {label}"
     );
 }
+
+/// Runs `args` (with `--json` appended) expecting exit 1 and returns the result document.
+fn failed_json(args: &[String]) -> Value {
+    let mut args: Vec<&str> = args.iter().map(String::as_str).collect();
+    args.push("--json");
+    run_single_json_event(&args, 1)
+}
+
+fn strings(args: &[&str]) -> Vec<String> {
+    args.iter().map(|arg| (*arg).to_string()).collect()
+}
+
+/// A readable file, a directory, a patch file, and an output folder, as one fixture.
+struct InputFixture {
+    _temp: TempDir,
+    dir: String,
+    file: String,
+    patch: String,
+    out: String,
+}
+
+fn input_fixture() -> InputFixture {
+    let temp = setup_temp_dir();
+    let dir = temp.child("adir");
+    fs::create_dir(dir.path()).expect("dir fixture");
+    let file = temp.child("base.bin");
+    fs::write(file.path(), vec![0u8; 64]).expect("file fixture");
+    let patch = temp.child("p.ips");
+    fs::write(patch.path(), b"PATCHEOF").expect("patch fixture");
+    let text = |path: &Path| path.to_str().expect("utf8 path").to_string();
+    InputFixture {
+        dir: text(dir.path()),
+        file: text(file.path()),
+        patch: text(patch.path()),
+        out: text(&temp.path().join("out")),
+        _temp: temp,
+    }
+}
+
+#[test]
+fn directory_input_gets_one_shared_message_in_every_command() {
+    let f = input_fixture();
+    let out = |name: &str| format!("{}/{name}", f.out);
+    let cases: Vec<Vec<String>> = vec![
+        strings(&["probe", "--input", &f.dir]),
+        strings(&["extract", "--input", &f.dir, "--output", &out("x")]),
+        strings(&["checksum", "--input", &f.dir]),
+        strings(&["identify", "--input", &f.dir]),
+        strings(&["playlist", "--input", &f.dir, "--output", &out("p.m3u")]),
+        strings(&[
+            "patch",
+            "apply",
+            "--input",
+            &f.dir,
+            "--patch",
+            &f.patch,
+            "--no-compress",
+            "--output",
+            &out("a.bin"),
+        ]),
+        strings(&[
+            "patch",
+            "apply",
+            "--input",
+            &f.file,
+            "--patch",
+            &f.dir,
+            "--no-compress",
+            "--output",
+            &out("b.bin"),
+        ]),
+        strings(&["patch", "validate", "--input", &f.dir, "--patch", &f.patch]),
+        strings(&["patch", "validate", "--input", &f.file, "--patch", &f.dir]),
+        strings(&[
+            "weave",
+            "create",
+            "--input",
+            &f.dir,
+            "--patch",
+            &f.patch,
+            "--output",
+            &out("w.json"),
+        ]),
+        strings(&[
+            "weave",
+            "create",
+            "--input",
+            &f.file,
+            "--patch",
+            &f.dir,
+            "--output",
+            &out("v.json"),
+        ]),
+        strings(&["weave", "parse", "--input", &f.dir]),
+        strings(&["--dry-run", "probe", "--input", &f.dir]),
+        strings(&["--dry-run", "weave", "parse", "--input", &f.dir]),
+    ];
+    let expected = format!("input is a directory, not a file: `{}`", f.dir);
+    for args in cases {
+        let json = failed_json(&args);
+        assert_eq!(json["error"]["message"], expected.as_str(), "{args:?}");
+        assert_eq!(json["error_kind"], "validation", "{args:?}");
+    }
+}
+
+#[test]
+fn missing_input_gets_one_shared_message_and_kind_in_every_command() {
+    let f = input_fixture();
+    let missing = format!("{}/nope.bin", f.out);
+    let out = |name: &str| format!("{}/{name}", f.out);
+    let cases: Vec<Vec<String>> = vec![
+        strings(&["probe", "--input", &missing]),
+        strings(&["checksum", "--input", &missing]),
+        strings(&["trim", &missing]),
+        strings(&["--dry-run", "trim", &missing]),
+        strings(&["cheat", "list", "--input", &missing]),
+        strings(&["weave", "parse", "--input", &missing]),
+        strings(&[
+            "weave",
+            "create",
+            "--input",
+            &missing,
+            "--patch",
+            &f.patch,
+            "--output",
+            &out("w.json"),
+        ]),
+        strings(&["playlist", "--input", &missing, "--output", &out("p.m3u")]),
+    ];
+    let expected = format!("input path does not exist: `{missing}`");
+    for args in cases {
+        let json = failed_json(&args);
+        assert_eq!(json["error"]["message"], expected.as_str(), "{args:?}");
+        assert_eq!(json["error_kind"], "validation", "{args:?}");
+    }
+}
+
+#[test]
+fn dry_run_checks_the_input_of_save_readers_and_cheat_list() {
+    let f = input_fixture();
+    let missing = format!("{}/nope.sav", f.out);
+    let cases: Vec<Vec<String>> = vec![
+        strings(&["--dry-run", "save", "inspect", &missing]),
+        strings(&["--dry-run", "save", "get", &missing, "a.b"]),
+        strings(&["--dry-run", "save", "identify", &missing]),
+        strings(&["--dry-run", "save", "export-schema", &missing]),
+        strings(&["--dry-run", "cheat", "list", "--input", &missing]),
+    ];
+    let expected = format!("input path does not exist: `{missing}`");
+    for args in cases {
+        let json = failed_json(&args);
+        assert_eq!(json["error"]["message"], expected.as_str(), "{args:?}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn unreadable_input_fails_with_the_denial_in_trim_weave_and_playlist() {
+    use std::os::unix::fs::PermissionsExt;
+
+    if running_as_root() {
+        return;
+    }
+    let f = input_fixture();
+    fs::set_permissions(&f.file, fs::Permissions::from_mode(0o000)).expect("chmod");
+    let out = |name: &str| format!("{}/{name}", f.out);
+    let cases: Vec<Vec<String>> = vec![
+        strings(&["trim", &f.file]),
+        strings(&["--dry-run", "trim", &f.file]),
+        strings(&["weave", "parse", "--input", &f.file]),
+        strings(&[
+            "weave",
+            "create",
+            "--input",
+            &f.file,
+            "--patch",
+            &f.patch,
+            "--output",
+            &out("w.json"),
+        ]),
+        strings(&["playlist", "--input", &f.file, "--output", &out("p.m3u")]),
+    ];
+    for args in cases {
+        let json = failed_json(&args);
+        let message = json["error"]["message"].as_str().expect("message");
+        assert!(
+            message.starts_with(&format!("i/o error: cannot open `{}`", f.file)),
+            "{args:?}: {message}"
+        );
+        assert!(
+            message.contains("this process runs as"),
+            "{args:?}: {message}"
+        );
+    }
+    for name in ["w.json", "p.m3u"] {
+        assert!(
+            !Path::new(&out(name)).exists(),
+            "{name} must not be written"
+        );
+    }
+}

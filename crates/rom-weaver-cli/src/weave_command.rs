@@ -117,6 +117,15 @@ impl CliApp {
         );
         let context = self.context(args.threads);
         let thread_execution = context.single_thread_execution();
+        if let Some(report) = self.require_readable_file(
+            "bundle-parse",
+            OperationFamily::Command,
+            Some("bundle-parse".to_string()),
+            &args.input,
+            thread_execution.clone(),
+        ) {
+            return self.finish("bundle-parse", report);
+        }
         let report = match self.weave_parse_inner(&args, &context) {
             Ok(result) => {
                 let label = format!(

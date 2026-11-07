@@ -30,8 +30,27 @@ impl CliApp {
             Commands::Patch(PatchCommands::Apply(args)) => {
                 Some(self.plan_patch_apply_dry_run(args))
             }
-            Commands::Probe(args) => Some(self.plan_read_only_input("probe", &args.input)),
-            Commands::Checksum(args) => Some(self.plan_read_only_input("checksum", &args.input)),
+            Commands::Probe(args) => {
+                Some(self.plan_read_only_input("probe", OperationFamily::Command, &args.input))
+            }
+            Commands::Checksum(args) => {
+                Some(self.plan_read_only_input("checksum", OperationFamily::Command, &args.input))
+            }
+            Commands::Cheat(args) => {
+                Some(self.plan_read_only_input("cheat", OperationFamily::Patch, &args.input))
+            }
+            Commands::Save(
+                SaveCommands::Identify(SaveIdentifyCommand { input, .. })
+                | SaveCommands::Inspect(SaveInspectCommand { input, .. })
+                | SaveCommands::Get(SaveGetCommand { input, .. })
+                | SaveCommands::ExportSchema(SaveExportSchemaCommand {
+                    input: Some(input), ..
+                }),
+            ) => Some(self.plan_read_only_input(
+                Self::command_name(command),
+                OperationFamily::Save,
+                input,
+            )),
             Commands::Patch(PatchCommands::Validate(args)) => {
                 Some(self.plan_patch_validate_dry_run(args))
             }
@@ -70,11 +89,12 @@ impl CliApp {
 
     pub(super) fn plan_patch_apply_dry_run(&self, args: &PatchApplyCommand) -> AppRunOutcome {
         let command = "patch-apply";
-        if let Some(outcome) = self.plan_readable(command, OperationFamily::Patch, &args.input) {
+        if let Some(outcome) = self.plan_readable_file(command, OperationFamily::Patch, &args.input)
+        {
             return outcome;
         }
         for patch in &args.patches {
-            if let Some(outcome) = self.plan_readable(command, OperationFamily::Patch, patch) {
+            if let Some(outcome) = self.plan_readable_file(command, OperationFamily::Patch, patch) {
                 return outcome;
             }
         }
@@ -110,7 +130,8 @@ impl CliApp {
 
     fn plan_extract_dry_run(&self, args: &ExtractCommand) -> AppRunOutcome {
         let command = "extract";
-        if let Some(outcome) = self.plan_readable(command, OperationFamily::Container, &args.input)
+        if let Some(outcome) =
+            self.plan_readable_file(command, OperationFamily::Container, &args.input)
         {
             return outcome;
         }
@@ -129,7 +150,8 @@ impl CliApp {
     fn plan_playlist_dry_run(&self, args: &PlaylistCommand) -> AppRunOutcome {
         let command = "playlist";
         for input in &args.input {
-            if let Some(outcome) = self.plan_readable(command, OperationFamily::Command, input) {
+            if let Some(outcome) = self.plan_readable_file(command, OperationFamily::Command, input)
+            {
                 return outcome;
             }
         }
@@ -215,17 +237,19 @@ impl CliApp {
     fn plan_weave_create_dry_run(&self, args: &WeaveCreateCommand) -> AppRunOutcome {
         let command = "bundle-create";
         if let Some(rom) = &args.rom
-            && let Some(outcome) = self.plan_readable(command, OperationFamily::Command, rom)
+            && let Some(outcome) = self.plan_readable_file(command, OperationFamily::Command, rom)
         {
             return outcome;
         }
         for patch in &args.patch {
-            if let Some(outcome) = self.plan_readable(command, OperationFamily::Command, patch) {
+            if let Some(outcome) = self.plan_readable_file(command, OperationFamily::Command, patch)
+            {
                 return outcome;
             }
         }
         if let Some(bundle_rom) = &args.bundle_rom
-            && let Some(outcome) = self.plan_readable(command, OperationFamily::Command, bundle_rom)
+            && let Some(outcome) =
+                self.plan_readable_file(command, OperationFamily::Command, bundle_rom)
         {
             return outcome;
         }
@@ -244,7 +268,9 @@ impl CliApp {
 
     fn plan_weave_parse_dry_run(&self, args: &WeaveParseCommand) -> AppRunOutcome {
         let command = "bundle-parse";
-        if let Some(outcome) = self.plan_readable(command, OperationFamily::Command, &args.input) {
+        if let Some(outcome) =
+            self.plan_readable_file(command, OperationFamily::Command, &args.input)
+        {
             return outcome;
         }
         let extracts = args.output.is_some() && !args.no_extract;
@@ -388,7 +414,7 @@ impl CliApp {
             return args
                 .input
                 .as_ref()
-                .map(|input| self.plan_read_only_input("identify", input))
+                .map(|input| self.plan_read_only_input("identify", OperationFamily::Command, input))
                 .unwrap_or_else(|| self.read_only_dry_run("identify"));
         };
         match command {
@@ -506,8 +532,13 @@ impl CliApp {
         )
     }
 
-    fn plan_read_only_input(&self, command: &str, input: &Path) -> AppRunOutcome {
-        if let Some(outcome) = self.plan_readable(command, OperationFamily::Command, input) {
+    fn plan_read_only_input(
+        &self,
+        command: &str,
+        family: OperationFamily,
+        input: &Path,
+    ) -> AppRunOutcome {
+        if let Some(outcome) = self.plan_readable_file(command, family, input) {
             return outcome;
         }
         self.read_only_dry_run(command)
@@ -515,11 +546,12 @@ impl CliApp {
 
     fn plan_patch_validate_dry_run(&self, args: &PatchValidateCommand) -> AppRunOutcome {
         let command = "patch-validate";
-        if let Some(outcome) = self.plan_readable(command, OperationFamily::Patch, &args.input) {
+        if let Some(outcome) = self.plan_readable_file(command, OperationFamily::Patch, &args.input)
+        {
             return outcome;
         }
         for patch in &args.patches {
-            if let Some(outcome) = self.plan_readable(command, OperationFamily::Patch, patch) {
+            if let Some(outcome) = self.plan_readable_file(command, OperationFamily::Patch, patch) {
                 return outcome;
             }
         }
@@ -536,6 +568,20 @@ impl CliApp {
             return None;
         }
         self.require_readable_path(command, family, None, path, None)
+            .map(|report| self.finish(command, report))
+    }
+
+    /// [`Self::plan_readable`] for an input that must be a single file.
+    fn plan_readable_file(
+        &self,
+        command: &str,
+        family: OperationFamily,
+        path: &Path,
+    ) -> Option<AppRunOutcome> {
+        if path.as_os_str() == "-" {
+            return None;
+        }
+        self.require_readable_file(command, family, None, path, None)
             .map(|report| self.finish(command, report))
     }
 

@@ -963,7 +963,7 @@ impl CliApp {
         thread_execution: Option<ThreadExecution>,
     ) -> Option<OperationReport> {
         for patch_path in patches {
-            if let Some(report) = self.require_readable_path(
+            if let Some(report) = self.require_readable_file(
                 "patch-apply",
                 OperationFamily::Patch,
                 None,
@@ -3775,7 +3775,7 @@ impl CliApp {
             );
         };
         for patch in patches {
-            if let Some(report) = self.require_readable_path(
+            if let Some(report) = self.require_readable_file(
                 "patch-apply",
                 OperationFamily::Patch,
                 None,

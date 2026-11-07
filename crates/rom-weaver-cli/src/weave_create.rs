@@ -80,7 +80,7 @@ impl CliApp {
             threads = %args.threads,
             "starting weave create command"
         );
-        let report = match self.weave_create_inner(&args, &context) {
+        let report = match self.weave_create_checked(&args, &context) {
             Ok(result) => {
                 let label = format!(
                     "wrote weave `{}` ({} patch entr{}{}{})",
@@ -132,13 +132,7 @@ impl CliApp {
                     ),
                 }
             }
-            Err(error) => OperationReport::failed_with_error(
-                OperationFamily::Command,
-                Some("bundle-create".to_string()),
-                "bundle-create",
-                error,
-                thread_execution,
-            ),
+            Err(report) => *report,
         };
         self.finish("bundle-create", report)
     }
@@ -361,6 +355,43 @@ impl CliApp {
         Ok(args.cheats.clone())
     }
 
+    /// [`Self::weave_create_inner`] for the CLI: failures come back as reports so the local
+    /// inputs get the shared readable-input preflight. It runs after the output preflight, which
+    /// can create the directories an input path like `child/../rom.bin` goes through.
+    fn weave_create_checked(
+        &self,
+        args: &WeaveCreateCommand,
+        context: &OperationContext,
+    ) -> std::result::Result<WeaveCreateResult, Box<OperationReport>> {
+        let thread_execution = context.single_thread_execution();
+        let failure = |error: RomWeaverError| {
+            Box::new(OperationReport::failed_with_error(
+                OperationFamily::Command,
+                Some("bundle-create".to_string()),
+                "bundle-create",
+                error,
+                thread_execution.clone(),
+            ))
+        };
+        let specs = weave_create_patch_specs(args).map_err(failure)?;
+        self.preflight_weave_create_outputs(args, &specs)
+            .map_err(failure)?;
+        let patch_paths = specs.iter().map(|spec| &spec.path);
+        for input in args.rom.iter().chain(&args.bundle_rom).chain(patch_paths) {
+            if let Some(report) = self.require_readable_file(
+                "bundle-create",
+                OperationFamily::Command,
+                Some("bundle-create".to_string()),
+                input,
+                thread_execution.clone(),
+            ) {
+                return Err(Box::new(report));
+            }
+        }
+        self.weave_create_with_specs(args, &specs, context)
+            .map_err(failure)
+    }
+
     pub(super) fn weave_create_inner(
         &self,
         args: &WeaveCreateCommand,
@@ -368,6 +399,15 @@ impl CliApp {
     ) -> Result<WeaveCreateResult> {
         let specs = weave_create_patch_specs(args)?;
         self.preflight_weave_create_outputs(args, &specs)?;
+        self.weave_create_with_specs(args, &specs, context)
+    }
+
+    fn weave_create_with_specs(
+        &self,
+        args: &WeaveCreateCommand,
+        specs: &[WeaveCreatePatchSpec],
+        context: &OperationContext,
+    ) -> Result<WeaveCreateResult> {
         let patch_basis = args.default_patch_basis.unwrap_or(PatchBasisMode::Auto);
         let cheats = self.weave_create_cheat_entries(args, context)?;
         if specs.is_empty() && cheats.is_empty() {
@@ -381,7 +421,7 @@ impl CliApp {
 
         let output_checks = weave_entry_checks(&args.output_check, "--expect-out")?;
 
-        let mut patches = weave_create_patch_entries(&specs, patch_basis)?;
+        let mut patches = weave_create_patch_entries(specs, patch_basis)?;
 
         let packaged_rom_source = args
             .bundle_rom
@@ -389,7 +429,7 @@ impl CliApp {
             .or(args.rom.as_deref())
             .filter(|_| args.rom_url.is_none() && !args.no_bundle_rom);
         if args.bundle.is_some() {
-            assign_weave_member_paths(&mut rom, packaged_rom_source, &mut patches, &specs)?;
+            assign_weave_member_paths(&mut rom, packaged_rom_source, &mut patches, specs)?;
         } else {
             require_unique_weave_source_names(rom.as_ref(), &patches)?;
         }
@@ -430,7 +470,7 @@ impl CliApp {
                 weave_archive,
                 &bytes,
                 packaged_rom_source,
-                &specs,
+                specs,
                 &weave,
                 context,
             )?),
@@ -514,12 +554,7 @@ impl CliApp {
                 checksums: rom_assume.checksums.clone(),
                 size: rom_assume.size,
             });
-        if !path.is_file() {
-            return Err(RomWeaverError::Validation(format!(
-                "rom path does not exist: `{}`",
-                path.display()
-            )));
-        }
+        require_weave_rom_file(path, "rom path")?;
         let resolved_member = if let Some(member) = args.rom_member.as_ref()
             && args.bundle_rom.is_none()
             && (cached_rom_checks.is_none() || rom_assume.size.is_none())
@@ -555,12 +590,7 @@ impl CliApp {
         }
         let checks = checks_result?;
         let weave_source = args.bundle_rom.as_deref().unwrap_or(path);
-        if !weave_source.is_file() {
-            return Err(RomWeaverError::Validation(format!(
-                "weave rom path does not exist: `{}`",
-                weave_source.display()
-            )));
-        }
+        require_weave_rom_file(weave_source, "weave rom path")?;
         let base_name = required_base_name(weave_source, "rom")?;
         // A no-weave-rom entry keeps its checks but carries no
         // source: the applying user supplies the ROM themselves. A
@@ -929,6 +959,23 @@ fn write_weave_create_output(
 
 /// Normalize per-patch specs for the wasm JSON path: metadata vectors must be
 /// index-aligned with `patch` (same length) or omitted entirely.
+/// A directory gets the shared input message; any other non-file keeps the
+/// `<what> does not exist` wording callers match.
+fn require_weave_rom_file(path: &Path, what: &str) -> Result<()> {
+    if path.is_file() {
+        return Ok(());
+    }
+    if path.is_dir() {
+        return Err(RomWeaverError::Validation(
+            super::path_access::input_is_directory_message(path),
+        ));
+    }
+    Err(RomWeaverError::Validation(format!(
+        "{what} does not exist: `{}`",
+        path.display()
+    )))
+}
+
 fn weave_create_patch_specs(args: &WeaveCreateCommand) -> Result<Vec<WeaveCreatePatchSpec>> {
     if !args.patch_specs.is_empty() {
         return Ok(args.patch_specs.clone());

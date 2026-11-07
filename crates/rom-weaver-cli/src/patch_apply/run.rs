@@ -375,7 +375,7 @@ impl CliApp {
         &self,
         run: &mut PatchApplyRun,
     ) -> std::result::Result<(), Box<OperationReport>> {
-        if let Some(report) = self.require_readable_path(
+        if let Some(report) = self.require_readable_file(
             "patch-apply",
             OperationFamily::Patch,
             None,

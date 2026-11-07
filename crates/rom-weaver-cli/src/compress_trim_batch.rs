@@ -625,6 +625,20 @@ impl CliApp {
             }
         };
 
+        // Unreadable named inputs must fail here: collection would otherwise count them as
+        // unsupported. Directories pass, since trim walks them.
+        for named in &source {
+            if let Some(report) = self.require_readable_path(
+                "trim",
+                OperationFamily::Command,
+                None,
+                named,
+                thread_execution.clone(),
+            ) {
+                return self.finish("trim", report);
+            }
+        }
+
         let mut skips = TrimSkips::default();
         let mut cleanup_paths: Vec<PathBuf> = Vec::new();
         let collect_options = TrimCollectOptions {

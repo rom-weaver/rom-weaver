@@ -134,7 +134,7 @@ Most commands also accept `-j`/`--threads auto|N`. `auto` uses the available cor
 
 List-valued flags (`--algo`, `--checksum`, `--filter`, `--codec`, `--expect-in`, `--expect-out`, `--assume-in`, `--patch-input-check`, `--patch-output-check`, and the compression codec flags) can be repeated or comma-separated: `--algo crc32,sha1` and `--algo crc32 --algo sha1` do the same thing.
 
-`-n`/`--dry-run` is available on every command, before or after the command name. It reports planned changes without writing destination files, changing installed databases, or downloading inputs. Read-only commands report a read-only plan instead of running the operation. Dry runs do not ask interactive questions.
+`-n`/`--dry-run` is available on every command, before or after the command name. It reports planned changes without writing destination files, changing installed databases, or downloading inputs. Read-only commands report a read-only plan instead of running the operation, and a dry run rejects a missing, unreadable, or directory input as the real run does. Dry runs do not ask interactive questions.
 
 Compression, trimming, and explicit patch application retain their detailed plans. A `compress` dry run runs the same codec, level, entry-name, and input checks as the real run for every output format (ZIP, 7z, CHD, RVZ, Z3DS), so a request that would fail, such as `--codec bogus`, `--codec zstd:99`, or a non-GameCube/Wii input to RVZ, fails the same way with the same error and exit code. Explicit patch application needs `--output` for its dry-run plan. For a plain ROM, the matching output extension selects raw bytes during planning as it does during application; an explicit compression option overrides that selection. For archive members and disc payloads whose raw extension is not yet known, the plan reports an unresolved format instead of rejecting the requested extension.
 
@@ -620,7 +620,7 @@ error: i/o error: cannot open `/roms/game.iso`: Permission denied (os error 13)
 (`/roms/game.iso` is mode 0600 owned by 0:0; this process runs as 1000:1000)
 ```
 
-The message identifies what was refused, who owns it, and which identity made the request. Only a genuinely missing path is reported as `input path does not exist`. A file that exists but cannot be reached, including one behind a directory without search permission, is reported as a denial. [Fix a permission error](../how-to/fix-permission-errors.md) gives the corrective steps.
+The message identifies what was refused, who owns it, and which identity made the request. Only a genuinely missing path is reported as `input path does not exist`. A directory given where an input file is expected is reported as ``input is a directory, not a file: `PATH` `` (`trim` accepts directories and walks them). Both preflight messages carry `error_kind` `validation` in JSON. A file that exists but cannot be reached, including one behind a directory without search permission, is reported as a denial. [Fix a permission error](../how-to/fix-permission-errors.md) gives the corrective steps.
 
 Permission failures exit `1`. Under `--json`, the result document has `"status": "failed"` and `"exit_code": 1`, carrying `"stage": "validate"` when the preflight caught them. Under `--jsonl`, they arrive as a terminal event.
 
