@@ -210,6 +210,24 @@ fn dry_run_pairs_show_planned_destinations_and_no_side_effects() {
 }
 
 #[test]
+fn dry_run_pairs_show_unknown_outputs_only_when_true() {
+    let pairs = |unknown: bool| {
+        let details = json!({
+            "dry_run": true,
+            "command": "tools",
+            "writes": ["restored.bin"],
+            "downloads": [],
+            "read_only": false,
+            "outputs_unknown": unknown,
+        });
+        dry_run_pairs(details.as_object().expect("plan object"))
+    };
+    let unknown = ("Outputs unknown".to_string(), "true".to_string());
+    assert!(!pairs(false).iter().any(|(key, _)| key == "Outputs unknown"));
+    assert!(pairs(true).contains(&unknown), "{:?}", pairs(true));
+}
+
+#[test]
 fn dry_run_pairs_mark_read_only_plans_with_no_writes() {
     let details = json!({
         "dry_run": true,

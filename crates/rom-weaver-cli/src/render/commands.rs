@@ -639,6 +639,10 @@ fn dry_run_pairs(details: &Map<String, Value>) -> Vec<(String, String)> {
         ) {
             continue;
         }
+        // Only the exceptional case needs a line; the JSON report keeps the field either way.
+        if key == "outputs_unknown" && value == &Value::Bool(false) {
+            continue;
+        }
         collect_value(key, value, &mut pairs);
     }
     append_plan_targets("Writes", details.get("writes"), &mut pairs);
