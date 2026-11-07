@@ -341,7 +341,9 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .rw-app .sub-status[data-sw] svg,
-  .rw-app .nav-runtime[data-sw] svg {
+  .rw-app .sub-status[data-sw] svg[data-nudge],
+  .rw-app .nav-runtime[data-sw] svg,
+  .rw-app .nav-runtime[data-sw] svg[data-nudge] {
     animation: none;
   }
 }
