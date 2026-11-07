@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, test } from "vitest";
 import { commands } from "vitest/browser";
 import { planBrowserPlaylist } from "../../src/platform/browser/browser-playlist-api.ts";
-import { canWritePlaylistFolders } from "../../src/storage/browser/playlist-folder-support.ts";
 import { PlaylistForm } from "../../src/webapp/components/playlist-form.tsx";
 import { WORKER_OPFS_MOUNTPOINT } from "../../src/workers/shared/worker-storage/storage-layout.ts";
 
@@ -171,6 +170,10 @@ const seedFolder = async (folder, files) => {
   }
 };
 
+// Chrome and Edge offer both; Safari moves files only inside its private storage and has no picker.
+const browserCanWriteFolders = () =>
+  typeof window.showDirectoryPicker === "function" && typeof FileSystemFileHandle.prototype.move === "function";
+
 const listFolder = async (directory) => {
   const files = {};
   for await (const entry of directory.values()) files[entry.name] = await (await entry.getFile()).text();
@@ -178,8 +181,7 @@ const listFolder = async (directory) => {
 };
 
 test("renames the discs in the picked folder where the browser can move files, and points to the CLI elsewhere", async () => {
-  // Chrome and Edge offer both; Safari moves files only inside its private storage and has no picker.
-  const canWriteFolders = canWritePlaylistFolders();
+  const canWriteFolders = browserCanWriteFolders();
   const root = await navigator.storage.getDirectory();
   folderName = `playlist-folder-${crypto.randomUUID()}`;
   const folder = await root.getDirectoryHandle(folderName, { create: true });
@@ -237,8 +239,7 @@ test("renames the discs in the picked folder where the browser can move files, a
 });
 
 test("clears the rename choice when another folder is opened", async () => {
-  // Only Chrome and Edge can pick a folder and move its files; elsewhere the choice is always off.
-  if (!canWritePlaylistFolders()) return;
+  if (!browserCanWriteFolders()) return;
   const root = await navigator.storage.getDirectory();
   folderName = `playlist-folder-${crypto.randomUUID()}`;
   const parent = await root.getDirectoryHandle(folderName, { create: true });
