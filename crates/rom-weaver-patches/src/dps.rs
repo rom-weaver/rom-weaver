@@ -25,6 +25,7 @@ use crate::shared::threading::{
 const DPS_TEXT_FIELD_BYTES: usize = 64;
 const DPS_HEADER_BYTES: usize = (DPS_TEXT_FIELD_BYTES * 3) + 1 + 1 + 4;
 const DPS_PATCH_VERSION: u8 = 1;
+const DPS_PATCH_FLAG_UNSTABLE: u8 = 1;
 
 const DPS_RECORD_COPY_FROM_SOURCE: u8 = 0;
 const DPS_RECORD_EMBEDDED_DATA: u8 = 1;
@@ -216,8 +217,12 @@ impl PatchHandler for DpsPatchHandler {
         output.flush()?;
 
         let checksum_suffix = checksum_validation_suffix(validate_source_size);
-        let malformed_warning_suffix =
-            append_warning_labels(String::new(), parsed.malformed_record_warning.as_slice());
+        let warnings = parsed
+            .unstable_patch_warning()
+            .into_iter()
+            .chain(parsed.malformed_record_warning.clone())
+            .collect::<Vec<_>>();
+        let malformed_warning_suffix = append_warning_labels(String::new(), &warnings);
         Ok(crate::patch_success_report(
             self.descriptor,
             "apply",
@@ -249,14 +254,17 @@ impl PatchHandler for DpsPatchHandler {
         } else {
             "; source size validation skipped".to_string()
         };
+        let unstable_warning_suffix =
+            append_warning_labels(String::new(), parsed.unstable_patch_warning().as_slice());
         Ok(crate::patch_success_report(
             self.descriptor,
             "validate",
             format!(
-                "validated {} patch source with {} record(s){}",
+                "validated {} patch source with {} record(s){}{}",
                 self.descriptor.name,
                 parsed.records.len(),
-                checksum_suffix
+                checksum_suffix,
+                unstable_warning_suffix
             ),
             context.single_thread_execution(),
         ))
@@ -359,6 +367,13 @@ struct ParsedDpsPatch {
     malformed_record_warning: Option<String>,
 }
 
+impl ParsedDpsPatch {
+    fn unstable_patch_warning(&self) -> Option<String> {
+        (self.patch_flag & DPS_PATCH_FLAG_UNSTABLE != 0)
+            .then(|| "this is an UNSTABLE DPS patch and it is not crash free".to_string())
+    }
+}
+
 #[derive(Clone, Debug)]
 enum DpsRecord {
     CopyFromSource {
@@ -454,6 +469,13 @@ enum ParsedDpsRecord {
 }
 
 impl ParsedDpsRecord {
+    fn writes_nothing(&self) -> bool {
+        match self {
+            ParsedDpsRecord::CopyFromSource { length, .. } => *length == 0,
+            ParsedDpsRecord::EmbeddedData { data, .. } => data.is_empty(),
+        }
+    }
+
     fn output_end(&self) -> Result<u64> {
         match self {
             ParsedDpsRecord::CopyFromSource {
@@ -637,7 +659,9 @@ fn parse_dps_file(path: &Path, mode: DpsParseMode) -> Result<ParsedDpsPatch> {
             }
         };
 
-        output_size = output_size.max(record.output_end()?);
+        if !record.writes_nothing() {
+            output_size = output_size.max(record.output_end()?);
+        }
         records.push(record);
     }
 
@@ -804,7 +828,9 @@ fn parse_dps_bytes(bytes: &[u8], mode: DpsParseMode) -> Result<ParsedDpsPatch> {
             }
         };
 
-        output_size = output_size.max(record.output_end()?);
+        if !record.writes_nothing() {
+            output_size = output_size.max(record.output_end()?);
+        }
         records.push(record);
     }
 
@@ -1420,6 +1446,10 @@ fn checked_range(
                 .with_field("len", len),
         )
     })?;
+    // dpspatcher seeks and then moves zero bytes, so an empty range may start past the limit.
+    if len == 0 {
+        return Ok((start, start));
+    }
     if end > limit {
         return Err(RomWeaverError::ValidationCode(
             dps_validation_code("DPS_RANGE_EXCEEDED_LIMIT")
