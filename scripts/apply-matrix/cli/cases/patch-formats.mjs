@@ -180,6 +180,13 @@ export const registerPatchFormats = () => {
           check(!result.panic, () => `crash: ${ctx.describe(result)}`);
           return;
         }
+        if (format.name === "ebp" && label === "minus-1") {
+          // The cut lands in the JSON metadata trailer; EBPatcher and CoilSnake apply the IPS records and ignore unreadable metadata.
+          ctx.ok(result, "EBP patch with truncated metadata");
+          check(/EBP metadata/.test(result.all), () => `no metadata warning: ${ctx.describe(result)}`);
+          ctx.same(out, romPath(ctx, first[2]), "output of an EBP patch with truncated metadata");
+          return;
+        }
         ctx.failed(result, { what: `patch truncated (${label})` });
         check(!ctx.exists(out), "truncated patch left an output file");
       });
