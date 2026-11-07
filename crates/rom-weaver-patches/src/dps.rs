@@ -222,7 +222,7 @@ impl PatchHandler for DpsPatchHandler {
             .into_iter()
             .chain(parsed.malformed_record_warning.clone())
             .collect::<Vec<_>>();
-        let malformed_warning_suffix = append_warning_labels(String::new(), &warnings);
+        let warning_suffix = append_warning_labels(String::new(), &warnings);
         Ok(crate::patch_success_report(
             self.descriptor,
             "apply",
@@ -233,7 +233,7 @@ impl PatchHandler for DpsPatchHandler {
                 parsed.copy_record_count,
                 parsed.data_record_count,
                 checksum_suffix,
-                malformed_warning_suffix
+                warning_suffix
             ),
             Some(execution),
         ))

@@ -1,11 +1,5 @@
 //! Bounded Yay0 decoder for Star Rod Classic `.mod` packages
 //! (`game/yay0/Yay0Helper.java` in z64a/star-rod-classic).
-//!
-//! Layout: `"Yay0"`, then big-endian u32 decoded length, link-table offset and chunk-table
-//! offset, with the command bits starting at byte 16. A set command bit copies one literal byte
-//! from the chunk table. A clear bit reads a big-endian u16 link from the link table: the low 12
-//! bits are the back-reference distance minus one and the high 4 bits are the copy length minus
-//! two. A zero length nibble instead takes the next chunk-table byte plus 18 as the length.
 
 use rom_weaver_core::{ERROR_CODE_RESOURCE_OUT_OF_MEMORY, Result, RomWeaverError};
 use tracing::trace;
