@@ -240,7 +240,7 @@ fn create_and_apply_round_trip() {
         .expect("create");
 
     let patch_text = fs::read_to_string(&patch).expect("patch");
-    assert!(patch_text.contains("00000000 68 48"));
+    assert!(patch_text.contains("00000000: 68 48"));
     assert!(has_pat_record_signature(&patch));
 
     handler
@@ -364,18 +364,23 @@ fn parse_labels_are_built_from_the_parsed_counts() {
 }
 
 #[test]
-fn parse_rejects_a_line_longer_than_the_supported_maximum() {
+fn parse_skips_and_reports_a_line_longer_than_the_supported_maximum() {
     let temp = TestDir::new();
     let path = temp.child("long-line.pat");
-    let mut line = "00000000 61 41".to_string();
-    line.push_str(&" ".repeat(super::PAT_LINE_MAX_BYTES));
-    line.push('\n');
-    fs::write(&path, line).expect("fixture");
+    let mut long_line = "00000001 62 42".to_string();
+    long_line.push_str(&" ".repeat(super::PAT_LINE_MAX_BYTES));
+    fs::write(
+        &path,
+        format!("00000000 61 41\n{long_line}\n00000002 63 43\n"),
+    )
+    .expect("fixture");
 
-    let error = parse_pat_file(&path).expect_err("an over-long line should fail");
-    assert!(
-        error.to_string().contains("PAT line exceeded maximum"),
-        "unexpected error: {error}"
+    let parsed = parse_pat_file(&path).expect("an over-long line is skipped, not fatal");
+    assert_eq!(parsed.records.len(), 2);
+    assert_eq!(parsed.skipped_lines, [2]);
+    assert_eq!(
+        build_pat_parse_label("PAT", &parsed),
+        "parsed PAT patch with 2 record(s); warning=PAT skipped 1 line(s) that are not valid records (line 2)"
     );
 }
 
@@ -600,23 +605,100 @@ fn apply_rejects_a_patch_with_no_records() {
     }
 }
 
+/// Fixtures the reference (`apply_fireflower` in NINJA 2.0) ignores because they are not 15
+/// characters of `XXXXXXXX: SS MM`.
 #[test]
-fn apply_rejects_a_patch_with_a_damaged_record_line() {
-    for damaged in [
-        "00000001 6 42",
-        "00000001 6g 42",
-        "00000001 62",
-        "00000001 62 42 43",
+fn apply_skips_non_record_lines_and_reports_their_numbers() {
+    for (name, line) in [
+        ("short byte field", "00000001 6 42"),
+        ("non-hex byte", "00000001 6g 42"),
+        ("missing field", "00000001 62"),
+        ("extra field", "00000001 62 42 43"),
+        ("date line", "20060101 Hack by Kuma"),
+        ("record with trailing note", "00000001 62 42 ;note"),
     ] {
-        let text = format!("00000000 61 41\n{damaged}\n00000002 63 43\n");
+        let text = format!("00000000 61 41\n{line}\n00000002 63 43\n");
         let (result, _temp, output) = apply_pat_text(text.as_bytes());
-        let error = result.expect_err(damaged);
-        assert!(
-            error.to_string().contains("line 2"),
-            "{damaged}: error should name the offending line: {error}"
+        let report = result.unwrap_or_else(|error| panic!("{name}: {error}"));
+        assert_eq!(
+            report.label,
+            "applied PAT patch with 2 record(s): 2 forward / 0 reverse; warning=PAT skipped 1 line(s) that are not valid records (line 2)",
+            "{name}"
         );
-        assert!(!output.exists(), "{damaged}: no output may remain");
+        assert_eq!(fs::read(output).expect("output"), b"AbC", "{name}");
     }
+}
+
+#[test]
+fn skipped_line_warning_lists_a_bounded_number_of_lines() {
+    let mut text = String::from("00000000 61 41\n");
+    for _ in 0..20 {
+        text.push_str("20060101 not a record\n");
+    }
+    let (result, _temp, output) = apply_pat_text(text.as_bytes());
+    let report = result.expect("apply");
+    assert!(
+        report.label.ends_with(
+            "warning=PAT skipped 20 line(s) that are not valid records (line 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17 and 4 more)"
+        ),
+        "unexpected label: {}",
+        report.label
+    );
+    assert_eq!(fs::read(output).expect("output"), b"Abc");
+}
+
+#[test]
+fn validate_reports_skipped_non_record_lines() {
+    let temp = TestDir::new();
+    let source = temp.child("source.bin");
+    let patch = temp.child("skipped.pat");
+    fs::write(&source, b"abc").expect("fixture");
+    fs::write(&patch, "00000000 61 41\n20060101 Hack by Kuma\n").expect("fixture");
+
+    let report = PatPatchHandler::new(&PAT)
+        .validate(
+            &PatchValidateRequest {
+                input: source,
+                patches: vec![patch],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("validate");
+    assert!(
+        report
+            .label
+            .ends_with("warning=PAT skipped 1 line(s) that are not valid records (line 2)"),
+        "unexpected label: {}",
+        report.label
+    );
+}
+
+#[test]
+fn created_patch_lines_are_fifteen_characters_the_reference_applies() {
+    let temp = TestDir::new();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("created.pat");
+    fs::write(&original, b"abcd").expect("fixture");
+    fs::write(&modified, b"aBcD").expect("fixture");
+
+    PatPatchHandler::new(&PAT)
+        .create(
+            &PatchCreateRequest {
+                original,
+                modified,
+                output: patch.clone(),
+                format: "pat".into(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("create");
+
+    // `fc /b` layout: 8 hex digits, colon, space, source byte, space, modified byte.
+    assert_eq!(
+        fs::read_to_string(patch).expect("patch"),
+        "00000001: 62 42\n00000003: 64 44\n"
+    );
 }
 
 #[test]

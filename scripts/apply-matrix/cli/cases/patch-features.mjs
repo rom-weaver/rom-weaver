@@ -269,11 +269,15 @@ export const register = () => {
   });
 
   // ------------------------------------------------------------ corrupt / ambiguous patch handling
-  add("patch.pat.bad-record-line", ["pat", "negative"], (ctx) => {
-    const patch = ctx.write("mixed.pat", "00000000 61 41\n00000001 6g 42\n");
+  add("patch.pat.bad-record-line-skipped", ["pat"], (ctx) => {
+    const base = fs.readFileSync(ctx.fx("rom/base.bin"));
+    const hex = (byte) => byte.toString(16).padStart(2, "0");
+    const flipped = base[0] ^ 0xff;
+    const patch = ctx.write("mixed.pat", `00000000 ${hex(base[0])} ${hex(flipped)}\n00000001 6g 42\n`);
     const out = ctx.tmp("out.bin");
-    ctx.failed(ctx.apply(ctx.fx("rom/base.bin"), patch, out), { message: /PAT patch line 2/, what: "PAT with an unparseable record line" });
-    check(!ctx.exists(out), "failed PAT apply left an output file");
+    const result = ctx.ok(ctx.apply(ctx.fx("rom/base.bin"), patch, out), "PAT with an unparseable record line");
+    check(/skipped 1 line\(s\) that are not valid records \(line 2\)/.test(result.all), () => `no skipped-line warning: ${ctx.describe(result)}`);
+    check(fs.readFileSync(out)[0] === flipped, "PAT record before the unparseable line was not applied");
   });
   add("patch.pat.comments-and-blank-lines-allowed", ["pat"], (ctx) => {
     const base = fs.readFileSync(ctx.fx("rom/base.bin"));
