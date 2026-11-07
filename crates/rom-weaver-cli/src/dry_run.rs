@@ -4,6 +4,17 @@
 
 use super::*;
 
+/// What a dry-run plan reports beyond the command, family, and label.
+#[derive(Default)]
+struct PlanReportOptions {
+    writes: Vec<String>,
+    downloads: Vec<String>,
+    notes: Vec<String>,
+    read_only: bool,
+    /// An extra `details` entry keyed by the command name.
+    command_details: Option<(&'static str, Value)>,
+}
+
 impl CliApp {
     /// Return a terminal plan for commands whose normal path can mutate data.
     /// `compress`, `trim`, and the ordinary `patch apply` path keep their
@@ -123,16 +134,23 @@ impl CliApp {
             }
         }
         match super::playlist::plan_job(args) {
-            Ok(job) => self.plan_succeeded(
-                command,
-                OperationFamily::Command,
-                "dry run: would write the playlist; nothing written",
-                job.writes()
-                    .iter()
-                    .map(|path| path.display().to_string())
-                    .collect(),
-                Vec::new(),
-            ),
+            Ok(job) => {
+                let plan = json!(job.dry_run_plan());
+                self.plan_report(
+                    command,
+                    OperationFamily::Command,
+                    "dry run: would write the playlist; nothing written",
+                    PlanReportOptions {
+                        writes: job
+                            .writes()
+                            .iter()
+                            .map(|path| path.display().to_string())
+                            .collect(),
+                        command_details: Some(("playlist", plan)),
+                        ..PlanReportOptions::default()
+                    },
+                )
+            }
             Err(error) => self.finish(command, super::playlist::playlist_failure(error)),
         }
     }
@@ -481,8 +499,10 @@ impl CliApp {
             command,
             OperationFamily::Command,
             &format!("dry run: {command} only reads; no changes planned"),
-            (Vec::new(), Vec::new(), Vec::new()),
-            true,
+            PlanReportOptions {
+                read_only: true,
+                ..PlanReportOptions::default()
+            },
         )
     }
 
@@ -562,8 +582,13 @@ impl CliApp {
             command,
             family,
             label,
-            (writes, downloads, notes),
-            read_only,
+            PlanReportOptions {
+                writes,
+                downloads,
+                notes,
+                read_only,
+                command_details: None,
+            },
         )
     }
 
@@ -572,12 +597,18 @@ impl CliApp {
         command: &str,
         family: OperationFamily,
         label: &str,
-        (writes, downloads, notes): (Vec<String>, Vec<String>, Vec<String>),
-        read_only: bool,
+        options: PlanReportOptions,
     ) -> AppRunOutcome {
+        let PlanReportOptions {
+            writes,
+            downloads,
+            notes,
+            read_only,
+            command_details,
+        } = options;
         let mut report =
             OperationReport::succeeded(family, None, "plan", label.to_string(), Some(100.0), None);
-        report.details = Some(json!({
+        let mut details = json!({
             "dry_run": true,
             "command": command,
             "writes": writes,
@@ -585,7 +616,11 @@ impl CliApp {
             "read_only": read_only,
             "outputs_unknown": !read_only && writes.is_empty(),
             "notes": notes,
-        }));
+        });
+        if let (Some((key, value)), Some(object)) = (command_details, details.as_object_mut()) {
+            object.insert(key.to_string(), value);
+        }
+        report.details = Some(details);
         self.finish(command, report)
     }
 }

@@ -1006,6 +1006,7 @@ Fixture description.
     ["docs/trim-roms-browser", "trim", "/trim-rom", "Trim ROMs"],
     ["docs/edit-gen3-saves", "save-editor", "/rom-save-editor", "Edit game saves"],
     ["docs/undo-ppf-browser", "ppf-undo", "/ppf-undo", "Undo PPF patches"],
+    ["docs/make-playlist-browser", "playlist", "/create-m3u-playlist", "Make disc playlists"],
     ["docs/get-started", "patcher", "/apply-rom-patches", "Apply ROM patches"],
   ])("links to the matching tool below the heading and footer of %s", (slug, view, href, label) => {
     const onSelectTab = vi.fn();

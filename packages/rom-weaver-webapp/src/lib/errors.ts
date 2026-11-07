@@ -134,6 +134,7 @@ const withAbortSignal = async <T>(operation: Promise<T>, signal?: AbortSignal): 
 
 export {
   getEngineError,
+  getErrorMessage,
   hasEngineErrorCode,
   isWorkflowErrorCode,
   OUT_OF_MEMORY_MESSAGE_REGEX,

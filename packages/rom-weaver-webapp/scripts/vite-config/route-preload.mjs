@@ -24,6 +24,7 @@ const WORKFLOW_ROUTE_MODULES = {
   patcher: "src/public/react/apply-patch-form.tsx",
   test: "src/public/react/emulator-test-view.tsx",
   "ppf-undo": "src/webapp/components/ppf-undo-form.tsx",
+  playlist: "src/webapp/components/playlist-form.tsx",
   "save-editor": "src/webapp/components/save-editor.tsx",
   trim: "src/public/react/trim-form.tsx",
   "whats-new": "src/webapp/whats-new-page.tsx",

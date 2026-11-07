@@ -26,6 +26,7 @@ const WORKFLOW_ABOUT: Partial<Record<AboutRouteKey, AboutCopy>> = {
   extract: aboutCopy("extract"),
   identify: aboutCopy("identify"),
   patcher: aboutCopy("apply"),
+  playlist: aboutCopy("playlist"),
   "ppf-undo": aboutCopy("ppfUndo"),
   test: aboutCopy("test"),
   trim: aboutCopy("trim"),

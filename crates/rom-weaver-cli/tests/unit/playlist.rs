@@ -1,12 +1,13 @@
 use std::{
     collections::BTreeMap,
+    fs,
     path::{Path, PathBuf},
 };
 
 use super::{
-    BundleSource, Companion, PlannedDisc, PlaylistLayout, checked_game_name, disc_number,
-    game_name, natural_cmp, order_discs, plan_bundle, relative_playlist_path, renamed_companions,
-    render_m3u, sheet_track_path,
+    BundleSource, Companion, PlannedDisc, PlaylistCommand, PlaylistLayout, checked_game_name,
+    disc_number, game_name, natural_cmp, order_discs, plan_bundle, plan_job,
+    relative_playlist_path, renamed_companions, render_m3u, sheet_track_path,
 };
 
 fn names(paths: Vec<PathBuf>) -> Vec<String> {
@@ -341,4 +342,194 @@ fn rename_numbers_discs_in_playlist_order_and_refuses_mds() {
         companions: vec![companion("x.mdf", false)],
     }];
     assert!(plan_bundle(&mds, "FF7", PlaylistLayout::Flat, true).is_err());
+}
+
+#[test]
+fn sheet_tracks_take_one_staged_file_differing_only_in_case() {
+    let staged_paths = BTreeMap::from([
+        (
+            PathBuf::from("/work/Game.bin"),
+            PathBuf::from("/staged/Game.bin"),
+        ),
+        (
+            PathBuf::from("/work/sub/GAME.BIN"),
+            PathBuf::from("/staged/sub/GAME.BIN"),
+        ),
+    ]);
+    assert_eq!(
+        sheet_track_path(Path::new("/work"), "GAME.BIN", &staged_paths),
+        Some(PathBuf::from("/staged/Game.bin"))
+    );
+    let ambiguous = BTreeMap::from([
+        (
+            PathBuf::from("/work/Game.bin"),
+            PathBuf::from("/work/Game.bin"),
+        ),
+        (
+            PathBuf::from("/work/game.BIN"),
+            PathBuf::from("/work/game.BIN"),
+        ),
+    ]);
+    assert_eq!(
+        sheet_track_path(Path::new("/work"), "GAME.bin", &ambiguous),
+        None
+    );
+}
+
+fn write_cue_disc(dir: &Path, stem: &str, tracks: &[&str]) {
+    let mut sheet = String::new();
+    for (index, track) in tracks.iter().enumerate() {
+        fs::write(dir.join(track), track.as_bytes()).expect("write track");
+        sheet.push_str(&format!(
+            "FILE \"{track}\" BINARY\n  TRACK {:02} MODE2/2352\n    INDEX 01 00:00:00\n",
+            index + 1
+        ));
+    }
+    fs::write(dir.join(format!("{stem}.cue")), sheet).expect("write cue");
+}
+
+fn in_place_args(dir: &Path, inputs: &[&str], name: Option<&str>) -> PlaylistCommand {
+    PlaylistCommand {
+        staged_paths: BTreeMap::new(),
+        input: inputs.iter().map(|input| dir.join(input)).collect(),
+        output: None,
+        name: name.map(str::to_string),
+        layout: PlaylistLayout::Flat,
+        rename: false,
+        no_sort: false,
+        flat: false,
+        rename_in_place: true,
+    }
+}
+
+#[test]
+fn rename_in_place_renames_discs_tracks_and_same_named_files() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    for stem in ["ff7.disc02", "ff7.disc01"] {
+        write_cue_disc(temp.path(), stem, &[&format!("{stem}.bin")]);
+        fs::write(temp.path().join(format!("{stem}.sbi")), b"sbi").expect("write sbi");
+    }
+    fs::write(temp.path().join("notes.txt"), b"keep").expect("write notes");
+    fs::write(temp.path().join("ff7.disc01.m3u"), b"old").expect("write old playlist");
+    let plan = plan_job(&in_place_args(
+        temp.path(),
+        &["ff7.disc02.cue", "ff7.disc01.cue"],
+        Some("Final Fantasy VII"),
+    ))
+    .expect("plan")
+    .dry_run_plan();
+    assert_eq!(plan.file_name, "Final Fantasy VII.m3u");
+    assert_eq!(
+        plan.entries,
+        [
+            "Final Fantasy VII (Disc 1).cue",
+            "Final Fantasy VII (Disc 2).cue"
+        ]
+    );
+    assert_eq!(plan.text, render_m3u(&plan.entries));
+    let renames: Vec<(String, &str, bool)> = plan
+        .renames
+        .iter()
+        .map(|rename| {
+            (
+                Path::new(&rename.from)
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+                rename.to.as_str(),
+                rename.text.is_some(),
+            )
+        })
+        .collect();
+    let expected = [
+        ("ff7.disc01.cue", "Final Fantasy VII (Disc 1).cue", true),
+        ("ff7.disc02.cue", "Final Fantasy VII (Disc 2).cue", true),
+        ("ff7.disc01.bin", "Final Fantasy VII (Disc 1).bin", false),
+        ("ff7.disc02.bin", "Final Fantasy VII (Disc 2).bin", false),
+        ("ff7.disc01.sbi", "Final Fantasy VII (Disc 1).sbi", false),
+        ("ff7.disc02.sbi", "Final Fantasy VII (Disc 2).sbi", false),
+    ]
+    .map(|(from, to, text)| (from.to_string(), to, text));
+    assert_eq!(renames, expected);
+    assert!(
+        plan.renames[0]
+            .text
+            .as_deref()
+            .is_some_and(|text| text.contains("FILE \"Final Fantasy VII (Disc 1).bin\" BINARY")),
+        "the renamed sheet names its renamed track"
+    );
+}
+
+fn in_place_refusal(setup: impl Fn(&Path), inputs: &[&str], name: Option<&str>) -> String {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    fs::create_dir(temp.path().join("sub")).expect("sub folder");
+    setup(temp.path());
+    match plan_job(&in_place_args(temp.path(), inputs, name)) {
+        Ok(_) => panic!("planned renaming {inputs:?} in place"),
+        Err(error) => error.to_string(),
+    }
+}
+
+#[test]
+fn rename_in_place_refuses_what_a_rename_could_lose_or_overwrite() {
+    let chd = |dir: &Path, names: &[&str]| {
+        for name in names {
+            fs::write(dir.join(name), b"chd").expect("write disc");
+        }
+    };
+    for (setup, inputs, name, message) in [
+        (
+            Box::new(move |dir: &Path| chd(dir, &["G (Disc 2).chd", "G (Disc 3).chd"]))
+                as Box<dyn Fn(&Path)>,
+            &["G (Disc 2).chd", "G (Disc 3).chd"][..],
+            None,
+            "needs discs numbered 1 to 2; `G (Disc 2).chd` would become Disc 1",
+        ),
+        (
+            Box::new(move |dir: &Path| {
+                chd(dir, &["a (Disc 1).chd", "a (Disc 2).chd", "G (Disc 1).chd"])
+            }),
+            &["a (Disc 1).chd", "a (Disc 2).chd"][..],
+            Some("G"),
+            "`G (Disc 1).chd` already exists beside the discs",
+        ),
+        (
+            Box::new(move |dir: &Path| chd(dir, &["a (Disc 1).chd", "a (Disc 2).chd", "g.M3U"])),
+            &["a (Disc 1).chd", "a (Disc 2).chd"][..],
+            Some("G"),
+            "`G.m3u` already exists beside the discs",
+        ),
+        (
+            Box::new(move |dir: &Path| chd(dir, &["a (Disc 1).chd", "sub/a (Disc 2).chd"])),
+            &["a (Disc 1).chd", "sub/a (Disc 2).chd"][..],
+            None,
+            "needs every disc and track file in one folder",
+        ),
+        (
+            Box::new(move |dir: &Path| {
+                write_cue_disc(dir, "a (Disc 1)", &["shared.bin"]);
+                write_cue_disc(dir, "a (Disc 2)", &["shared.bin"]);
+            }),
+            &["a (Disc 1).cue", "a (Disc 2).cue"][..],
+            None,
+            "`shared.bin` belongs to two discs",
+        ),
+        (
+            Box::new(move |dir: &Path| {
+                write_cue_disc(
+                    dir,
+                    "a (Disc 1)",
+                    &["a (Disc 1).bin", "a (Disc 1) (Track 2).bin"],
+                );
+                fs::write(dir.join("a (Disc 1).sbi"), b"sbi").expect("write sbi");
+            }),
+            &["a (Disc 1).cue"][..],
+            Some("G"),
+            "`a (Disc 1).sbi` shares its name with files that get different names",
+        ),
+    ] {
+        let error = in_place_refusal(setup, inputs, name);
+        assert!(error.contains(message), "{inputs:?}: {error}");
+    }
 }

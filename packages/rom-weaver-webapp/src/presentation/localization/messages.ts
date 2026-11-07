@@ -1701,6 +1701,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.extractGuide": msg({ id: "ui.hero.extractGuide", message: "Read the Extract guide" }),
   "ui.hero.identifyGuide": msg({ id: "ui.hero.identifyGuide", message: "Read the Identify guide" }),
   "ui.hero.ppfUndoGuide": msg({ id: "ui.hero.ppfUndoGuide", message: "Read the PPF undo guide" }),
+  "ui.hero.playlistGuide": msg({ id: "ui.hero.playlistGuide", message: "Read the playlist guide" }),
   "ui.hero.saveGuide": msg({ id: "ui.hero.saveGuide", message: "Read the Save Editor guide" }),
   "ui.hero.testGuide": msg({ id: "ui.hero.testGuide", message: "Read the Test guide" }),
   "ui.hero.trimGuide": msg({ id: "ui.hero.trimGuide", message: "Read the Trim guide" }),
@@ -1719,6 +1720,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.hero.trimDescription",
     message:
       "Remove unused padding from Nintendo DS/DSi, Game Boy Advance, Nintendo 3DS, and Xbox XISO images, or pad a trimmed ROM back to full size.",
+  }),
+  "ui.hero.playlistDescription": msg({
+    id: "ui.hero.playlistDescription",
+    message: "List every disc of a multi-disc game in an .m3u playlist, so an emulator can change discs.",
   }),
   "ui.hero.toolsDescription": msg({
     id: "ui.hero.toolsDescription",
@@ -1916,6 +1921,22 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message:
       "PPF patches are common for PlayStation games. Check the restored copy against a known checksum before you patch it again.",
   }),
+  "ui.about.playlistTitle": msg({ id: "ui.about.playlistTitle", message: "About M3U playlists" }),
+  "ui.about.playlistBody1": msg({
+    id: "ui.about.playlistBody1",
+    message:
+      "An .m3u playlist lists the discs of a multi-disc game in order. Emulators such as RetroArch read it so you can change discs.",
+  }),
+  "ui.about.playlistBody2": msg({
+    id: "ui.about.playlistBody2",
+    message:
+      "Add the discs of one game. They are ordered by the number in their names, such as Disc 1 or .disc02, and track files such as .bin are left out.",
+  }),
+  "ui.about.playlistBody3": msg({
+    id: "ui.about.playlistBody3",
+    message:
+      "Download the playlist. In Chrome or Edge on a computer you can also save it into the game's folder and rename the discs to match. Nothing is uploaded.",
+  }),
   "ui.about.testTitle": msg({ id: "ui.about.testTitle", message: "About the online ROM tester" }),
   "ui.about.testBody1": msg({
     id: "ui.about.testBody1",
@@ -1939,6 +1960,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.identifyThesis": msg({
     id: "ui.hero.identifyThesis",
     message: "Identify your ROM.",
+  }),
+  "ui.hero.playlistThesis": msg({
+    id: "ui.hero.playlistThesis",
+    message: "Make a disc playlist.",
   }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",
@@ -2094,6 +2119,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.docs.toolIdentify": msg({ id: "ui.docs.toolIdentify", message: "Identify ROMs" }),
   "ui.docs.toolTest": msg({ id: "ui.docs.toolTest", message: "Test ROMs" }),
   "ui.docs.toolTrim": msg({ id: "ui.docs.toolTrim", message: "Trim ROMs" }),
+  "ui.docs.toolPlaylist": msg({ id: "ui.docs.toolPlaylist", message: "Make disc playlists" }),
   "ui.docs.toolSave": msg({ id: "ui.docs.toolSave", message: "Edit game saves" }),
   "ui.docs.toolUndo": msg({ id: "ui.docs.toolUndo", message: "Undo PPF patches" }),
   "ui.related.heading": msg({ id: "ui.related.heading", message: "Related" }),

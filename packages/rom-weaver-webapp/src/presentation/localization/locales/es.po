@@ -4455,6 +4455,11 @@ msgstr "Lee la guía de Identify"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.playlistGuide"
+msgstr "Lee la guía de listas de discos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.ppfUndoGuide"
 msgstr "Lee la guía de PPF undo"
 
@@ -4742,6 +4747,11 @@ msgstr "Restablecer todo"
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.group.resources"
 msgstr "Recursos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.playlistDescription"
+msgstr "Reúne todos los discos de un juego multidisco en una lista .m3u para que el emulador pueda cambiar de disco."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5930,6 +5940,11 @@ msgstr "Recortar ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolPlaylist"
+msgstr "Crear listas de discos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
 msgstr "Conserva el juego."
 
@@ -5982,6 +5997,11 @@ msgstr "Escribir códigos"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.unchanged"
 msgstr "Sin cambios"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.playlistThesis"
+msgstr "Crea una lista de discos."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -6447,3 +6467,23 @@ msgstr "Códec ZIP"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z y paquetes"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistTitle"
+msgstr "Acerca de las listas M3U"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistBody1"
+msgstr "Una lista .m3u enumera en orden los discos de un juego multidisco. Emuladores como RetroArch la leen para que puedas cambiar de disco."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistBody2"
+msgstr "Añade los discos de un juego. Se ordenan por el número de su nombre, como Disc 1 o .disc02, y se omiten los archivos de pista como .bin."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistBody3"
+msgstr "Descarga la lista. En Chrome o Edge en un ordenador también puedes guardarla en la carpeta del juego y renombrar los discos para que coincidan. No se sube nada."

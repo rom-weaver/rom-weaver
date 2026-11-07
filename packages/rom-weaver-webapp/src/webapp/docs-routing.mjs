@@ -171,6 +171,12 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({
     audience: "browser",
+    file: "how-to/make-playlist-browser.md",
+    label: "Make M3U playlists (browser)",
+    slug: "docs/make-playlist-browser",
+  }),
+  Object.freeze({
+    audience: "browser",
     file: "how-to/undo-ppf-browser.md",
     label: "Undo PPF (browser)",
     slug: "docs/undo-ppf-browser",
@@ -419,6 +425,7 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
   "docs/extract-chd": "Disc images & playlists",
   "docs/extract-files-browser": "Conversion & files",
   "docs/extract-z3ds": "Conversion & files",
+  "docs/make-playlist-browser": "Disc images & playlists",
   "docs/fix-checksum-errors": "Troubleshooting",
   "docs/fix-permission-errors": "Troubleshooting",
   "docs/identify-and-hash-files": "ROM checks",

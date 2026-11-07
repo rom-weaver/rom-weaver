@@ -401,6 +401,7 @@ const getNavigationGuardState = () => {
     },
     romFilePresent: state.patcherSession.romFilePresent,
     ppfUndoActive: state.ppfUndoSession.active,
+    playlistActive: state.playlistSession.active,
     compressActive: state.compressSession.active,
     saveEditorActive: state.saveEditorSession.active,
     trimState: {
@@ -470,6 +471,7 @@ const PRERENDERED_VIEWS = new Set<WebappView>([
   "home",
   "identify",
   "patcher",
+  "playlist",
   "ppf-undo",
   "save-editor",
   "extract",
@@ -629,6 +631,7 @@ const renderWebappRoot = (): undefined => {
       // The forms report these from passive effects, where the controller's synchronous
       // re-render (flushSync) is not allowed, so each is applied one microtask later.
       onPpfUndoSessionChange: (active) => queueMicrotask(() => webappController.setPpfUndoSessionState(active)),
+      onPlaylistSessionChange: (active) => queueMicrotask(() => webappController.setPlaylistSessionState(active)),
       onCompressSessionChange: (active) => queueMicrotask(() => webappController.setCompressSessionState(active)),
       onSaveEditorSessionChange: (active) => queueMicrotask(() => webappController.setSaveEditorSessionState(active)),
       onTrimOutputFormatChange: (format) => webappController.setTrimOutputFormat(format),

@@ -96,6 +96,9 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
   "docs/patch-compressed-disc": {
     tools: [{ labelId: "ui.docs.toolApply", view: "patcher" }],
   },
+  "docs/make-playlist-browser": {
+    tools: [{ labelId: "ui.docs.toolPlaylist", view: "playlist" }],
+  },
   "docs/search-rom-checksums": {
     tools: [{ labelId: "ui.docs.toolIdentify", view: "identify" }],
   },

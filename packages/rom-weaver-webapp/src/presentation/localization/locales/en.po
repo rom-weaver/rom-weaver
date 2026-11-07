@@ -4455,6 +4455,11 @@ msgstr "Read the Identify guide"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.playlistGuide"
+msgstr "Read the playlist guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.ppfUndoGuide"
 msgstr "Read the PPF undo guide"
 
@@ -4742,6 +4747,11 @@ msgstr "Reset all"
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.group.resources"
 msgstr "Resources"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.playlistDescription"
+msgstr "List every disc of a multi-disc game in an .m3u playlist, so an emulator can change discs."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5930,6 +5940,11 @@ msgstr "Trim ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolPlaylist"
+msgstr "Make disc playlists"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
 msgstr "Trim unused space from ROMs."
 
@@ -5982,6 +5997,11 @@ msgstr "Type codes"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.unchanged"
 msgstr "Unchanged"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.playlistThesis"
+msgstr "Make a disc playlist."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -6447,3 +6467,23 @@ msgstr "ZIP codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z and weaves"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistTitle"
+msgstr "About M3U playlists"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistBody1"
+msgstr "An .m3u playlist lists the discs of a multi-disc game in order. Emulators such as RetroArch read it so you can change discs."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistBody2"
+msgstr "Add the discs of one game. They are ordered by the number in their names, such as Disc 1 or .disc02, and track files such as .bin are left out."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistBody3"
+msgstr "Download the playlist. In Chrome or Edge on a computer you can also save it into the game's folder and rename the discs to match. Nothing is uploaded."

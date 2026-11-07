@@ -28,6 +28,7 @@ const workflowPages = {
   identify: "identify-rom",
   trim: "trim-rom",
   "ppf-undo": "ppf-undo",
+  playlist: "create-m3u-playlist",
   "save-editor": "rom-save-editor",
   test: "play-rom",
 };

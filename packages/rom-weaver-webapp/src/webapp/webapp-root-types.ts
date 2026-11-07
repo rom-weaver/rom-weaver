@@ -44,6 +44,7 @@ type WebappRootProps = {
     currentView: WebappView;
     patcherSession: PatcherSessionState;
     ppfUndoSession: { active: boolean };
+    playlistSession: { active: boolean };
     saveEditorSession: { active: boolean };
     trimSession: TrimSessionState;
     settingsDialogOpen: boolean;
@@ -102,6 +103,7 @@ type WebappRootProps = {
     onTrimOutputFormatChange: (format: string) => void;
     onTrimSettingsChange: (settings: unknown) => void;
     onPpfUndoSessionChange: (active: boolean) => void;
+    onPlaylistSessionChange: (active: boolean) => void;
     onCompressSessionChange: (active: boolean) => void;
     onSaveEditorSessionChange: (active: boolean) => void;
   };

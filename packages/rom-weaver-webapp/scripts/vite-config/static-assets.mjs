@@ -197,6 +197,15 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         ),
         WORKFLOW_SEO_ROUTES["ppf-undo"],
       );
+      const playlistHtml = injectLdJson(
+        createWorkflowRouteHtml(
+          withRoutePreloadLinks(withShell("playlist"), routePreloadLinks.get("playlist")),
+          WORKFLOW_SEO_ROUTES.playlist,
+          channel,
+          channelLabel,
+        ),
+        WORKFLOW_SEO_ROUTES.playlist,
+      );
       const saveEditorHtml = withRoutePreloadLinks(
         makeBetaRouteNoindex(withShell("save-editor"), "rom-save-editor", channel, channelLabel),
         routePreloadLinks.get("save-editor"),
@@ -241,6 +250,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         ["play-rom", testHtml],
         ["trim-rom", trimHtml],
         ["ppf-undo", ppfUndoHtml],
+        ["create-m3u-playlist", playlistHtml],
         // What's new needs a document of its own or the host serves 404.html,
         // whose not-found flag hides the route on a direct load or reload. Its
         // content is fetched release notes, so it stays out of the index.

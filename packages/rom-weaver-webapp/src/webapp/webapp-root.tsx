@@ -8,6 +8,7 @@ import {
   Gamepad,
   Hash,
   House,
+  ListMusic,
   PackageOpen,
   RotateCcw,
   Save as SaveIcon,
@@ -103,6 +104,7 @@ import {
   HomePageRoute,
   IdentifyRouteForm,
   preloadWorkflowRoute,
+  PlaylistRouteForm,
   PpfUndoRouteForm,
   SaveEditorRouteForm,
   TrimPatchRoute,
@@ -184,6 +186,14 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     id: "trim",
     label: "Trim ROM",
     railLabel: "Trim",
+  },
+  {
+    group: "roms",
+    href: "create-m3u-playlist",
+    icon: <ListMusic aria-hidden="true" />,
+    id: "playlist",
+    label: "Make playlist",
+    railLabel: "Playlist",
   },
   {
     dock: true,
@@ -1055,6 +1065,7 @@ function WebappRoot({
     patcherFormEdited: !!(state.patcherSession.outputName.trim() || state.patcherSession.outputCompression !== "none"),
     romFilePresent: state.patcherSession.romFilePresent,
     ppfUndoActive: state.ppfUndoSession?.active ?? false,
+    playlistActive: state.playlistSession?.active ?? false,
     compressActive: state.compressSession?.active ?? false,
     saveEditorActive: state.saveEditorSession?.active ?? false,
     trimState: state.trimSession,
@@ -1226,6 +1237,13 @@ function WebappRoot({
                     <PpfUndoRouteForm
                       onSessionChange={actions.onPpfUndoSessionChange}
                       pageDrop={pageDropFor("ppf-undo")}
+                    />,
+                  )}
+                  {workflowPanel(
+                    "playlist",
+                    <PlaylistRouteForm
+                      onSessionChange={actions.onPlaylistSessionChange}
+                      pageDrop={pageDropFor("playlist")}
                     />,
                   )}
                   {workflowPanel(

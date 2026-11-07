@@ -132,6 +132,7 @@ test("the sitemap contains each indexable workflow once and excludes beta tools"
     "extract-files",
     "identify-rom",
     "ppf-undo",
+    "create-m3u-playlist",
     "play-rom",
     "trim-rom",
   ]) {
@@ -196,6 +197,7 @@ test("workflow Markdown includes task instructions and limits from the published
     [WORKFLOW_SEO_ROUTES.extract, "Extract an archive", "Extract opens one archive per run."],
     [WORKFLOW_SEO_ROUTES.identify, "Identify a file", "It does not prove that your file is corrupt."],
     [WORKFLOW_SEO_ROUTES["ppf-undo"], "Restore the saved bytes", "If the patch lacks undo data"],
+    [WORKFLOW_SEO_ROUTES.playlist, "Rename the discs", "Renaming the discs also needs Chrome or Edge on a computer."],
     [
       WORKFLOW_SEO_ROUTES.trim,
       "Save a trimmed copy",

@@ -4455,6 +4455,11 @@ msgstr "Lies die Identify-Anleitung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.playlistGuide"
+msgstr "Lies die Playlist-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.ppfUndoGuide"
 msgstr "Lies die PPF-Undo-Anleitung"
 
@@ -4742,6 +4747,11 @@ msgstr "Alle zurücksetzen"
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.group.resources"
 msgstr "Ressourcen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.playlistDescription"
+msgstr "Liste alle Discs eines Spiels mit mehreren Discs in einer .m3u-Playlist auf, damit ein Emulator die Disc wechseln kann."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5930,6 +5940,11 @@ msgstr "ROMs kürzen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolPlaylist"
+msgstr "Disc-Playlists erstellen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
 msgstr "Behalte das Spiel."
 
@@ -5982,6 +5997,11 @@ msgstr "Codes eingeben"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.unchanged"
 msgstr "Unverändert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.playlistThesis"
+msgstr "Erstelle eine Disc-Playlist."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -6447,3 +6467,23 @@ msgstr "ZIP-Codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z und Weaves"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistTitle"
+msgstr "Über M3U-Playlists"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistBody1"
+msgstr "Eine .m3u-Playlist listet die Discs eines Spiels mit mehreren Discs der Reihe nach auf. Emulatoren wie RetroArch lesen sie, damit du die Disc wechseln kannst."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistBody2"
+msgstr "Füge die Discs eines Spiels hinzu. Sie werden nach der Nummer im Namen geordnet, etwa Disc 1 oder .disc02; Track-Dateien wie .bin werden weggelassen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistBody3"
+msgstr "Lade die Playlist herunter. In Chrome oder Edge auf einem Computer kannst du sie auch im Ordner des Spiels speichern und die Discs passend umbenennen. Es wird nichts hochgeladen."

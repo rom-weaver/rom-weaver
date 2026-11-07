@@ -556,7 +556,58 @@ export type PlaylistCommand = {
 /**
  * Browser inputs MUST map original logical paths to their staged paths explicitly.
  */
-staged_paths?: { [key in string]: string }, input: Array<string>, output?: string, name?: string, layout?: PlaylistLayout, rename?: boolean, no_sort?: boolean, flat?: boolean, };
+staged_paths?: { [key in string]: string }, input: Array<string>, output?: string, name?: string, layout?: PlaylistLayout, rename?: boolean, no_sort?: boolean, flat?: boolean,
+/**
+ * Plan renaming the discs `<game> (Disc N)` where they are, for the browser to carry out.
+ * Only a dry run accepts it.
+ */
+rename_in_place?: boolean, };
+
+export type PlaylistRename = {
+/**
+ * The file to rename.
+ */
+from: string,
+/**
+ * Its new file name.
+ */
+to: string,
+/**
+ * A disc sheet's new text, naming its renamed tracks.
+ */
+text?: string | null, };
+
+export type PlaylistPlannedDisc = {
+/**
+ * The disc file.
+ */
+path: string,
+/**
+ * The disc's name without its extension and disc number.
+ */
+game: string, };
+
+export type PlaylistDryRunPlan = {
+/**
+ * The playlist lines, in order.
+ */
+entries: Array<string>,
+/**
+ * The listed discs, in playlist order.
+ */
+discs: Array<PlaylistPlannedDisc>,
+/**
+ * The playlist's file name.
+ */
+file_name: string,
+/**
+ * The playlist's text.
+ */
+text: string,
+/**
+ * What a rename-in-place plan renames; empty for every other plan.
+ */
+renames: Array<PlaylistRename>, };
 
 export type ToolsCommands = { "type": "ppf-undo", "args": PpfUndoCommand };
 
