@@ -852,7 +852,7 @@ round_trip_test!(
         apply_extra: &[],
         patch_assert: Some(|bytes| {
             assert!(bytes.ends_with(
-            br#"{"patcher":"EBPatcher","Author":"Unknown","Description":"No description","Title":"Untitled"}"#
+            br#"{"patcher":"EBPatcher","author":"Unknown","title":"Untitled","description":"No description"}"#
         ));
         }),
     }
@@ -3962,40 +3962,56 @@ fn patch_create_reports_pds_as_explicitly_unsupported() {
 }
 
 #[test]
-fn patch_create_rejects_ips32_at_large_size() {
+fn patch_create_writes_ips32_past_the_24_bit_ips_offset_limit() {
+    // IPS32's 32-bit offsets reach bytes that 24-bit IPS records cannot address.
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
     let modified = temp.child("new.bin");
     let patch = temp.child("output.ips32");
+    let output = temp.child("output.bin");
     write_sparse_bytes(original.path(), 0x0100_0002, 0x0100_0000, b"ab");
     write_sparse_bytes(modified.path(), 0x0100_0002, 0x0100_0000, b"aZ");
+    let original_s = original.path().to_str().expect("path");
+    let patch_s = patch.path().to_str().expect("path");
 
-    let create_output = command_stdout(
+    let create = run_single_json_event(
         &[
             "patch",
             "create",
             "--original",
-            original.path().to_str().expect("path"),
+            original_s,
             "--modified",
             modified.path().to_str().expect("path"),
             "--format",
             "ips32",
             "--output",
-            patch.path().to_str().expect("path"),
+            patch_s,
             "--threads",
             "8",
             "--jsonl",
         ],
-        1,
+        0,
     );
+    assert_patch_envelope(&create, "patch-create", "IPS32", "succeeded");
 
-    let create_json = parse_single_json_line(&create_output);
-    assert_patch_envelope(&create_json, "patch-create", "IPS32", "failed");
+    let apply = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original_s,
+            "--patch",
+            patch_s,
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_patch_envelope(&apply, "patch-apply", "IPS32", "succeeded");
     assert!(
-        create_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("at or above 16.78 MB")
+        fs::read(output.path()).expect("output") == fs::read(modified.path()).expect("modified")
     );
 }
 

@@ -168,7 +168,8 @@ pub(super) fn create_patch_format_size_error_message(
 ) -> Option<String> {
     let normalized_format = normalize_create_patch_format(format);
     let max_size = max_create_patch_input_size(sizes);
-    if matches!(normalized_format.as_str(), "ips" | "ips32" | "ebp")
+    // IPS32 exists to widen IPS's 24-bit offsets, so only the 24-bit flavors stop here.
+    if matches!(normalized_format.as_str(), "ips" | "ebp")
         && max_size >= CREATE_PATCH_IPS_SIZE_LIMIT_BYTES
     {
         let limit = format_human_bytes(CREATE_PATCH_IPS_SIZE_LIMIT_BYTES);
