@@ -784,16 +784,51 @@ fn plan_rename_in_place(args: &PlaylistCommand) -> Result<PlaylistJob> {
         .parent()
         .unwrap_or_else(|| Path::new(""))
         .to_path_buf();
+    check_discs_share_folder(&discs, &folder)?;
+    check_discs_are_numbered_in_order(&discs)?;
+    let game = resolve_game_name(args, PlaylistOutput::M3u, &discs)?;
+    let (lines, entries) = plan_bundle(&discs, &game, PlaylistLayout::Flat, true)?;
+    let entries = unique_entries(entries)?;
+    let (mut renames, mut sources) = disc_renames(&entries)?;
+    let folder_names = folder_file_names(&folder)?;
+    for (path, companion) in companion_renames(&folder, &folder_names, &sources, &renames)? {
+        sources.insert(path);
+        renames.push(companion);
+    }
+    let playlist_name = format!("{game}.m3u");
+    let others = names_outside_renames(&folder, &folder_names, &sources);
+    check_rename_targets(&renames, &playlist_name, &others)?;
+    debug!(
+        discs = discs.len(),
+        renames = renames.len(),
+        "planned renaming the discs in place"
+    );
+    Ok(PlaylistJob {
+        kind: PlaylistOutput::M3u,
+        output: folder.join(&playlist_name),
+        playlist_name,
+        lines,
+        discs: discs.into_iter().map(|disc| disc.path).collect(),
+        entries: Vec::new(),
+        renames,
+    })
+}
+
+fn check_discs_share_folder(discs: &[PlannedDisc], folder: &Path) -> Result<()> {
     for path in discs.iter().flat_map(|disc| {
         std::iter::once(&disc.path).chain(disc.companions.iter().map(|companion| &companion.source))
     }) {
-        if path.parent() != Some(folder.as_path()) {
+        if path.parent() != Some(folder) {
             return Err(RomWeaverError::Validation(format!(
                 "renaming in place needs every disc and track file in one folder; `{}` is in another",
                 path.display()
             )));
         }
     }
+    Ok(())
+}
+
+fn check_discs_are_numbered_in_order(discs: &[PlannedDisc]) -> Result<()> {
     for (index, disc) in discs.iter().enumerate() {
         let name = file_name_of(&disc.path);
         let number = index + 1;
@@ -804,12 +839,14 @@ fn plan_rename_in_place(args: &PlaylistCommand) -> Result<PlaylistJob> {
             )));
         }
     }
-    let game = resolve_game_name(args, PlaylistOutput::M3u, &discs)?;
-    let (lines, entries) = plan_bundle(&discs, &game, PlaylistLayout::Flat, true)?;
-    let entries = unique_entries(entries)?;
+    Ok(())
+}
+
+/// The renames of the planned disc and track files, and the set of files they rename.
+fn disc_renames(entries: &[BundleEntry]) -> Result<(Vec<PlaylistRename>, HashSet<PathBuf>)> {
     let mut sources: HashSet<PathBuf> = HashSet::new();
     let mut renames = Vec::with_capacity(entries.len());
-    for entry in &entries {
+    for entry in entries {
         let (source, text) = match &entry.source {
             BundleSource::File(source) => (source, None),
             BundleSource::Sheet { source, text } => (source, Some(text.clone())),
@@ -827,9 +864,14 @@ fn plan_rename_in_place(args: &PlaylistCommand) -> Result<PlaylistJob> {
             text,
         });
     }
+    Ok((renames, sources))
+}
+
+/// The sorted names of the files directly in `folder`.
+fn folder_file_names(folder: &Path) -> Result<Vec<String>> {
     let mut folder_names = Vec::new();
-    for item in fs::read_dir(&folder).io_op(IoOp::ReadDir, &folder)? {
-        let item = item.io_op(IoOp::ReadDir, &folder)?;
+    for item in fs::read_dir(folder).io_op(IoOp::ReadDir, folder)? {
+        let item = item.io_op(IoOp::ReadDir, folder)?;
         if item
             .file_type()
             .io_op(IoOp::Inspect, item.path())?
@@ -839,9 +881,14 @@ fn plan_rename_in_place(args: &PlaylistCommand) -> Result<PlaylistJob> {
         }
     }
     folder_names.sort();
-    // A file sharing a renamed file's name, such as `Game.sbi` beside `Game.cue`, follows it.
+    Ok(folder_names)
+}
+
+/// A file sharing a renamed file's name, such as `Game.sbi` beside `Game.cue`, follows it. Maps
+/// each old lowercase stem to its new stem, or to `None` when its files get different new stems.
+fn renamed_stems(renames: &[PlaylistRename]) -> HashMap<String, Option<String>> {
     let mut new_stems: HashMap<String, Option<String>> = HashMap::new();
-    for rename in &renames {
+    for rename in renames {
         let old = file_name_of(Path::new(&rename.from));
         let new_stem = stem_of(&rename.to).to_string();
         new_stems
@@ -853,7 +900,20 @@ fn plan_rename_in_place(args: &PlaylistCommand) -> Result<PlaylistJob> {
             })
             .or_insert(Some(new_stem));
     }
-    for name in &folder_names {
+    new_stems
+}
+
+/// The renames of the same-named companions in `folder` that follow a renamed disc or track
+/// file, each with the companion's path.
+fn companion_renames(
+    folder: &Path,
+    folder_names: &[String],
+    sources: &HashSet<PathBuf>,
+    renames: &[PlaylistRename],
+) -> Result<Vec<(PathBuf, PlaylistRename)>> {
+    let new_stems = renamed_stems(renames);
+    let mut companions = Vec::new();
+    for name in folder_names {
         let path = folder.join(name);
         let extension = &name[stem_of(name).len()..];
         if sources.contains(&path)
@@ -871,24 +931,41 @@ fn plan_rename_in_place(args: &PlaylistCommand) -> Result<PlaylistJob> {
             )));
         };
         trace!(file = %name, "renaming a same-named companion with its disc");
-        sources.insert(path.clone());
-        renames.push(PlaylistRename {
+        let rename = PlaylistRename {
             from: path.display().to_string(),
             to: format!("{new_stem}{extension}"),
             text: None,
-        });
+        };
+        companions.push((path, rename));
     }
-    let playlist_name = format!("{game}.m3u");
-    let others: HashSet<String> = folder_names
+    Ok(companions)
+}
+
+/// The lowercase names of the files in `folder` that the plan does not rename.
+fn names_outside_renames(
+    folder: &Path,
+    folder_names: &[String],
+    sources: &HashSet<PathBuf>,
+) -> HashSet<String> {
+    folder_names
         .iter()
         .filter(|name| !sources.contains(&folder.join(name)))
         .map(|name| name.to_ascii_lowercase())
-        .collect();
+        .collect()
+}
+
+/// Refuse a new name, the playlist's included, that an untouched file already has or that two
+/// files would share.
+fn check_rename_targets(
+    renames: &[PlaylistRename],
+    playlist_name: &str,
+    others: &HashSet<String>,
+) -> Result<()> {
     let mut targets = HashSet::new();
     for target in renames
         .iter()
         .map(|rename| rename.to.as_str())
-        .chain(std::iter::once(playlist_name.as_str()))
+        .chain(std::iter::once(playlist_name))
     {
         let folded = target.to_ascii_lowercase();
         if others.contains(&folded) {
@@ -902,20 +979,7 @@ fn plan_rename_in_place(args: &PlaylistCommand) -> Result<PlaylistJob> {
             )));
         }
     }
-    debug!(
-        discs = discs.len(),
-        renames = renames.len(),
-        "planned renaming the discs in place"
-    );
-    Ok(PlaylistJob {
-        kind: PlaylistOutput::M3u,
-        output: folder.join(&playlist_name),
-        playlist_name,
-        lines,
-        discs: discs.into_iter().map(|disc| disc.path).collect(),
-        entries: Vec::new(),
-        renames,
-    })
+    Ok(())
 }
 
 /// Validate a `playlist` request and decide every file it writes, without writing any.
@@ -923,21 +987,7 @@ pub(super) fn plan_job(args: &PlaylistCommand) -> Result<PlaylistJob> {
     if args.rename_in_place {
         return plan_rename_in_place(args);
     }
-    let kind = match &args.output {
-        Some(output) => PlaylistOutput::from_path(output)?,
-        None => PlaylistOutput::M3u,
-    };
-    if kind == PlaylistOutput::M3u && (args.layout != PlaylistLayout::Flat || args.rename) {
-        return Err(RomWeaverError::Validation(
-            "--layout and --rename copy the discs, so they need a .zip or folder --output"
-                .to_string(),
-        ));
-    }
-    if kind == PlaylistOutput::M3u && args.output.is_some() && args.name.is_some() {
-        return Err(RomWeaverError::Validation(
-            "the .m3u --output already names the playlist; drop --name".to_string(),
-        ));
-    }
+    let kind = checked_output_kind(args)?;
     check_inputs_are_files(&args.input)?;
     let discs = plan_playlist(
         &args.input,
@@ -954,98 +1004,19 @@ pub(super) fn plan_job(args: &PlaylistCommand) -> Result<PlaylistJob> {
             .join(format!("{game}.m3u"))
     });
     if kind != PlaylistOutput::Folder {
-        if let Some(input) = args
-            .input
-            .iter()
-            .find(|input| super::path_access::paths_refer_to_same_file(input, &output))
-        {
-            return Err(RomWeaverError::Validation(format!(
-                "playlist output and input `{}` are the same file",
-                input.display()
-            )));
-        }
-        match fs::symlink_metadata(&output) {
-            Ok(_) => {
-                return Err(RomWeaverError::Validation(format!(
-                    "refusing to overwrite existing output `{}`; choose a different --output path",
-                    output.display()
-                )));
-            }
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error.into()),
-        }
+        check_file_output_is_free(&args.input, &output)?;
     }
     let (lines, entries) = if kind == PlaylistOutput::M3u {
-        let output_dir = output
-            .parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new("."));
-        let mut lines = Vec::with_capacity(discs.len());
-        for disc in &discs {
-            lines.push(if args.flat {
-                file_name_of(&disc.path)
-            } else {
-                relative_playlist_path(output_dir, &disc.path)?
-            });
-        }
-        (lines, Vec::new())
+        (m3u_lines(args, &discs, &output)?, Vec::new())
     } else {
         let (lines, entries) = plan_bundle(&discs, &game, args.layout, args.rename)?;
         (lines, unique_entries(entries)?)
     };
-    if let Some(duplicate) = lines.iter().enumerate().find_map(|(index, line)| {
-        lines[..index]
-            .iter()
-            .any(|earlier| earlier.eq_ignore_ascii_case(line))
-            .then_some(line)
-    }) {
-        return Err(RomWeaverError::Validation(format!(
-            "two discs share the name `{duplicate}`; rename one so each playlist line is unique"
-        )));
-    }
+    check_lines_are_unique(&lines)?;
     if kind == PlaylistOutput::Folder {
-        let folder: PathBuf = output.components().collect();
-        if let Some(file) = folder
-            .ancestors()
-            .find(|dir| !dir.as_os_str().is_empty() && dir.exists())
-            .filter(|dir| !dir.is_dir())
-        {
-            return Err(RomWeaverError::Validation(format!(
-                "`{}` is a file, so it cannot hold the --output folder",
-                file.display()
-            )));
-        }
-        for target in entries
-            .iter()
-            .map(|entry| folder_target(&output, &entry.path))
-        {
-            if fs::symlink_metadata(&target).is_ok() {
-                return Err(RomWeaverError::Validation(format!(
-                    "refusing to overwrite existing `{}`; choose a different --output folder",
-                    target.display()
-                )));
-            }
-            // A file where the game's or a disc's folder goes would stop the copy midway.
-            if let Some(file) = target
-                .ancestors()
-                .skip(1)
-                .find(|dir| !dir.as_os_str().is_empty() && dir.exists())
-                .filter(|dir| !dir.is_dir())
-            {
-                return Err(RomWeaverError::Validation(format!(
-                    "`{}` is a file, so it cannot hold `{}`; choose a different --output folder",
-                    file.display(),
-                    target.display()
-                )));
-            }
-        }
+        check_folder_output_is_free(&output, &entries)?;
     }
-    for entry in &entries {
-        if let BundleSource::File(source) = &entry.source {
-            // Name an unreadable disc file before anything is written.
-            fs::File::open(source).io_op(IoOp::Open, source)?;
-        }
-    }
+    check_entries_are_readable(&entries)?;
     debug!(
         ?kind,
         layout = ?args.layout,
@@ -1068,6 +1039,136 @@ pub(super) fn plan_job(args: &PlaylistCommand) -> Result<PlaylistJob> {
         entries,
         renames: Vec::new(),
     })
+}
+
+/// The output kind `--output` names (a lone `.m3u` without it), after refusing options that
+/// kind cannot honor.
+fn checked_output_kind(args: &PlaylistCommand) -> Result<PlaylistOutput> {
+    let kind = match &args.output {
+        Some(output) => PlaylistOutput::from_path(output)?,
+        None => PlaylistOutput::M3u,
+    };
+    if kind == PlaylistOutput::M3u && (args.layout != PlaylistLayout::Flat || args.rename) {
+        return Err(RomWeaverError::Validation(
+            "--layout and --rename copy the discs, so they need a .zip or folder --output"
+                .to_string(),
+        ));
+    }
+    if kind == PlaylistOutput::M3u && args.output.is_some() && args.name.is_some() {
+        return Err(RomWeaverError::Validation(
+            "the .m3u --output already names the playlist; drop --name".to_string(),
+        ));
+    }
+    Ok(kind)
+}
+
+/// Refuse a `.m3u` or `.zip` output that is one of the inputs or already exists.
+fn check_file_output_is_free(inputs: &[PathBuf], output: &Path) -> Result<()> {
+    if let Some(input) = inputs
+        .iter()
+        .find(|input| super::path_access::paths_refer_to_same_file(input, output))
+    {
+        return Err(RomWeaverError::Validation(format!(
+            "playlist output and input `{}` are the same file",
+            input.display()
+        )));
+    }
+    match fs::symlink_metadata(output) {
+        Ok(_) => Err(RomWeaverError::Validation(format!(
+            "refusing to overwrite existing output `{}`; choose a different --output path",
+            output.display()
+        ))),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// The playlist lines of a lone `.m3u`: each disc's file name with `--flat`, else its path
+/// relative to the playlist's folder.
+fn m3u_lines(args: &PlaylistCommand, discs: &[PlannedDisc], output: &Path) -> Result<Vec<String>> {
+    let output_dir = output
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let mut lines = Vec::with_capacity(discs.len());
+    for disc in discs {
+        lines.push(if args.flat {
+            file_name_of(&disc.path)
+        } else {
+            relative_playlist_path(output_dir, &disc.path)?
+        });
+    }
+    Ok(lines)
+}
+
+fn check_lines_are_unique(lines: &[String]) -> Result<()> {
+    if let Some(duplicate) = lines.iter().enumerate().find_map(|(index, line)| {
+        lines[..index]
+            .iter()
+            .any(|earlier| earlier.eq_ignore_ascii_case(line))
+            .then_some(line)
+    }) {
+        return Err(RomWeaverError::Validation(format!(
+            "two discs share the name `{duplicate}`; rename one so each playlist line is unique"
+        )));
+    }
+    Ok(())
+}
+
+/// Refuse a folder output that sits under a file or would overwrite or be blocked by an
+/// existing path.
+fn check_folder_output_is_free(output: &Path, entries: &[BundleEntry]) -> Result<()> {
+    let folder: PathBuf = output.components().collect();
+    if let Some(file) = folder
+        .ancestors()
+        .find(|dir| !dir.as_os_str().is_empty() && dir.exists())
+        .filter(|dir| !dir.is_dir())
+    {
+        return Err(RomWeaverError::Validation(format!(
+            "`{}` is a file, so it cannot hold the --output folder",
+            file.display()
+        )));
+    }
+    for target in entries
+        .iter()
+        .map(|entry| folder_target(output, &entry.path))
+    {
+        check_folder_target_is_free(&target)?;
+    }
+    Ok(())
+}
+
+fn check_folder_target_is_free(target: &Path) -> Result<()> {
+    if fs::symlink_metadata(target).is_ok() {
+        return Err(RomWeaverError::Validation(format!(
+            "refusing to overwrite existing `{}`; choose a different --output folder",
+            target.display()
+        )));
+    }
+    // A file where the game's or a disc's folder goes would stop the copy midway.
+    if let Some(file) = target
+        .ancestors()
+        .skip(1)
+        .find(|dir| !dir.as_os_str().is_empty() && dir.exists())
+        .filter(|dir| !dir.is_dir())
+    {
+        return Err(RomWeaverError::Validation(format!(
+            "`{}` is a file, so it cannot hold `{}`; choose a different --output folder",
+            file.display(),
+            target.display()
+        )));
+    }
+    Ok(())
+}
+
+fn check_entries_are_readable(entries: &[BundleEntry]) -> Result<()> {
+    for entry in entries {
+        if let BundleSource::File(source) = &entry.source {
+            // Name an unreadable disc file before anything is written.
+            fs::File::open(source).io_op(IoOp::Open, source)?;
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn playlist_failure(error: RomWeaverError) -> OperationReport {

@@ -2,7 +2,11 @@ import { Download, FolderOpen, FolderPen, Save } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { getErrorMessage } from "../../lib/errors.ts";
-import type { BrowserPlaylistPlan, PlaylistSourceFile } from "../../platform/browser/browser-playlist-api.ts";
+import type {
+  BrowserPlaylistPlan,
+  PlaylistSourceFile,
+  planBrowserPlaylist,
+} from "../../platform/browser/browser-playlist-api.ts";
 import { checkGameName } from "../../storage/browser/playlist-game-name.ts";
 import { canWritePlaylistFolders } from "../../storage/browser/playlist-folder-support.ts";
 import { resolveAssetUrl } from "../../public/react/asset-url.ts";
@@ -70,8 +74,297 @@ const readFolderInput = (list: FileList) => {
   };
 };
 
-const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
+type PlaylistActivityInput = {
+  busy: boolean;
+  planning: boolean;
+  error: string;
+  done: string;
+  hasSource: boolean;
+};
+
+const getPlaylistActivity = ({ busy, planning, error, done, hasSource }: PlaylistActivityInput) => {
+  if (busy || planning) return { stage: "Make playlist", state: "running" } as const;
+  if (error) return { state: "failed" } as const;
+  if (done) return { stage: done, state: "done" } as const;
+  if (hasSource) return { state: "ready" } as const;
+  return { state: "idle" } as const;
+};
+
+/** What one planning run reads: the files, the typed game name, and the planner the run loaded. */
+type PlanRequest = {
+  files: PlaylistSourceFile[];
+  /** The game chosen among the survey's games; empty for the first. */
+  game: string;
+  /** The game name typed in the form; empty when none or when it cannot name a file. */
+  typedName: string;
+  planPlaylist: typeof planBrowserPlaylist;
+  signal: AbortSignal;
+};
+
+const planPlaylistDiscs = (request: PlanRequest, discs?: string[], renameInPlace?: boolean) =>
+  request.planPlaylist({
+    discs,
+    files: request.files,
+    name: request.typedName || undefined,
+    renameInPlace,
+    signal: request.signal,
+  });
+
+/** The discs of the chosen game when the survey holds several games; undefined for every disc. */
+const chooseGameDiscs = (survey: BrowserPlaylistPlan, game: string) => {
+  const firstGame = survey.discs[0]?.game;
+  if (survey.discs.every((disc) => disc.game === firstGame)) return undefined;
+  return survey.discs.filter((disc) => disc.game === (game || firstGame)).map((disc) => disc.path);
+};
+
+/** Plan the survey's chosen game, reusing the survey when it already is that plan. */
+const planChosenGame = async (request: PlanRequest, survey: BrowserPlaylistPlan, surveyWasCached: boolean) => {
+  const discs = chooseGameDiscs(survey, request.game);
+  // A survey planned with the typed name is already the plan.
+  if (!(discs || (request.typedName && surveyWasCached))) return survey;
+  return planPlaylistDiscs(request, discs);
+};
+
+/** Plan renaming the discs in place, or say why it cannot; an abort is rethrown. */
+const planRenameInPlace = async (request: PlanRequest, plan: BrowserPlaylistPlan) => {
+  try {
+    const renamePlan = await planPlaylistDiscs(
+      request,
+      plan.discs.map((disc) => disc.path),
+      true,
+    );
+    return { renamePlan, reason: "" };
+  } catch (cause) {
+    if (isAbort(cause)) throw cause;
+    return { renamePlan: null, reason: getErrorMessage(cause) };
+  }
+};
+
+/** The hint under the save options; empty when there is nothing to say. */
+const getFolderHint = (hasFolder: boolean, plan: BrowserPlaylistPlan | null, allAtTop: boolean) => {
+  if (!hasFolder) return "Open the game's folder to save the playlist into it or rename its discs.";
+  if (plan && !allAtTop) {
+    return "The discs are in subfolders, so the playlist lists their paths. Save it into the folder you opened.";
+  }
+  return "";
+};
+
+type GameSelectProps = { games: string[]; game: string; locked: boolean; onChange: (game: string) => void };
+
+/** Choose which game's discs to list when the picked files hold several games. */
+const GameSelect = ({ games, game, locked, onChange }: GameSelectProps) => {
+  if (games.length < 2) return null;
+  return (
+    <label className="checkrow">
+      <span>Game</span>
+      <select
+        className="select mono"
+        disabled={locked}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        value={game || games[0]}
+      >
+        {games.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+};
+
+type GameNameFieldProps = {
+  name: string;
+  plan: BrowserPlaylistPlan | null;
+  problem: string;
+  locked: boolean;
+  onChange: (name: string) => void;
+};
+
+/** The game name input, showing the playlist's name until one is typed, and why a name cannot be used. */
+const GameNameField = ({ name, plan, problem, locked, onChange }: GameNameFieldProps) => (
+  <>
+    <label className="checkrow">
+      <span>Game name</span>
+      <input
+        aria-invalid={problem ? "true" : undefined}
+        className="input mono"
+        disabled={locked}
+        id="playlist-name"
+        onChange={(event) => onChange(event.currentTarget.value)}
+        placeholder={plan ? plan.file_name.replace(/\.m3u$/i, "") : ""}
+        spellCheck={false}
+        type="text"
+        value={name}
+      />
+    </label>
+    {problem ? <Notice level="error">{problem}</Notice> : null}
+  </>
+);
+
+type RenameChoiceProps = {
+  renaming: boolean;
+  disabled: boolean;
+  name: string;
+  /** Why the discs cannot be renamed; empty when they can. */
+  reason: string;
+  onChange: (rename: boolean) => void;
+};
+
+/** The checkbox to rename the discs after the game, and why that is not possible when it is not. */
+const RenameChoice = ({ renaming, disabled, name, reason, onChange }: RenameChoiceProps) => (
+  <>
+    <label className="checkrow">
+      <input
+        checked={renaming}
+        disabled={disabled}
+        id="playlist-rename-discs"
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        type="checkbox"
+      />
+      <FolderPen aria-hidden="true" />
+      <span>
+        Rename the discs to <span className="mono">{name.trim() || "Game"} (Disc N)</span>
+      </span>
+    </label>
+    {reason ? <Notice level="warn">Can't rename these discs: {reason}</Notice> : null}
+  </>
+);
+
+/** An error from the form, which the user can dismiss. */
+const ErrorNotice = ({ error, onDismiss }: { error: string; onDismiss: () => void }) =>
+  error ? (
+    <Notice level="error" onDismiss={onDismiss}>
+      {error}
+    </Notice>
+  ) : null;
+
+type OpenFolderButtonProps = { opening: boolean; locked: boolean; onClick: () => void };
+
+/** Opens the game's folder, which lets the page save the playlist into it and rename its discs. */
+const OpenFolderButton = ({ opening, locked, onClick }: OpenFolderButtonProps) => (
+  <button className="btn slim ghost" disabled={locked} onClick={onClick} type="button">
+    <FolderOpen aria-hidden="true" />
+    {opening ? "Opening folder…" : "Open game folder"}
+  </button>
+);
+
+type PlaylistEntriesProps = {
+  plan: BrowserPlaylistPlan | null;
+  planning: boolean;
+  renamePlan: BrowserPlaylistPlan | null;
+  renaming: boolean;
+};
+
+/** The playlist's lines, one card per disc, or a status while the first plan is read. */
+const PlaylistEntries = ({ plan, planning, renamePlan, renaming }: PlaylistEntriesProps) => {
+  if (!plan) return planning ? <p role="status">Reading the disc sheets…</p> : null;
+  const lines = renamePlan && renaming ? renamePlan.entries : plan.entries;
+  return (
+    <div className="cards" id="playlist-entries">
+      {lines.map((line, index) => (
+        <FileCard
+          key={line}
+          meta={<span className="meta-fmt mono">Disc {index + 1}</span>}
+          name={<span className="nm mono">{line}</span>}
+        />
+      ))}
+    </div>
+  );
+};
+
+/** The files the rename-in-place plan renames, one card per file; nothing unless renaming. */
+const RenameCards = ({ renamePlan, renaming }: { renamePlan: BrowserPlaylistPlan | null; renaming: boolean }) => {
+  if (!(renaming && renamePlan)) return null;
+  return (
+    <div className="cards" id="playlist-renames">
+      {renamePlan.renames.map((entry) => (
+        <FileCard
+          key={entry.from}
+          meta={<span className="meta-fmt mono">→ {entry.to}</span>}
+          name={<span className="nm mono">{entry.from}</span>}
+        />
+      ))}
+    </div>
+  );
+};
+
+/** The hint under the save options, or the notice that this browser cannot write folders. */
+const FolderSupportNote = ({ canWriteFolders, folderHint }: { canWriteFolders: boolean; folderHint: string }) => {
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
+  if (!canWriteFolders) {
+    return (
+      <Notice level="info">
+        Saving into a folder and renaming discs need Chrome or Edge on a computer. You can still download the playlist
+        and save it beside the discs, or{" "}
+        <a href={resolveAssetUrl(assetBaseUrl, CLI_RENAME_GUIDE)}>rename the discs with the command line</a>.
+      </Notice>
+    );
+  }
+  return folderHint ? <p className="hint">{folderHint}</p> : null;
+};
+
+type SaveActionsProps = {
+  busy: "open" | "save" | "rename" | null;
+  plan: BrowserPlaylistPlan | null;
+  renaming: boolean;
+  renamePlan: BrowserPlaylistPlan | null;
+  actionsReady: boolean;
+  canSaveToFolder: boolean;
+  onDownload: () => void;
+  onRename: () => void;
+  onSaveToFolder: () => void;
+};
+
+/** The buttons that finish the playlist: rename the discs and save it, or download or save it. */
+const SaveActions = ({
+  busy,
+  plan,
+  renaming,
+  renamePlan,
+  actionsReady,
+  canSaveToFolder,
+  onDownload,
+  onRename,
+  onSaveToFolder,
+}: SaveActionsProps) => {
+  if (renaming) {
+    return (
+      <RunButton
+        disabled={!(actionsReady && renamePlan)}
+        icon={<FolderPen aria-hidden="true" />}
+        id="playlist-rename"
+        onClick={onRename}
+      >
+        {busy === "rename" ? "Renaming discs…" : "Rename discs and save playlist"}
+      </RunButton>
+    );
+  }
+  return (
+    <>
+      <RunButton
+        disabled={!actionsReady}
+        icon={<Download aria-hidden="true" />}
+        id="playlist-download"
+        onClick={onDownload}
+      >
+        {plan ? `Download ${plan.file_name}` : "Download playlist"}
+      </RunButton>
+      <button
+        className="btn ghost"
+        disabled={!(canSaveToFolder && actionsReady)}
+        id="playlist-save-folder"
+        onClick={onSaveToFolder}
+        type="button"
+      >
+        <Save aria-hidden="true" />
+        {busy === "save" ? "Saving…" : "Save into folder"}
+      </button>
+    </>
+  );
+};
+
+const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   const [canWriteFolders, setCanWriteFolders] = useState(false);
   const [source, setSource] = useState<PlaylistSource | null>(null);
   const [survey, setSurvey] = useState<BrowserPlaylistPlan | null>(null);
@@ -101,11 +394,10 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     onSessionChange(busy === "rename");
   }, [busy, onSessionChange]);
   useEffect(() => {
-    if (busy || planning) setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { stage: "Make playlist", state: "running" });
-    else if (error) setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { state: "failed" });
-    else if (done) setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { stage: done, state: "done" });
-    else if (source) setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { state: "ready" });
-    else setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { state: "idle" });
+    setWorkbenchActivity(
+      PLAYLIST_ACTIVITY_KEY,
+      getPlaylistActivity({ busy: !!busy, done, error, hasSource: !!source, planning }),
+    );
   }, [busy, done, error, planning, source]);
   useEffect(() => () => setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { state: "idle" }), []);
 
@@ -133,29 +425,21 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     const timer = setTimeout(() => {
       void (async () => {
         const { planBrowserPlaylist } = await import("../../platform/browser/browser-playlist-api.ts");
-        const typedName = nameProblem ? "" : name.trim();
+        const request: PlanRequest = {
+          files: source.files,
+          game,
+          planPlaylist: planBrowserPlaylist,
+          signal: abort.signal,
+          typedName: nameProblem ? "" : name.trim(),
+        };
         try {
           // Discs named only by number give the engine no game name, so a survey that failed unnamed runs again with the typed one.
           const cachedSurvey = surveyRef.current;
-          const all =
-            cachedSurvey ??
-            (await planBrowserPlaylist({ files: source.files, name: typedName || undefined, signal: abort.signal }));
+          const all = cachedSurvey ?? (await planPlaylistDiscs(request));
           if (planRunRef.current !== run) return;
-          if (!typedName) surveyRef.current = all;
+          if (!request.typedName) surveyRef.current = all;
           setSurvey(all);
-          const discs = all.discs.some((disc) => disc.game !== all.discs[0]?.game)
-            ? all.discs.filter((disc) => disc.game === (game || all.discs[0]?.game)).map((disc) => disc.path)
-            : undefined;
-          // A survey planned with the typed name is already the plan.
-          const next =
-            discs || (typedName && cachedSurvey)
-              ? await planBrowserPlaylist({
-                  discs,
-                  files: source.files,
-                  name: typedName || undefined,
-                  signal: abort.signal,
-                })
-              : all;
+          const next = await planChosenGame(request, all, !!cachedSurvey);
           if (planRunRef.current !== run) return;
           setPlan(next);
           setError("");
@@ -164,22 +448,10 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
             setRenameReason("");
             return;
           }
-          try {
-            const renamed = await planBrowserPlaylist({
-              discs: next.discs.map((disc) => disc.path),
-              files: source.files,
-              name: typedName || undefined,
-              renameInPlace: true,
-              signal: abort.signal,
-            });
-            if (planRunRef.current !== run) return;
-            setRenamePlan(renamed);
-            setRenameReason("");
-          } catch (cause) {
-            if (planRunRef.current !== run || isAbort(cause)) return;
-            setRenamePlan(null);
-            setRenameReason(getErrorMessage(cause));
-          }
+          const renamed = await planRenameInPlace(request, next);
+          if (planRunRef.current !== run) return;
+          setRenamePlan(renamed.renamePlan);
+          setRenameReason(renamed.reason);
         } catch (cause) {
           if (planRunRef.current !== run || isAbort(cause)) return;
           setPlan(null);
@@ -322,34 +594,17 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
 
   const locked = !!busy;
   const actionsReady = !!plan && !planning && !locked && !nameProblem;
-  let folderHint = "";
-  if (source?.directory) {
-    if (plan && !allAtTop) {
-      folderHint =
-        "The discs are in subfolders, so the playlist lists their paths. Save it into the folder you opened.";
-    }
-  } else {
-    folderHint = "Open the game's folder to save the playlist into it or rename its discs.";
-  }
+  const folderHint = getFolderHint(!!source?.directory, plan, allAtTop);
   const renameNote = renaming ? renameReason : "";
 
   return (
     <section className="panel" id="playlist-container">
       {/* Without a source the steps below are hidden, so a failed folder pick reports here. */}
-      {!source && error ? (
-        <Notice level="error" onDismiss={() => setError("")}>
-          {error}
-        </Notice>
-      ) : null}
+      {source ? null : <ErrorNotice error={error} onDismiss={() => setError("")} />}
       <UnifiedDropZone
         addLabel="Replace the discs"
         // Below the drop target, not in the header: on phones the whole header is the add-files button.
-        afterDropZone={
-          <button className="btn slim ghost" disabled={locked} onClick={openFolder} type="button">
-            <FolderOpen aria-hidden="true" />
-            {busy === "open" ? "Opening folder…" : "Open game folder"}
-          </button>
-        }
+        afterDropZone={<OpenFolderButton locked={locked} onClick={openFolder} opening={busy === "open"} />}
         big={!source}
         disabled={locked}
         guide={WORKFLOW_GUIDES.playlist}
@@ -399,125 +654,33 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
             num="0x02"
             title="Playlist"
           >
-            {games.length > 1 ? (
-              <label className="checkrow">
-                <span>Game</span>
-                <select
-                  className="select mono"
-                  disabled={locked}
-                  onChange={(event) => setGame(event.currentTarget.value)}
-                  value={game || games[0]}
-                >
-                  {games.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            <label className="checkrow">
-              <span>Game name</span>
-              <input
-                aria-invalid={nameProblem ? "true" : undefined}
-                className="input mono"
-                disabled={locked}
-                id="playlist-name"
-                onChange={(event) => setName(event.currentTarget.value)}
-                placeholder={plan ? plan.file_name.replace(/\.m3u$/i, "") : ""}
-                spellCheck={false}
-                type="text"
-                value={name}
-              />
-            </label>
-            {nameProblem ? <Notice level="error">{nameProblem}</Notice> : null}
-            {planning && !plan ? <p role="status">Reading the disc sheets…</p> : null}
-            {plan ? (
-              <div className="cards" id="playlist-entries">
-                {(renamePlan && renaming ? renamePlan.entries : plan.entries).map((line, index) => (
-                  <FileCard
-                    key={line}
-                    meta={<span className="meta-fmt mono">Disc {index + 1}</span>}
-                    name={<span className="nm mono">{line}</span>}
-                  />
-                ))}
-              </div>
-            ) : null}
-            {error ? (
-              <Notice level="error" onDismiss={() => setError("")}>
-                {error}
-              </Notice>
-            ) : null}
+            <GameSelect games={games} game={game} locked={locked} onChange={setGame} />
+            <GameNameField locked={locked} name={name} onChange={setName} plan={plan} problem={nameProblem} />
+            <PlaylistEntries plan={plan} planning={planning} renamePlan={renamePlan} renaming={renaming} />
+            <ErrorNotice error={error} onDismiss={() => setError("")} />
           </StepSection>
           <StepSection num="0x03" title="Save" woven={!!done}>
-            <label className="checkrow">
-              <input
-                checked={renaming}
-                disabled={!canRename || locked || !allAtTop}
-                id="playlist-rename-discs"
-                onChange={(event) => setRename(event.currentTarget.checked)}
-                type="checkbox"
-              />
-              <FolderPen aria-hidden="true" />
-              <span>
-                Rename the discs to <span className="mono">{name.trim() || "Game"} (Disc N)</span>
-              </span>
-            </label>
-            {renameNote ? <Notice level="warn">Can't rename these discs: {renameNote}</Notice> : null}
-            {renaming && renamePlan ? (
-              <div className="cards" id="playlist-renames">
-                {renamePlan.renames.map((entry) => (
-                  <FileCard
-                    key={entry.from}
-                    meta={<span className="meta-fmt mono">→ {entry.to}</span>}
-                    name={<span className="nm mono">{entry.from}</span>}
-                  />
-                ))}
-              </div>
-            ) : null}
-            {canWriteFolders ? (
-              folderHint ? (
-                <p className="hint">{folderHint}</p>
-              ) : null
-            ) : (
-              <Notice level="info">
-                Saving into a folder and renaming discs need Chrome or Edge on a computer. You can still download the
-                playlist and save it beside the discs, or{" "}
-                <a href={resolveAssetUrl(assetBaseUrl, CLI_RENAME_GUIDE)}>rename the discs with the command line</a>.
-              </Notice>
-            )}
+            <RenameChoice
+              disabled={!canRename || locked || !allAtTop}
+              name={name}
+              onChange={setRename}
+              reason={renameNote}
+              renaming={renaming}
+            />
+            <RenameCards renamePlan={renamePlan} renaming={renaming} />
+            <FolderSupportNote canWriteFolders={canWriteFolders} folderHint={folderHint} />
             <div className="outbar">
-              {renaming ? (
-                <RunButton
-                  disabled={!(actionsReady && renamePlan)}
-                  icon={<FolderPen aria-hidden="true" />}
-                  id="playlist-rename"
-                  onClick={renameDiscs}
-                >
-                  {busy === "rename" ? "Renaming discs…" : "Rename discs and save playlist"}
-                </RunButton>
-              ) : (
-                <>
-                  <RunButton
-                    disabled={!actionsReady}
-                    icon={<Download aria-hidden="true" />}
-                    id="playlist-download"
-                    onClick={download}
-                  >
-                    {plan ? `Download ${plan.file_name}` : "Download playlist"}
-                  </RunButton>
-                  <button
-                    className="btn ghost"
-                    disabled={!(canWriteFolders && actionsReady && source.directory)}
-                    id="playlist-save-folder"
-                    onClick={saveToFolder}
-                    type="button"
-                  >
-                    <Save aria-hidden="true" />
-                    {busy === "save" ? "Saving…" : "Save into folder"}
-                  </button>
-                </>
-              )}
+              <SaveActions
+                actionsReady={actionsReady}
+                busy={busy}
+                canSaveToFolder={canWriteFolders && !!source.directory}
+                onDownload={download}
+                onRename={renameDiscs}
+                onSaveToFolder={saveToFolder}
+                plan={plan}
+                renamePlan={renamePlan}
+                renaming={renaming}
+              />
             </div>
             {done ? <Notice level="info">{done}</Notice> : null}
           </StepSection>

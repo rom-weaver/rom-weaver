@@ -4,6 +4,17 @@
 
 use super::*;
 
+/// What a dry-run plan reports beyond the command, family, and label.
+#[derive(Default)]
+struct PlanReportOptions {
+    writes: Vec<String>,
+    downloads: Vec<String>,
+    notes: Vec<String>,
+    read_only: bool,
+    /// An extra `details` entry keyed by the command name.
+    command_details: Option<(&'static str, Value)>,
+}
+
 impl CliApp {
     /// Return a terminal plan for commands whose normal path can mutate data.
     /// `compress`, `trim`, and the ordinary `patch apply` path keep their
@@ -129,16 +140,15 @@ impl CliApp {
                     command,
                     OperationFamily::Command,
                     "dry run: would write the playlist; nothing written",
-                    (
-                        job.writes()
+                    PlanReportOptions {
+                        writes: job
+                            .writes()
                             .iter()
                             .map(|path| path.display().to_string())
                             .collect(),
-                        Vec::new(),
-                        Vec::new(),
-                    ),
-                    false,
-                    Some(("playlist", plan)),
+                        command_details: Some(("playlist", plan)),
+                        ..PlanReportOptions::default()
+                    },
                 )
             }
             Err(error) => self.finish(command, super::playlist::playlist_failure(error)),
@@ -489,9 +499,10 @@ impl CliApp {
             command,
             OperationFamily::Command,
             &format!("dry run: {command} only reads; no changes planned"),
-            (Vec::new(), Vec::new(), Vec::new()),
-            true,
-            None,
+            PlanReportOptions {
+                read_only: true,
+                ..PlanReportOptions::default()
+            },
         )
     }
 
@@ -571,9 +582,13 @@ impl CliApp {
             command,
             family,
             label,
-            (writes, downloads, notes),
-            read_only,
-            None,
+            PlanReportOptions {
+                writes,
+                downloads,
+                notes,
+                read_only,
+                command_details: None,
+            },
         )
     }
 
@@ -582,10 +597,15 @@ impl CliApp {
         command: &str,
         family: OperationFamily,
         label: &str,
-        (writes, downloads, notes): (Vec<String>, Vec<String>, Vec<String>),
-        read_only: bool,
-        command_details: Option<(&str, Value)>,
+        options: PlanReportOptions,
     ) -> AppRunOutcome {
+        let PlanReportOptions {
+            writes,
+            downloads,
+            notes,
+            read_only,
+            command_details,
+        } = options;
         let mut report =
             OperationReport::succeeded(family, None, "plan", label.to_string(), Some(100.0), None);
         let mut details = json!({
