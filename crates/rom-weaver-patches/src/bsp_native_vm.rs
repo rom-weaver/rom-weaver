@@ -629,6 +629,8 @@ impl<'pool> BspVm<'pool> {
     }
 
     /// Records a printed message for the apply report. Empty messages carry nothing to show.
+    /// Each kept message is numbered so a script printing the same text twice still reports two
+    /// distinct warnings: the CLI's shared warning list drops equal strings.
     fn report_message(&mut self, message: &str) {
         if message.is_empty() {
             return;
@@ -639,7 +641,8 @@ impl<'pool> BspVm<'pool> {
         }
         let kept = &message[..floor_char_boundary(message, BSP_MAX_REPORTED_MESSAGE_BYTES)];
         debug!(bytes = message.len(), "BSP script printed a message");
-        self.messages.push(kept.to_string());
+        let number = self.messages.len() + 1;
+        self.messages.push(format!("BSP message {number}: {kept}"));
     }
 
     /// Takes the printed messages, with a final note when some were not kept.

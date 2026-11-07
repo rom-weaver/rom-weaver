@@ -883,13 +883,21 @@ fn print_and_printbuf_record_messages_in_order_and_cap_the_report() {
         assert_continue(step(vm, 0xA4, &[7]));
         assert_continue(step(vm, 0xA7, &[]));
         assert_continue(step(vm, 0xA6, &[]));
-        assert_eq!(vm.take_messages(), vec!["one", "one!"]);
+        assert_eq!(
+            vm.take_messages(),
+            vec!["BSP message 1: one", "BSP message 2: one!"]
+        );
 
         for _ in 0..BSP_MAX_REPORTED_MESSAGES + 6 {
             assert_continue(step(vm, 0x68, &[4]));
         }
         let messages = vm.take_messages();
         assert_eq!(messages.len(), BSP_MAX_REPORTED_MESSAGES + 1);
+        assert_eq!(messages[0], "BSP message 1: one");
+        assert_eq!(
+            messages[BSP_MAX_REPORTED_MESSAGES - 1],
+            format!("BSP message {BSP_MAX_REPORTED_MESSAGES}: one")
+        );
         assert_eq!(
             messages.last().map(String::as_str),
             Some("6 further BSP message(s) not shown")

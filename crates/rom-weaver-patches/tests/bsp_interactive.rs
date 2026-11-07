@@ -123,7 +123,7 @@ fn validate_rejects_interactive_bsp_menu_without_changing_input() {
     assert_eq!(fs::read(&input).expect("input"), [0]);
 }
 
-/// `print "first"; bufstring "two"; bufchar '!'; printbuf; print "third"; exit 0`, with the
+/// `print "first"; bufstring "two"; bufchar '!'; printbuf; print "first"; exit 0`, with the
 /// three NUL-terminated strings placed right after the 26 bytes of code.
 fn printing_patch() -> Vec<u8> {
     let mut patch = Vec::new();
@@ -139,7 +139,7 @@ fn printing_patch() -> Vec<u8> {
     patch.push(0x06); // exit
     patch.extend_from_slice(&0u32.to_le_bytes());
     assert_eq!(patch.len(), 26);
-    patch.extend_from_slice(b"first\0two\0third\0");
+    patch.extend_from_slice(b"first\0two\0first\0");
     patch
 }
 
@@ -166,7 +166,9 @@ fn printed_messages_reach_the_apply_report_in_order() {
         assert!(
             report
                 .label
-                .ends_with("; warning=first; warning=two!; warning=third"),
+                .ends_with(
+                    "; warning=BSP message 1: first; warning=BSP message 2: two!; warning=BSP message 3: first"
+                ),
             "messages must be listed in print order: {}",
             report.label
         );

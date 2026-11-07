@@ -7051,6 +7051,60 @@ fn patch_apply_succeeds_for_valid_bsp_patch() {
 }
 
 #[test]
+fn patch_apply_reports_repeated_bsp_prints_as_separate_numbered_warnings() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let patch = temp.child("repeat.bsp");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), [0x01, 0x02, 0x03]).expect("fixture");
+
+    // `print "dup"; print "dup"; exit 0`, with the string right after the 15 bytes of code.
+    let mut script = Vec::new();
+    for _ in 0..2 {
+        script.push(0x68);
+        script.extend_from_slice(&15u32.to_le_bytes());
+    }
+    script.push(0x06);
+    script.extend_from_slice(&0u32.to_le_bytes());
+    assert_eq!(script.len(), 15);
+    script.extend_from_slice(b"dup\0");
+    fs::write(patch.path(), script).expect("fixture");
+
+    let apply_output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+
+    let apply_json: serde_json::Value = serde_json::from_slice(&apply_output).expect("json");
+    let warnings: Vec<&str> = apply_json["details"]["warnings"]
+        .as_array()
+        .expect("warnings")
+        .iter()
+        .map(|warning| warning.as_str().expect("warning text"))
+        .collect();
+    assert_eq!(
+        warnings,
+        vec!["BSP message 1: dup", "BSP message 2: dup"],
+        "{apply_json}"
+    );
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        vec![0x01, 0x02, 0x03]
+    );
+}
+
+#[test]
 fn patch_create_succeeds_for_rup_and_round_trips() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
