@@ -706,7 +706,7 @@ describe("the update banner", () => {
       expect(updatedBanner(container)).toBeNull();
     });
 
-    it("waits behind a deploy that is ready to load, then takes the banner once it is dismissed", async () => {
+    it("waits behind a deploy that is ready to load, and one dismissal closes both", async () => {
       const { container } = await renderRoot({ updateReady: true });
       await waitFor(() => expect(readyBanner(container)).not.toBeNull());
 
@@ -715,8 +715,10 @@ describe("the update banner", () => {
 
       fireEvent.click(readyBanner(container)?.querySelector(".banner-x") as HTMLButtonElement);
 
-      await waitFor(() => expect(updatedBanner(container)?.textContent).toContain("Updated from v0.0.1"));
-      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe("0.0.1");
+      await settleBanner();
+      expect(readyBanner(container)).toBeNull();
+      expect(updatedBanner(container)).toBeNull();
+      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION);
     });
   });
 });
