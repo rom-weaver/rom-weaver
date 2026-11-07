@@ -5,8 +5,8 @@ use std::{
 };
 
 use rom_weaver_core::{
-    PatchApplyRequest, PatchCreateFormatOptions, PatchCreateRequest, PatchHandler,
-    PatchValidateRequest, ProbeConfidence, ThreadCapability,
+    PatchApplyRequest, PatchChecksumValidation, PatchCreateFormatOptions, PatchCreateRequest,
+    PatchHandler, PatchValidateRequest, ProbeConfidence, ThreadCapability,
 };
 
 use super::{
@@ -480,18 +480,27 @@ fn apply_rejects_ppf2_when_input_size_mismatches() {
     .expect("fixture");
 
     let handler = PpfPatchHandler::new(&PPF);
+    let request = PatchApplyRequest {
+        input: input_path,
+        patches: vec![patch_path],
+        output: output_path.clone(),
+    };
     let error = handler
-        .apply(
-            &PatchApplyRequest {
-                input: input_path,
-                patches: vec![patch_path],
-                output: output_path,
-            },
-            &test_context_with_threads(&temp, 1),
-        )
+        .apply(&request, &test_context_with_threads(&temp, 1))
         .expect_err("apply should fail");
-
     assert!(error.to_string().contains("PPF2 input size invalid"));
+
+    // ApplyPPF3 lets the user continue past the size check, so the checksum override does too.
+    handler
+        .apply(
+            &request,
+            &test_context_with_threads(&temp, 1)
+                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+        )
+        .expect("apply with checksum validation ignored");
+    let output = fs::read(&output_path).expect("output");
+    assert_eq!(output[0], 0xFF);
+    assert_eq!(output[1..], input[1..]);
 }
 
 #[test]
@@ -1516,16 +1525,22 @@ fn validate_rejects_ppf2_when_input_size_mismatches() {
     .expect("fixture");
 
     let handler = PpfPatchHandler::new(&PPF);
+    let request = PatchValidateRequest {
+        input: input_path,
+        patches: vec![patch_path],
+    };
     let error = handler
-        .validate(
-            &PatchValidateRequest {
-                input: input_path,
-                patches: vec![patch_path],
-            },
-            &test_context_with_threads(&temp, 1),
-        )
+        .validate(&request, &test_context_with_threads(&temp, 1))
         .expect_err("validate should reject size mismatch");
     assert!(error.to_string().contains("PPF2 input size invalid"));
+
+    handler
+        .validate(
+            &request,
+            &test_context_with_threads(&temp, 1)
+                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+        )
+        .expect("validate with checksum validation ignored");
 }
 
 #[test]
@@ -2649,6 +2664,13 @@ fn create_with_undo_round_trips_through_apply_and_undo() {
             )
             .expect("create with undo");
         assert!(report.label.contains("with undo data"), "{}", report.label);
+        assert!(
+            report
+                .label
+                .contains("undo cannot remove the 3 byte(s) this patch appends"),
+            "{}",
+            report.label
+        );
         patches.push(fs::read(&patch_path).expect("patch bytes"));
 
         let applied_path = temp.child(&format!("applied-{threads}.bin"));

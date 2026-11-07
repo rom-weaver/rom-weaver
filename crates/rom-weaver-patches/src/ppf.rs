@@ -16,6 +16,7 @@ use crate::checksum_validation_suffix;
 #[cfg(test)]
 use crate::shared::checked::read_u16_le;
 use crate::shared::checked::read_u32_le;
+use crate::shared::labels::append_warning_labels;
 use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
     parallel_chunked_capability, parallel_per_record_capability, scan_create_chunks,
@@ -162,12 +163,8 @@ impl PatchHandler for PpfPatchHandler {
             "ppf parsed"
         );
 
-        if let Some(expected_len) = parsed.expected_input_len
-            && input_len != expected_len
-        {
-            return Err(RomWeaverError::Validation(format!(
-                "PPF2 input size invalid; expected {expected_len}, got {input_len}"
-            )));
+        if validate_checksums {
+            validate_ppf2_input_len(&parsed, input_len)?;
         }
 
         if validate_checksums && let Some(blockcheck) = &parsed.blockcheck {
@@ -239,12 +236,8 @@ impl PatchHandler for PpfPatchHandler {
         let validate_checksums = context.validate_source_checks();
         let input_len = fs::metadata(&request.input)?.len();
 
-        if let Some(expected_len) = parsed.expected_input_len
-            && input_len != expected_len
-        {
-            return Err(RomWeaverError::Validation(format!(
-                "PPF2 input size invalid; expected {expected_len}, got {input_len}"
-            )));
+        if validate_checksums {
+            validate_ppf2_input_len(&parsed, input_len)?;
         }
 
         crate::ensure_plausible_output_size(
@@ -298,6 +291,14 @@ impl PatchHandler for PpfPatchHandler {
         };
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
+        // PPF has no truncate record, so undo data cannot remove bytes the patch appended.
+        let mut warnings = Vec::new();
+        if undo && modified_len > original_len {
+            warnings.push(format!(
+                "undo cannot remove the {} byte(s) this patch appends; undoing leaves them as zeros",
+                modified_len - original_len
+            ));
+        }
         debug!(
             format = self.descriptor.name,
             original_len, modified_len, "ppf patch create start (PPF3)"
@@ -338,9 +339,12 @@ impl PatchHandler for PpfPatchHandler {
         Ok(crate::patch_success_report(
             self.descriptor,
             "create",
-            format!(
-                "created {} patch (PPF3) with {} record(s), {blockcheck_label}",
-                self.descriptor.name, created.record_count
+            append_warning_labels(
+                format!(
+                    "created {} patch (PPF3) with {} record(s), {blockcheck_label}",
+                    self.descriptor.name, created.record_count
+                ),
+                &warnings,
             ),
             Some(execution),
         ))
@@ -1659,6 +1663,19 @@ fn rfind_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack
         .windows(needle.len())
         .rposition(|window| window == needle)
+}
+
+/// PPF2 stores the original's size. ApplyPPF3 offers to continue on a mismatch, so this is a source
+/// check the checksum-validation override skips rather than a structural error.
+fn validate_ppf2_input_len(parsed: &ParsedPpfPatch, input_len: u64) -> Result<()> {
+    if let Some(expected_len) = parsed.expected_input_len
+        && input_len != expected_len
+    {
+        return Err(RomWeaverError::Validation(format!(
+            "PPF2 input size invalid; expected {expected_len}, got {input_len}"
+        )));
+    }
+    Ok(())
 }
 
 fn validate_blockcheck(input_path: &Path, blockcheck: &PpfBlockcheck) -> Result<()> {
