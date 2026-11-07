@@ -555,7 +555,7 @@ fn n64_field_mismatch(field: &str, expected: &[u8], actual: &[u8]) -> RomWeaverE
 fn n64_format_name(original_format: u8) -> &'static str {
     match original_format {
         APS_N64_FORMAT_BYTE_SWAPPED => "byte-swapped (v64)",
-        APS_N64_FORMAT_OTHER => "non-byte-swapped (z64)",
+        APS_N64_FORMAT_OTHER => "non-v64",
         _ => "unknown-format",
     }
 }

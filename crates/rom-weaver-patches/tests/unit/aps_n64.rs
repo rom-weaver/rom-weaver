@@ -1089,9 +1089,7 @@ fn apply_enforces_the_original_format_byte_against_the_input_byte_order() {
         let error = apply_aps(&temp, &v64_rom(), &z64_patch, validation)
             .expect_err("a z64 patch must not apply to a v64 ROM");
         assert!(
-            error
-                .to_string()
-                .contains("made from a non-byte-swapped (z64) ROM"),
+            error.to_string().contains("made from a non-v64 ROM"),
             "{error}"
         );
 
