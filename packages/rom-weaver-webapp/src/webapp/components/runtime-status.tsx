@@ -238,9 +238,8 @@ const claimNudge = (svg: SVGSVGElement | null): boolean => {
 };
 
 /**
- * Cues the update nudge on the first rendered glyph once `isEligible` holds while the tab is visible, so it is not
- * spent on a hidden glyph or a page nobody is looking at. The ref goes on the animated svg, which clears the
- * cue when its animation ends or is cancelled by the glyph being hidden.
+ * Cues the update nudge on the first rendered glyph once `isEligible` holds and the tab is visible, so a hidden
+ * glyph or background page does not spend it. Callers MUST attach `svgRef` to the animated svg.
  */
 const useUpdateNudge = (isEligible: boolean) => {
   const svgRef = useRef<SVGSVGElement>(null);
