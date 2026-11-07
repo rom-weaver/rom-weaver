@@ -20,8 +20,10 @@ impl OutputMode {
             .skip(1)
             .take_while(|arg| *arg != "--")
             .fold(Self::Human, |mode, arg| match arg.to_str() {
-                Some("--json") => Self::Json,
-                Some("--jsonl") => Self::JsonLines,
+                // `--json=VALUE` is a clap usage error, which still has to
+                // come out in the format the caller asked for.
+                Some(arg) if arg == "--json" || arg.starts_with("--json=") => Self::Json,
+                Some(arg) if arg == "--jsonl" || arg.starts_with("--jsonl=") => Self::JsonLines,
                 _ => mode,
             })
     }
@@ -377,7 +379,13 @@ fn without_hidden_subcommands(mut error: clap::Error) -> clap::Error {
 pub(crate) fn print_argument_result(error: clap::Error, mode: OutputMode) -> ExitCode {
     let code = error.exit_code() as u8;
     if !mode.is_json() {
-        if let Err(failure) = error.print()
+        // Help and version go to stdout; usage errors go to stderr.
+        let printed = if code == 0 {
+            crate::stdout_output::ensure_open().and_then(|()| error.print())
+        } else {
+            error.print()
+        };
+        if let Err(failure) = printed
             && code == 0
         {
             crate::stdout_output::record_error(failure);
@@ -443,7 +451,11 @@ pub(crate) fn diagnostic(json: bool, level: &str, command: &str, message: &str) 
             &json!({ "level": level, "fields": { "command": command, "message": message } }),
         );
     } else {
-        let prefix = if level == "WARN" { "warning" } else { command };
+        let prefix = match level {
+            "WARN" => "warning",
+            "ERROR" => "error",
+            _ => command,
+        };
         crate::render::write_stderr(format_args!(
             "{prefix}: {}\n",
             crate::render::display_text(message)

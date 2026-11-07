@@ -1033,6 +1033,36 @@ fn stream_staging_is_removed_after_input_and_stdout_io_errors() {
     assert!(fs::read_dir(staging.path()).unwrap().next().is_none());
 }
 
+#[cfg(unix)]
+#[test]
+fn binary_stdout_to_a_closed_descriptor_fails_instead_of_succeeding() {
+    use std::os::unix::process::CommandExt;
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    fs::write(input.path(), b"closed stdout fixture").unwrap();
+    let mut command = binary();
+    command
+        .args([
+            "compress",
+            input.path().to_str().unwrap(),
+            "-f",
+            "zip",
+            "-o",
+            "-",
+        ])
+        .stdout(Stdio::null());
+    // SAFETY: only async-signal-safe close() runs between fork and exec.
+    unsafe {
+        command.pre_exec(|| {
+            libc::close(libc::STDOUT_FILENO);
+            Ok(())
+        });
+    }
+    let output = command.output().unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(!output.stderr.is_empty());
+}
+
 #[test]
 fn stdin_name_rejects_non_basename_values_and_requires_stdin() {
     let temp = setup_temp_dir();

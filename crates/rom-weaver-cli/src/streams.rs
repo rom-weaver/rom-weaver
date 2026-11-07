@@ -429,6 +429,7 @@ impl Write for PollStdout {
         if buffer.is_empty() {
             return Ok(0);
         }
+        crate::stdout_output::ensure_open()?;
         let token = process_cancellation_token();
         loop {
             if token.is_cancelled() {

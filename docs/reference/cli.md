@@ -599,7 +599,7 @@ Use `--jsonl` when a consumer needs the event stream. It writes progress and ter
 
 Both JSON modes disable interactive selection, making them stable interfaces for scripts. Commands that generate an asset, such as `weave schema`, `completions`, and `man` without `--install`, return their result in `details`. `weave schema` uses `details.schema`; help, man pages, and completions use `details.content` and `details.content_format`. Version output uses `details.name` and `details.version`. `formats --json` intentionally keeps the top-level catalog object.
 
-A closed stdout pipe does not cause a panic or interrupt file creation. The command finishes its work and retains its operation exit status. Other stdout write errors produce a diagnostic on stderr and a nonzero exit status.
+A closed stdout pipe does not cause a panic or interrupt file creation. The command finishes its work and retains its operation exit status. Other stdout write errors, including a stdout descriptor that was closed before the process started (`>&-` on Unix), produce an `error: cannot write stdout: ...` diagnostic on stderr and a nonzero exit status.
 
 ```bash
 rom-weaver --json probe --input game.sfc | jq

@@ -137,6 +137,14 @@ pub(super) fn render_verbose(surface: &Surface, event: &ProgressEvent) {
             let kind = codec.map(|codec| format!(", {codec}")).unwrap_or_default();
             diagnostics.line(&format!("{}: wrote {path} ({size}{kind})", event.command));
         }
+    } else if event.command == "save-list-games" {
+        // The label is the whole listing, which `render_save_games` already prints to stdout.
+        if let Some(games) = save_editor_details(event)
+            .and_then(|save| save.get("games"))
+            .and_then(Value::as_array)
+        {
+            diagnostics.line(&format!("save-list-games: {} game(s)", games.len()));
+        }
     } else if !event.label.is_empty()
         && !matches!(
             event.command.as_str(),

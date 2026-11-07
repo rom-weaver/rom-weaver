@@ -159,6 +159,65 @@ fn stdout_write_failure_has_a_controlled_nonzero_exit() {
     assert!(!stderr.contains("panicked"), "{stderr}");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn stdout_write_failure_diagnostic_uses_the_error_prefix() {
+    let output = std::process::Command::new(assert_cmd::cargo::cargo_bin("rom-weaver"))
+        .arg("formats")
+        .stdout(
+            File::options()
+                .write(true)
+                .open("/dev/full")
+                .expect("full device"),
+        )
+        .output()
+        .expect("run command");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.starts_with("error: cannot write stdout:"),
+        "{stderr}"
+    );
+}
+
+/// Runs the CLI with descriptor 1 closed (`>&-`) or pointing at /dev/null.
+#[cfg(unix)]
+fn run_with_stdout(args: &[&str], closed: bool) -> std::process::Output {
+    use std::os::unix::process::CommandExt;
+    let mut command = std::process::Command::new(assert_cmd::cargo::cargo_bin("rom-weaver"));
+    command.args(args).stdout(std::process::Stdio::null());
+    if closed {
+        // SAFETY: only async-signal-safe close() runs between fork and exec.
+        unsafe {
+            command.pre_exec(|| {
+                libc::close(libc::STDOUT_FILENO);
+                Ok(())
+            });
+        }
+    }
+    command.output().expect("run command")
+}
+
+#[cfg(unix)]
+#[test]
+fn closed_stdout_is_reported_instead_of_swallowed() {
+    for args in [
+        &["formats"][..],
+        &["--json", "formats"],
+        &["--version"],
+        &["--help"],
+    ] {
+        let output = run_with_stdout(args, true);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1), "{args:?}: {stderr}");
+        assert!(stderr.contains("cannot write stdout"), "{args:?}: {stderr}");
+        assert!(!stderr.contains("panicked"), "{args:?}: {stderr}");
+        // A stdout that is open but discards output is not an error.
+        let output = run_with_stdout(args, false);
+        assert_eq!(output.status.code(), Some(0), "{args:?}");
+        assert!(output.stderr.is_empty(), "{args:?}");
+    }
+}
+
 #[test]
 fn compress_refuses_to_overwrite_without_force() {
     let temp = setup_temp_dir();
