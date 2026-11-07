@@ -92,7 +92,7 @@ impl PatchHandler for ApsGbaPatchHandler {
         let validate_checksums = context.validate_source_checks();
         let expected_input_size = u64::from(patch.source_size);
         let actual_input_size = fs::metadata(&request.input)?.len();
-        if validate_checksums && actual_input_size != expected_input_size {
+        if actual_input_size != expected_input_size {
             return Err(RomWeaverError::Validation(format!(
                 "APSGBA input size invalid; expected {expected_input_size}, got {}",
                 actual_input_size
@@ -194,7 +194,7 @@ impl PatchHandler for ApsGbaPatchHandler {
         let validate_checksums = context.validate_source_checks();
         let expected_input_size = u64::from(patch.source_size);
         let actual_input_size = fs::metadata(&request.input)?.len();
-        if validate_checksums && actual_input_size != expected_input_size {
+        if actual_input_size != expected_input_size {
             return Err(RomWeaverError::Validation(format!(
                 "APSGBA input size invalid; expected {expected_input_size}, got {}",
                 actual_input_size

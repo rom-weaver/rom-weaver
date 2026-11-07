@@ -1161,59 +1161,6 @@ fn create_writes_a_header_only_patch_when_no_block_differs() {
 }
 
 #[test]
-fn source_size_check_follows_the_checksum_validation_override() {
-    let temp = TestDir::new();
-    let input_path = temp.child("input.gba");
-    let patch_path = temp.child("update.apsgba");
-    let output_path = temp.child("output.gba");
-    let input = build_source_bytes(12);
-    fs::write(&input_path, &input).expect("input");
-    // The header claims a 10-byte source and target; the input has 12 bytes.
-    let mut patch = b"APS1".to_vec();
-    patch.extend_from_slice(&10_u32.to_le_bytes());
-    patch.extend_from_slice(&10_u32.to_le_bytes());
-    fs::write(&patch_path, patch).expect("patch");
-
-    let handler = ApsGbaPatchHandler::new(&APSGBA);
-    let apply = |validation, memory_limit| {
-        handler.apply(
-            &PatchApplyRequest {
-                input: input_path.clone(),
-                patches: vec![patch_path.clone()],
-                output: output_path.clone(),
-            },
-            &test_context_with_threads(&temp, 2)
-                .with_patch_apply_in_memory_limit(memory_limit)
-                .with_patch_checksum_validation(validation),
-        )
-    };
-    let validate = |validation| {
-        handler.validate(
-            &PatchValidateRequest {
-                input: input_path.clone(),
-                patches: vec![patch_path.clone()],
-            },
-            &test_context_with_threads(&temp, 2).with_patch_checksum_validation(validation),
-        )
-    };
-
-    let error = apply(PatchChecksumValidation::Strict, 0).expect_err("strict rejects the size");
-    assert!(error.to_string().contains("APSGBA input size invalid"));
-    let error = validate(PatchChecksumValidation::Strict).expect_err("strict rejects the size");
-    assert!(error.to_string().contains("APSGBA input size invalid"));
-
-    for memory_limit in [0, 1 << 24] {
-        apply(PatchChecksumValidation::Ignore, memory_limit).expect("ignore overrides the size");
-        assert_eq!(
-            fs::read(&output_path).expect("output"),
-            input[..10],
-            "limit {memory_limit}"
-        );
-    }
-    validate(PatchChecksumValidation::Ignore).expect("ignore overrides the size");
-}
-
-#[test]
 fn rejects_an_implausible_declared_target_size() {
     let temp = TestDir::new();
     let input_path = temp.child("input.gba");
