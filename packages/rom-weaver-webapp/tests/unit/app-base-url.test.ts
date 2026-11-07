@@ -4,8 +4,7 @@ import { resolveAssetUrl } from "../../src/public/react/asset-url.ts";
 import { readGuidedSampleFromSearch, resolveGuidedSampleHref } from "../../src/public/react/guided-sample-start.ts";
 import { matchAppRoute, readAppBaseUrl } from "../../src/webapp/app-routes.ts";
 import { DOC_ROUTES } from "../../src/webapp/docs-pages.mjs";
-import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
-import { LEGACY_WORKFLOW_ROUTES } from "../../scripts/vite-config/root-static-assets.mjs";
+import { LEGACY_WORKFLOW_ROUTES, WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
 
 const appBase = vi.hoisted(() => ({ path: "/" }));
 vi.mock("../../src/webapp/app-base.ts", () => ({

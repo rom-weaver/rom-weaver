@@ -125,7 +125,28 @@ const BETA_ROUTE_TITLES = Object.freeze({
  */
 const withChannelBadge = (title, badge) => (badge ? title.replace(SITE_NAME, `${SITE_NAME} ${badge}`) : title);
 
+const LEGACY_WORKFLOW_ROUTES = {
+  apply: "apply-rom-patches",
+  "apply-patch": "apply-rom-patches",
+  bundle: "weave-rom-patches",
+  "bundle-patches": "weave-rom-patches",
+  create: "create-rom-patch",
+  "create-patch": "create-rom-patch",
+  identify: "identify-rom",
+  test: "play-rom",
+  trim: "trim-rom",
+  weave: "weave-rom-patches",
+  "apply-patches": "apply-rom-patches",
+  "weave-patches": "weave-rom-patches",
+  "save-editor": "rom-save-editor",
+  checksum: "file-checksum",
+  compress: "compress-files",
+  extract: "extract-files",
+  "test-rom": "play-rom",
+};
+
 export {
+  LEGACY_WORKFLOW_ROUTES,
   activeWorkflowEntry,
   WORKFLOW_ENTRY_ROUTES,
   readWorkflowEntryFromPathname,
