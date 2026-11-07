@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::{BufReader, Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     path::Path,
     sync::Arc,
 };
@@ -324,20 +324,40 @@ enum HdiffCompression {
     Lzma2,
 }
 
+/// Compressor names the reference decompress plugins define but this handler cannot decode.
+const HDIFF_UNSUPPORTED_COMPRESSORS: [&str; 6] = ["lz4", "lz4hc", "brotli", "lzham", "tuz", "7zxz"];
+
 impl HdiffCompression {
     fn parse(value: &str) -> Result<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "" | "nocomp" => Ok(Self::NoComp),
             "zstd" => Ok(Self::Zstd),
-            "zlib" => Ok(Self::Zlib),
-            "bz2" | "pbz2" => Ok(Self::Bz2),
+            "zlib" | "pzlib" => Ok(Self::Zlib),
+            "bz2" | "pbz2" | "bzip2" | "pbzip2" => Ok(Self::Bz2),
             "lzma" => Ok(Self::Lzma),
             "lzma2" => Ok(Self::Lzma2),
+            other if HDIFF_UNSUPPORTED_COMPRESSORS.contains(&other) => {
+                Err(RomWeaverError::ValidationCode(
+                    hdiff_validation_code("HDIFF_COMPRESSION_UNSUPPORTED")
+                        .with_message("HDiffPatch compression is not supported")
+                        .with_field("compression", other),
+                ))
+            }
             other => Err(RomWeaverError::ValidationCode(
                 hdiff_validation_code("HDIFF_COMPRESSION_UNRECOGNIZED")
                     .with_message("HDiffPatch compression is not recognized")
                     .with_field("compression", other),
             )),
+        }
+    }
+
+    /// Resolves the header's compressor name only when a chunk is actually compressed;
+    /// patch.c never consults the name for a patch whose chunks are all stored raw.
+    fn resolve(value: &str, has_compressed_chunks: bool) -> Result<Self> {
+        if has_compressed_chunks {
+            Self::parse(value)
+        } else {
+            Ok(Self::NoComp)
         }
     }
 
@@ -401,8 +421,6 @@ struct Sf20StepPlan {
 #[derive(Clone, Debug)]
 struct ParsedSf20Plan {
     steps: Vec<Sf20StepPlan>,
-    tail_range: std::ops::Range<usize>,
-    produced_len: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -561,10 +579,35 @@ fn parse_hdiff_patch_bytes(bytes: Vec<u8>) -> Result<ParsedPatchFile> {
     Ok(ParsedPatchFile { bytes, variant })
 }
 
+/// Layouts `hdiffz` can write that are valid HDiffPatch patches but are not implemented here.
+const HDIFF_UNSUPPORTED_LAYOUT_SIGNATURES: [(&[u8], &str); 2] = [
+    (b"HDIFFW26", "HDIFFW26 windowed patch"),
+    (b"ENDSLEY/BSDIFF43", "ENDSLEY/BSDIFF43 patch"),
+];
+
+fn unsupported_layout_error(layout: &str) -> RomWeaverError {
+    RomWeaverError::ValidationCode(
+        hdiff_validation_code("HDIFF_LAYOUT_UNSUPPORTED")
+            .with_message("HDiffPatch layout is recognized but not supported")
+            .with_field("layout", layout),
+    )
+}
+
+fn reject_unsupported_layout(prefix: &[u8]) -> Result<()> {
+    for (signature, layout) in HDIFF_UNSUPPORTED_LAYOUT_SIGNATURES {
+        if prefix.starts_with(signature) {
+            return Err(unsupported_layout_error(layout));
+        }
+    }
+    Ok(())
+}
+
 fn parse_hdiff_patch_file(path: &Path) -> Result<ParsedPatchVariant> {
     let file = File::open(path)?;
     let file_len = file.metadata()?.len();
-    let mut parser = HdiffFileParser::new(BufReader::new(file), file_len);
+    let mut reader = BufReader::new(file);
+    reject_unsupported_layout(reader.fill_buf()?)?;
+    let mut parser = HdiffFileParser::new(reader, file_len);
 
     let header_text = parser.read_null_terminated_string(1024)?;
     let parts = header_text.split('&').collect::<Vec<_>>();
@@ -575,7 +618,7 @@ fn parse_hdiff_patch_file(path: &Path) -> Result<ParsedPatchVariant> {
     }
 
     let magic = parts[0];
-    let compression = HdiffCompression::parse(parts[1])?;
+    let compression_name = parts[1];
 
     let variant = if magic == "HDIFF13" {
         let new_data_size = parser.read_var_u64("new_data_size")?;
@@ -589,9 +632,17 @@ fn parse_hdiff_patch_file(path: &Path) -> Result<ParsedPatchVariant> {
         let compress_rle_code_buf_size = parser.read_var_u64("compress_rle_code_buf_size")?;
         let new_data_diff_size = parser.read_var_u64("new_data_diff_size")?;
         let compress_new_data_diff_size = parser.read_var_u64("compress_new_data_diff_size")?;
+        let has_compressed_chunks = [
+            compress_cover_buf_size,
+            compress_rle_ctrl_buf_size,
+            compress_rle_code_buf_size,
+            compress_new_data_diff_size,
+        ]
+        .into_iter()
+        .any(|size| size > 0);
 
         ParsedPatchVariant::SingleFile13(ParsedHdiff13 {
-            compression,
+            compression: HdiffCompression::resolve(compression_name, has_compressed_chunks)?,
             old_data_size,
             new_data_size,
             cover_count,
@@ -612,9 +663,15 @@ fn parse_hdiff_patch_file(path: &Path) -> Result<ParsedPatchVariant> {
         let step_mem_size = parser.read_var_u64("step_mem_size")?;
         let uncompressed_size = parser.read_var_u64("uncompressed_size")?;
         let compressed_size = parser.read_var_u64("compressed_size")?;
+        check_hdiffsf20_header_sizes(
+            new_data_size,
+            step_mem_size,
+            uncompressed_size,
+            compressed_size,
+        )?;
 
         ParsedPatchVariant::SingleStream20(ParsedHdiffSf20 {
-            compression,
+            compression: HdiffCompression::resolve(compression_name, compressed_size > 0)?,
             old_data_size,
             new_data_size,
             cover_count,
@@ -633,13 +690,11 @@ fn parse_hdiff_patch_file(path: &Path) -> Result<ParsedPatchVariant> {
         let output_sum_size = parser.read_var_u64("output_sum_size")?;
 
         if !is_input_dir || !is_output_dir {
-            return Err(RomWeaverError::Validation(
-                "HDIFF19 patch flagged non-directory I/O unexpectedly".into(),
-            ));
+            return Err(unsupported_layout_error("HDIFF19 file-to-file diff"));
         }
 
         ParsedPatchVariant::Directory19(ParsedHdiffDir19 {
-            compression,
+            compression: HdiffCompression::parse(compression_name)?,
             old_data_size: input_sum_size,
             new_data_size: output_sum_size,
         })
@@ -654,8 +709,35 @@ fn parse_hdiff_patch_file(path: &Path) -> Result<ParsedPatchVariant> {
     Ok(variant)
 }
 
+/// Slack the reference allows `step_mem_size` above the data sizes (patch.c `_kStepMemSizeSafeLimit`).
+const HDIFFSF20_STEP_MEM_SLACK: u64 = 4 * 1024 * 1024;
+
+/// The HDIFFSF20 header checks of patch.c `getSingleCompressedDiffInfo`.
+fn check_hdiffsf20_header_sizes(
+    new_data_size: u64,
+    step_mem_size: u64,
+    uncompressed_size: u64,
+    compressed_size: u64,
+) -> Result<()> {
+    let step_mem_limit = new_data_size
+        .min(uncompressed_size)
+        .saturating_add(HDIFFSF20_STEP_MEM_SLACK);
+    if compressed_size > uncompressed_size || step_mem_size > step_mem_limit {
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFFSF20_HEADER_SIZES_INCONSISTENT")
+                .with_message("HDIFFSF20 header sizes are inconsistent")
+                .with_field("new_data_size", new_data_size)
+                .with_field("step_mem_size", step_mem_size)
+                .with_field("uncompressed_size", uncompressed_size)
+                .with_field("compressed_size", compressed_size),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
+    reject_unsupported_layout(raw)?;
     let (header_text, mut index) = read_null_terminated_string(raw, 1024)?;
     let parts = header_text.split('&').collect::<Vec<_>>();
     if parts.len() < 2 {
@@ -665,7 +747,7 @@ fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
     }
 
     let magic = parts[0];
-    let compression = HdiffCompression::parse(parts[1])?;
+    let compression_name = parts[1];
 
     let variant = if magic == "HDIFF13" {
         let new_data_size = read_var_u64(raw, &mut index, "new_data_size")?;
@@ -682,9 +764,17 @@ fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
         let new_data_diff_size = read_var_u64(raw, &mut index, "new_data_diff_size")?;
         let compress_new_data_diff_size =
             read_var_u64(raw, &mut index, "compress_new_data_diff_size")?;
+        let has_compressed_chunks = [
+            compress_cover_buf_size,
+            compress_rle_ctrl_buf_size,
+            compress_rle_code_buf_size,
+            compress_new_data_diff_size,
+        ]
+        .into_iter()
+        .any(|size| size > 0);
 
         ParsedPatchVariant::SingleFile13(ParsedHdiff13 {
-            compression,
+            compression: HdiffCompression::resolve(compression_name, has_compressed_chunks)?,
             old_data_size,
             new_data_size,
             cover_count,
@@ -705,9 +795,15 @@ fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
         let step_mem_size = read_var_u64(raw, &mut index, "step_mem_size")?;
         let uncompressed_size = read_var_u64(raw, &mut index, "uncompressed_size")?;
         let compressed_size = read_var_u64(raw, &mut index, "compressed_size")?;
+        check_hdiffsf20_header_sizes(
+            new_data_size,
+            step_mem_size,
+            uncompressed_size,
+            compressed_size,
+        )?;
 
         ParsedPatchVariant::SingleStream20(ParsedHdiffSf20 {
-            compression,
+            compression: HdiffCompression::resolve(compression_name, compressed_size > 0)?,
             old_data_size,
             new_data_size,
             cover_count,
@@ -726,13 +822,11 @@ fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
         let output_sum_size = read_var_u64(raw, &mut index, "output_sum_size")?;
 
         if !is_input_dir || !is_output_dir {
-            return Err(RomWeaverError::Validation(
-                "HDIFF19 patch flagged non-directory I/O unexpectedly".into(),
-            ));
+            return Err(unsupported_layout_error("HDIFF19 file-to-file diff"));
         }
 
         ParsedPatchVariant::Directory19(ParsedHdiffDir19 {
-            compression,
+            compression: HdiffCompression::parse(compression_name)?,
             old_data_size: input_sum_size,
             new_data_size: output_sum_size,
         })
@@ -774,7 +868,12 @@ struct Hdiff13Chunks {
     new_diff_raw: Vec<u8>,
 }
 
-fn hdiff13_chunk_offsets(header: &ParsedHdiff13) -> Result<(usize, usize, usize, usize)> {
+/// Returns the four chunk start offsets, and fails when bytes follow the last chunk
+/// (patch.c requires the chunks to end exactly at the end of the patch).
+fn hdiff13_chunk_offsets(
+    header: &ParsedHdiff13,
+    patch_len: u64,
+) -> Result<(usize, usize, usize, usize)> {
     let cover_start = header.header_end;
     let cover_end = add_usize_u64(
         cover_start,
@@ -794,6 +893,22 @@ fn hdiff13_chunk_offsets(header: &ParsedHdiff13) -> Result<(usize, usize, usize,
         "rle_code end",
     )?;
     let new_diff_start = rle_code_end;
+    let new_diff_end = add_usize_u64(
+        new_diff_start,
+        hdiff_chunk_raw_size(
+            header.new_data_diff_size,
+            header.compress_new_data_diff_size,
+        ),
+        "new_data_diff end",
+    )?;
+    if u64::try_from(new_diff_end).is_ok_and(|end| end < patch_len) {
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_TRAILING_BYTES")
+                .with_message("HDiffPatch patch has bytes after the last chunk")
+                .with_field("chunks_end", new_diff_end)
+                .with_field("patch_len", patch_len),
+        ));
+    }
     Ok((cover_start, rle_ctrl_start, rle_code_start, new_diff_start))
 }
 
@@ -803,8 +918,10 @@ fn read_hdiff13_chunks_from_patch_bytes(
     header: &ParsedHdiff13,
     parallel_chunks: bool,
 ) -> Result<Hdiff13Chunks> {
+    let patch_len = u64::try_from(patch_bytes.len())
+        .map_err(|_| RomWeaverError::Validation("HDiffPatch patch length overflowed u64".into()))?;
     let (cover_start, rle_ctrl_start, rle_code_start, new_diff_start) =
-        hdiff13_chunk_offsets(header)?;
+        hdiff13_chunk_offsets(header, patch_len)?;
 
     let (cover_raw, rle_ctrl_raw, rle_code_raw, new_diff_raw) = if parallel_chunks {
         let ((cover_raw, rle_ctrl_raw), (rle_code_raw, new_diff_raw)) = rayon::join(
@@ -909,7 +1026,7 @@ fn read_hdiff13_chunks_from_patch_reader(
     parallel_chunks: bool,
 ) -> Result<Hdiff13Chunks> {
     let (cover_start, rle_ctrl_start, rle_code_start, new_diff_start) =
-        hdiff13_chunk_offsets(header)?;
+        hdiff13_chunk_offsets(header, patch_len)?;
     let load = |start: usize, plain_size: u64, compressed_size: u64, label: &'static str| {
         read_hdiff_chunk_from_reader(
             patch_reader,
@@ -1053,11 +1170,9 @@ fn apply_hdiff13_with_chunks(
     );
 
     let mut cover_index = 0usize;
-    let mut rle_ctrl_index = 0usize;
-    let mut rle_code_index = 0usize;
     let mut new_diff_index = 0usize;
 
-    let mut rle_state = HdiffRleState::default();
+    let mut rle = HdiffRleDecoder::new(rle_ctrl_raw.as_slice(), rle_code_raw.as_slice());
 
     let mut last_old_end = 0u64;
     let mut last_new_end = 0u64;
@@ -1114,14 +1229,7 @@ fn apply_hdiff13_with_chunks(
                 fill_len,
                 "new_data_diff gap",
             )?;
-            apply_hdiff_rle(
-                gap,
-                rle_ctrl_raw.as_slice(),
-                &mut rle_ctrl_index,
-                rle_code_raw.as_slice(),
-                &mut rle_code_index,
-                &mut rle_state,
-            )?;
+            rle.skip(fill_len)?;
             output.write_all(gap)?;
             position = position
                 .checked_add(fill_len)
@@ -1155,14 +1263,7 @@ fn apply_hdiff13_with_chunks(
             let len = buffer.len().min(old_end - old_position);
             let target = &mut buffer[..len];
             old_data.read_into(old_position, target)?;
-            apply_hdiff_rle(
-                target,
-                rle_ctrl_raw.as_slice(),
-                &mut rle_ctrl_index,
-                rle_code_raw.as_slice(),
-                &mut rle_code_index,
-                &mut rle_state,
-            )?;
+            rle.add(target)?;
             output.write_all(target)?;
             old_position += len;
         }
@@ -1182,14 +1283,7 @@ fn apply_hdiff13_with_chunks(
             fill_len,
             "new_data_diff tail",
         )?;
-        apply_hdiff_rle(
-            tail,
-            rle_ctrl_raw.as_slice(),
-            &mut rle_ctrl_index,
-            rle_code_raw.as_slice(),
-            &mut rle_code_index,
-            &mut rle_state,
-        )?;
+        rle.skip(fill_len)?;
         output.write_all(tail)?;
         position = position
             .checked_add(fill_len)
@@ -1204,6 +1298,21 @@ fn apply_hdiff13_with_chunks(
                 .with_field("actual", position),
         ));
     }
+    let leftover_streams = [
+        ("cover", cover_raw.len() - cover_index),
+        ("new_data_diff", new_diff_raw.len() - new_diff_index),
+    ];
+    for (stream, bytes_left) in leftover_streams {
+        if bytes_left != 0 {
+            return Err(RomWeaverError::ValidationCode(
+                hdiff_validation_code("HDIFF_STREAM_NOT_CONSUMED")
+                    .with_message("HDiffPatch stream was not consumed exactly")
+                    .with_field("stream", stream)
+                    .with_field("bytes_left", bytes_left),
+            ));
+        }
+    }
+    rle.finish()?;
 
     Ok(position)
 }
@@ -1321,7 +1430,16 @@ fn apply_hdiffsf20_with_diff(
 ) -> Result<HdiffSf20ApplyOutput> {
     let new_data_size = usize::try_from(header.new_data_size)
         .map_err(|_| RomWeaverError::Validation("HDIFFSF20 new size overflowed usize".into()))?;
-    let parsed = parse_hdiffsf20_steps(diff, old_data.len(), new_data_size, header.cover_count)?;
+    let step_mem_size = usize::try_from(header.step_mem_size).map_err(|_| {
+        RomWeaverError::Validation("HDIFFSF20 step_mem_size overflowed usize".into())
+    })?;
+    let parsed = parse_hdiffsf20_steps(
+        diff,
+        old_data.len(),
+        new_data_size,
+        header.cover_count,
+        step_mem_size,
+    )?;
 
     // `new_data_size` is an attacker-controlled varint, but `parse_hdiffsf20_steps`
     // already bounds it by the data the patch can produce, so a refused reservation
@@ -1360,10 +1478,6 @@ fn apply_hdiffsf20_with_diff(
         }
     }
 
-    if parsed.produced_len < new_data_size {
-        output[parsed.produced_len..new_data_size].copy_from_slice(&diff[parsed.tail_range]);
-    }
-
     Ok(HdiffSf20ApplyOutput {
         output,
         used_parallelism,
@@ -1375,6 +1489,7 @@ fn parse_hdiffsf20_steps(
     old_len: usize,
     new_data_size: usize,
     cover_count: u64,
+    step_mem_size: usize,
 ) -> Result<ParsedSf20Plan> {
     let mut diff_index = 0usize;
     let mut last_old_end = 0u64;
@@ -1402,6 +1517,14 @@ fn parse_hdiffsf20_steps(
                 "HDIFFSF20 step buffer exceeded payload".into(),
             ));
         }
+        if step_size > step_mem_size {
+            return Err(RomWeaverError::ValidationCode(
+                hdiff_validation_code("HDIFFSF20_STEP_EXCEEDED_STEP_MEM_SIZE")
+                    .with_message("HDIFFSF20 step buffers exceed the declared step_mem_size")
+                    .with_field("step_size", step_size)
+                    .with_field("step_mem_size", step_mem_size),
+            ));
+        }
 
         let cover_start = diff_index;
         let cover_end = cover_start + cover_buf_size;
@@ -1419,7 +1542,12 @@ fn parse_hdiffsf20_steps(
         let mut step_covers = Vec::<Sf20CoverPlan>::new();
         let covers_before = remaining_covers;
 
-        while cover_index < covers.len() && remaining_covers > 0 {
+        while cover_index < covers.len() {
+            if remaining_covers == 0 {
+                return Err(RomWeaverError::Validation(
+                    "HDIFFSF20 step has cover bytes beyond the declared cover count".into(),
+                ));
+            }
             let p_sign = read_u8_slice(covers, &mut cover_index, "sf20 cover sign")?;
             let delta =
                 read_var_u64_tagged_slice(covers, &mut cover_index, 1, p_sign, "sf20 cover delta")?;
@@ -1465,6 +1593,12 @@ fn parse_hdiffsf20_steps(
             }
 
             remaining_covers -= 1;
+            // A zero-length cover only carries the final gap, so it must be the last cover.
+            if cover_len == 0 && remaining_covers != 0 {
+                return Err(RomWeaverError::Validation(
+                    "HDIFFSF20 zero-length cover is not the last cover".into(),
+                ));
+            }
             step_covers.push(Sf20CoverPlan {
                 old_start,
                 cover_len,
@@ -1519,7 +1653,7 @@ fn parse_hdiffsf20_steps(
     let produced_len = usize::try_from(last_new_end).map_err(|_| {
         RomWeaverError::Validation("HDIFFSF20 produced size overflowed usize".into())
     })?;
-    if produced_len > new_data_size {
+    if produced_len != new_data_size {
         return Err(RomWeaverError::ValidationCode(
             hdiff_validation_code("HDIFFSF20_OUTPUT_SIZE_MISMATCH")
                 .with_message("HDIFFSF20 output size mismatch")
@@ -1527,21 +1661,15 @@ fn parse_hdiffsf20_steps(
                 .with_field("actual", produced_len),
         ));
     }
-    let tail_len = new_data_size - produced_len;
-    let tail_end = diff_index
-        .checked_add(tail_len)
-        .ok_or_else(|| RomWeaverError::Validation("HDIFFSF20 tail range overflowed".into()))?;
-    if tail_end > diff.len() {
-        return Err(RomWeaverError::Validation(
-            "HDIFFSF20 tail diff bytes exceeded payload".into(),
+    if diff_index != diff.len() {
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_STREAM_NOT_CONSUMED")
+                .with_message("HDIFFSF20 payload has bytes after the last cover")
+                .with_field("bytes_left", diff.len() - diff_index),
         ));
     }
 
-    Ok(ParsedSf20Plan {
-        steps,
-        tail_range: diff_index..tail_end,
-        produced_len,
-    })
+    Ok(ParsedSf20Plan { steps })
 }
 
 fn render_hdiffsf20_step(
@@ -1916,119 +2044,140 @@ fn decode_lzma2_dict_size(property: u8, label: &'static str) -> Result<u32> {
     Ok(size)
 }
 
-#[derive(Default)]
-struct HdiffRleState {
+/// Decoder for the HDIFF13 RLE streams (`rle_ctrl` and `rle_code`) that add a delta onto the
+/// bytes copied from the old file, mirroring patch.c `_TBytesRle_load_stream`.
+struct HdiffRleDecoder<'a> {
+    ctrl: &'a [u8],
+    ctrl_index: usize,
+    code: &'a [u8],
+    code_index: usize,
     set_length: usize,
     set_value: u8,
     copy_length: usize,
 }
 
-fn apply_hdiff_rle(
-    target: &mut [u8],
-    rle_ctrl: &[u8],
-    rle_ctrl_index: &mut usize,
-    rle_code: &[u8],
-    rle_code_index: &mut usize,
-    state: &mut HdiffRleState,
-) -> Result<()> {
-    let mut offset = 0usize;
-
-    apply_hdiff_rle_pending(target, &mut offset, rle_code, rle_code_index, state, false)?;
-    if offset >= target.len() {
-        return Ok(());
-    }
-    if *rle_ctrl_index >= rle_ctrl.len() {
-        return Ok(());
-    }
-
-    while offset < target.len() {
-        if *rle_ctrl_index >= rle_ctrl.len() {
-            return Ok(());
+impl<'a> HdiffRleDecoder<'a> {
+    fn new(ctrl: &'a [u8], code: &'a [u8]) -> Self {
+        Self {
+            ctrl,
+            ctrl_index: 0,
+            code,
+            code_index: 0,
+            set_length: 0,
+            set_value: 0,
+            copy_length: 0,
         }
-        let p_sign = read_u8_slice(rle_ctrl, rle_ctrl_index, "rle ctrl")?;
-        let rle_type = p_sign >> 6;
-        let length =
-            read_var_u64_tagged_slice(rle_ctrl, rle_ctrl_index, 2, p_sign, "rle ctrl length")?
-                .checked_add(1)
-                .ok_or_else(|| {
-                    RomWeaverError::Validation("HDiffPatch rle length overflowed".into())
-                })?;
-        let length_usize = usize::try_from(length).map_err(|_| {
-            RomWeaverError::Validation("HDiffPatch rle length overflowed usize".into())
-        })?;
-
-        if rle_type == 3 {
-            state.copy_length = length_usize;
-        } else if rle_type == 2 {
-            state.set_length = length_usize;
-            state.set_value = read_u8_slice(rle_code, rle_code_index, "rle value")?;
-        } else {
-            state.set_length = length_usize;
-            state.set_value = (0u8).wrapping_sub(rle_type);
-        }
-
-        apply_hdiff_rle_pending(target, &mut offset, rle_code, rle_code_index, state, true)?;
     }
 
-    Ok(())
-}
+    /// Adds the next `target.len()` RLE bytes onto `target`.
+    fn add(&mut self, target: &mut [u8]) -> Result<()> {
+        let len = target.len();
+        self.advance(Some(target), len)
+    }
 
-fn apply_hdiff_rle_pending(
-    target: &mut [u8],
-    offset: &mut usize,
-    rle_code: &[u8],
-    rle_code_index: &mut usize,
-    state: &mut HdiffRleState,
-    allow_partial: bool,
-) -> Result<()> {
-    while *offset < target.len() {
-        if state.set_length > 0 {
-            let remaining = target.len() - *offset;
-            let step = state.set_length.min(remaining);
-            if state.set_value != 0 {
-                for byte in &mut target[*offset..*offset + step] {
-                    *byte = byte.wrapping_add(state.set_value);
+    /// Steps over the next `len` RLE bytes for output that is copied from `new_data_diff`
+    /// without an RLE delta (patch.c `_rle_decode_skip`).
+    fn skip(&mut self, len: usize) -> Result<()> {
+        self.advance(None, len)
+    }
+
+    /// Fails unless every RLE run and both streams were consumed exactly.
+    fn finish(&self) -> Result<()> {
+        if self.set_length != 0
+            || self.copy_length != 0
+            || self.ctrl_index != self.ctrl.len()
+            || self.code_index != self.code.len()
+        {
+            return Err(RomWeaverError::ValidationCode(
+                hdiff_validation_code("HDIFF_STREAM_NOT_CONSUMED")
+                    .with_message("HDiffPatch rle streams were not consumed exactly")
+                    .with_field("rle_ctrl_left", self.ctrl.len() - self.ctrl_index)
+                    .with_field("rle_code_left", self.code.len() - self.code_index)
+                    .with_field("pending_set", self.set_length)
+                    .with_field("pending_copy", self.copy_length),
+            ));
+        }
+        Ok(())
+    }
+
+    fn advance(&mut self, mut target: Option<&mut [u8]>, len: usize) -> Result<()> {
+        let mut offset = 0usize;
+        self.apply_pending(&mut target, &mut offset, len)?;
+        while offset < len {
+            if self.ctrl_index >= self.ctrl.len() {
+                return Err(RomWeaverError::Validation(
+                    "HDiffPatch rle_ctrl ended unexpectedly".into(),
+                ));
+            }
+            let p_sign = read_u8_slice(self.ctrl, &mut self.ctrl_index, "rle ctrl")?;
+            let rle_type = p_sign >> 6;
+            let run_length = read_var_u64_tagged_slice(
+                self.ctrl,
+                &mut self.ctrl_index,
+                2,
+                p_sign,
+                "rle ctrl length",
+            )?
+            .checked_add(1)
+            .ok_or_else(|| RomWeaverError::Validation("HDiffPatch rle length overflowed".into()))?;
+            let run_length = usize::try_from(run_length).map_err(|_| {
+                RomWeaverError::Validation("HDiffPatch rle length overflowed usize".into())
+            })?;
+
+            match rle_type {
+                3 => self.copy_length = run_length,
+                2 => {
+                    self.set_length = run_length;
+                    self.set_value = read_u8_slice(self.code, &mut self.code_index, "rle value")?;
+                }
+                _ => {
+                    self.set_length = run_length;
+                    self.set_value = 0u8.wrapping_sub(rle_type);
                 }
             }
-            state.set_length -= step;
-            *offset += step;
-            if !allow_partial {
-                continue;
+            self.apply_pending(&mut target, &mut offset, len)?;
+        }
+        Ok(())
+    }
+
+    fn apply_pending(
+        &mut self,
+        target: &mut Option<&mut [u8]>,
+        offset: &mut usize,
+        len: usize,
+    ) -> Result<()> {
+        let set_step = self.set_length.min(len - *offset);
+        if set_step > 0 {
+            if let Some(target) = target.as_deref_mut()
+                && self.set_value != 0
+            {
+                for byte in &mut target[*offset..*offset + set_step] {
+                    *byte = byte.wrapping_add(self.set_value);
+                }
             }
-            if step < remaining {
-                continue;
-            }
+            self.set_length -= set_step;
+            *offset += set_step;
         }
 
-        if state.copy_length > 0 {
-            let remaining = target.len() - *offset;
-            let step = state.copy_length.min(remaining);
-            if rle_code.len().saturating_sub(*rle_code_index) < step {
+        let copy_step = self.copy_length.min(len - *offset);
+        if copy_step > 0 {
+            if self.code.len() - self.code_index < copy_step {
                 return Err(RomWeaverError::Validation(
                     "HDiffPatch rle_code ended unexpectedly".into(),
                 ));
             }
-            let source = &rle_code[*rle_code_index..*rle_code_index + step];
-            for (dst, src) in target[*offset..*offset + step]
-                .iter_mut()
-                .zip(source.iter().copied())
-            {
-                *dst = dst.wrapping_add(src);
+            if let Some(target) = target.as_deref_mut() {
+                let source = &self.code[self.code_index..self.code_index + copy_step];
+                for (dst, src) in target[*offset..*offset + copy_step].iter_mut().zip(source) {
+                    *dst = dst.wrapping_add(*src);
+                }
             }
-            *rle_code_index += step;
-            state.copy_length -= step;
-            *offset += step;
-            if !allow_partial {
-                continue;
-            }
-            if step < remaining {
-                continue;
-            }
+            self.code_index += copy_step;
+            self.copy_length -= copy_step;
+            *offset += copy_step;
         }
-
-        break;
+        Ok(())
     }
-    Ok(())
 }
 
 struct HdiffSf20RleDecoder<'a> {
@@ -2095,24 +2244,7 @@ impl<'a> HdiffSf20RleDecoder<'a> {
 }
 
 fn read_rle_varint(bytes: &[u8], index: &mut usize, label: &'static str) -> Result<usize> {
-    let first = read_u8_slice(bytes, index, label)?;
-    let mut value = u64::from(first & 0x7f);
-
-    if (first & 0x80) != 0 {
-        loop {
-            let byte = read_u8_slice(bytes, index, label)?;
-            value = value
-                .checked_shl(7)
-                .and_then(|value| value.checked_add(u64::from(byte & 0x7f)))
-                .ok_or_else(|| {
-                    RomWeaverError::Validation("HDIFFSF20 rle varint overflowed".into())
-                })?;
-            if (byte & 0x80) == 0 {
-                break;
-            }
-        }
-    }
-
+    let value = read_var_u64(bytes, index, label)?;
     usize::try_from(value)
         .map_err(|_| RomWeaverError::Validation("HDIFFSF20 rle varint overflowed usize".into()))
 }
@@ -2215,11 +2347,14 @@ fn decode_hdiff_varint(
     }
 
     loop {
+        // A 7-bit shift must not push set bits out of the top of the u64 (patch.c:120).
+        if (value >> (u64::BITS - 7)) != 0 {
+            return Err(RomWeaverError::Validation(
+                "HDiffPatch varint overflowed".into(),
+            ));
+        }
         let byte = read_byte()?;
-        value = value
-            .checked_shl(7)
-            .and_then(|value| value.checked_add(u64::from(byte & 0x7f)))
-            .ok_or_else(|| RomWeaverError::Validation("HDiffPatch varint overflowed".into()))?;
+        value = (value << 7) | u64::from(byte & 0x7f);
         if (byte & 0x80) == 0 {
             break;
         }
@@ -2268,6 +2403,31 @@ fn write_var_u64(out: &mut Vec<u8>, mut value: u64) {
     }
 }
 
+/// Appends one HDIFF13 rle control record: `rle_type` in the top two bits, then `length - 1`
+/// as a tagged varint (rle0 = 0, rle255 = 1, rle with a code byte = 2, unrle copy = 3).
+#[cfg(test)]
+fn write_rle_ctrl(out: &mut Vec<u8>, rle_type: u8, length: u64) {
+    let first_payload_bits = 5u32;
+    let mut rest = length - 1;
+    let mut groups = Vec::new();
+    while rest >> first_payload_bits != 0 {
+        groups.push((rest & 0x7f) as u8);
+        rest >>= 7;
+    }
+    let continuation = if groups.is_empty() {
+        0
+    } else {
+        1 << first_payload_bits
+    };
+    out.push((rle_type << 6) | continuation | rest as u8);
+    for (index, group) in groups.iter().rev().enumerate() {
+        let is_last = index + 1 == groups.len();
+        out.push(if is_last { *group } else { *group | 0x80 });
+    }
+}
+
+/// An `hdiffz`-shaped patch with no covers: the rle control stream spans the whole output
+/// as one rle0 run and `new_data_diff` carries the new bytes.
 #[cfg(test)]
 fn build_uncompressed_hdiff13_patch(old_bytes: &[u8], new_bytes: &[u8]) -> Result<Vec<u8>> {
     let old_size = u64::try_from(old_bytes.len())
@@ -2275,15 +2435,26 @@ fn build_uncompressed_hdiff13_patch(old_bytes: &[u8], new_bytes: &[u8]) -> Resul
     let new_size = u64::try_from(new_bytes.len())
         .map_err(|_| RomWeaverError::Validation("new file length overflowed u64".into()))?;
 
-    let mut out = Vec::with_capacity(64usize.saturating_add(new_bytes.len()));
-    write_uncompressed_hdiff13_header_vec(&mut out, old_size, new_size);
+    let mut rle_ctrl = Vec::new();
+    if new_size > 0 {
+        write_rle_ctrl(&mut rle_ctrl, 0, new_size);
+    }
 
+    let mut out = Vec::with_capacity(64usize.saturating_add(new_bytes.len()));
+    write_uncompressed_hdiff13_header_vec(&mut out, old_size, new_size, rle_ctrl.len() as u64);
+
+    out.extend_from_slice(&rle_ctrl);
     out.extend_from_slice(new_bytes);
     Ok(out)
 }
 
 #[cfg(test)]
-fn write_uncompressed_hdiff13_header_vec(out: &mut Vec<u8>, old_size: u64, new_size: u64) {
+fn write_uncompressed_hdiff13_header_vec(
+    out: &mut Vec<u8>,
+    old_size: u64,
+    new_size: u64,
+    rle_ctrl_size: u64,
+) {
     out.extend_from_slice(b"HDIFF13&nocomp");
     out.push(0);
     write_var_u64(out, new_size);
@@ -2291,7 +2462,7 @@ fn write_uncompressed_hdiff13_header_vec(out: &mut Vec<u8>, old_size: u64, new_s
     write_var_u64(out, 0); // cover_count
     write_var_u64(out, 0); // cover_buf_size
     write_var_u64(out, 0); // compress_cover_buf_size
-    write_var_u64(out, 0); // rle_ctrl_buf_size
+    write_var_u64(out, rle_ctrl_size); // rle_ctrl_buf_size
     write_var_u64(out, 0); // compress_rle_ctrl_buf_size
     write_var_u64(out, 0); // rle_code_buf_size
     write_var_u64(out, 0); // compress_rle_code_buf_size
