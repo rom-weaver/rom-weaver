@@ -19,6 +19,7 @@ pub(crate) fn decorate(command: Command) -> Command {
         .mut_subcommand("probe", decorate_scalar)
         .mut_subcommand("extract", decorate_scalar)
         .mut_subcommand("checksum", decorate_scalar)
+        .mut_subcommand("ingest", decorate_scalar)
         .mut_subcommand("identify", decorate_identify)
         .mut_subcommand("compress", decorate_many)
         .mut_subcommand("trim", decorate_many)
@@ -33,6 +34,7 @@ pub(crate) fn resolve(command: &mut Commands, matches: &ArgMatches) -> Result<()
         Commands::Probe(args) => resolve_scalar(&mut args.input, command_matches),
         Commands::Extract(args) => resolve_scalar(&mut args.input, command_matches),
         Commands::Checksum(args) => resolve_scalar(&mut args.input, command_matches),
+        Commands::Ingest(args) => resolve_scalar(&mut args.input, command_matches),
         Commands::Identify(args) => resolve_optional(&mut args.input, command_matches),
         Commands::Compress(args) => resolve_many(&mut args.input, command_matches),
         Commands::Trim(args) => resolve_many(&mut args.input, command_matches),
