@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
@@ -668,6 +668,24 @@ describe("Masthead", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadLog={onPreloadLog} />));
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     expect(onPreloadLog).toHaveBeenCalledTimes(1);
+  });
+  it("gives the one update nudge to a displayed header chip, never to a rail glyph", async () => {
+    // The phone chip has no box on desktop, and a rail glyph in a visibility:hidden level still has one, as on docs pages.
+    const rects = vi.spyOn(SVGElement.prototype, "getClientRects").mockImplementation(function (this: SVGElement) {
+      return (this.closest(".phone-runtime") ? [] : [new DOMRect()]) as unknown as DOMRectList;
+    });
+    try {
+      vi.resetModules();
+      const { Masthead: FreshMasthead } = await import("../../../src/webapp/components/shell.tsx");
+      const { container } = render(
+        withSettings(<FreshMasthead {...mastheadProps} serviceWorkerStatus="active" updateReady />),
+      );
+      await waitFor(() => expect(container.querySelectorAll("svg[data-nudge]").length).toBe(1));
+      expect(container.querySelector(".nav-runtime svg[data-nudge]")).toBeNull();
+      expect(container.querySelector(".desktop-runtime .sub-status svg[data-nudge]")).not.toBeNull();
+    } finally {
+      rects.mockRestore();
+    }
   });
 });
 

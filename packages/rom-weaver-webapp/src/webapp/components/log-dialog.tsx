@@ -825,7 +825,7 @@ const ConsoleNav = ({
             >
               {entry === "offline" ? (
                 <span className="nav-runtime" data-sw={runtimeState}>
-                  <RuntimeGlyph nudge percent={offlinePercent} state={runtimeState} />
+                  <RuntimeGlyph percent={offlinePercent} state={runtimeState} />
                 </span>
               ) : (
                 <TabIcon aria-hidden="true" />

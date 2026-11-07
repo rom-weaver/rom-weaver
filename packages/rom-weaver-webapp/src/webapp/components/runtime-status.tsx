@@ -238,15 +238,15 @@ const claimNudge = (svg: SVGSVGElement | null): boolean => {
 };
 
 /**
- * Cues the update nudge on the first rendered glyph once `active` holds while the tab is visible, so it is not
+ * Cues the update nudge on the first rendered glyph once `isEligible` holds while the tab is visible, so it is not
  * spent on a hidden glyph or a page nobody is looking at. The ref goes on the animated svg, which clears the
  * cue when its animation ends or is cancelled by the glyph being hidden.
  */
-const useUpdateNudge = (active: boolean, enabled: boolean) => {
+const useUpdateNudge = (isEligible: boolean) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [isCued, setIsCued] = useState(false);
   useEffect(() => {
-    if (!(active && enabled)) {
+    if (!isEligible) {
       setIsCued(false);
       return undefined;
     }
@@ -264,7 +264,7 @@ const useUpdateNudge = (active: boolean, enabled: boolean) => {
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [active, enabled]);
+  }, [isEligible]);
   useEffect(() => {
     const svg = svgRef.current;
     if (!(svg && isCued)) return undefined;
@@ -279,7 +279,7 @@ const useUpdateNudge = (active: boolean, enabled: boolean) => {
   return { isCued, svgRef };
 };
 
-/** `nudge` marks a glyph the stylesheet animates; the legend's copies stay still and must not claim the nudge. */
+/** Only a glyph with `nudge` MAY claim and play the page's one update nudge. */
 const RuntimeGlyph = ({
   nudge = false,
   percent = null,
@@ -289,7 +289,7 @@ const RuntimeGlyph = ({
   percent?: number | null;
   state: RuntimeState;
 }) => {
-  const { isCued: shouldNudge, svgRef } = useUpdateNudge(state === "update", nudge);
+  const { isCued: shouldNudge, svgRef } = useUpdateNudge(nudge && state === "update");
   if (state === "installing" && typeof percent === "number") {
     return <ProgressRingGlyph percent={percent} />;
   }
