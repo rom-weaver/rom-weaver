@@ -1449,6 +1449,7 @@ pub(super) struct WindowEncodeInputs<'a> {
     target_len: u64,
     window_size: usize,
     options: &'a CompressOptions,
+    cancel: rom_weaver_core::CancellationToken,
 }
 
 /// Sequential single-threaded entry point. Produces output byte-identical to the parallel path;
@@ -1531,6 +1532,10 @@ pub(super) fn encode_patch_native(
         target_len,
         window_size,
         options: &options,
+        // The streaming test entry point has no context, so it never cancels.
+        cancel: progress.map_or_else(rom_weaver_core::CancellationToken::new, |progress| {
+            progress.progress.context.cancel().clone()
+        }),
     };
     if execution.used_parallelism {
         let pool = pool
@@ -1580,6 +1585,7 @@ pub(super) fn encode_windows_sequential<W: Write>(
     let mut target_buffer = vec![0; inputs.window_size];
 
     loop {
+        inputs.cancel.check()?;
         let bytes_read = read_next_chunk(&mut target, &mut target_buffer)?;
         if bytes_read == 0 {
             break;
@@ -1638,6 +1644,7 @@ pub(super) fn encode_windows_parallel<W: Write>(
     );
 
     loop {
+        inputs.cancel.check()?;
         let mut batch: Vec<(u64, Vec<u8>, Vec<u8>)> = Vec::with_capacity(batch_size);
         for _ in 0..batch_size {
             let mut target_buffer = vec![0; inputs.window_size];
@@ -1668,6 +1675,7 @@ pub(super) fn encode_windows_parallel<W: Write>(
             batch
                 .into_par_iter()
                 .map(|(source_offset, source_window, target_window)| {
+                    inputs.cancel.check()?;
                     build_native_window(
                         &source_window,
                         source_offset,

@@ -2204,3 +2204,57 @@ fn compress_dry_run_fails_exactly_where_the_real_run_fails() {
         assert!(!output.path().exists());
     }
 }
+
+/// A cancelled compress removes the directories it created for its output, like extract does,
+/// and keeps the ones that already existed.
+#[cfg(unix)]
+#[test]
+fn cancelled_compress_removes_the_output_directories_it_created() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+
+    let temp = setup_temp_dir();
+    let input = temp.child("source.bin");
+    fs::write(input.path(), pseudo_random_bytes(32 * 1024 * 1024, 5)).expect("fixture");
+    fs::create_dir(temp.path().join("existing")).expect("existing dir");
+    let output = temp.path().join("existing/new1/new2/out.7z");
+    let mut command = std::process::Command::new(assert_cmd::cargo::cargo_bin("rom-weaver"));
+    command
+        .current_dir(temp.path())
+        .args(["compress", "--level", "max", "--input"])
+        .arg(input.path())
+        .arg("--output")
+        .arg(&output)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    // SAFETY: only async-signal-safe signal() runs between fork and exec.
+    unsafe {
+        command.pre_exec(|| {
+            libc::signal(libc::SIGINT, libc::SIG_DFL);
+            Ok(())
+        });
+    }
+    let mut child = command.spawn().expect("spawn compress");
+    // The output file appears once the run is past argument handling and has its signal handler.
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while !output.exists() {
+        assert!(
+            Instant::now() < deadline,
+            "compress never created its output"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    unsafe { libc::kill(child.id() as i32, libc::SIGINT) };
+    let status = child.wait().expect("wait");
+    assert_eq!(status.code(), Some(130), "{status:?}");
+    assert!(!output.exists(), "cancelled compress left its output");
+    assert!(
+        !temp.path().join("existing/new1").exists(),
+        "cancelled compress left the directories it created"
+    );
+    assert!(
+        temp.path().join("existing").is_dir(),
+        "cancelled compress removed a directory that already existed"
+    );
+}

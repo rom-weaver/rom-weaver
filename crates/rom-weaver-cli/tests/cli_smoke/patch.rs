@@ -12505,7 +12505,7 @@ mod termination_signals {
     use std::time::{Duration, Instant};
 
     /// A long compressing apply in `cwd`, returned once it has created its private temp folder.
-    fn spawn_long_apply(cwd: &Path, ignore_hup: bool) -> std::process::Child {
+    fn spawn_long_apply(cwd: &Path, ignored_signal: Option<i32>) -> std::process::Child {
         let original = cwd.join("original.bin");
         let modified = cwd.join("modified.bin");
         let patch = cwd.join("update.xdelta");
@@ -12540,17 +12540,18 @@ mod termination_signals {
             .args(["--compress-level", "max"])
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        // Set both signals either way so the result does not depend on the runner's inherited dispositions.
-        let disposition = if ignore_hup {
-            libc::SIG_IGN
-        } else {
-            libc::SIG_DFL
-        };
+        // Set every signal either way so the result does not depend on the runner's inherited dispositions.
         // SAFETY: only async-signal-safe signal() runs between fork and exec.
         unsafe {
             command.pre_exec(move || {
-                libc::signal(libc::SIGHUP, disposition);
-                libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                for signal in [libc::SIGINT, libc::SIGHUP, libc::SIGTERM] {
+                    let disposition = if ignored_signal == Some(signal) {
+                        libc::SIG_IGN
+                    } else {
+                        libc::SIG_DFL
+                    };
+                    libc::signal(signal, disposition);
+                }
                 Ok(())
             });
         }
@@ -12570,7 +12571,7 @@ mod termination_signals {
     #[test]
     fn sigterm_cancels_cleanly_and_leaves_no_temp_folder() {
         let temp = setup_temp_dir();
-        let mut child = spawn_long_apply(temp.path(), false);
+        let mut child = spawn_long_apply(temp.path(), None);
         unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
         let status = child.wait().expect("wait");
         assert_eq!(status.code(), Some(130), "{status:?}");
@@ -12580,12 +12581,96 @@ mod termination_signals {
     #[test]
     fn inherited_ignored_sighup_still_lets_the_run_finish() {
         let temp = setup_temp_dir();
-        let mut child = spawn_long_apply(temp.path(), true);
+        let mut child = spawn_long_apply(temp.path(), Some(libc::SIGHUP));
         unsafe { libc::kill(child.id() as i32, libc::SIGHUP) };
         let status = child.wait().expect("wait");
         assert!(status.success(), "{status:?} signal {:?}", status.signal());
         assert!(temp.path().join("out.7z").exists());
         assert_no_temp_folder_left(temp.path());
+    }
+
+    /// A shell's background job starts with SIGINT ignored, so a terminal Ctrl-C aimed at the
+    /// foreground job must not cancel it.
+    #[test]
+    fn inherited_ignored_sigint_still_lets_the_run_finish() {
+        let temp = setup_temp_dir();
+        let mut child = spawn_long_apply(temp.path(), Some(libc::SIGINT));
+        unsafe { libc::kill(child.id() as i32, libc::SIGINT) };
+        let status = child.wait().expect("wait");
+        assert!(status.success(), "{status:?} signal {:?}", status.signal());
+        assert!(temp.path().join("out.7z").exists());
+        assert_no_temp_folder_left(temp.path());
+    }
+
+    /// The first SIGINT must stop the VCDIFF window loops, sequential (`--threads 1`) and
+    /// parallel, instead of letting the whole diff finish before the run reports 130.
+    #[test]
+    fn first_sigint_stops_an_xdelta_create_before_the_diff_finishes() {
+        use std::io::{BufRead, BufReader, Read};
+
+        for threads in ["1", "2"] {
+            let temp = setup_temp_dir();
+            let original = temp.path().join("original.bin");
+            let modified = temp.path().join("modified.bin");
+            fs::write(&original, pseudo_random_bytes(96 * 1024 * 1024, 11)).expect("original");
+            let mut changed = pseudo_random_bytes(96 * 1024 * 1024, 11);
+            changed[1000] ^= 0xff;
+            fs::write(&modified, changed).expect("modified");
+            // The output sits in directories the run creates, which a cancel must also remove.
+            let patch = temp.path().join("new1/new2/update.xdelta");
+            let mut command =
+                std::process::Command::new(assert_cmd::cargo::cargo_bin("rom-weaver"));
+            command
+                .current_dir(temp.path())
+                .env("PWD", temp.path())
+                .args(["patch", "create", "--original"])
+                .arg(&original)
+                .arg("--modified")
+                .arg(&modified)
+                .args([
+                    "--format",
+                    "xdelta",
+                    "--log-level",
+                    "debug",
+                    "--threads",
+                    threads,
+                ])
+                .arg("--output")
+                .arg(&patch)
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped());
+            // SAFETY: only async-signal-safe signal() runs between fork and exec.
+            unsafe {
+                command.pre_exec(|| {
+                    libc::signal(libc::SIGINT, libc::SIG_DFL);
+                    Ok(())
+                });
+            }
+            let mut child = command.spawn().expect("spawn create");
+            let mut stderr = BufReader::new(child.stderr.take().expect("stderr"));
+            let mut log = String::new();
+            // The run installs its signal handler before it logs the start of the diff.
+            while !log.contains("xdelta create start") {
+                let read = stderr.read_line(&mut log).expect("read stderr");
+                assert!(read > 0, "create ended before the diff started: {log}");
+            }
+            unsafe { libc::kill(child.id() as i32, libc::SIGINT) };
+            stderr.read_to_string(&mut log).expect("read stderr");
+            let status = child.wait().expect("wait");
+            assert_eq!(
+                status.code(),
+                Some(130),
+                "threads {threads}: {status:?}\n{log}"
+            );
+            assert!(
+                !log.contains("xdelta create phase timings"),
+                "threads {threads}: the diff ran to completion after SIGINT\n{log}"
+            );
+            assert!(
+                !temp.path().join("new1").exists(),
+                "threads {threads}: a cancelled create left its output directories"
+            );
+        }
     }
 
     /// The second signal takes the forced `process::exit(130)` path, which skips every `Drop`; the
@@ -12595,7 +12680,7 @@ mod termination_signals {
         let temp = setup_temp_dir();
         let preserved = temp.path().join("completed.bin");
         fs::write(&preserved, b"completed before cancellation").expect("completed output");
-        let mut child = spawn_long_apply(temp.path(), false);
+        let mut child = spawn_long_apply(temp.path(), None);
         unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
         std::thread::sleep(Duration::from_millis(30));
         unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };

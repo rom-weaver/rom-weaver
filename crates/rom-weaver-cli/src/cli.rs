@@ -1087,7 +1087,7 @@ fn install_cancel_handler(mode: OutputMode) {
     static SIGNALLED: AtomicBool = AtomicBool::new(false);
     let token = process_cancellation_token();
     #[cfg(unix)]
-    let ignored_signals = ignored_termination_signals();
+    let ignored_signals = ignored_cancel_signals();
     let result = ctrlc::set_handler(move || {
         if SIGNALLED.swap(true, Ordering::SeqCst) {
             // process::exit skips Drop, so the temp allocators cannot clean up on their own.
@@ -1117,8 +1117,8 @@ fn install_cancel_handler(mode: OutputMode) {
             "cancelling; press Ctrl-C again to stop immediately",
         );
     });
-    // ctrlc overwrites an inherited SIG_IGN (e.g. from `nohup`); put it back so a run started
-    // that way still survives SIGHUP/SIGTERM as it did before the handler covered them.
+    // ctrlc overwrites an inherited SIG_IGN (`nohup`, or a shell's background job ignoring
+    // SIGINT); put it back so a run started that way keeps ignoring that signal.
     #[cfg(unix)]
     for signal in ignored_signals {
         // SAFETY: restoring SIG_IGN for a valid signal number.
@@ -1137,10 +1137,10 @@ fn install_cancel_handler(mode: OutputMode) {
     }
 }
 
-/// SIGHUP/SIGTERM dispositions that were SIG_IGN when the process started.
+/// SIGINT/SIGHUP/SIGTERM dispositions that were SIG_IGN when the process started.
 #[cfg(unix)]
-fn ignored_termination_signals() -> Vec<libc::c_int> {
-    [libc::SIGHUP, libc::SIGTERM]
+fn ignored_cancel_signals() -> Vec<libc::c_int> {
+    [libc::SIGINT, libc::SIGHUP, libc::SIGTERM]
         .into_iter()
         .filter(|&signal| {
             // SAFETY: a null new action only queries the current disposition.

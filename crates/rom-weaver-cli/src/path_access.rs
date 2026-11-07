@@ -55,12 +55,20 @@ pub(super) fn check_readable(path: &Path) -> Result<(), PathAccessError> {
 
 /// Confirm files can be created inside `directory`, creating the directory
 /// itself when it is missing. "Missing" is never an outcome here - it is either
-/// created or the failure to create it is the error.
+/// created or the failure to create it is the error. Directories it creates are
+/// registered for removal if the run is cancelled.
 pub(super) fn check_writable_dir(directory: &Path) -> Result<(), RomWeaverError> {
-    if !directory.exists()
-        && let Err(error) = fs::create_dir_all(directory)
-    {
-        return Err(denied_error(IoOp::CreateDir, directory, error));
+    if !directory.exists() {
+        // Registered before they exist, outermost first, so a cancelled run removes them (when
+        // still empty) after the outputs they hold.
+        let created_dirs = crate::extract_command::missing_dirs_to_create(directory);
+        for dir in created_dirs.iter().rev() {
+            rom_weaver_core::register_in_progress_output(dir);
+        }
+        if let Err(error) = fs::create_dir_all(directory) {
+            return Err(denied_error(IoOp::CreateDir, directory, error));
+        }
+        trace!(directory = %directory.display(), created = created_dirs.len(), "created output directory");
     }
 
     if !PROBE_ENABLED {
