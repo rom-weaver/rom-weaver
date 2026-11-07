@@ -21,11 +21,18 @@ This page lists the format specifications and implementations used to check rom-
 
 ## Patch format specifications
 
-- IPS: <https://zerosoft.zophar.net/ips.php>
+- IPS: <https://zerosoft.zophar.net/ips.php> (informal; it omits the `EOF`-offset quirk, the truncation extension, and size limits that Flips defines)
 - BPS (Beat Patching System): <https://floating.muncher.se/byuu/bps/bps_spec.html>
-- VCDIFF: RFC 3284 <https://www.rfc-editor.org/rfc/rfc3284.html>
+- UPS: byuu's "UPS File Format Specification" (2008-04-18). It does not say how to handle hunks past the output size; byuu's `nall/ups.hpp` and Flips drop those bytes.
+- VCDIFF: RFC 3284 <https://www.rfc-editor.org/rfc/rfc3284.html>. The xdelta app header, window Adler32, secondary compressors (DJW, LZMA, FGK), and BLAKE3 "armor" are xdelta3 extensions that RFC 3284 does not define.
+- GDIFF: W3C Note "Generic Diff Format Specification" <https://www.w3.org/TR/NOTE-gdiff-19970901>
+- PPF: `PPF3.txt` in the Icarus/Paradox PPF 3.0 distribution <https://github.com/meunierd/ppf>. PPF1 and PPF2 layouts are defined only by `ApplyPPF3.c` in the same distribution.
+- APS (N64): `aps.txt` (APS draft 1.2) in Silo and Fractal's `bb-aps12.zip`, mirrored at <http://n64.icequake.net/mirror/www.dextrose.com/files/n64/ips_tools/bb-aps12.zip>
+- RUP: Sobodash's NINJA 2.0 file format specification (`filespec20.txt`, 2006), quoted in a UniPatcher wiki fork <https://github.com/Destitute-Streetdwelling-Guttersnipe/UniPatcher/wiki/RUP-(NINJA2)>
+- BSP: `specification.md` in <https://github.com/aaaaaa123456789/bsp>
+- SOLID: the author's v4 structure page <https://rgcorp.ucoz.net/Info/sp_struct.html>
 - DLDI (Dynamically Linked Device Interface): <https://www.chishm.com/DLDI/>
-- BSDIFF family background paper: <https://www.daemonology.net/papers/bsdiff.pdf>
+- BSDIFF family background paper: <https://www.daemonology.net/papers/bsdiff.pdf>; the `BSDIFF40` layout is defined by bsdiff 4.3 <https://www.daemonology.net/bsdiff/>
 - DCP (Universal Dreamcast Patcher): no formal spec - a ZIP of per-file xdelta3/VCDIFF deltas applied inside a GD-ROM ISO9660 filesystem; convention documented from the UDP source (see implementations below).
 - ISO9660 / ECMA-119 (volume descriptors, directory records, path tables): <https://wiki.osdev.org/ISO_9660>
 - CD-ROM sector layout + EDC/ECC (ECMA-130, `MODE1/2352`): <https://www.ecma-international.org/wp-content/uploads/ECMA-130_2nd_edition_june_1996.pdf>
@@ -59,6 +66,17 @@ This page lists the format specifications and implementations used to check rom-
   - Vendored Flips snapshot: <https://github.com/Alcaro/Flips/tree/5a3d2012b8ea53ae777c24b8ac4edb9a6bdb9761>
 - xdelta3 (VCDIFF-compatible toolchain): <https://github.com/jmacd/xdelta>
 - open-vcdiff (RFC 3284 implementation): <https://github.com/google/open-vcdiff>
+- higan `nall/beat` (byuu's BPS apply and create code): <https://github.com/higan-emu/higan>
+- Atmosphère IPS32 patcher (`libraries/libstratosphere/source/patcher/patcher_api.cpp`): <https://github.com/Atmosphere-NX/Atmosphere>
+- EBPatcher and CoilSnake (EBP metadata): <https://github.com/Lyrositor/EBPatcher>, <https://github.com/pk-hack/CoilSnake>
+- javaxdelta (third-party GDIFF patcher): <https://sourceforge.net/projects/javaxdelta/>
+- A-Ptch (APSGBA; VB6 source): <https://github.com/Gamer2020/Unofficial-A-ptch>
+- UniPatcher (APS, APSGBA, RUP): <https://github.com/btimofeev/UniPatcher>
+- NINJA 2.0 `ninja2.php` (RUP and FireFlower `PAT` apply): <https://github.com/vector-man/ninja2>
+- dlditool v1.25 in devkitPro dstools: <https://github.com/devkitPro/dstools>
+- `dpspatcher.c` (DPS), as embedded in android-rom-patcher: <https://github.com/xperia64/android-rom-patcher>
+- Star Rod Classic (MOD/PMSR writer and Yay0 compression): <https://github.com/z64a/star-rod-classic>
+- HDiffPatch (`libHDiffPatch/HPatch/patch.c`; no separate specification exists): <https://github.com/sisong/HDiffPatch>
 - Universal Dreamcast Patcher (the `.dcp` reference; GPL-3.0, study only - do not copy): <https://github.com/DerekPascarella/UniversalDreamcastPatcher>
   - GD-ROM ISO9660 build/extract (DiscUtilsGD, MIT) used by it and by `buildgdi`: <https://github.com/Sappharad/GDIbuilder>
 - CD-ROM EDC/ECC reference (Neill Corlett's ECM algorithm; basis for the `mode1` re-encoder): widely mirrored as `ecm.c`/`unecm.c` (ECMA-130 P/Q Reed-Solomon product code over GF(2⁸), primitive poly `0x11D`, EDC poly `0x8001801B`).
@@ -84,24 +102,31 @@ This page lists the format specifications and implementations used to check rom-
 
 ## Quick mapping for `rom-weaver` patch families
 
-| `rom-weaver` format   | Primary references                                                        |
-| --------------------- | ------------------------------------------------------------------------- |
-| `IPS`, `IPS32`, `EBP` | IPS spec, Flips IPS delta creator, RomPatcher.js IPS implementation       |
-| `BPS`                 | byuu BPS spec, Flips/MultiPatch, RomPatcher.js BPS implementation         |
-| `UPS`                 | RomPatcher.js UPS implementation                                          |
-| `VCDIFF`, `xdelta`    | RFC 3284, xdelta3, open-vcdiff, RomPatcher.js VCDIFF implementation       |
-| `GDIFF`               | `rom-weaver` handler implementation (no single canonical spec linked yet) |
-| `APS`, `APSGBA`       | RomPatcher.js APS/APSGBA implementations                                  |
-| `RUP`                 | RomPatcher.js RUP implementation                                          |
-| `PPF`                 | RomPatcher.js PPF implementation, MultiPatch/ApplyPPF                     |
-| `PAT` / `FFP`         | `rom-weaver` handler implementation (public spec is scarce)               |
-| `BDF/BSDIFF40`        | BSDIFF paper, RomPatcher.js BDF implementation                            |
-| `BSP`                 | `rom-weaver` BSP implementation                                           |
-| `MOD` / `PMSR`        | RomPatcher.js PMSR implementation                                         |
-| `DLDI`                | Chishm DLDI page, `rom-weaver` DLDI implementation                        |
-| `DPS`                 | `rom-weaver` DPS implementation                                           |
-| `SOLID`               | `rom-weaver` SOLID implementation                                         |
-| `DCP` (Dreamcast)     | UniversalDreamcastPatcher (format oracle), DiscUtilsGD/buildgdi (GD-ROM layout), ECMA-130 (EDC/ECC), RFC 3284 (per-file deltas) |
+The first reference in each row is the complete one: the format author's specification or the original tool, which decides behavior when implementations disagree. RomPatcher.js is a cross-check only; it is not complete for any of these formats.
+
+| `rom-weaver` format | Primary references |
+| ------------------- | ------------------ |
+| `IPS` | Flips `libips.cpp` (records, RLE, `EOF` offset, truncation, create limits), IPS spec |
+| `IPS32` | Atmosphère `patcher_api.cpp` (`IPS32` header, `EEOF` footer, 32-bit offsets) |
+| `EBP` | EBPatcher and CoilSnake (IPS records plus a JSON metadata trailer with lowercase keys) |
+| `BPS` | byuu BPS spec, Flips `libbps.cpp` (strict apply and check order), higan `nall/beat`, MultiPatch |
+| `UPS` | byuu UPS spec and `nall/ups.hpp`, Flips `libups.cpp` |
+| `VCDIFF`, `xdelta` | RFC 3284 (core format), xdelta3 (app header, window Adler32, secondary compressors, armor), open-vcdiff |
+| `GDIFF` | W3C GDIFF note, javaxdelta |
+| `APS` | `aps.txt`, `n64aps.c`, and `n64caps.c` from `bb-aps12.zip` |
+| `APSGBA` | A-Ptch source (no author spec exists), UniPatcher |
+| `RUP` | NINJA 2.0 spec, `ninja2.php` |
+| `PPF` | `PPF3.txt`, `ApplyPPF3.c`, `MakePPF3.c`; MultiPatch wraps the same C code |
+| `PAT` / `FFP` | `ninja2.php` FireFlower reader (no public spec exists) |
+| `BDF/BSDIFF40` | bsdiff 4.3 `bspatch.c` and `bsdiff.c`, BSDIFF paper |
+| `BSP` | BSP `specification.md` and `bsppatch.js` |
+| `MOD` / `PMSR` | Star Rod Classic `Patcher.java` and `Yay0Helper.java` |
+| `DLDI` | dlditool v1.25, Chishm DLDI page |
+| `DPS` | `dpspatcher.c` |
+| `SOLID` | Author's v4 structure page and "Solid patch apply demo.c" |
+| `HDiffPatch` | HDiffPatch `patch.c` |
+| `NINJA1` | No public spec or source found |
+| `DCP` (Dreamcast) | UniversalDreamcastPatcher (format oracle), DiscUtilsGD/buildgdi (GD-ROM layout), ECMA-130 (EDC/ECC), RFC 3284 (per-file deltas) |
 
 ## BPS comparison: MultiPatch and Flips
 
@@ -126,9 +151,9 @@ Comparison target: MultiPatch `master`, whose PPF path wraps Icarus/Paradox `App
 | Area | MultiPatch / ApplyPPF | `rom-weaver` |
 | ---- | --------------------- | ------------ |
 | Apply mode | GUI apply calls `applyPPF`, which always uses APPLY mode. PPF3 undo data is skipped unless the separate command-line undo mode is used. | Normal apply always writes forward patch bytes. PPF3 undo data is parsed and reported, but not auto-applied. |
-| Validation | PPF2 validates original size and the block at `0x9320`; PPF3 validates `0x9320` for BIN and `0x80A0` for GI when blockcheck is enabled. | Uses the same validation offsets under strict checksum validation; the shared ignore mode can skip blockcheck bytes. |
+| Validation | PPF2 validates original size and the block at `0x9320`; PPF3 validates `0x9320` for BIN and `0x80A0` for GI when blockcheck is enabled. A mismatch prompts the user to continue. | Uses the same size check and validation offsets under strict checksum validation; the shared ignore mode skips the PPF2 size check and the blockcheck bytes. |
 | File IDs | Supports PPF2/PPF3 `file_id.diz` trailers when the footer magic/length marker is present. | Skips PPF2 and PPF3 trailers during file parsing, including the 2-byte PPF3 trailer and padded 4-byte variant. |
-| Create | Creates PPF3 with BIN image type, blockcheck enabled by default, no undo by default, and optional CLI switches for undo, validation, image type, description, and file ID. | Creates PPF3 forward patches with BIN-style blockcheck when the source is large enough; no explicit undo/file-id/image-type options yet. |
+| Create | Creates PPF3 with BIN image type, blockcheck enabled by default, no undo by default, and optional CLI switches for undo, validation, image type, description, and file ID. | Creates PPF3 forward patches with BIN-style blockcheck when the source is large enough. `--ppf-undo` adds undo data; there are no file-id or image-type options. |
 
 ## Notes
 
