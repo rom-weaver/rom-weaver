@@ -495,6 +495,17 @@ fn apply_upstream_hdiffsf20_zstd_fixture() {
 
     let output = apply_hdiffsf20(&source, &parsed.bytes, &header).expect("apply");
     assert_eq!(output, expected);
+
+    // The handler reads the compressor name through the file parser.
+    for threads in [1, 4] {
+        let output = apply_patch_file(
+            &fixture_path("source.bin"),
+            &fixture_path("upstream-hdiffsf20-zstd.hpatchz"),
+            threads,
+        )
+        .unwrap_or_else(|error| panic!("{threads} thread(s): {error}"));
+        assert_eq!(output, expected, "{threads} thread(s)");
+    }
 }
 
 #[test]
@@ -2144,16 +2155,28 @@ fn sf20_rle_decoder_reports_a_value_buffer_that_ends_early() {
 
 #[test]
 fn hdiff13_rle_reports_a_code_buffer_that_ends_early() {
-    let mut target = [0u8; 4];
-    let ctrl = [0xC3]; // rle_type 3 (copy), length 4
-    let mut decoder = super::HdiffRleDecoder::new(&ctrl, &[1, 2]); // only two code bytes
+    // rle_type 3 (copy) runs: 0xC3 is length 4, 0xC0 length 1, 0xC1 length 2.
+    let cases: [(&str, &[u8], &[u8], usize); 2] = [
+        ("one run longer than the code", &[0xC3], &[1, 2], 4),
+        (
+            "second run after a partly used code",
+            &[0xC0, 0xC1],
+            &[1, 2],
+            3,
+        ),
+    ];
+    for (label, ctrl, code, target_len) in cases {
+        let mut target = vec![0u8; target_len];
+        let mut decoder = super::HdiffRleDecoder::new(ctrl, code);
 
-    let error = decoder.add(&mut target).expect_err("short code buffer");
-    assert!(
-        error
-            .to_string()
-            .contains("HDiffPatch rle_code ended unexpectedly")
-    );
+        let error = decoder.add(&mut target).expect_err(label);
+        assert!(
+            error
+                .to_string()
+                .contains("HDiffPatch rle_code ended unexpectedly"),
+            "{label}: {error}"
+        );
+    }
 }
 
 #[test]
@@ -2830,6 +2853,15 @@ fn hdiff13_rejects_streams_that_are_not_consumed_exactly() {
             "HDIFF_STREAM_NOT_CONSUMED",
         ),
         (
+            "partly consumed rle streams",
+            Hdiff13Parts {
+                rle_ctrl: &[0xC1, 0x00], // a copy run of 2, then an unused rle0 record
+                rle_code: &[1, 2, 3, 4, 5],
+                ..valid
+            },
+            "rle_ctrl_left=1, rle_code_left=3",
+        ),
+        (
             "rle_ctrl shorter than the output",
             Hdiff13Parts {
                 rle_ctrl: &[],
@@ -2891,6 +2923,36 @@ fn hdiffsf20_rejects_a_zero_length_cover_that_is_not_the_last_cover() {
     let patch = build_hdiffsf20_header(4, 4, 2, &payload);
     let error = write_patch_and_apply(b"abcd", &patch, 1).expect_err("early zero-length cover");
     assert!(error.to_string().contains("zero-length cover"), "{error}");
+}
+
+#[test]
+fn hdiffsf20_reports_the_payload_bytes_left_after_the_last_cover() {
+    let mut rle = Vec::new();
+    write_var_u64(&mut rle, 4);
+    let mut payload = sf20_step_payload(&sf20_cover(0x00, 0, 4), &rle, &[]);
+    payload.extend_from_slice(b"xyz");
+    let patch = build_hdiffsf20_header(4, 4, 1, &payload);
+    let error = write_patch_and_apply(b"abcd", &patch, 1).expect_err("trailing payload bytes");
+    let message = error.to_string();
+    assert!(message.contains("HDIFF_STREAM_NOT_CONSUMED"), "{message}");
+    assert!(message.contains("bytes_left=3"), "{message}");
+}
+
+#[test]
+fn hdiffsf20_accepts_a_final_step_whose_only_cover_is_empty() {
+    // A zero-length cover with no gap adds no output, so the final step produces nothing.
+    let mut rle = Vec::new();
+    write_var_u64(&mut rle, 4);
+    let first = sf20_step_payload(&sf20_cover(0x00, 0, 4), &rle, &[]);
+    let empty_last = sf20_step_payload(&sf20_cover(0x00, 0, 0), &[], &[]);
+    let patch = build_hdiffsf20_header(4, 4, 2, &[first, empty_last].concat());
+    for threads in [1, 4] {
+        assert_eq!(
+            write_patch_and_apply(b"abcd", &patch, threads)
+                .unwrap_or_else(|error| panic!("{threads} thread(s): {error}")),
+            b"abcd"
+        );
+    }
 }
 
 #[test]
