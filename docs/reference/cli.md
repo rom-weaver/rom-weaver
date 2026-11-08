@@ -416,6 +416,7 @@ A named producer must be selected and precede its consumer. Member selection app
 ### Checksum flags
 
 - Formats that carry their own checksums are verified strictly. `--ignore-checksum-validation` applies the patch anyway, which can produce a broken ROM.
+- An APS (N64) patch also records the byte order of the ROM it was made from, and `--ignore-checksum-validation` does not skip that check. A source in another order fails with a message that names the fix: `--n64-byte-order byte-swapped` for a patch made from a byte-swapped (v64) ROM, `--n64-byte-order big-endian` otherwise.
 - `--expect-in ALGO=HEX` stops unless the ROM about to be patched matches.
 - `--expect-out ALGO=HEX` fails unless the finished ROM matches.
 - `--assume-in ALGO=HEX` takes a checksum on trust rather than reading the ROM to compute it. It is a speed option for scripts and verifies nothing.
@@ -481,7 +482,7 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 
 `--ppf-undo` writes PPF3 undo data (the original bytes under every record) so `tools ppf-undo` can revert the patch. It requires PPF output. Bytes the modified file adds past the original's end are restored as zeros, because PPF cannot shrink a file.
 
-`--xdelta-secondary none|lzma|djw|fgk|auto` compresses an xdelta patch's own contents with one of xdelta3's secondary compressors. The default is `none`; `auto` keeps whichever of `djw`, `lzma`, and `fgk` is smallest. It applies to xdelta output only: with `--format vcdiff` or any other format, a value other than `none` is an error, because plain VCDIFF has no secondary compression.
+`--xdelta-secondary none|lzma|djw|fgk|auto` compresses an xdelta patch's own contents with one of xdelta3's secondary compressors. The default is `none`; `auto` keeps whichever of `djw` and `lzma` is smaller. `fgk` is explicit only: xdelta3 3.2 and later leave the FGK decoder out by default, so `auto` never picks it. It applies to xdelta output only: with `--format vcdiff` or any other format, a value other than `none` is an error, because plain VCDIFF has no secondary compression.
 
 [Create patches from the CLI](../how-to/cli-create.md) provides a metadata example and reconstruction check.
 

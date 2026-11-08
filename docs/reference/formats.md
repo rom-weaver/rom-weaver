@@ -58,7 +58,7 @@ Every supported Apply entry also supports probe/parse, except DCP. DCP uses a sp
 | DPS | none | `.dps` | ✅ | ⚠️ ⁴ |
 | DCP | none | `.dcp` | ⚠️ ² | ❌ |
 
-> ¹ Single-file `.hdiff` and `.hpatchz` patches are supported. Directory patches (`HDIFF19`) are not supported.
+> ¹ Single-file `HDIFF13` and `HDIFFSF20` patches (`.hdiff`, `.hpatchz`) are supported, with raw, zstd, zlib, bz2, lzma, and lzma2 data. rom-weaver recognizes but does not support `HDIFFW26` windowed patches, `ENDSLEY/BSDIFF43` patches, `HDIFF19` directory diffs, and patches whose data is compressed with lz4, brotli, lzham, tuz, or 7zXZ. These fail with an unsupported-operation error (exit code 2) rather than a corrupt-patch error.
 >
 > ² DCP requires a Dreamcast disc and must be applied alone. The CLI takes a `.cue` or `.gdi` input; browser Apply also takes a GD-ROM CHD or an archive of the disc. Byte-level patch flags and checksum checks do not apply to this filesystem rebuild.
 >
@@ -69,6 +69,18 @@ Every supported Apply entry also supports probe/parse, except DCP. DCP uses a sp
 PPF, EBP, and MOD cannot encode a target smaller than the Original. Browser Create hides them for such a target, and CLI `patch create` and `patch create --plan` reject or omit them.
 
 BSP scripts with nonempty menus fail during apply or validation in the browser and CLI. Interactive choices are unsupported; no branch is selected automatically. Scripts without menus and empty menus remain supported.
+
+Messages a BSP script prints appear as warnings in the apply report, numbered in print order, up to 64 of them. When the script fails, they are appended to the error message.
+
+Other apply behavior by format:
+
+- **RUP:** A patch with several file entries applies them in order. After the first matching entry, each later entry whose source MD5 matches the previous output applies too; the report reads `chained N file entries`. Undo walks the entries in reverse.
+- **APSGBA:** A block checksum that covers only the bytes present in a block cut short by the end of the file is accepted, as older rom-weaver versions wrote it.
+- **PAT:** A line that looks like a record but is damaged, such as one with a bad offset, is skipped and listed by line number in a warning. Titles and other text lines are ignored.
+- **IPS32 and EBP:** Bytes after the IPS32 end marker are ignored with a warning. EBP metadata that is not a JSON object of strings is ignored with a warning; the records still apply.
+- **PPF2:** The check of the source size against the size stored in the patch is skipped by `--ignore-checksum-validation`.
+- **MOD:** A Yay0-compressed `.mod` file is decompressed before it is read.
+- **DPS:** A patch flagged as unstable applies with a warning.
 
 NINJA1 headers can be detected but not applied. PDS is unsupported.
 
