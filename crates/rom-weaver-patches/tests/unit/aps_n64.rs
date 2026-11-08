@@ -58,8 +58,40 @@ fn parse_reports_concrete_n64_validation_values() {
         .parse(&patch_path, &test_context_with_threads(&temp, 1))
         .expect("parse report");
 
-    assert!(report.label.contains("n64 source cart id ABC"));
-    assert!(report.label.contains("n64 source crc 0102030405060708"));
+    // The cart ID is the two bytes "AB"; the third header byte "C" is the country.
+    assert!(report.label.contains(
+        "n64 source cart id 4142; n64 source country 43; n64 source crc 0102030405060708"
+    ));
+}
+
+#[test]
+fn parse_reports_non_text_cart_id_and_country_bytes_without_lossy_rendering() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("binary-ids.aps");
+    let patch = build_aps_patch(
+        APS_N64_MODE,
+        Some(TestN64Header {
+            original_format: 1,
+            cart_id: [0xFF, 0x00, 0x80],
+            crc: [0; 8],
+            pad: [0; 5],
+        }),
+        0x100,
+        vec![],
+    );
+    fs::write(&patch_path, patch).expect("fixture");
+
+    let report = ApsN64PatchHandler::new(&APS)
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect("parse report");
+    assert!(
+        report
+            .label
+            .contains("n64 source cart id ff00; n64 source country 80;"),
+        "unexpected label: {}",
+        report.label
+    );
+    assert!(!report.label.contains('\u{FFFD}'));
 }
 
 #[test]
@@ -396,7 +428,6 @@ fn create_matches_rompatcher_js_n64_fixture() {
     // Fixture generated from:
     // https://github.com/marcrobledo/RomPatcher.js/blob/master/rom-patcher-js/modules/RomPatcher.format.aps_n64.js
     // using BinFile.js + APS.buildFromRoms(...).export(...).
-    let original_path = std::path::Path::new("original.z64");
     let mut original = vec![0u8; 0x200];
     for (index, byte) in original.iter_mut().enumerate() {
         *byte = (index % 251) as u8;
@@ -413,8 +444,7 @@ fn create_matches_rompatcher_js_n64_fixture() {
     modified[0x61] = 0x22;
     modified[0x62] = 0x33;
 
-    let created =
-        create_aps_patch_bytes(original_path, &original, &modified).expect("create fixture");
+    let created = create_aps_patch_bytes(&original, &modified).expect("create fixture");
     let expected = hex_to_bytes(
         "415053313001006e6f206465736372697074696f6e0000000000000000000000000000000000000000000000000000000000000000000000000158595aa0b1c2d3e4f516270000000000000200002000000000aa086000000003112233",
     );
@@ -958,4 +988,334 @@ fn apply_rejects_a_corrupt_output_size_that_would_write_gigabytes() {
         &test_context_with_threads(&temp, 2),
     );
     crate::test_support::assert_implausible_output_rejected(result, &output_path);
+}
+
+const Z64_MAGIC: [u8; 4] = [0x80, 0x37, 0x12, 0x40];
+const LITTLE_ENDIAN_MAGIC: [u8; 4] = [0x40, 0x12, 0x37, 0x80];
+const ROM_CRC: [u8; 8] = [0xA0, 0xB1, 0xC2, 0xD3, 0xE4, 0xF5, 0x16, 0x27];
+
+/// A 0x100-byte z64 ROM with cart ID "NZ" at 0x3C, country "E" at 0x3E and `ROM_CRC` at 0x10.
+fn z64_rom() -> Vec<u8> {
+    let mut rom: Vec<u8> = (0..0x100).map(|index| (index % 251) as u8).collect();
+    rom[..4].copy_from_slice(&Z64_MAGIC);
+    rom[0x10..0x18].copy_from_slice(&ROM_CRC);
+    rom[0x3C..0x3F].copy_from_slice(b"NZE");
+    rom
+}
+
+/// The same ROM as a Doctor V64 dump, where every 16-bit word is byte-swapped.
+fn v64_rom() -> Vec<u8> {
+    let mut rom = z64_rom();
+    for pair in rom.chunks_exact_mut(2) {
+        pair.swap(0, 1);
+    }
+    rom
+}
+
+fn little_endian_rom() -> Vec<u8> {
+    let mut rom = z64_rom();
+    for word in rom.chunks_exact_mut(4) {
+        word.reverse();
+    }
+    assert_eq!(rom[..4], LITTLE_ENDIAN_MAGIC);
+    rom
+}
+
+/// A type 1 patch holding the z64-order fields of `z64_rom` and one record at 0x80.
+fn n64_patch_for_format(original_format: u8, cart_and_country: [u8; 3]) -> Vec<u8> {
+    build_aps_patch(
+        APS_N64_MODE,
+        Some(TestN64Header {
+            original_format,
+            cart_id: cart_and_country,
+            crc: ROM_CRC,
+            pad: [0; 5],
+        }),
+        0x100,
+        vec![TestRecord::Simple {
+            offset: 0x80,
+            data: b"XY".to_vec(),
+        }],
+    )
+}
+
+fn apply_aps(
+    temp: &TestDir,
+    rom: &[u8],
+    patch: &[u8],
+    validation: PatchChecksumValidation,
+) -> rom_weaver_core::Result<Vec<u8>> {
+    let input_path = temp.child("input.rom");
+    let patch_path = temp.child("update.aps");
+    let output_path = temp.child("output.rom");
+    fs::write(&input_path, rom).expect("fixture");
+    fs::write(&patch_path, patch).expect("fixture");
+    ApsN64PatchHandler::new(&APS).apply(
+        &PatchApplyRequest {
+            input: input_path,
+            patches: vec![patch_path],
+            output: output_path.clone(),
+        },
+        &test_context_with_threads(temp, 2).with_patch_checksum_validation(validation),
+    )?;
+    Ok(fs::read(output_path).expect("output"))
+}
+
+fn expected_with_record(rom: &[u8]) -> Vec<u8> {
+    let mut expected = rom.to_vec();
+    expected[0x80..0x82].copy_from_slice(b"XY");
+    expected
+}
+
+#[test]
+fn apply_enforces_the_original_format_byte_against_the_input_byte_order() {
+    // n64aps: "Image is in the wrong format", fatal even with -f.
+    for validation in [
+        PatchChecksumValidation::Strict,
+        PatchChecksumValidation::Ignore,
+    ] {
+        let temp = TestDir::new();
+        let v64_patch = n64_patch_for_format(0, *b"NZE");
+        let z64_patch = n64_patch_for_format(1, *b"NZE");
+
+        let error = apply_aps(&temp, &z64_rom(), &v64_patch, validation)
+            .expect_err("a v64 patch must not apply to a z64 ROM");
+        assert!(
+            error
+                .to_string()
+                .contains("made from a byte-swapped (v64) ROM"),
+            "{error}"
+        );
+        assert!(
+            error
+                .to_string()
+                .contains("convert the source with --n64-byte-order byte-swapped ["),
+            "{error}"
+        );
+        let error = apply_aps(&temp, &v64_rom(), &z64_patch, validation)
+            .expect_err("a z64 patch must not apply to a v64 ROM");
+        assert!(
+            error.to_string().contains("made from a non-v64 ROM"),
+            "{error}"
+        );
+        assert!(
+            error
+                .to_string()
+                .contains("convert the source with --n64-byte-order big-endian ["),
+            "{error}"
+        );
+        let unknown_patch = n64_patch_for_format(2, *b"NZE");
+        let error = apply_aps(&temp, &z64_rom(), &unknown_patch, validation)
+            .expect_err("an unknown original format matches no ROM");
+        assert!(
+            error
+                .to_string()
+                .contains("unknown original format that no source can match ["),
+            "{error}"
+        );
+
+        assert_eq!(
+            apply_aps(&temp, &z64_rom(), &z64_patch, validation).expect("z64 on z64"),
+            expected_with_record(&z64_rom())
+        );
+        assert_eq!(
+            apply_aps(&temp, &v64_rom(), &v64_patch, validation).expect("v64 on v64"),
+            expected_with_record(&v64_rom())
+        );
+    }
+}
+
+#[test]
+fn validate_enforces_the_original_format_byte() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.z64");
+    let patch_path = temp.child("update.aps");
+    fs::write(&input_path, z64_rom()).expect("fixture");
+    fs::write(&patch_path, n64_patch_for_format(0, *b"NZE")).expect("fixture");
+    let error = ApsN64PatchHandler::new(&APS)
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1)
+                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+        )
+        .expect_err("a v64 patch must not validate against a z64 ROM");
+    assert!(error.to_string().contains("byte-swapped (v64)"), "{error}");
+}
+
+#[test]
+fn apply_names_the_header_field_that_does_not_match() {
+    let temp = TestDir::new();
+    let wrong_cart = n64_patch_for_format(1, *b"NXE");
+    let wrong_country = n64_patch_for_format(1, *b"NZJ");
+    let mut wrong_crc = n64_patch_for_format(1, *b"NZE");
+    wrong_crc[61 + 4] ^= 0xFF;
+
+    for (patch, field) in [
+        (
+            &wrong_cart,
+            "cart ID is 4e58 in the patch but 4e5a in the source",
+        ),
+        (
+            &wrong_country,
+            "country is 4a in the patch but 45 in the source",
+        ),
+        (
+            &wrong_crc,
+            "CRC is a0b1c2d31bf51627 in the patch but a0b1c2d3e4f51627 in the source",
+        ),
+    ] {
+        for rom in [z64_rom(), v64_rom()] {
+            let mut patch = patch.clone();
+            patch[57] = u8::from(rom[..4] == Z64_MAGIC);
+            let error = apply_aps(&temp, &rom, &patch, PatchChecksumValidation::Strict)
+                .expect_err("a mismatched header field must be rejected");
+            let message = error.to_string();
+            assert!(
+                message.contains("Source ROM checksum mismatch"),
+                "{message}"
+            );
+            assert!(message.contains(field), "{message}");
+
+            // Ignoring checksum validation still overrides cart ID, country and CRC.
+            assert_eq!(
+                apply_aps(&temp, &rom, &patch, PatchChecksumValidation::Ignore)
+                    .expect("ignore overrides field mismatches"),
+                expected_with_record(&rom)
+            );
+        }
+    }
+}
+
+#[test]
+fn apply_reads_v64_country_from_raw_offset_0x3f() {
+    // Byte-swapping the word at 0x3C moves country "E" from 0x3E to 0x3F.
+    let temp = TestDir::new();
+    let mut rom = v64_rom();
+    assert_eq!(rom[0x3E..0x40], *b"?E");
+    rom[0x3F] = b'J';
+    let error = apply_aps(
+        &temp,
+        &rom,
+        &n64_patch_for_format(0, *b"NZE"),
+        PatchChecksumValidation::Strict,
+    )
+    .expect_err("country differs");
+    assert!(
+        error
+            .to_string()
+            .contains("country is 45 in the patch but 4a in the source"),
+        "{error}"
+    );
+}
+
+fn create_aps(temp: &TestDir, original_name: &str, original: &[u8], threads: usize) -> Vec<u8> {
+    let original_path = temp.child(original_name);
+    let modified_path = temp.child("modified.bin");
+    let patch_path = temp.child("created.aps");
+    let mut modified = original.to_vec();
+    modified[0x80..0x82].copy_from_slice(b"XY");
+    fs::write(&original_path, original).expect("fixture");
+    fs::write(&modified_path, modified).expect("fixture");
+    ApsN64PatchHandler::new(&APS)
+        .create(
+            &PatchCreateRequest {
+                original: original_path,
+                modified: modified_path,
+                output: patch_path.clone(),
+                format: "APS".into(),
+            },
+            &test_context_with_threads(temp, threads),
+        )
+        .expect("create");
+    fs::read(patch_path).expect("patch")
+}
+
+#[test]
+fn create_derives_the_header_from_the_original_content_not_its_name() {
+    // n64caps: format byte 0 for a v64 original, 1 for z64, with z64-order cart ID, country and CRC.
+    for threads in [1, 4] {
+        for (name, rom, expected_format) in [
+            ("original.v64", z64_rom(), 1u8),
+            ("original.z64", v64_rom(), 0),
+            ("original.v64", v64_rom(), 0),
+            ("original.z64", z64_rom(), 1),
+        ] {
+            let temp = TestDir::new();
+            let patch = create_aps(&temp, name, &rom, threads);
+            assert_eq!(&patch[..5], b"APS10");
+            assert_eq!(patch[5], 1, "{name}: type 1 N64 patch");
+            assert_eq!(patch[57], expected_format, "{name}: original-format byte");
+            assert_eq!(&patch[58..60], b"NZ", "{name}: cart ID");
+            assert_eq!(patch[60], b'E', "{name}: country");
+            assert_eq!(&patch[61..69], &ROM_CRC, "{name}: CRC");
+            assert_eq!(&patch[69..74], &[0; 5]);
+
+            let applied = apply_aps(&temp, &rom, &patch, PatchChecksumValidation::Strict)
+                .expect("a created patch applies to its own original");
+            assert_eq!(applied, expected_with_record(&rom));
+        }
+    }
+}
+
+#[test]
+fn create_keeps_type_0_for_originals_without_a_z64_or_v64_header() {
+    for (name, rom) in [
+        ("original.n64", little_endian_rom()),
+        ("original.z64", vec![0x55; 0x100]),
+    ] {
+        let temp = TestDir::new();
+        let patch = create_aps(&temp, name, &rom, 1);
+        assert_eq!(patch[5], 0, "{name}: type 0 simple patch");
+    }
+}
+
+#[test]
+fn parse_rejects_unknown_patch_types_and_encoding_methods() {
+    let temp = TestDir::new();
+    let handler = ApsN64PatchHandler::new(&APS);
+    let context = test_context_with_threads(&temp, 1);
+
+    let mut unknown_type = simple_and_rle_patch();
+    unknown_type[5] = 2;
+    let mut unknown_encoding = simple_and_rle_patch();
+    unknown_encoding[6] = 1;
+
+    for (bytes, expected) in [
+        (unknown_type, "APS patch type 2 is not supported"),
+        (unknown_encoding, "APS encoding method 1 is not supported"),
+    ] {
+        let patch_path = temp.child("unknown.aps");
+        fs::write(&patch_path, &bytes).expect("fixture");
+        let error = handler
+            .parse(&patch_path, &context)
+            .expect_err("parse must reject");
+        assert!(error.to_string().contains(expected), "{error}");
+
+        let input_path = temp.child("input.bin");
+        fs::write(&input_path, b"abcdefghij").expect("fixture");
+        let error = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: temp.child("output.bin"),
+                },
+                &context,
+            )
+            .expect_err("apply must reject");
+        assert!(error.to_string().contains(expected), "{error}");
+        let error = handler
+            .validate(
+                &PatchValidateRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                },
+                &context,
+            )
+            .expect_err("validate must reject");
+        assert!(error.to_string().contains(expected), "{error}");
+    }
 }

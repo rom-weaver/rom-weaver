@@ -578,15 +578,6 @@ fn parse_apsgba_bytes_rejects_truncated_and_misaligned_input() {
             .contains("too small to contain a valid header")
     );
 
-    let mut no_record = vec![0u8; super::APS_GBA_HEADER_SIZE];
-    no_record[..4].copy_from_slice(b"APS1");
-    let error = parse_apsgba_bytes(&no_record).expect_err("a record-free patch must be rejected");
-    assert!(
-        error
-            .to_string()
-            .contains("too small to contain at least one record")
-    );
-
     let mut misaligned = vec![0u8; super::APS_GBA_HEADER_SIZE + super::APS_GBA_RECORD_SIZE + 1];
     misaligned[..4].copy_from_slice(b"APS1");
     let error =
@@ -611,17 +602,6 @@ fn parse_apsgba_file_rejects_truncated_misaligned_and_unlabelled_patches() {
             .contains("too small to contain a valid header")
     );
 
-    let no_record = temp.child("no-record.aps");
-    fs::write(&no_record, [0u8; super::APS_GBA_HEADER_SIZE]).expect("fixture");
-    let error = handler
-        .parse(&no_record, &context)
-        .expect_err("a record-free patch must be rejected");
-    assert!(
-        error
-            .to_string()
-            .contains("too small to contain at least one record")
-    );
-
     let misaligned = temp.child("misaligned.aps");
     fs::write(
         &misaligned,
@@ -644,18 +624,14 @@ fn parse_apsgba_file_rejects_truncated_misaligned_and_unlabelled_patches() {
 }
 
 #[test]
-fn create_emits_one_empty_record_when_the_files_match() {
+fn create_emits_a_header_only_patch_when_the_files_match() {
     let source = build_source_bytes(1024);
     let created = create_apsgba_patch_bytes(&source, &source).expect("create bytes");
-    assert_eq!(created.record_count, 1);
+    assert_eq!(created.record_count, 0);
+    assert_eq!(created.bytes.len(), super::APS_GBA_HEADER_SIZE);
 
     let parsed = parse_apsgba_bytes(&created.bytes).expect("parse bytes");
-    assert_eq!(parsed.records.len(), 1);
-    assert_eq!(parsed.records[0].offset, 0);
-    assert!(
-        parsed.records[0].xor_bytes.iter().all(|byte| *byte == 0),
-        "an unchanged file must produce an all-zero xor record"
-    );
+    assert!(parsed.records.is_empty());
 }
 
 #[test]
@@ -783,7 +759,7 @@ fn past_eof_source_checksum_errors_match_across_apply_paths() {
         &source,
         &patch,
         Some(
-            "validation failed: Source checksum invalid at offset 74; expected: fffe, Actual: ffff [patch.checksum_mismatch]",
+            "validation failed: Source checksum invalid at offset 74; expected: 1d0e, Actual: 1d0f [patch.checksum_mismatch]",
         ),
     );
 }
@@ -798,7 +774,7 @@ fn past_eof_target_checksum_errors_match_across_apply_paths() {
         &source,
         &patch,
         Some(
-            "validation failed: Target checksum invalid at offset 74; expected: fffe, Actual: ffff [patch.checksum_mismatch]",
+            "validation failed: Target checksum invalid at offset 74; expected: 1d0e, Actual: 1d0f [patch.checksum_mismatch]",
         ),
     );
 }
@@ -808,12 +784,12 @@ fn past_eof_record_patch(source: &[u8], offset: u32) -> Vec<u8> {
     patch.extend_from_slice(&(source.len() as u32).to_le_bytes());
     patch.extend_from_slice(&(source.len() as u32).to_le_bytes());
     patch.extend_from_slice(&offset.to_le_bytes());
-    // Empty endpoint CRCs MUST match the creator's initial CRC16 value, 0xffff.
-    patch.extend_from_slice(&0xffff_u16.to_le_bytes());
-    patch.extend_from_slice(&0xffff_u16.to_le_bytes());
+    // A block past EOF is CRCed as 64 KiB of zeros.
+    patch.extend_from_slice(&ZERO_BLOCK_CRC16.to_le_bytes());
+    patch.extend_from_slice(&ZERO_BLOCK_CRC16.to_le_bytes());
     patch.extend_from_slice(&vec![0x5a; super::APS_GBA_BLOCK_SIZE]);
     patch.extend_from_slice(&0_u32.to_le_bytes());
-    let unchanged_crc = super::crc16_bytes(source).to_le_bytes();
+    let unchanged_crc = reference_block_crc16(source).to_le_bytes();
     patch.extend_from_slice(&unchanged_crc);
     patch.extend_from_slice(&unchanged_crc);
     patch.extend_from_slice(&vec![0; super::APS_GBA_BLOCK_SIZE]);
@@ -955,13 +931,11 @@ fn identical_inputs_round_trip_with_valid_block_checksums() {
 
 proptest::proptest! {
     #[test]
-    fn identity_patch_checksums_match_the_first_block(source in proptest::collection::vec(proptest::prelude::any::<u8>(), 0..4097)) {
+    fn identity_patch_has_no_records(source in proptest::collection::vec(proptest::prelude::any::<u8>(), 0..4097)) {
         let created = create_apsgba_patch_bytes(&source, &source).expect("create");
         let parsed = parse_apsgba_bytes(&created.bytes).expect("parse");
-        proptest::prop_assert_eq!(parsed.records.len(), 1);
-        proptest::prop_assert_eq!(parsed.records[0].source_crc16, super::crc16_bytes(&source));
-        proptest::prop_assert_eq!(parsed.records[0].target_crc16, super::crc16_bytes(&source));
-        proptest::prop_assert!(parsed.records[0].xor_bytes.iter().all(|byte| *byte == 0));
+        proptest::prop_assert!(parsed.records.is_empty());
+        proptest::prop_assert_eq!(created.bytes.len(), super::APS_GBA_HEADER_SIZE);
     }
 }
 
@@ -1007,5 +981,394 @@ fn zero_xor_resizes_round_trip_with_valid_checksums() {
                 .expect("apply zero XOR resize");
             assert_eq!(fs::read(output).expect("output"), vec![0; target_size]);
         }
+    }
+}
+
+/// CRC16 (poly 0x1021, init 0xffff, no reflection) of 64 KiB of zeros, worked bitwise from A-Ptch.
+const ZERO_BLOCK_CRC16: u16 = 0x1d0f;
+
+/// A-Ptch's CRC16 of one record block: the bytes zero-padded to a full 64 KiB buffer.
+fn reference_block_crc16(bytes: &[u8]) -> u16 {
+    let mut padded = bytes.to_vec();
+    padded.resize(super::APS_GBA_BLOCK_SIZE, 0);
+    ccitt_false_crc16(&padded)
+}
+
+/// CRC16/CCITT-FALSE (poly 0x1021, init 0xffff, no reflection, no final xor), worked bitwise.
+fn ccitt_false_crc16(bytes: &[u8]) -> u16 {
+    let mut crc = 0xffff_u16;
+    for byte in bytes {
+        crc ^= u16::from(*byte) << 8;
+        for _ in 0..8 {
+            crc = if crc & 0x8000 != 0 {
+                (crc << 1) ^ 0x1021
+            } else {
+                crc << 1
+            };
+        }
+    }
+    crc
+}
+
+/// A patch built the way A-Ptch and UniPatcher define it: one record per 64 KiB block that
+/// differs, CRCs over the zero-padded blocks.
+fn reference_patch(source: &[u8], target: &[u8]) -> Vec<u8> {
+    let block = super::APS_GBA_BLOCK_SIZE;
+    let mut patch = b"APS1".to_vec();
+    patch.extend_from_slice(&(source.len() as u32).to_le_bytes());
+    patch.extend_from_slice(&(target.len() as u32).to_le_bytes());
+    for index in 0..source.len().max(target.len()).div_ceil(block) {
+        let slice = |bytes: &[u8]| {
+            bytes[(index * block).min(bytes.len())..((index + 1) * block).min(bytes.len())].to_vec()
+        };
+        let (source_block, target_block) = (slice(source), slice(target));
+        let xor = (0..block)
+            .map(|offset| {
+                source_block.get(offset).copied().unwrap_or(0)
+                    ^ target_block.get(offset).copied().unwrap_or(0)
+            })
+            .collect::<Vec<u8>>();
+        if xor.iter().all(|byte| *byte == 0) {
+            continue;
+        }
+        patch.extend_from_slice(&((index * block) as u32).to_le_bytes());
+        patch.extend_from_slice(&reference_block_crc16(&source_block).to_le_bytes());
+        patch.extend_from_slice(&reference_block_crc16(&target_block).to_le_bytes());
+        patch.extend_from_slice(&xor);
+    }
+    patch
+}
+
+/// Source and target sizes whose blocks end short of, or past, EOF.
+fn partial_block_cases() -> Vec<(Vec<u8>, Vec<u8>)> {
+    let block = super::APS_GBA_BLOCK_SIZE;
+    [
+        (block + 100, block + 100),
+        (block + 100, 2 * block + 50),
+        (2 * block + 50, block + 100),
+        (block, 2 * block + 7),
+        (2 * block, block),
+        (0, 100),
+        (100, 0),
+    ]
+    .into_iter()
+    .map(|(source_len, target_len)| {
+        let source = build_source_bytes(source_len);
+        let mut target = source.clone();
+        target.resize(target_len, 0);
+        for (index, byte) in target.iter_mut().enumerate().skip(source_len) {
+            *byte = ((index * 7 + 3) & 0xff) as u8;
+        }
+        if let Some(byte) = target.get_mut(5) {
+            *byte ^= 0x5a;
+        }
+        (source, target)
+    })
+    .collect()
+}
+
+#[test]
+fn handler_crc16_matches_the_ccitt_false_check_value() {
+    // The padded block ends in zeros, so only the unpadded check value 0x29b1 pins the algorithm.
+    assert_eq!(super::crc16_bytes(b"123456789"), 0x29b1);
+    assert_eq!(reference_block_crc16(&[]), ZERO_BLOCK_CRC16);
+}
+
+#[test]
+fn created_patches_carry_the_crc16_of_the_zero_padded_64kib_block() {
+    for (source, target) in partial_block_cases() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.gba");
+        let target_path = temp.child("target.gba");
+        fs::write(&source_path, &source).expect("source");
+        fs::write(&target_path, &target).expect("target");
+        let expected = reference_patch(&source, &target);
+        for threads in [1, 8] {
+            let patch_path = temp.child(&format!("created-{threads}.apsgba"));
+            ApsGbaPatchHandler::new(&APSGBA)
+                .create(
+                    &PatchCreateRequest {
+                        original: source_path.clone(),
+                        modified: target_path.clone(),
+                        output: patch_path.clone(),
+                        format: "APSGBA".into(),
+                    },
+                    &test_context_with_threads(&temp, threads),
+                )
+                .expect("create");
+            assert!(
+                fs::read(patch_path).expect("patch") == expected,
+                "source {} target {} threads {threads}",
+                source.len(),
+                target.len()
+            );
+        }
+    }
+}
+
+#[test]
+fn apply_and_validate_accept_patches_with_zero_padded_block_crcs() {
+    for (source, target) in partial_block_cases() {
+        assert_past_eof_paths(&source, &target, &reference_patch(&source, &target), None);
+    }
+}
+
+#[test]
+fn header_only_patch_applies_and_validates_as_a_no_op() {
+    let source = build_source_bytes(100);
+    let mut patch = b"APS1".to_vec();
+    patch.extend_from_slice(&100_u32.to_le_bytes());
+    patch.extend_from_slice(&100_u32.to_le_bytes());
+    assert_eq!(patch.len(), super::APS_GBA_HEADER_SIZE);
+    assert_past_eof_paths(&source, &source, &patch, None);
+}
+
+#[test]
+fn create_writes_a_header_only_patch_when_no_block_differs() {
+    for size in [0, 100, super::APS_GBA_BLOCK_SIZE] {
+        for threads in [1, 8] {
+            let temp = TestDir::new();
+            let source = temp.child("source.gba");
+            let patch = temp.child("identity.apsgba");
+            fs::write(&source, build_source_bytes(size)).expect("source");
+            ApsGbaPatchHandler::new(&APSGBA)
+                .create(
+                    &PatchCreateRequest {
+                        original: source.clone(),
+                        modified: source,
+                        output: patch.clone(),
+                        format: "APSGBA".into(),
+                    },
+                    &test_context_with_threads(&temp, threads),
+                )
+                .expect("create");
+            let mut expected = b"APS1".to_vec();
+            expected.extend_from_slice(&(size as u32).to_le_bytes());
+            expected.extend_from_slice(&(size as u32).to_le_bytes());
+            assert_eq!(
+                fs::read(patch).expect("patch"),
+                expected,
+                "size {size}, threads {threads}"
+            );
+        }
+    }
+}
+
+#[test]
+fn rejects_an_implausible_declared_target_size() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.gba");
+    let patch_path = temp.child("huge.apsgba");
+    let output_path = temp.child("output.gba");
+    fs::write(&input_path, build_source_bytes(4)).expect("input");
+    let mut patch = b"APS1".to_vec();
+    patch.extend_from_slice(&4_u32.to_le_bytes());
+    patch.extend_from_slice(&u32::MAX.to_le_bytes());
+    fs::write(&patch_path, patch).expect("patch");
+
+    let handler = ApsGbaPatchHandler::new(&APSGBA);
+    for memory_limit in [0, u64::MAX] {
+        let result = handler.apply(
+            &PatchApplyRequest {
+                input: input_path.clone(),
+                patches: vec![patch_path.clone()],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 2).with_patch_apply_in_memory_limit(memory_limit),
+        );
+        crate::test_support::assert_implausible_output_rejected(result, &output_path);
+    }
+    let result = handler.validate(
+        &PatchValidateRequest {
+            input: input_path,
+            patches: vec![patch_path],
+        },
+        &test_context_with_threads(&temp, 2),
+    );
+    crate::test_support::assert_implausible_output_rejected(result, &output_path);
+}
+
+/// How a test patch stores one block CRC16.
+#[derive(Clone, Copy)]
+enum StoredCrc {
+    /// CRC of the zero-padded 64 KiB block (A-Ptch, UniPatcher).
+    ZeroPadded,
+    /// CRC of only the bytes present, 0xffff when none (rom-weaver 0.24.0).
+    PresentBytes,
+    /// CRC of the first n bytes of the block, which no convention defines.
+    Prefix(usize),
+    /// The zero-padded CRC with one bit flipped.
+    Corrupt,
+}
+
+impl StoredCrc {
+    fn value(self, present: &[u8]) -> u16 {
+        match self {
+            Self::ZeroPadded => reference_block_crc16(present),
+            Self::PresentBytes => ccitt_false_crc16(present),
+            Self::Prefix(len) => ccitt_false_crc16(&present[..len]),
+            Self::Corrupt => reference_block_crc16(present) ^ 1,
+        }
+    }
+
+    fn is_refused(self) -> bool {
+        matches!(self, Self::Prefix(_) | Self::Corrupt)
+    }
+}
+
+struct StoredCrcCase {
+    name: &'static str,
+    source_len: usize,
+    target_len: usize,
+    offsets: &'static [u32],
+    source_crc: StoredCrc,
+    target_crc: StoredCrc,
+}
+
+/// A patch with one 16-byte XOR run per record offset whose block CRC16s are stored as the case
+/// says, the target it produces, and the strict-mode error it must raise (if any).
+fn stored_crc_patch(case: &StoredCrcCase) -> (Vec<u8>, Vec<u8>, Vec<u8>, Option<String>) {
+    let block = super::APS_GBA_BLOCK_SIZE;
+    let source = build_source_bytes(case.source_len);
+    let mut xor = vec![0u8; block];
+    xor[..16].fill(0x5a);
+    let mut target = source.clone();
+    target.resize(case.target_len, 0);
+    for offset in case.offsets {
+        for (index, xor_byte) in xor.iter().enumerate() {
+            let position = *offset as usize + index;
+            if position < case.target_len {
+                target[position] = source.get(position).copied().unwrap_or(0) ^ xor_byte;
+            }
+        }
+    }
+    let present = |bytes: &[u8], offset: u32| {
+        let start = (offset as usize).min(bytes.len());
+        bytes[start..(start + block).min(bytes.len())].to_vec()
+    };
+    let mut patch = b"APS1".to_vec();
+    patch.extend_from_slice(&(source.len() as u32).to_le_bytes());
+    patch.extend_from_slice(&(target.len() as u32).to_le_bytes());
+    let mut error = None;
+    for offset in case.offsets {
+        let (source_block, target_block) = (present(&source, *offset), present(&target, *offset));
+        let source_crc = case.source_crc.value(&source_block);
+        let target_crc = case.target_crc.value(&target_block);
+        patch.extend_from_slice(&offset.to_le_bytes());
+        patch.extend_from_slice(&source_crc.to_le_bytes());
+        patch.extend_from_slice(&target_crc.to_le_bytes());
+        patch.extend_from_slice(&xor);
+        let refused = [
+            (
+                case.source_crc.is_refused(),
+                "Source",
+                source_crc,
+                &source_block,
+            ),
+            (
+                case.target_crc.is_refused(),
+                "Target",
+                target_crc,
+                &target_block,
+            ),
+        ]
+        .into_iter()
+        .find(|(refused, ..)| *refused);
+        if let (None, Some((_, label, stored, bytes))) = (&error, refused) {
+            error = Some(format!(
+                "validation failed: {label} checksum invalid at offset {offset}; expected: {stored:04x}, Actual: {:04x} [patch.checksum_mismatch]",
+                reference_block_crc16(bytes)
+            ));
+        }
+    }
+    (source, target, patch, error)
+}
+
+#[test]
+fn block_crc16_accepts_the_legacy_convention_only_for_blocks_not_wholly_inside_the_file() {
+    let block = super::APS_GBA_BLOCK_SIZE;
+    let cases = [
+        StoredCrcCase {
+            name: "partial block, legacy source and target",
+            source_len: 73,
+            target_len: 73,
+            offsets: &[0],
+            source_crc: StoredCrc::PresentBytes,
+            target_crc: StoredCrc::PresentBytes,
+        },
+        StoredCrcCase {
+            name: "blocks wholly past EOF, 0xffff on both sides",
+            source_len: 73,
+            target_len: 73,
+            offsets: &[0, 74],
+            source_crc: StoredCrc::PresentBytes,
+            target_crc: StoredCrc::PresentBytes,
+        },
+        StoredCrcCase {
+            name: "source block past EOF, target block partial",
+            source_len: 100,
+            target_len: block + 10,
+            offsets: &[0, 0x1_0000],
+            source_crc: StoredCrc::PresentBytes,
+            target_crc: StoredCrc::PresentBytes,
+        },
+        StoredCrcCase {
+            name: "legacy source with a zero-padded target",
+            source_len: 73,
+            target_len: 73,
+            offsets: &[0],
+            source_crc: StoredCrc::PresentBytes,
+            target_crc: StoredCrc::ZeroPadded,
+        },
+        StoredCrcCase {
+            name: "partial block matching neither convention, source",
+            source_len: 73,
+            target_len: 73,
+            offsets: &[0],
+            source_crc: StoredCrc::Corrupt,
+            target_crc: StoredCrc::ZeroPadded,
+        },
+        StoredCrcCase {
+            name: "partial block matching neither convention, target",
+            source_len: 73,
+            target_len: 73,
+            offsets: &[0],
+            source_crc: StoredCrc::ZeroPadded,
+            target_crc: StoredCrc::Corrupt,
+        },
+        StoredCrcCase {
+            name: "block wholly inside the file, prefix CRC source",
+            source_len: 2 * block,
+            target_len: 2 * block,
+            offsets: &[0],
+            source_crc: StoredCrc::Prefix(100),
+            target_crc: StoredCrc::ZeroPadded,
+        },
+        StoredCrcCase {
+            name: "block wholly inside the file, empty-input CRC source",
+            source_len: 2 * block,
+            target_len: 2 * block,
+            offsets: &[0],
+            source_crc: StoredCrc::Prefix(0),
+            target_crc: StoredCrc::ZeroPadded,
+        },
+        StoredCrcCase {
+            name: "block wholly inside the file, prefix CRC target",
+            source_len: 2 * block,
+            target_len: 2 * block,
+            offsets: &[0],
+            source_crc: StoredCrc::ZeroPadded,
+            target_crc: StoredCrc::Prefix(100),
+        },
+    ];
+    for case in &cases {
+        let (source, target, patch, error) = stored_crc_patch(case);
+        assert_eq!(
+            error.is_some(),
+            case.source_crc.is_refused() || case.target_crc.is_refused(),
+            "{}",
+            case.name
+        );
+        assert_past_eof_paths(&source, &target, &patch, error.as_deref());
     }
 }
