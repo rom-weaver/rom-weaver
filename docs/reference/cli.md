@@ -416,7 +416,7 @@ A named producer must be selected and precede its consumer. Member selection app
 ### Checksum flags
 
 - Formats that carry their own checksums are verified strictly. `--ignore-checksum-validation` applies the patch anyway, which can produce a broken ROM.
-- An APS (N64) patch also records the byte order of the ROM it was made from, and `--ignore-checksum-validation` does not skip that check. A source in another order fails with a message that names the fix: `--n64-byte-order byte-swapped` for a patch made from a byte-swapped (v64) ROM, `--n64-byte-order big-endian` otherwise.
+- An APS (N64) patch also records whether the ROM it was made from was byte-swapped (v64), and `--ignore-checksum-validation` does not skip that check. A v64 source for a patch made from a non-v64 ROM, or the reverse, fails with a message that names `--n64-byte-order byte-swapped` or `--n64-byte-order big-endian`. See [Apply an N64 patch regardless of byte order](../how-to/cli-apply.md#apply-an-n64-patch-regardless-of-byte-order).
 - `--expect-in ALGO=HEX` stops unless the ROM about to be patched matches.
 - `--expect-out ALGO=HEX` fails unless the finished ROM matches.
 - `--assume-in ALGO=HEX` takes a checksum on trust rather than reading the ROM to compute it. It is a speed option for scripts and verifies nothing.

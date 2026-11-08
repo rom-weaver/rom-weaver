@@ -143,7 +143,7 @@ rom-weaver patch apply \
 
 The output keeps the input's byte order. The `.n64` extension above reflects that; `--n64-byte-order big-endian` selects the patch input, not the output format.
 
-An APS (N64) patch records the byte order of the ROM it was made from and refuses a source in another order, even with `--ignore-checksum-validation`. The error names the flag to use: `--n64-byte-order byte-swapped` for a patch made from a byte-swapped (v64) ROM, `--n64-byte-order big-endian` otherwise.
+An APS (N64) patch refuses a source whose v64 byte-swapping differs from the ROM it was made from; see [Checksum flags](../reference/cli.md#checksum-flags).
 
 <a id="check-patches-without-writing-anything"></a>
 
