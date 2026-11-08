@@ -295,7 +295,7 @@ impl PatchHandler for PpfPatchHandler {
         let mut warnings = Vec::new();
         if undo && modified_len > original_len {
             warnings.push(format!(
-                "undo cannot remove the {} byte(s) this patch appends; undoing leaves them as zeros",
+                "PPF undo cannot remove the {} byte(s) this patch appends; undoing leaves them as zeros",
                 modified_len - original_len
             ));
         }

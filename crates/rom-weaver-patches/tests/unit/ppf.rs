@@ -2667,7 +2667,7 @@ fn create_with_undo_round_trips_through_apply_and_undo() {
         assert!(
             report
                 .label
-                .contains("undo cannot remove the 3 byte(s) this patch appends"),
+                .contains("PPF undo cannot remove the 3 byte(s) this patch appends"),
             "{}",
             report.label
         );
