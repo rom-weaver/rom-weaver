@@ -1089,7 +1089,7 @@ fn apply_enforces_the_original_format_byte_against_the_input_byte_order() {
         assert!(
             error
                 .to_string()
-                .contains("convert the source with --n64-byte-order byte-swapped ["),
+                .contains("rerun with --n64-byte-order byte-swapped ["),
             "{error}"
         );
         let error = apply_aps(&temp, &v64_rom(), &z64_patch, validation)
@@ -1101,7 +1101,7 @@ fn apply_enforces_the_original_format_byte_against_the_input_byte_order() {
         assert!(
             error
                 .to_string()
-                .contains("convert the source with --n64-byte-order big-endian ["),
+                .contains("rerun with --n64-byte-order big-endian ["),
             "{error}"
         );
         let unknown_patch = n64_patch_for_format(2, *b"NZE");

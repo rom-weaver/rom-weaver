@@ -564,8 +564,8 @@ fn n64_format_name(original_format: u8) -> &'static str {
 /// headers only ever read as v64 or non-v64, so a patch with any other byte matches no source.
 fn original_format_remedy(original_format: u8) -> &'static str {
     match original_format {
-        APS_N64_FORMAT_BYTE_SWAPPED => "convert the source with --n64-byte-order byte-swapped",
-        APS_N64_FORMAT_OTHER => "convert the source with --n64-byte-order big-endian",
+        APS_N64_FORMAT_BYTE_SWAPPED => "rerun with --n64-byte-order byte-swapped",
+        APS_N64_FORMAT_OTHER => "rerun with --n64-byte-order big-endian",
         _ => "the patch records an unknown original format that no source can match",
     }
 }
