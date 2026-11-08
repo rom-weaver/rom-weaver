@@ -142,7 +142,7 @@ Other commands report the requested destinations and any unresolved work. Archiv
 
 In human output, a dry run shows the plan and a no-write notice. JSON plans carry `details.dry_run`, `writes`, `downloads`, and `read_only`; `writes` and `downloads` describe planned actions, not completed actions. Existing detailed plan fields remain available.
 
-`--force` overwrites an output that already exists on commands that support it. Without it, a command that would overwrite stops before writing anything. An output path that is a directory is refused with and without `--force`, in the form ``output `PATH` is a directory; choose a different --output path``. `-y`/`--yes` answers confirmations with yes; it does not choose between candidates.
+`--force` overwrites an output that already exists on commands that support it. Without it, a command that would overwrite stops before writing anything. On commands that write a file (`compress`, `trim`, `patch apply`, `patch create`, `weave create`, `save`, and `tools ppf-undo`), an output path that is a directory is refused with and without `--force`, in the form ``output `PATH` is a directory; choose a different --output path``. `extract`, `weave parse`, and a `playlist` folder layout write into a directory by design. `-y`/`--yes` answers confirmations with yes; it does not choose between candidates.
 
 rom-weaver only asks interactive questions when stdin and stderr are both terminals and neither JSON mode is active. Otherwise, it decides on its own or fails.
 
@@ -621,7 +621,7 @@ error: i/o error: cannot open `/roms/game.iso`: Permission denied (os error 13)
 (`/roms/game.iso` is mode 0600 owned by 0:0; this process runs as 1000:1000)
 ```
 
-The message identifies what was refused, who owns it, and which identity made the request. Only a genuinely missing path is reported as `input path does not exist`. A directory given where an input file is expected is reported as ``input is a directory, not a file: `PATH` `` (`trim` accepts directories and walks them). Both preflight messages carry `error_kind` `validation` in JSON. A file that exists but cannot be reached, including one behind a directory without search permission, is reported as a denial. [Fix a permission error](../how-to/fix-permission-errors.md) gives the corrective steps.
+The message identifies what was refused, who owns it, and which identity made the request. Only a genuinely missing path is reported as `input path does not exist`. A directory given where an input file is expected is reported as ``input is a directory, not a file: `PATH` `` (`compress` and `trim` accept directories and walk them). Both preflight messages carry `error_kind` `validation` in JSON. A file that exists but cannot be reached, including one behind a directory without search permission, is reported as a denial. [Fix a permission error](../how-to/fix-permission-errors.md) gives the corrective steps.
 
 Permission failures exit `1`. Under `--json`, the result document has `"status": "failed"` and `"exit_code": 1`, carrying `"stage": "validate"` when the preflight caught them. Under `--jsonl`, they arrive as a terminal event.
 

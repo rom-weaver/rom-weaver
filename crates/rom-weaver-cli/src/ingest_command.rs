@@ -323,6 +323,16 @@ impl CliApp {
                 ),
             );
         }
+        for pack in &database {
+            if let Some(report) = self.require_readable_file(
+                OperationFamily::Command,
+                Some("ingest".to_string()),
+                pack,
+                None,
+            ) {
+                return self.finish("ingest", report);
+            }
+        }
         let identify_database = match IdentifyDatabaseSet::load(&database) {
             Ok(identify_database) => identify_database,
             Err(error) => {
@@ -396,8 +406,7 @@ impl CliApp {
             );
         }
 
-        if let Some(report) = self.require_readable_path(
-            "ingest",
+        if let Some(report) = self.require_readable_file(
             OperationFamily::Command,
             Some("ingest".to_string()),
             &source,

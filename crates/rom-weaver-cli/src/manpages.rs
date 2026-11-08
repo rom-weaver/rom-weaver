@@ -126,7 +126,7 @@ pub fn default_man_dir() -> Option<PathBuf> {
         if let Some(path) = crate::env_paths::xdg_data_home() {
             return Some(path.join("man").join("man1"));
         }
-        std::env::var_os("HOME").map(|path| PathBuf::from(path).join(".local/share/man/man1"))
+        crate::env_paths::env_dir("HOME").map(|path| path.join(".local/share/man/man1"))
     }
 }
 

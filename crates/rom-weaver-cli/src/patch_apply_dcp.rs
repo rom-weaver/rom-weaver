@@ -158,22 +158,14 @@ impl CliApp {
         }
 
         let dcp_path = args.patches[0].clone();
-        if let Some(report) = self.require_readable_path(
-            "patch-apply",
-            OperationFamily::Patch,
-            None,
-            &args.input,
-            single.clone(),
-        ) {
+        if let Some(report) =
+            self.require_readable_file(OperationFamily::Patch, None, &args.input, single.clone())
+        {
             return report;
         }
-        if let Some(report) = self.require_readable_path(
-            "patch-apply",
-            OperationFamily::Patch,
-            None,
-            &dcp_path,
-            single.clone(),
-        ) {
+        if let Some(report) =
+            self.require_readable_file(OperationFamily::Patch, None, &dcp_path, single.clone())
+        {
             return report;
         }
 

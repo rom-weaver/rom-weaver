@@ -961,8 +961,6 @@ fn write_weave_create_output(
     Ok(bytes)
 }
 
-/// Normalize per-patch specs for the wasm JSON path: metadata vectors must be
-/// index-aligned with `patch` (same length) or omitted entirely.
 /// A directory gets the shared input message; any other non-file keeps the
 /// `<what> does not exist` wording callers match.
 fn require_weave_rom_file(path: &Path, what: &str) -> Result<()> {
@@ -980,6 +978,8 @@ fn require_weave_rom_file(path: &Path, what: &str) -> Result<()> {
     )))
 }
 
+/// Normalize per-patch specs for the wasm JSON path: metadata vectors must be
+/// index-aligned with `patch` (same length) or omitted entirely.
 fn weave_create_patch_specs(args: &WeaveCreateCommand) -> Result<Vec<WeaveCreatePatchSpec>> {
     if !args.patch_specs.is_empty() {
         return Ok(args.patch_specs.clone());

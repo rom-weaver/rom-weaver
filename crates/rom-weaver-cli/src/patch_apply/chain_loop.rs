@@ -384,6 +384,21 @@ impl CliApp {
         Ok(())
     }
 
+    /// Blames the user-named output for a failure on a raw staged output, which takes the
+    /// requested file name; any other failure keeps its own path.
+    fn blame_raw_staged_output(
+        inputs: &RunPatchApplyLoopInputs<'_>,
+        apply_output: &Path,
+        error: RomWeaverError,
+    ) -> RomWeaverError {
+        match inputs.requested_output {
+            Some(requested) if apply_output == inputs.staged_output => {
+                Self::blame_requested_output(error, apply_output, requested)
+            }
+            _ => error,
+        }
+    }
+
     /// The last stage writes `staged_output`; earlier stages write a temporary
     /// intermediate.
     fn chain_step_apply_output(
@@ -514,7 +529,7 @@ impl CliApp {
                 OperationFamily::Patch,
                 Some(step.format().to_string()),
                 "apply",
-                error,
+                Self::blame_raw_staged_output(inputs, apply_output, error),
                 context.single_thread_execution(),
             ),
         };

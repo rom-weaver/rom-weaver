@@ -2145,6 +2145,10 @@ fn patch_create_suggests_the_closest_create_format_for_a_typo() {
         label.contains("supported create formats are IPS, "),
         "{label}"
     );
+    let supported = label
+        .split_once("supported create formats are ")
+        .expect("supported formats")
+        .1;
     assert!(supported.contains("BPS"), "{label}");
 }
 
@@ -15399,5 +15403,34 @@ fn patch_apply_no_compress_failure_names_the_output_path() {
     assert!(
         message.contains(&format!("cannot create `{}`", output.display())),
         "the failure must name the create and the path: {message}"
+    );
+}
+
+/// A compressed output stages the patched bytes in a scratch file that takes the
+/// requested file name; the failure must name the requested path, not the scratch one.
+#[cfg(unix)]
+#[test]
+fn patch_apply_compressed_failure_names_the_requested_output_path() {
+    let temp = setup_temp_dir();
+    let long_stem = "a".repeat(300);
+    let output = temp.path().join(format!("{long_stem}.7z"));
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            fixture_path("secondary-source.bin").to_str().expect("path"),
+            "--patch",
+            fixture_path("secondary-djw.xdelta").to_str().expect("path"),
+            "--output",
+            output.to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+    let message = json["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains(&format!("cannot create `{}`", output.display())),
+        "the failure must name the requested output, not its scratch file: {message}"
     );
 }

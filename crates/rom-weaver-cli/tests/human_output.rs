@@ -117,26 +117,29 @@ fn man_install_reports_the_installed_pages() {
 #[cfg(unix)]
 #[test]
 fn man_install_without_a_home_fails_instead_of_writing_to_the_working_directory() {
-    let temp = TempDir::new().expect("temp dir");
-    let output = command()
-        .args(["man", "--install"])
-        .current_dir(temp.path())
-        .env_remove("HOME")
-        .env_remove("XDG_DATA_HOME")
-        .env_remove("ROM_WEAVER_MAN_DIR")
-        .assert()
-        .code(1)
-        .get_output()
-        .clone();
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("no home directory; pass --man-dir"),
-        "{stderr}"
-    );
-    assert!(
-        !temp.child("man").path().exists(),
-        "pages were written to the cwd"
-    );
+    for home in [None, Some("")] {
+        let temp = TempDir::new().expect("temp dir");
+        let mut install = command();
+        install
+            .args(["man", "--install"])
+            .current_dir(temp.path())
+            .env_remove("XDG_DATA_HOME")
+            .env_remove("ROM_WEAVER_MAN_DIR");
+        match home {
+            Some(value) => install.env("HOME", value),
+            None => install.env_remove("HOME"),
+        };
+        let output = install.assert().code(1).get_output().clone();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("no home directory; pass --man-dir"),
+            "{home:?}: {stderr}"
+        );
+        assert!(
+            !temp.child("man").path().exists() && !temp.child(".local").path().exists(),
+            "{home:?}: pages were written to the cwd"
+        );
+    }
 }
 
 #[cfg(unix)]
@@ -193,6 +196,29 @@ fn identify_database_path_ignores_empty_and_relative_data_dir_variables() {
             String::from_utf8_lossy(&output.stdout).trim(),
             expected.to_str().expect("path"),
             "{data_dir:?} / {xdg_data_home:?}"
+        );
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn identify_database_path_without_a_home_fails_instead_of_resolving_in_the_working_directory() {
+    for home in [None, Some("")] {
+        let temp = TempDir::new().expect("temp dir");
+        let mut path = command();
+        path.args(["identify", "database", "path"])
+            .current_dir(temp.path())
+            .env_remove("XDG_DATA_HOME")
+            .env_remove("ROM_WEAVER_DATA_DIR");
+        match home {
+            Some(value) => path.env("HOME", value),
+            None => path.env_remove("HOME"),
+        };
+        let output = path.assert().code(1).get_output().clone();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("no home directory; pass --database-dir"),
+            "{home:?}: {stderr}"
         );
     }
 }

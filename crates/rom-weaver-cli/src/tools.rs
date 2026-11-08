@@ -16,8 +16,8 @@ impl CliApp {
     }
 
     /// Publishes a finished output. Without `--force` the install never clobbers; a
-    /// forced run over an existing output replaces it through [`StagedOutput`], so a
-    /// failed copy leaves the original in place.
+    /// forced run over an existing output replaces it through [`StagedOutput`], which
+    /// keeps the original on failure when it can stage beside it.
     fn publish_ppf_undo_output(source: &Path, destination: &Path, force: bool) -> Result<()> {
         if !force || fs::symlink_metadata(destination).is_err() {
             return Self::copy_to_new_output_file(source, destination);

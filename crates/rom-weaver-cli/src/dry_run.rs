@@ -102,7 +102,8 @@ impl CliApp {
         if let Some(weave) = &args.bundle {
             if let Some(url) = super::weave_apply::weave_ref_as_url(weave) {
                 downloads.push(url.to_string());
-            } else if let Some(outcome) = self.plan_readable(command, OperationFamily::Patch, weave)
+            } else if let Some(outcome) =
+                self.plan_readable_file(command, OperationFamily::Patch, weave)
             {
                 return outcome;
             }
@@ -179,11 +180,15 @@ impl CliApp {
 
     fn plan_ingest_dry_run(&self, args: &IngestCommand) -> AppRunOutcome {
         let command = "ingest";
-        if let Some(outcome) = self.plan_readable(command, OperationFamily::Command, &args.input) {
+        if let Some(outcome) =
+            self.plan_readable_file(command, OperationFamily::Command, &args.input)
+        {
             return outcome;
         }
         for database in &args.database {
-            if let Some(outcome) = self.plan_readable(command, OperationFamily::Command, database) {
+            if let Some(outcome) =
+                self.plan_readable_file(command, OperationFamily::Command, database)
+            {
                 return outcome;
             }
         }
@@ -198,11 +203,14 @@ impl CliApp {
 
     fn plan_patch_create_dry_run(&self, args: &PatchCreateCommand) -> AppRunOutcome {
         let command = "patch-create";
-        if let Some(outcome) = self.plan_readable(command, OperationFamily::Patch, &args.original) {
+        if let Some(outcome) =
+            self.plan_readable_file(command, OperationFamily::Patch, &args.original)
+        {
             return outcome;
         }
         if let Some(modified) = &args.modified
-            && let Some(outcome) = self.plan_readable(command, OperationFamily::Patch, modified)
+            && let Some(outcome) =
+                self.plan_readable_file(command, OperationFamily::Patch, modified)
         {
             return outcome;
         }
@@ -300,7 +308,7 @@ impl CliApp {
     fn plan_ppf_undo_dry_run(&self, args: &PpfUndoCommand) -> AppRunOutcome {
         let command = "tools-ppf-undo";
         for path in [&args.rom, &args.patch] {
-            if let Some(outcome) = self.plan_readable(command, OperationFamily::Patch, path) {
+            if let Some(outcome) = self.plan_readable_file(command, OperationFamily::Patch, path) {
                 return outcome;
             }
         }
@@ -417,6 +425,25 @@ impl CliApp {
                 .map(|input| self.plan_read_only_input("identify", OperationFamily::Command, input))
                 .unwrap_or_else(|| self.read_only_dry_run("identify"));
         };
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Err(error) = super::identify_database::validate_identify_database_args(command) {
+            return self.finish(
+                "identify-database",
+                OperationReport::failed_with_error(
+                    OperationFamily::Command,
+                    None,
+                    "validate",
+                    error,
+                    None,
+                ),
+            );
+        }
+        if let Some(input) = super::identify_database::identify_database_input(command)
+            && let Some(outcome) =
+                self.plan_readable_file("identify-database", OperationFamily::Command, input)
+        {
+            return outcome;
+        }
         match command {
             IdentifyDatabaseCommands::List(_)
             | IdentifyDatabaseCommands::Status(_)
@@ -436,64 +463,33 @@ impl CliApp {
                         .to_string(),
                 ],
             ),
-            IdentifyDatabaseCommands::ImportRedump(args) => {
-                if let Some(outcome) =
-                    self.plan_readable("identify-database", OperationFamily::Command, &args.input)
-                {
-                    return outcome;
-                }
-                self.database_import_plan(
-                    args.database_dir.as_ref(),
-                    "import local Redump data",
-                    None,
-                )
-            }
+            IdentifyDatabaseCommands::ImportRedump(args) => self.database_import_plan(
+                args.database_dir.as_ref(),
+                "import local Redump data",
+                None,
+            ),
             IdentifyDatabaseCommands::InstallAll(args) => self.database_import_plan(
                 args.database_dir.as_ref(),
                 "install bundled identify packs",
                 None,
             ),
-            IdentifyDatabaseCommands::InstallGroup(args) => {
-                if let Some(from) = &args.from
-                    && let Some(outcome) =
-                        self.plan_readable("identify-database", OperationFamily::Command, from)
-                {
-                    return outcome;
-                }
-                self.database_import_plan(
-                    args.database_dir.as_ref(),
-                    "install the identify pack group",
-                    args.from
-                        .is_none()
-                        .then(|| "identify pack group archive".to_string()),
-                )
-            }
-            IdentifyDatabaseCommands::Install(args) => {
-                if let Some(from) = &args.from
-                    && let Some(outcome) =
-                        self.plan_readable("identify-database", OperationFamily::Command, from)
-                {
-                    return outcome;
-                }
-                self.database_import_plan(
-                    args.database_dir.as_ref(),
-                    "install Redump identify packs",
-                    args.from.is_none().then(|| "Redump DAT files".to_string()),
-                )
-            }
-            IdentifyDatabaseCommands::Update(args) => {
-                if let Some(from) = &args.from
-                    && let Some(outcome) =
-                        self.plan_readable("identify-database", OperationFamily::Command, from)
-                {
-                    return outcome;
-                }
-                self.database_import_plan(
-                    args.database_dir.as_ref(),
-                    "update Redump identify packs",
-                    args.from.is_none().then(|| "Redump DAT files".to_string()),
-                )
-            }
+            IdentifyDatabaseCommands::InstallGroup(args) => self.database_import_plan(
+                args.database_dir.as_ref(),
+                "install the identify pack group",
+                args.from
+                    .is_none()
+                    .then(|| "identify pack group archive".to_string()),
+            ),
+            IdentifyDatabaseCommands::Install(args) => self.database_import_plan(
+                args.database_dir.as_ref(),
+                "install Redump identify packs",
+                args.from.is_none().then(|| "Redump DAT files".to_string()),
+            ),
+            IdentifyDatabaseCommands::Update(args) => self.database_import_plan(
+                args.database_dir.as_ref(),
+                "update Redump identify packs",
+                args.from.is_none().then(|| "Redump DAT files".to_string()),
+            ),
         }
     }
 
@@ -558,20 +554,8 @@ impl CliApp {
         self.read_only_dry_run(command)
     }
 
-    fn plan_readable(
-        &self,
-        command: &str,
-        family: OperationFamily,
-        path: &Path,
-    ) -> Option<AppRunOutcome> {
-        if path.as_os_str() == "-" {
-            return None;
-        }
-        self.require_readable_path(command, family, None, path, None)
-            .map(|report| self.finish(command, report))
-    }
-
-    /// [`Self::plan_readable`] for an input that must be a single file.
+    /// Plans the readability check for an input that must be a single file, so a
+    /// directory fails as the real run does.
     fn plan_readable_file(
         &self,
         command: &str,

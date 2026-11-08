@@ -667,6 +667,15 @@ impl CliApp {
         ))
     }
 
+    /// The failure for a ROM input that cannot be read in place or a local `--weave` that is
+    /// not a readable file, or `None` when both are usable.
+    fn patch_apply_input_failure(&self, args: &PatchApplyCommand) -> Option<OperationReport> {
+        Self::unseekable_rom_input_failure("patch apply", &args.input).or_else(|| {
+            let weave = args.bundle.as_deref().filter(|path| path.exists())?;
+            self.require_readable_file(OperationFamily::Patch, None, weave, None)
+        })
+    }
+
     pub(super) fn run_patch_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
         if args.input == Path::new("-") {
             let report = OperationReport::failed(
@@ -678,7 +687,7 @@ impl CliApp {
             );
             return self.finish("patch-apply", report);
         }
-        if let Some(report) = Self::unseekable_rom_input_failure("patch apply", &args.input) {
+        if let Some(report) = self.patch_apply_input_failure(&args) {
             return self.finish("patch-apply", report);
         }
         if args.dry_run {
@@ -3141,6 +3150,9 @@ struct RunPatchApplyLoopInputs<'a> {
     steps: &'a [PatchApplyStep],
     apply_input: PathBuf,
     staged_output: &'a Path,
+    /// The output the user named when `staged_output` is a raw scratch file that takes
+    /// its file name; a failure creating it is blamed on this path.
+    requested_output: Option<&'a Path>,
     plan_target_lanes: bool,
     shared_patch_basis: PatchBasisMode,
     rom_member_inputs: &'a BTreeMap<String, PathBuf>,
