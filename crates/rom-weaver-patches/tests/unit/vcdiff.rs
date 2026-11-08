@@ -991,6 +991,15 @@ fn create_xdelta_patch_mode_none_disables_secondary_candidates() {
     fs::write(&input_path, &input).expect("write input");
     fs::write(&modified_path, &expected).expect("write modified");
 
+    let sink = Arc::new(rom_weaver_core::RecordingProgressSink::default());
+    let context = OperationContext::new_with_private_temp_root(
+        ThreadBudget::Fixed(8),
+        &std::env::temp_dir(),
+        "rom-weaver-vcdiff-tests-context",
+        sink.clone(),
+        CancellationToken::new(),
+    )
+    .with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::None);
     let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let report = handler
         .create(
@@ -1000,11 +1009,27 @@ fn create_xdelta_patch_mode_none_disables_secondary_candidates() {
                 output: patch_path.clone(),
                 format: "xdelta".into(),
             },
-            &test_context_with_threads(8)
-                .with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::None),
+            &context,
         )
         .expect("create xdelta patch");
     assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+    // No secondary candidate runs, so the progress bar must not report the secondary recode band:
+    // it climbs through the diff band and ends at the finalize percent without that detour.
+    let percents: Vec<f32> = sink
+        .snapshot()
+        .iter()
+        .filter(|event| event.command == "patch-create")
+        .filter_map(|event| event.percent)
+        .collect();
+    assert!(
+        percents.windows(2).all(|pair| pair[0] < pair[1]),
+        "{percents:?}"
+    );
+    assert_eq!(percents.last(), Some(&(CREATE_FINALIZE_PERCENT as f32)));
+    assert!(
+        !percents.contains(&(CREATE_SECONDARY_RECODE_BAND_END as f32)),
+        "{percents:?}"
+    );
     assert!(
         !report
             .thread_execution
@@ -1057,6 +1082,86 @@ fn create_xdelta_patch_round_trips_adjacent_runs_of_different_bytes() {
         )
         .expect("apply created xdelta patch");
     assert_eq!(fs::read(output_path).expect("read output"), expected);
+}
+
+/// A VCDIFF window with no source holds only ADD and RUN instructions. In the default code table
+/// (RFC 3284 section 5.6) opcode 0 is `RUN` and opcode 1 is `ADD` with an explicit size, and each
+/// is followed by the size as a varint; so ADD 35 is `1, 35` and a RUN of eight bytes is `0, 8`.
+/// The adjacent runs of 0x5b and 0x85 must stay two separate RUNs (a RUN carries one byte), and
+/// ADDs and uniform RUNs must come out as one instruction each. The suffix shares no 4-byte
+/// sequence with the rest of the target, so no COPY from the target itself is possible.
+#[test]
+fn create_vcdiff_patch_without_a_source_keeps_one_instruction_per_add_and_run() {
+    let prefix = b"unique prefix bytes before the runs";
+    let suffix = b"QX9!-closing~7531/ok";
+    let mut leading_run = vec![0x11_u8; 16];
+    leading_run.extend_from_slice(prefix);
+    let mut with_leading_run = leading_run.clone();
+    with_leading_run.extend([0x5b_u8; 8]);
+    with_leading_run.extend([0x85_u8; 8]);
+    with_leading_run.extend_from_slice(suffix);
+    let mut without_leading_run = prefix.to_vec();
+    without_leading_run.extend([0x5b_u8; 8]);
+    without_leading_run.extend([0x85_u8; 8]);
+    without_leading_run.extend_from_slice(suffix);
+
+    let cases: [(&str, &[u8], &[u8]); 2] = [
+        (
+            "uniform run before the merged runs",
+            &with_leading_run,
+            &[0, 16, 1, 35, 0, 8, 0, 8, 1, 20],
+        ),
+        (
+            "add before the merged runs",
+            &without_leading_run,
+            &[1, 35, 0, 8, 0, 8, 1, 20],
+        ),
+    ];
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF);
+    for (label, target, expected_instructions) in cases {
+        let temp = create_temp_dir();
+        let input_path = temp.join("input.bin");
+        let modified_path = temp.join("modified.bin");
+        let patch_path = temp.join("update.vcdiff");
+        let output_path = temp.join("output.bin");
+        fs::write(&input_path, b"").expect("write empty input");
+        fs::write(&modified_path, target).expect("write modified");
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: input_path.clone(),
+                    modified: modified_path,
+                    output: patch_path.clone(),
+                    format: "VCDIFF".into(),
+                },
+                &test_context(),
+            )
+            .expect("create vcdiff patch");
+
+        let patch = fs::read(&patch_path).expect("read patch");
+        let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
+        assert_eq!(parsed.windows.len(), 1, "{label}");
+        let window = &parsed.windows[0];
+        let instructions =
+            &patch[window.inst_start as usize..(window.inst_start + window.inst_len) as usize];
+        assert_eq!(instructions, expected_instructions, "{label}");
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context(),
+            )
+            .expect("apply created patch");
+        assert_eq!(
+            fs::read(output_path).expect("read output"),
+            target,
+            "{label}"
+        );
+    }
 }
 
 #[test]
@@ -2536,16 +2641,25 @@ fn decode_secondary_fgk_round_trips() {
 
 #[test]
 fn xdelta_fgk_compress_matches_the_reference_when_a_zero_weight_parent_is_promoted() {
-    // The third distinct symbol lands the tree in xdelta3-fgk.h's "parent of the remaining
-    // zeros" promote branch. Expected bytes come from an independent transliteration of
-    // xdelta3-fgk.h.
-    let input = [0u8, 1, 0, 2, 2, 1, 1];
-    let payload = xdelta_fgk_compress(&input).expect("compress fgk");
-    assert_eq!(payload, [0x00, 0x00, 0x02, 0xc0, 0x16]);
-    assert_eq!(
-        decode_fgk_secondary(&payload, input.len()).expect("decode fgk"),
-        input
-    );
+    // Each input drives the FGK tree through xdelta3-fgk.h's "parent of the remaining zeros"
+    // promote branch (the branch is skipped or taken differently by a wrong condition, which
+    // changes the code lengths). Expected bytes come from an independent transliteration of
+    // xdelta3-fgk.h; they are not derived from this crate.
+    let cases: [(&[u8], &[u8]); 4] = [
+        (&[0, 1, 0, 2, 2, 1, 1], &[0x00, 0x00, 0x02, 0xc0, 0x16]),
+        (&[0, 0, 1, 1, 1, 0], &[0x00, 0x01, 0xa8]),
+        (&[0, 0, 0, 1, 1, 1, 0], &[0x00, 0x03, 0xd0]),
+        (&[0, 0, 1, 2, 2], &[0x00, 0x01, 0x00, 0x40]),
+    ];
+    for (input, expected) in cases {
+        let payload = xdelta_fgk_compress(input).expect("compress fgk");
+        assert_eq!(payload, expected, "input {input:?}");
+        assert_eq!(
+            decode_fgk_secondary(expected, input.len()).expect("decode fgk"),
+            input,
+            "input {input:?}"
+        );
+    }
 }
 
 #[test]
@@ -3967,6 +4081,135 @@ fn app_headers_without_a_full_armor_digest_stay_opaque() {
             apply_patch_file(b"hello old WORLD", &patch, &test_context())
                 .unwrap_or_else(|error| panic!("{header:?}: {error}")),
             b"hello new WORLD"
+        );
+    }
+}
+
+/// Deterministic targets whose candidate sizes are known (empty source, so the patch is a single
+/// ADD/RUN/COPY stream of the target). Measured with the file names `input.bin` and
+/// `modified.bin`; the app header is the same size in every candidate, so only the differences
+/// below matter: `base` is the uncompressed patch, `djw` and `lzma` the secondary candidates.
+fn secondary_selection_target(family: u8, len: usize) -> Vec<u8> {
+    let mut state = 0x9E37_79B9_7F4A_7C15_u64 ^ ((u64::from(family) << 40) | len as u64);
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    match family {
+        0 => {
+            let words: [&[u8]; 5] = [b"alpha ", b"beta ", b"gamma ", b"\x00\x00\x00", b"fox "];
+            let mut target = Vec::new();
+            while target.len() < len {
+                target.extend_from_slice(words[(next() % 5) as usize]);
+            }
+            target.truncate(len);
+            target
+        }
+        1 => (0..len)
+            .map(|index| {
+                if next() % 64 == 0 {
+                    (next() & 0xFF) as u8
+                } else {
+                    (index % 7) as u8
+                }
+            })
+            .collect(),
+        _ => (0..len)
+            .map(|index| {
+                if index % 50 == 49 {
+                    (next() & 0xFF) as u8
+                } else {
+                    0x20 + ((index / 50) % 5) as u8
+                }
+            })
+            .collect(),
+    }
+}
+
+/// The created patch is the smallest of the uncompressed baseline and the secondary candidates;
+/// a candidate must be strictly smaller than the baseline to win, and between candidates the
+/// first one tried (DJW, then LZMA) keeps a tie.
+#[test]
+fn create_xdelta_patch_picks_the_smallest_candidate_and_keeps_ties_with_the_earlier_one() {
+    use rom_weaver_core::XdeltaSecondaryMode as Mode;
+    // (label, family, length, mode, expected secondary id)
+    let cases: [(&str, u8, usize, Mode, Option<u8>); 5] = [
+        // base 186, djw 154, lzma 231
+        (
+            "djw smaller than lzma",
+            0,
+            200,
+            Mode::Auto,
+            Some(XDELTA_DJW_SECONDARY_ID),
+        ),
+        // base 1072, djw 721, lzma 717
+        (
+            "lzma smaller than djw",
+            0,
+            2186,
+            Mode::Auto,
+            Some(XDELTA_LZMA_SECONDARY_ID),
+        ),
+        // base 479, djw 310, lzma 310
+        (
+            "djw and lzma tie",
+            2,
+            4178,
+            Mode::Auto,
+            Some(XDELTA_DJW_SECONDARY_ID),
+        ),
+        // base 72, djw 73, lzma 73: both secondary candidates are larger than the baseline
+        (
+            "both candidates larger than baseline",
+            1,
+            200,
+            Mode::Auto,
+            None,
+        ),
+        // base 188, lzma 188: a candidate equal to the baseline does not win
+        ("lzma ties the baseline", 2, 1292, Mode::Lzma, None),
+    ];
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
+    for (label, family, len, mode, expected_id) in cases {
+        let target = secondary_selection_target(family, len);
+        let temp = create_temp_dir();
+        let input_path = temp.join("input.bin");
+        let modified_path = temp.join("modified.bin");
+        let patch_path = temp.join("update.xdelta");
+        let output_path = temp.join("output.bin");
+        fs::write(&input_path, b"").expect("write empty input");
+        fs::write(&modified_path, &target).expect("write modified");
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: input_path.clone(),
+                    modified: modified_path,
+                    output: patch_path.clone(),
+                    format: "xdelta".into(),
+                },
+                &test_context().with_xdelta_secondary_mode(mode),
+            )
+            .expect("create xdelta patch");
+        let patch = fs::read(&patch_path).expect("read patch");
+        let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
+        assert_eq!(parsed.secondary_compressor_id, expected_id, "{label}");
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context(),
+            )
+            .expect("apply created patch");
+        assert_eq!(
+            fs::read(output_path).expect("read output"),
+            target,
+            "{label}"
         );
     }
 }
