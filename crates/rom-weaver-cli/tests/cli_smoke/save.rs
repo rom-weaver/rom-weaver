@@ -1674,3 +1674,26 @@ fn save_inspect_reports_integrity_failure_for_a_chosen_game_with_bad_checksums()
     assert!(!label.contains("no editor"), "{label}");
     assert_eq!(fs::read(save.path()).unwrap(), bytes);
 }
+
+#[test]
+fn save_export_schema_requires_the_save_operand_as_a_usage_error() {
+    for args in [
+        vec!["save", "export-schema"],
+        vec!["save", "export-schema", "--game", "pokemon-emerald"],
+    ] {
+        let assert = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .assert()
+            .code(2);
+        let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+        assert!(stderr.contains("<SAVE>"), "{args:?}: {stderr}");
+    }
+    let help = command_stdout(&["save", "export-schema", "--help"], 0);
+    let usage = String::from_utf8_lossy(&help)
+        .lines()
+        .find(|line| line.starts_with("Usage:"))
+        .expect("usage line")
+        .to_string();
+    assert!(usage.contains("<SAVE>"), "{usage}");
+}

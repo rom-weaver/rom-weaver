@@ -521,6 +521,11 @@ fn tools_ppf_undo_invalid_compression_options_preserve_existing_output() {
         ),
         (
             "restored.zip",
+            &["--no-compress", "--compress-level", "max"],
+            "--no-compress cannot be combined with --compress-level",
+        ),
+        (
+            "restored.zip",
             &["--compress-codec", "lzma2"],
             "unsupported zip codec",
         ),
@@ -1180,6 +1185,41 @@ fn tools_ppf_undo_preserves_existing_and_dangling_output_symlinks() {
 }
 
 #[test]
+fn tools_ppf_undo_force_replaces_an_existing_output() {
+    let temp = setup_temp_dir();
+    let (rom, patch, original, modified) = undo_fixture(&temp);
+    for (name, options) in [
+        ("restored.gba", vec!["--no-compress"]),
+        ("restored.zip", vec!["--compress-codec", "store"]),
+    ] {
+        let output = temp.child(name);
+        fs::write(output.path(), b"existing user output").expect("existing output");
+        let report = undo_report(&rom, &patch, output.path(), &options, 1);
+        let label = report["label"].as_str().expect("label");
+        assert!(
+            label.contains("refusing to overwrite") && label.contains("pass --force"),
+            "{name}: {label}"
+        );
+        assert_eq!(
+            fs::read(output.path()).expect("preserved output"),
+            b"existing user output"
+        );
+
+        let mut forced = options.clone();
+        forced.push("--force");
+        let report = undo_report(&rom, &patch, output.path(), &forced, 0);
+        assert_eq!(report["status"], "succeeded", "{name}");
+        let replaced = fs::read(output.path()).expect("replaced output");
+        if name.ends_with(".zip") {
+            assert_eq!(&replaced[..2], b"PK", "{name}");
+        } else {
+            assert_eq!(replaced, original, "{name}");
+        }
+        assert_eq!(fs::read(&rom).expect("source ROM"), modified);
+    }
+}
+
+#[test]
 fn tools_ppf_undo_preserves_existing_output_directory() {
     let temp = setup_temp_dir();
     let (rom, patch, _, _) = undo_fixture(&temp);
@@ -1187,17 +1227,20 @@ fn tools_ppf_undo_preserves_existing_output_directory() {
     fs::create_dir(output.path()).expect("output directory");
     fs::write(output.path().join("keep.txt"), b"keep directory contents")
         .expect("directory contents");
-    let report = undo_report(&rom, &patch, output.path(), &["--no-compress"], 1);
-    assert!(
-        report["label"]
-            .as_str()
-            .expect("label")
-            .contains("refusing to overwrite")
-    );
-    assert_eq!(
-        fs::read(output.path().join("keep.txt")).expect("preserved contents"),
-        b"keep directory contents"
-    );
+    for options in [vec!["--no-compress"], vec!["--no-compress", "--force"]] {
+        let report = undo_report(&rom, &patch, output.path(), &options, 1);
+        assert!(
+            report["label"]
+                .as_str()
+                .expect("label")
+                .contains("is a directory; choose a different --output path"),
+            "{options:?}: {report}"
+        );
+        assert_eq!(
+            fs::read(output.path().join("keep.txt")).expect("preserved contents"),
+            b"keep directory contents"
+        );
+    }
 }
 
 #[test]

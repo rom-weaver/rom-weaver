@@ -1,21 +1,31 @@
 use super::*;
 
 impl CliApp {
-    fn require_new_ppf_undo_outputs(outputs: &[PathBuf]) -> Result<()> {
+    fn require_ppf_undo_outputs_available(outputs: &[PathBuf], force: bool) -> Result<()> {
         for output in outputs {
-            trace!(output = %output.display(), "checking PPF undo output availability");
-            match fs::symlink_metadata(output) {
-                Ok(_) => {
-                    return Err(RomWeaverError::Validation(format!(
-                        "refusing to overwrite existing output `{}`; choose a different --output path",
-                        output.display()
-                    )));
-                }
-                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error.into()),
+            trace!(output = %output.display(), force, "checking PPF undo output availability");
+            // `ensure_output_available` follows links and passes a dangling one, which
+            // still occupies the name.
+            let dangling = !output.exists() && fs::symlink_metadata(output).is_ok();
+            if dangling && !force {
+                return Err(overwrite_refusal(output));
             }
+            ensure_output_available(output, force)?;
         }
         Ok(())
+    }
+
+    /// Publishes a finished output. Without `--force` the install never clobbers; a
+    /// forced run over an existing output replaces it through [`StagedOutput`], so a
+    /// failed copy leaves the original in place.
+    fn publish_ppf_undo_output(source: &Path, destination: &Path, force: bool) -> Result<()> {
+        if !force || fs::symlink_metadata(destination).is_err() {
+            return Self::copy_to_new_output_file(source, destination);
+        }
+        trace!(output = %destination.display(), "replacing existing PPF undo output");
+        let staged = StagedOutput::new(destination)?;
+        rom_weaver_core::copy_file_retrying_interrupted(source, staged.path())?;
+        staged.commit()
     }
 
     pub(super) fn run_tools(&self, command: ToolsCommands) -> AppRunOutcome {
@@ -289,7 +299,7 @@ impl CliApp {
         context.cancel().check()?;
         // Preserve undo/compression diagnostics, then validate every destination
         // before publishing any part of a disc. Dangling links are occupied too.
-        Self::require_new_ppf_undo_outputs(&outputs)?;
+        Self::require_ppf_undo_outputs_available(&outputs, args.force)?;
         if let Some(parent) = output
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
@@ -314,13 +324,13 @@ impl CliApp {
                 {
                     fs::create_dir_all(parent)?;
                 }
-                Self::copy_to_new_output_file(source, destination)?;
+                Self::publish_ppf_undo_output(source, destination, args.force)?;
             }
             report
                 .label
                 .push_str(&format!("; wrote full disc beside `{}`", output.display()));
         } else {
-            Self::copy_to_new_output_file(&ready_output, &output)?;
+            Self::publish_ppf_undo_output(&ready_output, &output, args.force)?;
         }
         Ok(Self::attach_emitted_files_details(
             report,

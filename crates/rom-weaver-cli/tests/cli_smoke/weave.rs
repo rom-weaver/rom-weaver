@@ -6868,3 +6868,33 @@ fn weave_create_resolves_rom_member_from_tar_stream_wrappers() {
         assert!(output.path().exists(), "{codec}");
     }
 }
+
+#[test]
+fn weave_create_rejects_weave_rom_with_no_weave_rom() {
+    for flags in [
+        ["--weave-rom", "base.bin", "--no-weave-rom"],
+        ["--no-weave-rom", "--weave-rom", "base.bin"],
+    ] {
+        let assert = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args([
+                "weave", "create", "--input", "base.bin", "--patch", "fix.ips", "--output",
+                "out.json",
+            ])
+            .args(flags)
+            .assert()
+            .code(2);
+        let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+        assert!(stderr.contains("--weave-rom"), "{flags:?}: {stderr}");
+        assert!(stderr.contains("--no-weave-rom"), "{flags:?}: {stderr}");
+    }
+}
+
+#[test]
+fn weave_create_help_uses_current_weave_value_names() {
+    let help = command_stdout(&["weave", "create", "--help"], 0);
+    let help = String::from_utf8_lossy(&help);
+    assert!(help.contains("--weave <ARCHIVE>"), "{help}");
+    assert!(help.contains("--weave-rom <ROM>"), "{help}");
+    assert!(!help.contains("BUNDLE"), "{help}");
+}

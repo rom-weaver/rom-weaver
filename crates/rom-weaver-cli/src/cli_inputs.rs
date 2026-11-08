@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use clap::{
-    Arg, ArgAction, ArgMatches, Command,
+    Arg, ArgAction, ArgGroup, ArgMatches, Command,
     builder::ArgPredicate,
     error::{Error, ErrorKind},
     parser::ValueSource,
@@ -12,6 +12,7 @@ use clap::{
 use crate::Commands;
 
 const FILE: &str = "file";
+const INPUT_FORMS: &str = "input_forms";
 const PLACEHOLDER_INPUT: &str = ".";
 
 pub(crate) fn decorate(command: Command) -> Command {
@@ -46,11 +47,11 @@ fn decorate_scalar(command: Command) -> Command {
     command
         .mut_arg("input", |arg| {
             arg.required(false)
-                .required_unless_present(FILE)
                 .default_value_if(FILE, ArgPredicate::IsPresent, PLACEHOLDER_INPUT)
                 .hide_default_value(true)
         })
         .arg(file_arg())
+        .group(input_forms())
 }
 
 fn decorate_identify(command: Command) -> Command {
@@ -59,10 +60,18 @@ fn decorate_identify(command: Command) -> Command {
 
 fn decorate_many(command: Command) -> Command {
     command
-        .mut_arg("input", |arg| {
-            arg.required(false).required_unless_present(FILE)
-        })
+        .mut_arg("input", |arg| arg.required(false))
         .arg(file_arg().action(ArgAction::Append).num_args(1..))
+        .group(input_forms())
+}
+
+/// A required group, so a missing input names both forms in the error and Usage line.
+/// It allows both together: `resolve` reports that conflict with its own message.
+fn input_forms() -> ArgGroup {
+    ArgGroup::new(INPUT_FORMS)
+        .args(["input", FILE])
+        .required(true)
+        .multiple(true)
 }
 
 fn file_arg() -> Arg {

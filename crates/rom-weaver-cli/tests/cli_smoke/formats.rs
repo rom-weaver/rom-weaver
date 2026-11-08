@@ -76,6 +76,64 @@ fn man_install_json_reports_the_installed_page() {
 }
 
 #[test]
+fn completions_leave_out_hidden_flags_but_the_flags_stay_accepted() {
+    for shell in ["bash", "zsh", "fish", "elvish", "powershell"] {
+        let script = command_stdout(&["completions", shell], 0);
+        assert!(
+            !String::from_utf8_lossy(&script).contains("entry-name"),
+            "{shell}"
+        );
+    }
+    let temp = setup_temp_dir();
+    let input = temp.child("game.bin");
+    let archive = temp.child("game.zip");
+    fs::write(input.path(), b"rom bytes").expect("input fixture");
+    command_stdout(
+        &[
+            "compress",
+            "-i",
+            input.path().to_str().expect("input"),
+            "-o",
+            archive.path().to_str().expect("archive"),
+            "--entry-name",
+            "renamed.bin",
+        ],
+        0,
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn bash_completion_offers_subcommand_flags_and_values() {
+    let temp = setup_temp_dir();
+    let script = temp.child("completion.bash");
+    fs::write(script.path(), command_stdout(&["completions", "bash"], 0))
+        .expect("completion script");
+    for (words, expected) in [
+        ("rom-weaver ch", "checksum"),
+        ("rom-weaver checksum --al", "--algo"),
+        ("rom-weaver patch apply --patch-header ''", "strip"),
+    ] {
+        let driver = format!(
+            "source \"$1\"; COMP_WORDS=({words}); COMP_CWORD=$((${{#COMP_WORDS[@]}}-1)); \
+             COMPREPLY=(); _rom__weaver rom-weaver \"${{COMP_WORDS[COMP_CWORD]}}\" \
+             \"${{COMP_WORDS[COMP_CWORD-1]}}\"; echo \"${{COMPREPLY[*]}}\""
+        );
+        let output = std::process::Command::new("bash")
+            .args(["-c", &driver, "bash"])
+            .arg(script.path())
+            .output()
+            .expect("run bash");
+        let replies = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            replies.split_whitespace().any(|word| word == expected),
+            "{words}: {replies} {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+#[test]
 fn bare_invocation_prints_full_help() {
     let mut command = Command::cargo_bin("rom-weaver").expect("binary");
     let assert = command.assert().code(2);

@@ -119,7 +119,9 @@ pub fn ensure_output_available(output_path: &Path, overwrite: bool) -> Result<()
     Err(overwrite_refusal(output_path))
 }
 
-fn overwrite_refusal(output_path: &Path) -> RomWeaverError {
+/// The refusal for an output that exists and was not forced, for callers whose own
+/// occupancy check sees what [`ensure_output_available`] does not (a dangling link).
+pub fn overwrite_refusal(output_path: &Path) -> RomWeaverError {
     RomWeaverError::Validation(format!(
         "refusing to overwrite existing output `{}` (pass --force to overwrite it)",
         output_path.display()

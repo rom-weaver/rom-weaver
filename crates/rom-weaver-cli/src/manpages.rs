@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    env, fs, io,
+    fs, io,
     path::{Path, PathBuf},
 };
 
@@ -111,26 +111,22 @@ pub fn page_name(topics: &[String]) -> String {
 
 /// The man page install directory, or `None` when no user data directory can be resolved.
 pub fn default_man_dir() -> Option<PathBuf> {
-    if let Some(path) = env::var_os("ROM_WEAVER_MAN_DIR") {
-        return Some(PathBuf::from(path));
+    if let Some(path) = crate::env_paths::env_dir("ROM_WEAVER_MAN_DIR") {
+        return Some(path);
     }
 
     #[cfg(windows)]
     {
-        return env::var_os("LOCALAPPDATA").map(|path| {
-            PathBuf::from(path)
-                .join("rom-weaver")
-                .join("docs")
-                .join("man")
-        });
+        return crate::env_paths::env_dir("LOCALAPPDATA")
+            .map(|path| path.join("rom-weaver").join("docs").join("man"));
     }
 
     #[cfg(not(windows))]
     {
-        if let Some(path) = env::var_os("XDG_DATA_HOME") {
-            return Some(PathBuf::from(path).join("man").join("man1"));
+        if let Some(path) = crate::env_paths::xdg_data_home() {
+            return Some(path.join("man").join("man1"));
         }
-        env::var_os("HOME").map(|path| PathBuf::from(path).join(".local/share/man/man1"))
+        std::env::var_os("HOME").map(|path| PathBuf::from(path).join(".local/share/man/man1"))
     }
 }
 

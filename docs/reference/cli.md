@@ -232,7 +232,7 @@ Native identify performs no network access.
 
 ### Identify database directory
 
-Installed packs live in one directory. The default is the per-user data directory: `$XDG_DATA_HOME/rom-weaver/identify` on Linux (`~/.local/share` fallback), `~/Library/Application Support/rom-weaver/identify` on macOS, `%APPDATA%\rom-weaver\identify` on Windows. `ROM_WEAVER_DATA_DIR` overrides the base; `--database-dir` overrides the full path.
+Installed packs live in one directory. The default is the per-user data directory: `$XDG_DATA_HOME/rom-weaver/identify` on Linux (`~/.local/share` fallback), `~/Library/Application Support/rom-weaver/identify` on macOS, `%APPDATA%\rom-weaver\identify` on Windows. `ROM_WEAVER_DATA_DIR` overrides the base; `--database-dir` overrides the full path. An empty `ROM_WEAVER_DATA_DIR`, `XDG_DATA_HOME`, or `APPDATA` counts as unset, and a relative `XDG_DATA_HOME` is ignored.
 
 ### `setup`
 
@@ -259,7 +259,7 @@ Native builds only; the browser build reports them as unsupported. Every subcomm
 | `install-all` | Install the default database for this rom-weaver version. |
 | `install-group <GROUP> [--from <ARCHIVE>]` | Download or import one optional pack group. |
 | `import-redump <ZIP>` | Build a pack from a local Redump DAT ZIP. |
-| `install <SYSTEM> [--from <ZIP>]` | Install one Redump system pack. Without `--from`, download the DAT from Redump. |
+| `install <SYSTEM> \| --all [--from <ZIP>]` | Install one Redump system pack, or every platform in the dump with `--all`. Without `--from`, download the DAT from Redump. |
 | `update [SYSTEM] [--from <ZIP>]` | Update one or all installed Redump packs. Without `--from`, download current DAT files. |
 
 `status` includes raw packs in the database directory and compressed packs under `full-v1/packs/`. Size and SHA-256 describe the stored file bytes, including compression. When both copies exist for one slug, the raw pack takes precedence. `remove` deletes both copies and their cheat shards; it does not delete data packaged beside the executable.
@@ -311,7 +311,7 @@ Native `checksum --digest --algo ALGO` prints only the primary checksum in lower
 
 `save identify`, `inspect`, `get`, `set`, and `export-schema` take a save path. `identify`, `inspect`, `get`, and `export-schema` do not write a file. `get` also takes one field ID.
 
-`save export-schema` requires a save path, including when `--game` selects the handler.
+`save export-schema` requires a save path, including when `--game` selects the handler. A missing path is a usage error with exit code 2.
 
 `save set` takes one or more `FIELD=VALUE` assignments. It checks all assignments before it changes a copy. `-n` or `--dry-run` returns the change preview and writes nothing. Human output reports on stderr when the requested values already match the save; `--quiet` retains this explanation.
 
@@ -378,7 +378,7 @@ For an ordinary file apply, `--output` is optional. Without it, the command writ
 
 Without an explicit compression flag, an output extension matching the selected ROM leaf writes raw ROM bytes, except an explicit `.bin` output: it is ambiguous between a raw ROM and a disc image, so it requires `--no-compress` or an explicit `--compress-format`. A registered creatable container extension selects that container. Unknown or ambiguous extensions fail rather than selecting a format silently.
 
-`--no-compress` and its compatibility alias `--raw` force raw output. `--compress-format`, `--compress-codec`, and `--compress-level` remain the canonical compression flags; `--format`, `--codec`, and `--level` are accepted aliases on `patch apply`.
+`--no-compress` and its compatibility alias `--raw` force raw output. `--compress-format`, `--compress-codec`, and `--compress-level` remain the canonical compression flags; `--format`, `--codec`, and `--level` are accepted aliases on `patch apply`. `--no-compress` cannot be combined with `--compress-format`, `--compress-codec`, or `--compress-level`.
 
 DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM data track and reassemble the whole disc, so they cannot be chained with another patch or combined with the header and checksum options. With `--no-compress`, a `.cue` or `.gdi` output receives the whole disc, with its tracks beside it; any other output path receives only the rebuilt data track. The JSON result names that track in `details.dcp_data_track`.
 
@@ -439,7 +439,7 @@ A named producer must be selected and precede its consumer. Member selection app
 | Flag | Values |
 | --- | --- |
 | `--code CODE` | One or more codes. Repeat the flag, or join codes in one value with `+`, commas, or newlines. |
-| `--code-system SYSTEM` | `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `sg1000`, `gameboy`, `gba`, or `psx`, when the ROM header does not name the console. |
+| `--code-system SYSTEM` | `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `sg1000`, `gameboy`, `gameboy-color`, `gba`, or `psx`, when the ROM header does not name the console. An unknown value is a usage error with exit code 2. |
 | `--code-kind KIND` | `auto` (default), `game-genie`, `gameshark`/`par`, `xploder`, `pro-action-rocky`, `gold-finger`, `game-shark-v1`, `game-shark-v1-raw`, `action-replay-v3`, or `action-replay-v3-raw`. |
 
 - `auto` detects 14-character SNES Gold Finger codes. Eight-digit NES Pro Action Rocky codes need an explicit `--code-kind`, because their shape is ambiguous.
@@ -504,7 +504,7 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 | `--expect-out` | Expected final result checks. |
 | `--patch-input-check`, `--patch-output-check` | Expected checks around the preceding patch. The earlier spellings `--patch-expect-in` and `--patch-expect-out` still work but are hidden from `--help`. |
 | `--assume-in` | Supplied ROM checksums used without reading the file to verify them. |
-| `--weave ARCHIVE`, `--no-weave-rom` | Archive packaging and exclusion of ROM bytes. |
+| `--weave ARCHIVE`, `--weave-rom ROM`, `--no-weave-rom` | Archive packaging, the file packed as the ROM, and exclusion of ROM bytes. `--weave-rom` and `--no-weave-rom` conflict. |
 | `--schema-ref URL` | Adds a `$schema` URL; omitted by default. |
 | `--from FILE`, `--from -` | Reads a specification from a file or stdin. File paths resolve against the spec directory, or the current directory for stdin. Explicit CLI values override the spec: `--patch` replaces the spec's patch chain and `--cheat` replaces its `cheats` array, in both cases wholesale. |
 | `--cheat ID_OR_DESCRIPTION` | Records a cheat selection in the weave's `cheats` array. Needs `--input`. Takes the same selection flags as `patch apply`. |
@@ -542,7 +542,7 @@ Recipe and output-path fields retain their bundle aliases. Command identifiers a
 
 ## Tools
 
-`tools ppf-undo` restores saved bytes from a PPF3 patch with undo data. Required flags: `--input` (patched ROM), `--patch`, and `--output`. Output paths must differ from both inputs.
+`tools ppf-undo` restores saved bytes from a PPF3 patch with undo data. Required flags: `--input` (patched ROM), `--patch`, and `--output`. Output paths must differ from both inputs. An existing output stops the command unless `--force` is given.
 
 Invalid undo data is rejected before writing; failed undo or compression preserves existing outputs. It cannot reverse unrelated later edits.
 
@@ -628,7 +628,7 @@ Permission failures exit `1`. Under `--json`, the result document has `"status":
 
 The pages under `docs/man` come from the same Clap definitions as `--help`. Release packaging generates them. `rom-weaver man [COMMAND...]` prints a page. `rom-weaver man --install [COMMAND...]` writes all pages, or the named page, to the configured man directory. `--man-dir DIR` and `ROM_WEAVER_MAN_DIR` select that directory.
 
-On Unix, the default install directory is `$XDG_DATA_HOME/man/man1`, with `~/.local/share/man/man1` as the fallback. On Windows, it is `%LOCALAPPDATA%\rom-weaver\docs\man`. When that directory cannot be resolved (no `XDG_DATA_HOME` or `HOME` on Unix, no `LOCALAPPDATA` on Windows), `--install` fails and asks for `--man-dir`.
+On Unix, the default install directory is `$XDG_DATA_HOME/man/man1`, with `~/.local/share/man/man1` as the fallback. An empty `ROM_WEAVER_MAN_DIR`, `XDG_DATA_HOME`, or `LOCALAPPDATA` counts as unset, and a relative `XDG_DATA_HOME` is ignored. On Windows, it is `%LOCALAPPDATA%\rom-weaver\docs\man`. When that directory cannot be resolved (no `XDG_DATA_HOME` or `HOME` on Unix, no `LOCALAPPDATA` on Windows), `--install` fails and asks for `--man-dir`.
 
 Homebrew, the macOS/Linux install script, and global npm installs add the pages to a Unix manpath. Windows installers store them under the installed package's `docs/man` directory. Cargo, cargo-binstall, and mise install only the executable. Docker stores the pages under `/usr/local/share/man/man1`, but its distroless image has no `man(1)` program.
 

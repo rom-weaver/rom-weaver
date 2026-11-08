@@ -334,6 +334,11 @@ impl CliApp {
                     "--no-compress cannot be combined with --compress-codec".to_string(),
                 ));
             }
+            if compress_level.is_some() {
+                return Err(RomWeaverError::Validation(
+                    "--no-compress cannot be combined with --compress-level".to_string(),
+                ));
+            }
             return Ok(PatchApplyCompressionOptions {
                 enabled: false,
                 requested_format: None,

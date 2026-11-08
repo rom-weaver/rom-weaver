@@ -15086,3 +15086,101 @@ fn patch_create_ips32_rejects_shrink_and_empty_targets() {
         }
     }
 }
+
+#[test]
+fn patch_apply_rejects_compress_level_with_no_compress() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let patch = temp.child("update.ips");
+    let output = temp.child("out.bin");
+    fs::write(input.path(), b"abcdefgh").expect("input fixture");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0,
+                data: b"Z".to_vec(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch fixture");
+    let event = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--no-compress",
+            "--compress-level",
+            "high",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        1,
+    );
+    let label = event["label"].as_str().expect("label");
+    assert!(
+        label.contains("--no-compress cannot be combined with --compress-level"),
+        "{label}"
+    );
+    assert!(!output.path().exists());
+}
+
+#[test]
+fn code_system_is_validated_by_clap_and_lists_every_cheat_system() {
+    for args in [
+        vec![
+            "patch",
+            "apply",
+            "--input",
+            "game.sfc",
+            "--patch",
+            "hack.bps",
+            "--code",
+            "000-000",
+            "--code-system",
+            "bogus",
+            "--output",
+            "out.sfc",
+        ],
+        vec![
+            "patch",
+            "create",
+            "--original",
+            "game.sfc",
+            "--code",
+            "000-000",
+            "--code-system",
+            "bogus",
+            "--output",
+            "out.bps",
+        ],
+    ] {
+        let assert = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .assert()
+            .code(2);
+        let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+        assert!(stderr.contains("unknown system"), "{args:?}: {stderr}");
+        assert!(stderr.contains("gameboy-color"), "{args:?}: {stderr}");
+    }
+    for subcommand in ["apply", "create"] {
+        let help = command_stdout(&["patch", subcommand, "--help"], 0);
+        let help = String::from_utf8_lossy(&help);
+        assert!(help.contains("--code-system <SYS>"), "{subcommand}: {help}");
+        assert!(help.contains("gameboy-color"), "{subcommand}: {help}");
+    }
+}
+
+#[test]
+fn patch_apply_weave_value_name_is_not_the_legacy_bundle() {
+    let help = command_stdout(&["patch", "apply", "--help"], 0);
+    let help = String::from_utf8_lossy(&help);
+    assert!(help.contains("--weave <WEAVE>"), "{help}");
+    assert!(!help.contains("BUNDLE"), "{help}");
+}

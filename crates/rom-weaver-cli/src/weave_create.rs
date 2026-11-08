@@ -494,6 +494,11 @@ impl CliApp {
         context: &OperationContext,
         warnings: &mut Vec<String>,
     ) -> Result<Option<WeaveRom>> {
+        if args.bundle_rom.is_some() && args.no_bundle_rom {
+            return Err(RomWeaverError::Validation(
+                "--weave-rom cannot be combined with --no-weave-rom".to_string(),
+            ));
+        }
         if args.bundle_rom.is_some() && args.rom.is_none() {
             return Err(RomWeaverError::Validation(
                 "--weave-rom requires --input so the recorded checksums describe the real ROM"

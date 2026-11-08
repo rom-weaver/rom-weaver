@@ -103,19 +103,17 @@ pub(super) struct LoadedPack {
 /// The identify database directory: env override, then the platform data dir.
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) fn default_database_dir() -> Result<PathBuf> {
-    if let Some(dir) = std::env::var_os("ROM_WEAVER_DATA_DIR") {
-        return Ok(PathBuf::from(dir).join("identify"));
+    if let Some(dir) = crate::env_paths::env_dir("ROM_WEAVER_DATA_DIR") {
+        return Ok(dir.join("identify"));
     }
     let base = if cfg!(target_os = "windows") {
-        std::env::var_os("APPDATA").map(PathBuf::from)
+        crate::env_paths::env_dir("APPDATA")
     } else if cfg!(target_os = "macos") {
         std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Library/Application Support"))
     } else {
-        std::env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .or_else(|| {
-                std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share"))
-            })
+        crate::env_paths::xdg_data_home().or_else(|| {
+            std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share"))
+        })
     };
     let base = base.ok_or_else(|| {
         RomWeaverError::Validation(
