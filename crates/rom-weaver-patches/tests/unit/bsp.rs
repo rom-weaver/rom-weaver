@@ -837,14 +837,26 @@ fn apply_reads_file_byte_into_variable_then_writes_it_back() {
 #[test]
 fn apply_decodes_utf8_string_opcode() {
     // 0x68 decodes a NUL-terminated UTF-8 string from the patch space (and discards it). Drives
-    // utf8_decode's happy path without touching the file buffer.
-    let mut patch = vec![0x68];
-    push_word(&mut patch, 10); // patch-space address of the string
-    patch.push(0x06);
-    push_word(&mut patch, 0); // exit 0
-    patch.extend_from_slice(b"Hi\0"); // string at offset 10
+    // utf8_decode's happy path without touching the file buffer. One string per sequence length:
+    // a valid string of any length must be accepted, not reported as invalid UTF-8.
+    for (label, text) in [
+        ("one-byte", "Hi"),
+        ("two-byte", "caf\u{e9}"),
+        ("three-byte", "\u{20ac} \u{3042}"),
+        ("four-byte", "\u{1f600}"),
+        ("every length", "a\u{e9}\u{20ac}\u{1f600}z"),
+    ] {
+        let mut patch = vec![0x68];
+        push_word(&mut patch, 10); // patch-space address of the string
+        patch.push(0x06);
+        push_word(&mut patch, 0); // exit 0
+        patch.extend_from_slice(text.as_bytes()); // string at offset 10
+        patch.push(0);
 
-    assert_bsp_program_output(&patch, vec![0x01], vec![0x01]);
+        let output = apply_bsp_patch_bytes(&patch, vec![0x01], None)
+            .unwrap_or_else(|error| panic!("{label} string {text:?} must decode: {error:?}"));
+        assert_eq!(output, vec![0x01], "{label}");
+    }
 }
 
 #[test]

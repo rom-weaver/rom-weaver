@@ -186,9 +186,8 @@ fn cancellation_stops_a_runaway_script_within_a_bounded_time() {
     let mut patch = vec![0x02];
     patch.extend_from_slice(&0u32.to_le_bytes());
     fs::write(&patch_path, patch).expect("patch");
-    let handler = PatchRegistry::new().find_by_name("BSP").expect("BSP");
-
     let cancel = CancellationToken::new();
+    let context = temp.context_with_cancel(1, cancel.clone());
     let canceller = {
         let cancel = cancel.clone();
         thread::spawn(move || {
@@ -196,25 +195,33 @@ fn cancellation_stops_a_runaway_script_within_a_bounded_time() {
             cancel.cancel();
         })
     };
-    let started = Instant::now();
-    let error = handler
-        .apply(
-            &PatchApplyRequest {
-                input,
-                patches: vec![patch_path],
-                output: output.clone(),
-            },
-            &temp.context_with_cancel(1, cancel),
-        )
-        .expect_err("a cancelled script must stop");
+    let (done_tx, done_rx) = mpsc::channel();
+    let worker = {
+        let output = output.clone();
+        thread::spawn(move || {
+            let result = PatchRegistry::new()
+                .find_by_name("BSP")
+                .expect("BSP")
+                .apply(
+                    &PatchApplyRequest {
+                        input,
+                        patches: vec![patch_path],
+                        output,
+                    },
+                    &context,
+                );
+            let _ = done_tx.send(result);
+        })
+    };
+    // Without the step poll the script runs for minutes: stop waiting instead of hanging.
+    let result = done_rx
+        .recv_timeout(Duration::from_secs(30))
+        .expect("cancellation must stop the runaway script within 30s");
+    worker.join().expect("apply thread");
     canceller.join().expect("canceller thread");
 
+    let error = result.expect_err("a cancelled script must stop");
     assert_eq!(error.kind(), RomWeaverErrorKind::Cancelled, "{error}");
-    assert!(
-        started.elapsed() < Duration::from_secs(30),
-        "cancellation took {:?}",
-        started.elapsed()
-    );
     assert!(!output.exists(), "a cancelled BSP must not leave an output");
 }
 

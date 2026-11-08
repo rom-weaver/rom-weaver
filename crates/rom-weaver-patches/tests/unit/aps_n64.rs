@@ -793,6 +793,30 @@ fn validate_n64_source_rejects_an_input_too_short_for_the_header_fields() {
 }
 
 #[test]
+fn apply_rejects_a_source_cut_inside_the_header_even_when_the_missing_bytes_read_as_zero() {
+    // A z64 ROM cut at 0x3E bytes loses the country byte. Missing bytes read as zero, so a
+    // patch made from a ROM whose country byte is 0 would match it field by field: only the
+    // length check tells that the source is a truncated dump.
+    let truncated = z64_rom()[..0x3E].to_vec();
+    let patch = n64_patch_for_format(1, [b'N', b'Z', 0]);
+
+    let temp = TestDir::new();
+    let error = apply_aps(&temp, &truncated, &patch, PatchChecksumValidation::Strict)
+        .expect_err("a source shorter than the N64 header must be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("too short to hold an N64 header"),
+        "{error}"
+    );
+
+    let applied = apply_aps(&temp, &truncated, &patch, PatchChecksumValidation::Ignore)
+        .expect("ignoring checksums skips the header length check");
+    assert_eq!(applied.len(), 0x100);
+    assert_eq!(applied[0x80..0x82], *b"XY");
+}
+
+#[test]
 fn parse_aps_bytes_rejects_truncated_headers_and_records() {
     let short = parse_aps_bytes(&[0u8; 8]).expect_err("a short header must be rejected");
     assert!(
