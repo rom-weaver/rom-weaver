@@ -257,16 +257,6 @@ fn read_pack_bytes(path: &Path) -> Result<Vec<u8>> {
     )
 }
 
-/// The label for a lookup that matched nothing. With no packs searched the cause is a missing
-/// install, not a missing title.
-fn unknown_title_label(packs_searched: usize) -> &'static str {
-    if packs_searched == 0 {
-        "no identify packs installed; run `rom-weaver setup`"
-    } else {
-        "no matching title"
-    }
-}
-
 pub(super) struct IdentifyDatabaseSet {
     packs: Vec<(String, IdentifyPackFile)>,
 }
@@ -1214,7 +1204,7 @@ impl CliApp {
         let label = match lookup.status {
             IdentifyStatus::Matched => format!("identified {}", lookup.matches[0].name),
             IdentifyStatus::Ambiguous => format!("found {} possible titles", lookup.matches.len()),
-            IdentifyStatus::Unknown => unknown_title_label(databases.packs.len()).to_string(),
+            IdentifyStatus::Unknown => "no title matched the supplied database".to_string(),
         };
         // Without a file there are no input components; the record's own
         // components are what the caller came for, so an unambiguous match
@@ -1852,7 +1842,7 @@ fn identify_input_report(
             Some("unsupported_media_profile") => {
                 "this input's media profile is not supported yet".to_string()
             }
-            _ => unknown_title_label(selected.len()).to_string(),
+            _ => "no title matched the supplied database".to_string(),
         },
     };
 

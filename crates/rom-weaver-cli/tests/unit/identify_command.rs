@@ -997,7 +997,7 @@ fn identify_by_hash_matches_through_the_pack_routes() {
     args.hash = vec!["0".repeat(40)];
     assert_eq!(app.run_identify(args).status, OperationStatus::Succeeded);
     assert_eq!(identify_details(&sink)["status"], json!("unknown"));
-    assert_eq!(last_label(&sink), "no matching title");
+    assert_eq!(last_label(&sink), "no title matched the supplied database");
 }
 
 #[test]
@@ -1226,7 +1226,7 @@ fn identify_does_not_blame_the_media_profile_when_no_platform_was_detected() {
 
     let details = identify_details(&sink);
     assert!(details.get("condition").is_none_or(Value::is_null));
-    assert_eq!(last_label(&sink), "no matching title");
+    assert_eq!(last_label(&sink), "no title matched the supplied database");
 }
 
 #[test]
