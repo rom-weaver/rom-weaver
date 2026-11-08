@@ -106,8 +106,15 @@ pub fn encode_zstd(payload: &[u8], level: i32) -> Result<Vec<u8>> {
         .map_err(|error| RomWeaverError::Validation(format!("zstd encode failed: {error}")))
 }
 
+/// Largest zstd window log accepted, matching the HDiffPatch zstd decompress plugin
+/// (`ZSTD_d_windowLogMax`, decompress_plugin_demo.h) rather than the library default of 27.
+const ZSTD_DECODE_WINDOW_LOG_MAX: u32 = 30;
+
 pub fn decode_zstd_exact(payload: &[u8], expected_len: u64) -> Result<Vec<u8>> {
-    let decoder = ZstdDecoder::new(BufReader::new(Cursor::new(payload)))
+    let mut decoder = ZstdDecoder::new(BufReader::new(Cursor::new(payload)))
+        .map_err(|error| RomWeaverError::Validation(format!("zstd decode init failed: {error}")))?;
+    decoder
+        .window_log_max(ZSTD_DECODE_WINDOW_LOG_MAX)
         .map_err(|error| RomWeaverError::Validation(format!("zstd decode init failed: {error}")))?;
     decode_exact(decoder, expected_len, "zstd")
 }

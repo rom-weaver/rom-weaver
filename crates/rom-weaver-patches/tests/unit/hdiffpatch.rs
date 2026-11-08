@@ -136,6 +136,14 @@ fn apply_hdiff13_zero_cover_round_trip() {
     assert_eq!(output, new);
 }
 
+/// The rle control stream `hdiffz` writes for output that is entirely `new_data_diff`:
+/// one rle0 run over every output byte.
+fn rle0_ctrl_spanning(len: usize) -> Vec<u8> {
+    let mut ctrl = Vec::new();
+    super::write_rle_ctrl(&mut ctrl, 0, u64::try_from(len).expect("run length"));
+    ctrl
+}
+
 fn build_zstd_hdiff13_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
     let compressed = rom_weaver_core::codecs::encode_zstd(new, 3).expect("zstd encode");
     assert!(
@@ -143,6 +151,7 @@ fn build_zstd_hdiff13_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
         "fixture should be compressible"
     );
 
+    let rle_ctrl = rle0_ctrl_spanning(new.len());
     let mut patch = Vec::new();
     patch.extend_from_slice(b"HDIFF13&zstd");
     patch.push(0);
@@ -152,7 +161,7 @@ fn build_zstd_hdiff13_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
     write_var_u64(&mut patch, 0); // cover_count
     write_var_u64(&mut patch, 0); // cover_buf_size
     write_var_u64(&mut patch, 0); // compress_cover_buf_size
-    write_var_u64(&mut patch, 0); // rle_ctrl_buf_size
+    write_var_u64(&mut patch, rle_ctrl.len() as u64);
     write_var_u64(&mut patch, 0); // compress_rle_ctrl_buf_size
     write_var_u64(&mut patch, 0); // rle_code_buf_size
     write_var_u64(&mut patch, 0); // compress_rle_code_buf_size
@@ -161,6 +170,7 @@ fn build_zstd_hdiff13_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
         &mut patch,
         u64::try_from(compressed.len()).expect("compressed size"),
     );
+    patch.extend_from_slice(&rle_ctrl);
     patch.extend_from_slice(&compressed);
 
     patch
@@ -173,6 +183,10 @@ fn build_identity_hdiff13_patch_with_cover_and_rle(source: &[u8]) -> Vec<u8> {
     write_var_u64(&mut cover, 0); // copy_length
     write_var_u64(&mut cover, source_len); // cover_length
 
+    let mut rle_ctrl = Vec::new();
+    super::write_rle_ctrl(&mut rle_ctrl, 3, 1); // unrle copy, length 1
+    super::write_rle_ctrl(&mut rle_ctrl, 0, source_len - 1); // rle0 for the rest
+
     let mut patch = Vec::new();
     patch.extend_from_slice(b"HDIFF13&nocomp");
     patch.push(0);
@@ -181,15 +195,15 @@ fn build_identity_hdiff13_patch_with_cover_and_rle(source: &[u8]) -> Vec<u8> {
     write_var_u64(&mut patch, 1); // cover_count
     write_var_u64(&mut patch, u64::try_from(cover.len()).expect("cover size"));
     write_var_u64(&mut patch, 0); // compress_cover_buf_size
-    write_var_u64(&mut patch, 1); // rle_ctrl_buf_size
+    write_var_u64(&mut patch, rle_ctrl.len() as u64);
     write_var_u64(&mut patch, 0); // compress_rle_ctrl_buf_size
     write_var_u64(&mut patch, 1); // rle_code_buf_size
     write_var_u64(&mut patch, 0); // compress_rle_code_buf_size
     write_var_u64(&mut patch, 0); // new_data_diff_size
     write_var_u64(&mut patch, 0); // compress_new_data_diff_size
     patch.extend_from_slice(&cover);
-    patch.push(0xC0); // rle_type=copy, length=1
-    patch.push(0x00); // add 0, leaves byte unchanged
+    patch.extend_from_slice(&rle_ctrl);
+    patch.push(0x00); // copy byte: add 0, leaves the first byte unchanged
     patch
 }
 
@@ -331,14 +345,14 @@ fn apply_reports_parallel_execution_for_multi_chunk_hdiff13() {
 }
 
 #[test]
-fn apply_reports_single_thread_execution_when_only_one_chunk_is_present() {
+fn apply_reports_single_thread_execution_when_no_chunk_has_data() {
     let temp = TestDir::new();
     let input_path = temp.child("source.bin");
     let patch_path = temp.child("patch.hdiff");
     let output_path = temp.child("output.bin");
 
     let source = b"input bytes".to_vec();
-    let output = b"replacement bytes".to_vec();
+    let output = Vec::new();
     let patch = build_uncompressed_hdiff13_patch(&source, &output).expect("patch");
     fs::write(&input_path, &source).expect("source");
     fs::write(&patch_path, patch).expect("patch");
@@ -507,6 +521,7 @@ fn bzip2_encode(payload: &[u8]) -> Vec<u8> {
 fn build_bz2_hdiff13_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
     let compressed = bzip2_encode(new);
 
+    let rle_ctrl = rle0_ctrl_spanning(new.len());
     let mut patch = Vec::new();
     patch.extend_from_slice(b"HDIFF13&bz2");
     patch.push(0);
@@ -516,7 +531,7 @@ fn build_bz2_hdiff13_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
     write_var_u64(&mut patch, 0); // cover_count
     write_var_u64(&mut patch, 0); // cover_buf_size
     write_var_u64(&mut patch, 0); // compress_cover_buf_size
-    write_var_u64(&mut patch, 0); // rle_ctrl_buf_size
+    write_var_u64(&mut patch, rle_ctrl.len() as u64);
     write_var_u64(&mut patch, 0); // compress_rle_ctrl_buf_size
     write_var_u64(&mut patch, 0); // rle_code_buf_size
     write_var_u64(&mut patch, 0); // compress_rle_code_buf_size
@@ -525,6 +540,7 @@ fn build_bz2_hdiff13_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
         &mut patch,
         u64::try_from(compressed.len()).expect("compressed size"),
     );
+    patch.extend_from_slice(&rle_ctrl);
     patch.extend_from_slice(&compressed);
     patch
 }
@@ -729,13 +745,13 @@ fn compression_names_map_to_canonical_labels() {
 
 #[test]
 fn compression_parser_rejects_unknown_names() {
-    let error = HdiffCompression::parse("brotli").expect_err("unknown compression");
+    let error = HdiffCompression::parse("nosuchcodec").expect_err("unknown compression");
     let message = error.to_string();
     assert!(
         message.contains("HDIFF_COMPRESSION_UNRECOGNIZED"),
         "{message}"
     );
-    assert!(message.contains("compression=brotli"), "{message}");
+    assert!(message.contains("compression=nosuchcodec"), "{message}");
 }
 
 #[test]
@@ -783,20 +799,19 @@ fn add_usize_u64_reports_an_addition_overflow() {
 #[test]
 fn null_terminated_header_reads_report_bad_shapes() {
     assert_eq!(
-        super::read_null_terminated_string(b"HDIFF13&nocomp\0rest", 1024).expect("header"),
-        ("HDIFF13&nocomp".to_string(), 15)
+        super::read_null_terminated_bytes(b"HDIFF13&nocomp\0rest", 1024).expect("header"),
+        (b"HDIFF13&nocomp".to_vec(), 15)
     );
     assert!(
-        super::read_null_terminated_string(b"no terminator", 1024)
+        super::read_null_terminated_bytes(b"no terminator", 1024)
             .expect_err("missing terminator")
             .to_string()
             .contains("HDiffPatch header was missing null terminator")
     );
-    assert!(
-        super::read_null_terminated_string(&[0xFF, 0xFE, 0x00], 1024)
-            .expect_err("non utf8")
-            .to_string()
-            .contains("HDiffPatch header contained non-UTF8 bytes")
+    // The header is raw bytes: patch.c only reads the compressor name for compressed chunks.
+    assert_eq!(
+        super::read_null_terminated_bytes(&[0xFF, 0xFE, 0x00], 1024).expect("non utf8"),
+        (vec![0xFF, 0xFE], 3)
     );
 }
 
@@ -868,7 +883,7 @@ fn file_parser_decodes_multi_byte_varints_and_bools() {
 fn file_parser_rejects_headers_longer_than_the_scan_limit() {
     let mut parser = super::HdiffFileParser::new(b"ABCD".as_slice(), 4);
     let error = parser
-        .read_null_terminated_string(4)
+        .read_null_terminated_bytes(4)
         .expect_err("no terminator within the limit");
     assert!(
         error
@@ -878,15 +893,11 @@ fn file_parser_rejects_headers_longer_than_the_scan_limit() {
 }
 
 #[test]
-fn file_parser_rejects_non_utf8_headers() {
+fn file_parser_reads_non_utf8_headers_as_raw_bytes() {
     let mut parser = super::HdiffFileParser::new([0xFFu8, 0x00].as_slice(), 2);
-    let error = parser
-        .read_null_terminated_string(1024)
-        .expect_err("non utf8 header");
-    assert!(
-        error
-            .to_string()
-            .contains("HDiffPatch header contained non-UTF8 bytes")
+    assert_eq!(
+        parser.read_null_terminated_bytes(1024).expect("raw header"),
+        vec![0xFF]
     );
 }
 
@@ -1093,21 +1104,28 @@ fn parse_reads_hdiff19_directory_headers() {
 }
 
 #[test]
-fn parse_rejects_hdiff19_patches_that_are_not_directory_to_directory() {
+fn parse_names_the_hdiff19_layout_when_either_side_is_not_a_directory() {
     let temp = TestDir::new();
     let patch_path = temp.child("flat.hdiff");
-    let bytes = build_hdiff19_patch(1, 0, 128, 256);
-    fs::write(&patch_path, &bytes).expect("fixture");
-
-    for error in [
-        super::parse_hdiff_patch_view(&bytes).expect_err("non-directory"),
-        super::parse_hdiff_patch_file(&patch_path).expect_err("non-directory"),
+    for (is_input_dir, is_output_dir, layout) in [
+        (0, 0, "HDIFF19 file-to-file diff"),
+        (0, 1, "HDIFF19 file-to-directory diff"),
+        (1, 0, "HDIFF19 directory-to-file diff"),
     ] {
-        assert!(
-            error
-                .to_string()
-                .contains("HDIFF19 patch flagged non-directory I/O unexpectedly")
-        );
+        let bytes = build_hdiff19_patch(is_input_dir, is_output_dir, 128, 256);
+        fs::write(&patch_path, &bytes).expect("fixture");
+
+        for error in [
+            super::parse_hdiff_patch_view(&bytes).expect_err("non-directory"),
+            super::parse_hdiff_patch_file(&patch_path).expect_err("non-directory"),
+        ] {
+            match error {
+                RomWeaverError::Unsupported(UnsupportedOp::HdiffLayout { layout: found }) => {
+                    assert_eq!(found, layout);
+                }
+                other => panic!("{layout}: expected unsupported layout, got {other}"),
+            }
+        }
     }
 }
 
@@ -1310,7 +1328,7 @@ fn hdiff13_apply_fills_the_gap_before_a_cover_from_the_new_data_diff() {
         old_data_size: 2,
         cover_count: 1,
         cover: &cover,
-        rle_ctrl: &[],
+        rle_ctrl: &rle0_ctrl_spanning(4),
         rle_code: &[],
         new_diff: b"XY",
     }));
@@ -1378,7 +1396,7 @@ fn hdiff13_streaming_rejects_output_beyond_the_declared_size() {
             old_data_size: 4,
             cover_count,
             cover,
-            rle_ctrl: &[],
+            rle_ctrl: &rle0_ctrl_spanning(4000),
             rle_code: &[],
             new_diff,
         }));
@@ -1420,7 +1438,7 @@ fn hdiff13_rejects_output_position_overflow_with_the_size_mismatch_code() {
             old_data_size: 4,
             cover_count: if first_cover { 2 } else { 1 },
             cover: &cover,
-            rle_ctrl: &[],
+            rle_ctrl: &rle0_ctrl_spanning(4),
             rle_code: &[],
             new_diff: &[],
         }));
@@ -1449,7 +1467,7 @@ fn hdiff13_validate_rejects_repeated_covers_beyond_the_declared_size() {
             old_data_size: 4,
             cover_count: 1000,
             cover: &covers,
-            rle_ctrl: &[],
+            rle_ctrl: &rle0_ctrl_spanning(4000),
             rle_code: &[],
             new_diff: &[],
         }),
@@ -1718,7 +1736,16 @@ fn sf20_step_parsing_rejects_a_step_buffer_past_the_payload() {
     write_var_u64(&mut payload, 64);
     write_var_u64(&mut payload, 0);
 
-    let error = super::parse_hdiffsf20_steps(&payload, 8, 8, 1).expect_err("step past payload");
+    let error = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 8,
+            new_data_size: 8,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect_err("step past payload");
     assert!(
         error
             .to_string()
@@ -1729,7 +1756,16 @@ fn sf20_step_parsing_rejects_a_step_buffer_past_the_payload() {
 #[test]
 fn sf20_step_parsing_rejects_a_step_with_no_decodable_covers() {
     let payload = sf20_step_payload(&[], &[], &[]);
-    let error = super::parse_hdiffsf20_steps(&payload, 8, 8, 1).expect_err("no covers");
+    let error = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 8,
+            new_data_size: 8,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect_err("no covers");
     assert!(
         error
             .to_string()
@@ -1740,7 +1776,16 @@ fn sf20_step_parsing_rejects_a_step_with_no_decodable_covers() {
 #[test]
 fn sf20_step_parsing_rejects_a_cover_that_moves_before_the_start_of_the_source() {
     let payload = sf20_step_payload(&sf20_cover(0x81, 0, 1), &[], &[]);
-    let error = super::parse_hdiffsf20_steps(&payload, 8, 8, 1).expect_err("old position");
+    let error = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 8,
+            new_data_size: 8,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect_err("old position");
     assert!(
         error
             .to_string()
@@ -1751,7 +1796,16 @@ fn sf20_step_parsing_rejects_a_cover_that_moves_before_the_start_of_the_source()
 #[test]
 fn sf20_step_parsing_rejects_a_cover_that_reads_past_the_source() {
     let payload = sf20_step_payload(&sf20_cover(0x00, 0, 16), &[], &[]);
-    let error = super::parse_hdiffsf20_steps(&payload, 8, 8, 1).expect_err("cover past source");
+    let error = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 8,
+            new_data_size: 8,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect_err("cover past source");
     assert!(
         error
             .to_string()
@@ -1762,7 +1816,16 @@ fn sf20_step_parsing_rejects_a_cover_that_reads_past_the_source() {
 #[test]
 fn sf20_step_parsing_rejects_gap_bytes_past_the_payload() {
     let payload = sf20_step_payload(&sf20_cover(0x00, 64, 1), &[], &[]);
-    let error = super::parse_hdiffsf20_steps(&payload, 8, 128, 1).expect_err("gap past payload");
+    let error = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 8,
+            new_data_size: 128,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect_err("gap past payload");
     assert!(
         error
             .to_string()
@@ -1773,7 +1836,16 @@ fn sf20_step_parsing_rejects_gap_bytes_past_the_payload() {
 #[test]
 fn sf20_step_parsing_rejects_covers_that_produce_more_than_the_declared_output() {
     let payload = sf20_step_payload(&sf20_cover(0x00, 0, 8), &[], &[]);
-    let error = super::parse_hdiffsf20_steps(&payload, 8, 4, 1).expect_err("output size");
+    let error = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 8,
+            new_data_size: 4,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect_err("output size");
     let message = error.to_string();
     assert!(
         message.contains("HDIFFSF20_OUTPUT_SIZE_MISMATCH"),
@@ -1783,14 +1855,24 @@ fn sf20_step_parsing_rejects_covers_that_produce_more_than_the_declared_output()
 }
 
 #[test]
-fn sf20_step_parsing_rejects_a_tail_that_runs_past_the_payload() {
+fn sf20_step_parsing_rejects_covers_that_produce_less_than_the_declared_output() {
     let payload = sf20_step_payload(&sf20_cover(0x00, 0, 4), &[], &[]);
-    let error = super::parse_hdiffsf20_steps(&payload, 8, 8, 1).expect_err("tail past payload");
+    let error = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 8,
+            new_data_size: 8,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect_err("short output");
+    let message = error.to_string();
     assert!(
-        error
-            .to_string()
-            .contains("HDIFFSF20 tail diff bytes exceeded payload")
+        message.contains("HDIFFSF20_OUTPUT_SIZE_MISMATCH"),
+        "{message}"
     );
+    assert!(message.contains("actual=4"), "{message}");
 }
 
 #[test]
@@ -1799,13 +1881,20 @@ fn sf20_step_parsing_reports_the_step_layout() {
     write_var_u64(&mut rle, 4); // len_zero covering the whole cover
     let payload = sf20_step_payload(&sf20_cover(0x00, 0, 4), &rle, &[]);
 
-    let plan = super::parse_hdiffsf20_steps(&payload, 4, 4, 1).expect("plan");
+    let plan = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 4,
+            new_data_size: 4,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect("plan");
     assert_eq!(plan.steps.len(), 1);
-    assert_eq!(plan.produced_len, 4);
     assert_eq!(plan.steps[0].output_start, 0);
     assert_eq!(plan.steps[0].output_len, 4);
     assert_eq!(plan.steps[0].covers.len(), 1);
-    assert_eq!(plan.tail_range, payload.len()..payload.len());
 }
 
 #[test]
@@ -2009,11 +2098,12 @@ fn sf20_payload_reads_decompress_a_compressed_payload() {
 }
 
 #[test]
-fn sf20_apply_copies_the_tail_bytes_that_follow_the_last_cover() {
+fn sf20_apply_copies_the_tail_bytes_carried_by_a_final_zero_length_cover() {
     let mut rle = Vec::new();
     write_var_u64(&mut rle, 2); // len_zero covering the single cover
-    let payload = sf20_step_payload(&sf20_cover(0x00, 0, 2), &rle, b"TL");
-    let (bytes, header) = parsed_hdiffsf20(build_hdiffsf20_header(4, 4, 1, &payload));
+    let covers = [sf20_cover(0x00, 0, 2), sf20_cover(0x00, 2, 0)].concat();
+    let payload = sf20_step_payload(&covers, &rle, b"TL");
+    let (bytes, header) = parsed_hdiffsf20(build_hdiffsf20_header(4, 4, 2, &payload));
 
     assert_eq!(
         apply_hdiffsf20(b"abcd", &bytes, &header).expect("apply"),
@@ -2055,19 +2145,10 @@ fn sf20_rle_decoder_reports_a_value_buffer_that_ends_early() {
 #[test]
 fn hdiff13_rle_reports_a_code_buffer_that_ends_early() {
     let mut target = [0u8; 4];
-    let mut ctrl_index = 0usize;
-    let mut code_index = 0usize;
-    let mut state = super::HdiffRleState::default();
+    let ctrl = [0xC3]; // rle_type 3 (copy), length 4
+    let mut decoder = super::HdiffRleDecoder::new(&ctrl, &[1, 2]); // only two code bytes
 
-    let error = super::apply_hdiff_rle(
-        &mut target,
-        &[0xC3], // rle_type 3 (copy), length 4
-        &mut ctrl_index,
-        &[1, 2], // only two code bytes
-        &mut code_index,
-        &mut state,
-    )
-    .expect_err("short code buffer");
+    let error = decoder.add(&mut target).expect_err("short code buffer");
     assert!(
         error
             .to_string()
@@ -2078,42 +2159,28 @@ fn hdiff13_rle_reports_a_code_buffer_that_ends_early() {
 #[test]
 fn hdiff13_rle_applies_a_set_run_then_a_copy_run() {
     let mut target = [0u8; 4];
-    let mut ctrl_index = 0usize;
-    let mut code_index = 0usize;
-    let mut state = super::HdiffRleState::default();
+    // set-value run of 2, then a copy run of 2
+    let mut decoder = super::HdiffRleDecoder::new(&[0x81, 0xC1], &[5, 7, 9]);
 
-    super::apply_hdiff_rle(
-        &mut target,
-        &[0x81, 0xC1], // set-value run of 2, then a copy run of 2
-        &mut ctrl_index,
-        &[5, 7, 9], // set value, then the two copy bytes
-        &mut code_index,
-        &mut state,
-    )
-    .expect("rle");
+    decoder.add(&mut target).expect("rle");
 
     assert_eq!(target, [5, 5, 7, 9]);
-    assert_eq!(ctrl_index, 2);
-    assert_eq!(code_index, 3);
+    assert_eq!(decoder.ctrl_index, 2);
+    assert_eq!(decoder.code_index, 3);
+    decoder.finish().expect("streams fully consumed");
 }
 
 #[test]
-fn hdiff13_rle_leaves_the_target_untouched_without_control_bytes() {
+fn hdiff13_rle_reports_control_bytes_that_run_out_before_the_target_is_full() {
     let mut target = [1u8, 2, 3, 4];
-    let mut ctrl_index = 0usize;
-    let mut code_index = 0usize;
-    let mut state = super::HdiffRleState::default();
+    let mut decoder = super::HdiffRleDecoder::new(&[], &[]);
 
-    super::apply_hdiff_rle(
-        &mut target,
-        &[],
-        &mut ctrl_index,
-        &[],
-        &mut code_index,
-        &mut state,
-    )
-    .expect("rle");
-    assert_eq!(target, [1, 2, 3, 4]);
+    let error = decoder.add(&mut target).expect_err("no control bytes");
+    assert!(
+        error
+            .to_string()
+            .contains("HDiffPatch rle_ctrl ended unexpectedly")
+    );
 }
 
 #[test]
@@ -2154,7 +2221,7 @@ fn hdiff13_streams_exact_buffer_sized_covers_without_empty_writes() {
             old_data_size: source_len as u64,
             cover_count: 1,
             cover: &cover,
-            rle_ctrl: &[],
+            rle_ctrl: &rle0_ctrl_spanning(source_len),
             rle_code: &[],
             new_diff: &[],
         }));
@@ -2202,8 +2269,11 @@ fn hdiff13_streams_rle_across_gaps_cover_buffers_and_tail() {
     let mut expected = b"XYZ".to_vec();
     expected.extend_from_slice(&source);
     expected.extend_from_slice(b"tail");
-    for (index, byte) in expected.iter_mut().enumerate() {
-        *byte = byte.wrapping_add(if index < set_len { 1 } else { 2 });
+    // Only the covered bytes take the rle delta; the 3 gap bytes and the 4 tail bytes
+    // come straight from new_data_diff.
+    let covered = 3..expected.len() - 4;
+    for index in covered {
+        expected[index] = expected[index].wrapping_add(if index < set_len { 1 } else { 2 });
     }
 
     let handler = HdiffPatchHandler::new(&HDIFFPATCH);
@@ -2258,9 +2328,9 @@ fn hdiff13_streaming_propagates_output_write_errors() {
 #[test]
 fn sf20_parallel_steps_preserve_gaps_value_rle_empty_steps_and_tail() {
     let first = sf20_step_payload(&sf20_cover(0, 2, 2), &[0, 2, 1, 255], b"XY");
-    let empty = sf20_step_payload(&sf20_cover(0, 0, 0), &[], &[]);
-    let last = sf20_step_payload(&sf20_cover(0, 1, 4), &[4], b"Z");
-    let payload = [first, empty, last, b"T".to_vec()].concat();
+    let middle = sf20_step_payload(&sf20_cover(0, 1, 4), &[4], b"Z");
+    let tail_only = sf20_step_payload(&sf20_cover(0, 1, 0), &[], b"T");
+    let payload = [first, middle, tail_only].concat();
     let (bytes, header) = parsed_hdiffsf20(build_hdiffsf20_header(10, 6, 3, &payload));
     let old = super::HdiffOldData::Bytes(b"abcdef".to_vec());
     for parallel in [false, true] {
@@ -2352,7 +2422,7 @@ fn streamed_apply_keeps_existing_output_when_a_cover_is_malformed() {
             old_data_size: 4,
             cover_count: 1,
             cover: &cover,
-            rle_ctrl: &[],
+            rle_ctrl: &rle0_ctrl_spanning(10),
             rle_code: &[],
             new_diff: b"XY",
         }),
@@ -2407,4 +2477,514 @@ fn streamed_apply_preserves_hard_links_when_output_aliases_the_source() {
         .expect("apply through hard link");
     assert_eq!(fs::read(input).expect("source alias"), b"bcde");
     assert_eq!(fs::read(output).expect("output"), b"bcde");
+}
+
+fn apply_patch_file(
+    input: &Path,
+    patch: &Path,
+    threads: usize,
+) -> rom_weaver_core::Result<Vec<u8>> {
+    let temp = TestDir::new();
+    let output = temp.child("output.bin");
+    HdiffPatchHandler::new(&HDIFFPATCH).apply(
+        &PatchApplyRequest {
+            input: input.to_path_buf(),
+            patches: vec![patch.to_path_buf()],
+            output: output.clone(),
+        },
+        &test_context_with_threads(&temp, threads),
+    )?;
+    Ok(fs::read(output).expect("output"))
+}
+
+fn write_patch_and_apply(
+    old: &[u8],
+    patch: &[u8],
+    threads: usize,
+) -> rom_weaver_core::Result<Vec<u8>> {
+    let temp = TestDir::new();
+    let input = temp.child("input.bin");
+    let patch_path = temp.child("patch.hdiff");
+    fs::write(&input, old).expect("input");
+    fs::write(&patch_path, patch).expect("patch");
+    apply_patch_file(&input, &patch_path, threads)
+}
+
+/// Replaces the compressor name of an `HDIFF13&nocomp` / `HDIFFSF20&nocomp` header.
+fn with_compressor_name(patch: &[u8], magic: &str, name: &str) -> Vec<u8> {
+    let prefix = format!("{magic}&nocomp\0");
+    assert!(patch.starts_with(prefix.as_bytes()), "unexpected header");
+    let mut renamed = format!("{magic}&{name}\0").into_bytes();
+    renamed.extend_from_slice(&patch[prefix.len()..]);
+    renamed
+}
+
+// crafted-accept-*.ref is the output hpatchz produced for the matching .hdiff.
+const CRAFTED_ACCEPTED_PATCHES: [&str; 28] = [
+    "h13_base",
+    "h13_cover_rle_add",
+    "h13_cover_rle_unrle",
+    "h13_empty_new",
+    "h13_extra_fields",
+    "h13_gap_rle_nonzero",
+    "h13_neg_delta_overlap",
+    "h13_newsize_small",
+    "h13_tail_rle_nonzero",
+    "h13_type_brotli",
+    "h13_type_bzip2",
+    "h13_type_lz4",
+    "h13_type_lzham",
+    "h13_type_nocomp",
+    "h13_type_NOCOMP",
+    "h13_type_pbzip2",
+    "h13_type_pzlib",
+    "h13_type_tuz",
+    "h13_type_unknowncodec",
+    "h13_type_zstd_extra",
+    "h13_type_ZSTD",
+    "h13_zero_len_cover_at_eof",
+    "sf20_base",
+    "sf20_cc0_newsize0",
+    "sf20_rle_vals",
+    "sf20_type_nocomp",
+    "sf20_type_zstd",
+    "sf20_type_ZSTD",
+];
+
+// Patches the reference hpatchz rejects (patch.c structural checks).
+const CRAFTED_REJECTED_PATCHES: [&str; 17] = [
+    "h13_cc_too_small",
+    "h13_rle_empty",
+    "h13_rle_short",
+    "h13_rle_ends_at_cover",
+    "h13_rle_long",
+    "h13_trail_cover",
+    "h13_trail_file",
+    "h13_trail_newdiff",
+    "h13_trail_rlecode",
+    "h13_trail_rlectrl_extra",
+    "h13_varint_overflow_newsize",
+    "sf20_cc0_newsize5",
+    "sf20_comp_gt_unc",
+    "sf20_extra_cover_bytes",
+    "sf20_stepmem_small",
+    "sf20_tail_after_covers",
+    "sf20_trailing_byte",
+];
+
+#[test]
+fn crafted_patches_the_reference_applies_produce_its_output() {
+    let old = fixture_path("crafted-old.bin");
+    for name in CRAFTED_ACCEPTED_PATCHES {
+        let patch = fixture_path(&format!("crafted-accept-{name}.hdiff"));
+        let expected = fs::read(fixture_path(&format!("crafted-accept-{name}.ref")))
+            .expect("reference output");
+        for threads in [1, 4] {
+            let output = apply_patch_file(&old, &patch, threads)
+                .unwrap_or_else(|error| panic!("{name} ({threads} thread(s)): {error}"));
+            assert_eq!(output, expected, "{name} ({threads} thread(s))");
+        }
+    }
+}
+
+#[test]
+fn crafted_patches_the_reference_rejects_are_rejected() {
+    let old = fixture_path("crafted-old.bin");
+    for name in CRAFTED_REJECTED_PATCHES {
+        let patch = fixture_path(&format!("crafted-reject-{name}.hdiff"));
+        for threads in [1, 4] {
+            assert!(
+                apply_patch_file(&old, &patch, threads).is_err(),
+                "{name} ({threads} thread(s)) must be rejected"
+            );
+        }
+    }
+}
+
+#[test]
+fn hdiff13_raw_chunks_ignore_an_unusable_compressor_name() {
+    let old = b"source";
+    let new = b"replacement";
+    let patch = build_uncompressed_hdiff13_patch(old, new).expect("patch");
+    for name in [
+        "lz4", "brotli", "lzham", "tuz", "7zXZ", "pzlib", "bzip2", "mystery",
+    ] {
+        let renamed = with_compressor_name(&patch, "HDIFF13", name);
+        assert_eq!(
+            write_patch_and_apply(old, &renamed, 1)
+                .unwrap_or_else(|error| panic!("{name}: {error}")),
+            new,
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn hdiffsf20_raw_payload_ignores_an_unusable_compressor_name() {
+    let mut rle = Vec::new();
+    write_var_u64(&mut rle, 4); // len_zero covering the whole cover
+    let payload = sf20_step_payload(&sf20_cover(0x00, 0, 4), &rle, &[]);
+    let patch = build_hdiffsf20_header(4, 4, 1, &payload);
+    for name in ["lz4", "brotli", "7zXZ", "mystery"] {
+        let renamed = with_compressor_name(&patch, "HDIFFSF20", name);
+        assert_eq!(
+            write_patch_and_apply(b"abcd", &renamed, 1)
+                .unwrap_or_else(|error| panic!("{name}: {error}")),
+            b"abcd",
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn raw_patches_ignore_a_compressor_name_that_is_not_utf8() {
+    let old = b"abcd";
+    let hdiff13 = build_uncompressed_hdiff13_patch(b"old", b"replacement").expect("patch");
+    let mut rle = Vec::new();
+    write_var_u64(&mut rle, 4);
+    let payload = sf20_step_payload(&sf20_cover(0x00, 0, 4), &rle, &[]);
+    let sf20 = build_hdiffsf20_header(4, 4, 1, &payload);
+    for (magic, patch, old, expected) in [
+        (
+            "HDIFF13",
+            hdiff13,
+            b"old".as_slice(),
+            b"replacement".as_slice(),
+        ),
+        ("HDIFFSF20", sf20, old.as_slice(), old.as_slice()),
+    ] {
+        for name in [&[0xFFu8][..], b"zs\xC3", b"\xFE\xFFnocomp"] {
+            let prefix = format!("{magic}&nocomp\0");
+            let mut renamed = format!("{magic}&").into_bytes();
+            renamed.extend_from_slice(name);
+            renamed.push(0);
+            renamed.extend_from_slice(&patch[prefix.len()..]);
+
+            assert_eq!(
+                write_patch_and_apply(old, &renamed, 1)
+                    .unwrap_or_else(|error| panic!("{magic} {name:?}: {error}")),
+                expected,
+                "{magic} {name:?}"
+            );
+
+            let temp = TestDir::new();
+            let patch_path = temp.child("raw.hdiff");
+            fs::write(&patch_path, &renamed).expect("patch");
+            let report = HdiffPatchHandler::new(&HDIFFPATCH)
+                .parse(&patch_path, &test_context_with_threads(&temp, 1))
+                .unwrap_or_else(|error| panic!("{magic} {name:?}: {error}"));
+            assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+        }
+    }
+}
+
+#[test]
+fn hdiff13_compressed_chunk_with_a_name_that_is_not_utf8_is_unrecognized() {
+    let patch = build_zstd_hdiff13_patch(b"old", &vec![b'A'; 4096]);
+    let prefix = b"HDIFF13&zstd\0";
+    let mut renamed = b"HDIFF13&\xFF\xFEzstd\0".to_vec();
+    renamed.extend_from_slice(&patch[prefix.len()..]);
+    let error = write_patch_and_apply(b"old", &renamed, 1).expect_err("non-UTF-8 plugin name");
+    let message = error.to_string();
+    assert!(
+        message.contains("HDIFF_COMPRESSION_UNRECOGNIZED"),
+        "{message}"
+    );
+    assert!(!message.contains("non-UTF8"), "{message}");
+}
+
+#[test]
+fn hdiff13_compressed_chunk_with_a_defined_but_undecodable_plugin_is_not_supported() {
+    let patch = build_zstd_hdiff13_patch(b"old", &vec![b'A'; 4096]);
+    for name in ["lz4", "brotli", "lzham", "tuz", "7zXZ"] {
+        let renamed = {
+            let prefix = b"HDIFF13&zstd\0";
+            let mut renamed = format!("HDIFF13&{name}\0").into_bytes();
+            renamed.extend_from_slice(&patch[prefix.len()..]);
+            renamed
+        };
+        let error = write_patch_and_apply(b"old", &renamed, 1).expect_err("undecodable plugin");
+        assert!(
+            matches!(
+                &error,
+                RomWeaverError::Unsupported(UnsupportedOp::HdiffCompression { compression })
+                    if compression.eq_ignore_ascii_case(name)
+            ),
+            "{name}: {error}"
+        );
+    }
+    let renamed = {
+        let mut renamed = b"HDIFF13&mystery\0".to_vec();
+        renamed.extend_from_slice(&patch[b"HDIFF13&zstd\0".len()..]);
+        renamed
+    };
+    let error = write_patch_and_apply(b"old", &renamed, 1).expect_err("unknown plugin");
+    assert!(error.to_string().contains("HDIFF_COMPRESSION_UNRECOGNIZED"));
+}
+
+#[test]
+fn hdiff13_compressed_chunks_accept_the_reference_plugin_aliases() {
+    let old = b"01234567890123456789";
+    let new = b"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+    let patch = build_bz2_hdiff13_patch(old, new);
+    for name in ["bzip2", "pbzip2"] {
+        let mut renamed = format!("HDIFF13&{name}\0").into_bytes();
+        renamed.extend_from_slice(&patch[b"HDIFF13&bz2\0".len()..]);
+        assert_eq!(
+            write_patch_and_apply(old, &renamed, 1).expect(name),
+            new,
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn hdiff13_gap_and_tail_bytes_skip_the_rle_delta() {
+    // Output is [gap XY][cover over "ab"][tail TL] in the first case and [cover][tail] in the
+    // second; one rle "set +5" run spans every output byte, but only covered bytes take it
+    // (patch.c copies gap and tail bytes from new_data_diff and only skips the rle over them).
+    let mut rle_ctrl = Vec::new();
+    super::write_rle_ctrl(&mut rle_ctrl, 2, 4);
+    let mut gap_cover = vec![0x00u8];
+    write_var_u64(&mut gap_cover, 2); // two new bytes precede the cover
+    write_var_u64(&mut gap_cover, 2);
+    let mut tail_cover = vec![0x00u8];
+    write_var_u64(&mut tail_cover, 0);
+    write_var_u64(&mut tail_cover, 2);
+    for (cover, new_diff, expected) in [(&gap_cover, b"XY", b"XYfg"), (&tail_cover, b"TL", b"fgTL")]
+    {
+        let patch = build_hdiff13_parts(&Hdiff13Parts {
+            new_data_size: 4,
+            old_data_size: 2,
+            cover_count: 1,
+            cover,
+            rle_ctrl: &rle_ctrl,
+            rle_code: &[5],
+            new_diff,
+        });
+        for threads in [1, 4] {
+            assert_eq!(
+                write_patch_and_apply(b"ab", &patch, threads).expect("apply"),
+                expected,
+                "{threads} thread(s)"
+            );
+        }
+    }
+}
+
+#[test]
+fn hdiff13_rejects_streams_that_are_not_consumed_exactly() {
+    let mut cover = vec![0x00u8];
+    write_var_u64(&mut cover, 0);
+    write_var_u64(&mut cover, 2);
+    let mut two_covers = cover.clone();
+    two_covers.extend_from_slice(&[0x00, 0, 0]); // a second, empty cover
+    let rle0 = rle0_ctrl_spanning(2);
+    let mut rle0_then_extra = rle0.clone();
+    rle0_then_extra.push(0x00);
+    let valid = Hdiff13Parts {
+        new_data_size: 2,
+        old_data_size: 2,
+        cover_count: 1,
+        cover: &cover,
+        rle_ctrl: &rle0,
+        rle_code: &[],
+        new_diff: &[],
+    };
+    assert_eq!(
+        write_patch_and_apply(b"ab", &build_hdiff13_parts(&valid), 1).expect("valid control"),
+        b"ab"
+    );
+
+    let cases = [
+        (
+            "cover bytes beyond cover_count",
+            Hdiff13Parts {
+                cover: &two_covers,
+                ..valid
+            },
+            "HDIFF_STREAM_NOT_CONSUMED",
+        ),
+        (
+            "unused new_data_diff byte",
+            Hdiff13Parts {
+                new_diff: b"Z",
+                ..valid
+            },
+            "HDIFF_STREAM_NOT_CONSUMED",
+        ),
+        (
+            "unused rle_code byte",
+            Hdiff13Parts {
+                rle_code: &[0],
+                ..valid
+            },
+            "HDIFF_STREAM_NOT_CONSUMED",
+        ),
+        (
+            "unused rle_ctrl record",
+            Hdiff13Parts {
+                rle_ctrl: &rle0_then_extra,
+                ..valid
+            },
+            "HDIFF_STREAM_NOT_CONSUMED",
+        ),
+        (
+            "rle_ctrl shorter than the output",
+            Hdiff13Parts {
+                rle_ctrl: &[],
+                ..valid
+            },
+            "rle_ctrl ended unexpectedly",
+        ),
+    ];
+    for (label, parts, expected_message) in cases {
+        let error = write_patch_and_apply(b"ab", &build_hdiff13_parts(&parts), 1).expect_err(label);
+        let message = error.to_string();
+        assert!(message.contains(expected_message), "{label}: {message}");
+    }
+
+    let mut trailing = build_hdiff13_parts(&valid);
+    trailing.push(0);
+    let error = write_patch_and_apply(b"ab", &trailing, 1).expect_err("trailing byte");
+    assert!(
+        error.to_string().contains("HDIFF_TRAILING_BYTES"),
+        "{error}"
+    );
+}
+
+#[test]
+fn hdiff_varints_that_would_drop_set_bits_fail() {
+    // 2^70 + 4: the leading group of the first byte is shifted out of the top of a u64.
+    let mut overflowing = vec![0x81u8];
+    overflowing.extend_from_slice(&[0x80; 9]);
+    overflowing.push(0x04);
+    let mut index = 0usize;
+    let error = super::read_rle_varint(&overflowing, &mut index, "probe").expect_err("2^70 + 4");
+    assert!(error.to_string().contains("overflowed"), "{error}");
+    let mut index = 0usize;
+    let error = super::read_var_u64(&overflowing, &mut index, "probe").expect_err("2^70 + 4");
+    assert!(error.to_string().contains("overflowed"), "{error}");
+
+    // u64::MAX still fits, and 2^64 is the first value that does not.
+    let mut max = vec![0x81u8];
+    max.extend_from_slice(&[0xff; 8]);
+    max.push(0x7f);
+    let mut index = 0usize;
+    assert_eq!(
+        super::read_var_u64(&max, &mut index, "probe").expect("u64::MAX"),
+        u64::MAX
+    );
+    let mut too_big = vec![0x82u8];
+    too_big.extend_from_slice(&[0x80; 8]);
+    too_big.push(0x00);
+    let mut index = 0usize;
+    assert!(super::read_var_u64(&too_big, &mut index, "probe").is_err());
+}
+
+#[test]
+fn hdiffsf20_rejects_a_zero_length_cover_that_is_not_the_last_cover() {
+    let mut rle = Vec::new();
+    write_var_u64(&mut rle, 4);
+    let covers = [sf20_cover(0x00, 0, 0), sf20_cover(0x00, 0, 4)].concat();
+    let payload = sf20_step_payload(&covers, &rle, &[]);
+    let patch = build_hdiffsf20_header(4, 4, 2, &payload);
+    let error = write_patch_and_apply(b"abcd", &patch, 1).expect_err("early zero-length cover");
+    assert!(error.to_string().contains("zero-length cover"), "{error}");
+}
+
+#[test]
+fn zstd_chunks_may_use_a_window_beyond_the_library_default() {
+    // A raw-block zstd frame whose Window_Descriptor (0x90) declares a 2^28 window,
+    // above the library default limit of 2^27 but within the HDiffPatch plugin's 2^30.
+    let mut frame = vec![0x28, 0xB5, 0x2F, 0xFD, 0x00, 0x90];
+    frame.extend_from_slice(&[0x21, 0x00, 0x00]); // last raw block of 4 bytes
+    frame.extend_from_slice(b"WXYZ");
+    let rle_ctrl = rle0_ctrl_spanning(4);
+
+    let mut patch = Vec::new();
+    patch.extend_from_slice(b"HDIFF13&zstd\0");
+    for value in [4, 3, 0, 0, 0] {
+        write_var_u64(&mut patch, value); // new, old, cover_count, cover size, compressed cover
+    }
+    write_var_u64(&mut patch, rle_ctrl.len() as u64);
+    for value in [0, 0, 0, 4, frame.len() as u64] {
+        write_var_u64(&mut patch, value);
+    }
+    patch.extend_from_slice(&rle_ctrl);
+    patch.extend_from_slice(&frame);
+
+    assert_eq!(
+        write_patch_and_apply(b"old", &patch, 1).expect("apply"),
+        b"WXYZ"
+    );
+}
+
+#[test]
+fn unsupported_but_valid_hdiffz_layouts_are_reported_as_unsupported_not_corrupt() {
+    let mut windowed = b"HDIFFW26\x51\x00zstd&xxh128\0".to_vec();
+    windowed.extend_from_slice(&[0; 16]);
+    let mut endsley = b"ENDSLEY/BSDIFF43".to_vec();
+    endsley.extend_from_slice(&[0xf4, 0x3a, 0x03, 0, 0, 0, 0, 0, b'B', b'Z', b'h', b'9']);
+    for (label, patch) in [("HDIFFW26", windowed), ("ENDSLEY/BSDIFF43", endsley)] {
+        let temp = TestDir::new();
+        let patch_path = temp.child("layout.hdiff");
+        fs::write(&patch_path, &patch).expect("patch");
+        let error = HdiffPatchHandler::new(&HDIFFPATCH)
+            .parse(&patch_path, &test_context_with_threads(&temp, 1))
+            .expect_err(label);
+        assert!(
+            matches!(
+                &error,
+                RomWeaverError::Unsupported(UnsupportedOp::HdiffLayout { layout })
+                    if layout.starts_with(label)
+            ),
+            "{label}: {error}"
+        );
+        let message = error.to_string();
+        assert!(message.contains("not supported"), "{label}: {message}");
+        assert!(!message.contains("incomplete"), "{label}: {message}");
+        assert!(!message.contains("non-UTF8"), "{label}: {message}");
+    }
+}
+
+#[test]
+fn hdiffsf20_rejects_header_sizes_the_reference_refuses() {
+    let mut rle = Vec::new();
+    write_var_u64(&mut rle, 4);
+    let payload = sf20_step_payload(&sf20_cover(0x00, 0, 4), &rle, &[]);
+    let build = |step_mem_size: u64, uncompressed_size: u64, compressed_size: u64| {
+        let mut patch = b"HDIFFSF20&zstd\0".to_vec();
+        for value in [4, 4, 1, step_mem_size, uncompressed_size, compressed_size] {
+            write_var_u64(&mut patch, value);
+        }
+        patch.extend_from_slice(&payload);
+        patch
+    };
+    let payload_len = payload.len() as u64;
+    // step_mem_size may exceed min(new size, payload size) by at most 4 MiB.
+    let step_mem_limit = 4 + 4 * 1024 * 1024;
+
+    assert_eq!(
+        write_patch_and_apply(b"abcd", &build(step_mem_limit, payload_len, 0), 1)
+            .expect("step_mem_size at the limit"),
+        b"abcd"
+    );
+    for (label, patch) in [
+        (
+            "step_mem_size past the limit",
+            build(step_mem_limit + 1, payload_len, 0),
+        ),
+        (
+            "compressed_size above uncompressed_size",
+            build(256, payload_len, payload_len + 1),
+        ),
+    ] {
+        let error = write_patch_and_apply(b"abcd", &patch, 1).expect_err(label);
+        let message = error.to_string();
+        assert!(
+            message.contains("HDIFFSF20_HEADER_SIZES_INCONSISTENT"),
+            "{label}: {message}"
+        );
+    }
 }

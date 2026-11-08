@@ -417,6 +417,18 @@ fn unsupported_op_renders_every_variant() {
             "HDiffPatch directory patches (HDIFF19) are not supported for patch-apply; expected single-file patch (.hdiff/.hpatchz)",
         ),
         (
+            UnsupportedOp::HdiffLayout {
+                layout: "HDIFFW26 windowed patch",
+            },
+            "HDiffPatch layout is recognized but not supported: HDIFFW26 windowed patch",
+        ),
+        (
+            UnsupportedOp::HdiffCompression {
+                compression: "brotli".to_string(),
+            },
+            "HDiffPatch compression is not supported: brotli",
+        ),
+        (
             UnsupportedOp::BspInteractiveMenu,
             "interactive BSP menus are not supported; use a BSP patcher that supports menu choices",
         ),
