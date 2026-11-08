@@ -2,7 +2,7 @@
 //! `<target name>#<hex>/<target compression>/<source name>#<hex>/<source compression>`
 //! (xdelta3-main.h, `main_armor_parse_appheader`).
 use super::*;
-use rom_weaver_checksum::checksum_file_values;
+use crate::shared::checksum_io::checksum_path_cached;
 use rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH;
 
 const ARMOR_HEX_LEN: usize = 64;
@@ -39,7 +39,7 @@ fn armor_hash_of_name(name: &[u8]) -> Option<String> {
     is_hex.then(|| String::from_utf8_lossy(hash).into_owned())
 }
 
-/// Fails before any window is applied when the source is not the file the patch was built from.
+/// Returns a checksum-mismatch error when the source's BLAKE3 differs from the armored source digest.
 pub(super) fn verify_armor_source(
     armor: &ArmorHashes,
     source_path: &Path,
@@ -48,7 +48,7 @@ pub(super) fn verify_armor_source(
     let Some(expected) = armor.source.as_deref() else {
         return Ok(());
     };
-    let actual = blake3_hex(source_path, context)?;
+    let actual = checksum_path_cached(source_path, "blake3", context)?;
     trace!(expected, actual, "xdelta armor source digest");
     if actual != expected {
         return Err(RomWeaverError::coded(
@@ -68,7 +68,7 @@ pub(super) fn verify_armor_target(
     let Some(expected) = armor.target.as_deref() else {
         return Ok(());
     };
-    let actual = blake3_hex(output_path, context)?;
+    let actual = checksum_path_cached(output_path, "blake3", context)?;
     trace!(expected, actual, "xdelta armor target digest");
     if actual != expected {
         return Err(RomWeaverError::coded(
@@ -77,14 +77,4 @@ pub(super) fn verify_armor_target(
         ));
     }
     Ok(())
-}
-
-fn blake3_hex(path: &Path, context: &OperationContext) -> Result<String> {
-    checksum_file_values(path, &["blake3"], context)?
-        .remove("blake3")
-        .ok_or_else(|| {
-            RomWeaverError::Validation(
-                "native checksum engine did not return a blake3 result".into(),
-            )
-        })
 }
