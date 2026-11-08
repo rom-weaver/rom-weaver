@@ -385,9 +385,9 @@ export const register = async ({ root, fixtures }) => {
 
   // RVZ / CHD inputs made by rom-weaver compress from the wbfs payload
   const wbfsPayload = "disc/wbfs.payload.iso";
-  const defineMade = (ext, key, source, sourceLabel) => {
+  const defineMade = (ext, source, sourceLabel) => {
     fixtures.define(`disc/made.${ext}`, {
-      where: "cache", purpose: `${key} made by rom-weaver compress from ${sourceLabel}`, how: `rom-weaver compress --output made.${ext}`, deterministic: false,
+      where: "cache", purpose: `${ext} made by rom-weaver compress from ${sourceLabel}`, how: `rom-weaver compress --output made.${ext}`, deterministic: false,
       build: (self) => {
         const out = self.location(`disc/made.${ext}`);
         fs.mkdirSync(path.dirname(out), { recursive: true });
@@ -398,7 +398,7 @@ export const register = async ({ root, fixtures }) => {
     });
   };
   for (const [key, ext] of [["rvz", "rvz"], ["chd", "chd"]]) {
-    defineMade(ext, key, wbfsPayload, "the wbfs payload");
+    defineMade(ext, wbfsPayload, "the wbfs payload");
     add(`container.disc.${key}-input`, ["container", "disc", key], (ctx) => {
       const out = ctx.tmp("out.iso");
       const result = ctx.apply(ctx.fx(`disc/made.${ext}`), ctx.fx("disc/wbfs.ips"), out, key === "chd" ? ["--select", "*.bin"] : []);
@@ -407,7 +407,7 @@ export const register = async ({ root, fixtures }) => {
     });
   }
   // Z3DS only accepts 3DS content, so it is made from the NCSD image instead of the Wii payload.
-  defineMade("z3ds", "z3ds", "exh/ctr/game.3ds", "the NCSD image exh/ctr/game.3ds");
+  defineMade("z3ds", "exh/ctr/game.3ds", "the NCSD image exh/ctr/game.3ds");
   add("container.disc.z3ds-input", ["container", "disc", "z3ds"], (ctx) => {
     const bytes = fs.readFileSync(ctx.fx("exh/ctr/game.3ds"));
     const target = Buffer.from(bytes);
