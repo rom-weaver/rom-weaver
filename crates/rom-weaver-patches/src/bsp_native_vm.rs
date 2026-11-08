@@ -46,6 +46,10 @@ const BSP_MAX_MESSAGE_BUFFER_LEN: usize = 1 << 20;
 /// Steps between cancellation polls in `execute`: frequent enough to stop a runaway
 /// script promptly, rare enough that the atomic load is invisible next to the opcode work.
 const BSP_CANCEL_POLL_INTERVAL_STEPS: u64 = 1 << 12;
+/// Bytes between cancellation polls while scanning one NUL-terminated string. A single opcode
+/// can scan a patch-sized string, so a `print <addr>; jump 0` loop would otherwise only see
+/// the step poll after thousands of full scans.
+const BSP_STRING_CANCEL_POLL_BYTES: u32 = 1 << 16;
 /// How many `print`/`printbuf` messages one run keeps for the apply report; later ones are
 /// only counted so a print loop cannot grow the report without bound.
 const BSP_MAX_REPORTED_MESSAGES: usize = 64;
@@ -56,6 +60,7 @@ const BSP_MAX_REPORTED_MESSAGE_BYTES: usize = 4096;
 enum StepControl {
     Continue,
     Exit(u32),
+    Cancelled,
 }
 
 enum VmOutcome {
@@ -396,9 +401,13 @@ impl<'pool> BspVm<'pool> {
             }
             let opcode = self.next_patch_byte()?;
             let args = self.opcode_parameters(opcode)?;
-            let control = self.execute_opcode(opcode, &args)?;
-            let StepControl::Exit(exit_code) = control else {
-                continue;
+            let exit_code = match self.execute_opcode(opcode, &args)? {
+                StepControl::Continue => continue,
+                StepControl::Exit(exit_code) => exit_code,
+                StepControl::Cancelled => {
+                    debug!(steps, "BSP script cancelled while scanning a string");
+                    return Ok(VmOutcome::Cancelled);
+                }
             };
 
             // The top frame finished. Resume the parent that suspended it, if
@@ -766,9 +775,11 @@ impl<'pool> BspVm<'pool> {
     }
 
     /// Decodes the NUL-terminated UTF-8 string at `address`, validating all of it but keeping
-    /// only the whole characters that fit under `BSP_MAX_MESSAGE_BUFFER_LEN`.
-    fn utf8_decode(&self, mut address: u32) -> VmResult<String> {
+    /// only the whole characters that fit under `BSP_MAX_MESSAGE_BUFFER_LEN`. Polls the
+    /// cancellation token while scanning and returns `None` once it is set.
+    fn utf8_decode(&self, mut address: u32) -> VmResult<Option<String>> {
         let mut decoded = String::new();
+        let mut scanned = 0u32;
         let mut truncated = false;
         let mut pending = [0u8; 4];
         let mut pending_len = 0usize;
@@ -776,6 +787,10 @@ impl<'pool> BspVm<'pool> {
         loop {
             let next = self.get_patch_byte(address)?;
             address = address.wrapping_add(1);
+            scanned = scanned.wrapping_add(1);
+            if scanned.is_multiple_of(BSP_STRING_CANCEL_POLL_BYTES) && self.cancel.is_cancelled() {
+                return Ok(None);
+            }
             if next == 0 {
                 break;
             }
@@ -799,7 +814,35 @@ impl<'pool> BspVm<'pool> {
         if pending_len != 0 {
             return Err("invalid UTF-8 string".to_string());
         }
-        Ok(decoded)
+        Ok(Some(decoded))
+    }
+
+    /// `print`: records the string at `address` for the apply report.
+    fn print_string(&mut self, address: u32) -> VmResult<StepControl> {
+        let Some(text) = self.utf8_decode(address)? else {
+            return Ok(StepControl::Cancelled);
+        };
+        self.report_message(&text);
+        Ok(StepControl::Continue)
+    }
+
+    /// `bufstring`: appends the string at `address` to the message buffer.
+    fn buffer_string(&mut self, address: u32) -> VmResult<StepControl> {
+        let Some(text) = self.utf8_decode(address)? else {
+            return Ok(StepControl::Cancelled);
+        };
+        self.push_message(&text);
+        Ok(StepControl::Continue)
+    }
+
+    /// Validates every menu option string; `false` when cancelled part-way.
+    fn validate_menu_options(&self, option_addresses: &[u32]) -> VmResult<bool> {
+        for &option_address in option_addresses {
+            if self.utf8_decode(option_address)?.is_none() {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     fn update_hashes(&mut self) -> VmResult<()> {
@@ -1154,11 +1197,7 @@ impl<'pool> BspVm<'pool> {
                 self.current_file_pointer = len - args[0];
                 Ok(StepControl::Continue)
             }
-            0x68 | 0x69 => {
-                let text = self.utf8_decode(args[0])?;
-                self.report_message(&text);
-                Ok(StepControl::Continue)
-            }
+            0x68 | 0x69 => self.print_string(args[0]),
             0x6A | 0x6B => {
                 let variable = args[0] as u8;
                 let mut address = args[1];
@@ -1179,8 +1218,8 @@ impl<'pool> BspVm<'pool> {
                     return Ok(StepControl::Continue);
                 }
 
-                for option_address in option_addresses {
-                    let _ = self.utf8_decode(option_address)?;
+                if !self.validate_menu_options(&option_addresses)? {
+                    return Ok(StepControl::Cancelled);
                 }
 
                 debug!("rejecting interactive BSP menu without a choice provider");
@@ -1402,11 +1441,7 @@ impl<'pool> BspVm<'pool> {
                 self.set_variable(variable, self.get_variable(variable).wrapping_sub(1));
                 Ok(StepControl::Continue)
             }
-            0xA0 | 0xA1 => {
-                let text = self.utf8_decode(args[0])?;
-                self.push_message(&text);
-                Ok(StepControl::Continue)
-            }
+            0xA0 | 0xA1 => self.buffer_string(args[0]),
             0xA2 | 0xA3 => {
                 let character = args[0];
                 if character > 0x10FFFF || (character & 0xFFFF_F800) == 0xD800 {

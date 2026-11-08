@@ -1,7 +1,7 @@
 use std::{
     fs,
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, mpsc},
     thread,
     time::{Duration, Instant},
 };
@@ -214,6 +214,64 @@ fn cancellation_stops_a_runaway_script_within_a_bounded_time() {
         started.elapsed() < Duration::from_secs(30),
         "cancellation took {:?}",
         started.elapsed()
+    );
+    assert!(!output.exists(), "a cancelled BSP must not leave an output");
+}
+
+/// `print <addr>; jump 0` over a multi-MiB string with no cap-sized early exit: each print
+/// scans the whole string, so only a poll inside the scan makes cancellation prompt.
+#[test]
+fn cancellation_interrupts_an_expensive_print_loop_promptly() {
+    const STRING_BYTES: usize = 16 << 20;
+    let temp = Scratch::new();
+    let input = temp.0.join("print-loop-input.bin");
+    let patch_path = temp.0.join("print-loop.bsp");
+    let output = temp.0.join("print-loop-output.bin");
+    fs::write(&input, [0]).expect("input");
+    let mut patch = vec![0x68]; // print 10
+    patch.extend_from_slice(&10u32.to_le_bytes());
+    patch.push(0x02); // jump 0
+    patch.extend_from_slice(&0u32.to_le_bytes());
+    assert_eq!(patch.len(), 10);
+    patch.resize(10 + STRING_BYTES, b'A');
+    patch.push(0);
+    fs::write(&patch_path, patch).expect("patch");
+
+    let cancel = CancellationToken::new();
+    let context = temp.context_with_cancel(1, cancel.clone());
+    let (done_tx, done_rx) = mpsc::channel();
+    let worker = {
+        let (input, patch_path, output) = (input.clone(), patch_path.clone(), output.clone());
+        thread::spawn(move || {
+            let result = PatchRegistry::new()
+                .find_by_name("BSP")
+                .expect("BSP")
+                .apply(
+                    &PatchApplyRequest {
+                        input,
+                        patches: vec![patch_path],
+                        output,
+                    },
+                    &context,
+                );
+            let _ = done_tx.send((Instant::now(), result));
+        })
+    };
+    thread::sleep(Duration::from_millis(200));
+    let cancelled_at = Instant::now();
+    cancel.cancel();
+    // Without the poll in the string scan this takes minutes: stop waiting instead of hanging.
+    let (finished_at, result) = done_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("cancellation must interrupt the print loop within 10s");
+    worker.join().expect("apply thread");
+
+    let error = result.expect_err("a cancelled script must stop");
+    assert_eq!(error.kind(), RomWeaverErrorKind::Cancelled, "{error}");
+    assert!(
+        finished_at.duration_since(cancelled_at) < Duration::from_secs(5),
+        "cancellation took {:?}",
+        finished_at.duration_since(cancelled_at)
     );
     assert!(!output.exists(), "a cancelled BSP must not leave an output");
 }

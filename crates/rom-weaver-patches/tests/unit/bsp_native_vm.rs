@@ -54,15 +54,18 @@ fn step_error(vm: &mut BspVm<'static>, opcode: u8, args: &[u32]) -> String {
 }
 
 fn assert_continue(control: StepControl) {
-    if let StepControl::Exit(code) = control {
-        panic!("expected the VM to continue, got exit {code}");
-    }
+    assert!(
+        matches!(control, StepControl::Continue),
+        "expected the VM to continue"
+    );
 }
 
 fn assert_exit_code(control: StepControl, expected: u32) {
     match control {
         StepControl::Exit(code) => assert_eq!(code, expected),
-        StepControl::Continue => panic!("expected exit {expected}, got continue"),
+        StepControl::Continue | StepControl::Cancelled => {
+            panic!("expected exit {expected}, got no exit")
+        }
     }
 }
 
@@ -816,7 +819,10 @@ fn utf8_decode_discards_excess_characters_but_still_validates_them() {
     let mut long = vec![b'A'; BSP_MAX_MESSAGE_BUFFER_LEN + 1];
     long.push(0);
     run_vm(&long, &[0u8; 1], |vm| {
-        let decoded = vm.utf8_decode(0).expect("an over-long string is truncated");
+        let decoded = vm
+            .utf8_decode(0)
+            .expect("an over-long string is truncated")
+            .expect("not cancelled");
         assert_eq!(decoded.len(), BSP_MAX_MESSAGE_BUFFER_LEN);
         assert!(decoded.bytes().all(|byte| byte == b'A'));
     });
@@ -824,7 +830,10 @@ fn utf8_decode_discards_excess_characters_but_still_validates_them() {
     let mut invalid_tail = vec![b'A'; BSP_MAX_MESSAGE_BUFFER_LEN + 4];
     invalid_tail.extend_from_slice(&[0xFF, 0]);
     run_vm(&invalid_tail, &[0u8; 1], |vm| {
-        assert_eq!(vm.utf8_decode(0), Err("invalid UTF-8 string".to_string()));
+        assert_eq!(
+            vm.utf8_decode(0).map(|_| ()),
+            Err("invalid UTF-8 string".to_string())
+        );
     });
 
     // A two-byte character straddling the cap is dropped whole, never split.
@@ -833,7 +842,10 @@ fn utf8_decode_discards_excess_characters_but_still_validates_them() {
     straddle.push(0);
     run_vm(&straddle, &[0u8; 1], |vm| {
         assert_eq!(
-            vm.utf8_decode(0).expect("decodes").len(),
+            vm.utf8_decode(0)
+                .expect("decodes")
+                .expect("not cancelled")
+                .len(),
             BSP_MAX_MESSAGE_BUFFER_LEN - 1
         );
     });
