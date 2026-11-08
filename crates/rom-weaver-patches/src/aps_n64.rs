@@ -505,10 +505,10 @@ fn check_n64_source(
         return Err(RomWeaverError::coded(
             rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
             format!(
-                "Source ROM checksum mismatch: the patch was made from a {} ROM but the source is {}; the original-format check cannot be disabled; convert the source with {}",
+                "Source ROM checksum mismatch: the patch was made from a {} ROM but the source is {}; the original-format check cannot be disabled; {}",
                 n64_format_name(expected.original_format),
                 n64_format_name(actual.original_format),
-                n64_byte_order_flag(expected.original_format),
+                original_format_remedy(expected.original_format),
             ),
         ));
     }
@@ -560,13 +560,13 @@ fn n64_format_name(original_format: u8) -> &'static str {
     }
 }
 
-/// The `--n64-byte-order` flag that converts a source into the order a patch with this
-/// original-format byte was made from.
-fn n64_byte_order_flag(original_format: u8) -> &'static str {
-    if original_format == APS_N64_FORMAT_BYTE_SWAPPED {
-        "--n64-byte-order byte-swapped"
-    } else {
-        "--n64-byte-order big-endian"
+/// What to do when the source's byte order differs from a patch's original-format byte. Source
+/// headers only ever read as v64 or non-v64, so a patch with any other byte matches no source.
+fn original_format_remedy(original_format: u8) -> &'static str {
+    match original_format {
+        APS_N64_FORMAT_BYTE_SWAPPED => "convert the source with --n64-byte-order byte-swapped",
+        APS_N64_FORMAT_OTHER => "convert the source with --n64-byte-order big-endian",
+        _ => "the patch records an unknown original format that no source can match",
     }
 }
 

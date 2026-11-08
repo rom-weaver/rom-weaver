@@ -1104,6 +1104,15 @@ fn apply_enforces_the_original_format_byte_against_the_input_byte_order() {
                 .contains("convert the source with --n64-byte-order big-endian ["),
             "{error}"
         );
+        let unknown_patch = n64_patch_for_format(2, *b"NZE");
+        let error = apply_aps(&temp, &z64_rom(), &unknown_patch, validation)
+            .expect_err("an unknown original format matches no ROM");
+        assert!(
+            error
+                .to_string()
+                .contains("unknown original format that no source can match ["),
+            "{error}"
+        );
 
         assert_eq!(
             apply_aps(&temp, &z64_rom(), &z64_patch, validation).expect("z64 on z64"),
