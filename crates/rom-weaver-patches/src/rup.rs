@@ -112,28 +112,29 @@ impl PatchHandler for RupPatchHandler {
                 .iter()
                 .enumerate()
                 .flat_map(|(variant, file)| {
-                    let source = || {
+                    // A chained input ends at the last entry's output, not this entry's.
+                    let forward_end = &patch.files[declared_chain_end(&patch, variant, false)];
+                    let reverse_end = &patch.files[declared_chain_end(&patch, variant, true)];
+                    let source = |file: &RupFile| {
                         PatchEndpointSide::sized(file.source_file_size)
                             .with_checksum("md5", format_md5_hex(file.source_md5))
                     };
-                    let target = || {
+                    let target = |file: &RupFile| {
                         PatchEndpointSide::sized(file.target_file_size)
                             .with_checksum("md5", format_md5_hex(file.target_md5))
                     };
                     let variant = variant as u32;
                     [
-                        PatchEndpointVariant::new(source(), target()).with_execution(
-                            PatchEndpointSelection {
+                        PatchEndpointVariant::new(source(file), target(forward_end))
+                            .with_execution(PatchEndpointSelection {
                                 variant,
                                 direction: PatchApplyDirection::Forward,
-                            },
-                        ),
-                        PatchEndpointVariant::new(target(), source()).with_execution(
-                            PatchEndpointSelection {
+                            }),
+                        PatchEndpointVariant::new(target(file), source(reverse_end))
+                            .with_execution(PatchEndpointSelection {
                                 variant,
                                 direction: PatchApplyDirection::Reverse,
-                            },
-                        ),
+                            }),
                     ]
                 })
                 .collect(),
@@ -210,11 +211,7 @@ impl PatchHandler for RupPatchHandler {
         } = apply_rup_chain(&chain, selected, context)?;
 
         let checksum_suffix = checksum_validation_suffix(scopes.source && scopes.target);
-        let chain_suffix = if step_count > 1 {
-            format!("; chained {step_count} file entries")
-        } else {
-            String::new()
-        };
+        let chain_suffix = chain_label_suffix(step_count);
         let mut report = crate::patch_success_report(
             self.descriptor,
             "apply",
@@ -255,20 +252,38 @@ impl PatchHandler for RupPatchHandler {
             context.patch_endpoint_selection(),
             context,
         )?;
-        let output_size = if selected.undo {
-            selected.file.source_file_size
+        let undo = selected.undo;
+        let (output_size, record_count, step_count) = if rup_chain_may_continue(&patch, &selected) {
+            let scratch = temp_path(context, "rup-validate", Some("bin"))?;
+            let chain = RupChain {
+                patch: &patch,
+                format: self.descriptor.name,
+                input: &request.input,
+                output: &scratch,
+                verify_target: false,
+            };
+            let validated = validate_rup_chain(&chain, selected, context);
+            let _ = fs::remove_file(&scratch);
+            let (outcome, output_size) = validated?;
+            (output_size, outcome.record_count, outcome.step_count)
         } else {
-            selected.file.target_file_size
+            let output_size = if undo {
+                selected.file.source_file_size
+            } else {
+                selected.file.target_file_size
+            };
+            validate_rup_ranges(selected.file, undo, output_size)?;
+            (output_size, selected.file.records.len(), 1)
         };
-        validate_rup_ranges(selected.file, selected.undo, output_size)?;
 
         Ok(crate::patch_success_report(
             self.descriptor,
             "validate",
             format!(
-                "validated {} patch source and {} record(s); output would be {output_size} byte(s), target checksum deferred to apply",
+                "validated {} patch source and {} record(s){}; output would be {output_size} byte(s), target checksum deferred to apply",
                 self.descriptor.name,
-                selected.file.records.len()
+                record_count,
+                chain_label_suffix(step_count)
             ),
             context.single_thread_execution(),
         ))
@@ -351,6 +366,22 @@ struct RupFile {
     overflow_mode: Option<RupOverflowMode>,
     overflow_data: Vec<u8>,
     records: Vec<RupRecord>,
+}
+
+impl RupFile {
+    /// MD5 the entry expects of its input: the source forward, the target when undoing.
+    fn input_md5(&self, undo: bool) -> [u8; 16] {
+        if undo {
+            self.target_md5
+        } else {
+            self.source_md5
+        }
+    }
+
+    /// MD5 the entry produces: the target forward, the source when undoing.
+    fn output_md5(&self, undo: bool) -> [u8; 16] {
+        self.input_md5(!undo)
+    }
 }
 
 #[derive(Debug)]
@@ -624,11 +655,7 @@ fn select_matching_file_for_input<'a>(
         let undo = selection.direction == PatchApplyDirection::Reverse;
         if validate_checksums {
             let actual = rup_input_md5_with_progress(&normalized_input.path, context)?;
-            let expected = format_md5_hex(if undo {
-                file.target_md5
-            } else {
-                file.source_md5
-            });
+            let expected = format_md5_hex(file.input_md5(undo));
             if actual != expected {
                 return Err(RomWeaverError::coded(
                     rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
@@ -776,6 +803,26 @@ fn apply_rup_chain<'a>(
     Ok(outcome)
 }
 
+/// Applies the chain into `chain.output`, a scratch file the caller removes, and returns the
+/// totals with the final output size.
+fn validate_rup_chain<'a>(
+    chain: &RupChain<'a>,
+    first: RupSelectedFile<'a>,
+    context: &OperationContext,
+) -> Result<(RupChainOutcome, u64)> {
+    let outcome = apply_rup_chain(chain, first, context)?;
+    let output_size = fs::metadata(chain.output)?.len();
+    Ok((outcome, output_size))
+}
+
+fn chain_label_suffix(step_count: usize) -> String {
+    if step_count > 1 {
+        format!("; chained {step_count} file entries")
+    } else {
+        String::new()
+    }
+}
+
 /// Applies one file entry: seeds `output_path` from the normalized input,
 /// XORs the records, applies overflow, verifies the entry's target MD5 when
 /// `verify_target` is set, and restores the input's header or container.
@@ -849,11 +896,7 @@ fn apply_rup_entry(
     output.flush()?;
 
     if verify_target {
-        let expected_md5 = if undo {
-            file.source_md5
-        } else {
-            file.target_md5
-        };
+        let expected_md5 = file.output_md5(undo);
         output.seek(SeekFrom::Start(0))?;
         let actual_md5 = md5_open_file(&mut output)?;
         if actual_md5 != expected_md5 {
@@ -888,13 +931,38 @@ fn rup_chain_may_continue(patch: &ParsedRupPatch, current: &RupSelectedFile<'_>)
         (&patch.files[current.variant + 1..], current.file.target_md5)
     };
     later.iter().any(|file| {
-        file.rom_type != current.file.rom_type
-            || if current.undo {
-                file.target_md5 == expected_md5
-            } else {
-                file.source_md5 == expected_md5
-            }
+        file.rom_type != current.file.rom_type || file.input_md5(current.undo) == expected_md5
     })
+}
+
+/// Entry indexes that follow `variant` in apply order: later entries forward, earlier ones
+/// (nearest first) when undoing.
+fn chain_candidates(entry_count: usize, variant: usize, undo: bool) -> Vec<usize> {
+    if undo {
+        (0..variant).rev().collect()
+    } else {
+        (variant + 1..entry_count).collect()
+    }
+}
+
+/// Follows declared MD5s from `variant` through entries of the same ROM type and returns the
+/// last entry reached, which is where the chain's output ends.
+fn declared_chain_end(patch: &ParsedRupPatch, variant: usize, undo: bool) -> usize {
+    let mut current = variant;
+    loop {
+        let file = &patch.files[current];
+        let next = chain_candidates(patch.files.len(), current, undo)
+            .into_iter()
+            .find(|&candidate| {
+                let candidate_file = &patch.files[candidate];
+                candidate_file.rom_type == file.rom_type
+                    && candidate_file.input_md5(undo) == file.output_md5(undo)
+            });
+        let Some(next) = next else {
+            return current;
+        };
+        current = next;
+    }
 }
 
 /// Finds the next entry after `current`, in apply order, whose input MD5
@@ -906,30 +974,21 @@ fn next_chain_entry<'a>(
     context: &OperationContext,
 ) -> Result<Option<RupSelectedFile<'a>>> {
     let undo = current.undo;
-    let candidates: Vec<usize> = if undo {
-        (0..current.variant).rev().collect()
-    } else {
-        (current.variant + 1..patch.files.len()).collect()
-    };
     // Earlier steps leave N64 data in big-endian order whatever the base order was.
     let chain_context = context
         .clone()
         .with_patch_input_n64_byte_order(N64ByteOrder::BigEndian);
-    for variant in candidates {
+    let mut normalized_by_rom_type = RupNormalizationCache::default();
+    for variant in chain_candidates(patch.files.len(), current.variant, undo) {
         chain_context.cancel().check()?;
         let file = &patch.files[variant];
-        let normalized_input = match normalize_rup_input(current_output, file, &chain_context) {
-            Ok(normalized_input) => normalized_input,
-            Err(RomWeaverError::Validation(_) | RomWeaverError::ValidationCode(_)) => continue,
-            Err(error) => return Err(error),
+        let Some(actual) = normalized_by_rom_type.md5(current_output, file, &chain_context)? else {
+            continue;
         };
-        let actual = rup_input_md5_with_progress(&normalized_input.path, context)?;
-        let expected = format_md5_hex(if undo {
-            file.target_md5
-        } else {
-            file.source_md5
-        });
-        if actual == expected {
+        if actual == format_md5_hex(file.input_md5(undo)) {
+            let normalized_input = normalized_by_rom_type
+                .take(file.rom_type)
+                .expect("a cached MD5 has a normalized input");
             return Ok(Some(RupSelectedFile {
                 variant,
                 file,
@@ -951,16 +1010,23 @@ fn reject_named_rup_entries(patch: &ParsedRupPatch) -> Result<()> {
     Ok(())
 }
 
-fn matching_files_for_input<'a>(
-    patch: &'a ParsedRupPatch,
-    input_path: &Path,
-    context: &OperationContext,
-) -> Result<Vec<RupEndpointMatch<'a>>> {
-    let mut matches = Vec::new();
-    let mut normalized_by_rom_type = HashMap::<u8, Option<(RupNormalizedInput, String)>>::new();
-    for (variant, file) in patch.files.iter().enumerate() {
-        context.cancel().check()?;
-        let normalized = match normalized_by_rom_type.entry(file.rom_type) {
+/// Normalized forms of one input per ROM type, each with its MD5. A ROM type whose
+/// normalization fails validation is cached as unusable and its entries never match.
+#[derive(Default)]
+struct RupNormalizationCache {
+    by_rom_type: HashMap<u8, Option<(RupNormalizedInput, String)>>,
+}
+
+impl RupNormalizationCache {
+    /// MD5 of `input_path` as normalized for `file`'s ROM type, or `None` when the input is not
+    /// valid for that type.
+    fn md5(
+        &mut self,
+        input_path: &Path,
+        file: &RupFile,
+        context: &OperationContext,
+    ) -> Result<Option<&str>> {
+        let entry = match self.by_rom_type.entry(file.rom_type) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
             std::collections::hash_map::Entry::Vacant(entry) => {
                 let normalized = match normalize_rup_input(input_path, file, context) {
@@ -975,11 +1041,31 @@ fn matching_files_for_input<'a>(
                 entry.insert(normalized)
             }
         };
-        let Some((_, input_md5)) = normalized.as_ref() else {
+        Ok(entry.as_ref().map(|(_, input_md5)| input_md5.as_str()))
+    }
+
+    fn take(&mut self, rom_type: u8) -> Option<RupNormalizedInput> {
+        self.by_rom_type
+            .remove(&rom_type)
+            .flatten()
+            .map(|(input, _)| input)
+    }
+}
+
+fn matching_files_for_input<'a>(
+    patch: &'a ParsedRupPatch,
+    input_path: &Path,
+    context: &OperationContext,
+) -> Result<Vec<RupEndpointMatch<'a>>> {
+    let mut matches = Vec::new();
+    let mut normalized_by_rom_type = RupNormalizationCache::default();
+    for (variant, file) in patch.files.iter().enumerate() {
+        context.cancel().check()?;
+        let Some(input_md5) = normalized_by_rom_type.md5(input_path, file, context)? else {
             continue;
         };
-        let source_matches = format_md5_hex(file.source_md5) == input_md5.as_str();
-        let target_matches = format_md5_hex(file.target_md5) == input_md5.as_str();
+        let source_matches = format_md5_hex(file.source_md5) == input_md5;
+        let target_matches = format_md5_hex(file.target_md5) == input_md5;
         if source_matches || target_matches {
             matches.push(RupEndpointMatch {
                 variant: variant as u32,
@@ -990,10 +1076,7 @@ fn matching_files_for_input<'a>(
         }
     }
     if let [matched] = matches.as_mut_slice() {
-        matched.normalized_input = normalized_by_rom_type
-            .remove(&matched.file.rom_type)
-            .flatten()
-            .map(|(input, _)| input);
+        matched.normalized_input = normalized_by_rom_type.take(matched.file.rom_type);
     }
     Ok(matches)
 }

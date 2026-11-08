@@ -2752,6 +2752,116 @@ fn apply_chains_entries_whose_size_changes() {
     assert_eq!(undone, first);
 }
 
+fn validate_rup_fixture(
+    temp: &TestDir,
+    patch: &[u8],
+    input: &[u8],
+) -> rom_weaver_core::Result<rom_weaver_core::OperationReport> {
+    let input_path = temp.child("validate-input.bin");
+    let patch_path = temp.child("validate.rup");
+    fs::write(&input_path, input).expect("input");
+    fs::write(&patch_path, patch).expect("patch");
+    RupPatchHandler::new(&RUP).validate(
+        &PatchValidateRequest {
+            input: input_path,
+            patches: vec![patch_path],
+        },
+        &test_context_with_threads(temp, 1),
+    )
+}
+
+/// Entries "ab" -> "abcd" and "abcd" -> "abcdef" chain on input "ab".
+fn growing_chain_patch(first: &[u8], second: &[u8], third: &[u8]) -> Vec<u8> {
+    chained_rup_patch(&[
+        create_rup_patch_bytes(first, second).expect("grow").bytes,
+        create_rup_patch_bytes(second, third)
+            .expect("grow again")
+            .bytes,
+    ])
+}
+
+#[test]
+fn validate_follows_the_chain_apply_follows() {
+    let (first, second, third) = (&b"ab"[..], &b"abcd"[..], &b"abcdef"[..]);
+    let patch = growing_chain_patch(first, second, third);
+    let temp = TestDir::new();
+
+    let report = validate_rup_fixture(&temp, &patch, first).expect("validate");
+    let (_, applied) =
+        apply_rup_fixture(&temp, &patch, first, &test_context_with_threads(&temp, 1))
+            .expect("apply");
+
+    assert_eq!(applied, third);
+    assert!(
+        report.label.contains("output would be 6 byte(s)")
+            && report.label.contains("chained 2 file entries"),
+        "validate disagrees with apply: {}",
+        report.label
+    );
+}
+
+#[test]
+fn validate_rejects_a_broken_record_in_a_later_chain_entry() {
+    let (first, second, third) = (&b"ab"[..], &b"abcd"[..], &b"abcdef"[..]);
+    let mut files = parse_rup_bytes(&growing_chain_patch(first, second, third))
+        .expect("parse")
+        .files;
+    files[1].records.push(RupRecord {
+        offset: 100,
+        xor: vec![1],
+    });
+    let patch = encode_rup_patch(&RupMetadata::default(), &files).expect("patch");
+    let temp = TestDir::new();
+
+    let validate_error = validate_rup_fixture(&temp, &patch, first)
+        .expect_err("a record past the second entry's output should fail validate");
+    let apply_error = apply_rup_fixture(&temp, &patch, first, &test_context_with_threads(&temp, 1))
+        .expect_err("and apply");
+
+    assert!(
+        validate_error
+            .to_string()
+            .contains("record exceeded declared output size"),
+        "{validate_error}"
+    );
+    assert!(
+        apply_error
+            .to_string()
+            .contains("record exceeded declared output size"),
+        "{apply_error}"
+    );
+}
+
+#[test]
+fn parse_endpoints_end_at_the_last_chained_target() {
+    let (first, second, third) = (&b"ab"[..], &b"abcd"[..], &b"abcdef"[..]);
+    let patch = growing_chain_patch(first, second, third);
+    let temp = TestDir::new();
+    let patch_path = temp.child("chain.rup");
+    fs::write(&patch_path, &patch).expect("patch");
+
+    let report = RupPatchHandler::new(&RUP)
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect("parse");
+    let endpoints = report_endpoints(&report);
+
+    // Forward from entry 0 continues through entry 1; reverse from entry 1 continues back to
+    // entry 0; the entries' own ends are unchanged.
+    for (index, size, md5) in [
+        (0, 6, md5_bytes(third)),
+        (1, 2, md5_bytes(first)),
+        (2, 6, md5_bytes(third)),
+        (3, 2, md5_bytes(first)),
+    ] {
+        assert_eq!(endpoints[index]["output"]["size"].as_u64(), Some(size));
+        assert_eq!(
+            endpoints[index]["output"]["checksums"]["md5"].as_str(),
+            Some(format_md5_hex(md5).as_str()),
+            "endpoint {index}"
+        );
+    }
+}
+
 #[test]
 fn apply_picks_the_matching_alternative_variant_without_chaining() {
     let patch = chained_rup_patch(&[
