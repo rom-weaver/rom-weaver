@@ -722,8 +722,8 @@ fn clear_bss(slot: &mut [u8], patch: &[u8], ddmem_start: i64) -> Result<()> {
     // dlditool zeroes the whole BSS in memory but writes back only the slot, so the part past
     // the slot is dropped.
     let end = end.min(slot.len());
-    if start < end {
-        slot[start..end].fill(0);
+    if let Some(bss) = slot.get_mut(start..end) {
+        bss.fill(0);
     }
     Ok(())
 }
