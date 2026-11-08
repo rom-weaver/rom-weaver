@@ -273,6 +273,100 @@ fn compress_refuses_to_overwrite_without_force() {
 }
 
 #[test]
+fn output_path_that_is_a_directory_is_refused_naming_the_path() {
+    let temp = setup_temp_dir();
+    let base_rom = temp.child("base.bin");
+    let modified = temp.child("modified.bin");
+    let patch = temp.child("fix.ips");
+    let nds = temp.child("game.nds");
+    fs::write(base_rom.path(), b"abcdefgh").expect("base fixture");
+    fs::write(modified.path(), b"abcdefgi").expect("modified fixture");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 7,
+                data: b"i".to_vec(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch fixture");
+    fs::write(
+        nds.path(),
+        build_test_nds_rom(0x00, 0x4000, 0x4000, 0x8000, false),
+    )
+    .expect("nds fixture");
+    let output = temp.child("taken-dir");
+    fs::create_dir_all(output.path()).expect("output dir");
+    let out = output.path().to_str().expect("path");
+    let base_path = base_rom.path().to_str().expect("path");
+    let modified_path = modified.path().to_str().expect("path");
+    let patch_path = patch.path().to_str().expect("path");
+    let nds_path = nds.path().to_str().expect("path");
+
+    let commands: [&[&str]; 6] = [
+        &[
+            "compress", "--input", base_path, "--format", "zip", "--output", out, "--force",
+        ],
+        &[
+            "compress", "--input", base_path, "--format", "zip", "--output", out,
+        ],
+        &[
+            "patch",
+            "apply",
+            "--input",
+            base_path,
+            "--patch",
+            patch_path,
+            "--no-compress",
+            "--output",
+            out,
+            "--force",
+        ],
+        &[
+            "patch",
+            "create",
+            "--original",
+            base_path,
+            "--modified",
+            modified_path,
+            "--format",
+            "ips",
+            "--output",
+            out,
+            "--force",
+        ],
+        &[
+            "weave", "create", "--input", base_path, "--patch", patch_path, "--output", out,
+            "--force",
+        ],
+        &["trim", "--input", nds_path, "--output", out, "--force"],
+    ];
+    for args in commands {
+        let result = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(args)
+            .assert()
+            .code(1);
+        let stderr = String::from_utf8_lossy(&result.get_output().stderr).into_owned();
+        assert!(
+            stderr.contains(&format!(
+                "output `{out}` is a directory; choose a different --output path"
+            )),
+            "{args:?}: {stderr}"
+        );
+        assert!(
+            fs::read_dir(output.path())
+                .expect("output dir")
+                .next()
+                .is_none(),
+            "{args:?} wrote into the directory"
+        );
+    }
+}
+
+#[test]
 fn compress_force_preserves_inputs_that_alias_the_output() {
     let temp = setup_temp_dir();
     let input = temp.child("game.bin");

@@ -489,6 +489,47 @@ fn save_goemon_2_edits_repair_the_slot_crc_and_preserve_other_records() {
 }
 
 #[test]
+fn save_commands_name_an_unknown_game_and_point_to_list_games() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.sav");
+    let output = temp.child("output.sav");
+    fs::write(input.path(), pokemon_gen1_fixture()).unwrap();
+    let input_path = input.to_str().unwrap();
+    let output_path = output.to_str().unwrap();
+
+    for args in [
+        vec!["save", "create", "--game", "nope", "--output", output_path],
+        vec!["save", "inspect", input_path, "--game", "nope"],
+        vec!["save", "export-schema", input_path, "--game", "nope"],
+        vec!["save", "get", input_path, "trainer.name", "--game", "nope"],
+        vec![
+            "save",
+            "set",
+            input_path,
+            "trainer.money=1",
+            "--game",
+            "nope",
+            "--output",
+            output_path,
+        ],
+    ] {
+        let result = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .assert()
+            .code(1);
+        let stderr = String::from_utf8_lossy(&result.get_output().stderr).into_owned();
+        assert!(stderr.contains("game=nope"), "{args:?}: {stderr}");
+        assert!(stderr.contains("save list-games"), "{args:?}: {stderr}");
+        assert!(
+            stderr.contains("[save_game_unsupported]"),
+            "{args:?}: {stderr}"
+        );
+        assert!(!output.path().exists());
+    }
+}
+
+#[test]
 fn save_commands_reject_the_removed_schema_option_before_writing() {
     let temp = setup_temp_dir();
     let input = temp.child("input.sav");

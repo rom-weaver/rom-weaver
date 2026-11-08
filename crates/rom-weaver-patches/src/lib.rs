@@ -597,18 +597,24 @@ impl PatchRegistry {
             .cloned()
     }
 
-    /// The rejection message for a create format no handler answers to, plus
-    /// the closest create-capable name when `requested` looks like a typo of
-    /// one. Apply-only formats are never suggested: retrying with one of them
-    /// would fail again.
+    /// The rejection message for a create format no handler answers to: the
+    /// requested value, the create-capable names, and the closest one when
+    /// `requested` looks like a typo. Apply-only formats are never listed or
+    /// suggested: retrying with one of them would fail again.
     pub fn unregistered_create_format_message(&self, requested: &str) -> String {
-        let candidates = self
-            .handlers
-            .iter()
-            .filter(|handler| handler.capabilities().create)
-            .flat_map(|handler| handler.descriptor().name_spellings());
+        let create_handlers = || {
+            self.handlers
+                .iter()
+                .filter(|handler| handler.capabilities().create)
+        };
+        let supported = create_handlers()
+            .map(|handler| handler.descriptor().name)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let candidates =
+            create_handlers().flat_map(|handler| handler.descriptor().name_spellings());
         format!(
-            "requested patch format is not registered{}",
+            "requested patch format is not registered: `{requested}`; supported create formats are {supported}{}",
             rom_weaver_core::did_you_mean_suffix(requested, candidates)
         )
     }

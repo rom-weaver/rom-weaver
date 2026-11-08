@@ -424,6 +424,7 @@ fn identify_reports_database_required_for_an_uninstalled_platform() {
     let hint = identify["hint"].as_str().expect("hint");
     assert!(hint.contains("Sony PlayStation"));
     assert!(hint.contains("this install shipped no identify database"));
+    assert!(hint.contains("`rom-weaver setup`"), "{hint}");
     for flags in [vec![], vec!["--verbose"], vec!["--quiet"]] {
         let result = Command::cargo_bin("rom-weaver")
             .expect("binary")

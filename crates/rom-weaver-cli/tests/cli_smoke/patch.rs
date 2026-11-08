@@ -2128,12 +2128,24 @@ fn patch_create_suggests_the_closest_create_format_for_a_typo() {
     );
     assert!(label.ends_with("; did you mean `IPS`?"), "{label}");
 
-    // NINJA1 is apply-only, so a near miss of it MUST NOT be suggested.
+    // NINJA1 is apply-only, so a near miss of it MUST NOT be suggested or listed.
     let label = patch_create_label_for_format(&temp, "ninja");
-    assert_eq!(label, "requested patch format is not registered");
+    assert!(label.contains("not registered: `ninja`;"), "{label}");
+    assert!(!label.contains("did you mean"), "{label}");
+    let supported = label
+        .split_once("supported create formats are ")
+        .expect("supported formats")
+        .1;
+    assert!(!supported.contains("NINJA"), "{label}");
 
+    // The rejection names the bad value and lists what would have worked.
     let label = patch_create_label_for_format(&temp, "not-a-format");
-    assert_eq!(label, "requested patch format is not registered");
+    assert!(label.contains("not registered: `not-a-format`;"), "{label}");
+    assert!(
+        label.contains("supported create formats are IPS, "),
+        "{label}"
+    );
+    assert!(supported.contains("BPS"), "{label}");
 }
 
 #[test]
@@ -2622,12 +2634,15 @@ fn patch_apply_rejects_invalid_codec_before_patching() {
     assert!(!output.path().exists());
 }
 
+#[cfg(unix)]
 #[test]
 fn patch_apply_compression_failure_keeps_error_kind_in_contextual_label() {
     let temp = setup_temp_dir();
     let (original, patch) = make_bps_patch_fixture(&temp);
     let output = temp.child("blocked.zip");
-    fs::create_dir(output.path()).expect("block output path with directory");
+    // A dangling link passes the up-front output checks but cannot be created.
+    std::os::unix::fs::symlink("missing-dir/out.zip", output.path())
+        .expect("block output path with a dangling link");
 
     let apply_json = parse_single_json_line(&command_stdout(
         &[
@@ -2653,7 +2668,7 @@ fn patch_apply_compression_failure_keeps_error_kind_in_contextual_label() {
     let label = apply_json["label"].as_str().expect("failure label");
     assert!(label.contains("patch output compression failed"), "{label}");
     assert!(label.contains("i/o error:"), "{label}");
-    assert!(output.path().is_dir());
+    assert!(!temp.child("missing-dir").path().exists());
 }
 
 #[test]

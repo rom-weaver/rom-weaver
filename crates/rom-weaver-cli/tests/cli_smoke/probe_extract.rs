@@ -2223,6 +2223,99 @@ fn failed_extract(input: &Path, out: &Path) {
 }
 
 #[test]
+fn extract_single_payload_refusal_matches_the_archive_wording() {
+    let temp = setup_temp_dir();
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    std::io::Write::write_all(&mut encoder, b"single payload").expect("gzip write");
+    fs::write(
+        temp.child("payload.bin.gz").path(),
+        encoder.finish().expect("gzip finish"),
+    )
+    .expect("gzip fixture");
+    let input = temp.child("payload.bin.gz");
+    let out = temp.child("out");
+    let args = [
+        "extract",
+        "--input",
+        input.path().to_str().expect("path"),
+        "--output",
+        out.path().to_str().expect("path"),
+    ];
+    command_stdout(&args, 0);
+
+    let refused = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(args)
+        .assert()
+        .code(1)
+        .get_output()
+        .stderr
+        .clone();
+    let stderr = String::from_utf8(refused).expect("utf8 stderr");
+    assert!(
+        stderr.contains("(pass --force to overwrite it)"),
+        "single-payload refusal MUST name --force: {stderr}"
+    );
+    assert!(!stderr.contains("os error"), "{stderr}");
+}
+
+#[cfg(unix)]
+fn symlink_tar_fixture() -> Vec<u8> {
+    fn header(name: &str, size: usize, kind: u8, link: &str) -> Vec<u8> {
+        let mut block = vec![0u8; 512];
+        block[..name.len()].copy_from_slice(name.as_bytes());
+        block[100..107].copy_from_slice(b"0000644");
+        block[108..115].copy_from_slice(b"0000000");
+        block[116..123].copy_from_slice(b"0000000");
+        block[124..135].copy_from_slice(format!("{size:011o}").as_bytes());
+        block[136..147].copy_from_slice(b"00000000000");
+        block[156] = kind;
+        block[157..157 + link.len()].copy_from_slice(link.as_bytes());
+        block[257..263].copy_from_slice(b"ustar\0");
+        block[263..265].copy_from_slice(b"00");
+        block[148..156].fill(b' ');
+        let sum: u32 = block.iter().map(|byte| u32::from(*byte)).sum();
+        block[148..155].copy_from_slice(format!("{sum:06o}\0").as_bytes());
+        block
+    }
+    let payload = b"real payload";
+    let mut tar = header("link", 0, b'2', "/etc/passwd");
+    tar.extend(header("real.bin", payload.len(), b'0', ""));
+    tar.extend_from_slice(payload);
+    tar.resize(tar.len().next_multiple_of(512) + 1024, 0);
+    tar
+}
+
+#[cfg(unix)]
+#[test]
+fn extract_reports_a_skipped_archive_link_once() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("links.tar").path(), symlink_tar_fixture()).expect("tar fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            "--input",
+            temp.child("links.tar").path().to_str().expect("path"),
+            "--output",
+            temp.child("out").path().to_str().expect("path"),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    assert_eq!(
+        stderr.matches("skipping archive link").count(),
+        1,
+        "{stderr}"
+    );
+    assert!(temp.child("out/real.bin").path().is_file());
+    assert!(!temp.child("out/link").path().exists());
+}
+
+#[test]
 fn extract_truncated_gzip_leaves_no_output_dir() {
     let temp = setup_temp_dir();
     let raw = temp.child("r.bin");

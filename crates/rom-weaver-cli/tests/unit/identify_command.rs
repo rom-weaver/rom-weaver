@@ -1129,12 +1129,11 @@ fn identify_hints_at_the_missing_pack_for_a_routed_platform() {
     let details = identify_details(&sink);
     assert_eq!(details["status"], json!("unknown"));
     assert_eq!(details["condition"], json!("database_required"));
-    assert!(
-        details["hint"]
-            .as_str()
-            .expect("a hint accompanies the condition")
-            .contains("this install shipped no identify database")
-    );
+    let hint = details["hint"]
+        .as_str()
+        .expect("a hint accompanies the condition");
+    assert!(hint.contains("this install shipped no identify database"));
+    assert!(hint.contains("`rom-weaver setup`"), "{hint}");
     assert_eq!(details["detected_platform"], json!("Sony PlayStation"));
     assert_eq!(
         details["platform_candidates"][0]["evidence"]["kind"],

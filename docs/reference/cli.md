@@ -142,7 +142,7 @@ Other commands report the requested destinations and any unresolved work. Archiv
 
 In human output, a dry run shows the plan and a no-write notice. JSON plans carry `details.dry_run`, `writes`, `downloads`, and `read_only`; `writes` and `downloads` describe planned actions, not completed actions. Existing detailed plan fields remain available.
 
-`--force` overwrites an output that already exists on commands that support it. Without it, a command that would overwrite stops before writing anything. `-y`/`--yes` answers confirmations with yes; it does not choose between candidates.
+`--force` overwrites an output that already exists on commands that support it. Without it, a command that would overwrite stops before writing anything. An output path that is a directory is refused with and without `--force`, in the form ``output `PATH` is a directory; choose a different --output path``. `-y`/`--yes` answers confirmations with yes; it does not choose between candidates.
 
 rom-weaver only asks interactive questions when stdin and stderr are both terminals and neither JSON mode is active. Otherwise, it decides on its own or fails.
 
@@ -317,7 +317,7 @@ Native `checksum --digest --algo ALGO` prints only the primary checksum in lower
 
 Without `-o` or `--output`, `save set` writes a free sibling name such as `game-edited.sav`. It adds a number when that name exists. An explicit output path must not exist unless `--force` is present. The output path must not name the source file.
 
-`--game GAME_ID` selects a compatible handler when recognition is ambiguous. `--rom-sha1 SHA1` supplies a known ROM identity to recognition. The SHA-1 value contains 40 hexadecimal characters.
+`--game GAME_ID` selects a compatible handler when recognition is ambiguous. An ID that is not in `save list-games` fails with `save_game_unsupported` and names the ID, except in `save identify`, which reports the save as unrecognized. `--rom-sha1 SHA1` supplies a known ROM identity to recognition. The SHA-1 value contains 40 hexadecimal characters.
 
 [Save Editor support](save-editor.md) lists the accepted game IDs, input layouts, and fields.
 

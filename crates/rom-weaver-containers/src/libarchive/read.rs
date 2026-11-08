@@ -1,6 +1,8 @@
 use super::legacy_pathname::decode_legacy_pathname;
 use super::*;
 use std::os::raw::{c_char, c_int};
+use std::path::PathBuf;
+use std::sync::Mutex;
 use tracing::{trace, warn};
 
 type SupportFunction = unsafe extern "C" fn(*mut archive) -> c_int;
@@ -53,7 +55,12 @@ pub enum ReadFilter {
 }
 pub struct ReadArchive {
     ptr: Option<NonNull<archive>>,
+    source: Option<PathBuf>,
 }
+
+/// Skipped links already warned about, keyed by archive path and link name. Listing, probing and
+/// extracting each walk the archive again; one warning per link is enough.
+static WARNED_ARCHIVE_LINKS: Mutex<BTreeSet<(PathBuf, String)>> = Mutex::new(BTreeSet::new());
 
 impl ReadArchive {
     pub fn new(context: &str) -> Result<Self> {
@@ -63,7 +70,10 @@ impl ReadArchive {
                 "{context}: libarchive reader allocation returned null"
             ))
         })?;
-        let reader = Self { ptr: Some(ptr) };
+        let reader = Self {
+            ptr: Some(ptr),
+            source: None,
+        };
         ffi::configure_utf8(reader.as_ptr(), context)?;
         Ok(reader)
     }
@@ -144,6 +154,7 @@ impl ReadArchive {
             let input = path_to_cstring(input, label)?;
             unsafe { sys::archive_read_open_filename(self.as_ptr(), input.as_ptr(), block_size) }
         };
+        self.source = Some(input.to_path_buf());
         self.check_status(status, context)
     }
 
@@ -184,10 +195,25 @@ impl ReadArchive {
             // A skipped link's name only feeds this warning, so a name that cannot be decoded must not
             // fail the whole archive.
             let pathname = entry.pathname().unwrap_or_else(|_| entry.pathname_lossy());
+            self.warn_skipped_link(&pathname);
+        }
+    }
+
+    fn warn_skipped_link(&self, pathname: &str) {
+        let key = (
+            self.source.clone().unwrap_or_default(),
+            pathname.to_string(),
+        );
+        let first_time = WARNED_ARCHIVE_LINKS
+            .lock()
+            .map_or(true, |mut warned| warned.insert(key));
+        if first_time {
             warn!(
                 path = %pathname,
                 "skipping archive link: symbolic and hard links are not supported"
             );
+        } else {
+            trace!(path = %pathname, "archive link already reported as skipped");
         }
     }
 

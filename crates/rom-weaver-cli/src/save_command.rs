@@ -210,6 +210,13 @@ impl CliApp {
         registry: &SaveGameRegistry,
     ) -> std::result::Result<(SaveRecognition, SaveGameIdentity, SaveDocument), Box<AppRunOutcome>>
     {
+        if let Some(game) = &input.selected_game
+            && let Err(error) = registry.ensure_game_known(game)
+        {
+            return Err(Box::new(
+                self.finish(command, save_error_report("validate", error)),
+            ));
+        }
         let (recognition, identity) = match detect_for_edit(input, registry) {
             Ok(result) => result,
             Err(failure) => {

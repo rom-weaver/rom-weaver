@@ -105,13 +105,25 @@ pub fn ensure_output_available(output_path: &Path, overwrite: bool) -> Result<()
         crate::register_in_progress_output(output_path);
         return Ok(());
     }
+    // `--force` cannot replace a directory, so name the real problem instead of
+    // failing later with a path-less "Is a directory" or a misleading refusal.
+    if output_path.is_dir() {
+        return Err(RomWeaverError::Validation(format!(
+            "output `{}` is a directory; choose a different --output path",
+            output_path.display()
+        )));
+    }
     if overwrite {
         return Ok(());
     }
-    Err(RomWeaverError::Validation(format!(
+    Err(overwrite_refusal(output_path))
+}
+
+fn overwrite_refusal(output_path: &Path) -> RomWeaverError {
+    RomWeaverError::Validation(format!(
         "refusing to overwrite existing output `{}` (pass --force to overwrite it)",
         output_path.display()
-    )))
+    ))
 }
 
 /// Where a command writes an output that may replace an existing file. A new output
@@ -300,10 +312,7 @@ pub fn create_extract_output_file(output_path: &Path, overwrite: bool) -> Result
             // file is an overwrite refusal; a denied directory reported as one
             // sends the user hunting for a file that was never there.
             if error.kind() == ErrorKind::AlreadyExists {
-                return RomWeaverError::Validation(format!(
-                    "refusing to overwrite existing output `{}`: {error}",
-                    output_path.display()
-                ));
+                return overwrite_refusal(output_path);
             }
             RomWeaverError::io_path(IoOp::Create, output_path, error)
         })
