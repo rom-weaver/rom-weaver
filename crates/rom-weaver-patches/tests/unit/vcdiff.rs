@@ -3702,7 +3702,8 @@ fn apply_rejects_windows_declaring_an_implausible_total_output() {
     );
 }
 
-// `auto` must only choose a secondary compressor that stock xdelta3 (djw + lzma, no FGK) decodes.
+// `auto` must only choose a secondary compressor that default xdelta3 builds decode (djw + lzma;
+// xdelta3 3.2 and later leave the FGK decoder out by default).
 #[test]
 fn create_xdelta_patch_mode_auto_never_selects_fgk() {
     let words: [&[u8]; 6] = [
@@ -3769,38 +3770,81 @@ fn create_xdelta_patch_mode_auto_never_selects_fgk() {
     }
 }
 
-fn smallest_candidate_fixture(size: u64) -> CreatedPatchCandidate {
-    CreatedPatchCandidate {
-        path: PathBuf::from(format!("candidate-{size}")),
-        size,
+/// Makes the temp file the create flow allocates for secondary compressor `secondary_id` a
+/// directory, so writing that candidate fails. The allocator hands out sequential names, so the
+/// first few sequence numbers are blocked.
+fn block_secondary_candidate(context: &OperationContext, secondary_id: u8) {
+    let probe = context.temp_paths().next_path("probe", None);
+    let dir = probe.parent().expect("temp namespace dir");
+    for sequence in 0..32 {
+        fs::create_dir_all(dir.join(format!(
+            "vcdiff-create-secondary-{secondary_id}-{sequence:08}.xdelta"
+        )))
+        .expect("block secondary candidate path");
     }
 }
 
-// A forced compressor that fails must fail the create. Under `auto` the failing candidate is
-// skipped with a warning and the smallest remaining one wins.
-#[test]
-fn secondary_candidate_errors_fail_forced_modes_and_warn_under_auto() {
-    let failing = || RomWeaverError::Validation("encoder exploded".into());
-    let forced = pick_smallest_secondary_candidate(
-        vec![(XDELTA_LZMA_SECONDARY_ID, Err(failing()))],
-        rom_weaver_core::XdeltaSecondaryMode::Lzma,
-    )
-    .expect_err("a forced compressor error is returned");
-    assert!(forced.to_string().contains("encoder exploded"), "{forced}");
+fn create_compressible_xdelta_patch(
+    context: &OperationContext,
+) -> (Result<rom_weaver_core::OperationReport>, PathBuf, TempGuard) {
+    let temp = create_temp_dir();
+    let original = temp.join("source.bin");
+    let modified = temp.join("modified.bin");
+    let output = temp.join("update.xdelta");
+    let mut state = 0x2545_F491_4F6C_DD1D_u64;
+    let target = (0..20_000)
+        .map(|_| {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            b"aaabbcde"[(state >> 60) as usize % 8]
+        })
+        .collect::<Vec<u8>>();
+    fs::write(&original, b"").expect("write source");
+    fs::write(&modified, &target).expect("write modified");
+    let report = VcdiffPatchHandler::new(&crate::xdelta::XDELTA).create(
+        &PatchCreateRequest {
+            original,
+            modified,
+            output: output.clone(),
+            format: "xdelta".into(),
+        },
+        context,
+    );
+    (report, output, temp)
+}
 
-    let (winner, warnings) = pick_smallest_secondary_candidate(
-        vec![
-            (XDELTA_DJW_SECONDARY_ID, Ok(smallest_candidate_fixture(30))),
-            (XDELTA_LZMA_SECONDARY_ID, Err(failing())),
-            (XDELTA_FGK_SECONDARY_ID, Ok(smallest_candidate_fixture(20))),
-            (XDELTA_FGK_SECONDARY_ID, Ok(smallest_candidate_fixture(20))),
-        ],
-        rom_weaver_core::XdeltaSecondaryMode::Auto,
-    )
-    .expect("auto survives one failing candidate");
-    assert_eq!(winner.expect("a candidate wins").size, 20);
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
-    assert!(warnings[0].contains("encoder exploded"), "{warnings:?}");
+// A forced compressor whose candidate cannot be written must fail the create.
+#[test]
+fn create_xdelta_patch_forced_secondary_candidate_failure_fails_the_create() {
+    let context =
+        test_context().with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::Lzma);
+    block_secondary_candidate(&context, XDELTA_LZMA_SECONDARY_ID);
+    let (result, _output, _temp) = create_compressible_xdelta_patch(&context);
+    result.expect_err("a forced compressor error fails the create");
+}
+
+// Under `auto` the failing candidate is skipped with a warning and the remaining one wins.
+#[test]
+fn create_xdelta_patch_auto_warns_and_keeps_the_remaining_secondary_candidate() {
+    let context =
+        test_context().with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::Auto);
+    block_secondary_candidate(&context, XDELTA_LZMA_SECONDARY_ID);
+    let (result, output, _temp) = create_compressible_xdelta_patch(&context);
+    let report = result.expect("auto survives one failing candidate");
+    assert!(
+        report
+            .label
+            .contains("warning=xdelta secondary compressor 2 failed and was skipped"),
+        "{}",
+        report.label
+    );
+    let parsed = parse_patch(&mut Cursor::new(fs::read(&output).expect("read patch")))
+        .expect("parse created patch");
+    assert_eq!(
+        parsed.secondary_compressor_id,
+        Some(XDELTA_DJW_SECONDARY_ID)
+    );
 }
 
 /// BLAKE3-256 of `hello old world` and `hello new world`, taken from the application header
