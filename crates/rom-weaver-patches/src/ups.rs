@@ -20,10 +20,10 @@ use crc32fast::Hasher;
 use rayon::prelude::*;
 use rom_weaver_checksum::crc32_bytes;
 use rom_weaver_core::{
-    DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
-    OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities, PatchCreateRequest,
-    PatchHandler, PatchValidateRequest, ProbeConfidence, Result, RomWeaverError,
-    SharedBlockCacheReader, SharedThreadPool,
+    DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor, IoOp,
+    IoResultExt, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
+    PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence, Result,
+    RomWeaverError, SharedBlockCacheReader, SharedThreadPool,
 };
 
 const UPS_MAGIC: &[u8; 4] = b"UPS1";
@@ -98,7 +98,7 @@ impl PatchHandler for UpsPatchHandler {
         );
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
         let thread_capability = parallel_per_record_capability(patch.changes.len());
         let execution = {
@@ -214,9 +214,9 @@ impl PatchHandler for UpsPatchHandler {
         )?;
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
-        fs::write(&request.output, created.bytes)?;
+        fs::write(&request.output, created.bytes).io_op(IoOp::Create, &request.output)?;
 
         Ok(crate::shared::labels::patch_create_report(
             self.descriptor,

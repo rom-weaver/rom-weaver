@@ -1398,3 +1398,55 @@ fn ppf_undo_restores_a_cli_created_patch_made_with_ppf_undo() {
         b"1234567890abcdef"
     );
 }
+
+/// A destination name over the filesystem's 255-byte limit, or one inside an
+/// unwritable directory, fails at the create. The error must name the
+/// operation and the requested `--output`, not a bare os message or the
+/// scratch and staging files the restore writes first.
+#[cfg(unix)]
+#[test]
+fn tools_ppf_undo_failure_names_the_output_path() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = setup_temp_dir();
+    let rom = temp.child("patched.bin");
+    fs::write(rom.path(), b"AAAAXYZAAAAAAAAA").expect("patched fixture");
+    let patch = temp.child("update.ppf");
+    fs::write(
+        patch.path(),
+        build_ppf3_undo_patch(&[(4, b"XYZ".to_vec(), b"AAA".to_vec())]),
+    )
+    .expect("patch fixture");
+    let locked = temp.path().join("locked");
+    fs::create_dir_all(&locked).expect("locked dir");
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).expect("chmod");
+    // Root bypasses the permission bits, so the locked case cannot fail there.
+    let running_as_root = rom_weaver_core::effective_ids().is_some_and(|(uid, _)| uid == 0);
+    let mut outputs = vec![temp.path().join(format!("{}.bin", "a".repeat(300)))];
+    if !running_as_root {
+        outputs.push(locked.join("restored.bin"));
+    }
+    for output in outputs {
+        let json = run_single_json_event(
+            &[
+                "tools",
+                "ppf-undo",
+                "--no-compress",
+                "--input",
+                rom.path().to_str().expect("path"),
+                "--patch",
+                patch.path().to_str().expect("path"),
+                "--output",
+                output.to_str().expect("path"),
+                "--json",
+            ],
+            1,
+        );
+        let message = json["error"]["message"].as_str().unwrap_or_default();
+        assert!(
+            message.contains(&format!("cannot create `{}`", output.display())),
+            "the failure must name the create and the requested output: {message}"
+        );
+    }
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).expect("restore");
+}

@@ -2258,3 +2258,34 @@ fn cancelled_compress_removes_the_output_directories_it_created() {
         "cancelled compress removed a directory that already existed"
     );
 }
+
+/// A destination name over the filesystem's 255-byte limit fails at the create.
+/// The error must name the operation and the path rather than surface a bare
+/// `File name too long`.
+#[cfg(unix)]
+#[test]
+fn compress_create_failure_names_the_output_path_for_every_create_format() {
+    let temp = setup_temp_dir();
+    let input = temp.child("source.bin");
+    input.write_str("payload").expect("fixture");
+    let long_stem = "a".repeat(300);
+    for extension in ["zip", "7z", "z3ds"] {
+        let destination = temp.path().join(format!("{long_stem}.{extension}"));
+        let json = run_single_json_event(
+            &[
+                "compress",
+                "--input",
+                input.path().to_str().expect("path"),
+                "--output",
+                destination.to_str().expect("path"),
+                "--json",
+            ],
+            1,
+        );
+        let message = json["error"]["message"].as_str().unwrap_or_default();
+        assert!(
+            message.contains(&format!("cannot create `{}`", destination.display())),
+            "{extension}: the failure must name the create and the path: {message}"
+        );
+    }
+}

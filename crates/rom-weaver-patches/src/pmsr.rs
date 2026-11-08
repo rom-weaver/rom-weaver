@@ -9,9 +9,9 @@ use tracing::{debug, trace};
 use crc32fast::Hasher;
 use rayon::prelude::*;
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    FormatDescriptor, IoOp, IoResultExt, OperationContext, OperationFamily, OperationReport,
+    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest,
+    ProbeConfidence, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 
 use crate::shared::checked::checked_add;
@@ -111,7 +111,7 @@ impl PatchHandler for PmsrPatchHandler {
         )?;
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
         let thread_capability = parallel_per_record_capability(patch.records.len());
         let records_non_overlapping = pmsr_records_are_non_overlapping(&patch, output_len)?;
@@ -136,7 +136,7 @@ impl PatchHandler for PmsrPatchHandler {
             let mut output_bytes = fs::read(&request.input)?;
             output_bytes.resize(output_len as usize, 0);
             apply_pmsr_records_in_memory(output_len, &patch.records, &mut output_bytes)?;
-            fs::write(&request.output, &output_bytes)?;
+            fs::write(&request.output, &output_bytes).io_op(IoOp::Create, &request.output)?;
             execution.force_serial();
             execution
         } else {
@@ -164,7 +164,8 @@ impl PatchHandler for PmsrPatchHandler {
                     let mut output = OpenOptions::new()
                         .read(true)
                         .write(true)
-                        .open(&request.output)?;
+                        .open(&request.output)
+                        .io_op(IoOp::Open, &request.output)?;
                     apply_pmsr_patch_in_place(&patch, output_len, &mut output)?;
                     output.flush()?;
                     Ok(())
@@ -243,9 +244,9 @@ impl PatchHandler for PmsrPatchHandler {
         )?;
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
-        fs::write(&request.output, patch.bytes)?;
+        fs::write(&request.output, patch.bytes).io_op(IoOp::Create, &request.output)?;
 
         let mut report = crate::shared::labels::patch_create_report(
             self.descriptor,
@@ -578,7 +579,8 @@ fn apply_pmsr_record_chunk(
     let mut output = OpenOptions::new()
         .read(true)
         .write(true)
-        .open(output_path)?;
+        .open(output_path)
+        .io_op(IoOp::Open, output_path)?;
     for record in records {
         context.cancel().check()?;
         let end = record.end()?;

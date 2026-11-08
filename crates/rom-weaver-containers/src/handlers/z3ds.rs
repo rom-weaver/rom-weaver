@@ -1,5 +1,7 @@
 use super::*;
-use rom_weaver_core::{bounded_items_for_threads, parallel_heap_reserve, reserve_parallel_heap};
+use rom_weaver_core::{
+    IoOp, IoResultExt, bounded_items_for_threads, parallel_heap_reserve, reserve_parallel_heap,
+};
 use tracing::debug;
 
 pub(crate) struct Z3dsContainerHandler;
@@ -1092,14 +1094,16 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         };
         let build: Result<()> = (|| {
             if let Some(parent) = request.output.parent() {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
             }
             // Large write buffer: streaming frames to disk interleaves the writes with the
             // coordinator thread's read-ahead, so batching them into a few big writes (instead of
             // the default 8 KiB BufWriter's thousands of small ones) keeps the reader feeding the
             // compressors at fast levels. 4 MiB is negligible against the wasm memory budget.
-            let mut output =
-                BufWriter::with_capacity(4 * 1024 * 1024, File::create(&request.output)?);
+            let mut output = BufWriter::with_capacity(
+                4 * 1024 * 1024,
+                File::create(&request.output).io_op(IoOp::Create, &request.output)?,
+            );
             let mut seek_table = ZeekstdSeekTable::new();
             header.write_to(output.get_mut())?;
             if !metadata.is_empty() {

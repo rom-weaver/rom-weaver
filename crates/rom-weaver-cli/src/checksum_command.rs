@@ -162,7 +162,6 @@ impl CliApp {
         thread_execution: &Option<ThreadExecution>,
     ) -> Option<OperationReport> {
         if let Some(report) = self.require_readable_file(
-            "checksum",
             OperationFamily::Checksum,
             Some(self.checksum.name().to_string()),
             source,

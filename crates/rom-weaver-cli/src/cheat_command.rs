@@ -61,7 +61,6 @@ fn export_cheat_patches(
 impl CliApp {
     pub(super) fn run_cheat(&self, args: CheatCommand) -> AppRunOutcome {
         if let Some(report) = self.require_readable_file(
-            "cheat",
             OperationFamily::Patch,
             Some("cheat".to_string()),
             &args.input,

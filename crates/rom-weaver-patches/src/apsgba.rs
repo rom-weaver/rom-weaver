@@ -8,10 +8,10 @@ use std::{
 use rayon::prelude::*;
 use rom_weaver_checksum::crc16_ccitt_bytes as crc16_bytes;
 use rom_weaver_core::{
-    DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
-    OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
-    PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence, Result,
-    RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
+    DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor, IoOp,
+    IoResultExt, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
+    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
+    Result, RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
 };
 use tracing::{debug, trace};
 
@@ -100,7 +100,7 @@ impl PatchHandler for ApsGbaPatchHandler {
         }
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
         let target_size_u64 = u64::from(patch.target_size);
         let thread_capability = parallel_per_record_capability(patch.records.len());
@@ -131,7 +131,7 @@ impl PatchHandler for ApsGbaPatchHandler {
                 &mut output_bytes,
                 validate_checksums,
             )?;
-            fs::write(&request.output, &output_bytes)?;
+            fs::write(&request.output, &output_bytes).io_op(IoOp::Create, &request.output)?;
             execution.force_serial();
             execution
         } else {

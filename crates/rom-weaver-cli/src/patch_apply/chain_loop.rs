@@ -405,7 +405,7 @@ impl CliApp {
             && !parent.exists()
             && let Err(error) =
                 rom_weaver_core::with_output_creation(inputs.context.cancel(), || {
-                    fs::create_dir_all(parent)?;
+                    fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
                     Ok(())
                 })
         {

@@ -1250,7 +1250,7 @@ impl CliApp {
         let command = "playlist";
         for input in &args.input {
             if let Some(report) =
-                self.require_readable_file(command, OperationFamily::Command, None, input, None)
+                self.require_readable_file(OperationFamily::Command, None, input, None)
             {
                 return self.finish(command, report);
             }

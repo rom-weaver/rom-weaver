@@ -6898,3 +6898,36 @@ fn weave_create_help_uses_current_weave_value_names() {
     assert!(help.contains("--weave-rom <ROM>"), "{help}");
     assert!(!help.contains("BUNDLE"), "{help}");
 }
+
+/// A destination name over the filesystem's 255-byte limit fails at the create.
+/// The error must name the operation and the path rather than surface a bare
+/// `File name too long`.
+#[cfg(unix)]
+#[test]
+fn weave_create_failure_names_the_output_path() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("rom.bin");
+    fs::write(rom.path(), b"abcdefgh").expect("ROM");
+    let patch = write_min_ips(&temp, "fix.ips");
+    let long_stem = "a".repeat(300);
+    let output = temp.path().join(format!("{long_stem}.json"));
+    let json = run_single_json_event(
+        &[
+            "weave",
+            "create",
+            "--input",
+            rom.path().to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--output",
+            output.to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+    let message = json["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains(&format!("cannot create `{}`", output.display())),
+        "the failure must name the create and the path: {message}"
+    );
+}

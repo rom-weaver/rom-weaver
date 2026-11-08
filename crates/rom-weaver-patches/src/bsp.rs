@@ -7,9 +7,9 @@ use std::{
 };
 
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
-    PatchCreateRequest, PatchHandler, PatchValidateRequest, Result, RomWeaverError,
-    SharedThreadPool, ThreadCapability, UnsupportedOp,
+    FormatDescriptor, IoOp, IoResultExt, OperationContext, OperationReport, PatchApplyRequest,
+    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, Result,
+    RomWeaverError, SharedThreadPool, ThreadCapability, UnsupportedOp,
 };
 use tracing::{debug, trace};
 
@@ -66,7 +66,7 @@ impl BspPatchHandler {
         );
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
         let target_path = &request.output;
         let staged_path = match fs::symlink_metadata(target_path) {
@@ -81,7 +81,7 @@ impl BspPatchHandler {
         );
         let apply_result = (|| -> Result<u64> {
             if let Some(parent) = output_path.parent() {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
             }
             drop(crate::copy_input_to_output(&request.input, output_path)?);
             let written = apply_bsp_patch_path(

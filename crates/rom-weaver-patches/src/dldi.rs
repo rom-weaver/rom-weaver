@@ -9,9 +9,9 @@ use tracing::{debug, trace};
 
 use rom_weaver_core::{
     BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
-    Result, RomWeaverError, ThreadCapability,
+    FormatDescriptor, IoOp, IoResultExt, OperationContext, OperationFamily, OperationReport,
+    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest,
+    ProbeConfidence, Result, RomWeaverError, ThreadCapability,
 };
 
 use crate::shared::labels::append_warning_labels;
@@ -138,7 +138,7 @@ impl PatchHandler for DldiPatchHandler {
             };
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
 
         let label = append_warning_labels(
@@ -299,9 +299,9 @@ impl PatchHandler for DldiPatchHandler {
         }
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
-        fs::write(&request.output, &patch_bytes)?;
+        fs::write(&request.output, &patch_bytes).io_op(IoOp::Create, &request.output)?;
 
         Ok(crate::patch_success_report(
             self.descriptor,
@@ -354,7 +354,7 @@ fn apply_dldi_patch_to_file(
 ) -> Result<DldiApplyOutput> {
     let prepared = prepare_dldi_patch(input_path, patch, input_len)?;
     if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
     }
     let mut output = crate::copy_input_to_output(input_path, output_path)?;
     output.set_len(prepared.output_len)?;

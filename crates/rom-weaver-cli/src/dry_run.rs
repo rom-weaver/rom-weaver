@@ -581,7 +581,7 @@ impl CliApp {
         if path.as_os_str() == "-" {
             return None;
         }
-        self.require_readable_file(command, family, None, path, None)
+        self.require_readable_file(family, None, path, None)
             .map(|report| self.finish(command, report))
     }
 

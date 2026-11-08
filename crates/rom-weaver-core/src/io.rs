@@ -420,6 +420,15 @@ pub fn copy_file_retrying_interrupted(from: &Path, to: &Path) -> std::io::Result
     copy_file_retrying_with(from, to, |from, to| fs::copy(from, to))
 }
 
+/// [`copy_file_retrying_interrupted`] whose failure names the path at fault: `from` when it
+/// cannot be opened, otherwise `to`.
+pub fn copy_file_naming_paths(from: &Path, to: &Path) -> Result<u64> {
+    copy_file_retrying_interrupted(from, to).map_err(|error| match File::open(from) {
+        Ok(_) => RomWeaverError::io_path(IoOp::Create, to, error),
+        Err(open_error) => RomWeaverError::io_path(IoOp::Open, from, open_error),
+    })
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn copy_file_retrying_with(
     from: &Path,

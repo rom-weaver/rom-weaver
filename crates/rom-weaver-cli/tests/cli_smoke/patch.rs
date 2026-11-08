@@ -15184,3 +15184,38 @@ fn patch_apply_weave_value_name_is_not_the_legacy_bundle() {
     assert!(help.contains("--weave <WEAVE>"), "{help}");
     assert!(!help.contains("BUNDLE"), "{help}");
 }
+
+/// A destination name over the filesystem's 255-byte limit fails at the create.
+/// The error must name the operation and the path rather than surface a bare
+/// `File name too long`.
+#[cfg(unix)]
+#[test]
+fn patch_apply_no_compress_failure_names_the_output_path() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("rom.bin");
+    fs::write(rom.path(), b"abcdefgh").expect("ROM");
+    let patch = temp.child("fix.ips");
+    fs::write(patch.path(), b"PATCH\x00\x00\x03\x00\x01XEOF").expect("patch");
+    let long_stem = "a".repeat(300);
+    let output = temp.path().join(format!("{long_stem}.bin"));
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--no-compress",
+            "--input",
+            rom.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+    let message = json["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains(&format!("cannot create `{}`", output.display())),
+        "the failure must name the create and the path: {message}"
+    );
+}

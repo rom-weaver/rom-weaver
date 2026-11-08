@@ -60,10 +60,10 @@ impl CliApp {
             )));
         }
         if let Some(parent) = output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
         let mut reader = BufReader::new(File::open(input)?);
-        let mut writer = BufWriter::new(File::create(output)?);
+        let mut writer = BufWriter::new(File::create(output).io_op(IoOp::Create, output)?);
         let mut word = [0_u8; 4];
         loop {
             match reader.read_exact(&mut word) {

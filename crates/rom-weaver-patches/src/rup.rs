@@ -14,8 +14,8 @@ use rayon::prelude::*;
 use rom_weaver_checksum::md5_bytes;
 use rom_weaver_checksum::{checksum_reader_values_with_progress, md5_file};
 use rom_weaver_core::{
-    FormatDescriptor, N64ByteOrder, OperationContext, OperationFamily, OperationReport,
-    PatchApplyDirection, PatchApplyRequest, PatchCapabilities, PatchCreateRequest,
+    FormatDescriptor, IoOp, IoResultExt, N64ByteOrder, OperationContext, OperationFamily,
+    OperationReport, PatchApplyDirection, PatchApplyRequest, PatchCapabilities, PatchCreateRequest,
     PatchEndpointSelection, PatchHandler, PatchValidateRequest, ProbeConfidence, Result,
     RomWeaverError, SharedThreadPool, UnsupportedOp,
 };
@@ -205,7 +205,7 @@ impl PatchHandler for RupPatchHandler {
         })?;
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
         let normalized_output_path = if normalized_input.reconstruction.is_identity() {
             request.output.clone()
@@ -367,7 +367,7 @@ impl PatchHandler for RupPatchHandler {
         );
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
 
         let created = create_rup_patch(
@@ -376,7 +376,7 @@ impl PatchHandler for RupPatchHandler {
             &pool,
             execution.used_parallelism,
         )?;
-        fs::write(&request.output, &created.bytes)?;
+        fs::write(&request.output, &created.bytes).io_op(IoOp::Create, &request.output)?;
 
         Ok(crate::shared::labels::patch_create_report(
             self.descriptor,
@@ -1100,7 +1100,7 @@ fn finalize_rup_output(
         RupOutputReconstruction::Identity => Ok(()),
         RupOutputReconstruction::PrefixHeader(header) => {
             ensure_parent_dir(output_path)?;
-            let mut output = File::create(output_path)?;
+            let mut output = File::create(output_path).io_op(IoOp::Create, output_path)?;
             output.write_all(header)?;
             let mut normalized = File::open(normalized_output_path)?;
             rom_weaver_core::copy_retrying_interrupted(&mut normalized, &mut output)?;
@@ -1119,7 +1119,7 @@ fn finalize_rup_output(
 fn extract_unif_payload_to_temp(input_path: &Path, context: &OperationContext) -> Result<PathBuf> {
     write_normalization_temp(context, "rup-unif-payload", |output_path| {
         let mut input = File::open(input_path)?;
-        let mut output = File::create(output_path)?;
+        let mut output = File::create(output_path).io_op(IoOp::Create, output_path)?;
         copy_unif_payload_chunks(&mut input, &mut output, context)?;
         output.flush()?;
         Ok(())
@@ -1269,7 +1269,7 @@ fn write_snes_deinterleaved_to_temp(
         let payload = read_file_cancellable(input_path, context)?;
         let deinterleaved = deinterleave_snes_payload(&payload);
         let mut source = deinterleaved.as_slice();
-        let mut output = File::create(output_path)?;
+        let mut output = File::create(output_path).io_op(IoOp::Create, output_path)?;
         copy_cancellable(&mut source, &mut output, context)?;
         output.flush()?;
         Ok(())
@@ -1317,7 +1317,7 @@ fn write_n64_big_endian_to_temp(
             )));
         }
         let mut input = BufReader::new(File::open(input_path)?);
-        let mut output = File::create(output_path)?;
+        let mut output = File::create(output_path).io_op(IoOp::Create, output_path)?;
         let mut buffer = vec![0u8; RUP_IO_BUFFER_SIZE];
         let mut remaining = input_len;
         while remaining > 0 {
@@ -1346,7 +1346,7 @@ fn write_smd_deinterleaved_to_temp(
 ) -> Result<PathBuf> {
     write_normalization_temp(context, purpose, |output_path| {
         let mut input = BufReader::new(File::open(input_path)?);
-        let mut output = File::create(output_path)?;
+        let mut output = File::create(output_path).io_op(IoOp::Create, output_path)?;
         input.seek(SeekFrom::Start(payload_offset))?;
         let mut block = vec![0u8; SMD_BLOCK_SIZE];
         let mut remaining = payload_len;
@@ -1390,7 +1390,7 @@ fn copy_range_to_temp(
     write_normalization_temp(context, purpose, |output_path| {
         let mut input = File::open(input_path)?;
         input.seek(SeekFrom::Start(offset))?;
-        let mut output = File::create(output_path)?;
+        let mut output = File::create(output_path).io_op(IoOp::Create, output_path)?;
         let mut limited = input.take(len);
         copy_cancellable(&mut limited, &mut output, context)?;
         output.flush()?;
@@ -1459,7 +1459,7 @@ fn write_normalization_temp(
 
 fn ensure_parent_dir(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
     }
     Ok(())
 }

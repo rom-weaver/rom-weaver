@@ -642,7 +642,7 @@ impl CliApp {
                 Some(root) => root.clone(),
                 None => {
                     let root = context.temp_paths().next_path("patch-apply-weave", None);
-                    fs::create_dir_all(&root)?;
+                    fs::create_dir_all(&root).io_op(IoOp::CreateDir, &root)?;
                     *extract_root = Some(root.clone());
                     root
                 }

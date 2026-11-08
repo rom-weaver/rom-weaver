@@ -10,9 +10,9 @@ use tracing::{debug, trace};
 use rayon::prelude::*;
 use rom_weaver_core::{
     BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-    FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
-    PatchCreateRequest, PatchHandler, PatchValidateRequest, Result, RomWeaverError,
-    SharedThreadPool,
+    FormatDescriptor, IoOp, IoResultExt, OperationContext, OperationReport, PatchApplyRequest,
+    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, Result,
+    RomWeaverError, SharedThreadPool,
 };
 
 use crate::shared::threading::{
@@ -55,7 +55,7 @@ impl PatPatchHandler {
         let grouped_records = group_pat_records_by_offset(&parsed.records);
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
         let output_len = fs::metadata(&request.input)?.len();
         validate_pat_record_offsets(&grouped_records, output_len)?;
@@ -102,7 +102,7 @@ impl PatPatchHandler {
             for write in &writes {
                 output_bytes[write.offset as usize] = write.byte;
             }
-            fs::write(&request.output, &output_bytes)?;
+            fs::write(&request.output, &output_bytes).io_op(IoOp::Create, &request.output)?;
             let mut execution = planned_execution;
             execution.force_serial();
             (execution, writes)

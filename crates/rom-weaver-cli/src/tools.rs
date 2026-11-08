@@ -24,7 +24,7 @@ impl CliApp {
         }
         trace!(output = %destination.display(), "replacing existing PPF undo output");
         let staged = StagedOutput::new(destination)?;
-        rom_weaver_core::copy_file_retrying_interrupted(source, staged.path())?;
+        rom_weaver_core::copy_file_naming_paths(source, staged.path())?;
         staged.commit()
     }
 
@@ -38,8 +38,7 @@ impl CliApp {
         let command = "tools-ppf-undo";
         let execution = None;
         for (label, path) in [("ROM", &args.rom), ("PPF patch", &args.patch)] {
-            if let Some(report) = self.require_readable_path(
-                command,
+            if let Some(report) = self.require_readable_file(
                 OperationFamily::Patch,
                 Some("PPF".to_string()),
                 path,
@@ -55,18 +54,6 @@ impl CliApp {
                         Some("PPF".to_string()),
                         "validate",
                         format!("PPF undo output and {label} resolve to the same file; choose a different --output path"),
-                        execution.clone(),
-                    ),
-                );
-            }
-            if path.is_dir() {
-                return self.finish(
-                    command,
-                    OperationReport::failed(
-                        OperationFamily::Patch,
-                        Some("PPF".to_string()),
-                        "validate",
-                        format!("{label} path is a directory: `{}`", path.display()),
                         execution.clone(),
                     ),
                 );
@@ -220,7 +207,8 @@ impl CliApp {
             Some(0.0),
             context.single_thread_execution(),
         );
-        let mismatched_records = rom_weaver_patches::undo_ppf(input, patch, &raw_output)?;
+        let mismatched_records = rom_weaver_patches::undo_ppf(input, patch, &raw_output)
+            .map_err(|error| Self::blame_requested_output(error, &raw_output, &output))?;
         let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some("PPF".to_string()),
@@ -304,7 +292,7 @@ impl CliApp {
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
         {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
         if let Some(disc) = &disc
             && !compression_options.enabled
@@ -322,7 +310,7 @@ impl CliApp {
                 if let Some(parent) = destination.parent()
                     && !parent.as_os_str().is_empty()
                 {
-                    fs::create_dir_all(parent)?;
+                    fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
                 }
                 Self::publish_ppf_undo_output(source, destination, args.force)?;
             }

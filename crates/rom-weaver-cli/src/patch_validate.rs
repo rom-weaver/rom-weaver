@@ -194,18 +194,13 @@ impl CliApp {
         patches: &[PathBuf],
         probe_threads: &Option<ThreadExecution>,
     ) -> Option<OperationReport> {
-        if let Some(report) = self.require_readable_file(
-            "patch-validate",
-            OperationFamily::Patch,
-            None,
-            input,
-            probe_threads.clone(),
-        ) {
+        if let Some(report) =
+            self.require_readable_file(OperationFamily::Patch, None, input, probe_threads.clone())
+        {
             return Some(report);
         }
         for patch_path in patches {
             if let Some(report) = self.require_readable_file(
-                "patch-validate",
                 OperationFamily::Patch,
                 None,
                 patch_path,

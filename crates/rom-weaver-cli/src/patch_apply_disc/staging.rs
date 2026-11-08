@@ -1,6 +1,8 @@
 //! Source paths may leave the sheet directory; generated paths must never do so.
 
-use super::{DiscFile, DiscSheetKind, Path, PathBuf, Result, RomWeaverError, fs};
+use super::{
+    DiscFile, DiscSheetKind, IoOp, IoResultExt, Path, PathBuf, Result, RomWeaverError, fs,
+};
 use crate::path_access::path_basename;
 use std::collections::BTreeSet;
 
@@ -225,8 +227,9 @@ pub(super) fn write_sheet(source: &Path, dest: &Path, files: &[DiscFile]) -> Res
     let mut target = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(dest)?;
-    std::io::Write::write_all(&mut target, output.as_bytes())?;
+        .open(dest)
+        .io_op(IoOp::Create, dest)?;
+    std::io::Write::write_all(&mut target, output.as_bytes()).io_op(IoOp::Write, dest)?;
     Ok(())
 }
 

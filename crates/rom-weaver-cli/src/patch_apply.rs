@@ -964,7 +964,6 @@ impl CliApp {
     ) -> Option<OperationReport> {
         for patch_path in patches {
             if let Some(report) = self.require_readable_file(
-                "patch-apply",
                 OperationFamily::Patch,
                 None,
                 patch_path,
@@ -1469,7 +1468,7 @@ impl CliApp {
     }
 
     pub(super) fn copy_to_new_output_file(source: &Path, destination: &Path) -> Result<()> {
-        let mut source_file = File::open(source)?;
+        let mut source_file = File::open(source).io_op(IoOp::Open, source)?;
         let (staged_path, mut staged_file) = loop {
             let counter =
                 INFERRED_PUBLISH_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1491,14 +1490,17 @@ impl CliApp {
             {
                 Ok(file) => break (staged_path, file),
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-                Err(error) => return Err(RomWeaverError::Io(error)),
+                Err(error) => {
+                    return Err(Self::new_output_io_error(IoOp::Create, destination, error));
+                }
             }
         };
-        let publish_result = (|| -> io::Result<()> {
+        let publish_result = (|| -> Result<()> {
             rom_weaver_core::copy_retrying_interrupted(&mut source_file, &mut staged_file)?;
-            staged_file.sync_all()?;
+            staged_file.sync_all().io_op(IoOp::Write, &staged_path)?;
             drop(staged_file);
             Self::install_staged_no_overwrite(&staged_path, destination)
+                .map_err(|error| Self::new_output_io_error(IoOp::Create, destination, error))
         })();
         let cleanup_result = fs::remove_file(&staged_path);
         if let Err(error) = cleanup_result
@@ -1511,9 +1513,18 @@ impl CliApp {
                 );
                 return Ok(());
             }
-            return Err(RomWeaverError::Io(error));
+            return Err(Self::new_output_io_error(IoOp::Write, &staged_path, error));
         }
-        publish_result.map_err(RomWeaverError::Io)
+        publish_result
+    }
+
+    /// Names `path` in a failure of a create-new output write. An existing
+    /// destination stays a bare `AlreadyExists` so callers can pick another name.
+    fn new_output_io_error(op: IoOp, path: &Path, error: io::Error) -> RomWeaverError {
+        if error.kind() == io::ErrorKind::AlreadyExists {
+            return RomWeaverError::Io(error);
+        }
+        RomWeaverError::io_path(op, path, error)
     }
 
     fn compress_patch_apply_output(
@@ -3439,9 +3450,13 @@ impl CliApp {
         cheats::apply_writes(&mut rom, summary.system, &writes)
             .map_err(|error| fail("apply", error))?;
         if let Some(parent) = output.parent() {
-            fs::create_dir_all(parent).map_err(|error| fail_io("prepare", error))?;
+            fs::create_dir_all(parent)
+                .io_op(IoOp::CreateDir, parent)
+                .map_err(|error| fail("prepare", error))?;
         }
-        fs::write(output, rom).map_err(|error| fail_io("apply", error))?;
+        fs::write(output, rom)
+            .io_op(IoOp::Create, output)
+            .map_err(|error| fail("apply", error))?;
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some("cheat".to_string()),
@@ -3776,7 +3791,6 @@ impl CliApp {
         };
         for patch in patches {
             if let Some(report) = self.require_readable_file(
-                "patch-apply",
                 OperationFamily::Patch,
                 None,
                 patch,

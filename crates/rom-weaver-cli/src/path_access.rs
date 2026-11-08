@@ -131,6 +131,32 @@ fn input_validation_failure(
         .with_error_kind(RomWeaverErrorKind::Validation)
 }
 
+/// The validation failure for a `path` that is missing or cannot be read, or
+/// `None` when it can be.
+fn readable_path_failure(
+    family: OperationFamily,
+    format: Option<String>,
+    path: &Path,
+    thread_execution: Option<ThreadExecution>,
+) -> Option<OperationReport> {
+    match check_readable(path) {
+        Ok(()) => None,
+        Err(PathAccessError::Missing) => Some(input_validation_failure(
+            family,
+            format,
+            format!("input path does not exist: `{}`", path.display()),
+            thread_execution,
+        )),
+        Err(PathAccessError::Denied(error)) => Some(OperationReport::failed_with_error(
+            family,
+            format,
+            "validate",
+            error,
+            thread_execution,
+        )),
+    }
+}
+
 const PROBE_FILE_PREFIX: &str = ".rom-weaver-write-probe";
 static NEXT_PROBE_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -152,22 +178,7 @@ impl CliApp {
         path: &Path,
         thread_execution: Option<ThreadExecution>,
     ) -> Option<OperationReport> {
-        match check_readable(path) {
-            Ok(()) => None,
-            Err(PathAccessError::Missing) => Some(input_validation_failure(
-                family,
-                format,
-                format!("input path does not exist: `{}`", path.display()),
-                thread_execution,
-            )),
-            Err(PathAccessError::Denied(error)) => Some(OperationReport::failed_with_error(
-                family,
-                format,
-                "validate",
-                error,
-                thread_execution,
-            )),
-        }
+        readable_path_failure(family, format, path, thread_execution)
     }
 
     /// [`Self::require_readable_path`] for an input that must be a single file:
@@ -175,23 +186,18 @@ impl CliApp {
     /// reaching a handler that can only report "no handler matched".
     pub(super) fn require_readable_file(
         &self,
-        command: &str,
         family: OperationFamily,
         format: Option<String>,
         path: &Path,
         thread_execution: Option<ThreadExecution>,
     ) -> Option<OperationReport> {
-        if let Some(report) = self.require_readable_path(
-            command,
-            family,
-            format.clone(),
-            path,
-            thread_execution.clone(),
-        ) {
+        if let Some(report) =
+            readable_path_failure(family, format.clone(), path, thread_execution.clone())
+        {
             return Some(report);
         }
         path.is_dir().then(|| {
-            trace!(path = %path.display(), command, "input is a directory");
+            trace!(path = %path.display(), "input is a directory");
             input_validation_failure(
                 family,
                 format,

@@ -570,10 +570,10 @@ impl CliApp {
             .temp_paths()
             .next_path("patch-apply-disc-stage", None);
         if let Some(parent) = stage_dir.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
         // Never reuse an existing directory (or symlink) as our private stage.
-        fs::create_dir(&stage_dir)?;
+        fs::create_dir(&stage_dir).io_op(IoOp::CreateDir, &stage_dir)?;
         temp_paths.push(stage_dir.clone());
         trace!(stage_dir = %stage_dir.display(), tracks = replacements.len(), "staging patched disc");
 
@@ -597,7 +597,7 @@ impl CliApp {
             if let Some(parent) = dest.parent()
                 && !parent.exists()
             {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
             }
             let source = replacements.get(&file.path).unwrap_or(&file.path);
             // Exclusive creation also catches filesystem-specific name aliases.
@@ -605,7 +605,8 @@ impl CliApp {
             let mut target = fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
-                .open(&dest)?;
+                .open(&dest)
+                .io_op(IoOp::Create, &dest)?;
             rom_weaver_core::copy_retrying_interrupted(&mut source, &mut target)?;
         }
 
@@ -751,7 +752,7 @@ impl CliApp {
             if let Some(parent) = destination.parent()
                 && !parent.as_os_str().is_empty()
             {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
             }
             if overwrite {
                 // Some filesystems create additional aliases (such as NTFS
@@ -759,7 +760,7 @@ impl CliApp {
                 // identities before each destructive copy, not only before
                 // the first publication.
                 Self::validate_disc_output_destinations(disc, output, &[], true)?;
-                rom_weaver_core::copy_file_retrying_interrupted(source, destination)?;
+                rom_weaver_core::copy_file_naming_paths(source, destination)?;
             } else {
                 Self::copy_to_new_output_file(source, destination)?;
             }

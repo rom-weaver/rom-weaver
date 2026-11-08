@@ -52,8 +52,8 @@ use pmsr::PmsrPatchHandler;
 use ppf::PpfPatchHandler;
 pub use ppf::undo_ppf;
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchCapabilities,
-    PatchHandler, Result, RomWeaverError, ThreadExecution, ValidationCodeError,
+    FormatDescriptor, IoOp, IoResultExt, OperationContext, OperationFamily, OperationReport,
+    PatchCapabilities, PatchHandler, Result, RomWeaverError, ThreadExecution, ValidationCodeError,
 };
 use rup::RupPatchHandler;
 use solid::SolidPatchHandler;
@@ -136,22 +136,25 @@ pub(crate) fn can_apply_sparse_in_memory(
 pub fn copy_input_to_output(input: &Path, output: &Path) -> Result<File> {
     trace!(input = %input.display(), output = %output.display(), "seeding writable output");
     if output.exists() {
-        let mut input = File::open(input)?;
+        let mut input = File::open(input).io_op(IoOp::Open, input)?;
         let mut output = OpenOptions::new()
             .read(true)
             .write(true)
             .truncate(true)
-            .open(output)?;
+            .open(output)
+            .io_op(IoOp::Write, output)?;
         rom_weaver_core::copy_retrying_interrupted(&mut input, &mut output)?;
         return Ok(output);
     }
-    rom_weaver_core::copy_file_retrying_interrupted(input, output)?;
+    rom_weaver_core::copy_file_naming_paths(input, output)?;
     #[cfg(not(target_family = "wasm"))]
     {
         #[cfg(unix)]
         use std::os::unix::fs::PermissionsExt;
 
-        let mut permissions = fs::metadata(output)?.permissions();
+        let mut permissions = fs::metadata(output)
+            .io_op(IoOp::Inspect, output)?
+            .permissions();
         #[cfg(unix)]
         let needs_permissions = permissions.mode() & 0o600 != 0o600;
         #[cfg(not(unix))]
@@ -169,10 +172,14 @@ pub fn copy_input_to_output(input: &Path, output: &Path) -> Result<File> {
                 )]
                 permissions.set_readonly(false);
             }
-            fs::set_permissions(output, permissions)?;
+            fs::set_permissions(output, permissions).io_op(IoOp::Write, output)?;
         }
     }
-    Ok(OpenOptions::new().read(true).write(true).open(output)?)
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(output)
+        .io_op(IoOp::Open, output)
 }
 
 /// Read a chunk from both paths. `original_bytes` is zero-filled past
@@ -455,9 +462,11 @@ pub(crate) fn patch_success_report(
 /// Create `path`, truncating an existing file, after creating its parent directory.
 pub(crate) fn create_buffered_output(path: &Path) -> Result<BufWriter<File>> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
     }
-    Ok(BufWriter::new(File::create(path)?))
+    Ok(BufWriter::new(
+        File::create(path).io_op(IoOp::Create, path)?,
+    ))
 }
 
 /// Capabilities for a fully-featured patch format that parses, applies, and creates, with the

@@ -9,9 +9,9 @@ use tracing::{debug, trace};
 
 use rayon::prelude::*;
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool,
+    FormatDescriptor, IoOp, IoResultExt, OperationContext, OperationFamily, OperationReport,
+    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest,
+    ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
 };
 
 use crate::shared::threading::{
@@ -343,7 +343,7 @@ fn apply_gdiff_plan_sequential(
     source_len: u64,
 ) -> Result<()> {
     if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
     }
 
     let mut patch = BufReader::new(File::open(patch_path)?);

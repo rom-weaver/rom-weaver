@@ -379,7 +379,6 @@ impl CliApp {
         let patch_paths = specs.iter().map(|spec| &spec.path);
         for input in args.rom.iter().chain(&args.bundle_rom).chain(patch_paths) {
             if let Some(report) = self.require_readable_file(
-                "bundle-create",
                 OperationFamily::Command,
                 Some("bundle-create".to_string()),
                 input,
@@ -773,11 +772,11 @@ impl CliApp {
         context: &OperationContext,
     ) -> Result<PathBuf> {
         let staging = context.temp_paths().next_path("weave-weave", None);
-        fs::create_dir_all(&staging)?;
+        fs::create_dir_all(&staging).io_op(IoOp::CreateDir, &staging)?;
         let bundle_path = staging.join(WEAVE_BASE_FILE_NAME);
-        fs::write(&bundle_path, weave_bytes)?;
+        fs::write(&bundle_path, weave_bytes).io_op(IoOp::Create, &bundle_path)?;
         let legacy_path = staging.join(BUNDLE_BASE_FILE_NAME);
-        fs::write(&legacy_path, weave_bytes)?;
+        fs::write(&legacy_path, weave_bytes).io_op(IoOp::Create, &legacy_path)?;
         let mut inputs = vec![bundle_path, legacy_path];
         if let (Some(rom), Some(member)) = (
             rom,
@@ -785,9 +784,9 @@ impl CliApp {
         ) {
             let target = staging.join(member);
             if let Some(parent) = target.parent() {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
             }
-            rom_weaver_core::copy_file_retrying_interrupted(rom, &target)?;
+            rom_weaver_core::copy_file_naming_paths(rom, &target)?;
             inputs.push(target);
         }
         for (spec, entry) in specs.iter().zip(&definition.patches) {
@@ -799,9 +798,9 @@ impl CliApp {
                 continue;
             }
             if let Some(parent) = target.parent() {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
             }
-            rom_weaver_core::copy_file_retrying_interrupted(&spec.path, &target)?;
+            rom_weaver_core::copy_file_naming_paths(&spec.path, &target)?;
             inputs.push(target);
         }
         let format = weave
@@ -1442,7 +1441,7 @@ fn write_weave_bytes(output: &Path, bytes: &[u8]) -> Result<()> {
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
     {
-        fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
     }
     let base_name = output
         .file_name()
@@ -1454,14 +1453,14 @@ fn write_weave_bytes(output: &Path, bytes: &[u8]) -> Result<()> {
     });
     match codec {
         Some(extension) if extension.eq_ignore_ascii_case("gz") => {
-            let file = File::create(output)?;
+            let file = File::create(output).io_op(IoOp::Create, output)?;
             let mut encoder = GzEncoder::new(file, GzCompression::best());
-            encoder.write_all(bytes)?;
-            encoder.finish()?;
+            encoder.write_all(bytes).io_op(IoOp::Write, output)?;
+            encoder.finish().io_op(IoOp::Write, output)?;
             Ok(())
         }
         Some(extension) if extension.eq_ignore_ascii_case("zst") => {
-            let file = File::create(output)?;
+            let file = File::create(output).io_op(IoOp::Create, output)?;
             zstd::stream::copy_encode(bytes, file, 19).map_err(|error| {
                 RomWeaverError::Validation(format!("zstd weave encoding failed: {error}"))
             })?;
@@ -1477,7 +1476,7 @@ fn write_weave_bytes(output: &Path, bytes: &[u8]) -> Result<()> {
             )))
         }
         _ => {
-            fs::write(output, bytes)?;
+            fs::write(output, bytes).io_op(IoOp::Create, output)?;
             Ok(())
         }
     }
