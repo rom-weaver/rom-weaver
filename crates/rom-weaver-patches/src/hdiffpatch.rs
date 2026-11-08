@@ -1129,19 +1129,139 @@ fn read_hdiff13_chunks_from_patch_reader(
     })
 }
 
-fn apply_hdiff13_with_chunks(
-    old_data: &HdiffOldData,
-    header: &ParsedHdiff13,
-    chunks: Hdiff13Chunks,
-    output: &mut impl Write,
-) -> Result<usize> {
-    let Hdiff13Chunks {
-        cover_raw,
-        rle_ctrl_raw,
-        rle_code_raw,
-        mut new_diff_raw,
-    } = chunks;
+/// One cover decoded from the HDIFF13 cover buffer.
+struct Hdiff13Cover {
+    old_pos: u64,
+    cover_length: u64,
+    new_pos: u64,
+    new_end: u64,
+}
 
+/// Reads covers from the HDIFF13 cover buffer, tracking the end of the previous cover.
+struct Hdiff13CoverReader<'a> {
+    raw: &'a [u8],
+    index: usize,
+    last_old_end: u64,
+    last_new_end: u64,
+    new_data_size: usize,
+}
+
+impl<'a> Hdiff13CoverReader<'a> {
+    fn new(raw: &'a [u8], new_data_size: usize) -> Self {
+        Self {
+            raw,
+            index: 0,
+            last_old_end: 0,
+            last_new_end: 0,
+            new_data_size,
+        }
+    }
+
+    fn bytes_left(&self) -> usize {
+        self.raw.len() - self.index
+    }
+
+    fn read_cover(&mut self) -> Result<Hdiff13Cover> {
+        let p_sign = read_u8_slice(self.raw, &mut self.index, "cover sign")?;
+        let old_sign = p_sign >> 7;
+        let old_delta =
+            read_var_u64_tagged_slice(self.raw, &mut self.index, 1, p_sign, "cover old_delta")?;
+        let old_pos = if old_sign == 0 {
+            self.last_old_end.checked_add(old_delta).ok_or_else(|| {
+                RomWeaverError::Validation("HDiffPatch cover old position overflowed".into())
+            })?
+        } else {
+            self.last_old_end.checked_sub(old_delta).ok_or_else(|| {
+                RomWeaverError::Validation("HDiffPatch cover old position underflowed".into())
+            })?
+        };
+
+        let copy_length = read_var_u64(self.raw, &mut self.index, "cover copy")?;
+        let cover_length = read_var_u64(self.raw, &mut self.index, "cover length")?;
+
+        let new_data_limit = self.new_data_size as u64;
+        let new_pos = self
+            .last_new_end
+            .checked_add(copy_length)
+            .filter(|&position| position <= new_data_limit)
+            .ok_or_else(|| hdiff13_output_size_mismatch(self.new_data_size))?;
+        let new_end = new_pos
+            .checked_add(cover_length)
+            .filter(|&position| position <= new_data_limit)
+            .ok_or_else(|| hdiff13_output_size_mismatch(self.new_data_size))?;
+        Ok(Hdiff13Cover {
+            old_pos,
+            cover_length,
+            new_pos,
+            new_end,
+        })
+    }
+
+    fn finish_cover(&mut self, cover: &Hdiff13Cover) -> Result<()> {
+        self.last_old_end = cover
+            .old_pos
+            .checked_add(cover.cover_length)
+            .ok_or_else(|| RomWeaverError::Validation("HDiffPatch old end overflowed".into()))?;
+        self.last_new_end = cover.new_end;
+        Ok(())
+    }
+}
+
+/// Writes the ordered HDIFF13 output: new-data-diff bytes for gaps and old-file bytes with
+/// the RLE delta added for covers.
+struct Hdiff13Emitter<'a, W: Write> {
+    new_diff: Vec<u8>,
+    new_diff_index: usize,
+    rle: HdiffRleDecoder<'a>,
+    buffer: Vec<u8>,
+    output: &'a mut W,
+}
+
+impl<W: Write> Hdiff13Emitter<'_, W> {
+    fn fill_from_new_diff(&mut self, fill_len: usize, label: &'static str) -> Result<()> {
+        let fill = take_new_diff(
+            self.new_diff.as_mut_slice(),
+            &mut self.new_diff_index,
+            fill_len,
+            label,
+        )?;
+        self.rle.skip(fill_len)?;
+        self.output.write_all(fill)?;
+        Ok(())
+    }
+
+    fn copy_old_range(
+        &mut self,
+        old_data: &HdiffOldData,
+        old_range: std::ops::Range<usize>,
+    ) -> Result<()> {
+        let mut old_position = old_range.start;
+        while old_position < old_range.end {
+            let len = self.buffer.len().min(old_range.end - old_position);
+            let target = &mut self.buffer[..len];
+            old_data.read_into(old_position, target)?;
+            self.rle.add(target)?;
+            self.output.write_all(target)?;
+            old_position += len;
+        }
+        Ok(())
+    }
+
+    fn new_diff_bytes_left(&self) -> usize {
+        self.new_diff.len() - self.new_diff_index
+    }
+}
+
+fn hdiff13_output_size_mismatch(new_data_size: usize) -> RomWeaverError {
+    RomWeaverError::ValidationCode(
+        hdiff_validation_code("HDIFF_OUTPUT_SIZE_MISMATCH")
+            .with_message("HDiffPatch output size mismatch")
+            .with_field("expected", new_data_size),
+    )
+}
+
+/// Checks the old data against the header and returns the declared new data size.
+fn check_hdiff13_sizes(old_data: &HdiffOldData, header: &ParsedHdiff13) -> Result<usize> {
     let expected_old_data_size = usize::try_from(header.old_data_size).map_err(|_| {
         RomWeaverError::Validation("HDiffPatch old_data_size overflowed usize".into())
     })?;
@@ -1163,153 +1283,42 @@ fn apply_hdiff13_with_chunks(
             "HDiffPatch declared new_data_size {new_data_size} exceeds allocatable memory"
         )));
     }
-    let output_size_mismatch = || {
-        RomWeaverError::ValidationCode(
-            hdiff_validation_code("HDIFF_OUTPUT_SIZE_MISMATCH")
-                .with_message("HDiffPatch output size mismatch")
-                .with_field("expected", new_data_size),
-        )
-    };
-    let mut position = 0usize;
-    let mut buffer = vec![0u8; HDIFF13_OUTPUT_BUFFER_SIZE.min(old_data_size)];
-    trace!(
-        new_data_size,
-        buffer_size = buffer.len(),
-        "hdiffpatch streaming ordered HDIFF13 output"
-    );
+    Ok(new_data_size)
+}
 
-    let mut cover_index = 0usize;
-    let mut new_diff_index = 0usize;
-
-    let mut rle = HdiffRleDecoder::new(rle_ctrl_raw.as_slice(), rle_code_raw.as_slice());
-
-    let mut last_old_end = 0u64;
-    let mut last_new_end = 0u64;
-    let mut remaining_covers = header.cover_count;
-
-    while remaining_covers > 0 {
-        remaining_covers -= 1;
-
-        let p_sign = read_u8_slice(cover_raw.as_slice(), &mut cover_index, "cover sign")?;
-        let old_sign = p_sign >> 7;
-        let old_delta = read_var_u64_tagged_slice(
-            cover_raw.as_slice(),
-            &mut cover_index,
-            1,
-            p_sign,
-            "cover old_delta",
-        )?;
-        let old_pos = if old_sign == 0 {
-            last_old_end.checked_add(old_delta).ok_or_else(|| {
-                RomWeaverError::Validation("HDiffPatch cover old position overflowed".into())
-            })?
-        } else {
-            last_old_end.checked_sub(old_delta).ok_or_else(|| {
-                RomWeaverError::Validation("HDiffPatch cover old position underflowed".into())
-            })?
-        };
-
-        let copy_length = read_var_u64(cover_raw.as_slice(), &mut cover_index, "cover copy")?;
-        let cover_length = read_var_u64(cover_raw.as_slice(), &mut cover_index, "cover length")?;
-
-        let new_pos = last_new_end
-            .checked_add(copy_length)
-            .filter(|&position| position <= header.new_data_size)
-            .ok_or_else(output_size_mismatch)?;
-        let new_end = new_pos
-            .checked_add(cover_length)
-            .filter(|&position| position <= header.new_data_size)
-            .ok_or_else(output_size_mismatch)?;
-
-        let new_pos_usize = usize::try_from(new_pos).map_err(|_| {
-            RomWeaverError::Validation("HDiffPatch new position overflowed usize".into())
-        })?;
-        if position > new_pos_usize {
-            return Err(RomWeaverError::Validation(
-                "HDiffPatch cover new position moved backward".into(),
-            ));
-        }
-
-        if position < new_pos_usize {
-            let fill_len = new_pos_usize - position;
-            let gap = take_new_diff(
-                new_diff_raw.as_mut_slice(),
-                &mut new_diff_index,
-                fill_len,
-                "new_data_diff gap",
-            )?;
-            rle.skip(fill_len)?;
-            output.write_all(gap)?;
-            position = position
-                .checked_add(fill_len)
-                .ok_or_else(output_size_mismatch)?;
-        }
-
-        let old_start = usize::try_from(old_pos).map_err(|_| {
-            RomWeaverError::Validation("HDiffPatch old position overflowed usize".into())
-        })?;
-        let cover_len_usize = usize::try_from(cover_length).map_err(|_| {
-            RomWeaverError::Validation("HDiffPatch cover length overflowed usize".into())
-        })?;
-        let old_end = old_start.checked_add(cover_len_usize).ok_or_else(|| {
-            RomWeaverError::Validation("HDiffPatch cover old range overflowed".into())
-        })?;
-        if old_end > old_data_size {
-            return Err(RomWeaverError::ValidationCode(
-                hdiff_validation_code("HDIFF_COVER_EXCEEDED_OLD_BOUNDS")
-                    .with_message("HDiffPatch cover exceeded old data bounds")
-                    .with_field("old_start", old_start)
-                    .with_field("old_end", old_end)
-                    .with_field("old_len", old_data_size),
-            ));
-        }
-
-        let next_position = position
-            .checked_add(cover_len_usize)
-            .ok_or_else(output_size_mismatch)?;
-        let mut old_position = old_start;
-        while old_position < old_end {
-            let len = buffer.len().min(old_end - old_position);
-            let target = &mut buffer[..len];
-            old_data.read_into(old_position, target)?;
-            rle.add(target)?;
-            output.write_all(target)?;
-            old_position += len;
-        }
-        position = next_position;
-
-        last_old_end = old_pos
-            .checked_add(cover_length)
-            .ok_or_else(|| RomWeaverError::Validation("HDiffPatch old end overflowed".into()))?;
-        last_new_end = new_end;
-    }
-
-    if position < new_data_size {
-        let fill_len = new_data_size - position;
-        let tail = take_new_diff(
-            new_diff_raw.as_mut_slice(),
-            &mut new_diff_index,
-            fill_len,
-            "new_data_diff tail",
-        )?;
-        rle.skip(fill_len)?;
-        output.write_all(tail)?;
-        position = position
-            .checked_add(fill_len)
-            .ok_or_else(output_size_mismatch)?;
-    }
-
-    if position != new_data_size {
+/// Returns the old-data range a cover copies from, which must lie inside the old data.
+fn hdiff13_cover_old_range(
+    cover: &Hdiff13Cover,
+    old_data_size: usize,
+) -> Result<std::ops::Range<usize>> {
+    let old_start = usize::try_from(cover.old_pos).map_err(|_| {
+        RomWeaverError::Validation("HDiffPatch old position overflowed usize".into())
+    })?;
+    let cover_len = usize::try_from(cover.cover_length).map_err(|_| {
+        RomWeaverError::Validation("HDiffPatch cover length overflowed usize".into())
+    })?;
+    let old_end = old_start.checked_add(cover_len).ok_or_else(|| {
+        RomWeaverError::Validation("HDiffPatch cover old range overflowed".into())
+    })?;
+    if old_end > old_data_size {
         return Err(RomWeaverError::ValidationCode(
-            hdiff_validation_code("HDIFF_OUTPUT_SIZE_MISMATCH")
-                .with_message("HDiffPatch output size mismatch")
-                .with_field("expected", new_data_size)
-                .with_field("actual", position),
+            hdiff_validation_code("HDIFF_COVER_EXCEEDED_OLD_BOUNDS")
+                .with_message("HDiffPatch cover exceeded old data bounds")
+                .with_field("old_start", old_start)
+                .with_field("old_end", old_end)
+                .with_field("old_len", old_data_size),
         ));
     }
+    Ok(old_start..old_end)
+}
+
+fn check_hdiff13_streams_consumed(
+    cover_bytes_left: usize,
+    new_diff_bytes_left: usize,
+) -> Result<()> {
     let leftover_streams = [
-        ("cover", cover_raw.len() - cover_index),
-        ("new_data_diff", new_diff_raw.len() - new_diff_index),
+        ("cover", cover_bytes_left),
+        ("new_data_diff", new_diff_bytes_left),
     ];
     for (stream, bytes_left) in leftover_streams {
         if bytes_left != 0 {
@@ -1321,7 +1330,88 @@ fn apply_hdiff13_with_chunks(
             ));
         }
     }
-    rle.finish()?;
+    Ok(())
+}
+
+fn apply_hdiff13_with_chunks(
+    old_data: &HdiffOldData,
+    header: &ParsedHdiff13,
+    chunks: Hdiff13Chunks,
+    output: &mut impl Write,
+) -> Result<usize> {
+    let Hdiff13Chunks {
+        cover_raw,
+        rle_ctrl_raw,
+        rle_code_raw,
+        new_diff_raw,
+    } = chunks;
+
+    let new_data_size = check_hdiff13_sizes(old_data, header)?;
+    let old_data_size = old_data.len();
+    let buffer = vec![0u8; HDIFF13_OUTPUT_BUFFER_SIZE.min(old_data_size)];
+    trace!(
+        new_data_size,
+        buffer_size = buffer.len(),
+        "hdiffpatch streaming ordered HDIFF13 output"
+    );
+
+    let mut covers = Hdiff13CoverReader::new(cover_raw.as_slice(), new_data_size);
+    let mut emitter = Hdiff13Emitter {
+        new_diff: new_diff_raw,
+        new_diff_index: 0,
+        rle: HdiffRleDecoder::new(rle_ctrl_raw.as_slice(), rle_code_raw.as_slice()),
+        buffer,
+        output,
+    };
+    let mut position = 0usize;
+
+    for _ in 0..header.cover_count {
+        let cover = covers.read_cover()?;
+
+        let new_pos = usize::try_from(cover.new_pos).map_err(|_| {
+            RomWeaverError::Validation("HDiffPatch new position overflowed usize".into())
+        })?;
+        if position > new_pos {
+            return Err(RomWeaverError::Validation(
+                "HDiffPatch cover new position moved backward".into(),
+            ));
+        }
+        if position < new_pos {
+            let fill_len = new_pos - position;
+            emitter.fill_from_new_diff(fill_len, "new_data_diff gap")?;
+            position = position
+                .checked_add(fill_len)
+                .ok_or_else(|| hdiff13_output_size_mismatch(new_data_size))?;
+        }
+
+        let old_range = hdiff13_cover_old_range(&cover, old_data_size)?;
+        let next_position = position
+            .checked_add(old_range.len())
+            .ok_or_else(|| hdiff13_output_size_mismatch(new_data_size))?;
+        emitter.copy_old_range(old_data, old_range)?;
+        position = next_position;
+
+        covers.finish_cover(&cover)?;
+    }
+
+    if position < new_data_size {
+        let fill_len = new_data_size - position;
+        emitter.fill_from_new_diff(fill_len, "new_data_diff tail")?;
+        position = position
+            .checked_add(fill_len)
+            .ok_or_else(|| hdiff13_output_size_mismatch(new_data_size))?;
+    }
+
+    if position != new_data_size {
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_OUTPUT_SIZE_MISMATCH")
+                .with_message("HDiffPatch output size mismatch")
+                .with_field("expected", new_data_size)
+                .with_field("actual", position),
+        ));
+    }
+    check_hdiff13_streams_consumed(covers.bytes_left(), emitter.new_diff_bytes_left())?;
+    emitter.rle.finish()?;
 
     Ok(position)
 }
@@ -1444,10 +1534,12 @@ fn apply_hdiffsf20_with_diff(
     })?;
     let parsed = parse_hdiffsf20_steps(
         diff,
-        old_data.len(),
-        new_data_size,
-        header.cover_count,
-        step_mem_size,
+        Sf20PlanLimits {
+            old_len: old_data.len(),
+            new_data_size,
+            cover_count: header.cover_count,
+            step_mem_size,
+        },
     )?;
 
     // `new_data_size` is an attacker-controlled varint, but `parse_hdiffsf20_steps`
@@ -1493,32 +1585,142 @@ fn apply_hdiffsf20_with_diff(
     })
 }
 
-fn parse_hdiffsf20_steps(
-    diff: &[u8],
+#[derive(Clone, Copy, Debug)]
+struct Sf20PlanLimits {
     old_len: usize,
     new_data_size: usize,
     cover_count: u64,
     step_mem_size: usize,
-) -> Result<ParsedSf20Plan> {
-    let mut diff_index = 0usize;
-    let mut last_old_end = 0u64;
-    let mut last_new_end = 0u64;
-    let mut remaining_covers = cover_count;
-    let mut steps = Vec::<Sf20StepPlan>::new();
+}
 
-    while remaining_covers > 0 {
-        let cover_buf_size =
-            usize::try_from(read_var_u64(diff, &mut diff_index, "sf20 cover_buf_size")?).map_err(
-                |_| RomWeaverError::Validation("HDIFFSF20 cover_buf_size overflowed usize".into()),
-            )?;
-        let rle_buf_size =
-            usize::try_from(read_var_u64(diff, &mut diff_index, "sf20 rle_buf_size")?).map_err(
-                |_| RomWeaverError::Validation("HDIFFSF20 rle_buf_size overflowed usize".into()),
-            )?;
+/// One cover as encoded in a step's cover buffer, before conversion to `usize`.
+struct Sf20CoverRead {
+    old_pos: u64,
+    new_pos: u64,
+    new_gap: u64,
+    cover_length: u64,
+}
+
+fn parse_hdiffsf20_steps(diff: &[u8], limits: Sf20PlanLimits) -> Result<ParsedSf20Plan> {
+    Sf20PlanParser::new(diff, limits).parse()
+}
+
+/// Walks the HDIFFSF20 payload step by step, validating it the way patch.c does and
+/// recording where each step's covers, gaps and RLE bytes live.
+struct Sf20PlanParser<'a> {
+    diff: &'a [u8],
+    limits: Sf20PlanLimits,
+    diff_index: usize,
+    last_old_end: u64,
+    last_new_end: u64,
+    remaining_covers: u64,
+    steps: Vec<Sf20StepPlan>,
+}
+
+impl<'a> Sf20PlanParser<'a> {
+    fn new(diff: &'a [u8], limits: Sf20PlanLimits) -> Self {
+        Self {
+            diff,
+            limits,
+            diff_index: 0,
+            last_old_end: 0,
+            last_new_end: 0,
+            remaining_covers: limits.cover_count,
+            steps: Vec::new(),
+        }
+    }
+
+    fn parse(mut self) -> Result<ParsedSf20Plan> {
+        while self.remaining_covers > 0 {
+            let step = self.parse_step()?;
+            self.steps.push(step);
+        }
+
+        let produced_len = usize::try_from(self.last_new_end).map_err(|_| {
+            RomWeaverError::Validation("HDIFFSF20 produced size overflowed usize".into())
+        })?;
+        if produced_len != self.limits.new_data_size {
+            return Err(RomWeaverError::ValidationCode(
+                hdiff_validation_code("HDIFFSF20_OUTPUT_SIZE_MISMATCH")
+                    .with_message("HDIFFSF20 output size mismatch")
+                    .with_field("expected", self.limits.new_data_size)
+                    .with_field("actual", produced_len),
+            ));
+        }
+        if self.diff_index != self.diff.len() {
+            return Err(RomWeaverError::ValidationCode(
+                hdiff_validation_code("HDIFF_STREAM_NOT_CONSUMED")
+                    .with_message("HDIFFSF20 payload has bytes after the last cover")
+                    .with_field("bytes_left", self.diff.len() - self.diff_index),
+            ));
+        }
+
+        Ok(ParsedSf20Plan { steps: self.steps })
+    }
+
+    fn parse_step(&mut self) -> Result<Sf20StepPlan> {
+        let (cover_range, rle_range) = self.read_step_extent()?;
+        let diff = self.diff;
+        let covers = &diff[cover_range];
+
+        let output_start = usize::try_from(self.last_new_end).map_err(|_| {
+            RomWeaverError::Validation("HDIFFSF20 step output start overflowed usize".into())
+        })?;
+        let gap_start = self.diff_index;
+        let covers_before = self.remaining_covers;
+        let (step_covers, gap_end) = self.read_step_covers(covers)?;
+
+        if self.remaining_covers == covers_before {
+            return Err(RomWeaverError::Validation(
+                "HDIFFSF20 step declared no decodable covers".into(),
+            ));
+        }
+
+        let output_end = usize::try_from(self.last_new_end).map_err(|_| {
+            RomWeaverError::Validation("HDIFFSF20 step output end overflowed usize".into())
+        })?;
+        if output_end < output_start {
+            return Err(RomWeaverError::Validation(
+                "HDIFFSF20 step output moved backward".into(),
+            ));
+        }
+        self.check_step_follows_previous(output_start)?;
+
+        self.diff_index = gap_end;
+        Ok(Sf20StepPlan {
+            output_start,
+            output_len: output_end - output_start,
+            rle_range,
+            gap_range: gap_start..gap_end,
+            covers: step_covers,
+        })
+    }
+
+    /// Reads a step header and returns the ranges of its cover and RLE buffers, leaving
+    /// `diff_index` at the end of the step buffers.
+    fn read_step_extent(&mut self) -> Result<(std::ops::Range<usize>, std::ops::Range<usize>)> {
+        let diff = self.diff;
+        let cover_buf_size = usize::try_from(read_var_u64(
+            diff,
+            &mut self.diff_index,
+            "sf20 cover_buf_size",
+        )?)
+        .map_err(|_| {
+            RomWeaverError::Validation("HDIFFSF20 cover_buf_size overflowed usize".into())
+        })?;
+        let rle_buf_size = usize::try_from(read_var_u64(
+            diff,
+            &mut self.diff_index,
+            "sf20 rle_buf_size",
+        )?)
+        .map_err(|_| {
+            RomWeaverError::Validation("HDIFFSF20 rle_buf_size overflowed usize".into())
+        })?;
         let step_size = cover_buf_size
             .checked_add(rle_buf_size)
             .ok_or_else(|| RomWeaverError::Validation("HDIFFSF20 step size overflowed".into()))?;
-        let step_end = diff_index
+        let step_end = self
+            .diff_index
             .checked_add(step_size)
             .ok_or_else(|| RomWeaverError::Validation("HDIFFSF20 step end overflowed".into()))?;
         if step_end > diff.len() {
@@ -1526,159 +1728,139 @@ fn parse_hdiffsf20_steps(
                 "HDIFFSF20 step buffer exceeded payload".into(),
             ));
         }
-        if step_size > step_mem_size {
+        if step_size > self.limits.step_mem_size {
             return Err(RomWeaverError::ValidationCode(
                 hdiff_validation_code("HDIFFSF20_STEP_EXCEEDED_STEP_MEM_SIZE")
                     .with_message("HDIFFSF20 step buffers exceed the declared step_mem_size")
                     .with_field("step_size", step_size)
-                    .with_field("step_mem_size", step_mem_size),
+                    .with_field("step_mem_size", self.limits.step_mem_size),
             ));
         }
 
-        let cover_start = diff_index;
-        let cover_end = cover_start + cover_buf_size;
-        let rle_start = cover_end;
-        let rle_end = step_end;
-        let covers = &diff[cover_start..cover_end];
-        diff_index = step_end;
+        let cover_end = self.diff_index + cover_buf_size;
+        let cover_range = self.diff_index..cover_end;
+        self.diff_index = step_end;
+        Ok((cover_range, cover_end..step_end))
+    }
 
-        let step_output_start = usize::try_from(last_new_end).map_err(|_| {
-            RomWeaverError::Validation("HDIFFSF20 step output start overflowed usize".into())
-        })?;
-        let step_gap_start = diff_index;
-        let mut step_gap_cursor = diff_index;
+    /// Decodes every cover in one step's cover buffer and returns them with the end of the
+    /// step's gap bytes, which follow the step buffers in the payload.
+    fn read_step_covers(&mut self, covers: &[u8]) -> Result<(Vec<Sf20CoverPlan>, usize)> {
+        let mut gap_cursor = self.diff_index;
         let mut cover_index = 0usize;
         let mut step_covers = Vec::<Sf20CoverPlan>::new();
-        let covers_before = remaining_covers;
 
         while cover_index < covers.len() {
-            if remaining_covers == 0 {
+            if self.remaining_covers == 0 {
                 return Err(RomWeaverError::Validation(
                     "HDIFFSF20 step has cover bytes beyond the declared cover count".into(),
                 ));
             }
-            let p_sign = read_u8_slice(covers, &mut cover_index, "sf20 cover sign")?;
-            let delta =
-                read_var_u64_tagged_slice(covers, &mut cover_index, 1, p_sign, "sf20 cover delta")?;
-            let old_pos = if (p_sign >> 7) == 0 {
-                last_old_end.checked_add(delta).ok_or_else(|| {
-                    RomWeaverError::Validation("HDIFFSF20 old position overflowed".into())
-                })?
-            } else {
-                last_old_end.checked_sub(delta).ok_or_else(|| {
-                    RomWeaverError::Validation("HDIFFSF20 old position underflowed".into())
-                })?
-            };
-            let new_gap = read_var_u64(covers, &mut cover_index, "sf20 new gap")?;
-            let cover_length = read_var_u64(covers, &mut cover_index, "sf20 cover length")?;
-            let new_pos = last_new_end.checked_add(new_gap).ok_or_else(|| {
-                RomWeaverError::Validation("HDIFFSF20 new position overflowed".into())
-            })?;
+            let read = self.read_cover(covers, &mut cover_index)?;
+            let cover = self.plan_cover(&read)?;
 
-            let old_start = usize::try_from(old_pos).map_err(|_| {
-                RomWeaverError::Validation("HDIFFSF20 old position overflowed usize".into())
-            })?;
-            let cover_len = usize::try_from(cover_length).map_err(|_| {
-                RomWeaverError::Validation("HDIFFSF20 cover length overflowed usize".into())
-            })?;
-            let gap_len = usize::try_from(new_gap)
-                .map_err(|_| RomWeaverError::Validation("HDIFFSF20 gap overflowed usize".into()))?;
-            let old_end = old_start.checked_add(cover_len).ok_or_else(|| {
-                RomWeaverError::Validation("HDIFFSF20 old range overflowed".into())
-            })?;
-            if old_end > old_len {
-                return Err(RomWeaverError::Validation(
-                    "HDIFFSF20 cover exceeded source bounds".into(),
-                ));
-            }
-
-            step_gap_cursor = step_gap_cursor.checked_add(gap_len).ok_or_else(|| {
+            gap_cursor = gap_cursor.checked_add(cover.gap_len).ok_or_else(|| {
                 RomWeaverError::Validation("HDIFFSF20 gap cursor overflowed".into())
             })?;
-            if step_gap_cursor > diff.len() {
+            if gap_cursor > self.diff.len() {
                 return Err(RomWeaverError::Validation(
                     "HDIFFSF20 gap bytes exceeded payload".into(),
                 ));
             }
 
-            remaining_covers -= 1;
+            self.remaining_covers -= 1;
             // A zero-length cover only carries the final gap, so it must be the last cover.
-            if cover_len == 0 && remaining_covers != 0 {
+            if cover.cover_len == 0 && self.remaining_covers != 0 {
                 return Err(RomWeaverError::Validation(
                     "HDIFFSF20 zero-length cover is not the last cover".into(),
                 ));
             }
-            step_covers.push(Sf20CoverPlan {
-                old_start,
-                cover_len,
-                gap_len,
-            });
-            last_old_end = old_pos
-                .checked_add(cover_length)
-                .ok_or_else(|| RomWeaverError::Validation("HDIFFSF20 old end overflowed".into()))?;
-            last_new_end = new_pos
-                .checked_add(cover_length)
-                .ok_or_else(|| RomWeaverError::Validation("HDIFFSF20 new end overflowed".into()))?;
+            step_covers.push(cover);
+            self.advance_last_ends(&read)?;
         }
 
-        if remaining_covers == covers_before {
-            return Err(RomWeaverError::Validation(
-                "HDIFFSF20 step declared no decodable covers".into(),
-            ));
-        }
+        Ok((step_covers, gap_cursor))
+    }
 
-        let step_output_end = usize::try_from(last_new_end).map_err(|_| {
-            RomWeaverError::Validation("HDIFFSF20 step output end overflowed usize".into())
+    fn read_cover(&self, covers: &[u8], cover_index: &mut usize) -> Result<Sf20CoverRead> {
+        let p_sign = read_u8_slice(covers, cover_index, "sf20 cover sign")?;
+        let delta = read_var_u64_tagged_slice(covers, cover_index, 1, p_sign, "sf20 cover delta")?;
+        let old_pos = if (p_sign >> 7) == 0 {
+            self.last_old_end.checked_add(delta).ok_or_else(|| {
+                RomWeaverError::Validation("HDIFFSF20 old position overflowed".into())
+            })?
+        } else {
+            self.last_old_end.checked_sub(delta).ok_or_else(|| {
+                RomWeaverError::Validation("HDIFFSF20 old position underflowed".into())
+            })?
+        };
+        let new_gap = read_var_u64(covers, cover_index, "sf20 new gap")?;
+        let cover_length = read_var_u64(covers, cover_index, "sf20 cover length")?;
+        let new_pos = self.last_new_end.checked_add(new_gap).ok_or_else(|| {
+            RomWeaverError::Validation("HDIFFSF20 new position overflowed".into())
         })?;
-        if step_output_end < step_output_start {
+        Ok(Sf20CoverRead {
+            old_pos,
+            new_pos,
+            new_gap,
+            cover_length,
+        })
+    }
+
+    /// Converts a decoded cover to `usize` offsets and checks it lies inside the old data.
+    fn plan_cover(&self, read: &Sf20CoverRead) -> Result<Sf20CoverPlan> {
+        let old_start = usize::try_from(read.old_pos).map_err(|_| {
+            RomWeaverError::Validation("HDIFFSF20 old position overflowed usize".into())
+        })?;
+        let cover_len = usize::try_from(read.cover_length).map_err(|_| {
+            RomWeaverError::Validation("HDIFFSF20 cover length overflowed usize".into())
+        })?;
+        let gap_len = usize::try_from(read.new_gap)
+            .map_err(|_| RomWeaverError::Validation("HDIFFSF20 gap overflowed usize".into()))?;
+        let old_end = old_start
+            .checked_add(cover_len)
+            .ok_or_else(|| RomWeaverError::Validation("HDIFFSF20 old range overflowed".into()))?;
+        if old_end > self.limits.old_len {
             return Err(RomWeaverError::Validation(
-                "HDIFFSF20 step output moved backward".into(),
+                "HDIFFSF20 cover exceeded source bounds".into(),
             ));
         }
-        if let Some(previous) = steps.last() {
-            let previous_end = previous
-                .output_start
-                .checked_add(previous.output_len)
-                .ok_or_else(|| {
-                    RomWeaverError::Validation("HDIFFSF20 step output range overflowed".into())
-                })?;
-            if step_output_start < previous_end {
-                return Err(RomWeaverError::Validation(
-                    "HDIFFSF20 step output ranges overlapped".into(),
-                ));
-            }
+        Ok(Sf20CoverPlan {
+            old_start,
+            cover_len,
+            gap_len,
+        })
+    }
+
+    fn advance_last_ends(&mut self, read: &Sf20CoverRead) -> Result<()> {
+        self.last_old_end = read
+            .old_pos
+            .checked_add(read.cover_length)
+            .ok_or_else(|| RomWeaverError::Validation("HDIFFSF20 old end overflowed".into()))?;
+        self.last_new_end = read
+            .new_pos
+            .checked_add(read.cover_length)
+            .ok_or_else(|| RomWeaverError::Validation("HDIFFSF20 new end overflowed".into()))?;
+        Ok(())
+    }
+
+    fn check_step_follows_previous(&self, output_start: usize) -> Result<()> {
+        let Some(previous) = self.steps.last() else {
+            return Ok(());
+        };
+        let previous_end = previous
+            .output_start
+            .checked_add(previous.output_len)
+            .ok_or_else(|| {
+                RomWeaverError::Validation("HDIFFSF20 step output range overflowed".into())
+            })?;
+        if output_start < previous_end {
+            return Err(RomWeaverError::Validation(
+                "HDIFFSF20 step output ranges overlapped".into(),
+            ));
         }
-
-        steps.push(Sf20StepPlan {
-            output_start: step_output_start,
-            output_len: step_output_end - step_output_start,
-            rle_range: rle_start..rle_end,
-            gap_range: step_gap_start..step_gap_cursor,
-            covers: step_covers,
-        });
-        diff_index = step_gap_cursor;
+        Ok(())
     }
-
-    let produced_len = usize::try_from(last_new_end).map_err(|_| {
-        RomWeaverError::Validation("HDIFFSF20 produced size overflowed usize".into())
-    })?;
-    if produced_len != new_data_size {
-        return Err(RomWeaverError::ValidationCode(
-            hdiff_validation_code("HDIFFSF20_OUTPUT_SIZE_MISMATCH")
-                .with_message("HDIFFSF20 output size mismatch")
-                .with_field("expected", new_data_size)
-                .with_field("actual", produced_len),
-        ));
-    }
-    if diff_index != diff.len() {
-        return Err(RomWeaverError::ValidationCode(
-            hdiff_validation_code("HDIFF_STREAM_NOT_CONSUMED")
-                .with_message("HDIFFSF20 payload has bytes after the last cover")
-                .with_field("bytes_left", diff.len() - diff_index),
-        ));
-    }
-
-    Ok(ParsedSf20Plan { steps })
 }
 
 fn render_hdiffsf20_step(

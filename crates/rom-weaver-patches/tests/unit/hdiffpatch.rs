@@ -1727,8 +1727,16 @@ fn sf20_step_parsing_rejects_a_step_buffer_past_the_payload() {
     write_var_u64(&mut payload, 64);
     write_var_u64(&mut payload, 0);
 
-    let error =
-        super::parse_hdiffsf20_steps(&payload, 8, 8, 1, 256).expect_err("step past payload");
+    let error = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 8,
+            new_data_size: 8,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect_err("step past payload");
     assert!(
         error
             .to_string()
@@ -1739,7 +1747,16 @@ fn sf20_step_parsing_rejects_a_step_buffer_past_the_payload() {
 #[test]
 fn sf20_step_parsing_rejects_a_step_with_no_decodable_covers() {
     let payload = sf20_step_payload(&[], &[], &[]);
-    let error = super::parse_hdiffsf20_steps(&payload, 8, 8, 1, 256).expect_err("no covers");
+    let error = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 8,
+            new_data_size: 8,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect_err("no covers");
     assert!(
         error
             .to_string()
@@ -1750,7 +1767,16 @@ fn sf20_step_parsing_rejects_a_step_with_no_decodable_covers() {
 #[test]
 fn sf20_step_parsing_rejects_a_cover_that_moves_before_the_start_of_the_source() {
     let payload = sf20_step_payload(&sf20_cover(0x81, 0, 1), &[], &[]);
-    let error = super::parse_hdiffsf20_steps(&payload, 8, 8, 1, 256).expect_err("old position");
+    let error = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 8,
+            new_data_size: 8,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect_err("old position");
     assert!(
         error
             .to_string()
@@ -1761,8 +1787,16 @@ fn sf20_step_parsing_rejects_a_cover_that_moves_before_the_start_of_the_source()
 #[test]
 fn sf20_step_parsing_rejects_a_cover_that_reads_past_the_source() {
     let payload = sf20_step_payload(&sf20_cover(0x00, 0, 16), &[], &[]);
-    let error =
-        super::parse_hdiffsf20_steps(&payload, 8, 8, 1, 256).expect_err("cover past source");
+    let error = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 8,
+            new_data_size: 8,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect_err("cover past source");
     assert!(
         error
             .to_string()
@@ -1773,8 +1807,16 @@ fn sf20_step_parsing_rejects_a_cover_that_reads_past_the_source() {
 #[test]
 fn sf20_step_parsing_rejects_gap_bytes_past_the_payload() {
     let payload = sf20_step_payload(&sf20_cover(0x00, 64, 1), &[], &[]);
-    let error =
-        super::parse_hdiffsf20_steps(&payload, 8, 128, 1, 256).expect_err("gap past payload");
+    let error = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 8,
+            new_data_size: 128,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect_err("gap past payload");
     assert!(
         error
             .to_string()
@@ -1785,7 +1827,16 @@ fn sf20_step_parsing_rejects_gap_bytes_past_the_payload() {
 #[test]
 fn sf20_step_parsing_rejects_covers_that_produce_more_than_the_declared_output() {
     let payload = sf20_step_payload(&sf20_cover(0x00, 0, 8), &[], &[]);
-    let error = super::parse_hdiffsf20_steps(&payload, 8, 4, 1, 256).expect_err("output size");
+    let error = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 8,
+            new_data_size: 4,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect_err("output size");
     let message = error.to_string();
     assert!(
         message.contains("HDIFFSF20_OUTPUT_SIZE_MISMATCH"),
@@ -1797,7 +1848,16 @@ fn sf20_step_parsing_rejects_covers_that_produce_more_than_the_declared_output()
 #[test]
 fn sf20_step_parsing_rejects_covers_that_produce_less_than_the_declared_output() {
     let payload = sf20_step_payload(&sf20_cover(0x00, 0, 4), &[], &[]);
-    let error = super::parse_hdiffsf20_steps(&payload, 8, 8, 1, 256).expect_err("short output");
+    let error = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 8,
+            new_data_size: 8,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect_err("short output");
     let message = error.to_string();
     assert!(
         message.contains("HDIFFSF20_OUTPUT_SIZE_MISMATCH"),
@@ -1812,7 +1872,16 @@ fn sf20_step_parsing_reports_the_step_layout() {
     write_var_u64(&mut rle, 4); // len_zero covering the whole cover
     let payload = sf20_step_payload(&sf20_cover(0x00, 0, 4), &rle, &[]);
 
-    let plan = super::parse_hdiffsf20_steps(&payload, 4, 4, 1, 256).expect("plan");
+    let plan = super::parse_hdiffsf20_steps(
+        &payload,
+        super::Sf20PlanLimits {
+            old_len: 4,
+            new_data_size: 4,
+            cover_count: 1,
+            step_mem_size: 256,
+        },
+    )
+    .expect("plan");
     assert_eq!(plan.steps.len(), 1);
     assert_eq!(plan.steps[0].output_start, 0);
     assert_eq!(plan.steps[0].output_len, 4);
