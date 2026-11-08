@@ -324,10 +324,11 @@ struct CreatedPmsrPatch {
 fn parse_pmsr_file(path: &Path) -> Result<ParsedPmsrPatch> {
     let file_len = fs::metadata(path)?.len();
     let mut file = File::open(path)?;
+    // A file shorter than the magic leaves zeros in the buffer, which never match it.
     let mut magic = [0u8; YAY0_MAGIC.len()];
-    let magic_len = rom_weaver_core::read_full(&mut file, &mut magic)?;
+    rom_weaver_core::read_full(&mut file, &mut magic)?;
     file.seek(SeekFrom::Start(0))?;
-    if magic_len < magic.len() || &magic != YAY0_MAGIC {
+    if &magic != YAY0_MAGIC {
         return parse_pmsr_reader(BufReader::new(file), file_len);
     }
 
