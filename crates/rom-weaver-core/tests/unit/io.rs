@@ -9,7 +9,7 @@ use super::{
     BlockCacheReader, ChunkPlanner, OrderedChunkWriter, OrderedStreamingMessages,
     SharedBlockCacheReader, StagedOutput, TempPathAllocator, bounded_items_for_threads,
     copy_file_retrying_interrupted, copy_file_retrying_with, copy_retrying_interrupted,
-    create_extract_output_file, ensure_output_available, file_starts_with,
+    create_extract_output_file, ensure_output_available, file_starts_with, files_equal,
     ordered_streaming_compress, read_full, read_up_to, replace_file, retry_interrupted,
 };
 use crate::RomWeaverError;
@@ -819,6 +819,42 @@ impl Read for InterruptedShortReader {
         self.position += len;
         Ok(len)
     }
+}
+
+#[test]
+fn files_equal_detects_length_and_content_differences() {
+    let dir = std::env::temp_dir().join(format!(
+        "rom-weaver-tests-files-equal-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time")
+            .as_nanos()
+    ));
+    fs::create_dir_all(&dir).expect("temp dir");
+    // Larger than one 64 KiB read so a difference in the last chunk is still found.
+    let base = vec![7u8; 200_000];
+    let mut last_byte_differs = base.clone();
+    *last_byte_differs.last_mut().expect("last byte") = 8;
+    let write = |name: &str, bytes: &[u8]| {
+        let path = dir.join(name);
+        fs::write(&path, bytes).expect("fixture");
+        path
+    };
+    let left = write("left.bin", &base);
+    let same = write("same.bin", &base);
+    let shorter = write("shorter.bin", &base[..base.len() - 1]);
+    let different = write("different.bin", &last_byte_differs);
+    let empty_left = write("empty-left.bin", b"");
+    let empty_right = write("empty-right.bin", b"");
+
+    assert!(files_equal(&left, &same).expect("identical files"));
+    assert!(!files_equal(&left, &shorter).expect("different lengths"));
+    assert!(!files_equal(&left, &different).expect("different last byte"));
+    assert!(files_equal(&empty_left, &empty_right).expect("empty files"));
+    assert!(files_equal(&left, &dir.join("missing.bin")).is_err());
+
+    let _ = fs::remove_dir_all(dir);
 }
 
 #[test]

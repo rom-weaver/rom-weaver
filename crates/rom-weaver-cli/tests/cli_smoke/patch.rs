@@ -2248,8 +2248,8 @@ fn patch_apply_z3ds_compression_uses_matching_container_suffix() {
         let patch = temp.child(format!("update-{input_extension}.bps"));
         let output_base = temp.child(format!("patched-{input_extension}"));
 
-        fs::write(original.path(), b"hello old world").expect("fixture");
-        fs::write(modified.path(), b"hello new world").expect("fixture");
+        fs::write(original.path(), three_ds_fixture(b"hello old world")).expect("fixture");
+        fs::write(modified.path(), three_ds_fixture(b"hello new world")).expect("fixture");
 
         command_stdout(
             &[
@@ -2487,6 +2487,14 @@ fn patch_apply_default_output_is_collision_safe() {
     );
 }
 
+/// Bytes z3ds create accepts as 3DS content: NCSD magic at 0x100, then `tail`.
+fn three_ds_fixture(tail: &[u8]) -> Vec<u8> {
+    let mut bytes = vec![0_u8; 0x104];
+    bytes[0x100..].copy_from_slice(b"NCSD");
+    bytes.extend_from_slice(tail);
+    bytes
+}
+
 #[test]
 fn patch_apply_infers_z3ds_subtype_from_source_extension() {
     let temp = setup_temp_dir();
@@ -2494,8 +2502,8 @@ fn patch_apply_infers_z3ds_subtype_from_source_extension() {
     let modified = temp.child("changed.cia");
     let patch = temp.child("update.bps");
 
-    fs::write(original.path(), b"hello old world").expect("fixture");
-    fs::write(modified.path(), b"hello new world").expect("fixture");
+    fs::write(original.path(), three_ds_fixture(b"hello old world")).expect("fixture");
+    fs::write(modified.path(), three_ds_fixture(b"hello new world")).expect("fixture");
     command_stdout(
         &[
             "patch",
@@ -3230,53 +3238,77 @@ fn patch_apply_succeeds_for_ips32_patch_with_ips_extension() {
     assert_eq!(output_bytes[0x0100_0001], b'Z');
 }
 
+/// Every creatable format that accepts identical inputs writes its patch and exits 0 with one
+/// CLI-level warning. PAT is left out because it rejects identical inputs outright, and DLDI
+/// because it needs a patchable DLDI section.
 #[test]
-fn patch_create_warns_for_identical_ips_inputs() {
+fn patch_create_warns_once_for_identical_inputs_in_every_format() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
-    let modified = temp.child("new.bin");
-    let patch = temp.child("output.ips");
-    fs::write(original.path(), b"unchanged-input").expect("fixture");
-    fs::write(modified.path(), b"unchanged-input").expect("fixture");
+    let identical = temp.child("same.bin");
+    let different = temp.child("new.bin");
+    let original_bytes = b"unchanged-input".repeat(1024);
+    let mut different_bytes = original_bytes.clone();
+    different_bytes[100] ^= 0xff;
+    fs::write(original.path(), &original_bytes).expect("fixture");
+    fs::write(identical.path(), &original_bytes).expect("fixture");
+    fs::write(different.path(), &different_bytes).expect("fixture");
 
-    let output = command_stdout(
-        &[
-            "patch",
-            "create",
-            "--original",
-            original.path().to_str().expect("path"),
-            "--modified",
-            modified.path().to_str().expect("path"),
-            "--format",
-            "ips",
-            "--output",
-            patch.path().to_str().expect("path"),
-            "--jsonl",
-        ],
-        0,
-    );
-
-    let json = parse_single_json_line(&output);
-    assert_eq!(json["command"], "patch-create");
-    assert_eq!(json["format"], "IPS");
-    assert_eq!(json["status"], "succeeded");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("warning=IPS patch will not change output")
-    );
-    assert!(
+    let identical_warnings = |format: &str, modified: &Path| -> Vec<String> {
+        let patch = temp.child(format!(
+            "output-{format}-{}.patch",
+            modified
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .expect("stem")
+        ));
+        let output = command_stdout(
+            &[
+                "patch",
+                "create",
+                "--original",
+                original.path().to_str().expect("path"),
+                "--modified",
+                modified.to_str().expect("path"),
+                "--format",
+                format,
+                "--output",
+                patch.path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            0,
+        );
+        let json = parse_single_json_line(&output);
+        assert_eq!(json["command"], "patch-create", "{format}");
+        assert_eq!(json["status"], "succeeded", "{format}");
+        assert!(patch.path().exists(), "{format}: patch was not written");
         json["details"]["warnings"]
             .as_array()
-            .expect("warnings")
-            .iter()
-            .any(|warning| warning
-                .as_str()
-                .is_some_and(|text| text.starts_with("IPS patch will not change output"))),
-        "handler warnings must reach the terminal-visible warnings list"
-    );
-    assert_eq!(fs::read(patch.path()).expect("patch"), b"PATCHEOF");
+            .map(|warnings| warnings.iter().filter_map(Value::as_str))
+            .into_iter()
+            .flatten()
+            .filter(|warning| warning.contains("identical"))
+            .map(str::to_owned)
+            .collect()
+    };
+
+    for format in [
+        "ips", "ips32", "ebp", "solid", "bps", "ups", "vcdiff", "xdelta", "gdiff", "aps", "apsgba",
+        "rup", "ppf", "bdf", "mod", "dps",
+    ] {
+        assert_eq!(
+            identical_warnings(format, identical.path()),
+            ["Original and Modified are identical; the patch will not change the output"],
+            "{format}"
+        );
+    }
+    for format in ["ips", "bps", "xdelta", "ppf"] {
+        assert_eq!(
+            identical_warnings(format, different.path()),
+            Vec::<String>::new(),
+            "{format}: differing inputs must not warn"
+        );
+    }
 }
 
 #[test]

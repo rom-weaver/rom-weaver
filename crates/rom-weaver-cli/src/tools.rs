@@ -189,6 +189,9 @@ impl CliApp {
                 }
             }
         }
+        // Fail before the undo and any compression run; the check below the staging step stays
+        // because an output can appear while they run.
+        Self::require_new_ppf_undo_outputs(&outputs)?;
         let raw_output = Self::patch_apply_raw_output_path(
             &output,
             input,

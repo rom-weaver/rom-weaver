@@ -357,7 +357,7 @@ impl PatchHandler for SolidPatchHandler {
             &replay_path,
             context,
         )?;
-        let replay_matches = files_equal(&replay_path, &request.modified)?;
+        let replay_matches = rom_weaver_core::files_equal(&replay_path, &request.modified)?;
         let _ = fs::remove_file(&replay_path);
         if !replay_matches {
             return Err(RomWeaverError::Validation(
@@ -1294,32 +1294,6 @@ fn build_created_expansion_from_paths(
     let address = original_len;
     let data = read_solid_suffix(modified_path, original_len, modified_len)?;
     Ok(Some(CreatedExpansion { address, data }))
-}
-
-fn files_equal(left: &Path, right: &Path) -> Result<bool> {
-    let left_len = fs::metadata(left)?.len();
-    let right_len = fs::metadata(right)?.len();
-    if left_len != right_len {
-        return Ok(false);
-    }
-    let mut left_file = File::open(left)?;
-    let mut right_file = File::open(right)?;
-    let mut left_buffer = [0u8; CREATE_IO_BUFFER_SIZE];
-    let mut right_buffer = [0u8; CREATE_IO_BUFFER_SIZE];
-    loop {
-        let left_read = left_file.read(&mut left_buffer)?;
-        let right_read = right_file.read(&mut right_buffer)?;
-        if left_read != right_read {
-            return Ok(false);
-        }
-        if left_read == 0 {
-            break;
-        }
-        if left_buffer[..left_read] != right_buffer[..right_read] {
-            return Ok(false);
-        }
-    }
-    Ok(true)
 }
 
 fn build_description_strings(

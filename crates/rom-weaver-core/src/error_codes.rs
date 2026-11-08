@@ -116,6 +116,9 @@ pub const ERROR_CODE_TRIM_UNSUPPORTED_DISC: &str = "trim.unsupported_disc";
 /// A GameCube/Wii (nod) create input is not a GameCube or Wii disc image.
 pub const ERROR_CODE_DISC_NOT_GAMECUBE_WII: &str = "disc.not_gamecube_wii";
 
+/// A z3ds create input is not 3DS content (NCSD, NCCH, CIA, or 3DSX).
+pub const ERROR_CODE_CONTAINER_NOT_3DS: &str = "container.not_3ds";
+
 /// A patch file failed its own checksum, so the patch itself is damaged.
 pub const ERROR_CODE_PATCH_FILE_CHECKSUM_INVALID: &str = "patch.file_checksum_invalid";
 
@@ -166,6 +169,10 @@ pub const ERROR_CODE_WORKFLOW_CODES: &[(&str, WorkflowErrorCode)] = &[
     ),
     (
         ERROR_CODE_DISC_NOT_GAMECUBE_WII,
+        WorkflowErrorCode::UnsupportedFormat,
+    ),
+    (
+        ERROR_CODE_CONTAINER_NOT_3DS,
         WorkflowErrorCode::UnsupportedFormat,
     ),
     (

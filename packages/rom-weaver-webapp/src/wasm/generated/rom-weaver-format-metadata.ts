@@ -2617,6 +2617,7 @@ export const ROM_WEAVER_WEAVE_FILE_NAMES = {
 export const ROM_WEAVER_ERROR_CODES = {
   "archive.read_failed": "ARCHIVE_READ_FAILED",
   "archive.storage_failed": "COMPRESSION_FAILED",
+  "container.not_3ds": "UNSUPPORTED_FORMAT",
   "disc.not_gamecube_wii": "UNSUPPORTED_FORMAT",
   "extract.all_entries_ignored": "COMPRESSION_FAILED",
   "extract.max_depth_exceeded": "ARCHIVE_DEPTH_EXCEEDED",

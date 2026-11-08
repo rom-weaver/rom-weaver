@@ -131,6 +131,17 @@ mod tests {
         }
     }
 
+    /// A pseudo-random file that z3ds create accepts: NCSD magic at 0x100.
+    fn write_three_ds_fixture(path: &Path, byte_len: usize, seed: u32) {
+        write_xorshift_fixture(path, byte_len, seed);
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .expect("open 3ds fixture");
+        file.seek(SeekFrom::Start(0x100)).expect("seek 3ds magic");
+        file.write_all(b"NCSD").expect("write 3ds magic");
+    }
+
     fn write_tar_fixture(input_dir: &Path, archive_path: &Path, xz_level: Option<u32>) {
         let mut tar_bytes = Vec::new();
         {
@@ -747,62 +758,30 @@ mod tests {
         );
     }
 
-    fn z3ds_create_warnings(name: &str, payload: &[u8]) -> Vec<String> {
-        let temp_dir = temp_dir_path(&format!("z3ds-warn-{name}"));
+    fn z3ds_create_request(name: &str, payload: &[u8]) -> (ContainerCreateRequest, TempPath) {
+        let temp_dir = temp_dir_path(&format!("z3ds-create-{name}"));
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let input_path = temp_dir.join("payload.bin");
         fs::write(&input_path, payload).expect("write fixture");
-        let report = Z3dsContainerHandler
-            .create(
-                &ContainerCreateRequest {
-                    rvz_block_size: None,
-                    archive_names: None,
-                    inputs: vec![input_path],
-                    output: temp_dir.join("out.z3ds"),
-                    format: "z3ds".to_string(),
-                    codec: None,
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 1),
-            )
-            .expect("z3ds create succeeds");
-        report
-            .details
-            .as_ref()
-            .and_then(|details| details.get("warnings"))
-            .and_then(|warnings| warnings.as_array())
-            .map(|warnings| {
-                warnings
-                    .iter()
-                    .filter_map(|warning| warning.as_str().map(str::to_owned))
-                    .collect()
-            })
-            .unwrap_or_default()
+        let request = ContainerCreateRequest {
+            rvz_block_size: None,
+            archive_names: None,
+            inputs: vec![input_path],
+            output: temp_dir.join("out.z3ds"),
+            format: "z3ds".to_string(),
+            codec: None,
+            level: None,
+            parent: None,
+        };
+        (request, temp_dir)
     }
 
     fn z3ds_created_underlying_magic(name: &str, payload: &[u8]) -> [u8; 4] {
-        let temp_dir = temp_dir_path(&format!("z3ds-magic-{name}"));
-        fs::create_dir_all(&temp_dir).expect("temp dir");
-        let input_path = temp_dir.join("payload.bin");
-        fs::write(&input_path, payload).expect("write fixture");
-        let output = temp_dir.join("out.z3ds");
+        let (request, temp_dir) = z3ds_create_request(name, payload);
         Z3dsContainerHandler
-            .create(
-                &ContainerCreateRequest {
-                    rvz_block_size: None,
-                    archive_names: None,
-                    inputs: vec![input_path],
-                    output: output.clone(),
-                    format: "z3ds".to_string(),
-                    codec: None,
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 1),
-            )
+            .create(&request, &test_context(&temp_dir, 1))
             .expect("z3ds create succeeds");
-        let written = fs::read(&output).expect("read z3ds");
+        let written = fs::read(&request.output).expect("read z3ds");
         assert_eq!(&written[..4], b"Z3DS");
         written[4..8].try_into().expect("underlying magic")
     }
@@ -821,10 +800,6 @@ mod tests {
         assert_eq!(
             z3ds_created_underlying_magic("3dsx", b"3DSX\0\0\0\0"),
             *b"3DSX"
-        );
-        assert_eq!(
-            z3ds_created_underlying_magic("other", &[0x5a; 4096]),
-            [0x5a; 4]
         );
     }
 
@@ -866,20 +841,51 @@ mod tests {
     }
 
     #[test]
-    fn z3ds_create_warns_when_input_is_not_3ds_content() {
-        let warnings = z3ds_create_warnings("random", &[0x5a; 4096]);
-        assert_eq!(warnings, vec!["input is not recognizable 3DS content"]);
+    fn z3ds_create_rejects_non_3ds_content_before_writing() {
+        let mut ncsd_at_wrong_offset = vec![0_u8; 4096];
+        ncsd_at_wrong_offset[0x104..0x108].copy_from_slice(b"NCSD");
+        for (name, payload) in [
+            ("random", vec![0x5a_u8; 4096]),
+            ("empty", Vec::new()),
+            ("misplaced-magic", ncsd_at_wrong_offset),
+        ] {
+            let (request, temp_dir) = z3ds_create_request(name, &payload);
+            let validate_error = Z3dsContainerHandler
+                .validate_create(&request, &test_context(&temp_dir, 1))
+                .expect_err("validate rejects non-3DS input");
+            assert_eq!(validate_error.code(), Some("container.not_3ds"), "{name}");
+            let create_error = Z3dsContainerHandler
+                .create(&request, &test_context(&temp_dir, 1))
+                .expect_err("create rejects non-3DS input");
+            assert_eq!(create_error.code(), Some("container.not_3ds"), "{name}");
+            assert!(!request.output.exists(), "{name}: output was written");
+        }
     }
 
     #[test]
-    fn z3ds_create_does_not_warn_for_3ds_content() {
+    fn z3ds_create_accepts_3ds_content_without_warnings() {
         let mut ncsd = vec![0_u8; 4096];
         ncsd[0x100..0x104].copy_from_slice(b"NCSD");
-        assert!(z3ds_create_warnings("ncsd", &ncsd).is_empty());
         let mut cia = vec![0_u8; 4096];
         cia[..4].copy_from_slice(&[0x20, 0x20, 0, 0]);
-        assert!(z3ds_create_warnings("cia", &cia).is_empty());
-        assert!(z3ds_create_warnings("3dsx", b"3DSX\0\0\0\0").is_empty());
+        for (name, payload) in [
+            ("ncsd", ncsd),
+            ("cia", cia),
+            ("3dsx", b"3DSX\0\0\0\0".to_vec()),
+        ] {
+            let (request, temp_dir) = z3ds_create_request(name, &payload);
+            Z3dsContainerHandler
+                .validate_create(&request, &test_context(&temp_dir, 1))
+                .expect("validate accepts 3DS input");
+            let report = Z3dsContainerHandler
+                .create(&request, &test_context(&temp_dir, 1))
+                .expect("z3ds create succeeds");
+            let warnings = report
+                .details
+                .as_ref()
+                .and_then(|details| details.get("warnings"));
+            assert!(warnings.is_none(), "{name}: unexpected warnings");
+        }
     }
 
     #[test]
@@ -3280,9 +3286,10 @@ mod tests {
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let input_path = temp_dir.join("disc.3ds");
         let output_path = temp_dir.join("disc.z3ds");
-        let source = (0..65_536)
+        let mut source = (0..65_536)
             .map(|index| (index % 223) as u8)
             .collect::<Vec<_>>();
+        source[0x100..0x104].copy_from_slice(b"NCSD");
         fs::write(&input_path, source).expect("fixture");
 
         let registry = ContainerRegistry::new();
@@ -3320,9 +3327,10 @@ mod tests {
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let input_path = temp_dir.join("disc.3ds");
         let output_path = temp_dir.join("disc.z3ds");
-        let source = (0..65_536)
+        let mut source = (0..65_536)
             .map(|index| (index % 223) as u8)
             .collect::<Vec<_>>();
+        source[0x100..0x104].copy_from_slice(b"NCSD");
         fs::write(&input_path, source).expect("fixture");
 
         let registry = ContainerRegistry::new();
@@ -3370,9 +3378,10 @@ mod tests {
         let archive_path = temp_dir.join("disc.z3ds");
         let output_dir = temp_dir.join("out");
         let outer_archive_path = temp_dir.join("outer.7z");
-        let source = (0..(2 * 1024 * 1024))
+        let mut source = (0..(2 * 1024 * 1024))
             .map(|index| (index % 223) as u8)
             .collect::<Vec<_>>();
+        source[0x100..0x104].copy_from_slice(b"NCSD");
         fs::write(&input_path, &source).expect("fixture");
 
         let registry = ContainerRegistry::new();
@@ -3423,7 +3432,7 @@ mod tests {
         assert_eq!(extract_execution.effective_threads, 2);
         assert!(extract_execution.used_parallelism);
 
-        let extracted = fs::read(output_dir.join("disc.3ds")).expect("read extracted file");
+        let extracted = fs::read(output_dir.join("disc.cci")).expect("read extracted file");
         assert_eq!(extracted, source);
 
         let _ = fs::remove_dir_all(temp_dir);
@@ -6523,6 +6532,8 @@ mod tests {
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let payload = temp_dir.join("payload.bin");
         fs::write(&payload, vec![7_u8; 8192]).expect("payload");
+        let three_ds = temp_dir.join("game.3ds");
+        write_three_ds_fixture(&three_ds, 8192, 0x0BAD_CAFE);
         let gamecube = temp_dir.join("disc.iso");
         fs::write(&gamecube, build_test_gamecube_iso(0x4000)).expect("gamecube fixture");
         let registry = ContainerRegistry::new();
@@ -6547,7 +6558,7 @@ mod tests {
         };
 
         type Rejected<'a> = (&'a str, &'a Path, Option<&'a str>, Option<i32>, &'a str);
-        let rejected: [Rejected<'_>; 10] = [
+        let rejected: [Rejected<'_>; 11] = [
             (
                 "zip",
                 &payload,
@@ -6591,6 +6602,13 @@ mod tests {
                 "z3ds level `99` is out of range",
             ),
             (
+                "z3ds",
+                &payload,
+                Some("zstd"),
+                Some(3),
+                "is not a 3DS image",
+            ),
+            (
                 "chd",
                 &payload,
                 Some("deflate"),
@@ -6628,7 +6646,7 @@ mod tests {
         for (format, input, codec, level) in [
             ("zip", &payload, Some("deflate"), Some(6)),
             ("7z", &payload, Some("lzma2"), Some(5)),
-            ("z3ds", &payload, Some("zstd"), Some(3)),
+            ("z3ds", &three_ds, Some("zstd"), Some(3)),
             ("chd", &payload, Some("zlib"), None),
             ("rvz", &gamecube, Some("zstd"), Some(-7)),
             ("rvz", &gamecube, None, None),
@@ -6842,6 +6860,8 @@ mod tests {
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let data = temp_dir.join("data.bin");
         write_xorshift_fixture(&data, 512 * 1024, 0x1234_5678);
+        let three_ds = temp_dir.join("data.3ds");
+        write_three_ds_fixture(&three_ds, 512 * 1024, 0x1234_5678);
         let disc = temp_dir.join("disc.iso");
         fs::write(&disc, build_test_gamecube_iso(0x8_0000)).expect("gamecube fixture");
 
@@ -6851,7 +6871,7 @@ mod tests {
             ("7z", &data),
             ("chd", &data),
             ("rvz", &disc),
-            ("z3ds", &data),
+            ("z3ds", &three_ds),
         ] {
             // One thread and several take different paths through most writers.
             for threads in [1, 4] {
@@ -6881,6 +6901,8 @@ mod tests {
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let data = temp_dir.join("data.bin");
         write_xorshift_fixture(&data, 512 * 1024, 0x2468_ACE0);
+        let three_ds = temp_dir.join("data.3ds");
+        write_three_ds_fixture(&three_ds, 512 * 1024, 0x2468_ACE0);
         let disc = temp_dir.join("disc.iso");
         fs::write(&disc, build_test_gamecube_iso(0x8_0000)).expect("gamecube fixture");
 
@@ -6892,7 +6914,7 @@ mod tests {
             ("7z", &data),
             ("chd", &data),
             ("rvz", &disc),
-            ("z3ds", &data),
+            ("z3ds", &three_ds),
         ] {
             let source = temp_dir.join(format!("source.{format}"));
             registry

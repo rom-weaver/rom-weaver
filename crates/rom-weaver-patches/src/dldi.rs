@@ -290,7 +290,7 @@ impl PatchHandler for DldiPatchHandler {
             .temp_paths()
             .next_path("dldi-create-replay", Some("bin"));
         apply_dldi_patch_to_file(&request.original, &replay_path, &patch_bytes, original_len)?;
-        let replay_matches = files_equal(&replay_path, &request.modified)?;
+        let replay_matches = rom_weaver_core::files_equal(&replay_path, &request.modified)?;
         let _ = fs::remove_file(&replay_path);
         if !replay_matches {
             return Err(RomWeaverError::Validation(
@@ -845,33 +845,6 @@ fn read_dldi_range_from_path(path: &Path, start: usize, len: usize) -> Result<Ve
     let mut bytes = vec![0u8; len];
     reader.read_exact_at(offset, &mut bytes)?;
     Ok(bytes)
-}
-
-fn files_equal(left: &Path, right: &Path) -> Result<bool> {
-    let left_len = fs::metadata(left)?.len();
-    let right_len = fs::metadata(right)?.len();
-    if left_len != right_len {
-        return Ok(false);
-    }
-
-    let mut left_file = fs::File::open(left)?;
-    let mut right_file = fs::File::open(right)?;
-    let mut left_buffer = [0u8; 64 * 1024];
-    let mut right_buffer = [0u8; 64 * 1024];
-    loop {
-        let left_read = rom_weaver_core::read_full(&mut left_file, &mut left_buffer)?;
-        let right_read = rom_weaver_core::read_full(&mut right_file, &mut right_buffer)?;
-        if left_read != right_read {
-            return Ok(false);
-        }
-        if left_read == 0 {
-            break;
-        }
-        if left_buffer[..left_read] != right_buffer[..right_read] {
-            return Ok(false);
-        }
-    }
-    Ok(true)
 }
 
 fn find_dldi_slot_in_reader(

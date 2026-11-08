@@ -361,9 +361,10 @@ fn rvz_extract_supports_single_output_selection() {
 #[test]
 fn z3ds_compress_probe_and_extract_round_trip() {
     let temp = setup_temp_dir();
-    let source = (0..65_536)
+    let mut source = (0..65_536)
         .map(|index| (index % 239) as u8)
         .collect::<Vec<_>>();
+    source[0x100..0x104].copy_from_slice(b"NCSD");
     fs::write(temp.child("disc.3ds").path(), &source).expect("fixture");
 
     let z3ds_path = temp.child("disc.z3ds");
@@ -437,9 +438,36 @@ fn z3ds_compress_probe_and_extract_round_trip() {
     assert_eq!(extract_json["format"], "z3ds");
     assert_eq!(extract_json["status"], "succeeded");
     assert_eq!(
-        fs::read(out_dir.child("disc.3ds").path()).expect("extracted 3ds"),
+        fs::read(out_dir.child("disc.cci").path()).expect("extracted 3ds"),
         source
     );
+}
+
+#[test]
+fn z3ds_compress_rejects_non_3ds_input_and_writes_nothing() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.bin");
+    fs::write(input.path(), vec![0x5a_u8; 65_536]).expect("fixture");
+    let output = temp.child("game.z3ds");
+
+    let json = parse_single_json_line(&command_stdout(
+        &[
+            "compress",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--format",
+            "z3ds",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    ));
+
+    assert_eq!(json["status"], "failed");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("is not a 3DS image"), "{label}");
+    assert!(!output.path().exists(), "z3ds output was written");
 }
 
 #[test]
@@ -496,9 +524,10 @@ fn z3ds_extract_uses_underlying_magic_for_output_extension() {
 #[test]
 fn z3ds_extract_reports_parallel_threads_for_large_file() {
     let temp = setup_temp_dir();
-    let source = (0..(10 * 1024 * 1024))
+    let mut source = (0..(10 * 1024 * 1024))
         .map(|index| (index % 251) as u8)
         .collect::<Vec<_>>();
+    source[0x100..0x104].copy_from_slice(b"NCSD");
     fs::write(temp.child("large.3ds").path(), &source).expect("fixture");
 
     let z3ds_path = temp.child("large.z3ds");
@@ -543,7 +572,7 @@ fn z3ds_extract_reports_parallel_threads_for_large_file() {
     assert_eq!(json["used_parallelism"], true);
     assert_eq!(json["status"], "succeeded");
     assert_eq!(
-        fs::read(out_dir.child("large.3ds").path()).expect("extracted 3ds"),
+        fs::read(out_dir.child("large.cci").path()).expect("extracted 3ds"),
         source
     );
 }
@@ -551,9 +580,10 @@ fn z3ds_extract_reports_parallel_threads_for_large_file() {
 #[test]
 fn z3ds_extract_supports_single_output_selection() {
     let temp = setup_temp_dir();
-    let source = (0..65_536)
+    let mut source = (0..65_536)
         .map(|index| (index % 199) as u8)
         .collect::<Vec<_>>();
+    source[0x100..0x104].copy_from_slice(b"NCSD");
     fs::write(temp.child("disc.3ds").path(), &source).expect("fixture");
 
     let z3ds_path = temp.child("disc.z3ds");
@@ -580,7 +610,7 @@ fn z3ds_extract_supports_single_output_selection() {
             "--input",
             z3ds_path.path().to_str().expect("path"),
             "--select",
-            "disc.3ds",
+            "disc.cci",
             "--output",
             selected_out.path().to_str().expect("path"),
             "--jsonl",
@@ -589,7 +619,7 @@ fn z3ds_extract_supports_single_output_selection() {
     );
 
     assert_eq!(
-        fs::read(selected_out.child("disc.3ds").path()).expect("extracted 3ds"),
+        fs::read(selected_out.child("disc.cci").path()).expect("extracted 3ds"),
         source
     );
 
@@ -620,9 +650,10 @@ fn z3ds_extract_supports_single_output_selection() {
 #[test]
 fn z3ds_compress_reports_parallel_threads_for_large_file() {
     let temp = setup_temp_dir();
-    let source = (0..(10 * 1024 * 1024))
+    let mut source = (0..(10 * 1024 * 1024))
         .map(|index| (index % 241) as u8)
         .collect::<Vec<_>>();
+    source[0x100..0x104].copy_from_slice(b"NCSD");
     fs::write(temp.child("large.3ds").path(), &source).expect("fixture");
 
     let z3ds_path = temp.child("large.z3ds");

@@ -883,10 +883,8 @@ fn create_unchanged_files_produce_empty_patch() {
         )
         .expect("create");
     assert!(
-        report
-            .label
-            .contains("warning=IPS patch will not change output"),
-        "label mismatch: {}",
+        !report.label.contains("warning="),
+        "the CLI layer, not the IPS handler, warns about identical inputs: {}",
         report.label
     );
 

@@ -617,17 +617,13 @@ fn tools_ppf_undo_rejects_ambiguous_archives_and_accepts_payload_selectors() {
 }
 
 #[test]
-fn tools_ppf_undo_compression_failure_preserves_existing_output() {
+fn tools_ppf_undo_compression_failure_writes_no_output() {
     let temp = setup_temp_dir();
     let (rom, patch, _, _) = undo_fixture(&temp);
     let output = temp.child("restored.rvz");
-    fs::write(output.path(), b"keep existing output").expect("output fixture");
     let report = undo_report(&rom, &patch, output.path(), &[], 1);
     assert_eq!(report["stage"], "compress");
-    assert_eq!(
-        fs::read(output.path()).expect("output"),
-        b"keep existing output"
-    );
+    assert!(!output.path().exists(), "output was written");
 }
 
 #[test]
@@ -986,7 +982,7 @@ fn tools_ppf_undo_disc_warnings_and_invalid_targets_match_apply() {
 }
 
 #[test]
-fn tools_ppf_undo_invalid_patch_preserves_existing_compressed_destination() {
+fn tools_ppf_undo_invalid_patch_writes_no_compressed_destination() {
     let temp = setup_temp_dir();
     let (rom, patch, _, _) = undo_fixture(&temp);
     let output = temp.child("restored.zip");
@@ -1002,10 +998,41 @@ fn tools_ppf_undo_invalid_patch_preserves_existing_compressed_destination() {
         (b"invalid patch".to_vec(), "too small"),
     ] {
         fs::write(&patch, patch_bytes).expect("invalid patch fixture");
-        fs::write(output.path(), b"keep output").expect("output fixture");
         let report = undo_report(&rom, &patch, output.path(), &[], 1);
         assert!(report["label"].as_str().expect("label").contains(expected));
-        assert_eq!(fs::read(output.path()).expect("output"), b"keep output");
+        assert!(!output.path().exists(), "{expected}: output was written");
+    }
+}
+
+#[test]
+fn tools_ppf_undo_existing_output_fails_before_the_undo_runs() {
+    let temp = setup_temp_dir();
+    let (rom, patch, _, modified) = undo_fixture(&temp);
+    // An invalid patch makes the undo step fail, so seeing the existing-output error instead
+    // shows the check ran before the undo and any compression.
+    fs::write(&patch, b"invalid patch").expect("invalid patch fixture");
+    for (name, options) in [
+        ("restored.gba", vec!["--no-compress"]),
+        ("restored.zip", vec![]),
+    ] {
+        let output = temp.child(name);
+        fs::write(output.path(), b"existing user output").expect("existing output");
+        let report = undo_report(&rom, &patch, output.path(), &options, 1);
+        let label = report["label"].as_str().expect("label");
+        assert!(
+            label.contains("refusing to overwrite existing output"),
+            "{name}: {label}"
+        );
+        assert!(label.contains(name), "{name}: {label}");
+        assert!(
+            !label.contains("--force"),
+            "ppf-undo has no --force flag: {label}"
+        );
+        assert_eq!(
+            fs::read(output.path()).expect("preserved output"),
+            b"existing user output"
+        );
+        assert_eq!(fs::read(&rom).expect("source ROM"), modified);
     }
 }
 
