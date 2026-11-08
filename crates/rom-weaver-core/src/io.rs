@@ -101,8 +101,10 @@ pub fn bounded_items_for_threads(effective_threads: usize) -> usize {
 pub fn ensure_output_available(output_path: &Path, overwrite: bool) -> Result<()> {
     if !output_path.exists() {
         // Nothing was there, so a cancelled run may safely delete whatever it
-        // wrote here.
-        crate::register_in_progress_output(output_path);
+        // wrote here. A dangling link occupies the name and belongs to the user.
+        if fs::symlink_metadata(output_path).is_err() {
+            crate::register_in_progress_output(output_path);
+        }
         return Ok(());
     }
     // `--force` cannot replace a directory, so name the real problem instead of

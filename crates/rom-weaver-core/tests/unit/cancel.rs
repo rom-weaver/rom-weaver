@@ -1,10 +1,16 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::{
+        Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use super::*;
+
+/// The in-progress registry is process-global, so tests that clear or drain it run one at a time.
+static REGISTRY_LOCK: Mutex<()> = Mutex::new(());
 
 struct TempDir(PathBuf);
 
@@ -40,6 +46,9 @@ impl Drop for TempDir {
 
 #[test]
 fn local_cancellation_and_output_cleanup_have_expected_lifecycles() {
+    let _registry = REGISTRY_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     clear_in_progress_outputs();
 
     let token = CancellationToken::new();
@@ -92,6 +101,36 @@ fn local_cancellation_and_output_cleanup_have_expected_lifecycles() {
     assert!(preserved.exists());
 
     clear_in_progress_outputs();
+}
+
+#[cfg(unix)]
+#[test]
+fn ensure_output_available_registers_only_names_nothing_occupies() {
+    let _registry = REGISTRY_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let temp = TempDir::new("ensure-registered");
+    let dangling = temp.path().join("dangling-link");
+    std::os::unix::fs::symlink(temp.path().join("missing-target"), &dangling)
+        .expect("create dangling link");
+    let absent = temp.path().join("absent.bin");
+
+    clear_in_progress_outputs();
+    crate::ensure_output_available(&dangling, true)
+        .expect("a forced run may replace a dangling link");
+    crate::ensure_output_available(&absent, false).expect("an absent output is available");
+    fs::write(&absent, b"partial").expect("write partial output");
+    remove_in_progress_outputs();
+    clear_in_progress_outputs();
+
+    assert!(
+        fs::symlink_metadata(&dangling).is_ok(),
+        "a cancelled run must not delete the user's dangling link"
+    );
+    assert!(
+        !absent.exists(),
+        "a path nothing occupied is still cleaned up"
+    );
 }
 
 #[test]
