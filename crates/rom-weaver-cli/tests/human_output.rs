@@ -342,7 +342,7 @@ fn stream_validation_errors_drop_the_prefix_in_human_output_only() {
         .clone();
     let stdout = String::from_utf8_lossy(&json.stdout);
     assert!(
-        stdout.contains("validation failed: compress output -"),
+        stdout.contains("validation failed: output - cannot be combined"),
         "{stdout}"
     );
 }
