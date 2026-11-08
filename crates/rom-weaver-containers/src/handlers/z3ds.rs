@@ -483,6 +483,13 @@ impl Z3dsContainerHandler {
         Ok((input_path, level))
     }
 
+    /// The leading bytes of a create input, once they are known to be 3DS content.
+    fn read_3ds_head(input_path: &Path) -> Result<Vec<u8>> {
+        let head = rom_weaver_core::read_up_to(File::open(input_path)?, NCSD_MAGIC_OFFSET + 4)?;
+        Self::require_3ds_head(input_path, &head)?;
+        Ok(head)
+    }
+
     /// Reject an input that is not 3DS content before anything is written: a `.z3ds` of an
     /// arbitrary file would not load in 3DS emulators.
     fn require_3ds_head(input_path: &Path, head: &[u8]) -> Result<()> {
@@ -1020,8 +1027,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         _context: &OperationContext,
     ) -> Result<()> {
         let (input_path, _level) = self.resolve_create_input_and_level(request)?;
-        let head = rom_weaver_core::read_up_to(File::open(input_path)?, NCSD_MAGIC_OFFSET + 4)?;
-        Self::require_3ds_head(input_path, &head)
+        Self::read_3ds_head(input_path).map(drop)
     }
 
     fn create(
@@ -1030,8 +1036,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let (input_path, level) = self.resolve_create_input_and_level(request)?;
-        let head = rom_weaver_core::read_up_to(File::open(input_path)?, NCSD_MAGIC_OFFSET + 4)?;
-        Self::require_3ds_head(input_path, &head)?;
+        let head = Self::read_3ds_head(input_path)?;
         let input_size = fs::metadata(input_path)?.len();
         let create_tasks = self.build_create_tasks(input_size)?;
         // Plan threads without building a shared pool: the scoped pipeline owns exactly the worker

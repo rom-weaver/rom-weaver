@@ -823,14 +823,7 @@ impl Read for InterruptedShortReader {
 
 #[test]
 fn files_equal_detects_length_and_content_differences() {
-    let dir = std::env::temp_dir().join(format!(
-        "rom-weaver-tests-files-equal-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time")
-            .as_nanos()
-    ));
+    let dir = io_temp_path("files-equal");
     fs::create_dir_all(&dir).expect("temp dir");
     // Larger than one 64 KiB read so a difference in the last chunk is still found.
     let base = vec![7u8; 200_000];
