@@ -10670,24 +10670,48 @@ fn fixture_path(name: &str) -> PathBuf {
 }
 
 fn build_hdiff13_nocomp_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
+    let new_size = u64::try_from(new.len()).expect("new size");
+    let rle_ctrl = hdiff_rle0_ctrl(new_size);
     let mut patch = Vec::new();
     patch.extend_from_slice(b"HDIFF13&nocomp");
     patch.push(0);
     patch.extend_from_slice(&encode_all_varints(&[
-        u64::try_from(new.len()).expect("new size"),
+        new_size,
         u64::try_from(old.len()).expect("old size"),
         0, // cover_count
         0, // cover_buf_size
         0, // compress_cover_buf_size
-        0, // rle_ctrl_buf_size
-        0, // compress_rle_ctrl_buf_size
-        0, // rle_code_buf_size
-        0, // compress_rle_code_buf_size
-        u64::try_from(new.len()).expect("new diff size"),
-        0, // compress_new_data_diff_size
+        u64::try_from(rle_ctrl.len()).expect("rle ctrl size"),
+        0,        // compress_rle_ctrl_buf_size
+        0,        // rle_code_buf_size
+        0,        // compress_rle_code_buf_size
+        new_size, // new_data_diff_size
+        0,        // compress_new_data_diff_size
     ]));
+    patch.extend_from_slice(&rle_ctrl);
     patch.extend_from_slice(new);
     patch
+}
+
+/// HDiffPatch RLE control bytes for a zero run of `len` bytes. patch.c reads the RLE stream
+/// across the whole new data, gaps included, so a patch must cover every byte with it. The
+/// length is stored minus one in HDiffPatch's packed-uint-with-tag form (2 tag bits, type 0).
+fn hdiff_rle0_ctrl(len: u64) -> Vec<u8> {
+    let Some(mut value) = len.checked_sub(1) else {
+        return Vec::new();
+    };
+    let mut low_groups = Vec::new();
+    while value >= 1 << 5 {
+        low_groups.push((value & 0x7f) as u8);
+        value >>= 7;
+    }
+    let continues = if low_groups.is_empty() { 0 } else { 0x20 };
+    let mut ctrl = vec![value as u8 | continues];
+    while let Some(group) = low_groups.pop() {
+        let continues = if low_groups.is_empty() { 0 } else { 0x80 };
+        ctrl.push(group | continues);
+    }
+    ctrl
 }
 
 fn build_hdiff13_identity_patch_with_cover_and_rle(source: &[u8]) -> Vec<u8> {
@@ -10696,6 +10720,8 @@ fn build_hdiff13_identity_patch_with_cover_and_rle(source: &[u8]) -> Vec<u8> {
     cover.push(0); // old sign=0, old_delta=0
     encode_varint(&mut cover, 0); // copy_length
     encode_varint(&mut cover, source_size); // cover_length
+    let mut rle_ctrl = vec![0xC0]; // rle_type=copy, length=1
+    rle_ctrl.extend_from_slice(&hdiff_rle0_ctrl(source_size - 1));
 
     let mut patch = Vec::new();
     patch.extend_from_slice(b"HDIFF13&nocomp");
@@ -10706,7 +10732,7 @@ fn build_hdiff13_identity_patch_with_cover_and_rle(source: &[u8]) -> Vec<u8> {
         1,           // cover_count
         u64::try_from(cover.len()).expect("cover size"),
         0, // compress_cover_buf_size
-        1, // rle_ctrl_buf_size
+        u64::try_from(rle_ctrl.len()).expect("rle ctrl size"),
         0, // compress_rle_ctrl_buf_size
         1, // rle_code_buf_size
         0, // compress_rle_code_buf_size
@@ -10714,7 +10740,7 @@ fn build_hdiff13_identity_patch_with_cover_and_rle(source: &[u8]) -> Vec<u8> {
         0, // compress_new_data_diff_size
     ]));
     patch.extend_from_slice(&cover);
-    patch.push(0xC0); // rle_type=copy, length=1
+    patch.extend_from_slice(&rle_ctrl);
     patch.push(0x00); // add 0 to keep bytes unchanged
     patch
 }
