@@ -33,7 +33,7 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 MIB = 1024 * 1024
 NCSD_MAGIC_OFFSET = 0x100
@@ -964,25 +964,20 @@ def cached_fixture_path(cache_dir: Path, label: str, size_bytes: int, seed: int 
     return cache_dir / f"{label}-{size_bytes}{seed_part}.{suffix}"
 
 
-def ensure_cached_random_fixture(cache_dir: Path, label: str, size_bytes: int, seed: int) -> Path:
+def ensure_cached_random_fixture(
+    cache_dir: Path,
+    label: str,
+    size_bytes: int,
+    seed: int,
+    write_fixture: Callable[[Path, int, int], None] = write_random_fixture,
+) -> Path:
     cache_path = cached_fixture_path(cache_dir, label, size_bytes, seed)
     if cache_path.exists() and cache_path.stat().st_size == size_bytes:
         return cache_path
     if cache_path.exists():
         cache_path.unlink()
     print(f"[bench] generating fixture cache {cache_path}", flush=True)
-    write_random_fixture(cache_path, size_bytes, seed)
-    return cache_path
-
-
-def ensure_cached_3ds_fixture(cache_dir: Path, label: str, size_bytes: int, seed: int) -> Path:
-    cache_path = cached_fixture_path(cache_dir, label, size_bytes, seed)
-    if cache_path.exists() and cache_path.stat().st_size == size_bytes:
-        return cache_path
-    if cache_path.exists():
-        cache_path.unlink()
-    print(f"[bench] generating fixture cache {cache_path}", flush=True)
-    write_test_3ds_fixture(cache_path, size_bytes, seed)
+    write_fixture(cache_path, size_bytes, seed)
     return cache_path
 
 
@@ -2031,11 +2026,12 @@ def main() -> None:
         nonlocal source_3ds_ready
         if source_3ds_ready:
             return
-        cached = ensure_cached_3ds_fixture(
+        cached = ensure_cached_random_fixture(
             fixture_cache_dir,
             "source-3ds",
             args.size_mib * MIB,
             seed=0xBADC0DE,
+            write_fixture=write_test_3ds_fixture,
         )
         stage_fixture_file(cached, source_3ds_path)
         source_3ds_ready = True
