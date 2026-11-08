@@ -584,6 +584,10 @@ pub enum UnsupportedOp {
     RupNamedFileEntries,
     /// HDiffPatch directory (HDIFF19) patches cannot be applied by patch-apply.
     HdiffDirectoryPatch,
+    /// A valid HDiffPatch layout that this handler recognizes but cannot apply.
+    HdiffLayout { layout: &'static str },
+    /// A valid HDiffPatch compressor whose decoder is not available here.
+    HdiffCompression { compression: String },
     /// The BSP patch asks the user to pick from an interactive menu, which apply cannot answer.
     BspInteractiveMenu,
     /// The rust CHD encoder only supports `avhuff` for `chav` frame inputs.
@@ -678,6 +682,13 @@ impl fmt::Display for UnsupportedOp {
                 f,
                 "HDiffPatch directory patches (HDIFF19) are not supported for patch-apply; expected single-file patch (.hdiff/.hpatchz)"
             ),
+            Self::HdiffLayout { layout } => write!(
+                f,
+                "HDiffPatch layout is recognized but not supported: {layout}"
+            ),
+            Self::HdiffCompression { compression } => {
+                write!(f, "HDiffPatch compression is not supported: {compression}")
+            }
             Self::BspInteractiveMenu => write!(
                 f,
                 "interactive BSP menus are not supported; use a BSP patcher that supports menu choices"

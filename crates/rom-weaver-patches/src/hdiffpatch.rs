@@ -325,7 +325,7 @@ enum HdiffCompression {
 }
 
 /// Compressor names the reference decompress plugins define but this handler cannot decode.
-const HDIFF_UNSUPPORTED_COMPRESSORS: [&str; 6] = ["lz4", "lz4hc", "brotli", "lzham", "tuz", "7zxz"];
+const HDIFF_UNSUPPORTED_COMPRESSORS: [&str; 5] = ["lz4", "brotli", "lzham", "tuz", "7zxz"];
 
 impl HdiffCompression {
     fn parse(value: &str) -> Result<Self> {
@@ -336,13 +336,11 @@ impl HdiffCompression {
             "bz2" | "pbz2" | "bzip2" | "pbzip2" => Ok(Self::Bz2),
             "lzma" => Ok(Self::Lzma),
             "lzma2" => Ok(Self::Lzma2),
-            other if HDIFF_UNSUPPORTED_COMPRESSORS.contains(&other) => {
-                Err(RomWeaverError::ValidationCode(
-                    hdiff_validation_code("HDIFF_COMPRESSION_UNSUPPORTED")
-                        .with_message("HDiffPatch compression is not supported")
-                        .with_field("compression", other),
-                ))
-            }
+            other if HDIFF_UNSUPPORTED_COMPRESSORS.contains(&other) => Err(
+                RomWeaverError::Unsupported(UnsupportedOp::HdiffCompression {
+                    compression: other.to_string(),
+                }),
+            ),
             other => Err(RomWeaverError::ValidationCode(
                 hdiff_validation_code("HDIFF_COMPRESSION_UNRECOGNIZED")
                     .with_message("HDiffPatch compression is not recognized")
@@ -594,12 +592,37 @@ const HDIFF_UNSUPPORTED_LAYOUT_SIGNATURES: [(&[u8], &str); 2] = [
     (b"ENDSLEY/BSDIFF43", "ENDSLEY/BSDIFF43 patch"),
 ];
 
-fn unsupported_layout_error(layout: &str) -> RomWeaverError {
-    RomWeaverError::ValidationCode(
-        hdiff_validation_code("HDIFF_LAYOUT_UNSUPPORTED")
-            .with_message("HDiffPatch layout is recognized but not supported")
-            .with_field("layout", layout),
-    )
+fn unsupported_layout_error(layout: &'static str) -> RomWeaverError {
+    RomWeaverError::Unsupported(UnsupportedOp::HdiffLayout { layout })
+}
+
+/// hdiffz writes an HDIFF19 directory diff when either side is a directory
+/// (dir_patch.c reads both flags); only directory-to-directory patches reach the
+/// directory handler, so every other combination is named here.
+fn reject_hdiff19_non_directory_layout(is_input_dir: bool, is_output_dir: bool) -> Result<()> {
+    match (is_input_dir, is_output_dir) {
+        (true, true) => Ok(()),
+        (false, false) => Err(unsupported_layout_error("HDIFF19 file-to-file diff")),
+        (false, true) => Err(unsupported_layout_error("HDIFF19 file-to-directory diff")),
+        (true, false) => Err(unsupported_layout_error("HDIFF19 directory-to-file diff")),
+    }
+}
+
+/// Whether any HDIFF13 chunk is stored compressed, which decides if the named compressor is needed.
+fn hdiff13_has_compressed_chunks(
+    compress_cover_buf_size: u64,
+    compress_rle_ctrl_buf_size: u64,
+    compress_rle_code_buf_size: u64,
+    compress_new_data_diff_size: u64,
+) -> bool {
+    [
+        compress_cover_buf_size,
+        compress_rle_ctrl_buf_size,
+        compress_rle_code_buf_size,
+        compress_new_data_diff_size,
+    ]
+    .into_iter()
+    .any(|size| size > 0)
 }
 
 fn reject_unsupported_layout(prefix: &[u8]) -> Result<()> {
@@ -641,14 +664,12 @@ fn parse_hdiff_patch_file(path: &Path) -> Result<ParsedPatchVariant> {
         let compress_rle_code_buf_size = parser.read_var_u64("compress_rle_code_buf_size")?;
         let new_data_diff_size = parser.read_var_u64("new_data_diff_size")?;
         let compress_new_data_diff_size = parser.read_var_u64("compress_new_data_diff_size")?;
-        let has_compressed_chunks = [
+        let has_compressed_chunks = hdiff13_has_compressed_chunks(
             compress_cover_buf_size,
             compress_rle_ctrl_buf_size,
             compress_rle_code_buf_size,
             compress_new_data_diff_size,
-        ]
-        .into_iter()
-        .any(|size| size > 0);
+        );
 
         ParsedPatchVariant::SingleFile13(ParsedHdiff13 {
             compression: HdiffCompression::resolve(compression_name, has_compressed_chunks)?,
@@ -698,9 +719,7 @@ fn parse_hdiff_patch_file(path: &Path) -> Result<ParsedPatchVariant> {
         let _output_dir_count = parser.read_var_u64("output_dir_count")?;
         let output_sum_size = parser.read_var_u64("output_sum_size")?;
 
-        if !is_input_dir || !is_output_dir {
-            return Err(unsupported_layout_error("HDIFF19 file-to-file diff"));
-        }
+        reject_hdiff19_non_directory_layout(is_input_dir, is_output_dir)?;
 
         ParsedPatchVariant::Directory19(ParsedHdiffDir19 {
             compression: HdiffCompression::parse_bytes(compression_name)?,
@@ -773,14 +792,12 @@ fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
         let new_data_diff_size = read_var_u64(raw, &mut index, "new_data_diff_size")?;
         let compress_new_data_diff_size =
             read_var_u64(raw, &mut index, "compress_new_data_diff_size")?;
-        let has_compressed_chunks = [
+        let has_compressed_chunks = hdiff13_has_compressed_chunks(
             compress_cover_buf_size,
             compress_rle_ctrl_buf_size,
             compress_rle_code_buf_size,
             compress_new_data_diff_size,
-        ]
-        .into_iter()
-        .any(|size| size > 0);
+        );
 
         ParsedPatchVariant::SingleFile13(ParsedHdiff13 {
             compression: HdiffCompression::resolve(compression_name, has_compressed_chunks)?,
@@ -830,9 +847,7 @@ fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
         let _output_dir_count = read_var_u64(raw, &mut index, "output_dir_count")?;
         let output_sum_size = read_var_u64(raw, &mut index, "output_sum_size")?;
 
-        if !is_input_dir || !is_output_dir {
-            return Err(unsupported_layout_error("HDIFF19 file-to-file diff"));
-        }
+        reject_hdiff19_non_directory_layout(is_input_dir, is_output_dir)?;
 
         ParsedPatchVariant::Directory19(ParsedHdiffDir19 {
             compression: HdiffCompression::parse_bytes(compression_name)?,
@@ -2266,8 +2281,7 @@ impl<'a> HdiffRleDecoder<'a> {
         self.advance(Some(target), len)
     }
 
-    /// Steps over the next `len` RLE bytes for output that is copied from `new_data_diff`
-    /// without an RLE delta (patch.c `_rle_decode_skip`).
+    /// Consumes the next `len` RLE bytes without applying them (patch.c `_rle_decode_skip`).
     fn skip(&mut self, len: usize) -> Result<()> {
         self.advance(None, len)
     }

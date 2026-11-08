@@ -1104,19 +1104,28 @@ fn parse_reads_hdiff19_directory_headers() {
 }
 
 #[test]
-fn parse_reports_hdiff19_file_to_file_diffs_as_an_unsupported_layout() {
+fn parse_names_the_hdiff19_layout_when_either_side_is_not_a_directory() {
     let temp = TestDir::new();
     let patch_path = temp.child("flat.hdiff");
-    let bytes = build_hdiff19_patch(1, 0, 128, 256);
-    fs::write(&patch_path, &bytes).expect("fixture");
-
-    for error in [
-        super::parse_hdiff_patch_view(&bytes).expect_err("non-directory"),
-        super::parse_hdiff_patch_file(&patch_path).expect_err("non-directory"),
+    for (is_input_dir, is_output_dir, layout) in [
+        (0, 0, "HDIFF19 file-to-file diff"),
+        (0, 1, "HDIFF19 file-to-directory diff"),
+        (1, 0, "HDIFF19 directory-to-file diff"),
     ] {
-        let message = error.to_string();
-        assert!(message.contains("HDIFF_LAYOUT_UNSUPPORTED"), "{message}");
-        assert!(message.contains("HDIFF19 file-to-file diff"), "{message}");
+        let bytes = build_hdiff19_patch(is_input_dir, is_output_dir, 128, 256);
+        fs::write(&patch_path, &bytes).expect("fixture");
+
+        for error in [
+            super::parse_hdiff_patch_view(&bytes).expect_err("non-directory"),
+            super::parse_hdiff_patch_file(&patch_path).expect_err("non-directory"),
+        ] {
+            match error {
+                RomWeaverError::Unsupported(UnsupportedOp::HdiffLayout { layout: found }) => {
+                    assert_eq!(found, layout);
+                }
+                other => panic!("{layout}: expected unsupported layout, got {other}"),
+            }
+        }
     }
 }
 
@@ -2510,8 +2519,7 @@ fn with_compressor_name(patch: &[u8], magic: &str, name: &str) -> Vec<u8> {
     renamed
 }
 
-// Patches crafted for the HDiffPatch audit; `crafted-accept-*.ref` is the output the
-// reference hpatchz produced for the matching `.hdiff`.
+// crafted-accept-*.ref is the output hpatchz produced for the matching .hdiff.
 const CRAFTED_ACCEPTED_PATCHES: [&str; 28] = [
     "h13_base",
     "h13_cover_rle_add",
@@ -2599,7 +2607,7 @@ fn hdiff13_raw_chunks_ignore_an_unusable_compressor_name() {
     let new = b"replacement";
     let patch = build_uncompressed_hdiff13_patch(old, new).expect("patch");
     for name in [
-        "lz4", "lz4hc", "brotli", "lzham", "tuz", "7zXZ", "pzlib", "bzip2", "mystery",
+        "lz4", "brotli", "lzham", "tuz", "7zXZ", "pzlib", "bzip2", "mystery",
     ] {
         let renamed = with_compressor_name(&patch, "HDIFF13", name);
         assert_eq!(
@@ -2688,7 +2696,7 @@ fn hdiff13_compressed_chunk_with_a_name_that_is_not_utf8_is_unrecognized() {
 #[test]
 fn hdiff13_compressed_chunk_with_a_defined_but_undecodable_plugin_is_not_supported() {
     let patch = build_zstd_hdiff13_patch(b"old", &vec![b'A'; 4096]);
-    for name in ["lz4", "lz4hc", "brotli", "lzham", "tuz", "7zXZ"] {
+    for name in ["lz4", "brotli", "lzham", "tuz", "7zXZ"] {
         let renamed = {
             let prefix = b"HDIFF13&zstd\0";
             let mut renamed = format!("HDIFF13&{name}\0").into_bytes();
@@ -2696,12 +2704,14 @@ fn hdiff13_compressed_chunk_with_a_defined_but_undecodable_plugin_is_not_support
             renamed
         };
         let error = write_patch_and_apply(b"old", &renamed, 1).expect_err("undecodable plugin");
-        let message = error.to_string();
         assert!(
-            message.contains("HDIFF_COMPRESSION_UNSUPPORTED"),
-            "{message}"
+            matches!(
+                &error,
+                RomWeaverError::Unsupported(UnsupportedOp::HdiffCompression { compression })
+                    if compression.eq_ignore_ascii_case(name)
+            ),
+            "{name}: {error}"
         );
-        assert!(message.contains("not supported"), "{message}");
     }
     let renamed = {
         let mut renamed = b"HDIFF13&mystery\0".to_vec();
@@ -2923,11 +2933,15 @@ fn unsupported_but_valid_hdiffz_layouts_are_reported_as_unsupported_not_corrupt(
         let error = HdiffPatchHandler::new(&HDIFFPATCH)
             .parse(&patch_path, &test_context_with_threads(&temp, 1))
             .expect_err(label);
-        let message = error.to_string();
         assert!(
-            message.contains("HDIFF_LAYOUT_UNSUPPORTED"),
-            "{label}: {message}"
+            matches!(
+                &error,
+                RomWeaverError::Unsupported(UnsupportedOp::HdiffLayout { layout })
+                    if layout.starts_with(label)
+            ),
+            "{label}: {error}"
         );
+        let message = error.to_string();
         assert!(message.contains("not supported"), "{label}: {message}");
         assert!(!message.contains("incomplete"), "{label}: {message}");
         assert!(!message.contains("non-UTF8"), "{label}: {message}");

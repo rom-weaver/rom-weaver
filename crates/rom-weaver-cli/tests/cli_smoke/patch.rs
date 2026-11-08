@@ -7705,6 +7705,49 @@ fn patch_apply_hdiff19_directory_patch_reports_unsupported() {
 }
 
 #[test]
+fn patch_apply_hdiffw26_windowed_patch_reports_unsupported() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let patch = temp.child("update.hdiff");
+    let output = temp.child("output.bin");
+    fs::write(input.path(), b"any source bytes").expect("fixture");
+    let mut windowed = b"HDIFFW26\x51\x00zstd&xxh128\0".to_vec();
+    windowed.extend_from_slice(&[0; 16]);
+    fs::write(patch.path(), windowed).expect("fixture");
+
+    let apply_output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        2,
+    );
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_patch_envelope(
+        &apply_json,
+        "patch-apply",
+        "HDiffPatch/HPatchZ",
+        "unsupported",
+    );
+    assert!(
+        apply_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("recognized but not supported: HDIFFW26 windowed patch")
+    );
+    assert!(!output.path().exists());
+}
+
+#[test]
 fn patch_create_succeeds_for_xdelta_with_secondary_when_helpful() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -10694,8 +10737,7 @@ fn build_hdiff13_nocomp_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
 }
 
 /// HDiffPatch RLE control bytes for a zero run of `len` bytes. patch.c reads the RLE stream
-/// across the whole new data, gaps included, so a patch must cover every byte with it. The
-/// length is stored minus one in HDiffPatch's packed-uint-with-tag form (2 tag bits, type 0).
+/// across gaps, so every new byte needs coverage.
 fn hdiff_rle0_ctrl(len: u64) -> Vec<u8> {
     let Some(mut value) = len.checked_sub(1) else {
         return Vec::new();
