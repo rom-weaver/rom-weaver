@@ -13878,13 +13878,14 @@ fn corrupt_solid_patch_fails_apply_without_output_and_fails_validate() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.bin");
     fs::write(rom.path(), [0x11_u8; 64]).expect("rom fixture");
-    // SOLID v4, 2-byte base addresses, one literal primitive at a base offset of 0xff00,
-    // far past the 64-byte ROM, as a flipped address byte produces.
-    let mut solid = b"SP\x04\x01".to_vec();
+    // SOLID v4, 4-byte base addresses, one literal primitive at 0xff000000, as a flipped
+    // high address byte produces. Gaps are zero-filled, so the address alone would size a
+    // 4 GiB output.
+    let mut solid = b"SP\x04\x03".to_vec();
     solid.extend_from_slice(&1_u32.to_le_bytes());
     solid.extend_from_slice(&[0; 16 + 3]);
     solid.extend_from_slice(&[0, 0, 0]);
-    solid.extend_from_slice(&[0x00, 0x01, 0x00, 0xff, b'Z']);
+    solid.extend_from_slice(&[0x00, 0x01, 0x00, 0x00, 0x00, 0xff, b'Z']);
     let patch = temp.child("corrupt.solid");
     fs::write(patch.path(), solid).expect("solid fixture");
     let output = temp.child("out.bin");
@@ -13921,7 +13922,7 @@ fn corrupt_solid_patch_fails_apply_without_output_and_fails_validate() {
             .get_output()
             .clone();
         let stderr = String::from_utf8_lossy(&result.stderr);
-        assert!(stderr.contains("corrupt.solid` is corrupt"), "{stderr}");
+        assert!(stderr.contains("patch.output_size_implausible"), "{stderr}");
         assert!(!output.path().exists(), "{args:?} left an output");
     }
 }
