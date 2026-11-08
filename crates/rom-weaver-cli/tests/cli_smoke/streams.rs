@@ -1553,8 +1553,10 @@ fn trim_stdout_explains_when_no_input_is_eligible() {
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stdout.is_empty());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("output - produced no file"), "{stderr}");
+    // The lone-input failure now happens before any output stage, so the stream layer's
+    // "output - produced no file" message is never reached.
     assert!(stderr.contains("no trim-eligible inputs found"), "{stderr}");
+    assert!(stderr.contains("[trim.unsupported_input]"), "{stderr}");
     assert_eq!(fs::read(input.path()).unwrap(), source);
 }
 

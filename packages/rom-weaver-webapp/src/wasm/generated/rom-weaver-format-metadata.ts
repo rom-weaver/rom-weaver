@@ -2628,6 +2628,7 @@ export const ROM_WEAVER_ERROR_CODES = {
   "resource.out_of_memory": "OUT_OF_MEMORY",
   "selection.cancelled": "CANCELLED",
   "trim.unsupported_disc": "UNSUPPORTED_FORMAT",
+  "trim.unsupported_input": "UNSUPPORTED_FORMAT",
   "wbfs.size_mismatch": "INVALID_INPUT"
 } as const;
 

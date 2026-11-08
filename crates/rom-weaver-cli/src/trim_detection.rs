@@ -434,6 +434,17 @@ impl CliApp {
         )
     }
 
+    /// The rejection for a lone file or archive input with nothing trim-eligible in it.
+    pub(super) fn unsupported_trim_input_error(path: &Path) -> RomWeaverError {
+        RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_TRIM_UNSUPPORTED_INPUT,
+            format!(
+                "no trim-eligible inputs found in `{}`; run `rom-weaver trim --help` for the supported ROM formats",
+                path.display()
+            ),
+        )
+    }
+
     pub(super) fn collect_trim_input_files(
         &self,
         sources: &[PathBuf],

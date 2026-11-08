@@ -80,6 +80,10 @@ const invokeRomWeaverTrimWorker = async (
           code: "TRIM_UNSUPPORTED",
         });
       }
+      // A lone file or archive with nothing trim-eligible fails with its own code (batches still succeed).
+      if (hasEngineErrorCode(error, "trim.unsupported_input")) {
+        throw Object.assign(new Error(TRIM_UNSUPPORTED_MESSAGE), { code: "TRIM_UNSUPPORTED" });
+      }
       throw error;
     }
     const terminal = getTerminalEvent(result);

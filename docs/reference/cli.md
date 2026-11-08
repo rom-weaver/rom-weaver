@@ -76,7 +76,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 
 `probe`, `checksum`, `identify`, `extract`, and `ingest` accept one positional `FILE` instead of `-i`/`--input`. Supplying both forms is an error. `compress` and `trim` accept multiple positional files and repeated `--input` values; mixed forms retain their command-line order. `--` ends option parsing for filenames that start with `-`. The native aliases do not change the JSON/WASM command schema.
 
-`trim` searches folder inputs recursively; `--no-recursive` limits it to each folder's top level.
+`trim` searches folder inputs recursively; `--no-recursive` limits it to each folder's top level. A folder or multi-input run with no trim-eligible file exits `0` and counts the skipped inputs; a single file or archive that cannot be trimmed exits `1` with `trim.unsupported_input` and writes nothing.
 
 `trim --output` reads its extension the way `compress` and `patch apply` do. `.zip` and `.7z` pack the trimmed file inside the archive: it carries the output name without the archive extension, ending in the file's own extension (`game.zip` holds `game.nds`). `.z3ds` (3DS ROMs; `.zcci` is accepted for a cartridge image (NCSD) and `.zcxi` for an NCCH image, while `.zcia`, `.z3dsx`, and a descriptor that does not match the file's payload are rejected), and `.xiso` and `.xiso.iso` (XISO discs, which write the rebuilt XISO itself; an XISO is never written as CHD) are accepted only for the input they suit, and any other container extension is an error. An error writes nothing, and a dry run reports it. A name that matches no container writes the trimmed file itself. GameCube and Wii discs are not trim inputs; `compress` writes them as RVZ. [Trim a ROM from the CLI](../how-to/cli-trim.md#choose-the-output-format) has the table.
 
@@ -592,7 +592,7 @@ The full support matrix - every patch format, container and compressed ROM or di
 
 ## JSON output
 
-Pass `--json` to make an operation command write one complete JSON result document to stdout, on success or failure. `schema_version` is `1`. `exit_code` and the top-level terminal report describe the final exit status. `error` is `null` on success and an error object on failure. `warnings` collects unique warnings. Commands with more than one terminal report also include the complete `reports` array. Existing command-specific data stays under `details`. A trim with no eligible inputs succeeds with `details.processed`, `trimmed`, and `already_target` set to zero, and `skipped_unsupported` set to the number of unsupported inputs.
+Pass `--json` to make an operation command write one complete JSON result document to stdout, on success or failure. `schema_version` is `1`. `exit_code` and the top-level terminal report describe the final exit status. `error` is `null` on success and an error object on failure. `warnings` collects unique warnings. Commands with more than one terminal report also include the complete `reports` array. Existing command-specific data stays under `details`. A trim of a folder or of several inputs with no eligible file succeeds with `details.processed`, `trimmed`, and `already_target` set to zero, and `skipped_unsupported` set to the number of unsupported inputs. A trim of a single file or archive with nothing trim-eligible in it fails with exit `1` and the error code `trim.unsupported_input` (`trim.unsupported_disc` for a GameCube/Wii disc).
 
 Use `--jsonl` when a consumer needs the event stream. It writes progress and terminal events as JSON lines to stdout. Failed, unsupported, and cancelled terminal events include `details.error` with `code`, `message`, and `exit_code`. A final failure or cancellation event records a nonzero exit when earlier events do not reflect it.
 
@@ -608,7 +608,7 @@ rom-weaver --json probe --input game.sfc | jq
 
 ### Exit codes
 
-`rom-weaver` returns `0` on success, `1` when an operation fails, `2` for an unsupported operation or a command-line usage error, and `130` when a run is cancelled.
+`rom-weaver` returns `0` on success, `1` when an operation fails, `2` for an unsupported operation or a command-line usage error, and `130` when a run is cancelled. A `trim` given a single file or archive with nothing to trim is an operation failure (`1`); a folder or multi-input run with nothing to trim still returns `0`.
 
 ## File permissions
 

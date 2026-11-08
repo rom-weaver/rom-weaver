@@ -657,6 +657,16 @@ impl CliApp {
 
         if trim_sources.is_empty() {
             Self::cleanup_temp_paths(&cleanup_paths);
+            // A lone file or archive that cannot be trimmed is an error; folders and
+            // multi-input runs keep the exit-0 report with skip counts.
+            if let [only] = source.as_slice()
+                && only.is_file()
+            {
+                return self.finish(
+                    "trim",
+                    fail_error("validate", Self::unsupported_trim_input_error(only)),
+                );
+            }
             return self.finish(
                 "trim",
                 Self::trim_empty_report(report_format, skips, dry_run, thread_execution),
