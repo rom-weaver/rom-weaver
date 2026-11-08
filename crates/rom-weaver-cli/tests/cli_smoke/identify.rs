@@ -229,6 +229,63 @@ fn identify_matches_an_external_pack() {
 }
 
 #[test]
+fn identify_with_no_packs_installed_points_at_setup_and_still_exits_zero() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("hello.bin").path(), b"hello").expect("ROM fixture");
+    let empty_dir = temp.child("no-packs");
+    fs::create_dir_all(empty_dir.path()).expect("empty pack dir");
+    let rom = temp.child("hello.bin");
+    let args = [
+        "identify",
+        "--input",
+        rom.path().to_str().expect("ROM path"),
+        "--database-dir",
+        empty_dir.path().to_str().expect("dir path"),
+    ];
+
+    let json_args = [args.as_slice(), &["--json"]].concat();
+    let json = parse_single_json_line(&command_stdout(&json_args, 0));
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        json["label"],
+        "no identify packs installed; run `rom-weaver setup`"
+    );
+    let identify = &json["details"]["identify"];
+    assert_eq!(identify["status"], "unknown");
+    assert!(identify["condition"].is_null());
+
+    let human = String::from_utf8(command_stdout(&args, 0)).expect("utf8 stdout");
+    assert!(
+        human.contains("rom-weaver setup"),
+        "human output should name `setup`: {human}"
+    );
+}
+
+#[test]
+fn identify_with_installed_packs_and_no_match_says_no_matching_title() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("hello.bin").path(), b"hello").expect("ROM fixture");
+    fs::write(
+        temp.child("test.pack").path(),
+        identify_pack_with_crc([0xde, 0xad, 0xbe, 0xef], "Other"),
+    )
+    .expect("identify pack");
+    let json = parse_single_json_line(&command_stdout(
+        &[
+            "identify",
+            "--input",
+            temp.child("hello.bin").path().to_str().expect("ROM path"),
+            "--database",
+            temp.child("test.pack").path().to_str().expect("pack path"),
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(json["details"]["identify"]["status"], "unknown");
+    assert_eq!(json["label"], "no matching title");
+}
+
+#[test]
 fn identify_prints_all_names_in_the_human_output() {
     let temp = setup_temp_dir();
     fs::write(temp.child("hello.bin").path(), b"hello").expect("ROM fixture");

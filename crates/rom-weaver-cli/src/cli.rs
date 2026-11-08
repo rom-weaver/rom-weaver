@@ -332,7 +332,14 @@ Pass --json for the machine-readable form."
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn cli_command() -> clap::Command {
-    crate::streams::decorate(crate::cli_inputs::decorate(Cli::command().mut_subcommand(
+    let mut command = Cli::command().max_term_width(100);
+    // clap probes stdout, stderr, then stdin for a width. Width 0 keeps the source formatting when
+    // stdout is not a terminal, so JSON `details.content` and captured help never depend on an
+    // unrelated tty.
+    if !io::stdout().is_terminal() {
+        command = command.term_width(0);
+    }
+    crate::streams::decorate(crate::cli_inputs::decorate(command.mut_subcommand(
         "checksum",
         |command| {
             command.arg(
@@ -631,6 +638,12 @@ pub fn main_entry() -> ExitCode {
     let args = normalize_legacy_weave_args(normalize_help_args(std::env::args_os().collect()));
     let mode = OutputMode::from_args(&args);
     crate::stdout_output::finish(run_cli(args, mode), mode.is_json())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn main_entry() -> ExitCode {
+    eprintln!("rom-weaver-cli is native-only; build rom-weaver-app for wasm");
+    ExitCode::from(2)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1244,12 +1257,6 @@ fn run_apply_tui(
         ));
     }
     ExitCode::from(create_outcome.exit_code)
-}
-
-#[cfg(target_arch = "wasm32")]
-pub fn main_entry() -> ExitCode {
-    eprintln!("rom-weaver-cli is native-only; build rom-weaver-app for wasm");
-    ExitCode::from(2)
 }
 
 #[cfg(test)]

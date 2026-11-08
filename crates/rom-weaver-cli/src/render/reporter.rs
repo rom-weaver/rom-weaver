@@ -5,7 +5,9 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use indicatif::{ProgressBar, ProgressStyle};
-use rom_weaver_core::{OperationStatus, ProgressEvent, ProgressSink, process_cancellation_token};
+use rom_weaver_core::{
+    OperationStatus, ProgressEvent, ProgressSink, RomWeaverErrorKind, process_cancellation_token,
+};
 
 use super::{
     HumanStyle, Surface, commands, display_text, terminal_supports_progress, write_stderr,
@@ -156,6 +158,15 @@ impl HumanReporter {
             .clear();
     }
 
+    /// `-o/--output` writes leave stdout silent; on an interactive stderr, say what was written.
+    fn output_confirmation_lines(&self, event: &ProgressEvent) -> Vec<String> {
+        if self.progress_is_terminal && !self.quiet {
+            commands::output_confirmation_lines(event, &self.selection)
+        } else {
+            Vec::new()
+        }
+    }
+
     fn render_terminal(&self, event: &ProgressEvent) {
         if process_cancellation_token().is_cancelled() {
             self.surface.cancelled("cancelled");
@@ -178,9 +189,16 @@ impl HumanReporter {
                 }
                 if self.verbose {
                     commands::render_verbose(&self.surface, event);
+                } else {
+                    let diagnostics = self.surface.diagnostics();
+                    for line in self.output_confirmation_lines(event) {
+                        diagnostics.line(&line);
+                    }
                 }
             }
-            OperationStatus::Failed => self.surface.error(&format!("error: {}", event.label)),
+            OperationStatus::Failed => self
+                .surface
+                .error(&format!("error: {}", human_error_text(&event.label))),
             OperationStatus::Unsupported if event.command == "save-identify" => {
                 for (index, line) in event.label.lines().enumerate() {
                     if index == 0 {
@@ -190,15 +208,25 @@ impl HumanReporter {
                     }
                 }
             }
-            OperationStatus::Unsupported => {
-                self.surface.warn(&format!("unsupported: {}", event.label))
-            }
+            OperationStatus::Unsupported => self
+                .surface
+                .warn(&format!("unsupported: {}", human_error_text(&event.label))),
             OperationStatus::Cancelled => self
                 .surface
                 .cancelled(&format!("cancelled: {}", event.label)),
             OperationStatus::Pending | OperationStatus::Running => {}
         }
     }
+}
+
+/// Drop the standard `validation failed: ` prefix, which only repeats the `error:` label. The
+/// event text keeps it because `classify_message` and JSON consumers match on it.
+fn human_error_text(label: &str) -> &str {
+    RomWeaverErrorKind::MESSAGE_PREFIXES
+        .iter()
+        .find(|(_, kind)| *kind == RomWeaverErrorKind::Validation)
+        .and_then(|(prefix, _)| label.strip_prefix(prefix))
+        .map_or(label, str::trim_start)
 }
 
 impl ProgressSink for HumanReporter {

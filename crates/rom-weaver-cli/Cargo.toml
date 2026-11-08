@@ -54,7 +54,8 @@ zstd.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 brotli.workspace = true
-clap.workspace = true
+# `wrap_help` wraps `--help` to the terminal width (native only; wasm never prints clap help).
+clap = { workspace = true, features = ["wrap_help"] }
 # File-identity comparison for in-place apply safety; stable-Rust route to
 # the Windows by-handle info std still gates behind an unstable feature.
 same-file.workspace = true
