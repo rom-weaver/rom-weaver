@@ -437,6 +437,52 @@ fn human_results_save_lists_previews_and_unchanged_values() {
 }
 
 #[test]
+fn human_results_save_list_games_verbose_summarizes_without_repeating_the_listing() {
+    let output = command_output_with_env(&["save", "list-games", "-v"], &[], 0);
+    let stdout = String::from_utf8(output.stdout).expect("UTF-8");
+    let stderr = String::from_utf8(output.stderr).expect("UTF-8");
+    let games = stdout.lines().count();
+    assert!(games > 1, "{stdout}");
+    assert!(
+        stderr.contains(&format!("save-list-games: {games} game(s)")),
+        "{stderr}"
+    );
+    assert!(stderr.len() < 200, "{} bytes of stderr", stderr.len());
+}
+
+#[test]
+fn human_results_setup_dry_run_keeps_its_preview_with_quiet() {
+    let temp = setup_temp_dir();
+    let database_dir = temp.child("identify");
+    let output = command_output_with_env(
+        &[
+            "setup",
+            "--database-dir",
+            database_dir.path().to_str().expect("dir path"),
+            "--dry-run",
+            "--quiet",
+        ],
+        &[],
+        0,
+    );
+    let stdout = String::from_utf8(output.stdout).expect("UTF-8");
+    assert!(stdout.starts_with("dry run: would install"), "{stdout}");
+    assert!(!database_dir.path().exists());
+}
+
+#[test]
+fn json_flag_with_a_value_reports_the_usage_error_as_json() {
+    for flag in ["--json=1", "--jsonl=x"] {
+        let report = parse_single_json_line(&command_stdout(&[flag, "formats"], 2));
+        assert_eq!(
+            report["details"]["error"]["code"], "cli.invalid_arguments",
+            "{flag}"
+        );
+        assert_eq!(report["status"], "failed", "{flag}");
+    }
+}
+
+#[test]
 fn human_results_trim_and_empty_database_queries_explain_empty_results() {
     let temp = setup_temp_dir();
     let input = temp.child("unsupported.txt");

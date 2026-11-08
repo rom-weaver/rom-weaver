@@ -3669,7 +3669,7 @@ fn move_or_copy_file_reports_a_destination_it_cannot_write() {
     let error =
         move_or_copy_file(&from, &to).expect_err("moving onto a directory must fail on both paths");
     assert!(
-        matches!(error, RomWeaverError::Io(_)),
+        matches!(error, RomWeaverError::IoPath { .. }),
         "unexpected: {error}"
     );
     assert!(from.exists(), "the source must survive a failed move");

@@ -1399,11 +1399,7 @@ impl CliApp {
                     ))
                 })?;
             let pack = provider.pack_for_slug(&entry.pack_slug)?.ok_or_else(|| {
-                RomWeaverError::Validation(format!(
-                    "no identify pack is installed for {}; this install shipped no identify \
-                     database, or pass `--database-dir` with an existing one",
-                    entry.canonical_platform
-                ))
+                RomWeaverError::Validation(missing_identify_pack_hint(&entry.canonical_platform))
             })?;
             Ok(vec![SelectedPack {
                 pack,
@@ -1746,6 +1742,16 @@ struct IdentifyPackSelection {
     platform_candidates: Vec<PlatformCandidate>,
 }
 
+/// The one hint for a platform whose identify pack is not installed, shared by
+/// the `--system` error and the `database_required` condition.
+fn missing_identify_pack_hint(platform: &str) -> String {
+    format!(
+        "no identify pack is installed for {platform}; this install shipped no identify \
+         database, so run `rom-weaver setup` to install it, or pass `--database-dir` with an \
+         existing one"
+    )
+}
+
 /// Explains an unknown result: a missing pack, or a pack whose media profile needs tracks.
 fn identify_unknown_condition(
     missing_platforms: &[String],
@@ -1755,10 +1761,7 @@ fn identify_unknown_condition(
     if let Some(platform) = missing_platforms.first() {
         return (
             Some("database_required".to_string()),
-            Some(format!(
-                "no identify pack is installed for {platform}; this install shipped no \
-                 identify database, or pass `--database-dir` with an existing one"
-            )),
+            Some(missing_identify_pack_hint(platform)),
         );
     }
     // Without a detected or requested platform every pack is searched, so a CD

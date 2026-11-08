@@ -476,6 +476,33 @@ fn weave_rom_without_an_input_rom_is_rejected() {
 }
 
 #[test]
+fn weave_rom_with_no_weave_rom_is_rejected() {
+    let dir = scratch_dir("weave-rom-conflict");
+    let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());
+    let rom = write_fixture(&dir, "rom.nes", b"NES\x1a rom bytes");
+    let app = test_app();
+    let args = WeaveCreateCommand {
+        patch: vec![patch],
+        rom: Some(rom.clone()),
+        bundle_rom: Some(rom),
+        no_bundle_rom: true,
+        ..base_args(&dir)
+    };
+    let context = app.context(args.threads);
+    let error = app
+        .weave_create_inner(&args, &context)
+        .expect_err("--weave-rom conflicts with --no-weave-rom");
+    assert!(
+        error
+            .to_string()
+            .contains("--weave-rom cannot be combined with --no-weave-rom"),
+        "{error}"
+    );
+    assert!(!args.output.exists());
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn weave_create_warns_when_rom_only_flags_have_no_rom() {
     let dir = scratch_dir("rom-flag-warnings");
     let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());

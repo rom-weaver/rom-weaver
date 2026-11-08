@@ -2128,12 +2128,28 @@ fn patch_create_suggests_the_closest_create_format_for_a_typo() {
     );
     assert!(label.ends_with("; did you mean `IPS`?"), "{label}");
 
-    // NINJA1 is apply-only, so a near miss of it MUST NOT be suggested.
+    // NINJA1 is apply-only, so a near miss of it MUST NOT be suggested or listed.
     let label = patch_create_label_for_format(&temp, "ninja");
-    assert_eq!(label, "requested patch format is not registered");
+    assert!(label.contains("not registered: `ninja`;"), "{label}");
+    assert!(!label.contains("did you mean"), "{label}");
+    let supported = label
+        .split_once("supported create formats are ")
+        .expect("supported formats")
+        .1;
+    assert!(!supported.contains("NINJA"), "{label}");
 
+    // The rejection names the bad value and lists what would have worked.
     let label = patch_create_label_for_format(&temp, "not-a-format");
-    assert_eq!(label, "requested patch format is not registered");
+    assert!(label.contains("not registered: `not-a-format`;"), "{label}");
+    assert!(
+        label.contains("supported create formats are IPS, "),
+        "{label}"
+    );
+    let supported = label
+        .split_once("supported create formats are ")
+        .expect("supported formats")
+        .1;
+    assert!(supported.contains("BPS"), "{label}");
 }
 
 #[test]
@@ -2622,12 +2638,15 @@ fn patch_apply_rejects_invalid_codec_before_patching() {
     assert!(!output.path().exists());
 }
 
+#[cfg(unix)]
 #[test]
 fn patch_apply_compression_failure_keeps_error_kind_in_contextual_label() {
     let temp = setup_temp_dir();
     let (original, patch) = make_bps_patch_fixture(&temp);
     let output = temp.child("blocked.zip");
-    fs::create_dir(output.path()).expect("block output path with directory");
+    // A dangling link passes the up-front output checks but cannot be created.
+    std::os::unix::fs::symlink("missing-dir/out.zip", output.path())
+        .expect("block output path with a dangling link");
 
     let apply_json = parse_single_json_line(&command_stdout(
         &[
@@ -2653,7 +2672,7 @@ fn patch_apply_compression_failure_keeps_error_kind_in_contextual_label() {
     let label = apply_json["label"].as_str().expect("failure label");
     assert!(label.contains("patch output compression failed"), "{label}");
     assert!(label.contains("i/o error:"), "{label}");
-    assert!(output.path().is_dir());
+    assert!(!temp.child("missing-dir").path().exists());
 }
 
 #[test]
@@ -12686,7 +12705,7 @@ mod termination_signals {
     use std::time::{Duration, Instant};
 
     /// A long compressing apply in `cwd`, returned once it has created its private temp folder.
-    fn spawn_long_apply(cwd: &Path, ignore_hup: bool) -> std::process::Child {
+    fn spawn_long_apply(cwd: &Path, ignored_signal: Option<i32>) -> std::process::Child {
         let original = cwd.join("original.bin");
         let modified = cwd.join("modified.bin");
         let patch = cwd.join("update.xdelta");
@@ -12721,17 +12740,18 @@ mod termination_signals {
             .args(["--compress-level", "max"])
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        // Set both signals either way so the result does not depend on the runner's inherited dispositions.
-        let disposition = if ignore_hup {
-            libc::SIG_IGN
-        } else {
-            libc::SIG_DFL
-        };
+        // Set every signal either way so the result does not depend on the runner's inherited dispositions.
         // SAFETY: only async-signal-safe signal() runs between fork and exec.
         unsafe {
             command.pre_exec(move || {
-                libc::signal(libc::SIGHUP, disposition);
-                libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                for signal in [libc::SIGINT, libc::SIGHUP, libc::SIGTERM] {
+                    let disposition = if ignored_signal == Some(signal) {
+                        libc::SIG_IGN
+                    } else {
+                        libc::SIG_DFL
+                    };
+                    libc::signal(signal, disposition);
+                }
                 Ok(())
             });
         }
@@ -12751,7 +12771,7 @@ mod termination_signals {
     #[test]
     fn sigterm_cancels_cleanly_and_leaves_no_temp_folder() {
         let temp = setup_temp_dir();
-        let mut child = spawn_long_apply(temp.path(), false);
+        let mut child = spawn_long_apply(temp.path(), None);
         unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
         let status = child.wait().expect("wait");
         assert_eq!(status.code(), Some(130), "{status:?}");
@@ -12761,12 +12781,96 @@ mod termination_signals {
     #[test]
     fn inherited_ignored_sighup_still_lets_the_run_finish() {
         let temp = setup_temp_dir();
-        let mut child = spawn_long_apply(temp.path(), true);
+        let mut child = spawn_long_apply(temp.path(), Some(libc::SIGHUP));
         unsafe { libc::kill(child.id() as i32, libc::SIGHUP) };
         let status = child.wait().expect("wait");
         assert!(status.success(), "{status:?} signal {:?}", status.signal());
         assert!(temp.path().join("out.7z").exists());
         assert_no_temp_folder_left(temp.path());
+    }
+
+    /// A shell's background job starts with SIGINT ignored, so a terminal Ctrl-C aimed at the
+    /// foreground job must not cancel it.
+    #[test]
+    fn inherited_ignored_sigint_still_lets_the_run_finish() {
+        let temp = setup_temp_dir();
+        let mut child = spawn_long_apply(temp.path(), Some(libc::SIGINT));
+        unsafe { libc::kill(child.id() as i32, libc::SIGINT) };
+        let status = child.wait().expect("wait");
+        assert!(status.success(), "{status:?} signal {:?}", status.signal());
+        assert!(temp.path().join("out.7z").exists());
+        assert_no_temp_folder_left(temp.path());
+    }
+
+    /// The first SIGINT must stop the VCDIFF window loops, sequential (`--threads 1`) and
+    /// parallel, instead of letting the whole diff finish before the run reports 130.
+    #[test]
+    fn first_sigint_stops_an_xdelta_create_before_the_diff_finishes() {
+        use std::io::{BufRead, BufReader, Read};
+
+        for threads in ["1", "2"] {
+            let temp = setup_temp_dir();
+            let original = temp.path().join("original.bin");
+            let modified = temp.path().join("modified.bin");
+            fs::write(&original, pseudo_random_bytes(96 * 1024 * 1024, 11)).expect("original");
+            let mut changed = pseudo_random_bytes(96 * 1024 * 1024, 11);
+            changed[1000] ^= 0xff;
+            fs::write(&modified, changed).expect("modified");
+            // The output sits in directories the run creates, which a cancel must also remove.
+            let patch = temp.path().join("new1/new2/update.xdelta");
+            let mut command =
+                std::process::Command::new(assert_cmd::cargo::cargo_bin("rom-weaver"));
+            command
+                .current_dir(temp.path())
+                .env("PWD", temp.path())
+                .args(["patch", "create", "--original"])
+                .arg(&original)
+                .arg("--modified")
+                .arg(&modified)
+                .args([
+                    "--format",
+                    "xdelta",
+                    "--log-level",
+                    "debug",
+                    "--threads",
+                    threads,
+                ])
+                .arg("--output")
+                .arg(&patch)
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped());
+            // SAFETY: only async-signal-safe signal() runs between fork and exec.
+            unsafe {
+                command.pre_exec(|| {
+                    libc::signal(libc::SIGINT, libc::SIG_DFL);
+                    Ok(())
+                });
+            }
+            let mut child = command.spawn().expect("spawn create");
+            let mut stderr = BufReader::new(child.stderr.take().expect("stderr"));
+            let mut log = String::new();
+            // The run installs its signal handler before it logs the start of the diff.
+            while !log.contains("xdelta create start") {
+                let read = stderr.read_line(&mut log).expect("read stderr");
+                assert!(read > 0, "create ended before the diff started: {log}");
+            }
+            unsafe { libc::kill(child.id() as i32, libc::SIGINT) };
+            stderr.read_to_string(&mut log).expect("read stderr");
+            let status = child.wait().expect("wait");
+            assert_eq!(
+                status.code(),
+                Some(130),
+                "threads {threads}: {status:?}\n{log}"
+            );
+            assert!(
+                !log.contains("xdelta create phase timings"),
+                "threads {threads}: the diff ran to completion after SIGINT\n{log}"
+            );
+            assert!(
+                !temp.path().join("new1").exists(),
+                "threads {threads}: a cancelled create left its output directories"
+            );
+        }
     }
 
     /// The second signal takes the forced `process::exit(130)` path, which skips every `Drop`; the
@@ -12776,7 +12880,7 @@ mod termination_signals {
         let temp = setup_temp_dir();
         let preserved = temp.path().join("completed.bin");
         fs::write(&preserved, b"completed before cancellation").expect("completed output");
-        let mut child = spawn_long_apply(temp.path(), false);
+        let mut child = spawn_long_apply(temp.path(), None);
         unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
         std::thread::sleep(Duration::from_millis(30));
         unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
@@ -15167,4 +15271,166 @@ fn patch_create_ips32_rejects_shrink_and_empty_targets() {
             assert!(!patch.path().exists());
         }
     }
+}
+
+#[test]
+fn patch_apply_rejects_compress_level_with_no_compress() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let patch = temp.child("update.ips");
+    let output = temp.child("out.bin");
+    fs::write(input.path(), b"abcdefgh").expect("input fixture");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0,
+                data: b"Z".to_vec(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch fixture");
+    let event = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--no-compress",
+            "--compress-level",
+            "high",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        1,
+    );
+    let label = event["label"].as_str().expect("label");
+    assert!(
+        label.contains("--no-compress cannot be combined with --compress-level"),
+        "{label}"
+    );
+    assert!(!output.path().exists());
+}
+
+#[test]
+fn code_system_is_validated_by_clap_and_lists_every_cheat_system() {
+    for args in [
+        vec![
+            "patch",
+            "apply",
+            "--input",
+            "game.sfc",
+            "--patch",
+            "hack.bps",
+            "--code",
+            "000-000",
+            "--code-system",
+            "bogus",
+            "--output",
+            "out.sfc",
+        ],
+        vec![
+            "patch",
+            "create",
+            "--original",
+            "game.sfc",
+            "--code",
+            "000-000",
+            "--code-system",
+            "bogus",
+            "--output",
+            "out.bps",
+        ],
+    ] {
+        let assert = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .assert()
+            .code(2);
+        let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+        assert!(stderr.contains("unknown system"), "{args:?}: {stderr}");
+        assert!(stderr.contains("gameboy-color"), "{args:?}: {stderr}");
+    }
+    for subcommand in ["apply", "create"] {
+        let help = command_stdout(&["patch", subcommand, "--help"], 0);
+        let help = String::from_utf8_lossy(&help);
+        assert!(help.contains("--code-system <SYS>"), "{subcommand}: {help}");
+        assert!(help.contains("gameboy-color"), "{subcommand}: {help}");
+    }
+}
+
+#[test]
+fn patch_apply_weave_value_name_is_not_the_legacy_bundle() {
+    let help = command_stdout(&["patch", "apply", "--help"], 0);
+    let help = String::from_utf8_lossy(&help);
+    assert!(help.contains("--weave <WEAVE>"), "{help}");
+    assert!(!help.contains("BUNDLE"), "{help}");
+}
+
+/// A destination name over the filesystem's 255-byte limit fails at the create.
+/// The error must name the operation and the path rather than surface a bare
+/// `File name too long`.
+#[cfg(unix)]
+#[test]
+fn patch_apply_no_compress_failure_names_the_output_path() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("rom.bin");
+    fs::write(rom.path(), b"abcdefgh").expect("ROM");
+    let patch = temp.child("fix.ips");
+    fs::write(patch.path(), b"PATCH\x00\x00\x03\x00\x01XEOF").expect("patch");
+    let long_stem = "a".repeat(300);
+    let output = temp.path().join(format!("{long_stem}.bin"));
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--no-compress",
+            "--input",
+            rom.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+    let message = json["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains(&format!("cannot create `{}`", output.display())),
+        "the failure must name the create and the path: {message}"
+    );
+}
+
+/// A compressed output stages the patched bytes in a scratch file that takes the
+/// requested file name; the failure must name the requested path, not the scratch one.
+#[cfg(unix)]
+#[test]
+fn patch_apply_compressed_failure_names_the_requested_output_path() {
+    let temp = setup_temp_dir();
+    let long_stem = "a".repeat(300);
+    let output = temp.path().join(format!("{long_stem}.7z"));
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            fixture_path("secondary-source.bin").to_str().expect("path"),
+            "--patch",
+            fixture_path("secondary-djw.xdelta").to_str().expect("path"),
+            "--output",
+            output.to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+    let message = json["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains(&format!("cannot create `{}`", output.display())),
+        "the failure must name the requested output, not its scratch file: {message}"
+    );
 }

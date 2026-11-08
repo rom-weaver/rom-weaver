@@ -76,6 +76,64 @@ fn man_install_json_reports_the_installed_page() {
 }
 
 #[test]
+fn completions_leave_out_hidden_flags_but_the_flags_stay_accepted() {
+    for shell in ["bash", "zsh", "fish", "elvish", "powershell"] {
+        let script = command_stdout(&["completions", shell], 0);
+        assert!(
+            !String::from_utf8_lossy(&script).contains("entry-name"),
+            "{shell}"
+        );
+    }
+    let temp = setup_temp_dir();
+    let input = temp.child("game.bin");
+    let archive = temp.child("game.zip");
+    fs::write(input.path(), b"rom bytes").expect("input fixture");
+    command_stdout(
+        &[
+            "compress",
+            "-i",
+            input.path().to_str().expect("input"),
+            "-o",
+            archive.path().to_str().expect("archive"),
+            "--entry-name",
+            "renamed.bin",
+        ],
+        0,
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn bash_completion_offers_subcommand_flags_and_values() {
+    let temp = setup_temp_dir();
+    let script = temp.child("completion.bash");
+    fs::write(script.path(), command_stdout(&["completions", "bash"], 0))
+        .expect("completion script");
+    for (words, expected) in [
+        ("rom-weaver ch", "checksum"),
+        ("rom-weaver checksum --al", "--algo"),
+        ("rom-weaver patch apply --patch-header ''", "strip"),
+    ] {
+        let driver = format!(
+            "source \"$1\"; COMP_WORDS=({words}); COMP_CWORD=$((${{#COMP_WORDS[@]}}-1)); \
+             COMPREPLY=(); _rom__weaver rom-weaver \"${{COMP_WORDS[COMP_CWORD]}}\" \
+             \"${{COMP_WORDS[COMP_CWORD-1]}}\"; echo \"${{COMPREPLY[*]}}\""
+        );
+        let output = std::process::Command::new("bash")
+            .args(["-c", &driver, "bash"])
+            .arg(script.path())
+            .output()
+            .expect("run bash");
+        let replies = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            replies.split_whitespace().any(|word| word == expected),
+            "{words}: {replies} {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+#[test]
 fn bare_invocation_prints_full_help() {
     let mut command = Command::cargo_bin("rom-weaver").expect("binary");
     let assert = command.assert().code(2);
@@ -159,6 +217,65 @@ fn stdout_write_failure_has_a_controlled_nonzero_exit() {
     assert!(!stderr.contains("panicked"), "{stderr}");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn stdout_write_failure_diagnostic_uses_the_error_prefix() {
+    let output = std::process::Command::new(assert_cmd::cargo::cargo_bin("rom-weaver"))
+        .arg("formats")
+        .stdout(
+            File::options()
+                .write(true)
+                .open("/dev/full")
+                .expect("full device"),
+        )
+        .output()
+        .expect("run command");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.starts_with("error: cannot write stdout:"),
+        "{stderr}"
+    );
+}
+
+/// Runs the CLI with descriptor 1 closed (`>&-`) or pointing at /dev/null.
+#[cfg(unix)]
+fn run_with_stdout(args: &[&str], closed: bool) -> std::process::Output {
+    use std::os::unix::process::CommandExt;
+    let mut command = std::process::Command::new(assert_cmd::cargo::cargo_bin("rom-weaver"));
+    command.args(args).stdout(std::process::Stdio::null());
+    if closed {
+        // SAFETY: only async-signal-safe close() runs between fork and exec.
+        unsafe {
+            command.pre_exec(|| {
+                libc::close(libc::STDOUT_FILENO);
+                Ok(())
+            });
+        }
+    }
+    command.output().expect("run command")
+}
+
+#[cfg(unix)]
+#[test]
+fn closed_stdout_is_reported_instead_of_swallowed() {
+    for args in [
+        &["formats"][..],
+        &["--json", "formats"],
+        &["--version"],
+        &["--help"],
+    ] {
+        let output = run_with_stdout(args, true);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1), "{args:?}: {stderr}");
+        assert!(stderr.contains("cannot write stdout"), "{args:?}: {stderr}");
+        assert!(!stderr.contains("panicked"), "{args:?}: {stderr}");
+        // A stdout that is open but discards output is not an error.
+        let output = run_with_stdout(args, false);
+        assert_eq!(output.status.code(), Some(0), "{args:?}");
+        assert!(output.stderr.is_empty(), "{args:?}");
+    }
+}
+
 #[test]
 fn compress_refuses_to_overwrite_without_force() {
     let temp = setup_temp_dir();
@@ -211,6 +328,100 @@ fn compress_refuses_to_overwrite_without_force() {
         ],
         0,
     );
+}
+
+#[test]
+fn output_path_that_is_a_directory_is_refused_naming_the_path() {
+    let temp = setup_temp_dir();
+    let base_rom = temp.child("base.bin");
+    let modified = temp.child("modified.bin");
+    let patch = temp.child("fix.ips");
+    let nds = temp.child("game.nds");
+    fs::write(base_rom.path(), b"abcdefgh").expect("base fixture");
+    fs::write(modified.path(), b"abcdefgi").expect("modified fixture");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 7,
+                data: b"i".to_vec(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch fixture");
+    fs::write(
+        nds.path(),
+        build_test_nds_rom(0x00, 0x4000, 0x4000, 0x8000, false),
+    )
+    .expect("nds fixture");
+    let output = temp.child("taken-dir");
+    fs::create_dir_all(output.path()).expect("output dir");
+    let out = output.path().to_str().expect("path");
+    let base_path = base_rom.path().to_str().expect("path");
+    let modified_path = modified.path().to_str().expect("path");
+    let patch_path = patch.path().to_str().expect("path");
+    let nds_path = nds.path().to_str().expect("path");
+
+    let commands: [&[&str]; 6] = [
+        &[
+            "compress", "--input", base_path, "--format", "zip", "--output", out, "--force",
+        ],
+        &[
+            "compress", "--input", base_path, "--format", "zip", "--output", out,
+        ],
+        &[
+            "patch",
+            "apply",
+            "--input",
+            base_path,
+            "--patch",
+            patch_path,
+            "--no-compress",
+            "--output",
+            out,
+            "--force",
+        ],
+        &[
+            "patch",
+            "create",
+            "--original",
+            base_path,
+            "--modified",
+            modified_path,
+            "--format",
+            "ips",
+            "--output",
+            out,
+            "--force",
+        ],
+        &[
+            "weave", "create", "--input", base_path, "--patch", patch_path, "--output", out,
+            "--force",
+        ],
+        &["trim", "--input", nds_path, "--output", out, "--force"],
+    ];
+    for args in commands {
+        let result = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(args)
+            .assert()
+            .code(1);
+        let stderr = String::from_utf8_lossy(&result.get_output().stderr).into_owned();
+        assert!(
+            stderr.contains(&format!(
+                "output `{out}` is a directory; choose a different --output path"
+            )),
+            "{args:?}: {stderr}"
+        );
+        assert!(
+            fs::read_dir(output.path())
+                .expect("output dir")
+                .next()
+                .is_none(),
+            "{args:?} wrote into the directory"
+        );
+    }
 }
 
 #[test]

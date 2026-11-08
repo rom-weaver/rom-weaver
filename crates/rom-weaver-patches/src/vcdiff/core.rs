@@ -1,6 +1,8 @@
 use super::*;
 use crate::shared::labels::append_warning_labels;
-use rom_weaver_core::{ValidationCodeError, checksum_validation_suffix, require_single_patch_file};
+use rom_weaver_core::{
+    IoOp, IoResultExt, ValidationCodeError, checksum_validation_suffix, require_single_patch_file,
+};
 
 pub(super) const VCDIFF_MAGIC_BYTES: [u8; 3] = [0xD6, 0xC3, 0xC4];
 pub(super) const VCDIFF_VERSION_STANDARD: u8 = 0x00;
@@ -252,7 +254,7 @@ impl VcdiffPatchHandler {
         let mut output = BufWriter::with_capacity(
             APPLY_OUTPUT_BUFFER_BYTES,
             rom_weaver_core::with_output_creation(context.cancel(), || {
-                Ok(File::create(&request.output)?)
+                File::create(&request.output).io_op(IoOp::Create, &request.output)
             })?,
         );
         let mut expected_offset = 0u64;
@@ -633,7 +635,7 @@ impl PatchHandler for VcdiffPatchHandler {
                 let output_bytes = selected.size;
 
                 if let Some(parent) = request.output.parent() {
-                    fs::create_dir_all(parent)?;
+                    fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
                 }
                 // Reuse the completed candidate file; `move_or_copy_file` handles
                 // native rename failures and WASM's required copy.
@@ -1124,9 +1126,9 @@ pub(super) fn decode_window_task(
 
     rom_weaver_core::with_output_creation(cancel, || {
         if let Some(parent) = task.temp_path.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
-        fs::write(&task.temp_path, &target)?;
+        fs::write(&task.temp_path, &target).io_op(IoOp::Create, &task.temp_path)?;
         Ok(())
     })?;
 
@@ -1156,14 +1158,15 @@ where
         APPLY_OUTPUT_BUFFER_BYTES,
         rom_weaver_core::with_output_creation(cancel, || {
             if let Some(parent) = output_path.parent() {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
             }
-            Ok(OpenOptions::new()
+            OpenOptions::new()
                 .create(true)
                 .truncate(true)
                 .read(true)
                 .write(true)
-                .open(output_path)?)
+                .open(output_path)
+                .io_op(IoOp::Create, output_path)
         })?,
     );
     let mut assembled_output_size = 0u64;
@@ -1529,6 +1532,7 @@ pub(super) struct WindowEncodeInputs<'a> {
     target_len: u64,
     window_size: usize,
     options: &'a CompressOptions,
+    cancel: rom_weaver_core::CancellationToken,
 }
 
 /// Sequential single-threaded entry point. Produces output byte-identical to the parallel path;
@@ -1571,10 +1575,10 @@ pub(super) fn encode_patch_native(
     progress: Option<&CreateEncodeProgress<'_>>,
 ) -> Result<(CreatedPatchCandidate, ThreadExecution)> {
     if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
     }
 
-    let output_file = File::create(output_path)?;
+    let output_file = File::create(output_path).io_op(IoOp::Create, output_path)?;
     let writer = BufWriter::with_capacity(NATIVE_CHUNK_SIZE, output_file);
     let mut encoder = StreamEncoder::new(writer, options.checksum);
     if let Some(backend) = options.secondary.backend() {
@@ -1611,6 +1615,10 @@ pub(super) fn encode_patch_native(
         target_len,
         window_size,
         options: &options,
+        // The streaming test entry point has no context, so it never cancels.
+        cancel: progress.map_or_else(rom_weaver_core::CancellationToken::new, |progress| {
+            progress.progress.context.cancel().clone()
+        }),
     };
     if execution.used_parallelism {
         let pool = pool
@@ -1660,6 +1668,7 @@ pub(super) fn encode_windows_sequential<W: Write>(
     let mut target_buffer = vec![0; inputs.window_size];
 
     loop {
+        inputs.cancel.check()?;
         let bytes_read = read_next_chunk(&mut target, &mut target_buffer)?;
         if bytes_read == 0 {
             break;
@@ -1718,6 +1727,7 @@ pub(super) fn encode_windows_parallel<W: Write>(
     );
 
     loop {
+        inputs.cancel.check()?;
         let mut batch: Vec<(u64, Vec<u8>, Vec<u8>)> = Vec::with_capacity(batch_size);
         for _ in 0..batch_size {
             let mut target_buffer = vec![0; inputs.window_size];
@@ -1748,6 +1758,7 @@ pub(super) fn encode_windows_parallel<W: Write>(
             batch
                 .into_par_iter()
                 .map(|(source_offset, source_window, target_window)| {
+                    inputs.cancel.check()?;
                     build_native_window(
                         &source_window,
                         source_offset,
@@ -1798,7 +1809,7 @@ pub(super) fn elapsed_ms(start: SystemTime) -> u64 {
 pub(super) fn move_or_copy_file(from: &Path, to: &Path) -> Result<()> {
     #[cfg(target_arch = "wasm32")]
     {
-        rom_weaver_core::copy_file_retrying_interrupted(from, to)?;
+        rom_weaver_core::copy_file_naming_paths(from, to)?;
         let _ = fs::remove_file(from);
         Ok(())
     }
@@ -1807,7 +1818,7 @@ pub(super) fn move_or_copy_file(from: &Path, to: &Path) -> Result<()> {
         if fs::rename(from, to).is_ok() {
             return Ok(());
         }
-        rom_weaver_core::copy_file_retrying_interrupted(from, to)?;
+        rom_weaver_core::copy_file_naming_paths(from, to)?;
         let _ = fs::remove_file(from);
         Ok(())
     }
@@ -2027,10 +2038,10 @@ pub(super) fn recode_loaded_patch_with_xdelta_options(
         ));
     }
     if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
     }
 
-    let output_file = File::create(output_path)?;
+    let output_file = File::create(output_path).io_op(IoOp::Create, output_path)?;
     let mut recoded = BufWriter::with_capacity(NATIVE_CHUNK_SIZE, output_file);
     let mut lzma_encoders = if secondary_compressor_id == Some(XDELTA_LZMA_SECONDARY_ID) {
         Some(XdeltaLzmaSectionEncoders::new()?)

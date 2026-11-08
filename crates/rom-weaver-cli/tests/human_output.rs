@@ -117,26 +117,110 @@ fn man_install_reports_the_installed_pages() {
 #[cfg(unix)]
 #[test]
 fn man_install_without_a_home_fails_instead_of_writing_to_the_working_directory() {
+    for home in [None, Some("")] {
+        let temp = TempDir::new().expect("temp dir");
+        let mut install = command();
+        install
+            .args(["man", "--install"])
+            .current_dir(temp.path())
+            .env_remove("XDG_DATA_HOME")
+            .env_remove("ROM_WEAVER_MAN_DIR");
+        match home {
+            Some(value) => install.env("HOME", value),
+            None => install.env_remove("HOME"),
+        };
+        let output = install.assert().code(1).get_output().clone();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("no home directory; pass --man-dir"),
+            "{home:?}: {stderr}"
+        );
+        assert!(
+            !temp.child("man").path().exists() && !temp.child(".local").path().exists(),
+            "{home:?}: pages were written to the cwd"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn empty_or_relative_data_dir_variables_fall_back_to_the_home_directory() {
     let temp = TempDir::new().expect("temp dir");
-    let output = command()
-        .args(["man", "--install"])
-        .current_dir(temp.path())
-        .env_remove("HOME")
-        .env_remove("XDG_DATA_HOME")
-        .env_remove("ROM_WEAVER_MAN_DIR")
-        .assert()
-        .code(1)
-        .get_output()
-        .clone();
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("no home directory; pass --man-dir"),
-        "{stderr}"
-    );
-    assert!(
-        !temp.child("man").path().exists(),
-        "pages were written to the cwd"
-    );
+    let home = temp.child("home");
+    let cwd = temp.child("cwd");
+    fs::create_dir_all(cwd.path()).expect("cwd");
+    for (man_dir, xdg_data_home) in [("", ""), ("", "relative/data")] {
+        let output = command()
+            .args(["man", "checksum", "--install"])
+            .current_dir(cwd.path())
+            .env("HOME", home.path())
+            .env("ROM_WEAVER_MAN_DIR", man_dir)
+            .env("XDG_DATA_HOME", xdg_data_home)
+            .assert()
+            .success()
+            .get_output()
+            .clone();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("installed 1 man page to"), "{stdout}");
+        assert!(
+            home.path()
+                .join(".local/share/man/man1/rom-weaver-checksum.1")
+                .is_file(),
+            "{xdg_data_home:?}: {stdout}"
+        );
+        assert_eq!(
+            fs::read_dir(cwd.path()).expect("cwd listing").count(),
+            0,
+            "pages were written to the cwd"
+        );
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn identify_database_path_ignores_empty_and_relative_data_dir_variables() {
+    let temp = TempDir::new().expect("temp dir");
+    let home = temp.child("home");
+    let expected = home.path().join(".local/share/rom-weaver/identify");
+    for (data_dir, xdg_data_home) in [("", ""), ("", "relative/data")] {
+        let output = command()
+            .args(["identify", "database", "path"])
+            .env("HOME", home.path())
+            .env("ROM_WEAVER_DATA_DIR", data_dir)
+            .env("XDG_DATA_HOME", xdg_data_home)
+            .assert()
+            .success()
+            .get_output()
+            .clone();
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            expected.to_str().expect("path"),
+            "{data_dir:?} / {xdg_data_home:?}"
+        );
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn identify_database_path_without_a_home_fails_instead_of_resolving_in_the_working_directory() {
+    for home in [None, Some("")] {
+        let temp = TempDir::new().expect("temp dir");
+        let mut path = command();
+        path.args(["identify", "database", "path"])
+            .current_dir(temp.path())
+            .env_remove("XDG_DATA_HOME")
+            .env_remove("ROM_WEAVER_DATA_DIR");
+        match home {
+            Some(value) => path.env("HOME", value),
+            None => path.env_remove("HOME"),
+        };
+        let output = path.assert().code(1).get_output().clone();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("no home directory; pass --database-dir"),
+            "{home:?}: {stderr}"
+        );
+    }
 }
 
 #[test]

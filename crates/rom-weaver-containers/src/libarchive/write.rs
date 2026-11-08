@@ -1,4 +1,5 @@
 use super::*;
+use rom_weaver_core::{IoOp, IoResultExt};
 use tracing::trace;
 
 #[derive(Clone, Copy, Debug)]
@@ -258,7 +259,7 @@ impl WriteArchive {
                 "{context}: libarchive writer is already open"
             )));
         }
-        let file = File::create(output)?;
+        let file = File::create(output).io_op(IoOp::Create, output)?;
         let mut callback_data = Box::new(WriteCallbackData {
             file,
             on_bytes_written: Box::new(on_bytes_written),

@@ -13,7 +13,9 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use rom_weaver_core::{IoOp, OperationFamily, OperationReport, RomWeaverError, ThreadExecution};
+use rom_weaver_core::{
+    IoOp, OperationFamily, OperationReport, RomWeaverError, RomWeaverErrorKind, ThreadExecution,
+};
 use tracing::trace;
 
 use super::CliApp;
@@ -55,12 +57,20 @@ pub(super) fn check_readable(path: &Path) -> Result<(), PathAccessError> {
 
 /// Confirm files can be created inside `directory`, creating the directory
 /// itself when it is missing. "Missing" is never an outcome here - it is either
-/// created or the failure to create it is the error.
+/// created or the failure to create it is the error. Directories it creates are
+/// registered for removal if the run is cancelled.
 pub(super) fn check_writable_dir(directory: &Path) -> Result<(), RomWeaverError> {
-    if !directory.exists()
-        && let Err(error) = fs::create_dir_all(directory)
-    {
-        return Err(denied_error(IoOp::CreateDir, directory, error));
+    if !directory.exists() {
+        // Registered before they exist, outermost first, so a cancelled run removes them (when
+        // still empty) after the outputs they hold.
+        let created_dirs = crate::extract_command::missing_dirs_to_create(directory);
+        for dir in created_dirs.iter().rev() {
+            rom_weaver_core::register_in_progress_output(dir);
+        }
+        if let Err(error) = fs::create_dir_all(directory) {
+            return Err(denied_error(IoOp::CreateDir, directory, error));
+        }
+        trace!(directory = %directory.display(), created = created_dirs.len(), "created output directory");
     }
 
     if !PROBE_ENABLED {
@@ -104,6 +114,49 @@ fn denied_error(op: IoOp, path: &Path, error: io::Error) -> RomWeaverError {
     RomWeaverError::io_path(op, path, error)
 }
 
+/// Wording shared by every command that rejects a directory given as an input file.
+pub(super) fn input_is_directory_message(path: &Path) -> String {
+    format!("input is a directory, not a file: `{}`", path.display())
+}
+
+/// A preflight failure whose message needs no `RomWeaverError` prefix; it is
+/// still classified as validation so JSON consumers see one `error_kind`.
+fn input_validation_failure(
+    family: OperationFamily,
+    format: Option<String>,
+    label: String,
+    thread_execution: Option<ThreadExecution>,
+) -> OperationReport {
+    OperationReport::failed(family, format, "validate", label, thread_execution)
+        .with_error_kind(RomWeaverErrorKind::Validation)
+}
+
+/// The validation failure for a `path` that is missing or cannot be read, or
+/// `None` when it can be.
+fn readable_path_failure(
+    family: OperationFamily,
+    format: Option<String>,
+    path: &Path,
+    thread_execution: Option<ThreadExecution>,
+) -> Option<OperationReport> {
+    match check_readable(path) {
+        Ok(()) => None,
+        Err(PathAccessError::Missing) => Some(input_validation_failure(
+            family,
+            format,
+            format!("input path does not exist: `{}`", path.display()),
+            thread_execution,
+        )),
+        Err(PathAccessError::Denied(error)) => Some(OperationReport::failed_with_error(
+            family,
+            format,
+            "validate",
+            error,
+            thread_execution,
+        )),
+    }
+}
+
 const PROBE_FILE_PREFIX: &str = ".rom-weaver-write-probe";
 static NEXT_PROBE_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -125,28 +178,33 @@ impl CliApp {
         path: &Path,
         thread_execution: Option<ThreadExecution>,
     ) -> Option<OperationReport> {
-        let failure = |label: String| {
-            Some(OperationReport::failed(
-                family,
-                format.clone(),
-                "validate",
-                label,
-                thread_execution.clone(),
-            ))
-        };
-        match check_readable(path) {
-            Ok(()) => None,
-            Err(PathAccessError::Missing) => {
-                failure(format!("input path does not exist: `{}`", path.display()))
-            }
-            Err(PathAccessError::Denied(error)) => Some(OperationReport::failed_with_error(
+        readable_path_failure(family, format, path, thread_execution)
+    }
+
+    /// [`Self::require_readable_path`] for an input that must be a single file:
+    /// a directory fails with [`input_is_directory_message`] instead of
+    /// reaching a handler that can only report "no handler matched".
+    pub(super) fn require_readable_file(
+        &self,
+        family: OperationFamily,
+        format: Option<String>,
+        path: &Path,
+        thread_execution: Option<ThreadExecution>,
+    ) -> Option<OperationReport> {
+        if let Some(report) =
+            readable_path_failure(family, format.clone(), path, thread_execution.clone())
+        {
+            return Some(report);
+        }
+        path.is_dir().then(|| {
+            trace!(path = %path.display(), "input is a directory");
+            input_validation_failure(
                 family,
                 format,
-                "validate",
-                error,
+                input_is_directory_message(path),
                 thread_execution,
-            )),
-        }
+            )
+        })
     }
 
     /// Preflight the destination a command is about to write into, creating it

@@ -365,10 +365,21 @@ impl SaveGameRegistry {
                 return Ok(input);
             }
         }
-        Err(validation(
-            "save_game_unsupported",
-            "the selected save game is unsupported",
-        ))
+        Err(unsupported_game(game_id))
+    }
+
+    /// Fails with `save_game_unsupported`, naming the game, when no handler
+    /// defines `game_id`.
+    pub fn ensure_game_known(&self, game_id: &str) -> Result<()> {
+        let known = self
+            .handlers
+            .iter()
+            .flat_map(|handler| handler.definitions())
+            .any(|definition| definition.identity.id == game_id);
+        if known {
+            return Ok(());
+        }
+        Err(unsupported_game(game_id))
     }
 
     pub fn detect(&self, input: &SaveDetectionInput) -> SaveRecognition {
@@ -417,12 +428,7 @@ impl SaveGameRegistry {
                     .any(|definition| definition.identity == *game)
                     .then(|| handler.parse(input.as_ref(), game))
             })
-            .unwrap_or_else(|| {
-                Err(validation(
-                    "save_game_unsupported",
-                    "the selected save game is unsupported",
-                ))
-            })?;
+            .unwrap_or_else(|| Err(unsupported_game(&game.id)))?;
         if let Some(container) = container {
             attach_container_warnings(&mut document.warnings, &container);
         }
@@ -447,12 +453,7 @@ impl SaveGameRegistry {
                     .any(|definition| definition.identity == *game)
                     .then(|| handler.apply(input.as_ref(), game, edits, dry_run))
             })
-            .unwrap_or_else(|| {
-                Err(validation(
-                    "save_game_unsupported",
-                    "the selected save game is unsupported",
-                ))
-            })?;
+            .unwrap_or_else(|| Err(unsupported_game(&game.id)))?;
         if let Some(container) = container {
             attach_container_warnings(&mut result.document.warnings, &container);
             if let Some(bytes) = result.bytes.take() {
@@ -609,6 +610,16 @@ pub fn validate_save_edits(
         output_valid: true,
         integrity_recalculated: changed,
     })
+}
+
+fn unsupported_game(game_id: &str) -> RomWeaverError {
+    RomWeaverError::ValidationCode(
+        ValidationCodeError::new("save_game_unsupported")
+            .with_message(
+                "the selected save game is unsupported; run `rom-weaver save list-games` to see the game ids",
+            )
+            .with_field("game", game_id),
+    )
 }
 
 fn validation(code: &'static str, message: &'static str) -> RomWeaverError {

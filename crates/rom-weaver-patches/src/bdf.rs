@@ -12,9 +12,9 @@ use tracing::{debug, trace};
 
 use rom_weaver_core::{
     BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-    FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
-    PatchCreateRequest, PatchHandler, PatchValidateRequest, Result, RomWeaverError,
-    SharedBlockCacheReader, ThreadCapability,
+    FormatDescriptor, IoOp, IoResultExt, OperationContext, OperationReport, PatchApplyRequest,
+    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, Result,
+    RomWeaverError, SharedBlockCacheReader, ThreadCapability,
 };
 
 use crate::qbsdiff_support::qbsdiff_thread_capability;
@@ -57,7 +57,7 @@ impl BdfPatchHandler {
         let patch_layout = parse_bsdiff_patch_layout_from_path(patch_path)?;
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
         let thread_capability = qbsdiff_apply_thread_capability(patch_layout.target_len_hint);
         let source_len_u64 = fs::metadata(&request.input)?.len();
@@ -76,7 +76,8 @@ impl BdfPatchHandler {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(&request.output)?;
+            .open(&request.output)
+            .io_op(IoOp::Create, &request.output)?;
         output.set_len(plan.output_len)?;
         let planned_execution = context.plan_threads(thread_capability.clone());
         let (execution, pool) = if planned_execution.used_parallelism {
@@ -190,7 +191,7 @@ impl PatchHandler for BdfPatchHandler {
         let (execution, pool) = context.build_pool(qbsdiff_thread_capability(target_len_usize))?;
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
 
         trace!(

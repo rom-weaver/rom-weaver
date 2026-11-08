@@ -169,8 +169,7 @@ impl CliApp {
         context: &OperationContext,
     ) -> std::result::Result<Arc<dyn ContainerHandler>, Box<OperationReport>> {
         let probe_threads = context.single_thread_execution();
-        if let Some(report) = self.require_readable_path(
-            "extract",
+        if let Some(report) = self.require_readable_file(
             OperationFamily::Container,
             None,
             source,

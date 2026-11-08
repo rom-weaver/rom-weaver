@@ -60,6 +60,14 @@ fn export_cheat_patches(
 
 impl CliApp {
     pub(super) fn run_cheat(&self, args: CheatCommand) -> AppRunOutcome {
+        if let Some(report) = self.require_readable_file(
+            OperationFamily::Patch,
+            Some("cheat".to_string()),
+            &args.input,
+            None,
+        ) {
+            return self.finish("cheat", report);
+        }
         #[cfg(not(target_arch = "wasm32"))]
         match args.action {
             crate::CheatAction::List => return self.run_cheat_list(args),

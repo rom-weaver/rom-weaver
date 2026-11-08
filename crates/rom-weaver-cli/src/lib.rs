@@ -17,6 +17,8 @@ mod cli;
 #[cfg(not(target_arch = "wasm32"))]
 mod cli_inputs;
 #[cfg(not(target_arch = "wasm32"))]
+mod env_paths;
+#[cfg(not(target_arch = "wasm32"))]
 mod formats_command;
 #[cfg(not(target_arch = "wasm32"))]
 mod interactive;
@@ -64,17 +66,18 @@ pub use rom_weaver_core::N64ByteOrder;
 use rom_weaver_core::{
     ArchiveEntryKindFilter, ChecksumRequest, ContainerCreateRequest, ContainerExtractRequest,
     ContainerHandler, ContainerListEntry, ContainerProbeRequest, CreateInputOverride,
-    CreateInputSource, DiscSheetKind, FormatOperationKind, OperationContext, OperationFamily,
-    OperationReport, OperationStatus, PatchApplyRequest, PatchCheckScopes, PatchChecksumValidation,
-    PatchCreateFormatOptions, PatchCreateRequest, PatchEndpointSelection, PatchValidateRequest,
-    ProgressEvent, ProgressSink, PromptCandidate, Result, RomWeaverError, Selection, SelectionList,
-    SelectionMatcher, SelectionPrompter, SolidPatchMetadata, StagedOutput, ThreadBudget,
-    ThreadCapability, ThreadExecution, UnsupportedOp, ValidationCodeError, XdeltaSecondaryMode,
-    detect_disc_sheet, emit_variant_plan, ensure_output_available, enumerate_disc_sheet_refs,
-    env_u64, is_container_filter_passthrough_candidate_name, is_dcp_patch_name,
+    CreateInputSource, DiscSheetKind, FormatOperationKind, IoOp, IoResultExt, OperationContext,
+    OperationFamily, OperationReport, OperationStatus, PatchApplyRequest, PatchCheckScopes,
+    PatchChecksumValidation, PatchCreateFormatOptions, PatchCreateRequest, PatchEndpointSelection,
+    PatchValidateRequest, ProgressEvent, ProgressSink, PromptCandidate, Result, RomWeaverError,
+    Selection, SelectionList, SelectionMatcher, SelectionPrompter, SolidPatchMetadata,
+    StagedOutput, ThreadBudget, ThreadCapability, ThreadExecution, UnsupportedOp,
+    ValidationCodeError, XdeltaSecondaryMode, detect_disc_sheet, emit_variant_plan,
+    ensure_output_available, enumerate_disc_sheet_refs, env_u64,
+    is_container_filter_passthrough_candidate_name, is_dcp_patch_name,
     is_patch_filter_candidate_name, is_rom_filter_candidate_name, normalize_archive_name,
-    operation_report_details, process_cancellation_token, should_ignore_common_container_file,
-    sibling_gdi_path,
+    operation_report_details, overwrite_refusal, process_cancellation_token,
+    should_ignore_common_container_file, sibling_gdi_path,
 };
 // The selection-input parser moved to core; the app keeps a thin wrapper only so the existing unit
 // test in `tests.rs` can exercise it through `CliApp`.

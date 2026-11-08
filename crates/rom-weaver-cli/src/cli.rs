@@ -346,21 +346,67 @@ pub fn cli_command() -> clap::Command {
     )))
 }
 
-// Some shell generators include hidden subcommands. Build their tree without
-// the internal parser shim, retaining the same arguments and public commands.
+// Shell generators advertise hidden subcommands and flags, and clap cannot drop an
+// argument from a command. Rebuild each command from its visible parts, which also
+// leaves out the internal parser shim, retaining the same public arguments.
 #[cfg(not(target_arch = "wasm32"))]
-fn completion_command() -> clap::Command {
-    let command = cli_command();
-    clap::Command::new("rom-weaver")
-        .version(env!("CARGO_PKG_VERSION"))
-        .args(command.get_arguments().cloned())
-        .groups(command.get_groups().cloned())
+fn visible_command(command: &clap::Command) -> clap::Command {
+    let hidden: Vec<&clap::Id> = command
+        .get_arguments()
+        .filter(|arg| arg.is_hide_set())
+        .map(clap::Arg::get_id)
+        .collect();
+    // Derive groups list every field of their struct, so a group MUST drop its
+    // hidden members or clap rejects the rebuilt command.
+    let groups = command.get_groups().map(|group| {
+        clap::ArgGroup::new(group.get_id().clone())
+            .args(group.get_args().filter(|id| !hidden.contains(id)).cloned())
+            .required(group.is_required_set())
+            .multiple(group.clone().is_multiple())
+    });
+    clap::Command::new(command.get_name().to_owned())
+        .about(clap::builder::Resettable::from(
+            command.get_about().cloned(),
+        ))
+        .long_about(clap::builder::Resettable::from(
+            command.get_long_about().cloned(),
+        ))
+        .aliases(command.get_aliases().map(str::to_owned))
+        .visible_aliases(command.get_visible_aliases().map(str::to_owned))
+        .args(
+            command
+                .get_arguments()
+                .filter(|arg| !arg.is_hide_set())
+                .cloned(),
+        )
+        .groups(groups)
         .subcommands(
             command
                 .get_subcommands()
                 .filter(|sub| !sub.is_hide_set())
-                .cloned(),
+                .map(visible_command),
         )
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn completion_command() -> clap::Command {
+    visible_command(&cli_command()).version(env!("CARGO_PKG_VERSION"))
+}
+
+// clap_complete builds the bash dispatch labels from the space-joined command path
+// and swaps every `-` for `__subcmd__`, which also rewrites the hyphen in the
+// binary name. The transition table keeps `rom__weaver`, so no label matches and
+// bash completes only the first word. Rewrite the labels to the table's spelling.
+#[cfg(not(target_arch = "wasm32"))]
+fn completion_script(shell: clap_complete::Shell) -> String {
+    let mut command = completion_command();
+    let mut script = Vec::new();
+    clap_complete::generate(shell, &mut command, "rom-weaver", &mut script);
+    let script = String::from_utf8_lossy(&script).into_owned();
+    if shell == clap_complete::Shell::Bash {
+        return script.replace("rom__subcmd__weaver", "rom__weaver");
+    }
+    script
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -627,16 +673,7 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
         if cli.dry_run {
             return print_native_dry_run_plan("completions", Vec::new(), mode);
         }
-        let shell = *shell;
-        let mut command = completion_command();
-        let mut script = Vec::new();
-        clap_complete::generate(shell, &mut command, "rom-weaver", &mut script);
-        return print_asset(
-            mode,
-            "completions",
-            "shell",
-            &String::from_utf8_lossy(&script),
-        );
+        return print_asset(mode, "completions", "shell", &completion_script(*shell));
     }
     if let CliCommand::Man {
         command,
@@ -1087,7 +1124,7 @@ fn install_cancel_handler(mode: OutputMode) {
     static SIGNALLED: AtomicBool = AtomicBool::new(false);
     let token = process_cancellation_token();
     #[cfg(unix)]
-    let ignored_signals = ignored_termination_signals();
+    let ignored_signals = ignored_cancel_signals();
     let result = ctrlc::set_handler(move || {
         if SIGNALLED.swap(true, Ordering::SeqCst) {
             // process::exit skips Drop, so the temp allocators cannot clean up on their own.
@@ -1117,8 +1154,8 @@ fn install_cancel_handler(mode: OutputMode) {
             "cancelling; press Ctrl-C again to stop immediately",
         );
     });
-    // ctrlc overwrites an inherited SIG_IGN (e.g. from `nohup`); put it back so a run started
-    // that way still survives SIGHUP/SIGTERM as it did before the handler covered them.
+    // ctrlc overwrites an inherited SIG_IGN (`nohup`, or a shell's background job ignoring
+    // SIGINT); put it back so a run started that way keeps ignoring that signal.
     #[cfg(unix)]
     for signal in ignored_signals {
         // SAFETY: restoring SIG_IGN for a valid signal number.
@@ -1137,10 +1174,10 @@ fn install_cancel_handler(mode: OutputMode) {
     }
 }
 
-/// SIGHUP/SIGTERM dispositions that were SIG_IGN when the process started.
+/// SIGINT/SIGHUP/SIGTERM dispositions that were SIG_IGN when the process started.
 #[cfg(unix)]
-fn ignored_termination_signals() -> Vec<libc::c_int> {
-    [libc::SIGHUP, libc::SIGTERM]
+fn ignored_cancel_signals() -> Vec<libc::c_int> {
+    [libc::SIGINT, libc::SIGHUP, libc::SIGTERM]
         .into_iter()
         .filter(|&signal| {
             // SAFETY: a null new action only queries the current disposition.
@@ -1456,15 +1493,9 @@ mod tests {
             clap_complete::Shell::Elvish,
             clap_complete::Shell::PowerShell,
         ] {
-            let mut bytes = Vec::new();
-            clap_complete::generate(
-                shell,
-                &mut super::completion_command(),
-                "rom-weaver",
-                &mut bytes,
-            );
-            let script = String::from_utf8(bytes).expect("completion UTF-8");
+            let script = super::completion_script(shell);
             assert!(!script.contains("legacy-weave-apply"), "{shell}");
+            assert!(!script.contains("entry-name"), "{shell}");
             assert!(script.contains("weave"), "{shell}");
             assert!(script.contains("checksum"), "{shell}");
         }
@@ -1472,27 +1503,29 @@ mod tests {
 
     #[test]
     fn legacy_recipe_command_and_flags_are_accepted() {
+        // `--weave-rom` and `--no-weave-rom` conflict, so each spelling is parsed apart.
         for command in ["weave", "bundle"] {
             for flags in [
                 ["--weave", "--weave-rom", "--no-weave-rom"],
                 ["--bundle", "--bundle-rom", "--no-bundle-rom"],
             ] {
-                assert!(
-                    cli_command()
-                        .try_get_matches_from([
-                            "rom-weaver",
-                            command,
-                            "create",
-                            "--output",
-                            "recipe.json",
-                            flags[0],
-                            "release.zip",
-                            flags[1],
-                            "game.bin",
-                            flags[2],
-                        ])
-                        .is_ok()
-                );
+                for (rom_flag, rom_value) in [(flags[1], Some("game.bin")), (flags[2], None)] {
+                    let mut argv = vec![
+                        "rom-weaver",
+                        command,
+                        "create",
+                        "--output",
+                        "recipe.json",
+                        flags[0],
+                        "release.zip",
+                        rom_flag,
+                    ];
+                    argv.extend(rom_value);
+                    assert!(
+                        cli_command().try_get_matches_from(&argv).is_ok(),
+                        "{argv:?}"
+                    );
+                }
             }
         }
         for flag in ["--weave", "--bundle", "--emit-weave", "--emit-bundle"] {

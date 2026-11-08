@@ -117,6 +117,20 @@ pub(super) fn render_verbose(surface: &Surface, event: &ProgressEvent) {
     if is_dry_run(event) || is_save_preview(event) {
         return;
     }
+    render_verbose_summary(&diagnostics, event);
+    render_verbose_details(&diagnostics, event);
+    if let Some(elapsed) = event.elapsed_ms {
+        diagnostics.line(&format!(
+            "{}: finished in {}",
+            event.command,
+            format_elapsed_ms(elapsed)
+        ));
+    }
+}
+
+/// The verbose line(s) that say what the command did: each file it wrote, the
+/// game count for a save listing, or else its label.
+fn render_verbose_summary(diagnostics: &Surface, event: &ProgressEvent) {
     if let Some(files) = event
         .details
         .as_ref()
@@ -124,18 +138,14 @@ pub(super) fn render_verbose(surface: &Surface, event: &ProgressEvent) {
         .and_then(Value::as_array)
         .filter(|files| !files.is_empty())
     {
-        for file in files {
-            let path = emitted_file_path(file);
-            let size = size_field(file, "size_bytes");
-            let codec = event
-                .details
-                .as_ref()
-                .and_then(|details| details.get("compression"))
-                .and_then(|compression| compression.get("codec"))
-                .and_then(Value::as_str)
-                .or(event.format.as_deref());
-            let kind = codec.map(|codec| format!(", {codec}")).unwrap_or_default();
-            diagnostics.line(&format!("{}: wrote {path} ({size}{kind})", event.command));
+        render_verbose_emitted_files(diagnostics, event, files);
+    } else if event.command == "save-list-games" {
+        // The label is the whole listing, which `render_save_games` already prints to stdout.
+        if let Some(games) = save_editor_details(event)
+            .and_then(|save| save.get("games"))
+            .and_then(Value::as_array)
+        {
+            diagnostics.line(&format!("save-list-games: {} game(s)", games.len()));
         }
     } else if !event.label.is_empty()
         && !matches!(
@@ -145,8 +155,31 @@ pub(super) fn render_verbose(surface: &Surface, event: &ProgressEvent) {
     {
         diagnostics.line(&format!("{}: {}", event.command, event.label));
     }
-    if event.command == "probe" {
-        if let Some(details) = event.details.as_ref() {
+}
+
+fn render_verbose_emitted_files(diagnostics: &Surface, event: &ProgressEvent, files: &[Value]) {
+    for file in files {
+        let path = emitted_file_path(file);
+        let size = size_field(file, "size_bytes");
+        let codec = event
+            .details
+            .as_ref()
+            .and_then(|details| details.get("compression"))
+            .and_then(|compression| compression.get("codec"))
+            .and_then(Value::as_str)
+            .or(event.format.as_deref());
+        let kind = codec.map(|codec| format!(", {codec}")).unwrap_or_default();
+        diagnostics.line(&format!("{}: wrote {path} ({size}{kind})", event.command));
+    }
+}
+
+/// The command-specific detail lines `--verbose` adds after the summary.
+fn render_verbose_details(diagnostics: &Surface, event: &ProgressEvent) {
+    let Some(details) = event.details.as_ref() else {
+        return;
+    };
+    match event.command.as_str() {
+        "probe" => {
             let container = details.get("container").unwrap_or(details);
             for field in ["recommended_compress_format", "reason"] {
                 if let Some(value) = container.get(field).and_then(Value::as_str) {
@@ -154,17 +187,10 @@ pub(super) fn render_verbose(surface: &Surface, event: &ProgressEvent) {
                 }
             }
         }
-    } else if event.command == "patch-validate"
-        && let Some(details) = &event.details
-    {
-        render_object(&diagnostics, details);
-    }
-    if let Some(elapsed) = event.elapsed_ms {
-        diagnostics.line(&format!(
-            "{}: finished in {}",
-            event.command,
-            format_elapsed_ms(elapsed)
-        ));
+        "patch-validate" => {
+            render_object(diagnostics, details);
+        }
+        _ => {}
     }
 }
 

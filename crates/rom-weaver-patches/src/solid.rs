@@ -7,9 +7,9 @@ use std::{
 use rayon::prelude::*;
 use rom_weaver_checksum::md5_file;
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateFormatOptions, PatchCreateRequest, PatchHandler,
-    PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
+    FormatDescriptor, IoOp, IoResultExt, OperationContext, OperationFamily, OperationReport,
+    PatchApplyRequest, PatchCapabilities, PatchCreateFormatOptions, PatchCreateRequest,
+    PatchHandler, PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
     SolidPatchMetadata, ValidationCodeError,
 };
 use tracing::debug;
@@ -154,7 +154,7 @@ impl PatchHandler for SolidPatchHandler {
         let thread_capability = parallel_per_record_capability(parsed.primitives.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
         let execution = if planned_execution.used_parallelism {
             let (execution, pool) = context.build_pool(thread_capability)?;
@@ -366,9 +366,9 @@ impl PatchHandler for SolidPatchHandler {
         }
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
-        fs::write(&request.output, patch)?;
+        fs::write(&request.output, patch).io_op(IoOp::Create, &request.output)?;
 
         Ok(crate::patch_success_report(
             self.descriptor,
@@ -835,7 +835,7 @@ fn apply_solid_writes_and_resize_to_file(
     context: &OperationContext,
 ) -> Result<()> {
     if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
     }
     let mut output = crate::copy_input_to_output(source_path, output_path)?;
     let required_output_len_u64 = u64::try_from(required_output_len)
@@ -883,7 +883,10 @@ fn apply_resize_action_to_file(parsed: &ParsedSolidPatch, output_path: &Path) ->
             if size == 0 {
                 return Ok(());
             }
-            let mut output = OpenOptions::new().write(true).open(output_path)?;
+            let mut output = OpenOptions::new()
+                .write(true)
+                .open(output_path)
+                .io_op(IoOp::Write, output_path)?;
             output.seek(SeekFrom::Start(address))?;
             output.write_all(&parsed.expansion_data)?;
             output.flush()?;
@@ -891,7 +894,8 @@ fn apply_resize_action_to_file(parsed: &ParsedSolidPatch, output_path: &Path) ->
         ResizeAction::Truncate { size } => {
             OpenOptions::new()
                 .write(true)
-                .open(output_path)?
+                .open(output_path)
+                .io_op(IoOp::Open, output_path)?
                 .set_len(size)?;
         }
     }

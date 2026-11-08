@@ -103,19 +103,16 @@ pub(super) struct LoadedPack {
 /// The identify database directory: env override, then the platform data dir.
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) fn default_database_dir() -> Result<PathBuf> {
-    if let Some(dir) = std::env::var_os("ROM_WEAVER_DATA_DIR") {
-        return Ok(PathBuf::from(dir).join("identify"));
+    if let Some(dir) = crate::env_paths::env_dir("ROM_WEAVER_DATA_DIR") {
+        return Ok(dir.join("identify"));
     }
     let base = if cfg!(target_os = "windows") {
-        std::env::var_os("APPDATA").map(PathBuf::from)
+        crate::env_paths::env_dir("APPDATA")
     } else if cfg!(target_os = "macos") {
-        std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Library/Application Support"))
+        crate::env_paths::env_dir("HOME").map(|home| home.join("Library/Application Support"))
     } else {
-        std::env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .or_else(|| {
-                std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share"))
-            })
+        crate::env_paths::xdg_data_home()
+            .or_else(|| crate::env_paths::env_dir("HOME").map(|home| home.join(".local/share")))
     };
     let base = base.ok_or_else(|| {
         RomWeaverError::Validation(
@@ -839,6 +836,45 @@ fn write_merged_catalog(
 // Subcommand runners
 // ---------------------------------------------------------------------------
 
+/// The local file a database subcommand reads, which the real run and the dry
+/// run both check before any work.
+pub(super) fn identify_database_input(command: &IdentifyDatabaseCommands) -> Option<&Path> {
+    match command {
+        IdentifyDatabaseCommands::ImportRedump(args) => Some(&args.input),
+        IdentifyDatabaseCommands::InstallGroup(args) => args.from.as_deref(),
+        IdentifyDatabaseCommands::Install(args) => args.from.as_deref(),
+        IdentifyDatabaseCommands::Update(args) => args.from.as_deref(),
+        IdentifyDatabaseCommands::List(_)
+        | IdentifyDatabaseCommands::Status(_)
+        | IdentifyDatabaseCommands::Path(_)
+        | IdentifyDatabaseCommands::Remove(_)
+        | IdentifyDatabaseCommands::InstallAll(_) => None,
+    }
+}
+
+/// Argument checks that run before the input file check, so a bad argument is
+/// reported first in the real run and the dry run alike.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn validate_identify_database_args(command: &IdentifyDatabaseCommands) -> Result<()> {
+    match command {
+        IdentifyDatabaseCommands::InstallGroup(args) => {
+            super::identify_builtin::validate_group_id(&args.group)
+        }
+        _ => Ok(()),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn identify_database_failure(error: RomWeaverError) -> OperationReport {
+    OperationReport::failed_with_error(
+        OperationFamily::Command,
+        Some("identify-database".to_string()),
+        "identify-database",
+        error,
+        None,
+    )
+}
+
 impl CliApp {
     pub(super) fn run_identify_database(&self, command: IdentifyDatabaseCommands) -> AppRunOutcome {
         #[cfg(target_arch = "wasm32")]
@@ -858,18 +894,29 @@ impl CliApp {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let report = self
-                .run_identify_database_inner(command)
-                .unwrap_or_else(|error| {
-                    OperationReport::failed_with_error(
-                        OperationFamily::Command,
-                        Some("identify-database".to_string()),
-                        "identify-database",
-                        error,
-                        None,
-                    )
+                .identify_database_preflight(&command)
+                .unwrap_or_else(|| {
+                    self.run_identify_database_inner(command)
+                        .unwrap_or_else(identify_database_failure)
                 });
             self.finish("identify", report)
         }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn identify_database_preflight(
+        &self,
+        command: &IdentifyDatabaseCommands,
+    ) -> Option<OperationReport> {
+        if let Err(error) = validate_identify_database_args(command) {
+            return Some(identify_database_failure(error));
+        }
+        self.require_readable_file(
+            OperationFamily::Command,
+            Some("identify-database".to_string()),
+            identify_database_input(command)?,
+            None,
+        )
     }
 
     #[cfg(not(target_arch = "wasm32"))]

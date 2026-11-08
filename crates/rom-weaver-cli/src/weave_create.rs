@@ -80,7 +80,7 @@ impl CliApp {
             threads = %args.threads,
             "starting weave create command"
         );
-        let report = match self.weave_create_inner(&args, &context) {
+        let report = match self.weave_create_checked(&args, &context) {
             Ok(result) => {
                 let label = format!(
                     "wrote weave `{}` ({} patch entr{}{}{})",
@@ -132,13 +132,7 @@ impl CliApp {
                     ),
                 }
             }
-            Err(error) => OperationReport::failed_with_error(
-                OperationFamily::Command,
-                Some("bundle-create".to_string()),
-                "bundle-create",
-                error,
-                thread_execution,
-            ),
+            Err(report) => *report,
         };
         self.finish("bundle-create", report)
     }
@@ -361,6 +355,42 @@ impl CliApp {
         Ok(args.cheats.clone())
     }
 
+    /// [`Self::weave_create_inner`] for the CLI: failures come back as reports so the local
+    /// inputs get the shared readable-input preflight. It runs after the output preflight, which
+    /// can create the directories an input path like `child/../rom.bin` goes through.
+    fn weave_create_checked(
+        &self,
+        args: &WeaveCreateCommand,
+        context: &OperationContext,
+    ) -> std::result::Result<WeaveCreateResult, Box<OperationReport>> {
+        let thread_execution = context.single_thread_execution();
+        let failure = |error: RomWeaverError| {
+            Box::new(OperationReport::failed_with_error(
+                OperationFamily::Command,
+                Some("bundle-create".to_string()),
+                "bundle-create",
+                error,
+                thread_execution.clone(),
+            ))
+        };
+        let specs = weave_create_patch_specs(args).map_err(failure)?;
+        self.preflight_weave_create_outputs(args, &specs)
+            .map_err(failure)?;
+        let patch_paths = specs.iter().map(|spec| &spec.path);
+        for input in args.rom.iter().chain(&args.bundle_rom).chain(patch_paths) {
+            if let Some(report) = self.require_readable_file(
+                OperationFamily::Command,
+                Some("bundle-create".to_string()),
+                input,
+                thread_execution.clone(),
+            ) {
+                return Err(Box::new(report));
+            }
+        }
+        self.weave_create_with_specs(args, &specs, context)
+            .map_err(failure)
+    }
+
     pub(super) fn weave_create_inner(
         &self,
         args: &WeaveCreateCommand,
@@ -368,6 +398,15 @@ impl CliApp {
     ) -> Result<WeaveCreateResult> {
         let specs = weave_create_patch_specs(args)?;
         self.preflight_weave_create_outputs(args, &specs)?;
+        self.weave_create_with_specs(args, &specs, context)
+    }
+
+    fn weave_create_with_specs(
+        &self,
+        args: &WeaveCreateCommand,
+        specs: &[WeaveCreatePatchSpec],
+        context: &OperationContext,
+    ) -> Result<WeaveCreateResult> {
         let patch_basis = args.default_patch_basis.unwrap_or(PatchBasisMode::Auto);
         let cheats = self.weave_create_cheat_entries(args, context)?;
         if specs.is_empty() && cheats.is_empty() {
@@ -381,7 +420,7 @@ impl CliApp {
 
         let output_checks = weave_entry_checks(&args.output_check, "--expect-out")?;
 
-        let mut patches = weave_create_patch_entries(&specs, patch_basis)?;
+        let mut patches = weave_create_patch_entries(specs, patch_basis)?;
 
         let packaged_rom_source = args
             .bundle_rom
@@ -389,7 +428,7 @@ impl CliApp {
             .or(args.rom.as_deref())
             .filter(|_| args.rom_url.is_none() && !args.no_bundle_rom);
         if args.bundle.is_some() {
-            assign_weave_member_paths(&mut rom, packaged_rom_source, &mut patches, &specs)?;
+            assign_weave_member_paths(&mut rom, packaged_rom_source, &mut patches, specs)?;
         } else {
             require_unique_weave_source_names(rom.as_ref(), &patches)?;
         }
@@ -430,7 +469,7 @@ impl CliApp {
                 weave_archive,
                 &bytes,
                 packaged_rom_source,
-                &specs,
+                specs,
                 &weave,
                 context,
             )?),
@@ -454,6 +493,11 @@ impl CliApp {
         context: &OperationContext,
         warnings: &mut Vec<String>,
     ) -> Result<Option<WeaveRom>> {
+        if args.bundle_rom.is_some() && args.no_bundle_rom {
+            return Err(RomWeaverError::Validation(
+                "--weave-rom cannot be combined with --no-weave-rom".to_string(),
+            ));
+        }
         if args.bundle_rom.is_some() && args.rom.is_none() {
             return Err(RomWeaverError::Validation(
                 "--weave-rom requires --input so the recorded checksums describe the real ROM"
@@ -514,12 +558,7 @@ impl CliApp {
                 checksums: rom_assume.checksums.clone(),
                 size: rom_assume.size,
             });
-        if !path.is_file() {
-            return Err(RomWeaverError::Validation(format!(
-                "rom path does not exist: `{}`",
-                path.display()
-            )));
-        }
+        require_weave_rom_file(path, "rom path")?;
         let resolved_member = if let Some(member) = args.rom_member.as_ref()
             && args.bundle_rom.is_none()
             && (cached_rom_checks.is_none() || rom_assume.size.is_none())
@@ -555,12 +594,7 @@ impl CliApp {
         }
         let checks = checks_result?;
         let weave_source = args.bundle_rom.as_deref().unwrap_or(path);
-        if !weave_source.is_file() {
-            return Err(RomWeaverError::Validation(format!(
-                "weave rom path does not exist: `{}`",
-                weave_source.display()
-            )));
-        }
+        require_weave_rom_file(weave_source, "weave rom path")?;
         let base_name = required_base_name(weave_source, "rom")?;
         // A no-weave-rom entry keeps its checks but carries no
         // source: the applying user supplies the ROM themselves. A
@@ -738,11 +772,11 @@ impl CliApp {
         context: &OperationContext,
     ) -> Result<PathBuf> {
         let staging = context.temp_paths().next_path("weave-weave", None);
-        fs::create_dir_all(&staging)?;
+        fs::create_dir_all(&staging).io_op(IoOp::CreateDir, &staging)?;
         let bundle_path = staging.join(WEAVE_BASE_FILE_NAME);
-        fs::write(&bundle_path, weave_bytes)?;
+        fs::write(&bundle_path, weave_bytes).io_op(IoOp::Create, &bundle_path)?;
         let legacy_path = staging.join(BUNDLE_BASE_FILE_NAME);
-        fs::write(&legacy_path, weave_bytes)?;
+        fs::write(&legacy_path, weave_bytes).io_op(IoOp::Create, &legacy_path)?;
         let mut inputs = vec![bundle_path, legacy_path];
         if let (Some(rom), Some(member)) = (
             rom,
@@ -750,9 +784,9 @@ impl CliApp {
         ) {
             let target = staging.join(member);
             if let Some(parent) = target.parent() {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
             }
-            rom_weaver_core::copy_file_retrying_interrupted(rom, &target)?;
+            rom_weaver_core::copy_file_naming_paths(rom, &target)?;
             inputs.push(target);
         }
         for (spec, entry) in specs.iter().zip(&definition.patches) {
@@ -764,9 +798,9 @@ impl CliApp {
                 continue;
             }
             if let Some(parent) = target.parent() {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
             }
-            rom_weaver_core::copy_file_retrying_interrupted(&spec.path, &target)?;
+            rom_weaver_core::copy_file_naming_paths(&spec.path, &target)?;
             inputs.push(target);
         }
         let format = weave
@@ -925,6 +959,23 @@ fn write_weave_create_output(
     write_weave_bytes(&args.output, &bytes)?;
     trace!(output = %args.output.display(), bytes = bytes.len(), "weave written");
     Ok(bytes)
+}
+
+/// A directory gets the shared input message; any other non-file keeps the
+/// `<what> does not exist` wording callers match.
+fn require_weave_rom_file(path: &Path, what: &str) -> Result<()> {
+    if path.is_file() {
+        return Ok(());
+    }
+    if path.is_dir() {
+        return Err(RomWeaverError::Validation(
+            super::path_access::input_is_directory_message(path),
+        ));
+    }
+    Err(RomWeaverError::Validation(format!(
+        "{what} does not exist: `{}`",
+        path.display()
+    )))
 }
 
 /// Normalize per-patch specs for the wasm JSON path: metadata vectors must be
@@ -1390,7 +1441,7 @@ fn write_weave_bytes(output: &Path, bytes: &[u8]) -> Result<()> {
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
     {
-        fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
     }
     let base_name = output
         .file_name()
@@ -1402,14 +1453,14 @@ fn write_weave_bytes(output: &Path, bytes: &[u8]) -> Result<()> {
     });
     match codec {
         Some(extension) if extension.eq_ignore_ascii_case("gz") => {
-            let file = File::create(output)?;
+            let file = File::create(output).io_op(IoOp::Create, output)?;
             let mut encoder = GzEncoder::new(file, GzCompression::best());
-            encoder.write_all(bytes)?;
-            encoder.finish()?;
+            encoder.write_all(bytes).io_op(IoOp::Write, output)?;
+            encoder.finish().io_op(IoOp::Write, output)?;
             Ok(())
         }
         Some(extension) if extension.eq_ignore_ascii_case("zst") => {
-            let file = File::create(output)?;
+            let file = File::create(output).io_op(IoOp::Create, output)?;
             zstd::stream::copy_encode(bytes, file, 19).map_err(|error| {
                 RomWeaverError::Validation(format!("zstd weave encoding failed: {error}"))
             })?;
@@ -1425,7 +1476,7 @@ fn write_weave_bytes(output: &Path, bytes: &[u8]) -> Result<()> {
             )))
         }
         _ => {
-            fs::write(output, bytes)?;
+            fs::write(output, bytes).io_op(IoOp::Create, output)?;
             Ok(())
         }
     }

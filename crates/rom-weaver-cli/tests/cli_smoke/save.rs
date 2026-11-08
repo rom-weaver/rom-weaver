@@ -489,6 +489,47 @@ fn save_goemon_2_edits_repair_the_slot_crc_and_preserve_other_records() {
 }
 
 #[test]
+fn save_commands_name_an_unknown_game_and_point_to_list_games() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.sav");
+    let output = temp.child("output.sav");
+    fs::write(input.path(), pokemon_gen1_fixture()).unwrap();
+    let input_path = input.to_str().unwrap();
+    let output_path = output.to_str().unwrap();
+
+    for args in [
+        vec!["save", "create", "--game", "nope", "--output", output_path],
+        vec!["save", "inspect", input_path, "--game", "nope"],
+        vec!["save", "export-schema", input_path, "--game", "nope"],
+        vec!["save", "get", input_path, "trainer.name", "--game", "nope"],
+        vec![
+            "save",
+            "set",
+            input_path,
+            "trainer.money=1",
+            "--game",
+            "nope",
+            "--output",
+            output_path,
+        ],
+    ] {
+        let result = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .assert()
+            .code(1);
+        let stderr = String::from_utf8_lossy(&result.get_output().stderr).into_owned();
+        assert!(stderr.contains("game=nope"), "{args:?}: {stderr}");
+        assert!(stderr.contains("save list-games"), "{args:?}: {stderr}");
+        assert!(
+            stderr.contains("[save_game_unsupported]"),
+            "{args:?}: {stderr}"
+        );
+        assert!(!output.path().exists());
+    }
+}
+
+#[test]
 fn save_commands_reject_the_removed_schema_option_before_writing() {
     let temp = setup_temp_dir();
     let input = temp.child("input.sav");
@@ -1632,4 +1673,27 @@ fn save_inspect_reports_integrity_failure_for_a_chosen_game_with_bad_checksums()
     assert!(label.contains("integrity checks"), "{label}");
     assert!(!label.contains("no editor"), "{label}");
     assert_eq!(fs::read(save.path()).unwrap(), bytes);
+}
+
+#[test]
+fn save_export_schema_requires_the_save_operand_as_a_usage_error() {
+    for args in [
+        vec!["save", "export-schema"],
+        vec!["save", "export-schema", "--game", "pokemon-emerald"],
+    ] {
+        let assert = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .assert()
+            .code(2);
+        let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+        assert!(stderr.contains("<SAVE>"), "{args:?}: {stderr}");
+    }
+    let help = command_stdout(&["save", "export-schema", "--help"], 0);
+    let usage = String::from_utf8_lossy(&help)
+        .lines()
+        .find(|line| line.starts_with("Usage:"))
+        .expect("usage line")
+        .to_string();
+    assert!(usage.contains("<SAVE>"), "{usage}");
 }

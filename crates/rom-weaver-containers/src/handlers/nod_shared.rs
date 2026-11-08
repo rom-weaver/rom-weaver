@@ -1,6 +1,8 @@
 use super::*;
 use rom_weaver_checksum::{ChunkHashWorkers, ChunkHasher, round_robin_groups};
-use rom_weaver_core::{CancellationToken, VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError};
+use rom_weaver_core::{
+    CancellationToken, IoOp, IoResultExt, VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError,
+};
 #[cfg(target_family = "wasm")]
 use std::collections::HashMap;
 #[cfg(target_family = "wasm")]
@@ -762,7 +764,8 @@ impl NodHandlerCore {
         // Wrap the output in a BufWriter: in the parallel create pipeline every compressed
         // block funnels through this single callback on the main thread, so coalescing the
         // per-block writes into larger syscalls keeps the worker threads from stalling on I/O.
-        let mut output = BufWriter::new(File::create(output_path)?);
+        let mut output =
+            BufWriter::new(File::create(output_path).io_op(IoOp::Create, output_path)?);
         let process_options = NodProcessOptions {
             processor_threads: thread_plan.processor_threads,
             ..Default::default()

@@ -67,7 +67,7 @@ impl CliApp {
             );
         }
         let input = if let Some(template) = &args.template {
-            match self.load_save_input(command, template, args.game.clone(), None) {
+            match self.load_save_input(template, args.game.clone(), None) {
                 Ok(input) => input,
                 Err(report) => return self.finish(command, *report),
             }
@@ -101,7 +101,7 @@ impl CliApp {
     fn run_save_identify(&self, args: SaveIdentifyCommand) -> AppRunOutcome {
         let command = "save-identify";
         let registry = SaveGameRegistry::default();
-        let input = match self.load_save_input(command, &args.input, args.game, args.rom_sha1) {
+        let input = match self.load_save_input(&args.input, args.game, args.rom_sha1) {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
         };
@@ -176,7 +176,7 @@ impl CliApp {
     fn run_save_inspect(&self, args: SaveInspectCommand) -> AppRunOutcome {
         let command = "save-inspect";
         let registry = SaveGameRegistry::default();
-        let input = match self.load_save_input(command, &args.input, args.game, args.rom_sha1) {
+        let input = match self.load_save_input(&args.input, args.game, args.rom_sha1) {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
         };
@@ -210,6 +210,13 @@ impl CliApp {
         registry: &SaveGameRegistry,
     ) -> std::result::Result<(SaveRecognition, SaveGameIdentity, SaveDocument), Box<AppRunOutcome>>
     {
+        if let Some(game) = &input.selected_game
+            && let Err(error) = registry.ensure_game_known(game)
+        {
+            return Err(Box::new(
+                self.finish(command, save_error_report("validate", error)),
+            ));
+        }
         let (recognition, identity) = match detect_for_edit(input, registry) {
             Ok(result) => result,
             Err(failure) => {
@@ -236,7 +243,7 @@ impl CliApp {
     fn run_save_get(&self, args: SaveGetCommand) -> AppRunOutcome {
         let command = "save-get";
         let registry = SaveGameRegistry::default();
-        let input = match self.load_save_input(command, &args.input, args.game, args.rom_sha1) {
+        let input = match self.load_save_input(&args.input, args.game, args.rom_sha1) {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
         };
@@ -275,15 +282,11 @@ impl CliApp {
     pub(super) fn run_save_set(&self, args: SaveSetCommand) -> AppRunOutcome {
         let command = "save-set";
         let registry = SaveGameRegistry::default();
-        let input = match self.load_save_input(
-            command,
-            &args.input,
-            args.game.clone(),
-            args.rom_sha1.clone(),
-        ) {
-            Ok(input) => input,
-            Err(report) => return self.finish(command, *report),
-        };
+        let input =
+            match self.load_save_input(&args.input, args.game.clone(), args.rom_sha1.clone()) {
+                Ok(input) => input,
+                Err(report) => return self.finish(command, *report),
+            };
         self.run_save_write(command, input, args, &registry, false)
     }
 
@@ -404,7 +407,7 @@ impl CliApp {
                 ),
             );
         };
-        let input = match self.load_save_input(command, &path, args.game, args.rom_sha1) {
+        let input = match self.load_save_input(&path, args.game, args.rom_sha1) {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
         };
@@ -432,14 +435,11 @@ impl CliApp {
 
     fn load_save_input(
         &self,
-        command: &str,
         path: &Path,
         selected_game: Option<String>,
         rom_sha1: Option<String>,
     ) -> std::result::Result<SaveDetectionInput, Box<OperationReport>> {
-        if let Some(report) =
-            self.require_readable_path(command, OperationFamily::Save, None, path, None)
-        {
+        if let Some(report) = self.require_readable_file(OperationFamily::Save, None, path, None) {
             return Err(Box::new(report));
         }
         process_cancellation_token()

@@ -660,7 +660,7 @@ fn first_matching_state<'a>(
 fn copy_without_prefix(source: &Path, destination: &Path, skip: u64) -> Result<()> {
     let mut reader = BufReader::new(File::open(source)?);
     reader.seek(SeekFrom::Start(skip))?;
-    let mut writer = BufWriter::new(File::create(destination)?);
+    let mut writer = BufWriter::new(File::create(destination).io_op(IoOp::Create, destination)?);
     rom_weaver_core::copy_retrying_interrupted(&mut reader, &mut writer)?;
     writer.flush()?;
     Ok(())

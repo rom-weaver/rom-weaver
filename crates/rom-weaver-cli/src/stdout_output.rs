@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     fmt,
     io::{self, Write},
@@ -6,6 +8,45 @@ use std::{
 };
 
 static OUTPUT_ERROR: Mutex<Option<io::Error>> = Mutex::new(None);
+
+#[cfg(unix)]
+static STDOUT_CLOSED_AT_START: AtomicBool = AtomicBool::new(false);
+
+// The Rust runtime reopens a closed descriptor 1 as /dev/null before `main`,
+// so every later write succeeds and loses its data. This constructor runs
+// before the runtime and records the closed state first.
+#[cfg(unix)]
+extern "C" fn record_closed_stdout() {
+    // SAFETY: F_GETFD only queries the descriptor table.
+    let closed = unsafe { libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFD) } == -1
+        && io::Error::last_os_error().raw_os_error() == Some(libc::EBADF);
+    STDOUT_CLOSED_AT_START.store(closed, Ordering::Relaxed);
+}
+
+#[cfg(unix)]
+#[used]
+#[cfg_attr(
+    target_vendor = "apple",
+    unsafe(link_section = "__DATA,__mod_init_func")
+)]
+#[cfg_attr(not(target_vendor = "apple"), unsafe(link_section = ".init_array"))]
+static RECORD_CLOSED_STDOUT: extern "C" fn() = record_closed_stdout;
+
+/// Fails with EBADF when the process started without a stdout descriptor.
+/// Every stdout writer MUST call it first; the runtime's substitute
+/// descriptor would otherwise accept the bytes.
+#[cfg(unix)]
+pub(crate) fn ensure_open() -> io::Result<()> {
+    if STDOUT_CLOSED_AT_START.load(Ordering::Relaxed) {
+        return Err(io::Error::from_raw_os_error(libc::EBADF));
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+pub(crate) fn ensure_open() -> io::Result<()> {
+    Ok(())
+}
 
 // Output errors MUST NOT unwind an operation that is writing a ROM. Preserve
 // the first error for the CLI exit status and let the operation finish cleanup.
@@ -16,8 +57,11 @@ pub(crate) fn write(arguments: fmt::Arguments<'_>) {
     if error.is_some() {
         return;
     }
-    let mut stdout = io::stdout().lock();
-    if let Err(failure) = stdout.write_fmt(arguments).and_then(|()| stdout.flush()) {
+    let written = ensure_open().and_then(|()| {
+        let mut stdout = io::stdout().lock();
+        stdout.write_fmt(arguments).and_then(|()| stdout.flush())
+    });
+    if let Err(failure) = written {
         *error = Some(failure);
     }
 }

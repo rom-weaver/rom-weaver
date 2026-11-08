@@ -7,9 +7,9 @@ use std::{
 use tracing::{debug, trace};
 
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateFormatOptions, PatchCreateRequest, PatchHandler,
-    PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
+    FormatDescriptor, IoOp, IoResultExt, OperationContext, OperationFamily, OperationReport,
+    PatchApplyRequest, PatchCapabilities, PatchCreateFormatOptions, PatchCreateRequest,
+    PatchHandler, PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
 };
 
 use crate::checksum_validation_suffix;
@@ -95,7 +95,7 @@ pub fn undo_ppf(input_path: &Path, patch_path: &Path, output_path: &Path) -> Res
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
     {
-        fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
     }
     let mut output = crate::copy_input_to_output(input_path, output_path)?;
     for record in parsed.records.iter().rev() {
@@ -179,7 +179,7 @@ impl PatchHandler for PpfPatchHandler {
             patch_path,
         )?;
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
         let thread_capability = parallel_per_record_capability(parsed.records.len());
         let in_memory = crate::can_apply_sparse_in_memory(
@@ -198,7 +198,7 @@ impl PatchHandler for PpfPatchHandler {
             let mut output_bytes = fs::read(&request.input)?;
             output_bytes.resize(ppf_output_len as usize, 0);
             apply_records_in_memory(&parsed.records, &mut output_bytes)?;
-            fs::write(&request.output, &output_bytes)?;
+            fs::write(&request.output, &output_bytes).io_op(IoOp::Create, &request.output)?;
             execution.force_serial();
             execution
         } else {

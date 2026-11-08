@@ -101,17 +101,33 @@ pub fn bounded_items_for_threads(effective_threads: usize) -> usize {
 pub fn ensure_output_available(output_path: &Path, overwrite: bool) -> Result<()> {
     if !output_path.exists() {
         // Nothing was there, so a cancelled run may safely delete whatever it
-        // wrote here.
-        crate::register_in_progress_output(output_path);
+        // wrote here. A dangling link occupies the name and belongs to the user.
+        if fs::symlink_metadata(output_path).is_err() {
+            crate::register_in_progress_output(output_path);
+        }
         return Ok(());
+    }
+    // `--force` cannot replace a directory, so name the real problem instead of
+    // failing later with a path-less "Is a directory" or a misleading refusal.
+    if output_path.is_dir() {
+        return Err(RomWeaverError::Validation(format!(
+            "output `{}` is a directory; choose a different --output path",
+            output_path.display()
+        )));
     }
     if overwrite {
         return Ok(());
     }
-    Err(RomWeaverError::Validation(format!(
+    Err(overwrite_refusal(output_path))
+}
+
+/// The refusal for an output that exists and was not forced, for callers whose own
+/// occupancy check sees what [`ensure_output_available`] does not (a dangling link).
+pub fn overwrite_refusal(output_path: &Path) -> RomWeaverError {
+    RomWeaverError::Validation(format!(
         "refusing to overwrite existing output `{}` (pass --force to overwrite it)",
         output_path.display()
-    )))
+    ))
 }
 
 /// Where a command writes an output that may replace an existing file. A new output
@@ -300,10 +316,7 @@ pub fn create_extract_output_file(output_path: &Path, overwrite: bool) -> Result
             // file is an overwrite refusal; a denied directory reported as one
             // sends the user hunting for a file that was never there.
             if error.kind() == ErrorKind::AlreadyExists {
-                return RomWeaverError::Validation(format!(
-                    "refusing to overwrite existing output `{}`: {error}",
-                    output_path.display()
-                ));
+                return overwrite_refusal(output_path);
             }
             RomWeaverError::io_path(IoOp::Create, output_path, error)
         })
@@ -407,6 +420,15 @@ pub fn copy_file_retrying_interrupted(from: &Path, to: &Path) -> std::io::Result
     return fs::copy(from, to);
     #[cfg(not(target_arch = "wasm32"))]
     copy_file_retrying_with(from, to, |from, to| fs::copy(from, to))
+}
+
+/// [`copy_file_retrying_interrupted`] whose failure names the path at fault: `from` when it
+/// cannot be opened, otherwise `to`.
+pub fn copy_file_naming_paths(from: &Path, to: &Path) -> Result<u64> {
+    copy_file_retrying_interrupted(from, to).map_err(|error| match File::open(from) {
+        Ok(_) => RomWeaverError::io_path(IoOp::Create, to, error),
+        Err(open_error) => RomWeaverError::io_path(IoOp::Open, from, open_error),
+    })
 }
 
 #[cfg(not(target_arch = "wasm32"))]

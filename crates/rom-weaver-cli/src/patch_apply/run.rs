@@ -375,8 +375,7 @@ impl CliApp {
         &self,
         run: &mut PatchApplyRun,
     ) -> std::result::Result<(), Box<OperationReport>> {
-        if let Some(report) = self.require_readable_path(
-            "patch-apply",
+        if let Some(report) = self.require_readable_file(
             OperationFamily::Patch,
             None,
             &run.args.input,
@@ -1100,6 +1099,8 @@ impl CliApp {
             steps: &chain.patch_steps,
             apply_input: std::mem::take(&mut chain.apply_input),
             staged_output: &chain.staged_output,
+            requested_output: (run.compression_options.enabled || run.output_was_inferred)
+                .then_some(run.output.as_path()),
             plan_target_lanes: chain.target_lanes_present,
             shared_patch_basis: chain.shared_patch_basis,
             rom_member_inputs: &run.rom_member_inputs,

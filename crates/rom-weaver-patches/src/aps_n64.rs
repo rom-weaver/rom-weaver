@@ -7,9 +7,10 @@ use std::{
 use tracing::{debug, trace};
 
 use rom_weaver_core::{
-    FormatDescriptor, N64ByteOrder, OperationContext, OperationFamily, OperationReport,
-    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest,
-    ProbeConfidence, Result, RomWeaverError, SharedThreadPool, ThreadCapability, read_up_to,
+    FormatDescriptor, IoOp, IoResultExt, N64ByteOrder, OperationContext, OperationFamily,
+    OperationReport, PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler,
+    PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
+    ThreadCapability, read_up_to,
 };
 
 #[cfg(test)]
@@ -124,7 +125,7 @@ impl PatchHandler for ApsN64PatchHandler {
             patch_path,
         )?;
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
         let thread_capability = parallel_per_record_capability(patch.records.len());
         let in_memory = crate::can_apply_sparse_in_memory(
@@ -147,7 +148,7 @@ impl PatchHandler for ApsN64PatchHandler {
             let mut output_bytes = fs::read(&request.input)?;
             output_bytes.resize(patch.output_size as usize, 0);
             apply_aps_records_in_memory(patch.output_size, &patch.records, &mut output_bytes)?;
-            fs::write(&request.output, &output_bytes)?;
+            fs::write(&request.output, &output_bytes).io_op(IoOp::Create, &request.output)?;
             execution.force_serial();
             execution
         } else {
@@ -251,9 +252,9 @@ impl PatchHandler for ApsN64PatchHandler {
         )?;
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
-        fs::write(&request.output, created.bytes)?;
+        fs::write(&request.output, created.bytes).io_op(IoOp::Create, &request.output)?;
 
         Ok(crate::shared::labels::patch_create_report(
             self.descriptor,

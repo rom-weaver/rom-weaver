@@ -493,7 +493,7 @@ fn archive_relative_path(path: &Path) -> Result<PathBuf> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn validate_group_id(group: &str) -> Result<()> {
+pub(super) fn validate_group_id(group: &str) -> Result<()> {
     if group.is_empty()
         || !group
             .chars()

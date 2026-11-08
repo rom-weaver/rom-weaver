@@ -163,6 +163,33 @@ fn scalar_commands_keep_missing_input_errors() {
 }
 
 #[test]
+fn missing_input_errors_name_both_input_forms() {
+    for args in [
+        vec!["probe"],
+        vec!["checksum"],
+        vec!["extract", "--output", "out"],
+        vec!["compress", "--output", "out.zip"],
+        vec!["trim"],
+    ] {
+        let assert = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .assert()
+            .code(2);
+        let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+        let usage = stderr
+            .lines()
+            .find(|line| line.starts_with("Usage:"))
+            .unwrap_or_default();
+        assert!(
+            stderr.contains("<--input <INPUT>|FILE>"),
+            "{args:?}: {stderr}"
+        );
+        assert!(usage.contains("FILE"), "{args:?}: {stderr}");
+    }
+}
+
+#[test]
 fn inspect_and_stdin_use_the_positional_alias() {
     command_stdout_with_stdin(
         &["inspect", "-", "--no-extract", "--json"],

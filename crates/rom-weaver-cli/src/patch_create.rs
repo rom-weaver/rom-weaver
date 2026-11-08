@@ -552,8 +552,7 @@ impl CliApp {
                 );
             }
         };
-        if let Some(report) = self.require_readable_path(
-            "patch-create",
+        if let Some(report) = self.require_readable_file(
             OperationFamily::Patch,
             None,
             &args.original,
@@ -561,8 +560,7 @@ impl CliApp {
         ) {
             return report;
         }
-        if let Some(report) = self.require_readable_path(
-            "patch-create",
+        if let Some(report) = self.require_readable_file(
             OperationFamily::Patch,
             None,
             modified,
@@ -729,8 +727,7 @@ impl CliApp {
                 "{warning}"
             );
         }
-        if let Some(report) = self.require_readable_path(
-            "patch-create",
+        if let Some(report) = self.require_readable_file(
             OperationFamily::Patch,
             Some(requested_format.clone()),
             &args.original,
@@ -786,8 +783,7 @@ impl CliApp {
         requested_format: String,
         probe_threads: &Option<ThreadExecution>,
     ) -> std::result::Result<Arc<dyn PatchHandler>, Box<OperationReport>> {
-        if let Some(report) = self.require_readable_path(
-            "patch-create",
+        if let Some(report) = self.require_readable_file(
             OperationFamily::Patch,
             Some(requested_format.clone()),
             modified_path,

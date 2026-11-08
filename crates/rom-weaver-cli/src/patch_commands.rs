@@ -358,7 +358,7 @@ impl CliApp {
         let out_dir = context
             .temp_paths()
             .next_path("patch-apply-sidecar-patch-extract", None);
-        fs::create_dir_all(&out_dir)?;
+        fs::create_dir_all(&out_dir).io_op(IoOp::CreateDir, &out_dir)?;
         self.emit_running(
             OperationLabel {
                 command: "patch-apply",
@@ -424,7 +424,7 @@ impl CliApp {
             .unwrap_or("");
         let entry_dir = context.temp_paths().next_path(purpose, None);
         rom_weaver_core::with_output_creation(context.cancel(), || {
-            fs::create_dir_all(&entry_dir)?;
+            fs::create_dir_all(&entry_dir).io_op(IoOp::CreateDir, &entry_dir)?;
             Ok(())
         })?;
         let raw_output = entry_dir.join(&entry_file_name);
@@ -438,6 +438,22 @@ impl CliApp {
         );
         temp_paths.push(entry_dir);
         Ok(raw_output)
+    }
+
+    /// Blames `requested_output` for an I/O failure on its raw scratch copy from
+    /// [`Self::patch_apply_raw_output_path`]. The scratch file takes the requested
+    /// file name, so a name the filesystem rejects fails there first.
+    pub(super) fn blame_requested_output(
+        error: RomWeaverError,
+        raw_output: &Path,
+        requested_output: &Path,
+    ) -> RomWeaverError {
+        match error {
+            RomWeaverError::IoPath {
+                op, path, source, ..
+            } if path == raw_output => RomWeaverError::io_path(op, requested_output, source),
+            other => other,
+        }
     }
 
     pub(super) fn stage_patch_apply_archive_input(

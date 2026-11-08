@@ -12,11 +12,11 @@ use rayon::prelude::*;
 #[cfg(test)]
 use rom_weaver_checksum::crc32_bytes;
 use rom_weaver_core::{
-    DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
-    OperationContext, OperationFamily, OperationReport, OperationStatus, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
-    ProgressEvent, Result, RomWeaverError, SharedBlockCacheReader, SharedThreadPool,
-    ThreadCapability,
+    DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor, IoOp,
+    IoResultExt, OperationContext, OperationFamily, OperationReport, OperationStatus,
+    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest,
+    ProbeConfidence, ProgressEvent, Result, RomWeaverError, SharedBlockCacheReader,
+    SharedThreadPool, ThreadCapability,
 };
 use suffix_array::SuffixArray;
 use tracing::{debug, trace};
@@ -157,7 +157,8 @@ impl PatchHandler for BpsPatchHandler {
             .truncate(true)
             .read(true)
             .write(true)
-            .open(&request.output)?;
+            .open(&request.output)
+            .io_op(IoOp::Create, &request.output)?;
         output.set_len(patch.target_size)?;
         let thread_capability = bps_apply_thread_capability(&patch.actions);
         let has_target_copy = patch_contains_target_copy(&patch.actions);

@@ -1248,6 +1248,13 @@ fn write_playlist_folder(
 impl CliApp {
     pub(super) fn run_playlist(&self, args: PlaylistCommand) -> AppRunOutcome {
         let command = "playlist";
+        for input in &args.input {
+            if let Some(report) =
+                self.require_readable_file(OperationFamily::Command, None, input, None)
+            {
+                return self.finish(command, report);
+            }
+        }
         let report = self.build_playlist(&args).unwrap_or_else(playlist_failure);
         self.finish(command, report)
     }

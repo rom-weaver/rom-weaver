@@ -8,10 +8,10 @@ use std::{
 use tracing::{debug, trace};
 
 use rom_weaver_core::{
-    DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
-    OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
-    PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence, Result,
-    RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ValidationCodeError,
+    DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor, IoOp,
+    IoResultExt, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
+    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
+    Result, RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ValidationCodeError,
 };
 
 use crate::checksum_validation_suffix;
@@ -169,13 +169,14 @@ impl PatchHandler for DpsPatchHandler {
         let (parsed, validate_source_size, source_len, output_len) =
             self.prepare_input(patch_path, &request.input, context)?;
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
         let mut output = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(&request.output)?;
+            .open(&request.output)
+            .io_op(IoOp::Create, &request.output)?;
         output.set_len(parsed.output_size)?;
         debug!(
             format = self.descriptor.name,
@@ -324,9 +325,9 @@ impl PatchHandler for DpsPatchHandler {
         )?;
 
         if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
-        fs::write(&request.output, &patch_bytes)?;
+        fs::write(&request.output, &patch_bytes).io_op(IoOp::Create, &request.output)?;
 
         let copy_record_count = records
             .iter()

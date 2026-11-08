@@ -1327,6 +1327,7 @@ the ROM inside the input archive."
         not(target_arch = "wasm32"),
         arg(
             long = "weave",
+            value_name = "WEAVE",
             visible_alias = "bundle",
             help_heading = "Archive/weave",
             help = "Follow a rom-weaver-weave.json recipe: a file path, or an http(s) URL",
@@ -1719,8 +1720,10 @@ output is written back in the order the input arrived in."
         not(target_arch = "wasm32"),
         arg(
             long = "code-system",
+            value_name = "SYS",
+            value_parser = cheat_system_parser,
             help_heading = "Diagnostics/authoring",
-            help = "Console the --code values are for (nes, snes, genesis, 32x, sms, gamegear, sg1000, gameboy, gba, psx), when the ROM header does not say"
+            help = "Console the --code values are for (nes, snes, genesis, 32x, sms, gamegear, sg1000, gameboy, gameboy-color, gba, psx), when the ROM header does not say"
         )
     )]
     #[serde(default)]
@@ -2371,7 +2374,9 @@ apply and verifies the input, as long as the file name survives."
         not(target_arch = "wasm32"),
         arg(
             long = "code-system",
-            help = "Console the --code values are for (nes, snes, genesis, 32x, sms, gamegear, sg1000, gameboy, gba, psx), when the ROM header does not say"
+            value_name = "SYS",
+            value_parser = cheat_system_parser,
+            help = "Console the --code values are for (nes, snes, genesis, 32x, sms, gamegear, sg1000, gameboy, gameboy-color, gba, psx), when the ROM header does not say"
         )
     )]
     #[serde(default)]
@@ -3004,6 +3009,7 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
         not(target_arch = "wasm32"),
         arg(
             long = "weave",
+            value_name = "ARCHIVE",
             visible_alias = "bundle",
             help = "Also pack the weave and its ROM and patches into one shareable archive, such as release.zip"
         )
@@ -3017,7 +3023,9 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
         not(target_arch = "wasm32"),
         arg(
             long = "weave-rom",
+            value_name = "ROM",
             visible_alias = "bundle-rom",
+            conflicts_with = "no_bundle_rom",
             help = "Pack this file into --weave as the ROM, while --input supplies the checksums and metadata"
         )
     )]
@@ -3552,6 +3560,16 @@ Without :level, a codec follows the --compress-level profile."
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub threads: ThreadBudget,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "force",
+            help = "Overwrite the output if it already exists (without this, the command stops instead)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub force: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -4181,6 +4199,7 @@ pub struct SaveExportSchemaCommand {
         not(target_arch = "wasm32"),
         arg(
             value_name = "SAVE",
+            required = true,
             help = "Save file to validate and read the field schema from"
         )
     )]

@@ -258,9 +258,9 @@ impl CliApp {
             Some(if use_ips32 { "ips32" } else { "ips" }),
         );
         if let Some(parent) = patch_path.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
-        fs::write(&patch_path, ips)?;
+        fs::write(&patch_path, ips).io_op(IoOp::Create, &patch_path)?;
         temp_paths.push(patch_path.clone());
         Ok((
             patch_path,
@@ -350,9 +350,9 @@ impl CliApp {
         );
         cheats::apply_writes(&mut rom, summary.system, &writes)?;
         if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
-        fs::write(dest, rom)?;
+        fs::write(dest, rom).io_op(IoOp::Create, dest)?;
         Ok(summary)
     }
 
@@ -378,9 +378,9 @@ impl CliApp {
         let writes = Self::resolve_cheat_writes(&rom, system, codes, kind_id)?;
         cheats::apply_writes(&mut rom, system, &writes)?;
         if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
         }
-        fs::write(dest, rom)?;
+        fs::write(dest, rom).io_op(IoOp::Create, dest)?;
         Ok(CheatApplySummary {
             system,
             code_count: count_codes(codes, system, kind_id),
