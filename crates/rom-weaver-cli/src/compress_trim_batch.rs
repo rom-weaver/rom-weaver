@@ -566,12 +566,7 @@ impl CliApp {
             threads = %args.threads,
             "starting trim command"
         );
-        let filter_patches_only = args.rom_filter
-            && !args.filter.is_empty()
-            && !args
-                .filter
-                .iter()
-                .any(|kind| matches!(kind, FilterKind::Rom));
+        let filter_patches_only = Self::trim_filter_is_patches_only(&args);
         let rom_filter = args.rom_filter_enabled();
         let TrimCommand {
             input: source,
@@ -657,10 +652,10 @@ impl CliApp {
 
         if trim_sources.is_empty() {
             Self::cleanup_temp_paths(&cleanup_paths);
-            let report = Self::lone_unsupported_trim_report(&source, &thread_execution)
-                .unwrap_or_else(|| {
-                    Self::trim_empty_report(report_format, skips, dry_run, thread_execution)
-                });
+            let lone_report = Self::lone_unsupported_trim_report(&source, &thread_execution);
+            let report = lone_report.unwrap_or_else(|| {
+                Self::trim_empty_report(report_format, skips, dry_run, thread_execution)
+            });
             return self.finish("trim", report);
         }
 
@@ -712,6 +707,16 @@ impl CliApp {
             Self::trim_success_report(summary, state)
         };
         self.finish("trim", report)
+    }
+
+    /// Whether the archive filter is on and names only patch kinds, which trim cannot use.
+    fn trim_filter_is_patches_only(args: &TrimCommand) -> bool {
+        args.rom_filter
+            && !args.filter.is_empty()
+            && !args
+                .filter
+                .iter()
+                .any(|kind| matches!(kind, FilterKind::Rom))
     }
 
     /// Unreadable named inputs must fail up front: collection would otherwise count
