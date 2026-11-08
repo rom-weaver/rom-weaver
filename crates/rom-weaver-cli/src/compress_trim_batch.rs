@@ -657,20 +657,11 @@ impl CliApp {
 
         if trim_sources.is_empty() {
             Self::cleanup_temp_paths(&cleanup_paths);
-            // A lone file or archive that cannot be trimmed is an error; folders and
-            // multi-input runs keep the exit-0 report with skip counts.
-            if let [only] = source.as_slice()
-                && only.is_file()
-            {
-                return self.finish(
-                    "trim",
-                    fail_error("validate", Self::unsupported_trim_input_error(only)),
-                );
-            }
-            return self.finish(
-                "trim",
-                Self::trim_empty_report(report_format, skips, dry_run, thread_execution),
-            );
+            let report = Self::lone_unsupported_trim_report(&source, &thread_execution)
+                .unwrap_or_else(|| {
+                    Self::trim_empty_report(report_format, skips, dry_run, thread_execution)
+                });
+            return self.finish("trim", report);
         }
 
         if let Some(report) = self.validate_trim_output(
@@ -747,6 +738,26 @@ impl CliApp {
             format!(
                 "{} GameCube/Wii disc(s) were not trimmed because trim does not support them; use `rom-weaver compress` to convert them to RVZ",
                 skips.gamecube_wii
+            )
+        })
+    }
+
+    /// A lone file or archive that cannot be trimmed is an error; folders and
+    /// multi-input runs keep the exit-0 report with skip counts, so they return `None`.
+    fn lone_unsupported_trim_report(
+        source: &[PathBuf],
+        thread_execution: &Option<ThreadExecution>,
+    ) -> Option<OperationReport> {
+        let [only] = source else {
+            return None;
+        };
+        only.is_file().then(|| {
+            OperationReport::failed_with_error(
+                OperationFamily::Command,
+                None,
+                "validate",
+                Self::unsupported_trim_input_error(only),
+                thread_execution.clone(),
             )
         })
     }

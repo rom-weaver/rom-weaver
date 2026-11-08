@@ -28,6 +28,21 @@ import { runRomWeaverJson, relaySimpleProgress } from "./wasm-command-shared.ts"
 const TRIM_UNSUPPORTED_MESSAGE = "This input does not support trimming";
 const GAMECUBE_WII_COMPRESS_HINT = "Use Compress to convert GameCube and Wii discs to RVZ.";
 
+// The engine refuses a lone GameCube/Wii disc outright (Compress writes those as RVZ) and a lone file or
+// archive with nothing trim-eligible (batches still succeed); both are reported the way an unsupported input
+// is, so the staging probe flags them before any run. Any other error passes through unchanged.
+const toTrimUnsupportedError = (error: unknown): unknown => {
+  if (hasEngineErrorCode(error, "trim.unsupported_disc")) {
+    return Object.assign(new Error(`${TRIM_UNSUPPORTED_MESSAGE}. ${GAMECUBE_WII_COMPRESS_HINT}`), {
+      code: "TRIM_UNSUPPORTED",
+    });
+  }
+  if (hasEngineErrorCode(error, "trim.unsupported_input")) {
+    return Object.assign(new Error(TRIM_UNSUPPORTED_MESSAGE), { code: "TRIM_UNSUPPORTED" });
+  }
+  return error;
+};
+
 const invokeRomWeaverTrimWorker = async (
   input: RuntimeTrimWorkerInput,
   onProgress?: (progress: RuntimePatchWorkerProgress) => void,
@@ -73,18 +88,7 @@ const invokeRomWeaverTrimWorker = async (
     try {
       ensureRomWeaverSuccess(result, "Trim failed");
     } catch (error) {
-      // The engine refuses a lone GameCube/Wii disc outright (Compress writes those as RVZ); report it
-      // the way an unsupported input is reported so the staging probe flags it before any run.
-      if (hasEngineErrorCode(error, "trim.unsupported_disc")) {
-        throw Object.assign(new Error(`${TRIM_UNSUPPORTED_MESSAGE}. ${GAMECUBE_WII_COMPRESS_HINT}`), {
-          code: "TRIM_UNSUPPORTED",
-        });
-      }
-      // A lone file or archive with nothing trim-eligible fails with its own code (batches still succeed).
-      if (hasEngineErrorCode(error, "trim.unsupported_input")) {
-        throw Object.assign(new Error(TRIM_UNSUPPORTED_MESSAGE), { code: "TRIM_UNSUPPORTED" });
-      }
-      throw error;
+      throw toTrimUnsupportedError(error);
     }
     const terminal = getTerminalEvent(result);
     const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
