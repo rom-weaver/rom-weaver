@@ -1,10 +1,10 @@
 use std::fs;
 
-use rom_weaver_core::RomWeaverError;
+use rom_weaver_core::{CancellationToken, RomWeaverError};
 
 use super::{
-    BSP_MAX_MESSAGE_BUFFER_LEN, BSP_MAX_STACK_LEN, BspVm, PatchSpace, StepControl, VmFileBuffer,
-    apply_bsp_patch_file_native, apply_bsp_patch_file_native_from_path,
+    BSP_MAX_MESSAGE_BUFFER_LEN, BSP_MAX_REPORTED_MESSAGES, BSP_MAX_STACK_LEN, BspVm, PatchSpace,
+    StepControl, VmFileBuffer, apply_bsp_patch_file_native, apply_bsp_patch_file_native_from_path,
 };
 use crate::test_support::TestDir;
 
@@ -54,15 +54,18 @@ fn step_error(vm: &mut BspVm<'static>, opcode: u8, args: &[u32]) -> String {
 }
 
 fn assert_continue(control: StepControl) {
-    if let StepControl::Exit(code) = control {
-        panic!("expected the VM to continue, got exit {code}");
-    }
+    assert!(
+        matches!(control, StepControl::Continue),
+        "expected the VM to continue"
+    );
 }
 
 fn assert_exit_code(control: StepControl, expected: u32) {
     match control {
         StepControl::Exit(code) => assert_eq!(code, expected),
-        StepControl::Continue => panic!("expected exit {expected}, got continue"),
+        StepControl::Continue | StepControl::Cancelled => {
+            panic!("expected exit {expected}, got no exit")
+        }
     }
 }
 
@@ -810,15 +813,108 @@ fn print_opcodes_accumulate_and_clear_the_message_buffer() {
 }
 
 #[test]
-fn utf8_decode_rejects_a_string_longer_than_the_message_buffer_ceiling() {
-    let patch = vec![b'A'; BSP_MAX_MESSAGE_BUFFER_LEN + 1];
-    run_vm(&patch, &[0u8; 1], |vm| {
-        let error = vm
+fn utf8_decode_discards_excess_characters_but_still_validates_them() {
+    // Spec "String handling": characters past the limit are silently discarded; the string is
+    // still invalid UTF-8 if the discarded part is.
+    let mut long = vec![b'A'; BSP_MAX_MESSAGE_BUFFER_LEN + 1];
+    long.push(0);
+    run_vm(&long, &[0u8; 1], |vm| {
+        let decoded = vm
             .utf8_decode(0)
-            .expect_err("an unterminated string must be capped");
-        assert!(
-            error.contains("BSP decoded string exceeded the maximum size"),
-            "unexpected error: {error}"
+            .expect("an over-long string is truncated")
+            .expect("not cancelled");
+        assert_eq!(decoded.len(), BSP_MAX_MESSAGE_BUFFER_LEN);
+        assert!(decoded.bytes().all(|byte| byte == b'A'));
+    });
+
+    let mut invalid_tail = vec![b'A'; BSP_MAX_MESSAGE_BUFFER_LEN + 4];
+    invalid_tail.extend_from_slice(&[0xFF, 0]);
+    run_vm(&invalid_tail, &[0u8; 1], |vm| {
+        assert_eq!(
+            vm.utf8_decode(0).map(|_| ()),
+            Err("invalid UTF-8 string".to_string())
+        );
+    });
+
+    // A two-byte character straddling the cap is dropped whole, never split.
+    let mut straddle = vec![b'A'; BSP_MAX_MESSAGE_BUFFER_LEN - 1];
+    straddle.extend_from_slice("\u{e9}".as_bytes());
+    straddle.push(0);
+    run_vm(&straddle, &[0u8; 1], |vm| {
+        assert_eq!(
+            vm.utf8_decode(0)
+                .expect("decodes")
+                .expect("not cancelled")
+                .len(),
+            BSP_MAX_MESSAGE_BUFFER_LEN - 1
+        );
+    });
+}
+
+#[test]
+fn message_buffer_cap_discards_whole_characters_and_ignores_appends_until_cleared() {
+    let mut patch = vec![b'A'; BSP_MAX_MESSAGE_BUFFER_LEN - 1];
+    patch.push(0);
+    run_vm(&patch, &[0u8; 1], |vm| {
+        assert_continue(step(vm, 0xA0, &[0]));
+        assert_eq!(
+            vm.top_frame().message_buffer.len(),
+            BSP_MAX_MESSAGE_BUFFER_LEN - 1
+        );
+
+        // U+00E9 needs two bytes but one byte of room is left: dropped whole, no error.
+        assert_continue(step(vm, 0xA2, &[0xE9]));
+        assert_eq!(
+            vm.top_frame().message_buffer.len(),
+            BSP_MAX_MESSAGE_BUFFER_LEN - 1
+        );
+
+        // The buffer overflowed, so even a character that would fit is ignored.
+        assert_continue(step(vm, 0xA2, &[u32::from(b'B')]));
+        assert_eq!(
+            vm.top_frame().message_buffer.len(),
+            BSP_MAX_MESSAGE_BUFFER_LEN - 1
+        );
+
+        assert_continue(step(vm, 0xA7, &[]));
+        assert_continue(step(vm, 0xA2, &[u32::from(b'B')]));
+        assert_eq!(vm.top_frame().message_buffer, "B");
+    });
+}
+
+#[test]
+fn print_and_printbuf_record_messages_in_order_and_cap_the_report() {
+    let mut patch = vec![0u8; 4];
+    patch.extend_from_slice(b"one\0");
+    run_vm(&patch, &[0u8; 1], |vm| {
+        assert_continue(step(vm, 0x68, &[4]));
+        assert_continue(step(vm, 0xA0, &[4]));
+        assert_continue(step(vm, 0xA2, &[u32::from(b'!')]));
+        assert_continue(step(vm, 0xA6, &[]));
+        // clearbuf, an empty printbuf, and one of only terminal controls record nothing.
+        assert_continue(step(vm, 0xA4, &[7]));
+        assert_continue(step(vm, 0xA7, &[]));
+        assert_continue(step(vm, 0xA6, &[]));
+        assert_continue(step(vm, 0xA2, &[0x07]));
+        assert_continue(step(vm, 0xA6, &[]));
+        assert_eq!(
+            vm.take_messages(),
+            vec!["BSP message 1: one", "BSP message 2: one!"]
+        );
+
+        for _ in 0..BSP_MAX_REPORTED_MESSAGES + 6 {
+            assert_continue(step(vm, 0x68, &[4]));
+        }
+        let messages = vm.take_messages();
+        assert_eq!(messages.len(), BSP_MAX_REPORTED_MESSAGES + 1);
+        assert_eq!(messages[0], "BSP message 1: one");
+        assert_eq!(
+            messages[BSP_MAX_REPORTED_MESSAGES - 1],
+            format!("BSP message {BSP_MAX_REPORTED_MESSAGES}: one")
+        );
+        assert_eq!(
+            messages.last().map(String::as_str),
+            Some("6 further BSP message(s) not shown")
         );
     });
 }
@@ -1217,10 +1313,15 @@ fn apply_from_path_reads_the_patch_through_the_block_cache() {
     fs::write(&patch_path, cached_patch_program()).expect("patch fixture");
     fs::write(&input_path, [0u8; 8]).expect("input fixture");
 
-    let length =
-        apply_bsp_patch_file_native_from_path(&patch_path, &input_path, None).expect("apply");
+    let outcome = apply_bsp_patch_file_native_from_path(
+        &patch_path,
+        &input_path,
+        None,
+        &CancellationToken::new(),
+    )
+    .expect("apply");
 
-    assert_eq!(length, 8);
+    assert_eq!(outcome.written, 8);
     assert_eq!(
         fs::read(&input_path).expect("output"),
         vec![0x11, 0x22, 0x33, 0x44, 0x11, 0x22, 0x00, 0x00]
@@ -1233,9 +1334,13 @@ fn apply_from_path_surfaces_a_missing_patch_file() {
     let input_path = temp.child("input.bin");
     fs::write(&input_path, [0u8; 4]).expect("input fixture");
 
-    let error =
-        apply_bsp_patch_file_native_from_path(&temp.child("missing.bsp"), &input_path, None)
-            .expect_err("a missing patch must fail");
+    let error = apply_bsp_patch_file_native_from_path(
+        &temp.child("missing.bsp"),
+        &input_path,
+        None,
+        &CancellationToken::new(),
+    )
+    .expect_err("a missing patch must fail");
     assert!(
         matches!(&error, RomWeaverError::Validation(message)
             if message.contains("failed to read BSP patch metadata")),
@@ -1251,8 +1356,13 @@ fn apply_from_path_surfaces_a_failure_exit_status_and_a_runtime_error() {
 
     let exit_path = temp.child("exit.bsp");
     fs::write(&exit_path, [0x06, 0x02, 0x00, 0x00, 0x00]).expect("patch fixture");
-    let error = apply_bsp_patch_file_native_from_path(&exit_path, &input_path, None)
-        .expect_err("a non-zero exit must fail");
+    let error = apply_bsp_patch_file_native_from_path(
+        &exit_path,
+        &input_path,
+        None,
+        &CancellationToken::new(),
+    )
+    .expect_err("a non-zero exit must fail");
     assert!(
         matches!(&error, RomWeaverError::Validation(message)
             if message.contains("BSP patch script exited with failure status 2")),
@@ -1261,8 +1371,13 @@ fn apply_from_path_surfaces_a_failure_exit_status_and_a_runtime_error() {
 
     let broken_path = temp.child("broken.bsp");
     fs::write(&broken_path, [0xC0]).expect("patch fixture");
-    let error = apply_bsp_patch_file_native_from_path(&broken_path, &input_path, None)
-        .expect_err("an undefined opcode must fail");
+    let error = apply_bsp_patch_file_native_from_path(
+        &broken_path,
+        &input_path,
+        None,
+        &CancellationToken::new(),
+    )
+    .expect_err("an undefined opcode must fail");
     assert!(
         matches!(&error, RomWeaverError::Validation(message)
             if message.contains("BSP patch execution failed: undefined opcode")),

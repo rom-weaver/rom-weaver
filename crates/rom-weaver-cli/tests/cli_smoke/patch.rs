@@ -7051,6 +7051,103 @@ fn patch_apply_succeeds_for_valid_bsp_patch() {
 }
 
 #[test]
+fn patch_apply_reports_repeated_bsp_prints_as_separate_numbered_warnings() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let patch = temp.child("repeat.bsp");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), [0x01, 0x02, 0x03]).expect("fixture");
+
+    // `print "dup"; print "dup"; exit 0`, with the string right after the 15 bytes of code.
+    let mut script = Vec::new();
+    for _ in 0..2 {
+        script.push(0x68);
+        script.extend_from_slice(&15u32.to_le_bytes());
+    }
+    script.push(0x06);
+    script.extend_from_slice(&0u32.to_le_bytes());
+    assert_eq!(script.len(), 15);
+    script.extend_from_slice(b"dup\0");
+    fs::write(patch.path(), script).expect("fixture");
+
+    let apply_output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+
+    let apply_json: serde_json::Value = serde_json::from_slice(&apply_output).expect("json");
+    let warnings: Vec<&str> = apply_json["details"]["warnings"]
+        .as_array()
+        .expect("warnings")
+        .iter()
+        .map(|warning| warning.as_str().expect("warning text"))
+        .collect();
+    assert_eq!(
+        warnings,
+        vec!["BSP message 1: dup", "BSP message 2: dup"],
+        "{apply_json}"
+    );
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        vec![0x01, 0x02, 0x03]
+    );
+}
+
+#[test]
+fn patch_apply_failing_bsp_script_reports_its_printed_message() {
+    let temp = setup_temp_dir();
+    let input = temp.child("old.bin");
+    let patch = temp.child("refuse.bsp");
+    let output = temp.child("output.bin");
+    fs::write(input.path(), [0x01, 0x02, 0x03]).expect("fixture");
+
+    // `print "Use the USA v1.0 ROM"; exit 1`, with the string right after the 10 bytes of code.
+    let mut script = vec![0x68];
+    script.extend_from_slice(&10u32.to_le_bytes());
+    script.push(0x06);
+    script.extend_from_slice(&1u32.to_le_bytes());
+    assert_eq!(script.len(), 10);
+    script.extend_from_slice(b"Use the USA v1.0 ROM\0");
+    fs::write(patch.path(), script).expect("fixture");
+
+    let event = run_output_preservation_event(
+        &temp,
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        1,
+    );
+    assert_eq!(event["status"], "failed", "{event}");
+    assert_eq!(event["error_kind"], "validation", "{event}");
+    assert!(
+        event
+            .to_string()
+            .contains("failure status 1; BSP message 1: Use the USA v1.0 ROM"),
+        "{event}"
+    );
+}
+
+#[test]
 fn patch_create_succeeds_for_rup_and_round_trips() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -13824,13 +13921,14 @@ fn corrupt_solid_patch_fails_apply_without_output_and_fails_validate() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.bin");
     fs::write(rom.path(), [0x11_u8; 64]).expect("rom fixture");
-    // SOLID v4, 2-byte base addresses, one literal primitive at a base offset of 0xff00,
-    // far past the 64-byte ROM, as a flipped address byte produces.
-    let mut solid = b"SP\x04\x01".to_vec();
+    // SOLID v4, 4-byte base addresses, one literal primitive at 0xff000000, as a flipped
+    // high address byte produces. Gaps are zero-filled, so the address alone would size a
+    // 4 GiB output.
+    let mut solid = b"SP\x04\x03".to_vec();
     solid.extend_from_slice(&1_u32.to_le_bytes());
     solid.extend_from_slice(&[0; 16 + 3]);
     solid.extend_from_slice(&[0, 0, 0]);
-    solid.extend_from_slice(&[0x00, 0x01, 0x00, 0xff, b'Z']);
+    solid.extend_from_slice(&[0x00, 0x01, 0x00, 0x00, 0x00, 0xff, b'Z']);
     let patch = temp.child("corrupt.solid");
     fs::write(patch.path(), solid).expect("solid fixture");
     let output = temp.child("out.bin");
@@ -13867,7 +13965,7 @@ fn corrupt_solid_patch_fails_apply_without_output_and_fails_validate() {
             .get_output()
             .clone();
         let stderr = String::from_utf8_lossy(&result.stderr);
-        assert!(stderr.contains("corrupt.solid` is corrupt"), "{stderr}");
+        assert!(stderr.contains("patch.output_size_implausible"), "{stderr}");
         assert!(!output.path().exists(), "{args:?} left an output");
     }
 }
