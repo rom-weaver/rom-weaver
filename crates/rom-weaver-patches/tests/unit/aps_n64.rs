@@ -1086,10 +1086,22 @@ fn apply_enforces_the_original_format_byte_against_the_input_byte_order() {
                 .contains("made from a byte-swapped (v64) ROM"),
             "{error}"
         );
+        assert!(
+            error
+                .to_string()
+                .contains("convert the source with --n64-byte-order byte-swapped ["),
+            "{error}"
+        );
         let error = apply_aps(&temp, &v64_rom(), &z64_patch, validation)
             .expect_err("a z64 patch must not apply to a v64 ROM");
         assert!(
             error.to_string().contains("made from a non-v64 ROM"),
+            "{error}"
+        );
+        assert!(
+            error
+                .to_string()
+                .contains("convert the source with --n64-byte-order big-endian ["),
             "{error}"
         );
 

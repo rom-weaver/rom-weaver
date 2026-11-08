@@ -480,9 +480,8 @@ fn parse_aps_bytes(bytes: &[u8]) -> Result<ParsedApsPatch> {
     })
 }
 
-/// Checks the source ROM against a type 1 patch like `n64aps` does. The original-format check
-/// always runs, because the record offsets only mean something in the byte order the patch was
-/// made from. The cart ID, country and CRC checks run only when `validate_checksums` is set.
+/// Checks the source ROM against a type 1 patch like `n64aps`. The original-format check ignores
+/// `validate_checksums` because record offsets only hold in the byte order the patch was made from.
 fn check_n64_source(
     patch: &ParsedApsPatch,
     input_path: &Path,
@@ -506,9 +505,10 @@ fn check_n64_source(
         return Err(RomWeaverError::coded(
             rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
             format!(
-                "Source ROM checksum mismatch: the patch was made from a {} ROM but the source is {}; the original-format check cannot be disabled",
+                "Source ROM checksum mismatch: the patch was made from a {} ROM but the source is {}; the original-format check cannot be disabled; convert the source with {}",
                 n64_format_name(expected.original_format),
                 n64_format_name(actual.original_format),
+                n64_byte_order_flag(expected.original_format),
             ),
         ));
     }
@@ -557,6 +557,16 @@ fn n64_format_name(original_format: u8) -> &'static str {
         APS_N64_FORMAT_BYTE_SWAPPED => "byte-swapped (v64)",
         APS_N64_FORMAT_OTHER => "non-v64",
         _ => "unknown-format",
+    }
+}
+
+/// The `--n64-byte-order` flag that converts a source into the order a patch with this
+/// original-format byte was made from.
+fn n64_byte_order_flag(original_format: u8) -> &'static str {
+    if original_format == APS_N64_FORMAT_BYTE_SWAPPED {
+        "--n64-byte-order byte-swapped"
+    } else {
+        "--n64-byte-order big-endian"
     }
 }
 
