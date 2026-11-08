@@ -2716,13 +2716,34 @@ fn apply_chains_unnamed_entries_in_order_and_undoes_them_in_reverse() {
 
     let (report, forward) = apply_rup_fixture(&temp, &patch, first, &context).expect("forward");
     assert_eq!(forward, third);
+    // One XOR record per entry (a single byte differs each time), summed over the chain.
     assert!(
-        report.label.contains("chained 2 file entries"),
+        report
+            .label
+            .contains("with 2 record(s); chained 2 file entries"),
         "unexpected label: {}",
         report.label
     );
     let (_, undone) = apply_rup_fixture(&temp, &patch, third, &context).expect("undo");
     assert_eq!(undone, first);
+
+    // The intermediate step output is removed once the next entry has consumed it.
+    let namespace = context
+        .temp_paths()
+        .root()
+        .join(context.temp_paths().namespace());
+    assert!(
+        namespace.is_dir(),
+        "chaining must create its temp namespace"
+    );
+    let leftovers = fs::read_dir(namespace)
+        .expect("live temp namespace")
+        .map(|entry| entry.expect("temp entry").file_name())
+        .collect::<Vec<_>>();
+    assert!(
+        leftovers.is_empty(),
+        "chain intermediates survived the apply: {leftovers:?}"
+    );
 
     // The planner hands apply the first matching entry; the chain still continues from it.
     let selected =
@@ -2732,6 +2753,35 @@ fn apply_chains_unnamed_entries_in_order_and_undoes_them_in_reverse() {
         });
     let (_, forward) = apply_rup_fixture(&temp, &patch, first, &selected).expect("selected");
     assert_eq!(forward, third);
+}
+
+/// An entry declaring equal source and target checksums leaves its input unchanged. It can only
+/// follow itself if the chain walk treats an entry as its own successor, which never ends.
+#[test]
+fn parse_ends_endpoint_chains_at_an_entry_with_equal_source_and_target_checksums() {
+    let mut file = typed_rup_file(b"abcdef", b"aBcdef", 0);
+    file.target_md5 = file.source_md5;
+    let patch = encode_rup_patch(&RupMetadata::default(), &[file]).expect("patch");
+    let temp = TestDir::new();
+    let patch_path = temp.child("unchanged.rup");
+    fs::write(&patch_path, &patch).expect("patch");
+    let context = test_context_with_threads(&temp, 1);
+
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let report = RupPatchHandler::new(&RUP).parse(&patch_path, &context);
+        // The receiver is gone when the wait below timed out.
+        let _ = sender.send(report.map(|report| report_endpoints(&report)));
+    });
+    let endpoints = receiver
+        .recv_timeout(std::time::Duration::from_secs(30))
+        .expect("parse must finish; the endpoint chain walk did not end")
+        .expect("parse");
+
+    let md5 = format_md5_hex(md5_bytes(b"abcdef"));
+    assert_eq!(endpoints.len(), 2);
+    assert_eq!(endpoints[0]["output"]["checksums"]["md5"], md5.as_str());
+    assert_eq!(endpoints[1]["output"]["checksums"]["md5"], md5.as_str());
 }
 
 #[test]
@@ -2902,6 +2952,62 @@ fn apply_composes_duplicate_records_at_one_offset() {
         let (_, output) = apply_rup_fixture(&temp, &patch, &source, &context).expect("apply");
         assert_eq!(output, target, "threads {threads}");
     }
+}
+
+/// A record longer than the copy buffer is applied in several chunks, each at the next offset.
+#[test]
+fn apply_writes_a_record_longer_than_the_copy_buffer_at_consecutive_offsets() {
+    let offset = 3usize;
+    let xor: Vec<u8> = (0..super::RUP_IO_BUFFER_SIZE * 2 + 10)
+        .map(|index| (index % 251) as u8 + 1)
+        .collect();
+    let source = vec![0u8; offset + xor.len() + 2];
+    // The source is all zeros, so the target holds the XOR bytes themselves.
+    let mut target = source.clone();
+    target[offset..offset + xor.len()].copy_from_slice(&xor);
+    let mut file = typed_rup_file(&source, &target, 0);
+    file.records = vec![RupRecord {
+        offset: offset as u64,
+        xor,
+    }];
+    let patch = encode_rup_patch(&RupMetadata::default(), &[file]).expect("patch");
+    let temp = TestDir::new();
+
+    for threads in [1, 8] {
+        let context = test_context_with_threads(&temp, threads);
+        let (_, output) = apply_rup_fixture(&temp, &patch, &source, &context).expect("apply");
+        assert!(output == target, "threads {threads}: output differs");
+    }
+}
+
+/// Records that only touch end to start share no byte, so they still apply in parallel.
+#[test]
+fn apply_keeps_parallelism_for_records_that_only_touch() {
+    let source = [0u8; 6];
+    let target = [1u8, 1, 2, 2, 0, 0];
+    let mut file = typed_rup_file(&source, &target, 0);
+    file.records = vec![
+        RupRecord {
+            offset: 0,
+            xor: vec![1, 1],
+        },
+        RupRecord {
+            offset: 2,
+            xor: vec![2, 2],
+        },
+    ];
+    let patch = encode_rup_patch(&RupMetadata::default(), &[file]).expect("patch");
+    let temp = TestDir::new();
+    let context = test_context_with_threads(&temp, 8);
+
+    let (report, output) = apply_rup_fixture(&temp, &patch, &source, &context).expect("apply");
+    assert_eq!(output, target);
+    assert!(
+        report
+            .thread_execution
+            .expect("thread execution")
+            .used_parallelism
+    );
 }
 
 fn snes_interleaved_dump(bank_count: usize) -> Vec<u8> {

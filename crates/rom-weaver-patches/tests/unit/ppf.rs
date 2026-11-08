@@ -2716,6 +2716,75 @@ fn create_with_undo_round_trips_through_apply_and_undo() {
     );
 }
 
+/// Undo data cannot remove appended bytes, so only an undo patch for a growing target warns.
+#[test]
+fn create_warns_about_appended_bytes_only_for_growing_undo_patches() {
+    let handler = PpfPatchHandler::new(&PPF);
+    for (name, undo, modified, expected) in [
+        ("undo, grows", true, &b"abcdXYZ"[..], Some(3)),
+        ("undo, same length", true, &b"abXd"[..], None),
+        ("plain, grows", false, &b"abcdXYZ"[..], None),
+        ("plain, same length", false, &b"abXd"[..], None),
+    ] {
+        let temp = TestDir::new();
+        let original = temp.child("original.bin");
+        let modified_path = temp.child("modified.bin");
+        let patch = temp.child("out.ppf");
+        fs::write(&original, b"abcd").expect("original");
+        fs::write(&modified_path, modified).expect("modified");
+        let options = undo.then_some(PatchCreateFormatOptions::PpfUndo);
+        let report = handler
+            .create_with_options(
+                &PatchCreateRequest {
+                    original,
+                    modified: modified_path,
+                    output: patch,
+                    format: "ppf".into(),
+                },
+                options.as_ref(),
+                &test_context_with_threads(&temp, 1),
+            )
+            .unwrap_or_else(|error| panic!("{name}: {error}"));
+        match expected {
+            Some(appended) => assert!(
+                report.label.contains(&format!(
+                    "warning=PPF undo cannot remove the {appended} byte(s) this patch appends"
+                )),
+                "{name}: {}",
+                report.label
+            ),
+            None => assert!(
+                !report.label.contains("warning="),
+                "{name}: {}",
+                report.label
+            ),
+        }
+    }
+
+    // A shrinking target is refused before any warning is built.
+    let temp = TestDir::new();
+    let original = temp.child("original.bin");
+    let modified = temp.child("modified.bin");
+    fs::write(&original, b"abcd").expect("original");
+    fs::write(&modified, b"ab").expect("modified");
+    let error = handler
+        .create_with_options(
+            &PatchCreateRequest {
+                original,
+                modified,
+                output: temp.child("out.ppf"),
+                format: "ppf".into(),
+            },
+            Some(&PatchCreateFormatOptions::PpfUndo),
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("shrinking target");
+    assert!(
+        error.to_string().contains("does not support shrinking"),
+        "{error}"
+    );
+}
+
 #[test]
 fn apply_rejects_a_corrupt_ppf3_offset_that_would_write_terabytes() {
     let temp = TestDir::new();

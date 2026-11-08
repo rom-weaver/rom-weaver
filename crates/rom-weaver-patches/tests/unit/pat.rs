@@ -633,6 +633,23 @@ fn apply_skips_non_record_lines_and_reports_their_numbers() {
     }
 }
 
+/// The cap counts the whole line including its newline, so a line of exactly the cap is read.
+#[test]
+fn apply_reads_a_record_line_of_exactly_the_maximum_length() {
+    let mut line = "00000001 62 42".to_string();
+    line.push_str(&" ".repeat(super::PAT_LINE_MAX_BYTES - line.len() - 1));
+    line.push('\n');
+    assert_eq!(line.len(), super::PAT_LINE_MAX_BYTES);
+    let text = format!("00000000 61 41\n{line}00000002 63 43\n");
+    let (result, _temp, output) = apply_pat_text(text.as_bytes());
+    let report = result.expect("apply");
+    assert_eq!(
+        report.label,
+        "applied PAT patch with 3 record(s): 3 forward / 0 reverse"
+    );
+    assert_eq!(fs::read(output).expect("output"), b"ABC");
+}
+
 #[test]
 fn skipped_line_warning_lists_a_bounded_number_of_lines() {
     let mut text = String::from("00000000 61 41\n");
@@ -729,6 +746,10 @@ fn apply_keeps_titles_and_headers_silent() {
         "My Hack v1.0",
         "Level 01 02",
         "Track 0A 0B",
+        "Facade 01 02",
+        "Xdeadbeef 01 02",
+        "Defaced 1 02",
+        "Defaced 123 02",
         "comment line",
         "# note",
     ] {

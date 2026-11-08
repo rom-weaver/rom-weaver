@@ -966,6 +966,7 @@ fn parse_accepts_ips32_records_past_24bit_limit() {
     assert_eq!(parsed.records.len(), 1);
     assert_eq!(parsed.records[0].offset, 0x0100_0000);
     assert_eq!(parsed.truncate_size, None);
+    assert!(parsed.warnings.is_empty(), "{:?}", parsed.warnings);
 }
 
 #[test]

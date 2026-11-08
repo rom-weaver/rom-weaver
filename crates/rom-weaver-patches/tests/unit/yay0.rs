@@ -107,6 +107,23 @@ fn rejects_a_decoded_length_beyond_the_bound() {
 }
 
 #[test]
+fn accepts_a_decoded_length_exactly_at_the_bound() {
+    let valid = literal_then_link();
+
+    // The caller's bound is inclusive.
+    assert_eq!(decode_yay0(&valid, 8).expect("decode"), b"ABABABAB");
+
+    // 21 stream bytes allow 21 * 88 = 1848 decoded bytes. A declared length at that bound passes
+    // the limit check and fails later, when the tables run out, with a different error.
+    let mut at_bound = valid;
+    set_header_u32(&mut at_bound, 4, 1848);
+    let error = decode_yay0(&at_bound, u64::MAX)
+        .expect_err("tables end before the declared length")
+        .to_string();
+    assert!(!error.contains("byte limit"), "{error}");
+}
+
+#[test]
 fn rejects_a_link_that_reaches_before_the_start_of_the_output() {
     // Command 0x00 starts with a link, but nothing has been decoded yet: link 0x2000 is
     // distance 1, length 4.
