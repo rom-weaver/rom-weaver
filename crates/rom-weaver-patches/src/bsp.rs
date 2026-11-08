@@ -101,12 +101,6 @@ impl BspPatchHandler {
             let _ = fs::remove_file(output_path);
         }
         let outcome = apply_result?;
-        // Patch-supplied text: keep terminal controls out of the label.
-        let messages: Vec<String> = outcome
-            .messages
-            .iter()
-            .map(|message| message.chars().filter(|c| !c.is_control()).collect())
-            .collect();
         Ok(crate::patch_success_report(
             self.descriptor,
             "apply",
@@ -115,7 +109,7 @@ impl BspPatchHandler {
                     "applied {} patch script and wrote {} byte(s)",
                     self.descriptor.name, outcome.written
                 ),
-                &messages,
+                &outcome.messages,
             ),
             Some(execution),
         ))

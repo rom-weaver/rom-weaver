@@ -4,7 +4,9 @@ use std::{
     process::Command,
 };
 
-use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler, RomWeaverError};
+use rom_weaver_core::{
+    PatchApplyRequest, PatchCreateRequest, PatchHandler, RomWeaverError, RomWeaverErrorKind,
+};
 use serde_json::Value;
 
 use super::{BSP_THREAD_WORK_CHUNK_BYTES, BSP_VM_SOURCE, BspPatchHandler, apply_bsp_patch_bytes};
@@ -328,6 +330,46 @@ fn apply_surfaces_non_zero_exit_status() {
         error
             .to_string()
             .contains("BSP patch script exited with failure status 1")
+    );
+}
+
+#[test]
+fn apply_failure_error_carries_the_printed_messages() {
+    let temp = TestDir::new();
+    let input_path = temp.child("source.bin");
+    let patch_path = temp.child("refuse.bsp");
+    fs::write(&input_path, [0x01, 0x02, 0x03]).expect("fixture");
+
+    // `print "Use the USA v1.0 ROM"; print "bell\x07 here"; exit 1`, strings after 15 bytes of code.
+    let mut script = Vec::new();
+    script.push(0x68);
+    script.extend_from_slice(&15u32.to_le_bytes());
+    script.push(0x68);
+    script.extend_from_slice(&36u32.to_le_bytes());
+    script.push(0x06);
+    script.extend_from_slice(&1u32.to_le_bytes());
+    assert_eq!(script.len(), 15);
+    script.extend_from_slice(b"Use the USA v1.0 ROM\0");
+    assert_eq!(script.len(), 36);
+    script.extend_from_slice(b"bell\x07 here\0");
+    fs::write(&patch_path, script).expect("fixture");
+
+    let handler = BspPatchHandler::new(&BSP);
+    let error = handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: temp.child("output.bin"),
+            },
+            &test_context_with_threads(&temp, 2),
+        )
+        .expect_err("non-zero exit should fail");
+
+    assert_eq!(error.kind(), RomWeaverErrorKind::Validation);
+    assert_eq!(
+        error.to_string(),
+        "validation failed: BSP patch script exited with failure status 1; BSP message 1: Use the USA v1.0 ROM; BSP message 2: bell here"
     );
 }
 

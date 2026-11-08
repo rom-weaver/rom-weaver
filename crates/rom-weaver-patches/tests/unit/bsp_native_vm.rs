@@ -891,9 +891,11 @@ fn print_and_printbuf_record_messages_in_order_and_cap_the_report() {
         assert_continue(step(vm, 0xA0, &[4]));
         assert_continue(step(vm, 0xA2, &[u32::from(b'!')]));
         assert_continue(step(vm, 0xA6, &[]));
-        // clearbuf and an empty printbuf record nothing.
+        // clearbuf, an empty printbuf, and one of only terminal controls record nothing.
         assert_continue(step(vm, 0xA4, &[7]));
         assert_continue(step(vm, 0xA7, &[]));
+        assert_continue(step(vm, 0xA6, &[]));
+        assert_continue(step(vm, 0xA2, &[0x07]));
         assert_continue(step(vm, 0xA6, &[]));
         assert_eq!(
             vm.take_messages(),

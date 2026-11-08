@@ -7105,6 +7105,49 @@ fn patch_apply_reports_repeated_bsp_prints_as_separate_numbered_warnings() {
 }
 
 #[test]
+fn patch_apply_failing_bsp_script_reports_its_printed_message() {
+    let temp = setup_temp_dir();
+    let input = temp.child("old.bin");
+    let patch = temp.child("refuse.bsp");
+    let output = temp.child("output.bin");
+    fs::write(input.path(), [0x01, 0x02, 0x03]).expect("fixture");
+
+    // `print "Use the USA v1.0 ROM"; exit 1`, with the string right after the 10 bytes of code.
+    let mut script = vec![0x68];
+    script.extend_from_slice(&10u32.to_le_bytes());
+    script.push(0x06);
+    script.extend_from_slice(&1u32.to_le_bytes());
+    assert_eq!(script.len(), 10);
+    script.extend_from_slice(b"Use the USA v1.0 ROM\0");
+    fs::write(patch.path(), script).expect("fixture");
+
+    let event = run_output_preservation_event(
+        &temp,
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        1,
+    );
+    assert_eq!(event["status"], "failed", "{event}");
+    assert_eq!(event["error_kind"], "validation", "{event}");
+    assert!(
+        event
+            .to_string()
+            .contains("failure status 1; BSP message 1: Use the USA v1.0 ROM"),
+        "{event}"
+    );
+}
+
+#[test]
 fn patch_create_succeeds_for_rup_and_round_trips() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");

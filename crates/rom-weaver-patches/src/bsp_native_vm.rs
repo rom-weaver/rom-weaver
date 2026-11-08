@@ -632,23 +632,25 @@ impl<'pool> BspVm<'pool> {
             text
         } else {
             frame.message_overflowed = true;
-            &text[..floor_char_boundary(text, room)]
+            &text[..text.floor_char_boundary(room)]
         };
         frame.message_buffer.push_str(kept);
     }
 
-    /// Records a printed message for the apply report. Empty messages carry nothing to show.
-    /// Each kept message is numbered so a script printing the same text twice still reports two
-    /// distinct warnings: the CLI's shared warning list drops equal strings.
+    /// Records a printed message for the apply report without its terminal controls, dropping
+    /// one with no visible text. Each kept message is numbered so a script printing the same text
+    /// twice still reports two distinct warnings: the CLI's shared warning list drops equal strings.
     fn report_message(&mut self, message: &str) {
-        if message.is_empty() {
+        let has_visible_text = message.chars().any(|c| !c.is_control());
+        if !has_visible_text {
             return;
         }
         if self.messages.len() >= BSP_MAX_REPORTED_MESSAGES {
             self.suppressed_messages += 1;
             return;
         }
-        let kept = &message[..floor_char_boundary(message, BSP_MAX_REPORTED_MESSAGE_BYTES)];
+        let visible = strip_control_chars(message);
+        let kept = &visible[..visible.floor_char_boundary(BSP_MAX_REPORTED_MESSAGE_BYTES)];
         debug!(bytes = message.len(), "BSP script printed a message");
         let number = self.messages.len() + 1;
         self.messages.push(format!("BSP message {number}: {kept}"));
@@ -1814,12 +1816,9 @@ fn utf8_sequence_len(lead: u8) -> VmResult<usize> {
     }
 }
 
-/// Largest index at or below `index` that falls on a character boundary of `text`.
-fn floor_char_boundary(text: &str, index: usize) -> usize {
-    (0..=index.min(text.len()))
-        .rev()
-        .find(|&candidate| text.is_char_boundary(candidate))
-        .unwrap_or(0)
+/// Patch-supplied text: keeps terminal controls out of labels and errors.
+fn strip_control_chars(text: &str) -> String {
+    text.chars().filter(|c| !c.is_control()).collect()
 }
 
 fn finish_vm(mut vm: BspVm<'_>) -> Result<BspApplyOutcome, RomWeaverError> {
@@ -1828,10 +1827,18 @@ fn finish_vm(mut vm: BspVm<'_>) -> Result<BspApplyOutcome, RomWeaverError> {
             written: vm.output_len() as u64,
             messages: vm.take_messages(),
         }),
-        Ok(VmOutcome::Failure(code)) => Err(RomWeaverError::Validation(format!(
-            "BSP patch script exited with failure status {}",
-            code as i64
-        ))),
+        Ok(VmOutcome::Failure(code)) => {
+            // A failing script usually explains itself with `print`: keep that text.
+            let mut text = format!(
+                "BSP patch script exited with failure status {}",
+                code as i64
+            );
+            for message in vm.take_messages() {
+                text.push_str("; ");
+                text.push_str(&message);
+            }
+            Err(RomWeaverError::Validation(text))
+        }
         Ok(VmOutcome::Cancelled) => Err(RomWeaverError::Cancelled),
         Err(message) => Err(vm_execution_error(&message)),
     }
