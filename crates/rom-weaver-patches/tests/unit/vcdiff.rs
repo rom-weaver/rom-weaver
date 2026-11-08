@@ -1018,6 +1018,47 @@ fn create_xdelta_patch_mode_none_disables_secondary_candidates() {
     assert_eq!(parsed.secondary_compressor_id, None);
 }
 
+/// Adjacent runs of different bytes (here 0x5b x8 then 0x85 x8) must not be merged into one run.
+#[test]
+fn create_xdelta_patch_round_trips_adjacent_runs_of_different_bytes() {
+    let mut expected = b"unique prefix bytes before the runs".to_vec();
+    expected.extend([0x5b_u8; 8]);
+    expected.extend([0x85_u8; 8]);
+    expected.extend(b"unique suffix bytes after the runs");
+
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let modified_path = temp.join("modified.bin");
+    let patch_path = temp.join("update.xdelta");
+    let output_path = temp.join("output.bin");
+    fs::write(&input_path, b"unrelated source").expect("write input");
+    fs::write(&modified_path, &expected).expect("write modified");
+
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
+    handler
+        .create(
+            &PatchCreateRequest {
+                original: input_path.clone(),
+                modified: modified_path,
+                output: patch_path.clone(),
+                format: "xdelta".into(),
+            },
+            &test_context().with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::None),
+        )
+        .expect("create xdelta patch");
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context(),
+        )
+        .expect("apply created xdelta patch");
+    assert_eq!(fs::read(output_path).expect("read output"), expected);
+}
+
 #[test]
 fn create_xdelta_patch_mode_lzma_only_uses_lzma_secondary() {
     let (input, expected) = generated_secondary_source_and_target();

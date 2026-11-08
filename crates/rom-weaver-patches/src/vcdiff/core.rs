@@ -1875,13 +1875,45 @@ pub(super) fn build_native_window(
         } else {
             engine.find_matches(target, Some(&source))
         };
-        pipeline::optimize(&raw, target)
+        split_mixed_runs(pipeline::optimize(&raw, target), target)
     };
 
     let mut window = WindowEncoder::new(source_window, options.checksum);
     emit_native_instructions(&mut window, target, &instructions);
     let sections = window.finish_sections(Some(target));
     assemble_native_sections(sections, options)
+}
+
+/// Splits every `Run` whose target bytes are not all equal into one `Run` per byte value.
+/// `try_coalesce` in oxidelta 0.1.4 (`compress/pipeline.rs`) merges adjacent `Run`s without
+/// comparing their bytes, and a `Run` can only carry one byte.
+fn split_mixed_runs(instructions: Vec<Instruction>, target: &[u8]) -> Vec<Instruction> {
+    let mut result = Vec::with_capacity(instructions.len());
+    let mut target_pos = 0_usize;
+    for instruction in instructions {
+        let (len, is_run) = match instruction {
+            Instruction::Run { len } => (len as usize, true),
+            Instruction::Add { len } | Instruction::Copy { len, .. } => (len as usize, false),
+        };
+        let covered = &target[target_pos..target_pos + len];
+        target_pos += len;
+        if !is_run || covered.iter().all(|byte| *byte == covered[0]) {
+            result.push(instruction);
+            continue;
+        }
+        debug!(
+            target_offset = target_pos - len,
+            len, "VCDIFF create: splitting a merged run of differing bytes"
+        );
+        result.extend(
+            covered
+                .chunk_by(|left, right| left == right)
+                .map(|run| Instruction::Run {
+                    len: run.len() as u32,
+                }),
+        );
+    }
+    result
 }
 
 pub(super) fn assemble_native_sections(
