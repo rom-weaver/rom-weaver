@@ -2158,7 +2158,7 @@ fn probe_reads_stdin_for_dash_input() {
 #[test]
 fn extract_probe_names_the_unrecognised_payload() {
     let temp = setup_temp_dir();
-    // Compress refuses non-3DS input now, so make the legacy shape an earlier release wrote:
+    // Compress refuses non-3DS input, so make the legacy shape an earlier release wrote:
     // a Z3DS whose header records an unrecognised underlying magic.
     let mut blob = vec![0x5A_u8; 4096];
     blob[..4].copy_from_slice(&[0x20, 0x20, 0, 0]);

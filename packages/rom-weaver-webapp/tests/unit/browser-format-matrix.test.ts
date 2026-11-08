@@ -447,6 +447,20 @@ describe("runBrowserFullFormatMatrix", () => {
     expect(steps.some((step) => step.command === "patch-apply" && step.status === "running")).toBe(true);
     expect(mocks.waitForGuestFile).toHaveBeenCalled();
     expect(mocks.writeGuestFile).toHaveBeenCalled();
+
+    const compressInputs = runJson.mock.calls
+      .map(([command]) => command)
+      .filter((command) => getRomWeaverCommandLabel(command) === "compress")
+      .map((command) => command.args as { format: string; input: string[] });
+    for (const { format, input } of compressInputs) {
+      expect(input).toEqual([
+        format === "z3ds" ? "/work/matrix/all-format-source-3ds.bin" : "/work/matrix/all-format-source.bin",
+      ]);
+    }
+    expect(compressInputs.some(({ format }) => format === "z3ds")).toBe(true);
+    const writes = mocks.writeGuestFile.mock.calls as unknown as Array<[unknown, string, Uint8Array]>;
+    const z3dsSource = writes.find(([, path]) => path === "/work/matrix/all-format-source-3ds.bin")?.[2];
+    expect(Array.from(z3dsSource?.slice(0x100, 0x104) ?? [])).toEqual([0x4e, 0x43, 0x53, 0x44]);
   });
 
   describe("fixture loading", () => {

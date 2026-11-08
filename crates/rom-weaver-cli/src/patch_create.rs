@@ -483,9 +483,7 @@ impl CliApp {
         }
     }
 
-    /// Every format writes a patch that changes nothing when both inputs are the same bytes;
-    /// warn once here instead of in each handler. A failed comparison skips the warning, since
-    /// the patch itself was created.
+    /// Warns when both inputs have the same bytes; a failed comparison only logs, since the patch was already written.
     fn warn_patch_create_identical_inputs(
         report: &mut OperationReport,
         original: &Path,

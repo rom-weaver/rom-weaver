@@ -189,8 +189,7 @@ impl CliApp {
                 }
             }
         }
-        // Fail before the undo and any compression run; the check below the staging step stays
-        // because an output can appear while they run.
+        // Fail before the undo and compression work.
         Self::require_new_ppf_undo_outputs(&outputs)?;
         let raw_output = Self::patch_apply_raw_output_path(
             &output,
@@ -288,7 +287,7 @@ impl CliApp {
             report.label.push_str(&format!("; {note}"));
         }
         context.cancel().check()?;
-        // Preserve undo/compression diagnostics, then validate every destination
+        // An output can appear while the undo and compression run; check every destination again
         // before publishing any part of a disc. Dangling links are occupied too.
         Self::require_ppf_undo_outputs_available(&outputs, args.force)?;
         if let Some(parent) = output

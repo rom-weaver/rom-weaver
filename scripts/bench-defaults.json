@@ -140,6 +140,9 @@
       "wbfs",
       "tgc"
     ],
+    "nintendo_3ds_compress_input_formats": [
+      "z3ds"
+    ],
     "compress_codec_by_format": {},
     "codec_matrix_by_format": {
       "zip": [

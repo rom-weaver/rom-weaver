@@ -19,6 +19,15 @@ const readBack = (ctx, file, tag = "rb") => {
   return fs.readFileSync(path.join(files[0].parentPath ?? files[0].path, files[0].name));
 };
 const compressed = (ctx, output, extra = [], { rom = ROM, patch = PATCH, select } = {}) => ctx.apply(ctx.fx(rom), ctx.fx(patch), output, [...extra, ...(select ?? [])], { compress: true });
+/** A copy of `file` carrying the NCSD magic at 0x100: Z3DS output only accepts 3DS content. */
+const withNcsdMagic = (ctx, file, name) => {
+  const bytes = fs.readFileSync(file);
+  bytes.write("NCSD", 0x100, "ascii");
+  return ctx.write(name, bytes);
+};
+// The IPS edits leave 0x100..0x104 alone, so the 3DS-shaped source patches to the 3DS-shaped target.
+const compressed3ds = (ctx, output, extra = []) => ctx.apply(withNcsdMagic(ctx, ctx.fx(ROM), "base.3ds"), ctx.fx(PATCH), output, extra, { compress: true });
+const target3ds = (ctx) => withNcsdMagic(ctx, ctx.fx(TARGET), "target.3ds");
 
 export const register = () => {
   // ----------------------------------------------------------------------------- raw output
@@ -203,21 +212,21 @@ export const register = () => {
   // ------------------------------------------------------------------- z3ds / rvz outputs
   add("output.z3ds.round-trip", ["output", "z3ds"], (ctx) => {
     const out = ctx.tmp("out.z3ds");
-    ctx.ok(compressed(ctx, out), "z3ds");
-    ctx.same(ctx.write("rb.bin", readBack(ctx, out)), ctx.fx(TARGET), "z3ds round-trip");
+    ctx.ok(compressed3ds(ctx, out), "z3ds");
+    ctx.same(ctx.write("rb.bin", readBack(ctx, out)), target3ds(ctx), "z3ds round-trip");
   });
   for (const level of ["min", "medium", "max"]) {
     add(`output.z3ds.level-${level}`, ["output", "z3ds", level], (ctx) => {
       const out = ctx.tmp("out.z3ds");
-      ctx.ok(compressed(ctx, out, ["--compress-level", level]), `z3ds ${level}`);
-      ctx.same(ctx.write("rb.bin", readBack(ctx, out)), ctx.fx(TARGET), "z3ds round-trip");
+      ctx.ok(compressed3ds(ctx, out, ["--compress-level", level]), `z3ds ${level}`);
+      ctx.same(ctx.write("rb.bin", readBack(ctx, out)), target3ds(ctx), "z3ds round-trip");
     });
   }
   add("output.z3ds.determinism", ["output", "z3ds", "determinism"], (ctx) => {
     const outputs = [];
     for (const [label, threads] of [["a", "1"], ["b", "1"], ["c", "4"], ["d", "16"]]) {
       const out = ctx.tmp(`${label}/out.z3ds`);
-      ctx.ok(compressed(ctx, out, ["--threads", threads]), `z3ds -j${threads}`);
+      ctx.ok(compressed3ds(ctx, out, ["--threads", threads]), `z3ds -j${threads}`);
       outputs.push(out);
     }
     for (const out of outputs.slice(1)) ctx.same(out, outputs[0], `${path.relative(ctx.work, out)} vs first`);
@@ -225,9 +234,9 @@ export const register = () => {
   add("output.z3ds.subtype-extensions", ["output", "z3ds"], (ctx) => {
     for (const ext of ["zcci", "zcxi", "zcia", "z3dsx"]) {
       const out = ctx.tmp(`out.${ext}`);
-      const result = compressed(ctx, out);
+      const result = compressed3ds(ctx, out);
       check(!result.panic, () => ctx.describe(result));
-      if (result.code === 0) ctx.same(ctx.write(`rb-${ext}.bin`, readBack(ctx, out, ext)), ctx.fx(TARGET), `${ext} round-trip`);
+      if (result.code === 0) ctx.same(ctx.write(`rb-${ext}.bin`, readBack(ctx, out, ext)), target3ds(ctx), `${ext} round-trip`);
     }
   });
   add("output.rvz.raw-rom-rejected-with-clear-error", ["output", "rvz", "negative"], (ctx) => {
@@ -268,13 +277,18 @@ export const register = () => {
     check(produced.length === 1, () => `expected one default-named output, got ${produced.join(",")}`);
     ctx.same(ctx.tmp(produced[0]), ctx.fx("disc/wbfs.target.iso"), "default disc output");
   });
-  for (const ext of ["zip", "7z", "chd", "z3ds"]) {
+  for (const ext of ["zip", "7z", "chd"]) {
     add(`output.disc.wbfs-to-${ext}`, ["output", "disc", ext], (ctx) => {
       const out = ctx.tmp(`out.${ext}`);
       ctx.ok(compressed(ctx, out, [], { rom: wbfsPatch[0], patch: wbfsPatch[1] }), `wbfs -> ${ext}`);
       ctx.same(ctx.write("rb.iso", readBack(ctx, out)), ctx.fx("disc/wbfs.target.iso"), `${ext} round-trip`);
     });
   }
+  add("output.disc.wbfs-to-z3ds-rejected", ["output", "disc", "z3ds", "negative"], (ctx) => {
+    const out = ctx.tmp("out.z3ds");
+    ctx.failed(compressed(ctx, out, [], { rom: wbfsPatch[0], patch: wbfsPatch[1] }), { message: /not a 3DS image/, what: "wbfs -> z3ds" });
+    check(!ctx.exists(out), "left a partial z3ds");
+  });
   // quality-reason: patch apply has no split-output option to test; split WBFS input is covered by container.disc.wbfs-split*.
   add("output.split.not-offered-by-patch-apply", ["output", "split"], () => {
     skip("patch apply has no split-output option (split WBFS is covered as an input in container.disc.wbfs-split*)");

@@ -27,6 +27,8 @@ const OUTPUT_ROOT = joinGuestPath(BENCH_ROOT, "outputs");
 const ARCHIVE_FIXTURE_ROOT = joinGuestPath(FIXTURE_ROOT, "archive-sources");
 const SOURCE_PATH = joinGuestPath(FIXTURE_ROOT, "source.bin");
 const DISC_SOURCE_PATH = joinGuestPath(FIXTURE_ROOT, "source-disc.iso");
+const NINTENDO_3DS_SOURCE_PATH = joinGuestPath(FIXTURE_ROOT, "source-3ds.bin");
+const NCSD_MAGIC_OVERLAY = { bytes: [0x4e, 0x43, 0x53, 0x44], offset: 0x100 };
 const PATCH_ORIGINAL_PATH = joinGuestPath(FIXTURE_ROOT, "patch-original.bin");
 const PATCH_MODIFIED_PATH = joinGuestPath(FIXTURE_ROOT, "patch-modified.bin");
 const IPS_EBP_PATCH_ORIGINAL_PATH = joinGuestPath(FIXTURE_ROOT, "ips-ebp-patch-original.bin");
@@ -58,6 +60,7 @@ const WASM_PATCH_CREATE_SKIPS = {
 const WASM_PATCH_APPLY_SKIPS = {};
 const WASM_RUNTIME_DEFAULT = "default";
 const DISC_COMPRESS_INPUT_FORMATS = new Set(COMMAND_PATHS_DEFAULTS.disc_compress_input_formats);
+const NINTENDO_3DS_COMPRESS_INPUT_FORMATS = new Set(COMMAND_PATHS_DEFAULTS.nintendo_3ds_compress_input_formats);
 const ROM_WEAVER_COMPRESS_CODEC_BY_FORMAT = COMMAND_PATHS_DEFAULTS.compress_codec_by_format;
 const ROM_WEAVER_CODEC_MATRIX_BY_FORMAT = COMMAND_PATHS_DEFAULTS.codec_matrix_by_format;
 const CHECKSUM_ALGORITHMS = COMMAND_PATHS_DEFAULTS.checksum_algorithms;
@@ -108,6 +111,9 @@ const NEEDS_RAW_SOURCE = SELECTED_COMMANDS.has("checksum") && SELECTED_CHECKSUM_
 const NEEDS_COMPRESS_SOURCE = SELECTED_COMMANDS.has("compress");
 const NEEDS_DISC_SOURCE =
   NEEDS_COMPRESS_SOURCE && SELECTED_CONTAINER_FORMATS.some((formatName) => DISC_COMPRESS_INPUT_FORMATS.has(formatName));
+const NEEDS_NINTENDO_3DS_SOURCE =
+  NEEDS_COMPRESS_SOURCE &&
+  SELECTED_CONTAINER_FORMATS.some((formatName) => NINTENDO_3DS_COMPRESS_INPUT_FORMATS.has(formatName));
 const NEEDS_PATCH_PAIR =
   (SELECTED_COMMANDS.has("patch-create") || SELECTED_COMMANDS.has("patch-apply")) &&
   SELECTED_PATCH_FORMATS.some((formatName) => !patchCreateSkipReason(formatName));
@@ -433,6 +439,15 @@ async function ensureDiscSourceFixture() {
   });
 }
 
+// Z3DS compression rejects input that is not 3DS content, so it gets a random source with an NCSD marker.
+async function ensureNintendo3dsSourceFixture() {
+  await ensureGuestPseudoRandomFile(fixtureRootHandle, NINTENDO_3DS_SOURCE_PATH, SOURCE_SIZE_BYTES, {
+    chunkSizeBytes: 4 * MIB,
+    overlay: NCSD_MAGIC_OVERLAY,
+    seed: 0xbadc0de,
+  });
+}
+
 async function ensurePatchPairFixtures() {
   await ensureGuestPseudoRandomFile(fixtureRootHandle, PATCH_ORIGINAL_PATH, PATCH_SIZE_BYTES, {
     chunkSizeBytes: 4 * MIB,
@@ -737,7 +752,9 @@ function benchLog(message) {
 }
 
 function compressInputForFormat(formatName) {
-  return DISC_COMPRESS_INPUT_FORMATS.has(formatName) ? DISC_SOURCE_PATH : SOURCE_PATH;
+  if (DISC_COMPRESS_INPUT_FORMATS.has(formatName)) return DISC_SOURCE_PATH;
+  if (NINTENDO_3DS_COMPRESS_INPUT_FORMATS.has(formatName)) return NINTENDO_3DS_SOURCE_PATH;
+  return SOURCE_PATH;
 }
 
 function sourcePayloadBytesForFormat(formatName) {
@@ -854,6 +871,9 @@ async function initializeRuntime() {
   }
   if (NEEDS_DISC_SOURCE) {
     await ensureDiscSourceFixture();
+  }
+  if (NEEDS_NINTENDO_3DS_SOURCE) {
+    await ensureNintendo3dsSourceFixture();
   }
   if (NEEDS_PATCH_PAIR) {
     await ensurePatchPairFixtures();

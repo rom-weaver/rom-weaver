@@ -535,11 +535,11 @@
     {
       "name": "disc/made.z3ds",
       "location": "cache",
-      "purpose": "z3ds made by rom-weaver compress from the wbfs payload",
+      "purpose": "z3ds made by rom-weaver compress from the NCSD image exh/ctr/game.3ds",
       "how": "rom-weaver compress --output made.z3ds",
       "deterministic": false,
-      "bytes": 262,
-      "sha256": "5a80ddb25e7ece7c8424f9a8f91d2497281afd6804871e02bffa53843209e8e1"
+      "bytes": 146701,
+      "sha256": "c0667293a2ecd77363f4c83933b8c6f3d0a8b06fe216dea474eca81001123e82"
     },
     {
       "name": "disc/nfs/hif_000000.nfs",

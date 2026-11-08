@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 MIB = 1024 * 1024
+NCSD_MAGIC_OFFSET = 0x100
 TIME_BIN = Path("/usr/bin/time")
 SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parent.parent
@@ -118,6 +119,10 @@ DOLPHIN_TOOL_CHECKSUM_AUTO_EXTRACT_FORMATS = {"rvz"}
 
 DISC_COMPRESS_INPUT_FORMATS = {
     str(value) for value in COMMAND_PATHS_DEFAULTS["disc_compress_input_formats"]
+}
+
+NINTENDO_3DS_COMPRESS_INPUT_FORMATS = {
+    str(value) for value in COMMAND_PATHS_DEFAULTS["nintendo_3ds_compress_input_formats"]
 }
 
 ROM_WEAVER_COMPRESS_CODEC_BY_FORMAT = {
@@ -925,6 +930,13 @@ def write_test_gamecube_iso_fixture(path: Path, total_bytes: int) -> None:
     path.write_bytes(image)
 
 
+def write_test_3ds_fixture(path: Path, size_bytes: int, seed: int) -> None:
+    write_random_fixture(path, size_bytes, seed)
+    with path.open("r+b") as handle:
+        handle.seek(NCSD_MAGIC_OFFSET)
+        handle.write(b"NCSD")
+
+
 def write_modified_fixture(original: Path, modified: Path) -> None:
     modified.parent.mkdir(parents=True, exist_ok=True)
     data = bytearray(original.read_bytes())
@@ -960,6 +972,17 @@ def ensure_cached_random_fixture(cache_dir: Path, label: str, size_bytes: int, s
         cache_path.unlink()
     print(f"[bench] generating fixture cache {cache_path}", flush=True)
     write_random_fixture(cache_path, size_bytes, seed)
+    return cache_path
+
+
+def ensure_cached_3ds_fixture(cache_dir: Path, label: str, size_bytes: int, seed: int) -> Path:
+    cache_path = cached_fixture_path(cache_dir, label, size_bytes, seed)
+    if cache_path.exists() and cache_path.stat().st_size == size_bytes:
+        return cache_path
+    if cache_path.exists():
+        cache_path.unlink()
+    print(f"[bench] generating fixture cache {cache_path}", flush=True)
+    write_test_3ds_fixture(cache_path, size_bytes, seed)
     return cache_path
 
 
@@ -1904,6 +1927,7 @@ def main() -> None:
 
     source_path = fixtures_dir / "source.bin"
     disc_source_path = fixtures_dir / "source-disc.iso"
+    source_3ds_path = fixtures_dir / "source-3ds.bin"
     original_path = fixtures_dir / "original.bin"
     modified_path = fixtures_dir / "modified.bin"
     ips_ebp_original_path = fixtures_dir / "ips-ebp-original.bin"
@@ -1914,6 +1938,7 @@ def main() -> None:
 
     source_ready = False
     disc_source_ready = False
+    source_3ds_ready = False
     patch_pair_ready = False
     ips_ebp_ready = False
     dldi_ready = False
@@ -2000,6 +2025,20 @@ def main() -> None:
             )
             stage_fixture_file(cached, disc_source_path)
         disc_source_ready = True
+
+    def ensure_3ds_source_fixture() -> None:
+        # Z3DS compression rejects input that is not 3DS content.
+        nonlocal source_3ds_ready
+        if source_3ds_ready:
+            return
+        cached = ensure_cached_3ds_fixture(
+            fixture_cache_dir,
+            "source-3ds",
+            args.size_mib * MIB,
+            seed=0xBADC0DE,
+        )
+        stage_fixture_file(cached, source_3ds_path)
+        source_3ds_ready = True
 
     def ensure_patch_pair_fixtures() -> None:
         nonlocal patch_pair_ready
@@ -2124,6 +2163,9 @@ def main() -> None:
         if format_name in DISC_COMPRESS_INPUT_FORMATS:
             ensure_disc_source_fixture()
             return disc_source_path
+        if format_name in NINTENDO_3DS_COMPRESS_INPUT_FORMATS:
+            ensure_3ds_source_fixture()
+            return source_3ds_path
         ensure_source_fixture()
         return source_path
 
