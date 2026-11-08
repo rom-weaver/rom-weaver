@@ -331,14 +331,10 @@ struct PreparedPatWrite {
     skipped: usize,
 }
 
-/// Content sniff for extension-less probing: any file with at least one record line counts, even
-/// when other lines would make a real parse fail, so the apply step can explain what is wrong.
+/// Content sniff for extension-less probing: true when the file parses as a PAT patch, which
+/// requires at least one record line.
 pub(crate) fn has_pat_record_signature(path: &Path) -> bool {
-    File::open(path)
-        .map_err(RomWeaverError::from)
-        .and_then(|file| parse_pat_reader(BufReader::new(file), PatLineMode::Lenient))
-        .map(|parsed| !parsed.records.is_empty())
-        .unwrap_or(false)
+    parse_pat_file(path).is_ok()
 }
 
 /// Names the patch in warnings by file name, so output stays identical across platforms' path separators.
@@ -451,16 +447,7 @@ fn read_pat_group_input_bytes(
 fn parse_pat_file(path: &Path) -> Result<ParsedPatPatch> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
-    parse_pat_reader(reader, PatLineMode::Strict)
-}
-
-/// How [`parse_pat_reader`] treats a file with no records.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum PatLineMode {
-    /// Reject a patch with no records at all.
-    Strict,
-    /// Accept it (content sniffing only).
-    Lenient,
+    parse_pat_reader(reader)
 }
 
 fn build_pat_parse_label(format_name: &str, parsed: &ParsedPatPatch) -> String {
@@ -507,7 +494,7 @@ fn skipped_lines_warning(format_name: &str, parsed: &ParsedPatPatch) -> Vec<Stri
     )]
 }
 
-fn parse_pat_reader<R: BufRead>(mut reader: R, mode: PatLineMode) -> Result<ParsedPatPatch> {
+fn parse_pat_reader<R: BufRead>(mut reader: R) -> Result<ParsedPatPatch> {
     let mut records = Vec::new();
     let mut ignored_lines = 0usize;
     let mut skipped_lines = Vec::new();
@@ -551,7 +538,7 @@ fn parse_pat_reader<R: BufRead>(mut reader: R, mode: PatLineMode) -> Result<Pars
         records.push(record);
     }
 
-    if records.is_empty() && mode == PatLineMode::Strict {
+    if records.is_empty() {
         return Err(RomWeaverError::Validation(
             "PAT patch contains no records".into(),
         ));
@@ -566,8 +553,8 @@ fn parse_pat_reader<R: BufRead>(mut reader: R, mode: PatLineMode) -> Result<Pars
 
 /// Whether `line` is shaped like a record: it begins with an 8-digit hex offset, or it has an
 /// offset-like first field followed by two 2-digit hex byte fields. The second form catches a
-/// record whose offset is damaged (`0000001G: 11 BB`) while titles and `fc /b` headers, which
-/// never end in two hex byte fields, stay plain free text.
+/// record whose offset is damaged (`0000001G: 11 BB`) while titles and `fc /b` headers stay
+/// plain free text, even a title that ends in two hex-looking words.
 fn looks_like_pat_record(line: &str) -> bool {
     let mut fields = line.split_whitespace();
     let Some(first) = fields.next() else {
@@ -583,8 +570,21 @@ fn looks_like_pat_record(line: &str) -> bool {
         |field: &str| field.len() == 2 && field.bytes().all(|b| b.is_ascii_hexdigit());
     matches!(
         (fields.next(), fields.next(), fields.next()),
-        (Some(source), Some(modified), None) if is_byte_field(source) && is_byte_field(modified)
+        (Some(source), Some(modified), None)
+            if is_offset_like(first) && is_byte_field(source) && is_byte_field(modified)
     )
+}
+
+/// An offset field with an optional trailing `:`, 7 or 8 characters long with at most one that
+/// is not a hex digit, so a single damaged character still counts.
+fn is_offset_like(field: &str) -> bool {
+    let digits = field.strip_suffix(':').unwrap_or(field);
+    (7..=8).contains(&digits.len())
+        && digits
+            .bytes()
+            .filter(|byte| !byte.is_ascii_hexdigit())
+            .count()
+            <= 1
 }
 
 fn parse_pat_record(line: &str) -> Option<PatRecord> {

@@ -5,7 +5,7 @@ use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler, Patch
 use super::{
     PatPatchHandler, build_pat_parse_label, collect_pat_chunk_records_for_chunk,
     create_pat_patch_parallel, create_pat_patch_streaming, has_pat_record_signature,
-    looks_like_pat_record, parse_pat_file, parse_pat_record,
+    parse_pat_file, parse_pat_record,
 };
 use crate::shared::threading::parallel_chunked_capability;
 use crate::{
@@ -616,6 +616,10 @@ fn apply_skips_non_record_lines_and_reports_their_numbers() {
         ("extra field", "00000001 62 42 43"),
         ("date line", "20060101 Hack by Kuma"),
         ("record with trailing note", "00000001 62 42 ;note"),
+        ("damaged offset with colon", "0000001G: 11 BB"),
+        ("damaged offset", "0000001G 11 BB"),
+        ("seven-digit offset", "0000001: 11 BB"),
+        ("damaged source byte", "00000011: 1G BB"),
     ] {
         let text = format!("00000000 61 41\n{line}\n00000002 63 43\n");
         let (result, _temp, output) = apply_pat_text(text.as_bytes());
@@ -715,49 +719,27 @@ fn parse_still_tolerates_comments_and_blank_lines_beside_records() {
     assert_eq!(fs::read(output).expect("output"), b"aBc");
 }
 
-/// A record-shaped line is damaged when any field is bad, so it warns; titles and `fc /b`
-/// headers are free text and stay silent.
+/// Titles, notes and `fc /b` headers are free text, including titles that end in two
+/// hex-looking words.
 #[test]
-fn record_shape_covers_damaged_offsets_and_values_but_not_free_text() {
-    for (line, expected) in [
-        ("0000001G: 11 BB", true),
-        ("0000001G 11 BB", true),
-        ("0000001: 11 BB", true),
-        ("00000011: 1G BB", true),
-        ("00000011 11 B", true),
-        ("00000011: 11 BB ;note", true),
-        ("Comparing files a.bin and B.BIN", false),
-        ("FC: no differences encountered", false),
-        ("My Hack v1.0", false),
-        ("comment line", false),
-        ("# note", false),
-        ("", false),
+fn apply_keeps_titles_and_headers_silent() {
+    for line in [
+        "Comparing files a.bin and B.BIN",
+        "FC: no differences encountered",
+        "My Hack v1.0",
+        "Level 01 02",
+        "Track 0A 0B",
+        "comment line",
+        "# note",
     ] {
-        assert_eq!(looks_like_pat_record(line), expected, "{line:?}");
-    }
-}
-
-#[test]
-fn apply_warns_for_a_record_with_a_damaged_offset() {
-    for line in ["0000001G: 11 BB", "0000001G 11 BB"] {
-        let text = format!("00000000 61 41\n{line}\n00000002 63 43\n");
+        let text = format!("{line}\n00000001: 62 42\n");
         let (result, _temp, output) = apply_pat_text(text.as_bytes());
         let report = result.unwrap_or_else(|error| panic!("{line}: {error}"));
-        assert_eq!(
-            report.label,
-            "applied PAT patch with 2 record(s): 2 forward / 0 reverse; warning=PAT skipped 1 line(s) that are not valid records (line 2)",
-            "{line}"
+        assert!(
+            !report.label.contains("warning="),
+            "{line}: {}",
+            report.label
         );
-        assert_eq!(fs::read(output).expect("output"), b"AbC", "{line}");
+        assert_eq!(fs::read(output).expect("output"), b"aBc", "{line}");
     }
-}
-
-#[test]
-fn apply_keeps_fc_headers_silent() {
-    let (result, _temp, output) = apply_pat_text(
-        b"Comparing files a.bin and B.BIN\n00000001: 62 42\nFC: no differences encountered\n",
-    );
-    let report = result.expect("apply");
-    assert!(!report.label.contains("warning="), "{}", report.label);
-    assert_eq!(fs::read(output).expect("output"), b"aBc");
 }
