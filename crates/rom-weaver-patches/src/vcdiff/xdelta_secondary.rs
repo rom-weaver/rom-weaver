@@ -784,6 +784,7 @@ pub(super) fn decode_native_window_sections(
     } else {
         0
     };
+    ensure_instructions_match_sections(window, data, inst, addr)?;
     let header = build_native_window_header(window, source_len);
     let mut source: &[u8] = source_segment;
     let mut copy_buf = Vec::new();

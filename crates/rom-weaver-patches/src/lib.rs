@@ -26,6 +26,7 @@ mod solid;
 mod test_support;
 mod ups;
 mod varint;
+mod yay0;
 
 use std::{
     fs::{self, File, OpenOptions},
@@ -369,9 +370,12 @@ pub(crate) fn coded_validation(code: &'static str, message: &'static str) -> Rom
     RomWeaverError::ValidationCode(ValidationCodeError::new(code).with_message(message))
 }
 
-/// Stable code of the validation error for a patch that declares an output
-/// larger than [`plausible_output_limit`] allows. Carries `format`,
-/// `output_size`, `limit`, `source_size` and `patch_size` byte fields.
+/// Stable code of the validation error for a patch that declares more output
+/// than a format allows. Two uses:
+/// - the whole declared output exceeds [`plausible_output_limit`]; carries
+///   `format`, `output_size`, `limit`, `source_size` and `patch_size` fields;
+/// - a VCDIFF window declares a target over the per-window cap; carries only
+///   `format`, `output_size` (the window size) and `limit` (the cap).
 pub const VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE: &str = "patch.output_size_implausible";
 
 /// Outputs up to this many bytes are always plausible (largest cartridge and
@@ -639,6 +643,9 @@ impl PatchRegistry {
             return None;
         };
 
+        if prefix.starts_with(APS_N64_SIGNATURE) && is_apsgba_with_aps10_magic(path) {
+            return self.probe_signature_match(path, "APS GBA", "apsgba");
+        }
         if let Some(handler) =
             self.probe_prefix_signature(path, &prefix, ebp_extension, xdelta_extension)
         {
@@ -774,6 +781,16 @@ fn is_xdelta_extension(path: &Path) -> bool {
             let name = name.to_ascii_lowercase();
             name.ends_with(".xdelta") || name.ends_with(".delta") || name.ends_with(".dat")
         })
+}
+
+/// An APSGBA patch whose source size has 0x30 as its low byte starts with `APS10`, the N64 magic.
+/// It is told apart by structure: the file is a header plus whole 64 KiB records and does not
+/// parse as an N64 APS patch.
+fn is_apsgba_with_aps10_magic(path: &Path) -> bool {
+    let Ok(metadata) = fs::metadata(path) else {
+        return false;
+    };
+    apsgba::is_apsgba_record_length(metadata.len()) && !aps_n64::is_aps_n64_patch(path)
 }
 
 fn read_signature_prefix(path: &Path, max_len: usize) -> Option<Vec<u8>> {

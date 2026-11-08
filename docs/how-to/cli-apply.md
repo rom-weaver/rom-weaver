@@ -143,6 +143,8 @@ rom-weaver patch apply \
 
 The output keeps the input's byte order. The `.n64` extension above reflects that; `--n64-byte-order big-endian` selects the patch input, not the output format.
 
+An APS (N64) patch refuses a source whose v64 byte-swapping differs from the ROM it was made from; see [Checksum flags](../reference/cli.md#checksum-flags).
+
 <a id="check-patches-without-writing-anything"></a>
 
 ## Validate a patch chain
@@ -162,7 +164,7 @@ Pass `--independent` to check each patch separately and report every verdict. Th
 
 ## Undo a PPF patch
 
-Use the patched ROM and the exact PPF3 patch that changed it. The patch must include undo data. Create one with `rom-weaver patch create original.bin modified.bin -o change.ppf --ppf-undo`.
+Use the patched ROM and the exact PPF3 patch that changed it. The patch must include undo data. Create one with `rom-weaver patch create --original original.bin --modified modified.bin -o change.ppf --ppf-undo`.
 
 ```sh
 rom-weaver tools ppf-undo -i patched.bin --patch change.ppf -o restored.bin --no-compress

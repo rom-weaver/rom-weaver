@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File, OpenOptions},
-    io::{BufReader, Read, Seek, SeekFrom, Write},
+    io::{BufReader, Cursor, Read, Seek, SeekFrom, Write},
     path::Path,
 };
 
@@ -22,6 +22,7 @@ use crate::shared::threading::{
     chunk_count_for_len_checked, parallel_per_record_capability, run_with_optional_pool,
     scan_create_chunks,
 };
+use crate::yay0::{YAY0_MAGIC, decode_yay0};
 
 const PMSR_MAGIC: &[u8; 4] = b"PMSR";
 const PMSR_HEADER_SIZE: usize = 8;
@@ -319,16 +320,38 @@ struct CreatedPmsrPatch {
     record_count: usize,
 }
 
+/// Parses a `.mod` file, decoding it first when it is a Yay0 package (Star Rod Classic's default).
 fn parse_pmsr_file(path: &Path) -> Result<ParsedPmsrPatch> {
     let file_len = fs::metadata(path)?.len();
+    let mut file = File::open(path)?;
+    // A file shorter than the magic leaves zeros in the buffer, which never match it.
+    let mut magic = [0u8; YAY0_MAGIC.len()];
+    rom_weaver_core::read_full(&mut file, &mut magic)?;
+    file.seek(SeekFrom::Start(0))?;
+    if &magic != YAY0_MAGIC {
+        return parse_pmsr_reader(BufReader::new(file), file_len);
+    }
+
+    let mut compressed = Vec::new();
+    file.read_to_end(&mut compressed)?;
+    let decoded = decode_yay0(&compressed, crate::plausible_output_limit(0, file_len))?;
+    debug!(
+        compressed_len = file_len,
+        decoded_len = decoded.len(),
+        "pmsr patch is Yay0 compressed; parsing the decoded package"
+    );
+    let decoded_len = decoded.len() as u64;
+    parse_pmsr_reader(Cursor::new(decoded), decoded_len)
+}
+
+fn parse_pmsr_reader<R: Read>(reader: R, file_len: u64) -> Result<ParsedPmsrPatch> {
     if file_len < PMSR_HEADER_SIZE as u64 {
         return Err(RomWeaverError::Validation(
             "MOD patch is too small to contain a valid header".into(),
         ));
     }
 
-    let mut parser =
-        LabeledFileParser::new(BufReader::new(File::open(path)?), file_len, "MOD", "u64");
+    let mut parser = LabeledFileParser::new(reader, file_len, "MOD", "u64");
     if parser
         .read_exact(PMSR_MAGIC.len(), "MOD header")?
         .as_slice()

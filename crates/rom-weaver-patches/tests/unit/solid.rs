@@ -721,70 +721,167 @@ fn apply_writes_relative_and_rle_primitives() {
     );
 }
 
-#[test]
-fn apply_rejects_truncate_size_beyond_output_length() {
-    let temp = TestDir::new();
-    let source = temp.child("src.bin");
-    let patch = temp.child("truncate.solid");
-    let output = temp.child("out.bin");
-    fs::write(&source, b"ABCD").expect("source");
-    // modFileAction truncate (2 << 4), zero primitives, truncate size 100 > 4-byte source.
-    let bytes = assemble_solid(0x20, 0, &100u32.to_le_bytes());
-    fs::write(&patch, bytes).expect("patch");
+/// Resize body for `modFileAction` expand: `resizeFileAddr`, `resizeFileDataSize`, then the
+/// payload (which sits after the primitives, so these tests carry none).
+fn expand_body(address: u32, data: &[u8]) -> Vec<u8> {
+    let mut body = Vec::new();
+    body.extend_from_slice(&address.to_le_bytes());
+    body.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    body.extend_from_slice(data);
+    body
+}
 
+fn truncate_patch(size: u32) -> Vec<u8> {
+    // modFileAction truncate (2 << 4), zero primitives.
+    assemble_solid(0x20, 0, &size.to_le_bytes())
+}
+
+fn expand_patch(address: u32, data: &[u8]) -> Vec<u8> {
+    // modFileAction expand (1 << 4), zero primitives.
+    assemble_solid(0x10, 0, &expand_body(address, data))
+}
+
+/// One literal primitive at base address 16 (two-byte base width, no resize).
+fn literal_primitive_at_16_patch() -> Vec<u8> {
+    assemble_solid(0x01, 1, &[0x00, 0x01, 0x10, 0x00, b'Z'])
+}
+
+/// Applies `patch` to `source` at one and four threads and validates it, returning the
+/// output bytes after checking every apply path agrees.
+fn apply_and_validate_solid(source: &[u8], patch: &[u8]) -> Vec<u8> {
+    let temp = TestDir::new();
+    let source_path = temp.child("src.bin");
+    let patch_path = temp.child("patch.solid");
+    fs::write(&source_path, source).expect("source");
+    fs::write(&patch_path, patch).expect("patch");
     let handler = SolidPatchHandler::new(&SOLID);
-    let error = handler
-        .apply(
-            &PatchApplyRequest {
-                input: source,
-                patches: vec![patch],
-                output,
+    let context = |threads| {
+        test_context_with_threads(&temp, threads)
+            .with_patch_checksum_validation(PatchChecksumValidation::Ignore)
+    };
+
+    handler
+        .validate(
+            &PatchValidateRequest {
+                input: source_path.clone(),
+                patches: vec![patch_path.clone()],
             },
-            &test_context_with_threads(&temp, 1)
-                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            &context(1),
         )
-        .expect_err("apply should reject oversized truncate");
-    assert!(
-        error
-            .to_string()
-            .contains("truncate size exceeds output length"),
-        "unexpected error: {error}"
+        .expect("validate must agree with apply");
+    let mut outputs = Vec::new();
+    for threads in [1usize, 4] {
+        let output = temp.child(&format!("out-{threads}.bin"));
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output.clone(),
+                },
+                &context(threads),
+            )
+            .expect("apply");
+        outputs.push(fs::read(output).expect("output"));
+    }
+    assert_eq!(outputs[0], outputs[1], "thread paths must agree");
+    outputs.remove(0)
+}
+
+#[test]
+fn expand_overwrites_at_the_resize_address_like_the_reference() {
+    // Reference (demo.lf.c): seek to resizeFileAddr and write; the file grows only when the
+    // data runs past EOF. Expected bytes are worked by hand.
+    let source = b"0123456789";
+    assert_eq!(
+        apply_and_validate_solid(source, &expand_patch(4, b"XY")),
+        b"0123XY6789"
+    );
+    assert_eq!(
+        apply_and_validate_solid(source, &expand_patch(0, b"XY")),
+        b"XY23456789"
+    );
+    assert_eq!(
+        apply_and_validate_solid(source, &expand_patch(8, b"WXYZ")),
+        b"01234567WXYZ"
+    );
+    // Created patches expand at the original length, where overwrite and insert coincide.
+    assert_eq!(
+        apply_and_validate_solid(source, &expand_patch(10, b"XY")),
+        b"0123456789XY"
     );
 }
 
 #[test]
-fn apply_rejects_expand_address_beyond_output_length() {
-    let temp = TestDir::new();
-    let source = temp.child("src.bin");
-    let patch = temp.child("expand.solid");
-    let output = temp.child("out.bin");
-    fs::write(&source, b"ABCD").expect("source");
-    // modFileAction expand (1 << 4): resizeFileAddr 100 > 4-byte source, size 2 + 2 bytes data.
-    let mut body = Vec::new();
-    body.extend_from_slice(&100u32.to_le_bytes()); // resizeFileAddr
-    body.extend_from_slice(&2u32.to_le_bytes()); // resizeFileDataSize
-    body.extend_from_slice(&[0xDE, 0xAD]); // expansion payload
-    let bytes = assemble_solid(0x10, 0, &body);
-    fs::write(&patch, bytes).expect("patch");
-
-    let handler = SolidPatchHandler::new(&SOLID);
-    let error = handler
-        .apply(
-            &PatchApplyRequest {
-                input: source,
-                patches: vec![patch],
-                output,
-            },
-            &test_context_with_threads(&temp, 1)
-                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
-        )
-        .expect_err("apply should reject out-of-range resizeFileAddr");
-    assert!(
-        error
-            .to_string()
-            .contains("resizeFileAddr exceeds output length"),
-        "unexpected error: {error}"
+fn gaps_are_zero_filled_like_the_reference() {
+    // Expand address past the end: zero gap, then the data.
+    assert_eq!(
+        apply_and_validate_solid(b"ABCD", &expand_patch(6, b"XY")),
+        b"ABCD\0\0XY"
     );
+    // A primitive starting past the end: zero hole, then the byte.
+    let mut expected = b"AB".to_vec();
+    expected.extend_from_slice(&[0u8; 14]);
+    expected.push(b'Z');
+    assert_eq!(
+        apply_and_validate_solid(b"AB", &literal_primitive_at_16_patch()),
+        expected
+    );
+    // Truncate to a larger size: ftruncate zero-extends.
+    let mut expected = b"ABCD".to_vec();
+    expected.extend_from_slice(&[0u8; 96]);
+    assert_eq!(
+        apply_and_validate_solid(b"ABCD", &truncate_patch(100)),
+        expected
+    );
+}
+
+#[test]
+fn apply_and_validate_reject_an_implausibly_large_zero_filled_output() {
+    let temp = TestDir::new();
+    let source_path = temp.child("src.bin");
+    fs::write(&source_path, b"ABCD").expect("source");
+    let handler = SolidPatchHandler::new(&SOLID);
+    let context = || {
+        test_context_with_threads(&temp, 1)
+            .with_patch_checksum_validation(PatchChecksumValidation::Ignore)
+    };
+
+    for (name, patch) in [
+        ("truncate", truncate_patch(u32::MAX)),
+        ("expand", expand_patch(u32::MAX - 1, b"XY")),
+    ] {
+        let patch_path = temp.child(&format!("{name}.solid"));
+        let output = temp.child(&format!("{name}.bin"));
+        fs::write(&patch_path, patch).expect("patch");
+        let apply_error = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output.clone(),
+                },
+                &context(),
+            )
+            .expect_err("an implausible output must be rejected");
+        let validate_error = handler
+            .validate(
+                &PatchValidateRequest {
+                    input: source_path.clone(),
+                    patches: vec![patch_path],
+                },
+                &context(),
+            )
+            .expect_err("validate must agree with apply");
+        for error in [apply_error, validate_error] {
+            assert_eq!(
+                error.code(),
+                Some(crate::VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE),
+                "{name}: {error}"
+            );
+        }
+        assert!(!output.exists(), "{name}: no output may be created");
+    }
 }
 
 #[test]
@@ -1084,60 +1181,6 @@ fn apply_grows_the_output_when_a_primitive_writes_past_the_source() {
 }
 
 #[test]
-fn apply_and_validate_reject_a_primitive_that_starts_past_the_output_as_corrupt() {
-    let temp = TestDir::new();
-    let source = temp.child("short.bin");
-    let patch = temp.child("hole.solid");
-    let output = temp.child("hole.bin");
-    fs::write(&source, b"AB").expect("source");
-    // One literal primitive at base offset 16, far past the 2-byte source.
-    fs::write(
-        &patch,
-        assemble_solid(0x01, 1, &[0x00, 0x01, 0x10, 0x00, b'Z']),
-    )
-    .expect("patch");
-    let context = || {
-        test_context_with_threads(&temp, 1)
-            .with_patch_checksum_validation(PatchChecksumValidation::Ignore)
-    };
-    let handler = SolidPatchHandler::new(&SOLID);
-
-    let apply_error = handler
-        .apply(
-            &PatchApplyRequest {
-                input: source.clone(),
-                patches: vec![patch.clone()],
-                output: output.clone(),
-            },
-            &context(),
-        )
-        .expect_err("a hole-leaving primitive is corrupt");
-    let validate_error = handler
-        .validate(
-            &PatchValidateRequest {
-                input: source,
-                patches: vec![patch],
-            },
-            &context(),
-        )
-        .expect_err("validate must reject the corrupt patch");
-
-    for error in [apply_error, validate_error] {
-        let message = error.to_string();
-        assert!(message.contains("SOLID patch `"), "{message}");
-        assert!(message.contains("hole.solid` is corrupt"), "{message}");
-        assert!(
-            message.contains("past the end of the 2-byte output"),
-            "{message}"
-        );
-    }
-    assert!(
-        !output.exists(),
-        "a rejected patch must not write an output"
-    );
-}
-
-#[test]
 fn apply_resize_rejects_expansion_data_that_does_not_match_the_declared_size() {
     let temp = TestDir::new();
     let output = temp.child("expand-mismatch.bin");
@@ -1150,7 +1193,7 @@ fn apply_resize_rejects_expansion_data_that_does_not_match_the_declared_size() {
         vec![1, 2],
     );
 
-    let error = apply_resize_action_to_file(&parsed, &output, &test_context_with_threads(&temp, 1))
+    let error = apply_resize_action_to_file(&parsed, &output)
         .expect_err("payload length mismatch should fail");
     assert!(
         error
@@ -1173,13 +1216,12 @@ fn apply_resize_leaves_the_output_alone_for_a_zero_length_expansion() {
         Vec::new(),
     );
 
-    apply_resize_action_to_file(&parsed, &output, &test_context_with_threads(&temp, 1))
-        .expect("zero-length expansion succeeds");
+    apply_resize_action_to_file(&parsed, &output).expect("zero-length expansion succeeds");
     assert_eq!(fs::read(&output).expect("output"), b"0123");
 }
 
 #[test]
-fn apply_resize_splices_expansion_data_at_the_resize_address() {
+fn apply_resize_overwrites_with_expansion_data_at_the_resize_address() {
     let temp = TestDir::new();
     let output = temp.child("expand-splice.bin");
     fs::write(&output, b"0123").expect("fixture");
@@ -1191,9 +1233,8 @@ fn apply_resize_splices_expansion_data_at_the_resize_address() {
         b"XYZ".to_vec(),
     );
 
-    apply_resize_action_to_file(&parsed, &output, &test_context_with_threads(&temp, 1))
-        .expect("expansion succeeds");
-    assert_eq!(fs::read(&output).expect("output"), b"01XYZ23");
+    apply_resize_action_to_file(&parsed, &output).expect("expansion succeeds");
+    assert_eq!(fs::read(&output).expect("output"), b"01XYZ");
 }
 
 #[test]

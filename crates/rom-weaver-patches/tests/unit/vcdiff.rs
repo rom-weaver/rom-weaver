@@ -926,7 +926,7 @@ fn create_xdelta_patch_defaults_to_lzma_secondary_when_it_is_smaller() {
 }
 
 #[test]
-fn create_xdelta_patch_mode_auto_compares_all_secondary_candidates() {
+fn create_xdelta_patch_mode_auto_compares_djw_and_lzma_candidates() {
     let (input, expected) = generated_secondary_source_and_target();
 
     let temp = create_temp_dir();
@@ -962,9 +962,7 @@ fn create_xdelta_patch_mode_auto_compares_all_secondary_candidates() {
     let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
     assert!(matches!(
         parsed.secondary_compressor_id,
-        None | Some(XDELTA_DJW_SECONDARY_ID)
-            | Some(XDELTA_LZMA_SECONDARY_ID)
-            | Some(XDELTA_FGK_SECONDARY_ID)
+        None | Some(XDELTA_DJW_SECONDARY_ID) | Some(XDELTA_LZMA_SECONDARY_ID)
     ));
 
     handler
@@ -980,6 +978,137 @@ fn create_xdelta_patch_mode_auto_compares_all_secondary_candidates() {
     assert_eq!(fs::read(output_path).expect("read output"), expected);
 }
 
+/// Deterministic targets whose candidate sizes are known (empty source, so the patch is a single
+/// ADD/RUN/COPY stream of the target). Measured with the file names `input.bin` and
+/// `modified.bin`; the app header is the same size in every candidate, so only the differences
+/// below matter: `base` is the uncompressed patch, `djw` and `lzma` the secondary candidates.
+fn secondary_selection_target(family: u8, len: usize) -> Vec<u8> {
+    let mut state = 0x9E37_79B9_7F4A_7C15_u64 ^ ((u64::from(family) << 40) | len as u64);
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    match family {
+        0 => {
+            let words: [&[u8]; 5] = [b"alpha ", b"beta ", b"gamma ", b"\x00\x00\x00", b"fox "];
+            let mut target = Vec::new();
+            while target.len() < len {
+                target.extend_from_slice(words[(next() % 5) as usize]);
+            }
+            target.truncate(len);
+            target
+        }
+        1 => (0..len)
+            .map(|index| {
+                if next() % 64 == 0 {
+                    (next() & 0xFF) as u8
+                } else {
+                    (index % 7) as u8
+                }
+            })
+            .collect(),
+        _ => (0..len)
+            .map(|index| {
+                if index % 50 == 49 {
+                    (next() & 0xFF) as u8
+                } else {
+                    0x20 + ((index / 50) % 5) as u8
+                }
+            })
+            .collect(),
+    }
+}
+
+/// Creates an xdelta patch from an empty `input.bin` to `target` with `mode` and returns its bytes.
+fn create_xdelta_patch_from_empty_source(
+    target: &[u8],
+    mode: rom_weaver_core::XdeltaSecondaryMode,
+) -> Vec<u8> {
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let modified_path = temp.join("modified.bin");
+    let patch_path = temp.join("update.xdelta");
+    fs::write(&input_path, b"").expect("write empty input");
+    fs::write(&modified_path, target).expect("write modified");
+    VcdiffPatchHandler::new(&crate::xdelta::XDELTA)
+        .create(
+            &PatchCreateRequest {
+                original: input_path,
+                modified: modified_path,
+                output: patch_path.clone(),
+                format: "xdelta".into(),
+            },
+            &test_context().with_xdelta_secondary_mode(mode),
+        )
+        .expect("create xdelta patch");
+    fs::read(patch_path).expect("read patch")
+}
+
+/// The created patch is the smallest of the uncompressed baseline and the secondary candidates;
+/// a candidate must be strictly smaller than the baseline to win, and between candidates the
+/// first one tried (DJW, then LZMA) keeps a tie.
+#[test]
+fn create_xdelta_patch_picks_the_smallest_candidate_and_keeps_ties_with_the_earlier_one() {
+    use rom_weaver_core::XdeltaSecondaryMode as Mode;
+    // (label, family, length, mode, expected secondary id)
+    let cases: [(&str, u8, usize, Mode, Option<u8>); 5] = [
+        // base 186, djw 154, lzma 231
+        (
+            "djw smaller than lzma",
+            0,
+            200,
+            Mode::Auto,
+            Some(XDELTA_DJW_SECONDARY_ID),
+        ),
+        // base 1072, djw 721, lzma 717
+        (
+            "lzma smaller than djw",
+            0,
+            2186,
+            Mode::Auto,
+            Some(XDELTA_LZMA_SECONDARY_ID),
+        ),
+        // base 479, djw 310, lzma 310
+        (
+            "djw and lzma tie",
+            2,
+            4178,
+            Mode::Auto,
+            Some(XDELTA_DJW_SECONDARY_ID),
+        ),
+        // base 72, djw 73, lzma 73: both secondary candidates are larger than the baseline
+        (
+            "both candidates larger than baseline",
+            1,
+            200,
+            Mode::Auto,
+            None,
+        ),
+        // base 188, lzma 188: a candidate equal to the baseline does not win
+        ("lzma ties the baseline", 2, 1292, Mode::Lzma, None),
+    ];
+    for (label, family, len, mode, expected_id) in cases {
+        let target = secondary_selection_target(family, len);
+        let patch = create_xdelta_patch_from_empty_source(&target, mode);
+        let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
+        // A forced mode keeps the baseline unless its candidate is smaller, so a codec whose output
+        // size changed shows up here as sizes that differ from the ones measured above.
+        let forced_sizes = [Mode::None, Mode::Djw, Mode::Lzma]
+            .map(|forced| create_xdelta_patch_from_empty_source(&target, forced).len());
+        assert_eq!(
+            parsed.secondary_compressor_id, expected_id,
+            "{label}: patch sizes with none, djw, lzma forced: {forced_sizes:?}"
+        );
+        assert_eq!(
+            apply_patch_file(b"", &patch, &test_context()).expect("apply created patch"),
+            target,
+            "{label}"
+        );
+    }
+}
+
 #[test]
 fn create_xdelta_patch_mode_none_disables_secondary_candidates() {
     let (input, expected) = generated_secondary_source_and_target();
@@ -991,6 +1120,15 @@ fn create_xdelta_patch_mode_none_disables_secondary_candidates() {
     fs::write(&input_path, &input).expect("write input");
     fs::write(&modified_path, &expected).expect("write modified");
 
+    let sink = Arc::new(rom_weaver_core::RecordingProgressSink::default());
+    let context = OperationContext::new_with_private_temp_root(
+        ThreadBudget::Fixed(8),
+        &std::env::temp_dir(),
+        "rom-weaver-vcdiff-tests-context",
+        sink.clone(),
+        CancellationToken::new(),
+    )
+    .with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::None);
     let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
     let report = handler
         .create(
@@ -1000,11 +1138,27 @@ fn create_xdelta_patch_mode_none_disables_secondary_candidates() {
                 output: patch_path.clone(),
                 format: "xdelta".into(),
             },
-            &test_context_with_threads(8)
-                .with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::None),
+            &context,
         )
         .expect("create xdelta patch");
     assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+    // No secondary candidate runs, so the progress bar must not report the secondary recode band:
+    // it climbs through the diff band and ends at the finalize percent without that detour.
+    let percents: Vec<f32> = sink
+        .snapshot()
+        .iter()
+        .filter(|event| event.command == "patch-create")
+        .filter_map(|event| event.percent)
+        .collect();
+    assert!(
+        percents.windows(2).all(|pair| pair[0] < pair[1]),
+        "{percents:?}"
+    );
+    assert_eq!(percents.last(), Some(&(CREATE_FINALIZE_PERCENT as f32)));
+    assert!(
+        !percents.contains(&(CREATE_SECONDARY_RECODE_BAND_END as f32)),
+        "{percents:?}"
+    );
     assert!(
         !report
             .thread_execution
@@ -1016,6 +1170,124 @@ fn create_xdelta_patch_mode_none_disables_secondary_candidates() {
     let patch = fs::read(&patch_path).expect("read patch");
     let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
     assert_eq!(parsed.secondary_compressor_id, None);
+}
+
+/// Adjacent runs of different bytes (here 0x5b x8 then 0x85 x8) must not be merged into one run.
+#[test]
+fn create_xdelta_patch_round_trips_adjacent_runs_of_different_bytes() {
+    let mut expected = b"unique prefix bytes before the runs".to_vec();
+    expected.extend([0x5b_u8; 8]);
+    expected.extend([0x85_u8; 8]);
+    expected.extend(b"unique suffix bytes after the runs");
+
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let modified_path = temp.join("modified.bin");
+    let patch_path = temp.join("update.xdelta");
+    let output_path = temp.join("output.bin");
+    fs::write(&input_path, b"unrelated source").expect("write input");
+    fs::write(&modified_path, &expected).expect("write modified");
+
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
+    handler
+        .create(
+            &PatchCreateRequest {
+                original: input_path.clone(),
+                modified: modified_path,
+                output: patch_path.clone(),
+                format: "xdelta".into(),
+            },
+            &test_context().with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::None),
+        )
+        .expect("create xdelta patch");
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context(),
+        )
+        .expect("apply created xdelta patch");
+    assert_eq!(fs::read(output_path).expect("read output"), expected);
+}
+
+/// Without a source, adjacent runs of different bytes stay separate RUNs and each ADD or uniform
+/// RUN is one instruction: `0, n` is RUN n and `1, n` is ADD n in the RFC 3284 section 5.6 table.
+#[test]
+fn create_vcdiff_patch_without_a_source_keeps_one_instruction_per_add_and_run() {
+    let prefix = b"unique prefix bytes before the runs";
+    // Shares no 4-byte sequence with the rest of the target, so no COPY can encode it.
+    let suffix = b"QX9!-closing~7531/ok";
+    let mut leading_run = vec![0x11_u8; 16];
+    leading_run.extend_from_slice(prefix);
+    let mut with_leading_run = leading_run.clone();
+    with_leading_run.extend([0x5b_u8; 8]);
+    with_leading_run.extend([0x85_u8; 8]);
+    with_leading_run.extend_from_slice(suffix);
+    let mut without_leading_run = prefix.to_vec();
+    without_leading_run.extend([0x5b_u8; 8]);
+    without_leading_run.extend([0x85_u8; 8]);
+    without_leading_run.extend_from_slice(suffix);
+
+    let cases: [(&str, &[u8], &[u8]); 2] = [
+        (
+            "uniform run before the merged runs",
+            &with_leading_run,
+            &[0, 16, 1, 35, 0, 8, 0, 8, 1, 20],
+        ),
+        (
+            "add before the merged runs",
+            &without_leading_run,
+            &[1, 35, 0, 8, 0, 8, 1, 20],
+        ),
+    ];
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF);
+    for (label, target, expected_instructions) in cases {
+        let temp = create_temp_dir();
+        let input_path = temp.join("input.bin");
+        let modified_path = temp.join("modified.bin");
+        let patch_path = temp.join("update.vcdiff");
+        let output_path = temp.join("output.bin");
+        fs::write(&input_path, b"").expect("write empty input");
+        fs::write(&modified_path, target).expect("write modified");
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: input_path.clone(),
+                    modified: modified_path,
+                    output: patch_path.clone(),
+                    format: "VCDIFF".into(),
+                },
+                &test_context(),
+            )
+            .expect("create vcdiff patch");
+
+        let patch = fs::read(&patch_path).expect("read patch");
+        let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
+        assert_eq!(parsed.windows.len(), 1, "{label}");
+        let window = &parsed.windows[0];
+        let instructions =
+            &patch[window.inst_start as usize..(window.inst_start + window.inst_len) as usize];
+        assert_eq!(instructions, expected_instructions, "{label}");
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context(),
+            )
+            .expect("apply created patch");
+        assert_eq!(
+            fs::read(output_path).expect("read output"),
+            target,
+            "{label}"
+        );
+    }
 }
 
 #[test]
@@ -1110,6 +1382,54 @@ fn create_xdelta_patch_supports_explicit_djw_and_fgk_secondary_modes() {
             .expect("apply created xdelta patch");
         assert_eq!(fs::read(output_path).expect("read output"), expected);
     }
+}
+
+#[test]
+fn create_xdelta_patch_forced_fgk_handles_a_promoted_zero_weight_parent() {
+    // 0,1,0,2,2,1,1 is the shortest symbol sequence that sends the FGK model through the
+    // promote branch for the parent of the remaining zeros; it must not fail a forced `fgk`.
+    let expected = [0u8, 1, 0, 2, 2, 1, 1, 0, 1, 2, 0, 1];
+
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let modified_path = temp.join("modified.bin");
+    let patch_path = temp.join("update.xdelta");
+    let output_path = temp.join("output.bin");
+    fs::write(&input_path, b"").expect("write input");
+    fs::write(&modified_path, expected).expect("write modified");
+
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
+    handler
+        .create(
+            &PatchCreateRequest {
+                original: input_path.clone(),
+                modified: modified_path,
+                output: patch_path.clone(),
+                format: "xdelta".into(),
+            },
+            &test_context_with_threads(1)
+                .with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::Fgk),
+        )
+        .expect("forced fgk create");
+
+    let patch = fs::read(&patch_path).expect("read patch");
+    let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
+    assert_eq!(
+        parsed.secondary_compressor_id,
+        Some(XDELTA_FGK_SECONDARY_ID)
+    );
+
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context(),
+        )
+        .expect("apply forced fgk patch");
+    assert_eq!(fs::read(output_path).expect("read output"), expected);
 }
 
 #[test]
@@ -1632,7 +1952,11 @@ fn recode_supports_all_xdelta_secondary_encoders() {
     let app_header = build_default_xdelta_app_header(&input_path, &modified_path);
     let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
 
-    for secondary_id in XDELTA_SECONDARY_CANDIDATES {
+    for secondary_id in [
+        XDELTA_DJW_SECONDARY_ID,
+        XDELTA_LZMA_SECONDARY_ID,
+        XDELTA_FGK_SECONDARY_ID,
+    ] {
         let patch_path = temp.join(format!("secondary-{secondary_id}.xdelta"));
         let output_path = temp.join(format!("output-{secondary_id}.bin"));
         let recoded = recode_patch_with_xdelta_options(
@@ -2434,12 +2758,34 @@ fn decode_secondary_fgk_state_new_rejects_zero_alphabet() {
 #[test]
 fn decode_secondary_fgk_round_trips() {
     // Repeats over a small alphabet drive many adaptive weight updates and
-    // block promotions in the FGK tree, round-tripping end to end. (Larger
-    // alphabets currently trip an encoder-side tree bug, so keep this minimal.)
+    // block promotions in the FGK tree, round-tripping end to end.
     let input = b"ABAB".repeat(40);
     let payload = xdelta_fgk_compress(&input).expect("compress fgk");
     let decoded = decode_fgk_secondary(&payload, input.len()).expect("decode fgk");
     assert_eq!(decoded, input);
+}
+
+#[test]
+fn xdelta_fgk_compress_matches_the_reference_when_a_zero_weight_parent_is_promoted() {
+    // Each input drives the FGK tree through xdelta3-fgk.h's "parent of the remaining zeros"
+    // promote branch (the branch is skipped or taken differently by a wrong condition, which
+    // changes the code lengths). Expected bytes come from an independent transliteration of
+    // xdelta3-fgk.h; they are not derived from this crate.
+    let cases: [(&[u8], &[u8]); 4] = [
+        (&[0, 1, 0, 2, 2, 1, 1], &[0x00, 0x00, 0x02, 0xc0, 0x16]),
+        (&[0, 0, 1, 1, 1, 0], &[0x00, 0x01, 0xa8]),
+        (&[0, 0, 0, 1, 1, 1, 0], &[0x00, 0x03, 0xd0]),
+        (&[0, 0, 1, 2, 2], &[0x00, 0x01, 0x00, 0x40]),
+    ];
+    for (input, expected) in cases {
+        let payload = xdelta_fgk_compress(input).expect("compress fgk");
+        assert_eq!(payload, expected, "input {input:?}");
+        assert_eq!(
+            decode_fgk_secondary(expected, input.len()).expect("decode fgk"),
+            input,
+            "input {input:?}"
+        );
+    }
 }
 
 #[test]
@@ -2472,7 +2818,6 @@ fn decode_secondary_try_decode_xdelta_djw_sections_handles_flags() {
 
 #[test]
 fn decode_secondary_try_decode_xdelta_fgk_sections_handles_flags() {
-    // Two-symbol payload keeps the FGK encoder off its large-alphabet tree bug.
     let original = b"ABABABABABABABABABAB".to_vec();
     let fgk = xdelta_fgk_compress(&original).expect("compress fgk");
     let mut data_section = Vec::new();
@@ -3405,4 +3750,463 @@ fn apply_patch_bytes_rejects_an_implausible_target_size() {
         Some(crate::VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE),
         "{error}"
     );
+}
+
+fn plain_window(target_window_size: u64, data: &[u8], inst: &[u8], addr: &[u8]) -> TestWindow {
+    TestWindow {
+        win_indicator: 0,
+        source_segment_size: None,
+        source_segment_position: None,
+        target_window_size,
+        checksum: None,
+        data: data.to_vec(),
+        inst: inst.to_vec(),
+        addr: addr.to_vec(),
+    }
+}
+
+/// Window that rebuilds `hello new world` from `hello old world`: COPY 6 at 0, ADD "new", COPY 6 at 9.
+fn hello_source_window(addr: Vec<u8>) -> TestWindow {
+    TestWindow {
+        win_indicator: WIN_SOURCE,
+        source_segment_size: Some(15),
+        source_segment_position: Some(0),
+        target_window_size: 15,
+        checksum: None,
+        data: b"new".to_vec(),
+        inst: vec![22, 4, 22],
+        addr,
+    }
+}
+
+fn apply_patch_file(
+    input: &[u8],
+    patch_bytes: &[u8],
+    context: &OperationContext,
+) -> Result<Vec<u8>> {
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let patch_path = temp.join("update.vcdiff");
+    let output_path = temp.join("output.bin");
+    fs::write(&input_path, input).expect("write input");
+    fs::write(&patch_path, patch_bytes).expect("write patch");
+    VcdiffPatchHandler::new(&crate::xdelta::VCDIFF).apply(
+        &PatchApplyRequest {
+            input: input_path,
+            patches: vec![patch_path],
+            output: output_path.clone(),
+        },
+        context,
+    )?;
+    Ok(fs::read(output_path).expect("read output"))
+}
+
+// RFC 3284 section 7 requires every section byte to be consumed; xdelta3 rejects leftovers with
+// "extra data section" / "extra address section" (xdelta3-decode.h).
+#[test]
+fn apply_rejects_unconsumed_section_bytes_on_every_decode_path() {
+    let hello = b"hello old world";
+    let target_copy_window = TestWindow {
+        win_indicator: WIN_TARGET,
+        source_segment_size: Some(6),
+        source_segment_position: Some(0),
+        target_window_size: 6,
+        checksum: None,
+        data: b"Z".to_vec(),
+        inst: vec![22],
+        addr: encode_all_varints(&[0]),
+    };
+    let cases: Vec<(&str, &[u8], Vec<TestWindow>, &str)> = vec![
+        (
+            "extra data byte",
+            b"",
+            vec![plain_window(5, b"helloX", &[6], &[])],
+            "extra data section",
+        ),
+        (
+            "extra address byte",
+            hello,
+            vec![hello_source_window(encode_all_varints(&[0, 9, 0]))],
+            "extra address section",
+        ),
+        (
+            "extra data byte in a VCD_TARGET window",
+            b"",
+            vec![plain_window(6, b"abcdef", &[7], &[]), target_copy_window],
+            "extra data section",
+        ),
+    ];
+    for (name, input, windows, expected) in cases {
+        let patch = build_patch(TestPatch {
+            windows,
+            ..Default::default()
+        });
+        let file_error = apply_patch_file(input, &patch, &test_context()).expect_err(name);
+        assert!(
+            file_error.to_string().contains(expected),
+            "{name}: {file_error}"
+        );
+        let memory_error = apply_patch_bytes(input, &patch).expect_err(name);
+        assert!(
+            memory_error.to_string().contains(expected),
+            "{name}: {memory_error}"
+        );
+    }
+}
+
+#[test]
+fn apply_rejects_unconsumed_bytes_in_decompressed_secondary_sections() {
+    // A DJW-compressed data section that expands to 4 bytes while the ADD uses only 3.
+    let (data_source, _) = generated_secondary_source_and_target();
+    let unused_tail_data: Vec<u8> = data_source[..4].to_vec();
+    let compressed = xdelta_djw_compress(&unused_tail_data, DjwSectionKind::Data)
+        .expect("compress the data section");
+    let mut section = Vec::new();
+    encode_varint(&mut section, unused_tail_data.len() as u64);
+    section.extend_from_slice(&compressed);
+    let patch = build_secondary_data_add_patch(XDELTA_DJW_SECONDARY_ID, 3, section);
+    let error = apply_patch_file(b"", &patch, &test_context()).expect_err("unused data byte");
+    assert!(error.to_string().contains("extra data section"), "{error}");
+}
+
+// xdelta3 caps a window at XD3_HARDMAXWINSIZE (64 MiB, xdelta3.h) and rejects it with
+// "hard window size exceeded" before allocating anything.
+#[test]
+fn parse_rejects_target_window_sizes_above_the_window_limit() {
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF);
+    let cases: [(u64, bool); 4] = [
+        (1 << 26, true),
+        ((1 << 26) + 1, false),
+        (1 << 40, false),
+        (u64::MAX, false),
+    ];
+    for (target_window_size, accepted) in cases {
+        let patch = build_patch(TestPatch {
+            windows: vec![plain_window(target_window_size, b"hello", &[6], &[])],
+            ..Default::default()
+        });
+        let temp = create_temp_dir();
+        let patch_path = temp.join("window.vcdiff");
+        fs::write(&patch_path, patch).expect("write patch");
+        let result = handler.parse(&patch_path, &test_context());
+        if accepted {
+            result.expect("a window at the limit parses");
+        } else {
+            let error = result.expect_err("an oversized window is rejected");
+            assert_eq!(
+                error.code(),
+                Some(crate::VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE),
+                "{target_window_size}: {error}"
+            );
+        }
+    }
+}
+
+#[test]
+fn apply_rejects_oversized_window_without_allocating_it() {
+    let patch = build_patch(TestPatch {
+        windows: vec![plain_window(1 << 30, b"hello", &[6], &[])],
+        ..Default::default()
+    });
+    let file_error = apply_patch_file(b"", &patch, &test_context()).expect_err("1 GiB window");
+    assert_eq!(
+        file_error.code(),
+        Some(crate::VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE),
+        "{file_error}"
+    );
+    apply_patch_bytes(b"", &patch).expect_err("1 GiB window in memory");
+}
+
+// xdelta3-decode.h rejects an instruction whose size runs past the target window ("size too
+// large"). Without the check a RUN or COPY size read from the patch drives the allocation.
+#[test]
+fn apply_rejects_instruction_sizes_past_the_target_window() {
+    let mut run_size = Vec::new();
+    encode_varint(&mut run_size, 50_000_000);
+    let mut copy_size = Vec::new();
+    encode_varint(&mut copy_size, 40);
+    let cases: Vec<(&str, Vec<u8>, TestWindow)> = vec![
+        (
+            "RUN larger than the window",
+            Vec::new(),
+            plain_window(10, b"x", &[&[0u8][..], &run_size].concat(), &[]),
+        ),
+        (
+            "ADD larger than the window",
+            Vec::new(),
+            plain_window(2, b"hello", &[6], &[]),
+        ),
+        (
+            "source COPY larger than the window",
+            vec![7u8; 50],
+            TestWindow {
+                win_indicator: WIN_SOURCE,
+                source_segment_size: Some(50),
+                source_segment_position: Some(0),
+                ..plain_window(10, b"", &[&[19u8][..], &copy_size].concat(), &[0])
+            },
+        ),
+    ];
+    for (name, input, window) in cases {
+        let patch = build_patch(TestPatch {
+            windows: vec![window],
+            ..Default::default()
+        });
+        let file_error = apply_patch_file(&input, &patch, &test_context()).expect_err(name);
+        assert!(
+            file_error.to_string().contains("too large"),
+            "{name}: {file_error}"
+        );
+        let memory_error = apply_patch_bytes(&input, &patch).expect_err(name);
+        assert!(
+            memory_error.to_string().contains("too large"),
+            "{name}: {memory_error}"
+        );
+    }
+}
+
+#[test]
+fn apply_rejects_windows_declaring_an_implausible_total_output() {
+    // 17 windows of 64 MiB declare more than the 1 GiB floor of the plausible-output bound.
+    let windows = (0..17)
+        .map(|_| plain_window(1 << 26, b"", &[], &[]))
+        .collect();
+    let patch = build_patch(TestPatch {
+        windows,
+        ..Default::default()
+    });
+    let error = apply_patch_file(b"", &patch, &test_context()).expect_err("implausible total");
+    assert_eq!(
+        error.code(),
+        Some(crate::VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE),
+        "{error}"
+    );
+}
+
+// `auto` must only choose a secondary compressor that default xdelta3 builds decode (djw + lzma;
+// xdelta3 3.2 and later leave the FGK decoder out by default).
+#[test]
+fn create_xdelta_patch_mode_auto_never_selects_fgk() {
+    let words: [&[u8]; 6] = [
+        b"alpha ",
+        b"beta ",
+        b"gamma ",
+        b"\x00\x00\x00\x00",
+        b"\xff\xff",
+        b"fox ",
+    ];
+    let temp = create_temp_dir();
+    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
+    let mut state = 0x2545_F491_4F6C_DD1D_u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    let text = |next: &mut dyn FnMut() -> u64, length: usize| {
+        let mut bytes = Vec::new();
+        while bytes.len() < length {
+            bytes.extend_from_slice(words[(next() % 6) as usize]);
+            if next().is_multiple_of(10) {
+                bytes.push((next() & 0xFF) as u8);
+            }
+        }
+        bytes.truncate(length);
+        bytes
+    };
+    for case in 0..24 {
+        let source = text(&mut next, [300usize, 1000, 3000][case % 3]);
+        let mut modified = source.clone();
+        for _ in 0..3 {
+            let at = (next() as usize) % modified.len();
+            let inserted_len = 100 + (next() % 300) as usize;
+            let inserted = text(&mut next, inserted_len);
+            modified.splice(at..at, inserted);
+        }
+        let original = temp.join(format!("source-{case}.bin"));
+        let changed = temp.join(format!("modified-{case}.bin"));
+        let patch_path = temp.join(format!("patch-{case}.xdelta"));
+        fs::write(&original, &source).expect("write source");
+        fs::write(&changed, &modified).expect("write modified");
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original,
+                    modified: changed,
+                    output: patch_path.clone(),
+                    format: "xdelta".into(),
+                },
+                &test_context()
+                    .with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::Auto),
+            )
+            .expect("create auto xdelta patch");
+        let parsed = parse_patch(&mut Cursor::new(fs::read(&patch_path).expect("read patch")))
+            .expect("parse created patch");
+        assert_ne!(
+            parsed.secondary_compressor_id,
+            Some(XDELTA_FGK_SECONDARY_ID),
+            "case {case} chose FGK"
+        );
+    }
+}
+
+/// Makes the temp file the create flow allocates for secondary compressor `secondary_id` a
+/// directory, so writing that candidate fails. The allocator hands out sequential names, so the
+/// first few sequence numbers are blocked.
+fn block_secondary_candidate(context: &OperationContext, secondary_id: u8) {
+    let probe = context.temp_paths().next_path("probe", None);
+    let dir = probe.parent().expect("temp namespace dir");
+    for sequence in 0..32 {
+        fs::create_dir_all(dir.join(format!(
+            "vcdiff-create-secondary-{secondary_id}-{sequence:08}.xdelta"
+        )))
+        .expect("block secondary candidate path");
+    }
+}
+
+fn create_compressible_xdelta_patch(
+    context: &OperationContext,
+) -> (Result<rom_weaver_core::OperationReport>, PathBuf, TempGuard) {
+    let temp = create_temp_dir();
+    let original = temp.join("source.bin");
+    let modified = temp.join("modified.bin");
+    let output = temp.join("update.xdelta");
+    let mut state = 0x2545_F491_4F6C_DD1D_u64;
+    let target = (0..20_000)
+        .map(|_| {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            b"aaabbcde"[(state >> 60) as usize % 8]
+        })
+        .collect::<Vec<u8>>();
+    fs::write(&original, b"").expect("write source");
+    fs::write(&modified, &target).expect("write modified");
+    let report = VcdiffPatchHandler::new(&crate::xdelta::XDELTA).create(
+        &PatchCreateRequest {
+            original,
+            modified,
+            output: output.clone(),
+            format: "xdelta".into(),
+        },
+        context,
+    );
+    (report, output, temp)
+}
+
+// A forced compressor whose candidate cannot be written must fail the create.
+#[test]
+fn create_xdelta_patch_forced_secondary_candidate_failure_fails_the_create() {
+    let context =
+        test_context().with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::Lzma);
+    block_secondary_candidate(&context, XDELTA_LZMA_SECONDARY_ID);
+    let (result, _output, _temp) = create_compressible_xdelta_patch(&context);
+    result.expect_err("a forced compressor error fails the create");
+}
+
+// Under `auto` the failing candidate is skipped with a warning and the remaining one wins.
+#[test]
+fn create_xdelta_patch_auto_warns_and_keeps_the_remaining_secondary_candidate() {
+    let context =
+        test_context().with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::Auto);
+    block_secondary_candidate(&context, XDELTA_LZMA_SECONDARY_ID);
+    let (result, output, _temp) = create_compressible_xdelta_patch(&context);
+    let report = result.expect("auto survives one failing candidate");
+    assert!(
+        report
+            .label
+            .contains("warning=xdelta secondary compressor 2 failed and was skipped"),
+        "{}",
+        report.label
+    );
+    let parsed = parse_patch(&mut Cursor::new(fs::read(&output).expect("read patch")))
+        .expect("parse created patch");
+    assert_eq!(
+        parsed.secondary_compressor_id,
+        Some(XDELTA_DJW_SECONDARY_ID)
+    );
+}
+
+/// BLAKE3-256 of `hello old world` and `hello new world`, taken from the application header
+/// xdelta3 3.2.2 wrote for those two files.
+const HELLO_OLD_BLAKE3: &str = "0fe3c28afe9e26cc3381af5b3864860407fcb4ec23d309739933cd8cea3d15d2";
+const HELLO_NEW_BLAKE3: &str = "b508d502d8248600868637665594ebfd179623a428d0bc09e1decc70b715241e";
+
+fn armored_hello_patch(app_header: String) -> Vec<u8> {
+    build_patch(TestPatch {
+        header_flags: HDR_APP_HEADER,
+        app_header: app_header.into_bytes(),
+        windows: vec![hello_source_window(encode_all_varints(&[0, 9]))],
+        ..Default::default()
+    })
+}
+
+fn armored_header(source_digest: &str, target_digest: &str) -> String {
+    format!("tgt.bin#{target_digest}//src.bin#{source_digest}/")
+}
+
+// xdelta3 armor (xdelta3-main.h): the app header carries BLAKE3 of source and target, checked
+// before and after the apply.
+#[test]
+fn armored_patch_verifies_source_and_target_digests() {
+    let ignore = test_context().with_patch_checksum_validation(PatchChecksumValidation::Ignore);
+    let good = armored_hello_patch(armored_header(HELLO_OLD_BLAKE3, HELLO_NEW_BLAKE3));
+    assert_eq!(
+        apply_patch_file(b"hello old world", &good, &test_context()).expect("matching digests"),
+        b"hello new world"
+    );
+
+    let wrong_source = apply_patch_file(b"hello old WORLD", &good, &test_context())
+        .expect_err("a source that is not the patch's source");
+    assert!(
+        wrong_source
+            .to_string()
+            .contains("source file BLAKE3 mismatch"),
+        "{wrong_source}"
+    );
+    assert_eq!(
+        apply_patch_file(b"hello old WORLD", &good, &ignore)
+            .expect("ignore skips the source check"),
+        b"hello new WORLD"
+    );
+
+    let wrong_target_digest = HELLO_NEW_BLAKE3.replacen('b', "c", 1);
+    let tampered = armored_hello_patch(armored_header(HELLO_OLD_BLAKE3, &wrong_target_digest));
+    let wrong_target = apply_patch_file(b"hello old world", &tampered, &test_context())
+        .expect_err("a target digest the output does not match");
+    assert!(
+        wrong_target
+            .to_string()
+            .contains("target BLAKE3 mismatch after apply"),
+        "{wrong_target}"
+    );
+    assert_eq!(
+        apply_patch_file(b"hello old world", &tampered, &ignore)
+            .expect("ignore skips the target check"),
+        b"hello new world"
+    );
+}
+
+#[test]
+fn app_headers_without_a_full_armor_digest_stay_opaque() {
+    let uppercase = HELLO_OLD_BLAKE3.to_uppercase();
+    let headers = [
+        "tgt.bin//src.bin/".to_string(),
+        format!("tgt.bin#{uppercase}//src.bin#{uppercase}/"),
+        format!(
+            "tgt.bin#{}//src.bin#{}/",
+            &HELLO_NEW_BLAKE3[1..],
+            &HELLO_OLD_BLAKE3[1..]
+        ),
+        "\0rom-weaver 0.24.0".to_string(),
+    ];
+    for header in headers {
+        let patch = armored_hello_patch(header.clone());
+        assert_eq!(
+            apply_patch_file(b"hello old WORLD", &patch, &test_context())
+                .unwrap_or_else(|error| panic!("{header:?}: {error}")),
+            b"hello new WORLD"
+        );
+    }
 }

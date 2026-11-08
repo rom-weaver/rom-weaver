@@ -1235,21 +1235,11 @@ impl FgkState {
             .ok_or_else(|| RomWeaverError::Validation("xdelta fgk promote missing block".into()))?;
 
         if my_left == self.nodes[node].right_child
-            && self.nodes[node].left_child.is_some()
-            && self.nodes[self.nodes[node].left_child.unwrap()].weight == 0
+            && self.nodes[node]
+                .left_child
+                .is_some_and(|child| self.nodes[child].weight == 0)
         {
-            if self.nodes[node].weight == self.nodes[my_right].weight.saturating_sub(1)
-                && my_right != self.root_node
-            {
-                self.fgk_free_block(current_block);
-                let right_block = self.nodes[my_right].my_block.ok_or_else(|| {
-                    RomWeaverError::Validation("xdelta fgk right node missing block".into())
-                })?;
-                self.nodes[node].my_block = Some(right_block);
-                let left_child = self.nodes[node].left_child.unwrap();
-                self.nodes[left_child].my_block = Some(right_block);
-            }
-            return Ok(());
+            return self.fgk_promote_zero_parent(node, my_right);
         }
 
         if my_left == self.remaining_zeros {
@@ -1275,6 +1265,27 @@ impl FgkState {
             self.nodes[node].my_block = Some(block);
         }
 
+        Ok(())
+    }
+
+    /// Promote step for a node whose left child is a zero-weight leaf, so its `left` link is its
+    /// right child (xdelta3-fgk.h `fgk_promote`, first branch).
+    fn fgk_promote_zero_parent(&mut self, node: usize, my_right: usize) -> Result<()> {
+        if self.nodes[node].weight != self.nodes[my_right].weight.saturating_sub(1)
+            || my_right == self.root_node
+        {
+            return Ok(());
+        }
+        let missing_block =
+            || RomWeaverError::Validation("xdelta fgk promote missing block".into());
+        let current_block = self.nodes[node].my_block.ok_or_else(missing_block)?;
+        let right_block = self.nodes[my_right].my_block.ok_or_else(missing_block)?;
+        let my_left = self.nodes[node].left.ok_or_else(|| {
+            RomWeaverError::Validation("xdelta fgk promote missing left link".into())
+        })?;
+        self.fgk_free_block(current_block);
+        self.nodes[node].my_block = Some(right_block);
+        self.nodes[my_left].my_block = Some(right_block);
         Ok(())
     }
 

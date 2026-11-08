@@ -88,6 +88,12 @@ impl PatchHandler for UpsPatchHandler {
         let (output_size, output_checksum) =
             resolve_apply_target(&patch, input_len, input_checksum, scopes.source)?;
         let working_size = max(patch.source_size, patch.target_size);
+        crate::ensure_plausible_output_size(
+            self.descriptor.name,
+            working_size,
+            input_len,
+            patch_path,
+        )?;
         trace!(
             format = self.descriptor.name,
             changes = patch.changes.len(),
@@ -168,7 +174,12 @@ impl PatchHandler for UpsPatchHandler {
         let input_checksum = crc32_path_cached(&request.input, context)?;
         let (output_size, _) =
             resolve_apply_target(&patch, input_len, input_checksum, scopes.source)?;
-        validate_ups_change_ranges(&patch)?;
+        crate::ensure_plausible_output_size(
+            self.descriptor.name,
+            max(patch.source_size, patch.target_size),
+            input_len,
+            patch_path,
+        )?;
 
         Ok(crate::patch_success_report(
             self.descriptor,
@@ -462,20 +473,15 @@ fn resolve_apply_target(
     ))
 }
 
-fn validate_ups_change_ranges(patch: &ParsedUpsPatch) -> Result<()> {
-    let working_size = max(patch.source_size, patch.target_size);
-    for change in &patch.changes {
-        let change_len = u64::try_from(change.xor_bytes.len()).map_err(|_| {
-            RomWeaverError::Validation("UPS record length exceeded addressable memory".into())
-        })?;
-        let change_end = checked_add(change.offset, change_len, "UPS change end")?;
-        if change_end > working_size {
-            return Err(RomWeaverError::Validation(
-                "UPS change exceeds declared patch file bounds".into(),
-            ));
-        }
-    }
-    Ok(())
+/// Number of leading XOR bytes of `change` that land inside an output of
+/// `output_len` bytes. Bytes past the output end are dropped, like byuu's
+/// `target_write` and Flips' `if (outat<outend)`; the target CRC still guards
+/// the result.
+fn writable_xor_len(change: &UpsChange, output_len: u64) -> usize {
+    let room = output_len.saturating_sub(change.offset);
+    usize::try_from(room).map_or(change.xor_bytes.len(), |room| {
+        room.min(change.xor_bytes.len())
+    })
 }
 
 fn apply_changes_from_input(
@@ -488,17 +494,7 @@ fn apply_changes_from_input(
     let mut input = File::open(input_path)?;
     let mut buffer = vec![0u8; UPS_IO_BUFFER_SIZE];
     for change in &patch.changes {
-        let change_len = u64::try_from(change.xor_bytes.len()).map_err(|_| {
-            RomWeaverError::Validation("UPS record length exceeded addressable memory".into())
-        })?;
-        let change_end = checked_add(change.offset, change_len, "UPS change end")?;
-        if change_end > output_len {
-            return Err(RomWeaverError::Validation(
-                "UPS change exceeds declared patch file bounds".into(),
-            ));
-        }
-
-        let mut remaining = change.xor_bytes.len();
+        let mut remaining = writable_xor_len(change, output_len);
         let mut xor_cursor = 0usize;
         let mut write_offset = change.offset;
         while remaining > 0 {
@@ -566,16 +562,8 @@ fn prepare_ups_write(
     source: &Arc<SharedBlockCacheReader>,
     range: std::ops::Range<usize>,
 ) -> Result<PreparedWrite> {
-    let change_len = u64::try_from(change.xor_bytes.len()).map_err(|_| {
-        RomWeaverError::Validation("UPS record length exceeded addressable memory".into())
-    })?;
-    let change_end = checked_add(change.offset, change_len, "UPS change end")?;
-    if change_end > output_len {
-        return Err(RomWeaverError::Validation(
-            "UPS change exceeds declared patch file bounds".into(),
-        ));
-    }
-
+    let end = range.end.min(writable_xor_len(change, output_len));
+    let range = range.start.min(end)..end;
     let offset = checked_add(change.offset, range.start as u64, "UPS output offset")?;
     let mut data = vec![0u8; range.len()];
     if offset < source_len {

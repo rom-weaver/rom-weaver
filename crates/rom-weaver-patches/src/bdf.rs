@@ -663,15 +663,18 @@ fn decompress_bzip_stream_exact(payload: &[u8], expected_len: u64) -> Result<Vec
     })
 }
 
+/// Decodes bsdiff's sign-magnitude integer the way bspatch 4.3's `offtin` does, so a set sign bit
+/// with a zero magnitude ("negative zero") is 0.
 fn decode_bsdiff_i64(bytes: &[u8]) -> Result<i64> {
     let value_bytes: [u8; 8] = bytes
         .try_into()
         .map_err(|_| RomWeaverError::Validation("BSDIFF40 i64 decode expected 8 bytes".into()))?;
     let value = u64::from_le_bytes(value_bytes);
-    if value >> 63 == 0 || value == (1 << 63) {
-        Ok(value as i64)
+    let magnitude = (value & !(1 << 63)) as i64;
+    if value >> 63 == 0 {
+        Ok(magnitude)
     } else {
-        Ok(((value & ((1 << 63) - 1)) as i64).wrapping_neg())
+        Ok(-magnitude)
     }
 }
 
