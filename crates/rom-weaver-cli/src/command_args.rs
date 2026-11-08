@@ -2503,7 +2503,7 @@ xdelta patches only: compress the patch's own contents.
   none  Leave it uncompressed. The default, and what xdelta3 does without -S.
   lzma  Add LZMA, like xdelta3 -S lzma.
   djw   xdelta3's Huffman coder.
-  fgk   xdelta3's adaptive Huffman coder. Default xdelta3 builds cannot decode it.
+  fgk   xdelta3's adaptive Huffman coder. xdelta3 3.2 and later leave its decoder out by default.
   auto  Try djw and lzma, and keep whichever comes out smallest.
 
 Leaving it at none is usually right: patch payloads are often already-compressed

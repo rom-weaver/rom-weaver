@@ -369,9 +369,12 @@ pub(crate) fn coded_validation(code: &'static str, message: &'static str) -> Rom
     RomWeaverError::ValidationCode(ValidationCodeError::new(code).with_message(message))
 }
 
-/// Stable code of the validation error for a patch that declares an output
-/// larger than [`plausible_output_limit`] allows. Carries `format`,
-/// `output_size`, `limit`, `source_size` and `patch_size` byte fields.
+/// Stable code of the validation error for a patch that declares more output
+/// than a format allows. Two uses:
+/// - the whole declared output exceeds [`plausible_output_limit`]; carries
+///   `format`, `output_size`, `limit`, `source_size` and `patch_size` fields;
+/// - a VCDIFF window declares a target over the per-window cap; carries only
+///   `format`, `output_size` (the window size) and `limit` (the cap).
 pub const VALIDATION_CODE_PATCH_OUTPUT_IMPLAUSIBLE: &str = "patch.output_size_implausible";
 
 /// Outputs up to this many bytes are always plausible (largest cartridge and

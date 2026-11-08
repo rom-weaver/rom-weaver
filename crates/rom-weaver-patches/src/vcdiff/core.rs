@@ -32,8 +32,8 @@ pub(super) const XDELTA_SECONDARY_MIN_SAVINGS: usize = 2;
 pub(super) const XDELTA_DJW_SECONDARY_ID: u8 = 1;
 pub(super) const XDELTA_LZMA_SECONDARY_ID: u8 = 2;
 pub(super) const XDELTA_FGK_SECONDARY_ID: u8 = 16;
-/// Secondary compressors `auto` tries. FGK is left out because stock xdelta3 builds ship no FGK
-/// decoder, so an auto-chosen FGK patch would not apply there; `fgk` stays available explicitly.
+/// Secondary compressors `auto` tries. FGK is left out because xdelta3 3.2 and later leave the FGK
+/// decoder out by default, so an auto-chosen FGK patch would not apply there; `fgk` stays available explicitly.
 pub(super) const XDELTA_AUTO_SECONDARY_CANDIDATES: [u8; 2] =
     [XDELTA_DJW_SECONDARY_ID, XDELTA_LZMA_SECONDARY_ID];
 pub(super) const DJW_MAX_CODELEN: usize = 20;
@@ -710,8 +710,7 @@ impl PatchHandler for VcdiffPatchHandler {
 
 /// Picks the smallest successfully recoded secondary candidate. A candidate that errors is a
 /// failure when the user forced that one compressor and a warning under `auto`, where the other
-/// candidates can still win. A candidate that is merely not smaller than the baseline is not an
-/// error and is handled by the caller.
+/// candidates can still win.
 pub(super) fn pick_smallest_secondary_candidate(
     results: Vec<(u8, Result<CreatedPatchCandidate>)>,
     mode: XdeltaSecondaryMode,
