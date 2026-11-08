@@ -311,6 +311,42 @@ fn closed_stderr_preserves_operation_status_without_panicking() {
     }
 }
 
+#[test]
+fn stream_validation_errors_drop_the_prefix_in_human_output_only() {
+    let temp = TempDir::new().expect("temp dir");
+    let source = temp.child("hello.bin");
+    fs::write(source.path(), b"hello world").expect("fixture");
+
+    let human = command()
+        .arg("compress")
+        .arg(source.path())
+        .args(["-o", "-"])
+        .assert()
+        .failure()
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8_lossy(&human.stderr);
+    assert!(
+        stderr.starts_with("error: compress output - requires"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("validation failed"), "{stderr}");
+
+    let json = command()
+        .arg("compress")
+        .arg(source.path())
+        .args(["-o", "-", "--json"])
+        .assert()
+        .failure()
+        .get_output()
+        .clone();
+    let stdout = String::from_utf8_lossy(&json.stdout);
+    assert!(
+        stdout.contains("validation failed: compress output -"),
+        "{stdout}"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn filenames_cannot_inject_extra_summary_lines() {

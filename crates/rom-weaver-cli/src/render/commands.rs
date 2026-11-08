@@ -75,7 +75,9 @@ impl OutputSelection {
         };
         let output = std::fs::canonicalize(output).unwrap_or_else(|_| output.clone());
         let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.into());
-        output != path
+        // The emitted path is lossy UTF-8, so compare lossily: a non-UTF-8 `-o` name must still
+        // match its own emitted file and get the `wrote` confirmation.
+        output.to_string_lossy() != path.to_string_lossy()
     }
 }
 

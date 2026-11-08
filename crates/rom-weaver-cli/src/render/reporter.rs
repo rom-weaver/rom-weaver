@@ -167,6 +167,31 @@ impl HumanReporter {
         }
     }
 
+    fn render_succeeded(&self, event: &ProgressEvent) {
+        if event.command != "setup" || !self.quiet || commands::is_dry_run(event) {
+            commands::render_success(&self.surface, event, &self.selection);
+        }
+        if self.verbose {
+            commands::render_verbose(&self.surface, event);
+        } else {
+            let diagnostics = self.surface.diagnostics();
+            for line in self.output_confirmation_lines(event) {
+                diagnostics.line(&line);
+            }
+        }
+    }
+
+    /// Multi-line unsupported labels: only the first line carries the `unsupported:` prefix.
+    fn warn_unsupported_lines(&self, label: &str) {
+        for (index, line) in label.lines().enumerate() {
+            if index == 0 {
+                self.surface.warn(&format!("unsupported: {line}"));
+            } else {
+                self.surface.warn(line);
+            }
+        }
+    }
+
     fn render_terminal(&self, event: &ProgressEvent) {
         if process_cancellation_token().is_cancelled() {
             self.surface.cancelled("cancelled");
@@ -183,30 +208,12 @@ impl HumanReporter {
             }
         }
         match event.status {
-            OperationStatus::Succeeded => {
-                if event.command != "setup" || !self.quiet || commands::is_dry_run(event) {
-                    commands::render_success(&self.surface, event, &self.selection);
-                }
-                if self.verbose {
-                    commands::render_verbose(&self.surface, event);
-                } else {
-                    let diagnostics = self.surface.diagnostics();
-                    for line in self.output_confirmation_lines(event) {
-                        diagnostics.line(&line);
-                    }
-                }
-            }
+            OperationStatus::Succeeded => self.render_succeeded(event),
             OperationStatus::Failed => self
                 .surface
                 .error(&format!("error: {}", human_error_text(&event.label))),
             OperationStatus::Unsupported if event.command == "save-identify" => {
-                for (index, line) in event.label.lines().enumerate() {
-                    if index == 0 {
-                        self.surface.warn(&format!("unsupported: {line}"));
-                    } else {
-                        self.surface.warn(line);
-                    }
-                }
+                self.warn_unsupported_lines(&event.label);
             }
             OperationStatus::Unsupported => self
                 .surface
@@ -221,7 +228,7 @@ impl HumanReporter {
 
 /// Drop the standard `validation failed: ` prefix, which only repeats the `error:` label. The
 /// event text keeps it because `classify_message` and JSON consumers match on it.
-fn human_error_text(label: &str) -> &str {
+pub(crate) fn human_error_text(label: &str) -> &str {
     RomWeaverErrorKind::MESSAGE_PREFIXES
         .iter()
         .find(|(_, kind)| *kind == RomWeaverErrorKind::Validation)

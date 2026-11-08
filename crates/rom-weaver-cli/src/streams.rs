@@ -154,9 +154,10 @@ fn report_error(
         }
         reporter.emit(event);
     } else {
+        let message = error.to_string();
         crate::render::write_stderr(format_args!(
             "error: {}\n",
-            crate::render::display_text(&error.to_string())
+            crate::render::display_text(crate::render::human_error_text(&message))
         ));
     }
 }

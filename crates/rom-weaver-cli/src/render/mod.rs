@@ -7,7 +7,7 @@ mod reporter;
 pub(crate) use commands::format_elapsed_ms;
 pub use prompt::StdinPrompter;
 pub use reporter::HumanReporter;
-pub(crate) use reporter::{clear_progress, with_progress_suspended};
+pub(crate) use reporter::{clear_progress, human_error_text, with_progress_suspended};
 
 use std::borrow::Cow;
 use std::io::{IsTerminal, Write};

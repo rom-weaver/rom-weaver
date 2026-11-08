@@ -126,7 +126,7 @@ Every command accepts these global flags, listed under `Global options` in its h
 
 Native human stdout contains only requested results. An explicit file output is silent on stdout; when stderr is a terminal (and `-q` is not set), `trim`, `patch apply`, `patch create`, and `compress` confirm it on stderr with a `wrote PATH (size, codec)` line, which piped, JSON, and `-q` runs omit. When rom-weaver infers an output name or writes additional files, it prints those names.
 
-`--help` wraps to the terminal width, capped at 100 columns; when stdout is not a terminal it wraps at 100.
+`--help` wraps to the terminal width, up to 100 columns; when stdout is not a terminal it keeps its source line breaks.
 
 Progress, errors, and diagnostic logs use stderr. Elapsed time appears in verbose logs and JSON reports. Human output escapes terminal control characters in filenames and other values; JSON retains the original values through JSON escaping.
 
