@@ -1193,7 +1193,7 @@ fn rejects_an_implausible_declared_target_size() {
 enum StoredCrc {
     /// CRC of the zero-padded 64 KiB block (A-Ptch, UniPatcher).
     ZeroPadded,
-    /// CRC of only the bytes present, 0xffff when none (rom-weaver 0.24.0, RomPatcher.js).
+    /// CRC of only the bytes present, 0xffff when none (rom-weaver 0.24.0).
     PresentBytes,
     /// CRC of the first n bytes of the block, which no convention defines.
     Prefix(usize),

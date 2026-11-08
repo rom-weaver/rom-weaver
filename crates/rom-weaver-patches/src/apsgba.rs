@@ -886,10 +886,8 @@ fn crc16_padded_block(block: &[u8]) -> u16 {
     crc16_bytes(&padded)
 }
 
-/// Checks a stored block CRC16 against the block bytes present in the source or output. The
-/// zero-padded 64 KiB block CRC always matches. A block not wholly inside the file also matches
-/// the CRC over only the bytes present (0xffff when none), which rom-weaver 0.24.0 and RomPatcher.js
-/// wrote. `label` is "Source" or "Target".
+/// Accepts a stored block CRC16 that matches the zero-padded 64 KiB block or only the bytes
+/// present (0xffff when none). The present-bytes form is what rom-weaver 0.24.0 patches carry.
 fn verify_block_crc16(label: &str, offset: usize, stored: u16, present: &[u8]) -> Result<()> {
     let padded = crc16_padded_block(present);
     if padded == stored {
