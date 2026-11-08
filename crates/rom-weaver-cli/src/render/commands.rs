@@ -75,8 +75,7 @@ impl OutputSelection {
         };
         let output = std::fs::canonicalize(output).unwrap_or_else(|_| output.clone());
         let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.into());
-        // The emitted path is lossy UTF-8, so compare lossily: a non-UTF-8 `-o` name must still
-        // match its own emitted file and get the `wrote` confirmation.
+        // Emitted paths are lossy UTF-8; compare lossily or a non-UTF-8 `-o` name never matches its file.
         output.to_string_lossy() != path.to_string_lossy()
     }
 }
@@ -160,9 +159,7 @@ fn wrote_lines(event: &ProgressEvent, include: impl Fn(&Value) -> bool) -> Vec<S
         .collect()
 }
 
-/// Confirmation lines for an `-o/--output` write that the stdout summary leaves silent (files
-/// `shows_file` hides). The reporter gates these on an interactive stderr so scripted and piped
-/// runs stay unchanged.
+/// `wrote PATH (size, codec)` lines for `-o/--output` files that `shows_file` hides from stdout.
 pub(super) fn output_confirmation_lines(
     event: &ProgressEvent,
     selection: &OutputSelection,

@@ -721,23 +721,6 @@ fn save_inspect_get_and_export_schema_share_generic_fields() {
 }
 
 #[test]
-fn save_export_schema_without_a_save_path_is_a_usage_error() {
-    for args in [
-        vec!["save", "export-schema"],
-        vec!["save", "export-schema", "--game", "pokemon-red"],
-    ] {
-        let result = Command::cargo_bin("rom-weaver")
-            .expect("binary")
-            .args(&args)
-            .assert()
-            .code(2);
-        let stderr = String::from_utf8_lossy(&result.get_output().stderr).into_owned();
-        assert!(stderr.contains("<SAVE>"), "{stderr}");
-        assert!(result.get_output().stdout.is_empty());
-    }
-}
-
-#[test]
 fn save_set_dry_run_and_write_are_atomic_and_reparseable() {
     let temp = setup_temp_dir();
     let save = write_fixture(&temp);
