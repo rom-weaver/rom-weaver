@@ -38,7 +38,8 @@ const IPS32_RESERVED_EOF_OFFSET: u64 = 0x45_45_4F_46;
 const UNCHANGED_GAP_COALESCE_LIMIT: usize = 5;
 const RLE_SPLIT_EDGE_THRESHOLD: usize = 8;
 const RLE_SPLIT_MIDDLE_THRESHOLD: usize = 13;
-const DEFAULT_EBP_METADATA_JSON: &str = r#"{"patcher":"EBPatcher","Author":"Unknown","Description":"No description","Title":"Untitled"}"#;
+/// EBPatcher and CoilSnake read lowercase `title`, `author`, and `description` keys.
+const DEFAULT_EBP_METADATA_JSON: &str = r#"{"patcher":"EBPatcher","author":"Unknown","title":"Untitled","description":"No description"}"#;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum IpsFlavor {
@@ -486,14 +487,10 @@ fn parse_ips_file(
                         (None, sniffed)
                     }
                 },
-                IpsFlavor::Ips32 => match trailing_len {
-                    0 => (None, None),
-                    _ => {
-                        return Err(RomWeaverError::Validation(
-                            "IPS32 patch contained unexpected trailing data after EEOF".into(),
-                        ));
-                    }
-                },
+                IpsFlavor::Ips32 => {
+                    ignore_ips32_trailing_bytes(trailing_len, &mut warnings);
+                    (None, None)
+                }
                 IpsFlavor::Ebp => match trailing_len {
                     0 => (None, None),
                     _ => {
@@ -502,9 +499,11 @@ fn parse_ips_file(
                                 "EBP metadata exceeded addressable memory".into(),
                             )
                         })?;
-                        let metadata =
-                            parse_ebp_metadata(parser.read_exact(trailing_len)?.as_slice())?;
-                        (None, Some(metadata))
+                        let metadata = parse_ebp_metadata_or_warn(
+                            parser.read_exact(trailing_len)?.as_slice(),
+                            &mut warnings,
+                        );
+                        (None, metadata)
                     }
                 },
             };
@@ -746,19 +745,18 @@ fn parse_ips_bytes_with_validation(
                         (None, sniffed)
                     }
                 },
-                IpsFlavor::Ips32 => match parser.remaining() {
-                    0 => (None, None),
-                    _ => {
-                        return Err(RomWeaverError::Validation(
-                            "IPS32 patch contained unexpected trailing data after EEOF".into(),
-                        ));
-                    }
-                },
+                IpsFlavor::Ips32 => {
+                    ignore_ips32_trailing_bytes(parser.remaining() as u64, &mut warnings);
+                    (None, None)
+                }
                 IpsFlavor::Ebp => match parser.remaining() {
                     0 => (None, None),
                     _ => {
-                        let metadata = parse_ebp_metadata(parser.read_exact(parser.remaining())?)?;
-                        (None, Some(metadata))
+                        let metadata = parse_ebp_metadata_or_warn(
+                            parser.read_exact(parser.remaining())?,
+                            &mut warnings,
+                        );
+                        (None, metadata)
                     }
                 },
             };
@@ -842,6 +840,32 @@ fn handle_unexpected_ips_trailing_bytes(
 
     warnings.push(format!("ignored {message}"));
     Ok(())
+}
+
+/// Atmosphere's loader, which defines IPS32, stops reading at EEOF, so bytes after it never change
+/// the output.
+fn ignore_ips32_trailing_bytes(trailing_len: u64, warnings: &mut Vec<String>) {
+    if trailing_len > 0 {
+        warnings.push(format!(
+            "ignored {trailing_len} trailing byte(s) after EEOF in IPS32 patch"
+        ));
+    }
+}
+
+/// EBPatcher still applies the records when the metadata after EOF does not parse, so a bad block
+/// costs only the metadata.
+fn parse_ebp_metadata_or_warn(
+    trailing: &[u8],
+    warnings: &mut Vec<String>,
+) -> Option<JsonMap<String, JsonValue>> {
+    let metadata = parse_ebp_metadata(trailing).ok();
+    if metadata.is_none() {
+        warnings.push(format!(
+            "ignored {} byte(s) of EBP metadata that is not a JSON object of strings",
+            trailing.len()
+        ));
+    }
+    metadata
 }
 
 fn handle_zero_length_rle_record(

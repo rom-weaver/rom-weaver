@@ -966,6 +966,7 @@ fn parse_accepts_ips32_records_past_24bit_limit() {
     assert_eq!(parsed.records.len(), 1);
     assert_eq!(parsed.records[0].offset, 0x0100_0000);
     assert_eq!(parsed.truncate_size, None);
+    assert!(parsed.warnings.is_empty(), "{:?}", parsed.warnings);
 }
 
 #[test]
@@ -1071,16 +1072,52 @@ fn parse_accepts_ebp_metadata_after_eof() {
 }
 
 #[test]
-fn parse_rejects_invalid_ebp_metadata_json() {
-    let patch = build_ebp_patch(
-        vec![TestIpsRecord::Literal {
-            offset: 0,
-            data: b"A".to_vec(),
-        }],
-        "{invalid-json}",
-    );
-    let error = parse_ips_bytes(&patch, IpsFlavor::Ebp).expect_err("invalid metadata");
-    assert!(error.to_string().contains("EBP metadata is not valid JSON"));
+fn apply_ignores_unreadable_ebp_metadata_with_a_warning() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    fs::write(&input_path, b"abcd").expect("fixture");
+    let trailers: [(&str, &[u8]); 4] = [
+        ("not-json", b"{invalid-json}"),
+        ("not-object", br#"["a"]"#),
+        (
+            "non-string-value",
+            br#"{"patcher":"EBPatcher","version":2}"#,
+        ),
+        ("not-utf8", &[0xff, 0xfe, 0x00, 0x01]),
+    ];
+    for (name, trailer) in trailers {
+        let mut patch = build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 1,
+                data: b"Z".to_vec(),
+            }],
+            None,
+        );
+        patch.extend_from_slice(trailer);
+        let patch_path = temp.child(&format!("{name}.ebp"));
+        let output_path = temp.child(&format!("{name}.bin"));
+        fs::write(&patch_path, &patch).expect("fixture");
+        let handler = IpsPatchHandler::new_ebp(&EBP);
+        let context = test_context_with_threads(&temp, 1);
+
+        let report = handler.parse(&patch_path, &context).expect(name);
+        assert!(
+            report.label.contains("ignored") && !report.label.contains("and metadata"),
+            "{name}: {}",
+            report.label
+        );
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path.clone(),
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &context,
+            )
+            .expect(name);
+        assert_eq!(fs::read(&output_path).expect("output"), b"aZcd", "{name}");
+    }
 }
 
 #[test]
@@ -1151,7 +1188,11 @@ fn create_round_trips_and_writes_default_ebp_metadata() {
     assert!(patch.ends_with(DEFAULT_EBP_METADATA_JSON.as_bytes()));
     let parsed = parse_ips_bytes(&patch, IpsFlavor::Ebp).expect("parse");
     assert_eq!(parsed.truncate_size, None);
-    assert!(parsed.metadata.is_some());
+    let metadata = parsed.metadata.expect("metadata");
+    // EBPatcher's EBPPatch.loadMetadata reads exactly these lowercase keys.
+    for key in ["patcher", "title", "author", "description"] {
+        assert!(metadata.get(key).is_some_and(JsonValue::is_string), "{key}");
+    }
 
     handler
         .apply(
@@ -1353,9 +1394,12 @@ fn probe_reports_extension_confidence_for_every_flavor() {
 }
 
 #[test]
-fn parse_rejects_trailing_data_after_the_ips32_footer() {
+fn apply_ignores_trailing_data_after_the_ips32_footer_with_a_warning() {
     let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
     let patch_path = temp.child("trailing.ips32");
+    let output_path = temp.child("output.bin");
+    fs::write(&input_path, b"abcd").expect("fixture");
     let mut bytes = build_ips32_patch(vec![TestIpsRecord::Literal {
         offset: 0,
         data: b"AB".to_vec(),
@@ -1363,20 +1407,27 @@ fn parse_rejects_trailing_data_after_the_ips32_footer() {
     bytes.extend_from_slice(b"junk");
     fs::write(&patch_path, &bytes).expect("fixture");
 
-    let bytes_error = parse_ips_bytes(&bytes, IpsFlavor::Ips32)
-        .expect_err("bytes parser should reject trailing data");
-    assert!(
-        bytes_error.to_string().contains("after EEOF"),
-        "unexpected error: {bytes_error}"
+    let parsed = parse_ips_bytes(&bytes, IpsFlavor::Ips32).expect("bytes parser");
+    assert_eq!(
+        parsed.warnings,
+        ["ignored 4 trailing byte(s) after EEOF in IPS32 patch"]
     );
 
-    let file_error = IpsPatchHandler::new_ips32(&IPS32)
-        .parse(&patch_path, &test_context_with_threads(&temp, 1))
-        .expect_err("file parser should reject trailing data");
-    assert!(
-        file_error.to_string().contains("after EEOF"),
-        "unexpected error: {file_error}"
-    );
+    let handler = IpsPatchHandler::new_ips32(&IPS32);
+    let context = test_context_with_threads(&temp, 1);
+    let report = handler.parse(&patch_path, &context).expect("file parser");
+    assert!(report.label.contains("after EEOF"), "{}", report.label);
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &context,
+        )
+        .expect("apply");
+    assert_eq!(fs::read(&output_path).expect("output"), b"ABcd");
 }
 
 #[test]
@@ -1894,28 +1945,27 @@ fn probing_selects_the_ebp_flavor_from_the_file_extension() {
     let temp = TestDir::new();
     let as_ebp = temp.child("flavored.ebp");
     let as_ips = temp.child("flavored.ips");
-    let bytes = build_ebp_patch(
+    // Three bytes after EOF are a truncate size to IPS but (unreadable) metadata to EBP.
+    let mut bytes = build_ips_patch(
         vec![TestIpsRecord::Literal {
             offset: 0,
             data: b"A".to_vec(),
         }],
-        "{not json",
+        None,
     );
+    bytes.extend_from_slice(&[0x00, 0x00, 0x80]);
     fs::write(&as_ebp, &bytes).expect("ebp fixture");
     fs::write(&as_ips, &bytes).expect("ips fixture");
 
-    let error = probe_ips_records(&as_ebp).expect_err("EBP metadata is parsed for a .ebp file");
-    assert!(
-        error.to_string().contains("not valid JSON"),
-        "unexpected error: {error}"
-    );
+    let as_ebp_probe = probe_ips_records(&as_ebp)
+        .expect("ebp probe")
+        .expect("EBP patch");
+    assert_eq!(as_ebp_probe.truncate_size, None);
 
-    // The same bytes under a .ips name are classic IPS, whose probe ignores the
-    // trailing block instead of decoding it as metadata.
-    let probed = probe_ips_records(&as_ips)
+    let as_ips_probe = probe_ips_records(&as_ips)
         .expect("ips probe")
         .expect("IPS patch");
-    assert_eq!(probed.records.len(), 1);
+    assert_eq!(as_ips_probe.truncate_size, Some(128));
 }
 
 #[test]

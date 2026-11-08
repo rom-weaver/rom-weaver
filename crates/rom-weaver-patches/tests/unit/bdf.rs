@@ -584,6 +584,44 @@ fn apply_rejects_negative_add_and_copy_lengths() {
 }
 
 #[test]
+fn apply_reads_negative_zero_control_fields_as_zero() {
+    // bspatch decodes a set sign bit with a zero magnitude as 0; no conforming encoder writes it.
+    const NEGATIVE_ZERO: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0x80];
+    let zero = super::encode_bsdiff_i64(0);
+    let two = super::encode_bsdiff_i64(2);
+    // Each case is two control records (add, copy, seek) and the bytes they produce.
+    let cases = [
+        (
+            "negative-zero-seek",
+            [two, zero, NEGATIVE_ZERO, two, zero, zero],
+            &[11u8, 21, 31, 41][..],
+        ),
+        (
+            "negative-zero-copy",
+            [two, NEGATIVE_ZERO, zero, two, zero, zero],
+            &[11, 21, 31, 41][..],
+        ),
+        (
+            "negative-zero-add",
+            [two, zero, zero, NEGATIVE_ZERO, zero, zero],
+            &[11, 21][..],
+        ),
+    ];
+    let temp = TestDir::new();
+    for (name, control_fields, expected) in cases {
+        let patch = build_raw_bsdiff_patch(
+            &bzip2_encode(&control_fields.concat()),
+            &bzip2_encode(&vec![1u8; expected.len()]),
+            &bzip2_encode(&[]),
+            expected.len() as i64,
+        );
+        let output = apply_bdf(&temp, name, &[10u8, 20, 30, 40], &patch, 1)
+            .unwrap_or_else(|error| panic!("{name}: {error}"));
+        assert_eq!(output, expected, "{name}");
+    }
+}
+
+#[test]
 fn apply_reads_copy_segments_from_the_extra_payload() {
     let temp = TestDir::new();
     let output = apply_bdf(

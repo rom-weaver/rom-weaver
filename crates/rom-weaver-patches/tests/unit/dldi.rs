@@ -619,15 +619,6 @@ fn parse_rejects_malformed_dldi_headers() {
     huge_exponent[DO_DRIVER_SIZE] = 200;
     let error = parse_dldi_error(&temp, "huge-exponent.dldi", &huge_exponent);
     assert!(error.contains("exceeds platform limits"));
-
-    // The header declares 512 bytes, but the file holds only its 128-byte header.
-    let mut over_declared = build_dldi_header_block();
-    over_declared[DO_DRIVER_SIZE] = 9;
-    let error = parse_dldi_error(&temp, "over-declared.dldi", &over_declared);
-    assert!(
-        error.contains("declares 512 byte(s), but only 128 byte(s) are available"),
-        "unexpected error: {error}"
-    );
 }
 
 #[test]
@@ -911,4 +902,113 @@ fn apply_read_only_input_0464() {
         &target,
         0o464,
     );
+}
+
+/// dlditool copies exactly the bytes in the driver file and never requires the file to span the
+/// `1 << driverSize` slot, so real drivers that stop before their BSS are valid.
+#[test]
+fn parse_accepts_a_driver_file_shorter_than_its_declared_size() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("short.dldi");
+    let mut header_only = build_dldi_header_block();
+    header_only[DO_DRIVER_SIZE] = 9;
+    fs::write(&patch_path, &header_only).expect("fixture");
+
+    let report = DldiPatchHandler::new(&DLDI)
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect("parse");
+    assert!(
+        report.label.contains("(512 byte(s))"),
+        "unexpected label: {}",
+        report.label
+    );
+}
+
+fn read_slot_i32(output: &[u8], slot_offset: usize, field: usize) -> i32 {
+    let start = slot_offset + field;
+    i32::from_le_bytes(output[start..start + 4].try_into().expect("len"))
+}
+
+fn apply_dldi(temp: &TestDir, input: &[u8], patch: &[u8]) -> Vec<u8> {
+    let input_path = temp.child("input.nds");
+    let patch_path = temp.child("driver.dldi");
+    let output_path = temp.child("output.nds");
+    fs::write(&input_path, input).expect("fixture");
+    fs::write(&patch_path, patch).expect("fixture");
+    DldiPatchHandler::new(&DLDI)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(temp, 1),
+        )
+        .expect("apply");
+    fs::read(output_path).expect("output")
+}
+
+/// A stub with text_start 0 locates itself from its own startup pointer (dlditool.c reads
+/// `startup - DO_code` before copying the driver over the stub).
+#[test]
+fn apply_derives_the_memory_offset_from_the_stub_startup_when_text_start_is_zero() {
+    let slot_offset = 0x200;
+    let base = 0xBF80_0000u32 as i32;
+    let patch = build_test_dldi_driver(8, base, "Driver", FIX_ALL | FIX_GLUE | FIX_GOT | FIX_BSS);
+
+    // (stub startup, memory offset it implies); the patch's own startup is base + 0x80.
+    for (stub_startup, mem_offset) in [(0x0200_0080, 0x0200_0000), (0, -0x80)] {
+        let temp = TestDir::new();
+        let mut input = build_test_app_with_slot(slot_offset, 12, 0x0200_0000, "Stub");
+        write_i32(&mut input, slot_offset + DO_TEXT_START, 0);
+        write_i32(&mut input, slot_offset + DO_STARTUP, stub_startup);
+
+        let output = apply_dldi(&temp, &input, &patch);
+
+        let field = |name| read_slot_i32(&output, slot_offset, name);
+        assert_eq!(field(DO_TEXT_START), mem_offset, "{stub_startup}");
+        assert_eq!(field(DO_DATA_END), mem_offset + 0x100, "{stub_startup}");
+        assert_eq!(field(DO_STARTUP), mem_offset + 0x80, "{stub_startup}");
+        assert_eq!(field(DO_READ_SECTORS), mem_offset + 0x88, "{stub_startup}");
+        // A pointer into the driver's own text/data is relocated too.
+        assert_eq!(field(DO_CODE + 4), mem_offset + 0xD0, "{stub_startup}");
+    }
+}
+
+/// dlditool's fix-up loops run zero times for an empty or inverted range and its BSS clear only
+/// touches the slot, so none of these driver shapes make it fail.
+#[test]
+fn apply_tolerates_empty_inverted_and_oversized_section_ranges() {
+    let slot_offset = 0x200;
+    let mem_offset = 0x0200_0000;
+    let input = build_test_app_with_slot(slot_offset, 12, mem_offset, "Stub");
+
+    // Inverted glue range with FIX_GLUE only: the pointer at 0xA0 is left unrelocated.
+    let base = 0xBF80_0000u32 as i32;
+    let mut inverted_glue = build_test_dldi_driver(8, base, "Glue", FIX_GLUE);
+    write_i32(&mut inverted_glue, DO_GLUE_START, base + 0xB0);
+    write_i32(&mut inverted_glue, DO_GLUE_END, base + 0xA0);
+    let output = apply_dldi(&TestDir::new(), &input, &inverted_glue);
+    assert_eq!(read_slot_i32(&output, slot_offset, 0xA0), base + 0x80);
+
+    // Empty glue range at address 0 with a positive base: the slot-relative index is negative.
+    let positive_base = 0x0C00_0000;
+    let mut empty_glue = build_test_dldi_driver(8, positive_base, "Glue", FIX_GLUE);
+    write_i32(&mut empty_glue, DO_GLUE_START, 0);
+    write_i32(&mut empty_glue, DO_GLUE_END, 0);
+    let output = apply_dldi(&TestDir::new(), &input, &empty_glue);
+    assert_eq!(
+        read_slot_i32(&output, slot_offset, DO_STARTUP),
+        mem_offset + 0x80
+    );
+
+    // BSS running past the 256-byte driver: only the part inside the slot is cleared.
+    let mut long_bss = build_test_dldi_driver(8, base, "Bss", FIX_BSS);
+    write_i32(&mut long_bss, DO_BSS_START, base + 0xF0);
+    write_i32(&mut long_bss, DO_BSS_END, base + 0x200);
+    long_bss[0xE0..0x100].fill(0x7F);
+    let output = apply_dldi(&TestDir::new(), &input, &long_bss);
+    let slot = &output[slot_offset..slot_offset + 0x100];
+    assert!(slot[0xE0..0xF0].iter().all(|byte| *byte == 0x7F));
+    assert!(slot[0xF0..0x100].iter().all(|byte| *byte == 0));
 }

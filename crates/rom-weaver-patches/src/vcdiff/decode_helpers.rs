@@ -58,6 +58,118 @@ pub(super) fn native_decode_error(
         window.output_offset
     ))
 }
+
+/// First default-code-table COPY mode that reads a one-byte "same" cache index instead of a
+/// varint address (RFC 3284 section 5.3 with 4 near and 3 same slots).
+const COPY_MODE_SAME_START: u8 = 6;
+
+/// Walks a window's instruction section with the default code table before the instruction
+/// engine runs. It rejects instructions that write past the declared target window (xdelta3's
+/// "size too large"), so a hostile size never reaches an allocation, and sections with bytes the
+/// instructions never consume (xdelta3's "extra data section" and "extra address section").
+pub(super) fn ensure_instructions_match_sections(
+    window: &WindowIndex,
+    data: &[u8],
+    inst: &[u8],
+    addr: &[u8],
+) -> Result<()> {
+    let code_table = default_code_table();
+    let sections = WindowSections {
+        window,
+        data,
+        inst,
+        addr,
+    };
+    let mut cursor = SectionCursor::default();
+
+    while let Some(&opcode) = inst.get(cursor.inst_pos) {
+        cursor.inst_pos += 1;
+        let entry = code_table[usize::from(opcode)];
+        for (kind, table_size) in [(entry.type1, entry.size1), (entry.type2, entry.size2)] {
+            if kind != XD3_NOOP {
+                cursor.consume(kind, table_size, &sections)?;
+            }
+        }
+    }
+
+    if cursor.data_pos < data.len() {
+        return Err(invalid_instructions(window, "extra data section"));
+    }
+    if cursor.addr_pos < addr.len() {
+        return Err(invalid_instructions(window, "extra address section"));
+    }
+    Ok(())
+}
+
+struct WindowSections<'a> {
+    window: &'a WindowIndex,
+    data: &'a [u8],
+    inst: &'a [u8],
+    addr: &'a [u8],
+}
+
+/// How far [`ensure_instructions_match_sections`] has read into each section, and how many
+/// target bytes the instructions so far write.
+#[derive(Default)]
+struct SectionCursor {
+    inst_pos: usize,
+    data_pos: usize,
+    addr_pos: usize,
+    written: u64,
+}
+
+impl SectionCursor {
+    /// Consumes one half of a code-table entry from the sections.
+    fn consume(&mut self, kind: u8, table_size: u8, sections: &WindowSections) -> Result<()> {
+        let window = sections.window;
+        let size = if table_size == 0 {
+            let (size, consumed) = oxidelta_varint::read_u32(&sections.inst[self.inst_pos..])
+                .map_err(|error| {
+                    invalid_instructions(window, &format!("bad instruction size: {error}"))
+                })?;
+            self.inst_pos += consumed;
+            size
+        } else {
+            u32::from(table_size)
+        };
+        self.written += u64::from(size);
+        if self.written > window.target_window_size {
+            return Err(invalid_instructions(
+                window,
+                "instruction size too large for the target window",
+            ));
+        }
+        match kind {
+            XD3_ADD => self.data_pos += size as usize,
+            XD3_RUN => self.data_pos += 1,
+            _ => self.addr_pos += copy_address_len(kind, sections, self.addr_pos)?,
+        }
+        if self.data_pos > sections.data.len() {
+            return Err(invalid_instructions(window, "data section underflow"));
+        }
+        if self.addr_pos > sections.addr.len() {
+            return Err(invalid_instructions(window, "address section underflow"));
+        }
+        Ok(())
+    }
+}
+
+/// Bytes a COPY of mode `kind - XD3_CPY` reads from the address section at `addr_pos`.
+fn copy_address_len(kind: u8, sections: &WindowSections, addr_pos: usize) -> Result<usize> {
+    if kind - XD3_CPY >= COPY_MODE_SAME_START {
+        return Ok(1);
+    }
+    let remaining = sections.addr.get(addr_pos..).unwrap_or_default();
+    let (_, consumed) = oxidelta_varint::read_u64(remaining).map_err(|error| {
+        invalid_instructions(sections.window, &format!("address decode: {error}"))
+    })?;
+    Ok(consumed)
+}
+
+fn invalid_instructions(window: &WindowIndex, message: &str) -> RomWeaverError {
+    native_decode_error(OxideltaDecodeError::InvalidInput(message.into()), window)
+}
+
 pub(super) fn read_section<R: Read + Seek>(
     reader: &mut R,
     start: u64,

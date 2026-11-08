@@ -1,16 +1,16 @@
 use std::{
     fs::{self, File},
-    io::{BufReader, Read, Seek, SeekFrom, Write},
+    io::{BufReader, Seek, SeekFrom, Write},
     path::Path,
 };
 
 use tracing::{debug, trace};
 
 use rom_weaver_core::{
-    FormatDescriptor, IoOp, IoResultExt, N64_BIG_ENDIAN_MAGIC, OperationContext, OperationFamily,
+    FormatDescriptor, IoOp, IoResultExt, N64ByteOrder, OperationContext, OperationFamily,
     OperationReport, PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler,
     PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
-    ThreadCapability,
+    ThreadCapability, read_up_to,
 };
 
 #[cfg(test)]
@@ -24,6 +24,7 @@ use crate::shared::threading::{
 };
 
 const APS_N64_MAGIC: &[u8; 5] = b"APS10";
+const APS_SIMPLE_MODE: u8 = 0x00;
 const APS_N64_MODE: u8 = 0x01;
 const APS_RECORD_RLE: u8 = 0x00;
 const APS_DESCRIPTION_SIZE: usize = 50;
@@ -35,6 +36,12 @@ const APS_DEFAULT_DESCRIPTION: &str = "no description";
 const APS_DEFAULT_ENCODING_METHOD: u8 = 0;
 const APS_N64_CART_ID_OFFSET: u64 = 0x3C;
 const APS_N64_CRC_OFFSET: u64 = 0x10;
+/// Bytes of a ROM that hold every field the type 1 header copies: cart ID, both country offsets
+/// (0x3E, or 0x3F for byte-swapped ROMs) and the CRC at 0x10.
+const APS_N64_ROM_HEADER_BYTES: usize = 0x40;
+/// Original-format byte of a patch made from a byte-swapped (Doctor V64) ROM; every other ROM is 1.
+const APS_N64_FORMAT_BYTE_SWAPPED: u8 = 0;
+const APS_N64_FORMAT_OTHER: u8 = 1;
 const APS_CREATE_CHUNK_BYTES: usize = 1024 * 1024;
 
 pub struct ApsN64PatchHandler {
@@ -60,8 +67,9 @@ impl PatchHandler for ApsN64PatchHandler {
         let patch = parse_aps_file(patch_path)?;
         let validation_label = if let Some(n64_header) = &patch.n64_header {
             format!(
-                "; n64 source cart id {}; n64 source crc {}",
-                format_cart_id(n64_header.cart_id),
+                "; n64 source cart id {}; n64 source country {}; n64 source crc {}",
+                format_bytes_hex(&n64_header.cart_id),
+                format_bytes_hex(&[n64_header.country]),
                 format_bytes_hex(&n64_header.crc)
             )
         } else {
@@ -107,13 +115,7 @@ impl PatchHandler for ApsN64PatchHandler {
         );
         let patch = parse_aps_file(patch_path)?;
         let validate_checksums = context.validate_source_checks();
-
-        if validate_checksums
-            && patch.header_type == APS_N64_MODE
-            && let Some(n64_header) = &patch.n64_header
-        {
-            validate_n64_source(&request.input, n64_header)?;
-        }
+        check_n64_source(&patch, &request.input, validate_checksums)?;
 
         let input_size = fs::metadata(&request.input)?.len();
         crate::ensure_plausible_output_size(
@@ -191,13 +193,7 @@ impl PatchHandler for ApsN64PatchHandler {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
         let patch = parse_aps_file(patch_path)?;
         let validate_checksums = context.validate_source_checks();
-
-        if validate_checksums
-            && patch.header_type == APS_N64_MODE
-            && let Some(n64_header) = &patch.n64_header
-        {
-            validate_n64_source(&request.input, n64_header)?;
-        }
+        check_n64_source(&patch, &request.input, validate_checksums)?;
         crate::ensure_plausible_output_size(
             self.descriptor.name,
             patch.output_size,
@@ -272,10 +268,6 @@ impl PatchHandler for ApsN64PatchHandler {
     }
 }
 
-fn format_cart_id(cart_id: [u8; 3]) -> String {
-    String::from_utf8_lossy(&cart_id).into_owned()
-}
-
 fn format_bytes_hex(bytes: &[u8]) -> String {
     let mut rendered = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
@@ -300,9 +292,12 @@ struct ParsedApsPatch {
     records: Vec<ApsRecord>,
 }
 
+/// The type 1 header fields, in the z64 (Motorola) order the patch stores them.
 #[derive(Debug)]
 struct ApsN64Header {
-    cart_id: [u8; 3],
+    original_format: u8,
+    cart_id: [u8; 2],
+    country: u8,
     crc: [u8; 8],
 }
 
@@ -342,28 +337,11 @@ fn parse_aps_file(path: &Path) -> Result<ParsedApsPatch> {
     let mut parser =
         LabeledFileParser::new(BufReader::new(File::open(path)?), file_len, "APS", "u64");
     let prefix = parser.read_exact(APS_N64_PREFIX_SIZE, "APS header")?;
-    if !prefix.starts_with(APS_N64_MAGIC) {
-        return Err(crate::coded_validation(
-            "APS_N64_HEADER_INVALID",
-            "Patch header invalid",
-        ));
-    }
-
-    let header_type = prefix[APS_N64_MAGIC.len()];
-    let _encoding_method = prefix[APS_N64_MAGIC.len() + 1];
-    let _description = decode_description(
-        &prefix[APS_N64_MAGIC.len() + 2..APS_N64_MAGIC.len() + 2 + APS_DESCRIPTION_SIZE],
-    );
+    let header_type = parse_aps_prefix(&prefix)?;
 
     let n64_header = if header_type == APS_N64_MODE {
         let extra = parser.read_exact(APS_N64_EXTRA_HEADER_SIZE, "APS N64 header")?;
-        let cart_id: [u8; 3] = extra[1..4]
-            .try_into()
-            .map_err(|_| RomWeaverError::Validation("APS cart id bytes were truncated".into()))?;
-        let crc: [u8; 8] = extra[4..12]
-            .try_into()
-            .map_err(|_| RomWeaverError::Validation("APS CRC bytes were truncated".into()))?;
-        Some(ApsN64Header { cart_id, crc })
+        Some(parse_n64_extra_header(&extra)?)
     } else {
         None
     };
@@ -407,6 +385,11 @@ fn parse_aps_file(path: &Path) -> Result<ParsedApsPatch> {
     })
 }
 
+/// Whether `path` parses completely as an N64 APS patch.
+pub(crate) fn is_aps_n64_patch(path: &Path) -> bool {
+    parse_aps_file(path).is_ok()
+}
+
 #[cfg(test)]
 fn parse_aps_bytes(bytes: &[u8]) -> Result<ParsedApsPatch> {
     if bytes.len() < APS_N64_BASE_HEADER_SIZE {
@@ -414,18 +397,7 @@ fn parse_aps_bytes(bytes: &[u8]) -> Result<ParsedApsPatch> {
             "APS patch is too small to contain a valid header".into(),
         ));
     }
-    if !bytes.starts_with(APS_N64_MAGIC) {
-        return Err(crate::coded_validation(
-            "APS_N64_HEADER_INVALID",
-            "Patch header invalid",
-        ));
-    }
-
-    let header_type = bytes[APS_N64_MAGIC.len()];
-    let _encoding_method = bytes[APS_N64_MAGIC.len() + 1];
-    let _description = decode_description(
-        &bytes[APS_N64_MAGIC.len() + 2..APS_N64_MAGIC.len() + 2 + APS_DESCRIPTION_SIZE],
-    );
+    let header_type = parse_aps_prefix(&bytes[..APS_N64_PREFIX_SIZE])?;
 
     let mut cursor = APS_N64_PREFIX_SIZE;
     let n64_header = if header_type == APS_N64_MODE {
@@ -438,18 +410,10 @@ fn parse_aps_bytes(bytes: &[u8]) -> Result<ParsedApsPatch> {
             ));
         }
 
-        cursor += 1; // originalN64Format (unused for apply semantics)
-        let cart_id: [u8; 3] = bytes[cursor..cursor + 3]
-            .try_into()
-            .map_err(|_| RomWeaverError::Validation("APS cart id bytes were truncated".into()))?;
-        cursor += 3;
-        let crc: [u8; 8] = bytes[cursor..cursor + 8]
-            .try_into()
-            .map_err(|_| RomWeaverError::Validation("APS CRC bytes were truncated".into()))?;
-        cursor += 8;
-        cursor += 5; // pad bytes
+        let header = parse_n64_extra_header(&bytes[cursor..header_end])?;
+        cursor = header_end;
 
-        Some(ApsN64Header { cart_id, crc })
+        Some(header)
     } else {
         None
     };
@@ -517,31 +481,167 @@ fn parse_aps_bytes(bytes: &[u8]) -> Result<ParsedApsPatch> {
     })
 }
 
-fn validate_n64_source(input_path: &Path, expected: &ApsN64Header) -> Result<()> {
-    let mut input = File::open(input_path)?;
-    let input_len = input.metadata()?.len();
-    if input_len < APS_N64_CART_ID_OFFSET + 3 || input_len < APS_N64_CRC_OFFSET + 8 {
+/// Checks the source ROM against a type 1 patch like `n64aps`. The original-format check ignores
+/// `validate_checksums` because record offsets only hold in the byte order the patch was made from.
+fn check_n64_source(
+    patch: &ParsedApsPatch,
+    input_path: &Path,
+    validate_checksums: bool,
+) -> Result<()> {
+    let Some(expected) = &patch.n64_header else {
+        return Ok(());
+    };
+    if patch.header_type != APS_N64_MODE {
+        return Ok(());
+    }
+    let rom_head = read_up_to(File::open(input_path)?, APS_N64_ROM_HEADER_BYTES)?;
+    let actual = n64_header_from_rom(&rom_head);
+    trace!(
+        patch_format = expected.original_format,
+        rom_format = actual.original_format,
+        validate_checksums,
+        "aps n64 source header compared"
+    );
+    if actual.original_format != expected.original_format {
         return Err(RomWeaverError::coded(
             rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
-            "Source ROM checksum mismatch",
+            format!(
+                "Source ROM checksum mismatch: the patch was made from a {} ROM but the source is {}; the original-format check cannot be disabled; {}",
+                n64_format_name(expected.original_format),
+                n64_format_name(actual.original_format),
+                original_format_remedy(expected.original_format),
+            ),
         ));
     }
-
-    input.seek(SeekFrom::Start(APS_N64_CART_ID_OFFSET))?;
-    let mut cart_id = [0u8; 3];
-    input.read_exact(&mut cart_id)?;
-
-    input.seek(SeekFrom::Start(APS_N64_CRC_OFFSET))?;
-    let mut crc = [0u8; 8];
-    input.read_exact(&mut crc)?;
-
-    if cart_id != expected.cart_id || crc != expected.crc {
+    if !validate_checksums {
+        return Ok(());
+    }
+    if rom_head.len() < APS_N64_ROM_HEADER_BYTES {
         return Err(RomWeaverError::coded(
             rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
-            "Source ROM checksum mismatch",
+            "Source ROM checksum mismatch: the source is too short to hold an N64 header",
         ));
+    }
+    if actual.cart_id != expected.cart_id {
+        return Err(n64_field_mismatch(
+            "cart ID",
+            &expected.cart_id,
+            &actual.cart_id,
+        ));
+    }
+    if actual.country != expected.country {
+        return Err(n64_field_mismatch(
+            "country",
+            &[expected.country],
+            &[actual.country],
+        ));
+    }
+    if actual.crc != expected.crc {
+        return Err(n64_field_mismatch("CRC", &expected.crc, &actual.crc));
     }
     Ok(())
+}
+
+fn n64_field_mismatch(field: &str, expected: &[u8], actual: &[u8]) -> RomWeaverError {
+    RomWeaverError::coded(
+        rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+        format!(
+            "Source ROM checksum mismatch: {field} is {} in the patch but {} in the source",
+            format_bytes_hex(expected),
+            format_bytes_hex(actual)
+        ),
+    )
+}
+
+fn n64_format_name(original_format: u8) -> &'static str {
+    match original_format {
+        APS_N64_FORMAT_BYTE_SWAPPED => "byte-swapped (v64)",
+        APS_N64_FORMAT_OTHER => "non-v64",
+        _ => "unknown-format",
+    }
+}
+
+/// What to do when the source's byte order differs from a patch's original-format byte. Source
+/// headers only ever read as v64 or non-v64, so a patch with any other byte matches no source.
+fn original_format_remedy(original_format: u8) -> &'static str {
+    match original_format {
+        APS_N64_FORMAT_BYTE_SWAPPED => "rerun with --n64-byte-order byte-swapped",
+        APS_N64_FORMAT_OTHER => "rerun with --n64-byte-order big-endian",
+        _ => "the patch records an unknown original format that no source can match",
+    }
+}
+
+/// Reads the type 1 header fields from the first bytes of a ROM the way `n64caps` and `n64aps`
+/// do: a byte-swapped (v64) ROM has its 16-bit words swapped back, and its country sits at 0x3F
+/// instead of 0x3E. Bytes missing from a short `rom_head` read as zero.
+fn n64_header_from_rom(rom_head: &[u8]) -> ApsN64Header {
+    let mut head = [0u8; APS_N64_ROM_HEADER_BYTES];
+    let copy_len = rom_head.len().min(head.len());
+    head[..copy_len].copy_from_slice(&rom_head[..copy_len]);
+    let byte_swapped = N64ByteOrder::detect(&head) == Some(N64ByteOrder::ByteSwapped);
+    let cart_offset = APS_N64_CART_ID_OFFSET as usize;
+    let crc_offset = APS_N64_CRC_OFFSET as usize;
+
+    let mut cart_id = [head[cart_offset], head[cart_offset + 1]];
+    let mut crc = [0u8; 8];
+    crc.copy_from_slice(&head[crc_offset..crc_offset + 8]);
+    if byte_swapped {
+        cart_id.swap(0, 1);
+        for pair in crc.chunks_exact_mut(2) {
+            pair.swap(0, 1);
+        }
+    }
+    ApsN64Header {
+        original_format: if byte_swapped {
+            APS_N64_FORMAT_BYTE_SWAPPED
+        } else {
+            APS_N64_FORMAT_OTHER
+        },
+        cart_id,
+        country: head[cart_offset + if byte_swapped { 3 } else { 2 }],
+        crc,
+    }
+}
+
+/// Validates the 57-byte standard header and returns the patch type. Like `n64aps`, only patch
+/// type 0 or 1 with encoding method 0 is understood.
+fn parse_aps_prefix(prefix: &[u8]) -> Result<u8> {
+    if !prefix.starts_with(APS_N64_MAGIC) {
+        return Err(crate::coded_validation(
+            "APS_N64_HEADER_INVALID",
+            "Patch header invalid",
+        ));
+    }
+    let header_type = prefix[APS_N64_MAGIC.len()];
+    if header_type != APS_SIMPLE_MODE && header_type != APS_N64_MODE {
+        return Err(RomWeaverError::Validation(format!(
+            "APS patch type {header_type} is not supported; expected 0 (simple) or 1 (N64)"
+        )));
+    }
+    let encoding_method = prefix[APS_N64_MAGIC.len() + 1];
+    if encoding_method != APS_DEFAULT_ENCODING_METHOD {
+        return Err(RomWeaverError::Validation(format!(
+            "APS encoding method {encoding_method} is not supported; expected 0"
+        )));
+    }
+    Ok(header_type)
+}
+
+/// Splits the 17 bytes after the standard header: original format, cart ID, country, CRC, pad.
+fn parse_n64_extra_header(extra: &[u8]) -> Result<ApsN64Header> {
+    let truncated = || RomWeaverError::Validation("APS N64 header was truncated".into());
+    Ok(ApsN64Header {
+        original_format: *extra.first().ok_or_else(truncated)?,
+        cart_id: extra
+            .get(1..3)
+            .and_then(|bytes| bytes.try_into().ok())
+            .ok_or_else(truncated)?,
+        country: *extra.get(3).ok_or_else(truncated)?,
+        crc: extra
+            .get(4..12)
+            .and_then(|bytes| bytes.try_into().ok())
+            .ok_or_else(truncated)?,
+    })
 }
 
 fn apply_aps_records_in_memory(
@@ -723,12 +823,8 @@ fn prepare_aps_write(record: &ApsRecord, output_size: u64) -> Result<PreparedWri
 }
 
 #[cfg(test)]
-fn create_aps_patch_bytes(
-    original_path: &Path,
-    original: &[u8],
-    modified: &[u8],
-) -> Result<CreatedApsPatch> {
-    let n64_header = detect_n64_header(original_path, original);
+fn create_aps_patch_bytes(original: &[u8], modified: &[u8]) -> Result<CreatedApsPatch> {
+    let n64_header = detect_n64_header(original);
     let mut records = Vec::<ApsRecord>::new();
 
     let mut index = 0usize;
@@ -784,7 +880,7 @@ fn create_aps_patch_from_files(
     modified_len: u64,
     context: &OperationContext,
 ) -> Result<CreatedApsPatch> {
-    let n64_header = detect_n64_header_from_path(original_path, original_len)?;
+    let n64_header = detect_n64_header_from_path(original_path)?;
     let modified_len_usize = usize::try_from(modified_len).map_err(|_| {
         RomWeaverError::Validation("APS output size exceeded addressable memory".into())
     })?;
@@ -806,7 +902,7 @@ fn create_aps_patch_from_files(
 }
 
 fn create_aps_patch_with_records(
-    n64_header: Option<DetectedN64Header>,
+    n64_header: Option<ApsN64Header>,
     output_len: u64,
     records: Vec<ApsRecord>,
 ) -> Result<CreatedApsPatch> {
@@ -818,7 +914,7 @@ fn create_aps_patch_with_records(
     bytes.push(if n64_header.is_some() {
         APS_N64_MODE
     } else {
-        0
+        APS_SIMPLE_MODE
     });
     bytes.push(APS_DEFAULT_ENCODING_METHOD);
 
@@ -831,6 +927,7 @@ fn create_aps_patch_with_records(
     if let Some(n64_header) = n64_header {
         bytes.push(n64_header.original_format);
         bytes.extend_from_slice(&n64_header.cart_id);
+        bytes.push(n64_header.country);
         bytes.extend_from_slice(&n64_header.crc);
         bytes.extend_from_slice(&[0u8; 5]);
     }
@@ -873,69 +970,19 @@ fn create_aps_patch_with_records(
     })
 }
 
-#[cfg(test)]
-fn detect_n64_header(original_path: &Path, original: &[u8]) -> Option<DetectedN64Header> {
-    if original.len() < (APS_N64_CART_ID_OFFSET as usize + 3) || original.len() < 0x18 {
+/// The type 1 header for an original whose content is a z64 or v64 ROM; `None` for anything else
+/// (little-endian `.n64` dumps and non-ROM data), which get a type 0 patch.
+fn detect_n64_header(original_head: &[u8]) -> Option<ApsN64Header> {
+    let order = N64ByteOrder::detect(original_head)?;
+    if order == N64ByteOrder::LittleEndian || original_head.len() < APS_N64_ROM_HEADER_BYTES {
         return None;
     }
-    if !original.starts_with(&N64_BIG_ENDIAN_MAGIC) {
-        return None;
-    }
-
-    let mut cart_id = [0u8; 3];
-    cart_id.copy_from_slice(
-        &original[APS_N64_CART_ID_OFFSET as usize..APS_N64_CART_ID_OFFSET as usize + 3],
-    );
-    let mut crc = [0u8; 8];
-    crc.copy_from_slice(&original[APS_N64_CRC_OFFSET as usize..APS_N64_CRC_OFFSET as usize + 8]);
-
-    let original_format = original_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.to_ascii_lowercase().ends_with(".v64"));
-    Some(DetectedN64Header {
-        original_format: if original_format { 0 } else { 1 },
-        cart_id,
-        crc,
-    })
+    Some(n64_header_from_rom(original_head))
 }
 
-fn detect_n64_header_from_path(
-    original_path: &Path,
-    original_len: u64,
-) -> Result<Option<DetectedN64Header>> {
-    if original_len < APS_N64_CART_ID_OFFSET + 3 || original_len < 0x18 {
-        return Ok(None);
-    }
-    let mut original = File::open(original_path)?;
-    let mut magic = [0u8; 4];
-    original.read_exact(&mut magic)?;
-    if magic != N64_BIG_ENDIAN_MAGIC {
-        return Ok(None);
-    }
-    original.seek(SeekFrom::Start(APS_N64_CART_ID_OFFSET))?;
-    let mut cart_id = [0u8; 3];
-    original.read_exact(&mut cart_id)?;
-
-    original.seek(SeekFrom::Start(APS_N64_CRC_OFFSET))?;
-    let mut crc = [0u8; 8];
-    original.read_exact(&mut crc)?;
-
-    let original_format = original_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.to_ascii_lowercase().ends_with(".v64"));
-    Ok(Some(DetectedN64Header {
-        original_format: if original_format { 0 } else { 1 },
-        cart_id,
-        crc,
-    }))
-}
-
-struct DetectedN64Header {
-    original_format: u8,
-    cart_id: [u8; 3],
-    crc: [u8; 8],
+fn detect_n64_header_from_path(original_path: &Path) -> Result<Option<ApsN64Header>> {
+    let original_head = read_up_to(File::open(original_path)?, APS_N64_ROM_HEADER_BYTES)?;
+    Ok(detect_n64_header(&original_head))
 }
 
 #[derive(Debug)]
@@ -974,7 +1021,7 @@ fn create_aps_patch_parallel(
     pool: &SharedThreadPool,
     context: &OperationContext,
 ) -> Result<CreatedApsPatch> {
-    let n64_header = detect_n64_header_from_path(original_path, original_len)?;
+    let n64_header = detect_n64_header_from_path(original_path)?;
     let modified_len_usize = usize::try_from(modified_len).map_err(|_| {
         RomWeaverError::Validation("APS output size exceeded addressable memory".into())
     })?;
@@ -1095,12 +1142,6 @@ fn encode_runs_as_aps_records(runs: Vec<ApsDiffRun>) -> Result<Vec<ApsRecord>> {
         }
     }
     Ok(records)
-}
-
-fn decode_description(bytes: &[u8]) -> String {
-    String::from_utf8_lossy(bytes)
-        .trim_end_matches(['\0', ' '])
-        .to_string()
 }
 
 #[cfg(test)]

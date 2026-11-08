@@ -36,7 +36,7 @@
 Patch handlers implement `rom-weaver-core`'s `PatchHandler` trait. The registry selects a handler from a patch's signature or file extension.
 
 - **Formats.** IPS, IPS32, BPS, UPS, xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS (N64 and GBA), SOLID, MOD/PMSR, DPS, DLDI, GDIFF, HDiffPatch, BSP, PAT, EBP, and other registered formats. NINJA1 is recognized on probe but cannot be applied.
-- **Apply and create.** Most formats round-trip: generate a distributable patch from an original and a modified file, then apply it back. BSP and HDiffPatch can only be applied, not created.
+- **Apply and create.** Most formats round-trip: generate a distributable patch from an original and a modified file, then apply it back. BSP and HDiffPatch can only be applied, not created. HDiffPatch applies single-file `HDIFF13` and `HDIFFSF20` patches; `HDIFFW26`, `ENDSLEY/BSDIFF43`, `HDIFF19` directory diffs, and lz4, brotli, lzham, tuz, or 7zXZ compression are recognized but reported as unsupported.
 - **Validation without a saved ROM.** Most handlers check the patch and source directly. BSP and VCDIFF/xdelta apply to a temporary output because validation needs to execute the patch.
 - **Checksum discipline.** Formats that carry expected input/output checksums are enforced against `rom-weaver-checksum`. Formats that carry none, such as IPS, cannot prove that the chosen base is correct on their own; the CLI can add that check with `--expect-in`.
 - **Parallel VCDIFF.** The xdelta encoder splits window encoding across threads, and `apply_patch_bytes` exposes in-memory VCDIFF apply for callers that patch individual files inside a container.

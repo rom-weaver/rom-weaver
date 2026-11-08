@@ -79,7 +79,7 @@ VCDIFF is a general-purpose format for describing the difference between any two
 
 It handles large binaries and disc images well, which is why disc projects reach for it. Patches turn up as `.xdelta`, `.delta`, `.dat`, and `.vcdiff`.
 
-An xdelta patch's checks depend on its encoder and options. Optional output-window checks do not identify the entire original file. Separate published source and output checksums remove that uncertainty. rom-weaver applies and creates xdelta and VCDIFF. The two differ on output: `xdelta` adds what xdelta3 adds, an application header (file names plus a `rom-weaver` version tag), Adler32 window checks, and optional secondary compression, while `vcdiff` writes the plain format without them.
+An xdelta patch's checks depend on its encoder and options. Optional output-window checks do not identify the entire original file. A patch made with xdelta3's armor option records BLAKE3 digests of the source and output in its application header, and rom-weaver checks both. Otherwise, separate published source and output checksums remove that uncertainty. rom-weaver applies and creates xdelta and VCDIFF. The two differ on output: `xdelta` adds what xdelta3 adds, an application header (file names plus a `rom-weaver` version tag), Adler32 window checks, and optional secondary compression, while `vcdiff` writes the plain format without them.
 
 ## PPF
 

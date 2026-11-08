@@ -8,6 +8,7 @@ use super::{
     PatchRegistry, explicitly_unsupported_patch_reason_for_name,
     explicitly_unsupported_patch_reason_for_path,
 };
+use crate::test_support::{TestDir, test_context_with_threads};
 
 fn temp_file_path(label: &str) -> PathBuf {
     temp_file_path_with_extension(label, "ips")
@@ -216,6 +217,101 @@ fn probe_prefers_apsgba_signature_over_aps_extension() {
     assert_eq!(handler.descriptor().name, "APSGBA");
 
     let _ = fs::remove_file(path);
+}
+
+/// Writes `source.bin`, `target.bin` and an APSGBA `patch.bin` made by the registry's own handler.
+fn write_apsgba_fixture(temp: &TestDir, source_len: usize, target_len: usize) {
+    let source: Vec<u8> = (0..source_len).map(|index| (index % 251) as u8).collect();
+    let mut target = source.clone();
+    target.resize(target_len, 0xA5);
+    target[0] ^= 0xFF;
+    fs::write(temp.child("source.bin"), &source).expect("source");
+    fs::write(temp.child("target.bin"), &target).expect("target");
+    PatchRegistry::new()
+        .find_by_name("apsgba")
+        .expect("apsgba handler")
+        .create(
+            &rom_weaver_core::PatchCreateRequest {
+                original: temp.child("source.bin"),
+                modified: temp.child("target.bin"),
+                output: temp.child("patch.bin"),
+                format: "APSGBA".into(),
+            },
+            &test_context_with_threads(temp, 1),
+        )
+        .expect("create apsgba patch");
+}
+
+#[test]
+fn probe_routes_an_apsgba_patch_whose_source_size_spells_aps10_to_apsgba() {
+    // Source sizes 0x30 and 0x10030 make the GBA header start "APS10", the N64 magic.
+    for (source_len, target_len) in [(0x30, 0x30 + 200), (0x10030, 0x10030 + 5)] {
+        let temp = TestDir::new();
+        write_apsgba_fixture(&temp, source_len, target_len);
+        let patch = temp.child("patch.bin");
+        assert_eq!(&fs::read(&patch).expect("patch")[..5], b"APS10");
+
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(&patch).expect("apsgba probe");
+        assert_eq!(
+            handler.descriptor().name,
+            "APSGBA",
+            "source size {source_len:#x}"
+        );
+
+        let output = temp.child("output.bin");
+        handler
+            .apply(
+                &rom_weaver_core::PatchApplyRequest {
+                    input: temp.child("source.bin"),
+                    patches: vec![patch],
+                    output: output.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("the probed handler applies the patch");
+        assert_eq!(
+            fs::read(output).expect("output"),
+            fs::read(temp.child("target.bin")).expect("target")
+        );
+    }
+}
+
+#[test]
+fn probe_routes_a_header_only_aps10_looking_file_to_apsgba() {
+    let mut bytes = b"APS1".to_vec();
+    bytes.extend_from_slice(&0x30_u32.to_le_bytes());
+    bytes.extend_from_slice(&0x30_u32.to_le_bytes());
+    assert_probe_for_fixture(
+        temp_file_path_with_extension("aps10-header-only", "bin"),
+        &bytes,
+        "APSGBA",
+        "apsgba probe",
+    );
+}
+
+#[test]
+fn probe_keeps_an_n64_aps_patch_that_is_exactly_one_apsgba_record_long() {
+    // Type 0 header (61 bytes), then plain records filling the file to 12 + 65544 bytes.
+    let mut bytes = b"APS10".to_vec();
+    bytes.extend_from_slice(&[0, 0]);
+    bytes.extend_from_slice(&[b' '; 50]);
+    bytes.extend_from_slice(&0x1_0000_u32.to_le_bytes());
+    let mut offset = 0_u32;
+    while bytes.len() < 12 + 65544 {
+        let data_len = (12 + 65544 - bytes.len() - 5).min(255);
+        bytes.extend_from_slice(&offset.to_le_bytes());
+        bytes.push(data_len as u8);
+        bytes.extend(std::iter::repeat_n(0x11, data_len));
+        offset += data_len as u32;
+    }
+    assert_eq!(bytes.len(), 12 + 65544);
+    assert_probe_for_fixture(
+        temp_file_path_with_extension("aps10-n64-lookalike-length", "bin"),
+        &bytes,
+        "APS",
+        "aps probe",
+    );
 }
 
 #[test]

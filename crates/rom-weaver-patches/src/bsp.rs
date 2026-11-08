@@ -7,12 +7,14 @@ use std::{
 };
 
 use rom_weaver_core::{
-    FormatDescriptor, IoOp, IoResultExt, OperationContext, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, Result,
-    RomWeaverError, SharedThreadPool, ThreadCapability, UnsupportedOp,
+    CancellationToken, FormatDescriptor, IoOp, IoResultExt, OperationContext, OperationReport,
+    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest,
+    Result, RomWeaverError, SharedThreadPool, ThreadCapability, UnsupportedOp,
 };
 use tracing::{debug, trace};
 
+use crate::bsp_native_vm::BspApplyOutcome;
+use crate::shared::labels::append_warning_labels;
 use crate::shared::threading::parallel_chunked_capability;
 
 #[cfg(test)]
@@ -79,31 +81,35 @@ impl BspPatchHandler {
             format = self.descriptor.name,
             output = %output_path.display(), "bsp apply output seeding decision"
         );
-        let apply_result = (|| -> Result<u64> {
+        let apply_result = (|| -> Result<BspApplyOutcome> {
             if let Some(parent) = output_path.parent() {
                 fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
             }
             drop(crate::copy_input_to_output(&request.input, output_path)?);
-            let written = apply_bsp_patch_path(
+            let outcome = apply_bsp_patch_path(
                 patch_path,
                 output_path,
                 execution.used_parallelism.then_some(&pool),
+                context.cancel(),
             )?;
             if staged_path.is_some() {
                 drop(crate::copy_input_to_output(output_path, target_path)?);
             }
-            Ok(written)
+            Ok(outcome)
         })();
         if staged_path.is_some() || apply_result.is_err() {
             let _ = fs::remove_file(output_path);
         }
-        let written = apply_result?;
+        let outcome = apply_result?;
         Ok(crate::patch_success_report(
             self.descriptor,
             "apply",
-            format!(
-                "applied {} patch script and wrote {} byte(s)",
-                self.descriptor.name, written
+            append_warning_labels(
+                format!(
+                    "applied {} patch script and wrote {} byte(s)",
+                    self.descriptor.name, outcome.written
+                ),
+                &outcome.messages,
             ),
             Some(execution),
         ))
@@ -192,8 +198,11 @@ fn apply_bsp_patch_path(
     patch_path: &Path,
     input_path: &Path,
     pool: Option<&SharedThreadPool>,
-) -> Result<u64> {
-    crate::bsp_native_vm::apply_bsp_patch_file_native_from_path(patch_path, input_path, pool)
+    cancel: &CancellationToken,
+) -> Result<BspApplyOutcome> {
+    crate::bsp_native_vm::apply_bsp_patch_file_native_from_path(
+        patch_path, input_path, pool, cancel,
+    )
 }
 
 #[cfg(test)]

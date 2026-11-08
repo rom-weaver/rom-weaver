@@ -16,10 +16,11 @@ use oxidelta::{
     },
     hash::{config, matching::MatchEngine},
     vcdiff::{
-        code_table::Instruction,
+        code_table::{Instruction, XD3_ADD, XD3_CPY, XD3_NOOP, XD3_RUN, default_code_table},
         decoder::{self as oxidelta_decoder, DecodeError as OxideltaDecodeError},
         encoder::{SourceWindow, StreamEncoder, WindowEncoder, WindowSections},
         header::{VCD_ADLER32, VCD_SOURCE, VCD_TARGET, WindowHeader as OxideltaWindowHeader},
+        varint as oxidelta_varint,
     },
 };
 use rayon::prelude::*;
@@ -31,7 +32,7 @@ use rom_weaver_core::{
     ThreadCapability, ThreadExecution, XdeltaSecondaryMode,
 };
 use serde_json::json;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 #[cfg(test)]
 const VCDIFF: rom_weaver_core::FormatDescriptor = rom_weaver_core::FormatDescriptor {
@@ -52,6 +53,10 @@ const XDELTA: rom_weaver_core::FormatDescriptor = rom_weaver_core::FormatDescrip
 #[path = "vcdiff/varint.rs"]
 mod varint;
 use self::varint::*;
+
+#[path = "vcdiff/armor.rs"]
+mod armor;
+use self::armor::*;
 
 #[path = "vcdiff/core.rs"]
 mod core;

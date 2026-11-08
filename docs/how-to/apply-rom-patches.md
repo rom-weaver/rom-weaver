@@ -105,7 +105,7 @@ The same input steps cover APS, APSGBA, RUP, SOLID, GDIFF, PAT/FireFlower, EBP, 
 
 ## Apply an HDiffPatch or HPatchZ patch
 
-Add a single-file `.hdiff`/`.hpatchz` and its matching source. Check the author's digest. Directory patches marked `HDIFF19` are unsupported; use the author's directory-patching tool.
+Add a single-file `.hdiff`/`.hpatchz` and its matching source. Check the author's digest. Directory patches marked `HDIFF19`, windowed `HDIFFW26` patches, `ENDSLEY/BSDIFF43` patches, and patches compressed with lz4, brotli, lzham, tuz, or 7zXZ are recognized but unsupported; use the author's own patching tool for those.
 
 <a id="dreamcast-dcp-patches-need-the-cli"></a>
 

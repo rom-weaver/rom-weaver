@@ -852,7 +852,7 @@ round_trip_test!(
         apply_extra: &[],
         patch_assert: Some(|bytes| {
             assert!(bytes.ends_with(
-            br#"{"patcher":"EBPatcher","Author":"Unknown","Description":"No description","Title":"Untitled"}"#
+            br#"{"patcher":"EBPatcher","author":"Unknown","title":"Untitled","description":"No description"}"#
         ));
         }),
     }
@@ -1188,7 +1188,7 @@ round_trip_test!(
         modified: b"HELlo old worlD",
         apply_extra: &[],
         patch_assert: Some(|bytes| {
-            assert!(String::from_utf8_lossy(bytes).contains("00000000 68 48"));
+            assert!(String::from_utf8_lossy(bytes).contains("00000000: 68 48"));
         }),
     }
 );
@@ -3977,40 +3977,56 @@ fn patch_create_reports_pds_as_explicitly_unsupported() {
 }
 
 #[test]
-fn patch_create_rejects_ips32_at_large_size() {
+fn patch_create_writes_ips32_past_the_24_bit_ips_offset_limit() {
+    // IPS32's 32-bit offsets reach bytes that 24-bit IPS records cannot address.
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
     let modified = temp.child("new.bin");
     let patch = temp.child("output.ips32");
+    let output = temp.child("output.bin");
     write_sparse_bytes(original.path(), 0x0100_0002, 0x0100_0000, b"ab");
     write_sparse_bytes(modified.path(), 0x0100_0002, 0x0100_0000, b"aZ");
+    let original_s = original.path().to_str().expect("path");
+    let patch_s = patch.path().to_str().expect("path");
 
-    let create_output = command_stdout(
+    let create = run_single_json_event(
         &[
             "patch",
             "create",
             "--original",
-            original.path().to_str().expect("path"),
+            original_s,
             "--modified",
             modified.path().to_str().expect("path"),
             "--format",
             "ips32",
             "--output",
-            patch.path().to_str().expect("path"),
+            patch_s,
             "--threads",
             "8",
             "--jsonl",
         ],
-        1,
+        0,
     );
+    assert_patch_envelope(&create, "patch-create", "IPS32", "succeeded");
 
-    let create_json = parse_single_json_line(&create_output);
-    assert_patch_envelope(&create_json, "patch-create", "IPS32", "failed");
+    let apply = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original_s,
+            "--patch",
+            patch_s,
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_patch_envelope(&apply, "patch-apply", "IPS32", "succeeded");
     assert!(
-        create_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("at or above 16.78 MB")
+        fs::read(output.path()).expect("output") == fs::read(modified.path()).expect("modified")
     );
 }
 
@@ -7050,6 +7066,103 @@ fn patch_apply_succeeds_for_valid_bsp_patch() {
 }
 
 #[test]
+fn patch_apply_reports_repeated_bsp_prints_as_separate_numbered_warnings() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let patch = temp.child("repeat.bsp");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), [0x01, 0x02, 0x03]).expect("fixture");
+
+    // `print "dup"; print "dup"; exit 0`, with the string right after the 15 bytes of code.
+    let mut script = Vec::new();
+    for _ in 0..2 {
+        script.push(0x68);
+        script.extend_from_slice(&15u32.to_le_bytes());
+    }
+    script.push(0x06);
+    script.extend_from_slice(&0u32.to_le_bytes());
+    assert_eq!(script.len(), 15);
+    script.extend_from_slice(b"dup\0");
+    fs::write(patch.path(), script).expect("fixture");
+
+    let apply_output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+
+    let apply_json: serde_json::Value = serde_json::from_slice(&apply_output).expect("json");
+    let warnings: Vec<&str> = apply_json["details"]["warnings"]
+        .as_array()
+        .expect("warnings")
+        .iter()
+        .map(|warning| warning.as_str().expect("warning text"))
+        .collect();
+    assert_eq!(
+        warnings,
+        vec!["BSP message 1: dup", "BSP message 2: dup"],
+        "{apply_json}"
+    );
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        vec![0x01, 0x02, 0x03]
+    );
+}
+
+#[test]
+fn patch_apply_failing_bsp_script_reports_its_printed_message() {
+    let temp = setup_temp_dir();
+    let input = temp.child("old.bin");
+    let patch = temp.child("refuse.bsp");
+    let output = temp.child("output.bin");
+    fs::write(input.path(), [0x01, 0x02, 0x03]).expect("fixture");
+
+    // `print "Use the USA v1.0 ROM"; exit 1`, with the string right after the 10 bytes of code.
+    let mut script = vec![0x68];
+    script.extend_from_slice(&10u32.to_le_bytes());
+    script.push(0x06);
+    script.extend_from_slice(&1u32.to_le_bytes());
+    assert_eq!(script.len(), 10);
+    script.extend_from_slice(b"Use the USA v1.0 ROM\0");
+    fs::write(patch.path(), script).expect("fixture");
+
+    let event = run_output_preservation_event(
+        &temp,
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        1,
+    );
+    assert_eq!(event["status"], "failed", "{event}");
+    assert_eq!(event["error_kind"], "validation", "{event}");
+    assert!(
+        event
+            .to_string()
+            .contains("failure status 1; BSP message 1: Use the USA v1.0 ROM"),
+        "{event}"
+    );
+}
+
+#[test]
 fn patch_create_succeeds_for_rup_and_round_trips() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -7701,6 +7814,49 @@ fn patch_apply_hdiff19_directory_patch_reports_unsupported() {
             .expect("label")
             .contains("directory patches (HDIFF19) are not supported")
     );
+}
+
+#[test]
+fn patch_apply_hdiffw26_windowed_patch_reports_unsupported() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let patch = temp.child("update.hdiff");
+    let output = temp.child("output.bin");
+    fs::write(input.path(), b"any source bytes").expect("fixture");
+    let mut windowed = b"HDIFFW26\x51\x00zstd&xxh128\0".to_vec();
+    windowed.extend_from_slice(&[0; 16]);
+    fs::write(patch.path(), windowed).expect("fixture");
+
+    let apply_output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        2,
+    );
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_patch_envelope(
+        &apply_json,
+        "patch-apply",
+        "HDiffPatch/HPatchZ",
+        "unsupported",
+    );
+    assert!(
+        apply_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("recognized but not supported: HDIFFW26 windowed patch")
+    );
+    assert!(!output.path().exists());
 }
 
 #[test]
@@ -10669,24 +10825,47 @@ fn fixture_path(name: &str) -> PathBuf {
 }
 
 fn build_hdiff13_nocomp_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
+    let new_size = u64::try_from(new.len()).expect("new size");
+    let rle_ctrl = hdiff_rle0_ctrl(new_size);
     let mut patch = Vec::new();
     patch.extend_from_slice(b"HDIFF13&nocomp");
     patch.push(0);
     patch.extend_from_slice(&encode_all_varints(&[
-        u64::try_from(new.len()).expect("new size"),
+        new_size,
         u64::try_from(old.len()).expect("old size"),
         0, // cover_count
         0, // cover_buf_size
         0, // compress_cover_buf_size
-        0, // rle_ctrl_buf_size
-        0, // compress_rle_ctrl_buf_size
-        0, // rle_code_buf_size
-        0, // compress_rle_code_buf_size
-        u64::try_from(new.len()).expect("new diff size"),
-        0, // compress_new_data_diff_size
+        u64::try_from(rle_ctrl.len()).expect("rle ctrl size"),
+        0,        // compress_rle_ctrl_buf_size
+        0,        // rle_code_buf_size
+        0,        // compress_rle_code_buf_size
+        new_size, // new_data_diff_size
+        0,        // compress_new_data_diff_size
     ]));
+    patch.extend_from_slice(&rle_ctrl);
     patch.extend_from_slice(new);
     patch
+}
+
+/// HDiffPatch RLE control bytes for a zero run of `len` bytes. patch.c reads the RLE stream
+/// across gaps, so every new byte needs coverage.
+fn hdiff_rle0_ctrl(len: u64) -> Vec<u8> {
+    let Some(mut value) = len.checked_sub(1) else {
+        return Vec::new();
+    };
+    let mut low_groups = Vec::new();
+    while value >= 1 << 5 {
+        low_groups.push((value & 0x7f) as u8);
+        value >>= 7;
+    }
+    let continues = if low_groups.is_empty() { 0 } else { 0x20 };
+    let mut ctrl = vec![value as u8 | continues];
+    while let Some(group) = low_groups.pop() {
+        let continues = if low_groups.is_empty() { 0 } else { 0x80 };
+        ctrl.push(group | continues);
+    }
+    ctrl
 }
 
 fn build_hdiff13_identity_patch_with_cover_and_rle(source: &[u8]) -> Vec<u8> {
@@ -10695,6 +10874,8 @@ fn build_hdiff13_identity_patch_with_cover_and_rle(source: &[u8]) -> Vec<u8> {
     cover.push(0); // old sign=0, old_delta=0
     encode_varint(&mut cover, 0); // copy_length
     encode_varint(&mut cover, source_size); // cover_length
+    let mut rle_ctrl = vec![0xC0]; // rle_type=copy, length=1
+    rle_ctrl.extend_from_slice(&hdiff_rle0_ctrl(source_size - 1));
 
     let mut patch = Vec::new();
     patch.extend_from_slice(b"HDIFF13&nocomp");
@@ -10705,7 +10886,7 @@ fn build_hdiff13_identity_patch_with_cover_and_rle(source: &[u8]) -> Vec<u8> {
         1,           // cover_count
         u64::try_from(cover.len()).expect("cover size"),
         0, // compress_cover_buf_size
-        1, // rle_ctrl_buf_size
+        u64::try_from(rle_ctrl.len()).expect("rle ctrl size"),
         0, // compress_rle_ctrl_buf_size
         1, // rle_code_buf_size
         0, // compress_rle_code_buf_size
@@ -10713,7 +10894,7 @@ fn build_hdiff13_identity_patch_with_cover_and_rle(source: &[u8]) -> Vec<u8> {
         0, // compress_new_data_diff_size
     ]));
     patch.extend_from_slice(&cover);
-    patch.push(0xC0); // rle_type=copy, length=1
+    patch.extend_from_slice(&rle_ctrl);
     patch.push(0x00); // add 0 to keep bytes unchanged
     patch
 }
@@ -13908,13 +14089,14 @@ fn corrupt_solid_patch_fails_apply_without_output_and_fails_validate() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.bin");
     fs::write(rom.path(), [0x11_u8; 64]).expect("rom fixture");
-    // SOLID v4, 2-byte base addresses, one literal primitive at a base offset of 0xff00,
-    // far past the 64-byte ROM, as a flipped address byte produces.
-    let mut solid = b"SP\x04\x01".to_vec();
+    // SOLID v4, 4-byte base addresses, one literal primitive at 0xff000000, as a flipped
+    // high address byte produces. Gaps are zero-filled, so the address alone would size a
+    // 4 GiB output.
+    let mut solid = b"SP\x04\x03".to_vec();
     solid.extend_from_slice(&1_u32.to_le_bytes());
     solid.extend_from_slice(&[0; 16 + 3]);
     solid.extend_from_slice(&[0, 0, 0]);
-    solid.extend_from_slice(&[0x00, 0x01, 0x00, 0xff, b'Z']);
+    solid.extend_from_slice(&[0x00, 0x01, 0x00, 0x00, 0x00, 0xff, b'Z']);
     let patch = temp.child("corrupt.solid");
     fs::write(patch.path(), solid).expect("solid fixture");
     let output = temp.child("out.bin");
@@ -13951,7 +14133,7 @@ fn corrupt_solid_patch_fails_apply_without_output_and_fails_validate() {
             .get_output()
             .clone();
         let stderr = String::from_utf8_lossy(&result.stderr);
-        assert!(stderr.contains("corrupt.solid` is corrupt"), "{stderr}");
+        assert!(stderr.contains("patch.output_size_implausible"), "{stderr}");
         assert!(!output.path().exists(), "{args:?} left an output");
     }
 }
