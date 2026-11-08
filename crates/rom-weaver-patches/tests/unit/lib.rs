@@ -991,3 +991,46 @@ mod plausible_output_size {
         check(4096, 512, &patch).expect("small output");
     }
 }
+
+#[test]
+fn unregistered_create_format_message_names_the_request_and_lists_create_formats() {
+    let registry = PatchRegistry::new();
+    let create_names = registry
+        .handlers()
+        .iter()
+        .filter(|handler| handler.capabilities().create)
+        .map(|handler| handler.descriptor().name)
+        .collect::<Vec<_>>();
+    assert!(
+        registry
+            .handlers()
+            .iter()
+            .any(|handler| !handler.capabilities().create),
+        "the registry must hold an apply-only handler for this test to mean anything"
+    );
+
+    let message = registry.unregistered_create_format_message("xyzzy");
+
+    assert_eq!(
+        message,
+        format!(
+            "requested patch format is not registered: `xyzzy`; supported create formats are {}",
+            create_names.join(", ")
+        )
+    );
+}
+
+#[test]
+fn unregistered_create_format_message_suggests_the_closest_create_format_for_a_typo() {
+    let registry = PatchRegistry::new();
+
+    let message = registry.unregistered_create_format_message("bpz");
+
+    assert!(
+        message.starts_with(
+            "requested patch format is not registered: `bpz`; supported create formats are "
+        ),
+        "{message}"
+    );
+    assert!(message.ends_with("; did you mean `BPS`?"), "{message}");
+}
