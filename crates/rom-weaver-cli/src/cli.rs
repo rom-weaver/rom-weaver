@@ -505,83 +505,110 @@ fn color_override(color: bool, no_color: bool) -> Option<bool> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn normalize_legacy_weave_args(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::OsString> {
-    let is_display = |error: &clap::Error| {
-        matches!(
-            error.kind(),
-            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
-        )
-    };
-    let command = cli_command();
-    let canonical_error = match command.clone().try_get_matches_from(&args) {
-        Ok(_) => return args,
-        Err(error) if is_display(&error) => return args,
-        Err(error) => error,
-    };
-    // Partial matches retain a selected recipe subcommand even when its flags
-    // fail validation; those diagnostics must never become apply diagnostics.
-    if command
+fn is_display_error(error: &clap::Error) -> bool {
+    matches!(
+        error.kind(),
+        clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+    )
+}
+
+/// Partial matches retain a selected recipe subcommand even when its flags
+/// fail validation; those diagnostics must never become apply diagnostics.
+#[cfg(not(target_arch = "wasm32"))]
+fn selects_weave_recipe_subcommand(command: &clap::Command, args: &[std::ffi::OsString]) -> bool {
+    command
         .clone()
         .ignore_errors(true)
-        .try_get_matches_from(&args)
+        .try_get_matches_from(args)
         .is_ok_and(|matches| {
             matches
                 .subcommand_matches("weave")
                 .is_some_and(|weave| weave.subcommand_name().is_some())
         })
-    {
+}
+
+/// A rejected apply flag identifies legacy syntax even when another argument
+/// is missing or invalid. Keep recipe subcommand errors on the canonical path.
+#[cfg(not(target_arch = "wasm32"))]
+fn rejects_a_legacy_apply_flag(command: &clap::Command, error: &clap::Error) -> bool {
+    let Some(invalid) =
+        error
+            .get(clap::error::ContextKind::InvalidArg)
+            .and_then(|value| match value {
+                clap::error::ContextValue::String(value) => Some(value.as_str()),
+                _ => None,
+            })
+    else {
+        return false;
+    };
+    command
+        .find_subcommand("legacy-weave-apply")
+        .expect("legacy apply command")
+        .get_arguments()
+        .any(|arg| {
+            !arg.is_global_set()
+                && (arg
+                    .get_long()
+                    .into_iter()
+                    .chain(arg.get_all_aliases().into_iter().flatten())
+                    .any(|long| invalid == format!("--{long}"))
+                    || arg
+                        .get_short()
+                        .into_iter()
+                        .chain(arg.get_all_short_aliases().into_iter().flatten())
+                        .any(|short| invalid == format!("-{short}")))
+        })
+}
+
+/// Whether `legacy`, cut after the rewritten `weave` token and given a stand-in
+/// `--input`, parses as the legacy apply command.
+#[cfg(not(target_arch = "wasm32"))]
+fn legacy_apply_accepts_input_prefix(legacy: &[std::ffi::OsString], weave_index: usize) -> bool {
+    let mut prefix = legacy[..=weave_index].to_vec();
+    prefix.extend(["--input".into(), "compatibility-probe.bin".into()]);
+    cli_command()
+        .try_get_matches_from(prefix)
+        .is_ok_and(|matches| matches.subcommand_name() == Some("legacy-weave-apply"))
+}
+
+/// `args` with the `weave` token at `weave_index` rewritten to the legacy apply
+/// command, when that reading of the command line is the one the user meant.
+#[cfg(not(target_arch = "wasm32"))]
+fn legacy_apply_reading(
+    args: &[std::ffi::OsString],
+    weave_index: usize,
+    legacy_flag_error: bool,
+) -> Option<Vec<std::ffi::OsString>> {
+    let mut legacy = args.to_vec();
+    legacy[weave_index] = "legacy-weave-apply".into();
+    match cli_command().try_get_matches_from(&legacy) {
+        Ok(matches) => (matches.subcommand_name() == Some("legacy-weave-apply")).then_some(legacy),
+        Err(error) if is_display_error(&error) || legacy_flag_error => {
+            legacy_apply_accepts_input_prefix(&legacy, weave_index).then_some(legacy)
+        }
+        Err(_) => None,
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn normalize_legacy_weave_args(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::OsString> {
+    let command = cli_command();
+    let canonical_error = match command.clone().try_get_matches_from(&args) {
+        Ok(_) => return args,
+        Err(error) if is_display_error(&error) => return args,
+        Err(error) => error,
+    };
+    if selects_weave_recipe_subcommand(&command, &args) {
         return args;
     }
-    // A rejected apply flag identifies legacy syntax even when another argument
-    // is missing or invalid. Keep recipe subcommand errors on the canonical path.
-    let legacy_flag_error = canonical_error
-        .get(clap::error::ContextKind::InvalidArg)
-        .and_then(|value| match value {
-            clap::error::ContextValue::String(value) => Some(value.as_str()),
-            _ => None,
-        })
-        .is_some_and(|invalid| {
-            command
-                .find_subcommand("legacy-weave-apply")
-                .expect("legacy apply command")
-                .get_arguments()
-                .any(|arg| {
-                    !arg.is_global_set()
-                        && (arg
-                            .get_long()
-                            .into_iter()
-                            .chain(arg.get_all_aliases().into_iter().flatten())
-                            .any(|long| invalid == format!("--{long}"))
-                            || arg
-                                .get_short()
-                                .into_iter()
-                                .chain(arg.get_all_short_aliases().into_iter().flatten())
-                                .any(|short| invalid == format!("-{short}")))
-                })
-        });
-    for (index, arg) in args.iter().enumerate().skip(1) {
-        if arg != "weave" {
-            continue;
-        }
-        let mut legacy = args.clone();
-        legacy[index] = "legacy-weave-apply".into();
-        match cli_command().try_get_matches_from(&legacy) {
-            Ok(matches) if matches.subcommand_name() == Some("legacy-weave-apply") => {
-                return legacy;
-            }
-            Err(error) if is_display(&error) || legacy_flag_error => {
-                let mut prefix = legacy[..=index].to_vec();
-                prefix.extend(["--input".into(), "compatibility-probe.bin".into()]);
-                if let Ok(matches) = cli_command().try_get_matches_from(prefix)
-                    && matches.subcommand_name() == Some("legacy-weave-apply")
-                {
-                    return legacy;
-                }
-            }
-            _ => {}
-        }
-    }
-    args
+    let legacy_flag_error = rejects_a_legacy_apply_flag(&command, &canonical_error);
+    let legacy = args
+        .iter()
+        .enumerate()
+        .skip(1)
+        .filter(|(_, arg)| *arg == "weave")
+        .find_map(|(index, _)| legacy_apply_reading(&args, index, legacy_flag_error));
+    legacy.unwrap_or(args)
 }
 
 /// `help --help` and `help patch --help` ask for help about help; print the

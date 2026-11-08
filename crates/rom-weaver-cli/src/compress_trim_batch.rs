@@ -625,18 +625,8 @@ impl CliApp {
             }
         };
 
-        // Unreadable named inputs must fail here: collection would otherwise count them as
-        // unsupported. Directories pass, since trim walks them.
-        for named in &source {
-            if let Some(report) = self.require_readable_path(
-                "trim",
-                OperationFamily::Command,
-                None,
-                named,
-                thread_execution.clone(),
-            ) {
-                return self.finish("trim", report);
-            }
+        if let Some(report) = self.require_readable_trim_inputs(&source, &thread_execution) {
+            return self.finish("trim", report);
         }
 
         let mut skips = TrimSkips::default();
@@ -721,6 +711,24 @@ impl CliApp {
             Self::trim_success_report(summary, state)
         };
         self.finish("trim", report)
+    }
+
+    /// Unreadable named inputs must fail up front: collection would otherwise count
+    /// them as unsupported. Directories pass, since trim walks them.
+    fn require_readable_trim_inputs(
+        &self,
+        sources: &[PathBuf],
+        thread_execution: &Option<ThreadExecution>,
+    ) -> Option<OperationReport> {
+        sources.iter().find_map(|named| {
+            self.require_readable_path(
+                "trim",
+                OperationFamily::Command,
+                None,
+                named,
+                thread_execution.clone(),
+            )
+        })
     }
 
     /// The note about skipped GameCube/Wii discs, or `None` when none were skipped.
