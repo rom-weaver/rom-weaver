@@ -991,9 +991,14 @@ const ZERO_BLOCK_CRC16: u16 = 0x1d0f;
 fn reference_block_crc16(bytes: &[u8]) -> u16 {
     let mut padded = bytes.to_vec();
     padded.resize(super::APS_GBA_BLOCK_SIZE, 0);
+    ccitt_false_crc16(&padded)
+}
+
+/// CRC16/CCITT-FALSE (poly 0x1021, init 0xffff, no reflection, no final xor), worked bitwise.
+fn ccitt_false_crc16(bytes: &[u8]) -> u16 {
     let mut crc = 0xffff_u16;
-    for byte in padded {
-        crc ^= u16::from(byte) << 8;
+    for byte in bytes {
+        crc ^= u16::from(*byte) << 8;
         for _ in 0..8 {
             crc = if crc & 0x8000 != 0 {
                 (crc << 1) ^ 0x1021
@@ -1063,21 +1068,10 @@ fn partial_block_cases() -> Vec<(Vec<u8>, Vec<u8>)> {
 }
 
 #[test]
-fn reference_crc16_matches_the_ccitt_false_check_value() {
-    assert_eq!(reference_block_crc16(&[]), ZERO_BLOCK_CRC16);
+fn handler_crc16_matches_the_ccitt_false_check_value() {
     // The padded block ends in zeros, so only the unpadded check value 0x29b1 pins the algorithm.
-    let mut crc = 0xffff_u16;
-    for byte in b"123456789" {
-        crc ^= u16::from(*byte) << 8;
-        for _ in 0..8 {
-            crc = if crc & 0x8000 != 0 {
-                (crc << 1) ^ 0x1021
-            } else {
-                crc << 1
-            };
-        }
-    }
-    assert_eq!(crc, 0x29b1);
+    assert_eq!(super::crc16_bytes(b"123456789"), 0x29b1);
+    assert_eq!(reference_block_crc16(&[]), ZERO_BLOCK_CRC16);
 }
 
 #[test]
@@ -1192,4 +1186,189 @@ fn rejects_an_implausible_declared_target_size() {
         &test_context_with_threads(&temp, 2),
     );
     crate::test_support::assert_implausible_output_rejected(result, &output_path);
+}
+
+/// How a test patch stores one block CRC16.
+#[derive(Clone, Copy)]
+enum StoredCrc {
+    /// CRC of the zero-padded 64 KiB block (A-Ptch, UniPatcher).
+    ZeroPadded,
+    /// CRC of only the bytes present, 0xffff when none (rom-weaver 0.24.0, RomPatcher.js).
+    PresentBytes,
+    /// CRC of the first n bytes of the block, which no convention defines.
+    Prefix(usize),
+    /// The zero-padded CRC with one bit flipped.
+    Corrupt,
+}
+
+impl StoredCrc {
+    fn value(self, present: &[u8]) -> u16 {
+        match self {
+            Self::ZeroPadded => reference_block_crc16(present),
+            Self::PresentBytes => ccitt_false_crc16(present),
+            Self::Prefix(len) => ccitt_false_crc16(&present[..len]),
+            Self::Corrupt => reference_block_crc16(present) ^ 1,
+        }
+    }
+
+    fn is_refused(self) -> bool {
+        matches!(self, Self::Prefix(_) | Self::Corrupt)
+    }
+}
+
+struct StoredCrcCase {
+    name: &'static str,
+    source_len: usize,
+    target_len: usize,
+    offsets: &'static [u32],
+    source_crc: StoredCrc,
+    target_crc: StoredCrc,
+}
+
+/// A patch with one 16-byte XOR run per record offset whose block CRC16s are stored as the case
+/// says, the target it produces, and the strict-mode error it must raise (if any).
+fn stored_crc_patch(case: &StoredCrcCase) -> (Vec<u8>, Vec<u8>, Vec<u8>, Option<String>) {
+    let block = super::APS_GBA_BLOCK_SIZE;
+    let source = build_source_bytes(case.source_len);
+    let mut xor = vec![0u8; block];
+    xor[..16].fill(0x5a);
+    let mut target = source.clone();
+    target.resize(case.target_len, 0);
+    for offset in case.offsets {
+        for (index, xor_byte) in xor.iter().enumerate() {
+            let position = *offset as usize + index;
+            if position < case.target_len {
+                target[position] = source.get(position).copied().unwrap_or(0) ^ xor_byte;
+            }
+        }
+    }
+    let present = |bytes: &[u8], offset: u32| {
+        let start = (offset as usize).min(bytes.len());
+        bytes[start..(start + block).min(bytes.len())].to_vec()
+    };
+    let mut patch = b"APS1".to_vec();
+    patch.extend_from_slice(&(source.len() as u32).to_le_bytes());
+    patch.extend_from_slice(&(target.len() as u32).to_le_bytes());
+    let mut error = None;
+    for offset in case.offsets {
+        let (source_block, target_block) = (present(&source, *offset), present(&target, *offset));
+        let source_crc = case.source_crc.value(&source_block);
+        let target_crc = case.target_crc.value(&target_block);
+        patch.extend_from_slice(&offset.to_le_bytes());
+        patch.extend_from_slice(&source_crc.to_le_bytes());
+        patch.extend_from_slice(&target_crc.to_le_bytes());
+        patch.extend_from_slice(&xor);
+        let refused = [
+            (
+                case.source_crc.is_refused(),
+                "Source",
+                source_crc,
+                &source_block,
+            ),
+            (
+                case.target_crc.is_refused(),
+                "Target",
+                target_crc,
+                &target_block,
+            ),
+        ]
+        .into_iter()
+        .find(|(refused, ..)| *refused);
+        if let (None, Some((_, label, stored, bytes))) = (&error, refused) {
+            error = Some(format!(
+                "validation failed: {label} checksum invalid at offset {offset}; expected: {stored:04x}, Actual: {:04x} [patch.checksum_mismatch]",
+                reference_block_crc16(bytes)
+            ));
+        }
+    }
+    (source, target, patch, error)
+}
+
+#[test]
+fn block_crc16_accepts_the_legacy_convention_only_for_blocks_not_wholly_inside_the_file() {
+    let block = super::APS_GBA_BLOCK_SIZE;
+    let cases = [
+        StoredCrcCase {
+            name: "partial block, legacy source and target",
+            source_len: 73,
+            target_len: 73,
+            offsets: &[0],
+            source_crc: StoredCrc::PresentBytes,
+            target_crc: StoredCrc::PresentBytes,
+        },
+        StoredCrcCase {
+            name: "blocks wholly past EOF, 0xffff on both sides",
+            source_len: 73,
+            target_len: 73,
+            offsets: &[0, 74],
+            source_crc: StoredCrc::PresentBytes,
+            target_crc: StoredCrc::PresentBytes,
+        },
+        StoredCrcCase {
+            name: "source block past EOF, target block partial",
+            source_len: 100,
+            target_len: block + 10,
+            offsets: &[0, 0x1_0000],
+            source_crc: StoredCrc::PresentBytes,
+            target_crc: StoredCrc::PresentBytes,
+        },
+        StoredCrcCase {
+            name: "legacy source with a zero-padded target",
+            source_len: 73,
+            target_len: 73,
+            offsets: &[0],
+            source_crc: StoredCrc::PresentBytes,
+            target_crc: StoredCrc::ZeroPadded,
+        },
+        StoredCrcCase {
+            name: "partial block matching neither convention, source",
+            source_len: 73,
+            target_len: 73,
+            offsets: &[0],
+            source_crc: StoredCrc::Corrupt,
+            target_crc: StoredCrc::ZeroPadded,
+        },
+        StoredCrcCase {
+            name: "partial block matching neither convention, target",
+            source_len: 73,
+            target_len: 73,
+            offsets: &[0],
+            source_crc: StoredCrc::ZeroPadded,
+            target_crc: StoredCrc::Corrupt,
+        },
+        StoredCrcCase {
+            name: "block wholly inside the file, prefix CRC source",
+            source_len: 2 * block,
+            target_len: 2 * block,
+            offsets: &[0],
+            source_crc: StoredCrc::Prefix(100),
+            target_crc: StoredCrc::ZeroPadded,
+        },
+        StoredCrcCase {
+            name: "block wholly inside the file, empty-input CRC source",
+            source_len: 2 * block,
+            target_len: 2 * block,
+            offsets: &[0],
+            source_crc: StoredCrc::Prefix(0),
+            target_crc: StoredCrc::ZeroPadded,
+        },
+        StoredCrcCase {
+            name: "block wholly inside the file, prefix CRC target",
+            source_len: 2 * block,
+            target_len: 2 * block,
+            offsets: &[0],
+            source_crc: StoredCrc::ZeroPadded,
+            target_crc: StoredCrc::Prefix(100),
+        },
+    ];
+    for case in &cases {
+        let (source, target, patch, error) = stored_crc_patch(case);
+        assert_eq!(
+            error.is_some(),
+            case.source_crc.is_refused() || case.target_crc.is_refused(),
+            "{}",
+            case.name
+        );
+        assert_past_eof_paths(&source, &target, &patch, error.as_deref());
+    }
 }

@@ -335,7 +335,7 @@ fn parse_apsgba_file(path: &Path) -> Result<ParsedApsGbaPatch> {
         .ok_or_else(|| {
             RomWeaverError::Validation("APSGBA patch header length underflowed".into())
         })?;
-    if payload_len % APS_GBA_RECORD_SIZE as u64 != 0 {
+    if !is_apsgba_record_length(file_len) {
         return Err(RomWeaverError::Validation(
             "APSGBA patch has an invalid record payload length".into(),
         ));
@@ -408,7 +408,7 @@ fn parse_apsgba_bytes(bytes: &[u8]) -> Result<ParsedApsGbaPatch> {
         .ok_or_else(|| {
             RomWeaverError::Validation("APSGBA patch header length underflowed".into())
         })?;
-    if payload_len % APS_GBA_RECORD_SIZE != 0 {
+    if !is_apsgba_record_length(bytes.len() as u64) {
         return Err(RomWeaverError::Validation(
             "APSGBA patch has an invalid record payload length".into(),
         ));
@@ -509,16 +509,7 @@ fn apply_apsgba_patch_in_memory(
 
         if validate_checksums {
             let source_slice = source.get(offset..offset + source_len).unwrap_or_default();
-            let actual = crc16_padded_block(source_slice);
-            if actual != record.source_crc16 {
-                return Err(RomWeaverError::coded(
-                    rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
-                    format!(
-                        "Source checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
-                        record.source_crc16, actual
-                    ),
-                ));
-            }
+            verify_block_crc16("Source", offset, record.source_crc16, source_slice)?;
         }
 
         for index in 0..write_len {
@@ -532,16 +523,7 @@ fn apply_apsgba_patch_in_memory(
 
         if validate_checksums {
             let output_slice = output.get(offset..offset + write_len).unwrap_or_default();
-            let actual = crc16_padded_block(output_slice);
-            if actual != record.target_crc16 {
-                return Err(RomWeaverError::coded(
-                    rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
-                    format!(
-                        "Target checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
-                        record.target_crc16, actual
-                    ),
-                ));
-            }
+            verify_block_crc16("Target", offset, record.target_crc16, output_slice)?;
         }
     }
     Ok(())
@@ -562,16 +544,12 @@ fn apply_apsgba_patch_in_place(
         let source_len = read_at_most(source, u64::from(record.offset), &mut source_block)?;
 
         if validate_checksums {
-            let actual_source_crc16 = crc16_padded_block(&source_block[..source_len]);
-            if actual_source_crc16 != record.source_crc16 {
-                return Err(RomWeaverError::coded(
-                    rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
-                    format!(
-                        "Source checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
-                        record.source_crc16, actual_source_crc16
-                    ),
-                ));
-            }
+            verify_block_crc16(
+                "Source",
+                offset,
+                record.source_crc16,
+                &source_block[..source_len],
+            )?;
         }
 
         let write_len = output_len.saturating_sub(offset).min(APS_GBA_BLOCK_SIZE);
@@ -590,16 +568,12 @@ fn apply_apsgba_patch_in_place(
         }
 
         if validate_checksums {
-            let actual_target_crc16 = crc16_padded_block(&patched_block[..write_len]);
-            if actual_target_crc16 != record.target_crc16 {
-                return Err(RomWeaverError::coded(
-                    rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
-                    format!(
-                        "Target checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
-                        record.target_crc16, actual_target_crc16
-                    ),
-                ));
-            }
+            verify_block_crc16(
+                "Target",
+                offset,
+                record.target_crc16,
+                &patched_block[..write_len],
+            )?;
         }
     }
 
@@ -655,16 +629,7 @@ fn prepare_apsgba_write(
     }
 
     if validate_checksums {
-        let actual_source_crc16 = crc16_padded_block(&source_block);
-        if actual_source_crc16 != record.source_crc16 {
-            return Err(RomWeaverError::coded(
-                rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
-                format!(
-                    "Source checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
-                    record.source_crc16, actual_source_crc16
-                ),
-            ));
-        }
+        verify_block_crc16("Source", offset, record.source_crc16, &source_block)?;
     }
 
     let write_len = output_len.saturating_sub(offset).min(APS_GBA_BLOCK_SIZE);
@@ -675,16 +640,7 @@ fn prepare_apsgba_write(
     }
 
     if validate_checksums {
-        let actual_target_crc16 = crc16_padded_block(&patched);
-        if actual_target_crc16 != record.target_crc16 {
-            return Err(RomWeaverError::coded(
-                rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
-                format!(
-                    "Target checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
-                    record.target_crc16, actual_target_crc16
-                ),
-            ));
-        }
+        verify_block_crc16("Target", offset, record.target_crc16, &patched)?;
     }
 
     Ok(PreparedWrite {
@@ -928,6 +884,30 @@ fn crc16_padded_block(block: &[u8]) -> u16 {
     let mut padded = vec![0u8; APS_GBA_BLOCK_SIZE];
     padded[..block.len()].copy_from_slice(block);
     crc16_bytes(&padded)
+}
+
+/// Checks a stored block CRC16 against the block bytes present in the source or output. The
+/// zero-padded 64 KiB block CRC always matches. A block not wholly inside the file also matches
+/// the CRC over only the bytes present (0xffff when none), which rom-weaver 0.24.0 and RomPatcher.js
+/// wrote. `label` is "Source" or "Target".
+fn verify_block_crc16(label: &str, offset: usize, stored: u16, present: &[u8]) -> Result<()> {
+    let padded = crc16_padded_block(present);
+    if padded == stored {
+        return Ok(());
+    }
+    if crc16_bytes(present) == stored {
+        trace!(
+            "APSGBA {} crc16 at offset {offset} matched the legacy present-bytes convention",
+            label.to_lowercase()
+        );
+        return Ok(());
+    }
+    Err(RomWeaverError::coded(
+        rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
+        format!(
+            "{label} checksum invalid at offset {offset}; expected: {stored:04x}, Actual: {padded:04x}"
+        ),
+    ))
 }
 
 /// Whether a patch file of `file_len` bytes is exactly a header plus whole records.
