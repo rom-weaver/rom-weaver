@@ -566,7 +566,12 @@ impl CliApp {
             threads = %args.threads,
             "starting trim command"
         );
-        let filter_patches_only = Self::trim_filter_is_patches_only(&args);
+        let filter_patches_only = args.rom_filter
+            && !args.filter.is_empty()
+            && !args
+                .filter
+                .iter()
+                .any(|kind| matches!(kind, FilterKind::Rom));
         let rom_filter = args.rom_filter_enabled();
         let TrimCommand {
             input: source,
@@ -652,11 +657,10 @@ impl CliApp {
 
         if trim_sources.is_empty() {
             Self::cleanup_temp_paths(&cleanup_paths);
-            let lone_report = Self::lone_unsupported_trim_report(&source, &thread_execution);
-            let report = lone_report.unwrap_or_else(|| {
-                Self::trim_empty_report(report_format, skips, dry_run, thread_execution)
-            });
-            return self.finish("trim", report);
+            return self.finish(
+                "trim",
+                Self::trim_empty_report(report_format, skips, dry_run, thread_execution),
+            );
         }
 
         if let Some(report) = self.validate_trim_output(
@@ -709,16 +713,6 @@ impl CliApp {
         self.finish("trim", report)
     }
 
-    /// Whether the archive filter is on and names only patch kinds, which trim cannot use.
-    fn trim_filter_is_patches_only(args: &TrimCommand) -> bool {
-        args.rom_filter
-            && !args.filter.is_empty()
-            && !args
-                .filter
-                .iter()
-                .any(|kind| matches!(kind, FilterKind::Rom))
-    }
-
     /// Unreadable named inputs must fail up front: collection would otherwise count
     /// them as unsupported. Directories pass, since trim walks them.
     fn require_readable_trim_inputs(
@@ -743,26 +737,6 @@ impl CliApp {
             format!(
                 "{} GameCube/Wii disc(s) were not trimmed because trim does not support them; use `rom-weaver compress` to convert them to RVZ",
                 skips.gamecube_wii
-            )
-        })
-    }
-
-    /// A lone file or archive that cannot be trimmed is an error; folders and
-    /// multi-input runs keep the exit-0 report with skip counts, so they return `None`.
-    fn lone_unsupported_trim_report(
-        source: &[PathBuf],
-        thread_execution: &Option<ThreadExecution>,
-    ) -> Option<OperationReport> {
-        let [only] = source else {
-            return None;
-        };
-        only.is_file().then(|| {
-            OperationReport::failed_with_error(
-                OperationFamily::Command,
-                None,
-                "validate",
-                Self::unsupported_trim_input_error(only),
-                thread_execution.clone(),
             )
         })
     }

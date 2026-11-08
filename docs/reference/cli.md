@@ -608,7 +608,7 @@ rom-weaver --json probe --input game.sfc | jq
 
 ### Exit codes
 
-`rom-weaver` returns `0` on success, `1` when an operation fails, `2` for an unsupported operation or a command-line usage error, and `130` when a run is cancelled. A `trim` given a single file or archive with nothing to trim is an operation failure (`1`); a folder or multi-input run with nothing to trim still returns `0`.
+`rom-weaver` returns `0` on success, `1` when an operation fails, `2` for an unsupported operation or a command-line usage error, and `130` when a run is cancelled. A `trim` given a single file or archive that cannot be trimmed is an operation failure (`1`); a folder or multi-input run with nothing to trim still returns `0`.
 
 ## File permissions
 
