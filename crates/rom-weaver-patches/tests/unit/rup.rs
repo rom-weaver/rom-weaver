@@ -643,17 +643,24 @@ fn apply_normalizes_nes_ines_header_and_preserves_it_on_reverse() {
 }
 
 #[test]
-fn apply_does_not_strip_nes_payload_without_ines_magic() {
+fn apply_strips_a_nes_header_that_lacks_the_dos_eof_byte() {
     let temp = TestDir::new();
     let source_path = temp.child("source.nes");
     let output_path = temp.child("output.nes");
     let patch_path = temp.child("update.rup");
 
-    let source = b"NES!headerless-payload".to_vec();
-    let mut target = source.clone();
-    target[4] ^= 0x5a;
-    fs::write(&source_path, &source).expect("source");
-    fs::write(&patch_path, typed_rup_patch(&source, &target, 1)).expect("patch");
+    // The reference tests only for the three letters "NES" (ninja2.php nes_read).
+    let mut header = b"NES!".to_vec();
+    header.resize(NES_INES_HEADER_SIZE as usize, 0x07);
+    let source_payload = b"headerless-payload".to_vec();
+    let mut target_payload = source_payload.clone();
+    target_payload[4] ^= 0x5a;
+    fs::write(&source_path, [header.as_slice(), &source_payload].concat()).expect("source");
+    fs::write(
+        &patch_path,
+        typed_rup_patch(&source_payload, &target_payload, 1),
+    )
+    .expect("patch");
 
     RupPatchHandler::new(&RUP)
         .apply(
@@ -666,7 +673,10 @@ fn apply_does_not_strip_nes_payload_without_ines_magic() {
         )
         .expect("apply");
 
-    assert_eq!(fs::read(output_path).expect("output"), target);
+    assert_eq!(
+        fs::read(output_path).expect("output"),
+        [header.as_slice(), &target_payload].concat()
+    );
 }
 
 #[test]
@@ -1255,7 +1265,7 @@ fn apply_rejects_input_that_matches_neither_source_nor_target() {
 }
 
 #[test]
-fn apply_uses_source_bytes_for_each_record_even_when_records_overlap() {
+fn apply_composes_overlapping_records_against_the_current_output() {
     let temp = TestDir::new();
     let source_path = temp.child("source.bin");
     let target_path = temp.child("target.bin");
@@ -1311,7 +1321,11 @@ fn apply_uses_source_bytes_for_each_record_even_when_records_overlap() {
         )
         .expect("apply");
 
-    assert_eq!(fs::read(output_path).expect("output"), target);
+    // Bytes 2..3 are covered by both records: 0 ^ 0x01 ^ 0x02.
+    assert_eq!(
+        fs::read(output_path).expect("output"),
+        [0u8, 1, 3, 2, 0, 0, 0, 0]
+    );
 }
 
 #[test]
@@ -1382,14 +1396,17 @@ fn apply_is_deterministic_across_thread_budgets_for_overlapping_records() {
             .expect("single execution")
             .used_parallelism
     );
+    // Overlapping records compose against the current output, so they apply serially.
     assert!(
-        parallel_report
+        !parallel_report
             .thread_execution
             .expect("parallel execution")
             .used_parallelism
     );
+    let single_output = fs::read(output_single).expect("single output");
+    assert_eq!(single_output, [0u8, 1, 3, 2, 0, 0, 0, 0]);
     assert_eq!(
-        fs::read(output_single).expect("single output"),
+        single_output,
         fs::read(output_parallel).expect("parallel output")
     );
 }
@@ -1709,8 +1726,8 @@ fn parse_rejects_a_command_stream_that_ends_mid_record() {
 
 #[test]
 fn parse_rejects_a_vlv_wider_than_sixty_four_bits() {
-    let bytes = rup_patch_with_commands(&[RUP_COMMAND_OPEN_NEW_FILE, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    let error = parse_rup_bytes(&bytes).expect_err("a 9-byte VLV should fail");
+    let bytes = rup_patch_with_commands(&[RUP_COMMAND_OPEN_NEW_FILE, 9, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+    let error = parse_rup_bytes(&bytes).expect_err("a 9-byte VLV with a set high byte should fail");
     assert!(
         error
             .to_string()
@@ -2389,11 +2406,9 @@ fn applying_prepared_records_reports_an_out_of_range_index() {
 }
 
 #[test]
-fn in_place_xor_rejects_oversized_records_and_zero_fills_past_the_input() {
+fn in_place_xor_rejects_oversized_records_and_xors_the_zero_extended_output() {
     let temp = TestDir::new();
-    let input_path = temp.child("in-place-input.bin");
     let output_path = temp.child("in-place-output.bin");
-    fs::write(&input_path, b"ab").expect("input");
     fs::write(&output_path, b"ab\0\0").expect("output");
     let mut file = typed_rup_file(b"ab", b"ab", 0);
     file.records.push(RupRecord {
@@ -2401,13 +2416,12 @@ fn in_place_xor_rejects_oversized_records_and_zero_fills_past_the_input() {
         xor: vec![0x41, 0x42],
     });
 
-    let mut input = File::open(&input_path).expect("open input");
     let mut output = OpenOptions::new()
         .read(true)
         .write(true)
         .open(&output_path)
         .expect("open output");
-    let error = apply_xor_records_in_place(&file, 3, 2, &mut input, &mut output)
+    let error = apply_xor_records_in_place(&file, 3, &mut output)
         .expect_err("a record past the output should fail");
     assert!(
         error
@@ -2416,7 +2430,7 @@ fn in_place_xor_rejects_oversized_records_and_zero_fills_past_the_input() {
         "unexpected error: {error}"
     );
 
-    apply_xor_records_in_place(&file, 4, 2, &mut input, &mut output).expect("in-place apply");
+    apply_xor_records_in_place(&file, 4, &mut output).expect("in-place apply");
     output.flush().expect("flush");
     drop(output);
     assert_eq!(fs::read(&output_path).expect("output"), b"abAB");
@@ -2655,4 +2669,358 @@ fn apply_unif_read_only_input_0464() {
         &target,
         0o464,
     );
+}
+
+fn apply_rup_fixture(
+    temp: &TestDir,
+    patch: &[u8],
+    input: &[u8],
+    context: &rom_weaver_core::OperationContext,
+) -> rom_weaver_core::Result<(rom_weaver_core::OperationReport, Vec<u8>)> {
+    let input_path = temp.child("fixture-input.bin");
+    let patch_path = temp.child("fixture.rup");
+    let output_path = temp.child("fixture-output.bin");
+    fs::write(&input_path, input).expect("input");
+    fs::write(&patch_path, patch).expect("patch");
+    let report = RupPatchHandler::new(&RUP).apply(
+        &PatchApplyRequest {
+            input: input_path,
+            patches: vec![patch_path],
+            output: output_path.clone(),
+        },
+        context,
+    )?;
+    Ok((report, fs::read(output_path).expect("output")))
+}
+
+/// One patch holding the first file entry of each single-entry patch, in order.
+fn chained_rup_patch(single_entry_patches: &[Vec<u8>]) -> Vec<u8> {
+    let files = single_entry_patches
+        .iter()
+        .map(|bytes| parse_rup_bytes(bytes).expect("parse").files.remove(0))
+        .collect::<Vec<_>>();
+    encode_rup_patch(&RupMetadata::default(), &files).expect("chained patch")
+}
+
+#[test]
+fn apply_chains_unnamed_entries_in_order_and_undoes_them_in_reverse() {
+    let first = b"abcdef";
+    let second = b"aBcdef";
+    let third = b"aBcdEf";
+    let patch = chained_rup_patch(&[
+        typed_rup_patch(first, second, 0),
+        typed_rup_patch(second, third, 0),
+    ]);
+    let temp = TestDir::new();
+    let context = test_context_with_threads(&temp, 1);
+
+    let (report, forward) = apply_rup_fixture(&temp, &patch, first, &context).expect("forward");
+    assert_eq!(forward, third);
+    assert!(
+        report.label.contains("chained 2 file entries"),
+        "unexpected label: {}",
+        report.label
+    );
+    let (_, undone) = apply_rup_fixture(&temp, &patch, third, &context).expect("undo");
+    assert_eq!(undone, first);
+
+    // The planner hands apply the first matching entry; the chain still continues from it.
+    let selected =
+        test_context_with_threads(&temp, 1).with_patch_endpoint_selection(PatchEndpointSelection {
+            variant: 0,
+            direction: PatchApplyDirection::Forward,
+        });
+    let (_, forward) = apply_rup_fixture(&temp, &patch, first, &selected).expect("selected");
+    assert_eq!(forward, third);
+}
+
+#[test]
+fn apply_chains_entries_whose_size_changes() {
+    let first = b"ab";
+    let second = b"abcd";
+    let third = b"abXd";
+    let patch = chained_rup_patch(&[
+        create_rup_patch_bytes(first, second).expect("grow").bytes,
+        create_rup_patch_bytes(second, third).expect("edit").bytes,
+    ]);
+    let temp = TestDir::new();
+    let context = test_context_with_threads(&temp, 1);
+
+    let (_, forward) = apply_rup_fixture(&temp, &patch, first, &context).expect("forward");
+    assert_eq!(forward, third);
+    let (_, undone) = apply_rup_fixture(&temp, &patch, third, &context).expect("undo");
+    assert_eq!(undone, first);
+}
+
+fn validate_rup_fixture(
+    temp: &TestDir,
+    patch: &[u8],
+    input: &[u8],
+) -> rom_weaver_core::Result<rom_weaver_core::OperationReport> {
+    let input_path = temp.child("validate-input.bin");
+    let patch_path = temp.child("validate.rup");
+    fs::write(&input_path, input).expect("input");
+    fs::write(&patch_path, patch).expect("patch");
+    RupPatchHandler::new(&RUP).validate(
+        &PatchValidateRequest {
+            input: input_path,
+            patches: vec![patch_path],
+        },
+        &test_context_with_threads(temp, 1),
+    )
+}
+
+/// Entries "ab" -> "abcd" and "abcd" -> "abcdef" chain on input "ab".
+fn growing_chain_patch(first: &[u8], second: &[u8], third: &[u8]) -> Vec<u8> {
+    chained_rup_patch(&[
+        create_rup_patch_bytes(first, second).expect("grow").bytes,
+        create_rup_patch_bytes(second, third)
+            .expect("grow again")
+            .bytes,
+    ])
+}
+
+#[test]
+fn validate_follows_the_chain_apply_follows() {
+    let (first, second, third) = (&b"ab"[..], &b"abcd"[..], &b"abcdef"[..]);
+    let patch = growing_chain_patch(first, second, third);
+    let temp = TestDir::new();
+
+    let report = validate_rup_fixture(&temp, &patch, first).expect("validate");
+    let (_, applied) =
+        apply_rup_fixture(&temp, &patch, first, &test_context_with_threads(&temp, 1))
+            .expect("apply");
+
+    assert_eq!(applied, third);
+    assert!(
+        report.label.contains("output would be 6 byte(s)")
+            && report.label.contains("chained 2 file entries"),
+        "validate disagrees with apply: {}",
+        report.label
+    );
+}
+
+#[test]
+fn validate_rejects_a_broken_record_in_a_later_chain_entry() {
+    let (first, second, third) = (&b"ab"[..], &b"abcd"[..], &b"abcdef"[..]);
+    let mut files = parse_rup_bytes(&growing_chain_patch(first, second, third))
+        .expect("parse")
+        .files;
+    files[1].records.push(RupRecord {
+        offset: 100,
+        xor: vec![1],
+    });
+    let patch = encode_rup_patch(&RupMetadata::default(), &files).expect("patch");
+    let temp = TestDir::new();
+
+    let validate_error = validate_rup_fixture(&temp, &patch, first)
+        .expect_err("a record past the second entry's output should fail validate");
+    let apply_error = apply_rup_fixture(&temp, &patch, first, &test_context_with_threads(&temp, 1))
+        .expect_err("and apply");
+
+    assert!(
+        validate_error
+            .to_string()
+            .contains("record exceeded declared output size"),
+        "{validate_error}"
+    );
+    assert!(
+        apply_error
+            .to_string()
+            .contains("record exceeded declared output size"),
+        "{apply_error}"
+    );
+}
+
+#[test]
+fn parse_endpoints_end_at_the_last_chained_target() {
+    let (first, second, third) = (&b"ab"[..], &b"abcd"[..], &b"abcdef"[..]);
+    let patch = growing_chain_patch(first, second, third);
+    let temp = TestDir::new();
+    let patch_path = temp.child("chain.rup");
+    fs::write(&patch_path, &patch).expect("patch");
+
+    let report = RupPatchHandler::new(&RUP)
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect("parse");
+    let endpoints = report_endpoints(&report);
+
+    // Forward from entry 0 continues through entry 1; reverse from entry 1 continues back to
+    // entry 0; the entries' own ends are unchanged.
+    for (index, size, md5) in [
+        (0, 6, md5_bytes(third)),
+        (1, 2, md5_bytes(first)),
+        (2, 6, md5_bytes(third)),
+        (3, 2, md5_bytes(first)),
+    ] {
+        assert_eq!(endpoints[index]["output"]["size"].as_u64(), Some(size));
+        assert_eq!(
+            endpoints[index]["output"]["checksums"]["md5"].as_str(),
+            Some(format_md5_hex(md5).as_str()),
+            "endpoint {index}"
+        );
+    }
+}
+
+#[test]
+fn apply_picks_the_matching_alternative_variant_without_chaining() {
+    let patch = chained_rup_patch(&[
+        typed_rup_patch(b"abcdef", b"aBcdef", 0),
+        typed_rup_patch(b"uvwxyz", b"uvwXyz", 0),
+    ]);
+    let temp = TestDir::new();
+    let context = test_context_with_threads(&temp, 1);
+
+    let (report, first) = apply_rup_fixture(&temp, &patch, b"abcdef", &context).expect("first");
+    assert_eq!(first, b"aBcdef");
+    assert!(!report.label.contains("chained"), "{}", report.label);
+    let (_, second) = apply_rup_fixture(&temp, &patch, b"uvwxyz", &context).expect("second");
+    assert_eq!(second, b"uvwXyz");
+}
+
+#[test]
+fn apply_composes_duplicate_records_at_one_offset() {
+    let source = [0u8; 8];
+    let target = [0u8, 0, 3, 3, 0, 0, 0, 0];
+    let mut file = typed_rup_file(&source, &target, 0);
+    // 0x01 ^ 0x02 == 0x03: neither record alone reaches the target MD5.
+    file.records = vec![
+        RupRecord {
+            offset: 2,
+            xor: vec![0x01, 0x01],
+        },
+        RupRecord {
+            offset: 2,
+            xor: vec![0x02, 0x02],
+        },
+    ];
+    let patch = encode_rup_patch(&RupMetadata::default(), &[file]).expect("patch");
+    let temp = TestDir::new();
+
+    for threads in [1, 8] {
+        let context = test_context_with_threads(&temp, threads);
+        let (_, output) = apply_rup_fixture(&temp, &patch, &source, &context).expect("apply");
+        assert_eq!(output, target, "threads {threads}");
+    }
+}
+
+fn snes_interleaved_dump(bank_count: usize) -> Vec<u8> {
+    let bank_size = SNES_BANK_SIZE as usize;
+    let mut dump = vec![0u8; bank_count * bank_size];
+    for (bank, chunk) in dump.chunks_mut(bank_size).enumerate() {
+        chunk.fill(bank as u8);
+    }
+    // HiROM header seen through the interleave: odd map mode and a checksum pair summing to 0xFFFF.
+    dump[0x7fd5] = 0x31;
+    dump[0x7fdc..0x7fe0].copy_from_slice(&[0xcb, 0xed, 0x34, 0x12]);
+    dump
+}
+
+/// Applies a record-less type-3 patch so the output is the deinterleaved payload.
+fn deinterleave_through_rup(dump: &[u8]) -> Vec<u8> {
+    let temp = TestDir::new();
+    let patch = typed_rup_patch(dump, dump, 3);
+    let context = test_context_with_threads(&temp, 1)
+        .with_patch_checksum_validation(PatchChecksumValidation::Ignore);
+    apply_rup_fixture(&temp, &patch, dump, &context)
+        .expect("apply")
+        .1
+}
+
+fn bank_probe(payload: &[u8], bank: usize) -> u8 {
+    payload[bank * SNES_BANK_SIZE as usize + 0x100]
+}
+
+#[test]
+fn apply_deinterleaves_hirom_dumps_with_the_reference_bank_charts() {
+    // (dump banks, [(ROM bank, dump bank that must land there)]) from the chart arrays in
+    // sfam_read of ninja2.php.
+    let cases: [(usize, &[(usize, usize)]); 3] = [
+        (
+            80,
+            &[
+                (1, 0),
+                (3, 1),
+                (79, 39),
+                (64, 40),
+                (78, 47),
+                (32, 48),
+                (62, 63),
+                (0, 64),
+                (30, 79),
+            ],
+        ),
+        (
+            96,
+            &[(1, 0), (95, 47), (64, 48), (94, 63), (0, 64), (62, 95)],
+        ),
+        (
+            192,
+            &[
+                (129, 0),
+                (191, 31),
+                (128, 32),
+                (190, 63),
+                (1, 64),
+                (127, 127),
+                (0, 128),
+                (126, 191),
+            ],
+        ),
+    ];
+    for (bank_count, expectations) in cases {
+        let payload = deinterleave_through_rup(&snes_interleaved_dump(bank_count));
+        assert_eq!(payload.len(), bank_count * SNES_BANK_SIZE as usize);
+        for &(rom_bank, dump_bank) in expectations {
+            assert_eq!(
+                usize::from(bank_probe(&payload, rom_bank)),
+                dump_bank,
+                "{bank_count} banks: ROM bank {rom_bank}"
+            );
+        }
+    }
+}
+
+#[test]
+fn apply_uses_the_generic_swap_for_super_ufo_dumps_of_a_chart_size() {
+    let mut dump = snes_interleaved_dump(80);
+    dump[8..16].copy_from_slice(b"SUPERUFO");
+    let payload = deinterleave_through_rup(&dump);
+    // Halves swap: output bank 2i holds dump bank i + 40, bank 2i + 1 holds dump bank i.
+    for (rom_bank, dump_bank) in [(0, 40), (1, 0), (78, 79), (79, 39)] {
+        assert_eq!(
+            usize::from(bank_probe(&payload, rom_bank)),
+            dump_bank,
+            "ROM bank {rom_bank}"
+        );
+    }
+}
+
+/// A VLV whose value is `value` padded with zero bytes to `width` bytes.
+fn padded_vlv(value: u8, width: usize) -> Vec<u8> {
+    let mut bytes = vec![u8::try_from(width).expect("width"), value];
+    bytes.resize(width + 1, 0);
+    bytes
+}
+
+#[test]
+fn apply_accepts_vlvs_padded_beyond_eight_bytes() {
+    let source = b"abcd";
+    let target = b"acbd";
+    let mut commands = vec![RUP_COMMAND_OPEN_NEW_FILE, 0, 0];
+    commands.extend(padded_vlv(4, 9));
+    commands.extend(padded_vlv(4, 9));
+    commands.extend_from_slice(&md5_bytes(source));
+    commands.extend_from_slice(&md5_bytes(target));
+    commands.push(RUP_COMMAND_XOR_RECORD);
+    commands.extend(padded_vlv(1, 20));
+    commands.extend(padded_vlv(2, 9));
+    commands.extend_from_slice(&[0x01, 0x01, RUP_COMMAND_END]);
+    let patch = rup_patch_with_commands(&commands);
+    let temp = TestDir::new();
+
+    let (_, output) =
+        apply_rup_fixture(&temp, &patch, source, &test_context_with_threads(&temp, 1))
+            .expect("padded VLVs apply");
+    assert_eq!(output, target);
 }

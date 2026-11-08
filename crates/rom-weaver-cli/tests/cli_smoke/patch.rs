@@ -1188,7 +1188,7 @@ round_trip_test!(
         modified: b"HELlo old worlD",
         apply_extra: &[],
         patch_assert: Some(|bytes| {
-            assert!(String::from_utf8_lossy(bytes).contains("00000000 68 48"));
+            assert!(String::from_utf8_lossy(bytes).contains("00000000: 68 48"));
         }),
     }
 );
