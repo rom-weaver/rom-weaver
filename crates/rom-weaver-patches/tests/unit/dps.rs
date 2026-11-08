@@ -1418,3 +1418,151 @@ fn apply_rejects_a_corrupt_output_offset_that_would_write_gigabytes() {
     );
     crate::test_support::assert_implausible_output_rejected(result, &output_path);
 }
+
+/// dpspatcher seeks to a record's offset and then writes `length` bytes, so a zero-length record
+/// writes nothing and never grows the output (dpspatcher.c: `fseek` then a `length` loop).
+#[test]
+fn zero_length_records_do_not_extend_the_output() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    fs::write(&source_path, vec![0x11u8; 4096]).expect("fixture");
+
+    let xy = || DpsRecord::EmbeddedData {
+        output_offset: 0,
+        data: b"XY".to_vec(),
+    };
+    let cases: [(&str, Vec<DpsRecord>, &[u8]); 4] = [
+        (
+            "empty data record only",
+            vec![DpsRecord::EmbeddedData {
+                output_offset: 500,
+                data: Vec::new(),
+            }],
+            b"",
+        ),
+        (
+            "empty data record after a write",
+            vec![
+                xy(),
+                DpsRecord::EmbeddedData {
+                    output_offset: 1000,
+                    data: Vec::new(),
+                },
+            ],
+            b"XY",
+        ),
+        (
+            "empty copy record after a write",
+            vec![
+                xy(),
+                DpsRecord::CopyFromSource {
+                    output_offset: 1000,
+                    source_offset: 0,
+                    length: 0,
+                },
+            ],
+            b"XY",
+        ),
+        (
+            "empty copy record reading past the source",
+            vec![
+                xy(),
+                DpsRecord::CopyFromSource {
+                    output_offset: 1000,
+                    source_offset: 9000,
+                    length: 0,
+                },
+            ],
+            b"XY",
+        ),
+    ];
+
+    let handler = DpsPatchHandler::new(&DPS);
+    for (name, records, expected) in cases {
+        let patch_path = temp.child("zero-length.dps");
+        let bytes = encode_dps_patch(&records, dps_metadata("zero-length.dps"), 4096).expect(name);
+        fs::write(&patch_path, bytes).expect("fixture");
+        handler
+            .validate(
+                &PatchValidateRequest {
+                    input: source_path.clone(),
+                    patches: vec![patch_path.clone()],
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .unwrap_or_else(|error| panic!("{name}: validate: {error}"));
+        for threads in [1usize, 4] {
+            let output_path = temp.child("zero-length.out");
+            handler
+                .apply(
+                    &PatchApplyRequest {
+                        input: source_path.clone(),
+                        patches: vec![patch_path.clone()],
+                        output: output_path.clone(),
+                    },
+                    &test_context_with_threads(&temp, threads),
+                )
+                .unwrap_or_else(|error| panic!("{name}: apply: {error}"));
+            assert_eq!(
+                fs::read(&output_path).expect("output"),
+                expected,
+                "{name} ({threads} threads)"
+            );
+        }
+    }
+}
+
+/// dpspatcher prints "WARNING : this is an UNSTABLE patch" when flag bit 0 is set.
+#[test]
+fn apply_and_validate_warn_when_the_unstable_flag_is_set() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    fs::write(&source_path, b"ABCD").expect("fixture");
+    let records = [DpsRecord::EmbeddedData {
+        output_offset: 0,
+        data: b"X".to_vec(),
+    }];
+
+    let handler = DpsPatchHandler::new(&DPS);
+    for (patch_flag, expect_warning) in [(0u8, false), (1, true), (3, true), (2, false)] {
+        let patch_path = temp.child("flag.dps");
+        let metadata = DpsHeaderMetadata {
+            patch_flag,
+            ..dps_metadata("flag.dps")
+        };
+        fs::write(
+            &patch_path,
+            encode_dps_patch(&records, metadata, 4).expect("patch"),
+        )
+        .expect("fixture");
+
+        let context = test_context_with_threads(&temp, 1);
+        let applied = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: temp.child("flag.out"),
+                },
+                &context,
+            )
+            .expect("apply");
+        let validated = handler
+            .validate(
+                &PatchValidateRequest {
+                    input: source_path.clone(),
+                    patches: vec![patch_path],
+                },
+                &context,
+            )
+            .expect("validate");
+        for (operation, label) in [("apply", &applied.label), ("validate", &validated.label)] {
+            assert_eq!(
+                label.contains("warning=this is an UNSTABLE DPS patch"),
+                expect_warning,
+                "flag {patch_flag} {operation}: {label}"
+            );
+        }
+        assert_eq!(fs::read(temp.child("flag.out")).expect("output"), b"X");
+    }
+}

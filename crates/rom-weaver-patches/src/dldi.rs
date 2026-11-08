@@ -75,7 +75,7 @@ impl PatchHandler for DldiPatchHandler {
     }
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let header = parse_dldi_header_from_path(patch_path, "DLDI patch", false)?;
+        let header = parse_dldi_header_from_path(patch_path, "DLDI patch")?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
@@ -101,7 +101,7 @@ impl PatchHandler for DldiPatchHandler {
             patch = %patch_path.display(),
             "dldi patch apply start"
         );
-        let patch_header = parse_dldi_header_from_path(patch_path, "DLDI patch", true)?;
+        let patch_header = parse_dldi_header_from_path(patch_path, "DLDI patch")?;
         let patch_file_len = fs::metadata(patch_path)?.len();
         let patch_read_len = usize::try_from(
             patch_file_len.min(u64::try_from(patch_header.driver_size_bytes).unwrap_or(u64::MAX)),
@@ -163,7 +163,7 @@ impl PatchHandler for DldiPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch_header = parse_dldi_header_from_path(patch_path, "DLDI patch", true)?;
+        let patch_header = parse_dldi_header_from_path(patch_path, "DLDI patch")?;
         let patch_file_len = fs::metadata(patch_path)?.len();
         let patch_read_len = usize::try_from(
             patch_file_len.min(u64::try_from(patch_header.driver_size_bytes).unwrap_or(u64::MAX)),
@@ -452,10 +452,8 @@ fn prepare_dldi_patch(
         input_reader.read_exact_at(patch_offset_u64, &mut slot[..existing_slot_len])?;
     }
 
-    let patch_copy_len = patch.len().min(patch_header.driver_size_bytes);
-    slot[..patch_copy_len].copy_from_slice(&patch[..patch_copy_len]);
-    slot[DO_ALLOCATED_SPACE] = existing_header.allocated_space_log2;
-
+    // A stub without a text_start locates itself from its own startup pointer, which only the
+    // stub bytes read above still hold.
     let mut mem_offset = existing_header.text_start;
     if mem_offset == 0 {
         mem_offset = read_addr_i32(&slot, DO_STARTUP)?
@@ -466,6 +464,10 @@ fn prepare_dldi_patch(
                 )
             })?;
     }
+
+    let patch_copy_len = patch.len().min(patch_header.driver_size_bytes);
+    slot[..patch_copy_len].copy_from_slice(&patch[..patch_copy_len]);
+    slot[DO_ALLOCATED_SPACE] = existing_header.allocated_space_log2;
 
     let relocation = i64::from(mem_offset) - i64::from(patch_header.text_start);
     relocate_header_pointers(&mut slot, relocation)?;
@@ -547,11 +549,7 @@ fn parse_dldi_bytes_for_apply(bytes: &[u8], label: &str) -> Result<DldiHeader> {
     parse_dldi_bytes_with_options(bytes, label, true)
 }
 
-fn parse_dldi_header_from_path(
-    path: &Path,
-    label: &str,
-    allow_truncated_driver_bytes: bool,
-) -> Result<DldiHeader> {
+fn parse_dldi_header_from_path(path: &Path, label: &str) -> Result<DldiHeader> {
     let file_len = fs::metadata(path)?.len();
     let read_len = usize::try_from(file_len.min(DO_CODE as u64))
         .map_err(|_| RomWeaverError::Validation("DLDI header length exceeded usize".into()))?;
@@ -564,18 +562,7 @@ fn parse_dldi_header_from_path(
     if read_len > 0 {
         reader.read_exact_at(0, &mut header)?;
     }
-    let parsed = parse_dldi_bytes_with_options(&header, label, true)?;
-    if !allow_truncated_driver_bytes
-        && u64::try_from(parsed.driver_size_bytes)
-            .ok()
-            .is_some_and(|declared| declared > file_len)
-    {
-        return Err(RomWeaverError::Validation(format!(
-            "{label} declares {} byte(s), but only {file_len} byte(s) are available",
-            parsed.driver_size_bytes
-        )));
-    }
-    Ok(parsed)
+    parse_dldi_bytes_with_options(&header, label, true)
 }
 
 fn parse_dldi_bytes_with_options(
@@ -701,7 +688,13 @@ fn relocate_pointer_range(slot: &mut [u8], patch: &[u8], reloc: PointerRelocatio
         relocation,
         section_label,
     } = reloc;
-    let (start, end) = section_range(patch, start_offset, end_offset, ddmem_start, section_label)?;
+    let start_index = slot_index(patch, start_offset, ddmem_start, section_label)?;
+    let end_index = slot_index(patch, end_offset, ddmem_start, section_label)?;
+    // dlditool's loop over an empty or inverted range runs zero times.
+    if end_index <= start_index {
+        return Ok(());
+    }
+    let (start, end) = slot_range(start_index, end_index, section_label)?;
     for offset in start..end {
         if offset + 4 > slot.len() {
             break;
@@ -719,33 +712,33 @@ fn relocate_pointer_range(slot: &mut [u8], patch: &[u8], reloc: PointerRelocatio
 }
 
 fn clear_bss(slot: &mut [u8], patch: &[u8], ddmem_start: i64) -> Result<()> {
-    let (start, end) = section_range(patch, DO_BSS_START, DO_BSS_END, ddmem_start, "DLDI BSS")?;
-    if end > slot.len() {
-        return Err(RomWeaverError::Validation(
-            "DLDI BSS range exceeds patch slot size".into(),
-        ));
+    let label = "DLDI BSS";
+    let start_index = slot_index(patch, DO_BSS_START, ddmem_start, label)?;
+    let end_index = slot_index(patch, DO_BSS_END, ddmem_start, label)?;
+    if end_index == start_index {
+        return Ok(());
     }
-    slot[start..end].fill(0);
+    let (start, end) = slot_range(start_index, end_index, label)?;
+    // dlditool zeroes the whole BSS in memory but writes back only the slot, so the part past
+    // the slot is dropped.
+    let end = end.min(slot.len());
+    if start < end {
+        slot[start..end].fill(0);
+    }
     Ok(())
 }
 
-fn section_range(
-    patch: &[u8],
-    start_offset: usize,
-    end_offset: usize,
-    ddmem_start: i64,
-    section_label: &str,
-) -> Result<(usize, usize)> {
-    let start_address = i64::from(read_addr_i32(patch, start_offset)?);
-    let end_address = i64::from(read_addr_i32(patch, end_offset)?);
-
-    let start_index = start_address
+/// Resolves the section address stored at `offset` to an index relative to the start of the
+/// driver slot.
+fn slot_index(patch: &[u8], offset: usize, ddmem_start: i64, section_label: &str) -> Result<i64> {
+    i64::from(read_addr_i32(patch, offset)?)
         .checked_sub(ddmem_start)
-        .ok_or_else(|| RomWeaverError::Validation(format!("{section_label} range underflowed")))?;
-    let end_index = end_address
-        .checked_sub(ddmem_start)
-        .ok_or_else(|| RomWeaverError::Validation(format!("{section_label} range underflowed")))?;
+        .ok_or_else(|| RomWeaverError::Validation(format!("{section_label} range underflowed")))
+}
 
+/// Converts a non-empty slot-relative index pair to offsets, refusing the negative or inverted
+/// pairs that dlditool would read or write out of bounds for.
+fn slot_range(start_index: i64, end_index: i64, section_label: &str) -> Result<(usize, usize)> {
     if start_index < 0 || end_index < 0 {
         return Err(RomWeaverError::Validation(format!(
             "{section_label} range resolved to a negative offset"

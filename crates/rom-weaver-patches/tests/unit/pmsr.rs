@@ -951,3 +951,84 @@ fn apply_rejects_a_corrupt_record_offset_that_would_write_gigabytes() {
     );
     crate::test_support::assert_implausible_output_rejected(result, &output_path);
 }
+
+/// Yay0 stream (layout in `yay0.rs`) that decodes to the 22 byte PMSR package with one record,
+/// offset 2, data "ABABAB". Assembled by hand: 16 header bytes (decoded length 0x16, link table
+/// at 18, chunk table at 24), command bytes 0xFF 0x5C, links 0x1003 (distance 4, length 3,
+/// twice) and 0x2001 (distance 2, length 4), then 12 literals.
+const YAY0_PMSR_PACKAGE: [u8; 36] = [
+    0x59, 0x61, 0x79, 0x30, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x18,
+    0xFF, 0x5C, 0x10, 0x03, 0x10, 0x03, 0x20, 0x01, 0x50, 0x4D, 0x53, 0x52, 0x00, 0x00, 0x00, 0x01,
+    0x02, 0x06, 0x41, 0x42,
+];
+
+#[test]
+fn apply_decodes_a_yay0_wrapped_mod_package() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let patch_path = temp.child("update.mod");
+    let output_path = temp.child("output.bin");
+    fs::write(&source_path, b"ORIGINAL").expect("fixture");
+    fs::write(&patch_path, YAY0_PMSR_PACKAGE).expect("fixture");
+
+    let handler = PmsrPatchHandler::new(&MOD);
+    for threads in [1, 4] {
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, threads)
+                    .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            )
+            .expect("apply");
+        assert_eq!(fs::read(&output_path).expect("output"), b"ORABABAB");
+    }
+}
+
+#[test]
+fn validate_and_parse_decode_a_yay0_wrapped_mod_package() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let patch_path = temp.child("update.mod");
+    fs::write(&source_path, b"ORIGINAL").expect("fixture");
+    fs::write(&patch_path, YAY0_PMSR_PACKAGE).expect("fixture");
+
+    let handler = PmsrPatchHandler::new(&MOD);
+    let context = test_context_with_threads(&temp, 1)
+        .with_patch_checksum_validation(PatchChecksumValidation::Ignore);
+    let parsed = handler.parse(&patch_path, &context).expect("parse");
+    assert!(
+        parsed.label.contains("with 1 record(s)"),
+        "{}",
+        parsed.label
+    );
+    let validated = handler
+        .validate(
+            &PatchValidateRequest {
+                input: source_path,
+                patches: vec![patch_path],
+            },
+            &context,
+        )
+        .expect("validate");
+    assert_eq!(
+        validated.label,
+        "validated MOD patch source with 1 record(s); checksum validation skipped"
+    );
+}
+
+#[test]
+fn a_corrupt_yay0_wrapped_mod_package_reports_a_yay0_error() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("corrupt.mod");
+    fs::write(&patch_path, &YAY0_PMSR_PACKAGE[..30]).expect("fixture");
+
+    let error = PmsrPatchHandler::new(&MOD)
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect_err("truncated yay0")
+        .to_string();
+    assert!(error.contains("Yay0 stream ended"), "{error}");
+}

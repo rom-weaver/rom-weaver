@@ -26,6 +26,7 @@ mod solid;
 mod test_support;
 mod ups;
 mod varint;
+mod yay0;
 
 use std::{
     fs::{self, File, OpenOptions},
