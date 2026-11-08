@@ -926,7 +926,7 @@ fn create_xdelta_patch_defaults_to_lzma_secondary_when_it_is_smaller() {
 }
 
 #[test]
-fn create_xdelta_patch_mode_auto_compares_all_secondary_candidates() {
+fn create_xdelta_patch_mode_auto_compares_djw_and_lzma_candidates() {
     let (input, expected) = generated_secondary_source_and_target();
 
     let temp = create_temp_dir();
@@ -962,9 +962,7 @@ fn create_xdelta_patch_mode_auto_compares_all_secondary_candidates() {
     let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
     assert!(matches!(
         parsed.secondary_compressor_id,
-        None | Some(XDELTA_DJW_SECONDARY_ID)
-            | Some(XDELTA_LZMA_SECONDARY_ID)
-            | Some(XDELTA_FGK_SECONDARY_ID)
+        None | Some(XDELTA_DJW_SECONDARY_ID) | Some(XDELTA_LZMA_SECONDARY_ID)
     ));
 
     handler
@@ -978,6 +976,137 @@ fn create_xdelta_patch_mode_auto_compares_all_secondary_candidates() {
         )
         .expect("apply auto-created xdelta patch");
     assert_eq!(fs::read(output_path).expect("read output"), expected);
+}
+
+/// Deterministic targets whose candidate sizes are known (empty source, so the patch is a single
+/// ADD/RUN/COPY stream of the target). Measured with the file names `input.bin` and
+/// `modified.bin`; the app header is the same size in every candidate, so only the differences
+/// below matter: `base` is the uncompressed patch, `djw` and `lzma` the secondary candidates.
+fn secondary_selection_target(family: u8, len: usize) -> Vec<u8> {
+    let mut state = 0x9E37_79B9_7F4A_7C15_u64 ^ ((u64::from(family) << 40) | len as u64);
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    match family {
+        0 => {
+            let words: [&[u8]; 5] = [b"alpha ", b"beta ", b"gamma ", b"\x00\x00\x00", b"fox "];
+            let mut target = Vec::new();
+            while target.len() < len {
+                target.extend_from_slice(words[(next() % 5) as usize]);
+            }
+            target.truncate(len);
+            target
+        }
+        1 => (0..len)
+            .map(|index| {
+                if next() % 64 == 0 {
+                    (next() & 0xFF) as u8
+                } else {
+                    (index % 7) as u8
+                }
+            })
+            .collect(),
+        _ => (0..len)
+            .map(|index| {
+                if index % 50 == 49 {
+                    (next() & 0xFF) as u8
+                } else {
+                    0x20 + ((index / 50) % 5) as u8
+                }
+            })
+            .collect(),
+    }
+}
+
+/// Creates an xdelta patch from an empty `input.bin` to `target` with `mode` and returns its bytes.
+fn create_xdelta_patch_from_empty_source(
+    target: &[u8],
+    mode: rom_weaver_core::XdeltaSecondaryMode,
+) -> Vec<u8> {
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let modified_path = temp.join("modified.bin");
+    let patch_path = temp.join("update.xdelta");
+    fs::write(&input_path, b"").expect("write empty input");
+    fs::write(&modified_path, target).expect("write modified");
+    VcdiffPatchHandler::new(&crate::xdelta::XDELTA)
+        .create(
+            &PatchCreateRequest {
+                original: input_path,
+                modified: modified_path,
+                output: patch_path.clone(),
+                format: "xdelta".into(),
+            },
+            &test_context().with_xdelta_secondary_mode(mode),
+        )
+        .expect("create xdelta patch");
+    fs::read(patch_path).expect("read patch")
+}
+
+/// The created patch is the smallest of the uncompressed baseline and the secondary candidates;
+/// a candidate must be strictly smaller than the baseline to win, and between candidates the
+/// first one tried (DJW, then LZMA) keeps a tie.
+#[test]
+fn create_xdelta_patch_picks_the_smallest_candidate_and_keeps_ties_with_the_earlier_one() {
+    use rom_weaver_core::XdeltaSecondaryMode as Mode;
+    // (label, family, length, mode, expected secondary id)
+    let cases: [(&str, u8, usize, Mode, Option<u8>); 5] = [
+        // base 186, djw 154, lzma 231
+        (
+            "djw smaller than lzma",
+            0,
+            200,
+            Mode::Auto,
+            Some(XDELTA_DJW_SECONDARY_ID),
+        ),
+        // base 1072, djw 721, lzma 717
+        (
+            "lzma smaller than djw",
+            0,
+            2186,
+            Mode::Auto,
+            Some(XDELTA_LZMA_SECONDARY_ID),
+        ),
+        // base 479, djw 310, lzma 310
+        (
+            "djw and lzma tie",
+            2,
+            4178,
+            Mode::Auto,
+            Some(XDELTA_DJW_SECONDARY_ID),
+        ),
+        // base 72, djw 73, lzma 73: both secondary candidates are larger than the baseline
+        (
+            "both candidates larger than baseline",
+            1,
+            200,
+            Mode::Auto,
+            None,
+        ),
+        // base 188, lzma 188: a candidate equal to the baseline does not win
+        ("lzma ties the baseline", 2, 1292, Mode::Lzma, None),
+    ];
+    for (label, family, len, mode, expected_id) in cases {
+        let target = secondary_selection_target(family, len);
+        let patch = create_xdelta_patch_from_empty_source(&target, mode);
+        let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
+        // A forced mode keeps the baseline unless its candidate is smaller, so a codec whose output
+        // size changed shows up here as sizes that differ from the ones measured above.
+        let forced_sizes = [Mode::None, Mode::Djw, Mode::Lzma]
+            .map(|forced| create_xdelta_patch_from_empty_source(&target, forced).len());
+        assert_eq!(
+            parsed.secondary_compressor_id, expected_id,
+            "{label}: patch sizes with none, djw, lzma forced: {forced_sizes:?}"
+        );
+        assert_eq!(
+            apply_patch_file(b"", &patch, &test_context()).expect("apply created patch"),
+            target,
+            "{label}"
+        );
+    }
 }
 
 #[test]
@@ -1084,15 +1213,12 @@ fn create_xdelta_patch_round_trips_adjacent_runs_of_different_bytes() {
     assert_eq!(fs::read(output_path).expect("read output"), expected);
 }
 
-/// A VCDIFF window with no source holds only ADD and RUN instructions. In the default code table
-/// (RFC 3284 section 5.6) opcode 0 is `RUN` and opcode 1 is `ADD` with an explicit size, and each
-/// is followed by the size as a varint; so ADD 35 is `1, 35` and a RUN of eight bytes is `0, 8`.
-/// The adjacent runs of 0x5b and 0x85 must stay two separate RUNs (a RUN carries one byte), and
-/// ADDs and uniform RUNs must come out as one instruction each. The suffix shares no 4-byte
-/// sequence with the rest of the target, so no COPY from the target itself is possible.
+/// Without a source, adjacent runs of different bytes stay separate RUNs and each ADD or uniform
+/// RUN is one instruction: `0, n` is RUN n and `1, n` is ADD n in the RFC 3284 section 5.6 table.
 #[test]
 fn create_vcdiff_patch_without_a_source_keeps_one_instruction_per_add_and_run() {
     let prefix = b"unique prefix bytes before the runs";
+    // Shares no 4-byte sequence with the rest of the target, so no COPY can encode it.
     let suffix = b"QX9!-closing~7531/ok";
     let mut leading_run = vec![0x11_u8; 16];
     leading_run.extend_from_slice(prefix);
@@ -4081,135 +4207,6 @@ fn app_headers_without_a_full_armor_digest_stay_opaque() {
             apply_patch_file(b"hello old WORLD", &patch, &test_context())
                 .unwrap_or_else(|error| panic!("{header:?}: {error}")),
             b"hello new WORLD"
-        );
-    }
-}
-
-/// Deterministic targets whose candidate sizes are known (empty source, so the patch is a single
-/// ADD/RUN/COPY stream of the target). Measured with the file names `input.bin` and
-/// `modified.bin`; the app header is the same size in every candidate, so only the differences
-/// below matter: `base` is the uncompressed patch, `djw` and `lzma` the secondary candidates.
-fn secondary_selection_target(family: u8, len: usize) -> Vec<u8> {
-    let mut state = 0x9E37_79B9_7F4A_7C15_u64 ^ ((u64::from(family) << 40) | len as u64);
-    let mut next = move || {
-        state ^= state << 13;
-        state ^= state >> 7;
-        state ^= state << 17;
-        state
-    };
-    match family {
-        0 => {
-            let words: [&[u8]; 5] = [b"alpha ", b"beta ", b"gamma ", b"\x00\x00\x00", b"fox "];
-            let mut target = Vec::new();
-            while target.len() < len {
-                target.extend_from_slice(words[(next() % 5) as usize]);
-            }
-            target.truncate(len);
-            target
-        }
-        1 => (0..len)
-            .map(|index| {
-                if next() % 64 == 0 {
-                    (next() & 0xFF) as u8
-                } else {
-                    (index % 7) as u8
-                }
-            })
-            .collect(),
-        _ => (0..len)
-            .map(|index| {
-                if index % 50 == 49 {
-                    (next() & 0xFF) as u8
-                } else {
-                    0x20 + ((index / 50) % 5) as u8
-                }
-            })
-            .collect(),
-    }
-}
-
-/// The created patch is the smallest of the uncompressed baseline and the secondary candidates;
-/// a candidate must be strictly smaller than the baseline to win, and between candidates the
-/// first one tried (DJW, then LZMA) keeps a tie.
-#[test]
-fn create_xdelta_patch_picks_the_smallest_candidate_and_keeps_ties_with_the_earlier_one() {
-    use rom_weaver_core::XdeltaSecondaryMode as Mode;
-    // (label, family, length, mode, expected secondary id)
-    let cases: [(&str, u8, usize, Mode, Option<u8>); 5] = [
-        // base 186, djw 154, lzma 231
-        (
-            "djw smaller than lzma",
-            0,
-            200,
-            Mode::Auto,
-            Some(XDELTA_DJW_SECONDARY_ID),
-        ),
-        // base 1072, djw 721, lzma 717
-        (
-            "lzma smaller than djw",
-            0,
-            2186,
-            Mode::Auto,
-            Some(XDELTA_LZMA_SECONDARY_ID),
-        ),
-        // base 479, djw 310, lzma 310
-        (
-            "djw and lzma tie",
-            2,
-            4178,
-            Mode::Auto,
-            Some(XDELTA_DJW_SECONDARY_ID),
-        ),
-        // base 72, djw 73, lzma 73: both secondary candidates are larger than the baseline
-        (
-            "both candidates larger than baseline",
-            1,
-            200,
-            Mode::Auto,
-            None,
-        ),
-        // base 188, lzma 188: a candidate equal to the baseline does not win
-        ("lzma ties the baseline", 2, 1292, Mode::Lzma, None),
-    ];
-    let handler = VcdiffPatchHandler::new(&crate::xdelta::XDELTA);
-    for (label, family, len, mode, expected_id) in cases {
-        let target = secondary_selection_target(family, len);
-        let temp = create_temp_dir();
-        let input_path = temp.join("input.bin");
-        let modified_path = temp.join("modified.bin");
-        let patch_path = temp.join("update.xdelta");
-        let output_path = temp.join("output.bin");
-        fs::write(&input_path, b"").expect("write empty input");
-        fs::write(&modified_path, &target).expect("write modified");
-        handler
-            .create(
-                &PatchCreateRequest {
-                    original: input_path.clone(),
-                    modified: modified_path,
-                    output: patch_path.clone(),
-                    format: "xdelta".into(),
-                },
-                &test_context().with_xdelta_secondary_mode(mode),
-            )
-            .expect("create xdelta patch");
-        let patch = fs::read(&patch_path).expect("read patch");
-        let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
-        assert_eq!(parsed.secondary_compressor_id, expected_id, "{label}");
-
-        handler
-            .apply(
-                &PatchApplyRequest {
-                    input: input_path,
-                    patches: vec![patch_path],
-                    output: output_path.clone(),
-                },
-                &test_context(),
-            )
-            .expect("apply created patch");
-        assert_eq!(
-            fs::read(output_path).expect("read output"),
-            target,
-            "{label}"
         );
     }
 }

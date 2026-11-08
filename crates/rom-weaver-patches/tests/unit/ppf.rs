@@ -2761,7 +2761,7 @@ fn create_warns_about_appended_bytes_only_for_growing_undo_patches() {
         }
     }
 
-    // A shrinking target is refused before any warning is built.
+    // A shrinking undo target builds no warning and is refused.
     let temp = TestDir::new();
     let original = temp.child("original.bin");
     let modified = temp.child("modified.bin");

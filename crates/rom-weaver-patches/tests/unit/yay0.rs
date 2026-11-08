@@ -114,13 +114,13 @@ fn accepts_a_decoded_length_exactly_at_the_bound() {
     assert_eq!(decode_yay0(&valid, 8).expect("decode"), b"ABABABAB");
 
     // 21 stream bytes allow 21 * 88 = 1848 decoded bytes. A declared length at that bound passes
-    // the limit check and fails later, when the tables run out, with a different error.
+    // the limit check; decoding then reads the chunk bytes "AB" as link 0x4142, 323 bytes back.
     let mut at_bound = valid;
     set_header_u32(&mut at_bound, 4, 1848);
     let error = decode_yay0(&at_bound, u64::MAX)
-        .expect_err("tables end before the declared length")
+        .expect_err("link past the decoded output")
         .to_string();
-    assert!(!error.contains("byte limit"), "{error}");
+    assert!(error.contains("reaches 323 byte(s) back"), "{error}");
 }
 
 #[test]

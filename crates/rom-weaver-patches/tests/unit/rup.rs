@@ -2961,22 +2961,33 @@ fn apply_writes_a_record_longer_than_the_copy_buffer_at_consecutive_offsets() {
     let xor: Vec<u8> = (0..super::RUP_IO_BUFFER_SIZE * 2 + 10)
         .map(|index| (index % 251) as u8 + 1)
         .collect();
-    let source = vec![0u8; offset + xor.len() + 2];
+    // A second record lets the 8-thread run take the parallel path, which needs more than one.
+    let tail_offset = offset + xor.len() + 1;
+    let source = vec![0u8; tail_offset + 2];
     // The source is all zeros, so the target holds the XOR bytes themselves.
     let mut target = source.clone();
     target[offset..offset + xor.len()].copy_from_slice(&xor);
+    target[tail_offset] = 0x5a;
     let mut file = typed_rup_file(&source, &target, 0);
-    file.records = vec![RupRecord {
-        offset: offset as u64,
-        xor,
-    }];
+    file.records = vec![
+        RupRecord {
+            offset: offset as u64,
+            xor,
+        },
+        RupRecord {
+            offset: tail_offset as u64,
+            xor: vec![0x5a],
+        },
+    ];
     let patch = encode_rup_patch(&RupMetadata::default(), &[file]).expect("patch");
     let temp = TestDir::new();
 
     for threads in [1, 8] {
         let context = test_context_with_threads(&temp, threads);
-        let (_, output) = apply_rup_fixture(&temp, &patch, &source, &context).expect("apply");
+        let (report, output) = apply_rup_fixture(&temp, &patch, &source, &context).expect("apply");
         assert!(output == target, "threads {threads}: output differs");
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.used_parallelism, threads > 1, "threads {threads}");
     }
 }
 
