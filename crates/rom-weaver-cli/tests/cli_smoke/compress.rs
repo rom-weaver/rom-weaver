@@ -2271,7 +2271,10 @@ fn cancelled_compress_removes_the_output_directories_it_created() {
 fn compress_create_failure_names_the_output_path_for_every_create_format() {
     let temp = setup_temp_dir();
     let input = temp.child("source.bin");
-    input.write_str("payload").expect("fixture");
+    // Z3DS create only accepts 3DS content, so the source carries the NCSD magic.
+    let mut payload = vec![0u8; 0x200];
+    payload[0x100..0x104].copy_from_slice(b"NCSD");
+    fs::write(input.path(), &payload).expect("fixture");
     let long_stem = "a".repeat(300);
     for extension in ["zip", "7z", "z3ds"] {
         let destination = temp.path().join(format!("{long_stem}.{extension}"));

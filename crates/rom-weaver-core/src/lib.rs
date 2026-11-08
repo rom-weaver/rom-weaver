@@ -77,8 +77,8 @@ pub use io::{
     SharedBlockCacheReader, StagedOutput, TempPathAllocator, bounded_items_for_threads,
     copy_cancelable, copy_file_naming_paths, copy_file_retrying_interrupted,
     copy_retrying_interrupted, create_extract_output_file, ensure_output_available,
-    file_starts_with, files_equal, ordered_streaming_compress, overwrite_refusal, read_full, read_up_to,
-    retry_interrupted,
+    file_starts_with, files_equal, ordered_streaming_compress, overwrite_refusal, read_full,
+    read_up_to, retry_interrupted,
 };
 pub use media_topology::{
     ComponentId, ComponentRole, DetectionConfidence, DetectionEvidence, MediaComponent, MediaKind,

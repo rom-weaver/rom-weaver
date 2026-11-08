@@ -189,8 +189,6 @@ impl CliApp {
                 }
             }
         }
-        // Fail before the undo and compression work.
-        Self::require_new_ppf_undo_outputs(&outputs)?;
         let raw_output = Self::patch_apply_raw_output_path(
             &output,
             input,
@@ -287,7 +285,7 @@ impl CliApp {
             report.label.push_str(&format!("; {note}"));
         }
         context.cancel().check()?;
-        // An output can appear while the undo and compression run; check every destination again
+        // Preserve undo/compression diagnostics, then validate every destination
         // before publishing any part of a disc. Dangling links are occupied too.
         Self::require_ppf_undo_outputs_available(&outputs, args.force)?;
         if let Some(parent) = output
