@@ -1091,12 +1091,6 @@ mod plausible_output_size {
 #[test]
 fn unregistered_create_format_message_names_the_request_and_lists_create_formats() {
     let registry = PatchRegistry::new();
-    let create_names = registry
-        .handlers()
-        .iter()
-        .filter(|handler| handler.capabilities().create)
-        .map(|handler| handler.descriptor().name)
-        .collect::<Vec<_>>();
     assert!(
         registry
             .handlers()
@@ -1109,10 +1103,9 @@ fn unregistered_create_format_message_names_the_request_and_lists_create_formats
 
     assert_eq!(
         message,
-        format!(
-            "requested patch format is not registered: `xyzzy`; supported create formats are {}",
-            create_names.join(", ")
-        )
+        "requested patch format is not registered: `xyzzy`; supported create formats are \
+         IPS, IPS32, SOLID, BPS, UPS, VCDIFF, xdelta, GDIFF, APS, APSGBA, RUP, PPF, PAT, EBP, \
+         BDF/BSDIFF40, MOD, DLDI, DPS"
     );
 }
 
