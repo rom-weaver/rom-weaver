@@ -534,6 +534,36 @@ fn create_uses_target_copy_for_repeated_target_data() {
 }
 
 #[test]
+fn create_encodes_a_zero_target_copy_offset_without_a_sign_bit() {
+    let temp = TestDir::new();
+    let original = temp.child("original.bin");
+    let modified = temp.child("modified.bin");
+    let patch = temp.child("update.bps");
+    fs::write(&original, []).expect("fixture");
+    fs::write(&modified, [b'Z'; 16]).expect("fixture");
+
+    BpsPatchHandler::new(&BPS)
+        .create(
+            &PatchCreateRequest {
+                original,
+                modified,
+                output: patch.clone(),
+                format: "BPS".into(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("create");
+
+    assert_eq!(
+        fs::read(patch).expect("patch"),
+        [
+            0x42, 0x50, 0x53, 0x31, 0x80, 0x90, 0x80, 0x81, 0x5a, 0xbb, 0x80, 0x00, 0x00, 0x00,
+            0x00, 0x54, 0xe6, 0xbd, 0x68, 0x45, 0xa1, 0x79, 0xb0,
+        ]
+    );
+}
+
+#[test]
 fn create_rejects_inputs_that_exceed_suffix_memory_budget_before_reading() {
     let temp = TestDir::new();
     let original_path = temp.child("original.bin");
@@ -1633,6 +1663,66 @@ fn apply_copies_a_target_run_whose_period_exceeds_the_copy_buffer() {
         )
         .expect("apply");
     assert_eq!(fs::read(&output_path).expect("output"), target);
+}
+
+#[test]
+fn apply_repeats_target_periods_across_streaming_buffer_boundaries() {
+    for (period_len, copy_len) in [
+        (1, 1),
+        (3, 1),
+        (3, 32_766),
+        (3, 32_767),
+        (3, 65_539),
+        (7, 65_539),
+        (1_025, 65_539),
+        (32_767, 65_539),
+        (32_768, 65_539),
+        (32_769, 65_539),
+    ] {
+        let temp = TestDir::new();
+        let input = temp.child("input.bin");
+        let patch = temp.child("update.bps");
+        let output = temp.child("output.bin");
+        let period = patterned_tail(period_len);
+        let target: Vec<u8> = period
+            .iter()
+            .copied()
+            .cycle()
+            .take(period_len + copy_len)
+            .collect();
+        fs::write(&input, &period).expect("fixture");
+        fs::write(
+            &patch,
+            build_bps_patch(
+                &period,
+                &target,
+                vec![
+                    TestAction::SourceRead(period_len as u64),
+                    TestAction::TargetCopy {
+                        length: copy_len as u64,
+                        relative_offset: 0,
+                    },
+                ],
+            ),
+        )
+        .expect("fixture");
+
+        BpsPatchHandler::new(&BPS)
+            .apply(
+                &PatchApplyRequest {
+                    input,
+                    patches: vec![patch],
+                    output: output.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("apply");
+        assert_eq!(
+            fs::read(output).expect("output"),
+            target,
+            "period {period_len}, copy length {copy_len}"
+        );
+    }
 }
 
 #[test]

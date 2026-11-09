@@ -19,7 +19,7 @@ use crate::shared::threading::parallel_chunked_capability;
 
 #[cfg(test)]
 const BSP_VM_SOURCE: &str = include_str!("bsp_vm_runtime.js");
-const BSP_THREAD_WORK_CHUNK_BYTES: usize = 1024 * 1024;
+const BSP_THREAD_WORK_CHUNK_BYTES: usize = 1_048_576;
 #[cfg(test)]
 static BSP_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 

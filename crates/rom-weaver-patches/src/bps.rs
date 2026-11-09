@@ -2084,19 +2084,17 @@ fn copy_target_range(
     // Tile whole periods across the buffer (geometric doubling). `tile` is a multiple of `period`,
     // so writing successive full `tile` chunks continues the pattern seamlessly, and any final
     // short chunk still starts on a period boundary.
-    let tile = (COPY_BUFFER_SIZE / p) * p;
-    let mut filled = p;
-    while filled < tile {
+    let repeats = COPY_BUFFER_SIZE / p;
+    let tile = repeats * p;
+    for shift in 0..repeats.next_power_of_two().ilog2() {
+        let filled = p << shift;
         let n = (tile - filled).min(filled);
         buffer.copy_within(0..n, filled);
-        filled += n;
     }
     output.seek(SeekFrom::Start(*output_offset))?;
-    let mut remaining = length;
-    while remaining > 0 {
-        let chunk = remaining.min(tile as u64) as usize;
+    for copied in (0..length).step_by(tile) {
+        let chunk = (length - copied).min(tile as u64) as usize;
         output.write_all(&buffer[..chunk])?;
-        remaining -= chunk as u64;
         *output_offset += chunk as u64;
         progress.report(*output_offset);
     }
@@ -2194,20 +2192,16 @@ fn adjust_relative_offset(current: i128, delta: i128, limit: u64, label: &str) -
 }
 
 fn encode_signed_offset(delta: i128) -> Result<u64> {
-    let magnitude = if delta < 0 {
-        delta.checked_neg().ok_or_else(|| {
-            RomWeaverError::Validation("BPS relative offset magnitude overflowed".into())
-        })?
-    } else {
-        delta
-    };
+    let magnitude = delta.checked_abs().ok_or_else(|| {
+        RomWeaverError::Validation("BPS relative offset magnitude overflowed".into())
+    })?;
 
     let magnitude = u64::try_from(magnitude)
         .map_err(|_| RomWeaverError::Validation("BPS relative offset exceeded u64".into()))?;
     let shifted = magnitude.checked_shl(1).ok_or_else(|| {
         RomWeaverError::Validation("BPS relative offset exceeded encodable range".into())
     })?;
-    Ok(shifted | u64::from(delta < 0))
+    Ok(shifted + u64::from(delta < 0))
 }
 
 fn decode_signed_offset(raw: u64) -> i128 {

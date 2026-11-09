@@ -275,6 +275,7 @@ async function checkDocsRoutes(context, origin, prefix) {
       assert.deepEqual([...new Set(escaped)], [], `${prefix}/${slug} links leave ${prefix}/`);
     }
     await page.goto(`${origin}${prefix}/docs`, { waitUntil: "load" });
+    await page.locator("#webapp-root:not([aria-busy])").waitFor({ state: "attached", timeout: 60_000 });
     const link = page.locator(`a[href$="/docs/faq"]`).first();
     await link.waitFor({ state: "visible", timeout: 60_000 });
     await page.waitForFunction(
@@ -286,9 +287,19 @@ async function checkDocsRoutes(context, origin, prefix) {
       timeout: 30_000,
     });
     assert.ok(new URL(page.url()).pathname.startsWith(`${prefix}/`), page.url());
+    await page.locator('.docs-article[data-markdown-source="docs/faq.md"] h1').waitFor({
+      state: "visible",
+      timeout: 60_000,
+    });
+    await page.waitForLoadState("networkidle");
     const reloaded = await page.reload({ waitUntil: "load" });
     assert.equal(reloaded?.status(), 200, `reload of ${page.url()}`);
-    await page.locator("h1").first().waitFor({ state: "visible", timeout: 60_000 });
+    await page.locator("#webapp-root:not([aria-busy])").waitFor({ state: "attached", timeout: 60_000 });
+    await page.locator('.docs-article[data-markdown-source="docs/faq.md"] h1').waitFor({
+      state: "visible",
+      timeout: 60_000,
+    });
+    await page.waitForLoadState("networkidle");
     assert.deepEqual(problems, [], `${origin}${prefix} docs requests`);
     console.log(`PASS docs routes stay under ${prefix || "/"}: ${origin}${prefix}`);
   } finally {
