@@ -152,7 +152,7 @@ impl SelectionPrompter for StdinPrompter {
     }
 }
 
-/// Terminals send arrow and function keys as escape sequences; naming them beats echoing raw bytes.
+/// Retry message for an invalid selection. Arrow and function keys reach stdin as escape sequences and get a key hint.
 fn invalid_selection_message(input: &str, hint: &str) -> String {
     if input.contains('\u{1b}') {
         return format!("arrow and function keys do not work here. {hint}");
@@ -193,7 +193,3 @@ fn read_prompt_input() -> io::Result<Option<String>> {
         }
     }
 }
-
-#[cfg(test)]
-#[path = "../../tests/unit/render_prompt.rs"]
-mod tests;

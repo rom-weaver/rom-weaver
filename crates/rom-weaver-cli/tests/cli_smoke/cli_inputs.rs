@@ -138,11 +138,25 @@ fn scalar_commands_accept_a_file_before_or_after_options() {
         fs::read(output.path().join("game.bin")).unwrap(),
         fs::read(input.path()).unwrap()
     );
+    let ingested = temp.child("ingested");
+    command_stdout(
+        &[
+            "ingest",
+            path,
+            "--output",
+            ingested.path().to_str().unwrap(),
+        ],
+        0,
+    );
 }
 
 #[test]
 fn scalar_commands_reject_a_file_with_input_flag() {
     command_stdout(&["probe", "one.bin", "--input", "two.bin"], 2);
+    command_stdout(
+        &["ingest", "one.bin", "--input", "two.bin", "--output", "out"],
+        2,
+    );
     command_stdout(&["checksum", "one.bin", "--input", "two.bin"], 2);
     command_stdout(
         &[
@@ -325,34 +339,4 @@ fn input_alias_appears_in_native_help() {
     }
     let output = command_stdout(&["completions", "zsh"], 0);
     assert!(String::from_utf8_lossy(&output).contains("File input"));
-}
-
-#[test]
-fn ingest_accepts_positional_file_but_not_both_input_forms() {
-    let temp = setup_temp_dir();
-    let input = temp.child("game.bin");
-    fs::write(input.path(), b"abcde").expect("input fixture");
-    let home = temp.path().to_str().expect("isolated home");
-    let run = |args: &[&str]| {
-        let mut command = Command::cargo_bin("rom-weaver").expect("binary");
-        command
-            .current_dir(temp.path())
-            .env("HOME", home)
-            .env("NO_COLOR", "1")
-            .args(args);
-        command.assert()
-    };
-
-    run(&["ingest", "game.bin", "--output", "positional-out"]).success();
-    let both = run(&[
-        "ingest", "game.bin", "-i", "game.bin", "--output", "both-out",
-    ])
-    .code(2)
-    .get_output()
-    .clone();
-    let stderr = String::from_utf8(both.stderr).expect("utf8 stderr");
-    assert!(
-        stderr.contains("use either FILE or -i, --input, not both"),
-        "{stderr}"
-    );
 }
