@@ -92,7 +92,7 @@ const useBootCheck = (
       // An archive output hides the ROM until it is extracted, so the
       // extracted ROM passes the same gates Test applies to it.
       if (
-        requiresUnsuppliedBios({ fileName: loaded.fileName, platform: loaded.platform ?? platform }) ||
+        isFdsGame({ fileName: loaded.fileName, platform: loaded.platform ?? platform }) ||
         (await hasFdsDiskSignature(loaded.blob))
       ) {
         return null;
