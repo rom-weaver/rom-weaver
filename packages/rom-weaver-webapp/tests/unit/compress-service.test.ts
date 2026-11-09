@@ -3,9 +3,9 @@ import type { WorkflowRuntime } from "../../src/types/workflow-runtime-adapter.t
 import type { ApplyWorkflowOptions, PublicOutput } from "../../src/types/workflow-runtime-types.ts";
 import {
   compressFiles,
-  getCompressFormats,
-  RvzInputNotDiscError,
+  ContainerInputRejectedError,
   extractCompressEntries,
+  getCompressFormats,
   isOpenableCompressInput,
   listCompressInput,
   validateCompressInputs,
@@ -172,10 +172,28 @@ describe("compress service", () => {
     const failure = await compressFiles([file("dvd.iso", new Uint8Array(2048))], options("rvz"), runtime).catch(
       (error: unknown) => error,
     );
-    expect(failure).toBeInstanceOf(RvzInputNotDiscError);
-    expect((failure as RvzInputNotDiscError).fileName).toBe("dvd.iso");
+    expect(failure).toBeInstanceOf(ContainerInputRejectedError);
+    expect((failure as ContainerInputRejectedError).fileName).toBe("dvd.iso");
     expect((failure as Error).message).not.toContain("disc.not_gamecube_wii");
     expect((failure as Error).cause).toBeInstanceOf(Error);
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+
+  it("reports a non-3DS Z3DS input in plain words", async () => {
+    const { cleanup, create, runtime } = makeRuntime();
+    create.mockRejectedValue(
+      Object.assign(new Error("`game.3ds` is not a 3DS image [container.not_3ds]"), {
+        code: "UNSUPPORTED_FORMAT",
+        details: { engineCode: "container.not_3ds" },
+      }),
+    );
+    const failure = await compressFiles([file("game.3ds", new Uint8Array(2048))], options("z3ds"), runtime).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(ContainerInputRejectedError);
+    expect((failure as ContainerInputRejectedError).format).toBe("z3ds");
+    expect((failure as ContainerInputRejectedError).fileName).toBe("game.3ds");
+    expect((failure as Error).message).not.toContain("container.not_3ds");
     expect(cleanup).not.toHaveBeenCalled();
   });
 
@@ -189,6 +207,10 @@ describe("compress service", () => {
     create.mockRejectedValue(new Error("disc format error: Unknown disc format"));
     await expect(compressFiles([file("game.iso", new Uint8Array(2048))], options("chd"), runtime)).rejects.toThrow(
       "Unknown disc format",
+    );
+    create.mockRejectedValue(new Error("out of memory"));
+    await expect(compressFiles([file("game.3ds", new Uint8Array(2048))], options("z3ds"), runtime)).rejects.toThrow(
+      "out of memory",
     );
   });
 

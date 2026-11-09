@@ -38,6 +38,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.compress.rvzNeedsDisc",
     message: "RVZ only stores GameCube and Wii disc images, and {name} is not one. Choose another output format.",
   }),
+  "ui.compress.z3dsNeeds3ds": msg({
+    id: "ui.compress.z3dsNeeds3ds",
+    message: "Z3DS only stores Nintendo 3DS files, and {name} is not one. Choose another output format.",
+  }),
   "ui.compress.run": msg({ id: "ui.compress.run", message: "Compress" }),
   "ui.drop.inputHandling": msg({ id: "ui.drop.inputHandling", message: "How files are opened" }),
   "ui.drop.inputs": msg({ id: "ui.drop.inputs", message: "Inputs" }),

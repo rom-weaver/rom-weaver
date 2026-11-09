@@ -4920,6 +4920,11 @@ msgstr "RVZ only stores GameCube and Wii disc images, and {name} is not one. Cho
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.z3dsNeeds3ds"
+msgstr "Z3DS only stores Nintendo 3DS files, and {name} is not one. Choose another output format."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.guideRvz"
 msgstr "RVZ to ISO guide"
 

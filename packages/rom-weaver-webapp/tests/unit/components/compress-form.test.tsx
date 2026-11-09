@@ -2,7 +2,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CompressForm } from "../../../src/webapp/components/compress-form.tsx";
-import { RvzInputNotDiscError } from "../../../src/webapp/compress-service.ts";
+import { ContainerInputRejectedError } from "../../../src/webapp/compress-service.ts";
 import type { ApplyWorkflowOptions } from "../../../src/types/workflow-runtime-types.ts";
 
 const service = vi.hoisted(() => ({
@@ -104,7 +104,7 @@ describe("CompressForm", () => {
 
   it("explains in plain words that RVZ cannot hold a non-GameCube/Wii input", async () => {
     service.compressFiles.mockRejectedValue(
-      new RvzInputNotDiscError("dvd.iso", { cause: new Error("disc format error: Unknown disc format") }),
+      new ContainerInputRejectedError("rvz", "dvd.iso", { cause: new Error("disc format error: Unknown disc format") }),
     );
     render(<CompressForm />);
     addFiles([new File(["rom"], "game.sfc")]);
@@ -115,6 +115,21 @@ describe("CompressForm", () => {
       "RVZ only stores GameCube and Wii disc images, and dvd.iso is not one. Choose another output format.",
     );
     expect(alert.textContent).not.toContain("Unknown disc format");
+  });
+
+  it("explains in plain words that Z3DS cannot hold a non-3DS input", async () => {
+    service.compressFiles.mockRejectedValue(
+      new ContainerInputRejectedError("z3ds", "game.3ds", { cause: new Error("not a 3DS image") }),
+    );
+    render(<CompressForm />);
+    addFiles([new File(["rom"], "game.sfc")]);
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Compress", exact: true }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain(
+      "Z3DS only stores Nintendo 3DS files, and game.3ds is not one. Choose another output format.",
+    );
+    expect(alert.textContent).not.toContain("not a 3DS image");
   });
 
   it("aborts unmounted work and disposes its late result", async () => {

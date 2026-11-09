@@ -4920,6 +4920,11 @@ msgstr "RVZ speichert nur GameCube- und Wii-Disc-Abbilder, und {name} ist keines
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.z3dsNeeds3ds"
+msgstr "Z3DS speichert nur Nintendo-3DS-Dateien, und {name} ist keine. Wähle ein anderes Ausgabeformat."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.guideRvz"
 msgstr "Anleitung: RVZ zu ISO"
 

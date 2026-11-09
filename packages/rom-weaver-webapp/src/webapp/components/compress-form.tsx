@@ -29,14 +29,20 @@ import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import {
   compressFiles,
+  ContainerInputRejectedError,
   type CompressSource,
   getCompressFormats,
   isOpenableCompressInput,
-  RvzInputNotDiscError,
   type ValidatedCompressInput,
   validateCompressInputs,
 } from "../compress-service.ts";
 import { useCompressArchiveInputs } from "./compress-archive-inputs.tsx";
+
+// The localized wording for an input the chosen container cannot hold.
+const CONTAINER_REJECTION_MESSAGES = {
+  rvz: "ui.compress.rvzNeedsDisc",
+  z3ds: "ui.compress.z3dsNeeds3ds",
+} as const;
 
 type CompressFormProps = { pageDrop?: PageFileDrop | null; onSessionChange?: (active: boolean) => void };
 type CompressionFormat = ReturnType<typeof getCompressFormats>[number];
@@ -221,8 +227,8 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
     } catch (cause) {
       if (!abort.signal.aborted && runId === runIdRef.current) {
         setError(
-          cause instanceof RvzInputNotDiscError
-            ? localizer.message("ui.compress.rvzNeedsDisc", { name: cause.fileName })
+          cause instanceof ContainerInputRejectedError
+            ? localizer.message(CONTAINER_REJECTION_MESSAGES[cause.format], { name: cause.fileName })
             : cause instanceof Error
               ? cause.message
               : String(cause),
