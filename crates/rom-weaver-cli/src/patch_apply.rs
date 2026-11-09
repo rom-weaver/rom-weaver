@@ -3878,25 +3878,23 @@ impl CliApp {
                 );
             }
         };
-        let planned_output = if compression_options.enabled {
-            match self.resolve_patch_apply_compression_plan(
-                output,
-                &extension_source,
-                &compression_options,
-            ) {
-                Ok(plan) => Some(plan),
-                Err(error) => {
-                    return OperationReport::failed_with_error(
-                        OperationFamily::Patch,
-                        None,
-                        "validate",
-                        error,
-                        thread_execution,
-                    );
-                }
+        // An archive or disc sheet is resolved to its payload only during the run.
+        let planned_output = match self.plan_patch_apply_compression(
+            output,
+            &extension_source,
+            &compression_options,
+            (!unresolved_source).then_some(input),
+        ) {
+            Ok(plan) => plan,
+            Err(error) => {
+                return OperationReport::failed_with_error(
+                    OperationFamily::Patch,
+                    None,
+                    "validate",
+                    error,
+                    thread_execution,
+                );
             }
-        } else {
-            None
         };
         let planned_output_path = planned_output
             .as_ref()

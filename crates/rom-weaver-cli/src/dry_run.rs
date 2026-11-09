@@ -305,6 +305,43 @@ impl CliApp {
         )
     }
 
+    /// The resolved output, compression plan, and whether the plan awaits an archive member.
+    fn plan_ppf_undo_output(
+        &self,
+        args: &PpfUndoCommand,
+    ) -> Result<(PathBuf, Option<PatchApplyCompressionPlan>, bool)> {
+        let options = Self::parse_patch_apply_compression_options(
+            args.no_compress,
+            args.compress_format.clone(),
+            args.compress_codec.clone(),
+            args.compress_level,
+        )?;
+        let unresolved = !args.no_extract
+            && self.containers.probe(&args.rom).is_some()
+            && options.enabled
+            && options.requested_format.is_none()
+            && options.codec.is_none()
+            && !options.level_explicit
+            && self
+                .containers
+                .find_by_output_extension(&args.output)
+                .is_none();
+        if unresolved {
+            return Ok((args.output.clone(), None, true));
+        }
+        let options = self.resolve_patch_apply_output_options(options, &args.output, &args.rom)?;
+        // Without an extraction step the ROM is the compression input itself.
+        let checked_input = (args.no_extract || self.containers.probe(&args.rom).is_none())
+            .then_some(args.rom.as_path());
+        let plan =
+            self.plan_patch_apply_compression(&args.output, &args.rom, &options, checked_input)?;
+        let output = plan
+            .as_ref()
+            .map(|plan| plan.output_path.clone())
+            .unwrap_or_else(|| args.output.clone());
+        Ok((output, plan, false))
+    }
+
     fn plan_ppf_undo_dry_run(&self, args: &PpfUndoCommand) -> AppRunOutcome {
         let command = "tools-ppf-undo";
         for path in [&args.rom, &args.patch] {
@@ -312,40 +349,7 @@ impl CliApp {
                 return outcome;
             }
         }
-        let planned = (|| -> Result<(PathBuf, Option<PatchApplyCompressionPlan>, bool)> {
-            let options = Self::parse_patch_apply_compression_options(
-                args.no_compress,
-                args.compress_format.clone(),
-                args.compress_codec.clone(),
-                args.compress_level,
-            )?;
-            let unresolved = !args.no_extract
-                && self.containers.probe(&args.rom).is_some()
-                && options.enabled
-                && options.requested_format.is_none()
-                && options.codec.is_none()
-                && !options.level_explicit
-                && self
-                    .containers
-                    .find_by_output_extension(&args.output)
-                    .is_none();
-            if unresolved {
-                return Ok((args.output.clone(), None, true));
-            }
-            let options =
-                self.resolve_patch_apply_output_options(options, &args.output, &args.rom)?;
-            let plan = options
-                .enabled
-                .then(|| {
-                    self.resolve_patch_apply_compression_plan(&args.output, &args.rom, &options)
-                })
-                .transpose()?;
-            let output = plan
-                .as_ref()
-                .map(|plan| plan.output_path.clone())
-                .unwrap_or_else(|| args.output.clone());
-            Ok((output, plan, false))
-        })();
+        let planned = self.plan_ppf_undo_output(args);
         let (output, compression, unresolved) = match planned {
             Ok(plan) => plan,
             Err(error) => {

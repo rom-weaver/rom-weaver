@@ -2541,6 +2541,110 @@ fn patch_apply_infers_z3ds_subtype_from_source_extension() {
 }
 
 #[test]
+fn patch_apply_rejects_non_3ds_z3ds_before_patching() {
+    let temp = setup_temp_dir();
+    let (_original, patch) = make_bps_patch_fixture(&temp);
+    // The patch does not fit this input, so a failure naming the 3DS check shows it ran first.
+    let input = temp.child("other.bin");
+    fs::write(input.path(), b"not the patch source").expect("fixture");
+    let output = temp.child("out.z3ds");
+
+    let json = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--format",
+            "z3ds",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        1,
+    ));
+
+    assert_eq!(json["status"], "failed");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("is not a 3DS image"), "{label}");
+    assert!(!output.path().exists(), "z3ds output was written");
+}
+
+#[test]
+fn patch_apply_dry_run_checks_a_z3ds_output_input_for_3ds_content() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let three_ds = temp.child("game.3ds");
+    fs::write(three_ds.path(), three_ds_fixture(b"hello old world")).expect("fixture");
+
+    for (input, expected_code) in [(original.path(), 1), (three_ds.path(), 0)] {
+        let output = temp.child("out.z3ds");
+        let events = parse_json_lines(&command_stdout(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                input.to_str().expect("path"),
+                "--patch",
+                patch.path().to_str().expect("path"),
+                "--format",
+                "z3ds",
+                "--output",
+                output.path().to_str().expect("path"),
+                "--dry-run",
+                "--json",
+            ],
+            expected_code,
+        ));
+        let json = events.last().expect("terminal event");
+        let failed = expected_code == 1;
+        assert_eq!(json["status"], if failed { "failed" } else { "succeeded" });
+        if failed {
+            let label = json["label"].as_str().expect("label");
+            assert!(label.contains("is not a 3DS image"), "{label}");
+        }
+        assert!(!output.path().exists(), "dry run wrote the output");
+    }
+}
+
+#[test]
+fn ppf_undo_checks_a_z3ds_output_input_for_3ds_content_before_undoing() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("patched.bin");
+    // Not a valid PPF: a failure naming the 3DS check shows it ran before the undo.
+    let patch = temp.child("undo.ppf");
+    fs::write(rom.path(), b"patched").expect("rom fixture");
+    fs::write(patch.path(), b"PPF30").expect("patch fixture");
+
+    for dry_run in [true, false] {
+        let output = temp.child("restored.z3ds");
+        let mut args = vec![
+            "tools",
+            "ppf-undo",
+            "--input",
+            rom.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--compress-format",
+            "z3ds",
+            "--jsonl",
+        ];
+        if dry_run {
+            args.push("--dry-run");
+        }
+        let json = parse_single_json_line(&command_stdout(&args, 1));
+        assert_eq!(json["status"], "failed", "dry_run={dry_run}");
+        let label = json["label"].as_str().expect("label");
+        assert!(label.contains("is not a 3DS image"), "{label}");
+        assert!(!output.path().exists(), "dry_run={dry_run}");
+    }
+}
+
+#[test]
 fn patch_apply_emit_weave_records_inferred_container_output() {
     let temp = setup_temp_dir();
     let (original, patch) = make_bps_patch_fixture(&temp);
