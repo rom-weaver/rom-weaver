@@ -91,7 +91,8 @@ pub(super) fn render_success(
     match event.command.as_str() {
         "probe" => render_container_or_patch(surface, event),
         "trim" if !has_emitted_files(event) => render_no_write(surface, event),
-        // A successful trim stays quiet; `-v` lists the written files through `render_verbose`.
+        // A successful trim prints nothing on stdout; the written files go to stderr through
+        // `output_confirmation_lines` and, with `-v`, `render_verbose`.
         "trim" => {}
         "extract" | "compress" | "playlist" | "patch-apply" | "bundle-create"
         | "tools-ppf-undo" => {
@@ -141,11 +142,17 @@ fn wrote_lines(event: &ProgressEvent, include: impl Fn(&Value) -> bool) -> Vec<S
         return Vec::new();
     };
     // `format` names the written file only for these commands; elsewhere it is an input's format
-    // (the applied patch, the source archive) or a command tag.
-    let output_format = event
-        .format
-        .as_deref()
-        .filter(|_| matches!(event.command.as_str(), "compress" | "trim" | "patch-create"));
+    // (the applied patch, the source archive, the trimmed ROM) or a command tag. A trim reports
+    // the written format separately as `output_format`, for XISO only.
+    let output_format = match event.command.as_str() {
+        "compress" | "patch-create" => event.format.as_deref(),
+        "trim" => event
+            .details
+            .as_ref()
+            .and_then(|details| details.get("output_format"))
+            .and_then(Value::as_str),
+        _ => None,
+    };
     let codec = event
         .details
         .as_ref()
@@ -165,26 +172,28 @@ fn wrote_lines(event: &ProgressEvent, include: impl Fn(&Value) -> bool) -> Vec<S
         .collect()
 }
 
+/// Commands that confirm an explicit `-o/--output` write on stderr.
+const CONFIRMED_OUTPUT_COMMANDS: &[&str] = &[
+    "trim",
+    "patch-apply",
+    "patch-create",
+    "compress",
+    "playlist",
+    "bundle-create",
+    "save-create",
+    "save-set",
+    "tools-ppf-undo",
+];
+
 /// `wrote PATH (size, codec)` lines for `-o/--output` files that `shows_file` hides from stdout.
 pub(super) fn output_confirmation_lines(
     event: &ProgressEvent,
     selection: &OutputSelection,
 ) -> Vec<String> {
-    if is_dry_run(event)
-        || !matches!(
-            event.command.as_str(),
-            "trim"
-                | "patch-apply"
-                | "patch-create"
-                | "compress"
-                | "playlist"
-                | "bundle-create"
-                | "save-create"
-                | "save-set"
-                | "tools-ppf-undo"
-        )
-        || !selection.names_output_file()
-    {
+    let confirms_write = !is_dry_run(event)
+        && CONFIRMED_OUTPUT_COMMANDS.contains(&event.command.as_str())
+        && selection.names_output_file();
+    if !confirms_write {
         return Vec::new();
     }
     wrote_lines(event, |file| !selection.shows_file(file))

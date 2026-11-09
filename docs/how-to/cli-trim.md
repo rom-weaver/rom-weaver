@@ -54,7 +54,7 @@ The file inside an archive carries the output name without the archive extension
 
 `--in-place` rewrites the source file. Use it instead of pointing `--output` at a symlink or hard link to the input; output aliases are rejected even with `--force`. Keep a known-good copy first; a trimmed ROM is not always the file a patch expects.
 
-A successful trim prints nothing. Add `-v` to list each file it wrote; warnings and errors always print.
+A successful trim prints nothing on stdout. With `--output`, a terminal also shows a `wrote PATH` line on stderr; add `-v` to list each file it wrote. Warnings and errors always print.
 
 ## Make the trim reversible
 

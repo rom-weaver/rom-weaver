@@ -198,6 +198,25 @@ fn confirmation_names_the_codec_not_the_patch_format() {
 }
 
 #[test]
+fn trim_confirmation_names_the_written_format_not_the_rom_kind() {
+    let reporter = confirmation_reporter("game.7z", true, false);
+    let mut trimmed = written_event("trim", "game.7z");
+    trimmed.format = Some("nds".to_string());
+    assert_eq!(
+        reporter.output_confirmation_lines(&trimmed),
+        ["trim: wrote game.7z (1.5 KB)"]
+    );
+    trimmed.details = Some(serde_json::json!({
+        "emitted_files": [{ "path": "game.7z", "size_bytes": 1500 }],
+        "output_format": "7z",
+    }));
+    assert_eq!(
+        reporter.output_confirmation_lines(&trimmed),
+        ["trim: wrote game.7z (1.5 KB, 7z)"]
+    );
+}
+
+#[test]
 fn every_explicit_file_output_command_confirms_its_write() {
     let reporter = confirmation_reporter("out.bin", true, false);
     for command in [
