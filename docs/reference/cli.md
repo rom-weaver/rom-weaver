@@ -74,7 +74,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 
 `-h` prints a one-line summary of each option; `--help` prints the full explanation, including the extra detail on flags like `--patch-header`.
 
-`probe`, `checksum`, `identify`, and `extract` accept one positional `FILE` instead of `-i`/`--input`. Supplying both forms is an error. `compress` and `trim` accept multiple positional files and repeated `--input` values; mixed forms retain their command-line order. `--` ends option parsing for filenames that start with `-`. The native aliases do not change the JSON/WASM command schema.
+`probe`, `checksum`, `identify`, `extract`, and `ingest` accept one positional `FILE` instead of `-i`/`--input`. Supplying both forms is an error. `compress` and `trim` accept multiple positional files and repeated `--input` values; mixed forms retain their command-line order. `--` ends option parsing for filenames that start with `-`. The native aliases do not change the JSON/WASM command schema.
 
 `trim` searches folder inputs recursively; `--no-recursive` limits it to each folder's top level.
 

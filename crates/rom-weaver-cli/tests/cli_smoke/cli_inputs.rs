@@ -138,11 +138,25 @@ fn scalar_commands_accept_a_file_before_or_after_options() {
         fs::read(output.path().join("game.bin")).unwrap(),
         fs::read(input.path()).unwrap()
     );
+    let ingested = temp.child("ingested");
+    command_stdout(
+        &[
+            "ingest",
+            path,
+            "--output",
+            ingested.path().to_str().unwrap(),
+        ],
+        0,
+    );
 }
 
 #[test]
 fn scalar_commands_reject_a_file_with_input_flag() {
     command_stdout(&["probe", "one.bin", "--input", "two.bin"], 2);
+    command_stdout(
+        &["ingest", "one.bin", "--input", "two.bin", "--output", "out"],
+        2,
+    );
     command_stdout(&["checksum", "one.bin", "--input", "two.bin"], 2);
     command_stdout(
         &[

@@ -1,8 +1,11 @@
 use super::shared::*;
 use std::{
     io::Read,
-    os::{fd::FromRawFd, unix::process::CommandExt},
-    process::{Command as ProcessCommand, ExitStatus, Stdio},
+    os::{
+        fd::{AsRawFd, FromRawFd},
+        unix::process::CommandExt,
+    },
+    process::{Child, Command as ProcessCommand, ExitStatus, Stdio},
     time::{Duration, Instant},
 };
 
@@ -54,6 +57,67 @@ fn run_tui_paths(
     no_compress: bool,
     extra: &[&str],
 ) -> (ExitStatus, String) {
+    let mut command = isolated_command(temp);
+    command
+        .args([
+            "patch", "apply", "--input", input, "--patch", patch, "--tui",
+        ])
+        .args(extra);
+    if let Some(output) = output {
+        command.args(["--output", output]);
+    }
+    if no_compress {
+        command.arg("--no-compress");
+    }
+    let patch_count = 1 + extra
+        .iter()
+        .filter(|argument| **argument == "--patch")
+        .count();
+    let replies = (0..patch_count)
+        .flat_map(|_| {
+            [
+                "  name",
+                "  version",
+                "  author",
+                "optional (starts deselected)?",
+            ]
+        })
+        .chain(std::iter::once("Output file name"))
+        .map(|prompt| (prompt, &b"\n"[..]))
+        .collect::<Vec<_>>();
+    run_on_terminal(command, &replies)
+}
+
+/// Runs `command` with a pseudo-terminal as stdin, stdout, and stderr. Sends each reply
+/// once its prompt text appears after the previous prompt, then returns the exit status and
+/// everything the command printed.
+fn run_on_terminal(command: ProcessCommand, replies: &[(&str, &[u8])]) -> (ExitStatus, String) {
+    let (mut terminal, mut child) = spawn_on_terminal(command);
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut transcript = String::new();
+    let mut replied = 0;
+    let mut searched = 0;
+    loop {
+        if Instant::now() >= deadline {
+            child.kill().expect("stop timed-out terminal child");
+            child.wait().expect("reap timed-out terminal child");
+            panic!("terminal child timed out: {transcript}");
+        }
+        if !read_terminal(&mut terminal, &mut transcript) {
+            break;
+        }
+        if let Some((prompt, reply)) = replies.get(replied)
+            && let Some(found) = transcript[searched..].find(prompt)
+        {
+            terminal.write_all(reply).expect("answer prompt");
+            searched += found + prompt.len();
+            replied += 1;
+        }
+    }
+    (child.wait().expect("terminal child exit"), transcript)
+}
+
+fn spawn_on_terminal(mut command: ProcessCommand) -> (File, Child) {
     let mut master = -1;
     let mut slave = -1;
     // SAFETY: openpty initializes both descriptors; optional terminal settings are null.
@@ -68,22 +132,11 @@ fn run_tui_paths(
     };
     assert_eq!(result, 0, "openpty: {}", std::io::Error::last_os_error());
     // SAFETY: successful openpty returned two distinct, owned descriptors.
-    let (mut terminal, slave) = unsafe { (File::from_raw_fd(master), File::from_raw_fd(slave)) };
-    let mut command = isolated_command(temp);
+    let (terminal, slave) = unsafe { (File::from_raw_fd(master), File::from_raw_fd(slave)) };
     command
-        .args([
-            "patch", "apply", "--input", input, "--patch", patch, "--tui",
-        ])
-        .args(extra)
         .stdin(slave.try_clone().expect("terminal stdin"))
         .stdout(slave.try_clone().expect("terminal stdout"))
         .stderr(slave);
-    if let Some(output) = output {
-        command.args(["--output", output]);
-    }
-    if no_compress {
-        command.arg("--no-compress");
-    }
     // SAFETY: setsid and ioctl are async-signal-safe; fd 0 is the child terminal.
     unsafe {
         command.pre_exec(|| {
@@ -93,69 +146,45 @@ fn run_tui_paths(
             Ok(())
         });
     }
-    let mut child = command.spawn().expect("TUI child");
-    drop(command);
-    let patch_count = 1 + extra
-        .iter()
-        .filter(|argument| **argument == "--patch")
-        .count();
-    let prompts = (0..patch_count)
-        .flat_map(|_| {
-            [
-                "  name",
-                "  version",
-                "  author",
-                "optional (starts deselected)?",
-            ]
-        })
-        .chain(std::iter::once("Output file name"))
-        .collect::<Vec<_>>();
-    let deadline = Instant::now() + Duration::from_secs(20);
-    let mut transcript = String::new();
-    let mut prompt = 0;
-    loop {
-        if Instant::now() >= deadline {
-            child.kill().expect("stop timed-out TUI");
-            child.wait().expect("reap timed-out TUI");
-            panic!("TUI timed out: {transcript}");
-        }
-        let mut poll = libc::pollfd {
-            fd: master,
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        // SAFETY: poll receives one valid pollfd and a bounded timeout.
-        let ready = unsafe { libc::poll(&mut poll, 1, 100) };
-        if ready < 0 {
-            // assert_cmd's `timeout` installs a process-wide SIGCHLD handler, so another test's
-            // child exiting can interrupt this poll; poll is never restarted after a handler.
-            let error = std::io::Error::last_os_error();
-            assert_eq!(
-                error.kind(),
-                std::io::ErrorKind::Interrupted,
-                "poll: {error}"
-            );
-            continue;
-        }
-        if ready == 0 {
-            continue;
-        }
-        let mut buffer = [0; 4096];
-        match terminal.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(count) => transcript.push_str(&String::from_utf8_lossy(&buffer[..count])),
-            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-            Err(error) if error.raw_os_error() == Some(libc::EIO) => break,
-            Err(error) => panic!("read TUI: {error}: {transcript}"),
-        }
-        if let Some(expected) = prompts.get(prompt)
-            && transcript.contains(expected)
-        {
-            terminal.write_all(b"\n").expect("accept prompt default");
-            prompt += 1;
-        }
+    let child = command.spawn().expect("terminal child");
+    (terminal, child)
+}
+
+/// Appends whatever the terminal printed within 100 ms to `transcript`. Returns false once the
+/// child has closed the terminal.
+fn read_terminal(terminal: &mut File, transcript: &mut String) -> bool {
+    let mut poll = libc::pollfd {
+        fd: terminal.as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    // SAFETY: poll receives one valid pollfd and a bounded timeout.
+    let ready = unsafe { libc::poll(&mut poll, 1, 100) };
+    if ready < 0 {
+        // assert_cmd's `timeout` installs a process-wide SIGCHLD handler, so another test's
+        // child exiting can interrupt this poll; poll is never restarted after a handler.
+        let error = std::io::Error::last_os_error();
+        assert_eq!(
+            error.kind(),
+            std::io::ErrorKind::Interrupted,
+            "poll: {error}"
+        );
+        return true;
     }
-    (child.wait().expect("TUI exit"), transcript)
+    if ready == 0 {
+        return true;
+    }
+    let mut buffer = [0; 4096];
+    match terminal.read(&mut buffer) {
+        Ok(0) => false,
+        Ok(count) => {
+            transcript.push_str(&String::from_utf8_lossy(&buffer[..count]));
+            true
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => true,
+        Err(error) if error.raw_os_error() == Some(libc::EIO) => false,
+        Err(error) => panic!("read terminal: {error}: {transcript}"),
+    }
 }
 
 fn assert_replay(temp: &TempDir) -> Vec<u8> {
@@ -788,5 +817,29 @@ fn tui_recipe_replays_aligned_per_patch_header_modes() {
             recipe["patches"][1]["header"],
             second_mode.unwrap_or("strip")
         );
+    }
+}
+
+#[test]
+fn selection_prompt_hints_at_arrow_keys_and_echoes_other_bad_input() {
+    const ARROW_HINT: &str = "arrow and function keys do not work here. Enter 1..2 or `q`.";
+    const ECHO: &str = "invalid selection `abc`. Enter 1..2 or `q`.";
+    for (typed, message) in [(&b"2\x1b[D\n"[..], ARROW_HINT), (&b"abc\n"[..], ECHO)] {
+        let temp = setup_temp_dir();
+        for name in ["alpha.gba", "beta.gba"] {
+            fs::write(temp.child(name).path(), name).expect("ROM fixture");
+        }
+        let archive = isolated_command(&temp)
+            .args(["compress", "alpha.gba", "beta.gba", "-o", "multi.zip"])
+            .output()
+            .expect("compress CLI");
+        assert!(archive.status.success(), "{archive:?}");
+
+        let mut command = isolated_command(&temp);
+        command.args(["extract", "multi.zip", "-o", "out"]);
+        let replies = [("selection> ", typed), ("selection> ", &b"1\n"[..])];
+        let (status, transcript) = run_on_terminal(command, &replies);
+        assert!(status.success(), "{transcript}");
+        assert!(transcript.contains(message), "{transcript}");
     }
 }

@@ -60,9 +60,11 @@ impl SelectionPrompter for StdinPrompter {
                 }
                 ParsedSelectionInput::Selected(index) => return Selection::Selected(index),
                 ParsedSelectionInput::Invalid => write_stderr(format_args!(
-                    "invalid selection `{}`. Enter 1..{} or `q`.\n",
-                    display_text(trimmed),
-                    candidates.len()
+                    "{}\n",
+                    invalid_selection_message(
+                        trimmed,
+                        &format!("Enter 1..{} or `q`.", candidates.len())
+                    )
                 )),
             }
         }
@@ -107,9 +109,14 @@ impl SelectionPrompter for StdinPrompter {
                     return SelectionList::Selected(indexes);
                 }
                 ParsedSelectionListInput::Invalid => write_stderr(format_args!(
-                    "invalid selection `{}`. Enter 1..{}, comma-separated values, ranges, or `q`.\n",
-                    display_text(trimmed),
-                    candidates.len()
+                    "{}\n",
+                    invalid_selection_message(
+                        trimmed,
+                        &format!(
+                            "Enter 1..{}, comma-separated values, ranges, or `q`.",
+                            candidates.len()
+                        )
+                    )
                 )),
             }
         }
@@ -143,6 +150,14 @@ impl SelectionPrompter for StdinPrompter {
             }
         }
     }
+}
+
+/// Retry message for an invalid selection. Arrow and function keys reach stdin as escape sequences and get a key hint.
+fn invalid_selection_message(input: &str, hint: &str) -> String {
+    if input.contains('\u{1b}') {
+        return format!("arrow and function keys do not work here. {hint}");
+    }
+    format!("invalid selection `{}`. {hint}", display_text(input))
 }
 
 // The command thread MUST observe Ctrl-C while stdin blocks so it can clean up partial output.
