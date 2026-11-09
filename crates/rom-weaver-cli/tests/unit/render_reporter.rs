@@ -176,3 +176,41 @@ fn human_errors_drop_only_the_standard_validation_prefix() {
         "x: validation failed: kept"
     );
 }
+
+#[test]
+fn confirmation_names_the_codec_not_the_patch_format() {
+    let reporter = confirmation_reporter("game.zip", true, false);
+    let mut applied = written_event("patch-apply", "game.zip");
+    applied.format = Some("IPS".to_string());
+    assert_eq!(
+        reporter.output_confirmation_lines(&applied),
+        ["patch-apply: wrote game.zip (1.5 KB)"]
+    );
+    let mut packed = written_event("compress", "game.zip");
+    packed.details = Some(serde_json::json!({
+        "emitted_files": [{ "path": "game.zip", "size_bytes": 1500 }],
+        "compression": { "codec": "deflate" },
+    }));
+    assert_eq!(
+        reporter.output_confirmation_lines(&packed),
+        ["compress: wrote game.zip (1.5 KB, deflate)"]
+    );
+}
+
+#[test]
+fn every_explicit_file_output_command_confirms_its_write() {
+    let reporter = confirmation_reporter("out.bin", true, false);
+    for command in [
+        "playlist",
+        "bundle-create",
+        "save-create",
+        "save-set",
+        "tools-ppf-undo",
+    ] {
+        assert_eq!(
+            reporter.output_confirmation_lines(&written_event(command, "out.bin")),
+            [format!("{command}: wrote out.bin (1.5 KB)")],
+            "{command}"
+        );
+    }
+}

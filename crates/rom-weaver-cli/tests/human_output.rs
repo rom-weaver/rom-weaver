@@ -700,3 +700,25 @@ fn native_assets_report_stdout_write_errors() {
         assert!(String::from_utf8_lossy(&output.stderr).contains("cannot write stdout"));
     }
 }
+
+#[test]
+fn piped_help_ignores_the_terminal_width() {
+    let help = |columns: &str| {
+        let output = command()
+            .env("COLUMNS", columns)
+            .args(["patch", "apply", "-h"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        String::from_utf8(output).expect("utf-8 help")
+    };
+    let wide = help("300");
+    assert_eq!(help("40"), wide);
+    assert!(
+        wide.lines()
+            .any(|line| line.contains("-i, --input <PATH>") && line.contains("ROM to patch.")),
+        "{wide}"
+    );
+}

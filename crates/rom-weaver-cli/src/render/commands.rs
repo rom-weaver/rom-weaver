@@ -140,13 +140,19 @@ fn wrote_lines(event: &ProgressEvent, include: impl Fn(&Value) -> bool) -> Vec<S
     else {
         return Vec::new();
     };
+    // `format` names the written file only for these commands; elsewhere it is an input's format
+    // (the applied patch, the source archive) or a command tag.
+    let output_format = event
+        .format
+        .as_deref()
+        .filter(|_| matches!(event.command.as_str(), "compress" | "trim" | "patch-create"));
     let codec = event
         .details
         .as_ref()
         .and_then(|details| details.get("compression"))
         .and_then(|compression| compression.get("codec"))
         .and_then(Value::as_str)
-        .or(event.format.as_deref());
+        .or(output_format);
     let kind = codec.map(|codec| format!(", {codec}")).unwrap_or_default();
     files
         .iter()
@@ -167,7 +173,15 @@ pub(super) fn output_confirmation_lines(
     if is_dry_run(event)
         || !matches!(
             event.command.as_str(),
-            "trim" | "patch-apply" | "patch-create" | "compress"
+            "trim"
+                | "patch-apply"
+                | "patch-create"
+                | "compress"
+                | "playlist"
+                | "bundle-create"
+                | "save-create"
+                | "save-set"
+                | "tools-ppf-undo"
         )
         || !selection.names_output_file()
     {
