@@ -305,6 +305,54 @@ fn apply_reports_parallel_execution_for_large_write_data_opcode() {
 }
 
 #[test]
+fn apply_reports_threads_at_the_one_mebibyte_work_boundary() {
+    for (input_len, expected_threads) in [(0, 1), (1_048_576, 1), (1_048_577, 2)] {
+        let temp = TestDir::new();
+        let input = vec![0x5a; input_len];
+        let (report, output) = apply_fixture_with_threads(
+            &BspPatchHandler::new(&BSP),
+            &temp,
+            &input,
+            &[0x06, 0x00, 0x00, 0x00, 0x00],
+            8,
+        );
+
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.effective_threads, expected_threads);
+        assert_eq!(execution.used_parallelism, expected_threads > 1);
+        assert_eq!(output, input);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn apply_preserves_output_metadata_errors_before_seeding() {
+    let temp = TestDir::new();
+    let input = temp.child("source.bin");
+    let patch = temp.child("update.bsp");
+    let output = temp.child(&"x".repeat(256));
+    fs::write(&input, b"source").expect("fixture");
+    fs::write(&patch, [0x06, 0x00, 0x00, 0x00, 0x00]).expect("fixture");
+    let metadata_error = fs::symlink_metadata(&output).expect_err("filename exceeds NAME_MAX");
+    assert_ne!(metadata_error.kind(), std::io::ErrorKind::NotFound);
+    let expected_error = RomWeaverError::Io(metadata_error).to_string();
+
+    let error = BspPatchHandler::new(&BSP)
+        .apply(
+            &PatchApplyRequest {
+                input: input.clone(),
+                patches: vec![patch],
+                output,
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("output inspection fails");
+
+    assert_eq!(error.to_string(), expected_error);
+    assert_eq!(fs::read(input).expect("input"), b"source");
+}
+
+#[test]
 fn apply_surfaces_non_zero_exit_status() {
     let temp = TestDir::new();
     let input_path = temp.child("source.bin");

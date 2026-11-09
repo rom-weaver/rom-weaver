@@ -18,7 +18,7 @@ type VmResult<T> = std::result::Result<T, String>;
 
 const INTERACTIVE_MENU_UNSUPPORTED: &str =
     "interactive BSP menus are not supported; use a BSP patcher that supports menu choices";
-const FILE_IO_CHUNK_BYTES: usize = 1024 * 1024;
+const FILE_IO_CHUNK_BYTES: usize = 1_048_576;
 
 /// Fixed component of the per-run instruction budget. BSP scripts are a
 /// Turing-complete bytecode (jump/call opcodes can loop forever on malformed

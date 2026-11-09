@@ -1006,24 +1006,37 @@ fn patch_apply_inferred_publish_cleans_failed_private_stage() {
         std::process::id()
     ));
     std::fs::create_dir_all(&directory).expect("create output fixture directory");
-    let source = directory.join("source-directory");
-    let destination = directory.join("game-patched.sfc");
-    std::fs::create_dir(&source).expect("create invalid source fixture");
-    let mut destination = destination;
+    let source = directory.join("source.sfc");
+    let occupied = directory.join("game-patched.sfc");
+    std::fs::write(&source, b"patched bytes").expect("write staged source fixture");
+    std::fs::create_dir(&occupied).expect("create occupied destination fixture");
+    let mut destination = occupied.clone();
 
+    // Fail after staging; an absent parent also prevents a collision retry from succeeding.
     let error = CliApp::publish_inferred_patch_apply_output(
         &source,
         &mut destination,
-        &directory.join("game.sfc"),
+        &directory.join("missing-parent").join("game.sfc"),
     )
-    .expect_err("directory source must fail to publish");
-    assert!(matches!(error, RomWeaverError::Io(_)));
-    assert!(!destination.exists());
+    .expect_err("occupied destination must fail to publish");
+    assert!(
+        matches!(
+            &error,
+            RomWeaverError::IoPath { op: rom_weaver_core::IoOp::Create, path, .. }
+                if path == &destination
+        ),
+        "{error:?}"
+    );
+    assert!(occupied.is_dir());
+    assert_eq!(
+        std::fs::read(&source).expect("read staged source fixture"),
+        b"patched bytes"
+    );
     assert_eq!(
         std::fs::read_dir(&directory)
             .expect("read output fixture directory")
             .count(),
-        1,
+        2,
         "failed publish must remove its private staging file"
     );
 
