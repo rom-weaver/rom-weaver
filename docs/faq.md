@@ -16,6 +16,7 @@ Find rom-weaver guides for ROM patching, checksum errors, supported files, priva
   - [Can I share the result?](#can-i-share-the-result)
 - [Applying a patch](#applying-a-patch)
   - [Which page should I use?](#which-page-should-i-use)
+  - [How do I apply a BPS, IPS, UPS, or xdelta patch?](#how-do-i-apply-a-bps-ips-ups-or-xdelta-patch)
   - [Which patch format should I choose?](#which-patch-format-should-i-choose)
   - [Can I drop a ZIP or 7z without extracting it?](#can-i-drop-a-zip-or-7z-without-extracting-it)
   - [Why does the expected filename not match?](#why-does-the-expected-filename-not-match)
@@ -91,6 +92,10 @@ Find rom-weaver guides for ROM patching, checksum errors, supported files, priva
 ### Which page should I use?
 
 [Apply a ROM patch](how-to/apply-rom-patches.md), or [practise with supplied files](tutorials/first-patch.md).
+
+### How do I apply a BPS, IPS, UPS, or xdelta patch?
+
+[Apply a BPS patch](how-to/apply-bps-patch-browser.md), [an IPS patch](how-to/apply-ips-patch-browser.md), [a UPS patch](how-to/apply-ups-patch-browser.md), or [an xdelta patch](how-to/apply-xdelta-patch-browser.md).
 
 ### Which patch format should I choose?
 

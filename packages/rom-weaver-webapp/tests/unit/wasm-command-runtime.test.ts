@@ -635,6 +635,19 @@ describe("output-producing runtime workers", () => {
     ).rejects.toThrow("This input does not support trimming");
   });
 
+  it("reports the engine's unsupported-input refusal as an unsupported trim input", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      failedResult(
+        "validation failed: no trim-eligible inputs found in `/unsupported.bin`; run `rom-weaver trim --help` for the supported ROM formats [trim.unsupported_input]",
+        "trim.unsupported_input",
+      ),
+    );
+    await expect(
+      invokeRomWeaverTrimWorker({ dryRun: true, outputName: "trimmed.bin", sourceFilePath: "/unsupported.bin" }),
+    ).rejects.toMatchObject({ code: "TRIM_UNSUPPORTED", message: "This input does not support trimming" });
+    expect(mocks.runRomWeaverJson).toHaveBeenCalledTimes(1);
+  });
+
   it("retains the output of an already trimmed ROM", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(
       succeededResult({

@@ -140,7 +140,22 @@ test("identify Brotli cache is main-only and has a stable producer directory", (
   assert.match(save, /github\.ref == 'refs\/heads\/main'/u);
   assert.match(save, /steps\.cache\.outputs\.cache-hit != 'true'/u);
   assert.match(action, /Restore identify Brotli cache\n      if: inputs\.cache-restore == 'true' && steps\.cache\.outputs\.cache-hit != 'true'/u);
-  assert.match(action, /key: identify-brotli-\$\{\{ runner\.os \}\}-epoch1-\$\{\{ hashFiles\('scripts\/ensure-identify-data\.mjs'/u);
+  assert.equal(action.match(/key: identify-brotli-\$\{\{ runner\.os \}\}-epoch1-\$\{\{ steps\.key\.outputs\.hash \}\}/gu)?.length, 2);
+  assert.equal(action.match(/key: identify-data-\$\{\{ steps\.key\.outputs\.hash \}\}/gu)?.length, 2);
+  assert.equal(action.match(/hashFiles\(/gu)?.length, 1, "cache keys must share one hash step");
+  const hashStep = action.match(/- name: Hash identify build inputs\n([\s\S]*?)(?=\n    # |\n    - name:)/u)?.[0];
+  assert.ok(hashStep, "identify action has no key hash step");
+  for (const input of [
+    "scripts/ensure-identify-data.mjs",
+    "scripts/build-identify-index.mjs",
+    "scripts/import-libretro-cheats.mjs",
+    "scripts/wasm/brotli-compress.mjs",
+    "packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs",
+    "packages/rom-weaver-webapp/src/lib/identify/title-index.mjs",
+    "packages/rom-weaver-webapp/src/lib/cheats/shard-format.mjs",
+  ]) {
+    assert.ok(hashStep.includes(`'${input}'`), `key hash omits ${input}`);
+  }
 });
 
 test("identify producer runs for every selected consumer and skips fork documentation runs", () => {

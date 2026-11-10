@@ -27,7 +27,7 @@ ROM patch formats differ in checksums, size limits, and compatible patchers. BPS
 
 ## Applying a patch? Use the format you received
 
-An existing patch's format is already chosen, though Create can [convert it](../how-to/convert-patch-format-browser.md) when you have the clean ROM. The [format table](../reference/formats.md#patch-formats) lists what rom-weaver can apply and create.
+An existing patch's format is already chosen, though Create can [convert it](../how-to/convert-patch-format-browser.md) when you have the clean ROM. The [format table](../reference/formats.md#patch-formats) lists what rom-weaver can apply and create. To apply one, follow the [BPS](../how-to/apply-bps-patch-browser.md), [IPS](../how-to/apply-ips-patch-browser.md), [UPS](../how-to/apply-ups-patch-browser.md), or [xdelta](../how-to/apply-xdelta-patch-browser.md) guide.
 
 Converting a patch does not fix a source checksum mismatch. The mismatch concerns the starting bytes, not the patch format. [Fix a checksum error](../how-to/fix-checksum-errors.md) gives the procedure.
 

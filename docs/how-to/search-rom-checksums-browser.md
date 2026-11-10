@@ -1,8 +1,10 @@
-# Search ROM checksums in the browser
+# ROM hash checker: look up CRC32, MD5, or SHA-1 online
 
-Look up a ROM by CRC32, MD5, or SHA-1 checksum without adding a file.
+Use rom-weaver's ROM hash checker to look up a ROM by CRC32, MD5, or SHA-1 checksum without adding a file.
 
 To identify a file, use [Identify a ROM by checksum](identify-roms-browser.md). To calculate or compare hashes, use [Calculate ROM checksums](checksum-roms-browser.md).
+
+<a id="search-rom-checksums-in-the-browser"></a>
 
 <!-- START doctoc -->
 ## Table of contents

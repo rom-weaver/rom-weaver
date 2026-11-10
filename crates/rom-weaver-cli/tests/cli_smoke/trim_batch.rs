@@ -1139,9 +1139,12 @@ fn trim_no_filter_opens_members_with_unknown_names() {
     // By default a member with an unknown name is not a trim input.
     let filtered = parse_single_json_line(&command_stdout(
         &["trim", "--input", archive_path, "--dry-run", "--json"],
-        0,
+        1,
     ));
-    assert_eq!(filtered["details"]["processed"], 0, "{filtered}");
+    assert_eq!(
+        filtered["error_code"], "trim.unsupported_input",
+        "{filtered}"
+    );
     // `--no-filter` opens it and finds the ROM by content.
     let unfiltered = parse_single_json_line(&command_stdout(
         &[
@@ -1661,34 +1664,91 @@ fn trim_revert_restores_nds_to_power_of_two() {
 }
 
 #[test]
-fn trim_skips_non_nds_inputs() {
+fn trim_of_a_lone_unsupported_file_fails_with_a_coded_error() {
     let temp = setup_temp_dir();
     let source = temp.child("notes.txt");
     fs::write(source.path(), b"not an nds file").expect("fixture");
+    let output = temp.child("out.txt");
+    let source_arg = source.path().to_str().expect("path");
 
-    let output = command_stdout(
-        &[
-            "trim",
-            "--input",
-            source.path().to_str().expect("path"),
-            "--json",
-        ],
-        0,
-    );
+    for extra in [
+        &[][..],
+        &["--dry-run"][..],
+        &["--output", output.path().to_str().expect("path")][..],
+        &["--no-extract"][..],
+    ] {
+        let mut args = vec!["trim", "--input", source_arg, "--json"];
+        args.extend_from_slice(extra);
+        let terminal = parse_single_json_line(&command_stdout(&args, 1));
+        assert_eq!(terminal["command"], "trim", "{extra:?}");
+        assert_eq!(terminal["status"], "failed", "{extra:?}");
+        assert_eq!(
+            terminal["label"],
+            format!(
+                "validation failed: no trim-eligible inputs found in `{}`; run `rom-weaver trim --help` for the supported ROM formats [trim.unsupported_input]",
+                source.path().display()
+            ),
+            "{extra:?}"
+        );
+    }
+    assert!(!output.path().exists());
+    assert_eq!(fs::read(source.path()).expect("source"), b"not an nds file");
+}
 
-    let terminal = parse_single_json_line(&output);
-    assert_eq!(terminal["command"], "trim");
-    assert_eq!(terminal["status"], "succeeded");
-    assert_eq!(terminal["details"]["processed"], 0);
-    assert_eq!(terminal["details"]["trimmed"], 0);
-    assert_eq!(terminal["details"]["already_target"], 0);
-    assert_eq!(terminal["details"]["skipped_unsupported"], 1);
+#[cfg(unix)]
+#[test]
+fn trim_of_a_lone_non_regular_file_fails_with_a_coded_error() {
+    let terminal = parse_single_json_line(&command_stdout(
+        &["trim", "--input", "/dev/null", "--json"],
+        1,
+    ));
+    assert_eq!(terminal["status"], "failed");
     assert!(
         terminal["label"]
             .as_str()
             .expect("label")
-            .contains("no trim-eligible inputs found; skipped_unsupported=1")
+            .ends_with("[trim.unsupported_input]"),
+        "{terminal}"
     );
+}
+
+#[test]
+fn trim_skips_non_nds_inputs_in_a_folder_and_in_a_batch() {
+    let temp = setup_temp_dir();
+    let folder = temp.child("roms");
+    fs::create_dir_all(folder.path()).expect("folder");
+    let notes = folder.path().join("notes.txt");
+    fs::write(&notes, b"not an nds file").expect("fixture");
+    let other = temp.child("other.txt");
+    fs::write(other.path(), b"also not an nds file").expect("fixture");
+
+    for (inputs, skipped) in [
+        (vec![folder.path()], 1),
+        (vec![notes.as_path(), other.path()], 2),
+    ] {
+        let mut args = vec!["trim", "--json"];
+        for input in &inputs {
+            args.push("--input");
+            args.push(input.to_str().expect("path"));
+        }
+        let output = command_stdout(&args, 0);
+
+        let terminal = parse_single_json_line(&output);
+        assert_eq!(terminal["command"], "trim");
+        assert_eq!(terminal["status"], "succeeded");
+        assert_eq!(terminal["details"]["processed"], 0);
+        assert_eq!(terminal["details"]["trimmed"], 0);
+        assert_eq!(terminal["details"]["already_target"], 0);
+        assert_eq!(terminal["details"]["skipped_unsupported"], skipped);
+        assert!(
+            terminal["label"]
+                .as_str()
+                .expect("label")
+                .contains(&format!(
+                    "no trim-eligible inputs found; skipped_unsupported={skipped}"
+                ))
+        );
+    }
 }
 
 #[test]
@@ -3392,9 +3452,12 @@ fn trim_skips_nested_names_the_rom_filter_does_not_extract() {
             "--dry-run",
             "--json",
         ],
-        0,
+        1,
     ));
-    assert_eq!(terminal["details"]["processed"], 0, "{terminal}");
+    assert_eq!(
+        terminal["error_code"], "trim.unsupported_input",
+        "{terminal}"
+    );
 }
 
 #[test]

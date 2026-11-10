@@ -113,6 +113,9 @@ pub const ERROR_CODE_SELECTION_CANCELLED: &str = "selection.cancelled";
 /// Trim was given a disc format it does not support (GameCube/Wii discs).
 pub const ERROR_CODE_TRIM_UNSUPPORTED_DISC: &str = "trim.unsupported_disc";
 
+/// Trim was given a single file or archive with nothing trim-eligible in it.
+pub const ERROR_CODE_TRIM_UNSUPPORTED_INPUT: &str = "trim.unsupported_input";
+
 /// A GameCube/Wii (nod) create input is not a GameCube or Wii disc image.
 pub const ERROR_CODE_DISC_NOT_GAMECUBE_WII: &str = "disc.not_gamecube_wii";
 
@@ -165,6 +168,10 @@ pub const ERROR_CODE_WORKFLOW_CODES: &[(&str, WorkflowErrorCode)] = &[
     (ERROR_CODE_SELECTION_CANCELLED, WorkflowErrorCode::Cancelled),
     (
         ERROR_CODE_TRIM_UNSUPPORTED_DISC,
+        WorkflowErrorCode::UnsupportedFormat,
+    ),
+    (
+        ERROR_CODE_TRIM_UNSUPPORTED_INPUT,
         WorkflowErrorCode::UnsupportedFormat,
     ),
     (

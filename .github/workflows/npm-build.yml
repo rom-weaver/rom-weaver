@@ -357,7 +357,12 @@ jobs:
         with:
           ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
 
+      - id: rust-pin
+        uses: ./.github/actions/read-rust-pin
+
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-pin.outputs.version }}
 
       - uses: actions/setup-node@v7
         with:

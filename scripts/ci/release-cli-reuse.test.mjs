@@ -10,7 +10,7 @@ import { runInNewContext } from "node:vm";
 
 import { elf } from "./binary-fixtures.mjs";
 import { artifactName, pack } from "./cli-release-binary.mjs";
-import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
+import { isReleasePullRequest, RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
 
 const require = createRequire(import.meta.url);
 const { load } = require("js-yaml");
@@ -34,7 +34,10 @@ const evaluate = (expression, { event, headRef = "", headRepository = REPOSITORY
       repository: REPOSITORY,
       event: event === "pull_request" ? { pull_request: { head: { repo: { full_name: headRepository } } } } : {},
     },
-    needs: { "cli-platforms": { result: platforms } },
+    needs: {
+      changes: { outputs: { release_pr: String(isReleasePullRequest(event, headRef)) } },
+      "cli-platforms": { result: platforms },
+    },
     startsWith: (value, prefix) => value.startsWith(prefix),
   });
 
@@ -67,11 +70,12 @@ test("the release pull request run compiles the binaries it signs with no cache"
     else if (String(step.uses).startsWith("actions/setup-node@")) assert.equal(step.with["package-manager-cache"], false, step.name);
     else assert.fail(`${step.name ?? step.uses} may use a cache without cache-restore`);
   }
-  // A local action can cache with no telltale in the step itself: only identify data is allowed,
-  // and only in the mode CI does not use.
+  // A local action can cache with no telltale in the step itself: only the toolchain pin reader (it
+  // runs sed on mise.toml) and identify data are allowed, and identify data only in the mode CI does
+  // not use.
   const local = action.runs.steps.filter((step) => String(step.uses ?? "").startsWith("./"));
-  assert.deepEqual(local.map((step) => step.uses), ["./.github/actions/download-identify-data", "./.github/actions/identify-data"]);
-  assert.equal(local[1].if, "inputs.identify-data-source == 'cache'", "identify data is cached only in that mode");
+  assert.deepEqual(local.map((step) => step.uses), ["./.github/actions/read-rust-pin", "./.github/actions/download-identify-data", "./.github/actions/identify-data"]);
+  assert.equal(local[2].if, "inputs.identify-data-source == 'cache'", "identify data is cached only in that mode");
   assert.deepEqual(caching(action.runs.steps).filter((step) => gated.has(step.name)).map((step) => step.name), [...gated]);
   // CI takes identify data from this run's own artifact, which the binary does not embed.
   assert.equal(compile.with["identify-data-source"], "artifact");
