@@ -10,7 +10,7 @@ import { runInNewContext } from "node:vm";
 
 import { elf } from "./binary-fixtures.mjs";
 import { artifactName, pack } from "./cli-release-binary.mjs";
-import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
+import { isReleasePullRequest, RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
 
 const require = createRequire(import.meta.url);
 const { load } = require("js-yaml");
@@ -34,7 +34,10 @@ const evaluate = (expression, { event, headRef = "", headRepository = REPOSITORY
       repository: REPOSITORY,
       event: event === "pull_request" ? { pull_request: { head: { repo: { full_name: headRepository } } } } : {},
     },
-    needs: { "cli-platforms": { result: platforms } },
+    needs: {
+      changes: { outputs: { release_pr: String(isReleasePullRequest(event, headRef)) } },
+      "cli-platforms": { result: platforms },
+    },
     startsWith: (value, prefix) => value.startsWith(prefix),
   });
 

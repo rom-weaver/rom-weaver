@@ -79,7 +79,7 @@ runMain(() => {
     : whole;
   const output = `${formatChanges(
     eventName === "schedule" ? scheduledSelection(changes) : changes,
-  )}full_matrix=${fullMatrix}\nfull_native=${fullNative}\nnightly_checks=${nightlyChecks}\nquality_signals=${qualitySignals}\ndocker_arm_wasm_cache=${canReuseArmDockerWasm(paths)}\n`;
+  )}full_matrix=${fullMatrix}\nfull_native=${fullNative}\nnightly_checks=${nightlyChecks}\nquality_signals=${qualitySignals}\ndocker_arm_wasm_cache=${canReuseArmDockerWasm(paths)}\nrelease_pr=${releasePullRequest}\n`;
   process.stdout.write(output);
   appendFileSync(process.env.GITHUB_OUTPUT, output);
 });

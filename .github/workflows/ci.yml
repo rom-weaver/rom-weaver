@@ -80,6 +80,8 @@ jobs:
       deploy_targets: ${{ steps.plan.outputs.targets }}
       preview_branch: ${{ steps.plan.outputs.preview_branch }}
       last_nightly_sha: ${{ steps.last-nightly.outputs.sha }}
+      # The release pull request, which scripts/ci/release-pr.mjs identifies.
+      release_pr: ${{ steps.classify.outputs.release_pr }}
     steps:
       # Shallow on purpose: every other job waits on this one, and the
       # classifier needs only the base and head trees for a two-dot diff, not
@@ -910,8 +912,8 @@ jobs:
       # The release pull request's module is signed (`wasm-attest`) and shipped, so that run
       # restores no cache: anyone who can push to or retarget the pull request can write its
       # cache scope, and a poisoned module, target, compiler, tool, or node_modules entry would
-      # be signed as the clean commit's. The head-ref prefix MUST match scripts/ci/release-pr.mjs.
-      RELEASE_PR_WASM: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == 'main' && startsWith(github.head_ref, 'release-please--branches--main--components--') }}
+      # be signed as the clean commit's.
+      RELEASE_PR_WASM: ${{ needs.changes.outputs.release_pr == 'true' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == 'main' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -991,16 +993,24 @@ jobs:
 
       # Cargo MUST validate restored fingerprints; this cache contains build state,
       # not a finished module. The SHA suffix allows successful main builds to save
-      # new generations without losing restores from compatible older commits.
+      # new generations without losing restores from compatible older commits. The
+      # restore prefix stops at the Rust version and the compiler wrapper hash, so a change
+      # to the other inputs restores the previous generation instead of starting from empty.
+      # Cargo does not track the wrapper scripts, so changing one must start from empty.
+      - name: Resolve the Rust version
+        id: rustc
+        if: steps.wasm-cache.outputs.cache-hit != 'true' && steps.tag-wasm.outputs.verified != 'true' && env.RELEASE_PR_WASM != 'true'
+        run: echo "version=$(mise exec -- rustc --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+
       - name: Restore WASM target artifacts
         id: wasm-target-cache
         if: steps.wasm-cache.outputs.cache-hit != 'true' && steps.tag-wasm.outputs.verified != 'true' && env.RELEASE_PR_WASM != 'true'
         uses: actions/cache/restore@v6
         with:
           path: target
-          key: wasm-target-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/Cargo.toml', '.cargo/config.toml', 'rust-toolchain*', '.config/mise.toml', 'scripts/wasm/**', '.github/actions/setup-build-env/action.yml') }}-${{ github.sha }}
+          key: wasm-target-v1-${{ runner.os }}-${{ runner.arch }}-rustc-${{ steps.rustc.outputs.version }}-${{ hashFiles('scripts/wasm/wasi-liblzma-threading.h', 'scripts/wasm/wasm32-wasip1-threads-*.sh') }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/Cargo.toml', '.cargo/config.toml', 'rust-toolchain*', '.config/mise.toml', 'scripts/wasm/**', '.github/actions/setup-build-env/action.yml') }}-${{ github.sha }}
           restore-keys: |
-            wasm-target-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/Cargo.toml', '.cargo/config.toml', 'rust-toolchain*', '.config/mise.toml', 'scripts/wasm/**', '.github/actions/setup-build-env/action.yml') }}-
+            wasm-target-v1-${{ runner.os }}-${{ runner.arch }}-rustc-${{ steps.rustc.outputs.version }}-${{ hashFiles('scripts/wasm/wasi-liblzma-threading.h', 'scripts/wasm/wasm32-wasip1-threads-*.sh') }}-
 
       - uses: ./.github/actions/download-identify-data
 
@@ -1302,9 +1312,9 @@ jobs:
       CARGO_TERM_COLOR: always
       # The release pull request in this repository, which is the commit that ships. The release
       # reuses these binaries (.github/workflows/npm-build.yml) when its tree equals the one built
-      # here. The head-ref prefix MUST match scripts/ci/release-pr.mjs; an ordinary pull request,
-      # one into any base but main, a push to main, and the nightly never upload them.
-      RELEASE_PR_BINARIES: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--branches--main--components--') && github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main' }}
+      # here. An ordinary pull request, one into any base but main, a push to main, and the
+      # nightly never upload them.
+      RELEASE_PR_BINARIES: ${{ needs.changes.outputs.release_pr == 'true' && github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1401,8 +1411,7 @@ jobs:
     needs: [changes, cli-platforms]
     if: >-
       needs.cli-platforms.result == 'success' &&
-      github.event_name == 'pull_request' &&
-      startsWith(github.head_ref, 'release-please--branches--main--components--') &&
+      needs.changes.outputs.release_pr == 'true' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.base_ref == 'main'
     continue-on-error: true
