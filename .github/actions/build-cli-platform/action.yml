@@ -97,8 +97,12 @@ runs:
           echo "no D: drive on this runner; leaving CARGO_HOME/RUSTUP_HOME on C:"
         fi
 
+    - id: rust-pin
+      uses: ./.github/actions/read-rust-pin
+
     - uses: dtolnay/rust-toolchain@stable
       with:
+        toolchain: ${{ steps.rust-pin.outputs.version }}
         targets: ${{ inputs.target }}
 
     # CI and the release fan-out deliberately share one key per platform, so a

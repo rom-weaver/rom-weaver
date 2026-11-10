@@ -1,0 +1,27 @@
+name: Read the pinned Rust version
+description: >-
+  Print the Rust version pinned in .config/mise.toml so jobs that install the
+  toolchain with rustup install the version the tests ran on instead of
+  whatever stable is current. Needs the repository checked out.
+
+outputs:
+  version:
+    description: Pinned Rust version, for example 1.97.1.
+    value: ${{ steps.pin.outputs.rust }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read pinned Rust version
+      id: pin
+      shell: bash
+      run: |
+        version=$(sed -n \
+          -e 's/^rust = "\(.*\)"$/\1/p' \
+          -e 's/^rust = { version = "\([^"]*\)".*}$/\1/p' \
+          .config/mise.toml)
+        if [ -z "$version" ]; then
+          echo "::error::no rust pin found in .config/mise.toml"
+          exit 1
+        fi
+        echo "rust=$version" >> "$GITHUB_OUTPUT"

@@ -407,7 +407,12 @@ jobs:
         with:
           ref: ${{ needs.release.outputs.sha }}
 
+      - id: rust-pin
+        uses: ./.github/actions/read-rust-pin
+
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-pin.outputs.version }}
 
       - uses: actions/setup-node@v7
         with:
@@ -453,7 +458,12 @@ jobs:
         with:
           ref: ${{ needs.release.outputs.sha }}
 
+      - id: rust-pin
+        uses: ./.github/actions/read-rust-pin
+
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-pin.outputs.version }}
 
       - uses: actions/setup-node@v7
         with:
@@ -524,7 +534,12 @@ jobs:
         with:
           ref: ${{ needs.release.outputs.sha }}
 
+      - id: rust-pin
+        uses: ./.github/actions/read-rust-pin
+
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-pin.outputs.version }}
 
       - uses: actions/setup-node@v7
         with:
