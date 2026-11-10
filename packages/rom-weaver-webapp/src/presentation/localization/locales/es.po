@@ -5665,6 +5665,11 @@ msgstr "El archivo del parche está dañado (su suma de verificación no es vál
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.NOT_3DS_INPUT"
+msgstr "Z3DS solo almacena archivos de Nintendo 3DS, y la entrada no es uno. Elige otro formato de salida."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.validationCorruptHint"
 msgstr "El archivo del parche está dañado. Consigue una copia nueva y reemplaza este parche. Tampoco se comprobó la ROM con él."
 

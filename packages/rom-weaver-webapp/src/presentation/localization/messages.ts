@@ -1271,6 +1271,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "error.PATCH_FILE_DAMAGED",
     message: "The patch file is damaged (its checksum is invalid). Obtain a fresh copy and replace this patch.",
   }),
+  "error.NOT_3DS_INPUT": msg({
+    id: "error.NOT_3DS_INPUT",
+    message: "Z3DS only stores Nintendo 3DS files, and the input is not one. Choose another output format.",
+  }),
   "error.COMPRESSION_FAILED": msg({ id: "error.COMPRESSION_FAILED", message: "Compression failed." }),
   "error.INVALID_INPUT": msg({ id: "error.INVALID_INPUT", message: "rom-weaver couldn't use the files you added." }),
   "error.INVALID_SETTINGS": msg({

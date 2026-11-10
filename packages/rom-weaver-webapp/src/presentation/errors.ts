@@ -64,6 +64,17 @@ const getStructuredErrorDetail = (error: unknown): string => {
   return detailParts.join(", ");
 };
 
+const ENGINE_ERROR_MESSAGE_IDS = new Map<string, MessageId>([["container.not_3ds", "error.NOT_3DS_INPUT"]]);
+
+/** The localized wording for an engine failure that has its own message, or `undefined` for any other error. */
+const getLocalizedEngineErrorMessage = (
+  error: unknown,
+  localizer: Localizer = createLocalizer(),
+): string | undefined => {
+  const messageId = ENGINE_ERROR_MESSAGE_IDS.get(getEngineError(error)?.code ?? "");
+  return messageId ? localizer.message(messageId) : undefined;
+};
+
 const getUserFacingErrorMessage = (error: unknown, localizer: Localizer = createLocalizer()): string => {
   const code = getErrorCode(error);
   if (!code) return getErrorMessage(error);
@@ -71,6 +82,8 @@ const getUserFacingErrorMessage = (error: unknown, localizer: Localizer = create
   if (code === "INVALID_INPUT" && message.toLowerCase().includes("multi-file output")) return message;
   if (code === "OUT_OF_MEMORY") return message;
   if (isPatchFileChecksumFailure(getEngineError(error)?.code)) return localizer.message("error.PATCH_FILE_DAMAGED");
+  const engineMessage = getLocalizedEngineErrorMessage(error, localizer);
+  if (engineMessage) return engineMessage;
   const messageId = `error.${code}` as MessageId;
   const localized = localizer.message(messageId, getErrorDetails(error));
   return localized === messageId ? getErrorMessage(error) : localized;
@@ -116,4 +129,4 @@ const getDisplayedErrorCode = (message: string, code?: string): string | undefin
   return isWorkflowErrorCode(prefix) ? prefix : undefined;
 };
 
-export { formatCodedErrorForDisplay, getDisplayedErrorCode, getErrorCode };
+export { formatCodedErrorForDisplay, getDisplayedErrorCode, getErrorCode, getLocalizedEngineErrorMessage };

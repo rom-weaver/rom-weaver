@@ -164,6 +164,38 @@ describe("PPF Undo input replacement", () => {
     expect(await view.findByText(warning)).toBeTruthy();
   });
 
+  it("shows a localized message when a Z3DS output is refused for a non-3DS ROM", async () => {
+    mocks.ingest.mockImplementation(async ({ fileName }) => ({
+      outputs: [],
+      patchOutputs: [],
+      result: fileName.endsWith(".ppf")
+        ? { assets: [], patches: [{ fileName, format: "ppf", isValidPatch: true }] }
+        : { assets: [{ fileName }], patches: [] },
+    }));
+    mocks.undo.mockRejectedValue(
+      Object.assign(new Error("validation failed: `/work/game.bin` is not a 3DS image [container.not_3ds]"), {
+        code: "COMPRESSION_FAILED",
+        details: { engineCode: "container.not_3ds", engineFields: {} },
+      }),
+    );
+    const view = render(
+      <RomWeaverSettingsProvider settings={{ defaultCompression: "none" }}>
+        <PpfUndoForm onSessionChange={vi.fn()} />
+      </RomWeaverSettingsProvider>,
+    );
+    const picker = view.container.querySelector("#ppf-undo-input-picker");
+    if (!picker) throw new Error("Missing input picker");
+    fireEvent.change(picker, { target: { files: [new File(["ROM"], "game.bin"), new File(["PPF"], "valid.ppf")] } });
+    const button = await view.findByRole("button", { name: "Restore original ROM" });
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(button);
+    expect(
+      await view.findByText(
+        "Z3DS only stores Nintendo 3DS files, and the input is not one. Choose another output format.",
+      ),
+    ).toBeTruthy();
+  });
+
   it.each([
     ["restored.bin", "game.bin", "restored.bin"],
     ["Hack v1.2", "game.bin", "Hack v1.2.bin"],

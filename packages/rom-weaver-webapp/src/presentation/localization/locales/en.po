@@ -5665,6 +5665,11 @@ msgstr "The patch file is damaged (its checksum is invalid). Obtain a fresh copy
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.NOT_3DS_INPUT"
+msgstr "Z3DS only stores Nintendo 3DS files, and the input is not one. Choose another output format."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.validationCorruptHint"
 msgstr "The patch file is damaged. Obtain a fresh copy and replace this patch. The ROM was not checked against it either."
 
