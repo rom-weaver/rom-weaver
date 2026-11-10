@@ -142,7 +142,7 @@ fn wrote_lines(event: &ProgressEvent, include: impl Fn(&Value) -> bool) -> Vec<S
         return Vec::new();
     };
     // Only `compress` and `patch-create` set `format` to the written format. Elsewhere it names an
-    // input or the command. Trim reports `output_format` for Xbox ISO (XISO) output only.
+    // input or the command. Trim reports `output_format` only when the input is an Xbox ISO (XISO).
     let output_format = match event.command.as_str() {
         "compress" | "patch-create" => event.format.as_deref(),
         "trim" => event

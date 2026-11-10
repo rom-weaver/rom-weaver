@@ -124,7 +124,9 @@ Every command accepts these global flags, listed under `Global options` in its h
 - `--dep-trace` adds trace output from the bundled libraries, useful in a bug report. On its own it also raises rom-weaver's own logs to warning level.
 - `--color` and `--no-color` override colored output, including help and argument errors. The flag wins over the `NO_COLOR` environment variable and the `TERM=dumb` setting. Otherwise, stdout and stderr each use their own terminal status to select colors. `--color` keeps color even when piped; live progress stays terminal-only.
 
-Native human stdout contains only requested results. An explicit file output is silent on stdout. On an interactive stderr, the command prints `wrote PATH (size[, codec])` there. Piped stderr, JSON output, `-q`, and `TERM=dumb` omit that line. When rom-weaver infers an output name or writes additional files, it prints those names.
+Native human stdout contains only requested results. An explicit file output is silent on stdout. On an interactive stderr, the command prints `wrote PATH (size[, codec])`. Piped stderr, JSON output, `-q`, and `TERM=dumb` omit that line.
+
+When rom-weaver infers an output name or writes additional files, it prints those names.
 
 `--help` wraps to the terminal width, up to 100 columns. When stdout is not a terminal, help keeps its source line breaks.
 
