@@ -296,8 +296,11 @@ test("a release tag installs the module only through the verifier, against the t
 test("the WASM target cache restores an older generation of the same Rust version", () => {
   const { with: cache } = step(ci.jobs.wasm, "Restore WASM target artifacts");
   const prefix = cache["restore-keys"].trim();
-  assert.match(prefix, /-rustc-\$\{\{ steps\.rustc\.outputs\.version \}\}-$/u, "the prefix names the Rust version");
-  assert.doesNotMatch(prefix, /hashFiles/u, "the prefix must not pin the other inputs");
+  assert.match(prefix, /-rustc-\$\{\{ steps\.rustc\.outputs\.version \}\}-\$\{\{ hashFiles\([^)]*\) \}\}-$/u, "the prefix names the Rust version and one hash");
+  const pinned = prefix.match(/hashFiles\(([^)]*)\)/gu);
+  assert.equal(pinned.length, 1, "the prefix must not pin the other inputs");
+  assert.match(pinned[0], /wasm32-wasip1-threads-\*\.sh/u, "the one hash covers the compiler wrapper scripts Cargo does not track");
+  assert.match(pinned[0], /wasi-liblzma-threading\.h/u, "the one hash covers the wrapper's header");
   assert.ok(cache.key.startsWith(prefix), "the key extends the restore prefix");
   assert.match(step(ci.jobs.wasm, "Resolve the Rust version").run, /rustc --version/u);
 });

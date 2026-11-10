@@ -994,8 +994,9 @@ jobs:
       # Cargo MUST validate restored fingerprints; this cache contains build state,
       # not a finished module. The SHA suffix allows successful main builds to save
       # new generations without losing restores from compatible older commits. The
-      # restore prefix stops at the Rust version, so a change to the other inputs
-      # still restores the previous generation instead of starting from empty.
+      # restore prefix stops at the Rust version and the compiler wrapper hash, so a change
+      # to the other inputs restores the previous generation instead of starting from empty.
+      # Cargo does not track the wrapper scripts, so changing one must start from empty.
       - name: Resolve the Rust version
         id: rustc
         if: steps.wasm-cache.outputs.cache-hit != 'true' && steps.tag-wasm.outputs.verified != 'true' && env.RELEASE_PR_WASM != 'true'
@@ -1007,9 +1008,9 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: target
-          key: wasm-target-v1-${{ runner.os }}-${{ runner.arch }}-rustc-${{ steps.rustc.outputs.version }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/Cargo.toml', '.cargo/config.toml', 'rust-toolchain*', '.config/mise.toml', 'scripts/wasm/**', '.github/actions/setup-build-env/action.yml') }}-${{ github.sha }}
+          key: wasm-target-v1-${{ runner.os }}-${{ runner.arch }}-rustc-${{ steps.rustc.outputs.version }}-${{ hashFiles('scripts/wasm/wasi-liblzma-threading.h', 'scripts/wasm/wasm32-wasip1-threads-*.sh') }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/Cargo.toml', '.cargo/config.toml', 'rust-toolchain*', '.config/mise.toml', 'scripts/wasm/**', '.github/actions/setup-build-env/action.yml') }}-${{ github.sha }}
           restore-keys: |
-            wasm-target-v1-${{ runner.os }}-${{ runner.arch }}-rustc-${{ steps.rustc.outputs.version }}-
+            wasm-target-v1-${{ runner.os }}-${{ runner.arch }}-rustc-${{ steps.rustc.outputs.version }}-${{ hashFiles('scripts/wasm/wasi-liblzma-threading.h', 'scripts/wasm/wasm32-wasip1-threads-*.sh') }}-
 
       - uses: ./.github/actions/download-identify-data
 
