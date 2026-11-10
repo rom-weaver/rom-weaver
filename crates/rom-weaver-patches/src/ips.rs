@@ -19,8 +19,8 @@ use tracing::{debug, trace};
 use crate::shared::labels::append_warning_labels;
 use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
-    PreparedWrite, apply_batched_whole_writes, chunk_count_for_len_checked, run_with_optional_pool,
-    scan_create_chunks,
+    PreparedWrite, WholeWriteBatchOptions, apply_batched_whole_writes, chunk_count_for_len_checked,
+    run_with_optional_pool, scan_create_chunks,
 };
 
 const IPS_MAGIC: &[u8; 5] = b"PATCH";
@@ -189,8 +189,10 @@ impl PatchHandler for IpsPatchHandler {
         let write_result = apply_batched_whole_writes(
             &mut output,
             &tasks,
-            pool.as_ref(),
-            |task| usize::try_from(task.chunk.len).unwrap_or(usize::MAX),
+            WholeWriteBatchOptions {
+                pool: pool.as_ref(),
+                write_len: |task| usize::try_from(task.chunk.len).unwrap_or(usize::MAX),
+            },
             |task| {
                 let (write, chunk_changed) =
                     render_chunk_task(task, &request.input, input_len, &patch, context)?;

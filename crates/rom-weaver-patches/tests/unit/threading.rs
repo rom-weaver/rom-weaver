@@ -7,8 +7,8 @@ use std::{
 use rom_weaver_core::{RomWeaverError, ThreadCapability};
 
 use super::{
-    PARALLEL_WRITE_CHUNK_BYTES, PreparedWrite, apply_batched_whole_writes, apply_batched_writes,
-    parallel_write_batch_bytes,
+    PARALLEL_WRITE_CHUNK_BYTES, PreparedWrite, WholeWriteBatchOptions, apply_batched_whole_writes,
+    apply_batched_writes, parallel_write_batch_bytes,
 };
 use crate::test_support::{TestDir, test_context_with_threads};
 
@@ -210,8 +210,10 @@ fn assert_whole_batch_sizes(lengths: &[usize], expected_batches: &[usize]) {
     apply_batched_whole_writes(
         &mut output,
         &records,
-        None,
-        |record| record.1,
+        WholeWriteBatchOptions {
+            pool: None,
+            write_len: |record| record.1,
+        },
         |&(offset, len, byte)| {
             pending_bytes.fetch_add(len, Ordering::SeqCst);
             Ok(PreparedWrite {
@@ -239,8 +241,10 @@ fn whole_record_preparation_errors_stop_later_batches() {
     let error = apply_batched_whole_writes(
         &mut output,
         &records,
-        None,
-        |&len| len,
+        WholeWriteBatchOptions {
+            pool: None,
+            write_len: |&len| len,
+        },
         |&len| {
             if len == 1 {
                 return Err(RomWeaverError::Validation("second batch".into()));

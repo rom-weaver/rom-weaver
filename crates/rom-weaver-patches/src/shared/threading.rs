@@ -114,7 +114,6 @@ pub(crate) fn parallel_write_batch_bytes(threads: usize) -> usize {
     bounded_items_for_threads(threads).saturating_mul(PARALLEL_WRITE_CHUNK_BYTES)
 }
 
-/// Prepares one batch of writes (on `pool` when given) and applies them to `output` in order.
 fn write_prepared_batch<T: Sync>(
     output: &mut (impl Write + Seek),
     pool: Option<&SharedThreadPool>,
@@ -171,16 +170,21 @@ pub(crate) fn apply_batched_writes<I: Sync>(
     Ok(())
 }
 
+pub(crate) struct WholeWriteBatchOptions<'a, I> {
+    pub(crate) pool: Option<&'a SharedThreadPool>,
+    pub(crate) write_len: fn(&I) -> usize,
+}
+
 /// Like [`apply_batched_writes`] for records that cannot be split: each item is prepared whole,
 /// and a batch closes once its combined `write_len` would pass the byte budget. A batch always
 /// holds at least one item, so an item larger than the budget is prepared on its own.
 pub(crate) fn apply_batched_whole_writes<I: Sync>(
     output: &mut (impl Write + Seek),
     items: &[I],
-    pool: Option<&SharedThreadPool>,
-    write_len: impl Fn(&I) -> usize,
+    options: WholeWriteBatchOptions<'_, I>,
     prepare: impl Fn(&I) -> Result<PreparedWrite> + Sync + Send,
 ) -> Result<()> {
+    let WholeWriteBatchOptions { pool, write_len } = options;
     let byte_limit = parallel_write_batch_bytes(pool.map_or(1, SharedThreadPool::size));
     let mut batch: Vec<&I> = Vec::new();
     let mut batch_bytes = 0usize;

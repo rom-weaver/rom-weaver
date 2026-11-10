@@ -1,6 +1,6 @@
 use super::*;
 use crate::shared::labels::append_warning_labels;
-use crate::shared::threading::{PreparedWrite, apply_batched_whole_writes};
+use crate::shared::threading::{PreparedWrite, WholeWriteBatchOptions, apply_batched_whole_writes};
 use rom_weaver_core::{
     IoOp, IoResultExt, ValidationCodeError, checksum_validation_suffix, require_single_patch_file,
 };
@@ -181,25 +181,27 @@ impl VcdiffPatchHandler {
             (planned_execution, None)
         };
 
+        let decoder = WindowDecoder {
+            patch_path,
+            input_path: &request.input,
+            input_len,
+            secondary_compressor_id: patch.secondary_compressor_id,
+            validate_checksums,
+            cancel: context.cancel(),
+        };
         let mut output = rom_weaver_core::with_output_creation(context.cancel(), || {
             File::create(&request.output).io_op(IoOp::Create, &request.output)
         })?;
         let write_result = apply_batched_whole_writes(
             &mut output,
             &patch.windows,
-            pool.as_ref(),
-            |window| usize::try_from(window.target_window_size).unwrap_or(usize::MAX),
-            |window| {
-                decode_window_write(
-                    window,
-                    patch_path,
-                    &request.input,
-                    input_len,
-                    patch.secondary_compressor_id,
-                    validate_checksums,
-                    context.cancel(),
-                )
+            WholeWriteBatchOptions {
+                pool: pool.as_ref(),
+                write_len: |window| {
+                    usize::try_from(window.target_window_size).unwrap_or(usize::MAX)
+                },
             },
+            |window| decoder.decode_write(window),
         );
         drop(output);
         if let Err(error) = write_result {
@@ -1017,46 +1019,49 @@ pub(super) fn read_window_index<R: Read + Seek>(
     }))
 }
 
-fn decode_window_write(
-    window: &WindowIndex,
-    patch_path: &Path,
-    input_path: &Path,
+struct WindowDecoder<'a> {
+    patch_path: &'a Path,
+    input_path: &'a Path,
     input_len: u64,
     secondary_compressor_id: Option<u8>,
     validate_checksums: bool,
-    cancel: &rom_weaver_core::CancellationToken,
-) -> Result<PreparedWrite> {
-    cancel.check()?;
-    let source = match window.source_kind {
-        None => Vec::new(),
-        Some(WindowSourceKind::Target) => {
-            return Err(RomWeaverError::Validation(
-                "parallel decoding cannot be used for VCD_TARGET windows".into(),
-            ));
-        }
-        Some(WindowSourceKind::Source) => {
-            let mut input_reader = BufReader::new(File::open(input_path)?);
-            read_source_segment(
-                &mut input_reader,
-                window.source_segment_position,
-                window.source_segment_size,
-                input_len,
-                "source",
-            )?
-        }
-    };
-    let mut patch_reader = BufReader::new(File::open(patch_path)?);
-    let target = decode_window_with_native_engine(
-        &mut patch_reader,
-        window,
-        secondary_compressor_id,
-        &source,
-        validate_checksums,
-    )?;
-    Ok(PreparedWrite {
-        offset: window.output_offset,
-        data: target,
-    })
+    cancel: &'a rom_weaver_core::CancellationToken,
+}
+
+impl WindowDecoder<'_> {
+    fn decode_write(&self, window: &WindowIndex) -> Result<PreparedWrite> {
+        self.cancel.check()?;
+        let source = match window.source_kind {
+            None => Vec::new(),
+            Some(WindowSourceKind::Target) => {
+                return Err(RomWeaverError::Validation(
+                    "parallel decoding cannot be used for VCD_TARGET windows".into(),
+                ));
+            }
+            Some(WindowSourceKind::Source) => {
+                let mut input_reader = BufReader::new(File::open(self.input_path)?);
+                read_source_segment(
+                    &mut input_reader,
+                    window.source_segment_position,
+                    window.source_segment_size,
+                    self.input_len,
+                    "source",
+                )?
+            }
+        };
+        let mut patch_reader = BufReader::new(File::open(self.patch_path)?);
+        let target = decode_window_with_native_engine(
+            &mut patch_reader,
+            window,
+            self.secondary_compressor_id,
+            &source,
+            self.validate_checksums,
+        )?;
+        Ok(PreparedWrite {
+            offset: window.output_offset,
+            data: target,
+        })
+    }
 }
 
 fn apply_windows_serial<F>(
