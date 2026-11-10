@@ -3785,14 +3785,11 @@ impl CliApp {
     /// there is no archive member to infer it from.
     fn run_patch_apply_dry_run(
         &self,
-        input: &Path,
-        patches: &[PathBuf],
-        output: Option<&Path>,
+        args: &PatchApplyCommand,
         compression_options: &PatchApplyCompressionOptions,
-        output_header: Option<PatchApplyOutputHeaderMode>,
         probe_threads: Option<ThreadExecution>,
     ) -> OperationReport {
-        let Some(output) = output else {
+        let Some(output) = args.output.as_deref() else {
             return OperationReport::failed(
                 OperationFamily::Patch,
                 None,
@@ -3801,7 +3798,7 @@ impl CliApp {
                 probe_threads,
             );
         };
-        for patch in patches {
+        for patch in &args.patches {
             if let Some(report) = self.require_readable_file(
                 OperationFamily::Patch,
                 None,
@@ -3811,27 +3808,20 @@ impl CliApp {
                 return report;
             }
         }
-        self.patch_apply_dry_run(
-            input,
-            patches,
-            output,
-            compression_options,
-            output_header,
-            probe_threads,
-        )
+        self.patch_apply_dry_run(args, output, compression_options, probe_threads)
     }
 
     fn patch_apply_dry_run(
         &self,
-        input: &Path,
-        patches: &[PathBuf],
+        args: &PatchApplyCommand,
         output: &Path,
         compression_options: &PatchApplyCompressionOptions,
-        output_header: Option<PatchApplyOutputHeaderMode>,
         thread_execution: Option<ThreadExecution>,
     ) -> OperationReport {
+        let input = args.input.as_path();
+        let patches = args.patches.as_slice();
         // Validate the output extension the same way the real run does.
-        let extension_source = Self::output_extension_source(input, output, output_header);
+        let extension_source = Self::output_extension_source(input, output, args.output_header);
         let explicit_compression = compression_options.requested_format.is_some()
             || compression_options.codec.is_some()
             || compression_options.level_explicit;
@@ -3883,7 +3873,7 @@ impl CliApp {
             output,
             &extension_source,
             &compression_options,
-            (!unresolved_source).then_some(input),
+            (args.no_extract || !unresolved_source).then_some(input),
         ) {
             Ok(plan) => plan,
             Err(error) => {

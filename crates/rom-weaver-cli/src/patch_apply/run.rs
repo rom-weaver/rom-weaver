@@ -404,11 +404,8 @@ impl CliApp {
         }
         if run.args.dry_run {
             let mut report = self.run_patch_apply_dry_run(
-                &run.args.input,
-                &run.args.patches,
-                run.args.output.as_deref(),
+                &run.args,
                 &run.compression_options,
-                run.args.output_header,
                 run.probe_threads.clone(),
             );
             // Device codes apply as one extra step beside the listed patches.

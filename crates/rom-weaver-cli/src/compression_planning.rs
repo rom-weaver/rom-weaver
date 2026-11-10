@@ -649,8 +649,7 @@ impl CliApp {
         Ok(Some(plan))
     }
 
-    /// Fails a z3ds plan whose `input` is not 3DS content, with the check `compress` runs, so a
-    /// dry run and a run that has not patched yet reject what the final create would reject.
+    /// Fails a z3ds plan whose `input` is not 3DS content, using the z3ds handler's create validation.
     pub(super) fn validate_z3ds_plan_input(
         &self,
         plan: &PatchApplyCompressionPlan,
