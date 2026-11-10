@@ -318,7 +318,11 @@ The tag is created minutes after the release pull request merges, usually before
 
 `changes` resolves the channel list from the ref; `deploy` runs one matrix leg per channel, deploying with Cloudflare Direct Upload and reusing the CI-tested WASM artifact rather than spending Cloudflare build minutes on a second toolchain.
 
-The deployment wrapper matches the Pages branch and commit hash before invoking Wrangler. It waits for new deployments to finish before publishing their URLs. Retries reuse successful preview deployments, wait for active deployments, and retry failed matching deployments instead of creating another deployment. Lighthouse report deployments opt out of reuse because their generated reports can differ between runs. Completed production deployments upload again so a rerun can restore the selected main commit.
+With reuse enabled, the wrapper matches the Pages branch and commit before invoking Wrangler. It reuses successful previews, waits for active deployments, and retries failed matching deployments. If the retry API returns HTTP 409, the next attempt uploads afresh.
+
+The wrapper makes at most three attempts, waiting 10 seconds, then 30 seconds between attempts. It retries Cloudflare internal, server, and network failures. Authentication, configuration, and build errors stop immediately. It verifies deployment success before publishing the URL.
+
+Lighthouse report deployments start fresh because their generated reports can differ between runs. Completed production deployments also upload again, restoring the selected main commit.
 
 | Channel | Cloudflare project | URL | Intended use |
 | --- | --- | --- | --- |
