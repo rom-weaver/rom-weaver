@@ -439,7 +439,7 @@ impl OperationContext {
         // The returned `execution` still reflects this caller's negotiated capability (it drives
         // whether/how the handler parallelizes and progress reporting), but the pool itself is the
         // shared operation pool so nested/sequential extracts reuse one fixed set of worker threads.
-        let (pool, pool_execution) = self.operation_pool()?;
+        let (pool, pool_execution) = self.operation_pool(execution.effective_threads)?;
         // If the shared pool itself degraded to single-thread (e.g. the OS refused to build a
         // multi-thread pool), every operation drawing on it genuinely runs serially - so propagate
         // that fallback into this caller's reported execution instead of advertising parallelism it
@@ -455,25 +455,34 @@ impl OperationContext {
         Ok((execution, pool))
     }
 
-    /// Lazily build (once) and return the operation-scoped worker pool, sized to the full thread
-    /// budget so every extract that reuses it can draw on all available threads. The cached
+    /// Returns the operation-scoped worker pool, built with only the threads callers can use. The cached
     /// `ThreadExecution` records the pool's actual size after any build fallback so callers can
     /// reconcile their reported execution against what the shared pool can really deliver.
-    fn operation_pool(&self) -> Result<(SharedThreadPool, ThreadExecution)> {
+    fn operation_pool(&self, useful_threads: usize) -> Result<(SharedThreadPool, ThreadExecution)> {
+        // Browser workers come from a fixed pool, and a replaced pool's workers exit late.
+        // The browser builds the full budget once.
+        let pool_threads = if cfg!(target_family = "wasm") {
+            self.plan_threads(ThreadCapability::parallel(None))
+                .effective_threads
+        } else {
+            useful_threads
+        };
         let mut guard = self
             .operation_pool
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some((pool, execution)) = guard.as_ref() {
+        if let Some((pool, execution)) = guard.as_ref()
+            && (pool.size() >= pool_threads || execution.thread_fallback)
+        {
             return Ok((pool.clone(), execution.clone()));
         }
-        let full = self.plan_threads(ThreadCapability::parallel(None));
+        let planned = self.plan_threads(ThreadCapability::parallel(Some(pool_threads)));
         trace!(
-            effective_threads = full.effective_threads,
-            used_parallelism = full.used_parallelism,
+            effective_threads = planned.effective_threads,
+            used_parallelism = planned.used_parallelism,
             "building shared operation pool"
         );
-        let (execution, pool) = SharedThreadPool::with_execution_fallback(full)?;
+        let (execution, pool) = SharedThreadPool::with_execution_fallback(planned)?;
         *guard = Some((pool.clone(), execution.clone()));
         Ok((pool, execution))
     }

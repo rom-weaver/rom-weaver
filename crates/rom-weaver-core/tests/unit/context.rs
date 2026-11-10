@@ -7,8 +7,12 @@ use super::*;
 use crate::{NoopProgressSink, OperationFamily, OperationStatus, RecordingProgressSink};
 
 fn test_context() -> OperationContext {
+    context_with_threads(1)
+}
+
+fn context_with_threads(threads: usize) -> OperationContext {
     OperationContext::new(
-        ThreadBudget::Fixed(1),
+        ThreadBudget::Fixed(threads),
         std::env::temp_dir(),
         Arc::new(NoopProgressSink),
         CancellationToken::new(),
@@ -354,4 +358,42 @@ fn private_temp_root_context_only_touches_its_own_root_under_the_parent() {
     assert!(!root.exists());
     assert!(marker.exists());
     let _ = fs::remove_dir_all(&parent);
+}
+
+#[test]
+fn operation_pool_starts_only_the_threads_the_work_can_use() {
+    let cases = [(64, Some(3), 3), (6, None, 6), (4, Some(9), 4)];
+    for (budget, work_limit, expected) in cases {
+        let context = context_with_threads(budget);
+        let (execution, pool) = context
+            .build_pool(ThreadCapability::parallel(work_limit))
+            .expect("pool");
+        assert_eq!(
+            pool.size(),
+            expected,
+            "budget {budget}, work {work_limit:?}"
+        );
+        assert_eq!(execution.effective_threads, expected);
+        assert_eq!(execution.requested_threads, budget);
+    }
+}
+
+#[test]
+fn operation_pool_grows_when_later_work_needs_more_threads() {
+    let context = context_with_threads(8);
+    let (_, held) = context
+        .build_pool(ThreadCapability::parallel(Some(2)))
+        .expect("first pool");
+    assert_eq!(held.size(), 2);
+
+    let (execution, larger) = context
+        .build_pool(ThreadCapability::parallel(Some(5)))
+        .expect("larger pool");
+    assert_eq!(larger.size(), 5);
+    assert_eq!(execution.effective_threads, 5);
+
+    let (_, reused) = context
+        .build_pool(ThreadCapability::parallel(Some(3)))
+        .expect("reused pool");
+    assert_eq!(reused.size(), 5);
 }
