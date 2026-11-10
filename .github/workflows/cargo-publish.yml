@@ -28,7 +28,12 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
 
+      - id: rust-pin
+        uses: ./.github/actions/read-rust-pin
+
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-pin.outputs.version }}
 
       - uses: actions/setup-node@v7
         with:

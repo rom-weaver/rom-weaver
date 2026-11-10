@@ -1602,23 +1602,12 @@ jobs:
             echo "TEMP=$RUNNER_TEMP"
           } >> "$GITHUB_ENV"
 
-      - name: Read pinned Rust version
-        id: pin
-        shell: bash
-        run: |
-          version=$(sed -n \
-            -e 's/^rust = "\(.*\)"$/\1/p' \
-            -e 's/^rust = { version = "\([^"]*\)".*}$/\1/p' \
-            .config/mise.toml)
-          if [ -z "$version" ]; then
-            echo "::error::no rust pin found in .config/mise.toml"
-            exit 1
-          fi
-          echo "rust=$version" >> "$GITHUB_OUTPUT"
+      - id: rust-pin
+        uses: ./.github/actions/read-rust-pin
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ steps.pin.outputs.rust }}
+          toolchain: ${{ steps.rust-pin.outputs.version }}
 
       # Same restore-everywhere/save-on-main policy as the Linux jobs; the key
       # includes the OS, so this leg never collides with the others.
