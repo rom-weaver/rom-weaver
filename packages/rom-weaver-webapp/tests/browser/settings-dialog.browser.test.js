@@ -91,28 +91,33 @@ const SettingsPanelHarness = ({ language = "en" }) => {
   );
 };
 
-test("Settings help is hit-testable inside the native modal", async () => {
-  root.render(createElement(SettingsPanelHarness));
-  const input = page.getByRole("checkbox", { name: "Store emulator saves on this device", exact: true });
-  await expect.element(input).toBeVisible();
-  const trigger = page.getByRole("button", { name: "About Store emulator saves on this device", exact: true });
-  await trigger.click();
-  await expect.element(trigger).toHaveAttribute("aria-expanded", "true");
-  const panel = document.getElementById(trigger.element().getAttribute("aria-controls"));
-  expect.soft(document.querySelector("dialog:modal").contains(panel)).toBe(true);
-  await expect.element(page.elementLocator(panel)).toBeVisible();
-  await expect
-    .poll(() => {
-      const rect = panel.getBoundingClientRect();
-      return [0.1, 0.5, 0.9].every((fraction) =>
-        panel.contains(document.elementFromPoint(rect.left + rect.width * fraction, rect.top + rect.height / 2)),
-      );
-    })
-    .toBe(true);
-  await trigger.click();
-  await expect.element(trigger).toHaveAttribute("aria-expanded", "false");
-  expect(document.getElementById(panel.id)).toBeNull();
-});
+for (const [role, label] of [
+  ["checkbox", "Store emulator saves on this device"],
+  ["combobox", "File size units"],
+]) {
+  test(`Settings help for ${label} is hit-testable inside the native modal`, async () => {
+    root.render(createElement(SettingsPanelHarness));
+    const input = page.getByRole(role, { name: label, exact: true });
+    await expect.element(input).toBeVisible();
+    const trigger = page.getByRole("button", { name: `About ${label}`, exact: true });
+    await trigger.click();
+    await expect.element(trigger).toHaveAttribute("aria-expanded", "true");
+    const panel = document.getElementById(trigger.element().getAttribute("aria-controls"));
+    expect.soft(document.querySelector("dialog:modal").contains(panel)).toBe(true);
+    await expect.element(page.elementLocator(panel)).toBeVisible();
+    await expect
+      .poll(() => {
+        const rect = panel.getBoundingClientRect();
+        return [0.1, 0.5, 0.9].every((fraction) =>
+          panel.contains(document.elementFromPoint(rect.left + rect.width * fraction, rect.top + rect.height / 2)),
+        );
+      })
+      .toBe(true);
+    await trigger.click();
+    await expect.element(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(document.getElementById(panel.id)).toBeNull();
+  });
+}
 
 for (const width of [320, 1280]) {
   for (const language of ["en", "de", "es"]) {
