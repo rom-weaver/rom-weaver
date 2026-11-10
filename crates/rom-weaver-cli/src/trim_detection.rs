@@ -460,10 +460,10 @@ impl CliApp {
                     source.display()
                 ))
             })?;
+            // A lone input the user named that trim cannot use is rejected with an
+            // explanation; in a larger batch or a folder it is counted as skipped.
+            let lone_input = sources.len() == 1;
             if metadata.is_file() {
-                // A lone file the user named that trim cannot use is rejected with an
-                // explanation; in a larger batch or a folder it is counted as skipped.
-                let lone_input = sources.len() == 1;
                 self.collect_trim_file(
                     source,
                     options,
@@ -485,7 +485,7 @@ impl CliApp {
                 continue;
             }
 
-            skips.skip_unsupported();
+            Self::skip_or_reject_unsupported_trim_file(source, lone_input, skips)?;
         }
 
         files.sort_by(|left, right| left.path.cmp(&right.path));

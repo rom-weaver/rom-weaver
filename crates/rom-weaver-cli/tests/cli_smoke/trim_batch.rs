@@ -1695,6 +1695,23 @@ fn trim_of_a_lone_unsupported_file_fails_with_a_coded_error() {
     assert_eq!(fs::read(source.path()).expect("source"), b"not an nds file");
 }
 
+#[cfg(unix)]
+#[test]
+fn trim_of_a_lone_non_regular_file_fails_with_a_coded_error() {
+    let terminal = parse_single_json_line(&command_stdout(
+        &["trim", "--input", "/dev/null", "--json"],
+        1,
+    ));
+    assert_eq!(terminal["status"], "failed");
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .ends_with("[trim.unsupported_input]"),
+        "{terminal}"
+    );
+}
+
 #[test]
 fn trim_skips_non_nds_inputs_in_a_folder_and_in_a_batch() {
     let temp = setup_temp_dir();
