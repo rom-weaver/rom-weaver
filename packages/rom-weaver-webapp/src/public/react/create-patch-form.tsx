@@ -47,6 +47,7 @@ import {
   getDisplaySourceInfo,
   isChecksumProgress,
   resolveCreateExecutionOutputName,
+  withoutIdenticalInputsWarning,
 } from "./create-patch-output-model.ts";
 import { buildCreateSourceStep, type CreateSourceStepRuntimeNotice } from "./create-source-step-view-model.tsx";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
@@ -1160,7 +1161,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
         rawSize: result.sizeSummary?.rawSize,
         saveAs: result.output.saveAs,
         size: result.sizeSummary?.outputSize ?? result.output.size,
-        warnings: result.warnings,
+        warnings: withoutIdenticalInputsWarning(result.warnings),
       });
       setProgress(null);
       if (typeof window !== "undefined") await result.output.saveAs();

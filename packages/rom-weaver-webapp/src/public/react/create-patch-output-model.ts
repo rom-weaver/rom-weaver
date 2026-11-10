@@ -128,6 +128,11 @@ const CREATE_SUPPORTED_FILES = [
   { extensions: ARCHIVE_FILE_EXTENSIONS, label: "Archives & containers" },
 ] as const;
 
+/** The CLI's identical-inputs warning, which the Create form already shows as its own localized notice. */
+const IDENTICAL_INPUTS_ENGINE_WARNING = "Original and Modified are identical; the patch will not change the output";
+const withoutIdenticalInputsWarning = (warnings: string[] | undefined) =>
+  warnings?.filter((warning) => warning !== IDENTICAL_INPUTS_ENGINE_WARNING);
+
 const getChecksumTimingLabel = (timing: string) => (timing ? `Checksum ${timing}` : "");
 const isChecksumProgress = (progress: WorkflowFormProgressState | null) =>
   !!progress && /checksum/i.test(`${progress.label} ${progress.message}`);
@@ -147,4 +152,5 @@ export {
   getDisplaySourceInfo,
   isChecksumProgress,
   resolveCreateExecutionOutputName,
+  withoutIdenticalInputsWarning,
 };
