@@ -19,8 +19,8 @@ use tracing::{debug, trace};
 use crate::shared::labels::append_warning_labels;
 use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
-    PreparedWrite, WholeWriteBatchOptions, apply_batched_whole_writes, chunk_count_for_len_checked,
-    run_with_optional_pool, scan_create_chunks,
+    PartialOutput, PreparedWrite, WholeWriteBatchOptions, apply_batched_whole_writes,
+    chunk_count_for_len_checked, run_with_optional_pool, scan_create_chunks,
 };
 
 const IPS_MAGIC: &[u8; 5] = b"PATCH";
@@ -185,13 +185,24 @@ impl PatchHandler for IpsPatchHandler {
         )?;
 
         let rendered_chunks_changed = AtomicBool::new(false);
-        let mut output = crate::create_buffered_output(&request.output)?;
+        let fixed_memory_bytes = ips_apply_memory_bytes(&patch, &tasks, tasks.capacity());
+        let mut output = PartialOutput::new(
+            rom_weaver_core::with_output_creation(context.cancel(), || {
+                crate::create_buffered_output(&request.output)
+            })?,
+            &request.output,
+        );
+
         let write_result = apply_batched_whole_writes(
-            &mut output,
+            output.output(),
             &tasks,
             WholeWriteBatchOptions {
                 pool: pool.as_ref(),
+                effective_threads: execution.effective_threads,
                 write_len: |task| usize::try_from(task.chunk.len).unwrap_or(usize::MAX),
+                memory_len: &|task| task.chunk.len,
+                fixed_memory_bytes,
+                cancel: context.cancel(),
             },
             |task| {
                 let (write, chunk_changed) =
@@ -202,13 +213,9 @@ impl PatchHandler for IpsPatchHandler {
                 Ok(write)
             },
         )
-        .and_then(|()| Ok(output.flush()?));
-        drop(output);
-        if let Err(error) = write_result {
-            debug!(output = %request.output.display(), "removing partial ips output after failed apply");
-            let _ = fs::remove_file(&request.output);
-            return Err(error);
-        }
+        .and_then(|()| Ok(output.output().flush()?));
+        write_result?;
+        output.complete();
         let rendered_chunks_changed = rendered_chunks_changed.into_inner();
         let did_change = output_size != input_len || rendered_chunks_changed;
         let warnings =
@@ -1712,6 +1719,58 @@ fn build_chunk_tasks(patch: &ParsedIpsPatch, output_size: u64) -> Result<Vec<Chu
             record_indexes,
         })
         .collect())
+}
+
+fn ips_apply_memory_bytes(
+    patch: &ParsedIpsPatch,
+    tasks: &[ChunkTask],
+    task_capacity: usize,
+) -> u64 {
+    let records = patch.records.iter().fold(
+        patch
+            .records
+            .capacity()
+            .saturating_mul(size_of::<IpsRecord>()),
+        |bytes, record| {
+            bytes.saturating_add(match &record.data {
+                IpsRecordData::Literal(data) => data.capacity(),
+                IpsRecordData::Rle { .. } => 0,
+            })
+        },
+    );
+    let tasks_bytes = tasks.iter().fold(
+        task_capacity.saturating_mul(size_of::<ChunkTask>()),
+        |bytes, task| {
+            bytes.saturating_add(
+                task.record_indexes
+                    .capacity()
+                    .saturating_mul(size_of::<usize>()),
+            )
+        },
+    );
+    let warnings = patch.warnings.iter().fold(
+        patch
+            .warnings
+            .capacity()
+            .saturating_mul(size_of::<String>()),
+        |bytes, warning| bytes.saturating_add(warning.capacity()),
+    );
+    let metadata = patch.metadata.as_ref().map_or(0, |metadata| {
+        metadata.iter().fold(0usize, |bytes, (key, value)| {
+            bytes
+                .saturating_add(key.capacity())
+                .saturating_add(match value {
+                    JsonValue::String(value) => value.capacity(),
+                    _ => 0,
+                })
+                .saturating_add(size_of::<(String, JsonValue)>().saturating_mul(2))
+        })
+    });
+    records
+        .saturating_add(tasks_bytes)
+        .saturating_add(warnings)
+        .saturating_add(metadata)
+        .saturating_add(size_of::<ParsedIpsPatch>()) as u64
 }
 
 fn render_chunk_task(

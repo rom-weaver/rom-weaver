@@ -33,6 +33,38 @@ enum TestIpsRecord {
 }
 
 #[test]
+fn apply_memory_budget_covers_retained_literal_metadata_and_chunk_indexes() {
+    let bytes = build_ebp_patch(
+        vec![TestIpsRecord::Literal {
+            offset: 0,
+            data: vec![0x5a; 65_535],
+        }],
+        &serde_json::json!({ "Title": "m".repeat(256 * 1024) }).to_string(),
+    );
+    let patch = parse_ips_bytes(&bytes, IpsFlavor::Ebp).expect("parse EBP");
+    let tasks = super::build_chunk_tasks(&patch, OUTPUT_CHUNK_SIZE * 4).expect("tasks");
+    let literal = match &patch.records[0].data {
+        IpsRecordData::Literal(bytes) => bytes,
+        _ => panic!("literal fixture"),
+    };
+    let metadata = patch.metadata.as_ref().expect("metadata");
+    let metadata_bytes: usize = metadata
+        .iter()
+        .map(|(key, value)| key.capacity() + value.as_str().expect("accepted EBP string").len())
+        .sum();
+    let retained = literal.capacity()
+        + metadata_bytes
+        + std::mem::size_of_val(&patch)
+        + patch.records.capacity() * std::mem::size_of::<super::IpsRecord>()
+        + tasks.capacity() * std::mem::size_of::<super::ChunkTask>()
+        + tasks
+            .iter()
+            .map(|task| task.record_indexes.capacity() * std::mem::size_of::<usize>())
+            .sum::<usize>();
+    assert!(super::ips_apply_memory_bytes(&patch, &tasks, tasks.capacity()) >= retained as u64);
+}
+
+#[test]
 fn parse_accepts_records_beyond_truncate_size_with_warning() {
     let patch = build_ips_patch(
         vec![TestIpsRecord::Literal {
@@ -539,6 +571,36 @@ fn failed_apply_removes_partial_output_and_temp_files() {
         .expect_err("cancelled apply");
     assert!(matches!(error, rom_weaver_core::RomWeaverError::Cancelled));
     assert!(!output_path.exists());
+    assert!(!context.temp_paths().root().exists());
+}
+
+#[test]
+fn cancelled_apply_preserves_existing_output() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.ips");
+    let output_path = temp.child("output.bin");
+    fs::write(&input_path, b"input").expect("fixture");
+    fs::write(&patch_path, large_rle_patch(5, b'Z')).expect("fixture");
+    fs::write(&output_path, b"keep this output").expect("existing output");
+    let context = test_context_with_threads(&temp, 4);
+    context.cancel().cancel();
+
+    let error = IpsPatchHandler::new(&IPS)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &context,
+        )
+        .expect_err("cancelled apply");
+    assert!(matches!(error, rom_weaver_core::RomWeaverError::Cancelled));
+    assert_eq!(
+        fs::read(output_path).expect("preserved output"),
+        b"keep this output"
+    );
     assert!(!context.temp_paths().root().exists());
 }
 

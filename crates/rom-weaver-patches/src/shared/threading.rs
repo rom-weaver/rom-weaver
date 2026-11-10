@@ -4,14 +4,21 @@
 //! keep their format-specific wording.
 
 use std::{
+    collections::VecDeque,
     io::{Seek, SeekFrom, Write},
     ops::Range,
+    path::Path,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
 };
 
 use rayon::prelude::*;
 use rom_weaver_core::{
-    OperationContext, Result, RomWeaverError, SharedThreadPool, ThreadCapability, ThreadExecution,
-    bounded_items_for_threads,
+    CancellationToken, OperationContext, Result, RomWeaverError, SharedThreadPool,
+    ThreadCapability, ThreadExecution, bounded_items_for_threads, decode_memory_budget_bytes,
+    parallel_heap_reserve, reserve_parallel_heap,
 };
 
 /// Parallel capability sized to one unit of work per parsed record (change,
@@ -170,44 +177,291 @@ pub(crate) fn apply_batched_writes<I: Sync>(
     Ok(())
 }
 
-pub(crate) struct WholeWriteBatchOptions<'a, I> {
-    pub(crate) pool: Option<&'a SharedThreadPool>,
-    pub(crate) write_len: fn(&I) -> usize,
+/// Removes incomplete output after closing its handle, including during unwinding.
+/// The caller MUST keep this guard outside any worker scope so workers join first.
+pub(crate) struct PartialOutput<'a, W> {
+    output: Option<W>,
+    path: &'a Path,
+    complete: bool,
 }
 
-/// Like [`apply_batched_writes`] for records that cannot be split: each item is prepared whole,
-/// and a batch closes once its combined `write_len` would pass the byte budget. A batch always
-/// holds at least one item, so an item larger than the budget is prepared on its own.
+impl<'a, W> PartialOutput<'a, W> {
+    pub(crate) fn new(output: W, path: &'a Path) -> Self {
+        Self {
+            output: Some(output),
+            path,
+            complete: false,
+        }
+    }
+
+    pub(crate) fn output(&mut self) -> &mut W {
+        self.output
+            .as_mut()
+            .expect("output remains open until completion")
+    }
+
+    pub(crate) fn complete(mut self) {
+        drop(self.output.take());
+        self.complete = true;
+    }
+}
+
+impl<W> Drop for PartialOutput<'_, W> {
+    fn drop(&mut self) {
+        drop(self.output.take());
+        if !self.complete {
+            tracing::debug!(output = %self.path.display(), "removing partial patch output after failed apply");
+            let _ = std::fs::remove_file(self.path);
+        }
+    }
+}
+
+pub(crate) struct WholeWriteBatchOptions<'a, I> {
+    pub(crate) pool: Option<&'a SharedThreadPool>,
+    pub(crate) effective_threads: usize,
+    pub(crate) write_len: fn(&I) -> usize,
+    pub(crate) memory_len: &'a (dyn Fn(&I) -> u64 + Sync),
+    pub(crate) fixed_memory_bytes: u64,
+    pub(crate) cancel: &'a CancellationToken,
+}
+
+#[derive(Clone, Copy)]
+struct WriteCharge {
+    bytes: usize,
+    memory: u64,
+}
+
+struct WriteAdmission {
+    slots: usize,
+    byte_limit: usize,
+    memory_limit: u64,
+    bytes: usize,
+    memory: u64,
+}
+
+impl WriteAdmission {
+    fn accepts(&self, count: usize, charge: WriteCharge) -> bool {
+        count == 0
+            || (count < self.slots
+                && self
+                    .bytes
+                    .checked_add(charge.bytes)
+                    .is_some_and(|n| n <= self.byte_limit)
+                && self
+                    .memory
+                    .checked_add(charge.memory)
+                    .is_some_and(|n| n <= self.memory_limit))
+    }
+
+    fn acquire(&mut self, charge: WriteCharge) {
+        self.bytes = self.bytes.saturating_add(charge.bytes);
+        self.memory = self.memory.saturating_add(charge.memory);
+    }
+
+    fn release(&mut self, charge: WriteCharge) {
+        self.bytes -= charge.bytes;
+        self.memory -= charge.memory;
+    }
+}
+
+struct StopOnDrop<'a>(&'a AtomicBool);
+
+impl Drop for StopOnDrop<'_> {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Prepares whole items on workers and writes them in order on the caller. A slot stays
+/// charged until its prepared buffer has been written and dropped; oversized items run alone.
 pub(crate) fn apply_batched_whole_writes<I: Sync>(
     output: &mut (impl Write + Seek),
     items: &[I],
     options: WholeWriteBatchOptions<'_, I>,
     prepare: impl Fn(&I) -> Result<PreparedWrite> + Sync + Send,
 ) -> Result<()> {
-    let WholeWriteBatchOptions { pool, write_len } = options;
-    let byte_limit = parallel_write_batch_bytes(pool.map_or(1, SharedThreadPool::size));
-    let mut batch: Vec<&I> = Vec::new();
-    let mut batch_bytes = 0usize;
-    let mut flush = |batch: &[&I]| -> Result<()> {
-        tracing::trace!(
-            items = batch.len(),
-            byte_limit,
-            "patch prepared whole write batch"
-        );
-        write_prepared_batch(output, pool, batch, |item| prepare(item))
-    };
-    for item in items {
-        let len = write_len(item);
-        if !batch.is_empty() && batch_bytes.saturating_add(len) > byte_limit {
-            flush(&batch)?;
-            batch.clear();
-            batch_bytes = 0;
+    WholeWritePipeline::new(items, options, prepare).run(output, decode_memory_budget_bytes())
+}
+
+struct WholeWritePipeline<'a, I, P> {
+    items: &'a [I],
+    options: WholeWriteBatchOptions<'a, I>,
+    prepare: P,
+    stop: AtomicBool,
+}
+
+impl<'a, I: Sync, P: Fn(&I) -> Result<PreparedWrite> + Sync + Send> WholeWritePipeline<'a, I, P> {
+    fn new(items: &'a [I], options: WholeWriteBatchOptions<'a, I>, prepare: P) -> Self {
+        Self {
+            items,
+            options,
+            prepare,
+            stop: AtomicBool::new(false),
         }
-        batch.push(item);
-        batch_bytes = batch_bytes.saturating_add(len);
     }
-    if !batch.is_empty() {
-        flush(&batch)?;
+
+    fn run(&self, output: &mut (impl Write + Seek), memory_budget: u64) -> Result<()> {
+        let WholeWriteBatchOptions {
+            pool,
+            effective_threads,
+            write_len,
+            memory_len,
+            fixed_memory_bytes,
+            cancel: _,
+        } = &self.options;
+        let slots = (*effective_threads)
+            .max(1)
+            .min(pool.map_or(1, SharedThreadPool::size));
+        let overhead = pool.map_or(0, |pool| parallel_heap_reserve(pool.size())) as u64;
+        let fixed_memory_bytes = fixed_memory_bytes.saturating_add(overhead);
+        let mut admission = WriteAdmission {
+            slots,
+            byte_limit: parallel_write_batch_bytes(slots),
+            memory_limit: memory_budget.saturating_sub(fixed_memory_bytes),
+            bytes: 0,
+            memory: 0,
+        };
+        let charge = |item: &I| WriteCharge {
+            bytes: write_len(item),
+            memory: memory_len(item),
+        };
+        // Simulate the same ordered admissions across the entire plan, including late large windows.
+        let mut planned = VecDeque::new();
+        let mut peak_memory = 0;
+        let mut parallel_memory = 0;
+        let mut peak_bytes = 0;
+        let mut peak_slots = 0;
+        for item in self.items {
+            let item_charge = charge(item);
+            while !admission.accepts(planned.len(), item_charge) {
+                admission.release(planned.pop_front().expect("nonempty admission"));
+            }
+            admission.acquire(item_charge);
+            planned.push_back(item_charge);
+            peak_memory = peak_memory.max(admission.memory);
+            if planned.len() > 1 {
+                parallel_memory = parallel_memory.max(admission.memory);
+            }
+            peak_bytes = peak_bytes.max(admission.bytes);
+            peak_slots = peak_slots.max(planned.len());
+        }
+        tracing::debug!(
+            slots,
+            peak_slots,
+            peak_bytes,
+            peak_memory,
+            parallel_memory,
+            fixed_memory_bytes,
+            memory_budget,
+            "patch whole write admission plan"
+        );
+        admission.bytes = 0;
+        admission.memory = 0;
+        drop(planned);
+
+        if let Some(pool) = pool {
+            pool.in_place_scope(|scope| {
+                let scope = scope.filter(|_| peak_slots > 1);
+                if scope.is_some() {
+                    reserve_parallel_heap(
+                        usize::try_from(
+                            parallel_memory.saturating_add(parallel_heap_reserve(0) as u64),
+                        )
+                        .unwrap_or(usize::MAX),
+                    );
+                }
+                self.write_items(output, scope, &mut admission)
+            })
+        } else {
+            self.write_items(output, None, &mut admission)
+        }
+    }
+
+    fn write_items<'scope>(
+        &'scope self,
+        output: &mut (impl Write + Seek),
+        scope: Option<&rayon::Scope<'scope>>,
+        admission: &mut WriteAdmission,
+    ) -> Result<()> {
+        let options = &self.options;
+        let items = self.items;
+        let prepare = &self.prepare;
+        let stop = &self.stop;
+        let cancel = options.cancel;
+        let Some(scope) = scope else {
+            for item in items {
+                cancel.check()?;
+                let write = prepare(item)?;
+                cancel.check()?;
+                write_whole_item(output, &write, cancel)?;
+                drop(write);
+            }
+            return Ok(());
+        };
+        let mut pending = VecDeque::new();
+        let _stop_on_exit = StopOnDrop(stop);
+        let mut next = 0;
+        loop {
+            while next < items.len() {
+                cancel.check()?;
+                let item = &items[next];
+                let charge = WriteCharge {
+                    bytes: (options.write_len)(item),
+                    memory: (options.memory_len)(item),
+                };
+                if !admission.accepts(pending.len(), charge) {
+                    break;
+                }
+                admission.acquire(charge);
+                let (sender, receiver) = mpsc::sync_channel(1);
+                scope.spawn(move |_| {
+                    if stop.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    let result = cancel
+                        .check()
+                        .and_then(|()| prepare(item))
+                        .and_then(|write| {
+                            cancel.check()?;
+                            Ok(write)
+                        });
+                    // Exactly one send fits even while the coordinator writes another slot.
+                    let _ = sender.send(result);
+                });
+                pending.push_back((receiver, charge));
+                next += 1;
+                tracing::trace!(
+                    outstanding = pending.len(),
+                    bytes = admission.bytes,
+                    memory = admission.memory,
+                    "patch whole write admitted"
+                );
+            }
+            let Some((receiver, charge)) = pending.pop_front() else {
+                return Ok(());
+            };
+            let write = receiver.recv().map_err(|_| {
+                RomWeaverError::Validation(
+                    "patch decoder stopped before returning a prepared write".into(),
+                )
+            })??;
+            cancel.check()?;
+            write_whole_item(output, &write, cancel)?;
+            drop(write);
+            admission.release(charge);
+        }
+    }
+}
+
+fn write_whole_item(
+    output: &mut (impl Write + Seek),
+    write: &PreparedWrite,
+    cancel: &CancellationToken,
+) -> Result<()> {
+    if !write.data.is_empty() {
+        output.seek(SeekFrom::Start(write.offset))?;
+        cancel.check()?;
+        output.write_all(&write.data)?;
     }
     Ok(())
 }

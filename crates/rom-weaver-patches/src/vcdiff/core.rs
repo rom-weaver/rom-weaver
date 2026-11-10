@@ -1,6 +1,8 @@
 use super::*;
 use crate::shared::labels::append_warning_labels;
-use crate::shared::threading::{PreparedWrite, WholeWriteBatchOptions, apply_batched_whole_writes};
+use crate::shared::threading::{
+    PartialOutput, PreparedWrite, WholeWriteBatchOptions, apply_batched_whole_writes,
+};
 use rom_weaver_core::{
     IoOp, IoResultExt, ValidationCodeError, checksum_validation_suffix, require_single_patch_file,
 };
@@ -172,7 +174,7 @@ impl VcdiffPatchHandler {
             windows = patch.windows.len(),
             requested_threads,
             used_parallelism = planned_execution.used_parallelism,
-            "xdelta apply path: batched per-window decode"
+            "xdelta apply path: streaming per-window decode"
         );
         let (execution, pool) = if planned_execution.used_parallelism {
             let (execution, pool) = context.build_pool(thread_capability)?;
@@ -189,26 +191,30 @@ impl VcdiffPatchHandler {
             validate_checksums,
             cancel: context.cancel(),
         };
-        let mut output = rom_weaver_core::with_output_creation(context.cancel(), || {
-            File::create(&request.output).io_op(IoOp::Create, &request.output)
-        })?;
+        let mut output = PartialOutput::new(
+            rom_weaver_core::with_output_creation(context.cancel(), || {
+                File::create(&request.output).io_op(IoOp::Create, &request.output)
+            })?,
+            &request.output,
+        );
+
         let write_result = apply_batched_whole_writes(
-            &mut output,
+            output.output(),
             &patch.windows,
             WholeWriteBatchOptions {
                 pool: pool.as_ref(),
+                effective_threads: execution.effective_threads,
                 write_len: |window| {
                     usize::try_from(window.target_window_size).unwrap_or(usize::MAX)
                 },
+                memory_len: &|window| window.decode_memory_bytes(patch.secondary_compressor_id),
+                fixed_memory_bytes: patch.apply_memory_bytes(),
+                cancel: context.cancel(),
             },
             |window| decoder.decode_write(window),
         );
-        drop(output);
-        if let Err(error) = write_result {
-            debug!(output = %request.output.display(), "removing partial VCDIFF output after failed apply");
-            let _ = fs::remove_file(&request.output);
-            return Err(error);
-        }
+        write_result?;
+        output.complete();
 
         Ok(self.apply_report(patch, validate_checksums, &empty_patch_warnings, execution))
     }
@@ -731,9 +737,55 @@ pub(super) struct WindowIndex {
     pub(super) output_offset: u64,
 }
 
-impl WindowIndex {}
+impl WindowIndex {
+    pub(super) fn decode_memory_bytes(&self, secondary: Option<u8>) -> u64 {
+        let sections = self
+            .data_len
+            .saturating_add(self.inst_len)
+            .saturating_add(self.addr_len);
+        // The slice-backed decoder borrows source COPY spans; its fallback COPY buffer stays empty.
+        // Fixed scratch covers buffered input and DJW/FGK table/model allocations.
+        let mut memory = self
+            .source_segment_size
+            .saturating_add(self.target_window_size)
+            .saturating_add(sections)
+            .saturating_add((2 * NATIVE_CHUNK_SIZE) as u64);
+        if self.delta_indicator != 0 {
+            if !matches!(
+                secondary,
+                Some(XDELTA_DJW_SECONDARY_ID | XDELTA_FGK_SECONDARY_ID)
+            ) {
+                // Ordinary LZMA libraries can allocate dictionaries independent of window size.
+                return u64::MAX;
+            }
+            for (len, flag) in [
+                (self.data_len, DELTA_DATA_COMP),
+                (self.inst_len, DELTA_INST_COMP),
+                (self.addr_len, DELTA_ADDR_COMP),
+            ] {
+                let decoded = if self.delta_indicator & flag != 0 {
+                    len.saturating_mul(8)
+                } else {
+                    len
+                };
+                // DJW selectors need at most one byte per five output bytes; charging another
+                // decoded length covers them while all raw and decoded sections coexist.
+                memory = memory.saturating_add(decoded.saturating_mul(2));
+            }
+        }
+        memory
+    }
+}
 
 impl ParsedPatch {
+    pub(super) fn apply_memory_bytes(&self) -> u64 {
+        self.windows
+            .capacity()
+            .saturating_mul(size_of::<WindowIndex>())
+            .saturating_add(self.app_header.as_ref().map_or(0, Vec::capacity))
+            .saturating_add(size_of::<Self>()) as u64
+    }
+
     pub(super) fn minimum_source_size(&self) -> Result<Option<u64>> {
         self.windows
             .iter()
