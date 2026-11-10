@@ -81,19 +81,19 @@ New here? [Your first patch](../tutorials/first-patch.md) supplies homebrew file
 
 Apply a BPS patch online with the clean ROM its author names. BPS records the source ROM's CRC32, so **Checks** shows a match or a mismatch before you apply; if it fails, follow [Fix a source ROM checksum mismatch](fix-checksum-errors.md). Choose a plain output file unless your emulator or the patch author needs a compressed format, then [test the result](test-roms-in-browser.md#test-an-apply-result).
 
-For multiple patches, check [order and inputs](#apply-multiple-patches-in-order); for output options, see [choose the output and apply](#choose-the-output-and-apply).
+For multiple patches, check [order and inputs](#apply-multiple-patches-in-order); for output options, see [choose the output and apply](#choose-the-output-and-apply). [How to apply a BPS patch](apply-bps-patch-browser.md) explains each check a BPS patch carries.
 
 ## Apply an IPS or IPS32 patch
 
-Add the `.ips`/`.ips32` and source. These formats contain no source checksum: compare the author's digest using [Checksum](checksum-roms-browser.md) and check the header state. Successful application alone does not prove the ROM is correct.
+Add the `.ips`/`.ips32` and source. These formats contain no source checksum: compare the author's digest using [Checksum](checksum-roms-browser.md) and check the header state. Successful application alone does not prove the ROM is correct. [How to apply an IPS patch](apply-ips-patch-browser.md) covers both checks.
 
 ## Apply a UPS patch
 
-Add the `.ups` and clean source. Check the card's input checks; resolve [region, revision, or header mismatches](fix-checksum-errors.md) before applying.
+Add the `.ups` and clean source. Check the card's input checks; resolve [region, revision, or header mismatches](fix-checksum-errors.md) before applying. [How to apply a UPS patch](apply-ups-patch-browser.md) explains what those checks compare.
 
 ## Apply an xdelta or VCDIFF patch
 
-Add the supplied `.xdelta`, `.delta`, `.dat`, or `.vcdiff` and the exact image or track named by the author. Source checks depend on how the patch was made; compare any published source digest before applying.
+Add the supplied `.xdelta`, `.delta`, `.dat`, or `.vcdiff` and the exact image or track named by the author. Source checks depend on how the patch was made; compare any published source digest before applying. [How to apply an xdelta patch](apply-xdelta-patch-browser.md) covers disc images and tracks.
 
 ## Apply a PPF patch
 

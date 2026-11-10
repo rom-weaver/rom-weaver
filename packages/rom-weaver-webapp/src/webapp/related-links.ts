@@ -33,6 +33,18 @@ type RelatedEntry = {
  * `docs/` or is exactly `docs`.
  */
 const RELATED_LINKS: Record<string, RelatedEntry> = {
+  "docs/apply-bps-patch": {
+    tools: [{ labelId: "ui.docs.toolApply", view: "patcher" }],
+  },
+  "docs/apply-ips-patch": {
+    tools: [{ labelId: "ui.docs.toolApply", view: "patcher" }],
+  },
+  "docs/apply-ups-patch": {
+    tools: [{ labelId: "ui.docs.toolApply", view: "patcher" }],
+  },
+  "docs/apply-xdelta-patch": {
+    tools: [{ labelId: "ui.docs.toolApply", view: "patcher" }],
+  },
   "docs/apply-rom-patches": {
     tools: [{ labelId: "ui.docs.toolApply", view: "patcher" }],
   },

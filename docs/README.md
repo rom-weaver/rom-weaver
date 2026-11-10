@@ -79,6 +79,10 @@ Procedures for specific tasks.
 
 - [Add an Apply button to a release](hosting/webapp-integration.md#add-an-apply-button)
 - [Apply a ROM patch](how-to/apply-rom-patches.md)
+- [Apply a BPS patch](how-to/apply-bps-patch-browser.md)
+- [Apply an IPS patch](how-to/apply-ips-patch-browser.md)
+- [Apply a UPS patch](how-to/apply-ups-patch-browser.md)
+- [Apply an xdelta patch](how-to/apply-xdelta-patch-browser.md)
 - [Use cheats in the browser](how-to/use-browser-cheats.md)
 - [Convert BPS to IPS and other patch formats](how-to/convert-patch-format-browser.md)
 - [Create a ROM patch](how-to/create-rom-patches.md)

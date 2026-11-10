@@ -103,6 +103,9 @@ for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
 for (const publicPath of [
   ...MARKDOWN_ROUTES.map(({ markdownPath }) => markdownPath),
   "/auth.md",
+  "/NOTICE",
+  "/WEBAPP_NOTICE",
+  "/third_party/licenses/LICENSE-APACHE",
   "/rom-weaver-bundle-v2.schema.json",
   "/rom-weaver-weave-v2.schema.json",
 ]) {
