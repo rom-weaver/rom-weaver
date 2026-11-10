@@ -9,6 +9,7 @@ use std::{
     ops::Range,
     path::Path,
     sync::{
+        Mutex,
         atomic::{AtomicBool, Ordering},
         mpsc,
     },
@@ -272,13 +273,46 @@ impl Drop for StopOnDrop<'_> {
     }
 }
 
+/// Written buffers returned for reuse, so workers do not allocate and fault in fresh pages
+/// per item and freed blocks do not pile up in per-thread allocator arenas.
+#[derive(Default)]
+struct SpareBuffers(Mutex<Vec<Vec<u8>>>);
+
+impl SpareBuffers {
+    /// Returns an empty buffer whose capacity is exactly `len` when a spare is large enough.
+    fn take(&self, len: usize) -> Vec<u8> {
+        let spare = self
+            .0
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .pop();
+        match spare {
+            Some(mut buffer) if buffer.capacity() >= len => {
+                buffer.clear();
+                buffer.shrink_to(len);
+                buffer
+            }
+            _ => Vec::with_capacity(len),
+        }
+    }
+
+    fn put(&self, buffer: Vec<u8>) {
+        self.0
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .push(buffer);
+    }
+}
+
 /// Prepares whole items on workers and writes them in order on the caller. A slot stays
-/// charged until its prepared buffer has been written and dropped; oversized items run alone.
+/// charged until its prepared buffer has been written and returned; oversized items run alone.
+/// `prepare` receives an empty buffer with capacity for the item's write length and SHOULD
+/// return its bytes in that buffer.
 pub(crate) fn apply_batched_whole_writes<I: Sync>(
     output: &mut (impl Write + Seek),
     items: &[I],
     options: WholeWriteBatchOptions<'_, I>,
-    prepare: impl Fn(&I) -> Result<PreparedWrite> + Sync + Send,
+    prepare: impl Fn(&I, Vec<u8>) -> Result<PreparedWrite> + Sync + Send,
 ) -> Result<()> {
     WholeWritePipeline::new(items, options, prepare).run(output, decode_memory_budget_bytes())
 }
@@ -287,15 +321,19 @@ struct WholeWritePipeline<'a, I, P> {
     items: &'a [I],
     options: WholeWriteBatchOptions<'a, I>,
     prepare: P,
+    spares: SpareBuffers,
     stop: AtomicBool,
 }
 
-impl<'a, I: Sync, P: Fn(&I) -> Result<PreparedWrite> + Sync + Send> WholeWritePipeline<'a, I, P> {
+impl<'a, I: Sync, P: Fn(&I, Vec<u8>) -> Result<PreparedWrite> + Sync + Send>
+    WholeWritePipeline<'a, I, P>
+{
     fn new(items: &'a [I], options: WholeWriteBatchOptions<'a, I>, prepare: P) -> Self {
         Self {
             items,
             options,
             prepare,
+            spares: SpareBuffers::default(),
             stop: AtomicBool::new(false),
         }
     }
@@ -377,6 +415,11 @@ impl<'a, I: Sync, P: Fn(&I) -> Result<PreparedWrite> + Sync + Send> WholeWritePi
         }
     }
 
+    fn prepare_item(&self, item: &I) -> Result<PreparedWrite> {
+        let buffer = self.spares.take((self.options.write_len)(item));
+        (self.prepare)(item, buffer)
+    }
+
     fn write_items<'scope>(
         &'scope self,
         output: &mut (impl Write + Seek),
@@ -385,16 +428,15 @@ impl<'a, I: Sync, P: Fn(&I) -> Result<PreparedWrite> + Sync + Send> WholeWritePi
     ) -> Result<()> {
         let options = &self.options;
         let items = self.items;
-        let prepare = &self.prepare;
         let stop = &self.stop;
         let cancel = options.cancel;
         let Some(scope) = scope else {
             for item in items {
                 cancel.check()?;
-                let write = prepare(item)?;
+                let write = self.prepare_item(item)?;
                 cancel.check()?;
                 write_whole_item(output, &write, cancel)?;
-                drop(write);
+                self.spares.put(write.data);
             }
             return Ok(());
         };
@@ -420,7 +462,7 @@ impl<'a, I: Sync, P: Fn(&I) -> Result<PreparedWrite> + Sync + Send> WholeWritePi
                     }
                     let result = cancel
                         .check()
-                        .and_then(|()| prepare(item))
+                        .and_then(|()| self.prepare_item(item))
                         .and_then(|write| {
                             cancel.check()?;
                             Ok(write)
@@ -447,7 +489,7 @@ impl<'a, I: Sync, P: Fn(&I) -> Result<PreparedWrite> + Sync + Send> WholeWritePi
             })??;
             cancel.check()?;
             write_whole_item(output, &write, cancel)?;
-            drop(write);
+            self.spares.put(write.data);
             admission.release(charge);
         }
     }

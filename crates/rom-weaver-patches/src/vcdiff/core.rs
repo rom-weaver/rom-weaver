@@ -211,7 +211,7 @@ impl VcdiffPatchHandler {
                 fixed_memory_bytes: patch.apply_memory_bytes(),
                 cancel: context.cancel(),
             },
-            |window| decoder.decode_write(window),
+            |window, target| decoder.decode_write(window, target),
         );
         write_result?;
         output.complete();
@@ -1081,7 +1081,7 @@ struct WindowDecoder<'a> {
 }
 
 impl WindowDecoder<'_> {
-    fn decode_write(&self, window: &WindowIndex) -> Result<PreparedWrite> {
+    fn decode_write(&self, window: &WindowIndex, target: Vec<u8>) -> Result<PreparedWrite> {
         self.cancel.check()?;
         let source = match window.source_kind {
             None => Vec::new(),
@@ -1108,6 +1108,7 @@ impl WindowDecoder<'_> {
             self.secondary_compressor_id,
             &source,
             self.validate_checksums,
+            target,
         )?;
         Ok(PreparedWrite {
             offset: window.output_offset,
@@ -1249,6 +1250,7 @@ pub(super) fn apply_windows_with_target_sources(
                 patch.secondary_compressor_id,
                 source,
                 validate_checksums,
+                Vec::new(),
             )
         },
     )
@@ -1334,6 +1336,7 @@ pub fn apply_patch_bytes(source: &[u8], patch_bytes: &[u8]) -> Result<Vec<u8>> {
             patch.secondary_compressor_id,
             segment,
             true,
+            Vec::new(),
         )?;
         output.extend_from_slice(&target);
     }

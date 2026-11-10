@@ -733,6 +733,7 @@ pub(super) fn decode_window_with_native_engine<R: Read + Seek>(
     secondary_compressor_id: Option<u8>,
     source_segment: &[u8],
     validate_checksums: bool,
+    target: Vec<u8>,
 ) -> Result<Vec<u8>> {
     let (data, inst, addr) = read_window_sections(patch_reader, window, secondary_compressor_id)?;
     decode_native_window_sections(
@@ -742,6 +743,7 @@ pub(super) fn decode_window_with_native_engine<R: Read + Seek>(
         &addr,
         source_segment,
         validate_checksums,
+        target,
     )
 }
 
@@ -768,9 +770,11 @@ pub(super) fn decode_window_with_xdelta_lzma_sections<R: Read + Seek>(
         &addr,
         source_segment,
         validate_checksums,
+        Vec::new(),
     )
 }
 
+/// Decodes one window into `target`, which MUST be empty; its capacity is reused.
 pub(super) fn decode_native_window_sections(
     window: &WindowIndex,
     data: &[u8],
@@ -778,6 +782,7 @@ pub(super) fn decode_native_window_sections(
     addr: &[u8],
     source_segment: &[u8],
     validate_checksums: bool,
+    mut target: Vec<u8>,
 ) -> Result<Vec<u8>> {
     let source_len = if window.source_kind.is_some() {
         window.source_segment_size
@@ -789,27 +794,26 @@ pub(super) fn decode_native_window_sections(
     let mut source: &[u8] = source_segment;
     let mut copy_buf = Vec::new();
 
-    let decoded = oxidelta_decoder::decode_window(
+    oxidelta_decoder::decode_window_into(
         &header,
-        data,
-        inst,
-        addr,
+        oxidelta_decoder::WindowSections { data, inst, addr },
         &mut source,
         validate_checksums,
         &mut copy_buf,
+        &mut target,
     )
     .map_err(|error| native_decode_error(error, window))?;
 
-    if decoded.len() as u64 != window.target_window_size {
+    if target.len() as u64 != window.target_window_size {
         return Err(RomWeaverError::Validation(format!(
             "native VCDIFF decoder produced {} byte(s) but expected {}",
-            decoded.len(),
+            target.len(),
             window.target_window_size
         )));
     }
 
     if validate_checksums && let Some(expected) = window.checksum {
-        let actual = adler32(&decoded);
+        let actual = adler32(&target);
         if actual != expected {
             return Err(RomWeaverError::coded(
                 rom_weaver_core::ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
@@ -820,7 +824,7 @@ pub(super) fn decode_native_window_sections(
         }
     }
 
-    Ok(decoded)
+    Ok(target)
 }
 
 pub(super) fn read_window_sections<R: Read + Seek>(

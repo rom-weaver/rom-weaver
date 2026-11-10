@@ -204,9 +204,9 @@ impl PatchHandler for IpsPatchHandler {
                 fixed_memory_bytes,
                 cancel: context.cancel(),
             },
-            |task| {
+            |task, buffer| {
                 let (write, chunk_changed) =
-                    render_chunk_task(task, &request.input, input_len, &patch, context)?;
+                    render_chunk_task(task, buffer, &request.input, input_len, &patch, context)?;
                 if chunk_changed {
                     rendered_chunks_changed.store(true, Ordering::Relaxed);
                 }
@@ -1775,6 +1775,7 @@ fn ips_apply_memory_bytes(
 
 fn render_chunk_task(
     task: &ChunkTask,
+    mut buffer: Vec<u8>,
     input_path: &Path,
     input_len: u64,
     patch: &ParsedIpsPatch,
@@ -1785,7 +1786,7 @@ fn render_chunk_task(
     let chunk_len = usize::try_from(task.chunk.len).map_err(|_| {
         RomWeaverError::Validation("IPS chunk length exceeded addressable memory".into())
     })?;
-    let mut buffer = vec![0u8; chunk_len];
+    buffer.resize(chunk_len, 0);
     read_input_chunk(input_path, input_len, &task.chunk, &mut buffer)?;
     let mut changed = false;
 

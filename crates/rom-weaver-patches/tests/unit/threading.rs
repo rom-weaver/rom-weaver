@@ -218,7 +218,7 @@ fn assert_whole_batch_sizes(lengths: &[usize], expected_batches: &[usize]) {
             cancel: &CancellationToken::new(),
             write_len: |record| record.1,
         },
-        |&(offset, len, byte)| {
+        |&(offset, len, byte), _buffer| {
             pending_bytes.fetch_add(len, Ordering::SeqCst);
             Ok(PreparedWrite {
                 offset: offset as u64,
@@ -229,6 +229,24 @@ fn assert_whole_batch_sizes(lengths: &[usize], expected_batches: &[usize]) {
     .expect("whole writes");
     assert_eq!(output.batch_sizes, expected_batches);
     assert_eq!(output.output.into_inner(), expected);
+}
+
+#[test]
+fn written_buffers_are_reused_only_when_large_enough() {
+    let spares = super::SpareBuffers::default();
+    let written = Vec::<u8>::with_capacity(64);
+    let written_ptr = written.as_ptr();
+    spares.put(written);
+    assert_eq!(spares.0.lock().expect("spares").len(), 1);
+
+    let reused = spares.take(64);
+    assert_eq!(reused.as_ptr(), written_ptr);
+    assert!(reused.is_empty());
+    assert!(reused.capacity() >= 64);
+
+    spares.put(reused);
+    let grown = spares.take(128);
+    assert!(grown.capacity() >= 128);
 }
 
 #[test]
@@ -253,7 +271,7 @@ fn whole_record_preparation_errors_stop_later_batches() {
             cancel: &CancellationToken::new(),
             write_len: |&len| len,
         },
-        |&len| {
+        |&len, _buffer| {
             if len == 1 {
                 return Err(RomWeaverError::Validation("second batch".into()));
             }
@@ -341,7 +359,7 @@ fn slow_first_decode_and_blocked_caller_write_keep_all_slots_charged() {
                     fixed_memory_bytes: 0,
                     cancel: &CancellationToken::new(),
                 },
-                |&index| {
+                |&index, _buffer| {
                     started.send(index).expect("started");
                     if index == 0 {
                         decode_gate
@@ -417,7 +435,7 @@ fn memory_admission_includes_pending_outputs_and_oversized_items_run_alone() {
             fixed_memory_bytes: 7,
             cancel: &CancellationToken::new(),
         },
-        |memory| {
+        |memory, _buffer| {
             let index = prepared.fetch_add(1, Ordering::SeqCst);
             if *memory == 100 {
                 assert_eq!(written.load(Ordering::SeqCst), 2);
@@ -505,7 +523,7 @@ fn completed_writes_recycle_both_budgets_across_repeated_parallel_admissions() {
                 fixed_memory_bytes: 0,
                 cancel: &CancellationToken::new(),
             },
-            |&index| {
+            |&index, _buffer| {
                 let mut seen = seen.lock().expect("seen items");
                 if std::mem::replace(&mut seen[index], true) {
                     return Err(RomWeaverError::Validation("item prepared twice".into()));
@@ -581,7 +599,7 @@ fn unequal_whole_writes_keep_the_remaining_byte_credit() {
             fixed_memory_bytes: 0,
             cancel: &CancellationToken::new(),
         },
-        |&index| {
+        |&index, _buffer| {
             started.send(index).expect("observe decoder");
             Ok(PreparedWrite {
                 offset: index as u64,
@@ -614,7 +632,7 @@ fn parallel_whole_writes_prepare_each_item_once_and_preserve_order() {
             fixed_memory_bytes: 0,
             cancel: &CancellationToken::new(),
         },
-        |&index| {
+        |&index, _buffer| {
             if std::mem::replace(&mut seen.lock().expect("seen items")[index], true) {
                 return Err(RomWeaverError::Validation("item prepared twice".into()));
             }
@@ -654,7 +672,7 @@ fn whole_write_target_byte_limit_still_admits_oversized_items_only_alone() {
             fixed_memory_bytes: 0,
             cancel: &CancellationToken::new(),
         },
-        |&len| {
+        |&len, _buffer| {
             assert_eq!(pending.fetch_add(1, Ordering::SeqCst), 0);
             // Admission uses the estimate, avoiding large allocations in this concurrency test.
             Ok(PreparedWrite {
@@ -696,7 +714,7 @@ fn nested_pool_whole_writes_fall_back_to_immediate_serial_writes() {
                 fixed_memory_bytes: 0,
                 cancel: &CancellationToken::new(),
             },
-            |&index| {
+            |&index, _buffer| {
                 assert_eq!(std::thread::current().id(), caller);
                 assert_eq!(written.load(Ordering::SeqCst), index);
                 Ok(PreparedWrite {
@@ -731,7 +749,7 @@ fn cancellation_after_decode_never_writes_prepared_data() {
                 fixed_memory_bytes: 0,
                 cancel: &cancel,
             },
-            |_| {
+            |_, _buffer| {
                 cancel.cancel();
                 Ok(PreparedWrite {
                     offset: 0,
@@ -803,7 +821,7 @@ fn prepare_and_write_failures_join_workers_before_partial_output_removal() {
                     fixed_memory_bytes: 0,
                     cancel: &CancellationToken::new(),
                 },
-                |_| {
+                |_, _buffer| {
                     assert!(!closed.load(Ordering::SeqCst));
                     assert!(path.exists());
                     if !fail_write {
@@ -868,7 +886,7 @@ fn worker_and_writer_unwind_join_without_hanging_and_remove_partial_output() {
                         fixed_memory_bytes: 0,
                         cancel: &CancellationToken::new(),
                     },
-                    |&index| {
+                    |&index, _buffer| {
                         assert!(path.exists(), "output removed before workers joined");
                         if worker_panic && index == 0 {
                             panic!("decoder panic");
@@ -940,7 +958,7 @@ fn cancellation_during_positioning_is_checked_immediately_before_write() {
             fixed_memory_bytes: 0,
             cancel: &cancel,
         },
-        |&index| {
+        |&index, _buffer| {
             Ok(PreparedWrite {
                 offset: index as u64,
                 data: vec![index as u8],
