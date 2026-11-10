@@ -229,15 +229,16 @@ impl CliApp {
         &self,
         run: &PatchApplyRun,
     ) -> std::result::Result<(), Box<OperationReport>> {
-        if !run.compression_options.enabled || run.is_disc() {
+        if run.is_disc() {
             return Ok(());
         }
-        self.resolve_patch_apply_compression_plan(
+        self.plan_patch_apply_compression(
             &run.output,
             &run.resolved_input,
             &run.compression_options,
+            Some(&run.resolved_input),
         )
-        .and_then(|plan| self.validate_z3ds_plan_input(&plan, &run.resolved_input))
+        .map(|_plan| ())
         .map_err(|error| run.fail_error("compress", error))
     }
 

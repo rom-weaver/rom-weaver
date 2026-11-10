@@ -316,8 +316,9 @@ impl CliApp {
             args.compress_codec.clone(),
             args.compress_level,
         )?;
-        let unresolved = !args.no_extract
-            && self.containers.probe(&args.rom).is_some()
+        // Without an extraction step the ROM is the compression input itself.
+        let extracts_container = !args.no_extract && self.containers.probe(&args.rom).is_some();
+        let unresolved = extracts_container
             && options.enabled
             && options.requested_format.is_none()
             && options.codec.is_none()
@@ -330,9 +331,7 @@ impl CliApp {
             return Ok((args.output.clone(), None, true));
         }
         let options = self.resolve_patch_apply_output_options(options, &args.output, &args.rom)?;
-        // Without an extraction step the ROM is the compression input itself.
-        let checked_input = (args.no_extract || self.containers.probe(&args.rom).is_none())
-            .then_some(args.rom.as_path());
+        let checked_input = (!extracts_container).then_some(args.rom.as_path());
         let plan =
             self.plan_patch_apply_compression(&args.output, &args.rom, &options, checked_input)?;
         let output = plan

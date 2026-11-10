@@ -157,45 +157,41 @@ describe("compress service", () => {
     expect(probe).toHaveBeenCalledTimes(2);
   });
 
-  it("reports a non-disc RVZ input in plain words", async () => {
-    const engineMessage =
-      "`dvd.iso` is not a GameCube or Wii disc image; rvz create only supports GameCube and Wii disc images [disc.not_gamecube_wii]";
-    const { cleanup, create, runtime } = makeRuntime();
-    create.mockRejectedValue(
-      Object.assign(new Error(engineMessage), {
-        code: "UNSUPPORTED_FORMAT",
-        details: { engineCode: "disc.not_gamecube_wii" },
-      }),
-    );
-    const probe = async () => ({ entries: [], recommendedFormat: "rvz" });
-    Object.assign(runtime.compression, { probe });
-    const failure = await compressFiles([file("dvd.iso", new Uint8Array(2048))], options("rvz"), runtime).catch(
-      (error: unknown) => error,
-    );
-    expect(failure).toBeInstanceOf(ContainerInputRejectedError);
-    expect((failure as ContainerInputRejectedError).fileName).toBe("dvd.iso");
-    expect((failure as Error).message).not.toContain("disc.not_gamecube_wii");
-    expect((failure as Error).cause).toBeInstanceOf(Error);
-    expect(cleanup).not.toHaveBeenCalled();
-  });
-
-  it("reports a non-3DS Z3DS input in plain words", async () => {
-    const { cleanup, create, runtime } = makeRuntime();
-    create.mockRejectedValue(
-      Object.assign(new Error("`game.3ds` is not a 3DS image [container.not_3ds]"), {
-        code: "UNSUPPORTED_FORMAT",
-        details: { engineCode: "container.not_3ds" },
-      }),
-    );
-    const failure = await compressFiles([file("game.3ds", new Uint8Array(2048))], options("z3ds"), runtime).catch(
-      (error: unknown) => error,
-    );
-    expect(failure).toBeInstanceOf(ContainerInputRejectedError);
-    expect((failure as ContainerInputRejectedError).format).toBe("z3ds");
-    expect((failure as ContainerInputRejectedError).fileName).toBe("game.3ds");
-    expect((failure as Error).message).not.toContain("container.not_3ds");
-    expect(cleanup).not.toHaveBeenCalled();
-  });
+  it.each([
+    {
+      format: "rvz" as const,
+      fileName: "dvd.iso",
+      engineCode: "disc.not_gamecube_wii",
+      engineMessage:
+        "`dvd.iso` is not a GameCube or Wii disc image; rvz create only supports GameCube and Wii disc images [disc.not_gamecube_wii]",
+      probe: async () => ({ entries: [], recommendedFormat: "rvz" }),
+    },
+    {
+      format: "z3ds" as const,
+      fileName: "game.3ds",
+      engineCode: "container.not_3ds",
+      engineMessage: "`game.3ds` is not a 3DS image [container.not_3ds]",
+      probe: undefined,
+    },
+  ])(
+    "reports a rejected $format input in plain words",
+    async ({ format, fileName, engineCode, engineMessage, probe }) => {
+      const { cleanup, create, runtime } = makeRuntime();
+      create.mockRejectedValue(
+        Object.assign(new Error(engineMessage), { code: "UNSUPPORTED_FORMAT", details: { engineCode } }),
+      );
+      if (probe) Object.assign(runtime.compression, { probe });
+      const failure = await compressFiles([file(fileName, new Uint8Array(2048))], options(format), runtime).catch(
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(ContainerInputRejectedError);
+      expect((failure as ContainerInputRejectedError).format).toBe(format);
+      expect((failure as ContainerInputRejectedError).fileName).toBe(fileName);
+      expect((failure as Error).message).not.toContain(engineCode);
+      expect((failure as Error).cause).toBeInstanceOf(Error);
+      expect(cleanup).not.toHaveBeenCalled();
+    },
+  );
 
   it("leaves other RVZ and non-RVZ failures untouched", async () => {
     const { create, runtime } = makeRuntime();
