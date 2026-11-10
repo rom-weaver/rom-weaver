@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -368,6 +368,51 @@ test("API retry and Wrangler fallback share three attempts", async (t) => {
   assert.deepEqual(sleeps, [10000, 30000]);
   assert.equal(existsSync(outputFile), false);
 });
+
+for (const reuse of [false, true]) {
+  for (const finalFailure of [null, INTERNAL_ERROR, "Authentication error [code: 10000]"]) {
+    test(`retry-unavailable after a successful upload launches afresh (reuse=${reuse}, final=${finalFailure ?? "success"})`, async (t) => {
+      const outputFile = deploymentOutput(t);
+      const trigger = { metadata: { branch: "pr-12", commit_hash: SHA } };
+      const failed = deployment({ deployment_trigger: trigger, latest_stage: { status: "failure" } });
+      const finished = deployment({ id: "fresh-deployment", deployment_trigger: trigger, url: "https://fresh.pages.dev" });
+      const responses = [
+        ...(reuse ? [listResponse([])] : []),
+        errorResponse(503, "Service unavailable"),
+        listResponse([failed]),
+        errorResponse(409, "retry is unavailable"),
+        listResponse([failed]),
+        errorResponse(409, "retry is unavailable"),
+      ];
+      const { calls, fetchImpl } = queuedFetch(responses);
+      const sleeps = [];
+      let uploads = 0;
+      const pending = deployPages(deployOptions({
+        accountId: ACCOUNT, token: "token", fetchImpl, reuse, outputFile,
+        sleep: async (milliseconds) => sleeps.push(milliseconds),
+        spawnImpl: () => {
+          uploads += 1;
+          if (uploads === 1) return { status: 0, stdout: "https://failed.pages.dev\n" };
+          responses[0] = listResponse([finished]);
+          return finalFailure
+            ? { status: 1, stdout: "https://failed.pages.dev\n", stderr: finalFailure }
+            : { status: 0, stdout: "https://reported.pages.dev\n" };
+        },
+      }));
+      if (finalFailure) {
+        await assert.rejects(pending, /wrangler exited with status 1/);
+        assert.equal(existsSync(outputFile), false);
+      } else {
+        assert.equal(await pending, finished.url);
+        assert.equal(readFileSync(outputFile, "utf8"), `url=${finished.url}\n`);
+      }
+      assert.equal(uploads, 2);
+      assert.deepEqual(sleeps, [10000, 30000]);
+      assert.equal(calls.filter(({ options }) => options.method === "POST").length, 1);
+      assert.match(calls.at(-1).url, finalFailure ? /\/deployments\/deployment-id\/retry$/ : /\/deployments\?env=preview&page=1$/);
+    });
+  }
+}
 
 test("API retry recovers canceled deployments and stops after three server failures", async (t) => {
   for (const recover of [true, false]) {

@@ -246,6 +246,7 @@ async function deployAttempt(options, state) {
       if (error.status !== 409 || isPermanentFailure(error.message)) throw error;
       process.stderr.write(`retrying existing Cloudflare Pages deployment ${id} failed; uploading a fresh deployment: ${error.message}\n`);
       state.lookup = false;
+      state.uploaded = false;
       error.retryable = true;
       throw error;
     }
