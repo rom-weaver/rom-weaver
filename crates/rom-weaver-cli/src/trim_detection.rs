@@ -526,7 +526,7 @@ impl CliApp {
         }
 
         if options.no_extract {
-            return Self::skip_unsupported_trim_file(path, lone_input, skips);
+            return Self::skip_or_reject_unsupported_trim_file(path, lone_input, skips);
         }
 
         let discs_before = skips.gamecube_wii;
@@ -553,13 +553,13 @@ impl CliApp {
                 ));
             }
         } else {
-            return Self::skip_unsupported_trim_file(path, lone_input, skips);
+            return Self::skip_or_reject_unsupported_trim_file(path, lone_input, skips);
         }
         Ok(())
     }
 
     /// Count a file trim cannot use as skipped, or reject it when it is the only input.
-    fn skip_unsupported_trim_file(
+    fn skip_or_reject_unsupported_trim_file(
         path: &Path,
         lone_input: bool,
         skips: &mut TrimSkips,

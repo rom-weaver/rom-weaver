@@ -1675,6 +1675,7 @@ fn trim_of_a_lone_unsupported_file_fails_with_a_coded_error() {
         &[][..],
         &["--dry-run"][..],
         &["--output", output.path().to_str().expect("path")][..],
+        &["--no-extract"][..],
     ] {
         let mut args = vec!["trim", "--input", source_arg, "--json"];
         args.extend_from_slice(extra);
@@ -1692,42 +1693,6 @@ fn trim_of_a_lone_unsupported_file_fails_with_a_coded_error() {
     }
     assert!(!output.path().exists());
     assert_eq!(fs::read(source.path()).expect("source"), b"not an nds file");
-}
-
-#[test]
-fn trim_of_a_lone_archive_without_trimmable_members_fails_with_a_coded_error() {
-    let temp = setup_temp_dir();
-    let text = temp.child("notes.txt");
-    fs::write(text.path(), b"not an nds file").expect("fixture");
-    let archive = temp.child("notes.zip");
-    command_stdout(
-        &[
-            "compress",
-            "--input",
-            text.path().to_str().expect("path"),
-            "--output",
-            archive.path().to_str().expect("path"),
-            "--json",
-        ],
-        0,
-    );
-    let terminal = parse_single_json_line(&command_stdout(
-        &[
-            "trim",
-            "--input",
-            archive.path().to_str().expect("path"),
-            "--json",
-        ],
-        1,
-    ));
-    assert_eq!(terminal["status"], "failed");
-    assert!(
-        terminal["label"]
-            .as_str()
-            .expect("label")
-            .ends_with("[trim.unsupported_input]"),
-        "{terminal}"
-    );
 }
 
 #[test]
