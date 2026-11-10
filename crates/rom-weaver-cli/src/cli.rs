@@ -333,8 +333,8 @@ Pass --json for the machine-readable form."
 #[cfg(not(target_arch = "wasm32"))]
 pub fn cli_command() -> clap::Command {
     let mut command = Cli::command().max_term_width(100);
-    // clap probes stdout, stderr, then stdin for a width. Width 0 turns wrapping off when stdout is
-    // not a terminal, so JSON `details.content` and captured help never depend on an unrelated tty.
+    // clap probes stdout, stderr, then stdin for a width. Width 0 turns wrapping off for piped
+    // stdout, so JSON `details.content` and captured help never depend on another stream's tty.
     if !io::stdout().is_terminal() {
         command = command.term_width(0);
     }

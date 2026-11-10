@@ -75,7 +75,7 @@ impl OutputSelection {
         };
         let output = std::fs::canonicalize(output).unwrap_or_else(|_| output.clone());
         let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.into());
-        // Emitted paths are lossy UTF-8; compare lossily or a non-UTF-8 `-o` name never matches its file.
+        // Emitted paths are lossy UTF-8, so a non-UTF-8 `-o` name only matches when compared lossily.
         output.to_string_lossy() != path.to_string_lossy()
     }
 }
@@ -91,8 +91,8 @@ pub(super) fn render_success(
     match event.command.as_str() {
         "probe" => render_container_or_patch(surface, event),
         "trim" if !has_emitted_files(event) => render_no_write(surface, event),
-        // A successful trim prints nothing on stdout; the written files go to stderr through
-        // `output_confirmation_lines` and, with `-v`, `render_verbose`.
+        // A successful trim prints nothing on stdout. `render_verbose` (`-v`) and
+        // `output_confirmation_lines` (explicit `-o` on a terminal) report written files on stderr.
         "trim" => {}
         "extract" | "compress" | "playlist" | "patch-apply" | "bundle-create"
         | "tools-ppf-undo" => {
@@ -141,9 +141,8 @@ fn wrote_lines(event: &ProgressEvent, include: impl Fn(&Value) -> bool) -> Vec<S
     else {
         return Vec::new();
     };
-    // `format` names the written file only for these commands; elsewhere it is an input's format
-    // (the applied patch, the source archive, the trimmed ROM) or a command tag. A trim reports
-    // the written format separately as `output_format`, for XISO only.
+    // Only `compress` and `patch-create` set `format` to the written format. Elsewhere it names an
+    // input or the command. Trim reports `output_format` for Xbox ISO (XISO) output only.
     let output_format = match event.command.as_str() {
         "compress" | "patch-create" => event.format.as_deref(),
         "trim" => event
