@@ -1365,6 +1365,59 @@ test("navigation Offline app keeps a plain label and opens the current offline v
   ).toContain("Update available");
 });
 
+test("workflow help stays outside unrelated Settings across scroll and resize", async () => {
+  await page.viewport(1280, 900);
+  try {
+    mountWebappRoot();
+    const workflowTrigger = page.getByRole("button", { name: "How files are opened", exact: true });
+    await workflowTrigger.click();
+    await expect.element(workflowTrigger).toHaveAttribute("aria-expanded", "true");
+    const workflowPanelId = workflowTrigger.element().getAttribute("aria-controls");
+    const app = workflowTrigger.element().closest(".rw-app");
+    expect(document.getElementById(workflowPanelId).parentElement).toBe(app);
+
+    await page.elementLocator(navRow("Settings")).click();
+    await expect.poll(() => document.querySelector(".log-dlg:modal .settings-body")).toBeTruthy();
+    const dialog = document.querySelector(".log-dlg:modal");
+    const body = dialog.querySelector(".settings-body");
+    await expect.element(page.elementLocator(body)).toBeVisible();
+    await Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+        .map((animation) => animation.finished),
+    );
+    await expect.poll(() => body.scrollHeight - body.clientHeight).toBeGreaterThanOrEqual(120);
+    body.scrollTop = 120;
+    await expect.poll(() => body.scrollTop).toBe(120);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await expect.poll(() => document.getElementById(workflowPanelId).parentElement).toBe(app);
+    expect(dialog.contains(workflowTrigger.element())).toBe(false);
+    expect(dialog.contains(document.getElementById(workflowPanelId))).toBe(false);
+
+    await page.viewport(1000, 900);
+    await expect.poll(() => document.getElementById(workflowPanelId).parentElement).toBe(app);
+    const settingsTrigger = page.getByRole("button", { name: "About File size units", exact: true });
+    await settingsTrigger.click();
+    await expect.element(settingsTrigger).toHaveAttribute("aria-expanded", "true");
+    const settingsPanelId = settingsTrigger.element().getAttribute("aria-controls");
+    expect(document.getElementById(settingsPanelId).closest("dialog:modal")).toBe(dialog);
+    await page.elementLocator(document.getElementById(settingsPanelId)).click();
+    expect(document.querySelector(".log-dlg:modal")).toBe(dialog);
+    await settingsTrigger.click();
+    expect(document.getElementById(settingsPanelId)).toBeNull();
+    await page.elementLocator(dialog.querySelector(".dlg-x")).click();
+    await expect.poll(() => document.querySelector(".log-dlg")).toBeNull();
+    await expect.element(workflowTrigger).toHaveAttribute("aria-expanded", "true");
+    await workflowTrigger.click();
+    expect(document.getElementById(workflowPanelId)).toBeNull();
+    await workflowTrigger.click();
+    expect(document.getElementById(workflowPanelId).parentElement).toBe(app);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
 test("Settings help above the phone dock remains readable and interactive", async () => {
   await page.viewport(320, 900);
   try {

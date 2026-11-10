@@ -95,7 +95,9 @@ function InfoToggle({
   let renderedPanel: ReactNode = null;
   if (open) {
     renderedPanel =
-      portalPanel && typeof document !== "undefined" ? createPortal(panel, getOverlayPortalTarget()) : panel;
+      portalPanel && typeof document !== "undefined"
+        ? createPortal(panel, getOverlayPortalTarget(buttonRef.current))
+        : panel;
   }
 
   return (
