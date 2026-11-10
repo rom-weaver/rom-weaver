@@ -35,14 +35,16 @@ const emulatorDataUrl = () =>
 const isAbort = (error: unknown, signal: AbortSignal) =>
   signal.aborted || (error instanceof Error && error.name === "AbortError");
 
+type BootCheckRequest = {
+  core: string | undefined;
+  enabled: boolean;
+  output: ApplyOutput | null | undefined;
+  owner: string | undefined;
+  platform: string | undefined;
+};
+
 /** Boot the output once, and cancel the check when the output goes away. */
-const useBootCheck = (
-  core: string | undefined,
-  enabled: boolean,
-  output: ApplyOutput | null | undefined,
-  platform: string | undefined,
-  owner: string | undefined,
-) => {
+const useBootCheck = ({ core, enabled, output, owner, platform }: BootCheckRequest) => {
   // A ref, because a language change MUST NOT boot the output again.
   const localizerRef = useLatestRef(useUiLocalizer());
   // A cancelled check re-arms only while the option is still on.
@@ -228,7 +230,7 @@ export const BootCheckStatus = ({
   platform?: string;
 }) => {
   const localizer = useUiLocalizer();
-  const state = useBootCheck(core, enabled, output, platform, owner);
+  const state = useBootCheck({ core, enabled, output, owner, platform });
   if (!state) return null;
   const { label, note } = describeResult(state, localizer);
   const Icon = STATUS_ICONS[state.status];

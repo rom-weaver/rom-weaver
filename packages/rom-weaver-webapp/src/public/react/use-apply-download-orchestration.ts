@@ -555,6 +555,95 @@ const applySessionLogger = createLogger("ui:apply-session");
 const traceApplyPrimaryAction = (outcome: string, details?: Record<string, unknown>) =>
   applySessionLogger.trace(`apply primary action ${outcome}`, details);
 
+type ApplyBootCheckPreparation = {
+  enabledRef: MutableRefObject<boolean>;
+  owner: string;
+};
+
+const prepareApplyResources = (
+  { request, session }: ApplyDownloadOrchestrationContext,
+  pendingDownloadResult: ApplyWorkflowResult | null,
+  { enabledRef, owner }: ApplyBootCheckPreparation,
+) => {
+  const { busy, hasPendingDownload, applyQueueBlocked, canQueueApply, canStartApply } = request;
+  // An Apply request may queue behind input preparation, which already works on the new disc.
+  const requestsApply =
+    !(busy || (pendingDownloadResult && hasPendingDownload) || applyQueueBlocked) && (canQueueApply || canStartApply);
+  if (requestsApply) releaseLargeEntries({ announce: true });
+  // This MUST stay before the first await: WebKit resumes only an
+  // AudioContext created while the Apply click is still a user action.
+  if (
+    enabledRef.current &&
+    !busy &&
+    !(pendingDownloadResult && hasPendingDownload) &&
+    !applyQueueBlocked &&
+    (canStartApply || canQueueApply) &&
+    mayHaveEmulatorCore(session.localState.romInputs[0])
+  ) {
+    prepareBootCheckAudioContext(owner);
+  }
+};
+
+const recordApplyCompletion = (
+  { lifecycle, refs, request, session }: ApplyDownloadOrchestrationContext,
+  result: ApplyWorkflowResult,
+): string => {
+  const {
+    setCompletedApplyTimeMs,
+    setCompletedCompressionTimeMs,
+    setCompletedSizeSummary,
+    setCompletedWarnings,
+    setProgress,
+  } = session;
+  const { rememberActiveOutputCleanup, setPendingDownloadReadyFileName } = lifecycle;
+  const { applyExecutionTimingRef, pendingDownloadResultRef } = refs;
+  const { effectiveResolvedOutputName } = request;
+  const completedAt = Date.now();
+  const { applyTimeMs, compressionTimeMs, sizeSummary } = deriveApplyCompletion(
+    result,
+    applyExecutionTimingRef.current,
+    completedAt,
+  );
+  setCompletedApplyTimeMs(applyTimeMs);
+  setCompletedCompressionTimeMs(compressionTimeMs);
+  setProgress({
+    indeterminate: false,
+    label: `Created ${result.output.fileName}`,
+    message: `Created ${result.output.fileName}`,
+    percent: 100,
+  });
+  setCompletedSizeSummary(sizeSummary);
+  setCompletedWarnings(result.warnings ?? []);
+  rememberActiveOutputCleanup(
+    result.outputs.length > 0
+      ? async () => {
+          await Promise.all(result.outputs.map((output) => Promise.resolve(output.cleanup?.())));
+        }
+      : result.output.cleanup || null,
+  );
+  pendingDownloadResultRef.current = result;
+  // Warm the output's download snapshot now so a later "Download output" tap reaches
+  // navigator.share before its user activation expires (iOS PWA share path).
+  void result.output.prepareDownload?.().catch(() => undefined);
+  const initialDownloadFileName = result.output.fileName || effectiveResolvedOutputName || "output";
+  setPendingDownloadReadyFileName(initialDownloadFileName);
+  return initialDownloadFileName;
+};
+
+const describePostApplyEmulator = (
+  session: SessionState,
+  result: ApplyWorkflowResult,
+  initialDownloadFileName: string,
+) => {
+  const romInput = session.localState.romInputs[0];
+  const fileName =
+    romInput?.info.fileName || romInput?.info.archiveName || initialDownloadFileName || result.output.fileName;
+  const platform = romInput?.info.romType?.platform;
+  const core = getEmulatorJsCore(platform, fileName);
+  const retainedEntry = core ? getApplyEntry(fileName) || getApplyEntry() : null;
+  return { core, fileName, platform, retainedEntry };
+};
+
 // Owns the apply-and-download workflow for the patcher session: queueing/cancellation gating, the
 // AbortController lifecycle, per-stage progress fan-out, completion timing/size summary, and the
 // download hand-off. Returns the primary-action handlers consumed by the output controller. The live
@@ -585,13 +674,11 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         lifecycle.clearActiveApplyProgress();
       },
       runPrimaryAction: async () => {
-        const { lifecycle, refs, request, session, workflow } = contextRef.current;
+        const currentContext = contextRef.current;
+        const { lifecycle, refs, request, session, workflow } = currentContext;
         const {
           setBusy,
           setCompletedApplyTimeMs,
-          setCompletedCompressionTimeMs,
-          setCompletedSizeSummary,
-          setCompletedWarnings,
           setOutputErrorMessage,
           setPatchProgress,
           setPatchProgressByKey,
@@ -626,11 +713,9 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           invalidateCompletedOutputState,
           mergeRomInput,
           rememberAbortController,
-          rememberActiveOutputCleanup,
           resetCompletedOutputState,
           setApplyQueued,
           setChecksumOverrideChecked,
-          setPendingDownloadReadyFileName,
           selectTestView,
         } = lifecycle;
         const { applyPatches, downloadOutput, onApplyComplete, onError, onProgress } = workflow;
@@ -642,23 +727,10 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           patchChangePendingRef,
         } = refs;
         const pendingDownloadResult = pendingDownloadResultRef.current;
-        // An Apply request may queue behind input preparation, which already works on the new disc.
-        const requestsApply =
-          !(busy || (pendingDownloadResult && hasPendingDownload) || applyQueueBlocked) &&
-          (canQueueApply || canStartApply);
-        if (requestsApply) releaseLargeEntries({ announce: true });
-        // This MUST stay before the first await: WebKit resumes only an
-        // AudioContext created while the Apply click is still a user action.
-        if (
-          verifyBootAfterApplyRef.current &&
-          !busy &&
-          !(pendingDownloadResult && hasPendingDownload) &&
-          !applyQueueBlocked &&
-          (canStartApply || canQueueApply) &&
-          mayHaveEmulatorCore(session.localState.romInputs[0])
-        ) {
-          prepareBootCheckAudioContext(bootCheckOwner);
-        }
+        prepareApplyResources(currentContext, pendingDownloadResult, {
+          enabledRef: verifyBootAfterApplyRef,
+          owner: bootCheckOwner,
+        });
         if (patchChangePendingRef.current && !busy) {
           traceApplyPrimaryAction("queued: patch change pending");
           setApplyQueued(true);
@@ -753,50 +825,19 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
             defaultPatchBasis,
             ...(activePatchOptions ? { patchOptions: activePatchOptions } : {}),
           });
-          const completedAt = Date.now();
-          const { applyTimeMs, compressionTimeMs, sizeSummary } = deriveApplyCompletion(
-            result,
-            applyExecutionTimingRef.current,
-            completedAt,
-          );
-          setCompletedApplyTimeMs(applyTimeMs);
-          setCompletedCompressionTimeMs(compressionTimeMs);
-          setProgress({
-            indeterminate: false,
-            label: `Created ${result.output.fileName}`,
-            message: `Created ${result.output.fileName}`,
-            percent: 100,
-          });
-          setCompletedSizeSummary(sizeSummary);
-          setCompletedWarnings(result.warnings ?? []);
-          rememberActiveOutputCleanup(
-            result.outputs.length > 0
-              ? async () => {
-                  await Promise.all(result.outputs.map((output) => Promise.resolve(output.cleanup?.())));
-                }
-              : result.output.cleanup || null,
-          );
-          pendingDownloadResultRef.current = result;
-          // Warm the output's download snapshot now so a later "Download output" tap reaches
-          // navigator.share before its user activation expires (iOS PWA share path).
-          void result.output.prepareDownload?.().catch(() => undefined);
-          const initialDownloadFileName = result.output.fileName || effectiveResolvedOutputName || "output";
-          setPendingDownloadReadyFileName(initialDownloadFileName);
+          const initialDownloadFileName = recordApplyCompletion(currentContext, result);
           if (claimPostApplyRun(postApplyResultRef, result)) {
-            const romInput = session.localState.romInputs[0];
-            const emulatorFileName =
-              romInput?.info.fileName ||
-              romInput?.info.archiveName ||
-              initialDownloadFileName ||
-              result.output.fileName;
-            const platform = romInput?.info.romType?.platform;
-            const core = getEmulatorJsCore(platform, emulatorFileName);
+            const { core, fileName, platform, retainedEntry } = describePostApplyEmulator(
+              session,
+              result,
+              initialDownloadFileName,
+            );
             await runPostApplyActions({
               addSessionEntry: addEntry,
               core,
               download: () => downloadOutput(result, initialDownloadFileName, { interactive: false }),
               downloadBehavior: postApplyDownloadBehaviorRef.current,
-              fileName: emulatorFileName,
+              fileName,
               focusDownload: focusPendingDownload,
               onAutomaticActionFailed: () => {
                 setPostApplyDownloadBehaviorOverride(
@@ -806,7 +847,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
               onSelectTestView: selectTestView,
               output: result,
               platform,
-              retainedEntry: core ? getApplyEntry(emulatorFileName) || getApplyEntry() : null,
+              retainedEntry,
               setCurrentGame,
               testBehavior: postApplyTestBehaviorRef.current,
             });

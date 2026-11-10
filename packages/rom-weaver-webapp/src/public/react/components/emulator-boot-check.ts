@@ -188,6 +188,31 @@ type SampleOptions = {
   signal?: AbortSignal;
 };
 
+type CaptureOptions = Pick<SampleOptions, "deadline" | "decode" | "signal"> & {
+  frames: number;
+  minCaptureMs: number;
+  samples: number;
+};
+
+const captureBootFrame = async (
+  gameManager: EmulatorInstance["gameManager"],
+  screenshot: NonNullable<EmulatorGameManager["screenshot"]>,
+  { deadline, decode, frames, minCaptureMs, samples, signal }: CaptureOptions,
+): Promise<BootCheckOutcome | null> => {
+  // EmulatorJS polls its filesystem forever for the screenshot file, so
+  // every capture is bounded.
+  const captureMs = Math.max(minCaptureMs, deadline - Date.now());
+  const captured = await withDeadline(Promise.resolve(screenshot.call(gameManager)), captureMs, signal);
+  if (!captured) return null;
+  const png = captured instanceof Uint8Array ? captured : new Uint8Array(captured);
+  if (!isPng(png)) return { detail: "The captured frame is not a PNG.", frames, status: "error" };
+  const summary = summarizeFrameColors(await decode(png));
+  samples += 1;
+  logger.trace("Boot check sampled a frame", { frames, samples, ...summary });
+  if (isBootFrame(summary)) return { frames, samples, status: "boots", summary };
+  return { frames, reason: "blank-frame", samples, status: "blank" };
+};
+
 /**
  * Wait for the core to draw `minFrames` frames, then capture and classify
  * frames until one shows a picture. A game can show a flat screen for a
@@ -217,17 +242,17 @@ const sampleBootFrames = async ({
       await sleep(pollIntervalMs, signal);
       continue;
     }
-    // EmulatorJS polls its filesystem forever for the screenshot file, so
-    // every capture is bounded.
-    const captureMs = Math.max(minCaptureMs, deadline - Date.now());
-    const captured = await withDeadline(Promise.resolve(screenshot.call(emulator.gameManager)), captureMs, signal);
-    if (!captured) break;
-    const png = captured instanceof Uint8Array ? captured : new Uint8Array(captured);
-    if (!isPng(png)) return { detail: "The captured frame is not a PNG.", frames, status: "error" };
-    const summary = summarizeFrameColors(await decode(png));
-    samples += 1;
-    logger.trace("Boot check sampled a frame", { frames, samples, ...summary });
-    if (isBootFrame(summary)) return { frames, samples, status: "boots", summary };
+    const sample = await captureBootFrame(emulator.gameManager, screenshot, {
+      deadline,
+      decode,
+      frames,
+      minCaptureMs,
+      samples,
+      signal,
+    });
+    if (!sample) break;
+    if (sample.status !== "blank") return sample;
+    samples = sample.samples;
     if (Date.now() >= deadline) break;
     await sleep(Math.min(sampleIntervalMs, Math.max(0, deadline - Date.now())), signal);
   }
