@@ -535,7 +535,7 @@ fn parse_ips_file(
         let size = parser.read_u16()?;
         let (len, data) = if size == 0 {
             let rle_len = u64::from(parser.read_u16()?);
-            let byte = parser.read_u8()?;
+            let byte = parser.read_exact(1)?[0];
             if rle_len == 0 {
                 handle_zero_length_rle_record(offset, validation, &mut warnings)?;
                 continue;
@@ -1948,50 +1948,32 @@ impl<R: Read> IpsFileParser<R> {
         })
     }
 
-    fn ensure_available(&self, len: usize) -> Result<u64> {
+    fn read_exact(&mut self, len: usize) -> Result<Vec<u8>> {
         let len_u64 = u64::try_from(len)
             .map_err(|_| RomWeaverError::Validation("IPS read length overflowed u64".into()))?;
-        if len_u64 > self.remaining()? {
+        let remaining = self.remaining()?;
+        if len_u64 > remaining {
             return Err(RomWeaverError::Validation(
                 "IPS patch ended unexpectedly while reading record data".into(),
             ));
         }
-        Ok(len_u64)
-    }
 
-    fn read_into(&mut self, bytes: &mut [u8]) -> Result<()> {
-        let len_u64 = self.ensure_available(bytes.len())?;
-        self.reader.read_exact(bytes)?;
+        let mut bytes = vec![0u8; len];
+        self.reader.read_exact(&mut bytes)?;
         self.offset = self
             .offset
             .checked_add(len_u64)
             .ok_or_else(|| RomWeaverError::Validation("IPS parser offset overflowed".into()))?;
-        Ok(())
-    }
-
-    fn read_exact(&mut self, len: usize) -> Result<Vec<u8>> {
-        // Bound `len` by the bytes left in the file before allocating for it.
-        self.ensure_available(len)?;
-        let mut bytes = vec![0u8; len];
-        self.read_into(&mut bytes)?;
         Ok(bytes)
     }
 
-    fn read_u8(&mut self) -> Result<u8> {
-        let mut bytes = [0u8; 1];
-        self.read_into(&mut bytes)?;
-        Ok(bytes[0])
-    }
-
     fn read_u16(&mut self) -> Result<u16> {
-        let mut bytes = [0u8; 2];
-        self.read_into(&mut bytes)?;
-        Ok(u16::from_be_bytes(bytes))
+        let bytes = self.read_exact(2)?;
+        Ok(u16::from_be_bytes([bytes[0], bytes[1]]))
     }
 
     fn read_u24(&mut self) -> Result<u32> {
-        let mut bytes = [0u8; 3];
-        self.read_into(&mut bytes)?;
+        let bytes = self.read_exact(3)?;
         Ok(read_u24(&bytes))
     }
 }

@@ -122,20 +122,6 @@ pub(crate) fn parallel_write_batch_bytes(threads: usize) -> usize {
     bounded_items_for_threads(threads).saturating_mul(PARALLEL_WRITE_CHUNK_BYTES)
 }
 
-fn write_prepared_batch<T: Sync>(
-    output: &mut (impl Write + Seek),
-    pool: Option<&SharedThreadPool>,
-    batch: &[T],
-    prepare: impl Fn(&T) -> Result<PreparedWrite> + Sync + Send,
-) -> Result<()> {
-    let writes = if let Some(pool) = pool {
-        pool_map(pool, batch, prepare)?
-    } else {
-        batch.iter().map(prepare).collect::<Result<Vec<_>>>()?
-    };
-    apply_prepared_writes(output, &writes)
-}
-
 /// Splits oversized records so even a single dense change fits the prepared-byte budget.
 /// Callers MUST validate the complete record before preparing any subrange.
 pub(crate) fn apply_batched_writes<I: Sync>(
@@ -154,9 +140,13 @@ pub(crate) fn apply_batched_writes<I: Sync>(
             byte_limit,
             "patch prepared write batch"
         );
-        write_prepared_batch(output, pool, batch, |(item, range)| {
-            prepare(item, range.clone())
-        })
+        let map = |(item, range): &(&I, Range<usize>)| prepare(item, range.clone());
+        let writes = if let Some(pool) = pool {
+            pool_map(pool, batch, map)?
+        } else {
+            batch.iter().map(map).collect::<Result<Vec<_>>>()?
+        };
+        apply_prepared_writes(output, &writes)
     };
     for item in items {
         let len = write_len(item);
