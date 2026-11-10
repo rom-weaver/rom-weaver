@@ -3891,6 +3891,15 @@ impl CliApp {
             .as_ref()
             .map(|plan| plan.output_path.clone())
             .unwrap_or_else(|| output.to_path_buf());
+        if let Err(error) = check_output_available(&planned_output_path, args.force) {
+            return OperationReport::failed_with_error(
+                OperationFamily::Patch,
+                None,
+                "validate",
+                error,
+                thread_execution,
+            );
+        }
         Self::patch_apply_dry_run_report(
             input,
             patches,
