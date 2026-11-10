@@ -142,8 +142,8 @@
 }
 /* Log dialog */
 .rw-app .log-dlg {
-  /* Focused Settings rows use z-index 90; keep their help above them. */
-  --info-pop-z: 100;
+  /* Help clears focused rows (90) and the phone dock (1000), below confirmations (1100). */
+  --info-pop-z: 1001;
   max-width: min(1280px, calc(100vw - 32px));
 }
 .rw-app .log-dlg .dlg-frame {
