@@ -62,55 +62,43 @@ const windowsRuntimeStaticLinkPatches = {
   },
 };
 
-export const coreRecipe = (core, platformName) => {
-  const platform = platformConfig(platformName);
-  const build = structuredClone(core.build ?? []);
-  let output = core.output?.replace(/\.so$/, platform.coreExtension);
-  for (const step of build) {
-    step.command = step.command.map((argument) => {
-      if (argument === "platform=unix") return `platform=${platform.makePlatform}`;
-      if (argument === "CC=cc") return "CC={cc}";
-      if (argument === "CXX=c++") return "CXX={cxx}";
-      if (argument === "make") return "{make}";
-      if (argument.includes("./linux/x86_64")) {
-        return argument.replace("./linux/x86_64", `./${platform.ffmpegPrefix}`);
-      }
-      if (argument === "--arch=x86_64" && platformName === "darwin-arm64") {
-        return "--arch=aarch64";
-      }
-      if (argument === "--arch=x86_64" && platformName === "win32-x64") {
-        return "--arch=x86_64";
-      }
-      return argument;
-    });
-    if (step.command[0] === "./configure") step.command.unshift("sh");
+const coreBuildArgument = (argument, platformName, platform) => {
+  if (argument === "platform=unix") return `platform=${platform.makePlatform}`;
+  if (argument === "CC=cc") return "CC={cc}";
+  if (argument === "CXX=c++") return "CXX={cxx}";
+  if (argument === "make") return "{make}";
+  if (argument.includes("./linux/x86_64")) {
+    return argument.replace("./linux/x86_64", `./${platform.ffmpegPrefix}`);
   }
-  if (core.id === "mgba") output = `build/mgba_libretro${platform.coreExtension}`;
-  if (core.id === "mgba" && platformName !== "linux-x64-gnu") {
-    build[0].command.push("-DSKIP_LIBRARY=ON", "-DDISABLE_DEPS=ON");
+  if (argument === "--arch=x86_64" && platformName === "darwin-arm64") {
+    return "--arch=aarch64";
   }
-  if (core.id === "mupen64plus_next" && platformName === "win32-x64") {
-    build.at(-1).command.push("MSYSTEM=MINGW64");
+  if (argument === "--arch=x86_64" && platformName === "win32-x64") {
+    return "--arch=x86_64";
   }
+  return argument;
+};
+
+const windowsCorePatches = (core) => {
   const patches = [];
-  if (platformName === "win32-x64" && Object.hasOwn(windowsRuntimeStaticLinkPatches, core.id)) {
+  if (Object.hasOwn(windowsRuntimeStaticLinkPatches, core.id)) {
     patches.push(windowsRuntimeStaticLinkPatches[core.id]);
   }
-  if (["gambatte", "snes9x"].includes(core.id) && platformName === "win32-x64") {
+  if (["gambatte", "snes9x"].includes(core.id)) {
     patches.push({
       path: core.id === "snes9x" ? "libretro/Makefile" : "Makefile.libretro",
       find: "SHARED := -shared -static-libgcc -static-libstdc++",
       replace: "SHARED := -shared -static -static-libgcc -static-libstdc++",
     });
   }
-  if (core.id === "handy" && platformName === "win32-x64") {
+  if (core.id === "handy") {
     patches.push({
       path: "Makefile",
       find: "SHARED := -shared -static-libgcc -static-libstdc++ -Wl,-no-undefined",
       replace: "SHARED := -shared -static -static-libgcc -static-libstdc++ -Wl,-no-undefined",
     });
   }
-  if (core.id === "melonds" && platformName === "win32-x64") {
+  if (core.id === "melonds") {
     patches.push({
       path: "Makefile",
       find: "SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined",
@@ -118,7 +106,7 @@ export const coreRecipe = (core, platformName) => {
         "SHARED := -shared -static -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined",
     });
   }
-  if (core.id === "mupen64plus_next" && platformName === "win32-x64") {
+  if (core.id === "mupen64plus_next") {
     patches.push({
       path: "Makefile",
       find: "LDFLAGS += -shared -static-libgcc -static-libstdc++ -Wl,--version-script=$(LIBRETRO_DIR)/link.T #-static",
@@ -126,15 +114,7 @@ export const coreRecipe = (core, platformName) => {
         "LDFLAGS += -shared -static -static-libgcc -static-libstdc++ -Wl,--version-script=$(LIBRETRO_DIR)/link.T #-static",
     });
   }
-  if (core.id === "ppsspp" && platformName === "darwin-arm64") {
-    patches.push({
-      path: "libretro/Makefile",
-      find: "ifneq (,$(findstring 64,$(TARGET_ARCH)))",
-      replace: "ifneq (,$(filter x86_64 amd64,$(TARGET_ARCH)))",
-    });
-    build.at(-1).command.push("TARGET_ARCH=arm64", "ARCHFLAGS=-arch arm64");
-  }
-  if (core.id === "ppsspp" && platformName === "win32-x64") {
+  if (core.id === "ppsspp") {
     patches.push(
       {
         path: "ext/libzip/zip_source_file_win32_ansi.c",
@@ -273,11 +253,50 @@ utf16_set_file_attributes_callback(const void *name, DWORD attributes) {
           "# zstd only uses asm for Linux/macOS and GNUC.\nifeq ($(PLATFORM_EXT), win32)\nCFLAGS += -DZSTD_DISABLE_ASM\nendif\n\nifneq ($(PLATFORM_EXT), win32)",
       },
     );
+  }
+  return patches;
+};
+
+const corePatches = (core, platformName) => {
+  if (platformName === "win32-x64") return windowsCorePatches(core);
+  const patches = [];
+  if (core.id === "ppsspp" && platformName === "darwin-arm64") {
+    patches.push({
+      path: "libretro/Makefile",
+      find: "ifneq (,$(findstring 64,$(TARGET_ARCH)))",
+      replace: "ifneq (,$(filter x86_64 amd64,$(TARGET_ARCH)))",
+    });
+  }
+  return patches;
+};
+
+export const coreRecipe = (core, platformName) => {
+  const platform = platformConfig(platformName);
+  const build = structuredClone(core.build ?? []);
+  let output = core.output?.replace(/\.so$/, platform.coreExtension);
+  for (const step of build) {
+    step.command = step.command.map((argument) =>
+      coreBuildArgument(argument, platformName, platform),
+    );
+    if (step.command[0] === "./configure") step.command.unshift("sh");
+  }
+  if (core.id === "mgba") output = `build/mgba_libretro${platform.coreExtension}`;
+  if (core.id === "mgba" && platformName !== "linux-x64-gnu") {
+    build[0].command.push("-DSKIP_LIBRARY=ON", "-DDISABLE_DEPS=ON");
+  }
+  if (core.id === "mupen64plus_next" && platformName === "win32-x64") {
+    build.at(-1).command.push("MSYSTEM=MINGW64");
+  }
+  if (core.id === "ppsspp" && platformName === "darwin-arm64") {
+    build.at(-1).command.push("TARGET_ARCH=arm64", "ARCHFLAGS=-arch arm64");
+  }
+  if (core.id === "ppsspp" && platformName === "win32-x64") {
     build
       .at(-1)
       .command.push(
         "FFMPEGLDFLAGS=-L../ffmpeg/Windows/x86_64/lib -lavformat -lavcodec -lavutil -lswresample -lswscale -Wl,-Bstatic -liconv -Wl,-Bdynamic -Wl,-Bstatic",
       );
   }
+  const patches = corePatches(core, platformName);
   return { build, output, patches };
 };

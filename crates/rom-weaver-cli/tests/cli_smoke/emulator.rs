@@ -57,9 +57,12 @@ fn nes(temp: &TempDir) -> PathBuf {
     path.path().to_path_buf()
 }
 
-fn run(temp: &TempDir, runtime: &Path, rom: &Path, extra: &[&str], code: i32) -> Value {
-    let cache = temp.child("cache");
-    cache.create_dir_all().expect("cache");
+fn run(runtime: &Path, rom: &Path, extra: &[&str], code: i32) -> Value {
+    let cache = runtime
+        .parent()
+        .expect("runtime fixture parent")
+        .join("cache");
+    fs::create_dir_all(&cache).expect("cache");
     let mut args = vec![
         "--json",
         "test",
@@ -70,7 +73,7 @@ fn run(temp: &TempDir, runtime: &Path, rom: &Path, extra: &[&str], code: i32) ->
     args.extend_from_slice(extra);
     run_json_events_with_env(
         &args,
-        &[("XDG_CACHE_HOME", cache.path().to_str().expect("cache path"))],
+        &[("XDG_CACHE_HOME", cache.to_str().expect("cache path"))],
         code,
     )
     .pop()
@@ -92,7 +95,6 @@ printf 'ran fake runtime\n'"#,
     let rom = nes(&temp);
     let screenshot = temp.child("published frame.png");
     let event = run(
-        &temp,
         &runtime,
         &rom,
         &[
@@ -128,7 +130,7 @@ fn test_rejects_non_nes_content_before_spawn() {
     let runtime = runtime(&temp, &format!("touch '{}'", marker.path().display()));
     let rom = temp.child("not-nes.nes");
     fs::write(rom.path(), b"not an NES ROM!!!").expect("invalid ROM");
-    let event = run(&temp, &runtime, rom.path(), &[], 1);
+    let event = run(&runtime, rom.path(), &[], 1);
     assert!(
         event["error"]["message"]
             .as_str()
@@ -143,7 +145,7 @@ fn test_reports_nonzero_exit_and_missing_png() {
     let temp = TempDir::new().expect("temp");
     let rom = nes(&temp);
     let failed = runtime(&temp, "printf 'runtime failed' >&2\nexit 9");
-    let event = run(&temp, &failed, &rom, &[], 1);
+    let event = run(&failed, &rom, &[], 1);
     assert!(
         event["error"]["message"]
             .as_str()
@@ -153,7 +155,7 @@ fn test_reports_nonzero_exit_and_missing_png() {
 
     fs::remove_dir_all(&failed).expect("replace runtime");
     let missing = runtime(&temp, "exit 0");
-    let event = run(&temp, &missing, &rom, &[], 1);
+    let event = run(&missing, &rom, &[], 1);
     assert!(
         event["error"]["message"]
             .as_str()
@@ -168,7 +170,7 @@ fn test_times_out_and_never_clobbers_output() {
     let runtime = runtime(&temp, "sleep 5");
     let rom = nes(&temp);
     let started = std::time::Instant::now();
-    let event = run(&temp, &runtime, &rom, &["--timeout", "1"], 1);
+    let event = run(&runtime, &rom, &["--timeout", "1"], 1);
     assert!(started.elapsed() < std::time::Duration::from_secs(3));
     assert!(
         event["error"]["message"]
@@ -180,7 +182,6 @@ fn test_times_out_and_never_clobbers_output() {
     let output = temp.child("existing.png");
     fs::write(output.path(), b"keep me").expect("existing output");
     let event = run(
-        &temp,
         &runtime,
         &rom,
         &["--screenshot", output.path().to_str().expect("output path")],
@@ -202,7 +203,6 @@ fn test_dry_run_does_not_require_runtime_or_write() {
     let missing_rom = temp.child("missing.nes");
     let missing_runtime = temp.child("missing runtime");
     let event = run(
-        &temp,
         missing_runtime.path(),
         missing_rom.path(),
         &["--dry-run", "--screenshot", output.path().to_str().unwrap()],
@@ -251,11 +251,11 @@ fn multiple_cores_select_by_extension_or_explicit_id() {
     let rom = temp.child("game.gb");
     fs::write(rom.path(), b"a fake game boy ROM").unwrap();
     assert_eq!(
-        run(&temp, &runtime, rom.path(), &[], 0)["details"]["core"],
+        run(&runtime, rom.path(), &[], 0)["details"]["core"],
         "gambatte"
     );
     add_core(&runtime, "mgba", &["gb", "gba"], &[]);
-    let event = run(&temp, &runtime, rom.path(), &[], 1);
+    let event = run(&runtime, rom.path(), &[], 1);
     assert!(
         event["error"]["message"]
             .as_str()
@@ -263,10 +263,10 @@ fn multiple_cores_select_by_extension_or_explicit_id() {
             .contains("pass --core")
     );
     assert_eq!(
-        run(&temp, &runtime, rom.path(), &["--core", "mgba"], 0)["details"]["core"],
+        run(&runtime, rom.path(), &["--core", "mgba"], 0)["details"]["core"],
         "mgba"
     );
-    let event = run(&temp, &runtime, rom.path(), &["--core", "missing"], 1);
+    let event = run(&runtime, rom.path(), &["--core", "missing"], 1);
     assert!(
         event["error"]["message"]
             .as_str()
@@ -285,7 +285,7 @@ fn firmware_is_required_and_isolated_from_user_files() {
     add_core(&runtime, "handy", &["lnx"], &["boot.bin"]);
     let rom = temp.child("game.lnx");
     fs::write(rom.path(), b"a fake lynx ROM").unwrap();
-    let event = run(&temp, &runtime, rom.path(), &[], 1);
+    let event = run(&runtime, rom.path(), &[], 1);
     assert!(
         event["error"]["message"]
             .as_str()
@@ -296,7 +296,6 @@ fn firmware_is_required_and_isolated_from_user_files() {
     system.create_dir_all().unwrap();
     fs::write(system.child("boot.bin").path(), b"original").unwrap();
     run(
-        &temp,
         &runtime,
         rom.path(),
         &["--system-dir", system.path().to_str().unwrap()],
@@ -325,13 +324,13 @@ fn disc_sheets_keep_their_tracks_and_reject_escaping_references() {
         "FILE \"tracks/track 1.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n",
     )
     .unwrap();
-    run(&temp, &runtime, cue.path(), &[], 0);
+    run(&runtime, cue.path(), &[], 0);
     fs::write(
         cue.path(),
         "FILE \"../outside.bin\" BINARY\n  TRACK 01 MODE1/2352\n",
     )
     .unwrap();
-    let event = run(&temp, &runtime, cue.path(), &[], 1);
+    let event = run(&runtime, cue.path(), &[], 1);
     assert!(
         event["error"]["message"]
             .as_str()
@@ -365,20 +364,8 @@ fn archive_disc_selection_keeps_tracks_and_does_not_extract_the_disc() {
         builder.append_data(&mut header, name, contents).unwrap();
     }
     builder.finish().unwrap();
-    run(
-        &temp,
-        &runtime,
-        archive.path(),
-        &["--select", "game.cue"],
-        0,
-    );
-    run(
-        &temp,
-        &runtime,
-        archive.path(),
-        &["--select", "playlist.m3u"],
-        0,
-    );
+    run(&runtime, archive.path(), &["--select", "game.cue"], 0);
+    run(&runtime, archive.path(), &["--select", "playlist.m3u"], 0);
 }
 
 #[test]
@@ -390,7 +377,6 @@ fn system_directory_symlinks_are_rejected() {
     std::os::unix::fs::symlink(temp.path(), system.child("link").path()).unwrap();
     let rom = nes(&temp);
     let event = run(
-        &temp,
         &runtime,
         &rom,
         &["--system-dir", system.path().to_str().unwrap()],

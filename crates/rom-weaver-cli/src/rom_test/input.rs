@@ -30,46 +30,68 @@ pub(super) fn stage_rom(source: &Path, destination: &Path) -> Result<PathBuf> {
     let name = source
         .file_name()
         .ok_or_else(|| invalid("ROM has no filename"))?;
-    let mut staged = HashSet::new();
-    stage_content_file(root, Path::new(name), destination, &mut staged, 0)?;
+    ContentStaging {
+        root,
+        destination,
+        staged: HashSet::new(),
+    }
+    .stage_content_file(Path::new(name), 0)?;
     Ok(destination.join(name))
 }
 
-fn stage_content_file(
-    root: &Path,
-    relative: &Path,
-    destination: &Path,
-    staged: &mut HashSet<PathBuf>,
-    depth: usize,
-) -> Result<()> {
-    process_cancellation_token().check()?;
-    if depth > 8 || staged.len() >= 1024 || !safe_relative_path(relative) {
-        return Err(invalid(
-            "disc references must be relative, stay inside the ROM directory, and have bounded nesting",
-        ));
+struct ContentStaging<'a> {
+    root: &'a Path,
+    destination: &'a Path,
+    staged: HashSet<PathBuf>,
+}
+
+impl ContentStaging<'_> {
+    fn stage_content_file(&mut self, relative: &Path, depth: usize) -> Result<()> {
+        process_cancellation_token().check()?;
+        if depth > 8 || self.staged.len() >= 1024 || !safe_relative_path(relative) {
+            return Err(invalid(
+                "disc references must be relative, stay inside the ROM directory, and have bounded nesting",
+            ));
+        }
+        if !self.staged.insert(relative.to_path_buf()) {
+            return Ok(());
+        }
+        let source = self.root.join(relative);
+        let canonical = fs::canonicalize(&source).io_op(IoOp::Inspect, &source)?;
+        if !canonical.starts_with(self.root) || !canonical.is_file() {
+            return Err(invalid(format!(
+                "disc reference escapes its source directory: {}",
+                relative.display()
+            )));
+        }
+        let output = self.destination.join(relative);
+        fs::create_dir_all(output.parent().expect("staged file has a parent"))?;
+        if detect_disc_sheet(&source).is_none() && extension(&source) != "m3u" {
+            fs::copy(&canonical, &output).io_op(IoOp::Write, &output)?;
+            return Ok(());
+        }
+        let (text, references) = read_disc_references(&source, &canonical)?;
+        for reference in references {
+            let reference = Path::new(&reference);
+            if !safe_relative_path(reference) {
+                return Err(invalid(format!(
+                    "unsafe disc reference: {}",
+                    reference.display()
+                )));
+            }
+            let nested = relative.parent().unwrap_or(Path::new("")).join(reference);
+            self.stage_content_file(&nested, depth + 1)?;
+        }
+        fs::write(&output, text).io_op(IoOp::Write, &output)
     }
-    if !staged.insert(relative.to_path_buf()) {
-        return Ok(());
-    }
-    let source = root.join(relative);
-    let canonical = fs::canonicalize(&source).io_op(IoOp::Inspect, &source)?;
-    if !canonical.starts_with(root) || !canonical.is_file() {
-        return Err(invalid(format!(
-            "disc reference escapes its source directory: {}",
-            relative.display()
-        )));
-    }
-    let output = destination.join(relative);
-    fs::create_dir_all(output.parent().expect("staged file has a parent"))?;
-    if detect_disc_sheet(&source).is_none() && extension(&source) != "m3u" {
-        fs::copy(&canonical, &output).io_op(IoOp::Write, &output)?;
-        return Ok(());
-    }
-    if fs::metadata(&canonical)?.len() > 1024 * 1024 {
+}
+
+fn read_disc_references(source: &Path, canonical: &Path) -> Result<(String, Vec<String>)> {
+    if fs::metadata(canonical)?.len() > 1024 * 1024 {
         return Err(invalid("disc sheet or playlist exceeds the 1 MiB limit"));
     }
-    let text = fs::read_to_string(&canonical).io_op(IoOp::Open, &canonical)?;
-    let references = if let Some(kind) = detect_disc_sheet(&source) {
+    let text = fs::read_to_string(canonical).io_op(IoOp::Open, canonical)?;
+    let references = if let Some(kind) = detect_disc_sheet(source) {
         parse_disc_sheet_refs_from_text(kind, &text, &source.to_string_lossy())?
     } else {
         text.lines()
@@ -81,18 +103,7 @@ fn stage_content_file(
     if references.is_empty() {
         return Err(invalid("disc playlist contains no entries"));
     }
-    for reference in references {
-        let reference = Path::new(&reference);
-        if !safe_relative_path(reference) {
-            return Err(invalid(format!(
-                "unsafe disc reference: {}",
-                reference.display()
-            )));
-        }
-        let nested = relative.parent().unwrap_or(Path::new("")).join(reference);
-        stage_content_file(root, &nested, destination, staged, depth + 1)?;
-    }
-    fs::write(&output, text).io_op(IoOp::Write, &output)
+    Ok((text, references))
 }
 
 pub(super) fn stage_system(
@@ -112,15 +123,11 @@ pub(super) fn stage_system(
         fs::copy(runtime.root.join(relative), &target).io_op(IoOp::Write, &target)?;
     }
     if let Some(supplied) = supplied {
-        let mut remaining_bytes = 512 * 1024 * 1024;
-        let mut remaining_entries = 4096;
-        copy_system_directory(
-            supplied,
-            destination,
-            &mut remaining_bytes,
-            &mut remaining_entries,
-            0,
-        )?;
+        SystemCopyBudget {
+            remaining_bytes: 512 * 1024 * 1024,
+            remaining_entries: 4096,
+        }
+        .copy_system_directory(supplied, destination, 0)?;
     }
     let missing = core
         .firmware
@@ -141,51 +148,53 @@ pub(super) fn stage_system(
     Ok(())
 }
 
-fn copy_system_directory(
-    source: &Path,
-    destination: &Path,
-    remaining_bytes: &mut u64,
-    remaining_entries: &mut usize,
-    depth: usize,
-) -> Result<()> {
-    if depth > 16 || fs::symlink_metadata(source)?.file_type().is_symlink() {
-        return Err(invalid(
-            "system directories must not contain links or exceed 16 directory levels",
-        ));
-    }
-    fs::create_dir_all(destination)?;
-    for entry in fs::read_dir(source).io_op(IoOp::ReadDir, source)? {
-        process_cancellation_token().check()?;
-        let entry = entry?;
-        *remaining_entries = remaining_entries
-            .checked_sub(1)
-            .ok_or_else(|| invalid("system directory exceeds 4096 entries"))?;
-        let metadata = entry.metadata()?;
-        let output = destination.join(entry.file_name());
-        if entry.file_type()?.is_symlink() {
-            return Err(invalid(format!(
-                "system asset must not be a symlink: {}",
-                entry.path().display()
-            )));
-        }
-        if metadata.is_dir() {
-            copy_system_directory(
-                &entry.path(),
-                &output,
-                remaining_bytes,
-                remaining_entries,
-                depth + 1,
-            )?;
-        } else if metadata.is_file() {
-            *remaining_bytes = remaining_bytes
-                .checked_sub(metadata.len())
-                .ok_or_else(|| invalid("system files exceed the 512 MiB limit"))?;
-            fs::copy(entry.path(), &output).io_op(IoOp::Write, &output)?;
-        } else {
+struct SystemCopyBudget {
+    remaining_bytes: u64,
+    remaining_entries: usize,
+}
+
+impl SystemCopyBudget {
+    fn copy_system_directory(
+        &mut self,
+        source: &Path,
+        destination: &Path,
+        depth: usize,
+    ) -> Result<()> {
+        if depth > 16 || fs::symlink_metadata(source)?.file_type().is_symlink() {
             return Err(invalid(
-                "system assets must be regular files or directories",
+                "system directories must not contain links or exceed 16 directory levels",
             ));
         }
+        fs::create_dir_all(destination)?;
+        for entry in fs::read_dir(source).io_op(IoOp::ReadDir, source)? {
+            process_cancellation_token().check()?;
+            let entry = entry?;
+            self.remaining_entries = self
+                .remaining_entries
+                .checked_sub(1)
+                .ok_or_else(|| invalid("system directory exceeds 4096 entries"))?;
+            let metadata = entry.metadata()?;
+            let output = destination.join(entry.file_name());
+            if entry.file_type()?.is_symlink() {
+                return Err(invalid(format!(
+                    "system asset must not be a symlink: {}",
+                    entry.path().display()
+                )));
+            }
+            if metadata.is_dir() {
+                self.copy_system_directory(&entry.path(), &output, depth + 1)?;
+            } else if metadata.is_file() {
+                self.remaining_bytes = self
+                    .remaining_bytes
+                    .checked_sub(metadata.len())
+                    .ok_or_else(|| invalid("system files exceed the 512 MiB limit"))?;
+                fs::copy(entry.path(), &output).io_op(IoOp::Write, &output)?;
+            } else {
+                return Err(invalid(
+                    "system assets must be regular files or directories",
+                ));
+            }
+        }
+        Ok(())
     }
-    Ok(())
 }

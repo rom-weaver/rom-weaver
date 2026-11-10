@@ -124,15 +124,7 @@ pub(crate) fn run(command: &TestCommand, dry_run: bool) -> Result<Value> {
     let config = workspace.path.join("retroarch.cfg");
     write_config(&config)?;
     let started = Instant::now();
-    let process = execute(
-        &runtime,
-        core,
-        &rom,
-        &captured,
-        &config,
-        &workspace.path,
-        command,
-    )?;
+    let process = workspace.execute(&runtime, core, &rom, command)?;
     let elapsed_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
     if !process.status.success() {
         return Err(RomWeaverError::Validation(format!(
@@ -212,115 +204,118 @@ struct ProcessOutput {
     stderr: Vec<u8>,
 }
 
-fn execute(
-    runtime: &EmulatorRuntime,
-    core: &EmulatorCore,
-    rom: &Path,
-    screenshot: &Path,
-    config: &Path,
-    workspace: &Path,
-    options: &TestCommand,
-) -> Result<ProcessOutput> {
-    let retroarch = &runtime.retroarch;
-    let frames = options.frames;
-    let timeout = Duration::from_secs(options.timeout);
-    trace!(retroarch = %retroarch.display(), rom = %rom.display(), frames, "starting emulator smoke test");
-    let home = workspace.join("home");
-    let cache = workspace.join("cache");
-    let config_home = workspace.join("config");
-    let data = workspace.join("data");
-    for path in [&home, &cache, &config_home, &data] {
-        fs::create_dir_all(path).io_op(IoOp::CreateDir, path)?;
-    }
-    let mut command = Command::new(retroarch);
-    #[cfg(unix)]
-    command.env_clear().env("PATH", "/usr/bin:/bin");
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
+impl Workspace {
+    fn execute(
+        &self,
+        runtime: &EmulatorRuntime,
+        core: &EmulatorCore,
+        rom: &Path,
+        options: &TestCommand,
+    ) -> Result<ProcessOutput> {
+        let workspace = &self.path;
+        let screenshot = workspace.join("captured.png");
+        let config = workspace.join("retroarch.cfg");
+        let retroarch = &runtime.retroarch;
+        let frames = options.frames;
+        let timeout = Duration::from_secs(options.timeout);
+        trace!(retroarch = %retroarch.display(), rom = %rom.display(), frames, "starting emulator smoke test");
+        let home = workspace.join("home");
+        let cache = workspace.join("cache");
+        let config_home = workspace.join("config");
+        let data = workspace.join("data");
+        for path in [&home, &cache, &config_home, &data] {
+            fs::create_dir_all(path).io_op(IoOp::CreateDir, path)?;
+        }
+        let mut command = Command::new(retroarch);
+        #[cfg(unix)]
+        command.env_clear().env("PATH", "/usr/bin:/bin");
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
 
-        let system_root = std::env::var_os("SystemRoot")
-            .or_else(|| std::env::var_os("WINDIR"))
-            .ok_or_else(|| {
-                RomWeaverError::Validation(
-                    "SystemRoot or WINDIR is required to start the emulator".to_string(),
-                )
-            })?;
+            let system_root = std::env::var_os("SystemRoot")
+                .or_else(|| std::env::var_os("WINDIR"))
+                .ok_or_else(|| {
+                    RomWeaverError::Validation(
+                        "SystemRoot or WINDIR is required to start the emulator".to_string(),
+                    )
+                })?;
+            command
+                .env_clear()
+                .creation_flags(windows_process::CREATE_SUSPENDED);
+            command
+                .env("SystemRoot", &system_root)
+                .env("WINDIR", &system_root)
+                .env("PATH", PathBuf::from(system_root).join("System32"));
+        }
         command
-            .env_clear()
-            .creation_flags(windows_process::CREATE_SUSPENDED);
+            .arg("--verbose")
+            .arg("--config")
+            .arg(config)
+            .arg("-L")
+            .arg(&core.path)
+            .arg(format!("--max-frames={frames}"))
+            .arg("--max-frames-ss")
+            .arg(format!("--max-frames-ss-path={}", screenshot.display()))
+            .arg("--sram-mode=noload-nosave")
+            .arg(rom)
+            .current_dir(workspace)
+            .env("HOME", &home)
+            .env("XDG_CACHE_HOME", &cache)
+            .env("XDG_CONFIG_HOME", &config_home)
+            .env("XDG_DATA_HOME", &data)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        #[cfg(windows)]
         command
-            .env("SystemRoot", &system_root)
-            .env("WINDIR", &system_root)
-            .env("PATH", PathBuf::from(system_root).join("System32"));
+            .env("USERPROFILE", &home)
+            .env("APPDATA", &config_home)
+            .env("LOCALAPPDATA", &data)
+            .env("TEMP", &cache)
+            .env("TMP", &cache);
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
+        let child = command.spawn().io_op(IoOp::Open, retroarch)?;
+        let mut process = RunningEmulator::new(child)?;
+        let stdout = process.child.stdout.take().expect("piped stdout");
+        let stderr = process.child.stderr.take().expect("piped stderr");
+        let stdout_reader = thread::spawn(move || read_bounded(stdout));
+        let stderr_reader = thread::spawn(move || read_bounded(stderr));
+        let started = Instant::now();
+        let cancellation = process_cancellation_token();
+        let status = loop {
+            if let Some(status) = process.child.try_wait().map_err(RomWeaverError::Io)? {
+                break status;
+            }
+            if cancellation.is_cancelled() {
+                process.stop();
+                return Err(RomWeaverError::Cancelled);
+            }
+            if started.elapsed() >= timeout {
+                process.stop();
+                let stdout = stdout_reader.join().unwrap_or_default();
+                let stderr = stderr_reader.join().unwrap_or_default();
+                return Err(RomWeaverError::Validation(format!(
+                    "RetroArch timed out after {} seconds (stdout: {}; stderr: {})",
+                    timeout.as_secs(),
+                    display_capture(&stdout),
+                    display_capture(&stderr),
+                )));
+            }
+            thread::sleep(Duration::from_millis(10));
+        };
+        // Descendants MUST close inherited pipes before the readers are joined.
+        process.stop();
+        Ok(ProcessOutput {
+            status,
+            stdout: stdout_reader.join().unwrap_or_default(),
+            stderr: stderr_reader.join().unwrap_or_default(),
+        })
     }
-    command
-        .arg("--verbose")
-        .arg("--config")
-        .arg(config)
-        .arg("-L")
-        .arg(&core.path)
-        .arg(format!("--max-frames={frames}"))
-        .arg("--max-frames-ss")
-        .arg(format!("--max-frames-ss-path={}", screenshot.display()))
-        .arg("--sram-mode=noload-nosave")
-        .arg(rom)
-        .current_dir(workspace)
-        .env("HOME", &home)
-        .env("XDG_CACHE_HOME", &cache)
-        .env("XDG_CONFIG_HOME", &config_home)
-        .env("XDG_DATA_HOME", &data)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(windows)]
-    command
-        .env("USERPROFILE", &home)
-        .env("APPDATA", &config_home)
-        .env("LOCALAPPDATA", &data)
-        .env("TEMP", &cache)
-        .env("TMP", &cache);
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        command.process_group(0);
-    }
-    let child = command.spawn().io_op(IoOp::Open, retroarch)?;
-    let mut process = RunningEmulator::new(child)?;
-    let stdout = process.child.stdout.take().expect("piped stdout");
-    let stderr = process.child.stderr.take().expect("piped stderr");
-    let stdout_reader = thread::spawn(move || read_bounded(stdout));
-    let stderr_reader = thread::spawn(move || read_bounded(stderr));
-    let started = Instant::now();
-    let cancellation = process_cancellation_token();
-    let status = loop {
-        if let Some(status) = process.child.try_wait().map_err(RomWeaverError::Io)? {
-            break status;
-        }
-        if cancellation.is_cancelled() {
-            process.stop();
-            return Err(RomWeaverError::Cancelled);
-        }
-        if started.elapsed() >= timeout {
-            process.stop();
-            let stdout = stdout_reader.join().unwrap_or_default();
-            let stderr = stderr_reader.join().unwrap_or_default();
-            return Err(RomWeaverError::Validation(format!(
-                "RetroArch timed out after {} seconds (stdout: {}; stderr: {})",
-                timeout.as_secs(),
-                display_capture(&stdout),
-                display_capture(&stderr),
-            )));
-        }
-        thread::sleep(Duration::from_millis(10));
-    };
-    // Descendants MUST close inherited pipes before the readers are joined.
-    process.stop();
-    Ok(ProcessOutput {
-        status,
-        stdout: stdout_reader.join().unwrap_or_default(),
-        stderr: stderr_reader.join().unwrap_or_default(),
-    })
 }
 
 fn read_bounded(mut reader: impl Read) -> Vec<u8> {

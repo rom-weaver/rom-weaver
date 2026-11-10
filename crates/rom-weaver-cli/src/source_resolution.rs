@@ -45,7 +45,9 @@ pub(super) struct PatchResolveLabels<'a> {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct AutoExtractResolutionOptions {
+struct AutoExtractResolutionOptions<'a> {
+    labels: AutoExtractResolutionLabels<'a>,
+    select: &'a [String],
     group_disc_payloads: bool,
     no_extract: bool,
     no_ignore: bool,
@@ -70,6 +72,86 @@ enum AutoExtractMode {
     Recursive,
     SingleStep,
     SingleStepWithCompanions,
+}
+
+fn is_split_7z_volume(source: &Path) -> bool {
+    source
+        .file_stem()
+        .is_some_and(|stem| stem.to_string_lossy().to_ascii_lowercase().ends_with(".7z"))
+        && source.extension().is_some_and(|extension| {
+            let extension = extension.as_encoded_bytes();
+            extension.len() >= 3 && extension.iter().all(u8::is_ascii_digit)
+        })
+}
+
+fn probe_auto_extract_source(
+    handler: &dyn ContainerHandler,
+    current_source: &Path,
+    context: &OperationContext,
+    labels: AutoExtractResolutionLabels<'_>,
+) -> Result<bool> {
+    let probe_request = ContainerProbeRequest {
+        source: current_source.to_path_buf(),
+        split_bin: false,
+    };
+    if let Err(error) = handler.probe_details(&probe_request, context) {
+        // A short signature can match raw ROM bytes by chance. Only a
+        // file named as this container is a damaged archive; any
+        // other file is used as-is.
+        if !handler.descriptor().matches_path(current_source) && !is_split_7z_volume(current_source)
+        {
+            debug!(
+                current_source = %current_source.display(),
+                format = handler.descriptor().name,
+                error = %error,
+                "auto-extract stopped: signature-only match failed its probe; using the raw file"
+            );
+            return Ok(false);
+        }
+        trace!(
+            current_source = %current_source.display(),
+            format = handler.descriptor().name,
+            error = %error,
+            "auto-extract failed: handler probe failed"
+        );
+        if is_split_7z_volume(current_source) && handler.descriptor().matches_name("7z") {
+            return Err(RomWeaverError::Validation(format!(
+                "{} payload extraction failed for `{}` (7z): split 7z volume sets are unsupported; join the volumes into one archive or use --no-extract to use this volume as raw input: {error}",
+                labels.source_label,
+                current_source.display(),
+            )));
+        }
+        return Err(RomWeaverError::Validation(format!(
+            "{} payload extraction failed for `{}` ({}): {error}",
+            labels.source_label,
+            current_source.display(),
+            handler.descriptor().name
+        )));
+    }
+
+    Ok(true)
+}
+
+fn auto_extract_next_depth(
+    current_source: &Path,
+    depth: usize,
+    source_label: &str,
+) -> Result<usize> {
+    let next_depth = depth + 1;
+    if next_depth > MAX_NESTED_EXTRACT_DEPTH {
+        trace!(
+            current_source = %current_source.display(),
+            next_depth,
+            max_depth = MAX_NESTED_EXTRACT_DEPTH,
+            "auto-extract failed: exceeded max recursion depth"
+        );
+        return Err(RomWeaverError::Validation(format!(
+            "{} extract exceeded max depth of {MAX_NESTED_EXTRACT_DEPTH} at `{}`",
+            source_label,
+            current_source.display()
+        )));
+    }
+    Ok(next_depth)
 }
 
 impl CliApp {
@@ -99,16 +181,16 @@ impl CliApp {
             }
             let next = self.resolve_source_with_auto_extract_with_mode(
                 &resolved.source,
-                select,
                 context,
-                AutoExtractResolutionLabels {
-                    command: "test",
-                    family: OperationFamily::Command,
-                    format: None,
-                    source_label: "ROM",
-                    temp_prefix: "test-extract",
-                },
                 AutoExtractResolutionOptions {
+                    select,
+                    labels: AutoExtractResolutionLabels {
+                        command: "test",
+                        family: OperationFamily::Command,
+                        format: None,
+                        source_label: "ROM",
+                        temp_prefix: "test-extract",
+                    },
                     group_disc_payloads: false,
                     no_extract: false,
                     no_ignore: false,
@@ -185,10 +267,10 @@ impl CliApp {
                 if is_stream_codec_format_name(handler.descriptor().name) {
                     let resolved = self.resolve_source_with_auto_extract_with_mode(
                         &current,
-                        &[],
                         context,
-                        labels,
                         AutoExtractResolutionOptions {
+                            select: &[],
+                            labels,
                             group_disc_payloads: false,
                             no_extract: false,
                             no_ignore: true,
@@ -297,10 +379,10 @@ impl CliApp {
     ) -> Result<ResolvedChecksumSource> {
         self.resolve_source_with_auto_extract_with_mode(
             source,
-            select,
             context,
-            labels,
             AutoExtractResolutionOptions {
+                select,
+                labels,
                 group_disc_payloads,
                 no_extract: flags.no_extract,
                 no_ignore: flags.no_ignore,
@@ -314,11 +396,11 @@ impl CliApp {
     fn resolve_source_with_auto_extract_with_mode(
         &self,
         source: &Path,
-        select: &[String],
         context: &OperationContext,
-        labels: AutoExtractResolutionLabels<'_>,
-        options: AutoExtractResolutionOptions,
+        options: AutoExtractResolutionOptions<'_>,
     ) -> Result<ResolvedChecksumSource> {
+        let labels = options.labels;
+        let select = options.select;
         trace!(
             source = %source.display(),
             selections = select.len(),
@@ -369,102 +451,14 @@ impl CliApp {
                 );
                 break;
             }
-            let is_7z_volume = current_source
-                .file_stem()
-                .is_some_and(|stem| stem.to_string_lossy().to_ascii_lowercase().ends_with(".7z"))
-                && current_source.extension().is_some_and(|extension| {
-                    let extension = extension.as_encoded_bytes();
-                    extension.len() >= 3 && extension.iter().all(u8::is_ascii_digit)
-                });
-            let Some(handler) = self
-                .containers
-                .probe(&current_source)
-                .or_else(|| {
-                    is_7z_volume
-                        .then(|| self.containers.find_by_name("7z"))
-                        .flatten()
-                })
-                .filter(|handler| !handler.is_self_contained_rom(&current_source))
-            else {
-                trace!(
-                    current_source = %current_source.display(),
-                    "auto-extract stopped: no extractable container handler matched source"
-                );
+            let Some(handler) = self.auto_extract_handler(&current_source, options) else {
                 break;
             };
-            let is_xiso = handler.descriptor().matches_name("xiso");
-            let can_extract = handler.capabilities().extract;
-            if is_xiso || !can_extract {
-                trace!(
-                    current_source = %current_source.display(),
-                    format = handler.descriptor().name,
-                    is_xiso,
-                    can_extract,
-                    "auto-extract stopped: matched handler is not eligible for extract"
-                );
-                break;
-            }
-            if options.stop_on_single_payload_codec && handler.is_single_payload_codec_container() {
-                trace!(
-                    current_source = %current_source.display(),
-                    format = handler.descriptor().name,
-                    "auto-extract stopped: single-payload codec reported as terminal probe target"
-                );
+            if !probe_auto_extract_source(handler.as_ref(), &current_source, context, labels)? {
                 break;
             }
 
-            let probe_request = ContainerProbeRequest {
-                source: current_source.clone(),
-                split_bin: false,
-            };
-            if let Err(error) = handler.probe_details(&probe_request, context) {
-                // A short signature can match raw ROM bytes by chance. Only a
-                // file named as this container is a damaged archive; any
-                // other file is used as-is.
-                if !handler.descriptor().matches_path(&current_source) && !is_7z_volume {
-                    debug!(
-                        current_source = %current_source.display(),
-                        format = handler.descriptor().name,
-                        error = %error,
-                        "auto-extract stopped: signature-only match failed its probe; using the raw file"
-                    );
-                    break;
-                }
-                trace!(
-                    current_source = %current_source.display(),
-                    format = handler.descriptor().name,
-                    error = %error,
-                    "auto-extract failed: handler probe failed"
-                );
-                if is_7z_volume && handler.descriptor().matches_name("7z") {
-                    return Err(RomWeaverError::Validation(format!(
-                        "{} payload extraction failed for `{}` (7z): split 7z volume sets are unsupported; join the volumes into one archive or use --no-extract to use this volume as raw input: {error}",
-                        labels.source_label,
-                        current_source.display(),
-                    )));
-                }
-                return Err(RomWeaverError::Validation(format!(
-                    "{} payload extraction failed for `{}` ({}): {error}",
-                    labels.source_label,
-                    current_source.display(),
-                    handler.descriptor().name
-                )));
-            }
-
-            let next_depth = depth + 1;
-            if next_depth > MAX_NESTED_EXTRACT_DEPTH {
-                trace!(
-                    current_source = %current_source.display(),
-                    next_depth,
-                    max_depth = MAX_NESTED_EXTRACT_DEPTH,
-                    "auto-extract failed: exceeded max recursion depth"
-                );
-                return Err(RomWeaverError::Validation(format!(
-                    "{} extract exceeded max depth of {MAX_NESTED_EXTRACT_DEPTH} at `{}`",
-                    labels.source_label,
-                    current_source.display()
-                )));
-            }
+            let next_depth = auto_extract_next_depth(&current_source, depth, labels.source_label)?;
             if extracted_archives >= MAX_NESTED_EXTRACT_ARCHIVES {
                 trace!(
                     source = %source.display(),
@@ -478,83 +472,12 @@ impl CliApp {
                 )));
             }
 
-            self.emit_running(
-                OperationLabel {
-                    command: labels.command,
-                    family: labels.family,
-                    format: Some(handler.descriptor().name),
-                },
-                "prepare",
-                format!(
-                    "extracting {} payload from `{}`",
-                    labels.source_label,
-                    current_source.display()
-                ),
-                None,
-                Some(context.plan_threads(handler.capabilities().extract_threads)),
-            );
-
-            let out_dir = context.temp_paths().next_path(labels.temp_prefix, None);
-            fs::create_dir_all(&out_dir)?;
-            // Ask BEFORE extracting: when the caller pinned no `--select` and interactive selection
-            // is enabled, resolve the container's logical ROMs up front and prompt for the one to
-            // keep (single-select for ROMs) instead of extracting everything and prompting after.
-            // An unambiguous container resolves to an empty list, so we extract it whole as before.
-            let resolved_selections;
-            let select_for_extract: &[String] =
-                if options.mode == AutoExtractMode::SingleStepWithCompanions {
-                    // Disc sheets and playlists MUST retain their referenced archive members.
-                    &[]
-                } else if select.is_empty() && self.interactive_selection_enabled {
-                    resolved_selections = self.resolve_extract_payload_selections(
-                        handler.as_ref(),
-                        &current_source,
-                        SelectionResolutionOptions {
-                            kind_filter: options.kind_filter,
-                            split_bin: false,
-                            ignore_common_files: !options.no_ignore,
-                            source_label: labels.source_label,
-                        },
-                        context,
-                    )?;
-                    if resolved_selections.is_empty() {
-                        select
-                    } else {
-                        &resolved_selections
-                    }
-                } else {
-                    select
-                };
-            self.extract_with_selection_fallback(
+            let out_dir = self.extract_auto_extract_payload(
                 handler.as_ref(),
                 &current_source,
-                SelectionExtract {
-                    out_dir: &out_dir,
-                    selections: select_for_extract,
-                    kind_filter: if options.mode == AutoExtractMode::SingleStepWithCompanions {
-                        ArchiveEntryKindFilter::default()
-                    } else {
-                        options.kind_filter
-                    },
-                    split_bin: false,
-                    ignore_common_files: false,
-                    overwrite: true,
-                    source_label: labels.source_label,
-                    allow_multi_select: false,
-                },
                 context,
-            )
-            .map_err(|error| {
-                if error.code() == Some(rom_weaver_core::ERROR_CODE_EXTRACT_NO_MATCHING_ENTRIES) {
-                    return error;
-                }
-                RomWeaverError::Validation(format!(
-                    "{} payload extraction failed for `{}` ({}): {error}",
-                    labels.source_label,
-                    current_source.display(),
-                    handler.descriptor().name
-                ))
-            })?;
+                options,
+            )?;
             cleanup_paths.push(out_dir.clone());
             extracted_archives = extracted_archives.saturating_add(1);
             depth = next_depth;
@@ -567,13 +490,8 @@ impl CliApp {
                 "auto-extract archive extraction completed"
             );
 
-            let selected_candidate = self.resolve_auto_extract_candidate(
-                &current_source,
-                &out_dir,
-                labels,
-                options,
-                select,
-            )?;
+            let selected_candidate =
+                self.resolve_auto_extract_candidate(&current_source, &out_dir, options)?;
             trace!(
                 source = %current_source.display(),
                 selected = %selected_candidate.display_name,
@@ -604,10 +522,10 @@ impl CliApp {
         &self,
         current_source: &Path,
         out_dir: &Path,
-        labels: AutoExtractResolutionLabels<'_>,
-        options: AutoExtractResolutionOptions,
-        select: &[String],
+        options: AutoExtractResolutionOptions<'_>,
     ) -> Result<ChecksumExtractCandidate> {
+        let labels = options.labels;
+        let select = options.select;
         let all_candidates = self.collect_checksum_extract_candidates(out_dir)?;
         let all_candidates = if options.group_disc_payloads {
             Self::group_disc_extract_candidates(all_candidates)?
@@ -661,6 +579,139 @@ impl CliApp {
             )?
         };
         self.select_auto_extract_candidate(current_source, candidates, labels.source_label)
+    }
+
+    fn auto_extract_handler(
+        &self,
+        current_source: &Path,
+        options: AutoExtractResolutionOptions<'_>,
+    ) -> Option<Arc<dyn ContainerHandler>> {
+        let Some(handler) = self
+            .containers
+            .probe(current_source)
+            .or_else(|| {
+                is_split_7z_volume(current_source)
+                    .then(|| self.containers.find_by_name("7z"))
+                    .flatten()
+            })
+            .filter(|handler| !handler.is_self_contained_rom(current_source))
+        else {
+            trace!(
+                current_source = %current_source.display(),
+                "auto-extract stopped: no extractable container handler matched source"
+            );
+            return None;
+        };
+        let is_xiso = handler.descriptor().matches_name("xiso");
+        let can_extract = handler.capabilities().extract;
+        if is_xiso || !can_extract {
+            trace!(
+                current_source = %current_source.display(),
+                format = handler.descriptor().name,
+                is_xiso,
+                can_extract,
+                "auto-extract stopped: matched handler is not eligible for extract"
+            );
+            return None;
+        }
+        if options.stop_on_single_payload_codec && handler.is_single_payload_codec_container() {
+            trace!(
+                current_source = %current_source.display(),
+                format = handler.descriptor().name,
+                "auto-extract stopped: single-payload codec reported as terminal probe target"
+            );
+            return None;
+        }
+
+        Some(handler)
+    }
+
+    fn extract_auto_extract_payload(
+        &self,
+        handler: &dyn ContainerHandler,
+        current_source: &Path,
+        context: &OperationContext,
+        options: AutoExtractResolutionOptions<'_>,
+    ) -> Result<PathBuf> {
+        let labels = options.labels;
+        self.emit_running(
+            OperationLabel {
+                command: labels.command,
+                family: labels.family,
+                format: Some(handler.descriptor().name),
+            },
+            "prepare",
+            format!(
+                "extracting {} payload from `{}`",
+                labels.source_label,
+                current_source.display()
+            ),
+            None,
+            Some(context.plan_threads(handler.capabilities().extract_threads)),
+        );
+
+        let out_dir = context.temp_paths().next_path(labels.temp_prefix, None);
+        fs::create_dir_all(&out_dir)?;
+        let resolved_selections =
+            self.auto_extract_selections(handler, current_source, context, options)?;
+        self.extract_with_selection_fallback(
+            handler,
+            current_source,
+            SelectionExtract {
+                out_dir: &out_dir,
+                selections: &resolved_selections,
+                kind_filter: if options.mode == AutoExtractMode::SingleStepWithCompanions {
+                    ArchiveEntryKindFilter::default()
+                } else {
+                    options.kind_filter
+                },
+                split_bin: false,
+                ignore_common_files: false,
+                overwrite: true,
+                source_label: labels.source_label,
+                allow_multi_select: false,
+            },
+            context,
+        )
+        .map_err(|error| {
+            if error.code() == Some(rom_weaver_core::ERROR_CODE_EXTRACT_NO_MATCHING_ENTRIES) {
+                return error;
+            }
+            RomWeaverError::Validation(format!(
+                "{} payload extraction failed for `{}` ({}): {error}",
+                labels.source_label,
+                current_source.display(),
+                handler.descriptor().name
+            ))
+        })?;
+        Ok(out_dir)
+    }
+
+    fn auto_extract_selections(
+        &self,
+        handler: &dyn ContainerHandler,
+        current_source: &Path,
+        context: &OperationContext,
+        options: AutoExtractResolutionOptions<'_>,
+    ) -> Result<Vec<String>> {
+        // Disc sheets and playlists MUST retain their referenced archive members.
+        if options.mode == AutoExtractMode::SingleStepWithCompanions {
+            return Ok(Vec::new());
+        }
+        if !options.select.is_empty() || !self.interactive_selection_enabled {
+            return Ok(options.select.to_vec());
+        }
+        self.resolve_extract_payload_selections(
+            handler,
+            current_source,
+            SelectionResolutionOptions {
+                kind_filter: options.kind_filter,
+                split_bin: false,
+                ignore_common_files: !options.no_ignore,
+                source_label: options.labels.source_label,
+            },
+            context,
+        )
     }
 
     fn group_disc_extract_candidates(

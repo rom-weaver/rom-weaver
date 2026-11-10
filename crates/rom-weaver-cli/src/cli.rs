@@ -661,6 +661,120 @@ fn argument_color(args: &[std::ffi::OsString]) -> clap::ColorChoice {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+fn print_native_command_result(
+    details: serde_json::Value,
+    mode: OutputMode,
+    command: &str,
+    dry_run: bool,
+) -> ExitCode {
+    let label = details["message"].as_str().unwrap_or("command completed");
+    if mode.is_json() {
+        let event = native_output::result_event(
+            command,
+            if dry_run { "plan" } else { "complete" },
+            label,
+            Some(details.clone()),
+        );
+        native_output::print_event(mode, event, 0)
+    } else {
+        crate::stdout_output::write(format_args!("{}\n", crate::render::display_text(label)));
+        if let Some(path) = details["screenshot"].as_str() {
+            crate::stdout_output::write(format_args!(
+                "Screenshot: {}\n",
+                crate::render::display_text(path)
+            ));
+        }
+        ExitCode::SUCCESS
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn print_native_command_outcome(
+    result: rom_weaver_core::Result<serde_json::Value>,
+    mode: OutputMode,
+    command: &str,
+    dry_run: bool,
+) -> ExitCode {
+    match result {
+        Ok(details) => print_native_command_result(details, mode, command, dry_run),
+        Err(error) => {
+            let cancelled = matches!(error, rom_weaver_core::RomWeaverError::Cancelled);
+            native_output::print_error(
+                mode,
+                command,
+                "execute",
+                if cancelled {
+                    "operation.cancelled"
+                } else {
+                    "cli.emulator"
+                },
+                &error.to_string(),
+                if cancelled { 130 } else { 1 },
+            )
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn print_bundle_schema(mode: OutputMode) -> ExitCode {
+    if mode.is_json() {
+        let schema =
+            match serde_json::from_str::<serde_json::Value>(rom_weaver_app::WEAVE_JSON_SCHEMA) {
+                Ok(schema) => schema,
+                Err(error) => {
+                    return native_output::print_error(
+                        mode,
+                        "bundle-schema",
+                        "schema",
+                        "cli.schema",
+                        &error.to_string(),
+                        1,
+                    );
+                }
+            };
+        return native_output::print_event(
+            mode,
+            native_output::result_event(
+                "bundle-schema",
+                "schema",
+                "weave schema",
+                Some(serde_json::json!({ "schema": schema })),
+            ),
+            0,
+        );
+    }
+    crate::stdout_output::write(format_args!("{}", rom_weaver_app::WEAVE_JSON_SCHEMA));
+    ExitCode::SUCCESS
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn print_native_formats(cli: &Cli, mode: OutputMode) -> ExitCode {
+    if mode == OutputMode::JsonLines {
+        native_output::print_event(
+            mode,
+            native_output::result_event(
+                "formats",
+                "formats",
+                "listed supported formats",
+                Some(crate::formats_command::report()),
+            ),
+            0,
+        );
+    } else {
+        print_formats(mode.is_json());
+    }
+    if cli.verbose > 0 && !cli.quiet {
+        native_output::diagnostic(
+            mode.is_json(),
+            "INFO",
+            "formats",
+            "listed supported formats",
+        );
+    }
+    ExitCode::SUCCESS
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
     let output = cli.output_options(false);
     crate::init_logging(output.log_level, output.dep_trace, output.json);
@@ -678,47 +792,7 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
             CliCommand::Emulator(args) => crate::emulator_runtime::run(args, cli.dry_run),
             _ => unreachable!(),
         };
-        return match result {
-            Ok(details) => {
-                let label = details["message"].as_str().unwrap_or("command completed");
-                if mode.is_json() {
-                    let event = native_output::result_event(
-                        command,
-                        if cli.dry_run { "plan" } else { "complete" },
-                        label,
-                        Some(details.clone()),
-                    );
-                    native_output::print_event(mode, event, 0)
-                } else {
-                    crate::stdout_output::write(format_args!(
-                        "{}\n",
-                        crate::render::display_text(label)
-                    ));
-                    if let Some(path) = details["screenshot"].as_str() {
-                        crate::stdout_output::write(format_args!(
-                            "Screenshot: {}\n",
-                            crate::render::display_text(path)
-                        ));
-                    }
-                    ExitCode::SUCCESS
-                }
-            }
-            Err(error) => {
-                let cancelled = matches!(error, rom_weaver_core::RomWeaverError::Cancelled);
-                native_output::print_error(
-                    mode,
-                    command,
-                    "execute",
-                    if cancelled {
-                        "operation.cancelled"
-                    } else {
-                        "cli.emulator"
-                    },
-                    &error.to_string(),
-                    if cancelled { 130 } else { 1 },
-                )
-            }
-        };
+        return print_native_command_outcome(result, mode, command, cli.dry_run);
     }
     // `completions` is a native-only concern: emit the script and exit before
     // any command runs. The completion tree excludes internal parser shims.
@@ -750,29 +824,7 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
         if cli.dry_run {
             return print_native_dry_run_plan("formats", Vec::new(), mode);
         }
-        if mode == OutputMode::JsonLines {
-            native_output::print_event(
-                mode,
-                native_output::result_event(
-                    "formats",
-                    "formats",
-                    "listed supported formats",
-                    Some(crate::formats_command::report()),
-                ),
-                0,
-            );
-        } else {
-            print_formats(mode.is_json());
-        }
-        if cli.verbose > 0 && !cli.quiet {
-            native_output::diagnostic(
-                mode.is_json(),
-                "INFO",
-                "formats",
-                "listed supported formats",
-            );
-        }
-        return ExitCode::SUCCESS;
+        return print_native_formats(cli, mode);
     }
     // `weave schema` prints the raw JSON Schema to stdout (redirect it to a
     // file / point an editor at it), before any command runs.
@@ -780,35 +832,7 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
         if cli.dry_run {
             return print_native_dry_run_plan("bundle-schema", Vec::new(), mode);
         }
-        if mode.is_json() {
-            let schema = match serde_json::from_str::<serde_json::Value>(
-                rom_weaver_app::WEAVE_JSON_SCHEMA,
-            ) {
-                Ok(schema) => schema,
-                Err(error) => {
-                    return native_output::print_error(
-                        mode,
-                        "bundle-schema",
-                        "schema",
-                        "cli.schema",
-                        &error.to_string(),
-                        1,
-                    );
-                }
-            };
-            return native_output::print_event(
-                mode,
-                native_output::result_event(
-                    "bundle-schema",
-                    "schema",
-                    "weave schema",
-                    Some(serde_json::json!({ "schema": schema })),
-                ),
-                0,
-            );
-        }
-        crate::stdout_output::write(format_args!("{}", rom_weaver_app::WEAVE_JSON_SCHEMA));
-        return ExitCode::SUCCESS;
+        return print_bundle_schema(mode);
     }
     unreachable!("only native commands reach this dispatcher")
 }

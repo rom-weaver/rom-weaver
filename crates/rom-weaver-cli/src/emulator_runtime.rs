@@ -279,26 +279,8 @@ pub(crate) fn resolve(directory: Option<&Path>) -> Result<EmulatorRuntime> {
             firmware: core.firmware,
         });
     }
-    let mut system_paths = HashSet::new();
-    if manifest.system_files.len() > 4096 {
-        return Err(invalid("runtime contains too many system assets"));
-    }
-    for asset in manifest.system_files {
-        if !asset.path.starts_with("system/") || !system_paths.insert(PathBuf::from(&asset.path)) {
-            return Err(invalid(
-                "system assets must have unique paths inside system/",
-            ));
-        }
-        verify_file(
-            &root,
-            &RuntimeFile {
-                path: asset.path.clone(),
-                revision: manifest.retroarch.revision.clone(),
-                sha256: asset.sha256,
-            },
-            &asset.path,
-        )?;
-    }
+    let system_paths =
+        verify_system_files(&root, &manifest.system_files, &manifest.retroarch.revision)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -317,6 +299,34 @@ pub(crate) fn resolve(directory: Option<&Path>) -> Result<EmulatorRuntime> {
         cores,
         system_files: system_paths.into_iter().collect(),
     })
+}
+
+fn verify_system_files(
+    root: &Path,
+    assets: &[SystemFile],
+    revision: &str,
+) -> Result<HashSet<PathBuf>> {
+    let mut system_paths = HashSet::new();
+    if assets.len() > 4096 {
+        return Err(invalid("runtime contains too many system assets"));
+    }
+    for asset in assets {
+        if !asset.path.starts_with("system/") || !system_paths.insert(PathBuf::from(&asset.path)) {
+            return Err(invalid(
+                "system assets must have unique paths inside system/",
+            ));
+        }
+        verify_file(
+            root,
+            &RuntimeFile {
+                path: asset.path.clone(),
+                revision: revision.to_owned(),
+                sha256: asset.sha256.clone(),
+            },
+            &asset.path,
+        )?;
+    }
+    Ok(system_paths)
 }
 
 fn safe_identifier(value: &str) -> bool {
