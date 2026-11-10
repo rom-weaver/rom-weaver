@@ -38,6 +38,123 @@ struct TestPatch {
 }
 
 #[test]
+fn apply_memory_budget_covers_parsed_window_storage_and_application_header() {
+    let patch_bytes = build_patch(TestPatch {
+        header_flags: HDR_APP_HEADER,
+        app_header: vec![b'h'; 256 * 1024],
+        windows: vec![
+            TestWindow {
+                win_indicator: 0,
+                source_segment_size: None,
+                source_segment_position: None,
+                target_window_size: 1,
+                checksum: None,
+                data: vec![7],
+                inst: vec![2],
+                addr: vec![],
+            };
+            33
+        ],
+        ..Default::default()
+    });
+    let parsed = parse_patch(&mut Cursor::new(&patch_bytes)).expect("parse patch");
+    assert_eq!(
+        apply_patch_bytes(b"", &patch_bytes).expect("apply"),
+        vec![7; 33]
+    );
+    let retained = std::mem::size_of_val(&parsed)
+        + parsed.windows.capacity() * std::mem::size_of::<WindowIndex>()
+        + parsed
+            .app_header
+            .as_ref()
+            .expect("application header")
+            .capacity();
+    assert!(parsed.apply_memory_bytes() >= retained as u64);
+}
+
+#[test]
+fn decode_memory_budget_covers_source_target_raw_sections_and_secondary_models() {
+    let source = vec![0x33; 256 * 1024];
+    let target: Vec<_> = (0..256 * 1024).map(|index| (index % 251) as u8).collect();
+    let mut inst = vec![1];
+    encode_varint(&mut inst, target.len() as u64);
+    let fgk_model =
+        511 * std::mem::size_of::<FgkNode>() + 1022 * std::mem::size_of::<FgkBlock>() + 256;
+    let input_buffers = 2 * std::io::BufReader::new(Cursor::new(&[])).capacity();
+    for secondary in [
+        None,
+        Some(XDELTA_DJW_SECONDARY_ID),
+        Some(XDELTA_FGK_SECONDARY_ID),
+        Some(XDELTA_LZMA_SECONDARY_ID),
+    ] {
+        let bytes = build_patch(TestPatch {
+            header_flags: if secondary.is_some() {
+                HDR_SECONDARY
+            } else {
+                0
+            },
+            secondary_id: secondary,
+            windows: vec![TestWindow {
+                win_indicator: WIN_SOURCE,
+                source_segment_size: Some(source.len() as u64),
+                source_segment_position: Some(0),
+                target_window_size: target.len() as u64,
+                checksum: None,
+                data: target.clone(),
+                inst: inst.clone(),
+                addr: vec![],
+            }],
+            ..Default::default()
+        });
+        let parsed = parse_patch(&mut Cursor::new(&bytes)).expect("parse uncompressed window");
+        assert_eq!(
+            apply_patch_bytes(&source, &bytes).expect("apply raw sections"),
+            target
+        );
+        let allocated = source.len() + target.len() + target.len() + inst.len() + input_buffers;
+        let estimate = parsed.windows[0].decode_memory_bytes(secondary);
+        assert!(
+            estimate >= allocated as u64,
+            "source, target, raw sections and readers must remain charged"
+        );
+        assert!(
+            estimate <= (allocated + 2 * fgk_model) as u64,
+            "uncompressed sections have no unbounded secondary dictionary"
+        );
+    }
+    for len in [32, 256 * 1024] {
+        let target = vec![b'A'; len];
+        let inst = vec![2; len];
+        let mut packed = Vec::new();
+        encode_varint_raw(&mut packed, target.len() as u64);
+        packed.extend_from_slice(&xdelta_fgk_compress(&target).expect("compress FGK"));
+        let bytes = build_secondary_data_add_windows_patch(
+            XDELTA_FGK_SECONDARY_ID,
+            vec![(target.len() as u64, packed.clone(), inst.clone())],
+        );
+        let parsed = parse_patch(&mut Cursor::new(&bytes)).expect("parse FGK window");
+        assert_eq!(apply_patch_bytes(b"", &bytes).expect("apply FGK"), target);
+        // FGK (Faller-Gallager-Knuth adaptive Huffman) owns 511 nodes, 1022 blocks and 256 coded bits for its byte alphabet.
+        let allocated =
+            target.len() * 2 + packed.len() + inst.len() * 2 + fgk_model + input_buffers;
+        let estimate = parsed.windows[0].decode_memory_bytes(Some(XDELTA_FGK_SECONDARY_ID));
+        assert!(estimate >= allocated as u64);
+        // Compressed byte symbols cost at least one input bit; raw instructions stay raw.
+        let expanded_sections = packed.len() * 8 + inst.len();
+        let bounded = target.len()
+            + packed.len()
+            + inst.len()
+            + 2 * expanded_sections
+            + input_buffers
+            + 2 * fgk_model;
+        assert!(
+            estimate <= bounded as u64,
+            "only flagged sections need packed-bit expansion"
+        );
+    }
+}
+
+#[test]
 fn parse_and_apply_basic_source_patch() {
     let input = b"hello old world";
     let expected = b"hello new world";
@@ -123,6 +240,84 @@ fn cancelled_apply_does_not_create_output_or_temp_windows() {
         )
         .expect_err("cancelled VCDIFF must not write output or temp windows");
     assert!(matches!(error, RomWeaverError::Cancelled));
+    assert!(!output_path.exists());
+    assert!(!context.temp_paths().root().exists());
+}
+
+fn two_window_patch(second_checksum: Option<u32>) -> Vec<u8> {
+    let input_len = b"hello old world".len() as u64;
+    let window =
+        |target_window_size, checksum: Option<u32>, inst: Vec<u8>, addr: Vec<u64>| TestWindow {
+            win_indicator: if checksum.is_some() {
+                WIN_SOURCE | WIN_CHECKSUM
+            } else {
+                WIN_SOURCE
+            },
+            source_segment_size: Some(input_len),
+            source_segment_position: Some(0),
+            target_window_size,
+            checksum,
+            data: Vec::new(),
+            inst,
+            addr: encode_all_varints(&addr),
+        };
+    build_patch(TestPatch {
+        windows: vec![
+            window(6, None, vec![22], vec![0]),
+            window(6, second_checksum, vec![22], vec![0]),
+        ],
+        ..Default::default()
+    })
+}
+
+#[test]
+fn parallel_apply_streams_windows_without_temp_files() {
+    let input = b"hello old world";
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let patch_path = temp.join("update.vcdiff");
+    let output_path = temp.join("output.bin");
+    fs::write(&input_path, input).expect("write input");
+    fs::write(&patch_path, two_window_patch(None)).expect("write patch");
+    let context = test_context_with_threads(2);
+
+    let report = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &context,
+        )
+        .expect("apply patch");
+    assert!(report.thread_execution.expect("execution").used_parallelism);
+    assert_eq!(fs::read(output_path).expect("read output"), b"hello hello ");
+    assert!(!context.temp_paths().root().exists());
+}
+
+#[test]
+fn failed_parallel_apply_leaves_no_output_or_temp_files() {
+    let input = b"hello old world";
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let patch_path = temp.join("update.vcdiff");
+    let output_path = temp.join("output.bin");
+    fs::write(&input_path, input).expect("write input");
+    fs::write(&patch_path, two_window_patch(Some(0xDEAD_BEEF))).expect("write patch");
+    let context = test_context_with_threads(2);
+
+    let error = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &context,
+        )
+        .expect_err("second window checksum must fail");
+    assert!(format!("{error}").contains("checksum mismatch"));
     assert!(!output_path.exists());
     assert!(!context.temp_paths().root().exists());
 }
@@ -533,6 +728,55 @@ fn apply_fails_on_checksum_mismatch() {
         )
         .expect_err("checksum mismatch");
     assert!(format!("{error}").contains("checksum mismatch"));
+}
+
+#[test]
+fn streamed_windows_preserve_prior_decode_error_and_remove_partial_output() {
+    for threads in [1, 4, 16] {
+        let temp = create_temp_dir();
+        let input_path = temp.join("input.bin");
+        let patch_path = temp.join("update.xdelta");
+        let output_path = temp.join("output.bin");
+        fs::write(&input_path, b"abcabcabcabc").expect("input");
+        let mut windows = vec![
+            TestWindow {
+                win_indicator: WIN_SOURCE,
+                source_segment_size: Some(12),
+                source_segment_position: Some(0),
+                target_window_size: 6,
+                checksum: None,
+                data: Vec::new(),
+                inst: vec![22],
+                addr: encode_all_varints(&[0]),
+            };
+            20
+        ];
+        windows[1].win_indicator |= WIN_CHECKSUM;
+        windows[1].checksum = Some(0xDEADBEEF);
+        fs::write(
+            &patch_path,
+            build_patch(TestPatch {
+                windows,
+                ..Default::default()
+            }),
+        )
+        .expect("patch");
+        let error = VcdiffPatchHandler::new(&crate::xdelta::XDELTA)
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(threads),
+            )
+            .expect_err("checksum mismatch");
+        assert!(error.to_string().contains("checksum mismatch"));
+        assert!(
+            !output_path.exists(),
+            "{threads} threads left partial output"
+        );
+    }
 }
 
 #[test]

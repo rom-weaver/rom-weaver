@@ -440,3 +440,48 @@ fn pool_fallback_propagates_a_non_pool_build_error_from_the_retry() {
     assert_eq!(calls, 2);
     assert_eq!(error.to_string(), "validation failed: unrelated failure");
 }
+
+#[test]
+fn in_place_scope_keeps_coordinator_on_caller_and_joins_jobs() {
+    use std::{
+        cell::Cell,
+        rc::Rc,
+        sync::atomic::{AtomicUsize, Ordering},
+    };
+    let pool = SharedThreadPool::with_size(4).expect("pool");
+    let caller = std::thread::current().id();
+    let completed = AtomicUsize::new(0);
+    let value = Rc::new(Cell::new(0));
+    let result = pool.in_place_scope(|scope| {
+        assert_eq!(std::thread::current().id(), caller);
+        let scope = scope.expect("worker scope");
+        for _ in 0..8 {
+            scope.spawn(|_| {
+                completed.fetch_add(1, Ordering::SeqCst);
+            });
+        }
+        value.set(3);
+        value.clone()
+    });
+    assert_eq!(completed.load(Ordering::SeqCst), 8);
+    assert_eq!(result.get(), 3);
+}
+
+#[test]
+fn inline_and_nested_in_place_scopes_use_the_callers_serial_path() {
+    let inline = SharedThreadPool::with_execution(
+        &ThreadCapability::single_threaded().negotiate(ThreadBudget::Fixed(4)),
+    )
+    .expect("inline");
+    inline.in_place_scope(|scope| assert!(scope.is_none()));
+    for size in [1, 4] {
+        let pool = SharedThreadPool::with_size(size).expect("pool");
+        pool.install(|| {
+            let caller = std::thread::current().id();
+            pool.in_place_scope(|scope| {
+                assert!(scope.is_none());
+                assert_eq!(std::thread::current().id(), caller);
+            });
+        });
+    }
+}

@@ -3,10 +3,10 @@ use std::{
     cmp::{max, min},
     fs::{self, File},
     io::{BufReader, Read, Seek, SeekFrom, Write},
-    path::{Path, PathBuf},
+    path::Path,
+    sync::atomic::{AtomicBool, Ordering},
 };
 
-use rayon::prelude::*;
 use rom_weaver_core::{
     ChunkPlanner, FileChunk, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
     PatchApplyRequest, PatchCapabilities, PatchChecksumValidation, PatchCreateRequest,
@@ -19,6 +19,7 @@ use tracing::{debug, trace};
 use crate::shared::labels::append_warning_labels;
 use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
+    PartialOutput, PreparedWrite, WholeWriteBatchOptions, apply_batched_whole_writes,
     chunk_count_for_len_checked, run_with_optional_pool, scan_create_chunks,
 };
 
@@ -167,7 +168,7 @@ impl PatchHandler for IpsPatchHandler {
         );
         let max_parallel_chunks = max_parallel_chunks(output_size)?;
         let thread_capability = ThreadCapability::parallel(Some(max_parallel_chunks));
-        let tasks = build_chunk_tasks(&patch, output_size, context)?;
+        let tasks = build_chunk_tasks(&patch, output_size)?;
         trace!(
             format = self.descriptor.name,
             chunk_tasks = tasks.len(),
@@ -175,39 +176,47 @@ impl PatchHandler for IpsPatchHandler {
             "ips apply chunk plan"
         );
 
-        let render_result = run_with_optional_pool(
+        let (execution, pool) = run_with_optional_pool(
             context,
             thread_capability,
             true,
-            |pool| {
-                pool.install(|| {
-                    tasks
-                        .par_iter()
-                        .map(|task| {
-                            render_chunk_task(task, &request.input, input_len, &patch, context)
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })
-            },
-            || {
-                tasks
-                    .iter()
-                    .map(|task| render_chunk_task(task, &request.input, input_len, &patch, context))
-                    .collect::<Result<Vec<_>>>()
-            },
+            |pool| Ok(Some(pool.clone())),
+            || Ok(None),
+        )?;
+
+        let rendered_chunks_changed = AtomicBool::new(false);
+        let fixed_memory_bytes = ips_apply_memory_bytes(&patch, &tasks, tasks.capacity());
+        let mut output = PartialOutput::new(
+            rom_weaver_core::with_output_creation(context.cancel(), || {
+                crate::create_buffered_output(&request.output)
+            })?,
+            &request.output,
         );
 
-        let (execution, rendered_chunks_changed) = match render_result {
-            Ok((execution, changed)) => (execution, changed.into_iter().any(|changed| changed)),
-            Err(error) => {
-                cleanup_chunk_files(&tasks);
-                return Err(error);
-            }
-        };
-
-        let assemble_result = assemble_output(&request.output, &tasks, context);
-        cleanup_chunk_files(&tasks);
-        assemble_result?;
+        let write_result = apply_batched_whole_writes(
+            output.output(),
+            &tasks,
+            WholeWriteBatchOptions {
+                pool: pool.as_ref(),
+                effective_threads: execution.effective_threads,
+                write_len: |task| usize::try_from(task.chunk.len).unwrap_or(usize::MAX),
+                memory_len: &|task| task.chunk.len,
+                fixed_memory_bytes,
+                cancel: context.cancel(),
+            },
+            |task, buffer| {
+                let buffer = read_input_chunk(&request.input, input_len, &task.chunk, buffer)?;
+                let (write, chunk_changed) = render_chunk_task(task, buffer, &patch, context)?;
+                if chunk_changed {
+                    rendered_chunks_changed.store(true, Ordering::Relaxed);
+                }
+                Ok(write)
+            },
+        )
+        .and_then(|()| Ok(output.output().flush()?));
+        write_result?;
+        output.complete();
+        let rendered_chunks_changed = rendered_chunks_changed.into_inner();
         let did_change = output_size != input_len || rendered_chunks_changed;
         let warnings =
             ips_apply_warning_labels(self.descriptor.name, &patch, input_len, did_change);
@@ -387,7 +396,6 @@ enum IpsRecordData {
 #[derive(Debug)]
 struct ChunkTask {
     chunk: FileChunk,
-    temp_path: PathBuf,
     record_indexes: Vec<usize>,
 }
 
@@ -1679,11 +1687,7 @@ fn write_u32(output: &mut impl Write, value: u64, label: &str) -> Result<()> {
     Ok(())
 }
 
-fn build_chunk_tasks(
-    patch: &ParsedIpsPatch,
-    output_size: u64,
-    context: &OperationContext,
-) -> Result<Vec<ChunkTask>> {
+fn build_chunk_tasks(patch: &ParsedIpsPatch, output_size: u64) -> Result<Vec<ChunkTask>> {
     let planner = ChunkPlanner::new(OUTPUT_CHUNK_SIZE)?;
     let chunks = planner.plan(output_size);
     let mut record_indexes = vec![Vec::new(); chunks.len()];
@@ -1711,29 +1715,71 @@ fn build_chunk_tasks(
         .into_iter()
         .zip(record_indexes)
         .map(|(chunk, record_indexes)| ChunkTask {
-            temp_path: context
-                .temp_paths()
-                .next_path(&format!("ips-chunk-{}", chunk.index), Some("bin")),
             chunk,
             record_indexes,
         })
         .collect())
 }
 
+fn ips_apply_memory_bytes(
+    patch: &ParsedIpsPatch,
+    tasks: &[ChunkTask],
+    task_capacity: usize,
+) -> u64 {
+    let records = patch.records.iter().fold(
+        patch
+            .records
+            .capacity()
+            .saturating_mul(size_of::<IpsRecord>()),
+        |bytes, record| {
+            bytes.saturating_add(match &record.data {
+                IpsRecordData::Literal(data) => data.capacity(),
+                IpsRecordData::Rle { .. } => 0,
+            })
+        },
+    );
+    let tasks_bytes = tasks.iter().fold(
+        task_capacity.saturating_mul(size_of::<ChunkTask>()),
+        |bytes, task| {
+            bytes.saturating_add(
+                task.record_indexes
+                    .capacity()
+                    .saturating_mul(size_of::<usize>()),
+            )
+        },
+    );
+    let warnings = patch.warnings.iter().fold(
+        patch
+            .warnings
+            .capacity()
+            .saturating_mul(size_of::<String>()),
+        |bytes, warning| bytes.saturating_add(warning.capacity()),
+    );
+    let metadata = patch.metadata.as_ref().map_or(0, |metadata| {
+        metadata.iter().fold(0usize, |bytes, (key, value)| {
+            bytes
+                .saturating_add(key.capacity())
+                .saturating_add(match value {
+                    JsonValue::String(value) => value.capacity(),
+                    _ => 0,
+                })
+                .saturating_add(size_of::<(String, JsonValue)>().saturating_mul(2))
+        })
+    });
+    records
+        .saturating_add(tasks_bytes)
+        .saturating_add(warnings)
+        .saturating_add(metadata)
+        .saturating_add(size_of::<ParsedIpsPatch>()) as u64
+}
+
 fn render_chunk_task(
     task: &ChunkTask,
-    input_path: &Path,
-    input_len: u64,
+    mut buffer: Vec<u8>,
     patch: &ParsedIpsPatch,
     context: &OperationContext,
-) -> Result<bool> {
+) -> Result<(PreparedWrite, bool)> {
     context.cancel().check()?;
-
-    let chunk_len = usize::try_from(task.chunk.len).map_err(|_| {
-        RomWeaverError::Validation("IPS chunk length exceeded addressable memory".into())
-    })?;
-    let mut buffer = vec![0u8; chunk_len];
-    read_input_chunk(input_path, input_len, &task.chunk, &mut buffer)?;
     let mut changed = false;
 
     let chunk_start = task.chunk.offset;
@@ -1784,20 +1830,28 @@ fn render_chunk_task(
         }
     }
 
-    let mut writer = crate::create_buffered_output(&task.temp_path)?;
-    writer.write_all(&buffer)?;
-    writer.flush()?;
-    Ok(changed)
+    Ok((
+        PreparedWrite {
+            offset: chunk_start,
+            data: buffer,
+        },
+        changed,
+    ))
 }
 
+/// Fills `buffer` with the chunk's input bytes, zero-padding past the end of the input.
 fn read_input_chunk(
     input_path: &Path,
     input_len: u64,
     chunk: &FileChunk,
-    buffer: &mut [u8],
-) -> Result<()> {
+    mut buffer: Vec<u8>,
+) -> Result<Vec<u8>> {
+    let chunk_len = usize::try_from(chunk.len).map_err(|_| {
+        RomWeaverError::Validation("IPS chunk length exceeded addressable memory".into())
+    })?;
+    buffer.resize(chunk_len, 0);
     if buffer.is_empty() || chunk.offset >= input_len {
-        return Ok(());
+        return Ok(buffer);
     }
 
     let bytes_to_read =
@@ -1805,34 +1859,13 @@ fn read_input_chunk(
             RomWeaverError::Validation("IPS input chunk exceeded addressable memory".into())
         })?;
     if bytes_to_read == 0 {
-        return Ok(());
+        return Ok(buffer);
     }
 
     let mut input = File::open(input_path)?;
     input.seek(SeekFrom::Start(chunk.offset))?;
     input.read_exact(&mut buffer[..bytes_to_read])?;
-    Ok(())
-}
-
-fn assemble_output(
-    output_path: &Path,
-    tasks: &[ChunkTask],
-    context: &OperationContext,
-) -> Result<()> {
-    let mut output = crate::create_buffered_output(output_path)?;
-    for task in tasks {
-        context.cancel().check()?;
-        let mut reader = BufReader::new(File::open(&task.temp_path)?);
-        rom_weaver_core::copy_retrying_interrupted(&mut reader, &mut output)?;
-    }
-    output.flush()?;
-    Ok(())
-}
-
-fn cleanup_chunk_files(tasks: &[ChunkTask]) {
-    for task in tasks {
-        let _ = fs::remove_file(&task.temp_path);
-    }
+    Ok(buffer)
 }
 
 fn checked_add(left: u64, right: u64, label: &str) -> Result<u64> {

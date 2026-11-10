@@ -486,6 +486,20 @@ impl SharedThreadPool {
         }
     }
 
+    /// Runs the coordinator on the calling thread, with a Rayon scope when one is available.
+    /// Nested calls and inline pools get no scope and MUST run their work serially.
+    pub fn in_place_scope<'scope, R>(
+        &self,
+        operation: impl FnOnce(Option<&rayon::Scope<'scope>>) -> R,
+    ) -> R {
+        match &self.backend {
+            ThreadPoolBackend::Rayon(inner) if rayon::current_thread_index().is_none() => {
+                inner.in_place_scope(|scope| operation(Some(scope)))
+            }
+            _ => operation(None),
+        }
+    }
+
     fn forced_build_failure_reason(size: usize) -> Option<String> {
         if !cfg!(debug_assertions) {
             return None;
