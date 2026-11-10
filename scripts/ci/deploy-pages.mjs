@@ -253,10 +253,11 @@ async function deployAttempt(options, state) {
     process.stdout.write(`reusing existing Cloudflare Pages deployment ${state.deployment.id}\n`);
   } else {
     state.uploadAttempted = true;
-    state.lookup = Boolean(options.accountId && options.token);
+    const canVerify = Boolean(options.accountId && options.token);
+    state.lookup = options.reuse && canVerify;
     const reportedUrl = uploadPages(options);
     state.uploaded = true;
-    if (!state.lookup) return reportedUrl;
+    if (!canVerify) return reportedUrl;
     state.deployment = await waitForMatchingDeployment(options);
   }
   return waitForDeployment({ ...options, deployment: state.deployment });
@@ -281,7 +282,7 @@ export async function deployPages({
   maxDeploymentPages = DEFAULT_MAX_DEPLOYMENT_PAGES,
 } = {}) {
   const options = {
-    project, branch, commitHash, accountId, token, directory, fetchImpl, spawnImpl,
+    project, branch, commitHash, accountId, token, directory, fetchImpl, spawnImpl, reuse,
     sleep, pollIntervalMs, maxPolls, maxDeploymentPages, cwd: resolve(root, workingDirectory),
   };
   const state = { lookup: Boolean(reuse && accountId && token) };

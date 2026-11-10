@@ -196,18 +196,18 @@ test("API authentication, configuration, rate-limit, malformed success, and canc
   }
 });
 
-test("a failed fresh upload discovers and finishes its exact matching deployment", async () => {
+test("a failed upload with reuse enabled discovers and finishes its exact matching deployment", async () => {
   const trigger = { metadata: { branch: "pr-12", commit_hash: SHA } };
   const active = deployment({ deployment_trigger: trigger, latest_stage: { status: "active" } });
   const finished = deployment({ deployment_trigger: trigger });
-  const { calls, fetchImpl } = queuedFetch([listResponse([active]), deploymentResponse(finished)]);
+  const { calls, fetchImpl } = queuedFetch([listResponse([]), listResponse([active]), deploymentResponse(finished)]);
   const sleeps = [];
   let uploads = 0;
   const url = await deployPages(deployOptions({
-    accountId: ACCOUNT, token: "token", fetchImpl, reuse: false,
+    accountId: ACCOUNT, token: "token", fetchImpl, reuse: true,
     sleep: async (milliseconds) => sleeps.push(milliseconds),
     spawnImpl: () => {
-      assert.equal(calls.length, 0, "reuse=false looked up an old deployment before uploading");
+      assert.equal(calls.length, 1, "reuse-enabled upload did not check for a matching deployment first");
       uploads += 1;
       return { status: 1, stdout: "", stderr: INTERNAL_ERROR };
     },
@@ -215,6 +215,86 @@ test("a failed fresh upload discovers and finishes its exact matching deployment
   assert.equal(url, finished.url);
   assert.equal(uploads, 1);
   assert.deepEqual(sleeps, [10000, 1000]);
+});
+
+test("a failed Lighthouse upload retries afresh instead of reusing a previous report", async () => {
+  const trigger = { metadata: { branch: "lighthouse-pr-12", commit_hash: SHA } };
+  const previous = deployment({ id: "previous-report", deployment_trigger: trigger, url: "https://previous-report.pages.dev" });
+  const current = deployment({ id: "current-report", deployment_trigger: trigger, url: "https://current-report.pages.dev" });
+  const events = [];
+  let uploads = 0;
+  const url = await deployPages(deployOptions({
+    accountId: ACCOUNT, token: "token", branch: "lighthouse-pr-12", reuse: false,
+    sleep: async (milliseconds) => events.push(`sleep:${milliseconds}`),
+    fetchImpl: async () => {
+      events.push("history");
+      return Response.json(listResponse(uploads < 2 ? [previous] : [current, previous]));
+    },
+    spawnImpl: () => {
+      uploads += 1;
+      events.push(`upload:${uploads}`);
+      return uploads === 1
+        ? { status: 1, stderr: "TypeError: fetch failed" }
+        : { status: 0, stdout: `${current.url}\n` };
+    },
+  }));
+
+  assert.equal(url, current.url);
+  assert.equal(uploads, 2);
+  assert.deepEqual(events, ["upload:1", "sleep:10000", "upload:2", "history"]);
+});
+
+test("failed Lighthouse uploads exhaust three attempts despite a previous successful report", async (t) => {
+  const outputFile = deploymentOutput(t);
+  const previous = deployment({ deployment_trigger: { metadata: { branch: "lighthouse-pr-12", commit_hash: SHA } } });
+  const sleeps = [];
+  let uploads = 0;
+  let historyReads = 0;
+  await assert.rejects(deployPages(deployOptions({
+    accountId: ACCOUNT, token: "token", branch: "lighthouse-pr-12", reuse: false, outputFile,
+    sleep: async (milliseconds) => sleeps.push(milliseconds),
+    fetchImpl: async () => {
+      historyReads += 1;
+      return Response.json(listResponse([previous]));
+    },
+    spawnImpl: () => {
+      uploads += 1;
+      return { status: 1, stderr: "TypeError: fetch failed" };
+    },
+  })), /wrangler exited with status 1/);
+
+  assert.equal(uploads, 3);
+  assert.equal(historyReads, 0);
+  assert.deepEqual(sleeps, [10000, 30000]);
+  assert.equal(existsSync(outputFile), false);
+});
+
+test("Lighthouse upload verification resumes after visibility and polling API failures", async () => {
+  const trigger = { metadata: { branch: "lighthouse-pr-12", commit_hash: SHA } };
+  const active = deployment({ deployment_trigger: trigger, latest_stage: { status: "active" } });
+  const finished = deployment({ deployment_trigger: trigger });
+  const { calls, fetchImpl } = queuedFetch([
+    errorResponse(503, "Service unavailable"),
+    listResponse([active]),
+    new TypeError("fetch failed"),
+    deploymentResponse(finished),
+  ]);
+  const sleeps = [];
+  let uploads = 0;
+  const url = await deployPages(deployOptions({
+    accountId: ACCOUNT, token: "token", branch: "lighthouse-pr-12", reuse: false, fetchImpl,
+    sleep: async (milliseconds) => sleeps.push(milliseconds),
+    spawnImpl: () => {
+      uploads += 1;
+      assert.equal(calls.length, 0, "Lighthouse upload was relaunched after verification began");
+      return { status: 0, stdout: "https://reported.pages.dev\n" };
+    },
+  }));
+
+  assert.equal(url, finished.url);
+  assert.equal(uploads, 1);
+  assert.equal(calls.length, 4);
+  assert.deepEqual(sleeps, [10000, 1000, 30000, 1000]);
 });
 
 test("production refresh survives API visibility and poll failures without uploading again", async () => {
