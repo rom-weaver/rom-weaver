@@ -6,6 +6,8 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
+
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "classify-workflow.mjs");
 
 // Git hooks export GIT_DIR, GIT_INDEX_FILE, and friends. Inherited, they point
@@ -49,7 +51,7 @@ function history(t) {
   return { cwd, base, prior, head };
 }
 
-function classify({ cwd, base, head, usePrior = "", eventName = "pull_request" }) {
+function classify({ cwd, base, head, usePrior = "", eventName = "pull_request", headRef = "fix/x" }) {
   const output = join(cwd, "github-output.txt");
   writeFileSync(output, "");
   const result = spawnSync("node", [SCRIPT], {
@@ -58,7 +60,7 @@ function classify({ cwd, base, head, usePrior = "", eventName = "pull_request" }
     env: isolatedEnv({
       GITHUB_OUTPUT: output,
       EVENT_NAME: eventName,
-      HEAD_REF: "fix/x",
+      HEAD_REF: headRef,
       BASE_SHA: base,
       HEAD_SHA: head,
       PRIOR_GREEN_SHA: usePrior,
@@ -133,5 +135,20 @@ test("a push selects every stack whatever the diff", (t) => {
   const { outputs } = classify({ ...repo, base: repo.prior, eventName: "push" });
   for (const key of ["rust", "rust_lint", "fuzz", "webapp", "webapp_browser", "docker_prebuilt"]) {
     assert.equal(outputs[key], "true", key);
+  }
+});
+
+test("release_pr is true only for a pull request from the release branch", (t) => {
+  const repo = history(t);
+  const releaseRef = `${RELEASE_PR_BRANCH_PREFIX}cli`;
+  for (const [eventName, headRef, expected] of [
+    ["pull_request", releaseRef, "true"],
+    ["pull_request", "fix/x", "false"],
+    ["pull_request", `wip-${releaseRef}`, "false"],
+    ["push", releaseRef, "false"],
+    ["schedule", releaseRef, "false"],
+  ]) {
+    const { outputs } = classify({ ...repo, eventName, headRef });
+    assert.equal(outputs.release_pr, expected, `${eventName} ${headRef}`);
   }
 });

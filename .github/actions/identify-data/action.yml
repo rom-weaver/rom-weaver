@@ -23,6 +23,13 @@ inputs:
 runs:
   using: composite
   steps:
+    # Every cache key below shares this hash of the pack build inputs.
+    - name: Hash identify build inputs
+      id: key
+      if: inputs.cache-restore == 'true'
+      shell: bash
+      run: echo "hash=${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/import-libretro-cheats.mjs', 'scripts/wasm/brotli-compress.mjs', 'packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs', 'packages/rom-weaver-webapp/src/lib/identify/title-index.mjs', 'packages/rom-weaver-webapp/src/lib/cheats/shard-format.mjs') }}" >> "$GITHUB_OUTPUT"
+
     # The packs are byte-identical on every OS (node builds them and the index
     # records their sha256), so one cross-OS cache entry serves all runners.
     - name: Restore identify packs
@@ -31,7 +38,7 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: crates/rom-weaver-cli/data/identify/v1
-        key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/import-libretro-cheats.mjs', 'scripts/wasm/brotli-compress.mjs', 'packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs', 'packages/rom-weaver-webapp/src/lib/identify/title-index.mjs') }}
+        key: identify-data-${{ steps.key.outputs.hash }}
         enableCrossOsArchive: true
 
     # Cache compressed bytes by content across identify-data generations. The
@@ -43,7 +50,7 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: .cache/identify/brotli
-        key: identify-brotli-${{ runner.os }}-epoch1-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/import-libretro-cheats.mjs', 'scripts/wasm/brotli-compress.mjs', 'packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs', 'packages/rom-weaver-webapp/src/lib/identify/title-index.mjs') }}
+        key: identify-brotli-${{ runner.os }}-epoch1-${{ steps.key.outputs.hash }}
         restore-keys: |
           identify-brotli-${{ runner.os }}-epoch1-
 
@@ -71,7 +78,7 @@ runs:
       uses: actions/cache/save@v6
       with:
         path: crates/rom-weaver-cli/data/identify/v1
-        key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/import-libretro-cheats.mjs', 'scripts/wasm/brotli-compress.mjs', 'packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs', 'packages/rom-weaver-webapp/src/lib/identify/title-index.mjs') }}
+        key: identify-data-${{ steps.key.outputs.hash }}
         enableCrossOsArchive: true
 
     # Pull requests can read this content-addressed cache but only main can
@@ -81,4 +88,4 @@ runs:
       uses: actions/cache/save@v6
       with:
         path: .cache/identify/brotli
-        key: identify-brotli-${{ runner.os }}-epoch1-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/import-libretro-cheats.mjs', 'scripts/wasm/brotli-compress.mjs', 'packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs', 'packages/rom-weaver-webapp/src/lib/identify/title-index.mjs') }}
+        key: identify-brotli-${{ runner.os }}-epoch1-${{ steps.key.outputs.hash }}
