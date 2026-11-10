@@ -275,6 +275,7 @@
   border-block-start: 1px solid var(--seam);
 }
 .rw-app .verify-boot-field .checkrow {
+  min-height: 44px;
   margin-block: 0 var(--sp-2xs);
 }
 .rw-app .verify-boot-hint {

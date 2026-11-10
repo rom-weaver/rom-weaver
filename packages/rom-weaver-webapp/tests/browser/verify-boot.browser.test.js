@@ -3,6 +3,8 @@ import { beforeAll, expect, test } from "vitest";
 import { userEvent } from "vitest/browser";
 import { runEmulatorBootCheck } from "../../src/public/react/components/emulator-boot-check.ts";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
+import "../../src/webapp/design-system/index.css";
+import "../../src/webapp/design-system/deferred.css";
 import {
   installPatcherTestHooks,
   mount,
@@ -84,7 +86,13 @@ const openOutputOptions = async () => {
 };
 
 const applyFiles = async ({ patch, rom }, compression = "none") => {
-  mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression } } }));
+  mount(
+    createElement(
+      "div",
+      { className: "rw-app" },
+      createElement(ApplyPatchForm, { defaultSettings: { output: { compression } } }),
+    ),
+  );
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), rom);
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), patch);
@@ -122,6 +130,8 @@ test(
   async () => {
     await applySample();
     await openOutputOptions();
+    const verifyBootLabel = document.querySelector('label[for="rom-weaver-checkbox-verify-boot"]');
+    expect(verifyBootLabel.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     expect(document.getElementById("rom-weaver-checkbox-verify-boot").checked).toBe(false);
     const watcher = watchBootCheckFrames();
     try {
