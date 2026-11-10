@@ -355,3 +355,61 @@ fn private_temp_root_context_only_touches_its_own_root_under_the_parent() {
     assert!(marker.exists());
     let _ = fs::remove_dir_all(&parent);
 }
+
+fn context_with_threads(threads: usize) -> OperationContext {
+    OperationContext::new(
+        ThreadBudget::Fixed(threads),
+        std::env::temp_dir(),
+        Arc::new(NoopProgressSink),
+        CancellationToken::new(),
+    )
+}
+
+#[test]
+fn operation_pool_starts_only_the_threads_the_work_can_use() {
+    let cases = [(64, Some(3), 3), (6, None, 6), (4, Some(9), 4)];
+    for (budget, work_limit, expected) in cases {
+        let context = context_with_threads(budget);
+        let (execution, pool) = context
+            .build_pool(ThreadCapability::parallel(work_limit))
+            .expect("pool");
+        assert_eq!(
+            pool.size(),
+            expected,
+            "budget {budget}, work {work_limit:?}"
+        );
+        assert_eq!(execution.effective_threads, expected);
+        assert_eq!(execution.requested_threads, budget);
+    }
+}
+
+#[test]
+fn operation_pool_grows_after_the_smaller_pool_is_released() {
+    let context = context_with_threads(8);
+    let (_, small) = context
+        .build_pool(ThreadCapability::parallel(Some(2)))
+        .expect("small pool");
+    assert_eq!(small.size(), 2);
+    drop(small);
+
+    let (execution, larger) = context
+        .build_pool(ThreadCapability::parallel(Some(5)))
+        .expect("larger pool");
+    assert_eq!(larger.size(), 5);
+    assert_eq!(execution.effective_threads, 5);
+}
+
+#[test]
+fn nested_operation_shares_the_pool_its_outer_operation_holds() {
+    let context = context_with_threads(8);
+    let (_, outer) = context
+        .build_pool(ThreadCapability::parallel(Some(2)))
+        .expect("outer pool");
+
+    let (execution, nested) = context
+        .build_pool(ThreadCapability::parallel(Some(5)))
+        .expect("nested pool");
+    assert_eq!(nested.size(), outer.size());
+    assert_eq!(execution.effective_threads, 2);
+    assert!(execution.used_parallelism);
+}
