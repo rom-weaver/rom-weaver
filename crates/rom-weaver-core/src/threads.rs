@@ -479,14 +479,6 @@ impl SharedThreadPool {
         self.size
     }
 
-    /// Whether a clone of this pool exists besides `self`.
-    pub(crate) fn is_held_elsewhere(&self) -> bool {
-        match &self.backend {
-            ThreadPoolBackend::Rayon(inner) => Arc::strong_count(inner) > 1,
-            ThreadPoolBackend::Inline => false,
-        }
-    }
-
     pub fn install<R: Send>(&self, operation: impl FnOnce() -> R + Send) -> R {
         match &self.backend {
             ThreadPoolBackend::Rayon(inner) => inner.install(operation),

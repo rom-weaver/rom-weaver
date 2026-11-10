@@ -451,21 +451,16 @@ impl OperationContext {
                 .clone()
                 .unwrap_or_else(|| "shared operation pool fell back to single-thread".to_string());
             execution.apply_pool_fallback(reason);
-        } else if pool.size() < execution.effective_threads {
-            // A nested caller keeps the smaller pool its outer operation still holds.
-            execution.effective_threads = pool.size();
-            execution.used_parallelism = pool.size() > 1;
         }
         Ok((execution, pool))
     }
 
-    /// Returns the operation-scoped worker pool, building it with only as many threads as callers
-    /// can use. Natively it grows to `useful_threads` when no caller still holds it. The cached
+    /// Returns the operation-scoped worker pool, built with only the threads callers can use. The cached
     /// `ThreadExecution` records the pool's actual size after any build fallback so callers can
     /// reconcile their reported execution against what the shared pool can really deliver.
     fn operation_pool(&self, useful_threads: usize) -> Result<(SharedThreadPool, ThreadExecution)> {
-        // Browser workers come from a fixed pool, and a replaced pool's workers exit late, so the
-        // browser builds the full budget once instead of growing.
+        // Browser workers come from a fixed pool, and a replaced pool's workers exit late.
+        // The browser builds the full budget once.
         let pool_threads = if cfg!(target_family = "wasm") {
             self.plan_threads(ThreadCapability::parallel(None))
                 .effective_threads
@@ -476,11 +471,10 @@ impl OperationContext {
             .operation_pool
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some((pool, execution)) = guard.as_ref() {
-            let can_serve = pool.size() >= pool_threads || execution.thread_fallback;
-            if can_serve || pool.is_held_elsewhere() {
-                return Ok((pool.clone(), execution.clone()));
-            }
+        if let Some((pool, execution)) = guard.as_ref()
+            && (pool.size() >= pool_threads || execution.thread_fallback)
+        {
+            return Ok((pool.clone(), execution.clone()));
         }
         let planned = self.plan_threads(ThreadCapability::parallel(Some(pool_threads)));
         trace!(
