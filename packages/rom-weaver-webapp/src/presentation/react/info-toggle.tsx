@@ -10,12 +10,9 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { getOverlayPortalTarget } from "./overlay-portal.ts";
 
 const cx = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
-
-/** Popovers portal into the styled app root so the design-system `.info-pop` rules apply. */
-const getInfoPortalTarget = (): Element =>
-  (typeof document === "undefined" ? null : document.querySelector(".rw-app")) ?? document.body;
 
 function InfoToggle({
   ariaLabel,
@@ -86,7 +83,6 @@ function InfoToggle({
       className={cx("info-pop", panelClassName)}
       id={panelId}
       ref={panelRef}
-      // Portal into the app root so fixed positioning and the popover z-index apply outside the trigger.
       style={
         portalPanel
           ? { display: "block", position: "fixed", zIndex: "var(--info-pop-z, 80)", ...panelStyle }
@@ -98,7 +94,8 @@ function InfoToggle({
   );
   let renderedPanel: ReactNode = null;
   if (open) {
-    renderedPanel = portalPanel && typeof document !== "undefined" ? createPortal(panel, getInfoPortalTarget()) : panel;
+    renderedPanel =
+      portalPanel && typeof document !== "undefined" ? createPortal(panel, getOverlayPortalTarget()) : panel;
   }
 
   return (

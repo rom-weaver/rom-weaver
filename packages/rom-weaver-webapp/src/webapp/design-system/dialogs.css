@@ -960,7 +960,12 @@
   padding-block-start: 4px;
 }
 .rw-app .setchecks .popt {
+  min-height: 44px;
   font-size: 0.82rem;
+}
+.rw-app .setchecks .slabel > .info {
+  /* Reserve the mobile help button's 44px hit area around its 24px graphic. */
+  margin-inline: 10px;
 }
 /* Each optional database carries what it costs, so the choice is made against
    the download size rather than the name alone. The size parks at the far end

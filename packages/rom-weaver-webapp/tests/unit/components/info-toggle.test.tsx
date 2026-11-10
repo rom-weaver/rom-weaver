@@ -46,7 +46,29 @@ describe("InfoToggle portaled popover repositioning", () => {
       </InfoToggle>,
     );
     fireEvent.click(container.querySelector("button.info-btn") as HTMLButtonElement);
+    expect(container.querySelector(".info-pop")?.parentElement).toBe(container.querySelector(".info"));
     expect(addSpy.mock.calls.some(([type]) => type === "scroll")).toBe(false);
     expect(addSpy.mock.calls.some(([type]) => type === "resize")).toBe(false);
+  });
+
+  it.each(["app root", "body"])("keeps portaled help in the %s without a native modal", (target) => {
+    const host = document.createElement("div");
+    if (target === "app root") host.className = "rw-app";
+    document.body.append(host);
+    const { unmount } = render(
+      <InfoToggle ariaLabel="More info" portalPanel title="info">
+        body copy
+      </InfoToggle>,
+      { container: host },
+    );
+    try {
+      fireEvent.click(host.querySelector("button.info-btn") as HTMLButtonElement);
+      const panel = document.querySelector(".info-pop");
+      expect(panel?.parentElement).toBe(target === "app root" ? host : document.body);
+      expect(panel?.textContent).toBe("body copy");
+    } finally {
+      unmount();
+      host.remove();
+    }
   });
 });
