@@ -82,8 +82,6 @@ const getUserFacingErrorMessage = (error: unknown, localizer: Localizer = create
   if (code === "INVALID_INPUT" && message.toLowerCase().includes("multi-file output")) return message;
   if (code === "OUT_OF_MEMORY") return message;
   if (isPatchFileChecksumFailure(getEngineError(error)?.code)) return localizer.message("error.PATCH_FILE_DAMAGED");
-  const engineMessage = getLocalizedEngineErrorMessage(error, localizer);
-  if (engineMessage) return engineMessage;
   const messageId = `error.${code}` as MessageId;
   const localized = localizer.message(messageId, getErrorDetails(error));
   return localized === messageId ? getErrorMessage(error) : localized;
@@ -107,6 +105,8 @@ const getNoRomInArchiveMessage = (error: unknown): string => {
 const formatCodedErrorForDisplay = (error: unknown, localizer: Localizer = createLocalizer()): string => {
   const noRomMessage = getNoRomInArchiveMessage(error);
   if (noRomMessage) return noRomMessage;
+  const engineMessage = getLocalizedEngineErrorMessage(error, localizer);
+  if (engineMessage) return engineMessage;
   const code = getErrorCode(error);
   const message = getUserFacingErrorMessage(error, localizer);
   if (!code) return message;

@@ -59,11 +59,11 @@ describe("presentation errors", () => {
     },
   );
 
-  it("localizes a refused non-3DS Z3DS input from its engine code and keeps the engine detail", () => {
+  it("shows a refused non-3DS Z3DS input as the localized message alone", () => {
     const engineMessage = "validation failed: `/work/game.zip` is not a 3DS image [container.not_3ds]";
     const coded = engineError(engineMessage, "container.not_3ds", {});
     expect(formatCodedErrorForDisplay(coded)).toBe(
-      `COMPRESSION_FAILED: Z3DS only stores Nintendo 3DS files, and the input is not one. Choose another output format. Details: ${engineMessage}`,
+      "Z3DS only stores Nintendo 3DS files, and the input is not one. Choose another output format.",
     );
     expect(getLocalizedEngineErrorMessage(codedError("failed", "WORKER_FAILED", { cause: coded }))).toBe(
       "Z3DS only stores Nintendo 3DS files, and the input is not one. Choose another output format.",
