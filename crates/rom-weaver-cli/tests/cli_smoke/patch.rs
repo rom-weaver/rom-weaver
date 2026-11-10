@@ -2656,6 +2656,53 @@ fn patch_apply_no_extract_checks_an_archive_input_for_3ds_content_in_a_dry_run()
 }
 
 #[test]
+fn patch_apply_no_extract_validates_the_output_extension_in_a_dry_run() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let archive = temp.child("source.zip");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+
+    for dry_run in [true, false] {
+        let output = temp.child("out.bin");
+        let mut args = vec![
+            "patch",
+            "apply",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--no-extract",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--jsonl",
+        ];
+        if dry_run {
+            args.push("--dry-run");
+        }
+        let json = parse_single_json_line(&command_stdout(&args, 1));
+        assert_eq!(json["status"], "failed", "dry_run={dry_run}");
+        let label = json["label"].as_str().expect("label");
+        assert!(
+            label.contains("neither a registered container nor the selected ROM leaf extension"),
+            "{label}"
+        );
+        assert!(!output.path().exists(), "dry_run={dry_run}");
+    }
+}
+
+#[test]
 fn ppf_undo_checks_a_z3ds_output_input_for_3ds_content_before_undoing() {
     let temp = setup_temp_dir();
     let rom = temp.child("patched.bin");

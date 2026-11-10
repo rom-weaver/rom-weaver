@@ -3825,7 +3825,8 @@ impl CliApp {
         let explicit_compression = compression_options.requested_format.is_some()
             || compression_options.codec.is_some()
             || compression_options.level_explicit;
-        let unresolved_source = self.containers.probe(input).is_some()
+        // With --no-extract the archive is the ROM itself, so no member is chosen later.
+        let unresolved_source = (!args.no_extract && self.containers.probe(input).is_some())
             || input
                 .extension()
                 .and_then(|ext| ext.to_str())
