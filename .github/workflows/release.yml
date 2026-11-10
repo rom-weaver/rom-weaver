@@ -484,8 +484,11 @@ jobs:
           shared-key: cargo-publish
           cache-on-failure: true
 
+      # Same version as the .config/mise.toml pin; this job cannot use mise.
       - name: Install cargo-semver-checks
-        uses: taiki-e/install-action@cargo-semver-checks
+        uses: taiki-e/install-action@v2.90.2
+        with:
+          tool: cargo-semver-checks@0.46.0
 
       # Cache published rustdoc baselines, which change only when a crate is released.
       - name: Cache cargo-semver-checks baselines
