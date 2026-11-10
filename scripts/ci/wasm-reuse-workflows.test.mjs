@@ -104,7 +104,16 @@ const releaseJob = release.jobs.release;
 const staticWebapp = release.jobs["static-webapp"];
 
 test("release.yml never downloads wasm-prod directly; every reuse goes through the verifier", () => {
-  assert.doesNotMatch(read("release.yml"), /gh run download|download-artifact/u);
+  const jobs = structuredClone(release.jobs);
+  const runtimeJob = jobs["publish-emulator-runtime"];
+  const runtimeDownload = step(runtimeJob, "Download emulator runtime");
+  assert.match(runtimeDownload.uses, /^actions\/download-artifact@/u);
+  assert.equal(runtimeDownload.with.pattern, "emulator-runtime-*");
+  assert.equal(runtimeDownload.with.name, undefined);
+  assert.equal(runtimeDownload.with["artifact-ids"], undefined);
+  assert.equal(runtimeDownload.run, undefined);
+  runtimeJob.steps = runtimeJob.steps.filter((candidate) => candidate !== runtimeDownload);
+  assert.doesNotMatch(JSON.stringify({ ...release, jobs }), /gh run download|download-artifact/u);
   assert.doesNotMatch(read("release.yml"), /--name wasm-prod/u);
   const fetches = [releaseJob, staticWebapp].flatMap((job) => job.steps.filter((candidate) => candidate.run === "node scripts/ci/fetch-verified-wasm.mjs"));
   assert.equal(fetches.length, 2);
