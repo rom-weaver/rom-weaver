@@ -69,6 +69,30 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({
     audience: "browser",
+    file: "how-to/apply-bps-patch-browser.md",
+    label: "Apply a BPS patch (browser)",
+    slug: "docs/apply-bps-patch",
+  }),
+  Object.freeze({
+    audience: "browser",
+    file: "how-to/apply-ips-patch-browser.md",
+    label: "Apply an IPS patch (browser)",
+    slug: "docs/apply-ips-patch",
+  }),
+  Object.freeze({
+    audience: "browser",
+    file: "how-to/apply-ups-patch-browser.md",
+    label: "Apply a UPS patch (browser)",
+    slug: "docs/apply-ups-patch",
+  }),
+  Object.freeze({
+    audience: "browser",
+    file: "how-to/apply-xdelta-patch-browser.md",
+    label: "Apply an xdelta patch (browser)",
+    slug: "docs/apply-xdelta-patch",
+  }),
+  Object.freeze({
+    audience: "browser",
     file: "how-to/use-browser-cheats.md",
     label: "Use cheats (browser)",
     slug: "docs/use-cheats",
@@ -400,6 +424,10 @@ const groupDocRoutes = (routes) => {
 
 /** @type {Readonly<Record<string, string>>} */
 const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
+  "docs/apply-bps-patch": "Patching & weaves",
+  "docs/apply-ips-patch": "Patching & weaves",
+  "docs/apply-ups-patch": "Patching & weaves",
+  "docs/apply-xdelta-patch": "Patching & weaves",
   "docs/apply-rom-patches": "Patching & weaves",
   "docs/bake-cheat-codes": "Cheats",
   "docs/browser-settings": "Setup & offline",

@@ -107,7 +107,9 @@ describe("groupDocNavigationRoutes", () => {
       "Development",
       "Legal",
     ]);
-    expect(shelves.slice(2, 10).every((shelf) => shelf.routes.length <= 9)).toBe(true);
+    expect(
+      shelves.slice(2, 10).every((shelf) => shelf.routes.length <= (shelf.title === "Patching & weaves" ? 13 : 9)),
+    ).toBe(true);
     expect(shelves.some((shelf) => shelf.title === "How-to guides")).toBe(false);
   });
 

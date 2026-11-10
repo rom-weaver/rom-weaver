@@ -43,6 +43,10 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Patch a compressed CHD disc](https://rom-weaver.com/docs/patch-compressed-disc): Browser tutorial with a synthetic CHD, two ordered patches, and a verified output checksum.
 - [Your first patch](https://rom-weaver.com/docs/get-started): Tutorial that patches a homebrew ROM in the browser and verifies the result.
 - [Apply patches guide](https://rom-weaver.com/docs/apply-rom-patches): Browser instructions for supported byte-level patch families, including SOLID, GDIFF, APSGBA, PAT/FireFlower, EBP, BDF/BSDIFF40, BSP, MOD/PMSR, DLDI, DPS, and single-file HDiffPatch/HPatchZ. NINJA1 and PDS cannot be applied.
+- [Apply a BPS patch](https://rom-weaver.com/docs/apply-bps-patch): Browser steps for a BPS patch, the three CRC32 checks it carries, and what to do when they fail.
+- [Apply an IPS patch](https://rom-weaver.com/docs/apply-ips-patch): Browser steps for an IPS or IPS32 patch, with a manual source checksum check because IPS stores none.
+- [Apply a UPS patch](https://rom-weaver.com/docs/apply-ups-patch): Browser steps for a UPS patch, its CRC32 checks, and why an already patched ROM also matches.
+- [Apply an xdelta patch](https://rom-weaver.com/docs/apply-xdelta-patch): Browser steps for an xdelta or VCDIFF patch on a ROM or disc image, and how to check the source file.
 - [Apply Dreamcast DCP patches](https://rom-weaver.com/docs/apply-rom-patches#apply-a-dreamcast-dcp-patch): Rebuild a Dreamcast disc in the browser from one DCP patch and its GDI or CUE with tracks, a GD-ROM CHD, or an archive of them. DCP must run alone.
 - [Apply Dreamcast DCP patches (CLI)](https://rom-weaver.com/docs/cli-apply#apply-a-dreamcast-dcp-patch): Rebuild a Dreamcast disc from one DCP patch and its CUE or GDI input. DCP must run alone.
 - [Use cheats guide](https://rom-weaver.com/docs/use-cheats): Bake ROM cheats into a ROM from the browser Apply workflow.
