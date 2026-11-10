@@ -7,7 +7,8 @@ use std::{
 use rom_weaver_core::{RomWeaverError, ThreadCapability};
 
 use super::{
-    PARALLEL_WRITE_CHUNK_BYTES, PreparedWrite, apply_batched_writes, parallel_write_batch_bytes,
+    PARALLEL_WRITE_CHUNK_BYTES, PreparedWrite, apply_batched_whole_writes, apply_batched_writes,
+    parallel_write_batch_bytes,
 };
 use crate::test_support::{TestDir, test_context_with_threads};
 
@@ -186,4 +187,71 @@ fn single_record_crosses_the_budget_with_exact_piece_offsets() {
 #[test]
 fn empty_record_at_the_full_budget_does_not_force_a_flush() {
     assert_serial_batch_sizes(&[8_388_608, 0, 1], &[8_388_608, 1]);
+}
+
+fn assert_whole_batch_sizes(lengths: &[usize], expected_batches: &[usize]) {
+    let pending_bytes = AtomicUsize::new(0);
+    let mut output = ObservedBatches {
+        output: Cursor::new(Vec::new()),
+        pending_bytes: &pending_bytes,
+        batch_sizes: Vec::new(),
+    };
+    let mut expected = Vec::new();
+    let records: Vec<_> = lengths
+        .iter()
+        .enumerate()
+        .map(|(index, &len)| {
+            let offset = expected.len();
+            let byte = (index + 1) as u8;
+            expected.resize(offset + len, byte);
+            (offset, len, byte)
+        })
+        .collect();
+    apply_batched_whole_writes(
+        &mut output,
+        &records,
+        None,
+        |record| record.1,
+        |&(offset, len, byte)| {
+            pending_bytes.fetch_add(len, Ordering::SeqCst);
+            Ok(PreparedWrite {
+                offset: offset as u64,
+                data: vec![byte; len],
+            })
+        },
+    )
+    .expect("whole writes");
+    assert_eq!(output.batch_sizes, expected_batches);
+    assert_eq!(output.output.into_inner(), expected);
+}
+
+#[test]
+fn whole_records_batch_up_to_the_budget_and_are_never_split() {
+    assert_whole_batch_sizes(&[5_242_880, 3_145_728, 1], &[8_388_608, 1]);
+    assert_whole_batch_sizes(&[5_242_880, 3_145_729], &[5_242_880, 3_145_729]);
+    assert_whole_batch_sizes(&[9_000_000, 1], &[9_000_000, 1]);
+}
+
+#[test]
+fn whole_record_preparation_errors_stop_later_batches() {
+    let mut output = Cursor::new(Vec::new());
+    let records = [8_388_608usize, 1];
+    let error = apply_batched_whole_writes(
+        &mut output,
+        &records,
+        None,
+        |&len| len,
+        |&len| {
+            if len == 1 {
+                return Err(RomWeaverError::Validation("second batch".into()));
+            }
+            Ok(PreparedWrite {
+                offset: 0,
+                data: vec![1; len],
+            })
+        },
+    )
+    .expect_err("second batch fails");
+    assert!(error.to_string().contains("second batch"));
+    assert_eq!(output.into_inner().len(), 8_388_608);
 }

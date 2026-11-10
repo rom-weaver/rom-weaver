@@ -463,6 +463,86 @@ fn apply_uses_parallel_threads_for_large_output() {
 }
 
 #[test]
+fn apply_writes_chunks_in_order_without_temp_files() {
+    let chunk = OUTPUT_CHUNK_SIZE as usize;
+    let mut input = vec![b'a'; chunk * 3 + 7];
+    input[chunk - 2..chunk + 2].copy_from_slice(b"wxyz");
+    let mut expected = input.clone();
+    expected[chunk - 1..chunk + 1].copy_from_slice(b"QR");
+    expected[chunk * 3 + 5..].copy_from_slice(b"ST");
+    let patch = build_ips_patch(
+        vec![
+            TestIpsRecord::Literal {
+                offset: (chunk - 1) as u32,
+                data: b"QR".to_vec(),
+            },
+            TestIpsRecord::Literal {
+                offset: (chunk * 3 + 5) as u32,
+                data: b"ST".to_vec(),
+            },
+        ],
+        None,
+    );
+
+    for threads in [1, 8] {
+        let temp = TestDir::new();
+        let input_path = temp.child("input.bin");
+        let patch_path = temp.child("update.ips");
+        let output_path = temp.child("output.bin");
+        fs::write(&input_path, &input).expect("fixture");
+        fs::write(&patch_path, &patch).expect("fixture");
+        let context = test_context_with_threads(&temp, threads);
+
+        IpsPatchHandler::new(&IPS)
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &context,
+            )
+            .expect("report");
+
+        assert_eq!(fs::read(&output_path).expect("output"), expected);
+        assert!(
+            !context.temp_paths().root().exists(),
+            "{threads} thread(s) left a temp root"
+        );
+    }
+}
+
+#[test]
+fn failed_apply_removes_partial_output_and_temp_files() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.ips");
+    let output_path = temp.child("output.bin");
+    fs::write(&input_path, vec![0u8; OUTPUT_CHUNK_SIZE as usize * 2]).expect("fixture");
+    fs::write(
+        &patch_path,
+        large_rle_patch(OUTPUT_CHUNK_SIZE as u32 * 2, b'Z'),
+    )
+    .expect("fixture");
+    let context = test_context_with_threads(&temp, 4);
+    context.cancel().cancel();
+
+    let error = IpsPatchHandler::new(&IPS)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &context,
+        )
+        .expect_err("cancelled apply");
+    assert!(matches!(error, rom_weaver_core::RomWeaverError::Cancelled));
+    assert!(!output_path.exists());
+    assert!(!context.temp_paths().root().exists());
+}
+
+#[test]
 fn create_round_trips_and_encodes_truncation_when_shrinking() {
     let temp = TestDir::new();
     let original_path = temp.child("input.bin");

@@ -127,6 +127,84 @@ fn cancelled_apply_does_not_create_output_or_temp_windows() {
     assert!(!context.temp_paths().root().exists());
 }
 
+fn two_window_patch(second_checksum: Option<u32>) -> Vec<u8> {
+    let input_len = b"hello old world".len() as u64;
+    let window =
+        |target_window_size, checksum: Option<u32>, inst: Vec<u8>, addr: Vec<u64>| TestWindow {
+            win_indicator: if checksum.is_some() {
+                WIN_SOURCE | WIN_CHECKSUM
+            } else {
+                WIN_SOURCE
+            },
+            source_segment_size: Some(input_len),
+            source_segment_position: Some(0),
+            target_window_size,
+            checksum,
+            data: Vec::new(),
+            inst,
+            addr: encode_all_varints(&addr),
+        };
+    build_patch(TestPatch {
+        windows: vec![
+            window(6, None, vec![22], vec![0]),
+            window(6, second_checksum, vec![22], vec![0]),
+        ],
+        ..Default::default()
+    })
+}
+
+#[test]
+fn parallel_apply_streams_windows_without_temp_files() {
+    let input = b"hello old world";
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let patch_path = temp.join("update.vcdiff");
+    let output_path = temp.join("output.bin");
+    fs::write(&input_path, input).expect("write input");
+    fs::write(&patch_path, two_window_patch(None)).expect("write patch");
+    let context = test_context_with_threads(2);
+
+    let report = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &context,
+        )
+        .expect("apply patch");
+    assert!(report.thread_execution.expect("execution").used_parallelism);
+    assert_eq!(fs::read(output_path).expect("read output"), b"hello hello ");
+    assert!(!context.temp_paths().root().exists());
+}
+
+#[test]
+fn failed_parallel_apply_leaves_no_output_or_temp_files() {
+    let input = b"hello old world";
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let patch_path = temp.join("update.vcdiff");
+    let output_path = temp.join("output.bin");
+    fs::write(&input_path, input).expect("write input");
+    fs::write(&patch_path, two_window_patch(Some(0xDEAD_BEEF))).expect("write patch");
+    let context = test_context_with_threads(2);
+
+    let error = VcdiffPatchHandler::new(&crate::xdelta::VCDIFF)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &context,
+        )
+        .expect_err("second window checksum must fail");
+    assert!(format!("{error}").contains("checksum mismatch"));
+    assert!(!output_path.exists());
+    assert!(!context.temp_paths().root().exists());
+}
+
 #[test]
 fn apply_names_truncated_patch_file() {
     let patch_bytes = build_patch(TestPatch {

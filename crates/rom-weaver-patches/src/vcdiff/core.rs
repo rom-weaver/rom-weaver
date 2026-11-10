@@ -1,5 +1,6 @@
 use super::*;
 use crate::shared::labels::append_warning_labels;
+use crate::shared::threading::{PreparedWrite, apply_batched_whole_writes};
 use rom_weaver_core::{
     IoOp, IoResultExt, ValidationCodeError, checksum_validation_suffix, require_single_patch_file,
 };
@@ -128,22 +129,11 @@ impl VcdiffPatchHandler {
             )?;
 
             let execution = context.plan_threads(ThreadCapability::single_threaded());
-            let checksum_suffix = checksum_validation_suffix(validate_checksums);
-            return Ok(OperationReport::succeeded(
-                OperationFamily::Patch,
-                Some(self.descriptor.name.to_string()),
-                "apply",
-                append_warning_labels(
-                    format!(
-                        "applied {} patch with {} window(s){}",
-                        self.descriptor.name,
-                        patch.windows.len(),
-                        checksum_suffix
-                    ),
-                    &empty_patch_warnings,
-                ),
-                Some(100.0),
-                Some(execution),
+            return Ok(self.apply_report(
+                patch,
+                validate_checksums,
+                &empty_patch_warnings,
+                execution,
             ));
         }
 
@@ -167,115 +157,68 @@ impl VcdiffPatchHandler {
             )?;
 
             let execution = context.plan_threads(ThreadCapability::single_threaded());
-            let checksum_suffix = checksum_validation_suffix(validate_checksums);
-            return Ok(OperationReport::succeeded(
-                OperationFamily::Patch,
-                Some(self.descriptor.name.to_string()),
-                "apply",
-                append_warning_labels(
-                    format!(
-                        "applied {} patch with {} window(s){}",
-                        self.descriptor.name,
-                        patch.windows.len(),
-                        checksum_suffix
-                    ),
-                    &empty_patch_warnings,
-                ),
-                Some(100.0),
-                Some(execution),
+            return Ok(self.apply_report(
+                patch,
+                validate_checksums,
+                &empty_patch_warnings,
+                execution,
             ));
         }
 
         let requested_threads = patch.windows.len().max(1);
         let thread_capability = ThreadCapability::parallel(Some(requested_threads));
         let planned_execution = context.plan_threads(thread_capability.clone());
-        let tasks = patch
-            .windows
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(index, window)| WindowTask {
-                index,
-                temp_path: context
-                    .temp_paths()
-                    .next_path(&format!("vcdiff-window-{index}"), Some("bin")),
-                window,
-            })
-            .collect::<Vec<_>>();
-        let input_path = request.input.clone();
-        let validate_checksums_for_tasks = validate_checksums;
-        let secondary_compressor_id = patch.secondary_compressor_id;
-
         trace!(
-            windows = tasks.len(),
+            windows = patch.windows.len(),
             requested_threads,
             used_parallelism = planned_execution.used_parallelism,
-            "xdelta apply path: per-window decode fan-out"
+            "xdelta apply path: batched per-window decode"
         );
-        let (execution, mut decoded) = if planned_execution.used_parallelism {
+        let (execution, pool) = if planned_execution.used_parallelism {
             let (execution, pool) = context.build_pool(thread_capability)?;
-            let decoded = pool.install(|| {
-                tasks
-                    .into_par_iter()
-                    .map(|task| {
-                        decode_window_task(
-                            &task,
-                            patch_path,
-                            &input_path,
-                            input_len,
-                            secondary_compressor_id,
-                            validate_checksums_for_tasks,
-                            context.cancel(),
-                        )
-                    })
-                    .collect::<Result<Vec<_>>>()
-            })?;
-            (execution, decoded)
+            (execution, Some(pool))
         } else {
-            let decoded = tasks
-                .into_iter()
-                .map(|task| {
-                    decode_window_task(
-                        &task,
-                        patch_path,
-                        &input_path,
-                        input_len,
-                        secondary_compressor_id,
-                        validate_checksums_for_tasks,
-                        context.cancel(),
-                    )
-                })
-                .collect::<Result<Vec<_>>>()?;
-            (planned_execution, decoded)
+            (planned_execution, None)
         };
 
-        decoded.sort_by_key(|window| (window.output_offset, window.index));
-
-        let mut output = BufWriter::with_capacity(
-            APPLY_OUTPUT_BUFFER_BYTES,
-            rom_weaver_core::with_output_creation(context.cancel(), || {
-                File::create(&request.output).io_op(IoOp::Create, &request.output)
-            })?,
+        let mut output = rom_weaver_core::with_output_creation(context.cancel(), || {
+            File::create(&request.output).io_op(IoOp::Create, &request.output)
+        })?;
+        let write_result = apply_batched_whole_writes(
+            &mut output,
+            &patch.windows,
+            pool.as_ref(),
+            |window| usize::try_from(window.target_window_size).unwrap_or(usize::MAX),
+            |window| {
+                decode_window_write(
+                    window,
+                    patch_path,
+                    &request.input,
+                    input_len,
+                    patch.secondary_compressor_id,
+                    validate_checksums,
+                    context.cancel(),
+                )
+            },
         );
-        let mut expected_offset = 0u64;
-        for window in decoded {
-            context.cancel().check()?;
-            if window.output_offset != expected_offset {
-                return Err(RomWeaverError::Validation(format!(
-                    "window output offset mismatch: expected {expected_offset}, got {}",
-                    window.output_offset
-                )));
-            }
-
-            let mut temp = BufReader::new(File::open(&window.temp_path)?);
-            rom_weaver_core::copy_cancelable(&mut temp, &mut output, context.cancel())?;
-            expected_offset = checked_add(expected_offset, window.len, "assembled output size")?;
-            let _ = fs::remove_file(&window.temp_path);
+        drop(output);
+        if let Err(error) = write_result {
+            debug!(output = %request.output.display(), "removing partial VCDIFF output after failed apply");
+            let _ = fs::remove_file(&request.output);
+            return Err(error);
         }
-        output.flush()?;
 
-        let checksum_suffix = checksum_validation_suffix(validate_checksums);
-        Ok(OperationReport::succeeded(
+        Ok(self.apply_report(patch, validate_checksums, &empty_patch_warnings, execution))
+    }
+
+    fn apply_report(
+        &self,
+        patch: &ParsedPatch,
+        validate_checksums: bool,
+        warnings: &[String],
+        execution: ThreadExecution,
+    ) -> OperationReport {
+        OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "apply",
@@ -284,13 +227,13 @@ impl VcdiffPatchHandler {
                     "applied {} patch with {} window(s){}",
                     self.descriptor.name,
                     patch.windows.len(),
-                    checksum_suffix
+                    checksum_validation_suffix(validate_checksums)
                 ),
-                &empty_patch_warnings,
+                warnings,
             ),
             Some(100.0),
             Some(execution),
-        ))
+        )
     }
 }
 
@@ -835,21 +778,6 @@ pub(super) fn read_source_segment<R: Read + Seek>(
     Ok(segment)
 }
 
-#[derive(Clone, Debug)]
-pub(super) struct WindowTask {
-    index: usize,
-    window: WindowIndex,
-    temp_path: PathBuf,
-}
-
-#[derive(Debug)]
-pub(super) struct DecodedWindow {
-    index: usize,
-    output_offset: u64,
-    len: u64,
-    temp_path: PathBuf,
-}
-
 #[derive(Debug)]
 pub(super) struct CreatedPatchCandidate {
     pub(super) path: PathBuf,
@@ -1089,54 +1017,45 @@ pub(super) fn read_window_index<R: Read + Seek>(
     }))
 }
 
-pub(super) fn decode_window_task(
-    task: &WindowTask,
+fn decode_window_write(
+    window: &WindowIndex,
     patch_path: &Path,
     input_path: &Path,
     input_len: u64,
     secondary_compressor_id: Option<u8>,
     validate_checksums: bool,
     cancel: &rom_weaver_core::CancellationToken,
-) -> Result<DecodedWindow> {
+) -> Result<PreparedWrite> {
     cancel.check()?;
-    let mut input_reader = BufReader::new(File::open(input_path)?);
-    let source = match task.window.source_kind {
+    let source = match window.source_kind {
         None => Vec::new(),
         Some(WindowSourceKind::Target) => {
             return Err(RomWeaverError::Validation(
                 "parallel decoding cannot be used for VCD_TARGET windows".into(),
             ));
         }
-        Some(WindowSourceKind::Source) => read_source_segment(
-            &mut input_reader,
-            task.window.source_segment_position,
-            task.window.source_segment_size,
-            input_len,
-            "source",
-        )?,
+        Some(WindowSourceKind::Source) => {
+            let mut input_reader = BufReader::new(File::open(input_path)?);
+            read_source_segment(
+                &mut input_reader,
+                window.source_segment_position,
+                window.source_segment_size,
+                input_len,
+                "source",
+            )?
+        }
     };
     let mut patch_reader = BufReader::new(File::open(patch_path)?);
     let target = decode_window_with_native_engine(
         &mut patch_reader,
-        &task.window,
+        window,
         secondary_compressor_id,
         &source,
         validate_checksums,
     )?;
-
-    rom_weaver_core::with_output_creation(cancel, || {
-        if let Some(parent) = task.temp_path.parent() {
-            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
-        }
-        fs::write(&task.temp_path, &target).io_op(IoOp::Create, &task.temp_path)?;
-        Ok(())
-    })?;
-
-    Ok(DecodedWindow {
-        index: task.index,
-        output_offset: task.window.output_offset,
-        len: target.len() as u64,
-        temp_path: task.temp_path.clone(),
+    Ok(PreparedWrite {
+        offset: window.output_offset,
+        data: target,
     })
 }
 

@@ -3,10 +3,10 @@ use std::{
     cmp::{max, min},
     fs::{self, File},
     io::{BufReader, Read, Seek, SeekFrom, Write},
-    path::{Path, PathBuf},
+    path::Path,
+    sync::atomic::{AtomicBool, Ordering},
 };
 
-use rayon::prelude::*;
 use rom_weaver_core::{
     ChunkPlanner, FileChunk, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
     PatchApplyRequest, PatchCapabilities, PatchChecksumValidation, PatchCreateRequest,
@@ -19,7 +19,8 @@ use tracing::{debug, trace};
 use crate::shared::labels::append_warning_labels;
 use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
-    chunk_count_for_len_checked, run_with_optional_pool, scan_create_chunks,
+    PreparedWrite, apply_batched_whole_writes, chunk_count_for_len_checked, run_with_optional_pool,
+    scan_create_chunks,
 };
 
 const IPS_MAGIC: &[u8; 5] = b"PATCH";
@@ -167,7 +168,7 @@ impl PatchHandler for IpsPatchHandler {
         );
         let max_parallel_chunks = max_parallel_chunks(output_size)?;
         let thread_capability = ThreadCapability::parallel(Some(max_parallel_chunks));
-        let tasks = build_chunk_tasks(&patch, output_size, context)?;
+        let tasks = build_chunk_tasks(&patch, output_size)?;
         trace!(
             format = self.descriptor.name,
             chunk_tasks = tasks.len(),
@@ -175,39 +176,38 @@ impl PatchHandler for IpsPatchHandler {
             "ips apply chunk plan"
         );
 
-        let render_result = run_with_optional_pool(
+        let (execution, pool) = run_with_optional_pool(
             context,
             thread_capability,
             true,
-            |pool| {
-                pool.install(|| {
-                    tasks
-                        .par_iter()
-                        .map(|task| {
-                            render_chunk_task(task, &request.input, input_len, &patch, context)
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })
-            },
-            || {
-                tasks
-                    .iter()
-                    .map(|task| render_chunk_task(task, &request.input, input_len, &patch, context))
-                    .collect::<Result<Vec<_>>>()
-            },
-        );
+            |pool| Ok(Some(pool.clone())),
+            || Ok(None),
+        )?;
 
-        let (execution, rendered_chunks_changed) = match render_result {
-            Ok((execution, changed)) => (execution, changed.into_iter().any(|changed| changed)),
-            Err(error) => {
-                cleanup_chunk_files(&tasks);
-                return Err(error);
-            }
-        };
-
-        let assemble_result = assemble_output(&request.output, &tasks, context);
-        cleanup_chunk_files(&tasks);
-        assemble_result?;
+        let rendered_chunks_changed = AtomicBool::new(false);
+        let mut output = crate::create_buffered_output(&request.output)?;
+        let write_result = apply_batched_whole_writes(
+            &mut output,
+            &tasks,
+            pool.as_ref(),
+            |task| usize::try_from(task.chunk.len).unwrap_or(usize::MAX),
+            |task| {
+                let (write, chunk_changed) =
+                    render_chunk_task(task, &request.input, input_len, &patch, context)?;
+                if chunk_changed {
+                    rendered_chunks_changed.store(true, Ordering::Relaxed);
+                }
+                Ok(write)
+            },
+        )
+        .and_then(|()| Ok(output.flush()?));
+        drop(output);
+        if let Err(error) = write_result {
+            debug!(output = %request.output.display(), "removing partial ips output after failed apply");
+            let _ = fs::remove_file(&request.output);
+            return Err(error);
+        }
+        let rendered_chunks_changed = rendered_chunks_changed.into_inner();
         let did_change = output_size != input_len || rendered_chunks_changed;
         let warnings =
             ips_apply_warning_labels(self.descriptor.name, &patch, input_len, did_change);
@@ -387,7 +387,6 @@ enum IpsRecordData {
 #[derive(Debug)]
 struct ChunkTask {
     chunk: FileChunk,
-    temp_path: PathBuf,
     record_indexes: Vec<usize>,
 }
 
@@ -527,7 +526,7 @@ fn parse_ips_file(
         let size = parser.read_u16()?;
         let (len, data) = if size == 0 {
             let rle_len = u64::from(parser.read_u16()?);
-            let byte = parser.read_exact(1)?[0];
+            let byte = parser.read_u8()?;
             if rle_len == 0 {
                 handle_zero_length_rle_record(offset, validation, &mut warnings)?;
                 continue;
@@ -1679,11 +1678,7 @@ fn write_u32(output: &mut impl Write, value: u64, label: &str) -> Result<()> {
     Ok(())
 }
 
-fn build_chunk_tasks(
-    patch: &ParsedIpsPatch,
-    output_size: u64,
-    context: &OperationContext,
-) -> Result<Vec<ChunkTask>> {
+fn build_chunk_tasks(patch: &ParsedIpsPatch, output_size: u64) -> Result<Vec<ChunkTask>> {
     let planner = ChunkPlanner::new(OUTPUT_CHUNK_SIZE)?;
     let chunks = planner.plan(output_size);
     let mut record_indexes = vec![Vec::new(); chunks.len()];
@@ -1711,9 +1706,6 @@ fn build_chunk_tasks(
         .into_iter()
         .zip(record_indexes)
         .map(|(chunk, record_indexes)| ChunkTask {
-            temp_path: context
-                .temp_paths()
-                .next_path(&format!("ips-chunk-{}", chunk.index), Some("bin")),
             chunk,
             record_indexes,
         })
@@ -1726,7 +1718,7 @@ fn render_chunk_task(
     input_len: u64,
     patch: &ParsedIpsPatch,
     context: &OperationContext,
-) -> Result<bool> {
+) -> Result<(PreparedWrite, bool)> {
     context.cancel().check()?;
 
     let chunk_len = usize::try_from(task.chunk.len).map_err(|_| {
@@ -1784,10 +1776,13 @@ fn render_chunk_task(
         }
     }
 
-    let mut writer = crate::create_buffered_output(&task.temp_path)?;
-    writer.write_all(&buffer)?;
-    writer.flush()?;
-    Ok(changed)
+    Ok((
+        PreparedWrite {
+            offset: chunk_start,
+            data: buffer,
+        },
+        changed,
+    ))
 }
 
 fn read_input_chunk(
@@ -1812,27 +1807,6 @@ fn read_input_chunk(
     input.seek(SeekFrom::Start(chunk.offset))?;
     input.read_exact(&mut buffer[..bytes_to_read])?;
     Ok(())
-}
-
-fn assemble_output(
-    output_path: &Path,
-    tasks: &[ChunkTask],
-    context: &OperationContext,
-) -> Result<()> {
-    let mut output = crate::create_buffered_output(output_path)?;
-    for task in tasks {
-        context.cancel().check()?;
-        let mut reader = BufReader::new(File::open(&task.temp_path)?);
-        rom_weaver_core::copy_retrying_interrupted(&mut reader, &mut output)?;
-    }
-    output.flush()?;
-    Ok(())
-}
-
-fn cleanup_chunk_files(tasks: &[ChunkTask]) {
-    for task in tasks {
-        let _ = fs::remove_file(&task.temp_path);
-    }
 }
 
 fn checked_add(left: u64, right: u64, label: &str) -> Result<u64> {
@@ -1915,32 +1889,50 @@ impl<R: Read> IpsFileParser<R> {
         })
     }
 
-    fn read_exact(&mut self, len: usize) -> Result<Vec<u8>> {
+    fn ensure_available(&self, len: usize) -> Result<u64> {
         let len_u64 = u64::try_from(len)
             .map_err(|_| RomWeaverError::Validation("IPS read length overflowed u64".into()))?;
-        let remaining = self.remaining()?;
-        if len_u64 > remaining {
+        if len_u64 > self.remaining()? {
             return Err(RomWeaverError::Validation(
                 "IPS patch ended unexpectedly while reading record data".into(),
             ));
         }
+        Ok(len_u64)
+    }
 
-        let mut bytes = vec![0u8; len];
-        self.reader.read_exact(&mut bytes)?;
+    fn read_into(&mut self, bytes: &mut [u8]) -> Result<()> {
+        let len_u64 = self.ensure_available(bytes.len())?;
+        self.reader.read_exact(bytes)?;
         self.offset = self
             .offset
             .checked_add(len_u64)
             .ok_or_else(|| RomWeaverError::Validation("IPS parser offset overflowed".into()))?;
+        Ok(())
+    }
+
+    fn read_exact(&mut self, len: usize) -> Result<Vec<u8>> {
+        // Bound `len` by the bytes left in the file before allocating for it.
+        self.ensure_available(len)?;
+        let mut bytes = vec![0u8; len];
+        self.read_into(&mut bytes)?;
         Ok(bytes)
     }
 
+    fn read_u8(&mut self) -> Result<u8> {
+        let mut bytes = [0u8; 1];
+        self.read_into(&mut bytes)?;
+        Ok(bytes[0])
+    }
+
     fn read_u16(&mut self) -> Result<u16> {
-        let bytes = self.read_exact(2)?;
-        Ok(u16::from_be_bytes([bytes[0], bytes[1]]))
+        let mut bytes = [0u8; 2];
+        self.read_into(&mut bytes)?;
+        Ok(u16::from_be_bytes(bytes))
     }
 
     fn read_u24(&mut self) -> Result<u32> {
-        let bytes = self.read_exact(3)?;
+        let mut bytes = [0u8; 3];
+        self.read_into(&mut bytes)?;
         Ok(read_u24(&bytes))
     }
 }

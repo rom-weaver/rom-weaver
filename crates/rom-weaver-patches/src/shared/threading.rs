@@ -114,6 +114,21 @@ pub(crate) fn parallel_write_batch_bytes(threads: usize) -> usize {
     bounded_items_for_threads(threads).saturating_mul(PARALLEL_WRITE_CHUNK_BYTES)
 }
 
+/// Prepares one batch of writes (on `pool` when given) and applies them to `output` in order.
+fn write_prepared_batch<T: Sync>(
+    output: &mut (impl Write + Seek),
+    pool: Option<&SharedThreadPool>,
+    batch: &[T],
+    prepare: impl Fn(&T) -> Result<PreparedWrite> + Sync + Send,
+) -> Result<()> {
+    let writes = if let Some(pool) = pool {
+        pool_map(pool, batch, prepare)?
+    } else {
+        batch.iter().map(prepare).collect::<Result<Vec<_>>>()?
+    };
+    apply_prepared_writes(output, &writes)
+}
+
 /// Splits oversized records so even a single dense change fits the prepared-byte budget.
 /// Callers MUST validate the complete record before preparing any subrange.
 pub(crate) fn apply_batched_writes<I: Sync>(
@@ -132,13 +147,9 @@ pub(crate) fn apply_batched_writes<I: Sync>(
             byte_limit,
             "patch prepared write batch"
         );
-        let map = |(item, range): &(&I, Range<usize>)| prepare(item, range.clone());
-        let writes = if let Some(pool) = pool {
-            pool_map(pool, batch, map)?
-        } else {
-            batch.iter().map(map).collect::<Result<Vec<_>>>()?
-        };
-        apply_prepared_writes(output, &writes)
+        write_prepared_batch(output, pool, batch, |(item, range)| {
+            prepare(item, range.clone())
+        })
     };
     for item in items {
         let len = write_len(item);
@@ -153,6 +164,43 @@ pub(crate) fn apply_batched_writes<I: Sync>(
             batch.push((item, start..end));
             batch_bytes += bytes;
         }
+    }
+    if !batch.is_empty() {
+        flush(&batch)?;
+    }
+    Ok(())
+}
+
+/// Like [`apply_batched_writes`] for records that cannot be split: each item is prepared whole,
+/// and a batch closes once its combined `write_len` would pass the byte budget. A batch always
+/// holds at least one item, so an item larger than the budget is prepared on its own.
+pub(crate) fn apply_batched_whole_writes<I: Sync>(
+    output: &mut (impl Write + Seek),
+    items: &[I],
+    pool: Option<&SharedThreadPool>,
+    write_len: impl Fn(&I) -> usize,
+    prepare: impl Fn(&I) -> Result<PreparedWrite> + Sync + Send,
+) -> Result<()> {
+    let byte_limit = parallel_write_batch_bytes(pool.map_or(1, SharedThreadPool::size));
+    let mut batch: Vec<&I> = Vec::new();
+    let mut batch_bytes = 0usize;
+    let mut flush = |batch: &[&I]| -> Result<()> {
+        tracing::trace!(
+            items = batch.len(),
+            byte_limit,
+            "patch prepared whole write batch"
+        );
+        write_prepared_batch(output, pool, batch, |item| prepare(item))
+    };
+    for item in items {
+        let len = write_len(item);
+        if !batch.is_empty() && batch_bytes.saturating_add(len) > byte_limit {
+            flush(&batch)?;
+            batch.clear();
+            batch_bytes = 0;
+        }
+        batch.push(item);
+        batch_bytes = batch_bytes.saturating_add(len);
     }
     if !batch.is_empty() {
         flush(&batch)?;
