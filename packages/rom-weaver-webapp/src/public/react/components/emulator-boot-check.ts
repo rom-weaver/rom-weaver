@@ -1,4 +1,5 @@
 import { createLogger } from "../../../lib/logging.ts";
+import { createEmulatorGameUrl, revokeEmulatorGameUrl } from "../emulator-game-urls.ts";
 import { createEmulatorDocument, createEmulatorGameIdentity } from "./emulator-document.ts";
 
 const logger = createLogger("emulator-boot-check");
@@ -270,7 +271,7 @@ const runEmulatorBootCheck = async ({
 }: BootCheckOptions): Promise<BootCheckOutcome> => {
   if (signal?.aborted) throw abortError();
   const { gameId, gameName } = createEmulatorGameIdentity({ checksum, core, fileName });
-  const gameUrl = URL.createObjectURL(rom);
+  const gameUrl = createEmulatorGameUrl(rom);
   const iframe = createHiddenFrame();
   const deadline = Date.now() + timeoutMs;
   let frames = 0;
@@ -287,7 +288,7 @@ const runEmulatorBootCheck = async ({
   } finally {
     iframe.romWeaverAudioContext = null;
     iframe.remove();
-    URL.revokeObjectURL(gameUrl);
+    revokeEmulatorGameUrl(gameUrl);
     logger.trace("Boot check player removed", { core, fileName, frames });
   }
 };

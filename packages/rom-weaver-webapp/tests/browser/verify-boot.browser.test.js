@@ -167,7 +167,7 @@ test(
   CASE_TIMEOUT_MS,
 );
 
-// The FDS core crashes the tab without the BIOS the site does not supply, so
+// The FDS core crashes the tab without the BIOS the boot check does not supply, so
 // the check MUST NOT start it, whether the name or only the bytes say FDS.
 for (const { fileName, headered } of [
   { fileName: "disk.fds", headered: true },
