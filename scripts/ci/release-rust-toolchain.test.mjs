@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -31,10 +31,11 @@ test("every release toolchain install uses the version pinned in mise.toml", () 
   assert.equal(installs, 6);
 });
 
-test("the pin reader extracts the version from the repository's mise.toml", () => {
+test("the pin reader extracts the version from the repository's mise.toml", (t) => {
   const action = read(".github/actions/read-rust-pin/action.yml");
   const script = action.match(/^ {6}run: \|\n((?: {8}.*\n)+)/mu)[1].replace(/^ {8}/gmu, "");
   const dir = mkdtempSync(join(tmpdir(), "rust-pin-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const run = (toml) => {
     writeFileSync(join(dir, "mise.toml"), toml);
     const output = join(dir, "output");
@@ -47,6 +48,5 @@ test("the pin reader extracts the version from the repository's mise.toml", () =
   assert.equal(run('[tools]\nrust = { version = "9.8.7", components = "rustfmt" }\n'), "rust=9.8.7\n");
   assert.equal(run('[tools]\nrust = "9.8.7"\n'), "rust=9.8.7\n");
   assert.throws(() => run("[tools]\nnode = 24\n"));
-  const pinned = read(".config/mise.toml").match(/^rust = \{ version = "([^"]+)"/mu)[1];
-  assert.match(pinned, /^\d+\.\d+\.\d+$/u);
+  assert.match(run(read(".config/mise.toml")), /^rust=\d+\.\d+\.\d+\n$/u);
 });

@@ -1,8 +1,7 @@
 name: Read the pinned Rust version
 description: >-
-  Print the Rust version pinned in .config/mise.toml so jobs that install the
-  toolchain with rustup install the version the tests ran on instead of
-  whatever stable is current. Needs the repository checked out.
+  Output the Rust version pinned in .config/mise.toml. Needs the repository
+  checked out.
 
 outputs:
   version:
