@@ -107,10 +107,11 @@ test("release.yml never downloads wasm-prod directly; every reuse goes through t
   const jobs = structuredClone(release.jobs);
   const runtimeJob = jobs["publish-emulator-runtime"];
   const runtimeDownload = step(runtimeJob, "Download emulator runtime");
+  const inputs = Object.fromEntries(Object.entries(runtimeDownload.with).map(([name, value]) => [name.toLowerCase(), value]));
   assert.match(runtimeDownload.uses, /^actions\/download-artifact@/u);
-  assert.equal(runtimeDownload.with.pattern, "emulator-runtime-*");
-  assert.equal(runtimeDownload.with.name, undefined);
-  assert.equal(runtimeDownload.with["artifact-ids"], undefined);
+  assert.equal(inputs.pattern, "emulator-runtime-*");
+  assert.equal(inputs.name, undefined);
+  assert.equal(inputs["artifact-ids"], undefined);
   assert.equal(runtimeDownload.run, undefined);
   runtimeJob.steps = runtimeJob.steps.filter((candidate) => candidate !== runtimeDownload);
   assert.doesNotMatch(JSON.stringify({ ...release, jobs }), /gh run download|download-artifact/u);
