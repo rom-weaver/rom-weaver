@@ -3,6 +3,7 @@ import {
   type MutableRefObject,
   type SetStateAction,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useSyncExternalStore,
@@ -37,6 +38,7 @@ import type { ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
 import { getPublicOutputSize, toError, waitForNextUiPaint } from "./patcher-form-session-utils.ts";
 import { createOutputSizeSummary } from "./patcher-presentation.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
+import { prepareBootCheckAudioContext, releaseBootCheckAudioContext } from "./boot-check-audio.ts";
 import {
   addEntry,
   getApplyEntry,
@@ -303,6 +305,22 @@ const setPostApplyTestBehaviorOverride = postApplyTestBehaviorStore.set;
 const subscribePostApplyTestBehaviorOverride = postApplyTestBehaviorStore.subscribe;
 const syncPostApplyTestBehaviorSetting = postApplyTestBehaviorStore.syncSetting;
 
+const verifyBootAfterApplyStore = createSettingSessionOverride((value: unknown): boolean => value === true);
+const setVerifyBootAfterApplyOverride = verifyBootAfterApplyStore.set;
+
+/** The Verify boot checkbox's controlled value: the override once set, else the live setting. */
+const useVerifyBootAfterApplyValue = (settingValue: unknown): boolean => {
+  const override = useSyncExternalStore(
+    verifyBootAfterApplyStore.subscribe,
+    verifyBootAfterApplyStore.get,
+    verifyBootAfterApplyStore.get,
+  );
+  useEffect(() => {
+    verifyBootAfterApplyStore.syncSetting(settingValue);
+  }, [settingValue]);
+  return override ?? settingValue === true;
+};
+
 /** The Post Apply Download select's controlled value: the override once set, else the live setting. */
 const usePostApplyDownloadBehaviorValue = (settingValue: unknown): PostApplyActionBehavior => {
   const override = useSyncExternalStore(
@@ -437,6 +455,21 @@ const runPostApplyActions = async ({
   return { downloaded, tested: true };
 };
 
+/**
+ * Whether the boot check can have a core for this ROM, judged at the Apply
+ * click. The ROM's name and identified platform decide the core the same way
+ * after Apply. A ROM that is still loading shows a placeholder name, such as
+ * its archive's, so its core is unknown and the click prepares for a check
+ * anyway: a queued Apply starts later, without the click WebKit needs.
+ */
+const mayHaveEmulatorCore = (romInput: RomInputRowState | undefined): boolean => {
+  if (!romInput || romInput.loading) return true;
+  const fileName = romInput.info.fileName || romInput.info.archiveName;
+  const platform = romInput?.info.romType?.platform;
+  if (!(fileName || platform)) return true;
+  return !!getEmulatorJsCore(platform, fileName);
+};
+
 const focusPendingDownload = () => {
   const focus = () => {
     if (typeof document === "undefined") return;
@@ -522,6 +555,95 @@ const applySessionLogger = createLogger("ui:apply-session");
 const traceApplyPrimaryAction = (outcome: string, details?: Record<string, unknown>) =>
   applySessionLogger.trace(`apply primary action ${outcome}`, details);
 
+type ApplyBootCheckPreparation = {
+  enabledRef: MutableRefObject<boolean>;
+  owner: string;
+};
+
+const prepareApplyResources = (
+  { request, session }: ApplyDownloadOrchestrationContext,
+  pendingDownloadResult: ApplyWorkflowResult | null,
+  { enabledRef, owner }: ApplyBootCheckPreparation,
+) => {
+  const { busy, hasPendingDownload, applyQueueBlocked, canQueueApply, canStartApply } = request;
+  // An Apply request may queue behind input preparation, which already works on the new disc.
+  const requestsApply =
+    !(busy || (pendingDownloadResult && hasPendingDownload) || applyQueueBlocked) && (canQueueApply || canStartApply);
+  if (requestsApply) releaseLargeEntries({ announce: true });
+  // This MUST stay before the first await: WebKit resumes only an
+  // AudioContext created while the Apply click is still a user action.
+  if (
+    enabledRef.current &&
+    !busy &&
+    !(pendingDownloadResult && hasPendingDownload) &&
+    !applyQueueBlocked &&
+    (canStartApply || canQueueApply) &&
+    mayHaveEmulatorCore(session.localState.romInputs[0])
+  ) {
+    prepareBootCheckAudioContext(owner);
+  }
+};
+
+const recordApplyCompletion = (
+  { lifecycle, refs, request, session }: ApplyDownloadOrchestrationContext,
+  result: ApplyWorkflowResult,
+): string => {
+  const {
+    setCompletedApplyTimeMs,
+    setCompletedCompressionTimeMs,
+    setCompletedSizeSummary,
+    setCompletedWarnings,
+    setProgress,
+  } = session;
+  const { rememberActiveOutputCleanup, setPendingDownloadReadyFileName } = lifecycle;
+  const { applyExecutionTimingRef, pendingDownloadResultRef } = refs;
+  const { effectiveResolvedOutputName } = request;
+  const completedAt = Date.now();
+  const { applyTimeMs, compressionTimeMs, sizeSummary } = deriveApplyCompletion(
+    result,
+    applyExecutionTimingRef.current,
+    completedAt,
+  );
+  setCompletedApplyTimeMs(applyTimeMs);
+  setCompletedCompressionTimeMs(compressionTimeMs);
+  setProgress({
+    indeterminate: false,
+    label: `Created ${result.output.fileName}`,
+    message: `Created ${result.output.fileName}`,
+    percent: 100,
+  });
+  setCompletedSizeSummary(sizeSummary);
+  setCompletedWarnings(result.warnings ?? []);
+  rememberActiveOutputCleanup(
+    result.outputs.length > 0
+      ? async () => {
+          await Promise.all(result.outputs.map((output) => Promise.resolve(output.cleanup?.())));
+        }
+      : result.output.cleanup || null,
+  );
+  pendingDownloadResultRef.current = result;
+  // Warm the output's download snapshot now so a later "Download output" tap reaches
+  // navigator.share before its user activation expires (iOS PWA share path).
+  void result.output.prepareDownload?.().catch(() => undefined);
+  const initialDownloadFileName = result.output.fileName || effectiveResolvedOutputName || "output";
+  setPendingDownloadReadyFileName(initialDownloadFileName);
+  return initialDownloadFileName;
+};
+
+const describePostApplyEmulator = (
+  session: SessionState,
+  result: ApplyWorkflowResult,
+  initialDownloadFileName: string,
+) => {
+  const romInput = session.localState.romInputs[0];
+  const fileName =
+    romInput?.info.fileName || romInput?.info.archiveName || initialDownloadFileName || result.output.fileName;
+  const platform = romInput?.info.romType?.platform;
+  const core = getEmulatorJsCore(platform, fileName);
+  const retainedEntry = core ? getApplyEntry(fileName) || getApplyEntry() : null;
+  return { core, fileName, platform, retainedEntry };
+};
+
 // Owns the apply-and-download workflow for the patcher session: queueing/cancellation gating, the
 // AbortController lifecycle, per-stage progress fan-out, completion timing/size summary, and the
 // download hand-off. Returns the primary-action handlers consumed by the output controller. The live
@@ -533,9 +655,13 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
     usePostApplyDownloadBehaviorValue(settings.postApplyDownloadBehavior),
   );
   const postApplyTestBehaviorRef = useLatestRef(usePostApplyTestBehaviorValue(settings.postApplyTestBehavior));
+  const verifyBootAfterApplyRef = useLatestRef(useVerifyBootAfterApplyValue(settings.verifyBootAfterApply));
+  // Names this form's boot checks, so a hidden form cannot take them.
+  const bootCheckOwner = useId();
   const postApplyResultRef = useRef<ApplyWorkflowResult | null>(null);
   return useMemo(
     () => ({
+      bootCheckOwner,
       cancelPrimaryAction: () => {
         const { lifecycle, request } = contextRef.current;
         lifecycle.setApplyQueued(false);
@@ -548,13 +674,11 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         lifecycle.clearActiveApplyProgress();
       },
       runPrimaryAction: async () => {
-        const { lifecycle, refs, request, session, workflow } = contextRef.current;
+        const currentContext = contextRef.current;
+        const { lifecycle, refs, request, session, workflow } = currentContext;
         const {
           setBusy,
           setCompletedApplyTimeMs,
-          setCompletedCompressionTimeMs,
-          setCompletedSizeSummary,
-          setCompletedWarnings,
           setOutputErrorMessage,
           setPatchProgress,
           setPatchProgressByKey,
@@ -589,11 +713,9 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           invalidateCompletedOutputState,
           mergeRomInput,
           rememberAbortController,
-          rememberActiveOutputCleanup,
           resetCompletedOutputState,
           setApplyQueued,
           setChecksumOverrideChecked,
-          setPendingDownloadReadyFileName,
           selectTestView,
         } = lifecycle;
         const { applyPatches, downloadOutput, onApplyComplete, onError, onProgress } = workflow;
@@ -605,11 +727,10 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           patchChangePendingRef,
         } = refs;
         const pendingDownloadResult = pendingDownloadResultRef.current;
-        // An Apply request may queue behind input preparation, which already works on the new disc.
-        const requestsApply =
-          !(busy || (pendingDownloadResult && hasPendingDownload) || applyQueueBlocked) &&
-          (canQueueApply || canStartApply);
-        if (requestsApply) releaseLargeEntries({ announce: true });
+        prepareApplyResources(currentContext, pendingDownloadResult, {
+          enabledRef: verifyBootAfterApplyRef,
+          owner: bootCheckOwner,
+        });
         if (patchChangePendingRef.current && !busy) {
           traceApplyPrimaryAction("queued: patch change pending");
           setApplyQueued(true);
@@ -704,50 +825,19 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
             defaultPatchBasis,
             ...(activePatchOptions ? { patchOptions: activePatchOptions } : {}),
           });
-          const completedAt = Date.now();
-          const { applyTimeMs, compressionTimeMs, sizeSummary } = deriveApplyCompletion(
-            result,
-            applyExecutionTimingRef.current,
-            completedAt,
-          );
-          setCompletedApplyTimeMs(applyTimeMs);
-          setCompletedCompressionTimeMs(compressionTimeMs);
-          setProgress({
-            indeterminate: false,
-            label: `Created ${result.output.fileName}`,
-            message: `Created ${result.output.fileName}`,
-            percent: 100,
-          });
-          setCompletedSizeSummary(sizeSummary);
-          setCompletedWarnings(result.warnings ?? []);
-          rememberActiveOutputCleanup(
-            result.outputs.length > 0
-              ? async () => {
-                  await Promise.all(result.outputs.map((output) => Promise.resolve(output.cleanup?.())));
-                }
-              : result.output.cleanup || null,
-          );
-          pendingDownloadResultRef.current = result;
-          // Warm the output's download snapshot now so a later "Download output" tap reaches
-          // navigator.share before its user activation expires (iOS PWA share path).
-          void result.output.prepareDownload?.().catch(() => undefined);
-          const initialDownloadFileName = result.output.fileName || effectiveResolvedOutputName || "output";
-          setPendingDownloadReadyFileName(initialDownloadFileName);
+          const initialDownloadFileName = recordApplyCompletion(currentContext, result);
           if (claimPostApplyRun(postApplyResultRef, result)) {
-            const romInput = session.localState.romInputs[0];
-            const emulatorFileName =
-              romInput?.info.fileName ||
-              romInput?.info.archiveName ||
-              initialDownloadFileName ||
-              result.output.fileName;
-            const platform = romInput?.info.romType?.platform;
-            const core = getEmulatorJsCore(platform, emulatorFileName);
+            const { core, fileName, platform, retainedEntry } = describePostApplyEmulator(
+              session,
+              result,
+              initialDownloadFileName,
+            );
             await runPostApplyActions({
               addSessionEntry: addEntry,
               core,
               download: () => downloadOutput(result, initialDownloadFileName, { interactive: false }),
               downloadBehavior: postApplyDownloadBehaviorRef.current,
-              fileName: emulatorFileName,
+              fileName,
               focusDownload: focusPendingDownload,
               onAutomaticActionFailed: () => {
                 setPostApplyDownloadBehaviorOverride(
@@ -757,7 +847,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
               onSelectTestView: selectTestView,
               output: result,
               platform,
-              retainedEntry: core ? getApplyEntry(emulatorFileName) || getApplyEntry() : null,
+              retainedEntry,
               setCurrentGame,
               testBehavior: postApplyTestBehaviorRef.current,
             });
@@ -765,6 +855,8 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           onApplyComplete?.(result);
         } catch (error) {
           const normalizedError = toError(error);
+          // No output will come from this run, so no boot check will use the context.
+          releaseBootCheckAudioContext(bootCheckOwner);
           if (abortController.signal.aborted && getErrorCode(normalizedError) === "CANCELLED") {
             resetCompletedOutputState();
             clearActiveApplyProgress();
@@ -790,7 +882,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         }
       },
     }),
-    [contextRef, postApplyDownloadBehaviorRef, postApplyTestBehaviorRef],
+    [bootCheckOwner, contextRef, postApplyDownloadBehaviorRef, postApplyTestBehaviorRef, verifyBootAfterApplyRef],
   );
 };
 
@@ -802,6 +894,7 @@ export {
   runPostApplyActions,
   setPostApplyDownloadBehaviorOverride,
   setPostApplyTestBehaviorOverride,
+  setVerifyBootAfterApplyOverride,
   subscribePostApplyDownloadBehaviorOverride,
   subscribePostApplyTestBehaviorOverride,
   syncPostApplyDownloadBehaviorSetting,
@@ -809,4 +902,5 @@ export {
   useApplyDownloadOrchestration,
   usePostApplyDownloadBehaviorValue,
   usePostApplyTestBehaviorValue,
+  useVerifyBootAfterApplyValue,
 };

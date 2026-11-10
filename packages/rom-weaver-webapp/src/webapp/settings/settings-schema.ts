@@ -82,6 +82,7 @@ const BOOLEAN_SETTINGS_FIELDS = [
   "keepTestedRomsEnabled",
   "fixChecksum",
   "identifiedOutputName",
+  "verifyBootAfterApply",
 ] as const satisfies readonly SettingsFieldKey[];
 const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "defaultCompression",
@@ -387,6 +388,8 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
   );
   const patch = isRecord(applySettings.patch) ? applySettings.patch : {};
   const validation = isRecord(applySettings.validation) ? applySettings.validation : {};
+  const applyOutput = isRecord(applySettings.output) ? applySettings.output : undefined;
+  const createOutput = isRecord(createSettings.output) ? createSettings.output : undefined;
   return {
     betaToolsEnabled: commonSettings.betaToolsEnabled,
     detailedViewEnabled: commonSettings.detailedViewEnabled,
@@ -397,24 +400,17 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     offlineCopyEnabled: commonSettings.offlineCopyEnabled,
     accent: commonSettings.accent,
     byteUnits: commonSettings.byteUnits,
-    weavePackage: isRecord(applySettings.output)
-      ? (applySettings.output.weavePackage ?? applySettings.output.bundlePackage)
-      : undefined,
-    legacyPostApplyRomBehavior: isRecord(applySettings.output) ? applySettings.output.postApplyRomBehavior : undefined,
-    postApplyDownloadBehavior: isRecord(applySettings.output)
-      ? applySettings.output.postApplyDownloadBehavior
-      : undefined,
-    postApplyTestBehavior: isRecord(applySettings.output) ? applySettings.output.postApplyTestBehavior : undefined,
+    weavePackage: applyOutput?.weavePackage ?? applyOutput?.bundlePackage,
+    legacyPostApplyRomBehavior: applyOutput?.postApplyRomBehavior,
+    postApplyDownloadBehavior: applyOutput?.postApplyDownloadBehavior,
+    postApplyTestBehavior: applyOutput?.postApplyTestBehavior,
+    verifyBootAfterApply: applyOutput?.verifyBootAfterApply,
     chdCreateCdCodecs: compression.chdCreateCdCodecs,
     chdCreateDvdCodecs: compression.chdCreateDvdCodecs,
     compressionProfile: compression.profile,
     defaultCompression: commonSettings.defaultCompression,
     fixChecksum: patch.fixChecksum,
-    identifiedOutputName: isRecord(applySettings.output)
-      ? applySettings.output.identifiedName
-      : isRecord(createSettings.output)
-        ? createSettings.output.identifiedName
-        : undefined,
+    identifiedOutputName: applyOutput ? applyOutput.identifiedName : createOutput?.identifiedName,
     language: commonSettings.language,
     logLevel: commonSettings.logLevel,
     requireInputChecksumMatch: validation.requireInputChecksumMatch,
@@ -425,6 +421,154 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     zipCodec: compression.zipCodec,
     ...storageSettings,
   };
+};
+
+const restoreStoredCommonChoices = (settings: SettingsState, loadedSettings: Record<string, unknown>) => {
+  const accent = readStoredField(storedStringSchema, loadedSettings.accent);
+  if (accent !== undefined) settings.accent = normalizeChoiceField("accent", accent, settings.accent);
+
+  const language = readStoredField(storedStringSchema, loadedSettings.language);
+  if (language !== undefined) settings.language = normalizeChoiceField("language", language, settings.language);
+
+  const byteUnits = readStoredField(storedStringSchema, loadedSettings.byteUnits);
+  if (byteUnits !== undefined) settings.byteUnits = normalizeChoiceField("byteUnits", byteUnits, settings.byteUnits);
+
+  const logLevel = readStoredField(storedStringSchema, loadedSettings.logLevel);
+  if (logLevel !== undefined) settings.logLevel = normalizeChoiceField("logLevel", logLevel, settings.logLevel);
+
+  const weavePackage = readStoredField(storedStringSchema, loadedSettings.weavePackage ?? loadedSettings.bundlePackage);
+  if (weavePackage !== undefined) {
+    settings.weavePackage = normalizeChoiceField(
+      "weavePackage",
+      normalizeStoredWeavePackage(weavePackage, settings.weavePackage),
+      settings.weavePackage,
+    );
+  }
+};
+
+const restoreStoredPostApplyBehavior = (
+  settings: SettingsState,
+  loadedSettings: Record<string, unknown>,
+  version: unknown,
+) => {
+  const postApplyDownloadBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyDownloadBehavior);
+  const postApplyTestBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyTestBehavior);
+  const legacyPostApplyRomBehavior = readStoredField(storedStringSchema, loadedSettings.legacyPostApplyRomBehavior);
+  const legacyApplyPlayButtonEnabled = readStoredField(
+    storedBooleanSchema,
+    loadedSettings.legacyApplyPlayButtonEnabled,
+  );
+  if (version === 5 || version === 6 || version === 7) {
+    const migrated = migrateLegacyPostApplyBehavior(legacyPostApplyRomBehavior, legacyApplyPlayButtonEnabled !== false);
+    settings.postApplyDownloadBehavior = migrated.postApplyDownloadBehavior;
+    settings.postApplyTestBehavior = migrated.postApplyTestBehavior;
+  } else if (version === 8) {
+    settings.postApplyDownloadBehavior = normalizePostApplyDownloadBehavior(postApplyDownloadBehavior);
+    settings.postApplyTestBehavior = normalizePostApplyTestBehavior(postApplyTestBehavior);
+  } else {
+    if (postApplyDownloadBehavior !== undefined) {
+      settings.postApplyDownloadBehavior = normalizeChoiceField(
+        "postApplyDownloadBehavior",
+        postApplyDownloadBehavior,
+        settings.postApplyDownloadBehavior,
+      );
+    }
+    if (postApplyTestBehavior !== undefined) {
+      settings.postApplyTestBehavior = normalizeChoiceField(
+        "postApplyTestBehavior",
+        postApplyTestBehavior,
+        settings.postApplyTestBehavior,
+      );
+    }
+  }
+};
+
+const restoreStoredApplySettings = (settings: SettingsState, loadedSettings: Record<string, unknown>) => {
+  const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
+  if (betaToolsEnabled !== undefined) settings.betaToolsEnabled = betaToolsEnabled;
+
+  const detailedViewEnabled = readStoredField(storedBooleanSchema, loadedSettings.detailedViewEnabled);
+  if (detailedViewEnabled !== undefined) settings.detailedViewEnabled = detailedViewEnabled;
+
+  const verifyBootAfterApply = readStoredField(storedBooleanSchema, loadedSettings.verifyBootAfterApply);
+  if (verifyBootAfterApply !== undefined) settings.verifyBootAfterApply = verifyBootAfterApply;
+
+  const identifiedOutputName = readStoredField(storedBooleanSchema, loadedSettings.identifiedOutputName);
+  if (identifiedOutputName !== undefined) settings.identifiedOutputName = identifiedOutputName;
+
+  const onboardingEnabled = readStoredField(storedBooleanSchema, loadedSettings.onboardingEnabled);
+  if (onboardingEnabled !== undefined) settings.onboardingEnabled = onboardingEnabled;
+
+  const offlineCopyEnabled = readStoredField(storedBooleanSchema, loadedSettings.offlineCopyEnabled);
+  if (offlineCopyEnabled !== undefined) settings.offlineCopyEnabled = offlineCopyEnabled;
+
+  const emulatorSaveStorageEnabled = readStoredField(storedBooleanSchema, loadedSettings.emulatorSaveStorageEnabled);
+  if (emulatorSaveStorageEnabled !== undefined) settings.emulatorSaveStorageEnabled = emulatorSaveStorageEnabled;
+  const keepTestedRomsEnabled = readStoredField(storedBooleanSchema, loadedSettings.keepTestedRomsEnabled);
+  if (keepTestedRomsEnabled !== undefined) settings.keepTestedRomsEnabled = keepTestedRomsEnabled;
+  const defaultCompression = readStoredField(storedStringSchema, loadedSettings.defaultCompression);
+  if (defaultCompression !== undefined) {
+    settings.defaultCompression = normalizeChoiceField(
+      "defaultCompression",
+      defaultCompression,
+      settings.defaultCompression,
+    );
+  }
+
+  const fixChecksum = readStoredField(storedBooleanSchema, loadedSettings.fixChecksum);
+  if (fixChecksum !== undefined) settings.fixChecksum = fixChecksum;
+
+  const requireInputChecksumMatch = readStoredField(storedBooleanSchema, loadedSettings.requireInputChecksumMatch);
+  if (requireInputChecksumMatch !== undefined) settings.requireInputChecksumMatch = requireInputChecksumMatch;
+};
+
+const restoreStoredCompressionSettings = (settings: SettingsState, loadedSettings: Record<string, unknown>) => {
+  const compressionProfile = readStoredField(storedStringSchema, loadedSettings.compressionProfile);
+  if (compressionProfile !== undefined)
+    settings.compressionProfile = normalizeCompressionProfile(compressionProfile, settings.compressionProfile);
+
+  const chdCreateCdCodecs = readStoredField(storedStringSchema, loadedSettings.chdCreateCdCodecs);
+  if (chdCreateCdCodecs !== undefined)
+    settings.chdCreateCdCodecs = normalizeStoredCodecSetting(
+      "chdCreateCdCodecs",
+      chdCreateCdCodecs,
+      settings.chdCreateCdCodecs,
+      true,
+    );
+
+  const chdCreateDvdCodecs = readStoredField(storedStringSchema, loadedSettings.chdCreateDvdCodecs);
+  if (chdCreateDvdCodecs !== undefined)
+    settings.chdCreateDvdCodecs = normalizeStoredCodecSetting(
+      "chdCreateDvdCodecs",
+      chdCreateDvdCodecs,
+      settings.chdCreateDvdCodecs,
+      true,
+    );
+
+  const rvzCodec = readStoredField(storedStringSchema, loadedSettings.rvzCodec);
+  if (rvzCodec !== undefined)
+    settings.rvzCodec = normalizeStoredCodecSetting("rvzCodec", rvzCodec, settings.rvzCodec, true);
+
+  const rvzBlockSize = readStoredField(storedStringOrNumberSchema, loadedSettings.rvzBlockSize);
+  if (rvzBlockSize !== undefined)
+    settings.rvzBlockSize = normalizePositiveIntegerField(
+      "rvzBlockSize",
+      rvzBlockSize,
+      settings.rvzBlockSize,
+      settings,
+    );
+
+  const sevenZipCodec = readStoredField(storedStringSchema, loadedSettings.sevenZipCodec);
+  if (sevenZipCodec !== undefined)
+    settings.sevenZipCodec = normalizeStoredCodecSetting("sevenZipCodec", sevenZipCodec, settings.sevenZipCodec, true);
+
+  const zipCodec = readStoredField(storedStringSchema, loadedSettings.zipCodec);
+  if (zipCodec !== undefined)
+    settings.zipCodec = normalizeStoredCodecSetting("zipCodec", zipCodec, settings.zipCodec, true);
+
+  const threads = readStoredField(storedStringOrNumberSchema, loadedSettings.threads);
+  if (threads !== undefined)
+    settings.threads = normalizeStoredThreads(threads, resolveThreadsNumericFallback(settings.threads));
 };
 
 const loadSettings = (storage?: StorageLike): SettingsState => {
@@ -461,149 +605,10 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     }
     const loadedSettings = readGroupedStoredSettings(parsedSettings);
 
-    const accent = readStoredField(storedStringSchema, loadedSettings.accent);
-    if (accent !== undefined) settings.accent = normalizeChoiceField("accent", accent, settings.accent);
-
-    const language = readStoredField(storedStringSchema, loadedSettings.language);
-    if (language !== undefined) settings.language = normalizeChoiceField("language", language, settings.language);
-
-    const byteUnits = readStoredField(storedStringSchema, loadedSettings.byteUnits);
-    if (byteUnits !== undefined) settings.byteUnits = normalizeChoiceField("byteUnits", byteUnits, settings.byteUnits);
-
-    const logLevel = readStoredField(storedStringSchema, loadedSettings.logLevel);
-    if (logLevel !== undefined) settings.logLevel = normalizeChoiceField("logLevel", logLevel, settings.logLevel);
-
-    const weavePackage = readStoredField(
-      storedStringSchema,
-      loadedSettings.weavePackage ?? loadedSettings.bundlePackage,
-    );
-    if (weavePackage !== undefined) {
-      settings.weavePackage = normalizeChoiceField(
-        "weavePackage",
-        normalizeStoredWeavePackage(weavePackage, settings.weavePackage),
-        settings.weavePackage,
-      );
-    }
-
-    const postApplyDownloadBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyDownloadBehavior);
-    const postApplyTestBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyTestBehavior);
-    const legacyPostApplyRomBehavior = readStoredField(storedStringSchema, loadedSettings.legacyPostApplyRomBehavior);
-    const legacyApplyPlayButtonEnabled = readStoredField(
-      storedBooleanSchema,
-      loadedSettings.legacyApplyPlayButtonEnabled,
-    );
-    if (parsedSettings.version === 5 || parsedSettings.version === 6 || parsedSettings.version === 7) {
-      const migrated = migrateLegacyPostApplyBehavior(
-        legacyPostApplyRomBehavior,
-        legacyApplyPlayButtonEnabled !== false,
-      );
-      settings.postApplyDownloadBehavior = migrated.postApplyDownloadBehavior;
-      settings.postApplyTestBehavior = migrated.postApplyTestBehavior;
-    } else if (parsedSettings.version === 8) {
-      settings.postApplyDownloadBehavior = normalizePostApplyDownloadBehavior(postApplyDownloadBehavior);
-      settings.postApplyTestBehavior = normalizePostApplyTestBehavior(postApplyTestBehavior);
-    } else {
-      if (postApplyDownloadBehavior !== undefined) {
-        settings.postApplyDownloadBehavior = normalizeChoiceField(
-          "postApplyDownloadBehavior",
-          postApplyDownloadBehavior,
-          settings.postApplyDownloadBehavior,
-        );
-      }
-      if (postApplyTestBehavior !== undefined) {
-        settings.postApplyTestBehavior = normalizeChoiceField(
-          "postApplyTestBehavior",
-          postApplyTestBehavior,
-          settings.postApplyTestBehavior,
-        );
-      }
-    }
-
-    const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
-    if (betaToolsEnabled !== undefined) settings.betaToolsEnabled = betaToolsEnabled;
-
-    const detailedViewEnabled = readStoredField(storedBooleanSchema, loadedSettings.detailedViewEnabled);
-    if (detailedViewEnabled !== undefined) settings.detailedViewEnabled = detailedViewEnabled;
-
-    const identifiedOutputName = readStoredField(storedBooleanSchema, loadedSettings.identifiedOutputName);
-    if (identifiedOutputName !== undefined) settings.identifiedOutputName = identifiedOutputName;
-
-    const onboardingEnabled = readStoredField(storedBooleanSchema, loadedSettings.onboardingEnabled);
-    if (onboardingEnabled !== undefined) settings.onboardingEnabled = onboardingEnabled;
-
-    const offlineCopyEnabled = readStoredField(storedBooleanSchema, loadedSettings.offlineCopyEnabled);
-    if (offlineCopyEnabled !== undefined) settings.offlineCopyEnabled = offlineCopyEnabled;
-
-    const emulatorSaveStorageEnabled = readStoredField(storedBooleanSchema, loadedSettings.emulatorSaveStorageEnabled);
-    if (emulatorSaveStorageEnabled !== undefined) settings.emulatorSaveStorageEnabled = emulatorSaveStorageEnabled;
-    const keepTestedRomsEnabled = readStoredField(storedBooleanSchema, loadedSettings.keepTestedRomsEnabled);
-    if (keepTestedRomsEnabled !== undefined) settings.keepTestedRomsEnabled = keepTestedRomsEnabled;
-    const defaultCompression = readStoredField(storedStringSchema, loadedSettings.defaultCompression);
-    if (defaultCompression !== undefined) {
-      settings.defaultCompression = normalizeChoiceField(
-        "defaultCompression",
-        defaultCompression,
-        settings.defaultCompression,
-      );
-    }
-
-    const fixChecksum = readStoredField(storedBooleanSchema, loadedSettings.fixChecksum);
-    if (fixChecksum !== undefined) settings.fixChecksum = fixChecksum;
-
-    const requireInputChecksumMatch = readStoredField(storedBooleanSchema, loadedSettings.requireInputChecksumMatch);
-    if (requireInputChecksumMatch !== undefined) settings.requireInputChecksumMatch = requireInputChecksumMatch;
-
-    const compressionProfile = readStoredField(storedStringSchema, loadedSettings.compressionProfile);
-    if (compressionProfile !== undefined)
-      settings.compressionProfile = normalizeCompressionProfile(compressionProfile, settings.compressionProfile);
-
-    const chdCreateCdCodecs = readStoredField(storedStringSchema, loadedSettings.chdCreateCdCodecs);
-    if (chdCreateCdCodecs !== undefined)
-      settings.chdCreateCdCodecs = normalizeStoredCodecSetting(
-        "chdCreateCdCodecs",
-        chdCreateCdCodecs,
-        settings.chdCreateCdCodecs,
-        true,
-      );
-
-    const chdCreateDvdCodecs = readStoredField(storedStringSchema, loadedSettings.chdCreateDvdCodecs);
-    if (chdCreateDvdCodecs !== undefined)
-      settings.chdCreateDvdCodecs = normalizeStoredCodecSetting(
-        "chdCreateDvdCodecs",
-        chdCreateDvdCodecs,
-        settings.chdCreateDvdCodecs,
-        true,
-      );
-
-    const rvzCodec = readStoredField(storedStringSchema, loadedSettings.rvzCodec);
-    if (rvzCodec !== undefined)
-      settings.rvzCodec = normalizeStoredCodecSetting("rvzCodec", rvzCodec, settings.rvzCodec, true);
-
-    const rvzBlockSize = readStoredField(storedStringOrNumberSchema, loadedSettings.rvzBlockSize);
-    if (rvzBlockSize !== undefined)
-      settings.rvzBlockSize = normalizePositiveIntegerField(
-        "rvzBlockSize",
-        rvzBlockSize,
-        settings.rvzBlockSize,
-        settings,
-      );
-
-    const sevenZipCodec = readStoredField(storedStringSchema, loadedSettings.sevenZipCodec);
-    if (sevenZipCodec !== undefined)
-      settings.sevenZipCodec = normalizeStoredCodecSetting(
-        "sevenZipCodec",
-        sevenZipCodec,
-        settings.sevenZipCodec,
-        true,
-      );
-
-    const zipCodec = readStoredField(storedStringSchema, loadedSettings.zipCodec);
-    if (zipCodec !== undefined)
-      settings.zipCodec = normalizeStoredCodecSetting("zipCodec", zipCodec, settings.zipCodec, true);
-
-    const threads = readStoredField(storedStringOrNumberSchema, loadedSettings.threads);
-    if (threads !== undefined)
-      settings.threads = normalizeStoredThreads(threads, resolveThreadsNumericFallback(settings.threads));
+    restoreStoredCommonChoices(settings, loadedSettings);
+    restoreStoredPostApplyBehavior(settings, loadedSettings, parsedSettings.version);
+    restoreStoredApplySettings(settings, loadedSettings);
+    restoreStoredCompressionSettings(settings, loadedSettings);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     resetStoredSettings(storageObject, message);
@@ -676,7 +681,8 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
     if (
       fieldKey === "weavePackage" ||
       fieldKey === "postApplyDownloadBehavior" ||
-      fieldKey === "postApplyTestBehavior"
+      fieldKey === "postApplyTestBehavior" ||
+      fieldKey === "verifyBootAfterApply"
     ) {
       storedSettings.apply = {
         ...storedSettings.apply,
