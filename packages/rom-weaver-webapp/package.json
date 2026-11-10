@@ -37,6 +37,9 @@
   "overrides": {
     "vite-plugin-pwa": {
       "vite": "$vite"
+    },
+    "workbox-build@7.4.1": {
+      "glob": "14.0.4"
     }
   },
   "scripts": {
