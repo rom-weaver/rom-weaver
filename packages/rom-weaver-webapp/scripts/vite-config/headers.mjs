@@ -46,12 +46,14 @@ export const writeCloudflareHeadersAsset = (channel) => {
       const headerLines = Object.entries(headers)
         .map(([name, value]) => `  ${name}: ${value}`)
         .join("\n");
+      // Prod only: other channels get `noindex, nofollow` from `/*`. robots.txt
+      // MUST NOT block these paths, or crawlers never see the noindex.
+      const noindex = channel === "prod" ? "  X-Robots-Tag: noindex\n" : "";
       // The attribution files are named `LICENSE-APACHE`, `COPYING`, `NOTICE`
       // and so on. With no extension Cloudflare types them as a binary
       // download, which both skips its on-the-fly compression (2.1 MB of text
       // over the wire) and makes a browser download rather than display them.
-      const noindex = channel === "prod" ? "  X-Robots-Tag: noindex\n" : "";
-      const licenseContentType = `/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n${noindex}\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n${noindex}\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n${noindex}`;
+      const licenseHeaders = `/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n${noindex}\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n${noindex}\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n${noindex}`;
       const installerContentType = "/install.sh\n  Content-Type: text/plain; charset=utf-8\n";
       // The catalog file has no extension, so Cloudflare would serve it as a
       // binary download. The Link header satisfies the RFC 9727 HEAD response.
@@ -74,12 +76,12 @@ export const writeCloudflareHeadersAsset = (channel) => {
         ({ markdownPath }) => `${markdownPath}\n  Content-Type: text/markdown; charset=utf-8\n${noindex}`,
       ).join("\n");
       // The Markdown copies and JSON schemas stay fetchable for LLMs and tools but out of
-      // search results. Crawlers MUST fetch them to see noindex. Reusing the exact
-      // Markdown rules keeps _headers within Pages' 100-rule cap.
+      // search results. The Markdown rules above carry their noindex, which keeps
+      // _headers within Pages' 100-rule cap; one wildcard covers the schemas.
       const noindexHeaders = channel === "prod" ? "\n/*.schema.json\n  X-Robots-Tag: noindex\n" : "";
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${homeDiscoveryHeaders}\n${apiCatalogHeaders}${authMarkdownHeaders}${markdownHeaders}${noindexHeaders}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseHeaders}\n${installerContentType}\n${homeDiscoveryHeaders}\n${apiCatalogHeaders}${authMarkdownHeaders}${markdownHeaders}${noindexHeaders}`,
       );
     },
     configResolved(config) {

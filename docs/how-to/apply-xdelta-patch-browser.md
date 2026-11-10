@@ -31,12 +31,13 @@ The download is named after the source file and the patch, such as `game [hack].
 
 ## Check the source file
 
-An xdelta patch has no fixed checksum of the file it expects. What it catches depends on how the author made it.
+An xdelta patch has no fixed checksum of the file it expects unless the author used xdelta3's armor option. What it catches depends on how the author made it.
 
+- A patch made with the armor option records a BLAKE3 digest of the source. A wrong source fails with a `checksum mismatch` message, and **APPLY & DOWNLOAD** is blocked.
 - A patch with window checksums catches a wrong source. The card shows **Checks failed** with a `checksum mismatch` message, and **APPLY & DOWNLOAD** is blocked.
-- A patch without them applies to a wrong source without a warning.
+- A patch with neither applies to a wrong source without a warning.
 
-The card shows **Checked** for both kinds, so compare the author's checksum yourself. Add it as an input check on the patch card, as in [Check the ROM yourself](apply-ips-patch-browser.md#check-the-rom-yourself). The card then shows **Verified** for the right file.
+The card shows **Checked** for the patches without armor, so compare the author's checksum yourself. Add it as an input check on the patch card, as in [Check the ROM yourself](apply-ips-patch-browser.md#check-the-rom-yourself). The card then shows **Verified** for the right file.
 
 After a failed check, [Fix a source ROM checksum mismatch](fix-checksum-errors.md) lists the causes. A fresh file dropped into **0x01 Inputs** replaces the wrong one.
 

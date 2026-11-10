@@ -55,7 +55,7 @@ rom-weaver reads the patch for hints about which form it expects. A hint is not 
 
 ## IPS32 and large ROMs
 
-An IPS patch cannot start a change at or beyond 16 MiB. Patches for larger files use IPS32, with the `.ips32` extension. The steps above apply both.
+An IPS patch cannot start a change at or beyond 16 MiB. Patches for larger files use IPS32, with the `.ips32` extension. The steps above apply to both.
 
 ## Test the patched ROM
 
