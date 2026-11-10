@@ -1365,6 +1365,104 @@ test("navigation Offline app keeps a plain label and opens the current offline v
   ).toContain("Update available");
 });
 
+test("workflow help stays outside unrelated Settings across scroll and resize", async () => {
+  await page.viewport(1280, 900);
+  try {
+    mountWebappRoot();
+    const workflowTrigger = page.getByRole("button", { name: "How files are opened", exact: true });
+    await workflowTrigger.click();
+    await expect.element(workflowTrigger).toHaveAttribute("aria-expanded", "true");
+    const workflowPanelId = workflowTrigger.element().getAttribute("aria-controls");
+    const app = workflowTrigger.element().closest(".rw-app");
+    expect(document.getElementById(workflowPanelId).parentElement).toBe(app);
+
+    await page.elementLocator(navRow("Settings")).click();
+    await expect.poll(() => document.querySelector(".log-dlg:modal .settings-body")).toBeTruthy();
+    const dialog = document.querySelector(".log-dlg:modal");
+    const body = dialog.querySelector(".settings-body");
+    await expect.element(page.elementLocator(body)).toBeVisible();
+    await Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+        .map((animation) => animation.finished),
+    );
+    await expect.poll(() => body.scrollHeight - body.clientHeight).toBeGreaterThanOrEqual(120);
+    body.scrollTop = 120;
+    await expect.poll(() => body.scrollTop).toBe(120);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await expect.poll(() => document.getElementById(workflowPanelId).parentElement).toBe(app);
+    expect(dialog.contains(workflowTrigger.element())).toBe(false);
+    expect(dialog.contains(document.getElementById(workflowPanelId))).toBe(false);
+
+    await page.viewport(1000, 900);
+    await expect.poll(() => document.getElementById(workflowPanelId).parentElement).toBe(app);
+    const settingsTrigger = page.getByRole("button", { name: "About File size units", exact: true });
+    await settingsTrigger.click();
+    await expect.element(settingsTrigger).toHaveAttribute("aria-expanded", "true");
+    const settingsPanelId = settingsTrigger.element().getAttribute("aria-controls");
+    expect(document.getElementById(settingsPanelId).closest("dialog:modal")).toBe(dialog);
+    await page.elementLocator(document.getElementById(settingsPanelId)).click();
+    expect(document.querySelector(".log-dlg:modal")).toBe(dialog);
+    await settingsTrigger.click();
+    expect(document.getElementById(settingsPanelId)).toBeNull();
+    await page.elementLocator(dialog.querySelector(".dlg-x")).click();
+    await expect.poll(() => document.querySelector(".log-dlg")).toBeNull();
+    await expect.element(workflowTrigger).toHaveAttribute("aria-expanded", "true");
+    await workflowTrigger.click();
+    expect(document.getElementById(workflowPanelId)).toBeNull();
+    await workflowTrigger.click();
+    expect(document.getElementById(workflowPanelId).parentElement).toBe(app);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+test("Settings help above the phone dock remains readable and interactive", async () => {
+  await page.viewport(320, 900);
+  try {
+    mountWebappRoot();
+    await openMenuSheet();
+    navRow("Settings", ".menu-sheet").click();
+    await expect.poll(() => document.querySelector(".log-dlg[open] .settings-body")).toBeTruthy();
+    const dialog = document.querySelector(".log-dlg[open]");
+    const body = dialog.querySelector(".settings-body");
+    const dock = dialog.querySelector(".dock");
+    const trigger = page.getByRole("button", { name: "About Download after patching", exact: true });
+    await expect.element(trigger).toBeVisible();
+    trigger.element().scrollIntoView({ block: "center" });
+    const triggerDockGapPx = 20;
+    const triggerBottom = dock.getBoundingClientRect().top - triggerDockGapPx;
+    body.scrollTop += trigger.element().getBoundingClientRect().bottom - triggerBottom;
+    await expect.poll(() => Math.abs(trigger.element().getBoundingClientRect().bottom - triggerBottom)).toBeLessThan(1);
+    trigger.element().click();
+    await expect.element(trigger).toHaveAttribute("aria-expanded", "true");
+    const panel = document.getElementById(trigger.element().getAttribute("aria-controls"));
+    await expect.element(page.elementLocator(panel)).toBeVisible();
+    await Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+        .map((animation) => animation.finished),
+    );
+    expect(panel.getBoundingClientRect().bottom).toBeGreaterThan(dock.getBoundingClientRect().top);
+    await expect
+      .poll(() => {
+        const rect = panel.getBoundingClientRect();
+        return [0.1, 0.5, 0.9].every((fraction) =>
+          panel.contains(document.elementFromPoint(rect.left + rect.width * fraction, rect.top + rect.height / 2)),
+        );
+      })
+      .toBe(true);
+    const checked = [...dialog.querySelectorAll('input[type="checkbox"]')].map((input) => input.checked);
+    await page.elementLocator(panel).click();
+    expect(document.querySelector(".log-dlg[open]")).toBe(dialog);
+    expect([...dialog.querySelectorAll('input[type="checkbox"]')].map((input) => input.checked)).toEqual(checked);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
 test("the phone console opens one section from Menu, with the dock at its foot reading Close", async () => {
   const height = 844;
   await page.viewport(393, height);

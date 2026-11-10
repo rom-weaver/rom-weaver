@@ -1,6 +1,7 @@
 import { Check, TriangleAlert, X } from "lucide-react";
 import { type ReactNode, useId, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { getOverlayPortalTarget } from "../../../../presentation/react/overlay-portal.ts";
 import { join } from "./cx.ts";
 
 const FOCUSABLE_SELECTOR = [
@@ -22,17 +23,6 @@ const getFocusableElements = (root: HTMLElement): HTMLElement[] =>
     const style = getComputedStyle(element);
     return style.display !== "none" && style.visibility !== "hidden";
   });
-
-/**
- * Keep overlays inside the active native dialog's top layer. Portaling beside
- * a showModal() dialog makes the overlay inert, regardless of its z-index.
- * Otherwise use the styled app root so design-system controls inherit it.
- */
-const getModalPortalTarget = (): Element =>
-  document.activeElement?.closest("dialog:modal") ??
-  document.querySelector("dialog:modal") ??
-  document.querySelector(".rw-app") ??
-  document.body;
 
 const ModalShell = ({
   open,
@@ -133,7 +123,7 @@ const ModalShell = ({
       <button aria-label="Close" className="rw-modal-backdrop" onClick={onBackdrop} tabIndex={-1} type="button" />
       <div className={join("rw-modal-card", card)}>{children}</div>
     </div>,
-    getModalPortalTarget(),
+    getOverlayPortalTarget(),
   );
 };
 
