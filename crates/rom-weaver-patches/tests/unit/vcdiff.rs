@@ -134,7 +134,7 @@ fn decode_memory_budget_covers_source_target_raw_sections_and_secondary_models()
         );
         let parsed = parse_patch(&mut Cursor::new(&bytes)).expect("parse FGK window");
         assert_eq!(apply_patch_bytes(b"", &bytes).expect("apply FGK"), target);
-        // FGK owns 511 nodes, 1022 blocks and 256 coded bits for its byte alphabet.
+        // FGK (Faller-Gallager-Knuth adaptive Huffman) owns 511 nodes, 1022 blocks and 256 coded bits for its byte alphabet.
         let allocated =
             target.len() * 2 + packed.len() + inst.len() * 2 + fgk_model + input_buffers;
         let estimate = parsed.windows[0].decode_memory_bytes(Some(XDELTA_FGK_SECONDARY_ID));

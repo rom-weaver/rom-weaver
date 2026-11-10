@@ -744,7 +744,8 @@ impl WindowIndex {
             .saturating_add(self.inst_len)
             .saturating_add(self.addr_len);
         // The slice-backed decoder borrows source COPY spans; its fallback COPY buffer stays empty.
-        // Fixed scratch covers buffered input and DJW/FGK table/model allocations.
+        // Fixed scratch covers buffered input and the tables of xdelta's DJW (static Huffman)
+        // and FGK (adaptive Huffman) secondary decoders.
         let mut memory = self
             .source_segment_size
             .saturating_add(self.target_window_size)
@@ -768,8 +769,8 @@ impl WindowIndex {
                 } else {
                     len
                 };
-                // DJW selectors need at most one byte per five output bytes; charging another
-                // decoded length covers them while all raw and decoded sections coexist.
+                // DJW (static Huffman) selectors need at most one byte per five output bytes.
+                // One more decoded length covers them while raw and decoded sections coexist.
                 memory = memory.saturating_add(decoded.saturating_mul(2));
             }
         }
@@ -1102,10 +1103,15 @@ impl WindowDecoder<'_> {
             }
         };
         let mut patch_reader = BufReader::new(File::open(self.patch_path)?);
-        let target = decode_window_with_native_engine(
-            &mut patch_reader,
+        let (data, inst, addr) =
+            read_window_sections(&mut patch_reader, window, self.secondary_compressor_id)?;
+        let target = decode_native_window_sections(
             window,
-            self.secondary_compressor_id,
+            oxidelta_decoder::WindowSections {
+                data: &data,
+                inst: &inst,
+                addr: &addr,
+            },
             &source,
             self.validate_checksums,
             target,
@@ -1250,7 +1256,6 @@ pub(super) fn apply_windows_with_target_sources(
                 patch.secondary_compressor_id,
                 source,
                 validate_checksums,
-                Vec::new(),
             )
         },
     )
@@ -1336,7 +1341,6 @@ pub fn apply_patch_bytes(source: &[u8], patch_bytes: &[u8]) -> Result<Vec<u8>> {
             patch.secondary_compressor_id,
             segment,
             true,
-            Vec::new(),
         )?;
         output.extend_from_slice(&target);
     }

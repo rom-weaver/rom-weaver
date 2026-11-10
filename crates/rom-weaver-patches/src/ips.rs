@@ -205,8 +205,8 @@ impl PatchHandler for IpsPatchHandler {
                 cancel: context.cancel(),
             },
             |task, buffer| {
-                let (write, chunk_changed) =
-                    render_chunk_task(task, buffer, &request.input, input_len, &patch, context)?;
+                let buffer = read_input_chunk(&request.input, input_len, &task.chunk, buffer)?;
+                let (write, chunk_changed) = render_chunk_task(task, buffer, &patch, context)?;
                 if chunk_changed {
                     rendered_chunks_changed.store(true, Ordering::Relaxed);
                 }
@@ -1776,18 +1776,10 @@ fn ips_apply_memory_bytes(
 fn render_chunk_task(
     task: &ChunkTask,
     mut buffer: Vec<u8>,
-    input_path: &Path,
-    input_len: u64,
     patch: &ParsedIpsPatch,
     context: &OperationContext,
 ) -> Result<(PreparedWrite, bool)> {
     context.cancel().check()?;
-
-    let chunk_len = usize::try_from(task.chunk.len).map_err(|_| {
-        RomWeaverError::Validation("IPS chunk length exceeded addressable memory".into())
-    })?;
-    buffer.resize(chunk_len, 0);
-    read_input_chunk(input_path, input_len, &task.chunk, &mut buffer)?;
     let mut changed = false;
 
     let chunk_start = task.chunk.offset;
@@ -1847,14 +1839,19 @@ fn render_chunk_task(
     ))
 }
 
+/// Fills `buffer` with the chunk's input bytes, zero-padding past the end of the input.
 fn read_input_chunk(
     input_path: &Path,
     input_len: u64,
     chunk: &FileChunk,
-    buffer: &mut [u8],
-) -> Result<()> {
+    mut buffer: Vec<u8>,
+) -> Result<Vec<u8>> {
+    let chunk_len = usize::try_from(chunk.len).map_err(|_| {
+        RomWeaverError::Validation("IPS chunk length exceeded addressable memory".into())
+    })?;
+    buffer.resize(chunk_len, 0);
     if buffer.is_empty() || chunk.offset >= input_len {
-        return Ok(());
+        return Ok(buffer);
     }
 
     let bytes_to_read =
@@ -1862,13 +1859,13 @@ fn read_input_chunk(
             RomWeaverError::Validation("IPS input chunk exceeded addressable memory".into())
         })?;
     if bytes_to_read == 0 {
-        return Ok(());
+        return Ok(buffer);
     }
 
     let mut input = File::open(input_path)?;
     input.seek(SeekFrom::Start(chunk.offset))?;
     input.read_exact(&mut buffer[..bytes_to_read])?;
-    Ok(())
+    Ok(buffer)
 }
 
 fn checked_add(left: u64, right: u64, label: &str) -> Result<u64> {

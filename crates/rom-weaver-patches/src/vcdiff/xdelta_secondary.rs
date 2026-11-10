@@ -733,17 +733,18 @@ pub(super) fn decode_window_with_native_engine<R: Read + Seek>(
     secondary_compressor_id: Option<u8>,
     source_segment: &[u8],
     validate_checksums: bool,
-    target: Vec<u8>,
 ) -> Result<Vec<u8>> {
     let (data, inst, addr) = read_window_sections(patch_reader, window, secondary_compressor_id)?;
     decode_native_window_sections(
         window,
-        &data,
-        &inst,
-        &addr,
+        oxidelta_decoder::WindowSections {
+            data: &data,
+            inst: &inst,
+            addr: &addr,
+        },
         source_segment,
         validate_checksums,
-        target,
+        Vec::new(),
     )
 }
 
@@ -765,9 +766,11 @@ pub(super) fn decode_window_with_xdelta_lzma_sections<R: Read + Seek>(
     };
     decode_native_window_sections(
         window,
-        &data,
-        &inst,
-        &addr,
+        oxidelta_decoder::WindowSections {
+            data: &data,
+            inst: &inst,
+            addr: &addr,
+        },
         source_segment,
         validate_checksums,
         Vec::new(),
@@ -777,9 +780,7 @@ pub(super) fn decode_window_with_xdelta_lzma_sections<R: Read + Seek>(
 /// Decodes one window into `target`, which MUST be empty; its capacity is reused.
 pub(super) fn decode_native_window_sections(
     window: &WindowIndex,
-    data: &[u8],
-    inst: &[u8],
-    addr: &[u8],
+    sections: oxidelta_decoder::WindowSections<'_>,
     source_segment: &[u8],
     validate_checksums: bool,
     mut target: Vec<u8>,
@@ -789,14 +790,14 @@ pub(super) fn decode_native_window_sections(
     } else {
         0
     };
-    ensure_instructions_match_sections(window, data, inst, addr)?;
+    ensure_instructions_match_sections(window, sections.data, sections.inst, sections.addr)?;
     let header = build_native_window_header(window, source_len);
     let mut source: &[u8] = source_segment;
     let mut copy_buf = Vec::new();
 
     oxidelta_decoder::decode_window_into(
         &header,
-        oxidelta_decoder::WindowSections { data, inst, addr },
+        sections,
         &mut source,
         validate_checksums,
         &mut copy_buf,

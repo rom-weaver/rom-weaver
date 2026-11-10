@@ -273,8 +273,7 @@ impl Drop for StopOnDrop<'_> {
     }
 }
 
-/// Written buffers returned for reuse, so workers do not allocate and fault in fresh pages
-/// per item and freed blocks do not pile up in per-thread allocator arenas.
+/// Holds written buffers so later items reuse them instead of allocating.
 #[derive(Default)]
 struct SpareBuffers(Mutex<Vec<Vec<u8>>>);
 
@@ -304,10 +303,8 @@ impl SpareBuffers {
     }
 }
 
-/// Prepares whole items on workers and writes them in order on the caller. A slot stays
-/// charged until its prepared buffer has been written and returned; oversized items run alone.
-/// `prepare` receives an empty buffer with capacity for the item's write length and SHOULD
-/// return its bytes in that buffer.
+/// Prepares whole items on workers and writes them in order on the caller; oversized items
+/// run alone. A slot stays charged until its buffer is written; `prepare` SHOULD fill that buffer.
 pub(crate) fn apply_batched_whole_writes<I: Sync>(
     output: &mut (impl Write + Seek),
     items: &[I],

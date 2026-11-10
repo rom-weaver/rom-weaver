@@ -486,8 +486,8 @@ impl SharedThreadPool {
         }
     }
 
-    /// Runs the coordinator on the calling thread; nested Rayon calls and inline pools
-    /// receive no scope and MUST execute their work serially.
+    /// Runs the coordinator on the calling thread, with a Rayon scope when one is available.
+    /// Nested calls and inline pools get no scope and MUST run their work serially.
     pub fn in_place_scope<'scope, R>(
         &self,
         operation: impl FnOnce(Option<&rayon::Scope<'scope>>) -> R,
