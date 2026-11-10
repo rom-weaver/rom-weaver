@@ -143,6 +143,8 @@ test("release_pr is true only for a pull request from the release branch", (t) =
   const releaseRef = `${RELEASE_PR_BRANCH_PREFIX}cli`;
   for (const [eventName, headRef, expected] of [
     ["pull_request", releaseRef, "true"],
+    // Workflow expressions that test the same prefix ignore case.
+    ["pull_request", releaseRef.toUpperCase(), "true"],
     ["pull_request", "fix/x", "false"],
     ["pull_request", `wip-${releaseRef}`, "false"],
     ["push", releaseRef, "false"],
