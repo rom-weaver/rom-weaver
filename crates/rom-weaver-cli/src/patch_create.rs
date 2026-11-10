@@ -433,6 +433,11 @@ impl CliApp {
                 &request.modified,
                 &context,
             );
+            Self::warn_patch_create_identical_inputs(
+                &mut report,
+                &request.original,
+                &request.modified,
+            );
         }
         if report.status == OperationStatus::Succeeded
             && let Some(warning) = format_warning.as_deref()
@@ -473,6 +478,27 @@ impl CliApp {
         );
         if uses_container_bytes {
             let warning = "patch create compares raw container bytes without extraction. Apply with --no-extract --no-compress to reconstruct Modified exactly, including any container. Extract both ROMs before creation to patch ROM payloads";
+            report.label = format!("{}; warning: {warning}", report.label);
+            Self::append_report_warnings(report, [warning.to_string()]);
+        }
+    }
+
+    /// Warns when both inputs have the same bytes; a failed comparison only logs, since the patch was already written.
+    fn warn_patch_create_identical_inputs(
+        report: &mut OperationReport,
+        original: &Path,
+        modified: &Path,
+    ) {
+        let identical = match rom_weaver_core::files_equal(original, modified) {
+            Ok(identical) => identical,
+            Err(error) => {
+                debug!(%error, "patch create identical-inputs comparison failed");
+                return;
+            }
+        };
+        if identical {
+            let warning =
+                "Original and Modified are identical; the patch will not change the output";
             report.label = format!("{}; warning: {warning}", report.label);
             Self::append_report_warnings(report, [warning.to_string()]);
         }

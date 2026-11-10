@@ -114,10 +114,10 @@ try {
     );
   }
 
-  const z3dsInput = write(
-    "disc.3ds",
-    Buffer.from({ length: 65_536 }, (_, index) => index % 239),
-  );
+  // Z3DS compression only accepts 3DS content, so mark the buffer as an NCSD image.
+  const z3dsImage = Buffer.from({ length: 65_536 }, (_, index) => index % 239);
+  z3dsImage.write("NCSD", 0x100, "ascii");
+  const z3dsInput = write("disc.3ds", z3dsImage);
   const z3dsArchive = path.join(temp, "disc.z3ds");
   const z3dsOutput = path.join(temp, "extract-z3ds");
   run([
@@ -133,7 +133,7 @@ try {
   ]);
   run(["extract", "--input", z3dsArchive, "--output", z3dsOutput]);
   assert.deepEqual(
-    fs.readFileSync(path.join(z3dsOutput, path.basename(z3dsInput))),
+    fs.readFileSync(path.join(z3dsOutput, "disc.cci")),
     fs.readFileSync(z3dsInput),
     "Z3DS round trip",
   );

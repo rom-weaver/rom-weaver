@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   areCreateSourcesIdentical,
+  withoutIdenticalInputsWarning,
   type CreateDisplaySourceState,
   resolveCreateExecutionOutputName,
 } from "../../src/public/react/create-patch-output-model.ts";
@@ -52,5 +53,17 @@ describe("areCreateSourcesIdentical", () => {
     expect(areCreateSourcesIdentical(source(), source({ status: "loading" }))).toBe(false);
     expect(areCreateSourcesIdentical(source(), source({ checksums: { sha1: "AA" } }))).toBe(false);
     expect(areCreateSourcesIdentical(source({ checksums: undefined }), source({ checksums: undefined }))).toBe(false);
+  });
+});
+
+describe("withoutIdenticalInputsWarning", () => {
+  it("drops only the engine's identical-inputs warning", () => {
+    expect(
+      withoutIdenticalInputsWarning([
+        "Original and Modified are identical; the patch will not change the output",
+        "MOD patches target Paper Mario (USA) v1.0",
+      ]),
+    ).toEqual(["MOD patches target Paper Mario (USA) v1.0"]);
+    expect(withoutIdenticalInputsWarning(undefined)).toBeUndefined();
   });
 });

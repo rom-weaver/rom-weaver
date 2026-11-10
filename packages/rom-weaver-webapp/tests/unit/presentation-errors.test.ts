@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatCodedErrorForDisplay, getDisplayedErrorCode, getErrorCode } from "../../src/presentation/errors.ts";
+import {
+  formatCodedErrorForDisplay,
+  getDisplayedErrorCode,
+  getErrorCode,
+  getLocalizedEngineErrorMessage,
+} from "../../src/presentation/errors.ts";
 
 const codedError = (
   message: string,
@@ -53,6 +58,19 @@ describe("presentation errors", () => {
       expect(formatCodedErrorForDisplay(codedError("failed", "WORKER_FAILED", { cause: coded }))).toBe(expected);
     },
   );
+
+  it("shows a refused non-3DS Z3DS input as the localized message alone", () => {
+    const engineMessage = "validation failed: `/work/game.zip` is not a 3DS image [container.not_3ds]";
+    const coded = engineError(engineMessage, "container.not_3ds", {});
+    expect(formatCodedErrorForDisplay(coded)).toBe(
+      "Z3DS only stores Nintendo 3DS files, and the input is not one. Choose another output format.",
+    );
+    expect(getLocalizedEngineErrorMessage(codedError("failed", "WORKER_FAILED", { cause: coded }))).toBe(
+      "Z3DS only stores Nintendo 3DS files, and the input is not one. Choose another output format.",
+    );
+    expect(getLocalizedEngineErrorMessage(engineError("x", "extract.all_entries_ignored", {}))).toBeUndefined();
+    expect(getLocalizedEngineErrorMessage(new Error("plain"))).toBeUndefined();
+  });
 
   it("keeps messages that carry required runtime detail", () => {
     expect(formatCodedErrorForDisplay(codedError("Multi-file output needs an archive", "INVALID_INPUT"))).toBe(

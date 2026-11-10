@@ -630,6 +630,48 @@ impl CliApp {
         })
     }
 
+    /// The compression plan for a patch-style output, or `None` for a raw output. A
+    /// `checked_input` is held to the create check the real compression applies.
+    pub(super) fn plan_patch_apply_compression(
+        &self,
+        output: &Path,
+        extension_source: &Path,
+        options: &PatchApplyCompressionOptions,
+        checked_input: Option<&Path>,
+    ) -> Result<Option<PatchApplyCompressionPlan>> {
+        if !options.enabled {
+            return Ok(None);
+        }
+        let plan = self.resolve_patch_apply_compression_plan(output, extension_source, options)?;
+        if let Some(input) = checked_input {
+            self.validate_z3ds_plan_input(&plan, input)?;
+        }
+        Ok(Some(plan))
+    }
+
+    /// Fails a z3ds plan whose `input` is not 3DS content, using the z3ds handler's create validation.
+    pub(super) fn validate_z3ds_plan_input(
+        &self,
+        plan: &PatchApplyCompressionPlan,
+        input: &Path,
+    ) -> Result<()> {
+        if !plan.format.eq_ignore_ascii_case("z3ds") {
+            return Ok(());
+        }
+        let handler = self.containers.find_creatable_by_name(&plan.format)?;
+        let request = ContainerCreateRequest {
+            rvz_block_size: None,
+            archive_names: None,
+            inputs: vec![input.to_path_buf()],
+            output: plan.output_path.clone(),
+            format: plan.format.clone(),
+            codec: plan.codec.clone(),
+            level: plan.level,
+            parent: None,
+        };
+        handler.validate_create(&request, &self.context(ThreadBudget::default()))
+    }
+
     fn validate_patch_apply_compression_codec(
         format: &str,
         codec: Option<&str>,

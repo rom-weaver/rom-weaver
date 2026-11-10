@@ -365,6 +365,30 @@ pub fn read_full(reader: &mut dyn Read, buffer: &mut [u8]) -> std::io::Result<us
     Ok(filled)
 }
 
+const FILES_EQUAL_BUFFER_BYTES: usize = 64 * 1024;
+
+/// True when both files have the same length and bytes. Compares lengths first, then reads in
+/// chunks and stops at the first difference.
+pub fn files_equal(left: &Path, right: &Path) -> Result<bool> {
+    if fs::metadata(left)?.len() != fs::metadata(right)?.len() {
+        return Ok(false);
+    }
+    let mut left_file = File::open(left)?;
+    let mut right_file = File::open(right)?;
+    let mut left_buffer = vec![0u8; FILES_EQUAL_BUFFER_BYTES];
+    let mut right_buffer = vec![0u8; FILES_EQUAL_BUFFER_BYTES];
+    loop {
+        let left_read = read_full(&mut left_file, &mut left_buffer)?;
+        let right_read = read_full(&mut right_file, &mut right_buffer)?;
+        if left_buffer[..left_read] != right_buffer[..right_read] {
+            return Ok(false);
+        }
+        if left_read == 0 {
+            return Ok(true);
+        }
+    }
+}
+
 /// Read up to `limit` bytes, returning fewer only when the input ends first. See [`read_full`].
 pub fn read_up_to<R: Read>(mut reader: R, limit: usize) -> std::io::Result<Vec<u8>> {
     let mut bytes = vec![0u8; limit];

@@ -35,7 +35,7 @@ The Z3DS option covers every supported 3DS subtype. For example, a `.cia` input 
 
 Keep the extension assigned by Compress. The [Z3DS filename reference](../reference/formats.md#z3ds-filename-variants) lists each mapping.
 
-If Z3DS is unavailable, check the input extension and keep only one file in **Inputs**. Changing an extension does not convert the contents.
+If Z3DS is unavailable, check the input extension and keep only one file in **Inputs**. Changing an extension does not convert the contents, and Z3DS compression fails for a file that is not 3DS content.
 
 ## Check the result
 

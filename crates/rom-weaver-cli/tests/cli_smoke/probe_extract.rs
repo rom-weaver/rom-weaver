@@ -2158,7 +2158,11 @@ fn probe_reads_stdin_for_dash_input() {
 #[test]
 fn extract_probe_names_the_unrecognised_payload() {
     let temp = setup_temp_dir();
-    fs::write(temp.child("blob.3ds").path(), vec![0x5A_u8; 4096]).expect("fixture");
+    // Compress refuses non-3DS input, so make the legacy shape an earlier release wrote:
+    // a Z3DS whose header records an unrecognised underlying magic.
+    let mut blob = vec![0x5A_u8; 4096];
+    blob[..4].copy_from_slice(&[0x20, 0x20, 0, 0]);
+    fs::write(temp.child("blob.3ds").path(), blob).expect("fixture");
     command_stdout(
         &[
             "compress",
@@ -2172,6 +2176,9 @@ fn extract_probe_names_the_unrecognised_payload() {
         ],
         0,
     );
+    let mut z3ds = fs::read(temp.child("blob.z3ds").path()).expect("z3ds bytes");
+    z3ds[4..8].copy_from_slice(&[0x5A; 4]);
+    fs::write(temp.child("blob.z3ds").path(), z3ds).expect("legacy z3ds");
     let json = run_single_json_event(
         &[
             "extract",

@@ -224,14 +224,9 @@ fn a_dry_run_resolves_the_compression_plan_before_reporting() {
     // which is the difference the dry run has to report.
     let requested = temp.path().join("game-patched");
 
-    let report = app().patch_apply_dry_run(
-        &input,
-        &[PathBuf::from("a.ips")],
-        &requested,
-        &compression_options(Some("zip")),
-        None,
-        None,
-    );
+    let args = apply_command(&input, vec![PathBuf::from("a.ips")]);
+    let report =
+        app().patch_apply_dry_run(&args, &requested, &compression_options(Some("zip")), None);
 
     assert_eq!(report.status, OperationStatus::Succeeded);
     let details = details_of(&report);
@@ -250,12 +245,11 @@ fn a_dry_run_fails_when_the_requested_container_format_is_unknown() {
     let input = temp.path().join("game.sfc");
     fs::write(&input, b"rom bytes").expect("rom fixture");
 
+    let args = apply_command(&input, vec![PathBuf::from("a.ips")]);
     let report = app().patch_apply_dry_run(
-        &input,
-        &[PathBuf::from("a.ips")],
+        &args,
         &temp.path().join("out.bin"),
         &compression_options(Some("definitely-not-a-format")),
-        None,
         None,
     );
 

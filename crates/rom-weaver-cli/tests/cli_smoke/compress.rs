@@ -2140,8 +2140,11 @@ fn compress_dry_run_fails_exactly_where_the_real_run_fails() {
     .expect("cue fixture");
     fs::write(temp.child("gc.iso").path(), build_test_gamecube_iso(0x4000)).expect("gc fixture");
     fs::write(temp.child("dvd.iso").path(), vec![0_u8; 0x10000]).expect("dvd fixture");
+    let mut three_ds = vec![7_u8; 8192];
+    three_ds[0x100..0x104].copy_from_slice(b"NCSD");
+    fs::write(temp.child("game.3ds").path(), three_ds).expect("3ds fixture");
 
-    let cases: [(&str, &str, &[&str]); 12] = [
+    let cases: [(&str, &str, &[&str]); 13] = [
         ("data.cue", "chd", &["--codec", "deflate"]),
         ("gc.iso", "rvz", &["--codec", "zstd:-8"]),
         ("data.bin", "zip", &["--codec", "bogus"]),
@@ -2151,6 +2154,7 @@ fn compress_dry_run_fails_exactly_where_the_real_run_fails() {
         ("data.bin", "7z", &["--codec", "lzma2:99"]),
         ("data.bin", "z3ds", &["--codec", "bogus"]),
         ("data.bin", "z3ds", &["--codec", "zstd:99"]),
+        ("data.bin", "z3ds", &[]),
         ("dvd.iso", "rvz", &[]),
         ("data.bin", "rvz", &["--codec", "zstd"]),
         ("data.bin", "rvz", &["--rvz-block-size", "1000"]),
@@ -2185,7 +2189,7 @@ fn compress_dry_run_fails_exactly_where_the_real_run_fails() {
         ("data.cue", "chd", &["--codec", "zlib"][..]),
         ("data.bin", "zip", &["--codec", "deflate:6"][..]),
         ("data.bin", "7z", &["--codec", "lzma2:5"][..]),
-        ("data.bin", "z3ds", &["--codec", "zstd:3"][..]),
+        ("game.3ds", "z3ds", &["--codec", "zstd:3"][..]),
         ("gc.iso", "rvz", &["--codec", "zstd:-7"][..]),
     ] {
         let output = temp.child(format!("ok.{extension}"));
@@ -2267,7 +2271,10 @@ fn cancelled_compress_removes_the_output_directories_it_created() {
 fn compress_create_failure_names_the_output_path_for_every_create_format() {
     let temp = setup_temp_dir();
     let input = temp.child("source.bin");
-    input.write_str("payload").expect("fixture");
+    // Z3DS create only accepts 3DS content, so the source carries the NCSD magic.
+    let mut payload = vec![0u8; 0x200];
+    payload[0x100..0x104].copy_from_slice(b"NCSD");
+    fs::write(input.path(), &payload).expect("fixture");
     let long_stem = "a".repeat(300);
     for extension in ["zip", "7z", "z3ds"] {
         let destination = temp.path().join(format!("{long_stem}.{extension}"));

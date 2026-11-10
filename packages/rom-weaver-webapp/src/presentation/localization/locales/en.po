@@ -4920,6 +4920,11 @@ msgstr "RVZ only stores GameCube and Wii disc images, and {name} is not one. Cho
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.z3dsNeeds3ds"
+msgstr "Z3DS only stores Nintendo 3DS files, and {name} is not one. Choose another output format."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.guideRvz"
 msgstr "RVZ to ISO guide"
 
@@ -5657,6 +5662,11 @@ msgstr "The patch couldn't be applied. Check that it was made for this ROM."
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_FILE_DAMAGED"
 msgstr "The patch file is damaged (its checksum is invalid). Obtain a fresh copy and replace this patch."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.NOT_3DS_INPUT"
+msgstr "Z3DS only stores Nintendo 3DS files, and the input is not one. Choose another output format."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

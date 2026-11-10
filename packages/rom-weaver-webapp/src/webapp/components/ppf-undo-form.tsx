@@ -1,12 +1,14 @@
 import { Download, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
+import { getLocalizedEngineErrorMessage } from "../../presentation/errors.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
 import { FileCard } from "../../public/react/components/ds/file-card.tsx";
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { NeedsInput, StepSection } from "../../public/react/components/ds/layout.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
+import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react/file-classification.ts";
 import { WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
@@ -96,6 +98,7 @@ type PpfUndoFormProps = {
 
 const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
   const settings = useRomWeaverSettings();
+  const localizer = useUiLocalizer();
   const defaultArchive = getDefaultCompressionArchive(getDefaultCompressionMode(settings));
   const [selectedCompression, setCompression] = useState<string>(defaultArchive || "none");
   const [overrides, setOverrides] = useState<Record<string, string>>({});
@@ -250,7 +253,10 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
       setOutput(restored);
       await restored.saveAs();
     } catch (cause) {
-      if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause));
+      if (!abort.signal.aborted)
+        setError(
+          getLocalizedEngineErrorMessage(cause, localizer) ?? (cause instanceof Error ? cause.message : String(cause)),
+        );
     } finally {
       abortRef.current = null;
       setBusy(false);

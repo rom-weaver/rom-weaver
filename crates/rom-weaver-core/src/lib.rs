@@ -61,12 +61,12 @@ pub use error::{
 };
 pub use error_codes::{
     ERROR_CODE_ARCHIVE_READ_FAILED, ERROR_CODE_ARCHIVE_STORAGE_FAILED,
-    ERROR_CODE_DISC_NOT_GAMECUBE_WII, ERROR_CODE_EXTRACT_ALL_ENTRIES_IGNORED,
-    ERROR_CODE_EXTRACT_MAX_DEPTH_EXCEEDED, ERROR_CODE_EXTRACT_NO_MATCHING_ENTRIES,
-    ERROR_CODE_IO_STORAGE_FULL, ERROR_CODE_PATCH_CHECKSUM_MISMATCH,
-    ERROR_CODE_PATCH_FILE_CHECKSUM_INVALID, ERROR_CODE_RESOURCE_OUT_OF_MEMORY,
-    ERROR_CODE_SELECTION_CANCELLED, ERROR_CODE_TRIM_UNSUPPORTED_DISC,
-    ERROR_CODE_TRIM_UNSUPPORTED_INPUT, ERROR_CODE_WORKFLOW_CODES,
+    ERROR_CODE_CONTAINER_NOT_3DS, ERROR_CODE_DISC_NOT_GAMECUBE_WII,
+    ERROR_CODE_EXTRACT_ALL_ENTRIES_IGNORED, ERROR_CODE_EXTRACT_MAX_DEPTH_EXCEEDED,
+    ERROR_CODE_EXTRACT_NO_MATCHING_ENTRIES, ERROR_CODE_IO_STORAGE_FULL,
+    ERROR_CODE_PATCH_CHECKSUM_MISMATCH, ERROR_CODE_PATCH_FILE_CHECKSUM_INVALID,
+    ERROR_CODE_RESOURCE_OUT_OF_MEMORY, ERROR_CODE_SELECTION_CANCELLED,
+    ERROR_CODE_TRIM_UNSUPPORTED_DISC, ERROR_CODE_TRIM_UNSUPPORTED_INPUT, ERROR_CODE_WORKFLOW_CODES,
     VALIDATION_CODE_EXTRACT_NO_CONTAINER, VALIDATION_CODE_WBFS_SIZE_MISMATCH, WorkflowErrorCode,
     workflow_error_code,
 };
@@ -77,8 +77,8 @@ pub use io::{
     SharedBlockCacheReader, StagedOutput, TempPathAllocator, bounded_items_for_threads,
     copy_cancelable, copy_file_naming_paths, copy_file_retrying_interrupted,
     copy_retrying_interrupted, create_extract_output_file, ensure_output_available,
-    file_starts_with, ordered_streaming_compress, overwrite_refusal, read_full, read_up_to,
-    retry_interrupted,
+    file_starts_with, files_equal, ordered_streaming_compress, overwrite_refusal, read_full,
+    read_up_to, retry_interrupted,
 };
 pub use media_topology::{
     ComponentId, ComponentRole, DetectionConfidence, DetectionEvidence, MediaComponent, MediaKind,

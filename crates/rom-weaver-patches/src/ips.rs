@@ -331,12 +331,7 @@ impl PatchHandler for IpsPatchHandler {
             threads = execution.effective_threads,
             "ips create complete"
         );
-        let warnings = ips_create_warning_labels(
-            self.descriptor.name,
-            original_len,
-            modified_len,
-            &create_result,
-        );
+        let warnings = ips_create_warning_labels(self.descriptor.name, original_len, modified_len);
 
         Ok(crate::patch_success_report(
             self.descriptor,
@@ -932,14 +927,8 @@ fn ips_create_warning_labels(
     format_name: &str,
     original_len: u64,
     modified_len: u64,
-    create_result: &IpsCreateResult,
 ) -> Vec<String> {
     let mut warnings = Vec::new();
-    if create_result.record_count == 0 && original_len == modified_len {
-        warnings.push(format!(
-            "{format_name} patch will not change output; inputs are identical"
-        ));
-    }
     if original_len > modified_len {
         warnings.push(format!(
             "{format_name} create input is larger than modified output; double check file order"

@@ -698,10 +698,8 @@ export const register = () => {
     const out = ctx.tmp("o.z3ds");
     const result = compressTo(ctx, ctx.fx("rom/base.bin"), out);
     check(!result.panic, "panic");
-    if (result.code === 0) {
-      check(/warn/i.test(result.all), "non-3DS input accepted without a warning");
-      check(fs.readFileSync(extractOneFile(ctx, out)).equals(fs.readFileSync(ctx.fx("rom/base.bin"))), "round trip of non-3DS content");
-    } else check(!ctx.exists(out), "failed run left output");
+    ctx.failed(result, { message: /not a 3DS image/, what: "non-3DS input" });
+    check(!ctx.exists(out), "failed run left output");
     const empty = compressTo(ctx, ctx.write("e.3ds", ""), ctx.tmp("e.z3ds"));
     check(!empty.panic, "empty input panic");
     ctx.note(`z3ds of empty .3ds: exit ${empty.code}`);

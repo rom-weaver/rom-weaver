@@ -1283,21 +1283,6 @@ fn created_primitives_split_chunks_longer_than_one_size_byte() {
 }
 
 #[test]
-fn files_equal_detects_length_and_content_differences() {
-    let temp = TestDir::new();
-    let left = temp.child("left.bin");
-    let shorter = temp.child("shorter.bin");
-    let different = temp.child("different.bin");
-    fs::write(&left, b"abcd").expect("left");
-    fs::write(&shorter, b"abc").expect("shorter");
-    fs::write(&different, b"abce").expect("different");
-
-    assert!(files_equal(&left, &left).expect("identical files"));
-    assert!(!files_equal(&left, &shorter).expect("different lengths"));
-    assert!(!files_equal(&left, &different).expect("different bytes"));
-}
-
-#[test]
 fn read_solid_suffix_returns_nothing_when_the_range_is_empty() {
     let temp = TestDir::new();
     let path = temp.child("suffix.bin");

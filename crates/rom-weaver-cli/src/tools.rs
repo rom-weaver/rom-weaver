@@ -146,16 +146,12 @@ impl CliApp {
             &args.output,
             resolved_rom,
         )?;
-        let mut compression_plan = compression_options
-            .enabled
-            .then(|| {
-                self.resolve_patch_apply_compression_plan(
-                    &args.output,
-                    resolved_rom,
-                    &compression_options,
-                )
-            })
-            .transpose()?;
+        let mut compression_plan = self.plan_patch_apply_compression(
+            &args.output,
+            resolved_rom,
+            &compression_options,
+            disc.is_none().then_some(input),
+        )?;
         let output = compression_plan
             .as_ref()
             .map(|plan| plan.output_path.clone())

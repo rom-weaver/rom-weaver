@@ -138,6 +138,8 @@ const CONTAINER_SUFFIX_BY_FORMAT: ReadonlyMap<string, string> = new Map(
     stripLeadingExtensionDot(format.extensions[0] ?? `.${format.name}`),
   ]),
 );
+const NCSD_MAGIC = [0x4e, 0x43, 0x53, 0x44];
+const NCSD_MAGIC_OFFSET = 0x100;
 const PATCH_EXTENSION_BY_FORMAT = createPatchExtensionMap();
 const BROWSER_FORMAT_MATRIX_PATCH_FORMATS = createBrowserFormatMatrixPatchFormats();
 type ExhaustiveContainerCase = {
@@ -296,14 +298,25 @@ export async function runBrowserFullFormatMatrix(options: BrowserFormatMatrixOpt
 
 type BrowserFormatMatrixContainerRunContext = {
   archiveSourcePath: string;
+  z3dsSourcePath: string;
   dir: string;
   opfsHandle: FileSystemDirectoryHandle;
   profile: BrowserFormatMatrixProfile;
   runCommand: BrowserFormatMatrixRunCommand;
 };
 
+// Z3DS compression rejects input that is not 3DS content, so it gets the NCSD-marked copy.
+const containerSourcePath = (
+  {
+    archiveSourcePath,
+    z3dsSourcePath,
+  }: Pick<BrowserFormatMatrixContainerRunContext, "archiveSourcePath" | "z3dsSourcePath">,
+  format: string,
+) => (format === "z3ds" ? z3dsSourcePath : archiveSourcePath);
+
 const runContainerRoundTrips = async ({
   archiveSourcePath,
+  z3dsSourcePath,
   dir,
   opfsHandle,
   profile,
@@ -315,7 +328,12 @@ const runContainerRoundTrips = async ({
       const archivePath = joinGuestPath(dir, `roundtrip-${token}.${containerSuffix(format)}`);
       const compressResult = await runCommand(
         `compress ${format} threads=${threads}`,
-        createRomWeaverCommand("compress", { format, input: [archiveSourcePath], output: archivePath, threads }),
+        createRomWeaverCommand("compress", {
+          format,
+          input: [containerSourcePath({ archiveSourcePath, z3dsSourcePath }, format)],
+          output: archivePath,
+          threads,
+        }),
         { invalidateMountCacheAfterRun: true },
       );
       assertRunJsonSucceeded(compressResult, { command: "compress" });
@@ -339,6 +357,7 @@ const runContainerRoundTrips = async ({
 
 const runExhaustiveContainerCases = async ({
   archiveSourcePath,
+  z3dsSourcePath,
   dir,
   opfsHandle,
   runCommand,
@@ -353,7 +372,7 @@ const runExhaustiveContainerCases = async ({
       createRomWeaverCommand("compress", {
         codec: [matrixCase.codec],
         format: matrixCase.format,
-        input: [archiveSourcePath],
+        input: [containerSourcePath({ archiveSourcePath, z3dsSourcePath }, matrixCase.format)],
         ...(matrixCase.level ? { level: matrixCase.level } : {}),
         output: archivePath,
         threads: matrixCase.threads,
@@ -460,8 +479,12 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
   }
   archiveSource[archiveSource.length - 1] = 0;
   await writeGuestFile(opfsHandle, archiveSourcePath, archiveSource);
+  const z3dsSourcePath = joinGuestPath(dir, "all-format-source-3ds.bin");
+  const z3dsSource = new Uint8Array(archiveSource);
+  z3dsSource.set(NCSD_MAGIC, NCSD_MAGIC_OFFSET);
+  await writeGuestFile(opfsHandle, z3dsSourcePath, z3dsSource);
 
-  const containerRunContext = { archiveSourcePath, dir, opfsHandle, profile, runCommand };
+  const containerRunContext = { archiveSourcePath, dir, opfsHandle, profile, runCommand, z3dsSourcePath };
   await runContainerRoundTrips(containerRunContext);
   await runExhaustiveContainerCasesIfNeeded(profile, containerRunContext);
 

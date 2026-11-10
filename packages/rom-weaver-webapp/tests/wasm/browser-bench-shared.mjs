@@ -35,7 +35,7 @@ export async function openPersistentBenchRoot(name) {
 }
 
 export async function ensureGuestPseudoRandomFile(rootHandle, guestPath, byteLength, options = {}) {
-  const { chunkSizeBytes = 4 * MIB, seed = 0x12345678, mutate = null } = options;
+  const { chunkSizeBytes = 4 * MIB, seed = 0x12345678, mutate = null, overlay = null } = options;
 
   if (await guestFileHasSize(rootHandle, guestPath, byteLength)) {
     return { fromCache: true };
@@ -54,6 +54,8 @@ export async function ensureGuestPseudoRandomFile(rootHandle, guestPath, byteLen
         let value = state & 0xff;
         const delta = mutationPlan.deltaForOffset(absoluteOffset);
         if (delta !== 0) value = (value + delta) & 0xff;
+        const overlayIndex = overlay ? absoluteOffset - overlay.offset : -1;
+        if (overlayIndex >= 0 && overlayIndex < overlay.bytes.length) value = overlay.bytes[overlayIndex];
         chunk[index] = value;
         absoluteOffset += 1;
       }

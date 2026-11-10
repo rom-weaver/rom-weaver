@@ -57,18 +57,30 @@ const ARCHIVE_FORMATS = ["zip", "7z"] as const;
 const ROM_SPECIFIC_FORMATS = ["chd", "rvz", "z3ds"] as const;
 const getExtension = (fileName: string) => fileName.match(/\.([^./\\]+)$/)?.[1]?.toLowerCase() || "";
 
-/** RVZ was requested for a file the engine does not recognise as a GameCube or Wii disc image. */
-class RvzInputNotDiscError extends Error {
+/** A container that holds one kind of content, with the engine code and wording for refusing anything else. */
+const CONTENT_ONLY_CONTAINERS = {
+  rvz: { engineCode: "disc.not_gamecube_wii", holds: "GameCube and Wii disc images" },
+  z3ds: { engineCode: "container.not_3ds", holds: "Nintendo 3DS files" },
+} as const;
+type ContentOnlyContainer = keyof typeof CONTENT_ONLY_CONTAINERS;
+
+const isContentOnlyContainer = (format: string): format is ContentOnlyContainer =>
+  Object.hasOwn(CONTENT_ONLY_CONTAINERS, format);
+
+/** RVZ or Z3DS was requested for a file the engine does not recognise as the content that container holds. */
+class ContainerInputRejectedError extends Error {
   readonly fileName: string;
-  constructor(fileName: string, options?: ErrorOptions) {
-    super(`RVZ can only store GameCube and Wii disc images, and ${fileName} is not one.`, options);
-    this.name = "RvzInputNotDiscError";
+  readonly format: ContentOnlyContainer;
+  constructor(format: ContentOnlyContainer, fileName: string, options?: ErrorOptions) {
+    super(
+      `${format.toUpperCase()} can only store ${CONTENT_ONLY_CONTAINERS[format].holds}, and ${fileName} is not one.`,
+      options,
+    );
+    this.name = "ContainerInputRejectedError";
     this.fileName = fileName;
+    this.format = format;
   }
 }
-
-// The engine codes an RVZ input that is not a GameCube or Wii disc image.
-const isRvzNotADiscFailure = (error: unknown): boolean => hasEngineErrorCode(error, "disc.not_gamecube_wii");
 
 const assertFiles = (files: File[]) => {
   if (files.length === 0) throw new Error("Select at least one file to compress");
@@ -501,15 +513,21 @@ const compressFiles = async (
     return output;
   } catch (error) {
     await Promise.resolve(outputFile ? getPatchFileCleanup(outputFile)?.() : undefined).catch(() => undefined);
-    if (compression === "rvz" && assets.length === 1 && isRvzNotADiscFailure(error))
-      throw new RvzInputNotDiscError(assets[0]?.fileName ?? files[0]?.name ?? "the input", { cause: error });
+    if (
+      isContentOnlyContainer(compression) &&
+      assets.length === 1 &&
+      hasEngineErrorCode(error, CONTENT_ONLY_CONTAINERS[compression].engineCode)
+    )
+      throw new ContainerInputRejectedError(compression, assets[0]?.fileName ?? files[0]?.name ?? "the input", {
+        cause: error,
+      });
     throw error;
   }
 };
 
 export type { CompressSource, ListedCompressEntry, OpenedCompressEntry, ValidatedCompressInput };
 export {
-  RvzInputNotDiscError,
+  ContainerInputRejectedError,
   compressFiles,
   disposeOpenedOutputs,
   getCompressFormats,

@@ -2,7 +2,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CompressForm } from "../../../src/webapp/components/compress-form.tsx";
-import { RvzInputNotDiscError } from "../../../src/webapp/compress-service.ts";
+import { ContainerInputRejectedError } from "../../../src/webapp/compress-service.ts";
 import type { ApplyWorkflowOptions } from "../../../src/types/workflow-runtime-types.ts";
 
 const service = vi.hoisted(() => ({
@@ -102,20 +102,34 @@ describe("CompressForm", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("explains in plain words that RVZ cannot hold a non-GameCube/Wii input", async () => {
-    service.compressFiles.mockRejectedValue(
-      new RvzInputNotDiscError("dvd.iso", { cause: new Error("disc format error: Unknown disc format") }),
-    );
-    render(<CompressForm />);
-    addFiles([new File(["rom"], "game.sfc")]);
-    await ready();
-    fireEvent.click(screen.getByRole("button", { name: "Compress", exact: true }));
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain(
-      "RVZ only stores GameCube and Wii disc images, and dvd.iso is not one. Choose another output format.",
-    );
-    expect(alert.textContent).not.toContain("Unknown disc format");
-  });
+  it.each([
+    {
+      format: "rvz" as const,
+      fileName: "dvd.iso",
+      engineText: "Unknown disc format",
+      message: "RVZ only stores GameCube and Wii disc images, and dvd.iso is not one. Choose another output format.",
+    },
+    {
+      format: "z3ds" as const,
+      fileName: "game.3ds",
+      engineText: "not a 3DS image",
+      message: "Z3DS only stores Nintendo 3DS files, and game.3ds is not one. Choose another output format.",
+    },
+  ])(
+    "explains in plain words that $format cannot hold a rejected input",
+    async ({ format, fileName, engineText, message }) => {
+      service.compressFiles.mockRejectedValue(
+        new ContainerInputRejectedError(format, fileName, { cause: new Error(engineText) }),
+      );
+      render(<CompressForm />);
+      addFiles([new File(["rom"], "game.sfc")]);
+      await ready();
+      fireEvent.click(screen.getByRole("button", { name: "Compress", exact: true }));
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toContain(message);
+      expect(alert.textContent).not.toContain(engineText);
+    },
+  );
 
   it("aborts unmounted work and disposes its late result", async () => {
     const late = makeOutput();

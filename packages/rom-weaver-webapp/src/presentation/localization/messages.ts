@@ -38,6 +38,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.compress.rvzNeedsDisc",
     message: "RVZ only stores GameCube and Wii disc images, and {name} is not one. Choose another output format.",
   }),
+  "ui.compress.z3dsNeeds3ds": msg({
+    id: "ui.compress.z3dsNeeds3ds",
+    message: "Z3DS only stores Nintendo 3DS files, and {name} is not one. Choose another output format.",
+  }),
   "ui.compress.run": msg({ id: "ui.compress.run", message: "Compress" }),
   "ui.drop.inputHandling": msg({ id: "ui.drop.inputHandling", message: "How files are opened" }),
   "ui.drop.inputs": msg({ id: "ui.drop.inputs", message: "Inputs" }),
@@ -1266,6 +1270,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "error.PATCH_FILE_DAMAGED": msg({
     id: "error.PATCH_FILE_DAMAGED",
     message: "The patch file is damaged (its checksum is invalid). Obtain a fresh copy and replace this patch.",
+  }),
+  "error.NOT_3DS_INPUT": msg({
+    id: "error.NOT_3DS_INPUT",
+    message: "Z3DS only stores Nintendo 3DS files, and the input is not one. Choose another output format.",
   }),
   "error.COMPRESSION_FAILED": msg({ id: "error.COMPRESSION_FAILED", message: "Compression failed." }),
   "error.INVALID_INPUT": msg({ id: "error.INVALID_INPUT", message: "rom-weaver couldn't use the files you added." }),

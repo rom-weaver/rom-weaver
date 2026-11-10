@@ -196,6 +196,7 @@ impl CliApp {
             .and_then(|()| self.resolve_patch_apply_rom_members(&mut run))
             .and_then(|()| self.resolve_patch_apply_patches(&mut run, applied_cheats))
             .and_then(|()| Self::validate_patch_apply_disc_destinations(&run))
+            .and_then(|()| self.validate_patch_apply_z3ds_input(&run))
         {
             return *report;
         }
@@ -220,6 +221,25 @@ impl CliApp {
             run.args.force,
         )
         .map_err(|error| run.fail_error("validate", error))
+    }
+
+    /// Reject a z3ds output for a non-3DS input before any patch work, as `compress` and the dry
+    /// run do. A disc run compresses a sheet, which z3ds never accepts.
+    fn validate_patch_apply_z3ds_input(
+        &self,
+        run: &PatchApplyRun,
+    ) -> std::result::Result<(), Box<OperationReport>> {
+        if run.is_disc() {
+            return Ok(());
+        }
+        self.plan_patch_apply_compression(
+            &run.output,
+            &run.resolved_input,
+            &run.compression_options,
+            Some(&run.resolved_input),
+        )
+        .map(|_plan| ())
+        .map_err(|error| run.fail_error("compress", error))
     }
 
     /// Split the command into the run state and settle every flag that does not
@@ -385,11 +405,8 @@ impl CliApp {
         }
         if run.args.dry_run {
             let mut report = self.run_patch_apply_dry_run(
-                &run.args.input,
-                &run.args.patches,
-                run.args.output.as_deref(),
+                &run.args,
                 &run.compression_options,
-                run.args.output_header,
                 run.probe_threads.clone(),
             );
             // Device codes apply as one extra step beside the listed patches.

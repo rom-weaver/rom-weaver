@@ -483,6 +483,28 @@ impl Z3dsContainerHandler {
         Ok((input_path, level))
     }
 
+    /// The leading bytes of a create input, once they are known to be 3DS content.
+    fn read_3ds_head(input_path: &Path) -> Result<Vec<u8>> {
+        let head = rom_weaver_core::read_up_to(File::open(input_path)?, NCSD_MAGIC_OFFSET + 4)?;
+        Self::require_3ds_head(input_path, &head)?;
+        Ok(head)
+    }
+
+    /// Reject an input that is not 3DS content before anything is written: a `.z3ds` of an
+    /// arbitrary file would not load in 3DS emulators.
+    fn require_3ds_head(input_path: &Path, head: &[u8]) -> Result<()> {
+        if looks_like_3ds(head) {
+            return Ok(());
+        }
+        Err(RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_CONTAINER_NOT_3DS,
+            format!(
+                "`{}` is not a 3DS image; z3ds create only supports 3DS content (.3ds, .cia, .cci, .cxi, or .3dsx)",
+                input_path.display()
+            ),
+        ))
+    }
+
     fn resolve_level(&self, codec: Option<&str>, level: Option<i32>) -> Result<i32> {
         let level = level.unwrap_or(Z3DS_DEFAULT_COMPRESSION_LEVEL);
         if !(Z3DS_MIN_COMPRESSION_LEVEL..=Z3DS_MAX_COMPRESSION_LEVEL).contains(&level) {
@@ -1004,8 +1026,8 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         request: &ContainerCreateRequest,
         _context: &OperationContext,
     ) -> Result<()> {
-        self.resolve_create_input_and_level(request)?;
-        Ok(())
+        let (input_path, _level) = self.resolve_create_input_and_level(request)?;
+        Self::read_3ds_head(input_path).map(drop)
     }
 
     fn create(
@@ -1014,6 +1036,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let (input_path, level) = self.resolve_create_input_and_level(request)?;
+        let head = Self::read_3ds_head(input_path)?;
         let input_size = fs::metadata(input_path)?.len();
         let create_tasks = self.build_create_tasks(input_size)?;
         // Plan threads without building a shared pool: the scoped pipeline owns exactly the worker
@@ -1034,24 +1057,11 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         let create_progress_bytes = Arc::new(AtomicU64::new(0));
         let create_progress_bucket = Arc::new(AtomicU8::new(0));
 
-        let mut head = [0_u8; NCSD_MAGIC_OFFSET + 4];
-        let mut head_len = 0;
-        let mut head_file = File::open(input_path)?;
-        while head_len < head.len() {
-            match head_file.read(&mut head[head_len..]) {
-                Ok(0) => break,
-                Ok(read) => head_len += read,
-                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-                Err(error) => return Err(error.into()),
-            }
-        }
-        let head = &head[..head_len];
-        let underlying_magic = detect_underlying_magic(head);
+        let underlying_magic = detect_underlying_magic(&head);
         debug!(
             underlying_magic = %self.format_magic(underlying_magic),
             "z3ds create underlying magic"
         );
-        let recognized_3ds = looks_like_3ds(head);
 
         let metadata = Z3dsMetadata::encode_default(Z3DS_DEFAULT_FRAME_SIZE_BYTES);
         let metadata_aligned = Self::align_16(metadata.len());
@@ -1192,30 +1202,18 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
             Some(100.0),
             Some(execution.clone()),
         );
-        let mut report = attach_compression_details(
+        Ok(attach_compression_details(
             report,
             "zstd",
             Some(level),
             header.uncompressed_size,
             &execution,
-        );
-        if !recognized_3ds {
-            report.label.push_str("; warning=");
-            report.label.push_str(NOT_3DS_WARNING);
-            if let Some(serde_json::Value::Object(details)) = report.details.as_mut() {
-                details.insert(
-                    "warnings".to_string(),
-                    serde_json::Value::Array(vec![NOT_3DS_WARNING.into()]),
-                );
-            }
-        }
-        Ok(report)
+        ))
     }
 }
 
 /// Offset of the NCSD/NCCH magic inside real `.3ds`/`.cci`/`.cxi` images.
 const NCSD_MAGIC_OFFSET: usize = 0x100;
-const NOT_3DS_WARNING: &str = "input is not recognizable 3DS content";
 
 /// A CIA starts with its little-endian header size, 0x2020.
 const CIA_HEADER_SIZE_BYTES: [u8; 4] = [0x20, 0x20, 0, 0];

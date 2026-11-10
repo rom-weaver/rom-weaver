@@ -64,6 +64,17 @@ const getStructuredErrorDetail = (error: unknown): string => {
   return detailParts.join(", ");
 };
 
+const ENGINE_ERROR_MESSAGE_IDS = new Map<string, MessageId>([["container.not_3ds", "error.NOT_3DS_INPUT"]]);
+
+/** The localized wording for an engine failure that has its own message, or `undefined` for any other error. */
+const getLocalizedEngineErrorMessage = (
+  error: unknown,
+  localizer: Localizer = createLocalizer(),
+): string | undefined => {
+  const messageId = ENGINE_ERROR_MESSAGE_IDS.get(getEngineError(error)?.code ?? "");
+  return messageId ? localizer.message(messageId) : undefined;
+};
+
 const getUserFacingErrorMessage = (error: unknown, localizer: Localizer = createLocalizer()): string => {
   const code = getErrorCode(error);
   if (!code) return getErrorMessage(error);
@@ -94,6 +105,8 @@ const getNoRomInArchiveMessage = (error: unknown): string => {
 const formatCodedErrorForDisplay = (error: unknown, localizer: Localizer = createLocalizer()): string => {
   const noRomMessage = getNoRomInArchiveMessage(error);
   if (noRomMessage) return noRomMessage;
+  const engineMessage = getLocalizedEngineErrorMessage(error, localizer);
+  if (engineMessage) return engineMessage;
   const code = getErrorCode(error);
   const message = getUserFacingErrorMessage(error, localizer);
   if (!code) return message;
@@ -116,4 +129,4 @@ const getDisplayedErrorCode = (message: string, code?: string): string | undefin
   return isWorkflowErrorCode(prefix) ? prefix : undefined;
 };
 
-export { formatCodedErrorForDisplay, getDisplayedErrorCode, getErrorCode };
+export { formatCodedErrorForDisplay, getDisplayedErrorCode, getErrorCode, getLocalizedEngineErrorMessage };

@@ -4920,6 +4920,11 @@ msgstr "RVZ solo almacena imágenes de disco de GameCube y Wii, y {name} no es u
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.z3dsNeeds3ds"
+msgstr "Z3DS solo almacena archivos de Nintendo 3DS, y {name} no es uno. Elige otro formato de salida."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.guideRvz"
 msgstr "Guía de RVZ a ISO"
 
@@ -5657,6 +5662,11 @@ msgstr "No se pudo aplicar el parche."
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_FILE_DAMAGED"
 msgstr "El archivo del parche está dañado (su suma de verificación no es válida). Consigue una copia nueva y reemplaza este parche."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.NOT_3DS_INPUT"
+msgstr "Z3DS solo almacena archivos de Nintendo 3DS, y la entrada no es uno. Elige otro formato de salida."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
