@@ -434,6 +434,17 @@ impl CliApp {
         )
     }
 
+    /// The rejection for a lone file or archive input with nothing trim-eligible in it.
+    pub(super) fn unsupported_trim_input_error(path: &Path) -> RomWeaverError {
+        RomWeaverError::coded(
+            rom_weaver_core::ERROR_CODE_TRIM_UNSUPPORTED_INPUT,
+            format!(
+                "no trim-eligible inputs found in `{}`; run `rom-weaver trim --help` for the supported ROM formats",
+                path.display()
+            ),
+        )
+    }
+
     pub(super) fn collect_trim_input_files(
         &self,
         sources: &[PathBuf],
@@ -449,15 +460,14 @@ impl CliApp {
                     source.display()
                 ))
             })?;
+            // A lone input the user named that trim cannot use is rejected with an
+            // explanation; in a larger batch or a folder it is counted as skipped.
+            let lone_input = sources.len() == 1;
             if metadata.is_file() {
-                // A lone file the user named (a disc, or an archive holding only discs) is rejected
-                // with an explanation; in a larger batch or a folder a GameCube/Wii disc is
-                // counted as skipped like any other unsupported file.
-                let reject_gamecube_wii = sources.len() == 1;
                 self.collect_trim_file(
                     source,
                     options,
-                    reject_gamecube_wii,
+                    lone_input,
                     &mut files,
                     cleanup_paths,
                     skips,
@@ -475,7 +485,7 @@ impl CliApp {
                 continue;
             }
 
-            skips.skip_unsupported();
+            Self::skip_or_reject_unsupported_trim_file(source, lone_input, skips)?;
         }
 
         files.sort_by(|left, right| left.path.cmp(&right.path));
@@ -485,13 +495,13 @@ impl CliApp {
 
     /// Resolve a single file input into trim sources: a directly trim-eligible file becomes one
     /// source, otherwise an extractable archive is unpacked and its trim-eligible payloads are
-    /// added. Anything else increments the unsupported counter; a GameCube/Wii disc (or an
-    /// archive holding only discs) is an error instead when `reject_gamecube_wii` is set.
+    /// added. Anything else increments the unsupported counter; when `lone_input` is set it is an
+    /// error instead (a GameCube/Wii disc, or an archive holding only discs, gets its own error).
     pub(super) fn collect_trim_file(
         &self,
         path: &Path,
         options: TrimCollectOptions<'_>,
-        reject_gamecube_wii: bool,
+        lone_input: bool,
         files: &mut Vec<TrimSource>,
         cleanup_paths: &mut Vec<PathBuf>,
         skips: &mut TrimSkips,
@@ -507,8 +517,8 @@ impl CliApp {
         }
 
         if self.is_gamecube_wii_disc(path) {
-            debug!(path = %path.display(), reject_gamecube_wii, "trim skipped a GameCube/Wii disc");
-            if reject_gamecube_wii {
+            debug!(path = %path.display(), lone_input, "trim skipped a GameCube/Wii disc");
+            if lone_input {
                 return Err(Self::gamecube_wii_disc_trim_error(path));
             }
             skips.skip_gamecube_wii();
@@ -516,8 +526,7 @@ impl CliApp {
         }
 
         if options.no_extract {
-            skips.skip_unsupported();
-            return Ok(());
+            return Self::skip_or_reject_unsupported_trim_file(path, lone_input, skips);
         }
 
         let discs_before = skips.gamecube_wii;
@@ -534,18 +543,31 @@ impl CliApp {
             debug!(
                 path = %path.display(),
                 discs_in_archive,
-                reject_gamecube_wii,
+                lone_input,
                 "trim archive holds only GameCube/Wii discs"
             );
-            if reject_gamecube_wii {
+            if lone_input {
                 return Err(Self::gamecube_wii_archive_trim_error(
                     path,
                     discs_in_archive,
                 ));
             }
         } else {
-            skips.skip_unsupported();
+            return Self::skip_or_reject_unsupported_trim_file(path, lone_input, skips);
         }
+        Ok(())
+    }
+
+    /// Count a file trim cannot use as skipped, or reject it when it is the only input.
+    fn skip_or_reject_unsupported_trim_file(
+        path: &Path,
+        lone_input: bool,
+        skips: &mut TrimSkips,
+    ) -> Result<()> {
+        if lone_input {
+            return Err(Self::unsupported_trim_input_error(path));
+        }
+        skips.skip_unsupported();
         Ok(())
     }
 

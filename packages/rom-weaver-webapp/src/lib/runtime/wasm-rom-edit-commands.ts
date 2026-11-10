@@ -28,6 +28,19 @@ import { runRomWeaverJson, relaySimpleProgress } from "./wasm-command-shared.ts"
 const TRIM_UNSUPPORTED_MESSAGE = "This input does not support trimming";
 const GAMECUBE_WII_COMPRESS_HINT = "Use Compress to convert GameCube and Wii discs to RVZ.";
 
+// Maps the engine's lone-input trim refusals to the unsupported-trim error.
+const toTrimUnsupportedError = (error: unknown): unknown => {
+  if (hasEngineErrorCode(error, "trim.unsupported_disc")) {
+    return Object.assign(new Error(`${TRIM_UNSUPPORTED_MESSAGE}. ${GAMECUBE_WII_COMPRESS_HINT}`), {
+      code: "TRIM_UNSUPPORTED",
+    });
+  }
+  if (hasEngineErrorCode(error, "trim.unsupported_input")) {
+    return Object.assign(new Error(TRIM_UNSUPPORTED_MESSAGE), { code: "TRIM_UNSUPPORTED" });
+  }
+  return error;
+};
+
 const invokeRomWeaverTrimWorker = async (
   input: RuntimeTrimWorkerInput,
   onProgress?: (progress: RuntimePatchWorkerProgress) => void,
@@ -73,14 +86,7 @@ const invokeRomWeaverTrimWorker = async (
     try {
       ensureRomWeaverSuccess(result, "Trim failed");
     } catch (error) {
-      // The engine refuses a lone GameCube/Wii disc outright (Compress writes those as RVZ); report it
-      // the way an unsupported input is reported so the staging probe flags it before any run.
-      if (hasEngineErrorCode(error, "trim.unsupported_disc")) {
-        throw Object.assign(new Error(`${TRIM_UNSUPPORTED_MESSAGE}. ${GAMECUBE_WII_COMPRESS_HINT}`), {
-          code: "TRIM_UNSUPPORTED",
-        });
-      }
-      throw error;
+      throw toTrimUnsupportedError(error);
     }
     const terminal = getTerminalEvent(result);
     const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);

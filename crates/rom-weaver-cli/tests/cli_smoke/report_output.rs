@@ -485,13 +485,17 @@ fn json_flag_with_a_value_reports_the_usage_error_as_json() {
 #[test]
 fn human_results_trim_and_empty_database_queries_explain_empty_results() {
     let temp = setup_temp_dir();
-    let input = temp.child("unsupported.txt");
-    input.write_str("unsupported input").expect("fixture");
+    let folder = temp.child("roms");
+    fs::create_dir_all(folder.path()).expect("folder");
+    folder
+        .child("unsupported.txt")
+        .write_str("unsupported input")
+        .expect("fixture");
     let trim = command_output_with_env(
         &[
             "trim",
             "-i",
-            input.path().to_str().expect("path"),
+            folder.path().to_str().expect("path"),
             "--quiet",
         ],
         &[],
@@ -522,8 +526,13 @@ fn human_results_trim_and_empty_database_queries_explain_empty_results() {
 #[test]
 fn human_results_verbose_no_write_explanations_appear_once_with_elapsed_time() {
     let temp = setup_temp_dir();
-    let input = temp.child("unsupported.txt");
-    input.write_str("unsupported input").expect("fixture");
+    // A folder keeps trim a successful no-write run.
+    let folder = temp.child("roms");
+    fs::create_dir_all(folder.path()).expect("folder");
+    folder
+        .child("unsupported.txt")
+        .write_str("unsupported input")
+        .expect("fixture");
     let save = temp.child("fresh.srm");
     let save_path = save.path().to_str().expect("save path");
     command_stdout(
@@ -542,7 +551,7 @@ fn human_results_verbose_no_write_explanations_appear_once_with_elapsed_time() {
             vec![
                 "trim",
                 "-i",
-                input.path().to_str().expect("path"),
+                folder.path().to_str().expect("path"),
                 "--verbose",
             ],
             "no trim-eligible inputs found",
