@@ -19,7 +19,8 @@ rust = { version = "1.97.1", components = "rustfmt,clippy" }
 "aqua:koalaman/shellcheck" = "0.11.0"           # shell script linting (also backs actionlint's `run:` checks)
 "aqua:hadolint/hadolint" = "2.14.0"             # Dockerfile linting
 
-"github:sourcefrog/cargo-mutants" = "27.1.0"
+# cargo-mutants publishes no aarch64 macOS build; the x86_64 one runs under Rosetta.
+"github:sourcefrog/cargo-mutants" = { version = "27.1.0", platforms = { macos-arm64 = { asset_pattern = "cargo-mutants-x86_64-apple-darwin.tar.gz" } } }
 "cargo:cargo-fuzz" = "0.13.2"
 "cargo:kani-verifier" = "0.68.0"
 "github:taiki-e/cargo-llvm-cov" = "0.9.0"
