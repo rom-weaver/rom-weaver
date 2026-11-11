@@ -725,4 +725,10 @@ fn piped_help_ignores_the_terminal_width() {
         lines[input + 1].trim_start().starts_with("ROM to patch."),
         "{wide}"
     );
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.contains("--json") && line.contains("Print one complete JSON report")),
+        "same-line help moved to the next line:\n{wide}"
+    );
 }

@@ -330,9 +330,21 @@ Pass --json for the machine-readable form."
     Formats,
 }
 
+/// The width clap lays help out at when no terminal reports one.
+#[cfg(not(target_arch = "wasm32"))]
+const HELP_WIDTH: usize = 100;
+
+/// Clap indents a flag row by 2 or 6 spaces, so a deeper line continues a wrapped help text.
+#[cfg(not(target_arch = "wasm32"))]
+const WRAPPED_HELP_INDENT: &str = "       ";
+
+/// Clap's tab (2 spaces) plus its next-line help indent (8 spaces).
+#[cfg(not(target_arch = "wasm32"))]
+const NEXT_LINE_HELP_INDENT: &str = "          ";
+
 #[cfg(not(target_arch = "wasm32"))]
 pub fn cli_command() -> clap::Command {
-    let mut command = Cli::command().max_term_width(100);
+    let mut command = Cli::command().max_term_width(HELP_WIDTH);
     // clap probes stdout, stderr, then stdin for a width. Piped stdout gets width 0, so JSON
     // `details.content` and captured help ignore other ttys.
     if !io::stdout().is_terminal() {
@@ -789,7 +801,7 @@ fn matched_subcommand_mut<'a>(
     command
 }
 
-/// Returns the section headings where clap puts flag help on the next line at width 100.
+/// Returns section headings where clap puts flag help on the next line at width 100.
 #[cfg(not(target_arch = "wasm32"))]
 fn next_line_headings(probe: &mut clap::Command) -> Vec<String> {
     let help = probe.render_help().to_string();
@@ -799,15 +811,15 @@ fn next_line_headings(probe: &mut clap::Command) -> Vec<String> {
     while let Some(line) = lines.next() {
         if !line.starts_with(' ') && line.ends_with(':') {
             heading = line.trim_end_matches(':');
-        } else if line.starts_with("  ")
-            // Flag rows are indented at most 6 spaces; deeper lines continue a wrapped help text.
-            && !line.starts_with("       ")
-            && !line.trim().contains("  ")
-            && lines
-                .peek()
-                .is_some_and(|next| next.starts_with("          "))
-            && !headings.iter().any(|known| known == heading)
-        {
+            continue;
+        }
+        let is_flag_row = line.starts_with("  ")
+            && !line.starts_with(WRAPPED_HELP_INDENT)
+            && !line.trim().contains("  ");
+        let help_on_next_line = lines
+            .peek()
+            .is_some_and(|next| next.starts_with(NEXT_LINE_HELP_INDENT));
+        if is_flag_row && help_on_next_line && !headings.iter().any(|known| known == heading) {
             headings.push(heading.to_owned());
         }
     }
@@ -842,22 +854,38 @@ fn pin_piped_help_layout(command: clap::Command, probe: &mut clap::Command) -> c
     command
 }
 
+/// Parses `args`. Piped help parses again with the layout pinned; other runs skip that cost.
 #[cfg(not(target_arch = "wasm32"))]
-fn pin_help_layout_when_piped(command: clap::Command) -> clap::Command {
-    if io::stdout().is_terminal() {
-        return command;
+fn parse_with_piped_help_layout(
+    args: &[std::ffi::OsString],
+) -> (clap::Command, Result<clap::ArgMatches, clap::Error>) {
+    let build = || cli_command().color(argument_color(args));
+    let mut parser = build();
+    let parsed = parser.try_get_matches_from_mut(args);
+    let asks_for_help = matches!(
+        &parsed,
+        Err(error) if matches!(
+            error.kind(),
+            clap::error::ErrorKind::DisplayHelp
+                | clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+        )
+    );
+    if !asks_for_help || io::stdout().is_terminal() {
+        return (parser, parsed);
     }
-    let mut probe = command.clone().term_width(100);
+    let mut probe = build().term_width(HELP_WIDTH);
     probe.build();
-    pin_piped_help_layout(command, &mut probe)
+    let mut pinned = pin_piped_help_layout(build(), &mut probe);
+    let parsed = pinned.try_get_matches_from_mut(args);
+    (pinned, parsed)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
     // Patch header options bind by argument index, so parsing MUST preserve
     // the raw matches as well as the derived command.
-    let mut parser = pin_help_layout_when_piped(cli_command().color(argument_color(&args)));
-    let matches = match parser.try_get_matches_from_mut(args) {
+    let (mut parser, parsed) = parse_with_piped_help_layout(&args);
+    let matches = match parsed {
         Ok(matches) => matches,
         Err(error) => return print_argument_result(error, mode),
     };
