@@ -36,8 +36,7 @@
     "save-editor",
     "emulation",
     "retro",
-    "cli",
-    "wasm"
+    "cli"
   ],
   "homepage": "https://rom-weaver.com",
   "funding": [

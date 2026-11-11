@@ -46,8 +46,7 @@
     "save-editor",
     "emulation",
     "retro",
-    "cli",
-    "wasm"
+    "cli"
   ],
   "bin": {
     "rom-weaver": "bin/rom-weaver.mjs"

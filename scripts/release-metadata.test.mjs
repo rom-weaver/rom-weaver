@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -15,7 +16,9 @@ import test from "node:test";
 
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 const requiredReleaseKeywords = ["rvz", "chd", "z3ds", "rom", "patch"];
-const cliCrateKeywords = ["rom-patcher", "chd", "rvz", "z3ds", "xdelta"];
+// crates.io rejects a publish over these limits: https://doc.rust-lang.org/cargo/reference/manifest.html#the-keywords-field
+const CRATES_IO_MAX_KEYWORDS = 5;
+const CRATES_IO_KEYWORD_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_+-]{0,19}$/;
 
 test("npm alias package exposes a runnable bin", (t) => {
   const pkg = readJson("packages/rom-weaver-alias/package.json");
@@ -92,10 +95,15 @@ test("platform npm packages include the external identify data", () => {
 });
 
 test("published Cargo crates stay within crates.io keyword limits", () => {
-  const cargoToml = readFileSync("crates/rom-weaver-cli/Cargo.toml", "utf8");
-  const keywords = cargoToml.match(/^keywords = \[(.*)\]$/m)?.[1]?.match(/"[^"]+"/g) ?? [];
-  assert.deepEqual(
-    keywords.map((keyword) => keyword.slice(1, -1)),
-    cliCrateKeywords,
-  );
+  for (const crate of readdirSync("crates")) {
+    const cargoToml = readFileSync(join("crates", crate, "Cargo.toml"), "utf8");
+    if (!/^publish\.workspace = true$/m.test(cargoToml)) continue;
+    const keywords = (cargoToml.match(/^keywords = \[([^\]]*)\]/m)?.[1]?.match(/"[^"]+"/g) ?? []).map((keyword) =>
+      keyword.slice(1, -1),
+    );
+    assert.ok(keywords.length <= CRATES_IO_MAX_KEYWORDS, `${crate} has ${keywords.length} keywords`);
+    for (const keyword of keywords) {
+      assert.match(keyword, CRATES_IO_KEYWORD_PATTERN, `${crate} keyword ${keyword} breaks crates.io rules`);
+    }
+  }
 });
