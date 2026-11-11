@@ -113,7 +113,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --clobber
           echo "name=$asset_name" >> "$GITHUB_OUTPUT"
 
-      # The winget package; winget-dry-run.yml installs a zip from the same script.
+      # The winget package (scripts/ci/package-windows-zip.ps1 says why a zip).
       - name: Upload Windows zip to GitHub release
         id: zip
         if: runner.os == 'Windows'

@@ -71,7 +71,6 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io (the `latest`/`beta` channels; `nightly` is pushed from `ci.yml`) |
 | `attestation-dry-run.yml` | manual | No | Prove the release attest steps and both installers' checks without cutting a release |
 | `attestation-dry-run-called.yml` | called by `attestation-dry-run.yml` | No | Prove that attestation permissions survive a reusable-workflow boundary |
-| `winget-dry-run.yml` | manual | No | Zip the published Windows packages, check Komac's reading of them, and install each through winget from a local manifest |
 
 `pull-request.yml` posts two required commit statuses against the pull request head: `CLA Signed` and `PR Title Lint`. It uses `pull_request_target` so fork contributions can receive statuses. It reads scripts, configuration, and the allowlist from the base commit; it never executes contributor code.
 
