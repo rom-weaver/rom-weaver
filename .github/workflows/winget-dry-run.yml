@@ -219,6 +219,6 @@ jobs:
           }
 
           # A local-manifest install has no source to look the id up in.
-          winget uninstall --manifest $manifests --disable-interactivity
+          winget uninstall --manifest $manifests --accept-source-agreements --disable-interactivity
           if ($LASTEXITCODE -ne 0) { throw "winget uninstall exited with $LASTEXITCODE" }
           if (Test-Path -LiteralPath $command.Source) { throw "uninstall left $($command.Source)" }
