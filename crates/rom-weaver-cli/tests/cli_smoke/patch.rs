@@ -2610,7 +2610,7 @@ fn patch_apply_dry_run_checks_a_z3ds_output_input_for_3ds_content() {
 }
 
 #[test]
-fn patch_apply_no_extract_checks_an_archive_input_for_3ds_content_in_a_dry_run() {
+fn patch_apply_no_extract_checks_an_archive_input_in_a_dry_run() {
     let temp = setup_temp_dir();
     let (original, patch) = make_bps_patch_fixture(&temp);
     let archive = temp.child("source.zip");
@@ -2628,30 +2628,42 @@ fn patch_apply_no_extract_checks_an_archive_input_for_3ds_content_in_a_dry_run()
         0,
     );
 
-    for dry_run in [true, false] {
-        let output = temp.child("out.z3ds");
-        let mut args = vec![
-            "patch",
-            "apply",
-            "--input",
-            archive.path().to_str().expect("path"),
-            "--patch",
-            patch.path().to_str().expect("path"),
-            "--format",
-            "z3ds",
-            "--no-extract",
-            "--output",
-            output.path().to_str().expect("path"),
-            "--jsonl",
-        ];
-        if dry_run {
-            args.push("--dry-run");
+    let cases: [(&str, &[&str], &str); 2] = [
+        ("out.z3ds", &["--format", "z3ds"], "is not a 3DS image"),
+        (
+            "out.bin",
+            &[],
+            "neither a registered container nor the selected ROM leaf extension",
+        ),
+    ];
+    for (name, extra_args, expected) in cases {
+        for dry_run in [true, false] {
+            let output = temp.child(name);
+            let mut args = vec![
+                "patch",
+                "apply",
+                "--input",
+                archive.path().to_str().expect("path"),
+                "--patch",
+                patch.path().to_str().expect("path"),
+                "--no-extract",
+                "--output",
+                output.path().to_str().expect("path"),
+                "--jsonl",
+            ];
+            args.extend(extra_args);
+            if dry_run {
+                args.push("--dry-run");
+            }
+            let json = parse_single_json_line(&command_stdout(&args, 1));
+            assert_eq!(json["status"], "failed", "{name} dry_run={dry_run}");
+            let label = json["label"].as_str().expect("label");
+            assert!(
+                label.contains(expected),
+                "{name} dry_run={dry_run}: {label}"
+            );
+            assert!(!output.path().exists(), "{name} dry_run={dry_run}");
         }
-        let json = parse_single_json_line(&command_stdout(&args, 1));
-        assert_eq!(json["status"], "failed", "dry_run={dry_run}");
-        let label = json["label"].as_str().expect("label");
-        assert!(label.contains("is not a 3DS image"), "{label}");
-        assert!(!output.path().exists(), "dry_run={dry_run}");
     }
 }
 
