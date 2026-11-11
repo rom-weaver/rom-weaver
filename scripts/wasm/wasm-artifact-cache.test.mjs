@@ -211,6 +211,14 @@ test("path remapping appends to the target rustflags as a TOML array", () => {
   ]);
 });
 
+test("extra rustflags follow the path remapping in the same array", () => {
+  const args = remapPathArgs({ cargoHome: "/c", sysroot: "/s", target: "wasm32-wasip1-threads", extraFlags: ["-C", "linker-plugin-lto=no"] });
+  assert.equal(
+    args[1],
+    'target.wasm32-wasip1-threads.rustflags=["--remap-path-prefix=/c=/cargo","--remap-path-prefix=/s=/rustc-sysroot","-C","linker-plugin-lto=no"]',
+  );
+});
+
 test("build flag environment keys flags but not checkout-specific compiler paths", () => {
   const flags = buildFlagEnv({
     CFLAGS_wasm32_wasip1_threads: "-O3",

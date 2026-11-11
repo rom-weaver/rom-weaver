@@ -86,12 +86,12 @@ export function shouldReuseProductionArtifact({ artifact, brotliArtifactOk, fing
 // checkout-specific flag would change every rustc command line and stop sccache
 // from replaying dependencies across worktrees, so the checkout is not remapped.
 // Cargo appends --config rustflags to the list in .cargo/config.toml.
-export function remapPathArgs({ cargoHome, sysroot, target }) {
+export function remapPathArgs({ cargoHome, sysroot, target, extraFlags = [] }) {
   const flags = [
     [cargoHome, "/cargo"],
     [sysroot, "/rustc-sysroot"],
   ].map(([from, to]) => `--remap-path-prefix=${from}=${to}`);
-  return ["--config", `target.${target}.rustflags=${JSON.stringify(flags)}`];
+  return ["--config", `target.${target}.rustflags=${JSON.stringify([...flags, ...extraFlags])}`];
 }
 
 // Environment that reaches rustc or the C compilers as flags. Compiler paths
@@ -105,6 +105,27 @@ export const buildFlagEnv = (env) =>
       .sort()
       .map((name) => [name, env[name]]),
   );
+
+// .cargo/config.toml turns on linker-plugin-lto, which makes the link run LTO over every crate.
+// A later flag overrides it, and RUSTFLAGS would drop the remapping above.
+const FAST_RUSTFLAGS = ["-C", "linker-plugin-lto=no"];
+
+// Fast mode writes a quick sidecar, so the webapp build skips its quality-11 compression.
+function brotliSettings(mode, env) {
+  if (mode === "fast") return { wantBrotli: true, quality: env.BROTLI_QUALITY || "1" };
+  return { wantBrotli: mode === "prod" && env.ROM_WEAVER_WASM_NO_BROTLI !== "1", quality: env.BROTLI_QUALITY || "11" };
+}
+
+// WASM MUST use the default window: the larger asset window increases this module's transfer size.
+function writeBrotliSidecar({ artifact, quality }) {
+  const { cached, compressedSize, sourceSize } = brotliCompressFile({
+    inputPath: artifact,
+    outputPath: `${artifact}.br`,
+    quality,
+    parameterProfile: "default",
+  });
+  process.stdout.write(`brotli q${quality}${cached ? " (cached)" : ""}: ${sourceSize} -> ${compressedSize} bytes\n`);
+}
 
 export function main(argv = process.argv.slice(2), env = process.env) {
   const mode = parseMode(argv[0]);
@@ -125,9 +146,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   if (mode === "prod" && !existsExecutable("wasm-opt")) throw new Error("missing command: wasm-opt (install via mise or brew install binaryen)");
   mkdirSync(outDir, { recursive: true });
 
-  // The fast mode writes a quick sidecar so the webapp build does not compress the module at quality 11.
-  const wantBrotli = (mode === "prod" && env.ROM_WEAVER_WASM_NO_BROTLI !== "1") || mode === "fast";
-  const quality = env.BROTLI_QUALITY || (mode === "fast" ? "1" : "11");
+  const { wantBrotli, quality } = brotliSettings(mode, env);
   const brotliVersion = `node-zlib libbrotli ${process.versions.brotli}`;
   const stripVersion = toolVersion(env.WASI_STRIP, ["--version"]);
   const wasmOptVersion = mode === "prod" ? toolVersion("wasm-opt", ["--version"]) : "";
@@ -204,6 +223,7 @@ function buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile,
     cargoHome: env.CARGO_HOME || join(homedir(), ".cargo"),
     sysroot: toolVersion("rustc", ["--print", "sysroot"]),
     target,
+    extraFlags: mode === "fast" ? FAST_RUSTFLAGS : [],
   });
   run("cargo", ["build", "-p", "rom-weaver-cli", "--no-default-features", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", target, ...remap]);
 
@@ -227,18 +247,8 @@ function buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile,
       cpSync(`${artifact}.opt`, artifact);
       rmSync(`${artifact}.opt`, { force: true });
       run(env.WASI_STRIP, [artifact]);
-      if (wantBrotli) {
-        // WASM MUST use the default window: the larger asset window increases this module's transfer size.
-        const { cached, compressedSize, sourceSize } = brotliCompressFile({
-          inputPath: artifact,
-          outputPath: `${artifact}.br`,
-          quality,
-          parameterProfile: "default",
-        });
-        process.stdout.write(
-          `brotli q${quality}${cached ? " (cached)" : ""}: ${sourceSize} -> ${compressedSize} bytes\n`,
-        );
-      } else
+      if (wantBrotli) writeBrotliSidecar({ artifact, quality });
+      else
         process.stdout.write(
           "ROM_WEAVER_WASM_NO_BROTLI=1; skipping .br sibling (host compresses on the fly)\n",
         );
@@ -248,7 +258,7 @@ function buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile,
     rmSync(fingerprintFile, { force: true });
     cpSync(builtArtifact, artifact);
     run(env.WASI_STRIP, [artifact]);
-    if (wantBrotli) brotliCompressFile({ inputPath: artifact, outputPath: `${artifact}.br`, quality, parameterProfile: "default" });
+    if (wantBrotli) writeBrotliSidecar({ artifact, quality });
   }
 }
 

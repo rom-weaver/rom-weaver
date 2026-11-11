@@ -100,9 +100,11 @@ Fixtures cannot cover every input. Keep platform CI and [real-device checks](mob
 
 Before pushing webapp or published-doc changes, check the generated bundle, even when lint and pre-commit hooks pass.
 
-The pre-push hook runs steps 1 and 2 when CI's change classifier (`scripts/ci/classify-changes.mjs`) selects the webapp build for the commits since the default branch. It skips them for other pushes and when the pushed commits are not the checked-out `HEAD`. The hook builds the WASM module with `mise run build-wasm-fast`, which skips fat LTO, wasm-opt, and Brotli quality 11 and keeps its Cargo output in `target/wasm-check`. That module satisfies the guards but says nothing about size or speed, and it does not prove that the production profile builds. Set `ROM_WEAVER_PRE_PUSH_WASM=prod` to build the production module instead; a production module that another checkout already built for the same inputs is copied rather than rebuilt ([development guide](development.md#build-and-run-the-webapp)). Set `ROM_WEAVER_PRE_PUSH_E2E=1` to add `test:e2e:a11y` on the same bundle for UI changes, or push with `--no-verify` to skip the hook.
+The pre-push hook runs steps 1 and 2 when CI's change classifier (`scripts/ci/classify-changes.mjs`) selects the webapp build for the commits since the default branch. It skips them for other pushes and when the pushed commits are not the checked-out `HEAD`. The hook runs `mise run build-wasm-fast`, which skips fat LTO, wasm-opt, and Brotli quality 11. Its Cargo output goes to `target/wasm-fast`. Set `ROM_WEAVER_PRE_PUSH_E2E=1` to add `test:e2e:a11y` on the same bundle for UI changes, or push with `--no-verify` to skip the hook.
 
-1. Prepare the worktree with the [development guide](development.md#linked-worktrees). Build WASM from the current sources: `mise run build-wasm-fast` for the bundle guards, or `mise run build-wasm-prod` when size or speed matters, since neither a fast nor a development module is comparable to CI's optimized artifact.
+That module satisfies the guards but says nothing about size or speed. It does not prove that the production profile builds. Set `ROM_WEAVER_PRE_PUSH_WASM=prod` to build the production module instead. A production module that another checkout built for the same inputs is copied, not rebuilt ([development guide](development.md#build-and-run-the-webapp)).
+
+1. Prepare the worktree with the [development guide](development.md#linked-worktrees). Build WASM from the current sources with `mise run build-wasm-fast` for the bundle guards. Use `mise run build-wasm-prod` when size or speed matters; only it matches CI's artifact.
 2. From the repository root, build the production channel and run the chunk and Brotli sidecar guard:
 
    ```bash

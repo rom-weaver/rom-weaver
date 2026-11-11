@@ -795,8 +795,8 @@ fn build_libarchive(libarchive_dir: &Path, lzma_glue_dir: &Path, target_sysroot:
     }
 }
 
-/// Bindgen's `CargoCallbacks` also tracks every included header, including the staged copies in
-/// OUT_DIR that each run rewrites; those would rebuild this crate on every build.
+/// Bindgen's `CargoCallbacks` tracks every included header, including staged copies in `OUT_DIR`
+/// that each run rewrites. Tracking those would rebuild this crate on every build.
 #[derive(Debug)]
 struct EnvOnlyCallbacks;
 
