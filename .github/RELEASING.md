@@ -58,7 +58,7 @@ The tap and bucket repositories are public. The token must target the organizati
        "$base/rom-weaver-win32-arm64-msvc.zip"
    ```
 
-3. At the prompts, pick `bin/rom-weaver.exe` as the portable nested installer with the command alias `rom-weaver`. Choose **Edit** before submitting and add `ArchiveBinariesDependOnPath: true` to each installer. The CLI finds its identify data relative to its own path, and without this field winget starts it through a symlink in a separate `Links` directory instead of putting `bin` on `PATH`.
+3. At the prompts, pick `bin/rom-weaver.exe` as the portable nested installer and leave the command alias empty; winget names the command after the file. Choose **Edit** before submitting and add `ArchiveBinariesDependOnPath: true` to the installer manifest. The CLI finds its identify data relative to its own path, and without this field winget starts it through a symlink in a separate `Links` directory instead of putting `bin` on `PATH`.
 
 Later releases copy these fields from the newest merged version.
 

@@ -129,6 +129,8 @@ jobs:
             [Environment]::GetEnvironmentVariable('Path', 'User')
           winget --version
 
+      # The manifest matches what Komac writes, at the newest schema this
+      # image's winget reads (ArchiveBinariesDependOnPath needs 1.9.0 or later).
       # winget needs an http(s) InstallerUrl even for a local manifest, so the
       # zip is served from localhost for the length of this step.
       - name: Install, run, and uninstall through winget
@@ -163,21 +165,20 @@ jobs:
             Set-Content (Join-Path $manifests 'RomWeaver.RomWeaver.yaml') ($common + @"
           DefaultLocale: en-US
           ManifestType: version
-          ManifestVersion: 1.6.0
+          ManifestVersion: 1.10.0
           "@)
             Set-Content (Join-Path $manifests 'RomWeaver.RomWeaver.installer.yaml') ($common + @"
           InstallerType: zip
           NestedInstallerType: portable
           NestedInstallerFiles:
-          - RelativeFilePath: bin\rom-weaver.exe
-            PortableCommandAlias: rom-weaver
+          - RelativeFilePath: bin/rom-weaver.exe
           ArchiveBinariesDependOnPath: true
           Installers:
           - Architecture: $env:ARCHITECTURE
             InstallerUrl: http://127.0.0.1:8765/$zip
             InstallerSha256: $hash
           ManifestType: installer
-          ManifestVersion: 1.6.0
+          ManifestVersion: 1.10.0
           "@)
             Set-Content (Join-Path $manifests 'RomWeaver.RomWeaver.locale.en-US.yaml') ($common + @"
           PackageLocale: en-US
@@ -186,7 +187,7 @@ jobs:
           License: AGPL-3.0-or-later
           ShortDescription: Local-first offline toolkit for ROMs and ROM hack patches
           ManifestType: defaultLocale
-          ManifestVersion: 1.6.0
+          ManifestVersion: 1.10.0
           "@)
             Get-ChildItem $manifests | ForEach-Object { Write-Output "--- $($_.Name)"; Get-Content $_ }
 

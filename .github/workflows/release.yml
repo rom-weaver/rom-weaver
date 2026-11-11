@@ -914,10 +914,11 @@ jobs:
           git push
 
   # Third Windows package manager, with publish-scoop's ordering and prerelease
-  # skip. Komac downloads each zip to hash it and copies every other field
-  # (NestedInstallerFiles, ArchiveBinariesDependOnPath, locale metadata) from
-  # the newest RomWeaver.RomWeaver version in microsoft/winget-pkgs, so the
-  # first version is submitted by hand (.github/RELEASING.md). It opens a pull
+  # skip. Komac reads each installer (architecture, hash, nested binary) from
+  # the zips and keeps the other fields (ArchiveBinariesDependOnPath, locale
+  # metadata) from the newest RomWeaver.RomWeaver version in
+  # microsoft/winget-pkgs, so the first version is submitted by hand
+  # (.github/RELEASING.md). It opens a pull
   # request from the token owner's winget-pkgs fork; in CI it exits without a
   # second one when a pull request for this version already exists, so a rerun
   # is safe.
