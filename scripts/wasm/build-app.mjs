@@ -127,6 +127,10 @@ function writeBrotliSidecar({ artifact, quality }) {
   process.stdout.write(`brotli q${quality}${cached ? " (cached)" : ""}: ${sourceSize} -> ${compressedSize} bytes\n`);
 }
 
+// Whatever mode built the module in outDir, one built from the current inputs is as good as a fast build.
+const builtFromCurrentInputs = ({ artifact, sourceFingerprintFile, sourceFingerprint }) =>
+  existsSync(artifact) && existsSync(sourceFingerprintFile) && readFileSync(sourceFingerprintFile, "utf8").trim() === sourceFingerprint;
+
 export function main(argv = process.argv.slice(2), env = process.env) {
   const mode = parseMode(argv[0]);
   const root = env.MISE_PROJECT_ROOT;
@@ -183,7 +187,9 @@ export function main(argv = process.argv.slice(2), env = process.env) {
           }),
         };
 
-  if (cache && !force && restoreWasmArtifacts({ ...cache, files: cacheFiles, outDir })) {
+  if (mode === "fast" && !force && builtFromCurrentInputs({ artifact, sourceFingerprintFile, sourceFingerprint })) {
+    process.stdout.write(`kept ${artifact}: already built from the current inputs\n`);
+  } else if (cache && !force && restoreWasmArtifacts({ ...cache, files: cacheFiles, outDir })) {
     // The production fingerprint describes this checkout's Cargo output, which the cached module did not come from.
     rmSync(fingerprintFile, { force: true });
     process.stdout.write(`reused ${mode} WASM for unchanged inputs from ${join(cache.root, cache.key)}\n`);

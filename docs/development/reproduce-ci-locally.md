@@ -100,7 +100,7 @@ Fixtures cannot cover every input. Keep platform CI and [real-device checks](mob
 
 Before pushing webapp or published-doc changes, check the generated bundle, even when lint and pre-commit hooks pass.
 
-The pre-push hook runs steps 1 and 2 when CI's change classifier (`scripts/ci/classify-changes.mjs`) selects the webapp build for the commits since the default branch. It skips them for other pushes and when the pushed commits are not the checked-out `HEAD`. The hook runs `mise run build-wasm-fast`, which skips fat LTO, wasm-opt, and Brotli quality 11. Its Cargo output goes to `target/wasm-fast`.
+The pre-push hook runs steps 1 and 2 when CI's change classifier (`scripts/ci/classify-changes.mjs`) selects the webapp build for the commits since the default branch. It skips them for other pushes and when the pushed commits are not the checked-out `HEAD`. The hook runs `mise run build-wasm-fast`, which skips fat LTO, wasm-opt, and Brotli quality 11. It keeps a module already built from the current inputs, such as a production one.
 
 That module satisfies the guards but says nothing about size or speed. It does not prove that the production profile builds. Set `ROM_WEAVER_PRE_PUSH_WASM=prod` to build the production module instead. A production module that another checkout built for the same inputs is copied, not rebuilt ([development guide](development.md#build-and-run-the-webapp)).
 

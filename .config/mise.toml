@@ -117,7 +117,7 @@ env.CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O3 -flt
 run = "node {{ config_root }}/scripts/wasm/build-app.mjs prod"
 
 [tasks.build-wasm-fast]
-description = "Build the threaded WASM app module without LTO or wasm-opt, with a quality-1 brotli sidecar (pre-push bundle checks; size and speed are not representative)"
+description = "Build the threaded WASM app module without LTO or wasm-opt, with a quality-1 brotli sidecar (pre-push bundle checks; size and speed are not representative). Keeps a module in the output directory that was built from the current inputs"
 depends = ["identify-data"]
 # Its own target directory keeps these flags from invalidating the release build's Cargo output.
 env.CARGO_TARGET_DIR = "{{ config_root }}/target/wasm-fast"
