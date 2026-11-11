@@ -68,6 +68,7 @@ Choose the WASM build that matches the task:
 ```bash
 mise run wasm-check        # type-check the threaded WASI target
 mise run build-wasm        # fast development build
+mise run build-wasm-fast   # no LTO or wasm-opt, own target directory; the pre-push hook's module
 mise run build-wasm-prod   # optimized release build with wasm-opt and Brotli
 ```
 

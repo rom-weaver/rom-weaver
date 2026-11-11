@@ -14,11 +14,17 @@ import { resolveNpmCli } from "./ci/npm-publish-package.mjs";
 
 const WEBAPP = "packages/rom-weaver-webapp";
 
-export const WEBAPP_BUNDLE_STEPS = [
-  { label: "production WASM", command: "mise", args: ["run", "build-wasm-prod"] },
+const PRODUCTION_WASM_STEP = { label: "production WASM", command: "mise", args: ["run", "build-wasm-prod"] };
+// Same module layout without fat LTO, wasm-opt, or Brotli: enough for the bundle guards, but it proves nothing about size or speed.
+const FAST_WASM_STEP = { label: "fast WASM", command: "mise", args: ["run", "build-wasm-fast"] };
+
+const WEBAPP_STEPS = [
   { label: "production webapp build", command: "npm", args: ["--prefix", WEBAPP, "run", "build"], env: { ROM_WEAVER_CHANNEL: "prod" } },
   { label: "worker chunk guard", command: "npm", args: ["--prefix", WEBAPP, "run", "check:worker-chunk"] },
 ];
+
+export const WEBAPP_BUNDLE_STEPS = [FAST_WASM_STEP, ...WEBAPP_STEPS];
+export const PRODUCTION_BUNDLE_STEPS = [PRODUCTION_WASM_STEP, ...WEBAPP_STEPS];
 
 // The bundle from the steps above MUST be the one E2E reuses; a rebuild would default to the dev channel.
 export const A11Y_STEP = {
@@ -40,7 +46,7 @@ export function pushedCommits(stdin) {
 
 // changedPaths is undefined when no base resolves; every check then runs, the
 // classifier's own fail-open default.
-export function planPrePush({ pushed, head, changedPaths, e2e = false }) {
+export function planPrePush({ pushed, head, changedPaths, e2e = false, productionWasm = false }) {
   if (pushed.refs === 0) return { steps: [], reason: "git reported no pushed refs" };
   if (pushed.commits.length === 0) return { steps: [], reason: "the push only deletes refs" };
   // The checks build the working tree, which only matches a pushed HEAD.
@@ -49,7 +55,8 @@ export function planPrePush({ pushed, head, changedPaths, e2e = false }) {
   const selection = classifyChanges(changedPaths ?? [], changedPaths === undefined, "pull_request");
   if (!selection.webapp) return { steps: [], reason: "no webapp or published-doc change since the base" };
   const browser = selection.webapp_browser;
-  return { steps: browser && e2e ? [...WEBAPP_BUNDLE_STEPS, A11Y_STEP] : WEBAPP_BUNDLE_STEPS, browser };
+  const steps = productionWasm ? PRODUCTION_BUNDLE_STEPS : WEBAPP_BUNDLE_STEPS;
+  return { steps: browser && e2e ? [...steps, A11Y_STEP] : steps, browser };
 }
 
 const git = (args) => execFileSync("git", args, { encoding: "utf8" }).trim();
@@ -90,6 +97,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     head,
     changedPaths: changedSinceBase(remote),
     e2e: env.ROM_WEAVER_PRE_PUSH_E2E === "1",
+    productionWasm: env.ROM_WEAVER_PRE_PUSH_WASM === "prod",
   });
   // stderr: lefthook does not show a passing command's stdout when push runs without a terminal.
   const log = (message) => process.stderr.write(`[pre-push] ${message}\n`);

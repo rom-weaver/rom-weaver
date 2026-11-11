@@ -14,7 +14,7 @@ import { createCargoConfigSnapshot, createWasmSourceFingerprint, wasmSourcesModi
 import { createWasmProdFingerprint } from "./wasm-prod-fingerprint.mjs";
 
 export const parseMode = (value = "dev") => {
-  if (value !== "dev" && value !== "prod") throw new Error("usage: node scripts/wasm/build-app.mjs [dev|prod]");
+  if (value !== "dev" && value !== "fast" && value !== "prod") throw new Error("usage: node scripts/wasm/build-app.mjs [dev|fast|prod]");
   return value;
 };
 
@@ -125,8 +125,9 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   if (mode === "prod" && !existsExecutable("wasm-opt")) throw new Error("missing command: wasm-opt (install via mise or brew install binaryen)");
   mkdirSync(outDir, { recursive: true });
 
-  const wantBrotli = mode === "prod" && env.ROM_WEAVER_WASM_NO_BROTLI !== "1";
-  const quality = env.BROTLI_QUALITY || "11";
+  // The fast mode writes a quick sidecar so the webapp build does not compress the module at quality 11.
+  const wantBrotli = (mode === "prod" && env.ROM_WEAVER_WASM_NO_BROTLI !== "1") || mode === "fast";
+  const quality = env.BROTLI_QUALITY || (mode === "fast" ? "1" : "11");
   const brotliVersion = `node-zlib libbrotli ${process.versions.brotli}`;
   const stripVersion = toolVersion(env.WASI_STRIP, ["--version"]);
   const wasmOptVersion = mode === "prod" ? toolVersion("wasm-opt", ["--version"]) : "";
@@ -247,6 +248,7 @@ function buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile,
     rmSync(fingerprintFile, { force: true });
     cpSync(builtArtifact, artifact);
     run(env.WASI_STRIP, [artifact]);
+    if (wantBrotli) brotliCompressFile({ inputPath: artifact, outputPath: `${artifact}.br`, quality, parameterProfile: "default" });
   }
 }
 
