@@ -161,13 +161,16 @@ jobs:
           $server = Start-Process python -ArgumentList '-m', 'http.server', '8765', '--bind', '127.0.0.1', '--directory', 'served' -PassThru -NoNewWindow
           try {
             $manifests = New-Item -ItemType Directory -Force manifests
-            $common = "PackageIdentifier: RomWeaver.RomWeaver`nPackageVersion: 0.0.1`n"
-            Set-Content (Join-Path $manifests 'RomWeaver.RomWeaver.yaml') ($common + @"
-          DefaultLocale: en-US
-          ManifestType: version
-          ManifestVersion: 1.10.0
-          "@)
-            Set-Content (Join-Path $manifests 'RomWeaver.RomWeaver.installer.yaml') ($common + @"
+            function Write-Manifest([string] $FileName, [string] $Type, [string] $Body) {
+              $schema = "https://aka.ms/winget-manifest.$Type.1.10.0.schema.json"
+              Set-Content (Join-Path $manifests $FileName) (
+                "# yaml-language-server: `$schema=$schema`n" +
+                "PackageIdentifier: RomWeaver.RomWeaver`nPackageVersion: 0.0.1`n" +
+                $Body +
+                "`nManifestType: $Type`nManifestVersion: 1.10.0`n")
+            }
+            Write-Manifest 'RomWeaver.RomWeaver.yaml' version 'DefaultLocale: en-US'
+            Write-Manifest 'RomWeaver.RomWeaver.installer.yaml' installer @"
           InstallerType: zip
           NestedInstallerType: portable
           NestedInstallerFiles:
@@ -177,18 +180,14 @@ jobs:
           - Architecture: $env:ARCHITECTURE
             InstallerUrl: http://127.0.0.1:8765/$zip
             InstallerSha256: $hash
-          ManifestType: installer
-          ManifestVersion: 1.10.0
-          "@)
-            Set-Content (Join-Path $manifests 'RomWeaver.RomWeaver.locale.en-US.yaml') ($common + @"
+          "@
+            Write-Manifest 'RomWeaver.RomWeaver.locale.en-US.yaml' defaultLocale @"
           PackageLocale: en-US
           Publisher: rom-weaver
           PackageName: rom-weaver
           License: AGPL-3.0-or-later
           ShortDescription: Local-first offline toolkit for ROMs and ROM hack patches
-          ManifestType: defaultLocale
-          ManifestVersion: 1.10.0
-          "@)
+          "@
             Get-ChildItem $manifests | ForEach-Object { Write-Output "--- $($_.Name)"; Get-Content $_ }
 
             winget settings --enable LocalManifestFiles
