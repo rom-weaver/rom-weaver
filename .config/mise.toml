@@ -13,7 +13,7 @@ rust = { version = "1.97.1", components = "rustfmt,clippy" }
 "aqua:EmbarkStudios/cargo-deny" = "0.20.2"
 "github:bnjbvr/cargo-machete" = "0.9.1"
 # Version is the release tag: nextest's repo prefixes tags with the crate name.
-"github:nextest-rs/nextest" = { version = "cargo-nextest-0.9.140", exe = "cargo-nextest" }
+"github:nextest-rs/nextest" = "cargo-nextest-0.9.140"
 "github:obi1kenobi/cargo-semver-checks" = "0.46.0"
 "aqua:rhysd/actionlint" = "1.7.12"              # workflow linting (shellcheck-aware)
 "aqua:koalaman/shellcheck" = "0.11.0"           # shell script linting (also backs actionlint's `run:` checks)
