@@ -10,6 +10,7 @@ Find the cause, then fix the input. An override skips the check; it does not rep
 ## Table of contents
 
 - [What does the warning mean?](#what-does-the-warning-mean)
+- [Find the ROM the patch expects](#find-the-rom-the-patch-expects)
 - [Which messages are strict?](#which-messages-are-strict)
 - [Check these causes in order](#check-these-causes-in-order)
 - [Wrong region or revision](#wrong-region-or-revision)
@@ -26,6 +27,20 @@ Find the cause, then fix the input. An override skips the check; it does not rep
 Apply reports it as **Not the expected ROM**. Other patchers word it differently: RomPatcher.js shows `Source ROM checksum mismatch`, and xdelta3 shows `target window checksum mismatch`. Each usually means the wrong starting file.
 
 The checked bytes differ from the expected file. Compare the same algorithm in [Checksum file](https://rom-weaver.com/file-checksum). BPS/UPS carry checks; for IPS, use the author's notes. [Checksums versus filenames](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains the evidence.
+
+## Find the ROM the patch expects
+
+A BPS or UPS patch records the CRC32 of the ROM it was made from. Look that value up to learn which release you need.
+
+1. Open [Apply](https://rom-weaver.com/apply-rom-patches) and add your ROM and the patch.
+2. Read the patch card's **Checks failed** message. It gives the CRC32 the patch expects and the CRC32 of your ROM.
+3. Open a fresh [Identify page](https://rom-weaver.com/identify-rom).
+4. Paste the expected CRC32 into **Identify by checksum or game name**, then select the release.
+5. Return to [Apply](https://rom-weaver.com/apply-rom-patches) and drop your own copy of that release into **0x01 Inputs**. It replaces the wrong ROM.
+
+For example, Identify names CRC32 `DD88761C` as `Pokemon - Fire Red Version (U) (V1.0) [!]`. It names `84EE4776` as `Pokemon - Fire Red Version (U) (V1.1) [!]`. A patch made from one fails on the other.
+
+For IPS, xdelta, and other formats, take the expected checksum from the author's notes. [Search ROM checksums](search-rom-checksums-browser.md) covers lookup by CRC32, MD5, or SHA-1.
 
 ## Which messages are strict?
 
