@@ -43,7 +43,7 @@ The tap and bucket repositories are public. The token must target the organizati
 
 `publish-winget` updates an existing package. It fails until the first version is merged into `microsoft/winget-pkgs`.
 
-1. Create a classic personal access token with the `public_repo` scope. It can push to every public repository its account can, so use a dedicated account with no write access to `rom-weaver` repositories. That account holds the `winget-pkgs` fork, which Komac creates on first use. A fine-grained token cannot open the pull request, because `microsoft/winget-pkgs` is outside its resource owner. Store the token as the `WINGET_TOKEN` Actions secret.
+1. Create a classic personal access token with the `public_repo` scope. The token can push to every public repository its account can. Use a dedicated account with no write access to `rom-weaver` repositories. That account holds the `winget-pkgs` fork, which Komac creates on first use. A fine-grained token cannot open the pull request, because `microsoft/winget-pkgs` is outside its resource owner. Store the token as the `WINGET_TOKEN` Actions secret.
 2. After the first stable release that carries the `rom-weaver-win32-<arch>-msvc.zip` assets, submit that version with [Komac](https://github.com/russellbanks/Komac). Set `VERSION` to the release version without the `v`:
 
    ```bash
@@ -58,9 +58,9 @@ The tap and bucket repositories are public. The token must target the organizati
        "$base/rom-weaver-win32-arm64-msvc.zip"
    ```
 
-3. At the prompts, pick `bin/rom-weaver.exe` as the portable nested installer and leave the command alias empty; winget names the command after the file. Choose **Edit** before submitting. Add `ArchiveBinariesDependOnPath: true` at the top level of the installer manifest, beside `NestedInstallerFiles`. The CLI finds its identify data relative to its own path. Without this field, winget starts the CLI through a symlink in a separate `Links` directory.
+3. At the prompts, pick `bin/rom-weaver.exe` as the portable nested installer and leave the command alias empty; winget names the command after the file. Choose **Edit** before submitting. Add `ArchiveBinariesDependOnPath: true` at the top level of the installer manifest, beside `NestedInstallerFiles`. The `rom-weaver.exe` binary finds its identify data relative to its own path. Without this field, winget starts the binary through a symlink in a separate `Links` directory.
 
-Komac rebuilds each `Installers` entry from the zips in later versions and keeps the top-level fields. A field placed inside an `Installers` entry is lost on the next update.
+In later versions, Komac rebuilds each `Installers` entry and keeps the top-level fields. A field placed inside an `Installers` entry is lost on the next update.
 
 ## Cargo trusted publishing
 

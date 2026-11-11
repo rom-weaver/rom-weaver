@@ -914,8 +914,8 @@ jobs:
           git push
 
   # winget counterpart to publish-scoop, with the same ordering and prerelease skip.
-  # Komac only updates an existing package, so the first version is submitted by
-  # hand (.github/RELEASING.md); a rerun exits when this version's pull request exists.
+  # Komac only updates an existing package. The first version is submitted by
+  # hand (.github/RELEASING.md). A rerun exits when this version's pull request exists.
   publish-winget:
     needs: [release, publish-release]
     if: >-
@@ -1022,7 +1022,7 @@ jobs:
   # name. Creating the tag here is also what triggers cargo-publish.yml.
   #
   # publish-homebrew, publish-scoop, and publish-winget deliberately run *after*
-  # this rather than gating it; see the comment on publish-homebrew.
+  # this, not gating it; see publish-homebrew's comment.
   publish-release:
     name: Publish draft release
     needs:
