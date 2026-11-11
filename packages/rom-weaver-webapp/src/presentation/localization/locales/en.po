@@ -1605,6 +1605,11 @@ msgstr "Couldn't save the result. Free up storage, or choose a folder the browse
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.OUT_OF_MEMORY"
+msgstr "There wasn't enough memory to finish this."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.OUTPUT_WRITE_FAILED"
 msgstr "Couldn't save the result. Choose a folder the browser is allowed to write to."
 

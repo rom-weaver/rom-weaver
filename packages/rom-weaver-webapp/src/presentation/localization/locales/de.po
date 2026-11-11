@@ -1605,6 +1605,11 @@ msgstr "Das Ergebnis konnte nicht gespeichert werden. Gib Speicherplatz frei ode
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.OUT_OF_MEMORY"
+msgstr "Es war nicht genug Arbeitsspeicher vorhanden, um den Vorgang abzuschließen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.OUTPUT_WRITE_FAILED"
 msgstr "Das Ergebnis konnte nicht gespeichert werden. Wähle einen Ordner, in den der Browser schreiben darf."
 

@@ -80,7 +80,6 @@ const getUserFacingErrorMessage = (error: unknown, localizer: Localizer = create
   if (!code) return getErrorMessage(error);
   const message = getErrorMessage(error);
   if (code === "INVALID_INPUT" && message.toLowerCase().includes("multi-file output")) return message;
-  if (code === "OUT_OF_MEMORY") return message;
   if (isPatchFileChecksumFailure(getEngineError(error)?.code)) return localizer.message("error.PATCH_FILE_DAMAGED");
   const messageId = `error.${code}` as MessageId;
   const localized = localizer.message(messageId, getErrorDetails(error));
