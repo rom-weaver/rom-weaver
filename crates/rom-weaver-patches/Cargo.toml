@@ -2,6 +2,8 @@
 name = "rom-weaver-patches"
 authors.workspace = true
 description = "ROM hack patch formats for rom-weaver: apply, create, and validate IPS, BPS, UPS, xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS, and more than twenty formats in total."
+keywords = ["ips", "bps", "ups", "xdelta", "rom-patch"]
+categories = ["emulators", "encoding"]
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true

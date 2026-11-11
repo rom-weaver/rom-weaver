@@ -15,6 +15,7 @@ import test from "node:test";
 
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 const requiredReleaseKeywords = ["rvz", "chd", "z3ds", "rom", "patch"];
+const cliCrateKeywords = ["rom-patcher", "chd", "rvz", "z3ds", "xdelta"];
 
 test("npm alias package exposes a runnable bin", (t) => {
   const pkg = readJson("packages/rom-weaver-alias/package.json");
@@ -95,6 +96,6 @@ test("published Cargo crates stay within crates.io keyword limits", () => {
   const keywords = cargoToml.match(/^keywords = \[(.*)\]$/m)?.[1]?.match(/"[^"]+"/g) ?? [];
   assert.deepEqual(
     keywords.map((keyword) => keyword.slice(1, -1)),
-    requiredReleaseKeywords,
+    cliCrateKeywords,
   );
 });

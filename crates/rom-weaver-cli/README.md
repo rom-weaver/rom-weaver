@@ -8,7 +8,7 @@
 </h1>
 
 <p align="center">
-  A command-line ROM toolkit: patch, compress, extract, convert, identify, bake in cheat codes, and edit supported game saves. No telemetry.
+  ROM patcher and toolkit CLI: apply and create IPS, BPS, UPS, xdelta, and PPF patches; convert CHD, RVZ, Z3DS, and ISO/BIN/CUE; extract ZIP, 7z, and RAR; identify ROMs by checksum; bake in cheats; edit saves. No telemetry.
 </p>
 
 <p align="center">

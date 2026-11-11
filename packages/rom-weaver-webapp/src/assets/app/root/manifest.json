@@ -1,6 +1,8 @@
 {
   "short_name": "rom-weaver",
   "name": "rom-weaver",
+  "description": "Free, open-source ROM patcher and toolkit that runs in your browser or CLI: patch, convert CHD/RVZ/Z3DS/ISO, identify, cheat, edit saves, and play.",
+  "categories": ["utilities", "games"],
   "scope": "./",
   "icons": [
     {

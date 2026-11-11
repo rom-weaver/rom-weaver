@@ -37,7 +37,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   // The apex. An empty slug is deliberate: the canonical URL is the bare origin.
   home: Object.freeze({
     description:
-      "Free online ROM patcher and toolkit: apply BPS, IPS, UPS and xdelta patches, convert discs to CHD or RVZ, identify dumps. Runs in your browser; no uploads.",
+      "Free online ROM patcher and toolkit: apply BPS, IPS, UPS and xdelta patches, convert CHD or RVZ to ISO and back, identify dumps. Runs in your browser; no uploads.",
     slug: "",
     title: `${SITE_NAME}: Online ROM Patcher & ROM Toolkit`,
   }),

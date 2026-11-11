@@ -2,6 +2,8 @@
 name = "rom-weaver-core"
 authors.workspace = true
 description = "Foundation crate for rom-weaver: format registry traits, the shared RomWeaverError type, I/O and thread-planning helpers, and standalone codec helpers."
+keywords = ["rom", "romhacking", "emulation"]
+categories = ["emulators"]
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true

@@ -2,6 +2,8 @@
 name = "rom-weaver-checksum"
 authors.workspace = true
 description = "Checksum engines for rom-weaver: CRC-32, CRC-32C, CRC-16, Adler-32, MD5, SHA-1, SHA-256, and BLAKE3, plus a single-pass streaming engine with copier-header-aware and N64 byte-order variants."
+keywords = ["checksum", "crc32", "blake3", "sha1", "rom"]
+categories = ["algorithms", "emulators"]
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true

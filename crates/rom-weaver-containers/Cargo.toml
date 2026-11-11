@@ -2,6 +2,8 @@
 name = "rom-weaver-containers"
 authors.workspace = true
 description = "Archive, disc-image, and ROM-specific compression handlers for rom-weaver: probe, list, and extract ZIP, 7z, RAR, tar, CHD, RVZ, Z3DS, CSO, PBP, GCZ, WIA, WBFS, XISO and more; create ZIP, 7z, CHD, RVZ, and Z3DS."
+keywords = ["chd", "rvz", "z3ds", "disc-image", "archive"]
+categories = ["compression", "emulators", "filesystem"]
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true
