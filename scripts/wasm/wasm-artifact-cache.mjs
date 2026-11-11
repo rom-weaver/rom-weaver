@@ -9,9 +9,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 
-// Entries hold one dev or prod module (10-25 MB), so a handful covers the
-// branches in flight without filling the disk.
-const DEFAULT_KEEP = 8;
+// Entries hold one dev or prod module (10-25 MB). Every branch and worktree
+// shares the newest DEFAULT_KEEP.
+const DEFAULT_KEEP = 60;
 const STALE_TMP_MS = 60 * 60 * 1000;
 const OWNER_FILE = ".rom-weaver-wasm-cache-entry";
 const ownerContent = (key) => `rom-weaver-wasm-cache-v1\n${key}\n`;

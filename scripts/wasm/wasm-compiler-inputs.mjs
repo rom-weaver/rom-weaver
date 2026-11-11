@@ -28,14 +28,15 @@ const filterTree = (tree, select) =>
 
 export const filterWasmCompilerInputTree = (tree) => filterTree(tree, isWasmCompilerInput);
 
-export const filterWasmCacheInputTree = (tree) =>
-  filterTree(tree, (path) => {
-    if (path.startsWith("crates/")) return isWasmCompilerInput(path);
-    if (path.startsWith("scripts/wasm/")) {
-      return !path.endsWith(".test.mjs") && path !== "scripts/wasm/README.md";
-    }
-    return true;
-  });
+export const isWasmCacheInput = (path) => {
+  if (path.startsWith("crates/")) return isWasmCompilerInput(path);
+  if (path.startsWith("scripts/wasm/")) {
+    return !path.endsWith(".test.mjs") && path !== "scripts/wasm/README.md";
+  }
+  return true;
+};
+
+export const filterWasmCacheInputTree = (tree) => filterTree(tree, isWasmCacheInput);
 
 const main = async () => {
   const chunks = [];

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
-import { isWasmCompilerInput } from "./wasm-compiler-inputs.mjs";
+import { isWasmCacheInput } from "./wasm-compiler-inputs.mjs";
 
 const SOURCE_ROOTS = ["crates", "scripts/wasm"];
 const SOURCE_FILES = ["Cargo.lock", "Cargo.toml", ".cargo/config.toml", ".config/mise.toml"];
@@ -25,7 +25,7 @@ const collectFiles = (root, path, files) => {
     return;
   }
   if (stats.isFile()) {
-    if (!path.startsWith("crates/") || isWasmCompilerInput(path)) files.push(path);
+    if (isWasmCacheInput(path)) files.push(path);
     return;
   }
   for (const child of readdirSync(entry)) collectFiles(root, posix.join(path, child), files);

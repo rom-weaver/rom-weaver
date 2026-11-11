@@ -113,7 +113,7 @@ test("storing preserves foreign hash and staging directories in a shared root", 
     const linked = "d".repeat(64);
     fs.symlinkSync(path.join(root, foreign[0]), path.join(root, linked), "junction");
     for (let index = 0; index < 9; index++) {
-      storeWasmArtifacts({ root, key: wasmArtifactCacheKey({ index }), files: FILES, sourceDir: built });
+      storeWasmArtifacts({ root, key: wasmArtifactCacheKey({ index }), files: FILES, sourceDir: built, keep: 8 });
     }
     for (const name of foreign) assert.equal(fs.readFileSync(path.join(root, name, "sentinel"), "utf8"), "keep");
     assert.equal(fs.lstatSync(path.join(root, linked)).isSymbolicLink(), true);
