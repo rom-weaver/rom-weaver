@@ -218,6 +218,7 @@ jobs:
             throw 'a lone binary also reports installed packs; the check proves nothing'
           }
 
-          winget uninstall --id RomWeaver.RomWeaver --disable-interactivity --accept-source-agreements
+          # A local-manifest install has no source to look the id up in.
+          winget uninstall --manifest $manifests --disable-interactivity
           if ($LASTEXITCODE -ne 0) { throw "winget uninstall exited with $LASTEXITCODE" }
           if (Test-Path -LiteralPath $command.Source) { throw "uninstall left $($command.Source)" }
