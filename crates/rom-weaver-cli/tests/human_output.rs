@@ -716,9 +716,19 @@ fn piped_help_ignores_the_terminal_width() {
     };
     let wide = help("300");
     assert_eq!(help("40"), wide);
+    let lines: Vec<&str> = wide.lines().collect();
+    let input = lines
+        .iter()
+        .position(|line| line.trim() == "-i, --input <PATH>")
+        .unwrap_or_else(|| panic!("-i help is not on the next line:\n{wide}"));
     assert!(
-        wide.lines()
-            .any(|line| line.contains("-i, --input <PATH>") && line.contains("ROM to patch.")),
+        lines[input + 1].trim_start().starts_with("ROM to patch."),
         "{wide}"
+    );
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.contains("--json") && line.contains("Print one complete JSON report")),
+        "same-line help moved to the next line:\n{wide}"
     );
 }
