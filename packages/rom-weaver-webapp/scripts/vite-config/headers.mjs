@@ -70,8 +70,8 @@ export const writeCloudflareHeadersAsset = (channel) => {
       // Exact rules, not `:page` placeholders: a placeholder also matches missing
       // Markdown URLs and would serve their HTML 404 page as text/markdown.
       const authMarkdownHeaders = `/auth.md\n  Content-Type: text/markdown; charset=utf-8\n${noindex}\n`;
-      // Docs pages accept that 404 typing and share one wildcard, so adding a page
-      // adds no rule to the 100-rule cap.
+      // Docs pages share one wildcard, so a new page adds no rule. Their
+      // missing Markdown URLs accept the 404 typing above.
       const markdownPatterns = [
         ...MARKDOWN_ROUTES.map(({ markdownPath }) => markdownPath).filter(
           (markdownPath) => !markdownPath.startsWith("/docs/"),
