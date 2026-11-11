@@ -789,11 +789,70 @@ fn matched_subcommand_mut<'a>(
     command
 }
 
+/// Headings of the help sections that clap lays out with each flag's help on the next line at width 100.
+#[cfg(not(target_arch = "wasm32"))]
+fn next_line_headings(probe: &mut clap::Command) -> Vec<String> {
+    let help = probe.render_help().to_string();
+    let mut headings = Vec::new();
+    let mut heading = "";
+    let mut lines = help.lines().peekable();
+    while let Some(line) = lines.next() {
+        if !line.starts_with(' ') && line.ends_with(':') {
+            heading = line.trim_end_matches(':');
+        } else if line.starts_with("  ")
+            // Flag rows are indented at most 6 spaces; deeper lines continue a wrapped help text.
+            && !line.starts_with("       ")
+            && !line.trim().contains("  ")
+            && lines
+                .peek()
+                .is_some_and(|next| next.starts_with("          "))
+            && !headings.iter().any(|known| known == heading)
+        {
+            headings.push(heading.to_owned());
+        }
+    }
+    headings
+}
+
+/// Gives piped help clap's width-100 next-line sections without wrapping text. Width 0 wraps
+/// nothing but never picks next-line help, so the sections clap picks at width 100 get it explicitly.
+#[cfg(not(target_arch = "wasm32"))]
+fn pin_piped_help_layout(command: clap::Command, probe: &mut clap::Command) -> clap::Command {
+    let headings = next_line_headings(probe);
+    let names: Vec<String> = command
+        .get_subcommands()
+        .map(|sub| sub.get_name().to_owned())
+        .collect();
+    let mut command = command.mut_args(|arg| {
+        let heading = arg.get_help_heading().unwrap_or(if arg.is_positional() {
+            "Arguments"
+        } else {
+            "Options"
+        });
+        if headings.iter().any(|known| known == heading) {
+            arg.next_line_help(true)
+        } else {
+            arg
+        }
+    });
+    for name in names {
+        if let Some(sub_probe) = probe.find_subcommand_mut(&name) {
+            command = command.mut_subcommand(&name, |sub| pin_piped_help_layout(sub, sub_probe));
+        }
+    }
+    command
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
     // Patch header options bind by argument index, so parsing MUST preserve
     // the raw matches as well as the derived command.
     let mut parser = cli_command().color(argument_color(&args));
+    if !io::stdout().is_terminal() {
+        let mut probe = parser.clone().term_width(100);
+        probe.build();
+        parser = pin_piped_help_layout(parser, &mut probe);
+    }
     let matches = match parser.try_get_matches_from_mut(args) {
         Ok(matches) => matches,
         Err(error) => return print_argument_result(error, mode),
