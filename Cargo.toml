@@ -105,6 +105,8 @@ tar = "0.4.44"
 thiserror = "2.0.17"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["json"] }
+# Silences ts-rs warnings for unsupported serde attributes.
+# It also hides the warning for attributes that change serialization and that ts-rs ignores.
 ts-rs = { version = "12.0.1", features = ["no-serde-warnings"] }
 xxhash-rust = { version = "0.8", features = ["xxh64"] }
 zerocopy = { version = "0.8", features = ["alloc", "derive"] }
