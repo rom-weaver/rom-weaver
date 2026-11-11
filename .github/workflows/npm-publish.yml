@@ -45,7 +45,7 @@ jobs:
       # Signed provenance for the release archive. npm generates its own for
       # the package from the same OIDC token; this covers the tar.gz asset,
       # which `install.sh`, Homebrew, and Scoop hand to users without going
-      # near npm.
+      # near npm, and the Windows zip winget installs.
       attestations: write
       artifact-metadata: write
     strategy:

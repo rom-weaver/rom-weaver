@@ -1,7 +1,7 @@
 #Requires -Version 7
-# Zip one prepared Windows platform package for winget, which installs only
+# Zip one prepared Windows platform package for winget. winget installs only
 # .zip archives and runs no install script. The zip keeps the package layout,
-# so the identify data stays at bin\..\share, where the binary looks for it.
+# so the binary finds the identify data at bin\..\share.
 param(
   [Parameter(Mandatory)] [string] $Package,
   [Parameter(Mandatory)] [string] $Destination

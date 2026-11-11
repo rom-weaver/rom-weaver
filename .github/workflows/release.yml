@@ -913,15 +913,9 @@ jobs:
           git commit -m "rom-weaver $VERSION"
           git push
 
-  # Third Windows package manager, with publish-scoop's ordering and prerelease
-  # skip. Komac reads each installer (architecture, hash, nested binary) from
-  # the zips and keeps the other fields (ArchiveBinariesDependOnPath, locale
-  # metadata) from the newest RomWeaver.RomWeaver version in
-  # microsoft/winget-pkgs, so the first version is submitted by hand
-  # (.github/RELEASING.md). It opens a pull
-  # request from the token owner's winget-pkgs fork; in CI it exits without a
-  # second one when a pull request for this version already exists, so a rerun
-  # is safe.
+  # winget counterpart to publish-scoop, with the same ordering and prerelease skip.
+  # Komac only updates an existing package, so the first version is submitted by
+  # hand (.github/RELEASING.md); a rerun exits when this version's pull request exists.
   publish-winget:
     needs: [release, publish-release]
     if: >-
@@ -1027,8 +1021,8 @@ jobs:
   # be cut again - a published immutable release permanently reserves its tag
   # name. Creating the tag here is also what triggers cargo-publish.yml.
   #
-  # publish-homebrew and publish-scoop deliberately run *after* this rather than
-  # gating it; see the comment on publish-homebrew.
+  # publish-homebrew, publish-scoop, and publish-winget deliberately run *after*
+  # this rather than gating it; see the comment on publish-homebrew.
   publish-release:
     name: Publish draft release
     needs:
