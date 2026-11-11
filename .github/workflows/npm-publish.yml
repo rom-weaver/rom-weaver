@@ -113,9 +113,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --clobber
           echo "name=$asset_name" >> "$GITHUB_OUTPUT"
 
-      # winget installs only .zip archives and runs no install script, so this
-      # zip carries the package tree rather than the bare binary: the identify
-      # data stays at bin\..\share, where the binary looks for it.
+      # The winget package; winget-dry-run.yml installs a zip from the same script.
       - name: Upload Windows zip to GitHub release
         id: zip
         if: runner.os == 'Windows'
@@ -126,17 +124,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           $assetName = "rom-weaver-$env:PACKAGE.zip"
-          $assetPath = Join-Path $PWD $assetName
-          Push-Location "packages/rom-weaver-cli-platforms/$env:PACKAGE"
-          Compress-Archive -LiteralPath bin, share, LICENSE, CLI_NOTICE, third_party -DestinationPath $assetPath -Force
-          Pop-Location
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $zip =[System.IO.Compression.ZipFile]::OpenRead($assetPath)
-          $entries = $zip.Entries.FullName -replace '\\', '/'
-          $zip.Dispose()
-          foreach ($required in 'bin/rom-weaver.exe', 'share/rom-weaver/identify/v1/catalog.json') {
-            if ($entries -notcontains $required) { throw "$assetName is missing $required" }
-          }
+          ./scripts/ci/package-windows-zip.ps1 -Package $env:PACKAGE -Destination $assetName
           gh release upload "v$env:VERSION" $assetName --repo $env:GITHUB_REPOSITORY --clobber
           if ($LASTEXITCODE -ne 0) { throw "gh release upload failed for $assetName" }
           "name=$assetName" >> $env:GITHUB_OUTPUT

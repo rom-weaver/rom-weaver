@@ -41,7 +41,7 @@ The tap and bucket repositories are public. The token must target the organizati
 
 ## winget
 
-`publish-winget` updates a package that already exists in `microsoft/winget-pkgs`, so it fails until the first version is merged there.
+`publish-winget` updates a package that already exists in `microsoft/winget-pkgs`, so it fails until the first version is merged there. **Actions → winget dry run** tests the zips, Komac's reading of them, and a winget install without publishing anything.
 
 1. Create a classic personal access token with the `public_repo` scope on the account that will hold the `winget-pkgs` fork; Komac creates the fork on first use. A fine-grained token cannot open the pull request, because `microsoft/winget-pkgs` is outside its resource owner. Store the token as the `WINGET_TOKEN` Actions secret.
 2. After the first stable release that carries the `rom-weaver-win32-<arch>-msvc.zip` assets, submit that version with [Komac](https://github.com/russellbanks/Komac). Set `VERSION` to the release version without the `v`:
