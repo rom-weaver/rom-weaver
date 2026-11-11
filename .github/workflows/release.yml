@@ -913,6 +913,43 @@ jobs:
           git commit -m "rom-weaver $VERSION"
           git push
 
+  # Third Windows package manager, with publish-scoop's ordering and prerelease
+  # skip. Komac downloads each zip to hash it and copies every other field
+  # (NestedInstallerFiles, ArchiveBinariesDependOnPath, locale metadata) from
+  # the newest RomWeaver.RomWeaver version in microsoft/winget-pkgs, so the
+  # first version is submitted by hand (.github/RELEASING.md). It opens a pull
+  # request from the token owner's winget-pkgs fork; in CI it exits without a
+  # second one when a pull request for this version already exists, so a rerun
+  # is safe.
+  publish-winget:
+    needs: [release, publish-release]
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.publish-release.result == 'success' &&
+      needs.release.outputs.release_created == 'true' &&
+      !contains(needs.release.outputs.version, '-')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Install Komac
+        uses: taiki-e/install-action@v2.90.2
+        with:
+          tool: komac@2.17.2
+
+      - name: Submit manifest update
+        env:
+          GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION"
+          komac update RomWeaver.RomWeaver --version "$VERSION" --submit --urls \
+            "$base/rom-weaver-win32-x64-msvc.zip" \
+            "$base/rom-weaver-win32-ia32-msvc.zip" \
+            "$base/rom-weaver-win32-arm64-msvc.zip"
+
   # Both images are assembled from artifacts static-webapp and npm-build produce, so the build waits
   # for those two and then runs beside the npm publish instead of after it. It pushes nothing: each
   # architecture is written to an OCI archive, and publish-containers pushes the archives (and

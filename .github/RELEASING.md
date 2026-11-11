@@ -8,6 +8,7 @@ Start `release.yml` manually to open or refresh the Release Please pull request 
 - 11 npm packages: `@rom-weaver/cli`, its nine `@rom-weaver/<platform>` binaries, and the unscoped `rom-weaver` alias that depends on the launcher;
 - the `rom-weaver` formula in `rom-weaver/homebrew-tap` for stable releases;
 - the `rom-weaver` manifest in `rom-weaver/scoop-bucket` for stable releases;
+- a `RomWeaver.RomWeaver` pull request to `microsoft/winget-pkgs` for stable releases;
 - `ghcr.io/rom-weaver/rom-weaver-cli`;
 - `ghcr.io/rom-weaver/rom-weaver-webapp`.
 
@@ -17,6 +18,7 @@ The npm packages include npm provenance, Cargo authenticates with crates.io's Gi
 ## Table of contents
 
 - [One-time repository setup](#one-time-repository-setup)
+- [winget](#winget)
 - [Cargo trusted publishing](#cargo-trusted-publishing)
 - [npm trusted publishing](#npm-trusted-publishing)
 - [Webapp hosting and the channel domains](#webapp-hosting-and-the-channel-domains)
@@ -36,6 +38,29 @@ The npm packages include npm provenance, Cargo authenticates with crates.io's Gi
 5. Create a fine-grained token owned by the `rom-weaver` organization, limited to `rom-weaver/homebrew-tap` and `rom-weaver/scoop-bucket`, with Contents read/write access. Store it as the `PACKAGE_MANAGER_TOKEN` Actions secret. Stable releases update `Formula/rom-weaver.rb` and `bucket/rom-weaver.json`; prereleases leave both repositories unchanged.
 
 The tap and bucket repositories are public. The token must target the organization-owned repositories; a fine-grained token limited to the former personal repositories cannot push after the transfer.
+
+## winget
+
+`publish-winget` updates a package that already exists in `microsoft/winget-pkgs`, so it fails until the first version is merged there.
+
+1. Create a classic personal access token with the `public_repo` scope on the account that will hold the `winget-pkgs` fork; Komac creates the fork on first use. A fine-grained token cannot open the pull request, because `microsoft/winget-pkgs` is outside its resource owner. Store the token as the `WINGET_TOKEN` Actions secret.
+2. After the first stable release that carries the `rom-weaver-win32-<arch>-msvc.zip` assets, submit that version with [Komac](https://github.com/russellbanks/Komac). Set `VERSION` to the release version without the `v`:
+
+   ```bash
+   base="https://github.com/rom-weaver/rom-weaver/releases/download/v$VERSION"
+   komac new RomWeaver.RomWeaver --version "$VERSION" \
+     --publisher rom-weaver --publisher-url https://github.com/rom-weaver \
+     --package-name rom-weaver --package-url https://rom-weaver.com \
+     --moniker rom-weaver --license AGPL-3.0-or-later \
+     --short-description "Local-first offline toolkit for ROMs and ROM hack patches" \
+     --urls "$base/rom-weaver-win32-x64-msvc.zip" \
+       "$base/rom-weaver-win32-ia32-msvc.zip" \
+       "$base/rom-weaver-win32-arm64-msvc.zip"
+   ```
+
+3. At the prompts, pick `bin/rom-weaver.exe` as the portable nested installer with the command alias `rom-weaver`. Choose **Edit** before submitting and add `ArchiveBinariesDependOnPath: true` to each installer. The CLI finds its identify data relative to its own path, and without this field winget starts it through a symlink in a separate `Links` directory instead of putting `bin` on `PATH`.
+
+Later releases copy these fields from the newest merged version.
 
 ## Cargo trusted publishing
 
@@ -118,7 +143,7 @@ The screenshot step reuses the `wasm-prod` artifact from that commit's CI run; i
 
 The optional **Version to release as** input forces a specific version - the dispatch equivalent of a `Release-As:` footer. Leave it blank to let Release Please compute the bump from the commits.
 
-Merging the release pull request creates a **draft** GitHub Release and runs every asset-producing publisher against that draft. The `publish-release` job publishes it, which is what creates the `vX.Y.Z` tag and in turn triggers the crates.io publish. The Homebrew and Scoop pushes run after that, because the manifests they write point at release download URLs that do not resolve while the release is a draft. Follow progress under GitHub's **Actions → Release** page.
+Merging the release pull request creates a **draft** GitHub Release and runs every asset-producing publisher against that draft. The `publish-release` job publishes it, which is what creates the `vX.Y.Z` tag and in turn triggers the crates.io publish. The Homebrew, Scoop, and winget updates run after that, because the manifests they write point at release download URLs that do not resolve while the release is a draft. Follow progress under GitHub's **Actions → Release** page.
 
 > **Never publish a draft release by hand, and never re-cut a version whose release was published.** Immutable releases are enabled, so publication cannot be undone: the release accepts no further assets *and permanently reserves its tag name*, even if the release is later deleted. v0.6.0 was lost exactly that way - it published before its assets were uploaded, every upload came back `HTTP 422`, and the version could never be re-cut. A failed fan-out leaves a draft. Follow [Retry a failed publication](#retry-a-failed-publication) to resume the original run.
 
@@ -145,7 +170,7 @@ Note the npm dist-tag is derived from the **version field**, never from the `nam
 
 Run **Actions → Retry release**, enter the numeric run ID from the failed **Release** workflow URL, and start it. This reruns the failed jobs and their dependents while preserving successful jobs and the artifacts they produced. Do not choose **Re-run all jobs**: that needlessly repeats the native builds.
 
-Because the release is still a draft, `publish-release` will not have run, so nothing is stamped immutable and the retry can still attach assets. A `publish-homebrew` or `publish-scoop` failure is the exception: those run after the release is published, so the release itself is fine and rerunning the one job is the whole fix. From the CLI, set `FAILED_RUN_ID` to the numeric ID of the failed run, then use:
+Because the release is still a draft, `publish-release` will not have run, so nothing is stamped immutable and the retry can still attach assets. A `publish-homebrew`, `publish-scoop`, or `publish-winget` failure is the exception: those run after the release is published, so the release itself is fine and rerunning the one job is the whole fix. From the CLI, set `FAILED_RUN_ID` to the numeric ID of the failed run, then use:
 
 ```bash
 gh workflow run release-retry.yml -f run_id="$FAILED_RUN_ID"
