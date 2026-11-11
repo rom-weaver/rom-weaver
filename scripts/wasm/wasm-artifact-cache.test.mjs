@@ -280,15 +280,11 @@ test("Cargo config snapshots retain writes reverted during a build", () => {
     assert.equal(reverted.modified, true);
     fs.rmSync(file);
     const absent = createCargoConfigSnapshot(options);
-    fs.writeFileSync(file, "temporary");
-    fs.rmSync(file);
-    const removed = createCargoConfigSnapshot(options);
-    assert.equal(removed.fingerprint, absent.fingerprint);
-    assert.equal(removed.modified, true);
+    assert.equal(absent.modified, false);
   });
 });
 
-test("Cargo config snapshots retain changes to an included file's outer directories", () => {
+test("Cargo config snapshots ignore timestamp changes on directories around the config files", () => {
   withDir((dir) => {
     const cargoHome = path.join(dir, "home");
     const outer = path.join(dir, "external", "outer");
@@ -299,11 +295,13 @@ test("Cargo config snapshots retain changes to an included file's outer director
     const options = { root: dir, cwd: dir, cargoHome, sinceMs: Date.now() + 60_000 };
     const initial = createCargoConfigSnapshot(options);
     assert.equal(initial.modified, false);
+    // Cargo's own tracker in CARGO_HOME and unrelated writes in the checkout or its parents move these timestamps during every build.
     const changedAt = new Date(options.sinceMs + 60_000);
-    fs.utimesSync(outer, changedAt, changedAt);
+    for (const directory of [outer, path.join(outer, "inner"), cargoHome, dir]) fs.utimesSync(directory, changedAt, changedAt);
     const changed = createCargoConfigSnapshot(options);
     assert.equal(changed.fingerprint, initial.fingerprint);
-    assert.equal(changed.modified, true);
+    assert.equal(changed.modified, false);
+    assert.equal(changed.state, initial.state);
   });
 });
 

@@ -100,10 +100,10 @@ export function createCargoConfigSnapshot({ root, cwd, cargoHome, sinceMs }) {
     while (true) {
       if (directories.has(directory)) break;
       try {
-        const stats = lstatSync(directory);
-        if (stats.isSymbolicLink()) usable = false;
-        recordTime(stats);
-        state.push([directory, stats.mtimeMs, stats.ctimeMs]);
+        // Only links matter here. A directory's timestamps move with any write
+        // beside the config (Cargo's own tracker in CARGO_HOME, files in the checkout
+        // root or $HOME), which would mark nearly every build as modified.
+        if (lstatSync(directory).isSymbolicLink()) usable = false;
         directories.add(directory);
       } catch (error) {
         if (error.code !== "ENOENT") throw error;
