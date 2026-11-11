@@ -39,6 +39,20 @@ fn explicit_outputs_are_silent_and_generated_names_remain_results() {
     assert!(!in_place.shows_file(&file));
 }
 
+#[cfg(unix)]
+#[test]
+fn non_utf8_explicit_output_matches_its_lossy_emitted_path() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+    let name = OsString::from_vec(b"bad\xff\xfe.zip".to_vec());
+    let explicit = OutputSelection {
+        explicit_output: Some(name.into()),
+        ..OutputSelection::default()
+    };
+    assert!(!explicit.shows_file(&json!({ "path": "bad\u{FFFD}\u{FFFD}.zip" })));
+    assert!(explicit.shows_file(&json!({ "path": "other.zip" })));
+}
+
 #[test]
 fn elapsed_below_a_second_stays_in_milliseconds() {
     assert_eq!(format_elapsed_ms(0), "0ms");

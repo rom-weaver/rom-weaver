@@ -843,3 +843,22 @@ fn selection_prompt_hints_at_arrow_keys_and_echoes_other_bad_input() {
         assert!(transcript.contains(message), "{transcript}");
     }
 }
+
+#[test]
+fn explicit_output_write_is_confirmed_once_on_a_terminal() {
+    for flags in [&[][..], &["-v"][..]] {
+        let temp = fixture();
+        let mut command = isolated_command(&temp);
+        command
+            .env("TERM", "xterm")
+            .args(["compress", "game.nes", "-o", "out.zip"])
+            .args(flags);
+        let (status, transcript) = run_on_terminal(command, &[]);
+        assert!(status.success(), "{flags:?}: {transcript}");
+        assert_eq!(
+            transcript.matches("compress: wrote ").count(),
+            1,
+            "{flags:?}: {transcript}"
+        );
+    }
+}

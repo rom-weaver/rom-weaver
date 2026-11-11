@@ -311,6 +311,77 @@ fn closed_stderr_preserves_operation_status_without_panicking() {
     }
 }
 
+#[test]
+fn final_validation_errors_drop_the_prefix_in_human_output_only() {
+    let temp = TempDir::new().expect("temp dir");
+    let source = temp.child("source.bin");
+    fs::write(source.path(), b"hello world").expect("fixture");
+    let output = temp.child("out.zip");
+    fs::write(output.path(), b"existing").expect("existing output");
+    let args = [
+        "compress".as_ref(),
+        source.path().as_os_str(),
+        "-o".as_ref(),
+        output.path().as_os_str(),
+    ];
+
+    let human = command().args(args).assert().failure().get_output().clone();
+    let stderr = String::from_utf8_lossy(&human.stderr);
+    assert!(
+        stderr.starts_with("error: refusing to overwrite"),
+        "{stderr}"
+    );
+
+    let json = command()
+        .args(args)
+        .arg("--json")
+        .assert()
+        .failure()
+        .get_output()
+        .clone();
+    let stdout = String::from_utf8_lossy(&json.stdout);
+    assert!(
+        stdout.contains("validation failed: refusing to overwrite"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn stream_validation_errors_drop_the_prefix_in_human_output_only() {
+    let temp = TempDir::new().expect("temp dir");
+    let source = temp.child("hello.bin");
+    fs::write(source.path(), b"hello world").expect("fixture");
+
+    let human = command()
+        .arg("compress")
+        .arg(source.path())
+        .args(["-o", "-"])
+        .assert()
+        .failure()
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8_lossy(&human.stderr);
+    assert!(
+        stderr.starts_with("error: compress output - requires"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("validation failed"), "{stderr}");
+
+    let json = command()
+        .arg("compress")
+        .arg(source.path())
+        .args(["-o", "-", "--json"])
+        .assert()
+        .failure()
+        .get_output()
+        .clone();
+    let stdout = String::from_utf8_lossy(&json.stdout);
+    assert!(
+        stdout.contains("validation failed: output - cannot be combined"),
+        "{stdout}"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn filenames_cannot_inject_extra_summary_lines() {
@@ -628,4 +699,26 @@ fn native_assets_report_stdout_write_errors() {
         assert_eq!(output.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&output.stderr).contains("cannot write stdout"));
     }
+}
+
+#[test]
+fn piped_help_ignores_the_terminal_width() {
+    let help = |columns: &str| {
+        let output = command()
+            .env("COLUMNS", columns)
+            .args(["patch", "apply", "-h"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        String::from_utf8(output).expect("utf-8 help")
+    };
+    let wide = help("300");
+    assert_eq!(help("40"), wide);
+    assert!(
+        wide.lines()
+            .any(|line| line.contains("-i, --input <PATH>") && line.contains("ROM to patch.")),
+        "{wide}"
+    );
 }

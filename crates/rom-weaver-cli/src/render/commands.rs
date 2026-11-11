@@ -43,6 +43,23 @@ impl OutputSelection {
         selection
     }
 
+    #[cfg(test)]
+    pub(super) fn with_explicit_output(output: &str) -> Self {
+        Self {
+            explicit_output: Some(output.into()),
+            ..Self::default()
+        }
+    }
+
+    /// True when `-o/--output` names a file (not stdout or an in-place rewrite).
+    fn names_output_file(&self) -> bool {
+        !self.suppress_files
+            && self
+                .explicit_output
+                .as_deref()
+                .is_some_and(|output| output != std::path::Path::new("-"))
+    }
+
     fn shows_file(&self, file: &Value) -> bool {
         if self.suppress_files {
             return false;
@@ -58,7 +75,8 @@ impl OutputSelection {
         };
         let output = std::fs::canonicalize(output).unwrap_or_else(|_| output.clone());
         let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.into());
-        output != path
+        // Emitted paths are lossy UTF-8, so a non-UTF-8 `-o` name only matches when compared lossily.
+        output.to_string_lossy() != path.to_string_lossy()
     }
 }
 
@@ -73,7 +91,8 @@ pub(super) fn render_success(
     match event.command.as_str() {
         "probe" => render_container_or_patch(surface, event),
         "trim" if !has_emitted_files(event) => render_no_write(surface, event),
-        // A successful trim stays quiet; `-v` lists the written files through `render_verbose`.
+        // A successful trim prints nothing on stdout. `render_verbose` (`-v`) and
+        // `output_confirmation_lines` (explicit `-o` on a terminal) report written files on stderr.
         "trim" => {}
         "extract" | "compress" | "playlist" | "patch-apply" | "bundle-create"
         | "tools-ppf-undo" => {
@@ -112,6 +131,73 @@ pub(super) fn render_success(
     }
 }
 
+/// One `wrote PATH (size, codec)` diagnostic per emitted file accepted by `include`.
+fn wrote_lines(event: &ProgressEvent, include: impl Fn(&Value) -> bool) -> Vec<String> {
+    let Some(files) = event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("emitted_files"))
+        .and_then(Value::as_array)
+    else {
+        return Vec::new();
+    };
+    // Only `compress` and `patch-create` set `format` to the written format. Elsewhere it names an
+    // input or the command. Trim reports `output_format` only when the input is an Xbox ISO (XISO).
+    let output_format = match event.command.as_str() {
+        "compress" | "patch-create" => event.format.as_deref(),
+        "trim" => event
+            .details
+            .as_ref()
+            .and_then(|details| details.get("output_format"))
+            .and_then(Value::as_str),
+        _ => None,
+    };
+    let codec = event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("compression"))
+        .and_then(|compression| compression.get("codec"))
+        .and_then(Value::as_str)
+        .or(output_format);
+    let kind = codec.map(|codec| format!(", {codec}")).unwrap_or_default();
+    files
+        .iter()
+        .filter(|file| include(file))
+        .map(|file| {
+            let path = emitted_file_path(file);
+            let size = size_field(file, "size_bytes");
+            format!("{}: wrote {path} ({size}{kind})", event.command)
+        })
+        .collect()
+}
+
+/// Commands that confirm an explicit `-o/--output` write on stderr.
+const CONFIRMED_OUTPUT_COMMANDS: &[&str] = &[
+    "trim",
+    "patch-apply",
+    "patch-create",
+    "compress",
+    "playlist",
+    "bundle-create",
+    "save-create",
+    "save-set",
+    "tools-ppf-undo",
+];
+
+/// `wrote PATH (size, codec)` lines for `-o/--output` files that `shows_file` hides from stdout.
+pub(super) fn output_confirmation_lines(
+    event: &ProgressEvent,
+    selection: &OutputSelection,
+) -> Vec<String> {
+    let confirms_write = !is_dry_run(event)
+        && CONFIRMED_OUTPUT_COMMANDS.contains(&event.command.as_str())
+        && selection.names_output_file();
+    if !confirms_write {
+        return Vec::new();
+    }
+    wrote_lines(event, |file| !selection.shows_file(file))
+}
+
 pub(super) fn render_verbose(surface: &Surface, event: &ProgressEvent) {
     let diagnostics = surface.diagnostics();
     if is_dry_run(event) || is_save_preview(event) {
@@ -131,14 +217,8 @@ pub(super) fn render_verbose(surface: &Surface, event: &ProgressEvent) {
 /// The verbose line(s) that say what the command did: each file it wrote, the
 /// game count for a save listing, or else its label.
 fn render_verbose_summary(diagnostics: &Surface, event: &ProgressEvent) {
-    if let Some(files) = event
-        .details
-        .as_ref()
-        .and_then(|details| details.get("emitted_files"))
-        .and_then(Value::as_array)
-        .filter(|files| !files.is_empty())
-    {
-        render_verbose_emitted_files(diagnostics, event, files);
+    if has_emitted_files(event) {
+        render_verbose_emitted_files(diagnostics, event);
     } else if event.command == "save-list-games" {
         // The label is the whole listing, which `render_save_games` already prints to stdout.
         if let Some(games) = save_editor_details(event)
@@ -157,19 +237,9 @@ fn render_verbose_summary(diagnostics: &Surface, event: &ProgressEvent) {
     }
 }
 
-fn render_verbose_emitted_files(diagnostics: &Surface, event: &ProgressEvent, files: &[Value]) {
-    for file in files {
-        let path = emitted_file_path(file);
-        let size = size_field(file, "size_bytes");
-        let codec = event
-            .details
-            .as_ref()
-            .and_then(|details| details.get("compression"))
-            .and_then(|compression| compression.get("codec"))
-            .and_then(Value::as_str)
-            .or(event.format.as_deref());
-        let kind = codec.map(|codec| format!(", {codec}")).unwrap_or_default();
-        diagnostics.line(&format!("{}: wrote {path} ({size}{kind})", event.command));
+fn render_verbose_emitted_files(diagnostics: &Surface, event: &ProgressEvent) {
+    for line in wrote_lines(event, |_| true) {
+        diagnostics.line(&line);
     }
 }
 

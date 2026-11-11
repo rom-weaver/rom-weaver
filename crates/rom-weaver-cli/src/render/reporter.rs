@@ -5,7 +5,9 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use indicatif::{ProgressBar, ProgressStyle};
-use rom_weaver_core::{OperationStatus, ProgressEvent, ProgressSink, process_cancellation_token};
+use rom_weaver_core::{
+    OperationStatus, ProgressEvent, ProgressSink, RomWeaverErrorKind, process_cancellation_token,
+};
 
 use super::{
     HumanStyle, Surface, commands, display_text, terminal_supports_progress, write_stderr,
@@ -156,6 +158,40 @@ impl HumanReporter {
             .clear();
     }
 
+    /// `-o/--output` writes leave stdout silent; on an interactive stderr, say what was written.
+    fn output_confirmation_lines(&self, event: &ProgressEvent) -> Vec<String> {
+        if self.progress_is_terminal && !self.quiet {
+            commands::output_confirmation_lines(event, &self.selection)
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn render_succeeded(&self, event: &ProgressEvent) {
+        if event.command != "setup" || !self.quiet || commands::is_dry_run(event) {
+            commands::render_success(&self.surface, event, &self.selection);
+        }
+        if self.verbose {
+            commands::render_verbose(&self.surface, event);
+        } else {
+            let diagnostics = self.surface.diagnostics();
+            for line in self.output_confirmation_lines(event) {
+                diagnostics.line(&line);
+            }
+        }
+    }
+
+    /// Multi-line unsupported labels: only the first line carries the `unsupported:` prefix.
+    fn warn_unsupported_lines(&self, label: &str) {
+        for (index, line) in label.lines().enumerate() {
+            if index == 0 {
+                self.surface.warn(&format!("unsupported: {line}"));
+            } else {
+                self.surface.warn(line);
+            }
+        }
+    }
+
     fn render_terminal(&self, event: &ProgressEvent) {
         if process_cancellation_token().is_cancelled() {
             self.surface.cancelled("cancelled");
@@ -172,33 +208,32 @@ impl HumanReporter {
             }
         }
         match event.status {
-            OperationStatus::Succeeded => {
-                if event.command != "setup" || !self.quiet || commands::is_dry_run(event) {
-                    commands::render_success(&self.surface, event, &self.selection);
-                }
-                if self.verbose {
-                    commands::render_verbose(&self.surface, event);
-                }
-            }
-            OperationStatus::Failed => self.surface.error(&format!("error: {}", event.label)),
+            OperationStatus::Succeeded => self.render_succeeded(event),
+            OperationStatus::Failed => self
+                .surface
+                .error(&format!("error: {}", human_error_text(&event.label))),
             OperationStatus::Unsupported if event.command == "save-identify" => {
-                for (index, line) in event.label.lines().enumerate() {
-                    if index == 0 {
-                        self.surface.warn(&format!("unsupported: {line}"));
-                    } else {
-                        self.surface.warn(line);
-                    }
-                }
+                self.warn_unsupported_lines(&event.label);
             }
-            OperationStatus::Unsupported => {
-                self.surface.warn(&format!("unsupported: {}", event.label))
-            }
+            OperationStatus::Unsupported => self
+                .surface
+                .warn(&format!("unsupported: {}", human_error_text(&event.label))),
             OperationStatus::Cancelled => self
                 .surface
                 .cancelled(&format!("cancelled: {}", event.label)),
             OperationStatus::Pending | OperationStatus::Running => {}
         }
     }
+}
+
+/// Drop the standard `validation failed: ` prefix, which only repeats the `error:` label. The
+/// event text keeps it because `classify_message` and JSON consumers match on it.
+pub(crate) fn human_error_text(label: &str) -> &str {
+    RomWeaverErrorKind::MESSAGE_PREFIXES
+        .iter()
+        .find(|(_, kind)| *kind == RomWeaverErrorKind::Validation)
+        .and_then(|(prefix, _)| label.strip_prefix(prefix))
+        .map_or(label, str::trim_start)
 }
 
 impl ProgressSink for HumanReporter {

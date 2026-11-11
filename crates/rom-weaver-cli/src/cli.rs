@@ -332,7 +332,13 @@ Pass --json for the machine-readable form."
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn cli_command() -> clap::Command {
-    crate::streams::decorate(crate::cli_inputs::decorate(Cli::command().mut_subcommand(
+    let mut command = Cli::command().max_term_width(100);
+    // clap probes stdout, stderr, then stdin for a width. Piped stdout gets width 0, so JSON
+    // `details.content` and captured help ignore other ttys.
+    if !io::stdout().is_terminal() {
+        command = command.term_width(0);
+    }
+    crate::streams::decorate(crate::cli_inputs::decorate(command.mut_subcommand(
         "checksum",
         |command| {
             command.arg(
