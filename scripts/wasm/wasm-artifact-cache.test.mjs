@@ -295,7 +295,7 @@ test("Cargo config snapshots ignore timestamp changes on directories around the 
     const options = { root: dir, cwd: dir, cargoHome, sinceMs: Date.now() + 60_000 };
     const initial = createCargoConfigSnapshot(options);
     assert.equal(initial.modified, false);
-    // Cargo's own tracker in CARGO_HOME and unrelated writes in the checkout or its parents move these timestamps during every build.
+    // Nearly every build moves these timestamps: Cargo's CARGO_HOME tracker and nearby writes do it.
     const changedAt = new Date(options.sinceMs + 60_000);
     for (const directory of [outer, path.join(outer, "inner"), cargoHome, dir]) fs.utimesSync(directory, changedAt, changedAt);
     const changed = createCargoConfigSnapshot(options);
