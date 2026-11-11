@@ -334,7 +334,7 @@ Pass --json for the machine-readable form."
 #[cfg(not(target_arch = "wasm32"))]
 const HELP_WIDTH: usize = 100;
 
-/// Clap indents a flag row by 2 or 6 spaces, so a deeper line continues a wrapped help text.
+/// Clap indents flag rows by 2 or 6 spaces. A line indented deeper continues a wrapped help text.
 #[cfg(not(target_arch = "wasm32"))]
 const WRAPPED_HELP_INDENT: &str = "       ";
 
