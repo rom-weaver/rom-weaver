@@ -2668,6 +2668,63 @@ fn patch_apply_no_extract_checks_an_archive_input_in_a_dry_run() {
 }
 
 #[test]
+fn patch_apply_dry_run_refuses_an_existing_output_like_the_real_run() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let output = temp.child("out.bin");
+    fs::write(output.path(), b"keep me").expect("existing output");
+
+    for dry_run in [true, false] {
+        let mut args = vec![
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--no-compress",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--jsonl",
+        ];
+        if dry_run {
+            args.push("--dry-run");
+        }
+        let json = parse_single_json_line(&command_stdout(&args, 1));
+        assert_eq!(json["status"], "failed", "dry_run={dry_run}");
+        let label = json["label"].as_str().expect("label");
+        assert!(
+            label.contains("refusing to overwrite existing output"),
+            "{label}"
+        );
+        assert_eq!(fs::read(output.path()).expect("output"), b"keep me");
+    }
+
+    let forced = parse_json_lines(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--no-compress",
+            "--force",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(
+        forced.last().expect("terminal event")["status"],
+        "succeeded"
+    );
+    assert_eq!(fs::read(output.path()).expect("output"), b"keep me");
+}
+
+#[test]
 fn ppf_undo_checks_a_z3ds_output_input_for_3ds_content_before_undoing() {
     let temp = setup_temp_dir();
     let rom = temp.child("patched.bin");
