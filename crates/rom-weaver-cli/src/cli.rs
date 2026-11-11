@@ -789,7 +789,7 @@ fn matched_subcommand_mut<'a>(
     command
 }
 
-/// Headings of the help sections that clap lays out with each flag's help on the next line at width 100.
+/// Returns the section headings where clap puts flag help on the next line at width 100.
 #[cfg(not(target_arch = "wasm32"))]
 fn next_line_headings(probe: &mut clap::Command) -> Vec<String> {
     let help = probe.render_help().to_string();
@@ -814,8 +814,7 @@ fn next_line_headings(probe: &mut clap::Command) -> Vec<String> {
     headings
 }
 
-/// Gives piped help clap's width-100 next-line sections without wrapping text. Width 0 wraps
-/// nothing but never picks next-line help, so the sections clap picks at width 100 get it explicitly.
+/// Gives piped help the next-line sections clap picks at width 100. Width 0 wraps nothing but picks none.
 #[cfg(not(target_arch = "wasm32"))]
 fn pin_piped_help_layout(command: clap::Command, probe: &mut clap::Command) -> clap::Command {
     let headings = next_line_headings(probe);
@@ -844,15 +843,20 @@ fn pin_piped_help_layout(command: clap::Command, probe: &mut clap::Command) -> c
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+fn pin_help_layout_when_piped(command: clap::Command) -> clap::Command {
+    if io::stdout().is_terminal() {
+        return command;
+    }
+    let mut probe = command.clone().term_width(100);
+    probe.build();
+    pin_piped_help_layout(command, &mut probe)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
     // Patch header options bind by argument index, so parsing MUST preserve
     // the raw matches as well as the derived command.
-    let mut parser = cli_command().color(argument_color(&args));
-    if !io::stdout().is_terminal() {
-        let mut probe = parser.clone().term_width(100);
-        probe.build();
-        parser = pin_piped_help_layout(parser, &mut probe);
-    }
+    let mut parser = pin_help_layout_when_piped(cli_command().color(argument_color(&args)));
     let matches = match parser.try_get_matches_from_mut(args) {
         Ok(matches) => matches,
         Err(error) => return print_argument_result(error, mode),
