@@ -100,8 +100,8 @@ export function createCargoConfigSnapshot({ root, cwd, cargoHome, sinceMs }) {
     while (true) {
       if (directories.has(directory)) break;
       try {
-        // Only symlinks matter here. Cargo's tracker and writes in $HOME or the
-        // checkout change directory timestamps on nearly every build.
+        // Only symlinks matter here. Writes in $HOME, the checkout, and Cargo's
+        // tracker move directory timestamps on nearly every build.
         if (lstatSync(directory).isSymbolicLink()) usable = false;
         directories.add(directory);
       } catch (error) {
