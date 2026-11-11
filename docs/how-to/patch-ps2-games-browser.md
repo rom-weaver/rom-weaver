@@ -22,7 +22,7 @@ Patch a PlayStation 2 (PS2) disc online with rom-weaver's [Apply](https://rom-we
 
 1. Open [Apply](https://rom-weaver.com/apply-rom-patches).
 2. Drop the disc files and the patch into **0x01 Inputs**, or choose **Add files**.
-3. Wait for **Reading** and **Checksumming**. If Apply asks which file to use from a CHD or archive, choose the one the author names.
+3. Wait for **Reading** and **Checksumming**. Apply may ask which file to use from a CHD or archive. Choose the one the author names.
 4. Read the patch card's **Checks** line. For an xdelta patch, [Check the source file](apply-xdelta-patch-browser.md#check-the-source-file) explains what it can catch.
 5. In **Apply**, the format selector starts on **.chd**. Pick **.iso** to keep a raw image instead.
 6. Choose **APPLY & DOWNLOAD** and save the result.
@@ -31,9 +31,9 @@ Your original disc stays unchanged. Check that your emulator reads CHD before yo
 
 ## Check the disc first
 
-Compare the author's checksum with the ISO or track, not with the CHD, ZIP, or 7z around it. Open **Checks** on the ROM card to see the image's checksums.
+Compare the author's checksum with the ISO or track. Do not compare it with the CHD, ZIP, or 7z around it. Open **Checks** on the ROM card to see the image's checksums.
 
-On a mismatch, [Fix a source ROM checksum mismatch](fix-checksum-errors.md) lists the causes. A fresh file dropped into **0x01 Inputs** replaces the wrong one.
+On a mismatch, [Fix a source ROM checksum mismatch](fix-checksum-errors.md) lists the causes.
 
 A PS2 DVD can be several gigabytes. It needs free memory and storage; [browser limits](../explanation/local-first.md#what-this-costs-you) gives the details.
 

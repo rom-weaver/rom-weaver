@@ -33,9 +33,9 @@ Your original ROM stays unchanged.
 
 ## Check the ROM first
 
-A patch made for a decrypted ROM fails on an encrypted copy of the same game, and the other way round. rom-weaver does not decrypt or encrypt 3DS ROMs, so use the form the author names.
+A BPS or UPS patch made for a decrypted ROM fails on an encrypted copy. The reverse also fails. rom-weaver does not decrypt or encrypt 3DS ROMs, so use the form the author names.
 
-Compare the author's checksum with the ROM, not with the Z3DS, ZIP, or 7z around it. On a mismatch, [Fix a source ROM checksum mismatch](fix-checksum-errors.md) lists the causes.
+Compare the author's checksum with the ROM, not the Z3DS, ZIP, or 7z around it. On a mismatch, [Fix a source ROM checksum mismatch](fix-checksum-errors.md) lists the causes.
 
 ## Related
 

@@ -47,9 +47,9 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Apply an IPS patch](https://rom-weaver.com/docs/apply-ips-patch): Browser steps for an IPS or IPS32 patch, with a manual source checksum check because IPS stores none.
 - [Apply a UPS patch](https://rom-weaver.com/docs/apply-ups-patch): Browser steps for a UPS patch, its CRC32 checks, and why an already patched ROM also matches.
 - [Apply an xdelta patch](https://rom-weaver.com/docs/apply-xdelta-patch): Browser steps for an xdelta or VCDIFF patch on a ROM or disc image, and how to check the source file.
-- [Patch a GameCube or Wii game](https://rom-weaver.com/docs/patch-gamecube-wii-games): Browser steps for patching a GameCube or Wii ISO or RVZ and saving the result as RVZ or ISO.
-- [Patch a PS2 game](https://rom-weaver.com/docs/patch-ps2-games): Browser steps for patching a PS2 ISO, BIN/CUE, or CHD and saving the result as CHD or ISO.
-- [Patch a 3DS ROM](https://rom-weaver.com/docs/patch-3ds-roms): Browser steps for patching a `.3ds`, `.cci`, `.z3ds`, or `.zcci` ROM, and why encrypted and decrypted ROMs differ.
+- [Patch a GameCube or Wii game](https://rom-weaver.com/docs/patch-gamecube-wii-games): Browser steps to patch an ISO or RVZ, saved as RVZ or ISO.
+- [Patch a PS2 game](https://rom-weaver.com/docs/patch-ps2-games): Browser steps to patch an ISO, BIN/CUE, or CHD, saved as CHD or ISO.
+- [Patch a 3DS ROM](https://rom-weaver.com/docs/patch-3ds-roms): Browser steps for a `.3ds`, `.cci`, `.z3ds`, or `.zcci` ROM. Covers encrypted and decrypted ROMs.
 - [Apply Dreamcast DCP patches](https://rom-weaver.com/docs/apply-rom-patches#apply-a-dreamcast-dcp-patch): Rebuild a Dreamcast disc in the browser from one DCP patch and its GDI or CUE with tracks, a GD-ROM CHD, or an archive of them. DCP must run alone.
 - [Apply Dreamcast DCP patches (CLI)](https://rom-weaver.com/docs/cli-apply#apply-a-dreamcast-dcp-patch): Rebuild a Dreamcast disc from one DCP patch and its CUE or GDI input. DCP must run alone.
 - [Use cheats guide](https://rom-weaver.com/docs/use-cheats): Bake ROM cheats into a ROM from the browser Apply workflow.

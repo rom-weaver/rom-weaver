@@ -33,9 +33,9 @@ Your original disc stays unchanged.
 
 ## Check the disc first
 
-Compare the author's checksum with the ISO, not with the RVZ, ZIP, or 7z around it. Open **Checks** on the ROM card to see the ISO's checksums.
+Compare the author's checksum with the ISO, not the RVZ, ZIP, or 7z around it. Open **Checks** on the ROM card to see the ISO's checksums.
 
-On a mismatch, [Fix a source ROM checksum mismatch](fix-checksum-errors.md) lists the causes. A fresh file dropped into **0x01 Inputs** replaces the wrong one.
+On a mismatch, [Fix a source ROM checksum mismatch](fix-checksum-errors.md) lists the causes.
 
 A Wii disc can be several gigabytes. It needs free memory and storage; [browser limits](../explanation/local-first.md#what-this-costs-you) gives the details.
 
