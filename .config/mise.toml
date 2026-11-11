@@ -11,18 +11,19 @@ rust = { version = "1.97.1", components = "rustfmt,clippy" }
 # The GitHub backend includes Binaryen's Linux arm64 release assets.
 "github:WebAssembly/binaryen" = "version_129"
 "aqua:EmbarkStudios/cargo-deny" = "0.20.2"
-"ubi:bnjbvr/cargo-machete" = "0.9.1"
+"github:bnjbvr/cargo-machete" = "0.9.1"
 # Version is the release tag: nextest's repo prefixes tags with the crate name.
-"ubi:nextest-rs/nextest" = { version = "cargo-nextest-0.9.140", exe = "cargo-nextest" }
-"ubi:obi1kenobi/cargo-semver-checks" = "0.46.0"
+"github:nextest-rs/nextest" = "cargo-nextest-0.9.140"
+"github:obi1kenobi/cargo-semver-checks" = "0.46.0"
 "aqua:rhysd/actionlint" = "1.7.12"              # workflow linting (shellcheck-aware)
 "aqua:koalaman/shellcheck" = "0.11.0"           # shell script linting (also backs actionlint's `run:` checks)
 "aqua:hadolint/hadolint" = "2.14.0"             # Dockerfile linting
 
-"ubi:sourcefrog/cargo-mutants" = "27.1.0"
+# cargo-mutants publishes no aarch64 macOS build; the x86_64 one runs under Rosetta.
+"github:sourcefrog/cargo-mutants" = { version = "27.1.0", platforms = { macos-arm64 = { asset_pattern = "cargo-mutants-x86_64-apple-darwin.tar.gz" } } }
 "cargo:cargo-fuzz" = "0.13.2"
 "cargo:kani-verifier" = "0.68.0"
-"ubi:taiki-e/cargo-llvm-cov" = "0.9.0"
+"github:taiki-e/cargo-llvm-cov" = "0.9.0"
 
 [env]
 # SDK discovery MUST use system tools because [env] renders before tool installation.
@@ -63,7 +64,7 @@ CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
 RUSTC_WRAPPER = "{{ exec(command='command -v sccache || true') | trim }}"
 CARGO_INCREMENTAL = "{{ exec(command='test -n \"$CI\" || command -v sccache >/dev/null 2>&1 && echo 0 || echo 1') | trim }}"
 # Read the process value so parent worktree defaults cannot replace the limit.
-SCCACHE_CACHE_SIZE = "{{ get_env(name='SCCACHE_CACHE_SIZE', default='60G') }}"
+SCCACHE_CACHE_SIZE = "{{ get_env(name='SCCACHE_CACHE_SIZE', default='100G') }}"
 
 # cc-rs can inherit RUSTC_WRAPPER, but ccache reuses C objects across worktree paths.
 # Cross builds MUST set CC_<target>/CXX_<target> when the host compiler is unsuitable.

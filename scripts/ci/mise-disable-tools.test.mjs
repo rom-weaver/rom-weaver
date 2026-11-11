@@ -11,35 +11,35 @@ const config = `${import.meta.dirname}/../../.config/mise.toml`;
 const JOBS = {
   "wasm / release fallback": [
     ["node", "rust", "binaryen"],
-    "aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:nextest-rs/nextest,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,ubi:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,ubi:taiki-e/cargo-llvm-cov",
+    "aqua:EmbarkStudios/cargo-deny,github:bnjbvr/cargo-machete,github:nextest-rs/nextest,github:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,github:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,github:taiki-e/cargo-llvm-cov",
   ],
   "rust-lint": [
     ["node", "rust", "cargo-deny", "cargo-machete"],
-    "github:WebAssembly/binaryen,ubi:nextest-rs/nextest,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,ubi:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,ubi:taiki-e/cargo-llvm-cov",
+    "github:WebAssembly/binaryen,github:nextest-rs/nextest,github:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,github:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,github:taiki-e/cargo-llvm-cov",
   ],
   "rust-host": [
     ["node", "rust", "nextest"],
-    "github:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,ubi:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,ubi:taiki-e/cargo-llvm-cov",
+    "github:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,github:bnjbvr/cargo-machete,github:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,github:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,github:taiki-e/cargo-llvm-cov",
   ],
   "rust-macos": [
     ["rust", "nextest"],
-    "node,github:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,ubi:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,ubi:taiki-e/cargo-llvm-cov",
+    "node,github:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,github:bnjbvr/cargo-machete,github:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,github:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,github:taiki-e/cargo-llvm-cov",
   ],
   security: [
     ["node", "rust", "cargo-deny"],
-    "github:WebAssembly/binaryen,ubi:bnjbvr/cargo-machete,ubi:nextest-rs/nextest,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,ubi:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,ubi:taiki-e/cargo-llvm-cov",
+    "github:WebAssembly/binaryen,github:bnjbvr/cargo-machete,github:nextest-rs/nextest,github:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,github:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,github:taiki-e/cargo-llvm-cov",
   ],
   "wasm-check": [
     ["rust"],
-    "node,github:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:nextest-rs/nextest,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,ubi:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,ubi:taiki-e/cargo-llvm-cov",
+    "node,github:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,github:bnjbvr/cargo-machete,github:nextest-rs/nextest,github:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,github:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,github:taiki-e/cargo-llvm-cov",
   ],
   "webapp / deploy / static-webapp": [
     ["node"],
-    "rust,github:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:nextest-rs/nextest,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,ubi:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,ubi:taiki-e/cargo-llvm-cov",
+    "rust,github:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,github:bnjbvr/cargo-machete,github:nextest-rs/nextest,github:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,github:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,github:taiki-e/cargo-llvm-cov",
   ],
   "coverage / parity / e2e-nightly": [
     ["node", "rust"],
-    "github:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:nextest-rs/nextest,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,ubi:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,ubi:taiki-e/cargo-llvm-cov",
+    "github:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,github:bnjbvr/cargo-machete,github:nextest-rs/nextest,github:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint,github:sourcefrog/cargo-mutants,cargo:cargo-fuzz,cargo:kani-verifier,github:taiki-e/cargo-llvm-cov",
   ],
 };
 
@@ -55,8 +55,8 @@ test("refuses a config with no tools table", () => assert.throws(() => disabledT
 test("quality jobs install only their pinned analysis tools", () => {
   const wanted = ["node", "rust", "cargo-mutants"];
   const excluded = disabledTools(config, wanted).split(",");
-  assert.ok(!excluded.includes("ubi:sourcefrog/cargo-mutants"));
+  assert.ok(!excluded.includes("github:sourcefrog/cargo-mutants"));
   assert.ok(excluded.includes("cargo:cargo-fuzz"));
   assert.ok(excluded.includes("cargo:kani-verifier"));
-  assert.ok(excluded.includes("ubi:taiki-e/cargo-llvm-cov"));
+  assert.ok(excluded.includes("github:taiki-e/cargo-llvm-cov"));
 });
