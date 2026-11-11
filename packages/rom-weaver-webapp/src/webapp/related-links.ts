@@ -45,6 +45,15 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
   "docs/apply-xdelta-patch": {
     tools: [{ labelId: "ui.docs.toolApply", view: "patcher" }],
   },
+  "docs/patch-gamecube-wii-games": {
+    tools: [{ labelId: "ui.docs.toolApply", view: "patcher" }],
+  },
+  "docs/patch-ps2-games": {
+    tools: [{ labelId: "ui.docs.toolApply", view: "patcher" }],
+  },
+  "docs/patch-3ds-roms": {
+    tools: [{ labelId: "ui.docs.toolApply", view: "patcher" }],
+  },
   "docs/apply-rom-patches": {
     tools: [{ labelId: "ui.docs.toolApply", view: "patcher" }],
   },
