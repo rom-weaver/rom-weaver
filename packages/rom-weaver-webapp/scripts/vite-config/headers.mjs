@@ -70,11 +70,19 @@ export const writeCloudflareHeadersAsset = (channel) => {
       // Exact rules, not `:page` placeholders: a placeholder also matches missing
       // Markdown URLs and would serve their HTML 404 page as text/markdown.
       const authMarkdownHeaders = `/auth.md\n  Content-Type: text/markdown; charset=utf-8\n${noindex}\n`;
+      // Docs pages share one wildcard, so a new page adds no rule.
+      // Missing docs Markdown URLs also return a text/markdown 404.
+      const markdownPatterns = [
+        ...MARKDOWN_ROUTES.map(({ markdownPath }) => markdownPath).filter(
+          (markdownPath) => !markdownPath.startsWith("/docs/"),
+        ),
+        "/docs/*.md",
+      ];
       // No canonical Link here: noindex plus a canonical pointing at the HTML page risks the
       // noindex being applied to, or cancelled for, the page that must stay indexed.
-      const markdownHeaders = MARKDOWN_ROUTES.map(
-        ({ markdownPath }) => `${markdownPath}\n  Content-Type: text/markdown; charset=utf-8\n${noindex}`,
-      ).join("\n");
+      const markdownHeaders = markdownPatterns
+        .map((pattern) => `${pattern}\n  Content-Type: text/markdown; charset=utf-8\n${noindex}`)
+        .join("\n");
       // The Markdown copies and JSON schemas stay fetchable for LLMs and tools but out of
       // search results. The Markdown rules above carry their noindex, which keeps
       // _headers within Pages' 100-rule cap; one wildcard covers the schemas.
