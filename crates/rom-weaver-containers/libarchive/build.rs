@@ -795,22 +795,26 @@ fn build_libarchive(libarchive_dir: &Path, lzma_glue_dir: &Path, target_sysroot:
     }
 }
 
+/// Bindgen's `CargoCallbacks` also tracks every included header, including the staged copies in
+/// OUT_DIR that each run rewrites; those would rebuild this crate on every build.
+#[derive(Debug)]
+struct EnvOnlyCallbacks;
+
+impl bindgen::callbacks::ParseCallbacks for EnvOnlyCallbacks {
+    fn read_env_var(&self, key: &str) {
+        println!("cargo:rerun-if-env-changed={key}");
+    }
+}
+
 fn generate_bindings(libarchive_dir: &Path, target_sysroot: Option<&Path>) {
+    // The vendored tree is already tracked in `build`; see `EnvOnlyCallbacks`.
     println!("cargo:rerun-if-changed={WRAPPER_HEADER}");
-    println!(
-        "cargo:rerun-if-changed={}",
-        libarchive_dir.join("libarchive/archive.h").display()
-    );
-    println!(
-        "cargo:rerun-if-changed={}",
-        libarchive_dir.join("libarchive/archive_entry.h").display()
-    );
 
     let include_path = libarchive_dir.join("libarchive");
     let wasm_target = is_wasm32_target();
     let mut bindgen_builder = bindgen::builder()
         .header(WRAPPER_HEADER)
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .parse_callbacks(Box::new(EnvOnlyCallbacks))
         .allowlist_var("ARCHIVE_.*")
         .allowlist_type("archive")
         .allowlist_type("archive_.*")
