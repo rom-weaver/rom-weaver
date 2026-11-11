@@ -64,6 +64,7 @@ import {
 } from "./emulator-audio-context.ts";
 import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
+import { getErrorCode } from "../../presentation/errors.ts";
 import { keepTestRom } from "../../storage/browser/kept-roms.ts";
 import { KeptRomsPanel } from "./kept-roms-panel.tsx";
 import { StorageFullRecovery } from "./storage-full-recovery.tsx";
@@ -110,10 +111,12 @@ const createLocalEntryId = (fileName: string) => {
   return `local-${Date.now()}-${localEntryCounter}-${fileName}`;
 };
 
-type EmulatorError = { blocksPlayer?: boolean; detail: string; summary: string };
+type EmulatorError = { blocksPlayer?: boolean; code?: string; detail: string; summary: string };
 
-const errorDetail = (reason: unknown, fallback: string) =>
-  reason instanceof Error && reason.message.trim() ? reason.message : fallback;
+const errorFields = (reason: unknown, fallback: string) => ({
+  code: getErrorCode(reason),
+  detail: reason instanceof Error && reason.message.trim() ? reason.message : fallback,
+});
 
 const isCoarsePointer = () =>
   typeof window !== "undefined" &&
@@ -264,7 +267,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
       .catch((reason) => {
         if (current && revision === pendingReadRevisionRef.current) {
           setError({
-            detail: errorDetail(reason, "The saved upload could not be read."),
+            ...errorFields(reason, "The saved upload could not be read."),
             summary: "Could not load the saved upload.",
           });
         }
@@ -381,7 +384,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
       .catch((reason) => {
         if (!cancelled) {
           setError({
-            detail: errorDetail(reason, "The retained ROM could not be read."),
+            ...errorFields(reason, "The retained ROM could not be read."),
             summary: `Could not open ${currentGame.fileName}.`,
           });
           disposeEntry(currentGame.id);
@@ -571,7 +574,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
       } catch (reason) {
         if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return false;
         setError({
-          detail: errorDetail(reason, "The ROM could not be prepared for the emulator."),
+          ...errorFields(reason, "The ROM could not be prepared for the emulator."),
           summary: `Could not load ${file.name}.`,
         });
         return false;
@@ -622,7 +625,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
             setPendingSave(staged);
           } catch (reason) {
             setError({
-              detail: errorDetail(reason, "The save could not be loaded."),
+              ...errorFields(reason, "The save could not be loaded."),
               summary: `Could not load ${save.name}.`,
             });
           }
@@ -803,7 +806,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
       setPendingSave((await readPendingTestSaves())[0]);
     } catch (reason) {
       setError({
-        detail: errorDetail(reason, "The saved upload could not be removed."),
+        ...errorFields(reason, "The saved upload could not be removed."),
         summary: "Could not remove the saved upload.",
       });
     }
@@ -940,6 +943,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
                 >
                   <b>{error.summary}</b> {error.detail}
                   <StorageFullRecovery
+                    code={error.code}
                     message={error.detail}
                     onRetry={
                       lastPickedRomRef.current

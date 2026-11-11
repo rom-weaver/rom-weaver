@@ -1289,6 +1289,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "error.NO_SELECTABLE_CANDIDATE",
     message: "None of the files you added can be used here.",
   }),
+  "error.OUT_OF_MEMORY": msg({
+    id: "error.OUT_OF_MEMORY",
+    message: "There wasn't enough memory to finish this.",
+  }),
   "error.OUTPUT_WRITE_FAILED": msg({
     id: "error.OUTPUT_WRITE_FAILED",
     message: "Couldn't save the result. Choose a folder the browser is allowed to write to.",

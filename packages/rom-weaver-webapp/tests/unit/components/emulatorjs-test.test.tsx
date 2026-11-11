@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import type { KeptRomPlayback } from "../../../src/storage/browser/kept-roms.ts";
 import { createKeptRomQuotaError } from "../kept-rom-quota-fixture.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { RomWeaverError } from "../../../src/lib/errors.ts";
 import type { WorkflowProgress } from "../../../src/platform/browser/browser-api.ts";
 import { EmulatorTestView } from "../../../src/public/react/emulator-test-view.tsx";
 import {
@@ -1317,5 +1318,24 @@ it("shows cleanup guidance for the worker's actual kept-ROM quota error", async 
       }),
     ),
   );
+  expect(await screen.findByRole("button", { name: "Open Saves & storage" })).toBeTruthy();
+});
+
+it("shows storage recovery for a PBP storage-full failure whose message names no quota", async () => {
+  stubObjectUrls();
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+  keptRomMocks.listKeptRoms.mockResolvedValue([
+    { gameId: "a".repeat(40), fileName: "other.nes", size: 1000, status: "ready" },
+  ]);
+  loadRomMock.mockRejectedValueOnce(
+    new RomWeaverError(
+      "STORAGE_FULL",
+      "There is not enough browser storage to prepare every PBP disc. Free browser storage and try again.",
+    ),
+  );
+  render(withSettings(<EmulatorTestView />));
+  fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
+    target: { files: [new File(["ROM"], "game.nes")] },
+  });
   expect(await screen.findByRole("button", { name: "Open Saves & storage" })).toBeTruthy();
 });

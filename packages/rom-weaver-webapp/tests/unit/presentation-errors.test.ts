@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { loadCatalog } from "../../src/presentation/localization/catalog.ts";
+import { createLocalizer } from "../../src/presentation/localization/index.ts";
 import {
   formatCodedErrorForDisplay,
   getDisplayedErrorCode,
@@ -76,7 +78,17 @@ describe("presentation errors", () => {
     expect(formatCodedErrorForDisplay(codedError("Multi-file output needs an archive", "INVALID_INPUT"))).toBe(
       "INVALID_INPUT: Multi-file output needs an archive",
     );
-    expect(formatCodedErrorForDisplay(codedError("Wasm OOM", "OUT_OF_MEMORY"))).toBe("OUT_OF_MEMORY: Wasm OOM");
+  });
+
+  it.each([
+    ["en", "There wasn't enough memory to finish this."],
+    ["de", "Es war nicht genug Arbeitsspeicher vorhanden, um den Vorgang abzuschließen."],
+    ["es", "No había memoria suficiente para completar la operación."],
+  ])("localizes an out-of-memory failure in %s and keeps its text as the detail", async (locale, headline) => {
+    await loadCatalog(locale);
+    expect(formatCodedErrorForDisplay(codedError("Wasm OOM", "OUT_OF_MEMORY"), createLocalizer(locale))).toBe(
+      `OUT_OF_MEMORY: ${headline} Details: Wasm OOM`,
+    );
   });
 
   it("decides memory exhaustion by code, not by the message text", () => {
