@@ -22,12 +22,13 @@ function createProject() {
   };
   for (const [file, text] of [["Cargo.lock", "lock"], ["Cargo.toml", "manifest"], [".cargo/config.toml", "config"], [".config/mise.toml", "mise"], ["crates/example/lib.rs", "one"], ["scripts/gen-third-party-licenses.mjs", ""]])
     write(path.join(root, file), text);
-  // The fake cargo fails unless FAKE_CARGO_EDIT names a file: then it rewrites that file mid-build and writes a module.
+  // The fake cargo fails unless FAKE_CARGO_MODULE names a module to write. FAKE_CARGO_EDIT also makes it rewrite that file mid-build, and FAKE_CARGO_REVERT restores the original text.
   const cargo = [
     '[ "$1" = "--version" ] && exit 0',
     'echo "$@" >> "$FAKE_CARGO_LOG"',
-    '[ -n "$FAKE_CARGO_EDIT" ] || exit 1',
-    'echo edited > "$FAKE_CARGO_EDIT"',
+    '[ -n "$FAKE_CARGO_MODULE" ] || exit 1',
+    '[ -z "$FAKE_CARGO_EDIT" ] || echo edited > "$FAKE_CARGO_EDIT"',
+    '[ -z "$FAKE_CARGO_REVERT" ] || printf one > "$FAKE_CARGO_EDIT"',
     'mkdir -p "$(dirname "$FAKE_CARGO_MODULE")"',
     'echo built-module > "$FAKE_CARGO_MODULE"',
   ].join("\n");
@@ -127,15 +128,30 @@ test("only a fast build keeps a module built from the current inputs", { skip },
   }
 });
 
-test("a module built while its sources were edited is never kept", { skip }, () => {
+for (const [name, revert] of [["still edited after the build", ""], ["reverted before the build ended", "1"]]) {
+  test(`a module built while its sources were edited is never kept: ${name}`, { skip }, () => {
+    const project = createProject();
+    try {
+      const source = path.join(project.root, "crates/example/lib.rs");
+      const edit = { FAKE_CARGO_EDIT: source, FAKE_CARGO_REVERT: revert, FAKE_CARGO_MODULE: project.builtModule };
+      assert.equal(project.run("fast", edit).status, 0);
+      fs.writeFileSync(source, "one");
+      assert.notEqual(project.run("fast").status, 0);
+      assert.equal(project.cargoCalls().length, 2, "the second run rebuilds instead of keeping the module");
+    } finally {
+      fs.rmSync(project.dir, { recursive: true, force: true });
+    }
+  });
+}
+
+test("a module built from untouched sources is kept by the next fast build", { skip }, () => {
   const project = createProject();
   try {
-    const source = path.join(project.root, "crates/example/lib.rs");
-    const edit = { FAKE_CARGO_EDIT: source, FAKE_CARGO_MODULE: project.builtModule };
-    assert.equal(project.run("fast", edit).status, 0);
-    fs.writeFileSync(source, "one");
-    assert.notEqual(project.run("fast").status, 0);
-    assert.equal(project.cargoCalls().length, 2, "the second run rebuilds instead of keeping the module");
+    // ctime cannot be backdated, so wait out the one-second slack that treats a fresh source as still being edited.
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1100);
+    assert.equal(project.run("fast", { FAKE_CARGO_MODULE: project.builtModule }).status, 0);
+    assert.equal(project.run("fast").status, 0);
+    assert.equal(project.cargoCalls().length, 1, "the second run keeps the module");
   } finally {
     fs.rmSync(project.dir, { recursive: true, force: true });
   }

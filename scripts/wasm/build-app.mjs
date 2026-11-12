@@ -203,11 +203,10 @@ export function main(argv = process.argv.slice(2), env = process.env) {
     // The production fingerprint describes this checkout's Cargo output, which the cached module did not come from.
     rmSync(fingerprintFile, { force: true });
     process.stdout.write(`reused ${mode} WASM for unchanged inputs from ${join(cache.root, cache.key)}\n`);
-    recordSourceFingerprint({ sourceFingerprintFile, root, sourcesReadAt, sourceFingerprint });
+    writeFileSync(sourceFingerprintFile, `${sourceFingerprint}\n`);
   } else {
     buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env });
-    storeBuiltModule({ cache, configuration, configurationOptions, root, sourcesReadAt, sourceFingerprint, cacheFiles, outDir, force });
-    recordSourceFingerprint({ sourceFingerprintFile, root, sourcesReadAt, sourceFingerprint });
+    settleBuiltModule({ cache, configuration, configurationOptions, root, sourcesReadAt, sourceFingerprint, sourceFingerprintFile, cacheFiles, outDir, force });
   }
 
   run("node", [join(root, "scripts/gen-third-party-licenses.mjs"), outDir, "--target", "webapp"]);
@@ -215,32 +214,28 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   process.stdout.write(wantBrotli ? `artifacts written to ${outDir} (rom-weaver-app.wasm, rom-weaver-app.wasm.br)\n` : `artifact written to ${artifact}\n`);
 }
 
-// A source edit during the build, even one reverted since, reaches the module but not the fingerprint read before it.
-function recordSourceFingerprint({ sourceFingerprintFile, root, sourcesReadAt, sourceFingerprint }) {
-  if (wasmSourcesModifiedSince(root, sourcesReadAt) || createWasmSourceFingerprint(root) !== sourceFingerprint) rmSync(sourceFingerprintFile, { force: true });
+// A source edit during the build, even one reverted since, reaches Cargo's
+// output but not the fingerprint read before it. Recording or caching the
+// module would then serve that edit to a later build of the old sources.
+function settleBuiltModule({ cache, configuration, configurationOptions, root, sourcesReadAt, sourceFingerprint, sourceFingerprintFile, cacheFiles, outDir, force }) {
+  const sourcesChanged = wasmSourcesModifiedSince(root, sourcesReadAt) || createWasmSourceFingerprint(root) !== sourceFingerprint;
+  if (sourcesChanged) rmSync(sourceFingerprintFile, { force: true });
   else writeFileSync(sourceFingerprintFile, `${sourceFingerprint}\n`);
-}
-
-function storeBuiltModule({ cache, configuration, configurationOptions, root, sourcesReadAt, sourceFingerprint, cacheFiles, outDir, force }) {
-  // A source edit during the build, even one reverted since, reaches Cargo's
-  // output but not the key, so storing it would serve that edit to a later
-  // build of the old sources.
+  if (!cache) return;
   let configurationAfter;
-  if (cache) {
-    try {
-      configurationAfter = createCargoConfigSnapshot(configurationOptions);
-    } catch {
-      configurationAfter = undefined;
-    }
+  try {
+    configurationAfter = createCargoConfigSnapshot(configurationOptions);
+  } catch {
+    configurationAfter = undefined;
   }
-  if (cache && (!configurationAfter?.usable || wasmSourcesModifiedSince(root, sourcesReadAt) || createWasmSourceFingerprint(root) !== sourceFingerprint || configurationAfter.fingerprint !== configuration.fingerprint || configurationAfter.state !== configuration.state || configurationAfter.modified)) {
+  if (sourcesChanged || !configurationAfter?.usable || configurationAfter.fingerprint !== configuration.fingerprint || configurationAfter.state !== configuration.state || configurationAfter.modified) {
     process.stderr.write("warning: WASM build inputs changed during the build; not caching it\n");
-  } else if (cache) {
-    try {
-      storeWasmArtifacts({ ...cache, files: cacheFiles, sourceDir: outDir, replace: force });
-    } catch (error) {
-      process.stderr.write(`warning: could not store WASM in ${cache.root} (${error.message})\n`);
-    }
+    return;
+  }
+  try {
+    storeWasmArtifacts({ ...cache, files: cacheFiles, sourceDir: outDir, replace: force });
+  } catch (error) {
+    process.stderr.write(`warning: could not store WASM in ${cache.root} (${error.message})\n`);
   }
 }
 
