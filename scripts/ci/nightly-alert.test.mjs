@@ -5,9 +5,13 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 
 import {
+  ADVISORY_LABEL,
+  ADVISORY_TITLE,
   ALERT_AUTHOR,
   ALERT_LABEL,
   ALERT_TITLE,
+  advisoryJobLines,
+  advisoryOutcome,
   failedJobNames,
   failedJobsOrNone,
   failureText,
@@ -93,6 +97,37 @@ test("the outcome comes from the jobs the alert waits on", () => {
   assert.equal(nightlyOutcome({ gate: { result: "skipped" } }), "recovered");
   assert.equal(nightlyOutcome({ gate: { result: "cancelled" } }), "unknown");
   assert.throws(() => nightlyOutcome({}));
+});
+
+test("the advisory quality jobs never decide the nightly outcome", () => {
+  for (const result of ["failure", "cancelled", "success", "skipped"]) {
+    assert.equal(nightlyOutcome({ gate: { result: "success" }, "quality-analysis": { result } }), "recovered");
+    assert.equal(nightlyOutcome({ gate: { result: "failure" }, "quality-analysis": { result } }), "failing");
+  }
+  assert.throws(() => nightlyOutcome({ "quality-analysis": { result: "success" } }));
+});
+
+test("an advisory job that failed, timed out, or was cancelled is reported; none running says nothing", () => {
+  const job = (name, conclusion) => ({ name, conclusion });
+  assert.equal(advisoryOutcome([]), "unknown");
+  assert.equal(advisoryOutcome([job("Rust (host)", "failure")]), "unknown", "other jobs are not advisory");
+  assert.equal(advisoryOutcome([job("Quality signal (mutation)", "skipped")]), "unknown");
+  assert.equal(advisoryOutcome([job("Quality signal (mutation)", "success")]), "recovered");
+  for (const conclusion of ["failure", "timed_out", "cancelled"]) {
+    assert.equal(
+      advisoryOutcome([job("Quality signal (fuzz)", "success"), job("Quality signal (mutation)", conclusion)]),
+      "failing",
+      conclusion,
+    );
+  }
+  assert.deepEqual(
+    advisoryJobLines([
+      job("Quality signal (fuzz)", "success"),
+      job("Quality signal (mutation)", "cancelled"),
+      job("Rust (host)", "failure"),
+    ]),
+    ["Quality signal (mutation): cancelled"],
+  );
 });
 
 test("a failing nightly opens one issue naming the run, the commit, and the failed jobs", async () => {
@@ -240,7 +275,17 @@ test("a failed job lookup still reports the failure, without names", async () =>
 });
 
 // Drives the script's entry point against the fake issues API plus a runs endpoint.
-async function alert(state, { gate, newest, runsFail = false, jobsFail = false }) {
+async function alert(
+  state,
+  {
+    gate,
+    newest,
+    runsFail = false,
+    jobsFail = false,
+    jobs = [{ name: "Rust (host)", conclusion: "failure" }],
+    needs = { gate: { result: gate } },
+  },
+) {
   const issuesApi = state.api;
   const logs = [];
   const api = async (path, options) => {
@@ -251,7 +296,7 @@ async function alert(state, { gate, newest, runsFail = false, jobsFail = false }
     }
     if (path.includes("/jobs?")) {
       if (jobsFail) throw new Error("502 bad gateway");
-      return { total_count: 1, jobs: [{ name: "Rust (host)", conclusion: "failure" }] };
+      return { total_count: jobs.length, jobs };
     }
     return issuesApi(path, options);
   };
@@ -261,7 +306,7 @@ async function alert(state, { gate, newest, runsFail = false, jobsFail = false }
       GITHUB_RUN_ID: "42",
       GITHUB_SHA: run.sha,
       GITHUB_REF_NAME: "main",
-      NEEDS_JSON: JSON.stringify({ gate: { result: gate } }),
+      NEEDS_JSON: JSON.stringify(needs),
     },
     api,
     paginate: state.paginate,
@@ -299,6 +344,57 @@ test("a failed stale-run lookup still reports a failure but never closes the iss
   const recovering = fakeGitHub({ issues: [{ number: 7, state: "open", title: ALERT_TITLE }] });
   await assert.rejects(alert(recovering, { gate: "success", runsFail: true }), /503 unavailable/u);
   assert.equal(recovering.issues[0].state, "open");
+});
+
+test("a cancelled advisory job opens its own issue without failing the nightly", async () => {
+  const state = fakeGitHub();
+  const jobs = [{ name: "Quality signal (mutation)", conclusion: "cancelled" }];
+  const needs = { gate: { result: "success" }, "quality-analysis": { result: "success" } };
+  const { line } = await alert(state, { gate: "success", newest: 42, jobs, needs });
+  assert.match(line, /^nightly recovered: passing, and no tracking issue is open; advisory: opened #101$/u);
+  const [issue] = state.issues;
+  assert.equal(issue.title, ADVISORY_TITLE);
+  assert.deepEqual(issue.labels, [{ name: ADVISORY_LABEL }]);
+  assert.ok(issue.body.includes("- Quality signal (mutation): cancelled"));
+  assert.ok(issue.body.includes(run.runUrl));
+
+  await alert(state, { gate: "success", newest: 42, jobs, needs });
+  assert.equal(state.issues.length, 1, "the next bad night comments instead of opening another");
+  assert.equal(issue.comments.length, 1);
+
+  const passing = [{ name: "Quality signal (mutation)", conclusion: "success" }];
+  await alert(state, { gate: "success", newest: 42, jobs: passing, needs });
+  assert.equal(issue.state, "closed");
+  assert.match(issue.comments.at(-1), /^Recovered: the advisory quality jobs/u);
+});
+
+test("the advisory issue and the nightly issue never touch each other", async () => {
+  const state = fakeGitHub({
+    issues: [
+      { number: 7, state: "open", title: ALERT_TITLE },
+      { number: 8, state: "open", title: ADVISORY_TITLE },
+    ],
+  });
+  const needs = { gate: { result: "success" }, "quality-analysis": { result: "success" } };
+  const jobs = [{ name: "Quality signal (fuzz)", conclusion: "failure" }];
+  await alert(state, { gate: "success", newest: 42, jobs, needs });
+  const byNumber = Object.fromEntries(state.issues.map((issue) => [issue.number, issue]));
+  assert.equal(byNumber[7].state, "closed", "the green nightly still closes its own issue");
+  assert.equal(byNumber[8].state, "open");
+  assert.equal(byNumber[8].comments.length, 1);
+  assert.ok(!byNumber[7].comments.some((text) => text.includes("Quality signal")));
+});
+
+test("a night where no advisory job ran leaves the advisory issue alone, even if the job lookup fails", async () => {
+  const state = fakeGitHub({ issues: [{ number: 8, state: "open", title: ADVISORY_TITLE }] });
+  const none = [{ name: "Rust (host)", conclusion: "success" }];
+  await alert(state, { gate: "success", newest: 42, jobs: none });
+  assert.equal(state.issues[0].state, "open");
+  assert.deepEqual(state.issues[0].comments, []);
+
+  const { logs } = await alert(state, { gate: "success", newest: 42, jobsFail: true });
+  assert.ok(logs.some((entry) => /leaving the advisory issue as it was: 502 bad gateway/u.test(entry)));
+  assert.equal(state.issues[0].state, "open");
 });
 
 test("a cancelled nightly makes no API call at all", async () => {
@@ -340,7 +436,7 @@ test("the alert job runs only on the schedule event", () => {
   }
   assert.equal(evaluate(expression, "schedule", true), false, "a cancelled run raises no alert");
   assert.ok(ci.on.schedule, "the nightly trigger exists");
-  assert.equal(alertJob.needs, "gate", "the alert runs after the gate");
+  assert.deepEqual(alertJob.needs, ["gate", "quality-analysis"], "the alert runs after the gate and the advisory jobs");
 });
 
 test("no job but the alert job can write issues", () => {

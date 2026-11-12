@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 // Keeps one tracking issue in step with the scheduled CI run: a failing nightly opens it or comments
-// on the open one, and a passing nightly comments "recovered" and closes it. The workflow runs this
-// only on the `schedule` event, after the gate.
+// on the open one, and a passing nightly comments "recovered" and closes it. A second issue tracks the
+// advisory `Quality signal` jobs the same way, because they never fail the run. The workflow runs this
+// only on the `schedule` event, after the gate and those jobs.
 //
 // Required env:
 //   GH_TOKEN            token with issues:write and actions:read
@@ -31,14 +32,38 @@ const UNLISTED_JOBS = new Set(["Nightly alert", "CI gate"]);
 
 const FAILED_CONCLUSIONS = new Set(["failure", "timed_out"]);
 
+// The advisory jobs are `continue-on-error`, so the run stays green when one fails. A job that hits
+// its timeout reports `cancelled`, which counts here: a lane that never finishes is the problem.
+const ADVISORY_NEEDS = new Set(["quality-analysis"]);
+const ADVISORY_JOB_PREFIX = "Quality signal (";
+const ADVISORY_BAD_CONCLUSIONS = new Set([...FAILED_CONCLUSIONS, "cancelled"]);
+
 // `failing` when any job the alert waits on failed, `recovered` when all of them passed or were
 // skipped, and `unknown` for a cancelled run, which says nothing about the code.
 export function nightlyOutcome(needs) {
-  const results = Object.values(needs).map((need) => need.result);
+  const results = Object.entries(needs)
+    .filter(([name]) => !ADVISORY_NEEDS.has(name))
+    .map(([, need]) => need.result);
   if (results.length === 0) throw new Error("the alert job has no needs to judge");
   if (results.includes("failure")) return "failing";
   if (results.every((result) => result === "success" || result === "skipped")) return "recovered";
   return "unknown";
+}
+
+const advisoryJobs = (jobs) => jobs.filter((job) => job.name.startsWith(ADVISORY_JOB_PREFIX));
+
+// `failing` when any advisory job failed or was cancelled, `recovered` when at least one passed and
+// none failed, and `unknown` when none ran (a night with no Rust input change).
+export function advisoryOutcome(jobs) {
+  const signals = advisoryJobs(jobs);
+  if (signals.some((job) => ADVISORY_BAD_CONCLUSIONS.has(job.conclusion))) return "failing";
+  return signals.some((job) => job.conclusion === "success") ? "recovered" : "unknown";
+}
+
+export function advisoryJobLines(jobs) {
+  return advisoryJobs(jobs)
+    .filter((job) => ADVISORY_BAD_CONCLUSIONS.has(job.conclusion))
+    .map((job) => `${job.name}: ${job.conclusion}`);
 }
 
 export function failedJobNames(jobs) {
@@ -63,6 +88,33 @@ export function openingText(run) {
 export function recoveryText(run) {
   return `Recovered: the scheduled CI run passed.\n\n${runLine(run)}`;
 }
+
+export const ADVISORY_TITLE = "Nightly advisory quality jobs are not passing";
+export const ADVISORY_LABEL = "nightly-quality-advisory";
+const ADVISORY_LABEL_DESCRIPTION = "Opened and closed by the scheduled CI run for advisory quality jobs";
+
+export function advisoryFailureText({ runUrl, sha, repoUrl, failed }) {
+  return `${runLine({ runUrl, sha, repoUrl })}\n\nAdvisory jobs that did not pass (they do not fail the nightly; \`cancelled\` means the job hit its timeout):\n${failed.map((line) => `- ${line}`).join("\n")}`;
+}
+
+// The two issues share one lifecycle and differ only in how they are found and worded.
+const NIGHTLY_TRACKER = {
+  title: ALERT_TITLE,
+  label: ALERT_LABEL,
+  labelDescription: LABEL_DESCRIPTION,
+  opening: openingText,
+  failure: failureText,
+  recovery: recoveryText,
+};
+const ADVISORY_TRACKER = {
+  title: ADVISORY_TITLE,
+  label: ADVISORY_LABEL,
+  labelDescription: ADVISORY_LABEL_DESCRIPTION,
+  opening: (run) =>
+    `An advisory quality job in the scheduled CI run did not pass. Later nightlies comment here; the issue closes when they pass.\n\n${advisoryFailureText(run)}`,
+  failure: advisoryFailureText,
+  recovery: (run) => `Recovered: the advisory quality jobs in the scheduled CI run passed.\n\n${runLine(run)}`,
+};
 
 // A run's jobs are not a bare array, so the `paginate` helper cannot read them. The total is the
 // only reliable page count; a short page is not proof of the last one.
@@ -115,43 +167,62 @@ export async function runAlert({ env, api, paginate, warn, notice }) {
       return `nightly ${outcome}: a newer scheduled run exists; nothing to do`;
     }
   }
+  const run = { runUrl: `${repoUrl}/actions/runs/${runId}`, sha, repoUrl };
   const failed = outcome === "failing" ? await failedJobsOrNone({ api, repo, runId, warn }) : [];
-  const summary = await reconcile({
+  const summary = await reconcile({ api, paginate, repo, outcome, run, failed, warn });
+  if (outcome === "unknown") return `nightly ${outcome}: ${summary}`;
+  const advisory = await reconcileAdvisory({ api, paginate, repo, runId, run, warn });
+  return `nightly ${outcome}: ${summary}${advisory ? `; advisory: ${advisory}` : ""}`;
+}
+
+// The advisory lane never changes the nightly's own outcome, and a failed job lookup must not stop
+// the alert that already ran: it warns and leaves the advisory issue as it was.
+async function reconcileAdvisory({ api, paginate, repo, runId, run, warn }) {
+  let jobs;
+  try {
+    jobs = await listRunJobs({ api, repo, runId });
+  } catch (error) {
+    warn(`listing the run's jobs failed; leaving the advisory issue as it was: ${error.message}`);
+    return undefined;
+  }
+  const outcome = advisoryOutcome(jobs);
+  if (outcome === "unknown") return undefined;
+  return reconcile({
     api,
     paginate,
     repo,
     outcome,
-    run: { runUrl: `${repoUrl}/actions/runs/${runId}`, sha, repoUrl },
-    failed,
+    run,
+    failed: advisoryJobLines(jobs),
     warn,
+    tracker: ADVISORY_TRACKER,
   });
-  return `nightly ${outcome}: ${summary}`;
 }
 
 // Oldest first, so a stray duplicate never displaces the issue the alerts were already using. The
 // issues endpoint also returns pull requests. The label is not a match: a person can put it on any
 // issue. Neither is a person's issue with the same title: a passing nightly would close it.
-export async function findAlertIssues({ paginate, repo }) {
+export async function findAlertIssues({ paginate, repo, title = ALERT_TITLE }) {
   const open = await paginate(`/repos/${repo}/issues?state=open`);
   return open
-    .filter((issue) => !issue.pull_request && issue.title === ALERT_TITLE && issue.user?.login === ALERT_AUTHOR)
+    .filter((issue) => !issue.pull_request && issue.title === title && issue.user?.login === ALERT_AUTHOR)
     .toSorted((left, right) => left.number - right.number);
 }
 
 // Best effort: a missing label never stops the alert, because the title finds the issue anyway.
-async function ensureLabel({ api, repo, warn }) {
+async function ensureLabel({ api, repo, label, description, warn }) {
   try {
-    const existing = await api(`/repos/${repo}/labels/${encodeURIComponent(ALERT_LABEL)}`, {
+    const existing = await api(`/repos/${repo}/labels/${encodeURIComponent(label)}`, {
       allow404: true,
     });
     if (existing) return true;
     await api(`/repos/${repo}/labels`, {
       method: "POST",
-      body: { name: ALERT_LABEL, color: LABEL_COLOR, description: LABEL_DESCRIPTION },
+      body: { name: label, color: LABEL_COLOR, description },
     });
     return true;
   } catch (error) {
-    warn(`creating the ${ALERT_LABEL} label failed; the issue is found by title: ${error.message}`);
+    warn(`creating the ${label} label failed; the issue is found by title: ${error.message}`);
     return false;
   }
 }
@@ -159,13 +230,22 @@ async function ensureLabel({ api, repo, warn }) {
 const comment = (api, repo, issue, body) =>
   api(`/repos/${repo}/issues/${issue.number}/comments`, { method: "POST", body: { body } });
 
-export async function reconcile({ api, paginate, repo, outcome, run, failed, warn = () => {} }) {
+export async function reconcile({
+  api,
+  paginate,
+  repo,
+  outcome,
+  run,
+  failed,
+  warn = () => {},
+  tracker = NIGHTLY_TRACKER,
+}) {
   if (outcome === "unknown") return "the run was neither clearly failing nor passing; nothing to do";
-  const [tracking, ...duplicates] = await findAlertIssues({ paginate, repo });
+  const [tracking, ...duplicates] = await findAlertIssues({ paginate, repo, title: tracker.title });
 
   if (outcome === "recovered") {
     for (const issue of [tracking, ...duplicates].filter(Boolean)) {
-      await comment(api, repo, issue, recoveryText(run));
+      await comment(api, repo, issue, tracker.recovery(run));
       await api(`/repos/${repo}/issues/${issue.number}`, {
         method: "PATCH",
         body: { state: "closed", state_reason: "completed" },
@@ -175,19 +255,25 @@ export async function reconcile({ api, paginate, repo, outcome, run, failed, war
   }
 
   if (!tracking) {
-    const labelled = await ensureLabel({ api, repo, warn });
+    const labelled = await ensureLabel({
+      api,
+      repo,
+      label: tracker.label,
+      description: tracker.labelDescription,
+      warn,
+    });
     const created = await api(`/repos/${repo}/issues`, {
       method: "POST",
       body: {
-        title: ALERT_TITLE,
-        body: openingText({ ...run, failed }),
-        labels: labelled ? [ALERT_LABEL] : [],
+        title: tracker.title,
+        body: tracker.opening({ ...run, failed }),
+        labels: labelled ? [tracker.label] : [],
       },
     });
     return `opened #${created.number}`;
   }
 
-  await comment(api, repo, tracking, failureText({ ...run, failed }));
+  await comment(api, repo, tracking, tracker.failure({ ...run, failed }));
   for (const duplicate of duplicates) {
     await comment(api, repo, duplicate, `Duplicate of #${tracking.number}.`);
     await api(`/repos/${repo}/issues/${duplicate.number}`, {

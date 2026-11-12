@@ -80,6 +80,7 @@ jobs:
       deploy_targets: ${{ steps.plan.outputs.targets }}
       preview_branch: ${{ steps.plan.outputs.preview_branch }}
       last_nightly_sha: ${{ steps.last-nightly.outputs.sha }}
+      mutation_base: ${{ steps.last-nightly.outputs.mutation_sha }}
       # The release pull request, which scripts/ci/release-pr.mjs identifies.
       release_pr: ${{ steps.classify.outputs.release_pr }}
     steps:
@@ -103,7 +104,10 @@ jobs:
       # Nightly, manual, and release pull request quality checks share the previous
       # successful nightly as their baseline. The native matrix uses it to avoid
       # rebuilding unchanged targets. This step runs before the classifier, so the
-      # head-ref prefix here MUST match scripts/ci/release-pr.mjs.
+      # head-ref prefix here MUST match scripts/ci/release-pr.mjs. Only the mutation lane
+      # uses the last completed nightly instead: it times out far more often than the rest
+      # fail, and a stuck baseline would grow its diff every night. The other consumers MUST
+      # keep the last successful one, or a red nightly would hide its untested changes.
       - name: Find the last successful nightly
         id: last-nightly
         if: >-
@@ -111,10 +115,13 @@ jobs:
           (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--branches--main--components--'))
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          echo "sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml
-          --event schedule --branch main --status success --limit 1
-          --json headSha --jq '.[0].headSha // ""')" >> "$GITHUB_OUTPUT"
+        run: |
+          last_run() {
+            gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event schedule \
+              --branch main --status "$1" --limit 1 --json headSha --jq '.[0].headSha // ""'
+          }
+          echo "sha=$(last_run success)" >> "$GITHUB_OUTPUT"
+          echo "mutation_sha=$(last_run completed)" >> "$GITHUB_OUTPUT"
 
       # A pull request run tests the merge commit, which the API does not report,
       # so the tested SHA rides in an artifact name that a later run can read
@@ -452,7 +459,7 @@ jobs:
   quality-analysis:
     name: Quality signal (${{ matrix.signal }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 90
     needs: [changes, quality-fast]
     if: >-
       github.ref_type != 'tag'
@@ -484,7 +491,7 @@ jobs:
         id: mutation
         if: matrix.signal == 'mutation'
         env:
-          QUALITY_BASE: ${{ needs.changes.outputs.last_nightly_sha || github.event.pull_request.base.sha || github.event.before || '' }}
+          QUALITY_BASE: ${{ needs.changes.outputs.mutation_base || needs.changes.outputs.last_nightly_sha || github.event.pull_request.base.sha || github.event.before || '' }}
         run: |
           if [ -n "$QUALITY_BASE" ] && [ "$QUALITY_BASE" != "0000000000000000000000000000000000000000" ]; then
             mise run quality-mutation diff "$QUALITY_BASE"
@@ -2071,12 +2078,14 @@ jobs:
   # every job that can fail this workflow's run (parity.yml is separate and does not alert):
   # `security` only warns, and the deploy and advisory quality jobs are `continue-on-error`.
   # `issues: write` is granted to this job only, and the job exists only on the `schedule` event:
-  # pull requests, pushes, and manual runs never start a runner for it.
+  # pull requests, pushes, and manual runs never start a runner for it. It also waits for the
+  # advisory quality jobs, which never fail the run, to open a separate issue when one does not
+  # pass; their result never changes the nightly's own.
   nightly-alert:
     name: Nightly alert
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: gate
+    needs: [gate, quality-analysis]
     if: ${{ !cancelled() && github.event_name == 'schedule' }}
     permissions:
       contents: read
