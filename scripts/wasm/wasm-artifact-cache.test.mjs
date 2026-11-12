@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { buildFlagEnv, remapPathArgs } from "./build-app.mjs";
+import { buildFlagEnv, targetRustflagsArgs } from "./build-app.mjs";
 import { createCargoConfigSnapshot } from "./wasm-source-fingerprint.mjs";
 import {
   pruneWasmArtifacts,
@@ -204,7 +204,7 @@ test("restoring refreshes an entry's recency", () => {
 });
 
 test("path remapping appends to the target rustflags as a TOML array", () => {
-  const args = remapPathArgs({ cargoHome: "/h/my cargo", sysroot: "/h/.rustup/tc", target: "wasm32-wasip1-threads" });
+  const args = targetRustflagsArgs({ cargoHome: "/h/my cargo", sysroot: "/h/.rustup/tc", target: "wasm32-wasip1-threads" });
   assert.deepEqual(args, [
     "--config",
     'target.wasm32-wasip1-threads.rustflags=["--remap-path-prefix=/h/my cargo=/cargo","--remap-path-prefix=/h/.rustup/tc=/rustc-sysroot"]',
@@ -212,7 +212,7 @@ test("path remapping appends to the target rustflags as a TOML array", () => {
 });
 
 test("extra rustflags follow the path remapping in the same array", () => {
-  const args = remapPathArgs({ cargoHome: "/c", sysroot: "/s", target: "wasm32-wasip1-threads", extraFlags: ["-C", "linker-plugin-lto=no"] });
+  const args = targetRustflagsArgs({ cargoHome: "/c", sysroot: "/s", target: "wasm32-wasip1-threads", extraFlags: ["-C", "linker-plugin-lto=no"] });
   assert.equal(
     args[1],
     'target.wasm32-wasip1-threads.rustflags=["--remap-path-prefix=/c=/cargo","--remap-path-prefix=/s=/rustc-sysroot","-C","linker-plugin-lto=no"]',

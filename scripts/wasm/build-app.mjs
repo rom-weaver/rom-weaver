@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { cargoTargetDir } from "../cargo-target-dir.mjs";
 import { brotliCompressFile } from "./brotli-compress.mjs";
 import { restoreWasmArtifacts, storeWasmArtifacts, wasmArtifactCacheKey, wasmArtifactCacheRoot } from "./wasm-artifact-cache.mjs";
-import { createCargoConfigSnapshot, createWasmSourceFingerprint, wasmSourcesModifiedSince } from "./wasm-source-fingerprint.mjs";
+import { createCargoConfigSnapshot, createWasmSourceFingerprint, recordedSourceFingerprint, wasmSourcesModifiedSince } from "./wasm-source-fingerprint.mjs";
 import { createWasmProdFingerprint } from "./wasm-prod-fingerprint.mjs";
 
 export const parseMode = (value = "dev") => {
@@ -85,8 +85,9 @@ export function shouldReuseProductionArtifact({ artifact, brotliArtifactOk, fing
 // toolchain location. Workspace crates already embed relative paths, and a
 // checkout-specific flag would change every rustc command line and stop sccache
 // from replaying dependencies across worktrees, so the checkout is not remapped.
-// Cargo appends --config rustflags to the list in .cargo/config.toml.
-export function remapPathArgs({ cargoHome, sysroot, target, extraFlags = [] }) {
+// Cargo appends --config rustflags to the list in .cargo/config.toml, so
+// extraFlags follow the remapping and override earlier flags.
+export function targetRustflagsArgs({ cargoHome, sysroot, target, extraFlags = [] }) {
   const flags = [
     [cargoHome, "/cargo"],
     [sysroot, "/rustc-sysroot"],
@@ -127,9 +128,14 @@ function writeBrotliSidecar({ artifact, quality }) {
   process.stdout.write(`brotli q${quality}${cached ? " (cached)" : ""}: ${sourceSize} -> ${compressedSize} bytes\n`);
 }
 
-// Whatever mode built the module in outDir, one built from the current inputs is as good as a fast build.
-const builtFromCurrentInputs = ({ artifact, sourceFingerprintFile, sourceFingerprint }) =>
-  existsSync(artifact) && existsSync(sourceFingerprintFile) && readFileSync(sourceFingerprintFile, "utf8").trim() === sourceFingerprint;
+// Any mode may have built the module in outDir. One built from the current inputs is as good as a fast build.
+const builtFromCurrentInputs = ({ artifact, sourceFingerprint }) => existsSync(artifact) && recordedSourceFingerprint(artifact) === sourceFingerprint;
+
+function keepModule({ artifact, fingerprintFile, quality }) {
+  process.stdout.write(`kept ${artifact}: already built from the current inputs\n`);
+  // A dev module has no sidecar. Without one, the webapp build compresses the module at quality 11.
+  if (!existsSync(`${artifact}.br`) && !existsSync(fingerprintFile)) writeBrotliSidecar({ artifact, quality });
+}
 
 export function main(argv = process.argv.slice(2), env = process.env) {
   const mode = parseMode(argv[0]);
@@ -187,8 +193,8 @@ export function main(argv = process.argv.slice(2), env = process.env) {
           }),
         };
 
-  if (mode === "fast" && !force && builtFromCurrentInputs({ artifact, sourceFingerprintFile, sourceFingerprint })) {
-    process.stdout.write(`kept ${artifact}: already built from the current inputs\n`);
+  if (mode === "fast" && !force && builtFromCurrentInputs({ artifact, sourceFingerprint })) {
+    keepModule({ artifact, fingerprintFile, quality });
   } else if (cache && !force && restoreWasmArtifacts({ ...cache, files: cacheFiles, outDir })) {
     // The production fingerprint describes this checkout's Cargo output, which the cached module did not come from.
     rmSync(fingerprintFile, { force: true });
@@ -225,13 +231,13 @@ export function main(argv = process.argv.slice(2), env = process.env) {
 
 function buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env }) {
   process.stdout.write(`building ${target} -> ${artifact}\n`);
-  const remap = remapPathArgs({
+  const rustflagsArgs = targetRustflagsArgs({
     cargoHome: env.CARGO_HOME || join(homedir(), ".cargo"),
     sysroot: toolVersion("rustc", ["--print", "sysroot"]),
     target,
     extraFlags: mode === "fast" ? FAST_RUSTFLAGS : [],
   });
-  run("cargo", ["build", "-p", "rom-weaver-cli", "--no-default-features", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", target, ...remap]);
+  run("cargo", ["build", "-p", "rom-weaver-cli", "--no-default-features", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", target, ...rustflagsArgs]);
 
   if (mode === "prod") {
     const fingerprint = productionFingerprint({

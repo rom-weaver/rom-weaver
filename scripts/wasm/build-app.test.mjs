@@ -11,7 +11,7 @@ import { createWasmSourceFingerprint } from "./wasm-source-fingerprint.mjs";
 const BUILD_APP = fileURLToPath(new URL("./build-app.mjs", import.meta.url));
 const skip = process.platform === "win32" && "the fake toolchain is POSIX shell scripts";
 
-// A project root with a fake toolchain: `cargo build` logs its arguments and fails, so a run that reaches it ends in an error.
+// Creates a project root with a fake toolchain. The fake cargo logs its arguments and fails, so a run that reaches it errors.
 function createProject() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-build-app-"));
   const root = path.join(dir, "root");
@@ -43,6 +43,7 @@ function createProject() {
         WASI_STRIP: path.join(bin, "strip"),
         WASI_SYSROOT: path.join(dir, "sysroot"),
         ROM_WEAVER_WASM_CACHE: "0",
+        ROM_WEAVER_BROTLI_CACHE: "0",
         FAKE_CARGO_LOG: cargoLog,
         ...extraEnv,
       },
@@ -80,6 +81,23 @@ test("a fast build rebuilds a module built from other inputs, or when forced", {
     project.installModule(project.fingerprint());
     assert.notEqual(project.run("fast", { ROM_WEAVER_WASM_FORCE: "1" }).status, 0);
     assert.equal(project.cargoCalls().length, 2);
+  } finally {
+    fs.rmSync(project.dir, { recursive: true, force: true });
+  }
+});
+
+test("a kept module gets a quick sidecar unless a production build made it", { skip }, () => {
+  const project = createProject();
+  try {
+    project.installModule(project.fingerprint());
+    const sidecar = path.join(project.wasmDir, "rom-weaver-app.wasm.br");
+    assert.equal(project.run("fast").status, 0);
+    assert.ok(fs.existsSync(sidecar), "a module without a sidecar gets one");
+
+    fs.rmSync(sidecar);
+    fs.writeFileSync(path.join(project.wasmDir, "rom-weaver-app.wasm.prod.sha256"), "production\n");
+    assert.equal(project.run("fast").status, 0);
+    assert.ok(!fs.existsSync(sidecar), "a production module keeps its own sidecar state");
   } finally {
     fs.rmSync(project.dir, { recursive: true, force: true });
   }
