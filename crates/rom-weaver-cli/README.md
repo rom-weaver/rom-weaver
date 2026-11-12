@@ -8,7 +8,7 @@
 </h1>
 
 <p align="center">
-  ROM patcher and toolkit CLI. Apply and create IPS, BPS, UPS, xdelta, and PPF patches. Convert CHD, RVZ, Z3DS, and ISO/BIN/CUE. Extract ZIP, 7z, and RAR. Identify ROMs by checksum. Bake in cheats and edit saves. No telemetry.
+  ROM patcher and toolkit CLI: apply and create IPS, BPS, UPS, xdelta, and PPF patches. Convert CHD, RVZ, Z3DS, and ISO/BIN/CUE. Extract ZIP, 7z, and RAR; identify ROMs by checksum; bake in cheats; edit saves. No telemetry.
 </p>
 
 <p align="center">
