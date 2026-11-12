@@ -4,7 +4,7 @@
       <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/readme-banner-mobile-dark.svg">
       <source media="(max-width: 600px)" srcset="packages/rom-weaver-webapp/design/readme-banner-mobile.svg">
       <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/readme-banner-dark.svg">
-      <img src="packages/rom-weaver-webapp/design/readme-banner.svg" alt="rom-weaver — Your ROM workflow. One toolkit. Patch, Compress, Extract, Convert, Cheat, Save Edit, Identify. rom-weaver.com." width="100%">
+      <img src="packages/rom-weaver-webapp/design/readme-banner.svg" alt="rom-weaver — Your ROM workflow. One toolkit. Patch, Convert, Compress, Identify, Cheat, Edit saves, Play. rom-weaver.com." width="100%">
     </picture>
   </a>
 </p>
