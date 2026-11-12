@@ -22,7 +22,7 @@ function createProject() {
   };
   for (const [file, text] of [["Cargo.lock", "lock"], ["Cargo.toml", "manifest"], [".cargo/config.toml", "config"], [".config/mise.toml", "mise"], ["crates/example/lib.rs", "one"], ["scripts/gen-third-party-licenses.mjs", ""]])
     write(path.join(root, file), text);
-  // The fake cargo fails unless FAKE_CARGO_MODULE names a module to write. FAKE_CARGO_EDIT also makes it rewrite that file mid-build, and FAKE_CARGO_REVERT restores the original text.
+  // The fake cargo fails unless FAKE_CARGO_MODULE names a module to write. FAKE_CARGO_EDIT makes it rewrite that file mid-build. FAKE_CARGO_REVERT then restores the original text.
   const cargo = [
     '[ "$1" = "--version" ] && exit 0',
     'echo "$@" >> "$FAKE_CARGO_LOG"',
