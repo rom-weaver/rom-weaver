@@ -7,17 +7,19 @@
 // Set ROM_WEAVER_DEV_SKIP_WASM=1 to skip the build entirely (e.g. worktrees with a
 // copied artifact and no local WASI toolchain).
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import { createWasmSourceFingerprint } from "../../../scripts/wasm/wasm-source-fingerprint.mjs";
+import {
+  createWasmSourceFingerprint,
+  recordedSourceFingerprint,
+  shouldBuildWasm,
+} from "../../../scripts/wasm/wasm-source-fingerprint.mjs";
 import { REPO_ROOT, run, WASM_ARTIFACT } from "./build-utils.mjs";
 
 const log = (level, message) => console.log(`[ensure-wasm-build] ${level}: ${message}`);
-const fingerprintFile = `${WASM_ARTIFACT}.source.sha256`;
 
-export const shouldBuildWasm = ({ artifactExists, recordedFingerprint, sourceFingerprint }) =>
-  !artifactExists || recordedFingerprint !== sourceFingerprint;
+export { shouldBuildWasm };
 
 const main = (env = process.env) => {
   if (String(env.ROM_WEAVER_DEV_SKIP_WASM || "") === "1") {
@@ -25,7 +27,7 @@ const main = (env = process.env) => {
   } else if (
     shouldBuildWasm({
       artifactExists: existsSync(WASM_ARTIFACT),
-      recordedFingerprint: existsSync(fingerprintFile) ? readFileSync(fingerprintFile, "utf8").trim() : "",
+      recordedFingerprint: recordedSourceFingerprint(WASM_ARTIFACT),
       sourceFingerprint: createWasmSourceFingerprint(REPO_ROOT),
     })
   ) {

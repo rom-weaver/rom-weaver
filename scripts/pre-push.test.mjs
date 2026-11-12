@@ -6,7 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { A11Y_STEP, planPrePush, pushedCommits, WEBAPP_BUNDLE_STEPS } from "./pre-push.mjs";
+import { A11Y_STEP, planPrePush, PRODUCTION_BUNDLE_STEPS, pushedCommits, WEBAPP_BUNDLE_STEPS } from "./pre-push.mjs";
 
 const HEAD = "a".repeat(40);
 const OTHER = "b".repeat(40);
@@ -28,6 +28,16 @@ test("webapp and published-doc changes run the bundle checks", () => {
     const plan = planPrePush({ pushed: { refs: 1, commits: [HEAD] }, head: HEAD, changedPaths: [path] });
     assert.deepEqual(plan.steps, WEBAPP_BUNDLE_STEPS, path);
   }
+});
+
+test("the production WASM build is opt-in and replaces only the WASM step", () => {
+  const pushed = { refs: 1, commits: [HEAD] };
+  const changedPaths = ["crates/rom-weaver-core/src/lib.rs"];
+  assert.deepEqual(planPrePush({ pushed, head: HEAD, changedPaths }).steps[0].args, ["run", "build-wasm-fast"]);
+  const plan = planPrePush({ pushed, head: HEAD, changedPaths, productionWasm: true });
+  assert.deepEqual(plan.steps, PRODUCTION_BUNDLE_STEPS);
+  assert.deepEqual(plan.steps[0].args, ["run", "build-wasm-prod"]);
+  assert.deepEqual(plan.steps.slice(1), WEBAPP_BUNDLE_STEPS.slice(1));
 });
 
 test("changes CI's webapp build ignores skip the checks", () => {

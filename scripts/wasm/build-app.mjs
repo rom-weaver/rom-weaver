@@ -10,11 +10,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { cargoTargetDir } from "../cargo-target-dir.mjs";
 import { brotliCompressFile } from "./brotli-compress.mjs";
 import { restoreWasmArtifacts, storeWasmArtifacts, wasmArtifactCacheKey, wasmArtifactCacheRoot } from "./wasm-artifact-cache.mjs";
-import { createCargoConfigSnapshot, createWasmSourceFingerprint, wasmSourcesModifiedSince } from "./wasm-source-fingerprint.mjs";
+import { createCargoConfigSnapshot, createWasmSourceFingerprint, recordedSourceFingerprint, shouldBuildWasm, wasmSourcesModifiedSince } from "./wasm-source-fingerprint.mjs";
 import { createWasmProdFingerprint } from "./wasm-prod-fingerprint.mjs";
 
 export const parseMode = (value = "dev") => {
-  if (value !== "dev" && value !== "prod") throw new Error("usage: node scripts/wasm/build-app.mjs [dev|prod]");
+  if (value !== "dev" && value !== "fast" && value !== "prod") throw new Error("usage: node scripts/wasm/build-app.mjs [dev|fast|prod]");
   return value;
 };
 
@@ -85,13 +85,14 @@ export function shouldReuseProductionArtifact({ artifact, brotliArtifactOk, fing
 // toolchain location. Workspace crates already embed relative paths, and a
 // checkout-specific flag would change every rustc command line and stop sccache
 // from replaying dependencies across worktrees, so the checkout is not remapped.
-// Cargo appends --config rustflags to the list in .cargo/config.toml.
-export function remapPathArgs({ cargoHome, sysroot, target }) {
+// Cargo appends --config rustflags to the list in .cargo/config.toml, so
+// extraFlags follow the remapping and override earlier flags.
+export function targetRustflagsArgs({ cargoHome, sysroot, target, extraFlags = [] }) {
   const flags = [
     [cargoHome, "/cargo"],
     [sysroot, "/rustc-sysroot"],
   ].map(([from, to]) => `--remap-path-prefix=${from}=${to}`);
-  return ["--config", `target.${target}.rustflags=${JSON.stringify(flags)}`];
+  return ["--config", `target.${target}.rustflags=${JSON.stringify([...flags, ...extraFlags])}`];
 }
 
 // Environment that reaches rustc or the C compilers as flags. Compiler paths
@@ -105,6 +106,37 @@ export const buildFlagEnv = (env) =>
       .sort()
       .map((name) => [name, env[name]]),
   );
+
+// .cargo/config.toml turns on linker-plugin-lto, which runs link-time optimization (LTO) over every crate.
+// A later flag overrides it, and RUSTFLAGS would drop the remapping above.
+const FAST_RUSTFLAGS = ["-C", "linker-plugin-lto=no"];
+
+// Fast mode writes a quick sidecar, so the webapp build skips its quality-11 compression.
+function brotliSettings(mode, env) {
+  if (mode === "fast") return { wantBrotli: true, quality: env.BROTLI_QUALITY || "1" };
+  return { wantBrotli: mode === "prod" && env.ROM_WEAVER_WASM_NO_BROTLI !== "1", quality: env.BROTLI_QUALITY || "11" };
+}
+
+// WASM MUST use the default window: the larger asset window increases this module's transfer size.
+function writeBrotliSidecar({ artifact, quality }) {
+  const { cached, compressedSize, sourceSize } = brotliCompressFile({
+    inputPath: artifact,
+    outputPath: `${artifact}.br`,
+    quality,
+    parameterProfile: "default",
+  });
+  process.stdout.write(`brotli q${quality}${cached ? " (cached)" : ""}: ${sourceSize} -> ${compressedSize} bytes\n`);
+}
+
+// Any mode may have built the module in outDir. One built from the current inputs is as good as a fast build.
+const builtFromCurrentInputs = ({ artifact, sourceFingerprint }) =>
+  !shouldBuildWasm({ artifactExists: existsSync(artifact), recordedFingerprint: recordedSourceFingerprint(artifact), sourceFingerprint });
+
+function keepModuleWithSidecar({ artifact, fingerprintFile, quality }) {
+  process.stdout.write(`kept ${artifact}: already built from the current inputs\n`);
+  // A dev module has no sidecar. Without one, the webapp build compresses the module at quality 11.
+  if (!existsSync(`${artifact}.br`) && !existsSync(fingerprintFile)) writeBrotliSidecar({ artifact, quality });
+}
 
 export function main(argv = process.argv.slice(2), env = process.env) {
   const mode = parseMode(argv[0]);
@@ -125,8 +157,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   if (mode === "prod" && !existsExecutable("wasm-opt")) throw new Error("missing command: wasm-opt (install via mise or brew install binaryen)");
   mkdirSync(outDir, { recursive: true });
 
-  const wantBrotli = mode === "prod" && env.ROM_WEAVER_WASM_NO_BROTLI !== "1";
-  const quality = env.BROTLI_QUALITY || "11";
+  const { wantBrotli, quality } = brotliSettings(mode, env);
   const brotliVersion = `node-zlib libbrotli ${process.versions.brotli}`;
   const stripVersion = toolVersion(env.WASI_STRIP, ["--version"]);
   const wasmOptVersion = mode === "prod" ? toolVersion("wasm-opt", ["--version"]) : "";
@@ -163,48 +194,59 @@ export function main(argv = process.argv.slice(2), env = process.env) {
           }),
         };
 
-  if (cache && !force && restoreWasmArtifacts({ ...cache, files: cacheFiles, outDir })) {
+  const keep = mode === "fast" && !force && builtFromCurrentInputs({ artifact, sourceFingerprint });
+  // A restore or build stopped halfway leaves a module its recorded inputs do not describe.
+  if (!keep) rmSync(sourceFingerprintFile, { force: true });
+  if (keep) {
+    keepModuleWithSidecar({ artifact, fingerprintFile, quality });
+  } else if (cache && !force && restoreWasmArtifacts({ ...cache, files: cacheFiles, outDir })) {
     // The production fingerprint describes this checkout's Cargo output, which the cached module did not come from.
     rmSync(fingerprintFile, { force: true });
     process.stdout.write(`reused ${mode} WASM for unchanged inputs from ${join(cache.root, cache.key)}\n`);
+    writeFileSync(sourceFingerprintFile, `${sourceFingerprint}\n`);
   } else {
     buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env });
-    // A source edit during the build, even one reverted since, reaches Cargo's
-    // output but not the key, so storing it would serve that edit to a later
-    // build of the old sources.
-    let configurationAfter;
-    if (cache) {
-      try {
-        configurationAfter = createCargoConfigSnapshot(configurationOptions);
-      } catch {
-        configurationAfter = undefined;
-      }
-    }
-    if (cache && (!configurationAfter?.usable || wasmSourcesModifiedSince(root, sourcesReadAt) || createWasmSourceFingerprint(root) !== sourceFingerprint || configurationAfter.fingerprint !== configuration.fingerprint || configurationAfter.state !== configuration.state || configurationAfter.modified)) {
-      process.stderr.write("warning: WASM build inputs changed during the build; not caching it\n");
-    } else if (cache) {
-      try {
-        storeWasmArtifacts({ ...cache, files: cacheFiles, sourceDir: outDir, replace: force });
-      } catch (error) {
-        process.stderr.write(`warning: could not store WASM in ${cache.root} (${error.message})\n`);
-      }
-    }
+    settleBuiltModule({ cache, configuration, configurationOptions, root, sourcesReadAt, sourceFingerprint, sourceFingerprintFile, cacheFiles, outDir, force });
   }
 
-  writeFileSync(sourceFingerprintFile, `${sourceFingerprint}\n`);
   run("node", [join(root, "scripts/gen-third-party-licenses.mjs"), outDir, "--target", "webapp"]);
   if (outDir !== packageDir) run("node", [join(root, "packages/rom-weaver-webapp/scripts/sync-dist.mjs"), outDir]);
   process.stdout.write(wantBrotli ? `artifacts written to ${outDir} (rom-weaver-app.wasm, rom-weaver-app.wasm.br)\n` : `artifact written to ${artifact}\n`);
 }
 
+// An edit during the build reaches Cargo's output, even if reverted before the build ends.
+// The fingerprint predates it, so a later build could reuse the module with that edit.
+function settleBuiltModule({ cache, configuration, configurationOptions, root, sourcesReadAt, sourceFingerprint, sourceFingerprintFile, cacheFiles, outDir, force }) {
+  const sourcesChanged = wasmSourcesModifiedSince(root, sourcesReadAt) || createWasmSourceFingerprint(root) !== sourceFingerprint;
+  if (sourcesChanged) rmSync(sourceFingerprintFile, { force: true });
+  else writeFileSync(sourceFingerprintFile, `${sourceFingerprint}\n`);
+  if (!cache) return;
+  let configurationAfter;
+  try {
+    configurationAfter = createCargoConfigSnapshot(configurationOptions);
+  } catch {
+    configurationAfter = undefined;
+  }
+  if (sourcesChanged || !configurationAfter?.usable || configurationAfter.fingerprint !== configuration.fingerprint || configurationAfter.state !== configuration.state || configurationAfter.modified) {
+    process.stderr.write("warning: WASM build inputs changed during the build; not caching it\n");
+    return;
+  }
+  try {
+    storeWasmArtifacts({ ...cache, files: cacheFiles, sourceDir: outDir, replace: force });
+  } catch (error) {
+    process.stderr.write(`warning: could not store WASM in ${cache.root} (${error.message})\n`);
+  }
+}
+
 function buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env }) {
   process.stdout.write(`building ${target} -> ${artifact}\n`);
-  const remap = remapPathArgs({
+  const rustflagsArgs = targetRustflagsArgs({
     cargoHome: env.CARGO_HOME || join(homedir(), ".cargo"),
     sysroot: toolVersion("rustc", ["--print", "sysroot"]),
     target,
+    extraFlags: mode === "fast" ? FAST_RUSTFLAGS : [],
   });
-  run("cargo", ["build", "-p", "rom-weaver-cli", "--no-default-features", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", target, ...remap]);
+  run("cargo", ["build", "-p", "rom-weaver-cli", "--no-default-features", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", target, ...rustflagsArgs]);
 
   if (mode === "prod") {
     const fingerprint = productionFingerprint({
@@ -226,18 +268,8 @@ function buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile,
       cpSync(`${artifact}.opt`, artifact);
       rmSync(`${artifact}.opt`, { force: true });
       run(env.WASI_STRIP, [artifact]);
-      if (wantBrotli) {
-        // WASM MUST use the default window: the larger asset window increases this module's transfer size.
-        const { cached, compressedSize, sourceSize } = brotliCompressFile({
-          inputPath: artifact,
-          outputPath: `${artifact}.br`,
-          quality,
-          parameterProfile: "default",
-        });
-        process.stdout.write(
-          `brotli q${quality}${cached ? " (cached)" : ""}: ${sourceSize} -> ${compressedSize} bytes\n`,
-        );
-      } else
+      if (wantBrotli) writeBrotliSidecar({ artifact, quality });
+      else
         process.stdout.write(
           "ROM_WEAVER_WASM_NO_BROTLI=1; skipping .br sibling (host compresses on the fly)\n",
         );
@@ -247,6 +279,7 @@ function buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile,
     rmSync(fingerprintFile, { force: true });
     cpSync(builtArtifact, artifact);
     run(env.WASI_STRIP, [artifact]);
+    if (wantBrotli) writeBrotliSidecar({ artifact, quality });
   }
 }
 

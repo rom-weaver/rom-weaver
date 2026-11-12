@@ -291,7 +291,7 @@ A source one tool declines is recorded as a skip and the run continues.
 
 ## Browser benchmarks
 
-Run all browser-worker benchmarks with Vitest bench mode (from `packages/rom-weaver-webapp`):
+Run `mise run build-wasm-prod` first. The pre-push hook can leave a fast module in place. Run all browser-worker benchmarks with Vitest bench mode (from `packages/rom-weaver-webapp`):
 
 ```bash
 npm run test:browser:wasm:bench

@@ -54,6 +54,15 @@ export const wasmSourcesModifiedSince = (root, sinceMs) =>
     }
   });
 
+// The fingerprint a build recorded beside its module, or an empty string when there is none.
+export const recordedSourceFingerprint = (artifact) => {
+  const file = `${artifact}.source.sha256`;
+  return existsSync(file) ? readFileSync(file, "utf8").trim() : "";
+};
+
+export const shouldBuildWasm = ({ artifactExists, recordedFingerprint, sourceFingerprint }) =>
+  !artifactExists || recordedFingerprint !== sourceFingerprint;
+
 export const createWasmSourceFingerprint = (root) => {
   const hash = createHash("sha256");
   for (const path of wasmSourceFiles(root)) {
