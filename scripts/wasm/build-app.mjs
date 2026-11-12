@@ -195,7 +195,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
         };
 
   const keep = mode === "fast" && !force && builtFromCurrentInputs({ artifact, sourceFingerprint });
-  // A restore or build that stops halfway leaves a module its recorded inputs no longer describe.
+  // A restore or build stopped halfway leaves a module its recorded inputs do not describe.
   if (!keep) rmSync(sourceFingerprintFile, { force: true });
   if (keep) {
     keepModuleWithSidecar({ artifact, fingerprintFile, quality });
@@ -214,9 +214,8 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   process.stdout.write(wantBrotli ? `artifacts written to ${outDir} (rom-weaver-app.wasm, rom-weaver-app.wasm.br)\n` : `artifact written to ${artifact}\n`);
 }
 
-// A source edit during the build, even one reverted since, reaches Cargo's
-// output but not the fingerprint read before it. Recording or caching the
-// module would then serve that edit to a later build of the old sources.
+// An edit during the build reaches Cargo's output, even if reverted before the build ends.
+// The fingerprint predates it, so a later build could reuse the module with that edit.
 function settleBuiltModule({ cache, configuration, configurationOptions, root, sourcesReadAt, sourceFingerprint, sourceFingerprintFile, cacheFiles, outDir, force }) {
   const sourcesChanged = wasmSourcesModifiedSince(root, sourcesReadAt) || createWasmSourceFingerprint(root) !== sourceFingerprint;
   if (sourcesChanged) rmSync(sourceFingerprintFile, { force: true });

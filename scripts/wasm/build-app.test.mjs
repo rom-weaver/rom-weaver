@@ -147,7 +147,7 @@ for (const [name, revert] of [["still edited after the build", ""], ["reverted b
 test("a module built from untouched sources is kept by the next fast build", { skip }, () => {
   const project = createProject();
   try {
-    // ctime cannot be backdated, so wait out the one-second slack that treats a fresh source as still being edited.
+    // ctime cannot be backdated. Wait past the one-second slack that counts fresh files as edited.
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1100);
     assert.equal(project.run("fast", { FAKE_CARGO_MODULE: project.builtModule }).status, 0);
     assert.equal(project.run("fast").status, 0);
