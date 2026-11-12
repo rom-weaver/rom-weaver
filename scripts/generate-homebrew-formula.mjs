@@ -32,7 +32,7 @@ if (!identifyChecksum) throw new Error("invalid checksum for rom-weaver-identify
 
 const releaseUrl = `https://github.com/rom-weaver/rom-weaver/releases/download/v${version}`;
 const source = `class RomWeaver < Formula
-  desc "Offline ROM toolkit: patch, convert, identify, bake in cheat codes, and edit supported game saves. No telemetry."
+  desc "ROM toolkit: apply IPS/BPS/xdelta patches, convert CHD/RVZ/Z3DS, identify ROMs"
   homepage "https://rom-weaver.com"
   version "${version}"
   license "AGPL-3.0-or-later"

@@ -1,8 +1,9 @@
 [package]
 name = "rom-weaver-cli"
 authors.workspace = true
-description = "A command-line ROM toolkit: patch, compress, extract, convert, identify, bake in cheat codes, and edit supported game saves. No telemetry."
-keywords = ["rvz", "chd", "z3ds", "rom", "patch"]
+description = "ROM patcher and toolkit CLI: apply and create IPS, BPS, UPS, xdelta, and PPF patches; convert CHD, RVZ, Z3DS, and ISO/BIN/CUE; extract ZIP, 7z, and RAR; identify ROMs by checksum; bake in cheats; edit saves. No telemetry."
+keywords = ["rom-patcher", "chd", "rvz", "z3ds", "xdelta"]
+categories = ["command-line-utilities", "emulators", "compression"]
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true
