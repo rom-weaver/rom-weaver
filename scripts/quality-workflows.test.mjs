@@ -38,7 +38,12 @@ test("nightly, manual, and release pull request analysis runs use the selected s
   assert.ok(guardrails.run.includes('git rev-parse HEAD^'));
   assert.ok(ci.jobs["quality-analysis"].needs.includes("changes"));
   const mutation = ci.jobs["quality-analysis"].steps.find((step) => step.id === "mutation");
+  assert.ok(mutation.env.QUALITY_BASE.startsWith("${{ needs.changes.outputs.mutation_base ||"));
   assert.ok(mutation.env.QUALITY_BASE.includes("needs.changes.outputs.last_nightly_sha"));
+  assert.equal(ci.jobs.changes.outputs.mutation_base, "${{ steps.last-nightly.outputs.mutation_sha }}");
+  for (const consumer of [guardrails, ci.jobs["quality-fast"].steps.find((step) => step.id === "plan")]) {
+    assert.ok(!consumer.env.QUALITY_BASE.includes("mutation_base"), "only mutation uses the completed-run base");
+  }
 });
 test("per-change Rust checks do not require the nightly quality jobs", () => {
   assert.ok(ci.jobs.gate.needs.includes("quality-fast"));
