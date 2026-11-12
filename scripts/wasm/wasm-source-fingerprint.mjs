@@ -60,6 +60,9 @@ export const recordedSourceFingerprint = (artifact) => {
   return existsSync(file) ? readFileSync(file, "utf8").trim() : "";
 };
 
+export const shouldBuildWasm = ({ artifactExists, recordedFingerprint, sourceFingerprint }) =>
+  !artifactExists || recordedFingerprint !== sourceFingerprint;
+
 export const createWasmSourceFingerprint = (root) => {
   const hash = createHash("sha256");
   for (const path of wasmSourceFiles(root)) {

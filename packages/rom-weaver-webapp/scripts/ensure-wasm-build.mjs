@@ -13,13 +13,13 @@ import { pathToFileURL } from "node:url";
 import {
   createWasmSourceFingerprint,
   recordedSourceFingerprint,
+  shouldBuildWasm,
 } from "../../../scripts/wasm/wasm-source-fingerprint.mjs";
 import { REPO_ROOT, run, WASM_ARTIFACT } from "./build-utils.mjs";
 
 const log = (level, message) => console.log(`[ensure-wasm-build] ${level}: ${message}`);
 
-export const shouldBuildWasm = ({ artifactExists, recordedFingerprint, sourceFingerprint }) =>
-  !artifactExists || recordedFingerprint !== sourceFingerprint;
+export { shouldBuildWasm };
 
 const main = (env = process.env) => {
   if (String(env.ROM_WEAVER_DEV_SKIP_WASM || "") === "1") {

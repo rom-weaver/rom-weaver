@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { cargoTargetDir } from "../cargo-target-dir.mjs";
 import { brotliCompressFile } from "./brotli-compress.mjs";
 import { restoreWasmArtifacts, storeWasmArtifacts, wasmArtifactCacheKey, wasmArtifactCacheRoot } from "./wasm-artifact-cache.mjs";
-import { createCargoConfigSnapshot, createWasmSourceFingerprint, recordedSourceFingerprint, wasmSourcesModifiedSince } from "./wasm-source-fingerprint.mjs";
+import { createCargoConfigSnapshot, createWasmSourceFingerprint, recordedSourceFingerprint, shouldBuildWasm, wasmSourcesModifiedSince } from "./wasm-source-fingerprint.mjs";
 import { createWasmProdFingerprint } from "./wasm-prod-fingerprint.mjs";
 
 export const parseMode = (value = "dev") => {
@@ -107,7 +107,7 @@ export const buildFlagEnv = (env) =>
       .map((name) => [name, env[name]]),
   );
 
-// .cargo/config.toml turns on linker-plugin-lto, which makes the link run LTO over every crate.
+// .cargo/config.toml turns on linker-plugin-lto, which runs link-time optimization (LTO) over every crate.
 // A later flag overrides it, and RUSTFLAGS would drop the remapping above.
 const FAST_RUSTFLAGS = ["-C", "linker-plugin-lto=no"];
 
@@ -129,9 +129,10 @@ function writeBrotliSidecar({ artifact, quality }) {
 }
 
 // Any mode may have built the module in outDir. One built from the current inputs is as good as a fast build.
-const builtFromCurrentInputs = ({ artifact, sourceFingerprint }) => existsSync(artifact) && recordedSourceFingerprint(artifact) === sourceFingerprint;
+const builtFromCurrentInputs = ({ artifact, sourceFingerprint }) =>
+  !shouldBuildWasm({ artifactExists: existsSync(artifact), recordedFingerprint: recordedSourceFingerprint(artifact), sourceFingerprint });
 
-function keepModule({ artifact, fingerprintFile, quality }) {
+function keepModuleWithSidecar({ artifact, fingerprintFile, quality }) {
   process.stdout.write(`kept ${artifact}: already built from the current inputs\n`);
   // A dev module has no sidecar. Without one, the webapp build compresses the module at quality 11.
   if (!existsSync(`${artifact}.br`) && !existsSync(fingerprintFile)) writeBrotliSidecar({ artifact, quality });
@@ -193,40 +194,54 @@ export function main(argv = process.argv.slice(2), env = process.env) {
           }),
         };
 
-  if (mode === "fast" && !force && builtFromCurrentInputs({ artifact, sourceFingerprint })) {
-    keepModule({ artifact, fingerprintFile, quality });
+  const keep = mode === "fast" && !force && builtFromCurrentInputs({ artifact, sourceFingerprint });
+  // A restore or build that stops halfway leaves a module its recorded inputs no longer describe.
+  if (!keep) rmSync(sourceFingerprintFile, { force: true });
+  if (keep) {
+    keepModuleWithSidecar({ artifact, fingerprintFile, quality });
   } else if (cache && !force && restoreWasmArtifacts({ ...cache, files: cacheFiles, outDir })) {
     // The production fingerprint describes this checkout's Cargo output, which the cached module did not come from.
     rmSync(fingerprintFile, { force: true });
     process.stdout.write(`reused ${mode} WASM for unchanged inputs from ${join(cache.root, cache.key)}\n`);
+    recordSourceFingerprint({ sourceFingerprintFile, root, sourcesReadAt, sourceFingerprint });
   } else {
     buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env });
-    // A source edit during the build, even one reverted since, reaches Cargo's
-    // output but not the key, so storing it would serve that edit to a later
-    // build of the old sources.
-    let configurationAfter;
-    if (cache) {
-      try {
-        configurationAfter = createCargoConfigSnapshot(configurationOptions);
-      } catch {
-        configurationAfter = undefined;
-      }
-    }
-    if (cache && (!configurationAfter?.usable || wasmSourcesModifiedSince(root, sourcesReadAt) || createWasmSourceFingerprint(root) !== sourceFingerprint || configurationAfter.fingerprint !== configuration.fingerprint || configurationAfter.state !== configuration.state || configurationAfter.modified)) {
-      process.stderr.write("warning: WASM build inputs changed during the build; not caching it\n");
-    } else if (cache) {
-      try {
-        storeWasmArtifacts({ ...cache, files: cacheFiles, sourceDir: outDir, replace: force });
-      } catch (error) {
-        process.stderr.write(`warning: could not store WASM in ${cache.root} (${error.message})\n`);
-      }
-    }
+    storeBuiltModule({ cache, configuration, configurationOptions, root, sourcesReadAt, sourceFingerprint, cacheFiles, outDir, force });
+    recordSourceFingerprint({ sourceFingerprintFile, root, sourcesReadAt, sourceFingerprint });
   }
 
-  writeFileSync(sourceFingerprintFile, `${sourceFingerprint}\n`);
   run("node", [join(root, "scripts/gen-third-party-licenses.mjs"), outDir, "--target", "webapp"]);
   if (outDir !== packageDir) run("node", [join(root, "packages/rom-weaver-webapp/scripts/sync-dist.mjs"), outDir]);
   process.stdout.write(wantBrotli ? `artifacts written to ${outDir} (rom-weaver-app.wasm, rom-weaver-app.wasm.br)\n` : `artifact written to ${artifact}\n`);
+}
+
+// A source edit during the build, even one reverted since, reaches the module but not the fingerprint read before it.
+function recordSourceFingerprint({ sourceFingerprintFile, root, sourcesReadAt, sourceFingerprint }) {
+  if (wasmSourcesModifiedSince(root, sourcesReadAt) || createWasmSourceFingerprint(root) !== sourceFingerprint) rmSync(sourceFingerprintFile, { force: true });
+  else writeFileSync(sourceFingerprintFile, `${sourceFingerprint}\n`);
+}
+
+function storeBuiltModule({ cache, configuration, configurationOptions, root, sourcesReadAt, sourceFingerprint, cacheFiles, outDir, force }) {
+  // A source edit during the build, even one reverted since, reaches Cargo's
+  // output but not the key, so storing it would serve that edit to a later
+  // build of the old sources.
+  let configurationAfter;
+  if (cache) {
+    try {
+      configurationAfter = createCargoConfigSnapshot(configurationOptions);
+    } catch {
+      configurationAfter = undefined;
+    }
+  }
+  if (cache && (!configurationAfter?.usable || wasmSourcesModifiedSince(root, sourcesReadAt) || createWasmSourceFingerprint(root) !== sourceFingerprint || configurationAfter.fingerprint !== configuration.fingerprint || configurationAfter.state !== configuration.state || configurationAfter.modified)) {
+    process.stderr.write("warning: WASM build inputs changed during the build; not caching it\n");
+  } else if (cache) {
+    try {
+      storeWasmArtifacts({ ...cache, files: cacheFiles, sourceDir: outDir, replace: force });
+    } catch (error) {
+      process.stderr.write(`warning: could not store WASM in ${cache.root} (${error.message})\n`);
+    }
+  }
 }
 
 function buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env }) {

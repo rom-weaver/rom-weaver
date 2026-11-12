@@ -15,7 +15,7 @@ import { resolveNpmCli } from "./ci/npm-publish-package.mjs";
 const WEBAPP = "packages/rom-weaver-webapp";
 
 const PRODUCTION_WASM_STEP = { label: "production WASM", command: "mise", args: ["run", "build-wasm-prod"] };
-// Same layout, without fat LTO or wasm-opt, and with a quality-1 Brotli sidecar. Enough for the bundle guards, not for size or speed.
+// Same layout, without fat link-time optimization (LTO) or wasm-opt, and with a quality-1 Brotli sidecar. Enough for the bundle guards, not for size or speed.
 const FAST_WASM_STEP = { label: "fast WASM", command: "mise", args: ["run", "build-wasm-fast"] };
 
 const WEBAPP_STEPS = [

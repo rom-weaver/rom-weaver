@@ -22,7 +22,16 @@ function createProject() {
   };
   for (const [file, text] of [["Cargo.lock", "lock"], ["Cargo.toml", "manifest"], [".cargo/config.toml", "config"], [".config/mise.toml", "mise"], ["crates/example/lib.rs", "one"], ["scripts/gen-third-party-licenses.mjs", ""]])
     write(path.join(root, file), text);
-  const tools = { cargo: '[ "$1" = "--version" ] && exit 0\necho "$@" >> "$FAKE_CARGO_LOG"\nexit 1', rustc: "echo /fake-sysroot", strip: "echo strip 1", clang: "echo clang 1" };
+  // The fake cargo fails unless FAKE_CARGO_EDIT names a file: then it rewrites that file mid-build and writes a module.
+  const cargo = [
+    '[ "$1" = "--version" ] && exit 0',
+    'echo "$@" >> "$FAKE_CARGO_LOG"',
+    '[ -n "$FAKE_CARGO_EDIT" ] || exit 1',
+    'echo edited > "$FAKE_CARGO_EDIT"',
+    'mkdir -p "$(dirname "$FAKE_CARGO_MODULE")"',
+    'echo built-module > "$FAKE_CARGO_MODULE"',
+  ].join("\n");
+  const tools = { cargo, rustc: "echo /fake-sysroot", strip: "echo strip 1", clang: "echo clang 1" };
   for (const [name, body] of Object.entries(tools)) {
     write(path.join(bin, name), `#!/bin/sh\n${body}\n`);
     fs.chmodSync(path.join(bin, name), 0o755);
@@ -53,7 +62,8 @@ function createProject() {
     fs.writeFileSync(path.join(wasmDir, "rom-weaver-app.wasm.source.sha256"), `${recordedFingerprint}\n`);
   };
   const cargoCalls = () => (fs.existsSync(cargoLog) ? fs.readFileSync(cargoLog, "utf8").trim().split("\n") : []);
-  return { dir, wasmDir, run, installModule, cargoCalls, fingerprint: () => createWasmSourceFingerprint(root) };
+  const builtModule = path.join(root, "target/wasm32-wasip1-threads/wasm-release/examples/rom-weaver-app.wasm");
+  return { dir, root, wasmDir, builtModule, run, installModule, cargoCalls, fingerprint: () => createWasmSourceFingerprint(root) };
 }
 
 test("a fast build keeps a module already built from the current inputs", { skip }, () => {
@@ -76,7 +86,9 @@ test("a fast build rebuilds a module built from other inputs, or when forced", {
     project.installModule("stale");
     assert.notEqual(project.run("fast").status, 0);
     assert.match(project.cargoCalls().join("\n"), /^build /);
+    assert.match(project.cargoCalls()[0], /linker-plugin-lto=no/);
     assert.equal(project.cargoCalls().length, 1);
+    assert.ok(!fs.existsSync(path.join(project.wasmDir, "rom-weaver-app.wasm.source.sha256")), "a failed rebuild leaves no record of the old inputs");
 
     project.installModule(project.fingerprint());
     assert.notEqual(project.run("fast", { ROM_WEAVER_WASM_FORCE: "1" }).status, 0);
@@ -98,6 +110,32 @@ test("a kept module gets a quick sidecar unless a production build made it", { s
     fs.writeFileSync(path.join(project.wasmDir, "rom-weaver-app.wasm.prod.sha256"), "production\n");
     assert.equal(project.run("fast").status, 0);
     assert.ok(!fs.existsSync(sidecar), "a production module keeps its own sidecar state");
+  } finally {
+    fs.rmSync(project.dir, { recursive: true, force: true });
+  }
+});
+
+test("only a fast build keeps a module built from the current inputs", { skip }, () => {
+  const project = createProject();
+  try {
+    project.installModule(project.fingerprint());
+    assert.notEqual(project.run("dev").status, 0);
+    assert.equal(project.cargoCalls().length, 1);
+    assert.doesNotMatch(project.cargoCalls()[0], /linker-plugin-lto/);
+  } finally {
+    fs.rmSync(project.dir, { recursive: true, force: true });
+  }
+});
+
+test("a module built while its sources were edited is never kept", { skip }, () => {
+  const project = createProject();
+  try {
+    const source = path.join(project.root, "crates/example/lib.rs");
+    const edit = { FAKE_CARGO_EDIT: source, FAKE_CARGO_MODULE: project.builtModule };
+    assert.equal(project.run("fast", edit).status, 0);
+    fs.writeFileSync(source, "one");
+    assert.notEqual(project.run("fast").status, 0);
+    assert.equal(project.cargoCalls().length, 2, "the second run rebuilds instead of keeping the module");
   } finally {
     fs.rmSync(project.dir, { recursive: true, force: true });
   }
