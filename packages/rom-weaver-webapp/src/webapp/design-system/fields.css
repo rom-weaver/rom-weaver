@@ -35,6 +35,10 @@
   color: var(--ink-4);
   pointer-events: none;
 }
+.rw-app .target-grp > .dropdown-select > .dropdown-arrow {
+  inset-inline-end: 0;
+  color: currentcolor;
+}
 .rw-app .dropdown-select > .dropdown-arrow {
   position: absolute;
   inset-inline-end: 10px;

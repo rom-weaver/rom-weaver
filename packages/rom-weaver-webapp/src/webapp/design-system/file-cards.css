@@ -381,6 +381,12 @@
   background: transparent;
   border: 0;
 }
+/* The arrow overlaps the select's end edge (fields.css), so the text needs padding.
+   The underline and arrow mark a borderless select as a dropdown. */
+.rw-app .target-grp > .dropdown-select > select.meta-target-select {
+  padding-inline-end: 14px;
+  border-bottom: 1px dashed color-mix(in oklab, currentcolor 45%, transparent);
+}
 .rw-app .ptgt-chev {
   flex: none;
   width: 12px;
