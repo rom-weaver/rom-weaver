@@ -44,12 +44,12 @@ test("a patch whose filename crc32 token mismatches the ROM is blocked until App
     .poll(() => document.querySelector("#rom-weaver-list-patch-stack .file.bad .cks-match.bad"), { timeout: 60000 })
     .not.toBeNull();
   // The engine's dry run lands after the cheap preflight and also honors the file-name token;
-  // the mismatch must survive it instead of flipping the card to Verified.
+  // the mismatch must survive it instead of flipping the card to passed.
   await expect
     .poll(() => document.getElementById("rom-weaver-list-patch-stack")?.textContent ?? "", { timeout: 60000 })
     .not.toContain("Checking patch against the ROM");
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad .cks-match.bad")).not.toBeNull();
-  expect(document.getElementById("rom-weaver-list-patch-stack")?.textContent).not.toContain("Verified");
+  expect(document.querySelector('#rom-weaver-list-patch-stack button[title="Ready to apply"]')).toBeNull();
 
   checkbox.click();
   await waitForApplyButtonEnabled();
@@ -61,8 +61,10 @@ test("a patch whose filename crc32 token mismatches the ROM is blocked until App
 test("a patch whose filename crc32 token matches the ROM shows as verified", async () => {
   await stage(`hack [crc32:${RAW_ROM_CRC32}].ips`);
   await expect
-    .poll(() => document.getElementById("rom-weaver-list-patch-stack")?.textContent ?? "", { timeout: 45000 })
-    .toContain("Verified");
+    .poll(() => document.querySelector('#rom-weaver-list-patch-stack button[title="Ready to apply"]'), {
+      timeout: 45000,
+    })
+    .not.toBeNull();
   await waitForApplyButtonEnabled();
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
   expect(document.getElementById("rom-weaver-checkbox-checksum-override")).toBeNull();
@@ -131,8 +133,10 @@ test("a later patch whose filename crc32 token names the previous patch's output
     .not.toContain("Checking patch against the ROM");
   // Let the engine's dry run land; the file-name token must not turn it into a mismatch.
   await expect
-    .poll(() => document.getElementById("rom-weaver-patch-chain-chip-1")?.textContent?.trim() ?? "", { timeout: 60000 })
-    .not.toBe("");
+    .poll(() => document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Ready to apply"]').length, {
+      timeout: 60000,
+    })
+    .toBe(2);
   await new Promise((resolve) => globalThis.setTimeout(resolve, 3000));
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
   expect(document.getElementById("rom-weaver-checkbox-checksum-override")).toBeNull();

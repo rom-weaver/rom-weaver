@@ -35,6 +35,12 @@ const IPS_ALT_B = "tests/fixtures/archive_sources/multi-patch/alternate.ips";
 const ROM_CRC32 = "c6fb1252";
 
 const chipText = (index) => document.getElementById(`rom-weaver-patch-chain-chip-${index}`)?.textContent?.trim() ?? "";
+// A passed check shows only the drawer's "Ready to apply" check mark, with no chain chip.
+const passedWithoutChip = (index) =>
+  chipText(index) === "" &&
+  !!document
+    .querySelectorAll("#rom-weaver-list-patch-stack .card.patch")
+    [index]?.querySelector('button[title="Ready to apply"]');
 
 const dropFixtures = async (paths) => {
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
@@ -64,7 +70,7 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
 
   // The chain head verifies against the ROM; the dependent patch is deferred
   // with its link named - never dry-run against the wrong bytes.
-  await expect.poll(() => chipText(0), { timeout: 60000 }).toBe("Verified");
+  await expect.poll(() => passedWithoutChip(0), { timeout: 60000 }).toBe(true);
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Checks during apply: chain-step-a.bps");
   // One "runs on" select per patch; patch 2's automatic choice names the chain head's output.
   const runsOn0 = await getPatchInputSelect(0);
@@ -105,8 +111,8 @@ test("same-base patches all match the ROM and feed the Expected group without co
 
   // Both patches were authored against the base: each one verifies against
   // the ROM directly instead of chaining off its neighbor.
-  await expect.poll(() => chipText(0), { timeout: 60000 }).toBe("Verified");
-  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Verified");
+  await expect.poll(() => passedWithoutChip(0), { timeout: 60000 }).toBe(true);
+  await expect.poll(() => passedWithoutChip(1), { timeout: 60000 }).toBe(true);
   expect(document.getElementById("rom-weaver-patch-order-note")).toBeNull();
 
   // Their shared base expectation unions into the ROM card's Expected group
@@ -126,15 +132,15 @@ test("checksumless patches distinguish a successful preflight from a verified id
   const passedChecks = () =>
     document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Ready to apply"]').length;
   await expect.poll(passedChecks, { timeout: 60000 }).toBe(2);
-  // No checksum was compared, so the chip claims only that the patch was checked.
-  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Checked");
+  // No checksum was compared, so the check mark stands alone with no chip.
+  await expect.poll(() => passedWithoutChip(1), { timeout: 60000 }).toBe(true);
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
 }, 120000);
 
 test("a patch input selector re-plans that patch", async () => {
   mount(createElement(ApplyPatchForm, {}));
   await dropFixtures([RAW_ROM, CHAIN_A, SAME_BASE_D]);
-  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Verified");
+  await expect.poll(() => passedWithoutChip(1), { timeout: 60000 }).toBe(true);
 
   const basisSelect = await getPatchInputSelect(1);
   expect(basisSelect.value).toBe("auto");
@@ -149,7 +155,7 @@ test("a patch input selector re-plans that patch", async () => {
 
   // Return to automatic detection.
   setFormControlValue(document.getElementById("rom-weaver-select-patch-target-1"), "auto");
-  await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("Verified");
+  await expect.poll(() => passedWithoutChip(1), { timeout: 90000 }).toBe(true);
   expect(patchCheckHeadings(1)).toEqual([
     "Input: Original ROM (detected)",
     "Patch result",
@@ -165,7 +171,7 @@ test("a Previous basis pin reaches Apply execution", async () => {
     }),
   );
   await dropFixtures([RAW_ROM, CHAIN_A, SAME_BASE_D]);
-  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Verified");
+  await expect.poll(() => passedWithoutChip(1), { timeout: 60000 }).toBe(true);
 
   // The sibling patch is base-authored. Pinning it to Previous must reach the
   // real apply command, which then checks it against patch 1's intermediate

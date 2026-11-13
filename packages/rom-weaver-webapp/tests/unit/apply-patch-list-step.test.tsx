@@ -160,7 +160,7 @@ describe("ApplyPatchListStep", () => {
     expect(container.textContent).toContain("Patch source loaded");
   });
 
-  it("labels a successful preflight with no compared checksum as checked", () => {
+  it("shows only the check mark for a successful preflight with no compared checksum", () => {
     const appliedWithoutChecksum = item(0, {
       chainVerdict: {
         basis: "base",
@@ -170,18 +170,20 @@ describe("ApplyPatchListStep", () => {
     });
     const { container } = renderList({ patches: [appliedWithoutChecksum] });
 
-    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toBe("Checked");
+    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")).toBeNull();
+    expect(container.querySelectorAll('button[title="Ready to apply"]')).toHaveLength(1);
   });
 
-  it("labels a successful preflight as verified when a checksum was compared or matched", () => {
+  it("shows only the check mark for a successful preflight when a checksum was compared or matched", () => {
     const compared = item(0, { checksumCompared: true });
     const matched = item(1, {
       chainVerdict: { basis: "base", basisSource: "declared", matched: { kind: "base", variant: "raw" } },
     });
     const { container } = renderList({ patches: [compared, matched] });
 
-    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toBe("Verified");
-    expect(container.querySelector("#rom-weaver-patch-chain-chip-1")?.textContent).toBe("Verified");
+    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")).toBeNull();
+    expect(container.querySelector("#rom-weaver-patch-chain-chip-1")).toBeNull();
+    expect(container.querySelectorAll('button[title="Ready to apply"]')).toHaveLength(2);
   });
 
   it("labels a failed preflight as a failed check instead of not checked yet", () => {

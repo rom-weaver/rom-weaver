@@ -1120,11 +1120,6 @@ msgstr "Prüfe dein Ausgangs-ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.applied"
-msgstr "Kontrolliert"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.cheats.checkingCode"
 msgstr "Code wird geprüft…"
 
@@ -6167,11 +6162,6 @@ msgstr "Variante"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.variantClass"
 msgstr "Variantenklasse"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.verified"
-msgstr "Geprüft"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

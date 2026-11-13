@@ -1120,11 +1120,6 @@ msgstr "Check your original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.applied"
-msgstr "Checked"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.cheats.checkingCode"
 msgstr "Checking code…"
 
@@ -6167,11 +6162,6 @@ msgstr "Variant"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.variantClass"
 msgstr "Variant class"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.verified"
-msgstr "Verified"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
