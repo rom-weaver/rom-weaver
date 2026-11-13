@@ -104,7 +104,7 @@ const readDirtyPaths = (statusOutput) => {
 };
 
 /**
- * Map each file to the ISO date of its last commit. The whole list costs three git processes.
+ * Map each file to its last commit's ISO date, using three git processes in total.
  * Files with uncommitted changes, no history, or a shallow clone's boundary commit map to null.
  */
 export function readFileLastmods(files, cwd) {
@@ -126,13 +126,13 @@ export function readFileLastmods(files, cwd) {
     const shallowPath = path.resolve(cwd, shallowGitPath);
     const shallowCommits = new Set(fs.existsSync(shallowPath) ? fs.readFileSync(shallowPath, "utf8").split("\n") : []);
     const pending = new Set(files.map(repoPathOf).filter((repoPath) => !dirty.has(repoPath)));
-    // Commits are listed newest first, so a path's first appearance is its last change.
-    // A merge lists a path only when it differs from every parent, like `git log -1`.
-    // `--no-relative` keeps names repository-relative under `diff.relative`.
+    // Newest commits come first, so a path's first match is its last change.
+    // Merges list a path only when it differs from every parent, like `git log -1`.
     const log = git([
       "log",
       "--format=%H %ct",
       "--name-only",
+      // Keeps names repository-relative under `diff.relative`.
       "--no-relative",
       "--diff-merges=combined",
       "-z",

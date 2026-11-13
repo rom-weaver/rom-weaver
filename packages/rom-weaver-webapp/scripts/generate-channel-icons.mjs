@@ -84,8 +84,7 @@ const FAVICON_FALLBACK_SCALE = 1.15;
 const SOCIAL_PREVIEW = { height: 1280, width: 2560 };
 const SOCIAL_PREVIEW_NAMES = ["social-preview", "social-preview-dark"];
 
-// Every file whose contents reach the output. The lockfile pins the encoders and Playwright.
-// CI renders with system Chrome, so the stamp hashes the browser version too.
+// Every file whose contents reach the output, plus the unpinned browser version.
 // New local imports and master files MUST be listed here, or renders can go stale.
 const RENDER_INPUT_PATHS = [
   fileURLToPath(import.meta.url),
