@@ -24,7 +24,8 @@ const cacheFamily = (key) => {
     key.startsWith("wasm-target-") ||
     key.startsWith("semver-checks-") ||
     key.startsWith("identify-brotli-") ||
-    key.startsWith("webapp-build-")
+    key.startsWith("webapp-build-") ||
+    key.startsWith("webapp-bundle-")
   ) {
     const family = key.replace(HASH_SUFFIX, "");
     return family === key ? null : family;
@@ -32,6 +33,11 @@ const cacheFamily = (key) => {
 
   return null;
 };
+
+// A restore key takes the newest bundle. A tag's exact key finds its bundle while
+// it is among the newest three.
+const KEPT_PER_FAMILY = new Map([["webapp-bundle-", 3]]);
+const keptCount = (family) => [...KEPT_PER_FAMILY].find(([prefix]) => family.startsWith(prefix))?.[1] ?? 1;
 
 export function supersededCaches(caches) {
   const families = new Map();
@@ -44,15 +50,15 @@ export function supersededCaches(caches) {
     if (Number.isNaN(created)) continue;
 
     const scope = `${cache.ref}\u0000${cache.version}\u0000${family}`;
-    const members = families.get(scope) ?? [];
-    members.push({ ...cache, created });
+    const members = families.get(scope) ?? { family, members: [] };
+    members.members.push({ ...cache, created });
     families.set(scope, members);
   }
 
-  return [...families.values()].flatMap((members) =>
+  return [...families.values()].flatMap(({ family, members }) =>
     members
       .sort((left, right) => right.created - left.created || Number(right.id) - Number(left.id))
-      .slice(1)
+      .slice(keptCount(family))
       .map(({ created: _created, ...cache }) => cache),
   );
 }

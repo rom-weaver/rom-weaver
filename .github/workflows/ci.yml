@@ -2098,6 +2098,53 @@ jobs:
           '${{ needs.changes.outputs.wasm_runtime }}'
           'webapp-wasm-browser=${{ needs.webapp-wasm-browser.result }}'
 
+  # Saves the bundle the whole suite passed. Tags and runs with no webapp change
+  # build no bundle, so they restamp this one. deploy-webapp-pages decides when
+  # that is safe (scripts/ci/reuse-webapp-bundle.mjs).
+  save-webapp-bundle:
+    name: Save tested webapp bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: [wasm, gate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.wasm.outputs.bundle == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download tested webapp bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: webapp-dist
+          path: packages/rom-weaver-webapp/dist
+
+      - name: Download channel stamp templates
+        uses: actions/download-artifact@v8
+        with:
+          name: webapp-stamp-templates
+          path: packages/rom-weaver-webapp/build/channel-stamp
+
+      # Download by id, as `wasm-attest` does. The reuse check trusts this manifest.
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.wasm.outputs.wasm-artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/wasm-prod
+
+      - name: Record the bundle's commit and WASM files
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$GITHUB_SHA" > packages/rom-weaver-webapp/build/bundle-commit
+          node scripts/ci/wasm-manifest.mjs "$RUNNER_TEMP/wasm-prod" packages/rom-weaver-webapp/build/bundle-wasm.sha256
+
+      - name: Save tested webapp bundle
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            packages/rom-weaver-webapp/dist
+            packages/rom-weaver-webapp/build
+          key: webapp-bundle-${{ runner.os }}-${{ github.sha }}
+
   # Keeps one issue open while the nightly fails (scripts/ci/nightly-alert.mjs). The gate covers
   # every job that can fail this workflow's run (parity.yml is separate and does not alert):
   # `security` only warns, and the deploy and advisory quality jobs are `continue-on-error`.
@@ -2154,8 +2201,10 @@ jobs:
       needs.changes.outputs.deploy_targets != '' &&
       needs.changes.outputs.deploy_targets != '[]'
     strategy:
-      # Separate Pages projects with no shared state, so legs upload in parallel.
-      # Each leg restamps the tested `webapp-dist`, or builds its own only when `wasm` built none.
+      # Separate Pages projects with no shared state, so they upload in
+      # parallel; a release's three channels land in the time of one. Each leg
+      # restamps the tested `webapp-dist` for its channel. When `wasm` built
+      # none, the leg restamps the cached tested bundle, or builds its own.
       fail-fast: false
       matrix:
         target: ${{ fromJSON(needs.changes.outputs.deploy_targets) }}

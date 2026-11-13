@@ -1,4 +1,4 @@
-import { countVisibleWords, hasDescriptiveHeading } from "./html-document.mjs";
+import { countVisibleWords, documentNodes, hasDescriptiveHeading, parseDocument } from "./html-document.mjs";
 import { findCrawlerBrokenLinks } from "./crawler-links.mjs";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -14,7 +14,7 @@ import {
 } from "../src/webapp/api-catalog.mjs";
 import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { escapeHtml } from "../src/webapp/escape-html.mjs";
-import { channelAttributes, resolveAppChannel, resolveSiteOrigin } from "./vite-config/channel.mjs";
+import { buildInfoAttribute, channelAttributes, resolveAppChannel, resolveSiteOrigin } from "./vite-config/channel.mjs";
 import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
 import {
   LEGACY_WORKFLOW_ROUTES,
@@ -819,12 +819,23 @@ assertIncludes(
   "tools alias canonical",
 );
 
-// The bundle reads its channel from <html>. A page stamped for another channel shows that one's badge.
+// The bundle reads its channel and build info from <html>. A page stamped for
+// another channel or commit shows that one's badge and version.
 const expectedChannelAttributes = channelAttributes(channel, process.env.ROM_WEAVER_CHANNEL_LABEL || channel);
+// The stamping job's git sets the build info, so this reads it from the bundle.
+// Another checkout, such as Lighthouse's shallow one, would compute different values.
+const homeBuildInfoJson = [...documentNodes(parseDocument(homeHtml))]
+  .find((node) => node.nodeName === "html")
+  ?.attrs.find((attribute) => attribute.name === "data-build-info")?.value;
+const buildInfo = homeBuildInfoJson ? JSON.parse(homeBuildInfoJson) : null;
+if (typeof buildInfo?.version !== "string" || !buildInfo.commitHash)
+  throw new Error("index.html has no stamped build info");
+const expectedBuildInfoAttribute = buildInfoAttribute(buildInfo);
 for (const name of fs.readdirSync(distDir, { recursive: true, encoding: "utf8" })) {
   if (!name.endsWith(".html")) continue;
   const html = read(name);
   assertIncludes(html, expectedChannelAttributes, `${name} channel`);
+  assertIncludes(html, expectedBuildInfoAttribute, `${name} build info`);
   // A second root means a label's `$` text was read as replacement syntax.
   const mountPoints = html.split('id="webapp-root"').length - 1;
   if (mountPoints !== 1) throw new Error(`${name} has ${mountPoints} #webapp-root elements, expected 1`);
@@ -863,6 +874,9 @@ if (production) {
 // generated manifest is on disk.
 const precacheManifest = read("rom-weaver-service-worker.js");
 assertExcludes(precacheManifest, '"downloadManifest":true', "offline download manifest precache entry");
+// Its cache names use the version, so the service worker needs the pages' build info.
+assertIncludes(precacheManifest, JSON.stringify(buildInfo), "service worker build info");
+assertExcludes(precacheManifest, "__ROM_WEAVER_BUILD_INFO__", "service worker build info placeholder");
 // Each page's precache revision is its MD5. A restamp MUST inject the manifest again,
 // or the precache serves the previous channel's page.
 for (const [, revision, url] of precacheManifest.matchAll(

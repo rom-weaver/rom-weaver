@@ -10,7 +10,7 @@ import { cacheNames, setCacheNameDetails } from "workbox-core";
 import type { WorkboxPlugin } from "workbox-core/types.js";
 import { addPlugins, cleanupOutdatedCaches, matchPrecache, precacheAndRoute } from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
-import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
+import { APP_BUILD_VERSION } from "./build-version.ts";
 import { createOfflineWarmup } from "./offline-warmup.ts";
 import { createOfflineProgressReporter } from "./pwa/offline-progress-reporter.ts";
 import { prioritizePrecacheInstallRequest } from "./pwa/fetch-priority.ts";
@@ -61,8 +61,8 @@ const getDevBuildToken = () => {
 };
 const DEV_BUILD_TOKEN = getDevBuildToken();
 const PRECACHE_VERSION = import.meta.env.DEV
-  ? DEV_BUILD_TOKEN || RESOLVED_APP_BUILD_VERSION || APP_BUILD_VERSION || "dev"
-  : RESOLVED_APP_BUILD_VERSION || APP_BUILD_VERSION || "unknown";
+  ? DEV_BUILD_TOKEN || APP_BUILD_VERSION || "dev"
+  : APP_BUILD_VERSION || "unknown";
 
 setCacheNameDetails({
   precache: PRECACHE_ID,

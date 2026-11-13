@@ -78,6 +78,18 @@ test("keeps the newest cache in each compatible restore scope", () => {
   );
 });
 
+test("tested webapp bundles keep the newest three per scope", () => {
+  const bundles = [1, 2, 3, 4, 5].map((day) =>
+    cache({
+      id: day,
+      created_at: `2026-09-0${day}T12:00:00Z`,
+      key: `webapp-bundle-Linux-${String(day).repeat(40)}`,
+    }),
+  );
+  const otherRef = { ...bundles[0], id: 6, ref: "refs/heads/other" };
+  assert.deepEqual(supersededCaches([...bundles, otherRef]), [bundles[1], bundles[0]]);
+});
+
 test("sccache cleanup preserves separate jobs, runners, refs, and cache versions", () => {
   const old = cache({
     key: "sccache-wasm-Linux-X64-aabbccdd",
