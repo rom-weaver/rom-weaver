@@ -7,6 +7,13 @@
   .rw-app .cks > .cks-head .rb {
     padding: 1px 6px;
   }
+  .rw-app .extract-d > .cks-head .readouts {
+    gap: var(--sp-2xs);
+  }
+  .rw-app .extract-d > .cks-head .rb {
+    padding-inline: 2px;
+    font-size: calc(var(--badge-fs) * 0.85);
+  }
   .rw-app .app {
     font-stretch: 82%;
   }

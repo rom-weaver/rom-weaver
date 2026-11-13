@@ -331,14 +331,10 @@
 .rw-app .cks > .cks-head .readouts > .rb:not(:last-child) {
   flex: none;
 }
-/* The Files header carries size, format, and timing chips. Clipping the last
-   one hides the extract time, so a narrow header wraps the chips whole. */
+/* The Files header carries size, format, and timing chips; they may use the
+   space beside the label so the last one, the extract time, is not clipped. */
 .rw-app .extract-d > .cks-head .readouts {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-.rw-app .extract-d > .cks-head .readouts > .rb {
-  flex: none;
+  max-width: 100%;
 }
 .rw-app .cks:not(.is-open, .is-integrated) > .cks-head .rb {
   background: var(--plate-2);
