@@ -381,10 +381,10 @@
   background: transparent;
   border: 0;
 }
-/* The arrow is absolutely placed over the select's end edge (fields.css), so the text
-   needs padding to clear it; the arrow and underline show a borderless select is a dropdown. */
+/* The arrow overlaps the select's end edge (fields.css), so the text needs padding.
+   The underline and arrow mark a borderless select as a dropdown. */
 .rw-app .target-grp > .dropdown-select > select.meta-target-select {
-  padding-inline-end: 24px;
+  padding-inline-end: 14px;
   border-bottom: 1px dashed color-mix(in oklab, currentcolor 45%, transparent);
 }
 .rw-app .ptgt-chev {
