@@ -89,4 +89,24 @@ describe("InfoToggle dismissal", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(trigger);
   });
+
+  it("leaves Escape to a field that holds focus", () => {
+    const { container, getByLabelText } = render(
+      <>
+        <InfoToggle ariaLabel="More info" title="info">
+          body copy
+        </InfoToggle>
+        <input aria-label="Position" />
+      </>,
+    );
+    const trigger = container.querySelector("button.info-btn") as HTMLButtonElement;
+    fireEvent.click(trigger);
+    const field = getByLabelText("Position");
+    field.focus();
+
+    const notHandled = fireEvent.keyDown(field, { cancelable: true, key: "Escape" });
+
+    expect(notHandled).toBe(true);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  });
 });

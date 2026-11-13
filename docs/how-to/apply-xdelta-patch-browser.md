@@ -24,7 +24,7 @@ Apply an xdelta patch to a ROM or disc image online with rom-weaver's [Apply](ht
 1. Open [Apply](https://rom-weaver.com/apply-rom-patches).
 2. Drop the ROM or disc image and the patch into **0x01 Inputs**, or choose **Add files**.
 3. Wait for **Checksumming** to finish. If asked, choose the entry the author names.
-4. [Check the source file](#check-the-source-file). The patch card's **Checks** line shows **XDELTA** or **VCDIFF**, and a check mark.
+4. [Check the source file](#check-the-source-file). The patch card's **Checks** line shows **XDELTA** or **VCDIFF**, and a check circle or a dashed circle.
 5. Choose **APPLY & DOWNLOAD** and save the result.
 
 The download is named after the source file and the patch, such as `game [hack].bin`. Your original file stays unchanged.
@@ -37,7 +37,7 @@ An xdelta patch has no fixed checksum of the file it expects unless the author u
 - A patch with window checksums catches a wrong source. The card shows **Checks failed** with a `checksum mismatch` message, and **APPLY & DOWNLOAD** is blocked.
 - A patch with neither applies to a wrong source without a warning.
 
-For patches without armor the check mark only means the patch applies, so compare the author's checksum yourself. Add it as an input check on the patch card, as in [Check the ROM yourself](apply-ips-patch-browser.md#check-the-rom-yourself). A wrong file then fails the check.
+For patches without armor, a dashed circle means the patch only applies, so compare the author's checksum yourself. Add it as an input check on the patch card, as in [Check the ROM yourself](apply-ips-patch-browser.md#check-the-rom-yourself). A wrong file then fails the check.
 
 After a failed check, [Fix a source ROM checksum mismatch](fix-checksum-errors.md) lists the causes. A fresh file dropped into **0x01 Inputs** replaces the wrong one.
 

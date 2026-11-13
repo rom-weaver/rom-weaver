@@ -79,9 +79,17 @@ function InfoToggle({
 
   useEffect(() => {
     if (!open) return;
-    // Capture phase and preventDefault, so a dialog that skips handled Escape keeps its own state.
+    // Escape belongs to whatever holds focus: an inline editor or a dialog in front of this popover
+    // keeps it. Capture phase and preventDefault, so a dialog that skips handled Escape keeps its own state.
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      const focused = document.activeElement;
+      const ownsFocus =
+        !focused ||
+        focused === document.body ||
+        buttonRef.current?.contains(focused) ||
+        panelRef.current?.contains(focused);
+      if (!ownsFocus) return;
       event.preventDefault();
       setOpen(false);
       buttonRef.current?.focus();
