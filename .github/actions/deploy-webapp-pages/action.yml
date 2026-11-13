@@ -2,9 +2,9 @@ name: Build and deploy the webapp to Cloudflare Pages
 description: >-
   Stamp the webapp bundle for one channel and Direct-Upload it to that
   channel's Pages project. The `deploy` matrix restamps the bundle the `wasm`
-  job built and CI tested, and builds one only when that job built none. When
-  building, callers are responsible for putting the module in
-  packages/rom-weaver-webapp/src/wasm first.
+  job built and CI tested, and builds one only when that job built none.
+  Callers MUST put the `wasm-prod` files in packages/rom-weaver-webapp/src/wasm
+  first, whether it builds or restamps.
 
 inputs:
   channel:

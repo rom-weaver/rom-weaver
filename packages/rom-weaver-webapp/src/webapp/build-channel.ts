@@ -13,8 +13,7 @@ type BuildChannel = (typeof CHANNELS)[number];
 
 const isBuildChannel = (value: unknown): value is BuildChannel => CHANNELS.includes(value as BuildChannel);
 
-// The channel comes from the deployment's <html>, so no URL or storage key can change it.
-// Prerendering has no document, so it passes the channel in ROM_WEAVER_PRERENDER_CHANNEL.
+// The deployment's <html> sets the channel; prerendering sets ROM_WEAVER_PRERENDER_CHANNEL.
 // To preview a channel locally, run `ROM_WEAVER_CHANNEL=beta npm run dev`.
 const readStampedChannel = (): { channel?: string; label?: string } => {
   if (globalThis.ROM_WEAVER_PRERENDER_CHANNEL) return globalThis.ROM_WEAVER_PRERENDER_CHANNEL;

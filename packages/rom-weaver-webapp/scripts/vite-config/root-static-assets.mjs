@@ -137,9 +137,7 @@ const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel, site
     const legacySlug = requestPath.replace(/^\//, "").replace(/(?:\/index\.html|\/|\.html|\.md)$/, "");
     const destination = Object.hasOwn(LEGACY_WORKFLOW_ROUTES, legacySlug) && LEGACY_WORKFLOW_ROUTES[legacySlug];
     if (destination && (!markdown || Object.values(WORKFLOW_SEO_ROUTES).some(({ slug }) => slug === destination))) {
-      res.writeHead(301, {
-        Location: `/${destination}${markdown ? ".md" : ""}${req.url.slice(requestPath.length)}`,
-      });
+      res.writeHead(301, { Location: `/${destination}${markdown ? ".md" : ""}${req.url.slice(requestPath.length)}` });
       res.end();
       return;
     }

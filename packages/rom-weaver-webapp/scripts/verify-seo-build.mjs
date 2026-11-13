@@ -857,8 +857,8 @@ if (production) {
 // generated manifest is on disk.
 const precacheManifest = read("rom-weaver-service-worker.js");
 assertExcludes(precacheManifest, '"downloadManifest":true', "offline download manifest precache entry");
-// Each precache revision is the MD5 of its file. A stale one serves the previous
-// channel's page from the precache, so a restamp MUST inject the manifest again.
+// Each page's precache revision is its MD5. A restamp MUST inject the manifest again,
+// or the precache serves the previous channel's page.
 for (const [, revision, url] of precacheManifest.matchAll(
   /"revision":"([0-9a-f]+)","sizeBytes":\d+,"url":"([^"?]+\.html)"/g,
 )) {

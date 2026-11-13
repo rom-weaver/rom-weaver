@@ -47,11 +47,7 @@ const devPrerenderRoute = (url) => {
   if (!slug) return { docsSlug: "docs", view: "home" };
   const routeSlug = slug.replace(/\.html$/, "");
   if (Object.hasOwn(WORKFLOW_ENTRY_ROUTES, routeSlug)) {
-    return {
-      docsSlug: "docs",
-      view: WORKFLOW_ENTRY_ROUTES[routeSlug].view,
-      workflowEntry: routeSlug,
-    };
+    return { docsSlug: "docs", view: WORKFLOW_ENTRY_ROUTES[routeSlug].view, workflowEntry: routeSlug };
   }
   const directView = {
     "create-m3u-playlist": "playlist",
