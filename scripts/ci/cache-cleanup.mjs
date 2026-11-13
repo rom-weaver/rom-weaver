@@ -23,7 +23,8 @@ const cacheFamily = (key) => {
     key.startsWith("sccache-") ||
     key.startsWith("wasm-target-") ||
     key.startsWith("semver-checks-") ||
-    key.startsWith("identify-brotli-")
+    key.startsWith("identify-brotli-") ||
+    key.startsWith("webapp-build-")
   ) {
     const family = key.replace(HASH_SUFFIX, "");
     return family === key ? null : family;

@@ -210,7 +210,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     result.webapp = false;
     if (
       /^\.github\/workflows\/(?:ci|coverage)\.yml$/.test(path) ||
-      /^\.github\/actions\/(?:setup-build-env|wasm-cache)\//.test(path) ||
+      /^\.github\/actions\/(?:setup-build-env|wasm-cache|webapp-build-cache)\//.test(path) ||
       path.startsWith(".cargo/") ||
       path === ".config/lefthook.yml" ||
       path === ".config/mise.toml" ||

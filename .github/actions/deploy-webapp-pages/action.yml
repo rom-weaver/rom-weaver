@@ -89,6 +89,9 @@ runs:
         esac
         echo "origin=$origin" >> "$GITHUB_OUTPUT"
 
+    - name: Restore webapp build cache
+      uses: ./.github/actions/webapp-build-cache
+
     # The channel stamps the bundle's visible identity - masthead badge, tab
     # title, PWA name and accent tokens - so a nightly or preview tab is never
     # mistaken for production.

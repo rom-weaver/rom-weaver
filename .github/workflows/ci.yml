@@ -1067,11 +1067,26 @@ jobs:
           # attribution files that are intentionally outside the cache.
           path: ${{ steps.wasm-cache.outputs.path }}
 
+      - name: Restore webapp build cache
+        id: webapp-build-cache
+        if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+        uses: ./.github/actions/webapp-build-cache
+
       - name: Build webapp
+        id: webapp-build
         if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
         env:
           ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run build
+
+      # Pull requests restore main's entry but never write one, so a pull
+      # request cannot seed what a later main build reuses.
+      - name: Save webapp build cache
+        if: steps.webapp-build.outcome == 'success' && github.ref == 'refs/heads/main' && steps.webapp-build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.webapp-build-cache.outputs.path }}
+          key: ${{ steps.webapp-build-cache.outputs.key }}
 
       # The channel icon determinism check (`icons:channels:check`) runs in
       # Webapp (static) via `test:static`, off this job's critical path.

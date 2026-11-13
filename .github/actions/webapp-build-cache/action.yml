@@ -1,0 +1,43 @@
+name: Restore webapp build cache
+description: >-
+  Restore the reusable work of `npm run build`: the content-addressed Brotli
+  sidecar cache and the stamped channel icons. Each is verified before reuse
+  (a Brotli entry by decompressing it, the icons by their render stamp), so a
+  restore from an older main commit can skip work but never change output.
+  Restore after setup-build-env, whose `npm ci` replaces node_modules.
+
+outputs:
+  cache-hit:
+    description: "'true' when this exact commit's entry was restored."
+    value: ${{ steps.restore.outputs.cache-hit }}
+  key:
+    description: The key a caller that builds on main saves under.
+    value: ${{ steps.restore.outputs.cache-primary-key }}
+  path:
+    description: >-
+      The newline-separated cached paths. A save MUST pass this list unchanged:
+      the paths are part of the cache version a restore matches.
+    value: ${{ steps.paths.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve cached paths
+      id: paths
+      shell: bash
+      run: |
+        {
+          echo "path<<PATHS_EOF"
+          echo "node_modules/.cache/rom-weaver-brotli"
+          echo "dist/generated-assets"
+          echo "PATHS_EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Restore webapp build cache
+      id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ steps.paths.outputs.path }}
+        key: webapp-build-${{ runner.os }}-${{ github.sha }}
+        restore-keys: |
+          webapp-build-${{ runner.os }}-

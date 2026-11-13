@@ -304,6 +304,16 @@ test("the prebuilt smoke needs an image reason on a pull request, a bundle on ma
   assert.equal(classifyFor("push", "Dockerfile").docker_prebuilt, "false");
 });
 
+test("composite actions the WASM job runs select full CI", () => {
+  for (const path of [
+    ".github/actions/setup-build-env/action.yml",
+    ".github/actions/wasm-cache/action.yml",
+    ".github/actions/webapp-build-cache/action.yml",
+  ]) {
+    assert.equal(classifyFor("pull_request", path).full, "true", path);
+  }
+});
+
 test("plumbing lint runs only for the file kinds it lints", () => {
   for (const path of [
     ".github/workflows/codeql.yml",
