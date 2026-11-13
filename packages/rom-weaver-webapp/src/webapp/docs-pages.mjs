@@ -103,5 +103,7 @@ export {
   docSourcePath,
   generatedDocsDirectory,
   readDocRoutes,
+  replaceBetween,
+  replaceMetaContent,
   withDocsBase,
 };

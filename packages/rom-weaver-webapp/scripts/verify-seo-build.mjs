@@ -13,6 +13,7 @@ import {
   WEBAPP_URL_SESSION_DOC_PATH,
 } from "../src/webapp/api-catalog.mjs";
 import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
+import { escapeHtml } from "../src/webapp/escape-html.mjs";
 import { channelAttributes, resolveSiteOrigin } from "./vite-config/channel.mjs";
 import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
 import {
@@ -801,7 +802,7 @@ for (const weave of ["weave/index.html", "weave.html"]) {
 // Trim left beta: its page is indexed, self-canonical, titled by its SEO route, and listed in the sitemap.
 {
   const trimHtml = read("trim-rom/index.html");
-  assertIncludes(trimHtml, `<title>${WORKFLOW_SEO_ROUTES.trim.title}`, "trim title");
+  assertIncludes(trimHtml, `<title>${escapeHtml(WORKFLOW_SEO_ROUTES.trim.title)}`, "trim title");
   assertIncludes(trimHtml, WORKFLOW_SEO_ROUTES.trim.description, "trim description");
   assertIncludes(trimHtml, 'rel="canonical" href="https://rom-weaver.com/trim-rom"', "trim canonical");
   assertIncludes(
