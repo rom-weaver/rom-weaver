@@ -162,7 +162,8 @@ export default defineConfig(({ command, mode }) => {
         filename: "rom-weaver-service-worker.ts",
         injectManifest: {
           // The channel stamp injects the precache manifest, because each channel lists different documents.
-          injectionPoint: undefined,
+          // The dev server keeps the default, which it replaces with an empty manifest.
+          injectionPoint: command === "build" ? undefined : "self.__WB_MANIFEST",
         },
         injectRegister: null,
         integration: {
