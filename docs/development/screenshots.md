@@ -116,6 +116,6 @@ npm --prefix packages/rom-weaver-webapp run capture:video
 
 Install FFmpeg and `bsdtar` first (`ffmpeg` and `libarchive-tools` on Ubuntu). Set `ROM_WEAVER_VIDEO_BASE_URL` when the preview uses a different address. Set `ROM_WEAVER_FFMPEG` when FFmpeg is outside your executable search path. The default preview address is `https://localhost:4173/`.
 
-The capture imports the bundled test archive, applies both patches, and selects 7z. It ends with the download ready, then verifies the downloaded archive's ROM bytes. The MP4 uses H.264, 30 fps, and 1200 × 900 pixels. Output and capture evidence live under `.cache/agents/scratch/release-video/`.
+The capture imports the bundled test archive, applies both patches, and selects 7z. It then opens the result in the Test tab, waits for the game to start, and returns to Apply. It ends by downloading the archive, then verifies its ROM bytes. The MP4 uses H.264, 30 fps, and 1200 × 900 pixels. Output and capture evidence live under `.cache/agents/scratch/release-video/`.
 
 Release dispatch captures this video alongside screenshots on the release PR. It uploads the validated MP4 and replaces the README's `apply-video` marker block. The upload uses `RELEASE_PLEASE_TOKEN`; GitHub attachments require a user token. The installation `GITHUB_TOKEN` cannot upload these attachments. Capture or upload failures stop the refresh before the documentation commit. Re-dispatch creates a new attachment; previous links remain valid.
