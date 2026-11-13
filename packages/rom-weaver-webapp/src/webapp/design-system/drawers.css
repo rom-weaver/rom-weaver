@@ -331,9 +331,22 @@
 .rw-app .cks > .cks-head .readouts > .rb:not(:last-child) {
   flex: none;
 }
-/* The size, format, and extract-time chips may use the space beside the label. */
+/* The size, format, and extract-time chips may use the space beside the label.
+   On a narrow screen the size chip gives way so the extract time stays whole. */
 .rw-app .extract-d > .cks-head .readouts {
   max-width: 100%;
+}
+.rw-app .extract-d > .cks-head .readouts > .rb:first-child {
+  flex: 0 1 auto;
+}
+.rw-app .extract-d > .cks-head .readouts > .rb.time {
+  flex: none;
+}
+/* Every drawer header chip shrinks together where the widest header no longer fits. */
+@media (max-width: 449px) {
+  .rw-app .cks > .cks-head .rb {
+    font-size: calc(var(--badge-fs) * 0.85);
+  }
 }
 .rw-app .cks:not(.is-open, .is-integrated) > .cks-head .rb {
   background: var(--plate-2);
