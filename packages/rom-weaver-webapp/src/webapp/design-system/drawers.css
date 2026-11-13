@@ -331,8 +331,7 @@
 .rw-app .cks > .cks-head .readouts > .rb:not(:last-child) {
   flex: none;
 }
-/* The Files header carries size, format, and timing chips; they may use the
-   space beside the label so the last one, the extract time, is not clipped. */
+/* The size, format, and extract-time chips may use the space beside the label. */
 .rw-app .extract-d > .cks-head .readouts {
   max-width: 100%;
 }
