@@ -740,7 +740,7 @@ def rebuild_bench_targets(skip_build: bool, needs_rom_weaver: bool, needs_wasm: 
         subprocess.run(["cargo", "build", "-p", "rom-weaver-cli", "--release"], check=True, cwd=REPO_ROOT)
     if needs_wasm:
         print("[bench] rebuild wasm artifacts", flush=True)
-        subprocess.run(["mise", "run", "build-wasm"], check=True, cwd=REPO_ROOT)
+        subprocess.run(["mise", "run", "build-wasm-prod"], check=True, cwd=REPO_ROOT)
 
 
 def resolve_external_binary(bin_path: Path, flag_name: str) -> Path:

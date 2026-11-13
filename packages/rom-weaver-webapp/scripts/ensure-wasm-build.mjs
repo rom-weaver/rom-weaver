@@ -31,9 +31,9 @@ const main = (env = process.env) => {
       sourceFingerprint: createWasmSourceFingerprint(REPO_ROOT),
     })
   ) {
-    run("mise", ["run", "build-wasm"], { label: "build-wasm", log });
+    run("mise", ["run", "build-wasm-fast"], { label: "build-wasm-fast", log });
   } else {
-    log("info", "WASM inputs unchanged; skipping build-wasm");
+    log("info", "WASM inputs unchanged; skipping build-wasm-fast");
   }
 };
 

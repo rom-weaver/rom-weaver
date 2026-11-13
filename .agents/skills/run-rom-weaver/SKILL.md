@@ -17,7 +17,7 @@ mise install
 npm ci
 npm ci --prefix packages/rom-weaver-webapp
 npm --prefix packages/rom-weaver-webapp exec playwright -- install chromium
-mise run build-wasm
+mise run build-wasm-fast
 ```
 
 ## Test the native CLI
@@ -77,7 +77,7 @@ Run `mise run test-e2e-fast` from the repository root. It builds production WASM
 ## Troubleshooting
 
 - Missing Playwright package: run `npm ci --prefix packages/rom-weaver-webapp`.
-- Missing WASM file: run `mise run build-wasm`.
+- Missing WASM file: run `mise run build-wasm-fast`.
 - Browser startup timeout: confirm the server URL returns HTTP 200 with `curl -sk https://localhost:5191/ -o /dev/null -w '%{http_code}'`.
 - CLI output-extension error: add `--no-compress` for a raw file, or use a supported compressed extension.
 - Missing CLI binary: run `cargo build -p rom-weaver-cli --release`.

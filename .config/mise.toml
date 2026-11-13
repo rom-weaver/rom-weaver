@@ -93,7 +93,7 @@ description = "Type-check the threaded WASM target (containers lib)"
 run = "cargo check -p rom-weaver-containers --target wasm32-wasip1-threads --lib"
 
 [tasks.build-wasm]
-description = "Build the threaded WASM app module (fast local dev build, no wasm-opt/brotli)"
+description = "Build the threaded WASM app module with LTO, without wasm-opt/brotli"
 depends = ["identify-data"]
 # Release C builds add -O3 -flto on top of the lean check-time CFLAGS above.
 # These mirror build-wasm-prod's flags; scripts/wasm/build-app.mjs holds the
@@ -117,7 +117,7 @@ env.CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O3 -flt
 run = "node {{ config_root }}/scripts/wasm/build-app.mjs prod"
 
 [tasks.build-wasm-fast]
-description = "Build the threaded WASM app module without LTO or wasm-opt, with a quality-1 brotli sidecar (pre-push bundle checks; size and speed are not representative). Keeps a module in the output directory that was built from the current inputs"
+description = "Build the threaded WASM app module without LTO or wasm-opt, with a quality-1 brotli sidecar (local development and pre-push bundle checks; size and speed are not representative). Keeps a module in the output directory that was built from the current inputs"
 depends = ["identify-data"]
 # Its own target directory keeps these flags from invalidating the release build's Cargo output.
 env.CARGO_TARGET_DIR = "{{ config_root }}/target/wasm-fast"
@@ -128,6 +128,8 @@ env.CFLAGS_wasm32_wasip1 = "-msimd128 -O1"
 env.CXXFLAGS_wasm32_wasip1 = "-msimd128 -O1"
 env.CFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O1"
 env.CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O1"
+# Quality 1 is cheap to recompute, so skip the sidecar cache.
+env.ROM_WEAVER_BROTLI_CACHE = "0"
 run = "node {{ config_root }}/scripts/wasm/build-app.mjs fast"
 
 [tasks.build-wasm-twiggy]
