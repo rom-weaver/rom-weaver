@@ -17,6 +17,7 @@ import {
 } from "./scripts/vite-config/channel.mjs";
 import { stampBuildChannel } from "./scripts/vite-config/channel-stamp.mjs";
 import { deferDevHotUpdates, runtimeScratchIgnorePatterns } from "./scripts/vite-config/dev-hot-updates.mjs";
+import { importDevServiceWorkerDefines } from "./scripts/vite-config/dev-service-worker.mjs";
 import { emulatorJsLock, serveEmulatorJsAssets } from "./scripts/vite-config/emulatorjs.mjs";
 import { securityHeaders } from "./scripts/vite-config/headers.mjs";
 import { identifyManifestFiles, identifyOptionalPackGroups } from "./scripts/vite-config/identify-data.mjs";
@@ -32,6 +33,9 @@ import {
 } from "./scripts/vite-config/worker-chunks.mjs";
 import { nameWorkflowSharedGroup, resetWorkflowChunks } from "./scripts/vite-config/workflow-chunks.mjs";
 import { DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
+
+const SERVICE_WORKER_SOURCE_DIR = "src/webapp";
+const SERVICE_WORKER_FILENAME = "rom-weaver-service-worker.ts";
 
 /** Shared chunks below this many raw bytes are folded back into their importer; see build.rollupOptions.output. */
 const SHARED_CHUNK_MIN_SIZE = 30_000;
@@ -153,13 +157,14 @@ export default defineConfig(({ command, mode }) => {
       preloadWorkflowRouteChunks(routePreloadLinks),
       writeWebappStaticAssets(),
       writeBrotliSidecars(),
+      importDevServiceWorkerDefines(path.join(rootDir, SERVICE_WORKER_SOURCE_DIR, SERVICE_WORKER_FILENAME)),
       VitePWA({
         devOptions: {
           disableRuntimeConfig: true,
           enabled: devServiceWorkerEnabled,
           type: "module",
         },
-        filename: "rom-weaver-service-worker.ts",
+        filename: SERVICE_WORKER_FILENAME,
         injectManifest: {
           // The channel stamp injects the precache manifest, because each channel lists different documents.
           // The dev server keeps the default, which it replaces with an empty manifest.
@@ -175,7 +180,7 @@ export default defineConfig(({ command, mode }) => {
         },
         manifest: false,
         registerType: "prompt",
-        srcDir: "src/webapp",
+        srcDir: SERVICE_WORKER_SOURCE_DIR,
         strategies: "injectManifest",
       }),
       stampBuildChannel({
