@@ -1,13 +1,10 @@
 name: Build and deploy the webapp to Cloudflare Pages
 description: >-
   Stamp the webapp bundle for one channel and Direct-Upload it to that
-  channel's Pages project. Two jobs reach this: the normal `deploy` matrix,
-  which restamps the bundle the `wasm` job built and CI tested when there is
-  one, and the preview fast path, which builds from the cached WASM module
-  before that bundle exists. A preview must never be deployable two different
-  ways, so the sequence lives here once. When building, callers are
-  responsible for putting the module in packages/rom-weaver-webapp/src/wasm
-  first.
+  channel's Pages project. The `deploy` matrix restamps the bundle the `wasm`
+  job built and CI tested, and builds one only when that job built none. When
+  building, callers are responsible for putting the module in
+  packages/rom-weaver-webapp/src/wasm first.
 
 inputs:
   channel:
@@ -29,9 +26,6 @@ inputs:
       "artifact" restamps the run's `webapp-dist` and `webapp-stamp-templates`
       artifacts for this channel; "build" builds the bundle for it.
     default: build
-  generate-attribution:
-    description: Regenerate the cheap webapp attribution bundle before building.
-    default: "false"
   identify-data-source:
     description: >-
       "cache" restores or builds the packs locally; "artifact" downloads the
@@ -52,12 +46,10 @@ outputs:
 runs:
   using: composite
   steps:
-    # Compiles nothing - runs vite and wrangler over a prebuilt module. Rust is
-    # needed only when the preview fast path regenerated the module's cheap
-    # attribution files outside the WASM build job.
+    # Compiles nothing - runs vite and wrangler over a prebuilt module.
     - uses: ./.github/actions/setup-build-env
       with:
-        tools: ${{ inputs.generate-attribution == 'true' && 'node rust' || 'node' }}
+        tools: node
         cargo-cache: "false"
         webapp-deps: "true"
         emulatorjs-cache: ${{ inputs.bundle == 'build' && 'true' || 'false' }}
@@ -69,11 +61,6 @@ runs:
     - name: Prepare ROM identify data
       if: inputs.identify-data-source == 'cache'
       uses: ./.github/actions/identify-data
-
-    - name: Generate webapp attribution
-      if: inputs.bundle == 'build' && inputs.generate-attribution == 'true'
-      shell: bash
-      run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
 
     # The origin the deployment is served from. llms.txt, the Markdown
     # alternates, openapi.json and the API catalog name it instead of

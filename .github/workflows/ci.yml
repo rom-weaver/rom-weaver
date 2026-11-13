@@ -2119,96 +2119,6 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: node scripts/ci/nightly-alert.mjs
 
-  # Publish a preview from cached WASM while compiled checks run independently.
-  # On a miss, deploy owns the fallback; this job MUST NOT build a duplicate module.
-  deploy-preview-fast:
-    name: Webapp deploy (preview, cached wasm)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    needs: changes
-    # Same non-gating boundary as `deploy`: a Cloudflare outage must not turn a
-    # green build red.
-    continue-on-error: true
-    permissions:
-      contents: read
-      statuses: write
-      deployments: write
-    if: needs.changes.outputs.preview_branch != ''
-    # Do not attach an Actions environment here. This job creates its explicit
-    # deployment record only after the cached preview has actually uploaded.
-    outputs:
-      # False on a cache miss (the deploy step never ran) and equally false if
-      # wrangler failed, so `deploy` picks the preview back up in both cases.
-      deployed: ${{ steps.pages.outputs.url != '' }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          # Same blobless full-history clone as `deploy`, so both preview
-          # paths build identical version strings.
-          fetch-depth: 0
-          filter: blob:none
-          fetch-tags: true
-
-      - name: Restore built wasm module
-        id: wasm-cache
-        uses: ./.github/actions/wasm-cache
-        with:
-          variant: prod
-          # Read-only: this job never builds the module, so it must not claim
-          # the key ahead of the `wasm` job that does.
-          save: "false"
-
-      - name: Mark preview deployment pending
-        if: steps.wasm-cache.outputs.cache-hit == 'true'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          DEPLOYMENT_CHANNEL: preview
-          DEPLOYMENT_TARGET_URL: ${{ format('https://{0}.rom-weaver-preview.pages.dev', needs.changes.outputs.preview_branch) }}
-          DEPLOYMENT_STATE: pending
-          STATUS_CONTEXT: Webapp Deploy / preview
-        run: node scripts/ci/deployment-status.mjs
-
-      - name: Build and deploy preview
-        id: pages
-        if: steps.wasm-cache.outputs.cache-hit == 'true'
-        uses: ./.github/actions/deploy-webapp-pages
-        with:
-          channel: preview
-          label: ${{ needs.changes.outputs.preview_branch }}
-          project: rom-weaver-preview
-          branch: ${{ needs.changes.outputs.preview_branch }}
-          generate-attribution: "true"
-          identify-data-source: artifact
-          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Publish preview deployment status
-        if: always() && steps.wasm-cache.outputs.cache-hit == 'true'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          DEPLOYMENT_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
-          DEPLOYMENT_CHANNEL: preview
-          DEPLOYMENT_URL: ${{ steps.pages.outputs.url }}
-          DEPLOYMENT_TARGET_URL: ${{ format('https://{0}.rom-weaver-preview.pages.dev', needs.changes.outputs.preview_branch) }}
-          DEPLOYMENT_RECORD: "true"
-          DEPLOYMENT_ENVIRONMENT: rom-weaver-preview.pages.dev
-          STATUS_CONTEXT: Webapp Deploy / preview
-        run: node scripts/ci/deployment-status.mjs
-
-      - name: Delete superseded deployments for this pull request
-        if: ${{ !cancelled() && steps.wasm-cache.outputs.cache-hit == 'true' }}
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          PREVIEW_ENVIRONMENT: rom-weaver-preview.pages.dev
-          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        run: scripts/ci/cleanup-preview-deployments.sh
-
   # Build and publish one channel per matrix leg, to isolated Cloudflare origins
   # (rom-weaver.com, beta.rom-weaver.com, nightly.rom-weaver.com, and disposable
   # per-PR previews). `changes` above decides which legs exist.
@@ -2216,15 +2126,11 @@ jobs:
   # Direct Upload reuses the CI-tested WASM artifact without Cloudflare build
   # minutes or a second toolchain. Depend only on `wasm` so deploy URLs arrive
   # while the rest of the suite is still running.
-  #
-  # This is also the preview fallback: it publishes the preview whenever
-  # `deploy-preview-fast` above did not, which is any pull request that missed
-  # the wasm cache.
   deploy:
     name: Webapp deploy (${{ matrix.target.channel }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    needs: [wasm, changes, deploy-preview-fast]
+    needs: [wasm, changes]
     # Deployment was a separate, non-gating workflow before it moved here to
     # share the wasm artifact. Preserve that boundary: a Cloudflare outage must
     # not turn a green main build red and suppress release automation.
@@ -2234,21 +2140,12 @@ jobs:
       actions: read
       statuses: write
       deployments: write
-    # `!cancelled()` because deploy-preview-fast is skipped outright on tags and
-    # main, and a skipped dependency would otherwise skip this job with it. That
-    # weakens the implicit "only after a good wasm build" gate, so state it.
-    #
     # An empty or missing target list would be a hard "matrix contains no
     # values" error, so guard rather than trusting the planner to always emit
     # one.
-    #
-    # On a pull request the only leg is preview, so the last clause needs no
-    # per-channel test - and job-level `if` cannot see `matrix` anyway.
     if: >-
-      !cancelled() && needs.wasm.result == 'success' &&
       needs.changes.outputs.deploy_targets != '' &&
-      needs.changes.outputs.deploy_targets != '[]' &&
-      needs.deploy-preview-fast.outputs.deployed != 'true'
+      needs.changes.outputs.deploy_targets != '[]'
     strategy:
       # Separate Pages projects with no shared state, so they upload in
       # parallel; a release's three channels land in the time of one. Each leg

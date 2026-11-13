@@ -20,7 +20,6 @@ const NON_GATING = new Set([
   "gate",
   "cli-release-attest",
   "deploy",
-  "deploy-preview-fast",
   "docker-nightly",
   "docker-prebuilt-nightly",
   "nightly-alert",
