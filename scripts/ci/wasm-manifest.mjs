@@ -67,7 +67,7 @@ export function checkManifest(root, text) {
   return [...expected.keys()];
 }
 
-/** Throws unless each parsed manifest entry is a regular file under `root` with its hash; other files are ignored. */
+/** Throws unless each manifest entry is a regular file under `root` with its hash. Other files are ignored. */
 export function checkManifestEntries(root, expected) {
   for (const [path, hash] of expected) {
     if (!lstatSync(join(root, path), { throwIfNoEntry: false })?.isFile())

@@ -2098,9 +2098,8 @@ jobs:
           '${{ needs.changes.outputs.wasm_runtime }}'
           'webapp-wasm-browser=${{ needs.webapp-wasm-browser.result }}'
 
-  # Saves the bundle the whole suite passed. Tags and runs with no webapp change
-  # build no bundle, so they restamp this one. deploy-webapp-pages decides when
-  # that is safe (scripts/ci/reuse-webapp-bundle.mjs).
+  # Saves the bundle the whole suite passed. The reuse rule is in
+  # scripts/ci/reuse-webapp-bundle.mjs.
   save-webapp-bundle:
     name: Save tested webapp bundle
     runs-on: ubuntu-24.04

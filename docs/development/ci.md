@@ -377,7 +377,7 @@ When the `wasm` job built a bundle, each leg deploys it. E2E and Lighthouse test
 
 The bundle reads its channel from `<html data-channel data-channel-label>`. A stamp rewrites only channel-dependent files outside `dist/assets`, so the tested assets keep their bytes.
 
-The `wasm` job builds no bundle on a tag or when no webapp input changed. The leg then restores the newest `webapp-bundle-` entry, a bundle that passed `gate` on `main`. `scripts/ci/reuse-webapp-bundle.mjs` allows a restamp only when no webapp input changed since the bundle's commit. This run's `wasm-prod` files also have to match the bundle's manifest.
+The `wasm` job builds no bundle on a tag or when no webapp input changed. The leg then restores the `webapp-bundle-` entry for its commit. If none exists, it restores the newest one, a bundle that passed `gate` on `main`. `scripts/ci/reuse-webapp-bundle.mjs` allows a restamp only when no webapp input changed since the bundle's commit. This run's `wasm-prod` files also have to match the bundle's manifest.
 
 Otherwise the leg builds its own. The bundle reads its version and commit from `<html data-build-info>`. The stamp also writes them to the service worker. A restamped tag shows its own version. Pull request previews wait for the `wasm` job too.
 
