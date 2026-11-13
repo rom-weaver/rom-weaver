@@ -8,8 +8,8 @@ import { isPatchFileChecksumFailure } from "./patch-validation-failure.ts";
 
 /** The chain chip: one plain-language line for what this patch's input was matched against.
  * Positions in the verdict are 0-based ENABLED-chain positions; `enabledIndexes` maps them to
- * the list numbering the drag handles use. Quiet by design: single-patch stacks show only the
- * identity verdicts. */
+ * the list numbering the drag handles use. A passed check has no chip: the drawer's check mark
+ * already says it. */
 export const chainChipText = (
   item: PatchStackItemState,
   hasImplicitPredecessor: boolean,
@@ -23,12 +23,6 @@ export const chainChipText = (
   }
   // The patch itself is unreadable, so no ROM was checked and the chip must not blame the ROM.
   if (item.validationUnreadable) return { text: localizer.message("ui.patchChecks.unreadable"), warn: true };
-  // "Verified" claims a checksum matched; a patch that merely applied (IPS, or no checksum to
-  // compare) is only "Checked".
-  const passedText = (matchedKnownState: boolean) =>
-    localizer.message(
-      matchedKnownState || item.checksumCompared ? "ui.patchChecks.verified" : "ui.patchChecks.applied",
-    );
   const targetLabel = item.targetOptions?.find((option) => option.value === item.targetValue)?.label;
   const checkedTarget =
     targetLabel ||
@@ -38,7 +32,7 @@ export const chainChipText = (
       return { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) };
     }
     if (item.validationState === "valid") {
-      return { text: passedText(false) };
+      return null;
     }
     if (item.validationState === "invalid") {
       return { text: localizer.message("ui.patchChecks.failed", { input: checkedTarget }), warn: true };
@@ -66,18 +60,18 @@ export const chainChipText = (
     const predecessor = displayPatch(verdict.matched.index);
     return item.validationState === "deferred"
       ? { text: localizer.message("ui.patchChecks.deferred", { input: predecessor }) }
-      : { text: passedText(true) };
+      : null;
   }
   if (verdict.matched.kind === "base") {
     return item.validationState === "deferred"
       ? { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) }
-      : { text: passedText(true) };
+      : null;
   }
   if (item.validationState === "deferred") {
     return { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) };
   }
   if (item.validationState === "valid") {
-    return { text: passedText(false) };
+    return null;
   }
   if (item.validationState === "invalid") {
     return { text: localizer.message("ui.patchChecks.failed", { input: checkedTarget }), warn: true };

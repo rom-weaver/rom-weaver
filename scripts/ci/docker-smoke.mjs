@@ -405,9 +405,9 @@ async function checkBrowser(origins) {
         .getByText(/^758d6336$/i)
         .waitFor({ state: "visible", timeout: 60_000 });
       await page
-        .locator("#rom-weaver-list-patch-stack")
-        // The IPS patch carries no checksum, so a passed preflight reads "Checked", not "Verified".
-        .getByText("Checked", { exact: true })
+        // A passed preflight shows the "Ready to apply" check mark and no chip.
+        .locator('#rom-weaver-list-patch-stack button[title="Ready to apply"]')
+        .first()
         .waitFor({ state: "visible", timeout: 60_000 });
       let download;
       try {

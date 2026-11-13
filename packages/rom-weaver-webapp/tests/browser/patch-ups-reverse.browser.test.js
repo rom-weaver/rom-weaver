@@ -46,8 +46,10 @@ test.each(fixtures.flatMap((fixture) => ["forward", "reverse"].map((direction) =
       }),
     );
     await expect
-      .poll(() => document.getElementById("rom-weaver-patch-chain-chip-0")?.textContent, { timeout: 60000 })
-      .toBe("Verified");
+      .poll(() => document.querySelector('#rom-weaver-list-patch-stack button[title="Ready to apply"]'), {
+        timeout: 60000,
+      })
+      .not.toBeNull();
     await waitForApplyButtonEnabled();
     const expectedChecks = document.getElementById("rom-weaver-rom-expected-checks");
     expect(expectedChecks?.querySelector(".ck-mark.bad")).toBeNull();

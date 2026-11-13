@@ -26,7 +26,7 @@ A ZIP or 7z that holds either file works as it is.
 1. Open [Apply](https://rom-weaver.com/apply-rom-patches).
 2. Drop the ROM and the `.ups` file into **0x01 Inputs**, or choose **Add files**.
 3. Wait for **Checksumming** to finish.
-4. Read the **Checks** line on the patch card. It should show **UPS** and **Verified**.
+4. Read the **Checks** line on the patch card. It should show **UPS** and a check mark.
 5. Choose **APPLY & DOWNLOAD** and save the patched ROM.
 
 The download is named after the ROM and the patch, such as `game [hack].gba`. Your original ROM stays unchanged. [Choose the output and apply](apply-rom-patches.md#choose-the-output-and-apply) covers the filename, ZIP or 7z output, and other options.
@@ -43,7 +43,7 @@ A UPS patch stores three CRC32 checksums, and Apply compares each one for you.
 
 Open the patch card's **Checks** to see the values. **Input** lists the values your ROM matched and **Patch result** lists the values of the file you will get.
 
-A UPS patch also matches the ROM it produces. With an already patched copy, **Checks** still shows **Verified**, and applying gives back the original ROM. Compare **Patch result** with the author's checksum when you are unsure which copy you have.
+A UPS patch also matches the ROM it produces. With an already patched copy, **Checks** still shows a check mark, and applying gives back the original ROM. Compare **Patch result** with the author's checksum when you are unsure which copy you have.
 
 ## If the checks fail
 

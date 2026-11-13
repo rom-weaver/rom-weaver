@@ -26,7 +26,7 @@ A ZIP or 7z that holds either file works as it is.
 1. Open [Apply](https://rom-weaver.com/apply-rom-patches).
 2. Drop the ROM and the `.bps` file into **0x01 Inputs**, or choose **Add files**.
 3. Wait for **Checksumming** to finish.
-4. Read the **Checks** line on the patch card. It should show **BPS** and **Verified**.
+4. Read the **Checks** line on the patch card. It should show **BPS** and a check mark.
 5. Choose **APPLY & DOWNLOAD** and save the patched ROM.
 
 The download is named after the ROM and the patch, such as `game [hack].sfc`. Your original ROM stays unchanged. [Choose the output and apply](apply-rom-patches.md#choose-the-output-and-apply) covers the filename, ZIP or 7z output, and other options.
@@ -41,7 +41,7 @@ A BPS patch stores three CRC32 checksums, and Apply compares each one for you.
 | Source ROM, with its size | Your ROM is the one the author patched |
 | Patched ROM, with its size | The result is the one the author made |
 
-Open the patch card's **Checks** to see the values. **Input** lists the source ROM's values and **Patch result** lists the patched ROM's values. **Verified** means your ROM matched the input values.
+Open the patch card's **Checks** to see the values. **Input** lists the source ROM's values and **Patch result** lists the patched ROM's values. The check mark means your ROM matched the input values.
 
 Apply compares the patched ROM last, and stops with an error if it differs.
 
