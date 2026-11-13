@@ -331,6 +331,12 @@
 .rw-app .cks > .cks-head .readouts > .rb:not(:last-child) {
   flex: none;
 }
+/* Shrink all drawer header chips together at 449px and narrower. */
+@media (max-width: 449px) {
+  .rw-app .cks > .cks-head .rb {
+    font-size: calc(var(--badge-fs) * 0.85);
+  }
+}
 .rw-app .cks:not(.is-open, .is-integrated) > .cks-head .rb {
   background: var(--plate-2);
   border-color: transparent;
@@ -360,7 +366,15 @@
 .rw-app .patch-checks > .cks-head .readouts > .rb.muted {
   flex: 0 1 auto;
 }
-.rw-app .patch-checks > .cks-head .readouts > .rb.time {
+/* The extract header chips may use the space beside the label. On a narrow
+   screen the size chip shrinks so the extract time stays whole. */
+.rw-app .extract-d > .cks-head .readouts {
+  max-width: 100%;
+}
+.rw-app .extract-d > .cks-head .readouts > .rb:first-child {
+  flex: 0 1 auto;
+}
+.rw-app :is(.patch-checks, .extract-d) > .cks-head .readouts > .rb.time {
   flex: none;
 }
 .rw-app .identify-drawer-names .ck-v,
