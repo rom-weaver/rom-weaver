@@ -104,7 +104,7 @@ const readDirtyPaths = (statusOutput) => {
 };
 
 /**
- * Map each file to the ISO date of its last commit, with three git processes for the whole list.
+ * Map each file to the ISO date of its last commit. The whole list costs three git processes.
  * Files with uncommitted changes, no history, or a shallow clone's boundary commit map to null.
  */
 export function readFileLastmods(files, cwd) {
@@ -116,8 +116,7 @@ export function readFileLastmods(files, cwd) {
       stdio: ["ignore", "pipe", "ignore"],
     });
   try {
-    // The prefix locates `cwd` in the repository without resolving symlinks,
-    // which `--show-toplevel` would, so paths under a symlinked `cwd` still match.
+    // `--show-toplevel` resolves symlinks; the prefix does not. Paths under a symlinked `cwd` still match.
     const [prefix, shallowGitPath] = git(["rev-parse", "--show-prefix", "--git-path", "shallow"]).split("\n");
     const repoPathOf = (file) =>
       path.posix.normalize(prefix + path.relative(cwd, path.resolve(cwd, file)).split(path.sep).join("/"));
@@ -127,8 +126,8 @@ export function readFileLastmods(files, cwd) {
     const shallowPath = path.resolve(cwd, shallowGitPath);
     const shallowCommits = new Set(fs.existsSync(shallowPath) ? fs.readFileSync(shallowPath, "utf8").split("\n") : []);
     const pending = new Set(files.map(repoPathOf).filter((repoPath) => !dirty.has(repoPath)));
-    // Commits are listed newest first, so a path's first appearance is its last change. A merge
-    // lists a path only when it differs from every parent, as `git log -1 -- <path>` would.
+    // Commits are listed newest first, so a path's first appearance is its last change.
+    // A merge lists a path only when it differs from every parent, like `git log -1`.
     // `--no-relative` keeps names repository-relative under `diff.relative`.
     const log = git([
       "log",

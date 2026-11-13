@@ -103,15 +103,17 @@ test("lastmod is omitted for dirty files and missing history", (context) => {
   assert.equal(lastmod(path.join(shallow, "guide.md"), shallow), null);
 });
 
+const gitAt = (cwd, args, date) =>
+  execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], {
+    cwd,
+    env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
+    stdio: "ignore",
+  });
+
 test("lastmods dates each file in one call by its own last change, including a merge that edits it", (context) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "seo-history-batch-"));
   context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
-  const git = (args, date) =>
-    execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], {
-      cwd: directory,
-      env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
-      stdio: "ignore",
-    });
+  const git = (args, date) => gitAt(directory, args, date);
   const files = ["shared.md", "older.md", "dirty.md", "untracked.md", "renamed.md", "moved.md"].map((name) =>
     path.join(directory, name),
   );
@@ -149,12 +151,7 @@ test("lastmods match files from a symlinked or diff.relative subdirectory", asyn
   context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const repo = path.join(directory, "repo");
   const date = "2026-01-05T00:00:00Z";
-  const git = (args) =>
-    execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], {
-      cwd: repo,
-      env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
-      stdio: "ignore",
-    });
+  const git = (args) => gitAt(repo, args, date);
   fs.mkdirSync(path.join(repo, "docs"), { recursive: true });
   fs.mkdirSync(path.join(repo, "site"));
   fs.writeFileSync(path.join(repo, "docs", "guide.md"), "# Guide\n");
