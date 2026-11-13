@@ -260,11 +260,9 @@ const toPatchStageInfo = (
     archiveName,
     basisChoice: patch.basisChoice,
     chainVerdict: patch.chainVerdict,
-    // A checksum was actually compared: the preflight's required input CRC32 (embedded, filename
-    // token, or a pasted 8-hex CRC32 - a pasted SHA-1/MD5 is only enforced at apply, so it never
-    // counts) or a chain match against a known ROM/patch output.
-    checksumCompared:
-      !!patch.checksumPreflight?.requiredCrc32 || (!!patch.chainVerdict && patch.chainVerdict.matched.kind !== "none"),
+    // The preflight's required input CRC32 (embedded, filename token, or a pasted 8-hex CRC32).
+    // A pasted SHA-1/MD5 is only enforced at apply, so it never counts.
+    checksumCompared: !!patch.checksumPreflight?.requiredCrc32,
     checksumPreflightMismatch: validation.checksumMismatch,
     checksumTiming: validation.checksumTiming,
     dcp: patch.dcp === true,

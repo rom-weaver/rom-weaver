@@ -189,7 +189,10 @@ describe("ApplyPatchListStep", () => {
   it.each([
     [
       "the input matches",
-      { chainVerdict: { basis: "base", basisSource: "declared", matched: { kind: "base", variant: "raw" } } },
+      {
+        chainVerdict: { basis: "base", basisSource: "declared", matched: { kind: "base", variant: "raw" } },
+        checksumCompared: true,
+      },
       "The input matches what this patch was made for.",
     ],
     [

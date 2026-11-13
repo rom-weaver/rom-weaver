@@ -129,8 +129,7 @@ const PREFLIGHT_BASIS_MESSAGES = {
   matched: "ui.patch.preflightMatched",
 } as const;
 
-/** What a passed check rests on: the input matching what the patch was made for, a source checksum
- * that was compared, or only a clean dry-run apply. */
+/** What a passed dry-run apply rests on. */
 export const preflightBasisFor = (item: PatchStackItemState): PreflightBasis => {
   const matchedKind = item.chainVerdict?.matched.kind;
   if (matchedKind === "base" || matchedKind === "patch_output") return "matched";
