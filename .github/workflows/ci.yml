@@ -917,6 +917,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # Deploys restamp this job's bundle, so its version string needs the
+          # release tags and the commit count since them, as `deploy` checks out.
+          fetch-depth: 0
+          filter: blob:none
+          fetch-tags: true
 
       - name: Restore built wasm module
         id: wasm-cache
@@ -2149,8 +2155,8 @@ jobs:
     strategy:
       # Separate Pages projects with no shared state, so they upload in
       # parallel; a release's three channels land in the time of one. Each leg
-      # restamps the tested `webapp-dist` for its channel; only a run whose
-      # `wasm` job built no bundle (tags, changes outside the webapp) builds one.
+      # restamps the tested `webapp-dist` for its channel. A leg builds its own
+      # only when `wasm` built none (tags, no webapp changes).
       fail-fast: false
       matrix:
         target: ${{ fromJSON(needs.changes.outputs.deploy_targets) }}
@@ -2189,8 +2195,9 @@ jobs:
           STATUS_CONTEXT: Webapp Deploy / ${{ matrix.target.channel }}
         run: node scripts/ci/deployment-status.mjs
 
+      # A restamp needs it too: the prerendered docs include the generated notices.md.
       - name: Download WASM artifact
-        if: steps.freshness.outputs.fresh == 'true' && needs.wasm.outputs.bundle != 'success'
+        if: steps.freshness.outputs.fresh == 'true'
         uses: actions/download-artifact@v8
         with:
           name: wasm-prod

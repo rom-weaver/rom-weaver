@@ -2,9 +2,8 @@
 
 // Restamps an existing build for another channel without rebuilding it:
 //   npm run stamp-channel -- <channel> [label] [origin]
-// The label defaults to the channel and the origin to production, like the
-// ROM_WEAVER_CHANNEL, ROM_WEAVER_CHANNEL_LABEL and ROM_WEAVER_SITE_ORIGIN build
-// variables. dist and build/channel-stamp MUST come from the same build.
+// The label defaults to the channel, and the origin to production, as with the
+// build variables. dist and build/channel-stamp MUST come from the same build.
 
 import path from "node:path";
 import process from "node:process";

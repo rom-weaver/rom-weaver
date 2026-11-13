@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createDocRoute, DOC_SOURCES } from "./docs-content.mjs";
 import { createDocsSeoMetadata, isLegalDocRoute, isRootPath, mapDocImageUrls, SITE_ORIGIN } from "./docs-routing.mjs";
+import { escapeHtml } from "./escape-html.mjs";
 import { SITE_NAME } from "./workflow-seo.mjs";
 
 const docsDirectory = path.resolve(import.meta.dirname, "../../../../docs");
@@ -18,10 +19,6 @@ const readDocRoutes = () =>
   Object.freeze(DOC_SOURCES.map((source) => createDocRoute(source, fs.readFileSync(docSourcePath(source), "utf8"))));
 
 const DOC_ROUTES = readDocRoutes();
-
-/** @param {unknown} value */
-const escapeHtml = (value) =>
-  String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
 // A `<script>` element is raw text: the parser reads no entities and closes on
 // the first `</script`, so guide-derived JSON headed for an inline script has

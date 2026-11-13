@@ -7,8 +7,7 @@ import { DOC_ROUTES } from "../../src/webapp/docs-pages.mjs";
 // therefore carries modulepreload links for its own route chunks, so they
 // download alongside the entry instead of after it.
 //
-// Markers let writeChannelPages replace the landing page's preload set
-// with the set for each derived route document.
+// Markers bound the landing page's preload set, which each route document replaces.
 const ROUTE_PRELOAD_MARKER_START = "<!--rw-route-preload-->";
 const ROUTE_PRELOAD_MARKER_END = "<!--/rw-route-preload-->";
 

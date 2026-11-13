@@ -40,10 +40,8 @@ const renderLandingShellWithServer = async (
   return await entry.renderLandingShellHtml(view, notFound, docsSlug, workflowEntry);
 };
 
-// Runs `render` against one throwaway SSR server. Standing a server up costs
-// seconds, so every shell a build needs is rendered inside a single call rather
-// than one server per shell. `define` overrides the config's compile-time
-// constants, so a shell rendered after the build matches the bundle it ships with.
+// One throwaway SSR server renders every shell, since starting one costs seconds.
+// `define` overrides the config's compile-time constants, so a shell matches its bundle.
 const withPrerenderServer = async (render, define = {}) => {
   ensureIdentifyData();
   const server = await createServer({

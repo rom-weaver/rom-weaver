@@ -34,7 +34,7 @@ const llmsSourcePath = path.join(rootAssetDir, "llms.txt");
 const channelIconSources = (channel, iconDir) =>
   Object.fromEntries(CHANNEL_ICON_NAMES.map((name) => [`/${name}`, generatedChannelAssetPath(channel, name, iconDir)]));
 
-// The same for every channel, so the build writes them once and a channel stamp leaves them alone.
+// All channels share these. The build writes them once, and a channel stamp leaves them alone.
 const neutralRootStaticAssetSources = () => ({
   "/auth.md": path.join(rootAssetDir, "auth.md"),
   "/_redirects": path.join(rootAssetDir, "_redirects"),
@@ -128,14 +128,18 @@ export const redirectSourcePaths = () => {
 };
 
 const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel, siteOrigin) => {
-  const rootStaticAssetSources = rootStaticAssetSourcesForChannel(channel);
+  // Resolved on first request, so the stamp's prerender server never needs the generated icons.
+  let rootStaticAssetSources;
   middlewares.use((req, res, next) => {
+    rootStaticAssetSources ??= rootStaticAssetSourcesForChannel(channel);
     const requestPath = req.url ? req.url.split("?")[0] : "";
     const markdown = requestPath.endsWith(".md");
     const legacySlug = requestPath.replace(/^\//, "").replace(/(?:\/index\.html|\/|\.html|\.md)$/, "");
     const destination = Object.hasOwn(LEGACY_WORKFLOW_ROUTES, legacySlug) && LEGACY_WORKFLOW_ROUTES[legacySlug];
     if (destination && (!markdown || Object.values(WORKFLOW_SEO_ROUTES).some(({ slug }) => slug === destination))) {
-      res.writeHead(301, { Location: `/${destination}${markdown ? ".md" : ""}${req.url.slice(requestPath.length)}` });
+      res.writeHead(301, {
+        Location: `/${destination}${markdown ? ".md" : ""}${req.url.slice(requestPath.length)}`,
+      });
       res.end();
       return;
     }

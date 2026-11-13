@@ -13,11 +13,9 @@ type BuildChannel = (typeof CHANNELS)[number];
 
 const isBuildChannel = (value: unknown): value is BuildChannel => CHANNELS.includes(value as BuildChannel);
 
-// The channel is a deployment fact, never a user one: the build or
-// scripts/stamp-channel.mjs writes it onto the served <html>, and no URL parameter
-// or storage key can move it. Prerendering has no document, so it passes the
-// channel in ROM_WEAVER_PRERENDER_CHANNEL. To see a channel's out-of-box look
-// locally, serve with the real thing - `ROM_WEAVER_CHANNEL=beta npm run dev`.
+// The channel comes from the deployment's <html>, so no URL or storage key can change it.
+// Prerendering has no document, so it passes the channel in ROM_WEAVER_PRERENDER_CHANNEL.
+// To preview a channel locally, run `ROM_WEAVER_CHANNEL=beta npm run dev`.
 const readStampedChannel = (): { channel?: string; label?: string } => {
   if (globalThis.ROM_WEAVER_PRERENDER_CHANNEL) return globalThis.ROM_WEAVER_PRERENDER_CHANNEL;
   if (typeof document === "undefined") return {};

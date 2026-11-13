@@ -86,19 +86,16 @@ export const writeWebappStaticAssets = () => {
   };
 };
 
-/**
- * Writes every route document, its Markdown export, robots.txt, the prod-only
- * sitemap and the API catalog for one channel. `indexHtml` is the built
- * index.html with the channel identity applied and an empty mount point.
- */
+/** Writes one channel's route documents, Markdown exports, robots.txt, prod-only sitemap, API catalog and openapi.json. */
 export const writeChannelPages = (
   distDir,
   { channel, channelLabel, indexHtml, prerenderedShells, routePreloadLinks, siteOrigin },
 ) => {
+  // `indexHtml` is the built index.html with the channel identity applied and an empty mount point.
   if (!indexHtml.includes(PRERENDER_MOUNT_POINT))
     throw new Error("rom-weaver-static-assets: #webapp-root mount point not found in the index.html template");
-  // Every route page is the index.html template with its own shell in the
-  // mount point, so each one hydrates onto the view its markup was rendered as.
+  // Each route page is the template with its own shell in the mount point. It
+  // hydrates onto the view its markup was rendered as.
   const withShell = (view) => {
     const shell = prerenderedShells.get(view);
     if (!shell) throw new Error(`rom-weaver-static-assets: no prerendered shell for ${view}`);

@@ -54,8 +54,8 @@ export default defineConfig(({ command, mode }) => {
   const siteOrigin = resolveSiteOrigin(process.env.ROM_WEAVER_SITE_ORIGIN);
   const appChannelLabel = process.env.ROM_WEAVER_CHANNEL_LABEL || appChannel;
   const releaseVersion = releaseVersionForChannel(appChannel, appVersion);
-  // The channel stamp renders the prerendered shells after the build, possibly
-  // in another job, so it reuses these instead of reading git again.
+  // The channel stamp renders the shells after the build, possibly in another job.
+  // It reuses these values instead of reading git.
   const buildInfoDefines = {
     __APP_VERSION__: JSON.stringify(appVersion),
     __COMMIT_HASH__: JSON.stringify(commitHash),
@@ -161,8 +161,7 @@ export default defineConfig(({ command, mode }) => {
         },
         filename: "rom-weaver-service-worker.ts",
         injectManifest: {
-          // The channel stamp injects the precache manifest (scripts/vite-config/precache.mjs),
-          // because the documents it lists differ per channel.
+          // The channel stamp injects the precache manifest, because each channel lists different documents.
           injectionPoint: undefined,
         },
         injectRegister: null,

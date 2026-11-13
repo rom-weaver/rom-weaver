@@ -14,6 +14,8 @@ import { writeChannelPages } from "./static-assets.mjs";
 // Outside dist, which is uploaded to Pages and copied into the Docker image as a whole.
 export const CHANNEL_STAMP_TEMPLATES_DIR = path.join(rootDir, "build", "channel-stamp");
 const SERVICE_WORKER_NAME = "rom-weaver-service-worker.js";
+// From the build: the channel-free index.html, the service worker before manifest
+// injection, every channel's icons, the build-info constants, and route preload links.
 const TEMPLATE = {
   defines: "defines.json",
   icons: "channel-icons",
@@ -23,12 +25,7 @@ const TEMPLATE = {
   serviceWorkerMap: `${SERVICE_WORKER_NAME}.map`,
 };
 
-/**
- * Saves what a later stamp needs from a fresh build in `distDir`: its
- * channel-free index.html, the service worker before manifest injection, each
- * route's preload links, every channel's icons, and the build-info constants
- * the bundle was compiled with. Replaces any earlier templates as a whole.
- */
+/** Replaces the saved templates with the ones a later stamp needs from the fresh build in `distDir`. */
 const saveChannelStampTemplates = ({ define, distDir, routePreloadLinks, templatesDir }) => {
   const stagingDir = `${templatesDir}.tmp`;
   fs.rmSync(stagingDir, { force: true, recursive: true });
@@ -46,14 +43,7 @@ const saveChannelStampTemplates = ({ define, distDir, routePreloadLinks, templat
   fs.renameSync(stagingDir, templatesDir);
 };
 
-/**
- * Writes every channel-dependent file of the build in `distDir` from the
- * templates: route documents with their prerendered shells, Markdown exports,
- * root icons, manifest, llms.txt, robots.txt, the prod-only sitemap,
- * changelog.json, _headers, and the service worker's precache manifest. Running
- * it again with another channel fully replaces the first stamp; dist/assets is
- * never touched.
- */
+/** Writes every channel-dependent file in `distDir` from the templates, replacing any earlier stamp; dist/assets is never touched. */
 export const stampChannel = async ({ channel, channelLabel, distDir, siteOrigin, templatesDir }) => {
   const readTemplate = (name) => fs.readFileSync(path.join(templatesDir, name), "utf8");
   const define = JSON.parse(readTemplate(TEMPLATE.defines));
@@ -83,19 +73,26 @@ export const stampChannel = async ({ channel, channelLabel, distDir, siteOrigin,
   });
 };
 
-/**
- * Saves the templates once the rest of the build has written dist, then stamps
- * the build's own channel, so `npm run build` output is a deployable bundle.
- * Placed after VitePWA, whose closeBundle emits the service worker.
- */
+/** Saves the templates and stamps the build's own channel once dist is written, after VitePWA emits the service worker. */
 export const stampBuildChannel = ({ channel, channelLabel, define, routePreloadLinks, siteOrigin }) => {
   let distDir = path.join(rootDir, "dist");
   return {
     apply: "build",
     closeBundle: {
       async handler() {
-        saveChannelStampTemplates({ define, distDir, routePreloadLinks, templatesDir: CHANNEL_STAMP_TEMPLATES_DIR });
-        await stampChannel({ channel, channelLabel, distDir, siteOrigin, templatesDir: CHANNEL_STAMP_TEMPLATES_DIR });
+        saveChannelStampTemplates({
+          define,
+          distDir,
+          routePreloadLinks,
+          templatesDir: CHANNEL_STAMP_TEMPLATES_DIR,
+        });
+        await stampChannel({
+          channel,
+          channelLabel,
+          distDir,
+          siteOrigin,
+          templatesDir: CHANNEL_STAMP_TEMPLATES_DIR,
+        });
       },
       order: "post",
       sequential: true,

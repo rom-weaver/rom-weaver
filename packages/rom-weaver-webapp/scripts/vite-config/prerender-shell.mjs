@@ -47,7 +47,11 @@ const devPrerenderRoute = (url) => {
   if (!slug) return { docsSlug: "docs", view: "home" };
   const routeSlug = slug.replace(/\.html$/, "");
   if (Object.hasOwn(WORKFLOW_ENTRY_ROUTES, routeSlug)) {
-    return { docsSlug: "docs", view: WORKFLOW_ENTRY_ROUTES[routeSlug].view, workflowEntry: routeSlug };
+    return {
+      docsSlug: "docs",
+      view: WORKFLOW_ENTRY_ROUTES[routeSlug].view,
+      workflowEntry: routeSlug,
+    };
   }
   const directView = {
     "create-m3u-playlist": "playlist",
@@ -64,19 +68,14 @@ const devPrerenderRoute = (url) => {
   return { docsSlug: "docs", view };
 };
 
-/**
- * Renders every shell a deployment's pages carry, keyed the way writeChannelPages
- * looks them up, with `channel` shown in the masthead. `define` pins the bundle's
- * compile-time constants (see withPrerenderServer).
- */
+/** Renders every page shell, keyed as `writeChannelPages` looks them up, with `channel` in the masthead. */
 export const renderPrerenderedShells = async ({ channel, channelLabel, define }) => {
   const prerender = await import("../prerender.mjs");
   const shells = new Map();
   // build-channel.ts reads this while the SSR server loads it; a browser reads <html data-channel>.
   globalThis.ROM_WEAVER_PRERENDER_CHANNEL = { channel, label: channelLabel };
   try {
-    // One SSR server renders every shell; spinning one up per shell would cost
-    // more than the rendering does.
+    // One SSR server renders every shell; a server per shell would cost more than rendering.
     await prerender.withPrerenderServer(async (server) => {
       const render = (view, notFound, docsSlug, workflowEntry) =>
         prerender.renderLandingShellWithServer(server, view, notFound, docsSlug, workflowEntry);
@@ -112,8 +111,7 @@ export const renderPrerenderedShells = async ({ channel, channelLabel, define })
   return shells;
 };
 
-// A build leaves the mount point empty: the channel stamp fills it in with the
-// shell for each page (scripts/vite-config/channel-stamp.mjs).
+// A build leaves the mount point empty. The channel stamp fills it per page.
 export const prerenderWebappShell = (channel, channelLabel) => ({
   name: "rom-weaver-prerender-shell",
   transformIndexHtml: {

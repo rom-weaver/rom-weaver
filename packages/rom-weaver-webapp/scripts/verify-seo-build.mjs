@@ -818,7 +818,7 @@ assertIncludes(
   "tools alias canonical",
 );
 
-// The bundle reads its channel from <html>, so a page stamped for another channel shows that one's badge and accent.
+// The bundle reads its channel from <html>. A page stamped for another channel shows that one's badge.
 const expectedChannelAttributes = channelAttributes(channel, process.env.ROM_WEAVER_CHANNEL_LABEL || channel);
 for (const name of fs.readdirSync(distDir, { recursive: true, encoding: "utf8" })) {
   if (name.endsWith(".html")) assertIncludes(read(name), expectedChannelAttributes, `${name} channel`);
@@ -857,8 +857,8 @@ if (production) {
 // generated manifest is on disk.
 const precacheManifest = read("rom-weaver-service-worker.js");
 assertExcludes(precacheManifest, '"downloadManifest":true', "offline download manifest precache entry");
-// A restamp rewrites every page, so the manifest MUST be injected again after it;
-// a stale revision serves the previous channel's page from the precache.
+// Each precache revision is the MD5 of its file. A stale one serves the previous
+// channel's page from the precache, so a restamp MUST inject the manifest again.
 for (const [, revision, url] of precacheManifest.matchAll(
   /"revision":"([0-9a-f]+)","sizeBytes":\d+,"url":"([^"?]+\.html)"/g,
 )) {

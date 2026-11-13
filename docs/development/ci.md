@@ -370,7 +370,11 @@ The channels form a stability ladder - `prod` above `beta` above `nightly` - and
 | webapp/runtime push to `main` | `nightly` |
 | first-party pull-request commit, including docs-only changes | `preview` |
 
-Legs are independent Pages projects with no shared state, so they upload in parallel and a release's three channels land in the time of one. Each leg deploys the bundle the `wasm` job built and E2E and Lighthouse tested: `deploy-webapp-pages` downloads `webapp-dist` and the `webapp-stamp-templates` artifact, runs `npm run stamp-channel` for its channel, and checks the result with `verify-seo-build.mjs`. The bundle reads its channel from `<html data-channel data-channel-label>`, so a stamp rewrites only the pages, root icons, manifest, `_headers`, `robots.txt`, the sitemap, `llms.txt`, the API catalog, `changelog.json`, and the service worker's precache manifest; `dist/assets` keeps the tested bytes. A leg builds its own bundle only when the `wasm` job built none: on a tag, or when no webapp input changed. Pull request previews wait for that bundle too, so they show the tested code. Failure is per-leg (`fail-fast: false`): a beta upload failing still lets prod ship.
+Legs are independent Pages projects with no shared state, so they upload in parallel and a release's three channels land in the time of one. Failure is per-leg (`fail-fast: false`): a beta upload failing still lets prod ship.
+
+When the `wasm` job built a bundle, each leg deploys it, so E2E and Lighthouse tested the deployed code. `deploy-webapp-pages` downloads `webapp-dist` and `webapp-stamp-templates`, runs `npm run stamp-channel` for its channel, and checks the result with `verify-seo-build.mjs`. The bundle reads its channel from `<html data-channel data-channel-label>`. A stamp rewrites only channel-dependent files outside `dist/assets`, so the tested assets keep their bytes.
+
+A leg builds its own bundle only when the `wasm` job built none: on a tag, or when no webapp input changed. Pull request previews wait for the `wasm` job too.
 
 A hyphen after the version is what makes a tag a prerelease. The same rule routes the npm dist-tag and the docker `beta` tag - see [prerelease routing](#prerelease-routing).
 
@@ -437,7 +441,7 @@ The action exposes two lists. `cache-path` contains the expensive module files: 
 
 ### `.github/actions/webapp-build-cache`
 
-Restores two reusable outputs: the Brotli cache in `node_modules/.cache/rom-weaver-brotli` and the channel icons in `dist/generated-assets`. The `wasm` job restores it before building, except in the signed release pull request run. `deploy-webapp-pages` restores it whenever it builds instead of restamping the tested bundle.
+Restores two reusable outputs: the Brotli cache in `node_modules/.cache/rom-weaver-brotli` and the channel icons in `dist/generated-assets`. The `wasm` job restores it before building, except in the signed release pull request run. `deploy-webapp-pages` restores it only when it builds, not when it restamps the tested bundle.
 
 Only the `wasm` job on `main` saves an entry, keyed by commit. Pull requests restore the newest `main` entry by prefix and never write one.
 

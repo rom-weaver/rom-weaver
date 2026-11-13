@@ -33,13 +33,9 @@ const preparePrecacheEntries = (distDir) => (entries) => {
   return { manifest };
 };
 
-/**
- * Writes `swDest` as the `swSrc` service worker with the precache manifest of
- * `distDir` injected, plus `precache-sizes.json`. `swSrc` MUST still hold the
- * `self.__WB_MANIFEST` placeholder, so a restamp injects from the saved
- * template rather than from the already injected worker.
- */
+/** Writes `swDest` from `swSrc` with the `distDir` precache manifest injected, plus `precache-sizes.json`. */
 export const injectPrecacheManifest = async ({ distDir, swDest, swSrc }) => {
+  // swSrc MUST still hold the self.__WB_MANIFEST placeholder, so a restamp injects from the saved template.
   const { warnings } = await injectManifest({
     // Hashed asset names already change with their bytes; only the rest need a revision.
     dontCacheBustURLsMatching: /^assets\//,
@@ -103,5 +99,8 @@ export const injectPrecacheManifest = async ({ distDir, swDest, swSrc }) => {
     swDest,
     swSrc,
   });
+  // An entry over the size limit silently drops out of the precache, so it fails the build.
+  const oversized = warnings.filter((warning) => warning.includes("maximumFileSizeToCacheInBytes"));
+  if (oversized.length) throw new Error(`[rom-weaver] precache: ${oversized.join("\n")}`);
   for (const warning of warnings) console.warn(`[rom-weaver] precache: ${warning}`);
 };

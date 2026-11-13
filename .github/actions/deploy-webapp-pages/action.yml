@@ -113,8 +113,7 @@ runs:
         name: webapp-stamp-templates
         path: packages/rom-weaver-webapp/build/channel-stamp
 
-    # Rewrites only the channel's pages, icons, headers and precache manifest;
-    # dist/assets stays the bytes E2E and Lighthouse tested.
+    # Rewrites only the channel's files. dist/assets stays the bytes E2E and Lighthouse tested.
     - name: Stamp webapp for channel
       if: inputs.bundle == 'artifact'
       shell: bash

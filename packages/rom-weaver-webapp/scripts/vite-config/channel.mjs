@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { escapeHtml } from "../../src/webapp/escape-html.mjs";
 import { SITE_NAME } from "../../src/webapp/workflow-seo.mjs";
 import { rootDir } from "./paths.mjs";
 
@@ -52,12 +53,12 @@ export const resolveSiteOrigin = (value) => {
   return url.origin;
 };
 
-// Installed PWAs are identified by their manifest name, so without a per-channel
-// one a nightly install is indistinguishable from production on the home screen.
 // Only released channels list the release being served in "What's new".
 export const releaseVersionForChannel = (channel, appVersion) =>
   channel === "prod" || channel === "beta" || channel === "nightly" ? appVersion : "";
 
+// Installed PWAs are identified by their manifest name, so without a per-channel
+// one a nightly install is indistinguishable from production on the home screen.
 export const createRootManifestSource = (channel, channelLabel) => {
   const source = fs.readFileSync(rootManifestSourcePath, "utf8").replace(/"src\/assets\/app\//g, '"assets/app/');
   if (channel === "prod") return source;
@@ -66,18 +67,13 @@ export const createRootManifestSource = (channel, channelLabel) => {
   manifest.short_name = `${manifest.short_name} ${channelLabel}`;
   return `${JSON.stringify(manifest, null, 2)}\n`;
 };
-const HTML_ESCAPES = { '"': "&quot;", "&": "&amp;", "<": "&lt;", ">": "&gt;" };
-const escapeHtml = (text) => text.replace(/[&<>"]/g, (character) => HTML_ESCAPES[character]);
 
 /** The `<html>` attributes the bundle reads its channel from (src/webapp/build-channel.ts). */
 export const channelAttributes = (channel, channelLabel) =>
   `data-channel="${channel}" data-channel-label="${escapeHtml(channelLabel)}"`;
 
-// The bundle reads its channel from the <html> data attributes, and the tab title
-// and iOS home-screen label have to show it before the bundle has even booted.
-// Non-production deployments also opt out of indexing here; the deployed response
-// repeats the policy as a header. The accent MUST stay the first attribute:
-// verify-seo-build matches `<html data-accent=`.
+// The tab title and iOS home-screen label need the channel before the bundle boots.
+// The accent MUST stay the first `<html>` attribute: verify-seo-build matches `<html data-accent=`.
 export const applyChannelIdentity = (html, channel, channelLabel) => {
   const accent = CHANNEL_DEFAULT_ACCENTS[channel] || CHANNEL_DEFAULT_ACCENTS.dev;
   const label = escapeHtml(channelLabel);
@@ -90,8 +86,8 @@ export const applyChannelIdentity = (html, channel, channelLabel) => {
     .replace(/(<meta name="apple-mobile-web-app-title" content=")([^"]*)(")/, `$1$2 ${label}$3`);
 };
 
-// A build leaves the channel to the stamp step (scripts/vite-config/channel-stamp.mjs),
-// so its index.html stays the same for every channel; the dev server stamps directly.
+// A build leaves the channel to the stamp step, so index.html matches for every channel.
+// The dev server stamps directly.
 export const stampChannelIdentity = (channel, channelLabel, serviceWorkerEnabled) => ({
   name: "rom-weaver-channel-identity",
   transformIndexHtml: {
