@@ -128,7 +128,7 @@ env.CFLAGS_wasm32_wasip1 = "-msimd128 -O1"
 env.CXXFLAGS_wasm32_wasip1 = "-msimd128 -O1"
 env.CFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O1"
 env.CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O1"
-# Quality 1 compresses the module in under 100 ms, so caching each rebuild's sidecar only fills node_modules/.cache.
+# Quality 1 is cheap to recompute, so skip the sidecar cache.
 env.ROM_WEAVER_BROTLI_CACHE = "0"
 run = "node {{ config_root }}/scripts/wasm/build-app.mjs fast"
 

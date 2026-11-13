@@ -81,7 +81,7 @@ npm run dev
 
 Open the URL that the server prints. The local certificate may need a browser exception or trust setup. The server supplies HTTPS and the COOP/COEP headers needed for the production `SharedArrayBuffer` runtime.
 
-`npm run dev` runs `build-wasm-fast` when the artifact is missing or its sources changed. The source fingerprint does not cover the WASM toolchain. After changing the toolchain, run `ROM_WEAVER_WASM_FORCE=1 mise run build-wasm-fast`. A fast module is slower and larger than a production one. Measure speed or size with `mise run build-wasm-prod`.
+`npm run dev` runs `build-wasm-fast` when the artifact is missing or its sources changed. The source fingerprint ignores the toolchain, so run `ROM_WEAVER_WASM_FORCE=1 mise run build-wasm-fast` after changing it. A fast module is slower and larger than a production one. Measure speed or size with `mise run build-wasm-prod`.
 
 All three WASM build tasks share finished modules between checkouts through `${XDG_CACHE_HOME:-~/.cache}/rom-weaver/wasm/`. An entry is keyed by the source fingerprint, build mode, tool versions, and compiler-flag environment, including `HOST_`/`TARGET_` C/C++ overrides and cc's parsing/default switches. Cargo home and ancestor `config`/`config.toml` contents and their recursively included TOML files also enter the key; external configuration paths are included because relative values resolve from those locations. A matching build copies the module and skips Cargo.
 
