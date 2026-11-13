@@ -160,7 +160,7 @@ describe("ApplyPatchListStep", () => {
     expect(container.textContent).toContain("Patch source loaded");
   });
 
-  it("shows only the check mark for a successful preflight with no compared checksum", () => {
+  it("shows the check mark and no chip for a successful preflight with no compared checksum", () => {
     const appliedWithoutChecksum = item(0, {
       chainVerdict: {
         basis: "base",
@@ -174,7 +174,7 @@ describe("ApplyPatchListStep", () => {
     expect(container.querySelectorAll('button[title="Ready to apply"]')).toHaveLength(1);
   });
 
-  it("shows only the check mark for a successful preflight when a checksum was compared or matched", () => {
+  it("shows the check mark and no chip for a successful preflight when a checksum was compared or matched", () => {
     const compared = item(0, { checksumCompared: true });
     const matched = item(1, {
       chainVerdict: { basis: "base", basisSource: "declared", matched: { kind: "base", variant: "raw" } },
