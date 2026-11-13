@@ -71,7 +71,6 @@ export const renderPrerenderedShells = async ({ channel, channelLabel, define })
   // build-channel.ts reads this while the SSR server loads it; a browser reads <html data-channel>.
   globalThis.ROM_WEAVER_PRERENDER_CHANNEL = { channel, label: channelLabel };
   try {
-    // One SSR server renders every shell; a server per shell would cost more than rendering.
     await prerender.withPrerenderServer(async (server) => {
       const render = (view, notFound, docsSlug, workflowEntry) =>
         prerender.renderLandingShellWithServer(server, view, notFound, docsSlug, workflowEntry);

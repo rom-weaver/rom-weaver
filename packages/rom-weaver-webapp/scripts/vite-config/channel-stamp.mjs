@@ -14,8 +14,7 @@ import { writeChannelPages } from "./static-assets.mjs";
 // Outside dist, which is uploaded to Pages and copied into the Docker image as a whole.
 export const CHANNEL_STAMP_TEMPLATES_DIR = path.join(rootDir, "build", "channel-stamp");
 const SERVICE_WORKER_NAME = "rom-weaver-service-worker.js";
-// From the build: the channel-free index.html, the service worker before manifest
-// injection, every channel's icons, the build-info constants, and route preload links.
+// Each stamp reads these back. The saved service worker still holds its manifest placeholder.
 const TEMPLATE = {
   defines: "defines.json",
   icons: "channel-icons",
@@ -25,7 +24,7 @@ const TEMPLATE = {
   serviceWorkerMap: `${SERVICE_WORKER_NAME}.map`,
 };
 
-/** Replaces the saved templates with the ones a later stamp needs from the fresh build in `distDir`. */
+/** Replaces the saved templates with the ones from the fresh build in `distDir`. */
 const saveChannelStampTemplates = ({ define, distDir, routePreloadLinks, templatesDir }) => {
   const stagingDir = `${templatesDir}.tmp`;
   fs.rmSync(stagingDir, { force: true, recursive: true });
@@ -43,7 +42,7 @@ const saveChannelStampTemplates = ({ define, distDir, routePreloadLinks, templat
   fs.renameSync(stagingDir, templatesDir);
 };
 
-/** Writes every channel-dependent file in `distDir` from the templates, replacing any earlier stamp; dist/assets is never touched. */
+/** Rewrites the channel-dependent files in `distDir` from the templates, leaving `dist/assets` alone. */
 export const stampChannel = async ({ channel, channelLabel, distDir, siteOrigin, templatesDir }) => {
   const readTemplate = (name) => fs.readFileSync(path.join(templatesDir, name), "utf8");
   const define = JSON.parse(readTemplate(TEMPLATE.defines));
@@ -73,7 +72,7 @@ export const stampChannel = async ({ channel, channelLabel, distDir, siteOrigin,
   });
 };
 
-/** Saves the templates and stamps the build's own channel once dist is written, after VitePWA emits the service worker. */
+/** Saves the templates, then stamps the build's own channel after VitePWA emits the service worker. */
 export const stampBuildChannel = ({ channel, channelLabel, define, routePreloadLinks, siteOrigin }) => {
   let distDir = path.join(rootDir, "dist");
   return {

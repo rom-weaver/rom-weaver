@@ -372,7 +372,7 @@ The channels form a stability ladder - `prod` above `beta` above `nightly` - and
 
 Legs are independent Pages projects with no shared state, so they upload in parallel and a release's three channels land in the time of one. Failure is per-leg (`fail-fast: false`): a beta upload failing still lets prod ship.
 
-When the `wasm` job built a bundle, each leg deploys it, so E2E and Lighthouse tested the deployed code. `deploy-webapp-pages` downloads `webapp-dist` and `webapp-stamp-templates`, runs `npm run stamp-channel` for its channel, and checks the result with `verify-seo-build.mjs`. The bundle reads its channel from `<html data-channel data-channel-label>`. A stamp rewrites only channel-dependent files outside `dist/assets`, so the tested assets keep their bytes.
+When the `wasm` job built a bundle, each leg deploys it. E2E and Lighthouse tested it before the stamp. `deploy-webapp-pages` downloads `webapp-dist` and `webapp-stamp-templates`. It runs `npm run stamp-channel` for its channel, then checks the result with `verify-seo-build.mjs`. The bundle reads its channel from `<html data-channel data-channel-label>`. A stamp rewrites only channel-dependent files outside `dist/assets`, so the tested assets keep their bytes.
 
 A leg builds its own bundle only when the `wasm` job built none: on a tag, or when no webapp input changed. Pull request previews wait for the `wasm` job too.
 
