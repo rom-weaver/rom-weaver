@@ -7,16 +7,20 @@
 
 import path from "node:path";
 import process from "node:process";
-import { resolveAppChannel, resolveSiteOrigin } from "./vite-config/channel.mjs";
+import { APP_CHANNELS, resolveSiteOrigin } from "./vite-config/channel.mjs";
 import { CHANNEL_STAMP_TEMPLATES_DIR, stampChannel } from "./vite-config/channel-stamp.mjs";
 import { rootDir } from "./vite-config/paths.mjs";
 
-const [channelArgument, labelArgument, originArgument] = process.argv.slice(2);
-if (!channelArgument) {
+const [channel, labelArgument, originArgument] = process.argv.slice(2);
+if (!channel) {
   console.error("usage: npm run stamp-channel -- <channel> [label] [origin]");
   process.exit(2);
 }
-const channel = resolveAppChannel(channelArgument);
+// Unlike a build, which marks an unknown channel as dev, a restamp needs one the deploy can serve.
+if (!APP_CHANNELS.has(channel)) {
+  console.error(`unknown channel '${channel}'; expected one of ${[...APP_CHANNELS].join(", ")}`);
+  process.exit(2);
+}
 await stampChannel({
   channel,
   channelLabel: labelArgument || channel,

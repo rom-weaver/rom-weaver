@@ -5,7 +5,7 @@ import { SITE_NAME } from "../../src/webapp/workflow-seo.mjs";
 import { rootDir } from "./paths.mjs";
 
 export const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
-const APP_CHANNELS = new Set(["prod", "beta", "nightly", "preview", "dev"]);
+export const APP_CHANNELS = new Set(["prod", "beta", "nightly", "preview", "dev"]);
 const CHANNEL_DEFAULT_ACCENTS = {
   beta: "woad",
   dev: "madder",
