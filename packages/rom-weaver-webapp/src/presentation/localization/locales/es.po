@@ -4585,6 +4585,11 @@ msgstr "Eliminar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightPassedUncompared"
+msgstr "Comprobación previa superada, nada comparado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.remove"
 msgstr "Eliminar"
 

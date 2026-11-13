@@ -57,6 +57,9 @@
     color 0.15s,
     transform 0.12s;
 }
+.rw-app .drawer-action .is-apply-only .info-btn {
+  color: var(--ink-4);
+}
 .rw-app .drawer-action .info-btn::before {
   position: absolute;
   inset-inline: 4px;

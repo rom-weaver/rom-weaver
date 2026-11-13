@@ -1,4 +1,4 @@
-import { Check, X } from "lucide-react";
+import { CircleCheck, CircleDashed, X } from "lucide-react";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import { InfoToggle } from "../../presentation/react/info-toggle.tsx";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
@@ -141,11 +141,12 @@ export const preflightBasisFor = (item: PatchStackItemState): PreflightBasis => 
 
 export const PreflightSuccess = ({ basis }: { basis: PreflightBasis }) => {
   const localizer = useUiLocalizer();
+  const appliedOnly = basis === "applied";
   return (
     <InfoToggle
-      ariaLabel={localizer.message("ui.patch.preflightPassed")}
-      className="dry-apply-info"
-      icon={<Check aria-hidden="true" />}
+      ariaLabel={localizer.message(appliedOnly ? "ui.patch.preflightPassedUncompared" : "ui.patch.preflightPassed")}
+      className={appliedOnly ? "dry-apply-info is-apply-only" : "dry-apply-info"}
+      icon={appliedOnly ? <CircleDashed aria-hidden="true" /> : <CircleCheck aria-hidden="true" />}
       panelClassName="dry-apply-pop"
       portalPanel
       title={localizer.message("ui.patch.preflightPassed")}

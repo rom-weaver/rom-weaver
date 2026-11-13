@@ -1136,6 +1136,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "The output has not been created yet.",
   }),
   "ui.patch.preflightPassed": msg({ id: "ui.patch.preflightPassed", message: "Ready to apply" }),
+  "ui.patch.preflightPassedUncompared": msg({
+    id: "ui.patch.preflightPassedUncompared",
+    message: "Ready to apply, nothing compared",
+  }),
   "ui.patch.remove": msg({ id: "ui.patch.remove", message: "Remove" }),
   "ui.patch.replace": msg({ id: "ui.patch.replace", message: "Replace patch" }),
   "ui.patch.replaceHelp": msg({
