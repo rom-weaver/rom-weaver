@@ -262,6 +262,12 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ audience: "cli", file: "how-to/install-cli.md", label: "Install the CLI", slug: "docs/install" }),
   Object.freeze({
     audience: "cli",
+    file: "how-to/test-roms-cli.md",
+    label: "Test ROMs (CLI)",
+    slug: "docs/test-roms-cli",
+  }),
+  Object.freeze({
+    audience: "cli",
     file: "how-to/verify-downloads.md",
     label: "Verify a download",
     slug: "docs/verify-downloads",
@@ -388,6 +394,11 @@ const DOC_SOURCES = Object.freeze([
     label: "Save Editor development",
     slug: "docs/game-save-development",
   }),
+  Object.freeze({
+    file: "development/emulator-runtime.md",
+    label: "Native emulator runtime",
+    slug: "docs/emulator-runtime-development",
+  }),
   Object.freeze({ file: "development/references.md", label: "References", slug: "docs/references" }),
   Object.freeze({ file: "legal/about.md", label: "About", slug: "docs/about" }),
   // Generated at build time and not tracked in git, so GitHub has nothing to edit.
@@ -482,6 +493,7 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
   "docs/install": "Setup & offline",
   "docs/search-rom-checksums": "ROM checks",
   "docs/test-roms": "ROM checks",
+  "docs/test-roms-cli": "ROM checks",
   "docs/trim-roms-browser": "ROM checks",
   "docs/undo-ppf-browser": "Patching & weaves",
   "docs/use-cheats": "Cheats",

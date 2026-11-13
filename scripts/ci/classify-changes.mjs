@@ -193,204 +193,213 @@ export function canReuseArmDockerWasm(paths) {
   );
 }
 
-// Only ordinary pull requests narrow checks; missing event names and release pull requests preserve the full selected matrix.
-// The event default MUST agree with scripts/ci/cli-platform-matrix.mjs.
-export function classifyChanges(paths, all = false, eventName = undefined, headRef = undefined) {
-  const result = { ...EMPTY };
-  if (all || isReleasePullRequest(eventName, headRef)) {
-    return Object.fromEntries(Object.keys(result).map((key) => [key, true]));
-  }
+function classifyFullCiInput(path, result) {
+  if (
+    /^\.github\/workflows\/(?:ci|coverage|emulator-runtime)\.yml$/.test(path) ||
+    /^\.github\/actions\/(?:setup-build-env|wasm-cache)\//.test(path) ||
+    path.startsWith(".cargo/") ||
+    path === ".config/lefthook.yml" ||
+    path === ".config/mise.toml" ||
+    FULL_CI_PLUMBING.has(path) ||
+    (path.startsWith("scripts/ci/") &&
+      !path.endsWith(".test.mjs") &&
+      !REPO_LINT_CI_HELPERS.has(path) &&
+      path !== "scripts/ci/cli-platform-matrix.mjs" &&
+      path !== "scripts/ci/docker-matrix.mjs" &&
+      path !== "scripts/ci/docker-smoke.mjs" &&
+      path !== "scripts/ci/check-emulator-runtime.mjs")
+  )
+    result.full = true;
+}
 
-  // Whether any path other than published guide Markdown or a shared case table
-  // selected the webapp; the jobs `webapp_browser` gates cannot observe those.
-  // `webapp` is cleared per path so each path's own selection is visible.
-  let browserInput = false;
-  for (const path of paths.filter(Boolean)) {
-    const webappBefore = result.webapp;
-    result.webapp = false;
-    if (
-      /^\.github\/workflows\/(?:ci|coverage)\.yml$/.test(path) ||
-      /^\.github\/actions\/(?:setup-build-env|wasm-cache)\//.test(path) ||
-      path.startsWith(".cargo/") ||
-      path === ".config/lefthook.yml" ||
-      path === ".config/mise.toml" ||
-      FULL_CI_PLUMBING.has(path) ||
-      (path.startsWith("scripts/ci/") &&
-        !path.endsWith(".test.mjs") &&
-        !REPO_LINT_CI_HELPERS.has(path) &&
-        path !== "scripts/ci/cli-platform-matrix.mjs" &&
-        path !== "scripts/ci/docker-matrix.mjs" &&
-        path !== "scripts/ci/docker-smoke.mjs")
-    )
-      result.full = true;
-
-    if (path.startsWith("crates/")) {
-      result.rust = true;
-      if (isWasmCompilerInput(path)) {
-        result.webapp = true;
-        result.wasm_runtime = true;
-        // Pull requests already compile the release CLI directly. Rebuild its
-        // source Docker image after merge for nightly, or when image/toolchain
-        // inputs below changed and the Docker path itself needs proving.
-        if (eventName !== "pull_request") result.docker_cli = true;
-      }
-      if (SHARED_CASE_TABLE.test(path)) result.webapp = true;
-    }
-
-    if (
-      /^(?:Cargo\.toml|Cargo\.lock|\.config\/deny\.toml|package\.json|package-lock\.json)$/.test(
-        path,
-      ) ||
-      /^\.github\/workflows\/(?:npm-build|npm-publish|release)\.yml$/.test(path) ||
-      path.startsWith(".github/actions/build-cli-platform/") ||
-      path === ".github/cli-platforms.json" ||
-      path.startsWith("packages/rom-weaver-cli-platforms/") ||
-      /^(?:bin\/rom-weaver\.mjs|install\.(?:sh|ps1))$/.test(path) ||
-      /^(?:scripts\/(?:build-identify-index|check-thread-guards|check-whitespace|ensure-identify-data|gen-third-party-licenses|prepare-npm-platform-package|sync-version|vendored-pathspecs|verify-cli-platform)\.mjs|scripts\/wasm\/)/.test(
-        path,
-      )
-    ) {
-      result.rust = true;
+function classifyCrateInput(path, result, eventName) {
+  if (path.startsWith("crates/")) {
+    result.rust = true;
+    if (isWasmCompilerInput(path)) {
       result.webapp = true;
-    }
-
-    if (
-      path === "scripts/ci/cli-platform-matrix.mjs" ||
-      path === "packages/rom-weaver-alias/package.json" ||
-      // Rust tests read these: patches vcdiff and cli_smoke trim fixtures, and
-      // the CLI reference paragraph cli_smoke compares with `extract --help`.
-      path.startsWith("tests/fixtures/") ||
-      path === "docs/reference/cli.md"
-    )
-      result.rust = true;
-    if (path.startsWith("fuzz/")) {
-      result.rust_lint = true;
-      result.fuzz = true;
-    }
-    if (path === "scripts/ci/docker-matrix.mjs" || path === "scripts/ci/docker-smoke.mjs") {
-      result.webapp = true;
-      result.docker_cli = true;
-      result.docker_webapp = true;
-      result.docker_cli_arm64 = true;
-      result.docker_webapp_arm64 = true;
-    }
-
-    if (
-      path.startsWith("packages/rom-weaver-webapp/") ||
-      PUBLISHED_DOCS.has(path) ||
-      DOCS_WEBAPP_ASSET.test(path) ||
-      // Icon-master notes; the masters `brand:check` renders are under the
-      // webapp package, and the hygiene test in `webapp-static` guards this tree.
-      path.startsWith("design/") ||
-      path === "package.json" ||
-      path === "package-lock.json" ||
-      // CI helper tests run in repo-lint. Their implementation does not enter
-      // the webapp bundle, and the classifier keeps selection plumbing above
-      // fail-open. Leaf scripts run their tests in repo-lint too.
-      (/^scripts\/(?!ci\/).*\.mjs$/.test(path) && !ROOT_LEAF_SCRIPT.test(path)) ||
-      path.startsWith("scripts/wasm/") ||
-      path === ".dockerignore" ||
-      path === "docker-compose.yml" ||
-      path === ".github/workflows/docker-publish.yml"
-    )
-      result.webapp = true;
-
-    // Every path the `webapp-wasm-browser` suite can observe. The source and
-    // fixture entries are not a judgement call: `wasm-runtime-coverage.test.mjs`
-    // walks the suite's own import and `new URL(..., import.meta.url)` graph and
-    // fails if anything reachable from it is not selected here.
-    if (
-      /^(?:Cargo\.toml|Cargo\.lock|package\.json|package-lock\.json)$/.test(path) ||
-      path.startsWith("scripts/wasm/") ||
-      path.startsWith("tests/fixtures/") ||
-      WASM_RUNTIME_SUPPORT.has(path) ||
-      path.startsWith("crates/rom-weaver-patches/tests/fixtures/hdiffpatch/") ||
-      /^packages\/rom-weaver-webapp\/(?:package(?:-lock)?\.json|vitest(?:\.config\.base|(?:\.wasm)?\.browser\.config)\.mjs)$/.test(
-        path,
-      ) ||
-      /^packages\/rom-weaver-webapp\/src\/(?:lib\/(?:logging\.ts|runtime)|platform|storage|types|wasm|workers)(?:\/|$)/.test(
-        path,
-      ) ||
-      /^packages\/rom-weaver-webapp\/tests\/(?:fixtures|wasm)(?:\/|$)/.test(path)
-    )
       result.wasm_runtime = true;
-
-    if (
-      /^(?:Cargo\.toml|Cargo\.lock)$/.test(path) ||
-      /^crates\/[^/]+\/Cargo\.toml$/.test(path) ||
-      path === "package.json" ||
-      path === "package-lock.json" ||
-      path === "packages/rom-weaver-webapp/package.json" ||
-      path === "packages/rom-weaver-webapp/package-lock.json"
-    )
-      result.security = true;
-
-    // The CLI image pins its own `rust:` builder tag, independent of the
-    // toolchain `cli-platforms` compiles with, so a manifest or lock change can
-    // break this image and nothing else. It is still only worth one
-    // architecture on a pull request - see `docker_cli_arm64` above.
-    if (
-      path === "Dockerfile" ||
-      path.startsWith(".cargo/") ||
-      /^(?:Cargo\.toml|Cargo\.lock)$/.test(path)
-    ) {
-      result.docker_cli = true;
-      if (path === "Dockerfile") result.docker_cli_arm64 = true;
+      // Pull requests already compile the release CLI directly. Rebuild its
+      // source Docker image after merge for nightly, or when image/toolchain
+      // inputs below changed and the Docker path itself needs proving.
+      if (eventName !== "pull_request") result.docker_cli = true;
     }
-    if (
-      path === "packages/rom-weaver-webapp/Dockerfile" ||
-      path === "packages/rom-weaver-webapp/sws.toml" ||
-      path === "packages/rom-weaver-webapp/scripts/docker-entrypoint.sh" ||
-      path === "docs/hosting/self-hosting.md" ||
-      path === "packages/rom-weaver-webapp/scripts/compress-static-assets.mjs"
-    ) {
-      result.docker_webapp = true;
-      // The webapp image pins an arm64 WASI SDK and binaryen by sha256 that no
-      // amd64 build ever resolves, so its Dockerfile is exactly the file whose
-      // arm64 leg has to run.
-      if (path === "packages/rom-weaver-webapp/Dockerfile") result.docker_webapp_arm64 = true;
-    }
-    if (
-      path === ".dockerignore" ||
-      path === "docker-compose.yml" ||
-      path === ".github/workflows/docker-publish.yml" ||
-      // Both images are built and tagged through these, so an edit to either
-      // has to be exercised on an image before it reaches a release.
-      /^\.github\/actions\/docker-(?:build-arch|manifest)\//.test(path)
-    ) {
-      result.docker_cli = true;
-      result.docker_webapp = true;
-      // These decide the build context, the exporter, and the per-arch cache
-      // ref, all of which are architecture-specific.
-      result.docker_cli_arm64 = true;
-      result.docker_webapp_arm64 = true;
-    }
-
-    // `repo-lint` lints every tracked file of these kinds rather than the diff,
-    // so this selects the whole job, not individual files: whatever actionlint
-    // reads (the workflows, the composite actions, `.github` YAML at any depth
-    // - the shell `case` globs this replaced matched across `/`), any shell
-    // script, any Node.js script, any Markdown file, any Dockerfile, and
-    // hadolint's config.
-    if (
-      path.startsWith(".github/workflows/") ||
-      path.startsWith(".github/actions/") ||
-      /^\.github\/.*\.(?:yml|yaml)$/.test(path) ||
-      path === ".config/hadolint.yaml" ||
-      path === ".oxlintrc.json" ||
-      path === "package.json" ||
-      path === "package-lock.json" ||
-      /(?:Dockerfile(?:\.|$))/.test(path) ||
-      /\.(?:cjs|js|md|mjs|sh)$/.test(path)
-    )
-      result.repo_lint = true;
-
-    if (result.webapp && !PUBLISHED_DOCS.has(path) && !SHARED_CASE_TABLE.test(path))
-      browserInput = true;
-    if (isLighthouseInput(path)) result.lighthouse = true;
-    result.webapp ||= webappBefore;
+    if (SHARED_CASE_TABLE.test(path)) result.webapp = true;
   }
+}
 
+function classifyEmulatorInput(path, result) {
+  if (
+    path.startsWith("scripts/emulator-runtime/") ||
+    path === "scripts/ci/check-emulator-runtime.mjs"
+  ) {
+    result.rust = true;
+  }
+}
+
+function classifySharedBuildInput(path, result) {
+  if (
+    /^(?:Cargo\.toml|Cargo\.lock|\.config\/deny\.toml|package\.json|package-lock\.json)$/.test(
+      path,
+    ) ||
+    /^\.github\/workflows\/(?:npm-build|npm-publish|release)\.yml$/.test(path) ||
+    path.startsWith(".github/actions/build-cli-platform/") ||
+    path === ".github/cli-platforms.json" ||
+    path.startsWith("packages/rom-weaver-cli-platforms/") ||
+    /^(?:bin\/rom-weaver\.mjs|install\.(?:sh|ps1))$/.test(path) ||
+    /^(?:scripts\/(?:build-identify-index|check-thread-guards|check-whitespace|ensure-identify-data|gen-third-party-licenses|prepare-npm-platform-package|sync-version|vendored-pathspecs|verify-cli-platform)\.mjs|scripts\/wasm\/)/.test(
+      path,
+    )
+  ) {
+    result.rust = true;
+    result.webapp = true;
+  }
+}
+
+function classifySupplementalBuildInput(path, result) {
+  if (
+    path === "scripts/ci/cli-platform-matrix.mjs" ||
+    path === "packages/rom-weaver-alias/package.json" ||
+    // Rust tests read these: patches vcdiff and cli_smoke trim fixtures, and
+    // the CLI reference paragraph cli_smoke compares with `extract --help`.
+    path.startsWith("tests/fixtures/") ||
+    path === "docs/reference/cli.md"
+  )
+    result.rust = true;
+  if (path.startsWith("fuzz/")) {
+    result.rust_lint = true;
+    result.fuzz = true;
+  }
+  if (path === "scripts/ci/docker-matrix.mjs" || path === "scripts/ci/docker-smoke.mjs") {
+    result.webapp = true;
+    result.docker_cli = true;
+    result.docker_webapp = true;
+    result.docker_cli_arm64 = true;
+    result.docker_webapp_arm64 = true;
+  }
+}
+
+function classifyWebappInput(path, result) {
+  if (
+    path.startsWith("packages/rom-weaver-webapp/") ||
+    PUBLISHED_DOCS.has(path) ||
+    DOCS_WEBAPP_ASSET.test(path) ||
+    // Icon-master notes; the masters `brand:check` renders are under the
+    // webapp package, and the hygiene test in `webapp-static` guards this tree.
+    path.startsWith("design/") ||
+    path === "package.json" ||
+    path === "package-lock.json" ||
+    // CI helper tests run in repo-lint. Their implementation does not enter
+    // the webapp bundle, and the classifier keeps selection plumbing above
+    // fail-open. Leaf scripts run their tests in repo-lint too.
+    (/^scripts\/(?!(?:ci|emulator-runtime)\/).*\.mjs$/.test(path) &&
+      !ROOT_LEAF_SCRIPT.test(path)) ||
+    path.startsWith("scripts/wasm/") ||
+    path === ".dockerignore" ||
+    path === "docker-compose.yml" ||
+    path === ".github/workflows/docker-publish.yml"
+  )
+    result.webapp = true;
+}
+
+function classifyWasmRuntimeInput(path, result) {
+  // Every path the `webapp-wasm-browser` suite can observe. The source and
+  // fixture entries are not a judgement call: `wasm-runtime-coverage.test.mjs`
+  // walks the suite's own import and `new URL(..., import.meta.url)` graph and
+  // fails if anything reachable from it is not selected here.
+  if (
+    /^(?:Cargo\.toml|Cargo\.lock|package\.json|package-lock\.json)$/.test(path) ||
+    path.startsWith("scripts/wasm/") ||
+    path.startsWith("tests/fixtures/") ||
+    WASM_RUNTIME_SUPPORT.has(path) ||
+    path.startsWith("crates/rom-weaver-patches/tests/fixtures/hdiffpatch/") ||
+    /^packages\/rom-weaver-webapp\/(?:package(?:-lock)?\.json|vitest(?:\.config\.base|(?:\.wasm)?\.browser\.config)\.mjs)$/.test(
+      path,
+    ) ||
+    /^packages\/rom-weaver-webapp\/src\/(?:lib\/(?:logging\.ts|runtime)|platform|storage|types|wasm|workers)(?:\/|$)/.test(
+      path,
+    ) ||
+    /^packages\/rom-weaver-webapp\/tests\/(?:fixtures|wasm)(?:\/|$)/.test(path)
+  )
+    result.wasm_runtime = true;
+}
+
+function classifyImageInputs(path, result) {
+  // The CLI image pins its own `rust:` builder tag, independent of the
+  // toolchain `cli-platforms` compiles with, so a manifest or lock change can
+  // break this image and nothing else. It is still only worth one
+  // architecture on a pull request - see `docker_cli_arm64` above.
+  if (
+    path === "Dockerfile" ||
+    path.startsWith(".cargo/") ||
+    /^(?:Cargo\.toml|Cargo\.lock)$/.test(path)
+  ) {
+    result.docker_cli = true;
+    if (path === "Dockerfile") result.docker_cli_arm64 = true;
+  }
+  if (
+    path === "packages/rom-weaver-webapp/Dockerfile" ||
+    path === "packages/rom-weaver-webapp/sws.toml" ||
+    path === "packages/rom-weaver-webapp/scripts/docker-entrypoint.sh" ||
+    path === "docs/hosting/self-hosting.md" ||
+    path === "packages/rom-weaver-webapp/scripts/compress-static-assets.mjs"
+  ) {
+    result.docker_webapp = true;
+    // The webapp image pins an arm64 WASI SDK and binaryen by sha256 that no
+    // amd64 build ever resolves, so its Dockerfile is exactly the file whose
+    // arm64 leg has to run.
+    if (path === "packages/rom-weaver-webapp/Dockerfile") result.docker_webapp_arm64 = true;
+  }
+  if (
+    path === ".dockerignore" ||
+    path === "docker-compose.yml" ||
+    path === ".github/workflows/docker-publish.yml" ||
+    // Both images are built and tagged through these, so an edit to either
+    // has to be exercised on an image before it reaches a release.
+    /^\.github\/actions\/docker-(?:build-arch|manifest)\//.test(path)
+  ) {
+    result.docker_cli = true;
+    result.docker_webapp = true;
+    // These decide the build context, the exporter, and the per-arch cache
+    // ref, all of which are architecture-specific.
+    result.docker_cli_arm64 = true;
+    result.docker_webapp_arm64 = true;
+  }
+}
+
+function classifySecurityInput(path, result) {
+  if (
+    /^(?:Cargo\.toml|Cargo\.lock)$/.test(path) ||
+    /^crates\/[^/]+\/Cargo\.toml$/.test(path) ||
+    path === "package.json" ||
+    path === "package-lock.json" ||
+    path === "packages/rom-weaver-webapp/package.json" ||
+    path === "packages/rom-weaver-webapp/package-lock.json"
+  )
+    result.security = true;
+}
+
+function classifyRepoLintInput(path, result) {
+  // `repo-lint` lints every tracked file of these kinds rather than the diff,
+  // so this selects the whole job, not individual files: whatever actionlint
+  // reads (the workflows, the composite actions, `.github` YAML at any depth
+  // - the shell `case` globs this replaced matched across `/`), any shell
+  // script, any Node.js script, any Markdown file, any Dockerfile, and
+  // hadolint's config.
+  if (
+    path.startsWith(".github/workflows/") ||
+    path.startsWith(".github/actions/") ||
+    /^\.github\/.*\.(?:yml|yaml)$/.test(path) ||
+    path === ".config/hadolint.yaml" ||
+    path === ".oxlintrc.json" ||
+    path === "package.json" ||
+    path === "package-lock.json" ||
+    /(?:Dockerfile(?:\.|$))/.test(path) ||
+    /\.(?:cjs|js|md|mjs|sh)$/.test(path)
+  )
+    result.repo_lint = true;
+}
+
+function finalizeSelection(result, browserInput, eventName) {
   if (result.full) {
     result.rust = true;
     result.webapp = true;
@@ -425,6 +434,38 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
   // pull requests; other events also select it for webapp changes to publish nightly.
   result.docker_prebuilt = result.webapp && (eventName !== "pull_request" || result.docker_webapp);
   return result;
+}
+
+// Only ordinary pull requests narrow checks; missing event names and release pull requests preserve the full selected matrix.
+// The event default MUST agree with scripts/ci/cli-platform-matrix.mjs.
+export function classifyChanges(paths, all = false, eventName = undefined, headRef = undefined) {
+  const result = { ...EMPTY };
+  if (all || isReleasePullRequest(eventName, headRef)) {
+    return Object.fromEntries(Object.keys(result).map((key) => [key, true]));
+  }
+
+  // Whether any path other than published guide Markdown or a shared case table
+  // selected the webapp; the jobs `webapp_browser` gates cannot observe those.
+  let browserInput = false;
+  for (const path of paths.filter(Boolean)) {
+    const selection = { ...EMPTY };
+    classifyFullCiInput(path, selection);
+    classifyCrateInput(path, selection, eventName);
+    classifyEmulatorInput(path, selection);
+    classifySharedBuildInput(path, selection);
+    classifySupplementalBuildInput(path, selection);
+    classifyWebappInput(path, selection);
+    classifyWasmRuntimeInput(path, selection);
+    classifyImageInputs(path, selection);
+    classifySecurityInput(path, selection);
+    classifyRepoLintInput(path, selection);
+    if (selection.webapp && !PUBLISHED_DOCS.has(path) && !SHARED_CASE_TABLE.test(path))
+      browserInput = true;
+    if (isLighthouseInput(path)) selection.lighthouse = true;
+    for (const key of Object.keys(result)) result[key] ||= selection[key];
+  }
+
+  return finalizeSelection(result, browserInput, eventName);
 }
 
 // A pull request job stays selected unless BOTH the pull request diff and the

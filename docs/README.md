@@ -115,6 +115,7 @@ Procedures for specific tasks.
 
 - [Install the CLI](how-to/install-cli.md)
 - [Verify a download](how-to/verify-downloads.md)
+- [Test a ROM from the CLI](how-to/test-roms-cli.md)
 - [Apply patches from the CLI](how-to/cli-apply.md)
 - [Create patches from the CLI](how-to/cli-create.md)
 - [Weaves from the CLI](how-to/cli-bundles.md)
@@ -178,6 +179,7 @@ Background on the engine, formats, and design decisions.
 - [ROM identify data](development/identify-data.md): rebuild the Libretro and OpenGood packs.
 - [PBP emulator verification](development/emulator-pbp-verification.md): legal homebrew inputs and real-core boot evidence.
 - [Save Editor development](development/save-editor.md): shared handler architecture, integrity boundary, and the eight-step contributor flow.
+- [Native emulator runtime](development/emulator-runtime.md): build, verify, smoke-test, and release the optional Linux NES runtime.
 - [ROM patch and disc format specifications](development/references.md): format specifications and upstream reference implementations.
 
 - [CI workflows](development/ci.md) and [local CI checks](development/reproduce-ci-locally.md).

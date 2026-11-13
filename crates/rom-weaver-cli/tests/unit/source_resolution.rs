@@ -86,8 +86,10 @@ fn labels() -> AutoExtractResolutionLabels<'static> {
 fn options(
     kind_filter: ArchiveEntryKindFilter,
     mode: AutoExtractMode,
-) -> AutoExtractResolutionOptions {
+) -> AutoExtractResolutionOptions<'static> {
     AutoExtractResolutionOptions {
+        labels: labels(),
+        select: &[],
         group_disc_payloads: false,
         no_extract: false,
         no_ignore: false,
@@ -299,9 +301,7 @@ fn single_step_mode_stops_after_one_extraction() {
     let resolved = app
         .resolve_source_with_auto_extract_with_mode(
             &outer,
-            &[],
             &context,
-            labels(),
             options(no_filter(), AutoExtractMode::SingleStep),
         )
         .expect("single-step resolves");
@@ -586,7 +586,6 @@ fn an_extraction_that_produced_nothing_is_reported() {
         .resolve_auto_extract_candidate(
             Path::new("/games/archive.zip"),
             &out_dir,
-            labels(),
             options(no_filter(), AutoExtractMode::Recursive),
         )
         .expect_err("no files were produced");
@@ -613,7 +612,6 @@ fn resolving_a_candidate_applies_the_ignore_then_kind_filters() {
         .resolve_auto_extract_candidate(
             Path::new("/games/archive.zip"),
             &out_dir,
-            labels(),
             options(
                 ArchiveEntryKindFilter::new(true, false),
                 AutoExtractMode::Recursive,
