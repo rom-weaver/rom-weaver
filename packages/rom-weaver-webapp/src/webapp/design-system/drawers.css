@@ -331,6 +331,15 @@
 .rw-app .cks > .cks-head .readouts > .rb:not(:last-child) {
   flex: none;
 }
+/* The Files header carries size, format, and timing chips. Clipping the last
+   one hides the extract time, so a narrow header wraps the chips whole. */
+.rw-app .extract-d > .cks-head .readouts {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.rw-app .extract-d > .cks-head .readouts > .rb {
+  flex: none;
+}
 .rw-app .cks:not(.is-open, .is-integrated) > .cks-head .rb {
   background: var(--plate-2);
   border-color: transparent;
