@@ -518,7 +518,7 @@ const startWasmBuildWatcher = (viteServer) => {
       return;
     }
     console.log("WASM source changed; rebuilding...");
-    build = childProcess.spawn("mise", ["run", "build-wasm"], {
+    build = childProcess.spawn("mise", ["run", "build-wasm-fast"], {
       cwd: REPO_ROOT,
       env: process.env,
       stdio: "inherit",

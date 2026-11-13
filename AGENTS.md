@@ -23,7 +23,8 @@ cargo test --workspace                             # full Rust suite
 mise run typegen                                    # regen TS types (REQUIRED after Rust type/metadata changes)
 mise run deny                                      # dep advisories + licenses + sources (.config/deny.toml)
 mise run machete                                   # unused Rust dependencies
-mise run build-wasm                                # wasm build (needs WASI SDK v33+)
+mise run build-wasm-fast                           # wasm build for local development (needs WASI SDK v33+)
+mise run build-wasm-prod                           # optimized wasm build for performance and size work
 npm --prefix packages/rom-weaver-webapp run dev     # webapp dev server
 npm --prefix packages/rom-weaver-webapp run lint    # oxfmt + biome (CSS) + oxlint + tsc + browser-compat + knip
 npm --prefix packages/rom-weaver-webapp run test:browser:wasm  # wasm-layer browser tests

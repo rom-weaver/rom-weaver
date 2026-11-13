@@ -26,7 +26,9 @@ function main() {
   mkdirSync(PACKAGE_DIR, { recursive: true });
 
   if (!existsSync(DIST_WASM_DIR)) {
-    fail(`Missing artifacts directory: ${DIST_WASM_DIR}. Run mise run build-wasm and pass that output directory here.`);
+    fail(
+      `Missing artifacts directory: ${DIST_WASM_DIR}. Run mise run build-wasm-fast and pass that output directory here.`,
+    );
   }
 
   for (const { src: srcName, dst: dstName } of REQUIRED_DIST_COPIES) {
@@ -34,7 +36,7 @@ function main() {
     const dst = resolve(PACKAGE_DIR, dstName);
 
     if (!existsSync(src)) {
-      fail(`Missing artifact: ${src}. Run mise run build-wasm first.`);
+      fail(`Missing artifact: ${src}. Run mise run build-wasm-fast first.`);
     }
 
     mkdirSync(dirname(dst), { recursive: true });

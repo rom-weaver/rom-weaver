@@ -4,7 +4,7 @@ This directory contains the scripts that build, check, compress, and exercise `r
 
 ```bash
 mise run wasm-check
-mise run build-wasm
+mise run build-wasm-fast
 mise run build-wasm-prod
 ```
 

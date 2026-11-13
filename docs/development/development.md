@@ -67,9 +67,9 @@ Choose the WASM build that matches the task:
 
 ```bash
 mise run wasm-check        # type-check the threaded WASI target
-mise run build-wasm        # fast development build
-mise run build-wasm-fast   # no link-time optimization (LTO) or wasm-opt, own target directory; keeps a module built from the current inputs
-mise run build-wasm-prod   # optimized release build with wasm-opt and Brotli
+mise run build-wasm-fast   # local development build: no link-time optimization (LTO) or wasm-opt, own target directory; keeps a module built from the current inputs
+mise run build-wasm        # LTO build without wasm-opt or Brotli
+mise run build-wasm-prod   # optimized release build with wasm-opt and Brotli; use it for performance and size work
 ```
 
 Choose an unused port for each worktree, then start the HTTPS development server. This example uses port 5174; use another port if it is occupied:
@@ -81,7 +81,7 @@ npm run dev
 
 Open the URL that the server prints. The local certificate may need a browser exception or trust setup. The server supplies HTTPS and the COOP/COEP headers needed for the production `SharedArrayBuffer` runtime.
 
-`npm run dev` rebuilds WASM when the artifact is missing or its recorded source fingerprint differs from the current inputs. Run `mise run build-wasm` directly after changing the installed WASM toolchain or when you need the complete build output.
+`npm run dev` rebuilds WASM with `build-wasm-fast` when the artifact is missing or its recorded source fingerprint differs from the current inputs. Run `mise run build-wasm-fast` directly after changing the installed WASM toolchain. A fast module is slower and larger than a production one, so measure speed or size with `mise run build-wasm-prod`.
 
 All three WASM build tasks share finished modules between checkouts through `${XDG_CACHE_HOME:-~/.cache}/rom-weaver/wasm/`. An entry is keyed by the source fingerprint, build mode, tool versions, and compiler-flag environment, including `HOST_`/`TARGET_` C/C++ overrides and cc's parsing/default switches. Cargo home and ancestor `config`/`config.toml` contents and their recursively included TOML files also enter the key; external configuration paths are included because relative values resolve from those locations. A matching build copies the module and skips Cargo.
 
@@ -96,7 +96,7 @@ If a configuration snapshot cannot be read or parsed, a configuration path trave
 By default, build artifacts are written to `packages/rom-weaver-webapp/src/wasm/`. The binary and attribution outputs are gitignored; runtime source and generated TypeScript remain tracked. To keep a separate artifact directory:
 
 ```bash
-ROM_WEAVER_WASM_OUT_DIR=/path/to/artifacts mise run build-wasm
+ROM_WEAVER_WASM_OUT_DIR=/path/to/artifacts mise run build-wasm-fast
 ```
 
 The build synchronizes the artifacts back into the webapp package when the custom directory differs from the default. The threaded target flags and WASI compiler wiring live in `.cargo/config.toml` and `.config/mise.toml`; use `mise exec` for ad hoc target commands:

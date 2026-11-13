@@ -13,8 +13,8 @@ Missing tools or fixtures turn a case into `skip` with a printed reason; nothing
 ## Run
 
 ```bash
-# once: production wasm + bundle (see docs/development/reproduce-ci-locally.md)
-mise run build-wasm && npm --prefix packages/rom-weaver-webapp run build
+# once: wasm + bundle (see docs/development/reproduce-ci-locally.md)
+mise run build-wasm-fast && npm --prefix packages/rom-weaver-webapp run build
 
 # from the repository root
 node packages/rom-weaver-webapp/tests/apply-matrix/run.mjs                 # everything

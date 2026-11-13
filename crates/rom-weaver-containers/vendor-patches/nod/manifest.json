@@ -233,7 +233,7 @@
       },
       "tests": [
         "cargo test -p rom-weaver-containers --lib nod::io::",
-        "mise run build-wasm"
+        "mise run build-wasm-fast"
       ]
     },
     {

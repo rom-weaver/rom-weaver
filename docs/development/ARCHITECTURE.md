@@ -54,7 +54,7 @@ How rom-weaver is put together: one Rust command core shipped two ways (native C
 | `crates/rom-weaver-cli` | The installable package: the `rom_weaver_app` command library, native `rom-weaver` CLI, `rom-weaver-app` WASM entrypoint, type generator, argument parsing, and reporters. |
 | `packages/rom-weaver-webapp/src/wasm` | Browser WASM layer in the webapp package: OPFS WASI runner (`run`/`runJson`), mounts, thread pool, worker client, generated types. |
 | `packages/rom-weaver-webapp` | Webapp: workflow controllers, runtime adapters, React forms, workers, PWA shell. |
-| `scripts/` | Benches, worktree setup, and WASM toolchain helpers (`scripts/wasm/`); build orchestration moved to `.config/mise.toml` (`mise run build-wasm`). |
+| `scripts/` | Benches, worktree setup, and WASM toolchain helpers (`scripts/wasm/`); build orchestration moved to `.config/mise.toml` (`mise run build-wasm-fast`). |
 
 Crate dependency flow is one-directional: `core` ← format crates (`checksum`/`containers`/`patches`) ← `cli`. Libarchive is an internal `containers` module rather than another package. The CLI package's `dcp` module consumes its `gdrom` module (data-track filesystem) and `patches`' `xdelta` module (per-file VCDIFF apply).
 
