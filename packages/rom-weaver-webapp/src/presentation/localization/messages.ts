@@ -1127,6 +1127,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.patch.preflightMatched",
     message: "The input matches what this patch was made for.",
   }),
+  "ui.patch.preflightMatchedReverse": msg({
+    id: "ui.patch.preflightMatchedReverse",
+    message: "The input matches what this patch produces.",
+  }),
   "ui.patch.preflightOutputPending": msg({
     id: "ui.patch.preflightOutputPending",
     message: "The output has not been created yet.",

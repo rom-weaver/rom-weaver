@@ -77,6 +77,29 @@ function InfoToggle({
     };
   }, [open, portalPanel, computePanelPosition]);
 
+  useEffect(() => {
+    if (!open) return;
+    // Capture phase and preventDefault, so a dialog that skips handled Escape keeps its own state.
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setOpen(false);
+      buttonRef.current?.focus();
+    };
+    const dismissOnOutsidePress = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("keydown", dismissOnEscape, true);
+    document.addEventListener("pointerdown", dismissOnOutsidePress, true);
+    return () => {
+      document.removeEventListener("keydown", dismissOnEscape, true);
+      document.removeEventListener("pointerdown", dismissOnOutsidePress, true);
+    };
+  }, [open]);
+
   const panel = (
     <section
       aria-label={title}

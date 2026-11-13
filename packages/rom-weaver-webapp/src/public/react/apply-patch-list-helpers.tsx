@@ -121,18 +121,21 @@ export const PatchFaultWell = ({
   );
 };
 
-type PreflightBasis = "matched" | "compared" | "applied";
+type PreflightBasis = "matched" | "matchedReverse" | "compared" | "applied";
 
 const PREFLIGHT_BASIS_MESSAGES = {
   applied: "ui.patch.preflightApplied",
   compared: "ui.patch.preflightCompared",
   matched: "ui.patch.preflightMatched",
+  matchedReverse: "ui.patch.preflightMatchedReverse",
 } as const;
 
 /** What a passed dry-run apply rests on. */
 export const preflightBasisFor = (item: PatchStackItemState): PreflightBasis => {
   const matchedKind = item.chainVerdict?.matched.kind;
-  if (matchedKind === "base" || matchedKind === "patch_output") return "matched";
+  if (matchedKind === "base" || matchedKind === "patch_output") {
+    return item.chainVerdict?.direction === "reverse" ? "matchedReverse" : "matched";
+  }
   return item.checksumCompared ? "compared" : "applied";
 };
 

@@ -5655,6 +5655,11 @@ msgstr "La extensión de salida sigue la opción: {headeredExtension} con encabe
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightMatchedReverse"
+msgstr "La entrada coincide con lo que produce este parche."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.preflightOutputPending"
 msgstr "La salida todavía no se ha creado."
 

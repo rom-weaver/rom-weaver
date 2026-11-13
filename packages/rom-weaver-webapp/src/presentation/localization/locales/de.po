@@ -5655,6 +5655,11 @@ msgstr "Die Ausgabe-Endung folgt der Auswahl: {headeredExtension} mit Header, {h
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightMatchedReverse"
+msgstr "Die Eingabe entspricht dem, was dieser Patch erzeugt."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.preflightOutputPending"
 msgstr "Die Ausgabe wurde noch nicht erstellt."
 

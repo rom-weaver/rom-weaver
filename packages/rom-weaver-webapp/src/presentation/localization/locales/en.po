@@ -5655,6 +5655,11 @@ msgstr "The output extension follows the choice: {headeredExtension} with the he
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightMatchedReverse"
+msgstr "The input matches what this patch produces."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.preflightOutputPending"
 msgstr "The output has not been created yet."
 

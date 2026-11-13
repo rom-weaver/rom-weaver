@@ -196,6 +196,19 @@ describe("ApplyPatchListStep", () => {
       "The input matches what this patch was made for.",
     ],
     [
+      "a reverse patch's input matches",
+      {
+        chainVerdict: {
+          basis: "base",
+          basisSource: "declared",
+          direction: "reverse",
+          matched: { kind: "base", variant: "raw" },
+        },
+        checksumCompared: true,
+      },
+      "The input matches what this patch produces.",
+    ],
+    [
       "a source checksum was compared",
       { checksumCompared: true },
       "The patch's source checksum was compared and passed.",
@@ -204,17 +217,17 @@ describe("ApplyPatchListStep", () => {
   ] as [string, Partial<PatchStackItemState>, string][])(
     "tells in the check mark popover when %s",
     (_name, overrides, expected) => {
-      const { container, unmount } = renderList({ patches: [item(0, overrides)] });
+      const { container } = renderList({ patches: [item(0, overrides)] });
 
       fireEvent.click(container.querySelector('button[title="Ready to apply"]') as HTMLButtonElement);
 
       const shown = [
         "The input matches what this patch was made for.",
+        "The input matches what this patch produces.",
         "The patch's source checksum was compared and passed.",
         "The patch applies, but it has no checksum to compare.",
       ].filter((text) => screen.queryByText(text));
       expect(shown).toEqual([expected]);
-      unmount();
     },
   );
 
