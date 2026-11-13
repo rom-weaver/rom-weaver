@@ -16,7 +16,7 @@ export function replaceApplyVideo(readme, url) {
   const start = readme.indexOf(START) + START.length;
   const end = readme.indexOf(END);
   if (end < start) throw new Error("README apply-video markers are reversed");
-  return `${readme.slice(0, start)}\nApply two sample patches and download the result as 7z.\n\n<${url}>\n${readme.slice(end)}`;
+  return `${readme.slice(0, start)}\nApply two sample patches, test the result in the browser, and download it as 7z.\n\n<${url}>\n${readme.slice(end)}`;
 }
 
 export function publishApplyVideo(root = ROOT) {

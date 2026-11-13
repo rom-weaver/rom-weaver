@@ -11,7 +11,7 @@ test("refreshes only the demo and preserves surrounding README content", () => {
   const result = replaceApplyVideo(source, url);
   assert.equal(
     result,
-    `intro\n${start}\nApply two sample patches and download the result as 7z.\n\n<${url}>\n${end}\nremaining docs\n`,
+    `intro\n${start}\nApply two sample patches, test the result in the browser, and download it as 7z.\n\n<${url}>\n${end}\nremaining docs\n`,
   );
   assert.equal(replaceApplyVideo(result, url), result);
 });

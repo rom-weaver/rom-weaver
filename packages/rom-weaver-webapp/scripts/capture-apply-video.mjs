@@ -132,13 +132,32 @@ try {
   await apply.click();
   const download = page.getByRole("button", { name: /^Download .*\.7z/ });
   await download.waitFor({ timeout: 60000 });
-  await pause(3000);
-  const end = Date.now() / 1000;
-  await cdp.send("Page.stopScreencast");
-  await page.screenshot({ path: path.join(out, "ready.png") });
+  await pause(1500);
+  const test = page.locator("#rom-weaver-button-test-emulator");
+  await move(test);
+  await pause(250);
+  await test.click();
+  await page.waitForFunction(
+    () => document.querySelector("#emulator-test-player iframe")?.contentWindow?.__romWeaverGameStarted === true,
+    undefined,
+    { timeout: 60000 },
+  );
+  await pause(4000);
+  const applyTab = page.getByRole("link", { name: /^Apply/ }).first();
+  await move(applyTab);
+  await pause(250);
+  await applyTab.click();
+  await download.waitFor({ timeout: 10000 });
+  await pause(1500);
+  await move(download);
+  await pause(300);
   const dp = page.waitForEvent("download");
   await download.click();
   const d = await dp;
+  await pause(2500);
+  const end = Date.now() / 1000;
+  await cdp.send("Page.stopScreencast");
+  await page.screenshot({ path: path.join(out, "downloaded.png") });
   await d.saveAs(path.join(out, "output.7z"));
   const extracted = execFileSync("bsdtar", ["-xOf", path.join(out, "output.7z")]);
   if (!extracted.equals(createFirstSampleAssets().wovenRom))
