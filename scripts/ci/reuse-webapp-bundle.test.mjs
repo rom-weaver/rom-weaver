@@ -86,7 +86,7 @@ test("reuses the restored bundle only when nothing it was built from changed", a
       reuse: false,
       reason: /webapp inputs changed/,
     },
-    { name: "wasm module differs", options: { bundleCommit: null, runWasm: "rebuilt" }, reuse: false, reason: /rom-weaver-app\.wasm differs/ },
+    { name: "wasm module differs", options: { bundleCommit: null, runWasm: "rebuilt" }, reuse: false, reason: /rom-weaver-app\.wasm does not match its manifest checksum/ },
     { name: "no wasm manifest", options: { bundleCommit: null, wasmManifest: false }, reuse: false, reason: /cannot read/ },
   ]) {
     await t.test(name, (t) => {

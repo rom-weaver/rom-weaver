@@ -6,20 +6,17 @@
 // Writes `reuse=true|false` to $GITHUB_OUTPUT.
 
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 import { classifyChanges } from "./classify-changes.mjs";
-import { parseManifest } from "./wasm-manifest.mjs";
+import { checkManifestEntries, parseManifest } from "./wasm-manifest.mjs";
 
 const BUNDLE_COMMIT_FILE = "build/bundle-commit";
 const BUNDLE_WASM_MANIFEST_FILE = "build/bundle-wasm.sha256";
 const COMMIT_SHA = /^[0-9a-f]{40}$/;
-
-const sha256 = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
 const changedPathsSince = (repoDir, commit) =>
   execFileSync("git", ["diff", "--name-only", "--no-renames", "-z", commit, "HEAD"], { cwd: repoDir, encoding: "utf8" }).split("\0");
@@ -48,9 +45,10 @@ export function bundleRejection({ repoDir, wasmDir, webappDir }) {
   } catch (error) {
     return `cannot read ${BUNDLE_WASM_MANIFEST_FILE}: ${error.message}`;
   }
-  for (const [path, hash] of wasmManifest) {
-    const file = join(wasmDir, path);
-    if (!existsSync(file) || sha256(file) !== hash) return `wasm-prod ${path} differs from the bundle's`;
+  try {
+    checkManifestEntries(wasmDir, wasmManifest);
+  } catch (error) {
+    return `wasm-prod ${error.message}`;
   }
   return null;
 }
