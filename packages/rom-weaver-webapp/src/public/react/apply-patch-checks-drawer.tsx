@@ -21,6 +21,7 @@ import {
   CHECKSUM_TIMING_LABEL,
   getPatchVerificationRows,
   PreflightSuccess,
+  preflightBasisFor,
   getEmbeddedChecks,
   weaveCheckRows,
 } from "./apply-patch-list-helpers.tsx";
@@ -208,7 +209,7 @@ const PatchChecksDrawer = ({
     [...inputRows, ...outputRows].every((row) => String(row.value).length < 16);
   return (
     <ChecksumList
-      action={ok ? <PreflightSuccess /> : undefined}
+      action={ok ? <PreflightSuccess basis={preflightBasisFor(item)} /> : undefined}
       className="patch-checks"
       bodyClassName={compact ? "ckrows patch-check-columns" : "ckrows patch-checks-body"}
       defaultOpen={hasBuiltIn || hasUserChecks}

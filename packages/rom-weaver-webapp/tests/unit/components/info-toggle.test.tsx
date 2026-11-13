@@ -72,3 +72,41 @@ describe("InfoToggle portaled popover repositioning", () => {
     }
   });
 });
+
+describe("InfoToggle dismissal", () => {
+  it("closes the open popover on Escape and returns focus to its button", () => {
+    const { container } = render(
+      <InfoToggle ariaLabel="More info" title="info">
+        body copy
+      </InfoToggle>,
+    );
+    const trigger = container.querySelector("button.info-btn") as HTMLButtonElement;
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("leaves Escape to a field that holds focus", () => {
+    const { container, getByLabelText } = render(
+      <>
+        <InfoToggle ariaLabel="More info" title="info">
+          body copy
+        </InfoToggle>
+        <input aria-label="Position" />
+      </>,
+    );
+    const trigger = container.querySelector("button.info-btn") as HTMLButtonElement;
+    fireEvent.click(trigger);
+    const field = getByLabelText("Position");
+    field.focus();
+
+    const notHandled = fireEvent.keyDown(field, { cancelable: true, key: "Escape" });
+
+    expect(notHandled).toBe(true);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  });
+});

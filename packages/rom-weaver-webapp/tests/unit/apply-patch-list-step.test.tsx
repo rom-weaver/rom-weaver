@@ -186,6 +186,60 @@ describe("ApplyPatchListStep", () => {
     expect(container.querySelectorAll('button[title="Ready to apply"]')).toHaveLength(2);
   });
 
+  const APPLIED_ONLY_LINE = "The patch applies, but it has no checksum to compare.";
+
+  it.each([
+    [
+      "the input matches",
+      {
+        chainVerdict: { basis: "base", basisSource: "declared", matched: { kind: "base", variant: "raw" } },
+        checksumCompared: true,
+      },
+      "The input matches what this patch was made for.",
+    ],
+    [
+      "a reverse patch's input matches",
+      {
+        chainVerdict: {
+          basis: "base",
+          basisSource: "declared",
+          direction: "reverse",
+          matched: { kind: "base", variant: "raw" },
+        },
+        checksumCompared: true,
+      },
+      "The input matches what this patch produces.",
+    ],
+    [
+      "a source checksum was compared",
+      { checksumCompared: true },
+      "The patch's source checksum was compared and passed.",
+    ],
+    ["the patch only applied", {}, APPLIED_ONLY_LINE],
+  ] as [string, Partial<PatchStackItemState>, string][])(
+    "tells in the check mark popover when %s",
+    (_name, overrides, expected) => {
+      const { container } = renderList({ patches: [item(0, overrides)] });
+
+      const mark = container.querySelector('button[title="Ready to apply"]') as HTMLButtonElement;
+      fireEvent.click(mark);
+
+      expect(mark.getAttribute("aria-label")).toBe(
+        expected === APPLIED_ONLY_LINE ? "Ready to apply, nothing compared" : "Ready to apply",
+      );
+      expect(mark.querySelector("svg")?.classList.contains("lucide-circle-dashed")).toBe(
+        expected === APPLIED_ONLY_LINE,
+      );
+      const shown = [
+        "The input matches what this patch was made for.",
+        "The input matches what this patch produces.",
+        "The patch's source checksum was compared and passed.",
+        APPLIED_ONLY_LINE,
+      ].filter((text) => screen.queryByText(text));
+      expect(shown).toEqual([expected]);
+    },
+  );
+
   it("labels a failed preflight as a failed check instead of not checked yet", () => {
     const failedWithoutVerdict = item(0, { validationState: "invalid" });
     const { container } = renderList({ patches: [failedWithoutVerdict] });

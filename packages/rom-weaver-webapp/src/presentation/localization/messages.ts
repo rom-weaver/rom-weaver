@@ -1115,14 +1115,30 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.patch.name": msg({ id: "ui.patch.name", message: "Name" }),
   "ui.patch.off": msg({ id: "ui.patch.off", message: "Off" }),
   "ui.patch.on": msg({ id: "ui.patch.on", message: "On" }),
+  "ui.patch.preflightApplied": msg({
+    id: "ui.patch.preflightApplied",
+    message: "The patch applies, but it has no checksum to compare.",
+  }),
+  "ui.patch.preflightCompared": msg({
+    id: "ui.patch.preflightCompared",
+    message: "The patch's source checksum was compared and passed.",
+  }),
+  "ui.patch.preflightMatched": msg({
+    id: "ui.patch.preflightMatched",
+    message: "The input matches what this patch was made for.",
+  }),
+  "ui.patch.preflightMatchedReverse": msg({
+    id: "ui.patch.preflightMatchedReverse",
+    message: "The input matches what this patch produces.",
+  }),
   "ui.patch.preflightOutputPending": msg({
     id: "ui.patch.preflightOutputPending",
     message: "The output has not been created yet.",
   }),
   "ui.patch.preflightPassed": msg({ id: "ui.patch.preflightPassed", message: "Ready to apply" }),
-  "ui.patch.preflightVerified": msg({
-    id: "ui.patch.preflightVerified",
-    message: "rom-weaver checked this patch against the file it applies to.",
+  "ui.patch.preflightPassedUncompared": msg({
+    id: "ui.patch.preflightPassedUncompared",
+    message: "Ready to apply, nothing compared",
   }),
   "ui.patch.remove": msg({ id: "ui.patch.remove", message: "Remove" }),
   "ui.patch.replace": msg({ id: "ui.patch.replace", message: "Replace patch" }),

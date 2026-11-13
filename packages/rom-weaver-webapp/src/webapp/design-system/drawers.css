@@ -57,6 +57,18 @@
     color 0.15s,
     transform 0.12s;
 }
+.rw-app .drawer-action .is-apply-only .info-btn,
+.rw-app .drawer-action .is-apply-only .info-btn[aria-expanded="true"] {
+  color: var(--ink-4);
+}
+@media (hover: hover) {
+  .rw-app .drawer-action .is-apply-only .info-btn:hover {
+    color: var(--ink-4);
+  }
+}
+.rw-app .drawer-action .is-apply-only .info-btn:active {
+  color: var(--ink-4);
+}
 .rw-app .drawer-action .info-btn::before {
   position: absolute;
   inset-inline: 4px;

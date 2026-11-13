@@ -4585,6 +4585,11 @@ msgstr "Remove"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightPassedUncompared"
+msgstr "Ready to apply, nothing compared"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.remove"
 msgstr "Remove"
 
@@ -4835,8 +4840,18 @@ msgstr "rom-weaver can't open this kind of file."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.preflightVerified"
-msgstr "rom-weaver checked this patch against the file it applies to."
+msgid "ui.patch.preflightApplied"
+msgstr "The patch applies, but it has no checksum to compare."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightCompared"
+msgstr "The patch's source checksum was compared and passed."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightMatched"
+msgstr "The input matches what this patch was made for."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5642,6 +5657,11 @@ msgstr "The offline copy is ready. While you're online, rom-weaver may still use
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.header.extensionInfo"
 msgstr "The output extension follows the choice: {headeredExtension} with the header, {headerlessExtension} without."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightMatchedReverse"
+msgstr "The input matches what this patch produces."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

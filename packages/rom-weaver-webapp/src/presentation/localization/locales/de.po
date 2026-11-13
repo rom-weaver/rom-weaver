@@ -4585,6 +4585,11 @@ msgstr "Entfernen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightPassedUncompared"
+msgstr "Vorabprüfung bestanden, nichts verglichen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.remove"
 msgstr "Entfernen"
 
@@ -4835,8 +4840,18 @@ msgstr "Der gewählte Quelltyp wird nicht unterstützt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.preflightVerified"
-msgstr "rom-weaver hat diesen Patch gegen die aktuelle Eingabe geprüft."
+msgid "ui.patch.preflightApplied"
+msgstr "Der Patch lässt sich anwenden, hat aber keine Prüfsumme zum Vergleichen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightCompared"
+msgstr "Die Quell-Prüfsumme des Patches wurde verglichen und stimmt."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightMatched"
+msgstr "Die Eingabe entspricht dem, wofür dieser Patch erstellt wurde."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5642,6 +5657,11 @@ msgstr "Der Service Worker ist aktiv und die Offline-Kopie ist bereit. Solange d
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.header.extensionInfo"
 msgstr "Die Ausgabe-Endung folgt der Auswahl: {headeredExtension} mit Header, {headerlessExtension} ohne."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightMatchedReverse"
+msgstr "Die Eingabe entspricht dem, was dieser Patch erzeugt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

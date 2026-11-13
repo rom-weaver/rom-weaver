@@ -28,7 +28,7 @@ A ZIP or 7z that holds either file works as it is.
 1. Open [Apply](https://rom-weaver.com/apply-rom-patches).
 2. Drop the ROM and the `.ips` file into **0x01 Inputs**, or choose **Add files**.
 3. Wait for **Checksumming** to finish.
-4. [Check the ROM yourself](#check-the-rom-yourself). The patch card's **Checks** line shows **IPS** and a check mark for any ROM.
+4. [Check the ROM yourself](#check-the-rom-yourself). The patch card's **Checks** line shows **IPS** and a dashed circle for any ROM. The patch has no checksum to compare.
 5. Choose **APPLY & DOWNLOAD** and save the patched ROM.
 
 The download is named after the ROM and the patch, such as `game [hack].sfc`. Your original ROM stays unchanged. [Choose the output and apply](apply-rom-patches.md#choose-the-output-and-apply) covers the filename, ZIP or 7z output, and other options.
