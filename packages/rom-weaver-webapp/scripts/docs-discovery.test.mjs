@@ -143,3 +143,37 @@ test("lastmods dates each file in one call by its own last change, including a m
     ]),
   );
 });
+
+test("lastmods match files from a symlinked or diff.relative subdirectory", async (context) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "seo-history-paths-"));
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const repo = path.join(directory, "repo");
+  const date = "2026-01-05T00:00:00Z";
+  const git = (args) =>
+    execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], {
+      cwd: repo,
+      env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
+      stdio: "ignore",
+    });
+  fs.mkdirSync(path.join(repo, "docs"), { recursive: true });
+  fs.mkdirSync(path.join(repo, "site"));
+  fs.writeFileSync(path.join(repo, "docs", "guide.md"), "# Guide\n");
+  git(["init"]);
+  git(["add", "."]);
+  git(["commit", "-m", "docs: add guide"]);
+  fs.symlinkSync(repo, path.join(directory, "link"));
+
+  for (const [name, root, relative] of [
+    ["symlinked checkout", path.join(directory, "link"), "false"],
+    ["diff.relative", repo, "true"],
+  ]) {
+    await context.test(name, () => {
+      git(["config", "diff.relative", relative]);
+      const file = path.join(root, "docs", "guide.md");
+      assert.deepEqual(
+        readFileLastmods([file], path.join(root, "site")),
+        new Map([[file, "2026-01-05T00:00:00.000Z"]]),
+      );
+    });
+  }
+});

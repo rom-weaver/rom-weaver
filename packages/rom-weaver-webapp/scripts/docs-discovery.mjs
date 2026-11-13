@@ -79,6 +79,7 @@ export function createDocsMarkdown(source, markdown, siteOrigin = SITE_ORIGIN) {
   return `Canonical: ${SITE_ORIGIN}/${source.slug}\n\n${body}`;
 }
 
+// A longer log makes execFileSync throw, which leaves every date null.
 const GIT_LOG_MAX_BYTES = 64 * 1024 * 1024;
 const LOG_HEADER = /^([0-9a-f]{40,64}) (-?\d+)$/;
 
@@ -87,7 +88,7 @@ const commitDate = (timestamp) => {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
 
-// Paths in `git status -z` output: each entry is "XY path", and a rename or copy adds its source path as the next field.
+// `git status -z` gives each entry as "XY path". A rename or copy adds its source path as the next field.
 const readDirtyPaths = (statusOutput) => {
   const fields = statusOutput.split("\0");
   const dirty = new Set();
@@ -103,9 +104,8 @@ const readDirtyPaths = (statusOutput) => {
 };
 
 /**
- * Map each file to the ISO date of the last commit that changed it, with three git processes for
- * the whole list. A file is null when it has uncommitted changes, no history, or a last commit at
- * a shallow clone's boundary, whose date is not the file's.
+ * Map each file to the ISO date of its last commit, with three git processes for the whole list.
+ * Files with uncommitted changes, no history, or a shallow clone's boundary commit map to null.
  */
 export function readFileLastmods(files, cwd) {
   const git = (args) =>
@@ -116,19 +116,30 @@ export function readFileLastmods(files, cwd) {
       stdio: ["ignore", "pipe", "ignore"],
     });
   try {
-    const [topLevel, shallowGitPath] = git(["rev-parse", "--show-toplevel", "--git-path", "shallow"])
-      .trim()
-      .split("\n");
-    const repoPathOf = (file) => path.relative(topLevel, path.resolve(cwd, file)).split(path.sep).join("/");
+    // The prefix locates `cwd` in the repository without resolving symlinks,
+    // which `--show-toplevel` would, so paths under a symlinked `cwd` still match.
+    const [prefix, shallowGitPath] = git(["rev-parse", "--show-prefix", "--git-path", "shallow"]).split("\n");
+    const repoPathOf = (file) =>
+      path.posix.normalize(prefix + path.relative(cwd, path.resolve(cwd, file)).split(path.sep).join("/"));
+    // `top` resolves each path from the repository root; `literal` turns off glob matching.
     const pathspecs = [...new Set(files.map(repoPathOf))].map((repoPath) => `:(top,literal)${repoPath}`);
     const dirty = readDirtyPaths(git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...pathspecs]));
     const shallowPath = path.resolve(cwd, shallowGitPath);
     const shallowCommits = new Set(fs.existsSync(shallowPath) ? fs.readFileSync(shallowPath, "utf8").split("\n") : []);
     const pending = new Set(files.map(repoPathOf).filter((repoPath) => !dirty.has(repoPath)));
-    // Newest first: each commit's header is followed by the requested paths it changed, so a
-    // path's first appearance is its last change. A merge lists a path only when it differs from
-    // every parent, which is when `git log -1 -- <path>` would report the merge itself.
-    const log = git(["log", "--format=%H %ct", "--name-only", "--diff-merges=combined", "-z", "--", ...pathspecs]);
+    // Commits are listed newest first, so a path's first appearance is its last change. A merge
+    // lists a path only when it differs from every parent, as `git log -1 -- <path>` would.
+    // `--no-relative` keeps names repository-relative under `diff.relative`.
+    const log = git([
+      "log",
+      "--format=%H %ct",
+      "--name-only",
+      "--no-relative",
+      "--diff-merges=combined",
+      "-z",
+      "--",
+      ...pathspecs,
+    ]);
     const lastmodByRepoPath = new Map();
     let date = null;
     for (const field of log.split("\0")) {

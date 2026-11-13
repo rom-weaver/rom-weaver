@@ -14,8 +14,8 @@
  * which Vite clears before every build.
  *
  * --check re-renders into memory and diffs against the selected output,
- * exiting non-zero on drift. Otherwise a run skips rendering when the output's
- * render stamp matches the current inputs, browser, and output bytes.
+ * exiting non-zero on drift. Otherwise a run skips rendering when the render
+ * stamp matches the inputs, browser, and outputs.
  */
 
 import { createHash } from "node:crypto";
@@ -84,8 +84,9 @@ const FAVICON_FALLBACK_SCALE = 1.15;
 const SOCIAL_PREVIEW = { height: 1280, width: 2560 };
 const SOCIAL_PREVIEW_NAMES = ["social-preview", "social-preview-dark"];
 
-// Every file whose contents reach the output. The lockfile pins the encoders and Playwright's
-// browser; a new local import or master MUST be added here, or a stale render can be reused.
+// Every file whose contents reach the output. The lockfile pins the encoders and Playwright.
+// CI renders with system Chrome, so the stamp hashes the browser version too.
+// New local imports and master files MUST be listed here, or renders can go stale.
 const RENDER_INPUT_PATHS = [
   fileURLToPath(import.meta.url),
   path.join(rootDir, "package-lock.json"),
@@ -101,7 +102,7 @@ const RENDER_STAMP_NAME = "render-stamp.json";
 const sha256 = (buffer) => createHash("sha256").update(buffer).digest("hex");
 const digest = (buffer) => sha256(buffer).slice(0, 12);
 
-/** Hash the render inputs, the browser that rasterizes them, and the zlib that deflates the PNGs. */
+/** Hash the render inputs, the rasterizing browser, and the zlib that deflates PNGs. */
 const renderInputsDigest = (browserVersion) => {
   const hash = createHash("sha256").update(`browser ${browserVersion}\nzlib ${process.versions.zlib}\n`);
   for (const inputPath of RENDER_INPUT_PATHS) {
@@ -110,7 +111,7 @@ const renderInputsDigest = (browserVersion) => {
   return hash.digest("hex");
 };
 
-/** True when the stamp was written for these inputs and every file it lists still has the stamped bytes. */
+/** True when the stamp matches these inputs and every listed file has its stamped bytes. */
 const isRenderCurrent = (outputDir, inputsDigest) => {
   let stamp;
   try {

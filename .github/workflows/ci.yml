@@ -1069,7 +1069,7 @@ jobs:
 
       - name: Restore webapp build cache
         id: webapp-build-cache
-        if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+        if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true' && env.RELEASE_PR_WASM != 'true'
         uses: ./.github/actions/webapp-build-cache
 
       - name: Build webapp
@@ -1079,8 +1079,7 @@ jobs:
           ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run build
 
-      # Pull requests restore main's entry but never write one, so a pull
-      # request cannot seed what a later main build reuses.
+      # Only main writes this cache, so a pull request cannot seed later main builds.
       - name: Save webapp build cache
         if: steps.webapp-build.outcome == 'success' && github.ref == 'refs/heads/main' && steps.webapp-build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
@@ -2255,7 +2254,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           # Full history without file contents (no ~97 MB pack), so
-          # `git log -- <doc>` (readDocLastmod) dates every doc and the
+          # `git log` (readFileLastmods) dates every doc and the
           # version string always finds the last tag, on every channel. Tags
           # must still come along: the version string drops its `+hash`
           # suffix only when `git tag --points-at HEAD` sees the release tag.

@@ -224,6 +224,12 @@ const gatesWhole = (condition, prefix) => {
 };
 const action = (name) => load(readFileSync(new URL(`../../.github/actions/${name}/action.yml`, import.meta.url), "utf8"));
 const CACHE_ACTION = /^(actions\/cache(\/restore|\/save)?|Swatinem\/rust-cache)@/u;
+// A local action that caches counts too, unless the step hands it the `off` switch.
+const restoresCache = (entry, off) => {
+  if (CACHE_ACTION.test(entry.uses ?? "")) return true;
+  if (!String(entry.uses ?? "").startsWith("./.github/actions/") || Object.values(entry.with ?? {}).includes(off)) return false;
+  return action(entry.uses.slice("./.github/actions/".length)).runs.steps.some((nested) => CACHE_ACTION.test(nested.uses ?? ""));
+};
 
 test("the release pull request's WASM build, which is signed, restores and saves no cache", () => {
   const job = ci.jobs.wasm;
@@ -244,7 +250,7 @@ test("the release pull request's WASM build, which is signed, restores and saves
   const off = "${{ env.RELEASE_PR_WASM != 'true' }}";
   assert.equal(step(job, "Restore built wasm module").with.restore, off);
   for (const name of ["Set up cached WASM environment", "Set up WASM build environment"]) assert.equal(step(job, name).with["cache-restore"], off, name);
-  for (const candidate of job.steps.filter((entry) => CACHE_ACTION.test(entry.uses ?? "")))
+  for (const candidate of job.steps.filter((entry) => restoresCache(entry, off)))
     assert.match(String(candidate.if), /^[^|]*(^|&& )(env\.RELEASE_PR_WASM != 'true'|github\.ref == 'refs\/heads\/main')( &&[^|]*|)$/u, candidate.name);
 
   const setup = action("setup-build-env");

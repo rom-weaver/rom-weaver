@@ -442,9 +442,11 @@ The action exposes two lists. `cache-path` contains the expensive module files: 
 
 ### `.github/actions/webapp-build-cache`
 
-Restores the work `npm run build` can reuse: the Brotli sidecar cache in `node_modules/.cache/rom-weaver-brotli` and the channel icons in `dist/generated-assets`. The `wasm` job restores it before its webapp build, and every channel's deploy restores it through `deploy-webapp-pages`. Only the `wasm` job on `main` saves an entry, keyed by commit. Pull requests restore the newest `main` entry by prefix and never write one.
+Restores two reusable outputs: the Brotli cache in `node_modules/.cache/rom-weaver-brotli` and the channel icons in `dist/generated-assets`. The `wasm` job restores it before building, except in the signed release pull request run. Every channel deploy restores it through `deploy-webapp-pages`.
 
-A restored entry can skip work but cannot change output. A Brotli entry is used only after it decompresses to the asset's exact bytes. `generate-channel-icons.mjs` writes `render-stamp.json`, which records a digest of its input files, the browser version, and the zlib version, plus a digest of each file it wrote. The script skips rendering only when all of these match. `--check` always renders.
+Only the `wasm` job on `main` saves an entry, keyed by commit. Pull requests restore the newest `main` entry by prefix and never write one.
+
+A restored entry can skip work but cannot change output. A Brotli entry is used only after it decompresses to the asset's exact bytes. `generate-channel-icons.mjs` writes `render-stamp.json`: one digest of its inputs, browser, and zlib, plus each output's digest. The script skips rendering only when all of these match, and `--check` always renders.
 
 ### `.github/actions/build-cli-platform`
 
