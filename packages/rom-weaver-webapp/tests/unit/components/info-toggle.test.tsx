@@ -74,10 +74,7 @@ describe("InfoToggle portaled popover repositioning", () => {
 });
 
 describe("InfoToggle dismissal", () => {
-  it.each([
-    ["Escape", () => fireEvent.keyDown(document.body, { key: "Escape" })],
-    ["a press outside", () => fireEvent.pointerDown(document.body)],
-  ])("closes the open popover on %s", (_name, dismiss) => {
+  it("closes the open popover on Escape and returns focus to its button", () => {
     const { container } = render(
       <InfoToggle ariaLabel="More info" title="info">
         body copy
@@ -87,22 +84,9 @@ describe("InfoToggle dismissal", () => {
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
 
-    dismiss();
+    fireEvent.keyDown(document.body, { key: "Escape" });
 
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
-  });
-
-  it("stays open for a press inside the popover", () => {
-    const { container, getByText } = render(
-      <InfoToggle ariaLabel="More info" title="info">
-        body copy
-      </InfoToggle>,
-    );
-    const trigger = container.querySelector("button.info-btn") as HTMLButtonElement;
-    fireEvent.click(trigger);
-
-    fireEvent.pointerDown(getByText("body copy"));
-
-    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(trigger);
   });
 });

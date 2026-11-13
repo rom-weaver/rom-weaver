@@ -86,17 +86,9 @@ function InfoToggle({
       setOpen(false);
       buttonRef.current?.focus();
     };
-    const dismissOnOutsidePress = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) return;
-      setOpen(false);
-    };
     document.addEventListener("keydown", dismissOnEscape, true);
-    document.addEventListener("pointerdown", dismissOnOutsidePress, true);
     return () => {
       document.removeEventListener("keydown", dismissOnEscape, true);
-      document.removeEventListener("pointerdown", dismissOnOutsidePress, true);
     };
   }, [open]);
 
