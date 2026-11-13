@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getChangelog } from "../version.mjs";
-import { rootDir } from "./paths.mjs";
 
 // The "What's new" changelog, emitted at the dist root so it stays OUT of the SW
 // precache globs (assets/** + named files only). The client fetches it with
@@ -32,17 +31,6 @@ export const serveChangelogAsset = (releaseVersion) => {
   };
 };
 
-export const writeChangelogAsset = (releaseVersion) => {
-  let outDir = "dist";
-  return {
-    apply: "build",
-    closeBundle() {
-      const outputPath = path.join(path.resolve(rootDir, outDir), "changelog.json");
-      fs.writeFileSync(outputPath, JSON.stringify(getChangelog(50, releaseVersion)));
-    },
-    configResolved(config) {
-      outDir = config.build.outDir;
-    },
-    name: "rom-weaver-changelog-asset",
-  };
+export const writeChangelog = (distDir, releaseVersion) => {
+  fs.writeFileSync(path.join(distDir, "changelog.json"), JSON.stringify(getChangelog(50, releaseVersion)));
 };

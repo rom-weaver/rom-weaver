@@ -85,6 +85,7 @@
     "lint:types:generated": "tsc -p tsconfig.generated-types.json",
     "prepare:dist": "node ./scripts/sync-dist.mjs",
     "preview": "node scripts/ensure-preview-build.mjs && node scripts/dev-server.mjs preview",
+    "stamp-channel": "node scripts/stamp-channel.mjs",
     "samples:generate": "node scripts/first-sample-assets.mjs",
     "test": "run-s test:scripts test:browser",
     "test:apply-matrix": "node tests/apply-matrix/run.mjs",
@@ -162,6 +163,7 @@
     "vite-plugin-pwa": "2.0.0",
     "vitest": "5.1.0",
     "wasm-feature-detect": "1.9.0",
+    "workbox-build": "7.4.1",
     "workbox-core": "7.4.1",
     "workbox-precaching": "7.4.1",
     "workbox-routing": "7.4.1"

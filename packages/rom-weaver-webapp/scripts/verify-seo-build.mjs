@@ -1,5 +1,6 @@
 import { countVisibleWords, hasDescriptiveHeading } from "./html-document.mjs";
 import { findCrawlerBrokenLinks } from "./crawler-links.mjs";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -12,7 +13,7 @@ import {
   WEBAPP_URL_SESSION_DOC_PATH,
 } from "../src/webapp/api-catalog.mjs";
 import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
-import { resolveSiteOrigin } from "./vite-config/channel.mjs";
+import { channelAttributes, resolveSiteOrigin } from "./vite-config/channel.mjs";
 import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
 import {
   LEGACY_WORKFLOW_ROUTES,
@@ -817,6 +818,12 @@ assertIncludes(
   "tools alias canonical",
 );
 
+// The bundle reads its channel from <html>, so a page stamped for another channel shows that one's badge and accent.
+const expectedChannelAttributes = channelAttributes(channel, process.env.ROM_WEAVER_CHANNEL_LABEL || channel);
+for (const name of fs.readdirSync(distDir, { recursive: true, encoding: "utf8" })) {
+  if (name.endsWith(".html")) assertIncludes(read(name), expectedChannelAttributes, `${name} channel`);
+}
+
 if (production) {
   if (homeHtml.includes("<html data-accent=")) throw new Error("production must use the default madder accent");
   assertIncludes(robots, "Allow: /", "production robots.txt");
@@ -850,6 +857,16 @@ if (production) {
 // generated manifest is on disk.
 const precacheManifest = read("rom-weaver-service-worker.js");
 assertExcludes(precacheManifest, '"downloadManifest":true', "offline download manifest precache entry");
+// A restamp rewrites every page, so the manifest MUST be injected again after it;
+// a stale revision serves the previous channel's page from the precache.
+for (const [, revision, url] of precacheManifest.matchAll(
+  /"revision":"([0-9a-f]+)","sizeBytes":\d+,"url":"([^"?]+\.html)"/g,
+)) {
+  const actual = createHash("md5")
+    .update(fs.readFileSync(path.join(distDir, url)))
+    .digest("hex");
+  if (actual !== revision) throw new Error(`precache revision for ${url} does not match the file on disk`);
+}
 const identifyPrecacheEntry = (system) =>
   `"revision":"${system.sha256}","url":"assets/identify-${system.file}?sha256=${system.sha256}"`;
 assertIncludes(precacheManifest, '"404.html"', "404 precache entry");

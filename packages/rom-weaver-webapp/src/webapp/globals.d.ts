@@ -6,8 +6,8 @@ declare global {
   const __VERSION_BRANCH__: string;
   const __DIRTY_HASH__: string;
   const __VERSION_IS_TAGGED__: boolean;
-  const __APP_CHANNEL__: string;
-  const __APP_CHANNEL_LABEL__: string;
+  /** The channel prerendering renders for; see build-channel.ts. */
+  var ROM_WEAVER_PRERENDER_CHANNEL: { channel: string; label: string } | undefined;
   /** Hashed file names of the identify manifests under `assets/`; the catalog is null when the data set has none. */
   const __IDENTIFY_MANIFEST_FILES__: { catalog: string | null; index: string };
   const __SERVICE_WORKER_ENABLED__: boolean;

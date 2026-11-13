@@ -1,12 +1,13 @@
 name: Build and deploy the webapp to Cloudflare Pages
 description: >-
-  Build the webapp bundle for one channel and Direct-Upload it to that
+  Stamp the webapp bundle for one channel and Direct-Upload it to that
   channel's Pages project. Two jobs reach this: the normal `deploy` matrix,
-  which takes the WASM module from the `wasm` job's artifact, and the preview
-  fast path, which restores the same module from cache. Both need the identical
-  build-and-publish sequence, and a preview must never be deployable two
-  different ways, so the sequence lives here once. Callers are responsible only
-  for putting the module in packages/rom-weaver-webapp/src/wasm first.
+  which restamps the bundle the `wasm` job built and CI tested when there is
+  one, and the preview fast path, which builds from the cached WASM module
+  before that bundle exists. A preview must never be deployable two different
+  ways, so the sequence lives here once. When building, callers are
+  responsible for putting the module in packages/rom-weaver-webapp/src/wasm
+  first.
 
 inputs:
   channel:
@@ -23,6 +24,11 @@ inputs:
       Pages branch. The project's production branch (main) publishes a live
       deployment; anything else is a throwaway preview.
     required: true
+  bundle:
+    description: >-
+      "artifact" restamps the run's `webapp-dist` and `webapp-stamp-templates`
+      artifacts for this channel; "build" builds the bundle for it.
+    default: build
   generate-attribution:
     description: Regenerate the cheap webapp attribution bundle before building.
     default: "false"
@@ -54,7 +60,7 @@ runs:
         tools: ${{ inputs.generate-attribution == 'true' && 'node rust' || 'node' }}
         cargo-cache: "false"
         webapp-deps: "true"
-        emulatorjs-cache: "true"
+        emulatorjs-cache: ${{ inputs.bundle == 'build' && 'true' || 'false' }}
 
     - name: Download ROM identify data
       if: inputs.identify-data-source == 'artifact'
@@ -65,7 +71,7 @@ runs:
       uses: ./.github/actions/identify-data
 
     - name: Generate webapp attribution
-      if: inputs.generate-attribution == 'true'
+      if: inputs.bundle == 'build' && inputs.generate-attribution == 'true'
       shell: bash
       run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
 
@@ -90,12 +96,14 @@ runs:
         echo "origin=$origin" >> "$GITHUB_OUTPUT"
 
     - name: Restore webapp build cache
+      if: inputs.bundle == 'build'
       uses: ./.github/actions/webapp-build-cache
 
     # The channel stamps the bundle's visible identity - masthead badge, tab
     # title, PWA name and accent tokens - so a nightly or preview tab is never
     # mistaken for production.
     - name: Build webapp
+      if: inputs.bundle == 'build'
       shell: bash
       env:
         ROM_WEAVER_CHANNEL: ${{ inputs.channel }}
@@ -103,6 +111,40 @@ runs:
         ROM_WEAVER_SITE_ORIGIN: ${{ steps.origin.outputs.origin }}
         ROM_WEAVER_SYSTEM_CHROME: "1"
       run: npm --prefix packages/rom-weaver-webapp run build
+
+    - name: Download tested webapp bundle
+      if: inputs.bundle == 'artifact'
+      uses: actions/download-artifact@v8
+      with:
+        name: webapp-dist
+        path: packages/rom-weaver-webapp/dist
+
+    - name: Download channel stamp templates
+      if: inputs.bundle == 'artifact'
+      uses: actions/download-artifact@v8
+      with:
+        name: webapp-stamp-templates
+        path: packages/rom-weaver-webapp/build/channel-stamp
+
+    # Rewrites only the channel's pages, icons, headers and precache manifest;
+    # dist/assets stays the bytes E2E and Lighthouse tested.
+    - name: Stamp webapp for channel
+      if: inputs.bundle == 'artifact'
+      shell: bash
+      env:
+        CHANNEL: ${{ inputs.channel }}
+        LABEL: ${{ inputs.label }}
+        ORIGIN: ${{ steps.origin.outputs.origin }}
+      run: npm --prefix packages/rom-weaver-webapp run stamp-channel -- "$CHANNEL" "$LABEL" "$ORIGIN"
+
+    - name: Verify stamped webapp
+      if: inputs.bundle == 'artifact'
+      shell: bash
+      env:
+        ROM_WEAVER_CHANNEL: ${{ inputs.channel }}
+        ROM_WEAVER_CHANNEL_LABEL: ${{ inputs.label }}
+        ROM_WEAVER_SITE_ORIGIN: ${{ steps.origin.outputs.origin }}
+      run: node packages/rom-weaver-webapp/scripts/verify-seo-build.mjs
 
     # Idempotent, so the first run on a channel bootstraps its own project and
     # no local wrangler auth is ever needed. The deploy wrapper also waits for

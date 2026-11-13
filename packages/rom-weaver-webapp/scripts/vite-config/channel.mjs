@@ -54,6 +54,10 @@ export const resolveSiteOrigin = (value) => {
 
 // Installed PWAs are identified by their manifest name, so without a per-channel
 // one a nightly install is indistinguishable from production on the home screen.
+// Only released channels list the release being served in "What's new".
+export const releaseVersionForChannel = (channel, appVersion) =>
+  channel === "prod" || channel === "beta" || channel === "nightly" ? appVersion : "";
+
 export const createRootManifestSource = (channel, channelLabel) => {
   const source = fs.readFileSync(rootManifestSourcePath, "utf8").replace(/"src\/assets\/app\//g, '"assets/app/');
   if (channel === "prod") return source;
@@ -62,22 +66,38 @@ export const createRootManifestSource = (channel, channelLabel) => {
   manifest.short_name = `${manifest.short_name} ${channelLabel}`;
   return `${JSON.stringify(manifest, null, 2)}\n`;
 };
-// The tab title and the iOS home-screen label are the two places the channel has
-// to show up before the bundle has even booted. Non-production deployments also
-// opt out of indexing here; the deployed response repeats the policy as a header.
+const HTML_ESCAPES = { '"': "&quot;", "&": "&amp;", "<": "&lt;", ">": "&gt;" };
+const escapeHtml = (text) => text.replace(/[&<>"]/g, (character) => HTML_ESCAPES[character]);
+
+/** The `<html>` attributes the bundle reads its channel from (src/webapp/build-channel.ts). */
+export const channelAttributes = (channel, channelLabel) =>
+  `data-channel="${channel}" data-channel-label="${escapeHtml(channelLabel)}"`;
+
+// The bundle reads its channel from the <html> data attributes, and the tab title
+// and iOS home-screen label have to show it before the bundle has even booted.
+// Non-production deployments also opt out of indexing here; the deployed response
+// repeats the policy as a header. The accent MUST stay the first attribute:
+// verify-seo-build matches `<html data-accent=`.
+export const applyChannelIdentity = (html, channel, channelLabel) => {
+  const accent = CHANNEL_DEFAULT_ACCENTS[channel] || CHANNEL_DEFAULT_ACCENTS.dev;
+  const label = escapeHtml(channelLabel);
+  const accentAttribute = accent === "madder" ? "" : `data-accent="${accent}" `;
+  const stampedHtml = html.replace("<html ", `<html ${accentAttribute}${channelAttributes(channel, channelLabel)} `);
+  if (channel === "prod") return stampedHtml;
+  return stampedHtml
+    .replace(`<title>${SITE_NAME}`, `<title>${SITE_NAME} ${label}`)
+    .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
+    .replace(/(<meta name="apple-mobile-web-app-title" content=")([^"]*)(")/, `$1$2 ${label}$3`);
+};
+
+// A build leaves the channel to the stamp step (scripts/vite-config/channel-stamp.mjs),
+// so its index.html stays the same for every channel; the dev server stamps directly.
 export const stampChannelIdentity = (channel, channelLabel, serviceWorkerEnabled) => ({
   name: "rom-weaver-channel-identity",
   transformIndexHtml: {
-    handler(html) {
-      const accent = CHANNEL_DEFAULT_ACCENTS[channel] || CHANNEL_DEFAULT_ACCENTS.dev;
+    handler(html, ctx) {
       const serviceWorkerHtml = html.replace("<html ", `<html data-service-worker-enabled="${serviceWorkerEnabled}" `);
-      const stampedHtml =
-        accent === "madder" ? serviceWorkerHtml : serviceWorkerHtml.replace("<html ", `<html data-accent="${accent}" `);
-      if (channel === "prod") return stampedHtml;
-      return stampedHtml
-        .replace(`<title>${SITE_NAME}`, `<title>${SITE_NAME} ${channelLabel}`)
-        .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
-        .replace(/(<meta name="apple-mobile-web-app-title" content=")([^"]*)(")/, `$1$2 ${channelLabel}$3`);
+      return ctx.server ? applyChannelIdentity(serviceWorkerHtml, channel, channelLabel) : serviceWorkerHtml;
     },
     order: "pre",
   },

@@ -34,7 +34,7 @@ export const PRERENDER_ROOT = (shell) => {
 // bundle executes and React mounts. Rendered from the actual components via
 // react-dom/server (scripts/prerender.mjs), so there is no hand-copied markup
 // to drift. The client hydrates the shell in place.
-const PRERENDER_MOUNT_POINT = '<div id="webapp-root" aria-busy="true"></div>';
+export const PRERENDER_MOUNT_POINT = '<div id="webapp-root" aria-busy="true"></div>';
 
 // Which prerendered variant a dev request gets, mirroring the app router.
 const devPrerenderRoute = (url) => {
@@ -64,7 +64,57 @@ const devPrerenderRoute = (url) => {
   return { docsSlug: "docs", view };
 };
 
-export const prerenderWebappShell = (prerenderedShells) => ({
+/**
+ * Renders every shell a deployment's pages carry, keyed the way writeChannelPages
+ * looks them up, with `channel` shown in the masthead. `define` pins the bundle's
+ * compile-time constants (see withPrerenderServer).
+ */
+export const renderPrerenderedShells = async ({ channel, channelLabel, define }) => {
+  const prerender = await import("../prerender.mjs");
+  const shells = new Map();
+  // build-channel.ts reads this while the SSR server loads it; a browser reads <html data-channel>.
+  globalThis.ROM_WEAVER_PRERENDER_CHANNEL = { channel, label: channelLabel };
+  try {
+    // One SSR server renders every shell; spinning one up per shell would cost
+    // more than the rendering does.
+    await prerender.withPrerenderServer(async (server) => {
+      const render = (view, notFound, docsSlug, workflowEntry) =>
+        prerender.renderLandingShellWithServer(server, view, notFound, docsSlug, workflowEntry);
+      for (const view of [
+        "home",
+        "patcher",
+        "weave",
+        "creator",
+        "checksum",
+        "compress",
+        "identify",
+        "extract",
+        "trim",
+        "ppf-undo",
+        "playlist",
+        "save-editor",
+        "test",
+        "whats-new",
+      ]) {
+        shells.set(view, await render(view));
+      }
+      shells.set("notFound", await render("patcher", true));
+      for (const route of Object.values(WORKFLOW_ENTRY_ROUTES)) {
+        shells.set(route.slug, await render(route.view, false, "docs", route.slug));
+      }
+      for (const route of DOC_ROUTES) {
+        shells.set(route.slug, await render("docs", false, route.slug));
+      }
+    }, define);
+  } finally {
+    delete globalThis.ROM_WEAVER_PRERENDER_CHANNEL;
+  }
+  return shells;
+};
+
+// A build leaves the mount point empty: the channel stamp fills it in with the
+// shell for each page (scripts/vite-config/channel-stamp.mjs).
+export const prerenderWebappShell = (channel, channelLabel) => ({
   name: "rom-weaver-prerender-shell",
   transformIndexHtml: {
     async handler(html, ctx) {
@@ -76,12 +126,12 @@ export const prerenderWebappShell = (prerenderedShells) => ({
         if (ctx.server) return html;
         throw new Error("rom-weaver-prerender-shell: #webapp-root mount point not found in index.html");
       }
-      const prerender = await import("../prerender.mjs");
       // Dev reuses the running dev server's SSR loader (no second Vite server
       // per request) so the shell - and its prerender->mount handoff - matches
-      // production locally. Build renders the creator variant too, which
-      // writeWebappStaticAssets emits as a second static entry point.
+      // production locally.
       if (ctx.server) {
+        const prerender = await import("../prerender.mjs");
+        globalThis.ROM_WEAVER_PRERENDER_CHANNEL = { channel, label: channelLabel };
         const route = devPrerenderRoute(ctx.originalUrl ?? ctx.path);
         const shell = await prerender.renderLandingShellWithServer(
           ctx.server,
@@ -115,37 +165,7 @@ export const prerenderWebappShell = (prerenderedShells) => ({
           })),
         };
       }
-      // One SSR server renders every shell the build needs; spinning one up per
-      // shell would cost more than the rendering does.
-      const homeShell = await prerender.withPrerenderServer(async (server) => {
-        const render = (view, notFound, docsSlug, workflowEntry) =>
-          prerender.renderLandingShellWithServer(server, view, notFound, docsSlug, workflowEntry);
-        prerenderedShells.set("home", await render("home"));
-        prerenderedShells.set("patcher", await render("patcher"));
-        prerenderedShells.set("weave", await render("weave"));
-        prerenderedShells.set("creator", await render("creator"));
-        prerenderedShells.set("checksum", await render("checksum"));
-        prerenderedShells.set("compress", await render("compress"));
-        prerenderedShells.set("identify", await render("identify"));
-        prerenderedShells.set("extract", await render("extract"));
-        prerenderedShells.set("trim", await render("trim"));
-        prerenderedShells.set("ppf-undo", await render("ppf-undo"));
-        prerenderedShells.set("playlist", await render("playlist"));
-        prerenderedShells.set("save-editor", await render("save-editor"));
-        prerenderedShells.set("test", await render("test"));
-        prerenderedShells.set("whats-new", await render("whats-new"));
-        prerenderedShells.set("notFound", await render("patcher", true));
-        for (const route of Object.values(WORKFLOW_ENTRY_ROUTES)) {
-          prerenderedShells.set(route.slug, await render(route.view, false, "docs", route.slug));
-        }
-        for (const route of DOC_ROUTES) {
-          prerenderedShells.set(route.slug, await render("docs", false, route.slug));
-        }
-        return prerenderedShells.get("home");
-      });
-      // index.html is served at the apex, so it carries the landing shell; every
-      // other route page is derived from it by swapping that root out.
-      return html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(homeShell));
+      return html;
     },
     order: "post",
   },

@@ -1090,7 +1090,7 @@ jobs:
       # The channel icon determinism check (`icons:channels:check`) runs in
       # Webapp (static) via `test:static`, off this job's critical path.
 
-      # Browser E2E, Lighthouse, and Docker MUST consume this exact bundle.
+      # Browser E2E, Lighthouse, Docker, and every channel's deploy MUST consume this exact bundle.
       - name: Upload webapp bundle
         id: webapp-bundle
         if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
@@ -1101,6 +1101,16 @@ jobs:
           path: packages/rom-weaver-webapp/dist
           if-no-files-found: error
           include-hidden-files: true
+
+      # Outside webapp-dist, which Docker ships whole; `deploy` restamps the bundle from these.
+      - name: Upload channel stamp templates
+        if: steps.webapp-bundle.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: webapp-stamp-templates
+          overwrite: true
+          path: packages/rom-weaver-webapp/build/channel-stamp
+          if-no-files-found: error
 
       # Structural check of the built chunk graph; see docs/development/ci.md.
       - name: Worker runtime chunk guard
@@ -2241,9 +2251,9 @@ jobs:
       needs.deploy-preview-fast.outputs.deployed != 'true'
     strategy:
       # Separate Pages projects with no shared state, so they upload in
-      # parallel; a release's three channels land in the time of one. The
-      # channel is baked into the bundle, so each needs its own build - there is
-      # no artifact to share between them.
+      # parallel; a release's three channels land in the time of one. Each leg
+      # restamps the tested `webapp-dist` for its channel; only a run whose
+      # `wasm` job built no bundle (tags, changes outside the webapp) builds one.
       fail-fast: false
       matrix:
         target: ${{ fromJSON(needs.changes.outputs.deploy_targets) }}
@@ -2283,7 +2293,7 @@ jobs:
         run: node scripts/ci/deployment-status.mjs
 
       - name: Download WASM artifact
-        if: steps.freshness.outputs.fresh == 'true'
+        if: steps.freshness.outputs.fresh == 'true' && needs.wasm.outputs.bundle != 'success'
         uses: actions/download-artifact@v8
         with:
           name: wasm-prod
@@ -2294,6 +2304,7 @@ jobs:
         id: pages
         uses: ./.github/actions/deploy-webapp-pages
         with:
+          bundle: ${{ needs.wasm.outputs.bundle == 'success' && 'artifact' || 'build' }}
           channel: ${{ matrix.target.channel }}
           label: ${{ matrix.target.label }}
           project: ${{ matrix.target.project }}
