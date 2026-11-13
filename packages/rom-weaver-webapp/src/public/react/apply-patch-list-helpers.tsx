@@ -121,7 +121,23 @@ export const PatchFaultWell = ({
   );
 };
 
-export const PreflightSuccess = () => {
+type PreflightBasis = "matched" | "compared" | "applied";
+
+const PREFLIGHT_BASIS_MESSAGES = {
+  applied: "ui.patch.preflightApplied",
+  compared: "ui.patch.preflightCompared",
+  matched: "ui.patch.preflightMatched",
+} as const;
+
+/** What a passed check rests on: the input matching what the patch was made for, a source checksum
+ * that was compared, or only a clean dry-run apply. */
+export const preflightBasisFor = (item: PatchStackItemState): PreflightBasis => {
+  const matchedKind = item.chainVerdict?.matched.kind;
+  if (matchedKind === "base" || matchedKind === "patch_output") return "matched";
+  return item.checksumCompared ? "compared" : "applied";
+};
+
+export const PreflightSuccess = ({ basis }: { basis: PreflightBasis }) => {
   const localizer = useUiLocalizer();
   return (
     <InfoToggle
@@ -133,7 +149,7 @@ export const PreflightSuccess = () => {
       title={localizer.message("ui.patch.preflightPassed")}
     >
       <strong>{localizer.message("ui.patch.preflightPassed")}</strong>
-      <p>{localizer.message("ui.patch.preflightVerified")}</p>
+      <p>{localizer.message(PREFLIGHT_BASIS_MESSAGES[basis])}</p>
       <p>{localizer.message("ui.patch.preflightOutputPending")}</p>
     </InfoToggle>
   );

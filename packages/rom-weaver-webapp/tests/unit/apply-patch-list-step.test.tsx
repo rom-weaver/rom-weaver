@@ -186,6 +186,35 @@ describe("ApplyPatchListStep", () => {
     expect(container.querySelectorAll('button[title="Ready to apply"]')).toHaveLength(2);
   });
 
+  it.each([
+    [
+      "the input matches",
+      { chainVerdict: { basis: "base", basisSource: "declared", matched: { kind: "base", variant: "raw" } } },
+      "The input matches what this patch was made for.",
+    ],
+    [
+      "a source checksum was compared",
+      { checksumCompared: true },
+      "The patch's source checksum was compared and passed.",
+    ],
+    ["the patch only applied", {}, "The patch applies, but it has no checksum to compare."],
+  ] as [string, Partial<PatchStackItemState>, string][])(
+    "tells in the check mark popover when %s",
+    (_name, overrides, expected) => {
+      const { container, unmount } = renderList({ patches: [item(0, overrides)] });
+
+      fireEvent.click(container.querySelector('button[title="Ready to apply"]') as HTMLButtonElement);
+
+      const shown = [
+        "The input matches what this patch was made for.",
+        "The patch's source checksum was compared and passed.",
+        "The patch applies, but it has no checksum to compare.",
+      ].filter((text) => screen.queryByText(text));
+      expect(shown).toEqual([expected]);
+      unmount();
+    },
+  );
+
   it("labels a failed preflight as a failed check instead of not checked yet", () => {
     const failedWithoutVerdict = item(0, { validationState: "invalid" });
     const { container } = renderList({ patches: [failedWithoutVerdict] });

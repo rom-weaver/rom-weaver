@@ -4835,8 +4835,18 @@ msgstr "rom-weaver can't open this kind of file."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.preflightVerified"
-msgstr "rom-weaver checked this patch against the file it applies to."
+msgid "ui.patch.preflightApplied"
+msgstr "The patch applies, but it has no checksum to compare."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightCompared"
+msgstr "The patch's source checksum was compared and passed."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightMatched"
+msgstr "The input matches what this patch was made for."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

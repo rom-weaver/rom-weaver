@@ -4835,8 +4835,18 @@ msgstr "Der gewählte Quelltyp wird nicht unterstützt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.preflightVerified"
-msgstr "rom-weaver hat diesen Patch gegen die aktuelle Eingabe geprüft."
+msgid "ui.patch.preflightApplied"
+msgstr "Der Patch lässt sich anwenden, hat aber keine Prüfsumme zum Vergleichen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightCompared"
+msgstr "Die Quell-Prüfsumme des Patches wurde verglichen und stimmt."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightMatched"
+msgstr "Die Eingabe entspricht dem, wofür dieser Patch erstellt wurde."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

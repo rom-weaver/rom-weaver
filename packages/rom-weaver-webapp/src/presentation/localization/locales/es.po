@@ -4835,8 +4835,18 @@ msgstr "El tipo de fuente seleccionado no es compatible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.preflightVerified"
-msgstr "rom-weaver verificó este parche con la entrada actual."
+msgid "ui.patch.preflightApplied"
+msgstr "El parche se aplica, pero no tiene una suma de verificación para comparar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightCompared"
+msgstr "Se comparó la suma de verificación de origen del parche y coincide."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightMatched"
+msgstr "La entrada coincide con aquella para la que se creó este parche."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
