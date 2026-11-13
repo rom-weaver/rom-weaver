@@ -46,14 +46,15 @@ const assertNoDevBadge = async (page) => {
 
 // Practice files start checking after their cards render, so a quiet moment
 // before the checks begin is not a settled page; wait for the patch verdicts.
-// A patch without a checksum to compare settles on "Checked" rather than "Verified".
+// A passed patch check shows a "Ready to apply" check mark rather than a chip.
 const waitForStableContent = (page, { practiceFiles = false } = {}) =>
   page.waitForFunction(
     (waitForPatchChecks) => {
       const text = document.body.innerText;
       const patchChecksPending =
         waitForPatchChecks &&
-        (!/\b(Verified|Checked)\b/.test(text) || /Not checked yet|Checking(?:…|\.\.\.)/.test(text));
+        (!document.querySelector('button[title="Ready to apply"]') ||
+          /Not checked yet|Checking(?:…|\.\.\.)/.test(text));
       if (/(Reading|Checksumming)(?:…|\.\.\.)/.test(text) || patchChecksPending) {
         globalThis.__romWeaverScreenshotStableAt = undefined;
         return false;

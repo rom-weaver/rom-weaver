@@ -35,7 +35,7 @@ const IPS_ALT_B = "tests/fixtures/archive_sources/multi-patch/alternate.ips";
 const ROM_CRC32 = "c6fb1252";
 
 const chipText = (index) => document.getElementById(`rom-weaver-patch-chain-chip-${index}`)?.textContent?.trim() ?? "";
-// A passed check shows only the drawer's "Ready to apply" check mark, with no chain chip.
+// A passed check shows the "Ready to apply" mark and no chip.
 const passedWithoutChip = (index) =>
   chipText(index) === "" &&
   !!document
