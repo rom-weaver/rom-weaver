@@ -15,10 +15,8 @@ export const minifyDocumentHead = (html) => {
   return replaceSourceRanges(html, edits);
 };
 
-// The channel stamp derives each route document from the template. PRERENDER_ROOT
-// adds two inline scripts, so the minifier runs on finished files, not in transformIndexHtml.
-// It MUST run before the precache manifest is injected, which hashes these
-// documents from disk.
+// The minifier runs on finished files, since PRERENDER_ROOT adds two inline scripts after
+// transformIndexHtml. It MUST run before the precache manifest hashes these documents from disk.
 export const minifyDocumentInlineScripts = (distDir) => {
   for (const name of fs.readdirSync(distDir, { recursive: true })) {
     const relativePath = String(name);

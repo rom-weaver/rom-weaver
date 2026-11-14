@@ -270,7 +270,7 @@ security ── advisories (warn only, always green)
 - **Deployment planning** runs in `changes` and turns the ref into the list of channels to publish (below). The `deploy` job consumes its outputs without starting a separate planning runner.
 
   Every first-party pull request deploys a preview, so each one builds the WASM module and webapp bundle even when it changes neither. Labels start no run: branch protection reads the newest `ci.yml` run on a commit, so a run started by a label, even one whose jobs all skip, would hide the real run's `CI gate` and block the merge. Dependabot labels every pull request it opens. Fork and Dependabot pull requests do not deploy because they cannot access the Cloudflare secrets. Main pushes with webapp/runtime changes, tags, and explicit manual deploys also deploy.
-- **`deploy`** ships the site, one matrix leg per channel (below). It is `continue-on-error: true`, so a Cloudflare outage cannot turn a green `main` red and suppress release automation.
+- **`deploy`** ships the site, one matrix leg per channel (below). It is `continue-on-error: true`, so a Cloudflare outage cannot turn a green `main` red. It also cannot stop release automation.
 
 ### Identify data builds
 
@@ -372,9 +372,11 @@ The channels form a stability ladder - `prod` above `beta` above `nightly` - and
 
 Legs are independent Pages projects with no shared state, so they upload in parallel and a release's three channels land in the time of one. Failure is per-leg (`fail-fast: false`): a beta upload failing still lets prod ship.
 
-When the `wasm` job built a bundle, each leg deploys it. E2E and Lighthouse tested it before the stamp. `deploy-webapp-pages` downloads `webapp-dist` and `webapp-stamp-templates`. It runs `npm run stamp-channel` for its channel, then checks the result with `verify-seo-build.mjs`. The bundle reads its channel from `<html data-channel data-channel-label>`. A stamp rewrites only channel-dependent files outside `dist/assets`, so the tested assets keep their bytes.
+When the `wasm` job built a bundle, each leg deploys it. E2E and Lighthouse tested it before the stamp. `deploy-webapp-pages` downloads `webapp-dist` and `webapp-stamp-templates`. It runs `npm run stamp-channel` for its channel, then checks the result with `verify-seo-build.mjs`.
 
-A leg builds its own bundle only when the `wasm` job built none: on a tag, or when no webapp input changed. Pull request previews wait for the `wasm` job too.
+The bundle reads its channel from `<html data-channel data-channel-label>`. A stamp rewrites only channel-dependent files outside `dist/assets`, so the tested assets keep their bytes.
+
+A leg builds its own bundle only when the `wasm` job built none. That happens on tags and when no webapp input changed. Pull request previews wait for the `wasm` job too.
 
 A hyphen after the version is what makes a tag a prerelease. The same rule routes the npm dist-tag and the docker `beta` tag - see [prerelease routing](#prerelease-routing).
 

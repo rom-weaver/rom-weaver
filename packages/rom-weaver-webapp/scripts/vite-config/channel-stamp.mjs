@@ -11,7 +11,7 @@ import { renderPrerenderedShells } from "./prerender-shell.mjs";
 import { writeChannelRootStaticAssets } from "./root-static-assets.mjs";
 import { writeChannelPages } from "./static-assets.mjs";
 
-// Outside dist, which is uploaded to Pages and copied into the Docker image as a whole.
+// Outside dist, which Pages uploads and the Docker image copies whole.
 export const CHANNEL_STAMP_TEMPLATES_DIR = path.join(rootDir, "build", "channel-stamp");
 const SERVICE_WORKER_NAME = "rom-weaver-service-worker.js";
 // Each stamp reads these back. The saved service worker still holds its manifest placeholder.

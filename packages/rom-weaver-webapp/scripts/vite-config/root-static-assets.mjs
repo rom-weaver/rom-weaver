@@ -73,7 +73,7 @@ export const writeNeutralRootStaticAssets = (distDir) => {
   }
 };
 
-/** Writes the root files that carry the channel: its icons, the web app manifest and llms.txt. */
+/** Writes the channel's root files: its icons, the web app manifest, and llms.txt. */
 export const writeChannelRootStaticAssets = (distDir, { channel, channelLabel, iconDir, siteOrigin }) => {
   for (const [assetPath, sourcePath] of Object.entries(channelIconSources(channel, iconDir))) {
     fs.copyFileSync(sourcePath, path.join(distDir, assetPath));
