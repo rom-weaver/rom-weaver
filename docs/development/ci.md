@@ -379,7 +379,7 @@ The bundle reads its channel from `<html data-channel data-channel-label>`. A st
 
 The `wasm` job builds no bundle on a tag or when no webapp input changed. The leg then restores the `webapp-bundle-` entry for its commit. If none exists, it restores the newest one, a bundle that passed `gate` on `main`.
 
-A tag's run usually starts before `main`'s run saves that commit's bundle. So on a tag, `wait-webapp-bundle` (`scripts/ci/wait-webapp-bundle.mjs`) holds the deploy legs until the save. It stops early when `main` has no run for the commit, or when that run ends without saving. It gives up after 30 minutes.
+A tag's run usually starts before `main`'s run saves that commit's bundle. So on a tag, `wait-webapp-bundle` (`scripts/ci/wait-webapp-bundle.mjs`) holds the deploy legs until the save. It stops early when `main` has no run for the commit. It also stops when that run ends without saving. It gives up after 30 minutes.
 
 `scripts/ci/reuse-webapp-bundle.mjs` allows a restamp only when no webapp input changed since the bundle's commit. It also checks that each file in the bundle's manifest matches this run's `wasm-prod` file. Otherwise the leg builds its own.
 

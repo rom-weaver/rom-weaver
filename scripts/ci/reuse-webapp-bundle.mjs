@@ -46,7 +46,7 @@ export function bundleRejection({ repoDir, wasmDir, webappDir }) {
   return null;
 }
 
-/** Logs the reuse decision, writes `reuse` to `$GITHUB_OUTPUT` when set, and returns whether the bundle can be restamped. */
+/** Logs the decision, writes `reuse` to `$GITHUB_OUTPUT` when set, and returns whether to restamp. */
 export function main(repoDir = process.cwd(), env = process.env) {
   const webappDir = join(repoDir, "packages", "rom-weaver-webapp");
   const rejection = bundleRejection({ repoDir, wasmDir: join(webappDir, "src", "wasm"), webappDir });

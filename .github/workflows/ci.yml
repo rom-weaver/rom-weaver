@@ -2105,7 +2105,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     needs: [wasm, gate]
-    # Only speeds up later deploys, so a failed save MUST NOT turn a green main red.
+    # Saving only speeds up later deploys. A failed save MUST NOT turn a green main red.
     continue-on-error: true
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.wasm.outputs.bundle == 'success'
     steps:
@@ -2174,8 +2174,8 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: node scripts/ci/nightly-alert.mjs
 
-  # On a tag, waits up to 30 minutes for main to save this commit's tested bundle.
-  # It runs apart from the deploy legs' publish lock and never blocks them.
+  # A tag waits up to 30 minutes for main to save this commit's tested bundle.
+  # It runs outside the deploy legs' publish lock. The legs wait for it, even when it fails.
   wait-webapp-bundle:
     name: Wait for main's tested webapp bundle
     runs-on: ubuntu-24.04
@@ -2209,7 +2209,7 @@ jobs:
   #
   # Direct Upload reuses the CI-tested WASM artifact without Cloudflare build
   # minutes or a second toolchain. Depend on `wasm`, not the whole suite, so deploy
-  # URLs arrive while the rest is still running.
+  # URLs arrive while the rest runs.
   deploy:
     name: Webapp deploy (${{ matrix.target.channel }})
     runs-on: ubuntu-24.04

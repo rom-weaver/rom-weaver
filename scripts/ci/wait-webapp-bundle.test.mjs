@@ -15,7 +15,7 @@ const bundle = { repository: "owner/repo", sha: SHA, key: KEY };
 const mainCache = { key: KEY, ref: "refs/heads/main" };
 
 // Each poll returns the next entry of `polls`: main's caches and its runs for SHA.
-// A poll with no cache reads the caches again after the runs. The save can land in between.
+// A poll with no cache reads the caches again once the runs complete. The save can land in between.
 function fakeApi(polls) {
   let poll = 0;
   let cacheReads = 0;

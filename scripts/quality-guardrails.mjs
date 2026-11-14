@@ -231,7 +231,7 @@ export function inspectChange(path, before, after) {
   return findings;
 }
 
-/** Lists each changed file with the path its old content is at, which differs for a moved file. */
+/** Lists each changed file with its old path, which differs only for a moved file. */
 function changedFiles(git, mergeBase) {
   const fields = git(["diff", "--name-status", "--find-renames", "-z", mergeBase, "--"]).split("\0").filter(Boolean);
   const files = [];
@@ -251,7 +251,7 @@ export function checkDiff(base, cwd = process.cwd()) {
   const mergeBase = git(["merge-base", base, "HEAD"]).trim();
   const files = changedFiles(git, mergeBase);
   const findings = [];
-  // A moved file is compared with its old content, so the move cannot hide removed checks.
+  // Compare a moved file with its old content, so the move cannot hide removed checks.
   for (const { oldPath, path } of files) {
     let before = "";
     try {

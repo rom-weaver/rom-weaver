@@ -2,7 +2,7 @@
 
 // A release tag's CI run usually starts before main saves its tested bundle. This waits for that
 // save, so the tag's deploy legs restamp the bundle instead of building. It stops early when main
-// has no run for the commit, or when that run ends without saving.
+// has no run for the commit. It also stops when that run ends without saving.
 
 import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
