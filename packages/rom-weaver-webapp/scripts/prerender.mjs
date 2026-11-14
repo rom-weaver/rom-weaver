@@ -68,7 +68,7 @@ const renderLandingShell = async (view = "patcher", notFound = false, docsSlug =
 
 const isDirectRun = process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href;
 if (isDirectRun) {
-  // A build sets this channel too; with no environment it is prod, which wears no badge.
+  // A build sets this channel too. With ROM_WEAVER_CHANNEL unset, the channel is prod, which shows no badge.
   const channel = resolveAppChannel(process.env.ROM_WEAVER_CHANNEL);
   globalThis.ROM_WEAVER_PRERENDER_CHANNEL = { channel, label: process.env.ROM_WEAVER_CHANNEL_LABEL || channel };
   renderLandingShell().then(
