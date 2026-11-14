@@ -39,7 +39,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
       const mergeBase = execFileSync("git", ["merge-base", base, "HEAD"], {
         encoding: "utf8",
       }).trim();
-      // -z keeps non-ASCII names unquoted, and --no-renames lists a moved file at its old path too.
+      // `-z` keeps non-ASCII names unquoted. `--no-renames` lists a moved file at its old path too.
       paths = execFileSync("git", ["diff", "--name-only", "--no-renames", "--no-ext-diff", "-z", mergeBase], {
         encoding: "utf8",
         maxBuffer: Infinity,

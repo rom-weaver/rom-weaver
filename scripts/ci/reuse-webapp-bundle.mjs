@@ -2,7 +2,7 @@
 
 // Decides whether a deploy with no bundle may restamp the restored bundle instead of building.
 // It may restamp only if CI's change rule sees no webapp change since then.
-// This run's `wasm-prod` files MUST also match the bundle's manifest.
+// Each file in the bundle's manifest MUST match this run's `wasm-prod` file.
 // Writes `reuse=true|false` to $GITHUB_OUTPUT.
 
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
@@ -46,6 +46,7 @@ export function bundleRejection({ repoDir, wasmDir, webappDir }) {
   return null;
 }
 
+/** Logs the reuse decision, writes `reuse` to `$GITHUB_OUTPUT` when set, and returns whether the bundle can be restamped. */
 export function main(repoDir = process.cwd(), env = process.env) {
   const webappDir = join(repoDir, "packages", "rom-weaver-webapp");
   const rejection = bundleRejection({ repoDir, wasmDir: join(webappDir, "src", "wasm"), webappDir });

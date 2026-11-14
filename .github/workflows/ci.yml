@@ -2174,17 +2174,8 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: node scripts/ci/nightly-alert.mjs
 
-  # Build and publish one channel per matrix leg, to isolated Cloudflare origins
-  # (rom-weaver.com, beta.rom-weaver.com, nightly.rom-weaver.com, and disposable
-  # per-PR previews). `changes` above decides which legs exist.
-  #
-  # Direct Upload reuses the CI-tested WASM artifact without Cloudflare build
-  # minutes or a second toolchain. Depend only on `wasm` so deploy URLs arrive
-  # while the rest of the suite is still running.
-  # A release tag's run usually starts before main's run on the same commit saves its tested
-  # bundle. The deploy legs wait for that save here, outside their publish lock. The wait ends
-  # without a bundle when main has no run for the commit, the run ends without saving, or after
-  # 30 minutes; the legs then build their own.
+  # On a tag, waits up to 30 minutes for main to save this commit's tested bundle.
+  # It runs apart from the deploy legs' publish lock and never blocks them.
   wait-webapp-bundle:
     name: Wait for main's tested webapp bundle
     runs-on: ubuntu-24.04
@@ -2212,6 +2203,13 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/ci/wait-webapp-bundle.mjs
 
+  # Build and publish one channel per matrix leg, to isolated Cloudflare origins
+  # (rom-weaver.com, beta.rom-weaver.com, nightly.rom-weaver.com, and disposable
+  # per-PR previews). `changes` above decides which legs exist.
+  #
+  # Direct Upload reuses the CI-tested WASM artifact without Cloudflare build
+  # minutes or a second toolchain. Depend on `wasm`, not the whole suite, so deploy
+  # URLs arrive while the rest is still running.
   deploy:
     name: Webapp deploy (${{ matrix.target.channel }})
     runs-on: ubuntu-24.04
@@ -2236,11 +2234,8 @@ jobs:
       needs.changes.outputs.deploy_targets != '' &&
       needs.changes.outputs.deploy_targets != '[]'
     strategy:
-      # Separate Pages projects with no shared state, so they upload in
-      # parallel; a release's three channels land in the time of one. Each leg
-      # restamps the tested `webapp-dist` for its channel. When `wasm` built
-      # none, the leg restamps the cached tested bundle if
-      # reuse-webapp-bundle.mjs allows it, or else builds its own.
+      # Separate Pages projects with no shared state, so legs upload in parallel.
+      # Each leg restamps `webapp-dist`, else a cached bundle reuse-webapp-bundle.mjs accepts, else builds.
       fail-fast: false
       matrix:
         target: ${{ fromJSON(needs.changes.outputs.deploy_targets) }}
