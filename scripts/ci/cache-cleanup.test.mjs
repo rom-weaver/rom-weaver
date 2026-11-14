@@ -15,16 +15,6 @@ function cache(overrides = {}) {
   };
 }
 
-function response(body, { headers = {}, status = 200 } = {}) {
-  return {
-    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-    text: async () => JSON.stringify(body),
-  };
-}
-
 test("keeps the newest cache in each compatible restore scope", () => {
   const old = cache({ id: 1, key: "v0-rust-Linux-x64-11223344-12345678", created_at: "2026-09-09T12:00:00Z" });
   const current = cache({ id: 2 });
@@ -216,3 +206,13 @@ test("continues after a closed-pull-request cache deletion fails", async () => {
   assert.equal(result.reclaimed, second.size_in_bytes);
   assert.ok(logs.some((line) => line.includes("could not delete cache 1")));
 });
+
+function response(body, { headers = {}, status = 200 } = {}) {
+  return {
+    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  };
+}
