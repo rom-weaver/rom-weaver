@@ -48,6 +48,15 @@ test("keeps the newest cache in each compatible restore scope", () => {
     id: 11,
     key: "identify-brotli-Linux-epoch1-ddeeff00",
   });
+  const oldWebappBuild = cache({
+    id: 12,
+    created_at: "2026-09-09T12:00:00Z",
+    key: "webapp-build-Linux-0123456789abcdef0123456789abcdef01234567",
+  });
+  const currentWebappBuild = cache({
+    id: 13,
+    key: "webapp-build-Linux-89abcdef0123456789abcdef0123456789abcdef",
+  });
 
   assert.deepEqual(
     supersededCaches([
@@ -62,8 +71,10 @@ test("keeps the newest cache in each compatible restore scope", () => {
       currentCcache,
       oldIdentifyBrotli,
       currentIdentifyBrotli,
+      oldWebappBuild,
+      currentWebappBuild,
     ]),
-    [old, oldCcache, oldIdentifyBrotli],
+    [old, oldCcache, oldIdentifyBrotli, oldWebappBuild],
   );
 });
 

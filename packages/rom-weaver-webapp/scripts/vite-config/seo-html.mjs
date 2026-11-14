@@ -1,7 +1,6 @@
 import fs from "node:fs";
-import path from "node:path";
 import { Lexer } from "marked";
-import { createDocsMarkdown, readDocLastmod } from "../docs-discovery.mjs";
+import { createDocsMarkdown, readFileLastmods } from "../docs-discovery.mjs";
 import { readNoticesLastmod } from "../notices-lastmod.mjs";
 import { docSourcePath } from "../../src/webapp/docs-pages.mjs";
 import { ROOT_BASE_TAG } from "../../src/webapp/pwa/document-base.mjs";
@@ -135,32 +134,37 @@ const HOME_LASTMOD_SOURCES = [
   "src/webapp/components/home-loom.tsx",
   "src/wasm/generated/rom-weaver-format-metadata.ts",
 ];
-const readWorkflowLastmod = (route, root, repo) => {
+const readWorkflowLastmod = (route, sourceLastmods) => {
   const files = route.slug === "" ? [...WORKFLOW_LASTMOD_SOURCES, ...HOME_LASTMOD_SOURCES] : WORKFLOW_LASTMOD_SOURCES;
-  const dates = files.map((file) => readDocLastmod(path.join(root, file), repo));
+  const dates = files.map((file) => sourceLastmods.get(file));
   return dates.includes(null) ? null : dates.sort((a, b) => a.localeCompare(b)).at(-1);
 };
 
 // Notices is generated and untracked, so git cannot date it; readNoticesLastmod finds the release
 // that last changed its text. The sitemap and each page's structured data MUST share these dates.
-export const readDocLastmods = (repo = repoRoot, generatedLastmod = readNoticesLastmod(repo)) =>
-  new Map(
+export const readDocLastmods = (repo = repoRoot, generatedLastmod = readNoticesLastmod(repo)) => {
+  const trackedSources = DOC_SOURCES.filter((source) => !source.file.startsWith("wasm/"));
+  const lastmods = readFileLastmods(trackedSources.map(docSourcePath), repo);
+  return new Map(
     DOC_SOURCES.map((source) => [
       source.slug,
-      source.file.startsWith("wasm/") ? generatedLastmod : readDocLastmod(docSourcePath(source), repo),
+      source.file.startsWith("wasm/") ? generatedLastmod : lastmods.get(docSourcePath(source)),
     ]),
   );
+};
 
 export const createSitemapSource = ({
   root = rootDir,
   repo = repoRoot,
   generatedLastmod,
   docLastmods = readDocLastmods(repo, generatedLastmod),
-} = {}) => `<?xml version="1.0" encoding="UTF-8"?>
+} = {}) => {
+  const workflowSourceLastmods = readFileLastmods([...WORKFLOW_LASTMOD_SOURCES, ...HOME_LASTMOD_SOURCES], root);
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${[...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]
   .map((route) => {
-    const lastmod = readWorkflowLastmod(route, root, repo);
+    const lastmod = readWorkflowLastmod(route, workflowSourceLastmods);
     return `  <url><loc>https://rom-weaver.com/${route.slug}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ""}</url>`;
   })
   .join("\n")}
@@ -170,6 +174,7 @@ ${DOC_SOURCES.map((source) => {
 }).join("\n")}
 </urlset>
 `;
+};
 
 // The Canonical line names production; the links name the serving deployment.
 const WORKFLOW_MARKDOWN_GUIDES = {

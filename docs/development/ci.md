@@ -15,6 +15,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
 - [Shared building blocks](#shared-building-blocks)
   - [`.github/actions/setup-build-env`](#githubactionssetup-build-env)
   - [`.github/actions/wasm-cache`](#githubactionswasm-cache)
+  - [`.github/actions/webapp-build-cache`](#githubactionswebapp-build-cache)
   - [`.github/actions/build-cli-platform`](#githubactionsbuild-cli-platform)
   - [`.github/actions/docker-build-arch` and `docker-manifest`](#githubactionsdocker-build-arch-and-docker-manifest)
   - [`.github/actions/attest-retry`](#githubactionsattest-retry)
@@ -438,6 +439,14 @@ Standalone script tests and the WASM scripts README do not enter the artifact fi
 Deliberately no `restore-keys`: a partial-prefix hit could serve a module built from different source. A miss costs one build; a false hit ships stale WASM. `cache-epoch` invalidates everything by hand.
 
 The action exposes two lists. `cache-path` contains the expensive module files: WASM alone for `dev`, or WASM, Brotli, and the production fingerprint for `prod`. `path` also includes the generated attribution files and `third_party/` directory. Consumers regenerate attribution separately, then upload the complete `path` list.
+
+### `.github/actions/webapp-build-cache`
+
+Restores two reusable outputs: the Brotli cache in `node_modules/.cache/rom-weaver-brotli` and the channel icons in `dist/generated-assets`. The `wasm` job restores it before building, except in the signed release pull request run. Every channel deploy restores it through `deploy-webapp-pages`.
+
+Only the `wasm` job on `main` saves an entry, keyed by commit. Pull requests restore the newest `main` entry by prefix and never write one.
+
+A restored entry can skip work but cannot change output. A Brotli entry is used only after it decompresses to the asset's exact bytes. `generate-channel-icons.mjs` writes `render-stamp.json`: one digest of its inputs, browser, and zlib, plus each output's digest. The script skips rendering only when all of these match, and `--check` always renders.
 
 ### `.github/actions/build-cli-platform`
 

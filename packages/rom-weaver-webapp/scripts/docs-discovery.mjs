@@ -79,21 +79,84 @@ export function createDocsMarkdown(source, markdown, siteOrigin = SITE_ORIGIN) {
   return `Canonical: ${SITE_ORIGIN}/${source.slug}\n\n${body}`;
 }
 
-export function readDocLastmod(file, cwd) {
+// A longer log makes execFileSync throw, which leaves every date null.
+const GIT_LOG_MAX_BYTES = 64 * 1024 * 1024;
+// Matches a "%H %ct" log header: a commit hash, then a Unix time. The time may be negative.
+const LOG_HEADER = /^([0-9a-f]{40,64}) (-?\d+)$/;
+
+const commitDate = (timestamp) => {
+  const date = new Date(Number(timestamp) * 1000);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
+// `git status -z` gives each entry as "XY path". A rename or copy adds its source path as the next field.
+const readDirtyPaths = (statusOutput) => {
+  const fields = statusOutput.split("\0");
+  const dirty = new Set();
+  for (let index = 0; index < fields.length; index += 1) {
+    if (!fields[index]) continue;
+    dirty.add(fields[index].slice(3));
+    if (/[RC]/.test(fields[index].slice(0, 2))) {
+      index += 1;
+      dirty.add(fields[index]);
+    }
+  }
+  return dirty;
+};
+
+/**
+ * Map each file to its last commit's ISO date, using three git processes in total.
+ * Files with uncommitted changes, no history, or a shallow clone's boundary commit map to null.
+ */
+export function readFileLastmods(files, cwd) {
+  const git = (args) =>
+    execFileSync("git", args, {
+      cwd,
+      encoding: "utf8",
+      maxBuffer: GIT_LOG_MAX_BYTES,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
   try {
-    const gitFile = path.isAbsolute(file) ? path.relative(cwd, file) : file;
-    const git = (args) =>
-      execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-    if (git(["status", "--porcelain", "--", gitFile])) return null;
-    const [commit, timestamp = ""] = git(["log", "-1", "--format=%H%n%ct", "--", gitFile]).split("\n");
-    if (!commit) return null;
-    if (!/^-?\d+$/.test(timestamp)) return null;
-    const shallowPath = path.resolve(cwd, git(["rev-parse", "--git-path", "shallow"]));
-    if (fs.existsSync(shallowPath) && fs.readFileSync(shallowPath, "utf8").split("\n").includes(commit)) return null;
-    const date = new Date(Number(timestamp) * 1000);
-    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    // `--show-toplevel` resolves symlinks; the prefix does not. Paths under a symlinked `cwd` still match.
+    const [prefix, shallowGitPath] = git(["rev-parse", "--show-prefix", "--git-path", "shallow"]).split("\n");
+    const repoPathOf = (file) =>
+      path.posix.normalize(prefix + path.relative(cwd, path.resolve(cwd, file)).split(path.sep).join("/"));
+    // `top` resolves each path from the repository root; `literal` turns off glob matching.
+    const pathspecs = [...new Set(files.map(repoPathOf))].map((repoPath) => `:(top,literal)${repoPath}`);
+    const dirty = readDirtyPaths(git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...pathspecs]));
+    const shallowPath = path.resolve(cwd, shallowGitPath);
+    const shallowCommits = new Set(fs.existsSync(shallowPath) ? fs.readFileSync(shallowPath, "utf8").split("\n") : []);
+    const pending = new Set(files.map(repoPathOf).filter((repoPath) => !dirty.has(repoPath)));
+    // Newest commits come first, so a path's first match is its last change.
+    // Merges list a path only when it differs from every parent, like `git log -1`.
+    const log = git([
+      "log",
+      "--format=%H %ct",
+      "--name-only",
+      // Keeps names repository-relative under `diff.relative`.
+      "--no-relative",
+      // Stops `log.showSignature` output from hiding the commit header.
+      "--no-show-signature",
+      "--diff-merges=combined",
+      "-z",
+      "--",
+      ...pathspecs,
+    ]);
+    const lastmodByRepoPath = new Map();
+    let date = null;
+    for (const field of log.split("\0")) {
+      // With -z, git starts the first name after each commit header with a newline.
+      const repoPath = field.startsWith("\n") ? field.slice(1) : field;
+      if (pending.delete(repoPath)) {
+        lastmodByRepoPath.set(repoPath, date);
+        continue;
+      }
+      const header = LOG_HEADER.exec(field);
+      if (header) date = shallowCommits.has(header[1]) ? null : commitDate(header[2]);
+    }
+    return new Map(files.map((file) => [file, lastmodByRepoPath.get(repoPathOf(file)) ?? null]));
   } catch {
-    return null;
+    return new Map(files.map((file) => [file, null]));
   }
 }
 

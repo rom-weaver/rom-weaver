@@ -14,7 +14,8 @@
  * which Vite clears before every build.
  *
  * --check re-renders into memory and diffs against the selected output,
- * exiting non-zero on drift.
+ * exiting non-zero on drift. Otherwise a run skips rendering when the render
+ * stamp matches the inputs, browser, and outputs.
  */
 
 import { createHash } from "node:crypto";
@@ -81,8 +82,55 @@ const FAVICON_FALLBACK_SCALE = 1.15;
 
 // Social cards MUST match the dimensions index.html advertises to crawlers.
 const SOCIAL_PREVIEW = { height: 1280, width: 2560 };
+const SOCIAL_PREVIEW_NAMES = ["social-preview", "social-preview-dark"];
 
-const digest = (buffer) => createHash("sha256").update(buffer).digest("hex").slice(0, 12);
+// Every file whose contents reach the output, plus the unpinned browser version.
+// New local imports and master files MUST be listed here, or renders can go stale.
+const RENDER_INPUT_PATHS = [
+  fileURLToPath(import.meta.url),
+  path.join(rootDir, "package-lock.json"),
+  path.join(rootDir, "scripts", "optimize-png.mjs"),
+  path.join(rootDir, "scripts", "social-preview-encoders.mjs"),
+  path.join(rootDir, "src", "webapp", "accent-palette.mjs"),
+  path.join(rootDir, "src", "webapp", "brand-mark-assets.mjs"),
+  brandMasterPath,
+  ...SOCIAL_PREVIEW_NAMES.map((name) => path.join(designRoot, `${name}.svg`)),
+];
+const RENDER_STAMP_NAME = "render-stamp.json";
+
+const sha256 = (buffer) => createHash("sha256").update(buffer).digest("hex");
+const digest = (buffer) => sha256(buffer).slice(0, 12);
+
+/** Hash the render inputs, the rasterizing browser, and the zlib that deflates PNGs. */
+const renderInputsDigest = (browserVersion) => {
+  const hash = createHash("sha256").update(`browser ${browserVersion}\nzlib ${process.versions.zlib}\n`);
+  for (const inputPath of RENDER_INPUT_PATHS) {
+    hash.update(`${path.relative(rootDir, inputPath)} ${sha256(fs.readFileSync(inputPath))}\n`);
+  }
+  return hash.digest("hex");
+};
+
+/** True when the stamp matches these inputs and every listed file has its stamped bytes. */
+const isRenderCurrent = (outputDir, inputsDigest) => {
+  let stamp;
+  try {
+    stamp = JSON.parse(fs.readFileSync(path.join(outputDir, RENDER_STAMP_NAME), "utf8"));
+  } catch {
+    return false;
+  }
+  if (stamp?.inputs !== inputsDigest || typeof stamp.files !== "object" || stamp.files === null) return false;
+  return Object.entries(stamp.files).every(([relative, fileDigest]) => {
+    const target = path.join(outputDir, relative);
+    return fs.existsSync(target) && sha256(fs.readFileSync(target)) === fileDigest;
+  });
+};
+
+const writeRenderStamp = (outputDir, inputsDigest, files) => {
+  const stampPath = path.join(outputDir, RENDER_STAMP_NAME);
+  const temporaryPath = `${stampPath}.${process.pid}.tmp`;
+  fs.writeFileSync(temporaryPath, `${JSON.stringify({ inputs: inputsDigest, files }, null, 2)}\n`);
+  fs.renameSync(temporaryPath, stampPath);
+};
 
 const readBrandMaster = () => fs.readFileSync(brandMasterPath, "utf8");
 
@@ -195,17 +243,90 @@ const encodeFavicon = (images) => {
   return Buffer.concat([directory, ...images.map(({ png }) => png)]);
 };
 
+const renderChannelIcons = async (page, outputRoot, emit) => {
+  const brandMaster = readBrandMaster();
+  for (const [channel, accentName] of Object.entries(CHANNEL_ACCENTS)) {
+    const accent = ACCENTS.find((entry) => entry.value === accentName);
+    if (!accent) throw new Error(`Unknown channel accent: ${accentName}`);
+    const channelDir = path.join(outputRoot, channel);
+
+    console.log(channel);
+    emit(
+      path.join(channelDir, "logo.svg"),
+      Buffer.from(renderBrandMark(brandMaster, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
+    );
+
+    const favicon = renderFavicon(brandMaster, { accent });
+    emit(path.join(channelDir, "favicon.svg"), Buffer.from(favicon));
+
+    const appIconMark = renderBrandMark(brandMaster, { accent, tone: "light" });
+    for (const target of APP_ICON_TARGETS) {
+      const appIcon = await rasterize(page, appIconWrapper(appIconMark, target.scale), target.size);
+      assertAppIconFit(appIcon, { ...target, label: target.output });
+      emit(path.join(channelDir, target.output), appIcon);
+    }
+
+    const appleTouchIcon = await rasterize(
+      page,
+      appIconWrapper(appIconMark, APPLE_TOUCH_ICON.scale),
+      APPLE_TOUCH_ICON.size,
+    );
+    assertAppIconFit(appleTouchIcon, {
+      label: "apple-touch-icon.png",
+      minInsetRatio: 0.12,
+      size: APPLE_TOUCH_ICON.size,
+    });
+    emit(path.join(channelDir, "apple-touch-icon.png"), appleTouchIcon);
+
+    const fallbackFavicon = appIconWrapper(appIconMark, FAVICON_FALLBACK_SCALE);
+    const images = [];
+    for (const size of [16, 32, 48, 64]) {
+      const png = await rasterize(page, fallbackFavicon, size);
+      assertAppIconFit(png, { label: `favicon ${size}px`, minInsetRatio: 0.04, size });
+      if (size === 32) emit(path.join(channelDir, "favicon-32x32.png"), png);
+      images.push({ size, png });
+    }
+    emit(path.join(channelDir, "favicon.ico"), encodeFavicon(images));
+  }
+};
+
+const renderSocialPreviews = async (page, outputDir, emit) => {
+  for (const name of SOCIAL_PREVIEW_NAMES) {
+    console.log(name);
+    const socialMaster = fs.readFileSync(path.join(designRoot, `${name}.svg`), "utf8");
+    const social = await renderSocialPreview(page, socialMaster);
+    for (const [format, buffer] of Object.entries(social)) {
+      emit(path.join(outputDir, `${name}.${format}`), buffer);
+    }
+  }
+};
+
+const renderLogoVariants = (variantRoot, emit) => {
+  const logo = readBrandMaster();
+  for (const accent of ACCENTS) {
+    emit(
+      path.join(variantRoot, `${accent.value}.svg`),
+      Buffer.from(renderBrandMark(logo, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
+    );
+    for (const tone of BRAND_MARK_TONES) {
+      emit(
+        path.join(variantRoot, tone, `${accent.value}.svg`),
+        Buffer.from(renderBrandMark(logo, { accent, tone, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
+      );
+    }
+  }
+};
+
 const main = async () => {
   const { checkOnly, outputDir } = parseOptions(process.argv.slice(2));
-  const outputRoot = path.join(outputDir, "channel-icons");
-  const variantRoot = path.join(outputDir, "logo-variants");
   const launchOptions = process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
   const browser = await chromium.launch(launchOptions);
-  const page = await browser.newPage({ deviceScaleFactor: 1 });
+  const renderedFiles = {};
   const drift = [];
   let written = 0;
 
   const emit = (target, buffer) => {
+    renderedFiles[path.relative(outputDir, target)] = sha256(buffer);
     const relative = path.relative(repoRoot, target);
     const existing = fs.existsSync(target) ? fs.readFileSync(target) : null;
     if (existing && existing.equals(buffer)) return;
@@ -219,74 +340,17 @@ const main = async () => {
     console.log(`  wrote ${relative}`);
   };
 
+  let inputsDigest;
   try {
-    const brandMaster = readBrandMaster();
-    for (const [channel, accentName] of Object.entries(CHANNEL_ACCENTS)) {
-      const accent = ACCENTS.find((entry) => entry.value === accentName);
-      if (!accent) throw new Error(`Unknown channel accent: ${accentName}`);
-      const channelDir = path.join(outputRoot, channel);
-
-      console.log(channel);
-      emit(
-        path.join(channelDir, "logo.svg"),
-        Buffer.from(renderBrandMark(brandMaster, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
-      );
-
-      const favicon = renderFavicon(brandMaster, { accent });
-      emit(path.join(channelDir, "favicon.svg"), Buffer.from(favicon));
-
-      const appIconMark = renderBrandMark(brandMaster, { accent, tone: "light" });
-      for (const target of APP_ICON_TARGETS) {
-        const appIcon = await rasterize(page, appIconWrapper(appIconMark, target.scale), target.size);
-        assertAppIconFit(appIcon, { ...target, label: target.output });
-        emit(path.join(channelDir, target.output), appIcon);
-      }
-
-      const appleTouchIcon = await rasterize(
-        page,
-        appIconWrapper(appIconMark, APPLE_TOUCH_ICON.scale),
-        APPLE_TOUCH_ICON.size,
-      );
-      assertAppIconFit(appleTouchIcon, {
-        label: "apple-touch-icon.png",
-        minInsetRatio: 0.12,
-        size: APPLE_TOUCH_ICON.size,
-      });
-      emit(path.join(channelDir, "apple-touch-icon.png"), appleTouchIcon);
-
-      const fallbackFavicon = appIconWrapper(appIconMark, FAVICON_FALLBACK_SCALE);
-      const images = [];
-      for (const size of [16, 32, 48, 64]) {
-        const png = await rasterize(page, fallbackFavicon, size);
-        assertAppIconFit(png, { label: `favicon ${size}px`, minInsetRatio: 0.04, size });
-        if (size === 32) emit(path.join(channelDir, "favicon-32x32.png"), png);
-        images.push({ size, png });
-      }
-      emit(path.join(channelDir, "favicon.ico"), encodeFavicon(images));
+    inputsDigest = renderInputsDigest(browser.version());
+    if (!checkOnly && isRenderCurrent(outputDir, inputsDigest)) {
+      console.log("App icons match their render stamp; skipping the render.");
+      return;
     }
-
-    for (const name of ["social-preview", "social-preview-dark"]) {
-      console.log(name);
-      const socialMaster = fs.readFileSync(path.join(designRoot, `${name}.svg`), "utf8");
-      const social = await renderSocialPreview(page, socialMaster);
-      for (const [format, buffer] of Object.entries(social)) {
-        emit(path.join(outputDir, `${name}.${format}`), buffer);
-      }
-    }
-
-    const logo = readBrandMaster();
-    for (const accent of ACCENTS) {
-      emit(
-        path.join(variantRoot, `${accent.value}.svg`),
-        Buffer.from(renderBrandMark(logo, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
-      );
-      for (const tone of BRAND_MARK_TONES) {
-        emit(
-          path.join(variantRoot, tone, `${accent.value}.svg`),
-          Buffer.from(renderBrandMark(logo, { accent, tone, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
-        );
-      }
-    }
+    const page = await browser.newPage({ deviceScaleFactor: 1 });
+    await renderChannelIcons(page, path.join(outputDir, "channel-icons"), emit);
+    await renderSocialPreviews(page, outputDir, emit);
+    renderLogoVariants(path.join(outputDir, "logo-variants"), emit);
   } finally {
     await browser.close();
   }
@@ -296,6 +360,7 @@ const main = async () => {
     for (const entry of drift) console.error(`  ${entry}`);
     process.exit(1);
   }
+  if (!checkOnly) writeRenderStamp(outputDir, inputsDigest, renderedFiles);
   console.log(checkOnly ? "\nApp icons are up to date." : `\nDone (${written} file(s) changed).`);
 };
 

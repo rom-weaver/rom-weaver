@@ -1067,11 +1067,25 @@ jobs:
           # attribution files that are intentionally outside the cache.
           path: ${{ steps.wasm-cache.outputs.path }}
 
+      - name: Restore webapp build cache
+        id: webapp-build-cache
+        if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true' && env.RELEASE_PR_WASM != 'true'
+        uses: ./.github/actions/webapp-build-cache
+
       - name: Build webapp
+        id: webapp-build
         if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
         env:
           ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run build
+
+      # Only main writes this cache, so a pull request cannot seed later main builds.
+      - name: Save webapp build cache
+        if: steps.webapp-build.outcome == 'success' && github.ref == 'refs/heads/main' && steps.webapp-build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.webapp-build-cache.outputs.path }}
+          key: ${{ steps.webapp-build-cache.outputs.key }}
 
       # The channel icon determinism check (`icons:channels:check`) runs in
       # Webapp (static) via `test:static`, off this job's critical path.
@@ -2239,11 +2253,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Full history without file contents (no ~97 MB pack), so
-          # `git log -- <doc>` (readDocLastmod) dates every doc and the
-          # version string always finds the last tag, on every channel. Tags
-          # must still come along: the version string drops its `+hash`
-          # suffix only when `git tag --points-at HEAD` sees the release tag.
+          # Full history without file contents lets `git log` date docs and find the last tag.
+          # Keep tags: the version drops its `+hash` suffix only at the release tag.
           fetch-depth: 0
           filter: blob:none
           fetch-tags: true
