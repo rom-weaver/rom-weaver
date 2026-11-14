@@ -231,16 +231,10 @@ runs:
       shell: bash
       run: mise exec -- rustup target add ${{ inputs.rust-targets }}
 
-    # rust-cache hashes dependencies and Cargo.lock, not `[profile]` tables. A profile
-    # edit such as opt-level then keeps matching the old cache exactly: every run
-    # recompiles the changed crates and the stale entry is never saved again.
     - name: Hash Cargo profiles
       id: cargo-profile
       if: inputs.cache-restore == 'true' && (inputs.cargo-cache == 'true')
-      shell: bash
-      run: |
-        hash=$({ [ ! -f Cargo.toml ] || awk '/^\[/ { p = ($0 ~ /^\[profile/) } p' Cargo.toml; } | sed '/^[[:space:]]*#/d;/^[[:space:]]*$/d' | sha1sum | cut -c1-8)
-        echo "hash=$hash" >> "$GITHUB_OUTPUT"
+      uses: ./.github/actions/cargo-profile-hash
 
     # Cargo artifacts avoid dependency builds; sccache can also reuse unchanged workspace crates.
     - name: Cache cargo artifacts

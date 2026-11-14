@@ -1645,9 +1645,14 @@ jobs:
 
       # Same restore-everywhere/save-on-main policy as the Linux jobs; the key
       # includes the OS, so this leg never collides with the others.
+      - name: Hash Cargo profiles
+        id: cargo-profile
+        uses: ./.github/actions/cargo-profile-hash
+
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
+          key: profile-${{ steps.cargo-profile.outputs.hash }}
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
