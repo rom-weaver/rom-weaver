@@ -96,8 +96,8 @@ export const applyChannelIdentity = (html, { buildInfo, channel, channelLabel })
     );
 };
 
-// A build leaves the channel and build info to the stamp step. That keeps index.html
-// the same for every deployment. The dev server stamps directly.
+// The stamp step sets the channel and build info, so index.html matches for every
+// deployment. The dev server stamps directly.
 export const stampChannelIdentity = ({ buildInfo, channel, channelLabel, serviceWorkerEnabled }) => ({
   name: "rom-weaver-channel-identity",
   transformIndexHtml: {

@@ -12,10 +12,9 @@ type BuildInfo = {
 const isBuildInfo = (value: unknown): value is BuildInfo =>
   typeof value === "object" && value !== null && typeof (value as Partial<BuildInfo>).version === "string";
 
-// Pages carry the stamp as <html data-build-info>. The service worker has no
-// document. So the stamp writes the values over the global in its script text.
-// Prerendering sets the same global before it renders. An unstamped bundle (a
-// dev service worker, the standalone prerender script) leaves every value empty.
+// Pages read <html data-build-info>; the service worker has no document, so the stamp
+// writes the values into its script. Prerendering sets the same global, and an
+// unstamped bundle has no build info.
 const readStampedBuildInfo = (): BuildInfo | undefined => {
   const documentJson = typeof document === "undefined" ? undefined : document.documentElement.dataset.buildInfo;
   const stamped: unknown = globalThis.__ROM_WEAVER_BUILD_INFO__ ?? (documentJson && JSON.parse(documentJson));

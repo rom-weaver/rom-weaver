@@ -2203,7 +2203,8 @@ jobs:
       # Separate Pages projects with no shared state, so they upload in
       # parallel; a release's three channels land in the time of one. Each leg
       # restamps the tested `webapp-dist` for its channel. When `wasm` built
-      # none, the leg restamps the cached tested bundle, or builds its own.
+      # none, the leg restamps the cached tested bundle if
+      # reuse-webapp-bundle.mjs allows it, or else builds its own.
       fail-fast: false
       matrix:
         target: ${{ fromJSON(needs.changes.outputs.deploy_targets) }}
