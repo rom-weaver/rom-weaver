@@ -10,9 +10,10 @@ import { buildManifest } from "./wasm-manifest.mjs";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "reuse-webapp-bundle.mjs");
 const WEBAPP = "packages/rom-weaver-webapp";
-// More changed-path bytes than execFileSync's default 1 MiB maxBuffer holds.
+// More changed-path bytes than execFileSync's default 1 MiB maxBuffer holds, in paths under
+// macOS's 1,024-byte path limit.
 const OVER_ONE_MIB_OF_PATHS = Object.fromEntries(
-  Array.from({ length: 300 }, (_, index) => [`notes/${"d".repeat(250).concat("/").repeat(14)}${index}.md`, "\n"]),
+  Array.from({ length: 1500 }, (_, index) => [`notes/${"d".repeat(250).concat("/").repeat(3)}${index}.md`, "\n"]),
 );
 
 // Git hooks export GIT_DIR and similar variables. Inherited, they point git at the hook's repository.
