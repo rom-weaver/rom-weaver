@@ -78,7 +78,7 @@ runs:
     # the cargo/rustup moves are conditional on it existing. RUNNER_TEMP is
     # wherever the runner put it and is always the better temp dir, so TMP/TEMP
     # move either way. A one-time cache re-population is expected the first time
-    # this lands; the shared-key scheme is unchanged.
+    # this lands.
     - name: Move Windows hot paths off the OS disk
       if: runner.os == 'Windows'
       shell: bash
@@ -109,11 +109,16 @@ runs:
     # release restores what CI already built instead of spending a second set of
     # cache entries on the same artifacts. Keyed per entry - the nine platforms
     # share nothing.
+    - name: Hash Cargo profiles
+      id: cargo-profile
+      if: inputs.cache-restore == 'true'
+      uses: ./.github/actions/cargo-profile-hash
+
     - name: Cache cargo artifacts
       if: inputs.cache-restore == 'true'
       uses: Swatinem/rust-cache@v2
       with:
-        shared-key: cli-platform-${{ inputs.package }}
+        shared-key: cli-platform-${{ inputs.package }}-${{ steps.cargo-profile.outputs.hash }}
         cache-on-failure: true
         save-if: ${{ inputs.cache-save == 'true' }}
 

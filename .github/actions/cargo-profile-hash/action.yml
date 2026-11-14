@@ -1,0 +1,21 @@
+name: Hash Cargo profiles
+description: >-
+  Hash the root Cargo.toml `[profile]` tables for a Swatinem/rust-cache key.
+  rust-cache does not hash them (https://github.com/Swatinem/rust-cache),
+  so a profile edit would reuse a stale cache entry. Needs a checkout.
+
+outputs:
+  hash:
+    description: Checksum of the profile tables, without comments and blank lines.
+    value: ${{ steps.hash.outputs.hash }}
+
+runs:
+  using: composite
+  steps:
+    - name: Hash Cargo profiles
+      id: hash
+      shell: bash
+      # cksum is available on every runner OS. sha1sum is not guaranteed on macOS.
+      run: |
+        hash=$(awk '/^[[:space:]]*\[/ { in_profile = ($0 ~ /^[[:space:]]*\[[[:space:]]*profile[[:space:]]*(\.|\])/) } in_profile' Cargo.toml | sed 's/[[:space:]]*#.*//;s/[[:space:]]*$//;/^$/d' | cksum | cut -d ' ' -f 1)
+        echo "hash=$hash" >> "$GITHUB_OUTPUT"

@@ -478,10 +478,14 @@ jobs:
       - name: Prepare ROM identify data
         uses: ./.github/actions/identify-data
 
+      - name: Hash Cargo profiles
+        id: cargo-profile
+        uses: ./.github/actions/cargo-profile-hash
+
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: cargo-publish
+          shared-key: cargo-publish-${{ steps.cargo-profile.outputs.hash }}
           cache-on-failure: true
 
       # Same version as the .config/mise.toml pin; this job cannot use mise.

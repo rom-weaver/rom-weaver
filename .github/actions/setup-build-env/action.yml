@@ -231,11 +231,17 @@ runs:
       shell: bash
       run: mise exec -- rustup target add ${{ inputs.rust-targets }}
 
+    - name: Hash Cargo profiles
+      id: cargo-profile
+      if: inputs.cache-restore == 'true' && (inputs.cargo-cache == 'true')
+      uses: ./.github/actions/cargo-profile-hash
+
     # Cargo artifacts avoid dependency builds; sccache can also reuse unchanged workspace crates.
     - name: Cache cargo artifacts
       if: inputs.cache-restore == 'true' && (inputs.cargo-cache == 'true')
       uses: Swatinem/rust-cache@v2
       with:
+        key: profile-${{ steps.cargo-profile.outputs.hash }}
         # Save failed jobs because the key covers the toolchain and Cargo.lock.
         cache-on-failure: true
         cache-targets: ${{ inputs.cargo-cache-targets }}

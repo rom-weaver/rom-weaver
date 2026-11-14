@@ -51,10 +51,14 @@ jobs:
           APT_PACKAGES: clang cmake libclang-dev ninja-build pkg-config
         run: node scripts/ci/install-system-dependencies.mjs
 
+      - name: Hash Cargo profiles
+        id: cargo-profile
+        uses: ./.github/actions/cargo-profile-hash
+
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: cargo-publish
+          shared-key: cargo-publish-${{ steps.cargo-profile.outputs.hash }}
           cache-on-failure: true
 
       # release.yml runs the semver gate before publication makes the release immutable.
