@@ -2105,9 +2105,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     needs: [wasm, gate]
-    # Saving only speeds up later deploys. A failed save MUST NOT turn a green main red.
+    # Saving only speeds up later deploys. A failed save MUST NOT fail the main run.
     continue-on-error: true
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.wasm.outputs.bundle == 'success'
+    # `!cancelled()` keeps the jobs that main pushes skip from skipping this one.
+    if: >-
+      !cancelled() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.gate.result == 'success' &&
+      needs.wasm.result == 'success' &&
+      needs.wasm.outputs.bundle == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -2174,8 +2181,8 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: node scripts/ci/nightly-alert.mjs
 
-  # A tag waits up to 30 minutes for main to save this commit's tested bundle.
-  # It runs outside the deploy legs' publish lock. The legs wait for it, even when it fails.
+  # Waits up to 30 minutes for main to save this commit's tested bundle.
+  # Runs outside the deploy legs' publish lock.
   wait-webapp-bundle:
     name: Wait for main's tested webapp bundle
     runs-on: ubuntu-24.04

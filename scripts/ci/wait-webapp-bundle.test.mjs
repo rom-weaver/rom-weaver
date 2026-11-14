@@ -15,7 +15,7 @@ const bundle = { repository: "owner/repo", sha: SHA, key: KEY };
 const mainCache = { key: KEY, ref: "refs/heads/main" };
 
 // Each poll returns the next entry of `polls`: main's caches and its runs for SHA.
-// A poll with no cache reads the caches again once the runs complete. The save can land in between.
+// Once the runs complete, a poll with no cache reads the caches again, in case the save landed meanwhile.
 function fakeApi(polls) {
   let poll = 0;
   let cacheReads = 0;
@@ -132,9 +132,10 @@ test("an API failure prints a one-line warning with its cause and fails the step
   }
 });
 
+const { load } = createRequire(import.meta.url)("js-yaml");
+const readYaml = (path) => load(readFileSync(new URL(path, import.meta.url), "utf8"));
+
 test("tag deploys wait for the key main saves and the deploy restores", () => {
-  const { load } = createRequire(import.meta.url)("js-yaml");
-  const readYaml = (path) => load(readFileSync(new URL(path, import.meta.url), "utf8"));
   const { jobs } = readYaml("../../.github/workflows/ci.yml");
   const action = readYaml("../../.github/actions/deploy-webapp-pages/action.yml");
   const stepWith = (steps, uses) => steps.find((step) => step.uses?.startsWith(uses));
@@ -142,6 +143,14 @@ test("tag deploys wait for the key main saves and the deploy restores", () => {
   assert.equal(jobs["wait-webapp-bundle"].steps.find((step) => step.env?.BUNDLE_KEY).env.BUNDLE_KEY, savedKey);
   assert.equal(stepWith(action.runs.steps, "actions/cache/restore@").with.key, savedKey);
   assert.ok(jobs.deploy.needs.includes("wait-webapp-bundle"));
+});
+
+test("the save runs on main pushes, which skip jobs upstream of the gate", () => {
+  const save = readYaml("../../.github/workflows/ci.yml").jobs["save-webapp-bundle"];
+  assert.deepEqual(save.needs, ["wasm", "gate"]);
+  // Without `!cancelled()`, a skipped ancestor skips the save, even past a gate that ran.
+  assert.match(save.if, /^!cancelled\(\) &&/);
+  for (const need of save.needs) assert.match(save.if, new RegExp(`needs\\.${need}\\.result == 'success'`));
 });
 
 /** Runs the CLI against `apiUrl` and returns its failure, which carries `code`, `stdout` and `stderr`. */
