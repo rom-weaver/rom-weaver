@@ -1,7 +1,10 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   addedLines,
   diffCoverage,
@@ -128,4 +131,31 @@ test("V8 negative branch counts remain unknown, never covered", () => {
   assert.deepEqual(result.branches.covered, []);
   assert.deepEqual(result.branches.uncovered, []);
   assert.throws(() => parseBranches("SF:src/decision.ts\nBRDA:7,0,0,invalid\n"), /Invalid branch/);
+});
+test("the CLI measures a changed file with a non-ASCII name", () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "quality-diff-coverage-"));
+  try {
+    // Hooks export GIT_DIR, which would point git at this repository.
+    const env = {
+      ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
+      GIT_AUTHOR_NAME: "ci",
+      GIT_AUTHOR_EMAIL: "ci@example.com",
+      GIT_COMMITTER_NAME: "ci",
+      GIT_COMMITTER_EMAIL: "ci@example.com",
+    };
+    const git = (...args) => execFileSync("git", ["-c", "commit.gpgsign=false", ...args], { cwd: repo, env });
+    fs.mkdirSync(path.join(repo, "crates"));
+    fs.writeFileSync(path.join(repo, "crates/näme.rs"), "fn a() {}\n");
+    git("init", "-q");
+    git("add", "-A");
+    git("commit", "-q", "-m", "base");
+    fs.appendFileSync(path.join(repo, "crates/näme.rs"), "fn b() {}\n");
+    fs.writeFileSync(path.join(repo, "lcov.info"), "SF:crates/näme.rs\nDA:2,3\nend_of_record\n");
+    const script = fileURLToPath(new URL("./quality-diff-coverage.mjs", import.meta.url));
+    execFileSync(process.execPath, [script, "HEAD", "lcov.info"], { cwd: repo, env, stdio: "pipe" });
+    const { covered } = JSON.parse(fs.readFileSync(path.join(repo, "dist/coverage/changed-lines.json"), "utf8"));
+    assert.deepEqual(covered, ["crates/näme.rs:2"]);
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
 });
