@@ -2,24 +2,20 @@
 
 // Decides whether a deploy with no bundle may restamp the restored bundle instead of building.
 // It may restamp only if CI's change rule sees no webapp change since then.
-// This run's `wasm-prod` files also have to match the bundle's manifest.
+// This run's `wasm-prod` files MUST also match the bundle's manifest.
 // Writes `reuse=true|false` to $GITHUB_OUTPUT.
 
-import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-import { classifyChanges } from "./classify-changes.mjs";
+import { changedPathsBetween, classifyChanges } from "./classify-changes.mjs";
 import { checkManifestEntries, parseManifest } from "./wasm-manifest.mjs";
 
 const BUNDLE_COMMIT_FILE = "build/bundle-commit";
 const BUNDLE_WASM_MANIFEST_FILE = "build/bundle-wasm.sha256";
 const COMMIT_SHA = /^[0-9a-f]{40}$/;
-
-const changedPathsSince = (repoDir, commit) =>
-  execFileSync("git", ["diff", "--name-only", "--no-renames", "-z", commit, "HEAD"], { cwd: repoDir, encoding: "utf8" }).split("\0");
 
 /** Returns why the bundle restored into `webappDir` cannot be reused, or null when it can. */
 export function bundleRejection({ repoDir, wasmDir, webappDir }) {
@@ -30,7 +26,7 @@ export function bundleRejection({ repoDir, wasmDir, webappDir }) {
 
   let changedPaths;
   try {
-    changedPaths = changedPathsSince(repoDir, commit);
+    changedPaths = changedPathsBetween(commit, "HEAD", repoDir);
   } catch (error) {
     return `cannot diff ${commit} against HEAD: ${error.message}`;
   }

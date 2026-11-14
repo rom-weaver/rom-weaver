@@ -10,6 +10,10 @@ import { buildManifest } from "./wasm-manifest.mjs";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "reuse-webapp-bundle.mjs");
 const WEBAPP = "packages/rom-weaver-webapp";
+// More changed-path bytes than execFileSync's default 1 MiB maxBuffer holds.
+const OVER_ONE_MIB_OF_PATHS = Object.fromEntries(
+  Array.from({ length: 300 }, (_, index) => [`notes/${"d".repeat(250).concat("/").repeat(14)}${index}.md`, "\n"]),
+);
 
 // Git hooks export GIT_DIR and similar variables. Inherited, they point git at the hook's repository.
 const isolatedEnv = (extra = {}) => ({
@@ -71,6 +75,7 @@ test("reuses the restored bundle only when nothing it was built from changed", a
   for (const { name, options, reuse, reason } of [
     { name: "same commit", options: { bundleCommit: null }, reuse: true },
     { name: "only non-webapp files changed", options: { bundleCommit: null, laterChanges: { "README.md": "edited\n" } }, reuse: true },
+    { name: "more than 1 MiB of non-webapp paths changed", options: { bundleCommit: null, laterChanges: OVER_ONE_MIB_OF_PATHS }, reuse: true },
     { name: "no bundle restored", options: {}, reuse: false, reason: /no tested bundle was restored/ },
     { name: "unreadable bundle commit", options: { bundleCommit: "main" }, reuse: false, reason: /holds no commit/ },
     { name: "bundle commit not in history", options: { bundleCommit: "f".repeat(40) }, reuse: false, reason: /cannot diff/ },
