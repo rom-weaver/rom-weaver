@@ -2245,11 +2245,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Full history without file contents (no ~97 MB pack) lets `git log`
-          # date every doc. It also lets the version string always find the
-          # last tag, on every channel. Tags must still come along: the version
-          # string drops its `+hash` suffix only when `git tag --points-at HEAD`
-          # sees the release tag.
+          # Full history without file contents lets `git log` date docs and find the last tag.
+          # Keep tags: the version drops its `+hash` suffix only at the release tag.
           fetch-depth: 0
           filter: blob:none
           fetch-tags: true

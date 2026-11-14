@@ -81,6 +81,7 @@ export function createDocsMarkdown(source, markdown, siteOrigin = SITE_ORIGIN) {
 
 // A longer log makes execFileSync throw, which leaves every date null.
 const GIT_LOG_MAX_BYTES = 64 * 1024 * 1024;
+// Matches a "%H %ct" log header: a commit hash, then a Unix time. The time may be negative.
 const LOG_HEADER = /^([0-9a-f]{40,64}) (-?\d+)$/;
 
 const commitDate = (timestamp) => {
@@ -134,6 +135,8 @@ export function readFileLastmods(files, cwd) {
       "--name-only",
       // Keeps names repository-relative under `diff.relative`.
       "--no-relative",
+      // Stops `log.showSignature` output from hiding the commit header.
+      "--no-show-signature",
       "--diff-merges=combined",
       "-z",
       "--",
@@ -142,6 +145,7 @@ export function readFileLastmods(files, cwd) {
     const lastmodByRepoPath = new Map();
     let date = null;
     for (const field of log.split("\0")) {
+      // With -z, git starts the first name after each commit header with a newline.
       const repoPath = field.startsWith("\n") ? field.slice(1) : field;
       if (pending.delete(repoPath)) {
         lastmodByRepoPath.set(repoPath, date);
