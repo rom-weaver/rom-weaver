@@ -439,9 +439,10 @@ fn identify_hash_with_a_database_pack_needs_no_home_directory() {
     let temp = setup_temp_dir();
     fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
 
-    // Coverage profiles inside the crate invalidate the WebAssembly artifact cache.
     let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+    // `env -i`: no HOME or XDG directories, so no installed-pack location.
     command.env_clear();
+    // Without this, coverage profiles land in the crate and invalidate the WebAssembly artifact cache.
     if let Some(profile_file) = std::env::var_os("LLVM_PROFILE_FILE") {
         command.env("LLVM_PROFILE_FILE", profile_file);
     }
