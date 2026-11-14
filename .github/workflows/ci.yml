@@ -2181,7 +2181,7 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: node scripts/ci/nightly-alert.mjs
 
-  # Waits up to 30 minutes for main to save this commit's tested bundle.
+  # Waits up to 30 minutes for main to save the tested bundle for the run's commit.
   # Runs outside the deploy legs' publish lock.
   wait-webapp-bundle:
     name: Wait for main's tested webapp bundle

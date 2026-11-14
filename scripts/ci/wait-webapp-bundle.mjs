@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Waits for main to save this commit's tested bundle.
+// Waits for main to save the tested bundle for the run's commit.
 // Stops early when main has no run for the commit, or it ends without saving.
 
 import process from "node:process";
