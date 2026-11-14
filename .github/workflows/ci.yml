@@ -2155,7 +2155,6 @@ jobs:
       needs.changes.outputs.deploy_targets != '[]'
     strategy:
       # Separate Pages projects with no shared state, so legs upload in parallel.
-      # Each leg restamps the tested `webapp-dist`, or builds its own only when `wasm` built none.
       fail-fast: false
       matrix:
         target: ${{ fromJSON(needs.changes.outputs.deploy_targets) }}
