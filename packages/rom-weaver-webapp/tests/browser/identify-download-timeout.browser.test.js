@@ -19,6 +19,34 @@ const PATCH = new File(
 const releases = [];
 const BOUND_MS = 5000;
 const runs = [];
+const realSetTimeout = globalThis.setTimeout.bind(globalThis);
+const FAST_CLOCK_STEP_MS = 100;
+const FAST_CLOCK_TICK_MS = 20;
+
+// Runs `body` with setTimeout and performance.now() 5x faster than real time, so the identify bound
+// and the stub's slow headers elapse in ~1 s instead of 5-7 s. Workers keep their real clock.
+const withFastClock = async (body) => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  let outcome;
+  body().then(
+    (value) => {
+      outcome = { value };
+    },
+    (error) => {
+      outcome = { error };
+    },
+  );
+  try {
+    while (!outcome) {
+      await vi.advanceTimersByTimeAsync(FAST_CLOCK_STEP_MS);
+      await new Promise((resolve) => realSetTimeout(resolve, FAST_CLOCK_TICK_MS));
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+  if ("error" in outcome) throw outcome.error;
+  return outcome.value;
+};
 
 // Models the service worker too: it returns no headers until the whole pack is downloaded.
 const interceptPacks = (mode) => {
@@ -87,11 +115,14 @@ test.each(["headers", "body"])(
   "stalled pack %s cannot block local checksums and Apply",
   async (mode) => {
     const { requests } = interceptPacks(mode);
-    const started = performance.now();
-    const ingest = startIngest();
-    await expect.poll(() => ingest.result(), { timeout: 8000 }).toBeDefined();
+    const ingest = await withFastClock(async () => {
+      const started = performance.now();
+      const running = startIngest();
+      await expect.poll(() => running.result(), { timeout: 8000 }).toBeDefined();
+      expect(performance.now() - started).toBeLessThan(BOUND_MS + 3000);
+      return running;
+    });
     const ingested = ingest.result();
-    expect(performance.now() - started).toBeLessThan(BOUND_MS + 3000);
     // The download is not cancelled: the fetch carries no abort signal.
     expect(requests).toEqual([undefined]);
     expect(ingested.identifyUnavailable).toContain("did not finish");
@@ -148,43 +179,49 @@ test.each(["headers", "body"])(
 );
 
 test("a slow-header pack (service worker model) does not block ingest and an explicit lookup is not aborted", async () => {
-  const { requests } = interceptPacks("slow-headers");
-  const started = performance.now();
-  const ingest = startIngest();
-  await expect.poll(() => ingest.result(), { timeout: 8000 }).toBeDefined();
-  expect(performance.now() - started).toBeLessThan(7000);
-  expect(ingest.result().identifyUnavailable).toContain("did not finish");
-  expect(ingest.result().result.assets[0].checksums.crc32).toBe("c6fb1252");
-  const explicit = await loadIdentifyPackSelection({ fileName: ROM.name });
-  expect(explicit.packs).toHaveLength(1);
-  expect(requests).toHaveLength(1);
+  await withFastClock(async () => {
+    const { requests } = interceptPacks("slow-headers");
+    const started = performance.now();
+    const ingest = startIngest();
+    await expect.poll(() => ingest.result(), { timeout: 8000 }).toBeDefined();
+    expect(performance.now() - started).toBeLessThan(7000);
+    expect(ingest.result().identifyUnavailable).toContain("did not finish");
+    expect(ingest.result().result.assets[0].checksums.crc32).toBe("c6fb1252");
+    const explicit = await loadIdentifyPackSelection({ fileName: ROM.name });
+    expect(explicit.packs).toHaveLength(1);
+    expect(requests).toHaveLength(1);
+  });
 }, 30000);
 
 test("an explicit lookup waits past the ingest bound for a slow pack", async () => {
-  interceptPacks("slow-headers");
-  const started = performance.now();
-  const selection = await loadIdentifyPackSelection({ fileName: ROM.name });
-  expect(selection.packs).toHaveLength(1);
-  expect(performance.now() - started).toBeGreaterThan(BOUND_MS);
+  await withFastClock(async () => {
+    interceptPacks("slow-headers");
+    const started = performance.now();
+    const selection = await loadIdentifyPackSelection({ fileName: ROM.name });
+    expect(selection.packs).toHaveLength(1);
+    expect(performance.now() - started).toBeGreaterThan(BOUND_MS);
+  });
 }, 30000);
 
 test("Identify-page ingest waits past the bound for slow packs while default ingest stays bounded", async () => {
-  interceptPacks("slow-headers");
   const { identifyRom } = await import("../../src/platform/browser/browser-api.ts");
-  const started = performance.now();
-  // The stub pack is not a real database, so the engine may reject it; what matters is that the
-  // lookup was awaited past the bound instead of being reported as an unfinished (unavailable) load.
-  const outcome = await identifyRom(ROM, ROM.name).then(
-    (identified) => ({ identified }),
-    (error) => ({ error }),
-  );
-  expect(performance.now() - started).toBeGreaterThan(BOUND_MS);
-  expect(outcome.identified?.unavailableReason ?? String(outcome.error ?? "")).not.toContain("did not finish");
-  resetIdentifyPackCache();
-  interceptPacks("slow-headers");
-  const bounded = startIngest();
-  await expect.poll(() => bounded.result(), { timeout: 8000 }).toBeDefined();
-  expect(bounded.result().identifyUnavailable).toContain("did not finish");
+  await withFastClock(async () => {
+    interceptPacks("slow-headers");
+    const started = performance.now();
+    // The stub pack is not a real database, so the engine may reject it; what matters is that the
+    // lookup was awaited past the bound instead of being reported as an unfinished (unavailable) load.
+    const outcome = await identifyRom(ROM, ROM.name).then(
+      (identified) => ({ identified }),
+      (error) => ({ error }),
+    );
+    expect(performance.now() - started).toBeGreaterThan(BOUND_MS);
+    expect(outcome.identified?.unavailableReason ?? String(outcome.error ?? "")).not.toContain("did not finish");
+    resetIdentifyPackCache();
+    interceptPacks("slow-headers");
+    const bounded = startIngest();
+    await expect.poll(() => bounded.result(), { timeout: 8000 }).toBeDefined();
+    expect(bounded.result().identifyUnavailable).toContain("did not finish");
+  });
 }, 40000);
 
 test("a corrupt pack is rejected and a later lookup retries", async () => {
@@ -227,12 +264,14 @@ test.each(["identify-index", "identify-catalog"])(
       [PACK.file]: () => new Response("abc"),
       [stalled]: stall,
     });
-    const started = performance.now();
-    const ingest = startIngest();
-    await expect.poll(() => ingest.result(), { timeout: 8000 }).toBeDefined();
-    expect(performance.now() - started).toBeLessThan(BOUND_MS + 3000);
-    expect(ingest.result().identifyUnavailable).toContain("did not finish");
-    expect(ingest.result().result.assets[0].checksums.crc32).toBe("c6fb1252");
+    await withFastClock(async () => {
+      const started = performance.now();
+      const ingest = startIngest();
+      await expect.poll(() => ingest.result(), { timeout: 8000 }).toBeDefined();
+      expect(performance.now() - started).toBeLessThan(BOUND_MS + 3000);
+      expect(ingest.result().identifyUnavailable).toContain("did not finish");
+      expect(ingest.result().result.assets[0].checksums.crc32).toBe("c6fb1252");
+    });
   },
   20000,
 );
