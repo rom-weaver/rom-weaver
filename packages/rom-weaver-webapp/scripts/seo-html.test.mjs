@@ -247,7 +247,12 @@ test("beta tool pages get their own title, social titles, and channel badge", ()
 test("channel labels with HTML and replacement characters reach titles literally", () => {
   const label = `QA "<b>" & $& $1`;
   // Same shell the channel stamp builds.
-  const shell = applyChannelIdentity(fs.readFileSync(path.join(rootDir, "index.html"), "utf8"), "beta", label);
+  const buildInfo = { commitHash: "abc1234", version: "1.0.0" };
+  const shell = applyChannelIdentity(fs.readFileSync(path.join(rootDir, "index.html"), "utf8"), {
+    buildInfo,
+    channel: "beta",
+    channelLabel: label,
+  });
   for (const [page, html, expectedTitle] of [
     [
       "workflow",

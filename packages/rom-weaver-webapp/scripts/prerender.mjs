@@ -42,13 +42,11 @@ const renderLandingShellWithServer = async (
 };
 
 // One throwaway SSR server renders every shell, since starting one costs seconds.
-// `define` overrides the config's compile-time constants, so a shell matches its bundle.
-const withPrerenderServer = async (render, define = {}) => {
+const withPrerenderServer = async (render) => {
   ensureIdentifyData();
   const server = await createServer({
     appType: "custom",
     configFile: fileURLToPath(new URL("../vite.config.mjs", import.meta.url)),
-    define,
     logLevel: "warn",
     root: fileURLToPath(new URL("..", import.meta.url)),
     server: { hmr: false, middlewareMode: true, watch: null },

@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { A11Y_STEP, planPrePush, PRODUCTION_BUNDLE_STEPS, pushedCommits, WEBAPP_BUNDLE_STEPS } from "./pre-push.mjs";
+import { git, isolatedEnv } from "./test-git.mjs";
 
 const HEAD = "a".repeat(40);
 const OTHER = "b".repeat(40);
@@ -118,6 +119,52 @@ test("the Windows hook runs npm's JavaScript entrypoint with the production bund
     assert.equal(observed[0].channel, "prod");
     assert.equal(observed[2].channel, "prod");
     assert.equal(observed[2].prebuilt, "1");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a pushed non-ASCII webapp path runs the bundle checks", () => {
+  const dir = mkdtempSync(join(tmpdir(), "rom-weaver-pre-push-"));
+  try {
+    const repo = join(dir, "repo");
+    mkdirSync(join(repo, "packages", "rom-weaver-webapp", "src"), { recursive: true });
+    git(repo, "init", "-q");
+    writeFileSync(join(repo, "README.md"), "base\n");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-q", "-m", "base");
+    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD");
+    git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+    writeFileSync(join(repo, "packages", "rom-weaver-webapp", "src", "näme.ts"), "export {};\n");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-q", "-m", "webapp");
+    const head = git(repo, "rev-parse", "HEAD");
+
+    // npm runs a recording script, and mise does nothing, so no real build starts.
+    const calls = join(dir, "calls.jsonl");
+    const cli = join(dir, "npm-cli.cjs");
+    const preload = join(dir, "preload.mjs");
+    writeFileSync(cli, `require("node:fs").appendFileSync(${JSON.stringify(calls)}, JSON.stringify(process.argv.slice(2)) + "\\n");`);
+    writeFileSync(preload, `
+      import childProcess from "node:child_process";
+      import { syncBuiltinESMExports } from "node:module";
+      const original = childProcess.execFileSync;
+      childProcess.execFileSync = (command, args, options) => {
+        if (command === "mise") return "";
+        if (command === "npm") return original(process.execPath, [${JSON.stringify(cli)}, ...args], options);
+        return original(command, args, options);
+      };
+      syncBuiltinESMExports();
+    `);
+    const result = spawnSync(process.execPath, ["--import", preload, fileURLToPath(new URL("./pre-push.mjs", import.meta.url)), "origin"], {
+      cwd: repo,
+      encoding: "utf8",
+      input: `refs/heads/feat ${head} refs/heads/feat ${ZERO}\n`,
+      env: isolatedEnv({ npm_execpath: cli }),
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const observed = readFileSync(calls, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    assert.deepEqual(observed[0], ["--prefix", "packages/rom-weaver-webapp", "run", "build"], result.stderr);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

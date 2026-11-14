@@ -1,28 +1,38 @@
-const APP_VERSION = __APP_VERSION__;
-const COMMIT_HASH = __COMMIT_HASH__;
-const COMMITS_SINCE_VERSION = __COMMITS_SINCE_VERSION__;
-const GIT_BRANCH = __GIT_BRANCH__;
-const VERSION_BRANCH = __VERSION_BRANCH__;
-const DIRTY_HASH = __DIRTY_HASH__;
-const VERSION_IS_TAGGED = __VERSION_IS_TAGGED__;
-
-const VERSION_BRANCH_PREFIX = VERSION_BRANCH ? `${VERSION_BRANCH}.` : "";
-// A clean build of the tagged release commit is just the version, no suffix.
-const APP_BUILD_VERSION =
-  VERSION_IS_TAGGED && !DIRTY_HASH
-    ? APP_VERSION
-    : `${APP_VERSION}+${VERSION_BRANCH_PREFIX}${DIRTY_HASH ? `dirty.${DIRTY_HASH}` : COMMIT_HASH}`;
-const hasUnresolvedVersionTokens = [APP_VERSION, COMMIT_HASH, GIT_BRANCH, VERSION_BRANCH, DIRTY_HASH].some(
-  (value) => typeof value === "string" && value.indexOf("__") !== -1,
-);
-const RESOLVED_APP_BUILD_VERSION = hasUnresolvedVersionTokens ? "" : APP_BUILD_VERSION;
-
-export {
-  APP_BUILD_VERSION,
-  APP_VERSION,
-  COMMITS_SINCE_VERSION,
-  COMMIT_HASH,
-  DIRTY_HASH,
-  GIT_BRANCH,
-  RESOLVED_APP_BUILD_VERSION,
+/** What scripts/vite-config/channel-stamp.mjs stamps into a deployment, from scripts/version.mjs. */
+type BuildInfo = {
+  commitHash: string;
+  commitsSinceVersion: number | null;
+  dirtyHash: string;
+  gitBranch: string;
+  version: string;
+  versionBranch: string;
+  versionIsTagged: boolean;
 };
+
+const isBuildInfo = (value: unknown): value is BuildInfo =>
+  typeof value === "object" && value !== null && typeof (value as Partial<BuildInfo>).version === "string";
+
+// Pages read `<html data-build-info>`. The service worker has no document, so the stamp
+// writes the values into its script.
+const readStampedBuildInfo = (): BuildInfo | undefined => {
+  const documentJson = typeof document === "undefined" ? undefined : document.documentElement.dataset.buildInfo;
+  const stamped: unknown = globalThis.__ROM_WEAVER_BUILD_INFO__ ?? (documentJson && JSON.parse(documentJson));
+  return isBuildInfo(stamped) ? stamped : undefined;
+};
+
+const stampedBuildInfo = readStampedBuildInfo();
+const APP_VERSION = stampedBuildInfo?.version ?? "";
+const COMMIT_HASH = stampedBuildInfo?.commitHash ?? "";
+const COMMITS_SINCE_VERSION = stampedBuildInfo?.commitsSinceVersion ?? null;
+const GIT_BRANCH = stampedBuildInfo?.gitBranch ?? "";
+const DIRTY_HASH = stampedBuildInfo?.dirtyHash ?? "";
+
+const formatBuildVersion = ({ commitHash, dirtyHash, version, versionBranch, versionIsTagged }: BuildInfo) => {
+  // A clean build of the tagged release commit is just the version, no suffix.
+  if (versionIsTagged && !dirtyHash) return version;
+  const versionBranchPrefix = versionBranch ? `${versionBranch}.` : "";
+  return `${version}+${versionBranchPrefix}${dirtyHash ? `dirty.${dirtyHash}` : commitHash}`;
+};
+const APP_BUILD_VERSION = stampedBuildInfo ? formatBuildVersion(stampedBuildInfo) : "";
+
+export { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH };

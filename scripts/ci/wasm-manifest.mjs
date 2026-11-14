@@ -63,12 +63,17 @@ export function checkManifest(root, text) {
   const expected = parseManifest(text);
   const actual = listFiles(root);
   for (const path of actual) if (!expected.has(path)) throw new Error(`${path} is not in the manifest`);
-  const present = new Set(actual);
+  checkManifestEntries(root, expected);
+  return [...expected.keys()];
+}
+
+/** Throws unless each manifest entry is a regular file under `root` with its hash. Other files are ignored. */
+export function checkManifestEntries(root, expected) {
   for (const [path, hash] of expected) {
-    if (!present.has(path)) throw new Error(`${path} is in the manifest but missing from the artifact`);
+    if (!lstatSync(join(root, path), { throwIfNoEntry: false })?.isFile())
+      throw new Error(`${path} is in the manifest but missing from the artifact`);
     if (sha256(join(root, path)) !== hash) throw new Error(`${path} does not match its manifest checksum`);
   }
-  return [...expected.keys()];
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

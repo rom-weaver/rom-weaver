@@ -67,12 +67,14 @@ const devPrerenderRoute = (url) => {
   return { docsSlug: "docs", view };
 };
 
-/** Renders every page shell, keyed as `writeChannelPages` looks them up, with `channel` in the masthead. */
-export const renderPrerenderedShells = async ({ channel, channelLabel, define }) => {
+/** Renders each page shell with `channel` in its masthead and `buildInfo` as its build. */
+export const renderPrerenderedShells = async ({ buildInfo, channel, channelLabel }) => {
   const prerender = await import("../prerender.mjs");
   const shells = new Map();
-  // build-channel.ts reads this while the SSR server loads it; a browser reads <html data-channel>.
+  // The prerender server reads these while it loads build-channel.ts and
+  // build-version.ts. A browser reads <html data-channel> and <html data-build-info>.
   globalThis.ROM_WEAVER_PRERENDER_CHANNEL = { channel, label: channelLabel };
+  globalThis.__ROM_WEAVER_BUILD_INFO__ = buildInfo;
   try {
     await prerender.withPrerenderServer(async (server) => {
       const render = (view, notFound, docsSlug, workflowEntry) =>
@@ -102,15 +104,16 @@ export const renderPrerenderedShells = async ({ channel, channelLabel, define })
       for (const route of DOC_ROUTES) {
         shells.set(route.slug, await render("docs", false, route.slug));
       }
-    }, define);
+    });
   } finally {
     delete globalThis.ROM_WEAVER_PRERENDER_CHANNEL;
+    delete globalThis.__ROM_WEAVER_BUILD_INFO__;
   }
   return shells;
 };
 
 // A build leaves the mount point empty. The channel stamp fills it per page.
-export const prerenderWebappShell = (channel, channelLabel) => ({
+export const prerenderWebappShell = ({ buildInfo, channel, channelLabel }) => ({
   name: "rom-weaver-prerender-shell",
   transformIndexHtml: {
     async handler(html, ctx) {
@@ -128,6 +131,7 @@ export const prerenderWebappShell = (channel, channelLabel) => ({
       if (ctx.server) {
         const prerender = await import("../prerender.mjs");
         globalThis.ROM_WEAVER_PRERENDER_CHANNEL = { channel, label: channelLabel };
+        globalThis.__ROM_WEAVER_BUILD_INFO__ = buildInfo;
         const route = devPrerenderRoute(ctx.originalUrl ?? ctx.path);
         const shell = await prerender.renderLandingShellWithServer(
           ctx.server,

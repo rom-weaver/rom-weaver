@@ -2,7 +2,8 @@ name: Build and deploy the webapp to Cloudflare Pages
 description: >-
   Stamp the webapp bundle for one channel and Direct-Upload it to that
   channel's Pages project. The `deploy` matrix restamps the bundle the `wasm`
-  job built and CI tested, and builds one only when that job built none.
+  job built and CI tested. When that job built none, it tries the cached bundle
+  from `main`. It builds one when it cannot reuse that bundle.
   Callers MUST put the `wasm-prod` files in packages/rom-weaver-webapp/src/wasm
   first, whether it builds or restamps.
 
@@ -24,7 +25,8 @@ inputs:
   bundle:
     description: >-
       "artifact" restamps the run's `webapp-dist` and `webapp-stamp-templates`
-      artifacts for this channel; "build" builds the bundle for it.
+      artifacts for this channel; "build" restamps a reusable tested bundle
+      from the `webapp-bundle-` cache, or builds the bundle.
     default: build
   identify-data-source:
     description: >-
@@ -82,15 +84,39 @@ runs:
         esac
         echo "origin=$origin" >> "$GITHUB_OUTPUT"
 
-    - name: Restore webapp build cache
+    # ci.yml's save-webapp-bundle job saves one per main commit that passed CI.
+    - name: Restore tested webapp bundle
+      id: tested-bundle
       if: inputs.bundle == 'build'
+      uses: actions/cache/restore@v6
+      with:
+        path: |
+          packages/rom-weaver-webapp/dist
+          packages/rom-weaver-webapp/build
+        key: webapp-bundle-${{ runner.os }}-${{ github.sha }}
+        restore-keys: webapp-bundle-${{ runner.os }}-
+
+    - name: Check the tested bundle can be reused
+      id: reuse
+      if: inputs.bundle == 'build'
+      shell: bash
+      run: node scripts/ci/reuse-webapp-bundle.mjs
+
+    # The build then starts from the same tree as with no cache entry.
+    - name: Discard the tested bundle
+      if: inputs.bundle == 'build' && steps.reuse.outputs.reuse != 'true'
+      shell: bash
+      run: rm -rf packages/rom-weaver-webapp/dist packages/rom-weaver-webapp/build
+
+    - name: Restore webapp build cache
+      if: inputs.bundle == 'build' && steps.reuse.outputs.reuse != 'true'
       uses: ./.github/actions/webapp-build-cache
 
     # The channel stamps the bundle's visible identity - masthead badge, tab
     # title, PWA name and accent tokens - so a nightly or preview tab is never
     # mistaken for production.
     - name: Build webapp
-      if: inputs.bundle == 'build'
+      if: inputs.bundle == 'build' && steps.reuse.outputs.reuse != 'true'
       shell: bash
       env:
         ROM_WEAVER_CHANNEL: ${{ inputs.channel }}
@@ -115,7 +141,7 @@ runs:
 
     # Rewrites only the channel's files. dist/assets stays the bytes E2E and Lighthouse tested.
     - name: Stamp webapp for channel
-      if: inputs.bundle == 'artifact'
+      if: inputs.bundle == 'artifact' || steps.reuse.outputs.reuse == 'true'
       shell: bash
       env:
         CHANNEL: ${{ inputs.channel }}
@@ -124,7 +150,7 @@ runs:
       run: npm --prefix packages/rom-weaver-webapp run stamp-channel -- "$CHANNEL" "$LABEL" "$ORIGIN"
 
     - name: Verify stamped webapp
-      if: inputs.bundle == 'artifact'
+      if: inputs.bundle == 'artifact' || steps.reuse.outputs.reuse == 'true'
       shell: bash
       env:
         ROM_WEAVER_CHANNEL: ${{ inputs.channel }}

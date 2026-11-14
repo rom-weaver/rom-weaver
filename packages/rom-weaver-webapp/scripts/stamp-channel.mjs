@@ -3,6 +3,7 @@
 // Restamps an existing build for another channel without rebuilding it:
 //   npm run stamp-channel -- <channel> [label] [origin]
 // The label defaults to the channel, and the origin to production.
+// The build info comes from this checkout's git and the ROM_WEAVER_* overrides.
 // dist and build/channel-stamp MUST come from the same build.
 
 import path from "node:path";
@@ -10,6 +11,7 @@ import process from "node:process";
 import { APP_CHANNELS, resolveSiteOrigin } from "./vite-config/channel.mjs";
 import { CHANNEL_STAMP_TEMPLATES_DIR, stampChannel } from "./vite-config/channel-stamp.mjs";
 import { rootDir } from "./vite-config/paths.mjs";
+import { resolveAppBuildInfo } from "./version.mjs";
 
 const [channel, labelArgument, originArgument] = process.argv.slice(2);
 if (!channel) {
@@ -22,6 +24,7 @@ if (!APP_CHANNELS.has(channel)) {
   process.exit(2);
 }
 await stampChannel({
+  buildInfo: resolveAppBuildInfo(process.env),
   channel,
   channelLabel: labelArgument || channel,
   distDir: path.join(rootDir, "dist"),

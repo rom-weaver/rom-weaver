@@ -1,11 +1,6 @@
 declare global {
-  const __APP_VERSION__: string;
-  const __COMMIT_HASH__: string;
-  const __COMMITS_SINCE_VERSION__: number | null;
-  const __GIT_BRANCH__: string;
-  const __VERSION_BRANCH__: string;
-  const __DIRTY_HASH__: string;
-  const __VERSION_IS_TAGGED__: boolean;
+  /** The stamped build info in prerendering and the service worker; see build-version.ts. */
+  var __ROM_WEAVER_BUILD_INFO__: unknown;
   /** The channel prerendering renders for; see build-channel.ts. */
   var ROM_WEAVER_PRERENDER_CHANNEL: { channel: string; label: string } | undefined;
   /** Hashed file names of the identify manifests under `assets/`; the catalog is null when the data set has none. */

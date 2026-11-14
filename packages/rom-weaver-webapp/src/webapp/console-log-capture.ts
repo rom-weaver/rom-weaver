@@ -1,4 +1,5 @@
 import { drainDeferredLogs } from "../lib/logging.ts";
+import { APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
 
 type ConsoleLogLevel = "debug" | "error" | "info" | "log" | "trace" | "warn";
 type ConsoleLogSource = "console" | "unhandledrejection" | "window.error";
@@ -159,12 +160,12 @@ const getConsoleForInternalLog = (level: ConsoleLogLevel) =>
   originalConsole.get(level) || console[level] || console.log;
 
 const getReportApp = (): ConsoleLogReport["app"] => ({
-  branch: typeof __GIT_BRANCH__ === "undefined" ? undefined : __GIT_BRANCH__,
+  branch: GIT_BRANCH,
   // Which origin the report came from; a nightly bug reads very differently from a prod one.
   channel: typeof document === "undefined" ? undefined : document.documentElement.dataset.channel,
-  commit: typeof __COMMIT_HASH__ === "undefined" ? undefined : __COMMIT_HASH__,
-  dirty: typeof __DIRTY_HASH__ === "undefined" ? undefined : __DIRTY_HASH__,
-  version: typeof __APP_VERSION__ === "undefined" ? undefined : __APP_VERSION__,
+  commit: COMMIT_HASH,
+  dirty: DIRTY_HASH,
+  version: APP_VERSION,
 });
 
 const getReportPage = (): ConsoleLogReport["page"] => ({

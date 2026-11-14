@@ -72,16 +72,19 @@ export const createRootManifestSource = (channel, channelLabel) => {
 export const channelAttributes = (channel, channelLabel) =>
   `data-channel="${channel}" data-channel-label="${escapeHtml(channelLabel)}"`;
 
+/** The `<html>` attribute the bundle reads its version and commit from (src/webapp/build-version.ts). */
+export const buildInfoAttribute = (buildInfo) => `data-build-info="${escapeHtml(JSON.stringify(buildInfo))}"`;
+
 // The tab title and iOS home-screen label need the channel before the bundle boots.
 // The accent MUST stay the first `<html>` attribute: verify-seo-build matches `<html data-accent=`.
-export const applyChannelIdentity = (html, channel, channelLabel) => {
+export const applyChannelIdentity = (html, { buildInfo, channel, channelLabel }) => {
   const accent = CHANNEL_DEFAULT_ACCENTS[channel] || CHANNEL_DEFAULT_ACCENTS.dev;
   const label = escapeHtml(channelLabel);
   const accentAttribute = accent === "madder" ? "" : `data-accent="${accent}" `;
   // Replacer functions keep `$` sequences in the label literal.
   const stampedHtml = html.replace(
     "<html ",
-    () => `<html ${accentAttribute}${channelAttributes(channel, channelLabel)} `,
+    () => `<html ${accentAttribute}${channelAttributes(channel, channelLabel)} ${buildInfoAttribute(buildInfo)} `,
   );
   if (channel === "prod") return stampedHtml;
   return stampedHtml
@@ -93,14 +96,16 @@ export const applyChannelIdentity = (html, channel, channelLabel) => {
     );
 };
 
-// A build leaves the channel to the stamp step, so index.html matches for every channel.
-// The dev server stamps directly.
-export const stampChannelIdentity = (channel, channelLabel, serviceWorkerEnabled) => ({
+// The stamp step sets the channel and build info, so index.html matches for every
+// deployment. The dev server stamps directly.
+export const stampChannelIdentity = ({ buildInfo, channel, channelLabel, serviceWorkerEnabled }) => ({
   name: "rom-weaver-channel-identity",
   transformIndexHtml: {
     handler(html, ctx) {
       const serviceWorkerHtml = html.replace("<html ", `<html data-service-worker-enabled="${serviceWorkerEnabled}" `);
-      return ctx.server ? applyChannelIdentity(serviceWorkerHtml, channel, channelLabel) : serviceWorkerHtml;
+      return ctx.server
+        ? applyChannelIdentity(serviceWorkerHtml, { buildInfo, channel, channelLabel })
+        : serviceWorkerHtml;
     },
     order: "pre",
   },

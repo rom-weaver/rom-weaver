@@ -6,7 +6,7 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { compileLinguiCatalogs } from "./scripts/compile-lingui-catalogs.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
-import { getBuildInfo, getVersionBranch } from "./scripts/version.mjs";
+import { resolveAppBuildInfo } from "./scripts/version.mjs";
 import { writeBrotliSidecars } from "./scripts/vite-config/brotli-sidecars.mjs";
 import { serveChangelogAsset } from "./scripts/vite-config/changelog.mjs";
 import {
@@ -41,34 +41,15 @@ const SERVICE_WORKER_FILENAME = "rom-weaver-service-worker.ts";
 const SHARED_CHUNK_MIN_SIZE = 30_000;
 
 export default defineConfig(({ command, mode }) => {
-  const buildInfo = getBuildInfo();
+  const buildInfo = resolveAppBuildInfo(process.env);
   const devServiceWorkerEnabled = process.env.VITE_SW_DEV === "1";
   const serviceWorkerEnabled = command === "build" || devServiceWorkerEnabled;
-  const appVersion =
-    process.env.ROM_WEAVER_APP_VERSION || buildInfo.version || process.env.npm_package_version || "0.1.0";
-  const commitHash = process.env.ROM_WEAVER_COMMIT_HASH || buildInfo.commitHash || "unknown";
-  const commitsSinceVersion = buildInfo.commitsSinceVersion ?? null;
-  const dirtyHash = process.env.ROM_WEAVER_DIRTY_HASH ?? buildInfo.dirtyHash ?? "";
-  const gitBranch = process.env.ROM_WEAVER_GIT_BRANCH ?? buildInfo.gitBranch ?? "";
-  const versionIsTagged = (buildInfo.isVersionTag ?? false) && !dirtyHash;
-  const versionBranch = getVersionBranch(gitBranch, versionIsTagged);
   // An unset channel builds as production; dev and preview set their own default.
   const appChannel = resolveAppChannel(process.env.ROM_WEAVER_CHANNEL);
   // Origin named by llms.txt, the Markdown alternates, openapi.json and the API catalog.
   const siteOrigin = resolveSiteOrigin(process.env.ROM_WEAVER_SITE_ORIGIN);
   const appChannelLabel = process.env.ROM_WEAVER_CHANNEL_LABEL || appChannel;
-  const releaseVersion = releaseVersionForChannel(appChannel, appVersion);
-  // The channel stamp renders the shells after the build, possibly in another job.
-  // It reuses these values instead of reading git.
-  const buildInfoDefines = {
-    __APP_VERSION__: JSON.stringify(appVersion),
-    __COMMIT_HASH__: JSON.stringify(commitHash),
-    __COMMITS_SINCE_VERSION__: JSON.stringify(commitsSinceVersion),
-    __DIRTY_HASH__: JSON.stringify(dirtyHash),
-    __GIT_BRANCH__: JSON.stringify(gitBranch),
-    __VERSION_BRANCH__: JSON.stringify(versionBranch),
-    __VERSION_IS_TAGGED__: JSON.stringify(versionIsTagged),
-  };
+  const releaseVersion = releaseVersionForChannel(appChannel, buildInfo.version);
   const serviceWorkerDefines = {
     __SERVICE_WORKER_ENABLED__: JSON.stringify(serviceWorkerEnabled),
     __SERVICE_WORKER_UPDATE_INTERVAL_MS__: JSON.stringify(command === "build" ? 60000 : 5000),
@@ -122,7 +103,6 @@ export default defineConfig(({ command, mode }) => {
       transformer: "lightningcss",
     },
     define: {
-      ...buildInfoDefines,
       __EMULATORJS_VERSION__: JSON.stringify(emulatorJsLock.version),
       __IDENTIFY_MANIFEST_FILES__: JSON.stringify(identifyManifestFiles),
       __IDENTIFY_OPTIONAL_PACK_GROUPS__: JSON.stringify(identifyOptionalPackGroups),
@@ -151,9 +131,9 @@ export default defineConfig(({ command, mode }) => {
       serveEmulatorJsAssets(),
       serveChangelogAsset(releaseVersion),
       deferDevHotUpdates(),
-      stampChannelIdentity(appChannel, appChannelLabel, serviceWorkerEnabled),
+      stampChannelIdentity({ buildInfo, channel: appChannel, channelLabel: appChannelLabel, serviceWorkerEnabled }),
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
-      prerenderWebappShell(appChannel, appChannelLabel),
+      prerenderWebappShell({ buildInfo, channel: appChannel, channelLabel: appChannelLabel }),
       preloadWorkflowRouteChunks(routePreloadLinks),
       writeWebappStaticAssets(),
       writeBrotliSidecars(),
@@ -184,9 +164,9 @@ export default defineConfig(({ command, mode }) => {
         strategies: "injectManifest",
       }),
       stampBuildChannel({
+        buildInfo,
         channel: appChannel,
         channelLabel: appChannelLabel,
-        define: buildInfoDefines,
         routePreloadLinks,
         siteOrigin,
       }),

@@ -114,6 +114,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
     const diff = execFileSync(
       "git",
       [
+        // Unquoted non-ASCII names. Control characters, quotes and backslashes stay quoted, and addedLines rejects them.
+        "-c",
+        "core.quotePath=false",
         "diff",
         "--no-ext-diff",
         "--no-color",

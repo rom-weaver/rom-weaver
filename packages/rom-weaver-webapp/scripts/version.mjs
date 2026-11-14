@@ -339,4 +339,21 @@ const getBuildInfo = () => {
   };
 };
 
-export { getBuildInfo, getChangelog, getVersionBranch, readReleaseDate, readReleaseNotes, resolveGitBranch };
+/** The build info a deployment shows (src/webapp/build-version.ts), from git and `ROM_WEAVER_*` overrides in `env`. */
+const resolveAppBuildInfo = (env) => {
+  const buildInfo = getBuildInfo();
+  const dirtyHash = env.ROM_WEAVER_DIRTY_HASH ?? buildInfo.dirtyHash ?? "";
+  const gitBranch = env.ROM_WEAVER_GIT_BRANCH ?? buildInfo.gitBranch ?? "";
+  const versionIsTagged = (buildInfo.isVersionTag ?? false) && !dirtyHash;
+  return {
+    commitHash: env.ROM_WEAVER_COMMIT_HASH || buildInfo.commitHash || "unknown",
+    commitsSinceVersion: buildInfo.commitsSinceVersion ?? null,
+    dirtyHash,
+    gitBranch,
+    version: env.ROM_WEAVER_APP_VERSION || buildInfo.version || env.npm_package_version || "0.1.0",
+    versionBranch: getVersionBranch(gitBranch, versionIsTagged),
+    versionIsTagged,
+  };
+};
+
+export { getChangelog, getVersionBranch, readReleaseDate, readReleaseNotes, resolveAppBuildInfo, resolveGitBranch };

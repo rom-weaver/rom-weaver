@@ -15,16 +15,6 @@ function cache(overrides = {}) {
   };
 }
 
-function response(body, { headers = {}, status = 200 } = {}) {
-  return {
-    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-    text: async () => JSON.stringify(body),
-  };
-}
-
 test("keeps the newest cache in each compatible restore scope", () => {
   const old = cache({ id: 1, key: "v0-rust-Linux-x64-11223344-12345678", created_at: "2026-09-09T12:00:00Z" });
   const current = cache({ id: 2 });
@@ -76,6 +66,18 @@ test("keeps the newest cache in each compatible restore scope", () => {
     ]),
     [old, oldCcache, oldIdentifyBrotli, oldWebappBuild],
   );
+});
+
+test("tested webapp bundles keep the newest three per scope", () => {
+  const bundles = [1, 2, 3, 4, 5].map((day) =>
+    cache({
+      id: day,
+      created_at: `2026-09-0${day}T12:00:00Z`,
+      key: `webapp-bundle-Linux-${String(day).repeat(40)}`,
+    }),
+  );
+  const otherRef = { ...bundles[0], id: 6, ref: "refs/heads/other" };
+  assert.deepEqual(supersededCaches([...bundles, otherRef]), [bundles[1], bundles[0]]);
 });
 
 test("sccache cleanup preserves separate jobs, runners, refs, and cache versions", () => {
@@ -204,3 +206,13 @@ test("continues after a closed-pull-request cache deletion fails", async () => {
   assert.equal(result.reclaimed, second.size_in_bytes);
   assert.ok(logs.some((line) => line.includes("could not delete cache 1")));
 });
+
+function response(body, { headers = {}, status = 200 } = {}) {
+  return {
+    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  };
+}

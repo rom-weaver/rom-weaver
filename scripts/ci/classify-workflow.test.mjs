@@ -1,36 +1,15 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { git, isolatedEnv } from "../test-git.mjs";
 import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "classify-workflow.mjs");
-
-// Git hooks export GIT_DIR, GIT_INDEX_FILE, and friends. Inherited, they point
-// these commands at the repository running the hook instead of the scratch one.
-const isolatedEnv = (extra = {}) => ({
-  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
-  ...extra,
-});
-
-const IDENTITY = {
-  GIT_AUTHOR_NAME: "ci",
-  GIT_AUTHOR_EMAIL: "ci@example.com",
-  GIT_COMMITTER_NAME: "ci",
-  GIT_COMMITTER_EMAIL: "ci@example.com",
-};
-
-function git(cwd, ...args) {
-  return execFileSync("git", ["-c", "commit.gpgsign=false", ...args], {
-    cwd,
-    encoding: "utf8",
-    env: isolatedEnv(IDENTITY),
-  }).trim();
-}
 
 // base -> prior (a Rust edit, tested green) -> head (a guide edit only).
 function history(t) {
@@ -118,6 +97,16 @@ test("a rename out of a Rust directory still selects Rust", (t) => {
   git(repo.cwd, "commit", "-q", "-am", "move");
   const head = git(repo.cwd, "rev-parse", "HEAD");
   const { outputs } = classify({ ...repo, head, base: repo.prior });
+  assert.equal(outputs.rust, "true");
+});
+
+test("a Rust path with non-ASCII characters still selects Rust", (t) => {
+  const repo = history(t);
+  writeFileSync(join(repo.cwd, "crates/rom-weaver-core/src/näme.rs"), "// edit\n");
+  git(repo.cwd, "add", "-A");
+  git(repo.cwd, "commit", "-q", "-m", "name");
+  const head = git(repo.cwd, "rev-parse", "HEAD");
+  const { outputs } = classify({ ...repo, head, base: repo.head });
   assert.equal(outputs.rust, "true");
 });
 

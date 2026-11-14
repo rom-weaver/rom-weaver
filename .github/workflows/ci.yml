@@ -2098,6 +2098,61 @@ jobs:
           '${{ needs.changes.outputs.wasm_runtime }}'
           'webapp-wasm-browser=${{ needs.webapp-wasm-browser.result }}'
 
+  # Saves the bundle the whole suite passed. The reuse rule is in
+  # scripts/ci/reuse-webapp-bundle.mjs.
+  save-webapp-bundle:
+    name: Save tested webapp bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: [wasm, gate]
+    # Saving only speeds up later deploys. A failed save MUST NOT fail the main run.
+    continue-on-error: true
+    # `!cancelled()` keeps the jobs that main pushes skip from skipping this one.
+    if: >-
+      !cancelled() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.gate.result == 'success' &&
+      needs.wasm.result == 'success' &&
+      needs.wasm.outputs.bundle == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download tested webapp bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: webapp-dist
+          path: packages/rom-weaver-webapp/dist
+
+      - name: Download channel stamp templates
+        uses: actions/download-artifact@v8
+        with:
+          name: webapp-stamp-templates
+          path: packages/rom-weaver-webapp/build/channel-stamp
+
+      # Download by id, as `wasm-attest` does. The reuse check trusts this manifest.
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.wasm.outputs.wasm-artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/wasm-prod
+
+      - name: Record the bundle's commit and WASM files
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$GITHUB_SHA" > packages/rom-weaver-webapp/build/bundle-commit
+          node scripts/ci/wasm-manifest.mjs "$RUNNER_TEMP/wasm-prod" packages/rom-weaver-webapp/build/bundle-wasm.sha256
+
+      - name: Save tested webapp bundle
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            packages/rom-weaver-webapp/dist
+            packages/rom-weaver-webapp/build
+          key: webapp-bundle-${{ runner.os }}-${{ github.sha }}
+
   # Keeps one issue open while the nightly fails (scripts/ci/nightly-alert.mjs). The gate covers
   # every job that can fail this workflow's run (parity.yml is separate and does not alert):
   # `security` only warns, and the deploy and advisory quality jobs are `continue-on-error`.
@@ -2126,18 +2181,47 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: node scripts/ci/nightly-alert.mjs
 
+  # Waits up to 30 minutes for main to save the tested bundle for the run's commit.
+  # Runs outside the deploy legs' publish lock.
+  wait-webapp-bundle:
+    name: Wait for main's tested webapp bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    needs: changes
+    continue-on-error: true
+    if: >-
+      github.ref_type == 'tag' &&
+      needs.changes.outputs.deploy_targets != '' &&
+      needs.changes.outputs.deploy_targets != '[]'
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+
+      - name: Wait for main's tested webapp bundle
+        env:
+          # MUST match the key `save-webapp-bundle` writes.
+          BUNDLE_KEY: webapp-bundle-${{ runner.os }}-${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci/wait-webapp-bundle.mjs
+
   # Build and publish one channel per matrix leg, to isolated Cloudflare origins
   # (rom-weaver.com, beta.rom-weaver.com, nightly.rom-weaver.com, and disposable
   # per-PR previews). `changes` above decides which legs exist.
   #
   # Direct Upload reuses the CI-tested WASM artifact without Cloudflare build
-  # minutes or a second toolchain. Depend only on `wasm` so deploy URLs arrive
-  # while the rest of the suite is still running.
+  # minutes or a second toolchain. Depend on `wasm`, not the whole suite, so deploy
+  # URLs arrive while the rest runs.
   deploy:
     name: Webapp deploy (${{ matrix.target.channel }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    needs: [wasm, changes]
+    needs: [wasm, changes, wait-webapp-bundle]
     # Deployment was a separate, non-gating workflow before it moved here to
     # share the wasm artifact. Preserve that boundary: a Cloudflare outage must
     # not turn a green main build red and suppress release automation.
@@ -2149,12 +2233,16 @@ jobs:
       deployments: write
     # An empty or missing target list would be a hard "matrix contains no
     # values" error, so guard rather than trusting the planner to always emit
-    # one.
+    # one. `wait-webapp-bundle` runs only for tags, so its result is not checked.
     if: >-
+      !cancelled() &&
+      needs.wasm.result == 'success' &&
+      needs.changes.result == 'success' &&
       needs.changes.outputs.deploy_targets != '' &&
       needs.changes.outputs.deploy_targets != '[]'
     strategy:
       # Separate Pages projects with no shared state, so legs upload in parallel.
+      # Each leg restamps `webapp-dist`, else a cached bundle reuse-webapp-bundle.mjs accepts, else builds.
       fail-fast: false
       matrix:
         target: ${{ fromJSON(needs.changes.outputs.deploy_targets) }}
