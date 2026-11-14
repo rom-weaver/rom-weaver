@@ -2,7 +2,8 @@ import fs from "node:fs";
 import { Lexer } from "marked";
 import { createDocsMarkdown, readFileLastmods } from "../docs-discovery.mjs";
 import { readNoticesLastmod } from "../notices-lastmod.mjs";
-import { docSourcePath, replaceBetween, replaceMetaContent } from "../../src/webapp/docs-pages.mjs";
+import { docSourcePath } from "../../src/webapp/docs-pages.mjs";
+import { replaceBetween, replaceMetaContent } from "../../src/webapp/escape-html.mjs";
 import { ROOT_BASE_TAG } from "../../src/webapp/pwa/document-base.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
 import {
