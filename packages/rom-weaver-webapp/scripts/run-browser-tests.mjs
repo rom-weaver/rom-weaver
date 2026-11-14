@@ -42,7 +42,7 @@ const ANSI_ESCAPE_REGEX = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g
 
 const fileSize = (file) => fs.statSync(file, { throwIfNoEntry: false })?.size ?? 0;
 
-// Larger pools cause contention failures.
+// Eight file processes caused contention retries on a 16-core host.
 const MAX_DEFAULT_CONCURRENCY = 6;
 
 export const resolveConcurrency = (environment = process.env) => {
