@@ -463,7 +463,7 @@ A restored entry can skip work but cannot change output. A Brotli entry is used 
 
 Caches `fuzz/target`. The fuzz crate is its own workspace, so the `setup-build-env` cargo cache never covers it. A cold job rebuilds every dependency with sanitizer and coverage instrumentation. `quality-analysis` in `ci.yml` restores it; the weekly `quality-deep.yml` fuzz job also saves it (`save: "true"`).
 
-The key covers the runner, the pinned nightly (from `scripts/quality-fuzz.mjs`), and the lock files. It also covers Cargo and mise configuration, crate manifests, build scripts, and the commit. A restoring run falls back to older commits with the same inputs. It then falls back to the toolchain alone.
+The key covers the runner, the pinned nightly (from `scripts/quality-fuzz.mjs`), and the lock files. It also covers Cargo and mise configuration, crate manifests, build scripts, and the commit. A restoring run falls back to older commits with the same inputs. It then falls back to the same runner platform and toolchain.
 
 A saving run falls back only to the same inputs. Cargo never deletes unused artifacts, so a lock change starts an empty directory. Cargo's fingerprints handle source changes. They rebuild path crates whose sources are newer than the restored artifacts.
 

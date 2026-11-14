@@ -7,7 +7,7 @@ import { Writable } from "node:stream";
 import { createGunzip } from "node:zlib";
 
 // GitHub can change archive bytes for one commit, so the cache pins revisions, not hashes.
-// An entry is published only after its gzip stream decodes to the end.
+// An entry is published only after its `verify` step accepts it. The default decodes the gzip stream to the end.
 
 // Callers in one process share a download instead of racing to publish the same file.
 const pendingDownloads = new Map();
@@ -62,8 +62,8 @@ function ensureArchive({ archive, download }) {
 // tar and zlib report a damaged or truncated archive with a `TAR_*` or `Z_*` code.
 const isDamagedArchiveError = (error) => /^(?:TAR|Z)_/u.test(String(error?.code ?? ""));
 
-// Run `use(archive)`, downloading the archive when absent. A damaged entry from before this
-// call is removed, unless another process replaced it, and fetched once more.
+// Run `use(archive)`, downloading the archive when absent. Remove a damaged entry from before
+// this call unless another process replaced it, then fetch again.
 export async function withCachedArchive({ archive, download, use }) {
   const before = await entryIdentity(archive);
   await ensureArchive({ archive, download });
