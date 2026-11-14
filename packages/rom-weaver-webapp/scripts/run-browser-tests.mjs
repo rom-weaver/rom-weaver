@@ -18,6 +18,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import durations from "./browser-test-durations.json" with { type: "json" };
 import { generateIconAssets } from "./generated-icon-assets.mjs";
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -38,6 +39,8 @@ const TESTS_LINE_REGEX = /^\s*Tests\s+(\d.*?)\s*$/gm;
 // passing file reports "no test summary". Built with RegExp rather than a
 // literal because no-control-regex rejects an escape character in the source.
 const ANSI_ESCAPE_REGEX = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
+
+const fileSize = (file) => fs.statSync(file, { throwIfNoEntry: false })?.size ?? 0;
 
 export const resolveConcurrency = (environment = process.env) => {
   const raw = environment.BROWSER_TEST_CONCURRENCY;
@@ -111,6 +114,27 @@ export const selectShard = (files, shard) => {
     target.weight += weight;
   }
   return buckets[shard.index - 1].files.sort((left, right) => Number(left > right) - Number(left < right));
+};
+
+// Files that start last decide the finish time, so the slowest go first. A file
+// with a recorded median uses it; any other is estimated from its size at the
+// recorded seconds-per-byte ratio, so a new file still sorts by size.
+export const orderSlowestFirst = (files, recorded = durations, sizeOf = fileSize) => {
+  const knownNames = Object.keys(recorded);
+  const knownBytes = knownNames.reduce((sum, name) => sum + sizeOf(path.join(TEST_DIR, name)), 0);
+  const knownSeconds = knownNames.reduce((sum, name) => sum + recorded[name], 0);
+  const secondsPerByte = knownBytes ? knownSeconds / knownBytes : 0;
+  const estimate = (file) => recorded[path.basename(file)] ?? sizeOf(file) * secondsPerByte;
+  return files
+    .map((file) => ({ file, seconds: estimate(file) }))
+    .sort((left, right) => right.seconds - left.seconds || left.file.localeCompare(right.file))
+    .map(({ file }) => file);
+};
+
+// The smallest file runs alone first; the rest start slowest first.
+export const planFileOrder = (files) => {
+  const warmupFile = files.reduce((smallest, file) => (fileSize(file) < fileSize(smallest) ? file : smallest));
+  return { warmupFile, pooledFiles: orderSlowestFirst(files.filter((file) => file !== warmupFile)) };
 };
 
 const partitionRunnerArgs = (argv) => {
@@ -250,9 +274,7 @@ export const main = async () => {
   // Run the smallest file alone so the optimizer cache is warm before the pool
   // starts concurrent Vitest processes against it. The optimizer scans every
   // test file whichever one runs, so a small file warms it just as well.
-  const fileSize = (file) => fs.statSync(file, { throwIfNoEntry: false })?.size ?? 0;
-  const warmupFile = files.reduce((smallest, file) => (fileSize(file) < fileSize(smallest) ? file : smallest));
-  const pooledFiles = files.filter((file) => file !== warmupFile);
+  const { warmupFile, pooledFiles } = planFileOrder(files);
   recordResult(warmupFile, await runFile(warmupFile, vitestArgs));
   await runPool(pooledFiles, vitestArgs, concurrency, recordResult);
 

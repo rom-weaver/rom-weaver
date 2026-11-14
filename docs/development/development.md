@@ -153,6 +153,8 @@ npm --prefix packages/rom-weaver-webapp run test:browser
 
 Use the repository's browser-test runner instead of invoking browser Vitest directly; it isolates files and avoids browser-mode hangs in linked worktrees.
 
+The runner starts the slowest files first so a long file does not begin last. It orders by the recorded durations in `packages/rom-weaver-webapp/scripts/browser-test-durations.json` and estimates a file without one from its size. Record new measured durations there when a file's runtime changes a lot. A stale or missing entry changes only the order, never which files run.
+
 The fast end-to-end gate is also available separately:
 
 ```bash
