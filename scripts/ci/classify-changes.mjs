@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
@@ -191,6 +192,17 @@ export function canReuseArmDockerWasm(paths) {
         path.startsWith(".github/"),
     )
   );
+}
+
+/** Paths that differ between two commits. A move counts at both paths, because rename pairing is off. */
+export function changedPathsBetween(base, head, cwd = undefined) {
+  return execFileSync("git", ["diff", "--name-only", "--no-renames", "-z", base, head], {
+    cwd,
+    encoding: "utf8",
+    maxBuffer: Infinity,
+  })
+    .split("\0")
+    .filter(Boolean);
 }
 
 // Only ordinary pull requests narrow checks; missing event names and release pull requests preserve the full selected matrix.

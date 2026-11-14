@@ -121,6 +121,16 @@ test("a rename out of a Rust directory still selects Rust", (t) => {
   assert.equal(outputs.rust, "true");
 });
 
+test("a Rust path with non-ASCII characters still selects Rust", (t) => {
+  const repo = history(t);
+  writeFileSync(join(repo.cwd, "crates/rom-weaver-core/src/näme.rs"), "// edit\n");
+  git(repo.cwd, "add", "-A");
+  git(repo.cwd, "commit", "-q", "-m", "name");
+  const head = git(repo.cwd, "rev-parse", "HEAD");
+  const { outputs } = classify({ ...repo, head, base: repo.head });
+  assert.equal(outputs.rust, "true");
+});
+
 test("a push touching only a changelog does not reselect Rust", (t) => {
   const repo = history(t);
   // The earlier run covered the Rust edit; only a changelog differs since, so

@@ -2,13 +2,13 @@
 
 // Manual dispatches, pushes (to main and release tags), and unavailable base commits MUST select every stack to preserve CI coverage.
 
-import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import process from "node:process";
 
 import { runMain } from "../run-main.mjs";
 import {
   canReuseArmDockerWasm,
+  changedPathsBetween,
   classifyChanges,
   coverageTiers,
   formatChanges,
@@ -23,12 +23,7 @@ function changedPaths({ eventName, baseSha, headSha, quiet = false }) {
   if (eventName === "workflow_dispatch" || eventName === "push") return null;
   if (!baseSha || baseSha === EMPTY_SHA) return null;
   try {
-    return execFileSync("git", ["diff", "--name-only", "--no-renames", baseSha, headSha], {
-      encoding: "utf8",
-      maxBuffer: Infinity,
-    })
-      .split(/\r?\n/)
-      .filter(Boolean);
+    return changedPathsBetween(baseSha, headSha);
   } catch {
     if (!quiet) process.stdout.write(`base ${baseSha} is unreachable; classifying everything\n`);
     return null;

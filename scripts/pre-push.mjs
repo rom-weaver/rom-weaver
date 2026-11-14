@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-import { classifyChanges } from "./ci/classify-changes.mjs";
+import { changedPathsBetween, classifyChanges } from "./ci/classify-changes.mjs";
 import { resolveNpmCli } from "./ci/npm-publish-package.mjs";
 
 const WEBAPP = "packages/rom-weaver-webapp";
@@ -77,8 +77,7 @@ function changedSinceBase(remote) {
     .find(Boolean);
   const mergeBase = base && tryGit(["merge-base", base, "HEAD"]);
   if (!mergeBase) return undefined;
-  // --no-renames as in classify-workflow.mjs: a move MUST report its old path too, which can select the webapp.
-  return git(["diff", "--name-only", "--no-renames", `${mergeBase}...HEAD`]).split("\n").filter(Boolean);
+  return changedPathsBetween(mergeBase, "HEAD");
 }
 
 // A synchronous read of fd 0 fails with EAGAIN when the pipe git or lefthook
