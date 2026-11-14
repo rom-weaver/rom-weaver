@@ -246,7 +246,7 @@ test("beta tool pages get their own title, social titles, and channel badge", ()
 
 test("channel labels with HTML and replacement characters reach titles literally", () => {
   const label = `QA "<b>" & $& $1`;
-  // The stamp gives every page builder the app template with the channel identity applied.
+  // Same shell the channel stamp builds.
   const buildInfo = { commitHash: "abc1234", version: "1.0.0" };
   const shell = applyChannelIdentity(fs.readFileSync(path.join(rootDir, "index.html"), "utf8"), {
     buildInfo,

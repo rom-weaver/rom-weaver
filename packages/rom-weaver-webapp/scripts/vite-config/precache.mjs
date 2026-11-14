@@ -99,7 +99,7 @@ export const injectPrecacheManifest = async ({ distDir, swDest, swSrc }) => {
     swDest,
     swSrc,
   });
-  // An oversized entry silently drops out of the precache, so this fails the build.
+  // An oversized entry only warns and drops out of the precache, so this fails the build.
   const oversized = warnings.filter((warning) => warning.includes("maximumFileSizeToCacheInBytes"));
   if (oversized.length) throw new Error(`[rom-weaver] precache: ${oversized.join("\n")}`);
   for (const warning of warnings) console.warn(`[rom-weaver] precache: ${warning}`);

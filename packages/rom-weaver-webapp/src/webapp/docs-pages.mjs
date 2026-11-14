@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createDocRoute, DOC_SOURCES } from "./docs-content.mjs";
 import { createDocsSeoMetadata, isLegalDocRoute, isRootPath, mapDocImageUrls, SITE_ORIGIN } from "./docs-routing.mjs";
-import { escapeHtml } from "./escape-html.mjs";
+import { escapeHtml, replaceBetween, replaceMetaContent } from "./escape-html.mjs";
 import { SITE_NAME } from "./workflow-seo.mjs";
 
 const docsDirectory = path.resolve(import.meta.dirname, "../../../../docs");
@@ -25,17 +25,6 @@ const DOC_ROUTES = readDocRoutes();
 // its `<` escaped. `<` is the same character to a JSON reader.
 /** @param {unknown} value */
 const serializeInlineJson = (value) => JSON.stringify(value).replaceAll("<", "\\u003c");
-
-// Guide-derived text can contain `$`, which `String.replace` reads as a match
-// reference in a replacement *string* - every substitution here goes through a
-// replacer function so the content is inserted literally.
-/** @param {string} html @param {RegExp} pattern @param {string} content */
-const replaceBetween = (html, pattern, content) =>
-  html.replace(pattern, (_match, open, close) => `${open}${escapeHtml(content)}${close}`);
-
-/** @param {string} html @param {string} attribute @param {string} name @param {string} content */
-const replaceMetaContent = (html, attribute, name, content) =>
-  replaceBetween(html, new RegExp(`(<meta\\s+${attribute}="${name}"\\s+content=")[^"]*(")`), content);
 
 /**
  * Guides name their screenshots by root-absolute path (`/docs/screenshots/x.webp`). Written
@@ -103,7 +92,5 @@ export {
   docSourcePath,
   generatedDocsDirectory,
   readDocRoutes,
-  replaceBetween,
-  replaceMetaContent,
   withDocsBase,
 };
