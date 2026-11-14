@@ -3,6 +3,7 @@ import process from "node:process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
+import { resolveAppChannel } from "./vite-config/channel.mjs";
 
 // Node exposes navigator.hardwareConcurrency, which would bake the build
 // machine's core count into the masthead. Force the "unknown environment"
@@ -67,6 +68,9 @@ const renderLandingShell = async (view = "patcher", notFound = false, docsSlug =
 
 const isDirectRun = process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href;
 if (isDirectRun) {
+  // A build sets this channel too; with no environment it is prod, which wears no badge.
+  const channel = resolveAppChannel(process.env.ROM_WEAVER_CHANNEL);
+  globalThis.ROM_WEAVER_PRERENDER_CHANNEL = { channel, label: process.env.ROM_WEAVER_CHANNEL_LABEL || channel };
   renderLandingShell().then(
     (html) => {
       process.stdout.write(`${html}\n`);
