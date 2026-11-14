@@ -42,8 +42,7 @@ const ANSI_ESCAPE_REGEX = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g
 
 const fileSize = (file) => fs.statSync(file, { throwIfNoEntry: false })?.size ?? 0;
 
-// Six file processes finished the suite fastest on a 16-core host; eight lost more to contention
-// retries than it gained.
+// Larger pools cause contention failures.
 const MAX_DEFAULT_CONCURRENCY = 6;
 
 export const resolveConcurrency = (environment = process.env) => {
