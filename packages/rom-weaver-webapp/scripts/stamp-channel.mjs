@@ -16,7 +16,7 @@ if (!channel) {
   console.error("usage: npm run stamp-channel -- <channel> [label] [origin]");
   process.exit(2);
 }
-// Unlike a build, which marks an unknown channel as dev, a restamp needs one the deploy can serve.
+// A build maps unknown channels to dev. A restamp rejects them, so a typo cannot stamp dev.
 if (!APP_CHANNELS.has(channel)) {
   console.error(`unknown channel '${channel}'; expected one of ${[...APP_CHANNELS].join(", ")}`);
   process.exit(2);

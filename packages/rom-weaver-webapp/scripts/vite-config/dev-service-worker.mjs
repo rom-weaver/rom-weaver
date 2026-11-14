@@ -1,8 +1,7 @@
 import { normalizePath } from "vite";
 
-// The dev server leaves `define` names in the source and sets them as globals from /@vite/env instead.
-// Pages and Vite's own workers import that module, but the service worker vite-plugin-pwa serves does not.
-// This mirrors Vite's injection into module workers.
+// The dev server sets `define` names as globals from /@vite/env, which pages import.
+// This adds that import to the dev service worker, as Vite does for module workers.
 export const importDevServiceWorkerDefines = (serviceWorkerSource) => {
   const serviceWorkerId = normalizePath(serviceWorkerSource);
   return {
