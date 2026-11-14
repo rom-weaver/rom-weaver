@@ -2105,6 +2105,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     needs: [wasm, gate]
+    # Only speeds up later deploys, so a failed save MUST NOT turn a green main red.
+    continue-on-error: true
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.wasm.outputs.bundle == 'success'
     steps:
       - name: Checkout
