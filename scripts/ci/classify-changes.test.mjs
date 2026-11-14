@@ -307,6 +307,7 @@ test("the prebuilt smoke needs an image reason on a pull request, a bundle on ma
 test("composite actions the WASM job runs select full CI", () => {
   for (const path of [
     ".github/actions/setup-build-env/action.yml",
+    ".github/actions/cargo-profile-hash/action.yml",
     ".github/actions/wasm-cache/action.yml",
     ".github/actions/webapp-build-cache/action.yml",
   ]) {
