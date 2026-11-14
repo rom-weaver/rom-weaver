@@ -822,7 +822,12 @@ assertIncludes(
 // The bundle reads its channel from <html>. A page stamped for another channel shows that one's badge.
 const expectedChannelAttributes = channelAttributes(channel, process.env.ROM_WEAVER_CHANNEL_LABEL || channel);
 for (const name of fs.readdirSync(distDir, { recursive: true, encoding: "utf8" })) {
-  if (name.endsWith(".html")) assertIncludes(read(name), expectedChannelAttributes, `${name} channel`);
+  if (!name.endsWith(".html")) continue;
+  const html = read(name);
+  assertIncludes(html, expectedChannelAttributes, `${name} channel`);
+  // A second root means text in the shell, such as the channel label, was read as replacement syntax.
+  const mountPoints = html.split('id="webapp-root"').length - 1;
+  if (mountPoints !== 1) throw new Error(`${name} has ${mountPoints} #webapp-root elements, expected 1`);
 }
 
 if (production) {

@@ -20,7 +20,7 @@ try {
 } catch {}
 </script>`;
 
-export const PRERENDER_ROOT = (shell) => {
+const PRERENDER_ROOT = (shell) => {
   const shelfRestorer = /class="[^"]*\b(?:guide-shelf|docs-index-shelf)\b/.test(shell)
     ? PRERENDER_DOC_SHELF_RESTORER
     : "";
@@ -35,6 +35,9 @@ export const PRERENDER_ROOT = (shell) => {
 // react-dom/server (scripts/prerender.mjs), so there is no hand-copied markup
 // to drift. The client hydrates the shell in place.
 export const PRERENDER_MOUNT_POINT = '<div id="webapp-root" aria-busy="true"></div>';
+
+/** Puts `shell` in the mount point of `html`. A replacer function keeps `$` sequences in the shell literal. */
+export const injectPrerenderedShell = (html, shell) => html.replace(PRERENDER_MOUNT_POINT, () => PRERENDER_ROOT(shell));
 
 // Which prerendered variant a dev request gets, mirroring the app router.
 const devPrerenderRoute = (url) => {
@@ -146,7 +149,7 @@ export const prerenderWebappShell = (channel, channelLabel) => ({
         // them on a full reload; until then the HMR'd <style> (appended after
         // them, so it wins) carries the change and a *deleted* rule lingers.
         return {
-          html: routeHtml.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(shell)),
+          html: injectPrerenderedShell(routeHtml, shell),
           tags: [
             "/src/webapp/design-system/index.css",
             "/src/webapp/design-system/deferred.css",

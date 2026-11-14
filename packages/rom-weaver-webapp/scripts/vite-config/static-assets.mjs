@@ -13,7 +13,7 @@ import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
 import { LEGACY_WORKFLOW_ROUTES, WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
 import { copyEmulatorJsAssets } from "./emulatorjs.mjs";
 import { rootDir } from "./paths.mjs";
-import { PRERENDER_MOUNT_POINT, PRERENDER_ROOT } from "./prerender-shell.mjs";
+import { injectPrerenderedShell, PRERENDER_MOUNT_POINT } from "./prerender-shell.mjs";
 import {
   generatedLicenseAssetSources,
   generatedSampleAssetPaths,
@@ -99,7 +99,7 @@ export const writeChannelPages = (
   const withShell = (view) => {
     const shell = prerenderedShells.get(view);
     if (!shell) throw new Error(`rom-weaver-static-assets: no prerendered shell for ${view}`);
-    const html = indexHtml.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(shell));
+    const html = injectPrerenderedShell(indexHtml, shell);
     const stamped = shellView(view);
     return stamped ? stampView(html, stamped) : html;
   };

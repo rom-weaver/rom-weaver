@@ -23,4 +23,8 @@ describe("withChannelBadge", () => {
     expect(withChannelBadge("rom-weaver", "Beta")).toBe("rom-weaver Beta");
     expect(withChannelBadge("What's new | rom-weaver", "")).toBe("What's new | rom-weaver");
   });
+
+  it("inserts a label with replacement patterns literally", () => {
+    expect(withChannelBadge("What's new | rom-weaver", "QA $& $1")).toBe("What's new | rom-weaver QA $& $1");
+  });
 });

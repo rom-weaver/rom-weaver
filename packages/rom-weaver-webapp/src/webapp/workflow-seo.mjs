@@ -129,7 +129,8 @@ const BETA_ROUTE_TITLES = Object.freeze({
  * @param {string} badge
  * @returns {string}
  */
-const withChannelBadge = (title, badge) => (badge ? title.replace(SITE_NAME, `${SITE_NAME} ${badge}`) : title);
+// A replacer function keeps `$` sequences in the badge literal.
+const withChannelBadge = (title, badge) => (badge ? title.replace(SITE_NAME, () => `${SITE_NAME} ${badge}`) : title);
 
 const LEGACY_WORKFLOW_ROUTES = {
   apply: "apply-rom-patches",

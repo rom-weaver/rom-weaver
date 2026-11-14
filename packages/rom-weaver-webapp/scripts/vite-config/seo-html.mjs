@@ -11,6 +11,7 @@ import {
   SITE_NAME,
   WORKFLOW_SEO_ROUTES,
   WORKFLOW_ENTRY_ROUTES,
+  withChannelBadge,
 } from "../../src/webapp/workflow-seo.mjs";
 import { repoRoot, rootDir } from "./paths.mjs";
 
@@ -20,12 +21,8 @@ export const createRobotsSource = (channel) =>
 
 const TITLE_PATTERN = /(<title>)[^<]*(<\/title>)/;
 
-// A replacer function keeps `$` sequences in the label literal.
-const channelTitle = (title, channel, channelLabel) =>
-  channel === "prod" ? title : title.replace(SITE_NAME, () => `${SITE_NAME} ${channelLabel}`);
-
 export const createWorkflowRouteHtml = (html, route, channel, channelLabel) => {
-  const title = channelTitle(route.title, channel, channelLabel);
+  const title = channel === "prod" ? route.title : withChannelBadge(route.title, channelLabel);
   const canonicalUrl = `https://rom-weaver.com/${route.slug}`;
   let routeHtml = replaceBetween(html, TITLE_PATTERN, title).replace(
     /(<link\s+rel="canonical"\s+href=")[^"]*(")/,
@@ -88,7 +85,7 @@ export const makeBetaRouteNoindex = (html, slug, channel = "prod", channelLabel 
     .replace(/(<link\s+rel="canonical"\s+href=")[^"]*(")/, `$1https://rom-weaver.com/${slug}$2`);
   const baseTitle = BETA_ROUTE_TITLES[slug];
   if (!baseTitle) return betaHtml;
-  const title = channelTitle(baseTitle, channel, channelLabel);
+  const title = channel === "prod" ? baseTitle : withChannelBadge(baseTitle, channelLabel);
   betaHtml = replaceBetween(betaHtml, TITLE_PATTERN, title);
   for (const [attribute, name] of [
     ["property", "og:title"],

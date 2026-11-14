@@ -12,6 +12,8 @@ import {
   WORKFLOW_SEO_ROUTES,
 } from "../src/webapp/workflow-seo.mjs";
 import { documentNodes, parseDocument } from "./html-document.mjs";
+import { applyChannelIdentity } from "./vite-config/channel.mjs";
+import { rootDir } from "./vite-config/paths.mjs";
 import {
   createNotFoundHtml,
   createRobotsSource,
@@ -244,7 +246,8 @@ test("beta tool pages get their own title, social titles, and channel badge", ()
 
 test("channel labels with HTML and replacement characters reach titles literally", () => {
   const label = `QA "<b>" & $& $1`;
-  const shell = routeShell.replace("</head>", '<meta name="robots" content="index, follow" />\n</head>');
+  // The stamp gives every page builder the app template with the channel identity applied.
+  const shell = applyChannelIdentity(fs.readFileSync(path.join(rootDir, "index.html"), "utf8"), "beta", label);
   for (const [page, html, expectedTitle] of [
     [
       "workflow",
@@ -263,6 +266,11 @@ test("channel labels with HTML and replacement characters reach titles literally
     assert.equal(titleText, expectedTitle, `${page} title`);
     assert.equal(metaContent("og:title"), expectedTitle, `${page} og:title`);
     assert.equal(metaContent("twitter:title"), expectedTitle, `${page} twitter:title`);
+    assert.equal(metaContent("apple-mobile-web-app-title"), `rom-weaver ${label}`, `${page} home-screen title`);
+    const channelLabelAttribute = nodes
+      .find((node) => node.nodeName === "html")
+      ?.attrs.find((attribute) => attribute.name === "data-channel-label")?.value;
+    assert.equal(channelLabelAttribute, label, `${page} data-channel-label`);
   }
 });
 

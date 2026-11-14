@@ -78,12 +78,19 @@ export const applyChannelIdentity = (html, channel, channelLabel) => {
   const accent = CHANNEL_DEFAULT_ACCENTS[channel] || CHANNEL_DEFAULT_ACCENTS.dev;
   const label = escapeHtml(channelLabel);
   const accentAttribute = accent === "madder" ? "" : `data-accent="${accent}" `;
-  const stampedHtml = html.replace("<html ", `<html ${accentAttribute}${channelAttributes(channel, channelLabel)} `);
+  // Replacer functions keep `$` sequences in the label literal.
+  const stampedHtml = html.replace(
+    "<html ",
+    () => `<html ${accentAttribute}${channelAttributes(channel, channelLabel)} `,
+  );
   if (channel === "prod") return stampedHtml;
   return stampedHtml
-    .replace(`<title>${SITE_NAME}`, `<title>${SITE_NAME} ${label}`)
+    .replace(`<title>${SITE_NAME}`, () => `<title>${SITE_NAME} ${label}`)
     .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
-    .replace(/(<meta name="apple-mobile-web-app-title" content=")([^"]*)(")/, `$1$2 ${label}$3`);
+    .replace(
+      /(<meta name="apple-mobile-web-app-title" content=")([^"]*)(")/,
+      (_match, open, name, close) => `${open}${name} ${label}${close}`,
+    );
 };
 
 // A build leaves the channel to the stamp step, so index.html matches for every channel.
