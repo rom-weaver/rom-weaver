@@ -52,7 +52,7 @@ runs:
         tools: node
         cargo-cache: "false"
         webapp-deps: "true"
-        emulatorjs-cache: ${{ inputs.bundle == 'build' && 'true' || 'false' }}
+        emulatorjs-cache: ${{ inputs.bundle == 'build' }}
 
     - name: Download ROM identify data
       if: inputs.identify-data-source == 'artifact'
