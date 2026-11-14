@@ -439,7 +439,7 @@ fn identify_hash_with_a_database_pack_needs_no_home_directory() {
     let temp = setup_temp_dir();
     fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
 
-    // Coverage profiles inside the crate invalidate the WASM artifact cache.
+    // Coverage profiles inside the crate invalidate the WebAssembly artifact cache.
     let mut command = Command::cargo_bin("rom-weaver").expect("binary");
     command.env_clear();
     if let Some(profile_file) = std::env::var_os("LLVM_PROFILE_FILE") {
