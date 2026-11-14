@@ -825,7 +825,7 @@ for (const name of fs.readdirSync(distDir, { recursive: true, encoding: "utf8" }
   if (!name.endsWith(".html")) continue;
   const html = read(name);
   assertIncludes(html, expectedChannelAttributes, `${name} channel`);
-  // A second root means text in the shell, such as the channel label, was read as replacement syntax.
+  // A second root means a label's `$` text was read as replacement syntax.
   const mountPoints = html.split('id="webapp-root"').length - 1;
   if (mountPoints !== 1) throw new Error(`${name} has ${mountPoints} #webapp-root elements, expected 1`);
 }
