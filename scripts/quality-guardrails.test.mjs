@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkDiff, inspectChange, syntaxSignals } from "./quality-guardrails.mjs";
+import { git } from "./test-git.mjs";
 
 for (const source of [
   'test.only("x", () => {});',
@@ -138,19 +138,11 @@ test("a moved test is compared with its old content", async (t) => {
     await t.test(name, () => {
       const repo = mkdtempSync(join(tmpdir(), "quality-guardrails-"));
       try {
-        const env = {
-          ...process.env,
-          GIT_AUTHOR_NAME: "ci",
-          GIT_AUTHOR_EMAIL: "ci@example.com",
-          GIT_COMMITTER_NAME: "ci",
-          GIT_COMMITTER_EMAIL: "ci@example.com",
-        };
-        const git = (...args) => execFileSync("git", ["-c", "commit.gpgsign=false", ...args], { cwd: repo, env });
         writeFileSync(join(repo, "a.test.mjs"), assertions(10));
-        git("init", "-q");
-        git("add", "-A");
-        git("commit", "-q", "-m", "base");
-        git("mv", "a.test.mjs", "b.test.mjs");
+        git(repo, "init", "-q");
+        git(repo, "add", "-A");
+        git(repo, "commit", "-q", "-m", "base");
+        git(repo, "mv", "a.test.mjs", "b.test.mjs");
         writeFileSync(join(repo, "b.test.mjs"), moved);
         const result = checkDiff("HEAD", repo);
         assert.equal(result.checkedFiles, 1);

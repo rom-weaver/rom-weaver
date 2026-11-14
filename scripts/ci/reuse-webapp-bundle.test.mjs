@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { git, isolatedEnv } from "../test-git.mjs";
 import { buildManifest } from "./wasm-manifest.mjs";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "reuse-webapp-bundle.mjs");
@@ -15,16 +16,6 @@ const WEBAPP = "packages/rom-weaver-webapp";
 const OVER_ONE_MIB_OF_PATHS = Object.fromEntries(
   Array.from({ length: 1500 }, (_, index) => [`notes/${"d".repeat(250).concat("/").repeat(3)}${index}.md`, "\n"]),
 );
-
-// Git hooks export GIT_DIR and similar variables. Inherited, they point git at the hook's repository.
-const isolatedEnv = (extra = {}) => ({
-  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
-  GIT_AUTHOR_NAME: "ci",
-  GIT_AUTHOR_EMAIL: "ci@example.com",
-  GIT_COMMITTER_NAME: "ci",
-  GIT_COMMITTER_EMAIL: "ci@example.com",
-  ...extra,
-});
 
 const write = (root, path, body) => {
   mkdirSync(dirname(join(root, path)), { recursive: true });
@@ -36,22 +27,20 @@ const write = (root, path, body) => {
 function restoredBundle(t, { bundleCommit, laterChanges = {}, laterMoves = {}, runWasm = "module", wasmManifest = true }) {
   const repo = mkdtempSync(join(tmpdir(), "reuse-webapp-bundle-"));
   t.after(() => rmSync(repo, { recursive: true, force: true }));
-  const git = (...args) =>
-    execFileSync("git", ["-c", "commit.gpgsign=false", ...args], { cwd: repo, encoding: "utf8", env: isolatedEnv() }).trim();
-  git("init", "-q");
+  git(repo, "init", "-q");
   write(repo, "README.md", "base\n");
   write(repo, `${WEBAPP}/src/webapp/app.ts`, "export {};\n");
-  git("add", "-A");
-  git("commit", "-q", "-m", "base");
-  const bundled = git("rev-parse", "HEAD");
+  git(repo, "add", "-A");
+  git(repo, "commit", "-q", "-m", "base");
+  const bundled = git(repo, "rev-parse", "HEAD");
   for (const [path, body] of Object.entries(laterChanges)) write(repo, path, body);
   for (const [from, to] of Object.entries(laterMoves)) {
     mkdirSync(dirname(join(repo, to)), { recursive: true });
-    git("mv", from, to);
+    git(repo, "mv", from, to);
   }
   if (Object.keys(laterChanges).length || Object.keys(laterMoves).length) {
-    git("add", "-A");
-    git("commit", "-q", "-m", "later");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-q", "-m", "later");
   }
 
   const artifact = join(repo, "artifact");

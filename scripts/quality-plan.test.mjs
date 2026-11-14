@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { qualityPlan } from "./quality-plan.mjs";
 import { classifyChanges } from "./ci/classify-changes.mjs";
+import { git, isolatedEnv } from "./test-git.mjs";
 test("selection plumbing and shared manifests fail open to every assurance lane", () => {
   for (const path of [
     "Cargo.lock",
@@ -40,26 +41,19 @@ test("main classifier selects lint for every owned checker and workflow", () => 
 test("the CLI lists non-ASCII names and both paths of a moved file", () => {
   const repo = mkdtempSync(join(tmpdir(), "quality-plan-"));
   try {
-    // Hooks export GIT_DIR, and CI sets GITHUB_OUTPUT; neither may reach the CLI.
-    const env = {
-      ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_") && key !== "GITHUB_OUTPUT")),
-      GIT_AUTHOR_NAME: "ci",
-      GIT_AUTHOR_EMAIL: "ci@example.com",
-      GIT_COMMITTER_NAME: "ci",
-      GIT_COMMITTER_EMAIL: "ci@example.com",
-    };
-    const git = (...args) => execFileSync("git", ["-c", "commit.gpgsign=false", ...args], { cwd: repo, encoding: "utf8", env });
+    // CI sets GITHUB_OUTPUT, which must not reach the CLI.
+    const env = isolatedEnv({ GITHUB_OUTPUT: undefined });
     mkdirSync(join(repo, "crates/rom-weaver-patches/src"), { recursive: true });
     mkdirSync(join(repo, "packages/rom-weaver-webapp/src"), { recursive: true });
     writeFileSync(join(repo, "crates/rom-weaver-patches/src/lib.rs"), "pub fn apply() {}\n");
-    git("init", "-q");
-    git("add", "-A");
-    git("commit", "-q", "-m", "base");
-    git("branch", "base");
+    git(repo, "init", "-q");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-q", "-m", "base");
+    git(repo, "branch", "base");
     writeFileSync(join(repo, "packages/rom-weaver-webapp/src/näme.ts"), "export {};\n");
-    git("mv", "crates/rom-weaver-patches/src/lib.rs", "notes-lib.rs");
-    git("add", "-A");
-    git("commit", "-q", "-m", "change");
+    git(repo, "mv", "crates/rom-weaver-patches/src/lib.rs", "notes-lib.rs");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-q", "-m", "change");
     const script = fileURLToPath(new URL("./quality-plan.mjs", import.meta.url));
     const { paths } = JSON.parse(execFileSync(process.execPath, [script, "base"], { cwd: repo, encoding: "utf8", env }));
     assert.deepEqual(paths.toSorted(), [

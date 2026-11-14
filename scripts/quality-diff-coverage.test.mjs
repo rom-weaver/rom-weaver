@@ -12,6 +12,7 @@ import {
   readCoverageReports,
   parseBranches,
 } from "./quality-diff-coverage.mjs";
+import { git, isolatedEnv } from "./test-git.mjs";
 const diff =
   "--- a/crates/sample.rs\n+++ b/crates/sample.rs\n@@ -1,2 +1,3 @@\n+covered\n+uncovered\n+unmeasured\n";
 test("webapp-relative LCOV preserves measured lines and branches", () => {
@@ -135,24 +136,15 @@ test("V8 negative branch counts remain unknown, never covered", () => {
 test("the CLI measures a changed file with a non-ASCII name", () => {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), "quality-diff-coverage-"));
   try {
-    // Hooks export GIT_DIR, which would point git at this repository.
-    const env = {
-      ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
-      GIT_AUTHOR_NAME: "ci",
-      GIT_AUTHOR_EMAIL: "ci@example.com",
-      GIT_COMMITTER_NAME: "ci",
-      GIT_COMMITTER_EMAIL: "ci@example.com",
-    };
-    const git = (...args) => execFileSync("git", ["-c", "commit.gpgsign=false", ...args], { cwd: repo, env });
     fs.mkdirSync(path.join(repo, "crates"));
     fs.writeFileSync(path.join(repo, "crates/näme.rs"), "fn a() {}\n");
-    git("init", "-q");
-    git("add", "-A");
-    git("commit", "-q", "-m", "base");
+    git(repo, "init", "-q");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-q", "-m", "base");
     fs.appendFileSync(path.join(repo, "crates/näme.rs"), "fn b() {}\n");
     fs.writeFileSync(path.join(repo, "lcov.info"), "SF:crates/näme.rs\nDA:2,3\nend_of_record\n");
     const script = fileURLToPath(new URL("./quality-diff-coverage.mjs", import.meta.url));
-    execFileSync(process.execPath, [script, "HEAD", "lcov.info"], { cwd: repo, env, stdio: "pipe" });
+    execFileSync(process.execPath, [script, "HEAD", "lcov.info"], { cwd: repo, env: isolatedEnv(), stdio: "pipe" });
     const { covered } = JSON.parse(fs.readFileSync(path.join(repo, "dist/coverage/changed-lines.json"), "utf8"));
     assert.deepEqual(covered, ["crates/näme.rs:2"]);
   } finally {

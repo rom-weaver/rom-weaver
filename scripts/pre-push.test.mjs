@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { A11Y_STEP, planPrePush, PRODUCTION_BUNDLE_STEPS, pushedCommits, WEBAPP_BUNDLE_STEPS } from "./pre-push.mjs";
+import { git, isolatedEnv } from "./test-git.mjs";
 
 const HEAD = "a".repeat(40);
 const OTHER = "b".repeat(40);
@@ -128,25 +129,16 @@ test("a pushed non-ASCII webapp path runs the bundle checks", () => {
   try {
     const repo = join(dir, "repo");
     mkdirSync(join(repo, "packages", "rom-weaver-webapp", "src"), { recursive: true });
-    // Git hooks export GIT_DIR and similar variables. Inherited, they point git at the hook's repository.
-    const env = {
-      ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
-      GIT_AUTHOR_NAME: "ci",
-      GIT_AUTHOR_EMAIL: "ci@example.com",
-      GIT_COMMITTER_NAME: "ci",
-      GIT_COMMITTER_EMAIL: "ci@example.com",
-    };
-    const git = (...args) => execFileSync("git", ["-c", "commit.gpgsign=false", ...args], { cwd: repo, encoding: "utf8", env }).trim();
-    git("init", "-q");
+    git(repo, "init", "-q");
     writeFileSync(join(repo, "README.md"), "base\n");
-    git("add", "-A");
-    git("commit", "-q", "-m", "base");
-    git("update-ref", "refs/remotes/origin/main", "HEAD");
-    git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-q", "-m", "base");
+    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD");
+    git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
     writeFileSync(join(repo, "packages", "rom-weaver-webapp", "src", "näme.ts"), "export {};\n");
-    git("add", "-A");
-    git("commit", "-q", "-m", "webapp");
-    const head = git("rev-parse", "HEAD");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-q", "-m", "webapp");
+    const head = git(repo, "rev-parse", "HEAD");
 
     // npm runs a recording script, and mise does nothing, so no real build starts.
     const calls = join(dir, "calls.jsonl");
@@ -168,7 +160,7 @@ test("a pushed non-ASCII webapp path runs the bundle checks", () => {
       cwd: repo,
       encoding: "utf8",
       input: `refs/heads/feat ${head} refs/heads/feat ${ZERO}\n`,
-      env: { ...env, npm_execpath: cli },
+      env: isolatedEnv({ npm_execpath: cli }),
     });
     assert.equal(result.status, 0, result.stderr);
     const observed = readFileSync(calls, "utf8").trim().split("\n").map((line) => JSON.parse(line));
