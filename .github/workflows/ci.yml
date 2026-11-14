@@ -483,8 +483,6 @@ jobs:
       - name: Restore fuzz build artifacts
         if: matrix.signal == 'fuzz'
         uses: ./.github/actions/fuzz-cache
-        with:
-          save: "false"
       - name: Diff mutation evidence
         id: mutation
         if: matrix.signal == 'mutation'

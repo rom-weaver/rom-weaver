@@ -12,7 +12,7 @@ const step = (name) => {
   assert.ok(body, `missing fuzz cache step: ${name}`);
   return body;
 };
-const restoreKeys = (body) => body.match(/restore-keys: \|\n([\s\S]+)$/u)?.[1].trim().split("\n").map((line) => line.trim());
+const restoreKeys = (body) => body.match(/restore-keys: \|\n([\s\S]+?)(?:\n\s*\n|$)/u)?.[1].trim().split("\n").map((line) => line.trim());
 const field = (body, name) => body.match(new RegExp(`^        ${name}: (.+)$`, "mu"))?.[1];
 
 const selected = (name, save, ref) => {
@@ -34,20 +34,20 @@ for (const [label, save, ref, saves, restores] of [
   });
 }
 
-test("saving and restoring use the fuzz workspace's target directory with the same keys", () => {
+test("saving and restoring use the fuzz workspace's target directory with the same key", () => {
   const [saving, restoring] = [step("Cache fuzz build artifacts"), step("Restore fuzz build artifacts")];
   assert.equal(field(saving, "path"), "fuzz/target");
   assert.equal(field(restoring, "path"), "fuzz/target");
   assert.equal(field(saving, "key"), field(restoring, "key"));
-  assert.deepEqual(restoreKeys(saving), restoreKeys(restoring));
 });
 
 test("the key names the toolchain, platform, commit, and every file that fixes the build", () => {
-  const key = field(step("Cache fuzz build artifacts"), "key");
-  for (const part of ["runner.os", "runner.arch", "steps.pin.outputs.toolchain", "github.sha"]) {
-    assert.ok(key.includes(part), `key lacks ${part}`);
+  const pin = step("Resolve fuzz cache key");
+  for (const part of ["RUNNER_OS", "RUNNER_ARCH", "FUZZ_TOOLCHAIN", "INPUTS_HASH"]) {
+    assert.ok(pin.includes(part), `the key step lacks ${part}`);
   }
-  const patterns = [...key.matchAll(/hashFiles\(([^)]*)\)/gu)].flatMap(([, list]) => [...list.matchAll(/'([^']+)'/gu)].map((match) => match[1]));
+  assert.ok(field(step("Cache fuzz build artifacts"), "key").includes("github.sha"));
+  const patterns = [...pin.matchAll(/hashFiles\(([^)]*)\)/gu)].flatMap(([, list]) => [...list.matchAll(/'([^']+)'/gu)].map((match) => match[1]));
   for (const required of ["fuzz/Cargo.toml", "fuzz/Cargo.lock", "Cargo.lock", ".config/mise.toml", "scripts/quality-fuzz.mjs"]) {
     assert.ok(patterns.includes(required), `key does not hash ${required}`);
   }
@@ -58,16 +58,16 @@ test("the key names the toolchain, platform, commit, and every file that fixes t
   }
 });
 
-test("older generations are offered by prefixes that keep the toolchain and platform", () => {
-  const prefixes = restoreKeys(step("Restore fuzz build artifacts"));
-  assert.equal(prefixes.length, 2);
-  for (const prefix of prefixes) assert.match(prefix, /^fuzz-target-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-\$\{\{ steps\.pin\.outputs\.toolchain \}\}-/u);
+test("a restoring run may fall back to an older lock generation, a saving run may not", () => {
+  const inputs = "${{ steps.pin.outputs.inputs }}";
+  assert.deepEqual(restoreKeys(step("Restore fuzz build artifacts")), [inputs, "${{ steps.pin.outputs.prefix }}"]);
+  assert.deepEqual(restoreKeys(step("Cache fuzz build artifacts")), [inputs]);
 });
 
 test("both workflows install the toolchain the script pins and restore the cache only for the fuzz signal", () => {
   for (const [path, saves] of [
-    [".github/workflows/quality-deep.yml", "true"],
-    [".github/workflows/ci.yml", "false"],
+    [".github/workflows/quality-deep.yml", 'save: "true"'],
+    [".github/workflows/ci.yml", null],
   ]) {
     const workflow = read(path);
     const installed = [...workflow.matchAll(/rustup toolchain install (nightly-[\d-]+)/gu)].map((match) => match[1]);
@@ -76,6 +76,7 @@ test("both workflows install the toolchain the script pins and restore the cache
     assert.ok(block, `${path} does not restore fuzz build artifacts`);
     assert.match(block, /if: matrix\.signal == 'fuzz'/u);
     assert.match(block, /uses: \.\/\.github\/actions\/fuzz-cache/u);
-    assert.match(block, new RegExp(`save: "${saves}"`, "u"));
+    if (saves) assert.ok(block.includes(saves));
+    else assert.doesNotMatch(block, /save:/u);
   }
 });

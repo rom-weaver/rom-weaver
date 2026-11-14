@@ -461,11 +461,13 @@ A restored entry can skip work but cannot change output. A Brotli entry is used 
 
 ### `.github/actions/fuzz-cache`
 
-Caches `fuzz/target`. The fuzz crate is its own workspace, so the cargo cache in `setup-build-env` never covers it, and a cold job compiles every dependency again with sanitizer and coverage instrumentation. `quality-analysis` in `ci.yml` restores it; the weekly `quality-deep.yml` fuzz job also saves it (`save: "true"`).
+Caches `fuzz/target`. The fuzz crate is its own workspace, so the `setup-build-env` cargo cache never covers it. A cold job rebuilds every dependency with sanitizer and coverage instrumentation. `quality-analysis` in `ci.yml` restores it; the weekly `quality-deep.yml` fuzz job also saves it (`save: "true"`).
 
-The key covers the runner, the pinned nightly (read from `scripts/quality-fuzz.mjs`), the lock files, Cargo and mise configuration, crate manifests, build scripts, and the commit. Restores fall back to the same inputs without the commit, then to the toolchain alone. Source changes are left to Cargo's fingerprints, which rebuild path crates whose sources are newer than the restored artifacts.
+The key covers the runner, the pinned nightly (from `scripts/quality-fuzz.mjs`), and the lock files. It also covers Cargo and mise configuration, crate manifests, build scripts, and the commit. A restoring run falls back to older commits with the same inputs, then to the toolchain alone. A saving run falls back only to the same inputs. Cargo never deletes unused artifacts, so a lock change starts an empty directory.
 
-Only a run on `refs/heads/main` with `save: "true"` writes the cache, so pull request runs never add entries. The cache-cleanup sweep keeps the newest `fuzz-target-` generation per set of hashed inputs. The saved size on Actions is not yet measured; check it against the [cache budget](#actions-cache-budget) before relying on it.
+Cargo's fingerprints handle source changes. They rebuild path crates whose sources are newer than the restored artifacts. Only a run on `refs/heads/main` with `save: "true"` writes the cache. Pull request runs never add entries.
+
+The cache-cleanup sweep keeps the newest `fuzz-target-` generation per set of hashed inputs. The saved size on Actions is unmeasured; check it against the [cache budget](#actions-cache-budget) first.
 
 ### `.github/actions/build-cli-platform`
 

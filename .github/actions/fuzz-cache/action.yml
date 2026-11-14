@@ -14,43 +14,41 @@ inputs:
       Every other run, and every run with any other value, only restores.
     default: "false"
 
-outputs:
-  cache-hit:
-    description: "'true' when an exact key was restored."
-    value: ${{ steps.cache.outputs.cache-hit || steps.restore.outputs.cache-hit }}
-
 runs:
   using: composite
   steps:
-    # The fuzz script picks the nightly for every run, so the key cannot name another one.
-    - name: Resolve fuzz toolchain
+    # The fuzz script uses one nightly for every run; the key reads that value.
+    # The inputs hash covers the toolchain, locks, configuration, fuzz flags, and build scripts.
+    - name: Resolve fuzz cache key
       id: pin
       shell: bash
+      env:
+        INPUTS_HASH: ${{ hashFiles('fuzz/Cargo.toml', 'fuzz/Cargo.lock', 'Cargo.lock', '.cargo/config.toml', '.config/mise.toml', 'scripts/quality-fuzz.mjs', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/libarchive/build.rs') }}
       run: |
         toolchain=$(node --input-type=module -e 'import { FUZZ_TOOLCHAIN } from "./scripts/quality-fuzz.mjs"; process.stdout.write(FUZZ_TOOLCHAIN);')
         test -n "$toolchain"
-        echo "toolchain=$toolchain" >> "$GITHUB_OUTPUT"
+        prefix="fuzz-target-${RUNNER_OS}-${RUNNER_ARCH}-${toolchain}-"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "inputs=${prefix}${INPUTS_HASH}-" >> "$GITHUB_OUTPUT"
 
-    # The first prefix covers the toolchain, locks, configuration, fuzz flags, and build scripts.
-    # Cargo's fingerprints handle source changes, so a newer commit restores the previous generation.
+    # Cargo never deletes artifacts it stops using. A saving run restores only an entry built from
+    # identical inputs, so a lock change starts from an empty directory instead of growing the last one.
     - name: Cache fuzz build artifacts
-      id: cache
       if: inputs.save == 'true' && github.ref == 'refs/heads/main'
       uses: actions/cache@v6
       with:
         path: fuzz/target
-        key: fuzz-target-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.toolchain }}-${{ hashFiles('fuzz/Cargo.toml', 'fuzz/Cargo.lock', 'Cargo.lock', '.cargo/config.toml', '.config/mise.toml', 'scripts/quality-fuzz.mjs', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/libarchive/build.rs') }}-${{ github.sha }}
+        key: ${{ steps.pin.outputs.inputs }}${{ github.sha }}
         restore-keys: |
-          fuzz-target-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.toolchain }}-${{ hashFiles('fuzz/Cargo.toml', 'fuzz/Cargo.lock', 'Cargo.lock', '.cargo/config.toml', '.config/mise.toml', 'scripts/quality-fuzz.mjs', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/libarchive/build.rs') }}-
-          fuzz-target-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.toolchain }}-
+          ${{ steps.pin.outputs.inputs }}
 
+    # Cargo's fingerprints handle source changes, so a newer commit restores the previous generation.
     - name: Restore fuzz build artifacts
-      id: restore
       if: ${{ !(inputs.save == 'true' && github.ref == 'refs/heads/main') }}
       uses: actions/cache/restore@v6
       with:
         path: fuzz/target
-        key: fuzz-target-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.toolchain }}-${{ hashFiles('fuzz/Cargo.toml', 'fuzz/Cargo.lock', 'Cargo.lock', '.cargo/config.toml', '.config/mise.toml', 'scripts/quality-fuzz.mjs', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/libarchive/build.rs') }}-${{ github.sha }}
+        key: ${{ steps.pin.outputs.inputs }}${{ github.sha }}
         restore-keys: |
-          fuzz-target-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.toolchain }}-${{ hashFiles('fuzz/Cargo.toml', 'fuzz/Cargo.lock', 'Cargo.lock', '.cargo/config.toml', '.config/mise.toml', 'scripts/quality-fuzz.mjs', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/libarchive/build.rs') }}-
-          fuzz-target-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.toolchain }}-
+          ${{ steps.pin.outputs.inputs }}
+          ${{ steps.pin.outputs.prefix }}
