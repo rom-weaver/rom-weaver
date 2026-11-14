@@ -463,11 +463,11 @@ A restored entry can skip work but cannot change output. A Brotli entry is used 
 
 Caches `fuzz/target`. The fuzz crate is its own workspace, so the `setup-build-env` cargo cache never covers it. A cold job rebuilds every dependency with sanitizer and coverage instrumentation. `quality-analysis` in `ci.yml` restores it; the weekly `quality-deep.yml` fuzz job also saves it (`save: "true"`).
 
-The key covers the runner, the pinned nightly (from `scripts/quality-fuzz.mjs`), and the lock files. It also covers Cargo and mise configuration, crate manifests, build scripts, and the commit. A restoring run falls back to older commits with the same inputs, then to the toolchain alone. A saving run falls back only to the same inputs. Cargo never deletes unused artifacts, so a lock change starts an empty directory.
+The key covers the runner, the pinned nightly (from `scripts/quality-fuzz.mjs`), and the lock files. It also covers Cargo and mise configuration, crate manifests, build scripts, and the commit. A restoring run falls back to older commits with the same inputs. It then falls back to the toolchain alone.
 
-Cargo's fingerprints handle source changes. They rebuild path crates whose sources are newer than the restored artifacts. Only a run on `refs/heads/main` with `save: "true"` writes the cache. Pull request runs never add entries.
+A saving run falls back only to the same inputs. Cargo never deletes unused artifacts, so a lock change starts an empty directory. Cargo's fingerprints handle source changes. They rebuild path crates whose sources are newer than the restored artifacts.
 
-The cache-cleanup sweep keeps the newest `fuzz-target-` generation per set of hashed inputs. The saved size on Actions is unmeasured; check it against the [cache budget](#actions-cache-budget) first.
+Only a run on `refs/heads/main` with `save: "true"` writes the cache. Pull request runs never add entries. The cache-cleanup sweep keeps the newest `fuzz-target-` generation per set of hashed inputs. The saved size on Actions is unmeasured; check it against the [cache budget](#actions-cache-budget) first.
 
 ### `.github/actions/build-cli-platform`
 

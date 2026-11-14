@@ -29,7 +29,7 @@ async function assertGzipComplete(file) {
 }
 
 // Writers rename their own temp files into place, so readers never see partial files.
-// A writer that loses a rename keeps the winner. `verify` rejects a download that is incomplete.
+// `verify` rejects an incomplete download; a writer that loses a rename keeps the winner.
 export async function publishArchive({ archive, download, verify = assertGzipComplete }) {
   await mkdir(path.dirname(archive), { recursive: true });
   const partial = `${archive}.${process.pid}-${randomUUID()}.part`;
@@ -62,8 +62,8 @@ function ensureArchive({ archive, download }) {
 // tar and zlib report a damaged or truncated archive with a `TAR_*` or `Z_*` code.
 const isDamagedArchiveError = (error) => /^(?:TAR|Z)_/u.test(String(error?.code ?? ""));
 
-// Run `use(archive)`, downloading the archive when absent. A damaged entry from before
-// this call is removed, unless another process replaced it. Then it is fetched once more.
+// Run `use(archive)`, downloading the archive when absent. A damaged entry from before this
+// call is removed, unless another process replaced it, and fetched once more.
 export async function withCachedArchive({ archive, download, use }) {
   const before = await entryIdentity(archive);
   await ensureArchive({ archive, download });

@@ -31,8 +31,8 @@ runs:
         echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
         echo "inputs=${prefix}${INPUTS_HASH}-" >> "$GITHUB_OUTPUT"
 
-    # Cargo never deletes artifacts it stops using. A saving run restores only an entry built from
-    # identical inputs, so a lock change starts from an empty directory instead of growing the last one.
+    # Cargo never deletes artifacts it stops using. A saving run restores only an entry with identical inputs.
+    # A lock change then starts from an empty directory.
     - name: Cache fuzz build artifacts
       if: inputs.save == 'true' && github.ref == 'refs/heads/main'
       uses: actions/cache@v6
