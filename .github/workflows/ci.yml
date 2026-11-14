@@ -2179,11 +2179,42 @@ jobs:
   # Direct Upload reuses the CI-tested WASM artifact without Cloudflare build
   # minutes or a second toolchain. Depend only on `wasm` so deploy URLs arrive
   # while the rest of the suite is still running.
+  # A release tag's run usually starts before main's run on the same commit saves its tested
+  # bundle. The deploy legs wait for that save here, outside their publish lock. The wait ends
+  # without a bundle when main has no run for the commit, the run ends without saving, or after
+  # 30 minutes; the legs then build their own.
+  wait-webapp-bundle:
+    name: Wait for main's tested webapp bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    needs: changes
+    continue-on-error: true
+    if: >-
+      github.ref_type == 'tag' &&
+      needs.changes.outputs.deploy_targets != '' &&
+      needs.changes.outputs.deploy_targets != '[]'
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+
+      - name: Wait for main's tested webapp bundle
+        env:
+          # MUST match the key `save-webapp-bundle` writes.
+          BUNDLE_KEY: webapp-bundle-${{ runner.os }}-${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci/wait-webapp-bundle.mjs
+
   deploy:
     name: Webapp deploy (${{ matrix.target.channel }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    needs: [wasm, changes]
+    needs: [wasm, changes, wait-webapp-bundle]
     # Deployment was a separate, non-gating workflow before it moved here to
     # share the wasm artifact. Preserve that boundary: a Cloudflare outage must
     # not turn a green main build red and suppress release automation.
@@ -2195,8 +2226,11 @@ jobs:
       deployments: write
     # An empty or missing target list would be a hard "matrix contains no
     # values" error, so guard rather than trusting the planner to always emit
-    # one.
+    # one. `wait-webapp-bundle` runs only for tags, so its result is not checked.
     if: >-
+      !cancelled() &&
+      needs.wasm.result == 'success' &&
+      needs.changes.result == 'success' &&
       needs.changes.outputs.deploy_targets != '' &&
       needs.changes.outputs.deploy_targets != '[]'
     strategy:
