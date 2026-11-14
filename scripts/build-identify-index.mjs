@@ -16,6 +16,7 @@ const PLATFORM_NAMES = JSON.parse(
   ),
 );
 
+import { publishArchive, withCachedArchive } from "./identify-archive-cache.mjs";
 import { brotliCompressBufferCached } from "./wasm/brotli-compress.mjs";
 import {
   CHEAT_PLATFORMS,
@@ -477,6 +478,9 @@ Options:
   --out <dir>              Output directory for per-system packs. Defaults to ${DEFAULT_OUT}
   --only <platforms>       Comma-separated platform name(s) to build (repeatable).
   --cache-dir <path>       Download and game-cache directory. Defaults to ${DEFAULT_CACHE_DIR}
+  --archive-cache-dir <path>
+                          Directory for the compressed source archives, which concurrent
+                          builds may share. Defaults to --cache-dir.
   --force-row-cache        Rebuild the per-system game cache even if it matches.
   --download-only          Download/resolve sources, then stop.
   --jobs <n>               Concurrent platform builds (default: up to 4 CPUs).
@@ -489,9 +493,16 @@ Options:
   --help                   Show this help.
 `;
 
+const PATH_FLAGS = {
+  "--archive-cache-dir": "archiveCacheDir",
+  "--cache-dir": "cacheDir",
+  "--out": "outPath",
+};
+
 function parseArgs(argv) {
   const options = {
     allowMissingPlatforms: false,
+    archiveCacheDir: process.env.ROM_WEAVER_IDENTIFY_ARCHIVE_CACHE_DIR,
     brotli: true,
     brotliQuality: 11,
     cacheDir: process.env.ROM_WEAVER_IDENTIFY_CACHE_DIR || DEFAULT_CACHE_DIR,
@@ -513,9 +524,8 @@ function parseArgs(argv) {
       return value;
     };
 
-    if (arg === "--cache-dir") options.cacheDir = readValue();
+    if (Object.hasOwn(PATH_FLAGS, arg)) options[PATH_FLAGS[arg]] = readValue();
     else if (arg === "--jobs") options.jobs = Number(readValue());
-    else if (arg === "--out") options.outPath = readValue();
     else if (arg === "--only") {
       for (const name of readValue().split(",")) {
         const trimmed = name.trim();
@@ -535,6 +545,7 @@ function parseArgs(argv) {
       throw new Error(`Unknown argument: ${arg}`);
     }
   }
+  options.archiveCacheDir ||= options.cacheDir;
   if (!Number.isSafeInteger(options.jobs) || options.jobs < 1) {
     throw new Error("--jobs must be a positive integer");
   }
@@ -701,22 +712,26 @@ export async function extractArchiveDirectory({ archive, directory, sourceRoot }
   return members.sort();
 }
 
-async function ensureArchiveDownloaded({ archiveUrl, cacheDir, label, revision }) {
-  const archiveDir = path.join(cacheDir, label);
-  const archive = path.join(archiveDir, `${revision}.tar.gz`);
-  await mkdir(archiveDir, { recursive: true });
-  const archiveInfo = await fileStat(archive);
-  if (!archiveInfo?.isFile() || archiveInfo.size === 0) {
-    await runCurl(archiveUrl, `${archive}.part`, undefined);
-    await rename(`${archive}.part`, archive);
-  }
-  return archive;
+// Run `use(archive)` on a pinned source archive, fetching it first when the cache lacks it.
+function withSourceArchive({ archiveCacheDir, archiveUrl, label, revision }, use) {
+  return withCachedArchive({
+    archive: path.join(archiveCacheDir, label, `${revision}.tar.gz`),
+    download: (partial) => runCurl(archiveUrl, partial, undefined),
+    use,
+  });
 }
 
 // Extract one archive directory into the source cache once. The member list
 // is recorded next to the directory so a later build can trust the cache
 // without re-reading the archive; a missing member invalidates the record.
-async function ensureArchiveDirectory({ archiveUrl, cacheDir, directory, label, revision }) {
+async function ensureArchiveDirectory({
+  archiveCacheDir,
+  archiveUrl,
+  cacheDir,
+  directory,
+  label,
+  revision,
+}) {
   const sourceRoot = path.join(cacheDir, label, revision);
   const recordPath = path.join(sourceRoot, `${directory}.members.json`);
   let members;
@@ -732,9 +747,10 @@ async function ensureArchiveDirectory({ archiveUrl, cacheDir, directory, label, 
     // No usable record: extract below.
   }
   if (!members) {
-    const archive = await ensureArchiveDownloaded({ archiveUrl, cacheDir, label, revision });
     await mkdir(sourceRoot, { recursive: true });
-    members = await extractArchiveDirectory({ archive, directory, sourceRoot });
+    members = await withSourceArchive({ archiveCacheDir, archiveUrl, label, revision }, (archive) =>
+      extractArchiveDirectory({ archive, directory, sourceRoot }),
+    );
     if (!members.length) {
       throw new Error(`${label} archive has no .cht files under ${directory}`);
     }
@@ -744,6 +760,7 @@ async function ensureArchiveDirectory({ archiveUrl, cacheDir, directory, label, 
 }
 
 async function ensureArchiveFiles({
+  archiveCacheDir,
   archiveUrl,
   cacheDir,
   label,
@@ -762,13 +779,14 @@ async function ensureArchiveFiles({
     if (!info?.isFile() || info.size === 0) missing.push(entry);
   }
   if (missing.length) {
-    const archive = await ensureArchiveDownloaded({ archiveUrl, cacheDir, label, revision });
     await mkdir(sourceRoot, { recursive: true });
-    await extractArchiveMembers({
-      archive,
-      members: missing.map((entry) => `${prefix}/${entry.sourcePath}`),
-      sourceRoot,
-    });
+    await withSourceArchive({ archiveCacheDir, archiveUrl, label, revision }, (archive) =>
+      extractArchiveMembers({
+        archive,
+        members: missing.map((entry) => `${prefix}/${entry.sourcePath}`),
+        sourceRoot,
+      }),
+    );
   }
   const result = new Map();
   for (const entry of expected) {
@@ -781,8 +799,9 @@ async function ensureArchiveFiles({
   return result;
 }
 
-async function ensureLibretroDats(sourcePaths, cacheDir) {
+async function ensureLibretroDats(sourcePaths, { archiveCacheDir, cacheDir }) {
   return ensureArchiveFiles({
+    archiveCacheDir,
     archiveUrl: `${LIBRETRO_REPOSITORY}/archive/${LIBRETRO_REVISION}.tar.gz`,
     cacheDir,
     label: "libretro",
@@ -792,8 +811,9 @@ async function ensureLibretroDats(sourcePaths, cacheDir) {
   });
 }
 
-async function ensureLibretroCheatFiles(directory, cacheDir) {
+async function ensureLibretroCheatFiles(directory, { archiveCacheDir, cacheDir }) {
   return ensureArchiveDirectory({
+    archiveCacheDir,
     archiveUrl: `${LIBRETRO_REPOSITORY}/archive/${LIBRETRO_REVISION}.tar.gz`,
     cacheDir,
     directory,
@@ -808,7 +828,7 @@ async function writeCheatShard(platform, games, options) {
   const spec = CHEAT_PLATFORMS[platform];
   const slug = slugifyPlatform(platform);
   console.error(`[identify] ${platform}: building cheat shard`);
-  const sources = await ensureLibretroCheatFiles(spec.directory, options.cacheDir);
+  const sources = await ensureLibretroCheatFiles(spec.directory, options);
   const files = await Promise.all(
     sources.map(async ({ sourcePath, target }) => ({
       sourcePath,
@@ -866,12 +886,13 @@ async function writeCheatShard(platform, games, options) {
 
 async function ensureOpenGoodDats(
   datFiles,
-  cacheDir,
+  { archiveCacheDir, cacheDir },
   revision = OPENGOOD_REVISION,
   label = "opengood",
 ) {
   const sourcePaths = datFiles.map((datFile) => `dats/${datFile}`);
   const paths = await ensureArchiveFiles({
+    archiveCacheDir,
     archiveUrl: `${OPENGOOD_REPOSITORY}/archive/${revision}.tar.gz`,
     cacheDir,
     label,
@@ -880,6 +901,22 @@ async function ensureOpenGoodDats(
     revision,
   });
   return new Map(datFiles.map((datFile) => [datFile, paths.get(`dats/${datFile}`)]));
+}
+
+async function assertGoodToolsChecksum(file) {
+  const actualSha256 = await sha256File(file);
+  if (actualSha256 !== GOODTOOLS_ARCHIVE_SHA256) {
+    throw new Error(`GoodTools download checksum mismatch: expected ${GOODTOOLS_ARCHIVE_SHA256}, got ${actualSha256}`);
+  }
+}
+
+function downloadGoodToolsArchive(archive) {
+  const url = `${GOODTOOLS_REPOSITORY}/releases/download/${GOODTOOLS_RELEASE}/${encodeURIComponent(GOODTOOLS_ARCHIVE)}`;
+  return publishArchive({
+    archive,
+    download: (partial) => runCurl(url, partial, undefined),
+    verify: assertGoodToolsChecksum,
+  });
 }
 
 async function ensureGoodToolsHeaderedDat(cacheDir) {
@@ -899,19 +936,7 @@ async function ensureGoodToolsHeaderedDat(cacheDir) {
         );
       }
     } else {
-      const partial = `${archive}.part`;
-      await runCurl(
-        `${GOODTOOLS_REPOSITORY}/releases/download/${GOODTOOLS_RELEASE}/${encodeURIComponent(GOODTOOLS_ARCHIVE)}`,
-        partial,
-        undefined,
-      );
-      const actualSha256 = await sha256File(partial);
-      if (actualSha256 !== GOODTOOLS_ARCHIVE_SHA256) {
-        throw new Error(
-          `GoodTools download checksum mismatch: expected ${GOODTOOLS_ARCHIVE_SHA256}, got ${actualSha256}`,
-        );
-      }
-      await rename(partial, archive);
+      await downloadGoodToolsArchive(archive);
     }
     await mkdir(path.dirname(target), { recursive: true });
     requireExecutable("unzip");
@@ -2631,11 +2656,11 @@ export async function main(argv = process.argv.slice(2)) {
     if (GOODTOOLS_HEADERED_FALLBACKS[platform]) neededGoodToolsHeadered.add(platform);
   }
   const paths = {
-    libretro: await ensureLibretroDats([...neededLibretro].sort(), options.cacheDir),
-    opengood: await ensureOpenGoodDats([...neededOpenGood].sort(), options.cacheDir),
+    libretro: await ensureLibretroDats([...neededLibretro].sort(), options),
+    opengood: await ensureOpenGoodDats([...neededOpenGood].sort(), options),
     opengoodHeadered: await ensureOpenGoodDats(
       [...neededOpenGoodHeadered].sort(),
-      options.cacheDir,
+      options,
       OPENGOOD_HEADERED_REVISION,
       "opengood-headered",
     ),

@@ -33,6 +33,11 @@ jobs:
       - name: Install pinned nightly components
         if: matrix.signal == 'fuzz' || matrix.signal == 'sanitizer' || matrix.signal == 'miri'
         run: rustup toolchain install nightly-2026-08-25 --profile minimal --component rust-src,miri
+      - name: Restore fuzz build artifacts
+        if: matrix.signal == 'fuzz'
+        uses: ./.github/actions/fuzz-cache
+        with:
+          save: "true"
       - name: Mutation testing
         id: mutation
         if: matrix.signal == 'mutation'

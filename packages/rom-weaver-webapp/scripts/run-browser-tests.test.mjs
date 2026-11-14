@@ -3,9 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import durations from "./browser-test-durations.json" with { type: "json" };
 import {
   assertTestFilesSelected,
   discoverTestFiles,
+  orderSlowestFirst,
+  planFileOrder,
   parseShard,
   resolveConcurrency,
   selectShard,
@@ -170,4 +173,56 @@ test("--list output matches selectShard applied to real discovery", () => {
   const combinedNames = [...shardOne, ...shardTwo].map((file) => path.basename(file)).sort();
   const allNames = files.map((file) => path.basename(file)).sort();
   assert.deepEqual(combinedNames, allNames);
+});
+
+test("orderSlowestFirst: recorded durations beat file size", () => {
+  const sizes = { "/t/big-fast.js": 9000, "/t/small-slow.js": 10, "/t/mid.js": 500 };
+  const recorded = { "big-fast.js": 2, "small-slow.js": 90, "mid.js": 30 };
+  const ordered = orderSlowestFirst(Object.keys(sizes), recorded, (file) => sizes[file] ?? 0);
+  assert.deepEqual(ordered, ["/t/small-slow.js", "/t/mid.js", "/t/big-fast.js"]);
+});
+
+test("orderSlowestFirst: an unrecorded file is ranked by size at the recorded seconds-per-byte ratio", () => {
+  // The recorded files total 100 s over 1000 bytes, so 0.1 s per byte.
+  const sizes = { "/a/known-a.js": 400, "/a/known-b.js": 600, "/a/new-big.js": 700, "/a/new-small.js": 50 };
+  const recorded = { "known-a.js": 40, "known-b.js": 60 };
+  const sizeOf = (file) => sizes[file] ?? 500;
+  const ordered = orderSlowestFirst(Object.keys(sizes), recorded, sizeOf);
+  assert.deepEqual(ordered, ["/a/new-big.js", "/a/known-b.js", "/a/known-a.js", "/a/new-small.js"]);
+});
+
+test("orderSlowestFirst: ties and an empty table fall back to a stable name order", () => {
+  const files = ["/t/b.js", "/t/a.js", "/t/c.js"];
+  assert.deepEqual(
+    orderSlowestFirst(files, { "a.js": 5, "b.js": 5, "c.js": 5 }, () => 1),
+    ["/t/a.js", "/t/b.js", "/t/c.js"],
+  );
+  assert.deepEqual(
+    orderSlowestFirst(files, {}, () => 0),
+    ["/t/a.js", "/t/b.js", "/t/c.js"],
+  );
+});
+
+test("orderSlowestFirst: real discovery keeps every file exactly once", () => {
+  const files = discoverTestFiles([]);
+  const ordered = orderSlowestFirst(files);
+  assert.deepEqual(ordered.slice().sort(), files.slice().sort());
+});
+
+test("the recorded browser-test durations are positive seconds", () => {
+  for (const [name, seconds] of Object.entries(durations)) {
+    assert.ok(name.endsWith(".browser.test.js") && Number.isFinite(seconds) && seconds > 0, name);
+  }
+});
+
+test("planFileOrder: the smallest file warms up alone and every other file is pooled", () => {
+  const files = discoverTestFiles([]);
+  const { warmupFile, pooledFiles } = planFileOrder(files);
+  const smallest = Math.min(...files.map((file) => fs.statSync(file).size));
+  assert.equal(fs.statSync(warmupFile).size, smallest);
+  assert.equal(pooledFiles.length, files.length - 1);
+  assert.deepEqual(
+    [warmupFile, ...pooledFiles].sort((left, right) => left.localeCompare(right)),
+    files.slice().sort((left, right) => left.localeCompare(right)),
+  );
 });

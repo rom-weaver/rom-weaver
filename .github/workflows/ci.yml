@@ -480,6 +480,9 @@ jobs:
       - name: Install pinned fuzz toolchain
         if: matrix.signal == 'fuzz'
         run: rustup toolchain install nightly-2026-08-25 --profile minimal --component rust-src
+      - name: Restore fuzz build artifacts
+        if: matrix.signal == 'fuzz'
+        uses: ./.github/actions/fuzz-cache
       - name: Diff mutation evidence
         id: mutation
         if: matrix.signal == 'mutation'

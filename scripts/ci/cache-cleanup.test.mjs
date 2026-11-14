@@ -207,6 +207,25 @@ test("continues after a closed-pull-request cache deletion fails", async () => {
   assert.ok(logs.some((line) => line.includes("could not delete cache 1")));
 });
 
+test("fuzz build caches keep only the newest generation of each environment hash", () => {
+  const environment = `fuzz-target-Linux-X64-nightly-2026-08-25-${"a".repeat(64)}`;
+  const entry = (id, created_at, key) => ({
+    id,
+    key,
+    ref: "refs/heads/main",
+    version: "v1",
+    created_at,
+    size_in_bytes: 1,
+  });
+  const older = entry(1, "2026-09-01T00:00:00Z", `${environment}-${"1".repeat(40)}`);
+  const newer = entry(2, "2026-09-08T00:00:00Z", `${environment}-${"2".repeat(40)}`);
+  const otherEnvironment = entry(3, "2026-09-01T00:00:00Z", `fuzz-target-Linux-X64-nightly-2026-08-25-${"b".repeat(64)}-${"3".repeat(40)}`);
+  assert.deepEqual(
+    supersededCaches([older, newer, otherEnvironment]).map(({ id }) => id),
+    [1],
+  );
+});
+
 function response(body, { headers = {}, status = 200 } = {}) {
   return {
     headers: { get: (name) => headers[name.toLowerCase()] ?? null },

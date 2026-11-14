@@ -1,0 +1,54 @@
+name: Restore fuzz build artifacts
+description: >-
+  Cache the fuzz workspace's own Cargo target directory (fuzz/target). The fuzz
+  crate is a separate workspace, so the Cargo cache that setup-build-env keeps
+  for the root workspace never covers it, and a cold build compiles every
+  dependency with the sanitizer and coverage instrumentation again.
+  Cargo's fingerprints decide what a restored directory still serves: path
+  crates rebuild when their sources are newer than the restored artifacts.
+
+inputs:
+  save:
+    description: >-
+      "true" lets a run on refs/heads/main save the directory after the job.
+      Every other run, and every run with any other value, only restores.
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    # The fuzz script uses one nightly for every run; the key reads that value.
+    # The inputs hash covers the toolchain, locks, configuration, fuzz flags, and build scripts.
+    - name: Resolve fuzz cache key
+      id: pin
+      shell: bash
+      env:
+        INPUTS_HASH: ${{ hashFiles('fuzz/Cargo.toml', 'fuzz/Cargo.lock', 'Cargo.lock', '.cargo/config.toml', '.config/mise.toml', 'scripts/quality-fuzz.mjs', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/libarchive/build.rs') }}
+      run: |
+        toolchain=$(node --input-type=module -e 'import { FUZZ_TOOLCHAIN } from "./scripts/quality-fuzz.mjs"; process.stdout.write(FUZZ_TOOLCHAIN);')
+        test -n "$toolchain"
+        prefix="fuzz-target-${RUNNER_OS}-${RUNNER_ARCH}-${toolchain}-"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "inputs=${prefix}${INPUTS_HASH}-" >> "$GITHUB_OUTPUT"
+
+    # Cargo never deletes unused artifacts, so a saving run restores only identical inputs.
+    # A lock change starts an empty directory.
+    - name: Cache fuzz build artifacts
+      if: inputs.save == 'true' && github.ref == 'refs/heads/main'
+      uses: actions/cache@v6
+      with:
+        path: fuzz/target
+        key: ${{ steps.pin.outputs.inputs }}${{ github.sha }}
+        restore-keys: |
+          ${{ steps.pin.outputs.inputs }}
+
+    # Cargo's fingerprints handle source changes, so a newer commit restores the previous generation.
+    - name: Restore fuzz build artifacts
+      if: ${{ !(inputs.save == 'true' && github.ref == 'refs/heads/main') }}
+      uses: actions/cache/restore@v6
+      with:
+        path: fuzz/target
+        key: ${{ steps.pin.outputs.inputs }}${{ github.sha }}
+        restore-keys: |
+          ${{ steps.pin.outputs.inputs }}
+          ${{ steps.pin.outputs.prefix }}

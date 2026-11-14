@@ -22,6 +22,7 @@ const cacheFamily = (key) => {
     key.startsWith("ccache-") ||
     key.startsWith("sccache-") ||
     key.startsWith("wasm-target-") ||
+    key.startsWith("fuzz-target-") ||
     key.startsWith("semver-checks-") ||
     key.startsWith("identify-brotli-") ||
     key.startsWith("webapp-build-") ||

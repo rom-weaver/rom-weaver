@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 
@@ -42,6 +43,10 @@ import {
   parseTitleIndex,
   TITLE_INDEX_FORMAT,
 } from "../packages/rom-weaver-webapp/src/lib/identify/title-index.mjs";
+
+// Each build keeps its own --cache-dir for extracted sources and packs.
+// The compressed archives share one directory, so the pinned Libretro archive downloads once.
+process.env.ROM_WEAVER_IDENTIFY_ARCHIVE_CACHE_DIR ??= join(os.tmpdir(), "rom-weaver-identify-archives");
 
 const NES = "Nintendo - Nintendo Entertainment System";
 
@@ -557,6 +562,10 @@ test("the builder consumes a cached GoodSNES headered DAT", async () => {
   const manifest = JSON.parse(pack.get("manifest.json").toString("utf8"));
   assert.equal(manifest.counts.games, 799);
   assert.ok(manifest.provenance.some((entry) => entry.source === "Eggmansworld/Datfiles"));
+  const archiveName = `${LIBRETRO_REVISION}.tar.gz`;
+  assert.ok(existsSync(join(process.env.ROM_WEAVER_IDENTIFY_ARCHIVE_CACHE_DIR, "libretro", archiveName)));
+  assert.equal(existsSync(join(cacheDir, "libretro", archiveName)), false);
+  assert.ok(existsSync(join(cacheDir, "libretro", LIBRETRO_REVISION, "cht")));
 });
 
 test("family variants resolve to their shared pack", () => {
