@@ -18,13 +18,16 @@ const PATCH = new File(
 );
 const releases = [];
 const BOUND_MS = 5000;
+const UNFINISHED_REASON = `did not finish within ${BOUND_MS} ms`;
 const runs = [];
 const realSetTimeout = globalThis.setTimeout.bind(globalThis);
+const realNow = performance.now.bind(performance);
 const FAST_CLOCK_STEP_MS = 100;
 const FAST_CLOCK_TICK_MS = 20;
+const FAST_CLOCK_MAX_STEPS = 1000;
 
-// Runs `body` with setTimeout and performance.now() 5x faster than real time, so the identify bound
-// and the stub's slow headers elapse in ~1 s instead of 5-7 s. Workers keep their real clock.
+// Runs `body` with setTimeout and performance.now() five times faster than real time.
+// Workers keep their real clock.
 const withFastClock = async (body) => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
   let outcome;
@@ -37,8 +40,10 @@ const withFastClock = async (body) => {
     },
   );
   try {
-    while (!outcome) {
+    for (let step = 0; !outcome; step += 1) {
+      if (step === FAST_CLOCK_MAX_STEPS) throw new Error("withFastClock: the body did not settle");
       await vi.advanceTimersByTimeAsync(FAST_CLOCK_STEP_MS);
+      // Yield real time each step so worker messages can arrive.
       await new Promise((resolve) => realSetTimeout(resolve, FAST_CLOCK_TICK_MS));
     }
   } finally {
@@ -116,16 +121,16 @@ test.each(["headers", "body"])(
   async (mode) => {
     const { requests } = interceptPacks(mode);
     const ingest = await withFastClock(async () => {
-      const started = performance.now();
+      const started = realNow();
       const running = startIngest();
       await expect.poll(() => running.result(), { timeout: 8000 }).toBeDefined();
-      expect(performance.now() - started).toBeLessThan(BOUND_MS + 3000);
+      expect(realNow() - started).toBeLessThan(BOUND_MS + 3000);
       return running;
     });
     const ingested = ingest.result();
     // The download is not cancelled: the fetch carries no abort signal.
     expect(requests).toEqual([undefined]);
-    expect(ingested.identifyUnavailable).toContain("did not finish");
+    expect(ingested.identifyUnavailable).toContain(UNFINISHED_REASON);
     expect(ingested.result.assets[0].checksums.crc32).toBe("c6fb1252");
 
     const apply = (options) =>
@@ -181,11 +186,11 @@ test.each(["headers", "body"])(
 test("a slow-header pack (service worker model) does not block ingest and an explicit lookup is not aborted", async () => {
   await withFastClock(async () => {
     const { requests } = interceptPacks("slow-headers");
-    const started = performance.now();
+    const started = realNow();
     const ingest = startIngest();
     await expect.poll(() => ingest.result(), { timeout: 8000 }).toBeDefined();
-    expect(performance.now() - started).toBeLessThan(7000);
-    expect(ingest.result().identifyUnavailable).toContain("did not finish");
+    expect(realNow() - started).toBeLessThan(7000);
+    expect(ingest.result().identifyUnavailable).toContain(UNFINISHED_REASON);
     expect(ingest.result().result.assets[0].checksums.crc32).toBe("c6fb1252");
     const explicit = await loadIdentifyPackSelection({ fileName: ROM.name });
     expect(explicit.packs).toHaveLength(1);
@@ -215,12 +220,12 @@ test("Identify-page ingest waits past the bound for slow packs while default ing
       (error) => ({ error }),
     );
     expect(performance.now() - started).toBeGreaterThan(BOUND_MS);
-    expect(outcome.identified?.unavailableReason ?? String(outcome.error ?? "")).not.toContain("did not finish");
+    expect(outcome.identified?.unavailableReason ?? String(outcome.error ?? "")).not.toContain(UNFINISHED_REASON);
     resetIdentifyPackCache();
     interceptPacks("slow-headers");
     const bounded = startIngest();
     await expect.poll(() => bounded.result(), { timeout: 8000 }).toBeDefined();
-    expect(bounded.result().identifyUnavailable).toContain("did not finish");
+    expect(bounded.result().identifyUnavailable).toContain(UNFINISHED_REASON);
   });
 }, 40000);
 
@@ -265,11 +270,11 @@ test.each(["identify-index", "identify-catalog"])(
       [stalled]: stall,
     });
     await withFastClock(async () => {
-      const started = performance.now();
+      const started = realNow();
       const ingest = startIngest();
       await expect.poll(() => ingest.result(), { timeout: 8000 }).toBeDefined();
-      expect(performance.now() - started).toBeLessThan(BOUND_MS + 3000);
-      expect(ingest.result().identifyUnavailable).toContain("did not finish");
+      expect(realNow() - started).toBeLessThan(BOUND_MS + 3000);
+      expect(ingest.result().identifyUnavailable).toContain(UNFINISHED_REASON);
       expect(ingest.result().result.assets[0].checksums.crc32).toBe("c6fb1252");
     });
   },
