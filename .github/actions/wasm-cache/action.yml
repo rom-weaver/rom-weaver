@@ -17,7 +17,7 @@ inputs:
   save:
     description: >-
       "false" restores without registering the post-job save. Callers that
-      never build the module (the preview fast path) must set this: on a miss
+      never build the module must set this: on a miss
       they hold nothing worth caching, and writing the key first would deny it
       to the job that does build - permanently, since the key is source-exact
       and never rewritten.

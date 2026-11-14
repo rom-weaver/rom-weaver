@@ -110,7 +110,6 @@ test("CI prepares identify data once and shares the artifact with every consumer
     "webapp-static",
     "webapp-e2e",
     "webapp-webkit-e2e",
-    "deploy-preview-fast",
     "deploy",
   ];
   for (const name of consumers) {
@@ -125,10 +124,7 @@ test("CI prepares identify data once and shares the artifact with every consumer
   }
   const cliPlatforms = jobFor("cli-platforms");
   assert.match(cliPlatforms, /identify-data-source: artifact/u);
-  for (const name of ["deploy-preview-fast", "deploy"]) {
-    const job = jobFor(name);
-    assert.match(job, /identify-data-source: artifact/u, `${name} does not use the identify artifact`);
-  }
+  assert.match(jobFor("deploy"), /identify-data-source: artifact/u, "deploy does not use the identify artifact");
 });
 
 test("identify Brotli cache is main-only and has a stable producer directory", () => {

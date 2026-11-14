@@ -138,8 +138,6 @@ wasm ────┤ (module + production bundle + chunk guard)
          └── deploy ── Cloudflare Pages, one leg per channel (non-gating)
                  ↑
            changes ── ref -> channel list
-                 └── deploy-preview-fast ── preview, wasm cache hit only
-                                            (skips deploy's preview leg)
 
              ┌── repo-lint ───────────┐
 changes ─────┼── docker (0-4 legs) ───┼── gate
@@ -173,7 +171,7 @@ security ── advisories (warn only, always green)
 | `quality-analysis` | Mutation and fuzz signals on nightly and manual runs | not required (advisory) |
 | `security` | `cargo deny advisories` and `npm audit` | not required (warn only) |
 | `webapp-static`, `webapp-browser`, `webapp-wasm-browser`, `webapp-e2e`, `webapp-webkit-e2e` | Webapp lint, unit, browser, and E2E suites on the prebuilt module | `CI gate` |
-| `deploy`, `deploy-preview-fast` | Cloudflare Pages deployments | not required |
+| `deploy` | Cloudflare Pages deployments | not required |
 | `gate` | Asserts every gating job against its selection flag; reports `CI gate` | branch protection |
 | `nightly-alert` | Opens, updates, or closes the one nightly tracking issue; runs on the `schedule` event only | not required |
 
@@ -269,13 +267,10 @@ security ── advisories (warn only, always green)
 
   Pages publication serializes by project and branch; Docker nightly publication serializes by image. Automatic main publishers check newer CI runs after acquiring their slot and skip only when the same destination already has a successful newer publication. Manual deployments and release tags retain their explicit publication policy.
 - **Timeouts** are about twice the 95th-percentile duration of recent successful runs (measured October 2026; the CLI targets and Windows from nightly and `main` runs), so a hung job frees its runner within minutes rather than after an hour. Docker keeps 60 minutes because no recent run built the webapp image from source.
-- **Deployment planning** runs in `changes` and turns the ref into the list of channels to publish (below). The deployment jobs consume its outputs without starting a separate planning runner.
+- **Deployment planning** runs in `changes` and turns the ref into the list of channels to publish (below). The `deploy` job consumes its outputs without starting a separate planning runner.
 
   Every first-party pull request deploys a preview, so each one builds the WASM module and webapp bundle even when it changes neither. Labels start no run: branch protection reads the newest `ci.yml` run on a commit, so a run started by a label, even one whose jobs all skip, would hide the real run's `CI gate` and block the merge. Dependabot labels every pull request it opens. Fork and Dependabot pull requests do not deploy because they cannot access the Cloudflare secrets. Main pushes with webapp/runtime changes, tags, and explicit manual deploys also deploy.
-- **`deploy`** ships the site, one matrix leg per channel (below). Both deployment jobs are `continue-on-error: true`, so a Cloudflare outage cannot turn a green `main` red and suppress release automation.
-- **`deploy-preview-fast`** publishes the PR preview without waiting on `wasm`. `deploy` needs that job's artifact; this one restores the same module from cache, which hits whenever the module inputs are unchanged and lands the preview URL ~13s sooner. On a miss it deploys nothing - never the module itself, which would duplicate the ~6.5 min build already running - and `deploy` publishes the preview as usual.
-
-  The two can never both publish: `deploy` skips whenever this job reports a URL. Both share `.github/actions/deploy-webapp-pages`, so a preview has exactly one build-and-publish implementation.
+- **`deploy`** ships the site, one matrix leg per channel (below). It is `continue-on-error: true`, so a Cloudflare outage cannot turn a green `main` red. It also cannot stop release automation.
 
 ### Identify data builds
 
@@ -297,7 +292,9 @@ The budget is a regression ceiling, not a claim that unobserved rules are dead: 
 
 Lighthouse always audits the local build through `scripts/dev-server.mjs preview`, using Lighthouse's default mobile emulation, on every event, including forks. A Lighthouse runtime collection error gets one fresh-browser retry; threshold failures are never retried.
 
-The server speaks HTTP/2, serves the q11 sidecars, applies the built `dist/_headers`, and holds each asset in memory after the first read, which is what makes it a fair stand-in for the edge. Measured against the hosted Cloudflare bundle it scores slightly *better*, because HTTP/1.1's ~6-connection cap was the only thing that had made a local audit look slow. Auditing the deployed preview instead would gate a required check on `deploy-preview-fast`, which is `continue-on-error: true` precisely so a Cloudflare outage cannot redden a build, and which is not ordered ahead of this job anyway.
+The server speaks HTTP/2, serves the q11 sidecars, applies the built `dist/_headers`, and holds each asset in memory after the first read, which is what makes it a fair stand-in for the edge. Measured against the hosted Cloudflare bundle it scores slightly *better*, because HTTP/1.1's ~6-connection cap was the only thing that had made a local audit look slow.
+
+Auditing the deployed preview instead would gate a required check on `deploy`. That job is `continue-on-error: true` precisely so a Cloudflare outage cannot redden a build. It is also not ordered ahead of this job anyway.
 
 Applying `dist/_headers` gives the preview server the same security, cache, and content-signal behavior as Pages. Builds intentionally disable deploy-sensitive `Link` hints, so the preview server does not emit a `103` whose cached hashed URLs could outlive a deployment. The HTML's own stylesheet, modulepreload, and font links remain the render-critical discovery path that production serves.
 
@@ -375,7 +372,13 @@ The channels form a stability ladder - `prod` above `beta` above `nightly` - and
 | webapp/runtime push to `main` | `nightly` |
 | first-party pull-request commit, including docs-only changes | `preview` |
 
-Legs are independent Pages projects with no shared state, so they upload in parallel and a release's three channels land in the time of one. Each leg builds its own bundle because the channel is baked in at build time (`ROM_WEAVER_CHANNEL`), so there is no artifact to share between them. Failure is per-leg (`fail-fast: false`): a beta upload failing still lets prod ship.
+Legs are independent Pages projects with no shared state, so they upload in parallel and a release's three channels land in the time of one. Failure is per-leg (`fail-fast: false`): a beta upload failing still lets prod ship.
+
+When the `wasm` job built a bundle, each leg deploys it. E2E and Lighthouse tested it before the stamp. `deploy-webapp-pages` downloads `webapp-dist` and `webapp-stamp-templates`. It runs `npm run stamp-channel` for its channel, then checks the result with `verify-seo-build.mjs`.
+
+The bundle reads its channel from `<html data-channel data-channel-label>`. A stamp rewrites only channel-dependent files outside `dist/assets`, so the tested assets keep their bytes.
+
+A leg builds its own bundle only when the `wasm` job built none. That happens on tags and when no webapp input changed. Pull request previews wait for the `wasm` job too.
 
 A hyphen after the version is what makes a tag a prerelease. The same rule routes the npm dist-tag and the docker `beta` tag - see [prerelease routing](#prerelease-routing).
 
@@ -442,7 +445,7 @@ The action exposes two lists. `cache-path` contains the expensive module files: 
 
 ### `.github/actions/webapp-build-cache`
 
-Restores two reusable outputs: the Brotli cache in `node_modules/.cache/rom-weaver-brotli` and the channel icons in `dist/generated-assets`. The `wasm` job restores it before building, except in the signed release pull request run. Every channel deploy restores it through `deploy-webapp-pages`.
+Restores two reusable outputs: the Brotli cache in `node_modules/.cache/rom-weaver-brotli` and the channel icons in `dist/generated-assets`. The `wasm` job restores it before building, except in the signed release pull request run. `deploy-webapp-pages` restores it only when it builds, not when it restamps the tested bundle.
 
 Only the `wasm` job on `main` saves an entry, keyed by commit. Pull requests restore the newest `main` entry by prefix and never write one.
 

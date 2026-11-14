@@ -3,6 +3,7 @@ import { Lexer } from "marked";
 import { createDocsMarkdown, readFileLastmods } from "../docs-discovery.mjs";
 import { readNoticesLastmod } from "../notices-lastmod.mjs";
 import { docSourcePath } from "../../src/webapp/docs-pages.mjs";
+import { replaceBetween, replaceMetaContent } from "../../src/webapp/escape-html.mjs";
 import { ROOT_BASE_TAG } from "../../src/webapp/pwa/document-base.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
 import {
@@ -11,6 +12,7 @@ import {
   SITE_NAME,
   WORKFLOW_SEO_ROUTES,
   WORKFLOW_ENTRY_ROUTES,
+  withChannelBadge,
 } from "../../src/webapp/workflow-seo.mjs";
 import { repoRoot, rootDir } from "./paths.mjs";
 
@@ -18,15 +20,15 @@ export const createRobotsSource = (channel) =>
   `User-agent: *\nContent-Signal: ai-train=${channel === "prod" ? "yes" : "no"}, search=${channel === "prod" ? "yes" : "no"}, ai-input=${channel === "prod" ? "yes" : "no"}\n` +
   (channel === "prod" ? "Allow: /\nSitemap: https://rom-weaver.com/sitemap.xml\n" : "Disallow: /\n");
 
-const replaceMetaContent = (html, attribute, name, content) =>
-  html.replace(new RegExp(`(<meta\\s+${attribute}="${name}"\\s+content=")[^"]*(")`), `$1${content}$2`);
+const TITLE_PATTERN = /(<title>)[^<]*(<\/title>)/;
 
 export const createWorkflowRouteHtml = (html, route, channel, channelLabel) => {
-  const title = channel === "prod" ? route.title : route.title.replace(SITE_NAME, `${SITE_NAME} ${channelLabel}`);
+  const title = channel === "prod" ? route.title : withChannelBadge(route.title, channelLabel);
   const canonicalUrl = `https://rom-weaver.com/${route.slug}`;
-  let routeHtml = html
-    .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
-    .replace(/(<link\s+rel="canonical"\s+href=")[^"]*(")/, `$1${canonicalUrl}$2`);
+  let routeHtml = replaceBetween(html, TITLE_PATTERN, title).replace(
+    /(<link\s+rel="canonical"\s+href=")[^"]*(")/,
+    `$1${canonicalUrl}$2`,
+  );
   for (const [attribute, name, content] of [
     ["name", "description", route.description],
     ["property", "og:title", title],
@@ -84,8 +86,8 @@ export const makeBetaRouteNoindex = (html, slug, channel = "prod", channelLabel 
     .replace(/(<link\s+rel="canonical"\s+href=")[^"]*(")/, `$1https://rom-weaver.com/${slug}$2`);
   const baseTitle = BETA_ROUTE_TITLES[slug];
   if (!baseTitle) return betaHtml;
-  const title = channel === "prod" ? baseTitle : baseTitle.replace(SITE_NAME, `${SITE_NAME} ${channelLabel}`);
-  betaHtml = betaHtml.replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`);
+  const title = channel === "prod" ? baseTitle : withChannelBadge(baseTitle, channelLabel);
+  betaHtml = replaceBetween(betaHtml, TITLE_PATTERN, title);
   for (const [attribute, name] of [
     ["property", "og:title"],
     ["name", "twitter:title"],
@@ -99,10 +101,11 @@ export const createNotFoundHtml = (html, channel, channelLabel) => {
   const description = "The requested rom-weaver page could not be found.";
   // Cloudflare serves 404.html as the body at whatever URL missed, so the
   // base:"./" relative asset URLs resolve wrong at any nested path without this.
-  let notFoundHtml = html
-    .replace("<html ", '<html data-page="not-found" ')
-    .replace("<head>", `<head>\n    ${ROOT_BASE_TAG}`)
-    .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
+  let notFoundHtml = replaceBetween(
+    html.replace("<html ", '<html data-page="not-found" ').replace("<head>", `<head>\n    ${ROOT_BASE_TAG}`),
+    TITLE_PATTERN,
+    title,
+  )
     .replace(/(<meta\s+name="robots"\s+content=")[^"]*(")/, "$1noindex$2")
     .replace(
       'aria-selected="true" class="mode" data-mode="patcher"',

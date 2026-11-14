@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { matchPagesHeaders, parsePagesHeaders } from "../../scripts/pages-headers.mjs";
 
-// The shape writeCloudflareHeadersAsset emits.
+// The shape writeCloudflareHeaders emits.
 const headersFile = `/*
   Cross-Origin-Embedder-Policy: require-corp
   Content-Signal: ai-train=yes, search=yes, ai-input=yes

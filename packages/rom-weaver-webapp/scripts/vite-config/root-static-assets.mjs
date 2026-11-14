@@ -19,20 +19,26 @@ const docsScreenshotSources = Object.fromEntries(
 export const createLlmsSource = (sourcePath, siteOrigin) =>
   fs.readFileSync(sourcePath, "utf8").replaceAll(PRODUCTION_SITE_ORIGIN, siteOrigin);
 
-export const rootStaticAssetSourcesForChannel = (channel) => ({
+const CHANNEL_ICON_NAMES = [
+  "apple-touch-icon.png",
+  "favicon.ico",
+  "favicon-32x32.png",
+  "favicon.svg",
+  "icon-192.png",
+  "icon-512.png",
+  "icon-maskable-512.png",
+  "logo.svg",
+];
+const llmsSourcePath = path.join(rootAssetDir, "llms.txt");
+
+const channelIconSources = (channel, iconDir) =>
+  Object.fromEntries(CHANNEL_ICON_NAMES.map((name) => [`/${name}`, generatedChannelAssetPath(channel, name, iconDir)]));
+
+// All channels share these. The build writes them once, and a channel stamp leaves them alone.
+const neutralRootStaticAssetSources = () => ({
   "/auth.md": path.join(rootAssetDir, "auth.md"),
   "/_redirects": path.join(rootAssetDir, "_redirects"),
-  "/apple-touch-icon.png": generatedChannelAssetPath(channel, "apple-touch-icon.png"),
-  "/favicon.ico": generatedChannelAssetPath(channel, "favicon.ico"),
-  "/favicon-32x32.png": generatedChannelAssetPath(channel, "favicon-32x32.png"),
-  "/favicon.svg": generatedChannelAssetPath(channel, "favicon.svg"),
-  "/icon-192.png": generatedChannelAssetPath(channel, "icon-192.png"),
-  "/icon-512.png": generatedChannelAssetPath(channel, "icon-512.png"),
-  "/icon-maskable-512.png": generatedChannelAssetPath(channel, "icon-maskable-512.png"),
   "/install.sh": path.join(repoRoot, "install.sh"),
-  "/llms.txt": path.join(rootAssetDir, "llms.txt"),
-  "/logo.svg": generatedChannelAssetPath(channel, "logo.svg"),
-  "/manifest.json": rootManifestSourcePath,
   "/emulatorjs/LICENSE": path.join(rootDir, "vendor", "emulatorjs", "LICENSE"),
   "/emulatorjs/NOTICE": path.join(rootDir, "vendor", "emulatorjs", "NOTICE"),
   "/rom-weaver-bundle-v1.schema.json": path.join(repoRoot, "docs", "rom-weaver-bundle-v1.schema.json"),
@@ -51,6 +57,30 @@ export const rootStaticAssetSourcesForChannel = (channel) => ({
   "/docs/samples/compressed-disc/01-first.bps": path.join(repoRoot, "docs/samples/compressed-disc/01-first.bps"),
   "/docs/samples/compressed-disc/02-second.bps": path.join(repoRoot, "docs/samples/compressed-disc/02-second.bps"),
 });
+
+export const rootStaticAssetSourcesForChannel = (channel) => ({
+  ...neutralRootStaticAssetSources(),
+  ...channelIconSources(channel),
+  "/llms.txt": llmsSourcePath,
+  "/manifest.json": rootManifestSourcePath,
+});
+
+export const writeNeutralRootStaticAssets = (distDir) => {
+  for (const [assetPath, sourcePath] of Object.entries(neutralRootStaticAssetSources())) {
+    const outputPath = path.join(distDir, assetPath);
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.copyFileSync(sourcePath, outputPath);
+  }
+};
+
+/** Writes the channel's root files: its icons, the web app manifest, and llms.txt. */
+export const writeChannelRootStaticAssets = (distDir, { channel, channelLabel, iconDir, siteOrigin }) => {
+  for (const [assetPath, sourcePath] of Object.entries(channelIconSources(channel, iconDir))) {
+    fs.copyFileSync(sourcePath, path.join(distDir, assetPath));
+  }
+  fs.writeFileSync(path.join(distDir, "manifest.json"), createRootManifestSource(channel, channelLabel));
+  fs.writeFileSync(path.join(distDir, "llms.txt"), createLlmsSource(llmsSourcePath, siteOrigin));
+};
 export const generatedSampleAssetPaths = new Set([
   "/first-create.zip",
   "/first-weave.zip",
@@ -98,8 +128,10 @@ export const redirectSourcePaths = () => {
 };
 
 const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel, siteOrigin) => {
-  const rootStaticAssetSources = rootStaticAssetSourcesForChannel(channel);
+  // Resolved on first request, so the stamp's prerender server never needs the generated icons.
+  let rootStaticAssetSources;
   middlewares.use((req, res, next) => {
+    rootStaticAssetSources ??= rootStaticAssetSourcesForChannel(channel);
     const requestPath = req.url ? req.url.split("?")[0] : "";
     const markdown = requestPath.endsWith(".md");
     const legacySlug = requestPath.replace(/^\//, "").replace(/(?:\/index\.html|\/|\.html|\.md)$/, "");

@@ -835,7 +835,7 @@ const UNTESTED_LINT_ONLY = new Set([
   // importer prior-green-run.mjs stays fail-open, but the `changes` job runs that on every pull
   // request whatever the selection, so the full matrix would not test it further.
   "scripts/ci/github-api.mjs",
-  // Run by the deploy-webapp-pages action in the non-gating preview deploy jobs.
+  // Run by the deploy-webapp-pages action in the non-gating `deploy` job.
   "scripts/ci/ensure-cloudflare-pages-project.mjs",
   // Run by the non-gating preview cleanup job.
   "scripts/ci/cleanup-preview-deployments.sh",

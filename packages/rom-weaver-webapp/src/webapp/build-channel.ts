@@ -13,11 +13,17 @@ type BuildChannel = (typeof CHANNELS)[number];
 
 const isBuildChannel = (value: unknown): value is BuildChannel => CHANNELS.includes(value as BuildChannel);
 
-// The channel is a build fact, never a runtime one: no URL parameter or storage
-// key can move it. To see a channel's out-of-box look locally, build or serve
-// with the real thing - `ROM_WEAVER_CHANNEL=beta npm run dev`.
-const ACTIVE_CHANNEL: BuildChannel = isBuildChannel(__APP_CHANNEL__) ? __APP_CHANNEL__ : "dev";
-const ACTIVE_CHANNEL_LABEL = __APP_CHANNEL_LABEL__ || ACTIVE_CHANNEL;
+// The deployment's <html> sets the channel; prerendering sets ROM_WEAVER_PRERENDER_CHANNEL.
+// To preview a channel locally, run `ROM_WEAVER_CHANNEL=beta npm run dev`.
+const readStampedChannel = (): { channel?: string; label?: string } => {
+  if (globalThis.ROM_WEAVER_PRERENDER_CHANNEL) return globalThis.ROM_WEAVER_PRERENDER_CHANNEL;
+  if (typeof document === "undefined") return {};
+  const { channel, channelLabel } = document.documentElement.dataset;
+  return { channel, label: channelLabel };
+};
+const stampedChannel = readStampedChannel();
+const ACTIVE_CHANNEL: BuildChannel = isBuildChannel(stampedChannel.channel) ? stampedChannel.channel : "dev";
+const ACTIVE_CHANNEL_LABEL = stampedChannel.label || ACTIVE_CHANNEL;
 
 /** Production wears the plain brand; every other channel is marked. */
 const CHANNEL_BADGE = ACTIVE_CHANNEL === "prod" ? "" : ACTIVE_CHANNEL_LABEL;

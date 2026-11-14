@@ -11,7 +11,11 @@ import {
   readWorkflowEntryFromPathname,
   WORKFLOW_SEO_ROUTES,
 } from "../src/webapp/workflow-seo.mjs";
+import { documentNodes, parseDocument } from "./html-document.mjs";
+import { applyChannelIdentity } from "./vite-config/channel.mjs";
+import { rootDir } from "./vite-config/paths.mjs";
 import {
+  createNotFoundHtml,
   createRobotsSource,
   createSitemapSource,
   createWorkflowRouteHtml,
@@ -237,6 +241,36 @@ test("beta tool pages get their own title, social titles, and channel badge", ()
     assert.ok(prod.includes('content="noindex, nofollow"'), `${slug} noindex`);
     const beta = makeBetaRouteNoindex(shell, slug, "beta", "Beta");
     assert.ok(beta.includes(`<title>${name} | rom-weaver Beta</title>`), `${slug} beta title`);
+  }
+});
+
+test("channel labels with HTML and replacement characters reach titles literally", () => {
+  const label = `QA "<b>" & $& $1`;
+  // Same shell the channel stamp builds.
+  const shell = applyChannelIdentity(fs.readFileSync(path.join(rootDir, "index.html"), "utf8"), "beta", label);
+  for (const [page, html, expectedTitle] of [
+    [
+      "workflow",
+      createWorkflowRouteHtml(shell, WORKFLOW_SEO_ROUTES.home, "beta", label),
+      `rom-weaver ${label}: Online ROM Patcher & ROM Toolkit`,
+    ],
+    ["beta tool", makeBetaRouteNoindex(shell, "whats-new", "beta", label), `What's new | rom-weaver ${label}`],
+    ["404", createNotFoundHtml(shell, "beta", label), `Page not found | rom-weaver ${label}`],
+  ]) {
+    const nodes = [...documentNodes(parseDocument(html))];
+    const titleText = nodes.find((node) => node.nodeName === "title")?.childNodes[0]?.value;
+    const metaContent = (key) =>
+      nodes
+        .find((node) => node.nodeName === "meta" && node.attrs.some((attribute) => attribute.value === key))
+        ?.attrs.find((attribute) => attribute.name === "content")?.value;
+    assert.equal(titleText, expectedTitle, `${page} title`);
+    assert.equal(metaContent("og:title"), expectedTitle, `${page} og:title`);
+    assert.equal(metaContent("twitter:title"), expectedTitle, `${page} twitter:title`);
+    assert.equal(metaContent("apple-mobile-web-app-title"), `rom-weaver ${label}`, `${page} home-screen title`);
+    const channelLabelAttribute = nodes
+      .find((node) => node.nodeName === "html")
+      ?.attrs.find((attribute) => attribute.name === "data-channel-label")?.value;
+    assert.equal(channelLabelAttribute, label, `${page} data-channel-label`);
   }
 });
 

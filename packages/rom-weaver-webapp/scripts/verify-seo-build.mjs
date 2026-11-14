@@ -1,5 +1,6 @@
 import { countVisibleWords, hasDescriptiveHeading } from "./html-document.mjs";
 import { findCrawlerBrokenLinks } from "./crawler-links.mjs";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -12,7 +13,8 @@ import {
   WEBAPP_URL_SESSION_DOC_PATH,
 } from "../src/webapp/api-catalog.mjs";
 import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
-import { resolveSiteOrigin } from "./vite-config/channel.mjs";
+import { escapeHtml } from "../src/webapp/escape-html.mjs";
+import { channelAttributes, resolveAppChannel, resolveSiteOrigin } from "./vite-config/channel.mjs";
 import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
 import {
   LEGACY_WORKFLOW_ROUTES,
@@ -34,7 +36,7 @@ const distDir = path.join(packageDir, "dist");
 const identifyDataIndex = JSON.parse(
   fs.readFileSync(path.resolve(packageDir, "../../crates/rom-weaver-cli/data/identify/v1/index.json"), "utf8"),
 );
-const channel = process.env.ROM_WEAVER_CHANNEL || "prod";
+const channel = resolveAppChannel(process.env.ROM_WEAVER_CHANNEL);
 const production = channel === "prod";
 // Discovery endpoints name the deployment that serves them; canonicals name production (SITE_ORIGIN).
 const siteOrigin = resolveSiteOrigin(process.env.ROM_WEAVER_SITE_ORIGIN);
@@ -800,7 +802,7 @@ for (const weave of ["weave/index.html", "weave.html"]) {
 // Trim left beta: its page is indexed, self-canonical, titled by its SEO route, and listed in the sitemap.
 {
   const trimHtml = read("trim-rom/index.html");
-  assertIncludes(trimHtml, `<title>${WORKFLOW_SEO_ROUTES.trim.title}`, "trim title");
+  assertIncludes(trimHtml, `<title>${escapeHtml(WORKFLOW_SEO_ROUTES.trim.title)}`, "trim title");
   assertIncludes(trimHtml, WORKFLOW_SEO_ROUTES.trim.description, "trim description");
   assertIncludes(trimHtml, 'rel="canonical" href="https://rom-weaver.com/trim-rom"', "trim canonical");
   assertIncludes(
@@ -816,6 +818,17 @@ assertIncludes(
   'rel="canonical" href="https://rom-weaver.com/ppf-undo"',
   "tools alias canonical",
 );
+
+// The bundle reads its channel from <html>. A page stamped for another channel shows that one's badge.
+const expectedChannelAttributes = channelAttributes(channel, process.env.ROM_WEAVER_CHANNEL_LABEL || channel);
+for (const name of fs.readdirSync(distDir, { recursive: true, encoding: "utf8" })) {
+  if (!name.endsWith(".html")) continue;
+  const html = read(name);
+  assertIncludes(html, expectedChannelAttributes, `${name} channel`);
+  // A second root means a label's `$` text was read as replacement syntax.
+  const mountPoints = html.split('id="webapp-root"').length - 1;
+  if (mountPoints !== 1) throw new Error(`${name} has ${mountPoints} #webapp-root elements, expected 1`);
+}
 
 if (production) {
   if (homeHtml.includes("<html data-accent=")) throw new Error("production must use the default madder accent");
@@ -850,6 +863,16 @@ if (production) {
 // generated manifest is on disk.
 const precacheManifest = read("rom-weaver-service-worker.js");
 assertExcludes(precacheManifest, '"downloadManifest":true', "offline download manifest precache entry");
+// Each page's precache revision is its MD5. A restamp MUST inject the manifest again,
+// or the precache serves the previous channel's page.
+for (const [, revision, url] of precacheManifest.matchAll(
+  /"revision":"([0-9a-f]+)","sizeBytes":\d+,"url":"([^"?]+\.html)"/g,
+)) {
+  const actual = createHash("md5")
+    .update(fs.readFileSync(path.join(distDir, url)))
+    .digest("hex");
+  if (actual !== revision) throw new Error(`precache revision for ${url} does not match the file on disk`);
+}
 const identifyPrecacheEntry = (system) =>
   `"revision":"${system.sha256}","url":"assets/identify-${system.file}?sha256=${system.sha256}"`;
 assertIncludes(precacheManifest, '"404.html"', "404 precache entry");

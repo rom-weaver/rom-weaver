@@ -3,6 +3,7 @@ import process from "node:process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
+import { resolveAppChannel } from "./vite-config/channel.mjs";
 
 // Node exposes navigator.hardwareConcurrency, which would bake the build
 // machine's core count into the masthead. Force the "unknown environment"
@@ -40,14 +41,14 @@ const renderLandingShellWithServer = async (
   return await entry.renderLandingShellHtml(view, notFound, docsSlug, workflowEntry);
 };
 
-// Runs `render` against one throwaway SSR server. Standing a server up costs
-// seconds, so every shell a build needs is rendered inside a single call rather
-// than one server per shell.
-const withPrerenderServer = async (render) => {
+// One throwaway SSR server renders every shell, since starting one costs seconds.
+// `define` overrides the config's compile-time constants, so a shell matches its bundle.
+const withPrerenderServer = async (render, define = {}) => {
   ensureIdentifyData();
   const server = await createServer({
     appType: "custom",
     configFile: fileURLToPath(new URL("../vite.config.mjs", import.meta.url)),
+    define,
     logLevel: "warn",
     root: fileURLToPath(new URL("..", import.meta.url)),
     server: { hmr: false, middlewareMode: true, watch: null },
@@ -67,6 +68,9 @@ const renderLandingShell = async (view = "patcher", notFound = false, docsSlug =
 
 const isDirectRun = process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href;
 if (isDirectRun) {
+  // A build sets this channel too. With ROM_WEAVER_CHANNEL unset, the channel is prod, which shows no badge.
+  const channel = resolveAppChannel(process.env.ROM_WEAVER_CHANNEL);
+  globalThis.ROM_WEAVER_PRERENDER_CHANNEL = { channel, label: process.env.ROM_WEAVER_CHANNEL_LABEL || channel };
   renderLandingShell().then(
     (html) => {
       process.stdout.write(`${html}\n`);

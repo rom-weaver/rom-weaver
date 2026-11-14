@@ -6,18 +6,22 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { compileLinguiCatalogs } from "./scripts/compile-lingui-catalogs.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
-import { revisionUnhashedAssets } from "./scripts/precache-revisions.mjs";
 import { getBuildInfo, getVersionBranch } from "./scripts/version.mjs";
 import { writeBrotliSidecars } from "./scripts/vite-config/brotli-sidecars.mjs";
-import { serveChangelogAsset, writeChangelogAsset } from "./scripts/vite-config/changelog.mjs";
-import { resolveAppChannel, resolveSiteOrigin, stampChannelIdentity } from "./scripts/vite-config/channel.mjs";
+import { serveChangelogAsset } from "./scripts/vite-config/changelog.mjs";
+import {
+  releaseVersionForChannel,
+  resolveAppChannel,
+  resolveSiteOrigin,
+  stampChannelIdentity,
+} from "./scripts/vite-config/channel.mjs";
+import { stampBuildChannel } from "./scripts/vite-config/channel-stamp.mjs";
 import { deferDevHotUpdates, runtimeScratchIgnorePatterns } from "./scripts/vite-config/dev-hot-updates.mjs";
+import { importDevServiceWorkerDefines } from "./scripts/vite-config/dev-service-worker.mjs";
 import { emulatorJsLock, serveEmulatorJsAssets } from "./scripts/vite-config/emulatorjs.mjs";
-import { securityHeaders, writeCloudflareHeadersAsset } from "./scripts/vite-config/headers.mjs";
+import { securityHeaders } from "./scripts/vite-config/headers.mjs";
 import { identifyManifestFiles, identifyOptionalPackGroups } from "./scripts/vite-config/identify-data.mjs";
-import { minifyDocumentInlineScripts } from "./scripts/vite-config/minify-document-inline-scripts.mjs";
 import { repoRoot, rootDir } from "./scripts/vite-config/paths.mjs";
-import { preparePrecacheEntries, writePrecacheSizes } from "./scripts/vite-config/precache.mjs";
 import { prerenderWebappShell } from "./scripts/vite-config/prerender-shell.mjs";
 import { redirectSourcePaths, serveRootStaticAssets } from "./scripts/vite-config/root-static-assets.mjs";
 import { preloadWorkflowRouteChunks } from "./scripts/vite-config/route-preload.mjs";
@@ -29,6 +33,9 @@ import {
 } from "./scripts/vite-config/worker-chunks.mjs";
 import { nameWorkflowSharedGroup, resetWorkflowChunks } from "./scripts/vite-config/workflow-chunks.mjs";
 import { DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
+
+const SERVICE_WORKER_SOURCE_DIR = "src/webapp";
+const SERVICE_WORKER_FILENAME = "rom-weaver-service-worker.ts";
 
 /** Shared chunks below this many raw bytes are folded back into their importer; see build.rollupOptions.output. */
 const SHARED_CHUNK_MIN_SIZE = 30_000;
@@ -50,12 +57,22 @@ export default defineConfig(({ command, mode }) => {
   // Origin named by llms.txt, the Markdown alternates, openapi.json and the API catalog.
   const siteOrigin = resolveSiteOrigin(process.env.ROM_WEAVER_SITE_ORIGIN);
   const appChannelLabel = process.env.ROM_WEAVER_CHANNEL_LABEL || appChannel;
-  const releaseVersion = appChannel === "prod" || appChannel === "beta" || appChannel === "nightly" ? appVersion : "";
+  const releaseVersion = releaseVersionForChannel(appChannel, appVersion);
+  // The channel stamp renders the shells after the build, possibly in another job.
+  // It reuses these values instead of reading git.
+  const buildInfoDefines = {
+    __APP_VERSION__: JSON.stringify(appVersion),
+    __COMMIT_HASH__: JSON.stringify(commitHash),
+    __COMMITS_SINCE_VERSION__: JSON.stringify(commitsSinceVersion),
+    __DIRTY_HASH__: JSON.stringify(dirtyHash),
+    __GIT_BRANCH__: JSON.stringify(gitBranch),
+    __VERSION_BRANCH__: JSON.stringify(versionBranch),
+    __VERSION_IS_TAGGED__: JSON.stringify(versionIsTagged),
+  };
   const serviceWorkerDefines = {
     __SERVICE_WORKER_ENABLED__: JSON.stringify(serviceWorkerEnabled),
     __SERVICE_WORKER_UPDATE_INTERVAL_MS__: JSON.stringify(command === "build" ? 60000 : 5000),
   };
-  const prerenderedShells = new Map();
   const routePreloadLinks = new Map();
 
   return {
@@ -105,19 +122,11 @@ export default defineConfig(({ command, mode }) => {
       transformer: "lightningcss",
     },
     define: {
-      __APP_CHANNEL__: JSON.stringify(appChannel),
-      __APP_CHANNEL_LABEL__: JSON.stringify(appChannelLabel),
-      __APP_VERSION__: JSON.stringify(appVersion),
-      __COMMIT_HASH__: JSON.stringify(commitHash),
-      __COMMITS_SINCE_VERSION__: JSON.stringify(commitsSinceVersion),
-      __DIRTY_HASH__: JSON.stringify(dirtyHash),
+      ...buildInfoDefines,
       __EMULATORJS_VERSION__: JSON.stringify(emulatorJsLock.version),
       __IDENTIFY_MANIFEST_FILES__: JSON.stringify(identifyManifestFiles),
       __IDENTIFY_OPTIONAL_PACK_GROUPS__: JSON.stringify(identifyOptionalPackGroups),
       __REDIRECT_SOURCE_PATHS__: JSON.stringify(redirectSourcePaths()),
-      __GIT_BRANCH__: JSON.stringify(gitBranch),
-      __VERSION_BRANCH__: JSON.stringify(versionBranch),
-      __VERSION_IS_TAGGED__: JSON.stringify(versionIsTagged),
       ...serviceWorkerDefines,
     },
     optimizeDeps: {
@@ -144,73 +153,22 @@ export default defineConfig(({ command, mode }) => {
       deferDevHotUpdates(),
       stampChannelIdentity(appChannel, appChannelLabel, serviceWorkerEnabled),
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
-      prerenderWebappShell(prerenderedShells),
+      prerenderWebappShell(appChannel, appChannelLabel),
       preloadWorkflowRouteChunks(routePreloadLinks),
-      writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells, routePreloadLinks, siteOrigin),
-      writeChangelogAsset(releaseVersion),
-      minifyDocumentInlineScripts(),
-      writeCloudflareHeadersAsset(appChannel),
+      writeWebappStaticAssets(),
       writeBrotliSidecars(),
+      importDevServiceWorkerDefines(path.join(rootDir, SERVICE_WORKER_SOURCE_DIR, SERVICE_WORKER_FILENAME)),
       VitePWA({
         devOptions: {
           disableRuntimeConfig: true,
           enabled: devServiceWorkerEnabled,
           type: "module",
         },
-        filename: "rom-weaver-service-worker.ts",
+        filename: SERVICE_WORKER_FILENAME,
         injectManifest: {
-          // Manifest revisions track precached shell assets; identify packs load
-          // through background warm-up or on demand, outside the precache.
-          manifestTransforms: [revisionUnhashedAssets(), preparePrecacheEntries(), writePrecacheSizes()],
-          // The checksum router and the title index are warm-up data like the
-          // packs, so neither the raw files nor their brotli sidecars join the
-          // precache.
-          globIgnores: [
-            "**/*.map",
-            "assets/identify-*.pack.br",
-            "assets/identify-*.bin",
-            "assets/identify-*.bin.br",
-            "assets/identify-cheats-*.json.br",
-            "assets/identify-title-index.json",
-            "assets/identify-title-index.json.br",
-          ],
-          globPatterns: [
-            // Every route ships its own prerendered document, so precache them all:
-            // offline, a route the user has not visited yet has nothing in the runtime
-            // cache, and without its own shell it falls back to the patcher one and
-            // hydrates through a mismatch. Only the directory-index copy is listed -
-            // the `<slug>.html` twin is the same bytes, and the service worker looks
-            // routes up by the index form (see matchRouteDocument).
-            "index.html",
-            "**/index.html",
-            "404.html",
-            "manifest.json",
-            "rom-weaver-*.schema.json",
-            "docs.md",
-            "docs/*.md",
-            "NOTICE",
-            "WEBAPP_NOTICE",
-            "emulatorjs/LICENSE",
-            "emulatorjs/NOTICE",
-            "emulatorjs/bios/*.rom",
-            "emulatorjs/bios/*.bin",
-            "logo.svg",
-            "first-create.zip",
-            "first-weave.zip",
-            "favicon.ico",
-            "favicon*.png",
-            "favicon*.svg",
-            "apple-touch-icon.png",
-            "hello-world.nes",
-            "modified-world.nes",
-            "assets/**/*.{css,js,mjs,json,png,svg,jpg,jpeg,webp,woff2,wasm}",
-            "docs/screenshots/*.{avif,webp}",
-            "icon-192.png",
-            "icon-512.png",
-            "icon-maskable-512.png",
-          ],
-          // Large WASM entries MUST remain in the deferred manifest for the offline installer.
-          maximumFileSizeToCacheInBytes: 16 * 1024 * 1024,
+          // The channel stamp injects the precache manifest, because each channel lists different documents.
+          // The dev server keeps the default, which it replaces with an empty manifest.
+          injectionPoint: command === "build" ? undefined : "self.__WB_MANIFEST",
         },
         injectRegister: null,
         integration: {
@@ -222,8 +180,15 @@ export default defineConfig(({ command, mode }) => {
         },
         manifest: false,
         registerType: "prompt",
-        srcDir: "src/webapp",
+        srcDir: SERVICE_WORKER_SOURCE_DIR,
         strategies: "injectManifest",
+      }),
+      stampBuildChannel({
+        channel: appChannel,
+        channelLabel: appChannelLabel,
+        define: buildInfoDefines,
+        routePreloadLinks,
+        siteOrigin,
       }),
       ...(mode === "analyze"
         ? [
