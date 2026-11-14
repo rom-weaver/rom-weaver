@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import { SAVED, waitForBundle } from "./wait-webapp-bundle.mjs";
 
@@ -10,8 +14,8 @@ const KEY = `webapp-bundle-Linux-${SHA}`;
 const bundle = { repository: "owner/repo", sha: SHA, key: KEY };
 const mainCache = { key: KEY, ref: "refs/heads/main" };
 
-// Answers each poll from the next entry of `polls`: the caches main holds, and its runs for SHA.
-// A poll that finds no cache reads the caches again after the runs, as the save can land between.
+// Each poll returns the next entry of `polls`: main's caches and its runs for SHA.
+// A poll with no cache reads the caches again after the runs. The save can land in between.
 function fakeApi(polls) {
   let poll = 0;
   let cacheReads = 0;
@@ -101,6 +105,33 @@ test("an unexpected API response fails instead of reading as no bundle", async (
   await assert.rejects(waitForBundle({ api: async () => ({}), bundle }), /missing actions_caches/);
 });
 
+test("an API failure prints a one-line warning with its cause and fails the step", async (t) => {
+  const badGateway = createServer((_request, response) => {
+    response.writeHead(502, { "content-type": "text/html" });
+    response.end("<html>\n  <body>Bad gateway</body>\n</html>\n");
+  });
+  await new Promise((resolve) => badGateway.listen(0, "127.0.0.1", resolve));
+  t.after(() => badGateway.close());
+  const closed = createServer();
+  await new Promise((resolve) => closed.listen(0, "127.0.0.1", resolve));
+  const closedPort = closed.address().port;
+  await new Promise((resolve) => closed.close(resolve));
+  for (const { name, apiUrl, reason } of [
+    { name: "an error page", apiUrl: `http://127.0.0.1:${badGateway.address().port}`, reason: /502: <html> <body>Bad gateway<\/body> <\/html>/ },
+    // `localhost` can resolve to both ::1 and 127.0.0.1, which fails with an AggregateError.
+    { name: "a refused connection", apiUrl: `http://localhost:${closedPort}`, reason: /fetch failed: connect ECONNREFUSED / },
+  ]) {
+    await t.test(name, async () => {
+      const failure = await runCli(apiUrl);
+      assert.equal(failure.code, 1);
+      assert.equal(failure.stderr, "");
+      const [, warning] = /^::warning::Could not check for main's tested bundle \((.+)\); the deploy builds its own\.\n$/.exec(failure.stdout) ?? [];
+      assert.match(warning ?? failure.stdout, reason);
+      assert.doesNotMatch(warning, /^\s|\s$/);
+    });
+  }
+});
+
 test("tag deploys wait for the key main saves and the deploy restores", () => {
   const { load } = createRequire(import.meta.url)("js-yaml");
   const readYaml = (path) => load(readFileSync(new URL(path, import.meta.url), "utf8"));
@@ -112,3 +143,13 @@ test("tag deploys wait for the key main saves and the deploy restores", () => {
   assert.equal(stepWith(action.runs.steps, "actions/cache/restore@").with.key, savedKey);
   assert.ok(jobs.deploy.needs.includes("wait-webapp-bundle"));
 });
+
+/** Runs the CLI against `apiUrl` and returns its failure, which carries `code`, `stdout` and `stderr`. */
+function runCli(apiUrl) {
+  const script = fileURLToPath(new URL("./wait-webapp-bundle.mjs", import.meta.url));
+  const env = { ...process.env, BUNDLE_KEY: KEY, GITHUB_API_URL: apiUrl, GITHUB_REPOSITORY: "owner/repo", GITHUB_SHA: SHA, GITHUB_TOKEN: "token" };
+  return promisify(execFile)(process.execPath, [script], { env }).then(
+    () => assert.fail("the CLI MUST exit non-zero"),
+    (error) => error,
+  );
+}

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-// A release tag's CI run usually starts before main's run on the same commit saves its tested
-// bundle. This waits for that save, so the tag's deploy legs restamp the bundle instead of
-// building. It stops early when main has no run for the commit or the run ends without saving.
+// A release tag's CI run usually starts before main saves its tested bundle. This waits for that
+// save, so the tag's deploy legs restamp the bundle instead of building. It stops early when main
+// has no run for the commit, or when that run ends without saving.
 
 import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -17,7 +17,7 @@ const WAIT_LIMIT_MS = 30 * 60_000;
 export const SAVED = "saved";
 export const PENDING = "pending";
 
-/** Where main's bundle for `sha` stands: SAVED, PENDING, or the reason it will not be saved. */
+/** Returns SAVED, PENDING, or the reason main's bundle for `sha` will not be saved. */
 export async function bundleState(api, { repository, sha, key }) {
   const isSaved = async () => {
     const query = new URLSearchParams({ key, ref: MAIN_REF });
@@ -54,7 +54,7 @@ export async function waitForBundle({
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+async function main() {
   const { api } = createGitHubApi({
     token: process.env.GITHUB_TOKEN,
     apiUrl: process.env.GITHUB_API_URL || "https://api.github.com",
@@ -69,4 +69,16 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       ? `main saved ${bundle.key}\n`
       : `::warning::No tested bundle from main (${state}); the deploy builds its own.\n`,
   );
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    // A refused dual-stack connect fails with an AggregateError whose own message is empty.
+    const causes = error.cause instanceof AggregateError ? error.cause.errors : [error.cause];
+    const messages = [error, ...causes].map((cause) => cause?.message).filter(Boolean);
+    // API error bodies span lines, and an annotation is one line.
+    const reason = messages.join(": ").replace(/\s+/g, " ").trim();
+    process.stdout.write(`::warning::Could not check for main's tested bundle (${reason}); the deploy builds its own.\n`);
+    process.exitCode = 1;
+  });
 }
