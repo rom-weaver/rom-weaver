@@ -15,7 +15,7 @@ runs:
     - name: Hash Cargo profiles
       id: hash
       shell: bash
-      # cksum is POSIX, so it exists on every runner OS; sha1sum is not guaranteed on macOS.
+      # cksum is available on every runner OS. sha1sum is not guaranteed on macOS.
       run: |
         hash=$(awk '/^[[:space:]]*\[/ { in_profile = ($0 ~ /^[[:space:]]*\[[[:space:]]*profile[[:space:]]*(\.|\])/) } in_profile' Cargo.toml | sed 's/[[:space:]]*#.*//;s/[[:space:]]*$//;/^$/d' | cksum | cut -d ' ' -f 1)
         echo "hash=$hash" >> "$GITHUB_OUTPUT"

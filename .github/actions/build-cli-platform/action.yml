@@ -78,7 +78,7 @@ runs:
     # the cargo/rustup moves are conditional on it existing. RUNNER_TEMP is
     # wherever the runner put it and is always the better temp dir, so TMP/TEMP
     # move either way. A one-time cache re-population is expected the first time
-    # this lands; the shared-key scheme is unchanged.
+    # this lands.
     - name: Move Windows hot paths off the OS disk
       if: runner.os == 'Windows'
       shell: bash
