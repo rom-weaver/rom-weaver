@@ -12,7 +12,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { extractArchiveMembers } from "./build-identify-index.mjs";
-import { withCachedArchive } from "./identify-archive-cache.mjs";
+import { publishArchive, withCachedArchive } from "./identify-archive-cache.mjs";
 import { makeTempDir } from "./test-temp-dirs.mjs";
 
 const run = promisify(execFile);
@@ -192,4 +192,24 @@ test("a cached archive that lacks a member keeps its entry and reports the missi
     /is missing: pinned-source\/dat\/absent\.dat/u,
   );
   assert.ok(statSync(archive).size > 0);
+});
+
+test("publishArchive publishes what its verify step accepts and nothing it rejects", async () => {
+  const work = makeWork();
+  const archive = join(work, "cache", "plain.bin");
+  const download = (partial) => writeFileSync(partial, "not gzip");
+  await assert.rejects(
+    publishArchive({
+      archive,
+      download,
+      verify: () => {
+        throw new Error("rejected by the caller");
+      },
+    }),
+    /rejected by the caller/u,
+  );
+  assert.deepEqual(readdirSync(join(work, "cache")), []);
+  await publishArchive({ archive, download, verify: () => {} });
+  assert.equal(readFileSync(archive, "utf8"), "not gzip");
+  assert.deepEqual(readdirSync(join(work, "cache")), ["plain.bin"]);
 });

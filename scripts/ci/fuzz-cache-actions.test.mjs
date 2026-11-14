@@ -46,7 +46,7 @@ test("the key names the toolchain, platform, commit, and every file that fixes t
   for (const part of ["RUNNER_OS", "RUNNER_ARCH", "FUZZ_TOOLCHAIN", "INPUTS_HASH"]) {
     assert.ok(pin.includes(part), `the key step lacks ${part}`);
   }
-  assert.ok(field(step("Cache fuzz build artifacts"), "key").includes("github.sha"));
+  assert.equal(field(step("Cache fuzz build artifacts"), "key"), "${{ steps.pin.outputs.inputs }}${{ github.sha }}");
   const patterns = [...pin.matchAll(/hashFiles\(([^)]*)\)/gu)].flatMap(([, list]) => [...list.matchAll(/'([^']+)'/gu)].map((match) => match[1]));
   for (const required of ["fuzz/Cargo.toml", "fuzz/Cargo.lock", "Cargo.lock", ".config/mise.toml", "scripts/quality-fuzz.mjs"]) {
     assert.ok(patterns.includes(required), `key does not hash ${required}`);
