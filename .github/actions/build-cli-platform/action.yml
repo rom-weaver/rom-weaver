@@ -109,11 +109,16 @@ runs:
     # release restores what CI already built instead of spending a second set of
     # cache entries on the same artifacts. Keyed per entry - the nine platforms
     # share nothing.
+    - name: Hash Cargo profiles
+      id: cargo-profile
+      if: inputs.cache-restore == 'true'
+      uses: ./.github/actions/cargo-profile-hash
+
     - name: Cache cargo artifacts
       if: inputs.cache-restore == 'true'
       uses: Swatinem/rust-cache@v2
       with:
-        shared-key: cli-platform-${{ inputs.package }}
+        shared-key: cli-platform-${{ inputs.package }}-${{ steps.cargo-profile.outputs.hash }}
         cache-on-failure: true
         save-if: ${{ inputs.cache-save == 'true' }}
 
