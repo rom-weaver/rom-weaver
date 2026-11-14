@@ -120,8 +120,22 @@ zstd = "0.14.0"
 [profile.dev]
 debug = "line-tables-only"
 
+# Tests run checksums, CHD/CSO codecs, and vendored C (built by `cc` at the
+# profile's opt level) over MiB-sized fixtures; at opt-level 0 they dominate the
+# suite's wall time. Optimize the dependencies and these hot workspace crates;
+# the rest of the workspace keeps fast incremental dev builds.
 [profile.dev.package."*"]
 debug = false
+opt-level = 3
+
+[profile.dev.package.rom-weaver-checksum]
+opt-level = 3
+
+[profile.dev.package.rom-weaver-containers]
+opt-level = 3
+
+[profile.dev.package.rom-weaver-core]
+opt-level = 3
 
 [profile.release]
 lto = "fat"
