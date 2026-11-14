@@ -2,7 +2,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import { createReadStream, createWriteStream, readFileSync } from "node:fs";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
@@ -16,7 +16,7 @@ const PLATFORM_NAMES = JSON.parse(
   ),
 );
 
-import { withCachedArchive } from "./identify-archive-cache.mjs";
+import { publishArchive, withCachedArchive } from "./identify-archive-cache.mjs";
 import { brotliCompressBufferCached } from "./wasm/brotli-compress.mjs";
 import {
   CHEAT_PLATFORMS,
@@ -524,7 +524,7 @@ function parseArgs(argv) {
       return value;
     };
 
-    if (arg in PATH_FLAGS) options[PATH_FLAGS[arg]] = readValue();
+    if (Object.hasOwn(PATH_FLAGS, arg)) options[PATH_FLAGS[arg]] = readValue();
     else if (arg === "--jobs") options.jobs = Number(readValue());
     else if (arg === "--only") {
       for (const name of readValue().split(",")) {
@@ -903,24 +903,20 @@ async function ensureOpenGoodDats(
   return new Map(datFiles.map((datFile) => [datFile, paths.get(`dats/${datFile}`)]));
 }
 
-async function downloadGoodToolsArchive(archive) {
-  const partial = `${archive}.${process.pid}-${crypto.randomUUID()}.part`;
-  try {
-    await runCurl(
-      `${GOODTOOLS_REPOSITORY}/releases/download/${GOODTOOLS_RELEASE}/${encodeURIComponent(GOODTOOLS_ARCHIVE)}`,
-      partial,
-      undefined,
-    );
-    const actualSha256 = await sha256File(partial);
-    if (actualSha256 !== GOODTOOLS_ARCHIVE_SHA256) {
-      throw new Error(
-        `GoodTools download checksum mismatch: expected ${GOODTOOLS_ARCHIVE_SHA256}, got ${actualSha256}`,
-      );
-    }
-    await rename(partial, archive);
-  } finally {
-    await rm(partial, { force: true });
+async function assertGoodToolsChecksum(file) {
+  const actualSha256 = await sha256File(file);
+  if (actualSha256 !== GOODTOOLS_ARCHIVE_SHA256) {
+    throw new Error(`GoodTools download checksum mismatch: expected ${GOODTOOLS_ARCHIVE_SHA256}, got ${actualSha256}`);
   }
+}
+
+function downloadGoodToolsArchive(archive) {
+  const url = `${GOODTOOLS_REPOSITORY}/releases/download/${GOODTOOLS_RELEASE}/${encodeURIComponent(GOODTOOLS_ARCHIVE)}`;
+  return publishArchive({
+    archive,
+    download: (partial) => runCurl(url, partial, undefined),
+    verify: assertGoodToolsChecksum,
+  });
 }
 
 async function ensureGoodToolsHeaderedDat(cacheDir) {

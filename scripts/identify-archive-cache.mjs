@@ -6,10 +6,8 @@ import { pipeline } from "node:stream/promises";
 import { Writable } from "node:stream";
 import { createGunzip } from "node:zlib";
 
-// GitHub regenerates archives on request, so their bytes can change for the same commit.
-// The cache therefore pins an archive by revision, not by hash.
-// An entry is trusted once its gzip stream reads to the checksum, before publication.
-// An entry that later fails to extract is evicted and fetched again.
+// GitHub can change archive bytes for one commit, so the cache pins revisions, not hashes.
+// An entry is published only after its gzip stream decodes to the end.
 
 // Callers in one process share a download instead of racing to publish the same file.
 const pendingDownloads = new Map();
@@ -31,13 +29,13 @@ async function assertGzipComplete(file) {
 }
 
 // Writers rename their own temp files into place, so readers never see partial files.
-// A writer that loses a rename keeps the winner.
-async function publishArchive({ archive, download }) {
+// A writer that loses a rename keeps the winner. `verify` rejects a download that is incomplete.
+export async function publishArchive({ archive, download, verify = assertGzipComplete }) {
   await mkdir(path.dirname(archive), { recursive: true });
   const partial = `${archive}.${process.pid}-${randomUUID()}.part`;
   try {
     await download(partial);
-    await assertGzipComplete(partial);
+    await verify(partial);
     try {
       await rename(partial, archive);
     } catch (error) {
@@ -64,9 +62,8 @@ function ensureArchive({ archive, download }) {
 // tar and zlib report a damaged or truncated archive with a `TAR_*` or `Z_*` code.
 const isDamagedArchiveError = (error) => /^(?:TAR|Z)_/u.test(String(error?.code ?? ""));
 
-// Run `use(archive)` on the cached archive, downloading it when absent. An entry
-// that existed before this call and fails as damaged is removed, unless another
-// process replaced it meanwhile, and fetched once more.
+// Run `use(archive)`, downloading the archive when absent. A damaged entry from before
+// this call is removed, unless another process replaced it. Then it is fetched once more.
 export async function withCachedArchive({ archive, download, use }) {
   const before = await entryIdentity(archive);
   await ensureArchive({ archive, download });
