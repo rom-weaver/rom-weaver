@@ -231,16 +231,31 @@ export function inspectChange(path, before, after) {
   return findings;
 }
 
+/** Lists each changed file with the path its old content is at, which differs for a moved file. */
+function changedFiles(git, mergeBase) {
+  const fields = git(["diff", "--name-status", "--find-renames", "-z", mergeBase, "--"]).split("\0").filter(Boolean);
+  const files = [];
+  for (let index = 0; index < fields.length; ) {
+    // Renames (R) and copies (C, under `diff.renames=copies`) carry a source and a destination path.
+    const hasSource = /^[RC]/.test(fields[index]);
+    files.push({ oldPath: fields[index + 1], path: fields[hasSource ? index + 2 : index + 1] });
+    index += hasSource ? 3 : 2;
+  }
+  return files;
+}
+
 export function checkDiff(base, cwd = process.cwd()) {
+  // Piped stderr keeps the expected `git show` miss for a new file off the console.
   const git = (args) =>
-    execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+    execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 32 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
   const mergeBase = git(["merge-base", base, "HEAD"]).trim();
-  const paths = git(["diff", "--name-only", "-z", mergeBase, "--"]).split("\0").filter(Boolean);
+  const files = changedFiles(git, mergeBase);
   const findings = [];
-  for (const path of paths) {
+  // A moved file is compared with its old content, so the move cannot hide removed checks.
+  for (const { oldPath, path } of files) {
     let before = "";
     try {
-      before = git(["show", `${mergeBase}:${path}`]);
+      before = git(["show", `${mergeBase}:${oldPath}`]);
     } catch {
       /* New files have no baseline. */
     }
@@ -248,7 +263,7 @@ export function checkDiff(base, cwd = process.cwd()) {
     const after = existsSync(full) ? readFileSync(full, "utf8") : "";
     findings.push(...inspectChange(path, before, after));
   }
-  return { mergeBase, checkedFiles: paths.length, findings };
+  return { mergeBase, checkedFiles: files.length, findings };
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const base = process.argv[2];

@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { inspectChange, syntaxSignals } from "./quality-guardrails.mjs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { checkDiff, inspectChange, syntaxSignals } from "./quality-guardrails.mjs";
 
 for (const source of [
   'test.only("x", () => {});',
@@ -121,3 +125,39 @@ test("business only and skip properties do not suppress tests", () =>
     syntaxSignals("business.ts", "const result = customer.only(); pager.skip(2);"),
     [],
   ));
+test("a moved test is compared with its old content", async (t) => {
+  // Hooks export GIT_DIR, which would point git, and checkDiff, at this repository.
+  const hookGit = Object.entries(process.env).filter(([key]) => key.startsWith("GIT_"));
+  for (const [key] of hookGit) delete process.env[key];
+  t.after(() => Object.assign(process.env, Object.fromEntries(hookGit)));
+  const assertions = (count) => Array.from({ length: count }, (_, index) => `assert.equal(value${index}, ${index});\n`).join("");
+  for (const { name, moved, findings } of [
+    { name: "a plain move", moved: assertions(10), findings: [] },
+    { name: "a move that drops an assertion", moved: assertions(9), findings: [["b.test.mjs", "assertions-removed"]] },
+  ]) {
+    await t.test(name, () => {
+      const repo = mkdtempSync(join(tmpdir(), "quality-guardrails-"));
+      try {
+        const env = {
+          ...process.env,
+          GIT_AUTHOR_NAME: "ci",
+          GIT_AUTHOR_EMAIL: "ci@example.com",
+          GIT_COMMITTER_NAME: "ci",
+          GIT_COMMITTER_EMAIL: "ci@example.com",
+        };
+        const git = (...args) => execFileSync("git", ["-c", "commit.gpgsign=false", ...args], { cwd: repo, env });
+        writeFileSync(join(repo, "a.test.mjs"), assertions(10));
+        git("init", "-q");
+        git("add", "-A");
+        git("commit", "-q", "-m", "base");
+        git("mv", "a.test.mjs", "b.test.mjs");
+        writeFileSync(join(repo, "b.test.mjs"), moved);
+        const result = checkDiff("HEAD", repo);
+        assert.equal(result.checkedFiles, 1);
+        assert.deepEqual(result.findings.map((finding) => [finding.path, finding.kind]), findings);
+      } finally {
+        rmSync(repo, { recursive: true, force: true });
+      }
+    });
+  }
+});
