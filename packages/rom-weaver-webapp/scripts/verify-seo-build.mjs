@@ -14,7 +14,7 @@ import {
 } from "../src/webapp/api-catalog.mjs";
 import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { escapeHtml } from "../src/webapp/escape-html.mjs";
-import { channelAttributes, resolveSiteOrigin } from "./vite-config/channel.mjs";
+import { channelAttributes, resolveAppChannel, resolveSiteOrigin } from "./vite-config/channel.mjs";
 import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
 import {
   LEGACY_WORKFLOW_ROUTES,
@@ -36,7 +36,7 @@ const distDir = path.join(packageDir, "dist");
 const identifyDataIndex = JSON.parse(
   fs.readFileSync(path.resolve(packageDir, "../../crates/rom-weaver-cli/data/identify/v1/index.json"), "utf8"),
 );
-const channel = process.env.ROM_WEAVER_CHANNEL || "prod";
+const channel = resolveAppChannel(process.env.ROM_WEAVER_CHANNEL);
 const production = channel === "prod";
 // Discovery endpoints name the deployment that serves them; canonicals name production (SITE_ORIGIN).
 const siteOrigin = resolveSiteOrigin(process.env.ROM_WEAVER_SITE_ORIGIN);
