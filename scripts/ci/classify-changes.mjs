@@ -195,7 +195,7 @@ export function canReuseArmDockerWasm(paths) {
 }
 
 /** Paths that differ between two commits. A move counts at both paths, because rename pairing is off. */
-export function changedPathsBetween(base, head, cwd = undefined) {
+export function changedPathsBetween(base, head, cwd) {
   return execFileSync("git", ["diff", "--name-only", "--no-renames", "-z", base, head], {
     cwd,
     encoding: "utf8",

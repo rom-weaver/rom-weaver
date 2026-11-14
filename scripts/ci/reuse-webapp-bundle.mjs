@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
-// Decides whether a deploy with no bundle may restamp the restored bundle instead of building.
-// It may restamp only if CI's change rule sees no webapp change since then.
-// Each file in the bundle's manifest MUST match this run's `wasm-prod` file.
+// Decides whether a deploy may restamp the restored bundle instead of building.
+// That needs no webapp change since the bundle, and a manifest that matches this run's `wasm-prod`.
 // Writes `reuse=true|false` to $GITHUB_OUTPUT.
 
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
