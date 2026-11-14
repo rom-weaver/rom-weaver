@@ -343,6 +343,13 @@ jobs:
         shell: bash
         run: node scripts/ci/npm-publish-package.mjs --dry-run packages/rom-weaver-cli-platforms/${{ matrix.package }}
 
+      # npm-publish.yml builds the winget zip only after the irreversible npm
+      # publish. A packaging error MUST surface here first.
+      - name: Dry-run Windows zip
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/ci/package-windows-zip.ps1 -Package ${{ matrix.package }} -Destination "$env:RUNNER_TEMP/rom-weaver-${{ matrix.package }}.zip"
+
   cli-assets:
     name: Package CLI documentation
     needs: platform-build

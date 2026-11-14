@@ -43,9 +43,9 @@ jobs:
       contents: write
       id-token: write
       # Signed provenance for the release archive. npm generates its own for
-      # the package from the same OIDC token; this covers the tar.gz asset,
-      # which `install.sh`, Homebrew, and Scoop hand to users without going
-      # near npm.
+      # the package from the same OIDC token. This covers the tar.gz asset that
+      # `install.sh`, Homebrew, and Scoop hand to users without npm. It also
+      # covers the Windows zip that winget installs.
       attestations: write
       artifact-metadata: write
     strategy:
@@ -113,6 +113,22 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --clobber
           echo "name=$asset_name" >> "$GITHUB_OUTPUT"
 
+      # The winget package (scripts/ci/package-windows-zip.ps1 says why a zip).
+      - name: Upload Windows zip to GitHub release
+        id: zip
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE: ${{ matrix.package }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          $assetName = "rom-weaver-$env:PACKAGE.zip"
+          ./scripts/ci/package-windows-zip.ps1 -Package $env:PACKAGE -Destination $assetName
+          gh release upload "v$env:VERSION" $assetName --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw "gh release upload failed for $assetName" }
+          "name=$assetName" >> $env:GITHUB_OUTPUT
+
       # This replaced the `.sha256` sidecar that used to ship beside each asset.
       # The sidecar was written by this same job, so it proved the download was
       # not corrupted and nothing about where the binary came from.
@@ -125,6 +141,12 @@ jobs:
         uses: ./.github/actions/attest-retry
         with:
           subject-path: ${{ steps.asset.outputs.name }}
+
+      - name: Attest the Windows zip
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/attest-retry
+        with:
+          subject-path: ${{ steps.zip.outputs.name }}
 
   launcher:
     needs: platform

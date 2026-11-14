@@ -913,6 +913,38 @@ jobs:
           git commit -m "rom-weaver $VERSION"
           git push
 
+  # winget counterpart to publish-scoop, with the same ordering and prerelease skip.
+  # Komac only updates an existing package. The first version is submitted by
+  # hand (.github/RELEASING.md). A rerun exits when this version's pull request exists.
+  publish-winget:
+    needs: [release, publish-release]
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.publish-release.result == 'success' &&
+      needs.release.outputs.release_created == 'true' &&
+      !contains(needs.release.outputs.version, '-')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Install Komac
+        uses: taiki-e/install-action@v2.90.2
+        with:
+          tool: komac@2.17.2
+
+      - name: Submit manifest update
+        env:
+          GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION"
+          komac update RomWeaver.RomWeaver --version "$VERSION" --submit --urls \
+            "$base/rom-weaver-win32-x64-msvc.zip" \
+            "$base/rom-weaver-win32-ia32-msvc.zip" \
+            "$base/rom-weaver-win32-arm64-msvc.zip"
+
   # Both images are assembled from artifacts static-webapp and npm-build produce, so the build waits
   # for those two and then runs beside the npm publish instead of after it. It pushes nothing: each
   # architecture is written to an OCI archive, and publish-containers pushes the archives (and
@@ -989,8 +1021,8 @@ jobs:
   # be cut again - a published immutable release permanently reserves its tag
   # name. Creating the tag here is also what triggers cargo-publish.yml.
   #
-  # publish-homebrew and publish-scoop deliberately run *after* this rather than
-  # gating it; see the comment on publish-homebrew.
+  # publish-homebrew, publish-scoop, and publish-winget deliberately run *after*
+  # this, not gating it; see publish-homebrew's comment.
   publish-release:
     name: Publish draft release
     needs:

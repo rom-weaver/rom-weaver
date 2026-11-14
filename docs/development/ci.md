@@ -598,8 +598,9 @@ The script imports nothing outside Node, so the dry-run and publish jobs install
 | `publish-release` | flips the draft release to published, creating the tag |
 | `publish-homebrew` | formula commit to `rom-weaver/homebrew-tap` (stable only) |
 | `publish-scoop` | manifest commit to `rom-weaver/scoop-bucket` (stable only) |
+| `publish-winget` | `RomWeaver.RomWeaver` pull request to `microsoft/winget-pkgs` (stable only) |
 
-The table is in dependency order. Everything above `publish-release` attaches an asset to the draft or gates it; the two package-manager pushes come after it, and [Package managers publish last](#package-managers-publish-last) explains why.
+The table is in dependency order. Everything above `publish-release` attaches an asset to the draft or gates it. The three package-manager updates come after it; [Package managers publish last](#package-managers-publish-last) explains why.
 
 Every one of these jobs guards its `if` with `!cancelled()`. `release` needs `verify-main-ci`, which is skipped on the release-PR-merge path, and a skipped job propagates the skip to everything downstream of it - past `release`'s own `always()`. v0.10.0 was cut this way: the run reported success, created the draft release, and skipped the entire fan-out, leaving a draft with no assets. Opting out of skip propagation also means failed ancestors no longer stop a job either, so each one additionally asserts the `result` of the needs it depends on.
 
@@ -694,9 +695,9 @@ The org runs at most 20 jobs at once and a release peaked at 16 with main's CI o
 
 ### Package managers publish last
 
-`publish-homebrew` and `publish-scoop` run after `publish-release`. Their manifests use public `releases/download/vX.Y.Z/...` URLs, which are unavailable while the release is a draft.
+`publish-homebrew`, `publish-scoop`, and `publish-winget` run after `publish-release`. Their manifests use public `releases/download/vX.Y.Z/...` URLs, which are unavailable while the release is a draft.
 
-A Homebrew or Scoop failure can be retried by rerunning its job. These jobs update Git repositories and do not gate release publication. npm and container publication gate `publish-release`; crates.io publication starts after the tag exists.
+A Homebrew, Scoop, or winget failure can be retried by rerunning its job. These jobs update Git repositories or open a pull request. They do not gate release publication. npm and container publication gate `publish-release`; crates.io publication starts after the tag exists.
 
 ### Prerelease routing
 
@@ -730,12 +731,12 @@ Every artifact the fan-out publishes carries signed provenance, so what a user c
 
 | Artifact | Attested by |
 | --- | --- |
-| 9 CLI platform archives | `actions/attest-build-provenance` in `npm-publish.yml`'s `platform` job; the binary inside was either built by that release or attested by the release pull request's CI run (see [the reuse section](#the-release-reuses-the-release-pull-requests-cli-binaries)) |
+| 9 CLI platform archives and 3 Windows zips | `actions/attest-build-provenance` in `npm-publish.yml`'s `platform` job; the binary inside was either built by that release or attested by the release pull request's CI run (see [the reuse section](#the-release-reuses-the-release-pull-requests-cli-binaries)) |
 | static webapp tarball | the same, in `release.yml`'s `static-webapp` |
 | npm packages | `npm publish --provenance` (`scripts/ci/npm-publish-package.mjs`) |
 | container images | `provenance: mode=max` + `attest-retry`, in `docker-publish.yml` for `latest`/`beta` and in `ci.yml` for `nightly` |
 
-Two gaps remain, both because no mechanism exists: crates.io has no attestation story, and neither does a Cloudflare Pages deploy. Homebrew and Scoop need none of their own - both pin the release assets by sha256, so attesting the archives covers them.
+Two gaps remain, both because no mechanism exists: crates.io has no attestation story, and neither does a Cloudflare Pages deploy. Homebrew, Scoop, and winget need no attestation of their own. All three pin release assets by sha256, so attesting the archives covers them.
 
 Immutable releases separately make GitHub attest every release automatically, with an `in-toto.io/attestation/release/v0.2` statement listing each asset's digest. That is not build provenance and must not be mistaken for it: it says an asset was in a release, which is equally true of one a stolen token uploaded to the draft. It is also why every consumer query filters on `predicate_type=https://slsa.dev/provenance/v1` - without the filter, the automatic attestation answers and the check passes on anything in any release.
 
@@ -779,6 +780,7 @@ Cache **mounts** (`--mount=type=cache`) are a separate mechanism and remain loca
 | `CLOUDFLARE_ZONE_ID` (optional) | `ci.yml` | Maintaining the `/assets/*` zone Cache Rule; the API token also needs Cache Rules edit permission |
 | `RELEASE_PLEASE_TOKEN` | `release.yml` | Release pull request and release-metadata operations |
 | `PACKAGE_MANAGER_TOKEN` | `release.yml` | Pushing stable releases to the Homebrew tap and Scoop bucket repositories |
+| `WINGET_TOKEN` | `release.yml` | Classic `public_repo` token that opens stable-release pull requests on `microsoft/winget-pkgs` from its owner's fork |
 | `NPM_BOOTSTRAP_TOKEN` (optional) | `npm-publish.yml` | First publication of a newly added npm package before trusted publishing can be configured |
 | `GITHUB_TOKEN` | everywhere | ghcr.io, releases, statuses, cache deletion |
 
