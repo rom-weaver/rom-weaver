@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -118,6 +118,61 @@ test("the Windows hook runs npm's JavaScript entrypoint with the production bund
     assert.equal(observed[0].channel, "prod");
     assert.equal(observed[2].channel, "prod");
     assert.equal(observed[2].prebuilt, "1");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a pushed non-ASCII webapp path runs the bundle checks", () => {
+  const dir = mkdtempSync(join(tmpdir(), "rom-weaver-pre-push-"));
+  try {
+    const repo = join(dir, "repo");
+    mkdirSync(join(repo, "packages", "rom-weaver-webapp", "src"), { recursive: true });
+    // Git hooks export GIT_DIR and similar variables. Inherited, they point git at the hook's repository.
+    const env = {
+      ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
+      GIT_AUTHOR_NAME: "ci",
+      GIT_AUTHOR_EMAIL: "ci@example.com",
+      GIT_COMMITTER_NAME: "ci",
+      GIT_COMMITTER_EMAIL: "ci@example.com",
+    };
+    const git = (...args) => execFileSync("git", ["-c", "commit.gpgsign=false", ...args], { cwd: repo, encoding: "utf8", env }).trim();
+    git("init", "-q");
+    writeFileSync(join(repo, "README.md"), "base\n");
+    git("add", "-A");
+    git("commit", "-q", "-m", "base");
+    git("update-ref", "refs/remotes/origin/main", "HEAD");
+    git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+    writeFileSync(join(repo, "packages", "rom-weaver-webapp", "src", "näme.ts"), "export {};\n");
+    git("add", "-A");
+    git("commit", "-q", "-m", "webapp");
+    const head = git("rev-parse", "HEAD");
+
+    // npm runs a recording script, and mise does nothing, so no real build starts.
+    const calls = join(dir, "calls.jsonl");
+    const cli = join(dir, "npm-cli.cjs");
+    const preload = join(dir, "preload.mjs");
+    writeFileSync(cli, `require("node:fs").appendFileSync(${JSON.stringify(calls)}, JSON.stringify(process.argv.slice(2)) + "\\n");`);
+    writeFileSync(preload, `
+      import childProcess from "node:child_process";
+      import { syncBuiltinESMExports } from "node:module";
+      const original = childProcess.execFileSync;
+      childProcess.execFileSync = (command, args, options) => {
+        if (command === "mise") return "";
+        if (command === "npm") return original(process.execPath, [${JSON.stringify(cli)}, ...args], options);
+        return original(command, args, options);
+      };
+      syncBuiltinESMExports();
+    `);
+    const result = spawnSync(process.execPath, ["--import", preload, fileURLToPath(new URL("./pre-push.mjs", import.meta.url)), "origin"], {
+      cwd: repo,
+      encoding: "utf8",
+      input: `refs/heads/feat ${head} refs/heads/feat ${ZERO}\n`,
+      env: { ...env, npm_execpath: cli },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const observed = readFileSync(calls, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    assert.deepEqual(observed[0], ["--prefix", "packages/rom-weaver-webapp", "run", "build"], result.stderr);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
