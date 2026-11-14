@@ -6,11 +6,10 @@ import { pipeline } from "node:stream/promises";
 import { Writable } from "node:stream";
 import { createGunzip } from "node:zlib";
 
-// GitHub generates source archives on request, and their bytes can change while
-// the commit's contents do not, so the cache pins an archive by its revision
-// and cannot pin it by hash. An entry is trusted once its gzip stream has been
-// read to its checksum before publication; one that later fails to extract is
-// evicted and fetched again.
+// GitHub regenerates archives on request, so their bytes can change for the same commit.
+// The cache therefore pins an archive by revision, not by hash.
+// An entry is trusted once its gzip stream reads to the checksum, before publication.
+// An entry that later fails to extract is evicted and fetched again.
 
 // Callers in one process share a download instead of racing to publish the same file.
 const pendingDownloads = new Map();
@@ -31,9 +30,8 @@ async function assertGzipComplete(file) {
   await pipeline(createReadStream(file), createGunzip(), discard);
 }
 
-// Each writer fills its own temporary file and renames it into place, so a
-// reader sees either no entry or a complete one, and writers never share a
-// file. A writer that loses the rename to a concurrent one keeps the winner.
+// Writers rename their own temp files into place, so readers never see partial files.
+// A writer that loses a rename keeps the winner.
 async function publishArchive({ archive, download }) {
   await mkdir(path.dirname(archive), { recursive: true });
   const partial = `${archive}.${process.pid}-${randomUUID()}.part`;

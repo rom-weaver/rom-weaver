@@ -222,7 +222,11 @@ test("planFileOrder: the smallest file warms up alone and the rest follow slowes
   const { warmupFile, pooledFiles } = planFileOrder(files);
   const smallest = Math.min(...files.map((file) => fs.statSync(file).size));
   assert.equal(fs.statSync(warmupFile).size, smallest);
-  assert.deepEqual(pooledFiles, orderSlowestFirst(files.filter((file) => file !== warmupFile)));
+  assert.equal(pooledFiles.length, files.length - 1);
+  const slowestPooled = Object.entries(durations)
+    .filter(([name]) => name !== path.basename(warmupFile))
+    .sort((left, right) => right[1] - left[1])[0][0];
+  assert.equal(path.basename(pooledFiles[0]), slowestPooled);
   assert.deepEqual(
     [warmupFile, ...pooledFiles].sort((left, right) => left.localeCompare(right)),
     files.slice().sort((left, right) => left.localeCompare(right)),

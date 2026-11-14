@@ -16,6 +16,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
   - [`.github/actions/setup-build-env`](#githubactionssetup-build-env)
   - [`.github/actions/wasm-cache`](#githubactionswasm-cache)
   - [`.github/actions/webapp-build-cache`](#githubactionswebapp-build-cache)
+  - [`.github/actions/fuzz-cache`](#githubactionsfuzz-cache)
   - [`.github/actions/build-cli-platform`](#githubactionsbuild-cli-platform)
   - [`.github/actions/docker-build-arch` and `docker-manifest`](#githubactionsdocker-build-arch-and-docker-manifest)
   - [`.github/actions/attest-retry`](#githubactionsattest-retry)
@@ -457,6 +458,14 @@ Restores two reusable outputs: the Brotli cache in `node_modules/.cache/rom-weav
 Only the `wasm` job on `main` saves an entry, keyed by commit. Pull requests restore the newest `main` entry by prefix and never write one.
 
 A restored entry can skip work but cannot change output. A Brotli entry is used only after it decompresses to the asset's exact bytes. `generate-channel-icons.mjs` writes `render-stamp.json`: one digest of its inputs, browser, and zlib, plus each output's digest. The script skips rendering only when all of these match, and `--check` always renders.
+
+### `.github/actions/fuzz-cache`
+
+Caches `fuzz/target`. The fuzz crate is its own workspace, so the cargo cache in `setup-build-env` never covers it, and a cold job compiles every dependency again with sanitizer and coverage instrumentation. `quality-analysis` in `ci.yml` restores it; the weekly `quality-deep.yml` fuzz job also saves it (`save: "true"`).
+
+The key covers the runner, the pinned nightly (read from `scripts/quality-fuzz.mjs`), the lock files, Cargo and mise configuration, crate manifests, build scripts, and the commit. Restores fall back to the same inputs without the commit, then to the toolchain alone. Source changes are left to Cargo's fingerprints, which rebuild path crates whose sources are newer than the restored artifacts.
+
+Only a run on `refs/heads/main` with `save: "true"` writes the cache, so pull request runs never add entries. The cache-cleanup sweep keeps the newest `fuzz-target-` generation per set of hashed inputs. The saved size on Actions is not yet measured; check it against the [cache budget](#actions-cache-budget) before relying on it.
 
 ### `.github/actions/build-cli-platform`
 

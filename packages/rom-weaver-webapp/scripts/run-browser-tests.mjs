@@ -116,9 +116,8 @@ export const selectShard = (files, shard) => {
   return buckets[shard.index - 1].files.sort((left, right) => Number(left > right) - Number(left < right));
 };
 
-// Files that start last decide the finish time, so the slowest go first. A file
-// with a recorded median uses it; any other is estimated from its size at the
-// recorded seconds-per-byte ratio, so a new file still sorts by size.
+// Files that start last set the finish time, so the slowest go first.
+// A recorded duration sets the order; a file without one is estimated from its size.
 export const orderSlowestFirst = (files, recorded = durations, sizeOf = fileSize) => {
   const knownNames = Object.keys(recorded);
   const knownBytes = knownNames.reduce((sum, name) => sum + sizeOf(path.join(TEST_DIR, name)), 0);

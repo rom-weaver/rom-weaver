@@ -493,10 +493,16 @@ Options:
   --help                   Show this help.
 `;
 
+const PATH_FLAGS = {
+  "--archive-cache-dir": "archiveCacheDir",
+  "--cache-dir": "cacheDir",
+  "--out": "outPath",
+};
+
 function parseArgs(argv) {
   const options = {
     allowMissingPlatforms: false,
-    archiveCacheDir: process.env.ROM_WEAVER_IDENTIFY_ARCHIVE_CACHE_DIR || "",
+    archiveCacheDir: process.env.ROM_WEAVER_IDENTIFY_ARCHIVE_CACHE_DIR,
     brotli: true,
     brotliQuality: 11,
     cacheDir: process.env.ROM_WEAVER_IDENTIFY_CACHE_DIR || DEFAULT_CACHE_DIR,
@@ -518,10 +524,8 @@ function parseArgs(argv) {
       return value;
     };
 
-    if (arg === "--cache-dir") options.cacheDir = readValue();
-    else if (arg === "--archive-cache-dir") options.archiveCacheDir = readValue();
+    if (arg in PATH_FLAGS) options[PATH_FLAGS[arg]] = readValue();
     else if (arg === "--jobs") options.jobs = Number(readValue());
-    else if (arg === "--out") options.outPath = readValue();
     else if (arg === "--only") {
       for (const name of readValue().split(",")) {
         const trimmed = name.trim();
@@ -708,8 +712,7 @@ export async function extractArchiveDirectory({ archive, directory, sourceRoot }
   return members.sort();
 }
 
-// Run `use(archive)` on a pinned GitHub source archive, fetching it first when
-// the cache has none.
+// Run `use(archive)` on a pinned source archive, fetching it first when the cache lacks it.
 function withSourceArchive({ archiveCacheDir, archiveUrl, label, revision }, use) {
   return withCachedArchive({
     archive: path.join(archiveCacheDir, label, `${revision}.tar.gz`),
@@ -900,6 +903,26 @@ async function ensureOpenGoodDats(
   return new Map(datFiles.map((datFile) => [datFile, paths.get(`dats/${datFile}`)]));
 }
 
+async function downloadGoodToolsArchive(archive) {
+  const partial = `${archive}.${process.pid}-${crypto.randomUUID()}.part`;
+  try {
+    await runCurl(
+      `${GOODTOOLS_REPOSITORY}/releases/download/${GOODTOOLS_RELEASE}/${encodeURIComponent(GOODTOOLS_ARCHIVE)}`,
+      partial,
+      undefined,
+    );
+    const actualSha256 = await sha256File(partial);
+    if (actualSha256 !== GOODTOOLS_ARCHIVE_SHA256) {
+      throw new Error(
+        `GoodTools download checksum mismatch: expected ${GOODTOOLS_ARCHIVE_SHA256}, got ${actualSha256}`,
+      );
+    }
+    await rename(partial, archive);
+  } finally {
+    await rm(partial, { force: true });
+  }
+}
+
 async function ensureGoodToolsHeaderedDat(cacheDir) {
   const cacheKey = `${GOODTOOLS_RELEASE}-${GOODTOOLS_ARCHIVE_SHA256}`;
   const archiveDir = path.join(cacheDir, "goodtools", cacheKey);
@@ -917,23 +940,7 @@ async function ensureGoodToolsHeaderedDat(cacheDir) {
         );
       }
     } else {
-      const partial = `${archive}.${process.pid}-${crypto.randomUUID()}.part`;
-      try {
-        await runCurl(
-          `${GOODTOOLS_REPOSITORY}/releases/download/${GOODTOOLS_RELEASE}/${encodeURIComponent(GOODTOOLS_ARCHIVE)}`,
-          partial,
-          undefined,
-        );
-        const actualSha256 = await sha256File(partial);
-        if (actualSha256 !== GOODTOOLS_ARCHIVE_SHA256) {
-          throw new Error(
-            `GoodTools download checksum mismatch: expected ${GOODTOOLS_ARCHIVE_SHA256}, got ${actualSha256}`,
-          );
-        }
-        await rename(partial, archive);
-      } finally {
-        await rm(partial, { force: true });
-      }
+      await downloadGoodToolsArchive(archive);
     }
     await mkdir(path.dirname(target), { recursive: true });
     requireExecutable("unzip");

@@ -44,9 +44,8 @@ import {
   TITLE_INDEX_FORMAT,
 } from "../packages/rom-weaver-webapp/src/lib/identify/title-index.mjs";
 
-// Every build here keeps its own --cache-dir for extracted sources and generated
-// packs, but shares one directory of compressed source archives so the pinned
-// Libretro archive is fetched once instead of once per test.
+// Each build keeps its own --cache-dir for extracted sources and packs.
+// The compressed archives share one directory, so the pinned Libretro archive downloads once.
 process.env.ROM_WEAVER_IDENTIFY_ARCHIVE_CACHE_DIR ??= join(os.tmpdir(), "rom-weaver-identify-archives");
 
 const NES = "Nintendo - Nintendo Entertainment System";
@@ -563,8 +562,6 @@ test("the builder consumes a cached GoodSNES headered DAT", async () => {
   const manifest = JSON.parse(pack.get("manifest.json").toString("utf8"));
   assert.equal(manifest.counts.games, 799);
   assert.ok(manifest.provenance.some((entry) => entry.source === "Eggmansworld/Datfiles"));
-  // The cheat shard fetched the pinned archive: it is kept in the shared directory, while its
-  // extracted cheat files stay in this test's own cache.
   const archiveName = `${LIBRETRO_REVISION}.tar.gz`;
   assert.ok(existsSync(join(process.env.ROM_WEAVER_IDENTIFY_ARCHIVE_CACHE_DIR, "libretro", archiveName)));
   assert.equal(existsSync(join(cacheDir, "libretro", archiveName)), false);

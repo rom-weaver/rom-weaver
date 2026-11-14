@@ -22,8 +22,7 @@ outputs:
 runs:
   using: composite
   steps:
-    # The pinned nightly comes from the script that selects it for every fuzz
-    # run, so the key can never name a different one.
+    # The fuzz script picks the nightly for every run, so the key cannot name another one.
     - name: Resolve fuzz toolchain
       id: pin
       shell: bash
@@ -32,11 +31,8 @@ runs:
         test -n "$toolchain"
         echo "toolchain=$toolchain" >> "$GITHUB_OUTPUT"
 
-    # The first prefix names the toolchain, dependency locks, Cargo and
-    # instrumentation configuration (the mise pins include cargo-fuzz), the
-    # fuzz run flags, and every crate manifest and build script. Source changes
-    # are left to Cargo's fingerprints, so a newer commit restores the previous
-    # generation instead of starting empty. A save needs a new key per commit.
+    # The first prefix covers the toolchain, locks, configuration, fuzz flags, and build scripts.
+    # Cargo's fingerprints handle source changes, so a newer commit restores the previous generation.
     - name: Cache fuzz build artifacts
       id: cache
       if: inputs.save == 'true' && github.ref == 'refs/heads/main'

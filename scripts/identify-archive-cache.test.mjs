@@ -67,14 +67,17 @@ test("separate processes publishing the same archive each finish with one intact
   const source = await buildArchive(work, "payload");
   const cacheDir = join(work, "cache");
   const script = `
-    import { writeFileSync } from "node:fs";
+    import { readdirSync, writeFileSync } from "node:fs";
     import { copyFile } from "node:fs/promises";
     import { withCachedArchive } from ${JSON.stringify(new URL("./identify-archive-cache.mjs", import.meta.url).href)};
     await withCachedArchive({
       archive: process.argv[1],
       download: async (partial) => {
         writeFileSync(process.argv[3] + "/" + process.pid, partial);
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        const deadline = Date.now() + 30_000;
+        while (readdirSync(process.argv[3]).length < 3 && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
         await copyFile(process.argv[2], partial);
       },
       use: async () => {},
