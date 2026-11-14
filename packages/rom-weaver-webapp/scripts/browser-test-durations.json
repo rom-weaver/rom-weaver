@@ -35,7 +35,7 @@
   "home-loom-accent.browser.test.js": 4.8,
   "home-route-card.browser.test.js": 4.2,
   "host-ingest.browser.test.js": 3.2,
-  "identify-download-timeout.browser.test.js": 53.3,
+  "identify-download-timeout.browser.test.js": 14,
   "identify-many-files.browser.test.js": 6,
   "identify-result-conditions.browser.test.js": 4.6,
   "identify-workflow.browser.test.js": 7.1,

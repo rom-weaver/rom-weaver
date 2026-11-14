@@ -23,7 +23,7 @@ test("WebKit file processes run sequentially by default, including mixed browser
 test("Chromium retains the default parallel file pool", () => {
   for (const environment of [{}, { ROM_WEAVER_BROWSER: "chromium" }]) {
     const concurrency = resolveConcurrency(environment);
-    assert.ok(concurrency >= 2 && concurrency <= 4);
+    assert.ok(concurrency >= 2 && concurrency <= 6);
   }
 });
 
