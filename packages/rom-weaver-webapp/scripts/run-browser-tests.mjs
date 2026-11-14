@@ -42,6 +42,10 @@ const ANSI_ESCAPE_REGEX = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g
 
 const fileSize = (file) => fs.statSync(file, { throwIfNoEntry: false })?.size ?? 0;
 
+// Six file processes finished the suite fastest on a 16-core host; eight lost more to contention
+// retries than it gained.
+const MAX_DEFAULT_CONCURRENCY = 6;
+
 export const resolveConcurrency = (environment = process.env) => {
   const raw = environment.BROWSER_TEST_CONCURRENCY;
   if (raw) {
@@ -51,7 +55,7 @@ export const resolveConcurrency = (environment = process.env) => {
   const browsers = (environment.ROM_WEAVER_BROWSER || "chromium").toLowerCase().split(",");
   if (browsers.some((browser) => ["webkit", "all"].includes(browser.trim()))) return 1;
   const cores = typeof os.availableParallelism === "function" ? os.availableParallelism() : os.cpus().length;
-  return Math.max(2, Math.min(4, cores));
+  return Math.max(2, Math.min(MAX_DEFAULT_CONCURRENCY, cores));
 };
 
 // Runner-owned flags, pulled out before the vitest passthrough split so they
