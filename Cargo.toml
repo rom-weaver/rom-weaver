@@ -116,14 +116,15 @@ zstd = "0.14.0"
 
 # Full debuginfo is most of a dev/test target/ and its link time. Line tables keep
 # file:line in panics and test backtraces. For a debugger session, pass
-# `--config profile.dev.debug=true --config 'profile.dev.package."*".debug=true'`.
+# `--config profile.dev.debug=true --config 'profile.dev.package."*".debug=true'`,
+# and set `opt-level=0` the same way for `"*"` and the three crates below.
+# Otherwise optimized code hides locals.
 [profile.dev]
 debug = "line-tables-only"
 
-# Tests run checksums, CHD/CSO codecs, and vendored C (built by `cc` at the
-# profile's opt level) over MiB-sized fixtures; at opt-level 0 they dominate the
-# suite's wall time. Optimize the dependencies and these hot workspace crates;
-# the rest of the workspace keeps fast incremental dev builds.
+# Checksum and CHD/CSO codecs dominate test time at opt-level 0.
+# The `*` glob matches dependencies only, so other workspace crates keep fast
+# incremental builds.
 [profile.dev.package."*"]
 debug = false
 opt-level = 3
