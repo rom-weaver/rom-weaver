@@ -1,0 +1,60 @@
+name: Restore fuzz build artifacts
+description: >-
+  Cache the fuzz workspace's own Cargo target directory (fuzz/target). The fuzz
+  crate is a separate workspace, so the Cargo cache that setup-build-env keeps
+  for the root workspace never covers it, and a cold build compiles every
+  dependency with the sanitizer and coverage instrumentation again.
+  Cargo's fingerprints decide what a restored directory still serves: path
+  crates rebuild when their sources are newer than the restored artifacts.
+
+inputs:
+  save:
+    description: >-
+      "true" lets a run on refs/heads/main save the directory after the job.
+      Every other run, and every run with any other value, only restores.
+    default: "false"
+
+outputs:
+  cache-hit:
+    description: "'true' when an exact key was restored."
+    value: ${{ steps.cache.outputs.cache-hit || steps.restore.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    # The pinned nightly comes from the script that selects it for every fuzz
+    # run, so the key can never name a different one.
+    - name: Resolve fuzz toolchain
+      id: pin
+      shell: bash
+      run: |
+        toolchain=$(node --input-type=module -e 'import { FUZZ_TOOLCHAIN } from "./scripts/quality-fuzz.mjs"; process.stdout.write(FUZZ_TOOLCHAIN);')
+        test -n "$toolchain"
+        echo "toolchain=$toolchain" >> "$GITHUB_OUTPUT"
+
+    # The first prefix names the toolchain, dependency locks, Cargo and
+    # instrumentation configuration (the mise pins include cargo-fuzz), the
+    # fuzz run flags, and every crate manifest and build script. Source changes
+    # are left to Cargo's fingerprints, so a newer commit restores the previous
+    # generation instead of starting empty. A save needs a new key per commit.
+    - name: Cache fuzz build artifacts
+      id: cache
+      if: inputs.save == 'true' && github.ref == 'refs/heads/main'
+      uses: actions/cache@v6
+      with:
+        path: fuzz/target
+        key: fuzz-target-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.toolchain }}-${{ hashFiles('fuzz/Cargo.toml', 'fuzz/Cargo.lock', 'Cargo.lock', '.cargo/config.toml', '.config/mise.toml', 'scripts/quality-fuzz.mjs', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/libarchive/build.rs') }}-${{ github.sha }}
+        restore-keys: |
+          fuzz-target-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.toolchain }}-${{ hashFiles('fuzz/Cargo.toml', 'fuzz/Cargo.lock', 'Cargo.lock', '.cargo/config.toml', '.config/mise.toml', 'scripts/quality-fuzz.mjs', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/libarchive/build.rs') }}-
+          fuzz-target-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.toolchain }}-
+
+    - name: Restore fuzz build artifacts
+      id: restore
+      if: ${{ !(inputs.save == 'true' && github.ref == 'refs/heads/main') }}
+      uses: actions/cache/restore@v6
+      with:
+        path: fuzz/target
+        key: fuzz-target-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.toolchain }}-${{ hashFiles('fuzz/Cargo.toml', 'fuzz/Cargo.lock', 'Cargo.lock', '.cargo/config.toml', '.config/mise.toml', 'scripts/quality-fuzz.mjs', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/libarchive/build.rs') }}-${{ github.sha }}
+        restore-keys: |
+          fuzz-target-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.toolchain }}-${{ hashFiles('fuzz/Cargo.toml', 'fuzz/Cargo.lock', 'Cargo.lock', '.cargo/config.toml', '.config/mise.toml', 'scripts/quality-fuzz.mjs', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/libarchive/build.rs') }}-
+          fuzz-target-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.toolchain }}-
