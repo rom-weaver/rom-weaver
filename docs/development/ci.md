@@ -251,8 +251,8 @@ security ── advisories (warn only, always green)
   - `webapp-static` runs the shared generators once (accents, compiled locales, channel icons and their determinism check), then the root script tests, webapp script tests, and unit tests concurrently with buffered per-command output (`test:static`), then lint, then Lighthouse against the exact bundle from `wasm`. On a pull request the Lighthouse steps run only when the `lighthouse` flag is set: any change that can alter the audited bundle (webapp sources outside its tests, WASM compiler inputs, `scripts/wasm/`, non-leaf root scripts, `design/`, manifests and lockfiles) or any fail-open CI change. Guide Markdown and test-only pull requests skip the audit; every other event always runs it. It installs no Playwright, and it downloads the `identify-data` artifact the `changes` job prepared, because the Lighthouse runner otherwise rebuilds the identify packs from source for about seven minutes.
   - `webapp-browser` starts the browser suite directly, using Chrome from the Ubuntu runner image.
   - `webapp-wasm-browser` is the direct WASM/browser contract, selected only for conservative runtime inputs.
-  - `webapp-e2e` runs the accessibility/docs audit, the raw and archive journeys, the Chromium stress smoke, and the channel-icon check.
-  - `webapp-webkit-e2e` runs on macOS, without Chromium’s journey shards or stress smoke. Hydration and accessibility run concurrently in separate persistent contexts and production preview origins.
+  - `webapp-e2e` runs the accessibility/docs audit, the link audit, the raw and archive journeys, the Chromium stress smoke, and the channel-icon check.
+  - `webapp-webkit-e2e` runs on macOS, without Chromium’s journey shards, link audit, or stress smoke. Hydration and accessibility run concurrently in separate persistent contexts and production preview origins.
 
     Playwright’s macOS profiles share OPFS storage but have separate Web Locks. Separate origins keep one audit’s boot cleanup from deleting another audit’s weave inputs. The stateful accessibility page stays whole.
 
