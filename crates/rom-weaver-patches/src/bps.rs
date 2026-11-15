@@ -39,6 +39,8 @@ const BPS_PARALLEL_WRITE_CHUNK_SIZE: u64 = PARALLEL_WRITE_CHUNK_BYTES as u64;
 const BPS_NO_OFFSET: u32 = u32::MAX;
 const BPS_MIN_COPY_LENGTH: usize = 4;
 const BPS_CREATE_INDEX_TAIL_BYTES: usize = 256;
+// A u64 needs at most ten 7-bit groups.
+const BPS_VARINT_MAX_LEN: usize = 10;
 const BPS_CREATE_MEMORY_LIMIT_BYTES: u64 = 1024 * 1024 * 1024;
 /// Suffix-index bytes per input byte for the reverse-lookup index and for the lower-memory search.
 const BPS_CREATE_FAST_INDEX_BYTES_PER_SLOT: u64 = 8;
@@ -1422,7 +1424,8 @@ impl<'a> BpsCombinedSuffixMatcher<'a> {
             } else {
                 BpsCreateMode::SourceCopy
             };
-            (mode, source_offset, self.data.source_len - source_offset)
+            // The joined buffer ends with the source, so the scan stops there without a source limit.
+            (mode, source_offset, target_remaining)
         };
         let len = common_prefix_len_limited(
             self.joined.as_slice(),
@@ -1534,13 +1537,13 @@ fn bps_create_copy_match_is_worth(
 }
 
 fn bps_varint_len(mut data: u64) -> usize {
-    let mut len = 1usize;
-    while data >= 128 {
-        data >>= 7;
-        data -= 1;
-        len += 1;
+    for len in 1..BPS_VARINT_MAX_LEN {
+        if data < 128 {
+            return len;
+        }
+        data = (data >> 7) - 1;
     }
-    len
+    BPS_VARINT_MAX_LEN
 }
 
 fn bps_create_suffix_index_mode(source_len: u64, target_len: u64) -> Result<BpsSuffixIndexMode> {
@@ -2062,16 +2065,12 @@ fn copy_target_range(
     let mut buffer = [0u8; COPY_BUFFER_SIZE];
 
     if period >= COPY_BUFFER_SIZE as u64 {
-        let mut remaining = length;
-        let mut read_offset = start;
-        while remaining > 0 {
-            let chunk = remaining.min(COPY_BUFFER_SIZE as u64) as usize;
-            output.seek(SeekFrom::Start(read_offset))?;
+        for copied in (0..length).step_by(COPY_BUFFER_SIZE) {
+            let chunk = (length - copied).min(COPY_BUFFER_SIZE as u64) as usize;
+            output.seek(SeekFrom::Start(start + copied))?;
             output.read_exact(&mut buffer[..chunk])?;
             output.seek(SeekFrom::Start(*output_offset))?;
             output.write_all(&buffer[..chunk])?;
-            remaining -= chunk as u64;
-            read_offset += chunk as u64;
             *output_offset += chunk as u64;
             progress.report(*output_offset);
         }
