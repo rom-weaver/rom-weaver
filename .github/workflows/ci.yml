@@ -1894,9 +1894,9 @@ jobs:
   # This stays selected for every webapp change: it has caught regressions in
   # rendered documentation as well as application code. One runner for the
   # whole suite: it once ran as three shards (a11y, raw journeys, archive
-  # journeys), folded back for the same concurrency-cap reason as
-  # webapp-browser. The runner script's `--a11y` / `--journeys-raw` /
-  # `--journeys-archive` flags still select a slice locally.
+  # journeys), folded back because of the concurrency cap. The runner
+  # script's `--a11y` / `--journeys-raw` / `--journeys-archive` flags still
+  # select a slice locally.
   webapp-e2e:
     name: Webapp (E2E)
     runs-on: ubuntu-24.04
