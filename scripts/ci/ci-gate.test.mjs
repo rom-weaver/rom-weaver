@@ -104,15 +104,16 @@ test("labels never start a run that could hide the required gate", () => {
 });
 
 test("pull requests skip Lighthouse only through the shared classifier flag", () => {
-  const steps = ci.jobs["webapp-static"].steps;
-  const condition =
-    "github.event_name != 'pull_request' || needs.changes.outputs.lighthouse == 'true'";
-  for (const [name, wanted] of [
-    ["Download webapp bundle", condition],
-    ["Lighthouse gates", condition],
-    ["Upload Lighthouse reports", `!cancelled() && (${condition})`],
-  ]) {
-    assert.equal(expression(steps.find((step) => step.name === name).if), wanted, name);
-  }
+  const job = ci.jobs["webapp-lighthouse"];
+  assert.equal(
+    expression(job.if),
+    "github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true' && needs.changes.outputs.lighthouse == 'true'",
+  );
+  assert.ok(ci.jobs.gate.needs.includes("webapp-lighthouse"));
+  const verify = ci.jobs.gate.steps.find((step) => step.name === "Verify Lighthouse job");
+  assert.match(
+    expression(verify.run),
+    /needs\.changes\.outputs\.webapp == 'true' && needs\.changes\.outputs\.lighthouse == 'true'.*webapp-lighthouse=\$\{\{ needs\.webapp-lighthouse\.result \}\}/u,
+  );
   assert.equal(ci.jobs.changes.outputs.lighthouse, "${{ steps.classify.outputs.lighthouse }}");
 });
