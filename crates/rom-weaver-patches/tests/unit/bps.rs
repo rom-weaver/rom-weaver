@@ -1904,7 +1904,7 @@ fn create_progress_scales_indexing_and_output_into_their_bands() {
         CancellationToken::new(),
     );
 
-    // Indexing fills 5% to 40%; output writing fills 40% to 100%. The target is 100 bytes.
+    // Indexing fills 5% to 40%; output writing fills 40% to 100%.
     let mut progress = BpsCreateProgress::new(&context, "BPS", 100);
     progress.report_indexed(50);
     progress.report_output(50);
