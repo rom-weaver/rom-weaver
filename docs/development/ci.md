@@ -645,7 +645,7 @@ What the attestations now claim: the CI attestation says `ci.yml` built the bina
 | `rom-weaver-cli` | `cli-binary-linux-x64-gnu` and `cli-binary-linux-arm64-musl`, the binaries `npm-build` builds | a second `cargo build --release` of the workspace |
 | `rom-weaver-webapp` | `webapp-dist`, the bundle `static-webapp` packages | rustup + WASI SDK + binaryen + a cold wasm build |
 
-The webapp image has a third build arg, `WASM`, which is not part of this release path: it keeps the whole source build and only takes the compiled wasm module from the context. CI uses it on amd64 and eligible ARM pull-request image legs; the release fan-out never sets it, so a fallback-to-source release still compiles everything.
+The webapp image has a third build arg, `WASM`, which is not part of this release path: it keeps the whole source build and only takes the compiled wasm module from the context. CI uses it on amd64 and on ARM pull-request and push image legs whose diff leaves the image plumbing alone, while the nightly run always compiles; the release fan-out never sets it, so a fallback-to-source release still compiles everything.
 
 Each Dockerfile keeps both paths and picks with a build arg (`BINARY`, `DIST`) that defaults to building from source, so `docker build` with no arguments - what self-hosters and the `docker` job in `ci.yml` run - is unchanged. The prebuilt half reads a `prebuilt/` directory out of the build context, which only has to exist for the build that asks for it: BuildKit builds only the stages the selected one depends on. `docker-publish.yml` downloads the artifact, falls back to `source` when there is none, and so still works standalone under `workflow_dispatch`, where there are no sibling jobs.
 

@@ -84,6 +84,25 @@ test("the cache eligibility still reads the whole pull request diff", (t) => {
   assert.equal(outputs.docker_arm_wasm_cache, "false");
 });
 
+test("a push reuses ARM WASM only when its range leaves the image plumbing alone", (t) => {
+  const repo = history(t);
+  assert.equal(classify({ ...repo, eventName: "push", headRef: "" }).outputs.docker_arm_wasm_cache, "true");
+
+  const dockerfile = join("packages", "rom-weaver-webapp", "Dockerfile");
+  mkdirSync(join(repo.cwd, "packages", "rom-weaver-webapp"), { recursive: true });
+  writeFileSync(join(repo.cwd, dockerfile), "FROM scratch\n");
+  git(repo.cwd, "add", "-A");
+  git(repo.cwd, "commit", "-q", "-m", "docker");
+  const head = git(repo.cwd, "rev-parse", "HEAD");
+  assert.equal(classify({ ...repo, head, eventName: "push", headRef: "" }).outputs.docker_arm_wasm_cache, "false");
+});
+
+test("a push without a known earlier commit compiles ARM WASM", (t) => {
+  const repo = history(t);
+  for (const base of ["0".repeat(40), "d".repeat(40), ""])
+    assert.equal(classify({ ...repo, base, eventName: "push", headRef: "" }).outputs.docker_arm_wasm_cache, "false", base);
+});
+
 test("an unreachable earlier green run falls back to the whole pull request", (t) => {
   const repo = history(t);
   const { outputs, stdout } = classify({ ...repo, usePrior: "d".repeat(40) });

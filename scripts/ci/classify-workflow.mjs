@@ -59,6 +59,11 @@ runMain(() => {
   });
   if (paths)
     process.stdout.write(`changed paths:\n${paths.length ? paths.join("\n") : "(none)"}\n`);
+  // A push has no pull request base. The pushed range still names the paths the ARM image build needs.
+  const armPaths =
+    eventName === "push"
+      ? changedPaths({ eventName: "pull_request", baseSha: process.env.BASE_SHA, headSha: process.env.HEAD_SHA, quiet: true })
+      : paths;
   const { fullMatrix, fullNative, nightlyChecks, qualitySignals } = coverageTiers(
     eventName,
     headRef,
@@ -74,7 +79,7 @@ runMain(() => {
     : whole;
   const output = `${formatChanges(
     eventName === "schedule" ? scheduledSelection(changes) : changes,
-  )}full_matrix=${fullMatrix}\nfull_native=${fullNative}\nnightly_checks=${nightlyChecks}\nquality_signals=${qualitySignals}\ndocker_arm_wasm_cache=${canReuseArmDockerWasm(paths)}\nrelease_pr=${releasePullRequest}\n`;
+  )}full_matrix=${fullMatrix}\nfull_native=${fullNative}\nnightly_checks=${nightlyChecks}\nquality_signals=${qualitySignals}\ndocker_arm_wasm_cache=${canReuseArmDockerWasm(armPaths)}\nrelease_pr=${releasePullRequest}\n`;
   process.stdout.write(output);
   appendFileSync(process.env.GITHUB_OUTPUT, output);
 });
