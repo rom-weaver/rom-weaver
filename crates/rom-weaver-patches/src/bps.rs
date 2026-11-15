@@ -736,7 +736,6 @@ impl<'a> BpsApplyProgress<'a> {
             stage: "apply".to_string(),
             label: format!("applying patch using {}", self.format_name),
             percent: Some(bucket as f32),
-            elapsed_ms: None,
             status: OperationStatus::Running,
             ..ProgressEvent::from_thread_execution(None)
         });
@@ -1199,9 +1198,7 @@ impl<'a> BpsCreateProgress<'a> {
             format: Some(self.format_name.to_string()),
             stage: "create".to_string(),
             label: label.to_string(),
-            details: None,
             percent: Some(percent),
-            elapsed_ms: None,
             status: OperationStatus::Running,
             ..ProgressEvent::from_thread_execution(None)
         });

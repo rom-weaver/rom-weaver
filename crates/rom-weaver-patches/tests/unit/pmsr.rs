@@ -71,6 +71,20 @@ fn parse_reports_normalized_source_endpoint() {
 }
 
 #[test]
+fn parse_reports_the_output_size_bound_of_a_patch_with_records() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("records.mod");
+    fs::write(&patch_path, pmsr_patch_bytes(&[(4, b"AB"), (0, b"Z")])).expect("fixture");
+
+    let report = PmsrPatchHandler::new(&MOD)
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect("parse");
+
+    let endpoints = report_endpoints(&report);
+    assert_eq!(endpoints[0]["output"]["min_size"].as_u64(), Some(6));
+}
+
+#[test]
 fn apply_supports_minimal_mod_patch() {
     let temp = TestDir::new();
     let source_path = temp.child("source.bin");

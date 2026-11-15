@@ -9,11 +9,7 @@ use std::{
 };
 
 use oxidelta::{
-    compress::{
-        encoder::CompressOptions,
-        pipeline,
-        secondary::{self, SecondaryCompression},
-    },
+    compress::{encoder::CompressOptions, pipeline, secondary},
     hash::{config, matching::MatchEngine},
     vcdiff::{
         code_table::{Instruction, XD3_ADD, XD3_CPY, XD3_NOOP, XD3_RUN, default_code_table},
