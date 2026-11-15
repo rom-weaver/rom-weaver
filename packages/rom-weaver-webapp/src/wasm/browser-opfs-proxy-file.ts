@@ -13,8 +13,8 @@ import type { RandomAccessFileLike } from "./browser-opfs-wasi-file-inode.ts";
 /** Read-cache block tuned above the SAB slot size to reduce Safari Blob calls.
  * Locally sequential decode reads reuse the prefetch; cost is per-handle JS heap. */
 const PROXY_READ_CACHE_BLOCK_BYTES = 4 * 1024 * 1024;
-/** Requests larger than this are streamed directly rather than cached, unless the whole file is no
- * bigger than this: a header probe asking for a multi-MiB read of a small file is then one fill. */
+/** Requests larger than this stream directly, unless the whole file is no bigger than this.
+ * A multi-MiB read of a small file then fills the cache once. */
 const PROXY_READ_CACHE_MAX_REQUEST_BYTES = 256 * 1024;
 /**
  * Coalesces small sequential decoder writes into 4 MiB proxy writes. Any
@@ -60,8 +60,7 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
   // The cached block ends at end of file (a short fill, or a full block whose tail read found nothing).
   private cacheAtEof = false;
   private cacheVersion = -1;
-  // Last size() answer, valid while the proxy version stamp is unchanged. Format probes stat the same
-  // file many times; each uncached stat is a blocking proxy round trip.
+  // Last size() answer, valid while the proxy version stamp is unchanged.
   private sizeBytes = 0;
   private sizeVersion = -1;
   // Sequential write-back buffer: coalesces contiguous writes before hitting the proxy.
@@ -104,17 +103,7 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
     // the proxy version stamp, which only bumps once the write actually lands), so commit first.
     this.flushWriteBuffer();
     const start = Number(offset);
-    const version = this.client.handleVersion(handleId);
-    if (version !== this.cacheVersion) {
-      this.cacheStart = -1;
-      this.cacheLen = 0;
-      this.cacheAtEof = false;
-      this.cacheVersion = version;
-      // A size-fitted block of a writable file cannot hold the file once it grows.
-      if (this.writable && this.cacheBuf && this.cacheBuf.byteLength < PROXY_READ_CACHE_BLOCK_BYTES) {
-        this.releaseReadCache();
-      }
-    }
+    this.syncReadCacheVersion(handleId);
     const isLargeRequest = dst.byteLength > PROXY_READ_CACHE_MAX_REQUEST_BYTES;
     if (isLargeRequest && this.size() > PROXY_READ_CACHE_MAX_REQUEST_BYTES) {
       // Large read of a large file: stream directly; don't pollute the small-block cache.
@@ -131,13 +120,7 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
       return reqEnd - start;
     }
     if (!this.cacheBuf) {
-      // A read-only file cannot grow, so a KB-sized input does not need a 4 MiB block. Writable files
-      // may grow between reads and keep the full block, except for a large request of a small file
-      // (the block is then fitted to it and dropped when the version stamp shows a write).
-      const fitsFile = !this.writable || isLargeRequest;
-      const blockBytes = fitsFile
-        ? Math.max(1, Math.min(PROXY_READ_CACHE_BLOCK_BYTES, this.size()))
-        : PROXY_READ_CACHE_BLOCK_BYTES;
+      const blockBytes = this.readCacheBlockBytes(isLargeRequest);
       this.cacheBuf = new Uint8Array(blockBytes);
       liveAdapterBufferBytes += blockBytes;
     }
@@ -148,7 +131,6 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
     this.cacheLen = filled;
     // readInto returns short only at EOF.
     this.cacheAtEof = filled < PROXY_READ_CACHE_BLOCK_BYTES;
-    this.cacheVersion = version;
     const available = blockStart + filled - start;
     if (available <= 0) return 0;
     const fromCache = Math.min(available, dst.byteLength);
@@ -192,8 +174,7 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
   size(): number {
     this.flushWriteBuffer();
     const handleId = this.ensureOpen();
-    // Read the stamp first: a write landing between the two calls leaves a newer size under an older
-    // stamp, which only costs one extra stat later.
+    // Read the stamp before the size. A write between the two calls costs one extra stat later.
     const version = this.client.handleVersion(handleId);
     if (version !== this.sizeVersion) {
       this.sizeBytes = this.client.size(handleId);
@@ -273,9 +254,33 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
       liveAdapterBufferBytes -= this.cacheBuf.byteLength;
       this.cacheBuf = null;
     }
+    this.forgetCachedRange();
+  }
+
+  private forgetCachedRange(): void {
     this.cacheStart = -1;
     this.cacheLen = 0;
     this.cacheAtEof = false;
+  }
+
+  /** Forgets cached bytes once the proxy version stamp moves, as a write or truncate does. */
+  private syncReadCacheVersion(handleId: number): void {
+    const version = this.client.handleVersion(handleId);
+    if (version === this.cacheVersion) return;
+    this.cacheVersion = version;
+    // A size-fitted block of a writable file cannot hold the file once it grows.
+    const isFittedWritableBlock =
+      this.writable && this.cacheBuf !== null && this.cacheBuf.byteLength < PROXY_READ_CACHE_BLOCK_BYTES;
+    if (isFittedWritableBlock) this.releaseReadCache();
+    else this.forgetCachedRange();
+  }
+
+  private readCacheBlockBytes(isLargeRequest: boolean): number {
+    // A read-only file cannot grow, so a KB-sized input does not need a 4 MiB block.
+    // A large request of a small file also gets a fitted block; a write drops it.
+    // Other writable files may grow between reads, so they keep the full block.
+    const fitsFile = !this.writable || isLargeRequest;
+    return fitsFile ? Math.max(1, Math.min(PROXY_READ_CACHE_BLOCK_BYTES, this.size())) : PROXY_READ_CACHE_BLOCK_BYTES;
   }
 
   /** Commit any buffered sequential writes to the proxy in one (slot-chunked) call. */
