@@ -146,6 +146,8 @@ const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
 const RUN_LINK_AUDIT = (E2E_SHARD === "all" && browserName === "chromium") || E2E_SHARD === "links";
 const RUN_RAW_JOURNEY = E2E_SHARD === "all" || E2E_SHARD === "journeys" || E2E_SHARD === "journeys-raw";
 const RUN_ARCHIVE_JOURNEY = E2E_SHARD === "all" || E2E_SHARD === "journeys" || E2E_SHARD === "journeys-archive";
+// On the macOS WebKit runner, the stateful audit timed out with the journeys beside it.
+const RUN_LANES_CONCURRENTLY = E2E_SHARD === "all" && browserName === "chromium";
 const browserType = { chromium, webkit }[browserName];
 if (!browserType) throw new Error(`Unsupported ROM_WEAVER_BROWSER value: ${browserName}`);
 const systemChromeLaunchOptions =
@@ -1762,10 +1764,9 @@ const main = async () => {
       hydrationPort = await reservePort();
     } while (hydrationPort === previewPort || hydrationPort === devPort);
   }
-  const concurrentLanes = E2E_SHARD === "all";
-  const runLanes = concurrentLanes ? runConcurrently : runInOrder;
+  const runLanes = RUN_LANES_CONCURRENTLY ? runConcurrently : runInOrder;
   let journeysPort = previewPort;
-  if (concurrentLanes) {
+  if (RUN_LANES_CONCURRENTLY) {
     do {
       journeysPort = await reservePort();
     } while (journeysPort === previewPort || journeysPort === devPort || journeysPort === hydrationPort);
@@ -1783,7 +1784,7 @@ const main = async () => {
   const preview = startServer("preview", previewPort);
   const dev = startServer("dev", devPort, corpusDir);
   const hydration = RUN_AUDITS ? startServer("preview", hydrationPort) : null;
-  const journeys = concurrentLanes ? startServer("preview", journeysPort) : null;
+  const journeys = RUN_LANES_CONCURRENTLY ? startServer("preview", journeysPort) : null;
 
   try {
     await Promise.all([
@@ -1811,8 +1812,8 @@ const main = async () => {
           for (const userDataDir of persistentContextDirs) fs.rmSync(userDataDir, { force: true, recursive: true });
         }
       });
-    // The audit lane and the link-and-journey lane share no browser state. A full run
-    // overlaps them. A single shard runs alone, in this order.
+    // The audit lane and the link-and-journey lane share no browser state. A full Chromium
+    // run overlaps them. Otherwise they run in this order.
     const auditLane = async () => {
       if (!RUN_AUDITS) return;
       await scenario("accessible navigation", (createContext) =>

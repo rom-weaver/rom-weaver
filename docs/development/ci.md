@@ -254,7 +254,7 @@ security ── advisories (warn only, always green)
   - `webapp-e2e` runs the accessibility/docs audit, the link audit, and the raw and archive journeys. It also runs the Chromium stress smoke and the channel-icon check.
   - `webapp-webkit-e2e` runs on macOS, without Chromium’s journey shards, link audit, or stress smoke.
 
-    In both jobs, a full run overlaps two lanes. The first runs the audits. The second runs the Chromium link audit, then the journeys on their own production preview origin. Within the audits, the stateful accessibility page runs on one origin. Hydration and then the docs routes run on another. The docs routes share no state, so up to three load at once.
+    A full Chromium run overlaps two lanes. The first runs the audits. The second runs the link audit, then the journeys on their own production preview origin. WebKit runs the lanes in order. In both jobs, within the audits, the stateful accessibility page runs on one origin. Hydration and then the docs routes run on another. The docs routes share no state, so up to three load at once.
 
     Playwright’s macOS profiles share OPFS storage but have separate Web Locks. Separate origins keep one audit’s boot cleanup from deleting another audit’s weave inputs. The stateful accessibility page stays whole.
 
