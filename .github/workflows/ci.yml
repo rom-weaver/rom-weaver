@@ -1758,6 +1758,8 @@ jobs:
           cargo-cache: "false"
           webapp-deps: "true"
 
+      # Carries the generated notices.md that the SEO build check loads
+      # through the docs pages; the bundle itself comes from `webapp-dist`.
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
         with:

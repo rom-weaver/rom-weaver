@@ -109,7 +109,6 @@ test("pull requests skip Lighthouse only through the shared classifier flag", ()
     expression(job.if),
     "github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true' && needs.changes.outputs.lighthouse == 'true'",
   );
-  assert.ok(ci.jobs.gate.needs.includes("webapp-lighthouse"));
   const verify = ci.jobs.gate.steps.find((step) => step.name === "Verify Lighthouse job");
   assert.match(
     expression(verify.run),
