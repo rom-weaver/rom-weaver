@@ -277,7 +277,7 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
 
   private readCacheBlockBytes(isLargeRequest: boolean): number {
     // A read-only file cannot grow, so a KB-sized input does not need a 4 MiB block.
-    // A large request of a small file also gets a fitted block; a write drops it.
+    // A large request of a small file gets a fitted block too. A write drops it.
     // Other writable files may grow between reads, so they keep the full block.
     const fitsFile = !this.writable || isLargeRequest;
     return fitsFile ? Math.max(1, Math.min(PROXY_READ_CACHE_BLOCK_BYTES, this.size())) : PROXY_READ_CACHE_BLOCK_BYTES;
