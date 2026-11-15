@@ -89,6 +89,8 @@ export const computeLinkAuditRoutes = (docSources) => [
   ...new Set([...LINK_AUDIT_WORKFLOW_ROUTES, ...computeDocsRouteSlugs(docSources)]),
 ];
 const LINK_AUDIT_ROUTES = computeLinkAuditRoutes(DOC_SOURCES);
+// Pages that audit docs routes at once, beside the stateful app audit.
+const DOCS_AUDIT_PAGES = 3;
 const A11Y_VIEWPORTS = [
   { height: 720, label: "desktop", width: 1280 },
   { height: 844, label: "mobile", width: 390 },
@@ -543,7 +545,12 @@ const collectRouteLinks = async (page, baseUrl, route) => {
   } else {
     await page.locator("#webapp-root").waitFor({ state: "attached" });
   }
-  await page.locator("#webapp-root:not([aria-busy])").waitFor({ state: "attached" });
+  await page
+    .locator("#webapp-root:not([aria-busy])")
+    .waitFor({ state: "attached" })
+    .catch((error) => {
+      throw new Error(`${route || "/"} did not finish loading: ${error.message}`, { cause: error });
+    });
   return page.evaluate(
     (source) =>
       [...document.querySelectorAll("a[href]")].map((element) => ({
@@ -682,6 +689,52 @@ const scanLiveApp = async (page, label) => {
   process.stdout.write(`PASS accessibility ${label} (${Math.round(performance.now() - started)}ms)\n`);
 };
 
+const scanVariants = async (page, label) => {
+  const originalTheme = await page.locator("html").getAttribute("data-theme");
+  const originalViewport = page.viewportSize();
+  try {
+    for (const viewport of A11Y_VIEWPORTS) {
+      await page.setViewportSize(viewport);
+      for (const theme of ["light", "dark"]) {
+        await page.locator("html").evaluate((html, nextTheme) => {
+          html.dataset.theme = nextTheme;
+        }, theme);
+        await scanLiveApp(page, `${label} (${viewport.label}, ${theme})`);
+      }
+    }
+  } finally {
+    await page.locator("html").evaluate((html, theme) => {
+      html.dataset.theme = theme;
+    }, originalTheme);
+    if (originalViewport) await page.setViewportSize(originalViewport);
+  }
+};
+
+const installAuditTools = async (page) => {
+  await page.addScriptTag({ path: AXE_SCRIPT_PATH });
+  await page.addStyleTag({
+    content:
+      // iteration-count 1 matters as much as the zeroed duration: a
+      // zero-duration *infinite* animation is degenerate and WebKit can leave
+      // the element compositing a mid-keyframe colour, which axe then reads
+      // as a contrast failure. One zero-length pass ends deterministically.
+      "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important;transition-delay:0s!important;}" +
+      '.rw-app .btn[data-guide-cta="true"]{animation:none!important;}',
+  });
+};
+
+// Reduced motion keeps the guided tour's re-reveal scrolls instant. Its
+// smooth `scrollBy` otherwise glides the page while Playwright is hovering
+// the weave download button, and the hover retries "element is not stable"
+// until it times out. Chromium only: under the emulation WebKit intermittently
+// serves stale theme colours to axe after a theme flip (`.mode-label` read
+// dark-theme text on a light background), so WebKit keeps its default media.
+const createAuditContext = (createContext) =>
+  createContext({
+    ignoreHTTPSErrors: true,
+    ...(browserName === "chromium" ? { reducedMotion: "reduce" } : {}),
+  });
+
 export const checkCssCoverage = (entries) => {
   const coverage = summarizeCssCoverage(entries);
   if (coverage.stylesheetCount === 0) throw new Error("CSS coverage did not include a bundled stylesheet");
@@ -695,16 +748,7 @@ export const checkCssCoverage = (entries) => {
 };
 
 const runAccessibilityAudit = async (createContext, baseUrl) => {
-  // Reduced motion keeps the guided tour's re-reveal scrolls instant. Its
-  // smooth `scrollBy` otherwise glides the page while Playwright is hovering
-  // the weave download button, and the hover retries "element is not stable"
-  // until it times out. Chromium only: under the emulation WebKit intermittently
-  // serves stale theme colours to axe after a theme flip (`.mode-label` read
-  // dark-theme text on a light background), so WebKit keeps its default media.
-  const context = await createContext({
-    ignoreHTTPSErrors: true,
-    ...(browserName === "chromium" ? { reducedMotion: "reduce" } : {}),
-  });
+  const context = await createAuditContext(createContext);
   const scanGuidedLoading = await createGuidedLoadingAudit(context, scanLiveApp);
   let page = await context.newPage();
   const cssCoverageEntries = [];
@@ -735,39 +779,6 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if (!(await page.locator("#menu-sheet:visible").count())) await page.locator(PAGE_DOCK_MENU).click();
     await page.locator("#menu-sheet:visible").waitFor({ state: "visible" });
   };
-  const scanVariants = async (label) => {
-    const originalTheme = await page.locator("html").getAttribute("data-theme");
-    const originalViewport = page.viewportSize();
-    try {
-      for (const viewport of A11Y_VIEWPORTS) {
-        await page.setViewportSize(viewport);
-        for (const theme of ["light", "dark"]) {
-          await page.locator("html").evaluate((html, nextTheme) => {
-            html.dataset.theme = nextTheme;
-          }, theme);
-          await scanLiveApp(page, `${label} (${viewport.label}, ${theme})`);
-        }
-      }
-    } finally {
-      await page.locator("html").evaluate((html, theme) => {
-        html.dataset.theme = theme;
-      }, originalTheme);
-      if (originalViewport) await page.setViewportSize(originalViewport);
-    }
-  };
-  const installAuditTools = async () => {
-    await page.addScriptTag({ path: AXE_SCRIPT_PATH });
-    await page.addStyleTag({
-      content:
-        // iteration-count 1 matters as much as the zeroed duration: a
-        // zero-duration *infinite* animation is degenerate and WebKit can leave
-        // the element compositing a mid-keyframe colour, which axe then reads
-        // as a contrast failure. One zero-length pass ends deterministically.
-        "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important;transition-delay:0s!important;}" +
-        '.rw-app .btn[data-guide-cta="true"]{animation:none!important;}',
-    });
-  };
-
   try {
     if (browserName === "chromium") await page.coverage.startCSSCoverage();
     await page.goto(new URL("404.html", baseUrl).href, { waitUntil: "domcontentloaded" });
@@ -777,8 +788,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     }
     await page.locator(".not-found-home").waitFor({ state: "visible" });
     await page.locator(".not-found-docs:visible").waitFor({ state: "visible" });
-    await installAuditTools();
-    await scanVariants("not found");
+    await installAuditTools(page);
+    await scanVariants(page, "not found");
     if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
     await page.close();
 
@@ -822,8 +833,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if ((await page.locator('.mode[aria-selected="true"]').count()) !== 0) {
       throw new Error("the landing page marks a workflow tab as selected");
     }
-    await installAuditTools();
-    await scanVariants("landing");
+    await installAuditTools(page);
+    await scanVariants(page, "landing");
 
     await page.goto(new URL("apply", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
@@ -937,7 +948,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.setViewportSize(A11Y_VIEWPORTS.find((viewport) => viewport.label === "desktop"));
     await page.goto(new URL("apply", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
-    await installAuditTools();
+    await installAuditTools(page);
 
     for (const viewport of A11Y_VIEWPORTS) {
       await page.setViewportSize(viewport);
@@ -979,7 +990,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     const infoButton = page.locator(".info-btn").first();
     await infoButton.click();
     await page.locator(".info-pop").waitFor({ state: "visible" });
-    await scanVariants("info popover");
+    await scanVariants(page, "info popover");
     await infoButton.click();
 
     await openSettingsPanel(page);
@@ -989,7 +1000,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     const codecCombobox = page.locator(".codec-combobox input").first();
     await codecCombobox.click();
     await page.locator(".codec-combobox-list").waitFor({ state: "visible" });
-    await scanVariants("codec combobox");
+    await scanVariants(page, "codec combobox");
     await page.locator(".codec-combobox-option").first().click();
     await page.locator(".settings-actions .btn.primary:visible").click();
     await page.getByRole("dialog").waitFor({ state: "hidden" });
@@ -998,7 +1009,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await navRow("logs").click();
     const logDialog = page.locator("dialog.log-dlg");
     await logDialog.waitFor({ state: "visible" });
-    await scanVariants("log dialog");
+    await scanVariants(page, "log dialog");
     // A phone closes from the console's dock, where Menu was; desktop from the header.
     await logDialog.locator(".dock-menu:visible, .dlg-x:visible").click();
 
@@ -1016,7 +1027,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     ]);
     const selectionDialog = page.locator(".rw-modal.select-modal");
     await selectionDialog.waitFor({ state: "visible", timeout: 60_000 });
-    await scanVariants("candidate selection");
+    await scanVariants(page, "candidate selection");
     await selectionDialog.locator("button.dlg-x").click();
     await selectionDialog.waitFor({ state: "hidden" });
 
@@ -1036,13 +1047,13 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page
       .locator('.sample-tutorial-dialog[data-step="1"][data-step-count="5"]:not([data-moving])')
       .waitFor({ state: "visible", timeout: 60_000 });
-    await scanVariants("guided Apply 1/5 (waiting for files)");
+    await scanVariants(page, "guided Apply 1/5 (waiting for files)");
     await tutorial.locator(".sample-tutorial-next").click();
     for (let step = 2; step <= 5; step += 1) {
       await page
         .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="5"]:not([data-moving])`)
         .waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Apply ${step}/5`);
+      await scanVariants(page, `guided Apply ${step}/5`);
       if (step === 5) {
         const [download] = await Promise.all([
           page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
@@ -1060,13 +1071,13 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await scanGuidedLoading(page, ["first-weave.zip"], "guided Weave loading (desktop, light)", async () => {
       await page.goto(new URL("weave-rom-patches?guide=weave", baseUrl).href, { waitUntil: "domcontentloaded" });
       await page.locator("#rom-weaver-input-file-unified-weave").waitFor({ state: "attached" });
-      await installAuditTools();
+      await installAuditTools(page);
     });
     for (let step = 1; step <= 4; step += 1) {
       await page
         .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="4"]:not([data-moving])`)
         .waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Weave ${step}/4`);
+      await scanVariants(page, `guided Weave ${step}/4`);
       if (step === 4) {
         const createWeaveButton = page.locator("#rom-weaver-button-export-weave:not([data-downloadable])");
         await createWeaveButton.waitFor({ state: "visible", timeout: 60_000 });
@@ -1109,7 +1120,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.locator('.patch-menu-list:not([hidden]) [role="menuitem"][id^="rom-weaver-patch-meta-edit-"]').click();
     const patchDetailsDone = page.locator(".patch-menu-btn.is-editing:visible");
     await patchDetailsDone.waitFor({ state: "visible" });
-    await scanVariants("patch details editor");
+    await scanVariants(page, "patch details editor");
     await patchDetailsDone.click();
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
@@ -1123,7 +1134,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await patchHandles.first().click();
     const patchPositionInput = page.locator("input.phandle-input:visible");
     await patchPositionInput.waitFor({ state: "visible" });
-    await scanVariants("patch position editor");
+    await scanVariants(page, "patch position editor");
     await patchPositionInput.press("Escape");
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
@@ -1145,7 +1156,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await page
         .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="5"]:not([data-moving])`)
         .waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Create ${step}/5`);
+      await scanVariants(page, `guided Create ${step}/5`);
       if (step === 5) {
         // The guide ends on the click, before the asynchronous create/compress
         // run finishes. Keep its document alive until the patch has downloaded;
@@ -1170,69 +1181,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     }
     await tutorial.waitFor({ state: "hidden" });
 
-    // Last, because each guide is its own served document: the audits above all
-    // run against the app page and would have to re-enter it afterwards.
-    // Loading them for real rather than switching to them in-app is the only
-    // way a hydration mismatch against the served HTML surfaces as a page error.
-    // Coverage is per-document and resets on navigation, so bank what the app
-    // page used before leaving it - otherwise only the last guide's sheet
-    // survives to the budget check and the whole app's CSS reads as unused.
     if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
-
-    let retargetedSamples = 0;
-    for (const slug of DOCS_ROUTES) {
-      if (browserName === "chromium") await page.coverage.startCSSCoverage();
-      await page.goto(`${baseUrl.replace(/\/$/, "")}/${slug}`, { waitUntil: "commit" });
-      await page.locator(".docs-article h1").waitFor({ state: "visible" });
-      await installAuditTools();
-      const headings = await page.locator("h1").count();
-      assertSingleDocsHeading(headings, slug);
-      // This origin is not production, so once the page is live every sample
-      // download has to have moved to it. The served HTML still names
-      // production, which is the right answer for a crawler but the wrong one
-      // for anyone copying a command out of a beta or preview deployment.
-      // Hydration clears aria-busy before the asset-base effect re-renders the
-      // article. Wait for that second update before checking the production
-      // origin, otherwise WebKit can observe the authored HTML in between.
-      await page.waitForFunction((productionOrigin) => {
-        if (document.getElementById("webapp-root")?.hasAttribute("aria-busy")) return false;
-        const stillProduction = [...document.querySelectorAll(".docs-article pre code")]
-          .flatMap((block) => (block.textContent || "").match(/https?:\/\/[^\s"'<>]+/g) || [])
-          .some((value) => URL.canParse(value) && new URL(value).origin === productionOrigin);
-        return !stillProduction;
-      }, SITE_ORIGIN);
-      const samples = await page.evaluate((productionOrigin) => {
-        // Origins are compared after parsing so a lookalike host such as
-        // `rom-weaver.com.example` can never read as either origin.
-        const origins = [...document.querySelectorAll(".docs-article pre code")].map((block) =>
-          (block.textContent || "")
-            .match(/https?:\/\/[^\s"'<>]+/g)
-            ?.flatMap((value) => (URL.canParse(value) ? [new URL(value).origin] : [])),
-        );
-        const countBlocksNaming = (origin) => origins.filter((block) => block?.includes(origin)).length;
-        const anchorOrigins = [...document.querySelectorAll(".docs-article a[href]")].map((link) =>
-          URL.canParse(link.href) ? new URL(link.href).origin : "",
-        );
-        return {
-          local: countBlocksNaming(location.origin),
-          production: countBlocksNaming(productionOrigin),
-          productionLinks: anchorOrigins.filter((origin) => origin === productionOrigin).length,
-        };
-      }, SITE_ORIGIN);
-      assertNoProductionDocsSamples(samples, slug);
-      retargetedSamples += samples.local;
-      await scanVariants(slug);
-      if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
-    }
-    // Without this the checks above pass just as happily when the swap stops
-    // running and no guide offers a sample download at all.
-    if (!retargetedSamples) throw new Error("no guide sample was retargeted to the serving origin");
-    process.stdout.write(`PASS docs samples retargeted (${retargetedSamples} blocks)\n`);
-
     if (failures.length) throw new Error(`live app accessibility audit page errors:\n${failures.join("\n")}`);
-    // Every page above banked its own coverage as it finished; nothing is still
-    // recording here.
-    if (browserName === "chromium") checkCssCoverage(cssCoverageEntries);
+    return cssCoverageEntries;
   } catch (error) {
     const dialog = await page
       .locator(".sample-tutorial-dialog")
@@ -1247,27 +1198,128 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   }
 };
 
+/** Audits one served docs route and returns how many sample blocks it retargeted to the serving origin. */
+const auditDocsRoute = async (page, baseUrl, slug) => {
+  await page.goto(`${baseUrl.replace(/\/$/, "")}/${slug}`, { waitUntil: "commit" });
+  await page.locator(".docs-article h1").waitFor({ state: "visible" });
+  await installAuditTools(page);
+  const headings = await page.locator("h1").count();
+  assertSingleDocsHeading(headings, slug);
+  // This origin is not production, so once the page is live every sample
+  // download has to have moved to it. The served HTML still names
+  // production, which is the right answer for a crawler but the wrong one
+  // for anyone copying a command out of a beta or preview deployment.
+  // Hydration clears aria-busy before the asset-base effect re-renders the
+  // article. Wait for that second update before checking the production
+  // origin, otherwise WebKit can observe the authored HTML in between.
+  await page.waitForFunction((productionOrigin) => {
+    if (document.getElementById("webapp-root")?.hasAttribute("aria-busy")) return false;
+    const stillProduction = [...document.querySelectorAll(".docs-article pre code")]
+      .flatMap((block) => (block.textContent || "").match(/https?:\/\/[^\s"'<>]+/g) || [])
+      .some((value) => URL.canParse(value) && new URL(value).origin === productionOrigin);
+    return !stillProduction;
+  }, SITE_ORIGIN);
+  const samples = await page.evaluate((productionOrigin) => {
+    // Origins are compared after parsing so a lookalike host such as
+    // `rom-weaver.com.example` can never read as either origin.
+    const origins = [...document.querySelectorAll(".docs-article pre code")].map((block) =>
+      (block.textContent || "")
+        .match(/https?:\/\/[^\s"'<>]+/g)
+        ?.flatMap((value) => (URL.canParse(value) ? [new URL(value).origin] : [])),
+    );
+    const countBlocksNaming = (origin) => origins.filter((block) => block?.includes(origin)).length;
+    const anchorOrigins = [...document.querySelectorAll(".docs-article a[href]")].map((link) =>
+      URL.canParse(link.href) ? new URL(link.href).origin : "",
+    );
+    return {
+      local: countBlocksNaming(location.origin),
+      production: countBlocksNaming(productionOrigin),
+      productionLinks: anchorOrigins.filter((origin) => origin === productionOrigin).length,
+    };
+  }, SITE_ORIGIN);
+  assertNoProductionDocsSamples(samples, slug);
+  await scanVariants(page, slug);
+  return samples.local;
+};
+
+// Each guide is loaded as its own served document rather than switched to in-app:
+// that is the only way a hydration mismatch against the served HTML surfaces as a page error.
+// The routes share no state, so a pool of pages takes them from one queue.
+const runDocsAccessibilityAudit = async (createContext, baseUrl) => {
+  const context = await createAuditContext(createContext);
+  const pendingSlugs = [...DOCS_ROUTES];
+  const cssCoverageEntries = [];
+  const failures = [];
+  let retargetedSamples = 0;
+  const auditQueuedRoutes = async () => {
+    const page = await context.newPage();
+    watchRequestFailures(page);
+    page.on("pageerror", (error) => failures.push(`[${page.url()}] ${error.stack || error.message}`));
+    while (pendingSlugs.length > 0) {
+      const slug = pendingSlugs.shift();
+      // Coverage is per document and resets on navigation, so each route banks its own.
+      if (browserName === "chromium") await page.coverage.startCSSCoverage();
+      // Awaited first: `total += await …` reads the total before the await and drops other pages' counts.
+      const routeSamples = await auditDocsRoute(page, baseUrl, slug);
+      retargetedSamples += routeSamples;
+      if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
+    }
+  };
+  try {
+    await runLanes(
+      Array.from({ length: DOCS_AUDIT_PAGES }, () => auditQueuedRoutes),
+      true,
+    );
+    // Without this the checks above pass just as happily when the swap stops
+    // running and no guide offers a sample download at all.
+    if (!retargetedSamples) throw new Error("no guide sample was retargeted to the serving origin");
+    process.stdout.write(`PASS docs samples retargeted (${retargetedSamples} blocks)\n`);
+    if (failures.length) throw new Error(`docs accessibility audit page errors:\n${failures.join("\n")}`);
+    return cssCoverageEntries;
+  } finally {
+    await context.close();
+  }
+};
+
 // Parallel audits MUST use separate origins: Playwright’s macOS profiles share OPFS
 // storage but have independent Web Locks, allowing one profile's boot sweep to
 // delete another's inputs. The embedder omits a general-storage path override:
 // https://github.com/microsoft/playwright/blob/v1.64.1/browser_patches/webkit/embedder/Playwright/mac/AppDelegate.m#L175-L216
+// The docs audit follows hydration on its origin, so the two never overlap on shared storage.
+// Resolves to the accessibility and docs audit results, in that order.
 export const runAuditPhases = async (
-  runHydration,
-  runAccessibility,
-  parallel,
+  { hydration, accessibility, docs },
   { hydrationBaseUrl, accessibilityBaseUrl },
 ) => {
-  if (parallel) {
-    if (new URL(hydrationBaseUrl).origin === new URL(accessibilityBaseUrl).origin) {
-      throw new Error("Parallel audits require separate origins for OPFS isolation");
-    }
-    const results = await Promise.allSettled([runHydration(hydrationBaseUrl), runAccessibility(accessibilityBaseUrl)]);
-    const failure = results.find((result) => result.status === "rejected");
-    if (failure) throw failure.reason;
-    return;
+  if (new URL(hydrationBaseUrl).origin === new URL(accessibilityBaseUrl).origin) {
+    throw new Error("Parallel audits require separate origins for OPFS isolation");
   }
-  await runHydration(hydrationBaseUrl);
-  await runAccessibility(accessibilityBaseUrl);
+  const [accessibilityResult, docsResult] = await runLanes(
+    [
+      () => accessibility(accessibilityBaseUrl),
+      async () => {
+        await hydration(hydrationBaseUrl);
+        return docs(hydrationBaseUrl);
+      },
+    ],
+    true,
+  );
+  return [accessibilityResult, docsResult];
+};
+
+// Lanes in separate browser contexts MUST NOT share an origin; the storage rule above applies.
+// A failed lane never stops the others; the first failure is thrown once every lane has settled.
+// Resolves to each lane's result, in lane order.
+export const runLanes = async (lanes, concurrent) => {
+  if (!concurrent) {
+    const values = [];
+    for (const lane of lanes) values.push(await lane());
+    return values;
+  }
+  const results = await Promise.allSettled(lanes.map((lane) => lane()));
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure) throw failure.reason;
+  return results.map((result) => result.value);
 };
 
 export const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
@@ -1721,17 +1773,24 @@ const main = async () => {
   const previewPort = await reservePort();
   let devPort = await reservePort();
   while (devPort === previewPort) devPort = await reservePort();
-  const parallelAudits = RUN_AUDITS && browserName === "webkit";
   let hydrationPort = previewPort;
-  if (parallelAudits) {
+  if (RUN_AUDITS) {
     do {
       hydrationPort = await reservePort();
     } while (hydrationPort === previewPort || hydrationPort === devPort);
+  }
+  const concurrentLanes = E2E_SHARD === "all";
+  let journeysPort = previewPort;
+  if (concurrentLanes) {
+    do {
+      journeysPort = await reservePort();
+    } while (journeysPort === previewPort || journeysPort === devPort || journeysPort === hydrationPort);
   }
   const host = browserName === "webkit" ? "localhost" : "127.0.0.1";
   const previewBaseUrl = `https://${host}:${previewPort}/`;
   const devBaseUrl = `https://${host}:${devPort}/`;
   const hydrationBaseUrl = `https://${host}:${hydrationPort}/`;
+  const journeysBaseUrl = `https://${host}:${journeysPort}/`;
   const temporaryCorpusDir =
     RUN_ARCHIVE_JOURNEY && browserName === "chromium" && !process.env.ROM_WEAVER_E2E_CORPUS_DIR
       ? createWorkerReuseCorpus()
@@ -1739,13 +1798,15 @@ const main = async () => {
   const corpusDir = process.env.ROM_WEAVER_E2E_CORPUS_DIR || temporaryCorpusDir;
   const preview = startServer("preview", previewPort);
   const dev = startServer("dev", devPort, corpusDir);
-  const hydration = parallelAudits ? startServer("preview", hydrationPort) : null;
+  const hydration = RUN_AUDITS ? startServer("preview", hydrationPort) : null;
+  const journeys = concurrentLanes ? startServer("preview", journeysPort) : null;
 
   try {
     await Promise.all([
       waitForServer(previewBaseUrl),
       waitForServer(devBaseUrl),
       ...(hydration ? [waitForServer(hydrationBaseUrl)] : []),
+      ...(journeys ? [waitForServer(journeysBaseUrl)] : []),
     ]);
     if (corpusDir) {
       const traversalStatus = await requestStatus(`${devBaseUrl}__rom_weaver_corpus__/files/%2e%2e%2fmanifest.json`);
@@ -1760,63 +1821,85 @@ const main = async () => {
           browserName,
         );
         try {
-          await run(createContext);
+          return await run(createContext);
         } finally {
           await browser?.close();
           for (const userDataDir of persistentContextDirs) fs.rmSync(userDataDir, { force: true, recursive: true });
         }
       });
-    if (RUN_AUDITS) {
+    // The audits and the link audit plus journeys share nothing but the built bundle, so a full run
+    // overlaps the two lanes. A single shard still runs alone, in this order.
+    const auditLane = async () => {
+      if (!RUN_AUDITS) return;
       await scenario("accessible navigation", (createContext) =>
         runAccessibleNavigationAudit(createContext, previewBaseUrl),
       );
-      await runAuditPhases(
-        (baseUrl) => scenario("hydration", (createContext) => runHydrationAudit(createContext, baseUrl)),
-        (baseUrl) => scenario("accessibility", (createContext) => runAccessibilityAudit(createContext, baseUrl)),
-        parallelAudits,
+      const coverage = await runAuditPhases(
+        {
+          accessibility: (baseUrl) =>
+            scenario("accessibility", (createContext) => runAccessibilityAudit(createContext, baseUrl)),
+          docs: (baseUrl) =>
+            scenario("docs accessibility", (createContext) => runDocsAccessibilityAudit(createContext, baseUrl)),
+          hydration: (baseUrl) => scenario("hydration", (createContext) => runHydrationAudit(createContext, baseUrl)),
+        },
         { accessibilityBaseUrl: previewBaseUrl, hydrationBaseUrl },
       );
-    }
-    if (RUN_LINK_AUDIT)
-      await scenario("links", (createContext) => runLinkAudit(createContext, { devBaseUrl, previewBaseUrl }));
-    if (RUN_RAW_JOURNEY) {
-      await scenario("Create/Apply/Weave byte roundtrips", (createContext) =>
-        runCreateApplyRoundtrip(createContext, previewBaseUrl, configureUncompressedOutput),
-      );
-      await scenario("checksum/comparison/recovery", (createContext) =>
-        runChecksumJourney(createContext, previewBaseUrl),
-      );
-      await scenario("Compress/Extract ZIP roundtrip/recovery", (createContext) =>
-        runCompressExtractRoundtrip(createContext, previewBaseUrl),
-      );
-      await scenario("Trim NDS exact extent", (createContext) =>
-        runTrimJourney(createContext, previewBaseUrl, configureUncompressedOutput),
-      );
-      await scenario("PPF Undo/download/recovery", (createContext) => runPpfUndoJourney(createContext, previewBaseUrl));
-      await scenario("raw apply/download", (createContext) =>
-        runApplyJourney(createContext, previewBaseUrl, "raw apply/download", [
-          "archive_sources/game.bin",
-          "archive_sources/change.ips",
-        ]),
-      );
-      await scenario("Save Editor exact edit/reopen", (createContext) =>
-        runSaveEditorJourney(createContext, previewBaseUrl),
-      );
-    }
-    if (RUN_ARCHIVE_JOURNEY) {
-      await scenario("archive routing/apply/download", (createContext) =>
-        runApplyJourney(createContext, previewBaseUrl, "archive routing/apply/download", [
-          "archives/one-rom.zip",
-          "archives/one-patch.7z",
-        ]),
-      );
-      // The stress page MUST use the dev server because it is not a production entry point.
-      if (browserName === "chromium" && corpusDir) {
-        await scenario("archive worker reuse", (createContext) => runArchiveStressSmoke(createContext, devBaseUrl));
+      if (browserName === "chromium") checkCssCoverage(coverage.flat());
+    };
+    // A full run audits links only in Chromium, whose contexts share no storage, so the crawl MAY
+    // share the audits' preview origin.
+    const linkLane = async () => {
+      if (RUN_LINK_AUDIT) {
+        await scenario("links", (createContext) => runLinkAudit(createContext, { devBaseUrl, previewBaseUrl }));
       }
-    }
+    };
+    const journeyLane = async () => {
+      if (RUN_RAW_JOURNEY) {
+        await scenario("Create/Apply/Weave byte roundtrips", (createContext) =>
+          runCreateApplyRoundtrip(createContext, journeysBaseUrl, configureUncompressedOutput),
+        );
+        await scenario("checksum/comparison/recovery", (createContext) =>
+          runChecksumJourney(createContext, journeysBaseUrl),
+        );
+        await scenario("Compress/Extract ZIP roundtrip/recovery", (createContext) =>
+          runCompressExtractRoundtrip(createContext, journeysBaseUrl),
+        );
+        await scenario("Trim NDS exact extent", (createContext) =>
+          runTrimJourney(createContext, journeysBaseUrl, configureUncompressedOutput),
+        );
+        await scenario("PPF Undo/download/recovery", (createContext) =>
+          runPpfUndoJourney(createContext, journeysBaseUrl),
+        );
+        await scenario("raw apply/download", (createContext) =>
+          runApplyJourney(createContext, journeysBaseUrl, "raw apply/download", [
+            "archive_sources/game.bin",
+            "archive_sources/change.ips",
+          ]),
+        );
+        await scenario("Save Editor exact edit/reopen", (createContext) =>
+          runSaveEditorJourney(createContext, journeysBaseUrl),
+        );
+      }
+      if (RUN_ARCHIVE_JOURNEY) {
+        await scenario("archive routing/apply/download", (createContext) =>
+          runApplyJourney(createContext, journeysBaseUrl, "archive routing/apply/download", [
+            "archives/one-rom.zip",
+            "archives/one-patch.7z",
+          ]),
+        );
+        // The stress page MUST use the dev server because it is not a production entry point.
+        if (browserName === "chromium" && corpusDir) {
+          await scenario("archive worker reuse", (createContext) => runArchiveStressSmoke(createContext, devBaseUrl));
+        }
+      }
+    };
+    const siteLane = async () => {
+      await linkLane();
+      await journeyLane();
+    };
+    await runLanes([auditLane, siteLane], concurrentLanes);
   } catch (error) {
-    const serverOutput = [preview.output(), dev.output(), hydration?.output()]
+    const serverOutput = [preview.output(), dev.output(), hydration?.output(), journeys?.output()]
       .filter((output) => output?.trim())
       .join("\n");
     if (serverOutput) process.stderr.write(`${serverOutput.trim()}\n`);
@@ -1825,6 +1908,7 @@ const main = async () => {
     preview.server.kill("SIGTERM");
     dev.server.kill("SIGTERM");
     hydration?.server.kill("SIGTERM");
+    journeys?.server.kill("SIGTERM");
     if (temporaryCorpusDir) fs.rmSync(temporaryCorpusDir, { force: true, recursive: true });
   }
 };
@@ -1834,9 +1918,9 @@ export const runE2EScenario = async (name, run, report = (line) => process.stdou
     const started = performance.now();
     let status = "failed";
     try {
-      await run();
+      const result = await run();
       status = "passed";
-      return;
+      return result;
     } catch (error) {
       const message = error?.message || String(error);
       // Assertions and locator timeouts MUST fail immediately; replaying them hides deterministic regressions.

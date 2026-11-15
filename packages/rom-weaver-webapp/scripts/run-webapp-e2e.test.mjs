@@ -21,6 +21,7 @@ import {
   resolveE2EShard,
   runAuditPhases,
   runE2EScenario,
+  runLanes,
   sha256,
   shouldRejectUnauthorized,
 } from "./run-webapp-e2e.mjs";
@@ -101,11 +102,60 @@ describe("resolveE2EShard", () => {
   });
 });
 
+describe("runLanes", () => {
+  it("runs lanes in order and stops at the first failure when not concurrent", async () => {
+    const started = [];
+    const lane = (name, failure) => async () => {
+      started.push(name);
+      if (failure) throw failure;
+    };
+    const failure = new Error("links failed");
+
+    await assert.rejects(runLanes([lane("audits"), lane("links", failure), lane("journeys")], false), failure);
+    assert.deepEqual(started, ["audits", "links"]);
+  });
+
+  it("overlaps the lanes and finishes the others after one fails", { timeout: 2000 }, async () => {
+    const finished = [];
+    let journeysStarted;
+    let auditsFailed;
+    const journeysRunning = new Promise((resolve) => {
+      journeysStarted = resolve;
+    });
+    const auditsDone = new Promise((resolve) => {
+      auditsFailed = resolve;
+    });
+    const failure = new Error("audits failed");
+    // The audits lane cannot fail until the last lane is running, so lanes that run one at a time hang here.
+    // The last lane ends only after the failure, so a runner that stops at the first failure misses it.
+    const lanes = [
+      async () => {
+        await journeysRunning;
+        auditsFailed();
+        throw failure;
+      },
+      async () => {
+        finished.push("links");
+      },
+      async () => {
+        journeysStarted();
+        await auditsDone;
+        await new Promise((resolve) => setImmediate(resolve));
+        finished.push("journeys");
+      },
+    ];
+
+    await assert.rejects(runLanes(lanes, true), failure);
+    assert.deepEqual(finished, ["links", "journeys"]);
+  });
+});
+
 describe("runAuditPhases", () => {
   const baseUrls = {
     accessibilityBaseUrl: "https://localhost:42001/",
     hydrationBaseUrl: "https://localhost:42002/",
   };
+  const skipAudit = async () => undefined;
 
   it("preserves hydration inputs when the other audit boots after extraction", async () => {
     const sharedOriginStorage = new Map();
@@ -135,7 +185,7 @@ describe("runAuditPhases", () => {
       swept();
     };
 
-    await runAuditPhases(hydrate, accessibility, true, baseUrls);
+    await runAuditPhases({ accessibility, docs: skipAudit, hydration: hydrate }, baseUrls);
   });
 
   it("rejects shared origins before either parallel audit starts", async () => {
@@ -145,16 +195,19 @@ describe("runAuditPhases", () => {
     };
     await assert.rejects(
       () =>
-        runAuditPhases(phase, phase, true, {
-          accessibilityBaseUrl: baseUrls.hydrationBaseUrl,
-          hydrationBaseUrl: `${baseUrls.hydrationBaseUrl}weave-rom-patches`,
-        }),
+        runAuditPhases(
+          { accessibility: phase, docs: phase, hydration: phase },
+          {
+            accessibilityBaseUrl: baseUrls.hydrationBaseUrl,
+            hydrationBaseUrl: `${baseUrls.hydrationBaseUrl}weave-rom-patches`,
+          },
+        ),
       /Parallel audits require separate origins for OPFS isolation/,
     );
     assert.equal(started, false);
   });
 
-  it("runs the independent audit phases concurrently when requested", async () => {
+  it("runs the independent audit phases concurrently", async () => {
     let active = 0;
     let maximumActive = 0;
     const phase = async () => {
@@ -164,7 +217,7 @@ describe("runAuditPhases", () => {
       active -= 1;
     };
 
-    await runAuditPhases(phase, phase, true, baseUrls);
+    await runAuditPhases({ accessibility: phase, docs: skipAudit, hydration: phase }, baseUrls);
 
     assert.equal(maximumActive, 2);
   });
@@ -180,27 +233,39 @@ describe("runAuditPhases", () => {
       events.push("settled");
     };
 
-    await assert.rejects(() => runAuditPhases(failedPhase, slowPhase, true, baseUrls), /audit failed/);
+    await assert.rejects(
+      () => runAuditPhases({ accessibility: slowPhase, docs: skipAudit, hydration: failedPhase }, baseUrls),
+      /audit failed/,
+    );
 
     assert.deepEqual(events, ["failed", "settled"]);
   });
 
-  it("keeps the Chromium audit phases ordered", async () => {
+  it("audits docs on the hydration origin once hydration ends and returns both audit results", async () => {
     const events = [];
-    const phase = async (name) => {
-      events.push(`${name}:start`);
+    const phase = (name, result) => async (baseUrl) => {
+      events.push(`${name}:start ${baseUrl}`);
       await new Promise((resolve) => setTimeout(resolve, 5));
       events.push(`${name}:end`);
+      return result;
     };
 
-    await runAuditPhases(
-      () => phase("hydration"),
-      () => phase("accessibility"),
-      false,
+    const results = await runAuditPhases(
+      {
+        accessibility: phase("accessibility", ["app.css"]),
+        docs: phase("docs", ["docs.css"]),
+        hydration: phase("hydration"),
+      },
       baseUrls,
     );
 
-    assert.deepEqual(events, ["hydration:start", "hydration:end", "accessibility:start", "accessibility:end"]);
+    const hydrationEnd = events.indexOf("hydration:end");
+    assert.ok(
+      hydrationEnd >= 0 && hydrationEnd < events.indexOf(`docs:start ${baseUrls.hydrationBaseUrl}`),
+      events.join("\n"),
+    );
+    assert.ok(events.includes(`accessibility:start ${baseUrls.accessibilityBaseUrl}`), events.join("\n"));
+    assert.deepEqual(results, [["app.css"], ["docs.css"]]);
   });
 });
 

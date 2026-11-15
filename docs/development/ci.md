@@ -252,7 +252,9 @@ security ── advisories (warn only, always green)
   - `webapp-browser` starts the browser suite directly, using Chrome from the Ubuntu runner image.
   - `webapp-wasm-browser` is the direct WASM/browser contract, selected only for conservative runtime inputs.
   - `webapp-e2e` runs the accessibility/docs audit, the link audit, and the raw and archive journeys. It also runs the Chromium stress smoke and the channel-icon check.
-  - `webapp-webkit-e2e` runs on macOS, without Chromium’s journey shards, link audit, or stress smoke. Hydration and accessibility run concurrently in separate persistent contexts and production preview origins.
+  - `webapp-webkit-e2e` runs on macOS, without Chromium’s journey shards, link audit, or stress smoke.
+
+    A full Chromium run overlaps two lanes: the audits, and the link audit followed by the journeys on their own production preview origin. Within the audits, the stateful accessibility page runs on one origin while hydration and then the docs routes run on another. The docs routes share no state, so three pages take them from one queue.
 
     Playwright’s macOS profiles share OPFS storage but have separate Web Locks. Separate origins keep one audit’s boot cleanup from deleting another audit’s weave inputs. The stateful accessibility page stays whole.
 
@@ -260,7 +262,7 @@ security ── advisories (warn only, always green)
 
   **Prebuilt bundle.** Both E2E jobs download `webapp-dist` and use `ROM_WEAVER_E2E_USE_PREBUILT_DIST=1` with `ROM_WEAVER_CHANNEL=prod`; they do not rebuild it, which removes two builds. Hydration, accessibility, and Apply journeys use the same production files as Lighthouse and Docker. Local E2E runs still build by default, and the Chromium archive stress page stays on the dev server because it is a test-only entry point.
 
-  **Retries.** E2E retries are scoped to hydration, accessibility, links, each apply journey, or archive stress. A browser crash or connection failure gets one fresh-browser retry of that scenario; assertions and locator timeouts fail immediately. Each attempt logs its outcome and duration, and accessibility scans include per-state timings. Tutorial navigation waits on live step attributes rather than translated step-label text, while retaining the expected step counts and every accessibility scan.
+  **Retries.** E2E retries are scoped to hydration, accessibility, docs accessibility, links, each apply journey, or archive stress. A browser crash or connection failure gets one fresh-browser retry of that scenario; assertions and locator timeouts fail immediately. Each attempt logs its outcome and duration, and accessibility scans include per-state timings. Tutorial navigation waits on live step attributes rather than translated step-label text, while retaining the expected step counts and every accessibility scan.
 
   **Why so few runners.** The webapp jobs used to be spread over more runners - a separate node-only `webapp-fast` job, a `webapp-size` job, two `webapp-browser` shards, and three `webapp-e2e` shards. They were folded back because the organisation's concurrent-job cap, not per-job length, sets the wall clock of a busy CI: a webapp run spawned more jobs than the cap allows, so every extra runner was a job waiting in the queue. The node-only checks share the shorter Lighthouse job so they do not delay the browser suite or require another runner. The WASM runner also owns the production bundle build, which removes one setup and runner but delays its consumers until both artifacts are ready.
 

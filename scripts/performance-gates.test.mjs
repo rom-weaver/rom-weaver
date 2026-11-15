@@ -101,6 +101,16 @@ test("CSS coverage unions the same stylesheet across pages", () => {
   );
 });
 
+test("CSS coverage unions one stylesheet served from two origins", () => {
+  assert.deepEqual(
+    summarizeCssCoverage([
+      { ranges: [{ end: 2, start: 0 }], text: "abcdef", url: "https://localhost:42001/assets/index.css" },
+      { ranges: [{ end: 6, start: 4 }], text: "abcdef", url: "https://localhost:42002/assets/index.css" },
+    ]),
+    { stylesheetCount: 1, totalBytes: 6, unusedBytes: 2, usedBytes: 4 },
+  );
+});
+
 test("a metric Lighthouse could not collect fails instead of passing", (t) => {
   // evaluateReports prints ::error workflow commands; muted here so this fixture's fake
   // route cannot surface as a Lighthouse failure annotation on the CI job running it.
