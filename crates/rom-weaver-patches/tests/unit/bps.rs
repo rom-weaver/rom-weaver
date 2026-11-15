@@ -2343,14 +2343,14 @@ fn match_scoring_declines_target_reads_and_displaced_source_reads() {
 fn match_scoring_thresholds_count_header_offset_and_pending_target_read() {
     // (mode, len, offset, output_offset, pending target-read bytes, expected)
     let cases = [
-        // An aligned SourceRead costs one header byte: worth it from two bytes, three after a
-        // pending target read.
+        // An aligned SourceRead costs one header byte. It is worth it from two bytes, or three
+        // after a pending target read.
         (BpsCreateMode::SourceRead, 1, 0, 0, 0, false),
         (BpsCreateMode::SourceRead, 2, 0, 0, 0, true),
         (BpsCreateMode::SourceRead, 2, 0, 0, 1, false),
         (BpsCreateMode::SourceRead, 3, 0, 0, 1, true),
-        // A zero-delta copy costs a header and a one-byte offset: worth it from three bytes, four
-        // after a pending target read.
+        // A zero-delta copy costs a header and a one-byte offset. It is worth it from three
+        // bytes, or four after a pending target read.
         (BpsCreateMode::SourceCopy, 2, 5, 0, 0, false),
         (BpsCreateMode::SourceCopy, 3, 5, 0, 0, true),
         (BpsCreateMode::SourceCopy, 3, 5, 0, 1, false),
@@ -2364,7 +2364,7 @@ fn match_scoring_thresholds_count_header_offset_and_pending_target_read() {
         (BpsCreateMode::SourceCopy, 4, 69, 0, 0, true),
     ];
     for (mode, len, offset, output_offset, pending, expected) in cases {
-        // Both relative offsets sit at 5, so offset 5 is a zero delta and 69 is a delta of 64.
+        // Both relative offsets are 5. Offset 5 is a zero delta, and 69 is a delta of 64.
         let worth = bps_create_match_is_worth(mode, len, offset, output_offset, 5, 5, pending)
             .expect("score");
         assert_eq!(
@@ -2375,16 +2375,8 @@ fn match_scoring_thresholds_count_header_offset_and_pending_target_read() {
 }
 
 #[test]
-fn match_scoring_declines_empty_matches_without_validating_offsets() {
-    let worth = bps_create_match_is_worth(BpsCreateMode::SourceCopy, 0, 1, 0, i128::MIN, 0, 0)
-        .expect("an empty match is declined before its offsets are checked");
-    assert!(!worth);
-}
-
-#[test]
 fn varint_lengths_follow_the_bps_encoding_boundaries() {
-    // Each extra byte adds 128^n values, so the one-byte range ends at 127, the two-byte range at
-    // 128 + 16383, and the three-byte range at 16512 + 2097151.
+    // Each extra byte covers 128 times as many values. Two bytes end at 16511, three at 2113663.
     let cases = [
         (0u64, 1usize),
         (127, 1),
@@ -2424,8 +2416,8 @@ fn matcher_accepts_only_written_target_or_source_positions() {
     )
     .expect("matcher");
 
-    // Target positions are legal only before the write offset; source positions start after the
-    // 8 target bytes and end after the 4 source bytes.
+    // Target positions are legal only before the write offset. Joined positions 8 through 11
+    // are the source.
     let legal = |position| matcher.is_legal_match_position(position, 3);
     assert!(legal(2), "written target");
     assert!(!legal(3), "the write offset is not written yet");
@@ -2438,7 +2430,7 @@ fn matcher_accepts_only_written_target_or_source_positions() {
 #[test]
 fn matcher_bounds_each_match_by_the_bytes_that_remain() {
     let temp = TestDir::new();
-    let data = matcher_fixture(&[b'a'; 8], &[b'a'; 4]);
+    let data = matcher_fixture(&[b'a'; 8], &[b'a'; 8]);
     let context = test_context_with_threads(&temp, 1);
     let mut progress = BpsCreateProgress::new(&context, "BPS", 8);
     let matcher = BpsCombinedSuffixMatcher::new(
@@ -2449,13 +2441,13 @@ fn matcher_bounds_each_match_by_the_bytes_that_remain() {
     )
     .expect("matcher");
 
-    // Only three target bytes follow position 5, even though the run continues into the source.
+    // Only two target bytes remain at write offset 6, though the run continues past them.
     assert_eq!(
-        matcher.match_at(5, 2),
+        matcher.match_at(2, 6),
         BpsCreateMatch {
             mode: BpsCreateMode::TargetCopy,
-            offset: 5,
-            len: 3
+            offset: 2,
+            len: 2
         }
     );
     // The first joined position past the target is source offset 0.
@@ -2464,7 +2456,7 @@ fn matcher_bounds_each_match_by_the_bytes_that_remain() {
         BpsCreateMatch {
             mode: BpsCreateMode::SourceCopy,
             offset: 0,
-            len: 4
+            len: 6
         }
     );
     // A source match at the write offset needs no relative offset.
@@ -2473,7 +2465,7 @@ fn matcher_bounds_each_match_by_the_bytes_that_remain() {
         BpsCreateMatch {
             mode: BpsCreateMode::SourceRead,
             offset: 0,
-            len: 4
+            len: 8
         }
     );
 }

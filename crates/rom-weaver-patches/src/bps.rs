@@ -26,6 +26,7 @@ use crate::shared::labels::{byuu_metadata_report, byuu_parse_report};
 use crate::shared::threading::{
     PARALLEL_WRITE_CHUNK_BYTES, parallel_write_batch_bytes, run_with_optional_pool,
 };
+use crate::varint::VARINT_MAX_LEN;
 #[cfg(test)]
 use crate::varint::push_varint;
 
@@ -39,8 +40,6 @@ const BPS_PARALLEL_WRITE_CHUNK_SIZE: u64 = PARALLEL_WRITE_CHUNK_BYTES as u64;
 const BPS_NO_OFFSET: u32 = u32::MAX;
 const BPS_MIN_COPY_LENGTH: usize = 4;
 const BPS_CREATE_INDEX_TAIL_BYTES: usize = 256;
-// A u64 needs at most ten 7-bit groups.
-const BPS_VARINT_MAX_LEN: usize = 10;
 const BPS_CREATE_MEMORY_LIMIT_BYTES: u64 = 1024 * 1024 * 1024;
 /// Suffix-index bytes per input byte for the reverse-lookup index and for the lower-memory search.
 const BPS_CREATE_FAST_INDEX_BYTES_PER_SLOT: u64 = 8;
@@ -1411,12 +1410,8 @@ impl<'a> BpsCombinedSuffixMatcher<'a> {
 
     fn match_at(&self, position: usize, output_offset: usize) -> BpsCreateMatch {
         let target_remaining = self.sorted_target_len - output_offset;
-        let (mut mode, offset, candidate_remaining) = if position < self.sorted_target_len {
-            (
-                BpsCreateMode::TargetCopy,
-                position,
-                self.sorted_target_len - position,
-            )
+        let (mut mode, offset) = if position < self.sorted_target_len {
+            (BpsCreateMode::TargetCopy, position)
         } else {
             let source_offset = position - self.sorted_target_len;
             let mode = if source_offset == output_offset {
@@ -1424,14 +1419,14 @@ impl<'a> BpsCombinedSuffixMatcher<'a> {
             } else {
                 BpsCreateMode::SourceCopy
             };
-            // The joined buffer ends with the source, so the scan stops there without a source limit.
-            (mode, source_offset, target_remaining)
+            (mode, source_offset)
         };
+        // The scan also stops at the end of the joined buffer, which ends with the source.
         let len = common_prefix_len_limited(
             self.joined.as_slice(),
             output_offset,
             position,
-            target_remaining.min(candidate_remaining),
+            target_remaining,
         );
         if len == 0 {
             mode = BpsCreateMode::TargetRead;
@@ -1486,10 +1481,6 @@ fn bps_create_match_is_worth(
     target_relative_offset: i128,
     pending_target_read_len: usize,
 ) -> Result<bool> {
-    if mode == BpsCreateMode::TargetRead || len == 0 {
-        return Ok(false);
-    }
-
     match mode {
         BpsCreateMode::SourceRead if offset == output_offset => {
             let threshold = 1usize
@@ -1536,14 +1527,15 @@ fn bps_create_copy_match_is_worth(
     Ok(len >= threshold)
 }
 
+// Each continuation adds one, so every step shifts by 7 and subtracts 1.
 fn bps_varint_len(mut data: u64) -> usize {
-    for len in 1..BPS_VARINT_MAX_LEN {
+    for len in 1..VARINT_MAX_LEN {
         if data < 128 {
             return len;
         }
         data = (data >> 7) - 1;
     }
-    BPS_VARINT_MAX_LEN
+    VARINT_MAX_LEN
 }
 
 fn bps_create_suffix_index_mode(source_len: u64, target_len: u64) -> Result<BpsSuffixIndexMode> {
