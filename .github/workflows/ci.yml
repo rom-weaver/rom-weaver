@@ -1817,13 +1817,19 @@ jobs:
             --field description="$description" \
             --field target_url="$LIGHTHOUSE_REPORT_URL"
 
-  # One runner avoids extra queueing under the organisation's concurrency cap.
+  # Two shards: the suite is CPU-bound on a 4-core runner and set the wall clock
+  # of the whole run when it was one job. The matrix job's result is the worst
+  # shard's, so the gate reads it unchanged.
   webapp-browser:
-    name: Webapp (browser)
+    name: Webapp (browser ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp_browser == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -1847,6 +1853,7 @@ jobs:
           # ubuntu-24.04 already ships Chrome, so this job does not need to
           # download Playwright's Chromium or install its system dependencies.
           ROM_WEAVER_SYSTEM_CHROME: "1"
+          BROWSER_TEST_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
         run: npm --prefix packages/rom-weaver-webapp run test:browser
 
   # The direct WASM/browser contract. UI-only changes cannot affect this layer,
