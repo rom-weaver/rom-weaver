@@ -8,7 +8,7 @@ export const summarizeCssCoverage = (entries) => {
       continue;
     }
     if (!pathname.endsWith(".css") || typeof entry.text !== "string") continue;
-    // Audits on separate origins load the same bundle, so one stylesheet is keyed without its origin.
+    // Separate-origin audits load the same bundle, so key stylesheets by path, not origin.
     const key = `${pathname}\0${entry.text}`;
     const stylesheet = stylesheets.get(key) ?? { ranges: [], text: entry.text };
     stylesheet.ranges.push(...entry.ranges);

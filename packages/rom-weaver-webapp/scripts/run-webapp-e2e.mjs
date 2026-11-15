@@ -89,7 +89,6 @@ export const computeLinkAuditRoutes = (docSources) => [
   ...new Set([...LINK_AUDIT_WORKFLOW_ROUTES, ...computeDocsRouteSlugs(docSources)]),
 ];
 const LINK_AUDIT_ROUTES = computeLinkAuditRoutes(DOC_SOURCES);
-// Pages that audit docs routes at once, beside the stateful app audit.
 const DOCS_AUDIT_PAGES = 3;
 const A11Y_VIEWPORTS = [
   { height: 720, label: "desktop", width: 1280 },
@@ -545,12 +544,7 @@ const collectRouteLinks = async (page, baseUrl, route) => {
   } else {
     await page.locator("#webapp-root").waitFor({ state: "attached" });
   }
-  await page
-    .locator("#webapp-root:not([aria-busy])")
-    .waitFor({ state: "attached" })
-    .catch((error) => {
-      throw new Error(`${route || "/"} did not finish loading: ${error.message}`, { cause: error });
-    });
+  await page.locator("#webapp-root:not([aria-busy])").waitFor({ state: "attached" });
   return page.evaluate(
     (source) =>
       [...document.querySelectorAll("a[href]")].map((element) => ({
@@ -1198,7 +1192,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   }
 };
 
-/** Audits one served docs route and returns how many sample blocks it retargeted to the serving origin. */
+/** Audits one served docs route and returns how many sample blocks moved to its origin. */
 const auditDocsRoute = async (page, baseUrl, slug) => {
   await page.goto(`${baseUrl.replace(/\/$/, "")}/${slug}`, { waitUntil: "commit" });
   await page.locator(".docs-article h1").waitFor({ state: "visible" });
@@ -1242,34 +1236,28 @@ const auditDocsRoute = async (page, baseUrl, slug) => {
   return samples.local;
 };
 
-// Each guide is loaded as its own served document rather than switched to in-app:
-// that is the only way a hydration mismatch against the served HTML surfaces as a page error.
-// The routes share no state, so a pool of pages takes them from one queue.
+// Load each guide as its own document. Only that surfaces a hydration mismatch
+// against the served HTML as a page error.
 const runDocsAccessibilityAudit = async (createContext, baseUrl) => {
   const context = await createAuditContext(createContext);
-  const pendingSlugs = [...DOCS_ROUTES];
   const cssCoverageEntries = [];
   const failures = [];
-  let retargetedSamples = 0;
-  const auditQueuedRoutes = async () => {
+  const auditRouteOnNewPage = async (slug) => {
     const page = await context.newPage();
     watchRequestFailures(page);
     page.on("pageerror", (error) => failures.push(`[${page.url()}] ${error.stack || error.message}`));
-    while (pendingSlugs.length > 0) {
-      const slug = pendingSlugs.shift();
-      // Coverage is per document and resets on navigation, so each route banks its own.
+    try {
       if (browserName === "chromium") await page.coverage.startCSSCoverage();
-      // Awaited first: `total += await …` reads the total before the await and drops other pages' counts.
       const routeSamples = await auditDocsRoute(page, baseUrl, slug);
-      retargetedSamples += routeSamples;
       if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
+      return routeSamples;
+    } finally {
+      await page.close();
     }
   };
   try {
-    await runLanes(
-      Array.from({ length: DOCS_AUDIT_PAGES }, () => auditQueuedRoutes),
-      true,
-    );
+    const sampleCounts = await mapConcurrently(DOCS_ROUTES, DOCS_AUDIT_PAGES, auditRouteOnNewPage);
+    const retargetedSamples = sampleCounts.reduce((total, count) => total + count, 0);
     // Without this the checks above pass just as happily when the swap stops
     // running and no guide offers a sample download at all.
     if (!retargetedSamples) throw new Error("no guide sample was retargeted to the serving origin");
@@ -1285,7 +1273,7 @@ const runDocsAccessibilityAudit = async (createContext, baseUrl) => {
 // storage but have independent Web Locks, allowing one profile's boot sweep to
 // delete another's inputs. The embedder omits a general-storage path override:
 // https://github.com/microsoft/playwright/blob/v1.64.1/browser_patches/webkit/embedder/Playwright/mac/AppDelegate.m#L175-L216
-// The docs audit follows hydration on its origin, so the two never overlap on shared storage.
+// The docs audit follows hydration on its origin, so they never overlap on shared storage.
 // Resolves to the accessibility and docs audit results, in that order.
 export const runAuditPhases = async (
   { hydration, accessibility, docs },
@@ -1294,28 +1282,23 @@ export const runAuditPhases = async (
   if (new URL(hydrationBaseUrl).origin === new URL(accessibilityBaseUrl).origin) {
     throw new Error("Parallel audits require separate origins for OPFS isolation");
   }
-  const [accessibilityResult, docsResult] = await runLanes(
-    [
-      () => accessibility(accessibilityBaseUrl),
-      async () => {
-        await hydration(hydrationBaseUrl);
-        return docs(hydrationBaseUrl);
-      },
-    ],
-    true,
-  );
-  return [accessibilityResult, docsResult];
+  return runConcurrently([
+    () => accessibility(accessibilityBaseUrl),
+    async () => {
+      await hydration(hydrationBaseUrl);
+      return docs(hydrationBaseUrl);
+    },
+  ]);
 };
 
-// Lanes in separate browser contexts MUST NOT share an origin; the storage rule above applies.
-// A failed lane never stops the others; the first failure is thrown once every lane has settled.
+const runInOrder = async (lanes) => {
+  for (const lane of lanes) await lane();
+};
+
+// Concurrent WebKit lanes MUST use separate origins, per the storage rule above.
+// A failed lane never stops the others. The first failure is thrown after all settle.
 // Resolves to each lane's result, in lane order.
-export const runLanes = async (lanes, concurrent) => {
-  if (!concurrent) {
-    const values = [];
-    for (const lane of lanes) values.push(await lane());
-    return values;
-  }
+export const runConcurrently = async (lanes) => {
   const results = await Promise.allSettled(lanes.map((lane) => lane()));
   const failure = results.find((result) => result.status === "rejected");
   if (failure) throw failure.reason;
@@ -1780,6 +1763,7 @@ const main = async () => {
     } while (hydrationPort === previewPort || hydrationPort === devPort);
   }
   const concurrentLanes = E2E_SHARD === "all";
+  const runLanes = concurrentLanes ? runConcurrently : runInOrder;
   let journeysPort = previewPort;
   if (concurrentLanes) {
     do {
@@ -1827,8 +1811,8 @@ const main = async () => {
           for (const userDataDir of persistentContextDirs) fs.rmSync(userDataDir, { force: true, recursive: true });
         }
       });
-    // The audits and the link audit plus journeys share nothing but the built bundle, so a full run
-    // overlaps the two lanes. A single shard still runs alone, in this order.
+    // The audit lane and the link-and-journey lane share no browser state. A full run
+    // overlaps them. A single shard runs alone, in this order.
     const auditLane = async () => {
       if (!RUN_AUDITS) return;
       await scenario("accessible navigation", (createContext) =>
@@ -1846,8 +1830,8 @@ const main = async () => {
       );
       if (browserName === "chromium") checkCssCoverage(coverage.flat());
     };
-    // A full run audits links only in Chromium, whose contexts share no storage, so the crawl MAY
-    // share the audits' preview origin.
+    // A full run audits links only in Chromium, whose contexts share no storage.
+    // The crawl MAY use the audits' preview origin.
     const linkLane = async () => {
       if (RUN_LINK_AUDIT) {
         await scenario("links", (createContext) => runLinkAudit(createContext, { devBaseUrl, previewBaseUrl }));
@@ -1897,7 +1881,7 @@ const main = async () => {
       await linkLane();
       await journeyLane();
     };
-    await runLanes([auditLane, siteLane], concurrentLanes);
+    await runLanes([auditLane, siteLane]);
   } catch (error) {
     const serverOutput = [preview.output(), dev.output(), hydration?.output(), journeys?.output()]
       .filter((output) => output?.trim())

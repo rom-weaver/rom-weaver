@@ -20,8 +20,8 @@ import {
   resolveE2EBuild,
   resolveE2EShard,
   runAuditPhases,
+  runConcurrently,
   runE2EScenario,
-  runLanes,
   sha256,
   shouldRejectUnauthorized,
 } from "./run-webapp-e2e.mjs";
@@ -102,19 +102,7 @@ describe("resolveE2EShard", () => {
   });
 });
 
-describe("runLanes", () => {
-  it("runs lanes in order and stops at the first failure when not concurrent", async () => {
-    const started = [];
-    const lane = (name, failure) => async () => {
-      started.push(name);
-      if (failure) throw failure;
-    };
-    const failure = new Error("links failed");
-
-    await assert.rejects(runLanes([lane("audits"), lane("links", failure), lane("journeys")], false), failure);
-    assert.deepEqual(started, ["audits", "links"]);
-  });
-
+describe("runConcurrently", () => {
   it("overlaps the lanes and finishes the others after one fails", { timeout: 2000 }, async () => {
     const finished = [];
     let journeysStarted;
@@ -126,8 +114,8 @@ describe("runLanes", () => {
       auditsFailed = resolve;
     });
     const failure = new Error("audits failed");
-    // The audits lane cannot fail until the last lane is running, so lanes that run one at a time hang here.
-    // The last lane ends only after the failure, so a runner that stops at the first failure misses it.
+    // The audits lane fails only after the last lane starts. Lanes run one at a time would hang here.
+    // The last lane finishes after the failure. A runner that stops at the failure never records it.
     const lanes = [
       async () => {
         await journeysRunning;
@@ -145,7 +133,7 @@ describe("runLanes", () => {
       },
     ];
 
-    await assert.rejects(runLanes(lanes, true), failure);
+    await assert.rejects(runConcurrently(lanes), failure);
     assert.deepEqual(finished, ["links", "journeys"]);
   });
 });
