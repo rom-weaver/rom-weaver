@@ -19,8 +19,7 @@ import { isReleasePullRequest } from "./release-pr.mjs";
 
 const EMPTY_SHA = "0".repeat(40);
 
-function changedPaths({ eventName, baseSha, headSha, quiet = false }) {
-  if (eventName === "workflow_dispatch" || eventName === "push") return null;
+function changedPaths({ baseSha, headSha, quiet = false }) {
   if (!baseSha || baseSha === EMPTY_SHA) return null;
   try {
     return changedPathsBetween(baseSha, headSha);
@@ -34,7 +33,7 @@ function changedPaths({ eventName, baseSha, headSha, quiet = false }) {
 function priorGreenPaths({ eventName, headSha }) {
   const priorSha = process.env.PRIOR_GREEN_SHA;
   if (eventName !== "pull_request" || !priorSha) return null;
-  const paths = changedPaths({ eventName, baseSha: priorSha, headSha, quiet: true });
+  const paths = changedPaths({ baseSha: priorSha, headSha, quiet: true });
   if (paths === null) {
     process.stdout.write(`earlier green run ${priorSha} is unreachable; using the full diff\n`);
     return null;
@@ -52,11 +51,16 @@ runMain(() => {
   const releasePullRequest = isReleasePullRequest(eventName, headRef);
   if (releasePullRequest)
     process.stdout.write(`${headRef} is the release pull request; classifying everything\n`);
-  const paths = changedPaths({
-    eventName,
-    baseSha: process.env.BASE_SHA,
-    headSha: process.env.HEAD_SHA,
-  });
+  // A push has no pull request base, so only the ARM image decision reads its pushed range.
+  const rangePaths =
+    eventName === "workflow_dispatch"
+      ? null
+      : changedPaths({
+          baseSha: process.env.BASE_SHA,
+          headSha: process.env.HEAD_SHA,
+          quiet: eventName === "push",
+        });
+  const paths = eventName === "push" ? null : rangePaths;
   if (paths)
     process.stdout.write(`changed paths:\n${paths.length ? paths.join("\n") : "(none)"}\n`);
   const { fullMatrix, fullNative, nightlyChecks, qualitySignals } = coverageTiers(
@@ -65,8 +69,8 @@ runMain(() => {
   );
   // An earlier green run of this pull request already tested everything that
   // has not changed since, so a job runs only when the pull request diff and the
-  // change since that run both select it. The raw diff above still decides
-  // cache eligibility, which looks at the whole pull request.
+  // change since that run both select it. The raw range still decides
+  // cache eligibility, which looks at the whole pull request or push.
   const whole = classifyChanges(paths ?? [], paths === null, eventName, headRef);
   const sincePaths = paths && priorGreenPaths({ eventName, headSha: process.env.HEAD_SHA });
   const changes = sincePaths
@@ -74,7 +78,7 @@ runMain(() => {
     : whole;
   const output = `${formatChanges(
     eventName === "schedule" ? scheduledSelection(changes) : changes,
-  )}full_matrix=${fullMatrix}\nfull_native=${fullNative}\nnightly_checks=${nightlyChecks}\nquality_signals=${qualitySignals}\ndocker_arm_wasm_cache=${canReuseArmDockerWasm(paths)}\nrelease_pr=${releasePullRequest}\n`;
+  )}full_matrix=${fullMatrix}\nfull_native=${fullNative}\nnightly_checks=${nightlyChecks}\nquality_signals=${qualitySignals}\ndocker_arm_wasm_cache=${canReuseArmDockerWasm(rangePaths)}\nrelease_pr=${releasePullRequest}\n`;
   process.stdout.write(output);
   appendFileSync(process.env.GITHUB_OUTPUT, output);
 });
