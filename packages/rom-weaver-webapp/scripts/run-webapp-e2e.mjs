@@ -1271,39 +1271,6 @@ const runDocsAccessibilityAudit = async (createContext, baseUrl) => {
   }
 };
 
-// Parallel audits MUST use separate origins: Playwright’s macOS profiles share OPFS
-// storage but have independent Web Locks, allowing one profile's boot sweep to
-// delete another's inputs. The embedder omits a general-storage path override:
-// https://github.com/microsoft/playwright/blob/v1.64.1/browser_patches/webkit/embedder/Playwright/mac/AppDelegate.m#L175-L216
-// The docs audit follows hydration on its origin, so they never overlap on shared storage.
-// With overlapDocs, the docs routes run beside the stateful accessibility audit. Without it
-// (macOS WebKit), they wait until that audit and hydration have both ended: overlapped, the
-// stateful audit's guided Apply step timed out after 60 s on 2 of 4 runs of the 3-core runner.
-// Resolves to the accessibility and docs audit results, in that order.
-export const runAuditPhases = async (
-  { hydration, accessibility, docs },
-  { hydrationBaseUrl, accessibilityBaseUrl },
-  { overlapDocs = true } = {},
-) => {
-  if (new URL(hydrationBaseUrl).origin === new URL(accessibilityBaseUrl).origin) {
-    throw new Error("Parallel audits require separate origins for OPFS isolation");
-  }
-  if (!overlapDocs) {
-    const [accessibilityResult] = await runConcurrently([
-      () => accessibility(accessibilityBaseUrl),
-      () => hydration(hydrationBaseUrl),
-    ]);
-    return [accessibilityResult, await docs(hydrationBaseUrl)];
-  }
-  return runConcurrently([
-    () => accessibility(accessibilityBaseUrl),
-    async () => {
-      await hydration(hydrationBaseUrl);
-      return docs(hydrationBaseUrl);
-    },
-  ]);
-};
-
 const runInOrder = async (lanes) => {
   for (const lane of lanes) await lane();
 };
@@ -1762,6 +1729,39 @@ const startServer = (mode, port, corpusDir) => {
     output += chunk;
   });
   return { output: () => output, server };
+};
+
+// Parallel audits MUST use separate origins: Playwright’s macOS profiles share OPFS
+// storage but have independent Web Locks, allowing one profile's boot sweep to
+// delete another's inputs. The embedder omits a general-storage path override:
+// https://github.com/microsoft/playwright/blob/v1.64.1/browser_patches/webkit/embedder/Playwright/mac/AppDelegate.m#L175-L216
+// The docs audit follows hydration on its origin, so they never overlap on shared storage.
+// With overlapDocs, the docs routes run beside the stateful accessibility audit. Without it
+// (macOS WebKit), they wait until that audit and hydration have both ended: overlapped, the
+// stateful audit's guided Apply step timed out after 60 s on 2 of 4 runs of the 3-core runner.
+// Resolves to the accessibility and docs audit results, in that order.
+export const runAuditPhases = async (
+  { hydration, accessibility, docs },
+  { hydrationBaseUrl, accessibilityBaseUrl },
+  { overlapDocs = true } = {},
+) => {
+  if (new URL(hydrationBaseUrl).origin === new URL(accessibilityBaseUrl).origin) {
+    throw new Error("Parallel audits require separate origins for OPFS isolation");
+  }
+  if (!overlapDocs) {
+    const [accessibilityResult] = await runConcurrently([
+      () => accessibility(accessibilityBaseUrl),
+      () => hydration(hydrationBaseUrl),
+    ]);
+    return [accessibilityResult, await docs(hydrationBaseUrl)];
+  }
+  return runConcurrently([
+    () => accessibility(accessibilityBaseUrl),
+    async () => {
+      await hydration(hydrationBaseUrl);
+      return docs(hydrationBaseUrl);
+    },
+  ]);
 };
 
 const main = async () => {

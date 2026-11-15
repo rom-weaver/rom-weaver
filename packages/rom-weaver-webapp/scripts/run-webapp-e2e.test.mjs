@@ -256,6 +256,27 @@ describe("runAuditPhases", () => {
     assert.deepEqual(results, [["app.css"], ["docs.css"]]);
   });
 
+  it("starts docs before the accessibility audit ends by default", async () => {
+    const events = [];
+    const phase = (name, delay, result) => async () => {
+      events.push(`${name}:start`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      events.push(`${name}:end`);
+      return result;
+    };
+
+    await runAuditPhases(
+      {
+        accessibility: phase("accessibility", 20, ["app.css"]),
+        docs: phase("docs", 1, ["docs.css"]),
+        hydration: phase("hydration", 1),
+      },
+      baseUrls,
+    );
+
+    assert.ok(events.indexOf("docs:start") < events.indexOf("accessibility:end"), events.join("\n"));
+  });
+
   it("starts docs only after the accessibility and hydration audits end when docs overlap is off", async () => {
     const events = [];
     const phase = (name, delay, result) => async (baseUrl) => {
