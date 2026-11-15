@@ -20,6 +20,7 @@ import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import durations from "./browser-test-durations.json" with { type: "json" };
 import { generateIconAssets } from "./generated-icon-assets.mjs";
+import { mapConcurrently } from "./map-concurrently.mjs";
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TEST_DIR = path.join(ROOT_DIR, "tests", "browser");
@@ -228,19 +229,6 @@ const summarizeOutput = (output) => {
   return last ? last[1].replace(/\s+/g, " ").trim() : "no test summary";
 };
 
-const runPool = async (files, vitestArgs, concurrency, onResult) => {
-  let cursor = 0;
-  const worker = async () => {
-    while (cursor < files.length) {
-      const file = files[cursor];
-      cursor += 1;
-      const result = await runFile(file, vitestArgs);
-      onResult(file, result);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, worker));
-};
-
 export const main = async () => {
   const { listOnly, shard, rest } = extractRunnerFlags(process.argv.slice(2));
   const { files: requestedFiles, vitestArgs } = partitionRunnerArgs(rest);
@@ -278,7 +266,7 @@ export const main = async () => {
   // test file whichever one runs, so a small file warms it just as well.
   const { warmupFile, pooledFiles } = planFileOrder(files);
   recordResult(warmupFile, await runFile(warmupFile, vitestArgs));
-  await runPool(pooledFiles, vitestArgs, concurrency, recordResult);
+  await mapConcurrently(pooledFiles, concurrency, async (file) => recordResult(file, await runFile(file, vitestArgs)));
 
   // Retry failures once, serially with no neighbours, to absorb contention flakes.
   const initialFailures = files.filter((file) => results.get(file)?.code !== 0);
