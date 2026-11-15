@@ -8,6 +8,7 @@ import {
 } from "../../../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "../../functions/assets/content-types.js";
 import { MARKDOWN_ROUTES } from "../../functions/markdown-routes.js";
+import { mapConcurrently } from "../map-concurrently.mjs";
 import { rootDir } from "./paths.mjs";
 
 // Every webapp bundle carries quality-11 brotli sidecars for immutable assets
@@ -78,20 +79,18 @@ export const writeBrotliSidecars = () => {
         // requests them, so a q11 pass and a _routes.json include each would
         // buy nothing and eat the include budget.
         .filter((name) => !(name.endsWith(".wasm") || name.endsWith(".br") || name.endsWith(".map")));
-      const compressed = Array.from({ length: candidates.length });
-      let nextIndex = 0;
-      const worker = async () => {
-        while (nextIndex < candidates.length) {
-          const index = nextIndex++;
-          const source = await fs.promises.readFile(path.join(assetsDir, candidates[index]));
+      const compressed = await mapConcurrently(
+        candidates,
+        Math.max(1, Math.min(os.availableParallelism(), 8)),
+        async (name) => {
+          const source = await fs.promises.readFile(path.join(assetsDir, name));
           const result = await brotliCompressBufferCached(source, {
             cacheDir: DEFAULT_BROTLI_CACHE_DIR,
             quality: 11,
           });
-          compressed[index] = { compressed: result.compressed, sourceSize: source.byteLength };
-        }
-      };
-      await Promise.all(Array.from({ length: Math.max(1, Math.min(os.availableParallelism(), 8)) }, worker));
+          return { compressed: result.compressed, sourceSize: source.byteLength };
+        },
+      );
       for (const [index, name] of candidates.entries()) {
         const assetPath = path.join(assetsDir, name);
         const { compressed: sidecar, sourceSize } = compressed[index];

@@ -20,6 +20,7 @@ import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import durations from "./browser-test-durations.json" with { type: "json" };
 import { generateIconAssets } from "./generated-icon-assets.mjs";
+import { mapConcurrently } from "./map-concurrently.mjs";
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TEST_DIR = path.join(ROOT_DIR, "tests", "browser");
@@ -228,18 +229,8 @@ const summarizeOutput = (output) => {
   return last ? last[1].replace(/\s+/g, " ").trim() : "no test summary";
 };
 
-const runPool = async (files, vitestArgs, concurrency, onResult) => {
-  let cursor = 0;
-  const worker = async () => {
-    while (cursor < files.length) {
-      const file = files[cursor];
-      cursor += 1;
-      const result = await runFile(file, vitestArgs);
-      onResult(file, result);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, worker));
-};
+const runPool = (files, vitestArgs, concurrency, onResult) =>
+  mapConcurrently(files, concurrency, async (file) => onResult(file, await runFile(file, vitestArgs)));
 
 export const main = async () => {
   const { listOnly, shard, rest } = extractRunnerFlags(process.argv.slice(2));

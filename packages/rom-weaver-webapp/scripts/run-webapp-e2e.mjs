@@ -17,6 +17,7 @@ import { buildStoredZip } from "../tests/wasm/stored-zip-fixture.mjs";
 import { chooseFilesByKeyboard, runAccessibleNavigationAudit, tabTo } from "./accessible-navigation-audit.mjs";
 import { summarizeCssCoverage } from "./css-coverage.mjs";
 import { createGuidedLoadingAudit } from "./guided-loading-audit.mjs";
+import { mapConcurrently } from "./map-concurrently.mjs";
 import {
   runChecksumJourney,
   runCompressExtractRoundtrip,
@@ -552,18 +553,16 @@ const collectRouteLinks = async (page, baseUrl, route) => {
   );
 };
 
-// Routes are visited by a small pool of pages; results stay in route order so the report is deterministic.
+// Results keep route order so the link list is deterministic.
 const collectAuditedLinks = async (context, baseUrl) => {
-  const linksByRoute = Array.from({ length: LINK_AUDIT_ROUTES.length });
-  let nextRoute = 0;
-  const worker = async () => {
+  const linksByRoute = await mapConcurrently(LINK_AUDIT_ROUTES, LINK_AUDIT_PAGE_CONCURRENCY, async (route) => {
     const page = await context.newPage();
-    while (nextRoute < LINK_AUDIT_ROUTES.length) {
-      const index = nextRoute++;
-      linksByRoute[index] = await collectRouteLinks(page, baseUrl, LINK_AUDIT_ROUTES[index]);
+    try {
+      return await collectRouteLinks(page, baseUrl, route);
+    } finally {
+      await page.close();
     }
-  };
-  await Promise.all(Array.from({ length: Math.min(LINK_AUDIT_PAGE_CONCURRENCY, LINK_AUDIT_ROUTES.length) }, worker));
+  });
   return linksByRoute.flat();
 };
 
