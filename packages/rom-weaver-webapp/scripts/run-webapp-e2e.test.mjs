@@ -114,8 +114,8 @@ describe("runConcurrently", () => {
       auditsFailed = resolve;
     });
     const failure = new Error("audits failed");
-    // The audits lane fails only after the last lane starts. Lanes run one at a time would hang here.
-    // The last lane finishes after the failure. A runner that stops at the failure never records it.
+    // The audits lane fails only after the last lane starts, so running lanes one at a time hangs.
+    // The last lane finishes after the failure, so stopping at the first failure never records its finish.
     const lanes = [
       async () => {
         await journeysRunning;

@@ -146,7 +146,7 @@ const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
 const RUN_LINK_AUDIT = (E2E_SHARD === "all" && browserName === "chromium") || E2E_SHARD === "links";
 const RUN_RAW_JOURNEY = E2E_SHARD === "all" || E2E_SHARD === "journeys" || E2E_SHARD === "journeys-raw";
 const RUN_ARCHIVE_JOURNEY = E2E_SHARD === "all" || E2E_SHARD === "journeys" || E2E_SHARD === "journeys-archive";
-// On the macOS WebKit runner, the stateful audit timed out with the journeys beside it.
+// With the lanes overlapped, the stateful audit timed out once on the macOS WebKit runner.
 const RUN_LANES_CONCURRENTLY = E2E_SHARD === "all" && browserName === "chromium";
 const browserType = { chromium, webkit }[browserName];
 if (!browserType) throw new Error(`Unsupported ROM_WEAVER_BROWSER value: ${browserName}`);
@@ -1298,8 +1298,7 @@ const runInOrder = async (lanes) => {
 };
 
 // Concurrent WebKit lanes MUST use separate origins, per the storage rule above.
-// A failed lane never stops the others. The first failure is thrown after all settle.
-// Resolves to each lane's result, in lane order.
+// All lanes settle before the first failure is thrown, and results keep lane order.
 export const runConcurrently = async (lanes) => {
   const results = await Promise.allSettled(lanes.map((lane) => lane()));
   const failure = results.find((result) => result.status === "rejected");
@@ -1812,8 +1811,8 @@ const main = async () => {
           for (const userDataDir of persistentContextDirs) fs.rmSync(userDataDir, { force: true, recursive: true });
         }
       });
-    // The audit lane and the link-and-journey lane share no browser state. A full Chromium
-    // run overlaps them. Otherwise they run in this order.
+    // Chromium contexts share no browser state, so a full Chromium run overlaps the lanes.
+    // Otherwise they run in order.
     const auditLane = async () => {
       if (!RUN_AUDITS) return;
       await scenario("accessible navigation", (createContext) =>
