@@ -26,6 +26,7 @@ use crate::shared::labels::{byuu_metadata_report, byuu_parse_report};
 use crate::shared::threading::{
     PARALLEL_WRITE_CHUNK_BYTES, parallel_write_batch_bytes, run_with_optional_pool,
 };
+use crate::varint::VARINT_MAX_LEN;
 #[cfg(test)]
 use crate::varint::push_varint;
 
@@ -735,7 +736,6 @@ impl<'a> BpsApplyProgress<'a> {
             stage: "apply".to_string(),
             label: format!("applying patch using {}", self.format_name),
             percent: Some(bucket as f32),
-            elapsed_ms: None,
             status: OperationStatus::Running,
             ..ProgressEvent::from_thread_execution(None)
         });
@@ -1198,9 +1198,7 @@ impl<'a> BpsCreateProgress<'a> {
             format: Some(self.format_name.to_string()),
             stage: "create".to_string(),
             label: label.to_string(),
-            details: None,
             percent: Some(percent),
-            elapsed_ms: None,
             status: OperationStatus::Running,
             ..ProgressEvent::from_thread_execution(None)
         });
@@ -1409,12 +1407,8 @@ impl<'a> BpsCombinedSuffixMatcher<'a> {
 
     fn match_at(&self, position: usize, output_offset: usize) -> BpsCreateMatch {
         let target_remaining = self.sorted_target_len - output_offset;
-        let (mut mode, offset, candidate_remaining) = if position < self.sorted_target_len {
-            (
-                BpsCreateMode::TargetCopy,
-                position,
-                self.sorted_target_len - position,
-            )
+        let (mut mode, offset) = if position < self.sorted_target_len {
+            (BpsCreateMode::TargetCopy, position)
         } else {
             let source_offset = position - self.sorted_target_len;
             let mode = if source_offset == output_offset {
@@ -1422,13 +1416,14 @@ impl<'a> BpsCombinedSuffixMatcher<'a> {
             } else {
                 BpsCreateMode::SourceCopy
             };
-            (mode, source_offset, self.data.source_len - source_offset)
+            (mode, source_offset)
         };
+        // The scan also stops at the joined buffer's end, which is the source's end.
         let len = common_prefix_len_limited(
             self.joined.as_slice(),
             output_offset,
             position,
-            target_remaining.min(candidate_remaining),
+            target_remaining,
         );
         if len == 0 {
             mode = BpsCreateMode::TargetRead;
@@ -1483,10 +1478,6 @@ fn bps_create_match_is_worth(
     target_relative_offset: i128,
     pending_target_read_len: usize,
 ) -> Result<bool> {
-    if mode == BpsCreateMode::TargetRead || len == 0 {
-        return Ok(false);
-    }
-
     match mode {
         BpsCreateMode::SourceRead if offset == output_offset => {
             let threshold = 1usize
@@ -1533,14 +1524,15 @@ fn bps_create_copy_match_is_worth(
     Ok(len >= threshold)
 }
 
+// Each continuation adds one, so every step shifts by 7 and subtracts 1.
 fn bps_varint_len(mut data: u64) -> usize {
-    let mut len = 1usize;
-    while data >= 128 {
-        data >>= 7;
-        data -= 1;
-        len += 1;
+    for len in 1..VARINT_MAX_LEN {
+        if data < 128 {
+            return len;
+        }
+        data = (data >> 7) - 1;
     }
-    len
+    VARINT_MAX_LEN
 }
 
 fn bps_create_suffix_index_mode(source_len: u64, target_len: u64) -> Result<BpsSuffixIndexMode> {
@@ -2062,16 +2054,12 @@ fn copy_target_range(
     let mut buffer = [0u8; COPY_BUFFER_SIZE];
 
     if period >= COPY_BUFFER_SIZE as u64 {
-        let mut remaining = length;
-        let mut read_offset = start;
-        while remaining > 0 {
-            let chunk = remaining.min(COPY_BUFFER_SIZE as u64) as usize;
-            output.seek(SeekFrom::Start(read_offset))?;
+        for copied in (0..length).step_by(COPY_BUFFER_SIZE) {
+            let chunk = (length - copied).min(COPY_BUFFER_SIZE as u64) as usize;
+            output.seek(SeekFrom::Start(start + copied))?;
             output.read_exact(&mut buffer[..chunk])?;
             output.seek(SeekFrom::Start(*output_offset))?;
             output.write_all(&buffer[..chunk])?;
-            remaining -= chunk as u64;
-            read_offset += chunk as u64;
             *output_offset += chunk as u64;
             progress.report(*output_offset);
         }

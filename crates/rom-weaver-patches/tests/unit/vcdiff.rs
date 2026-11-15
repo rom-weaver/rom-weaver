@@ -9,6 +9,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use oxidelta::compress::secondary::SecondaryCompression;
 use rom_weaver_core::{CancellationToken, NoopProgressSink, PatchChecksumValidation, ThreadBudget};
 
 static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -4453,4 +4454,41 @@ fn app_headers_without_a_full_armor_digest_stay_opaque() {
             b"hello new WORLD"
         );
     }
+}
+
+#[test]
+fn native_compress_options_follow_the_descriptor() {
+    let xdelta = create_native_compress_options(&XDELTA, true);
+    assert_eq!(xdelta.level, 3);
+    assert!(xdelta.checksum);
+    assert!(matches!(xdelta.secondary, SecondaryCompression::None));
+    assert!(!create_native_compress_options(&XDELTA, false).checksum);
+
+    let vcdiff = create_native_compress_options(&VCDIFF, true);
+    assert_eq!(vcdiff.level, 6);
+    assert!(!vcdiff.checksum);
+}
+
+#[test]
+fn create_progress_events_describe_a_running_patch_create() {
+    let sink = Arc::new(rom_weaver_core::RecordingProgressSink::default());
+    let context = OperationContext::new_with_private_temp_root(
+        ThreadBudget::Fixed(1),
+        &std::env::temp_dir(),
+        "rom-weaver-vcdiff-tests-context",
+        sink.clone(),
+        CancellationToken::new(),
+    );
+
+    CreateProgress::new(&context, "xdelta").emit_overall(50.0);
+
+    let events = sink.snapshot();
+    assert_eq!(events.len(), 1);
+    let event = &events[0];
+    assert_eq!(event.command, "patch-create");
+    assert_eq!(event.family, rom_weaver_core::OperationFamily::Patch);
+    assert_eq!(event.format.as_deref(), Some("xdelta"));
+    assert_eq!(event.stage, "create");
+    assert_eq!(event.label, "creating xdelta patch");
+    assert_eq!(event.status, rom_weaver_core::OperationStatus::Running);
 }

@@ -1415,7 +1415,6 @@ pub(super) fn create_native_compress_options(
     CompressOptions {
         level,
         checksum: is_xdelta_descriptor(descriptor) && include_checksums,
-        secondary: SecondaryCompression::None,
         ..CompressOptions::default()
     }
 }
@@ -1473,9 +1472,7 @@ impl<'a> CreateProgress<'a> {
             format: Some(self.format.to_string()),
             stage: "create".to_string(),
             label: format!("creating {} patch", self.format),
-            details: None,
             percent: Some(percent as f32),
-            elapsed_ms: None,
             status: OperationStatus::Running,
             ..ProgressEvent::from_thread_execution(Some(&*execution))
         });

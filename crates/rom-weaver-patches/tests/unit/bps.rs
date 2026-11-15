@@ -13,16 +13,17 @@ use rom_weaver_core::{
 use super::{
     BPS_CREATE_MAX_COMBINED_INPUT_BYTES, BPS_CREATE_MEMORY_LIMIT_BYTES, BPS_MAGIC,
     BPS_PARALLEL_WRITE_CHUNK_SIZE, BpsAction, BpsApplyProgress, BpsCombinedSuffixMatcher,
-    BpsCreateData, BpsCreateMode, BpsCreateProgress, BpsPatchHandler, BpsSuffixIndexMode,
-    ParsedBpsPatch, PreparedBpsWrite, adjust_relative_offset, apply_patch_actions,
-    apply_patch_actions_in_memory, apply_prepared_bps_writes, bps_create_copy_match_is_worth,
-    bps_create_estimated_low_memory_suffix_bytes, bps_create_estimated_suffix_memory_bytes,
-    bps_create_inputs_fit, bps_create_match_is_worth, bps_create_suffix_index_mode,
-    bps_create_usize_len, bps_parallel_batch_end, collect_parallel_bps_write_plans,
-    common_prefix_len_limited, copy_target_range, crc32_bytes, encode_action_header,
-    encode_signed_offset, initial_bps_sorted_target_len, next_bps_sorted_target_len,
-    parse_bps_bytes, parse_bps_bytes_with_checksum_validation, push_varint, read_bps_create_data,
-    repeated_byte_run_len, try_reserve_exact, validate_output_file,
+    BpsCreateData, BpsCreateMatch, BpsCreateMode, BpsCreateProgress, BpsPatchHandler,
+    BpsSuffixIndexMode, ParsedBpsPatch, PreparedBpsWrite, adjust_relative_offset,
+    apply_patch_actions, apply_patch_actions_in_memory, apply_prepared_bps_writes,
+    bps_create_copy_match_is_worth, bps_create_estimated_low_memory_suffix_bytes,
+    bps_create_estimated_suffix_memory_bytes, bps_create_inputs_fit, bps_create_match_is_worth,
+    bps_create_suffix_index_mode, bps_create_usize_len, bps_parallel_batch_end, bps_varint_len,
+    collect_parallel_bps_write_plans, common_prefix_len_limited, copy_target_range, crc32_bytes,
+    encode_action_header, encode_signed_offset, initial_bps_sorted_target_len,
+    next_bps_sorted_target_len, parse_bps_bytes, parse_bps_bytes_with_checksum_validation,
+    push_varint, read_bps_create_data, repeated_byte_run_len, try_reserve_exact,
+    validate_output_file,
 };
 use crate::{
     BPS,
@@ -764,6 +765,12 @@ fn create_reports_progress_during_suffix_indexing_and_output() {
 
     let events = progress.snapshot();
     assert!(events.iter().any(|event| event.command == "patch-create"));
+    for event in &events {
+        assert_eq!(event.family, OperationFamily::Patch);
+        assert_eq!(event.format.as_deref(), Some("BPS"));
+        assert_eq!(event.stage, "create");
+        assert_eq!(event.status, OperationStatus::Running);
+    }
     assert!(
         events
             .iter()
@@ -1887,6 +1894,30 @@ fn create_progress_reports_fixed_percentages_for_a_zero_length_target() {
 }
 
 #[test]
+fn create_progress_scales_indexing_and_output_into_their_bands() {
+    let temp = TestDir::new();
+    let progress_sink = Arc::new(RecordingProgressSink::default());
+    let context = OperationContext::new(
+        ThreadBudget::Fixed(1),
+        temp.child("progress-temp"),
+        progress_sink.clone(),
+        CancellationToken::new(),
+    );
+
+    // Indexing fills 5% to 40%; output writing fills 40% to 100%.
+    let mut progress = BpsCreateProgress::new(&context, "BPS", 100);
+    progress.report_indexed(50);
+    progress.report_output(50);
+
+    let percents: Vec<_> = progress_sink
+        .snapshot()
+        .iter()
+        .map(|event| event.percent)
+        .collect();
+    assert_eq!(percents, [Some(22.5), Some(70.0)]);
+}
+
+#[test]
 fn parallel_write_plans_reject_actions_that_leave_the_declared_ranges() {
     let source_read = parsed_patch(4, 8, vec![BpsAction::SourceRead { length: 8 }]);
     let Err(error) = collect_parallel_bps_write_plans(&source_read) else {
@@ -2335,6 +2366,137 @@ fn match_scoring_declines_target_reads_and_displaced_source_reads() {
     assert!(
         bps_create_match_is_worth(BpsCreateMode::SourceRead, 4, 0, 0, 0, 0, 0)
             .expect("an aligned source read is worth it")
+    );
+}
+
+#[test]
+fn match_scoring_thresholds_count_header_offset_and_pending_target_read() {
+    // (mode, len, offset, output_offset, pending target-read bytes, expected)
+    let cases = [
+        // An aligned SourceRead costs one header byte. It is worth it from two bytes, or three
+        // after a pending target read.
+        (BpsCreateMode::SourceRead, 1, 0, 0, 0, false),
+        (BpsCreateMode::SourceRead, 2, 0, 0, 0, true),
+        (BpsCreateMode::SourceRead, 2, 0, 0, 1, false),
+        (BpsCreateMode::SourceRead, 3, 0, 0, 1, true),
+        // A zero-delta copy costs a header and a one-byte offset. It is worth it from three
+        // bytes, or four after a pending target read.
+        (BpsCreateMode::SourceCopy, 2, 5, 0, 0, false),
+        (BpsCreateMode::SourceCopy, 3, 5, 0, 0, true),
+        (BpsCreateMode::SourceCopy, 3, 5, 0, 1, false),
+        (BpsCreateMode::SourceCopy, 4, 5, 0, 1, true),
+        (BpsCreateMode::TargetCopy, 2, 5, 0, 0, false),
+        (BpsCreateMode::TargetCopy, 3, 5, 0, 0, true),
+        (BpsCreateMode::TargetCopy, 3, 5, 0, 1, false),
+        (BpsCreateMode::TargetCopy, 4, 5, 0, 1, true),
+        // A delta of 64 encodes as 128, which needs a two-byte offset.
+        (BpsCreateMode::SourceCopy, 3, 69, 0, 0, false),
+        (BpsCreateMode::SourceCopy, 4, 69, 0, 0, true),
+    ];
+    for (mode, len, offset, output_offset, pending, expected) in cases {
+        // Both relative offsets are 5. Offset 5 is a zero delta, and 69 is a delta of 64.
+        let worth = bps_create_match_is_worth(mode, len, offset, output_offset, 5, 5, pending)
+            .expect("score");
+        assert_eq!(
+            worth, expected,
+            "{mode:?} len {len} offset {offset} pending {pending}"
+        );
+    }
+}
+
+#[test]
+fn varint_lengths_follow_the_bps_encoding_boundaries() {
+    // Each extra byte covers 128 times as many values.
+    let cases = [
+        (0u64, 1usize),
+        (127, 1),
+        (128, 2),
+        (16_511, 2),
+        (16_512, 3),
+        (2_113_663, 3),
+        (2_113_664, 4),
+        (u64::MAX, 10),
+    ];
+    for (value, expected) in cases {
+        assert_eq!(bps_varint_len(value), expected, "varint length of {value}");
+    }
+}
+
+fn matcher_fixture(target: &[u8], source: &[u8]) -> BpsCreateData {
+    let mut bytes = target.to_vec();
+    bytes.extend_from_slice(source);
+    BpsCreateData {
+        bytes,
+        target_len: target.len(),
+        source_len: source.len(),
+    }
+}
+
+#[test]
+fn matcher_accepts_only_written_target_or_source_positions() {
+    let temp = TestDir::new();
+    let data = matcher_fixture(b"abcdefgh", b"wxyz");
+    let context = test_context_with_threads(&temp, 1);
+    let mut progress = BpsCreateProgress::new(&context, "BPS", 8);
+    let matcher = BpsCombinedSuffixMatcher::new(
+        &data,
+        BpsSuffixIndexMode::FastReverse,
+        &context,
+        &mut progress,
+    )
+    .expect("matcher");
+
+    // Target positions are legal only before the write offset. Joined positions 8 through 11
+    // are the source.
+    let legal = |position| matcher.is_legal_match_position(position, 3);
+    assert!(legal(2), "written target");
+    assert!(!legal(3), "the write offset is not written yet");
+    assert!(!legal(7), "unwritten target");
+    assert!(legal(8), "first source byte");
+    assert!(legal(11), "last source byte");
+    assert!(!legal(12), "past the source");
+}
+
+#[test]
+fn matcher_bounds_each_match_by_the_bytes_that_remain() {
+    let temp = TestDir::new();
+    let data = matcher_fixture(&[b'a'; 8], &[b'a'; 8]);
+    let context = test_context_with_threads(&temp, 1);
+    let mut progress = BpsCreateProgress::new(&context, "BPS", 8);
+    let matcher = BpsCombinedSuffixMatcher::new(
+        &data,
+        BpsSuffixIndexMode::FastReverse,
+        &context,
+        &mut progress,
+    )
+    .expect("matcher");
+
+    // Only two target bytes remain at write offset 6, though the run continues past them.
+    assert_eq!(
+        matcher.match_at(2, 6),
+        BpsCreateMatch {
+            mode: BpsCreateMode::TargetCopy,
+            offset: 2,
+            len: 2
+        }
+    );
+    // The first joined position past the target is source offset 0.
+    assert_eq!(
+        matcher.match_at(8, 2),
+        BpsCreateMatch {
+            mode: BpsCreateMode::SourceCopy,
+            offset: 0,
+            len: 6
+        }
+    );
+    // A source match at the write offset needs no relative offset.
+    assert_eq!(
+        matcher.match_at(8, 0),
+        BpsCreateMatch {
+            mode: BpsCreateMode::SourceRead,
+            offset: 0,
+            len: 8
+        }
     );
 }
 
