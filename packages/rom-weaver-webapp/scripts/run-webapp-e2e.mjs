@@ -140,10 +140,11 @@ export const assertPrebuiltWebappDist = (readFile) => {
 };
 const E2E_SHARD = resolveE2EShard(process.argv.slice(2));
 const RUN_AUDITS = E2E_SHARD === "all" || E2E_SHARD === "a11y";
-const RUN_LINK_AUDIT = E2E_SHARD === "all" || E2E_SHARD === "links";
+const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
+// Links do not depend on the browser, so the full run audits them in Chromium only.
+const RUN_LINK_AUDIT = (E2E_SHARD === "all" && browserName === "chromium") || E2E_SHARD === "links";
 const RUN_RAW_JOURNEY = E2E_SHARD === "all" || E2E_SHARD === "journeys" || E2E_SHARD === "journeys-raw";
 const RUN_ARCHIVE_JOURNEY = E2E_SHARD === "all" || E2E_SHARD === "journeys" || E2E_SHARD === "journeys-archive";
-const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
 const browserType = { chromium, webkit }[browserName];
 if (!browserType) throw new Error(`Unsupported ROM_WEAVER_BROWSER value: ${browserName}`);
 const systemChromeLaunchOptions =
