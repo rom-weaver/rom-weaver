@@ -1421,7 +1421,7 @@ impl<'a> BpsCombinedSuffixMatcher<'a> {
             };
             (mode, source_offset)
         };
-        // The scan also stops at the end of the joined buffer, which ends with the source.
+        // The scan also stops at the joined buffer's end, which is the source's end.
         let len = common_prefix_len_limited(
             self.joined.as_slice(),
             output_offset,

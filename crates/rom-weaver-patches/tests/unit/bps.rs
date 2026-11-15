@@ -2376,7 +2376,7 @@ fn match_scoring_thresholds_count_header_offset_and_pending_target_read() {
 
 #[test]
 fn varint_lengths_follow_the_bps_encoding_boundaries() {
-    // Each extra byte covers 128 times as many values. Two bytes end at 16511, three at 2113663.
+    // Each extra byte covers 128 times as many values.
     let cases = [
         (0u64, 1usize),
         (127, 1),
