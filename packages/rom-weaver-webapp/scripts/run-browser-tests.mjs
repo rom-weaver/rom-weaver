@@ -229,9 +229,6 @@ const summarizeOutput = (output) => {
   return last ? last[1].replace(/\s+/g, " ").trim() : "no test summary";
 };
 
-const runPool = (files, vitestArgs, concurrency, onResult) =>
-  mapConcurrently(files, concurrency, async (file) => onResult(file, await runFile(file, vitestArgs)));
-
 export const main = async () => {
   const { listOnly, shard, rest } = extractRunnerFlags(process.argv.slice(2));
   const { files: requestedFiles, vitestArgs } = partitionRunnerArgs(rest);
@@ -269,7 +266,7 @@ export const main = async () => {
   // test file whichever one runs, so a small file warms it just as well.
   const { warmupFile, pooledFiles } = planFileOrder(files);
   recordResult(warmupFile, await runFile(warmupFile, vitestArgs));
-  await runPool(pooledFiles, vitestArgs, concurrency, recordResult);
+  await mapConcurrently(pooledFiles, concurrency, async (file) => recordResult(file, await runFile(file, vitestArgs)));
 
   // Retry failures once, serially with no neighbours, to absorb contention flakes.
   const initialFailures = files.filter((file) => results.get(file)?.code !== 0);

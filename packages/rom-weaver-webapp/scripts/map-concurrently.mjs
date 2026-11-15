@@ -1,4 +1,4 @@
-// Runs `task(item, index)` for every item with at most `limit` in flight and returns the results in item order.
+// Runs `task(item, index)` on each item, at most `limit` at once. Results keep item order.
 export const mapConcurrently = async (items, limit, task) => {
   const results = Array.from({ length: items.length });
   let nextIndex = 0;
