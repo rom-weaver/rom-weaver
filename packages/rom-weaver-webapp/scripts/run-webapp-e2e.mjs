@@ -494,61 +494,84 @@ export const collectInternalLinkTargets = (links, baseUrl) => {
   return [...targets.values()];
 };
 
-export const runLinkAudit = async (createContext, baseUrl) => {
-  for (const [legacy, canonical] of [
-    ["apply-patches", "apply-rom-patches"],
-    ["weave-patches", "weave-rom-patches"],
-    ["save-editor", "rom-save-editor"],
-    ["checksum", "file-checksum"],
-    ["compress", "compress-files"],
-    ["extract", "extract-files"],
-    ["test-rom", "play-rom"],
-  ]) {
-    for (const suffix of ["", "/", ".html", "/index.html", ...(legacy === "save-editor" ? [] : [".md"])]) {
-      const source = new URL(`${legacy}${suffix}?guide=apply&weave=https%3A%2F%2Fexample.com%2Fa.zip`, baseUrl);
-      const expected = new URL(`${canonical}${suffix === ".md" ? ".md" : ""}${source.search}`, baseUrl);
-      await new Promise((resolve, reject) => {
-        const request = https.get(source, { rejectUnauthorized: shouldRejectUnauthorized(source) }, (response) => {
-          response.resume();
-          if (response.statusCode !== 301 || new URL(response.headers.location ?? "", source).href !== expected.href) {
-            reject(
-              new Error(
-                `${source.href}: expected 301 to ${expected.href}, got ${response.statusCode} ${response.headers.location}`,
-              ),
-            );
-          } else resolve();
-        });
-        request.on("error", reject);
-      });
-    }
-  }
-  const context = await createContext({ ignoreHTTPSErrors: true });
-  const page = await context.newPage();
-  const links = [];
-  try {
-    for (const route of LINK_AUDIT_ROUTES) {
-      const pageUrl = new URL(route, baseUrl).href;
-      const response = await page.goto(pageUrl, { waitUntil: "domcontentloaded" });
-      const status = response?.status() || 0;
-      if (status < 200 || status >= 400) throw new Error(`${route || "/"} returned HTTP ${status}`);
-      if (route === "docs" || route.startsWith("docs/")) {
-        await page.locator(".docs-article h1").waitFor({ state: "attached" });
-      } else {
-        await page.locator("#webapp-root").waitFor({ state: "attached" });
-      }
-      await page.locator("#webapp-root:not([aria-busy])").waitFor({ state: "attached" });
-      links.push(
-        ...(await page.evaluate(
-          (source) =>
-            [...document.querySelectorAll("a[href]")].map((element) => ({
-              href: element.href,
-              source,
-            })),
-          route,
-        )),
-      );
-    }
+const LEGACY_ROUTE_REDIRECTS = [
+  ["apply-patches", "apply-rom-patches"],
+  ["weave-patches", "weave-rom-patches"],
+  ["save-editor", "rom-save-editor"],
+  ["checksum", "file-checksum"],
+  ["compress", "compress-files"],
+  ["extract", "extract-files"],
+  ["test-rom", "play-rom"],
+];
+const LINK_AUDIT_PAGE_CONCURRENCY = 6;
 
+const expectLegacyRedirect = (source, expected) =>
+  new Promise((resolve, reject) => {
+    const request = https.get(source, { rejectUnauthorized: shouldRejectUnauthorized(source) }, (response) => {
+      response.resume();
+      if (response.statusCode !== 301 || new URL(response.headers.location ?? "", source).href !== expected.href) {
+        reject(
+          new Error(
+            `${source.href}: expected 301 to ${expected.href}, got ${response.statusCode} ${response.headers.location}`,
+          ),
+        );
+      } else resolve();
+    });
+    request.on("error", reject);
+  });
+
+const checkLegacyRedirects = (baseUrl) =>
+  Promise.all(
+    LEGACY_ROUTE_REDIRECTS.flatMap(([legacy, canonical]) =>
+      ["", "/", ".html", "/index.html", ...(legacy === "save-editor" ? [] : [".md"])].map((suffix) => {
+        const source = new URL(`${legacy}${suffix}?guide=apply&weave=https%3A%2F%2Fexample.com%2Fa.zip`, baseUrl);
+        const expected = new URL(`${canonical}${suffix === ".md" ? ".md" : ""}${source.search}`, baseUrl);
+        return expectLegacyRedirect(source, expected);
+      }),
+    ),
+  );
+
+const collectRouteLinks = async (page, baseUrl, route) => {
+  const pageUrl = new URL(route, baseUrl).href;
+  const response = await page.goto(pageUrl, { waitUntil: "domcontentloaded" });
+  const status = response?.status() || 0;
+  if (status < 200 || status >= 400) throw new Error(`${route || "/"} returned HTTP ${status}`);
+  if (route === "docs" || route.startsWith("docs/")) {
+    await page.locator(".docs-article h1").waitFor({ state: "attached" });
+  } else {
+    await page.locator("#webapp-root").waitFor({ state: "attached" });
+  }
+  await page.locator("#webapp-root:not([aria-busy])").waitFor({ state: "attached" });
+  return page.evaluate(
+    (source) =>
+      [...document.querySelectorAll("a[href]")].map((element) => ({
+        href: element.href,
+        source,
+      })),
+    route,
+  );
+};
+
+// Routes are visited by a small pool of pages; results stay in route order so the report is deterministic.
+const collectAuditedLinks = async (context, baseUrl) => {
+  const linksByRoute = Array.from({ length: LINK_AUDIT_ROUTES.length });
+  let nextRoute = 0;
+  const worker = async () => {
+    const page = await context.newPage();
+    while (nextRoute < LINK_AUDIT_ROUTES.length) {
+      const index = nextRoute++;
+      linksByRoute[index] = await collectRouteLinks(page, baseUrl, LINK_AUDIT_ROUTES[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(LINK_AUDIT_PAGE_CONCURRENCY, LINK_AUDIT_ROUTES.length) }, worker));
+  return linksByRoute.flat();
+};
+
+export const runLinkAudit = async (createContext, baseUrl) => {
+  await checkLegacyRedirects(baseUrl);
+  const context = await createContext({ ignoreHTTPSErrors: true });
+  try {
+    const links = await collectAuditedLinks(context, baseUrl);
     const targets = collectInternalLinkTargets(links, baseUrl);
     if (!targets.length) throw new Error("link audit found no same-origin links");
     const pagePaths = new Set(
