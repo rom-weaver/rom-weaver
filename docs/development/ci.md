@@ -256,7 +256,7 @@ security ── advisories (warn only, always green)
 
     A full Chromium run overlaps two lanes. The first runs the audits. The second runs the link audit, then the journeys on their own production preview origin. WebKit runs the lanes in order.
 
-    In both jobs, within the audits, the stateful accessibility page runs on one origin. Hydration and then the docs routes run on another. The docs routes share no state, so up to three load at once.
+    In both jobs, within the audits, the stateful accessibility page runs on one origin. Hydration and then the docs routes run on another. The docs routes share no state, so up to three load at once. On Chromium the docs routes run beside the stateful page. On WebKit they wait until it and hydration finish: with the docs pages loading beside it on the 3-core macOS runner, the stateful page timed out waiting 60 s at its guided Apply step on 2 of 4 runs.
 
     Playwright’s macOS profiles share OPFS storage but have separate Web Locks. Separate origins keep one audit’s boot cleanup from deleting another audit’s weave inputs. The stateful accessibility page stays whole.
 

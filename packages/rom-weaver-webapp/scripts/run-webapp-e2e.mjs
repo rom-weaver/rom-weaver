@@ -1276,13 +1276,24 @@ const runDocsAccessibilityAudit = async (createContext, baseUrl) => {
 // delete another's inputs. The embedder omits a general-storage path override:
 // https://github.com/microsoft/playwright/blob/v1.64.1/browser_patches/webkit/embedder/Playwright/mac/AppDelegate.m#L175-L216
 // The docs audit follows hydration on its origin, so they never overlap on shared storage.
+// With overlapDocs, the docs routes run beside the stateful accessibility audit. Without it
+// (macOS WebKit), they wait until that audit and hydration have both ended: overlapped, the
+// stateful audit's guided Apply step timed out after 60 s on 2 of 4 runs of the 3-core runner.
 // Resolves to the accessibility and docs audit results, in that order.
 export const runAuditPhases = async (
   { hydration, accessibility, docs },
   { hydrationBaseUrl, accessibilityBaseUrl },
+  { overlapDocs = true } = {},
 ) => {
   if (new URL(hydrationBaseUrl).origin === new URL(accessibilityBaseUrl).origin) {
     throw new Error("Parallel audits require separate origins for OPFS isolation");
+  }
+  if (!overlapDocs) {
+    const [accessibilityResult] = await runConcurrently([
+      () => accessibility(accessibilityBaseUrl),
+      () => hydration(hydrationBaseUrl),
+    ]);
+    return [accessibilityResult, await docs(hydrationBaseUrl)];
   }
   return runConcurrently([
     () => accessibility(accessibilityBaseUrl),
@@ -1827,6 +1838,7 @@ const main = async () => {
           hydration: (baseUrl) => scenario("hydration", (createContext) => runHydrationAudit(createContext, baseUrl)),
         },
         { accessibilityBaseUrl: previewBaseUrl, hydrationBaseUrl },
+        { overlapDocs: browserName === "chromium" },
       );
       if (browserName === "chromium") checkCssCoverage(coverage.flat());
     };
