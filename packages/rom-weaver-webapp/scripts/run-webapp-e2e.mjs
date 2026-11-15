@@ -567,28 +567,19 @@ const collectAuditedLinks = async (context, baseUrl) => {
   return linksByRoute.flat();
 };
 
-export const runLinkAudit = async (createContext, baseUrl) => {
-  await checkLegacyRedirects(baseUrl);
+// Only the dev server answers legacy routes with redirects, but the built preview is much faster to crawl.
+export const runLinkAudit = async (createContext, { devBaseUrl, previewBaseUrl }) => {
+  await checkLegacyRedirects(devBaseUrl);
   const context = await createContext({ ignoreHTTPSErrors: true });
   try {
-    const links = await collectAuditedLinks(context, baseUrl);
-    const targets = collectInternalLinkTargets(links, baseUrl);
+    const links = await collectAuditedLinks(context, previewBaseUrl);
+    const targets = collectInternalLinkTargets(links, previewBaseUrl);
     if (!targets.length) throw new Error("link audit found no same-origin links");
-    const pagePaths = new Set(
-      LINK_AUDIT_ROUTES.map((route) => {
-        const pathname = new URL(route, baseUrl).pathname.replace(/\/+$/, "");
-        return pathname || "/";
-      }),
-    );
     const failures = [];
     await Promise.all(
       targets.map(async ({ href, sources }) => {
         try {
-          const pathname = new URL(href).pathname.replace(/\/+$/, "") || "/";
-          // Vite's dev fallback returns the app shell with 200 for unknown paths when Accept includes text/html.
-          // Known page routes need text/html; asset checks use binary Accept so a missing asset remains 404.
-          const accept = pagePaths.has(pathname) ? "text/html" : "application/octet-stream";
-          const status = await requestStatus(href, { headers: { Accept: accept } });
+          const status = await requestStatus(href);
           if (status >= 400 || status < 200)
             failures.push(`${href} returned HTTP ${status} (from ${sources.join(", ")})`);
         } catch (error) {
@@ -1786,7 +1777,8 @@ const main = async () => {
         { accessibilityBaseUrl: previewBaseUrl, hydrationBaseUrl },
       );
     }
-    if (RUN_LINK_AUDIT) await scenario("links", (createContext) => runLinkAudit(createContext, devBaseUrl));
+    if (RUN_LINK_AUDIT)
+      await scenario("links", (createContext) => runLinkAudit(createContext, { devBaseUrl, previewBaseUrl }));
     if (RUN_RAW_JOURNEY) {
       await scenario("Create/Apply/Weave byte roundtrips", (createContext) =>
         runCreateApplyRoundtrip(createContext, previewBaseUrl, configureUncompressedOutput),
