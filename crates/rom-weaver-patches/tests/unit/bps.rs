@@ -765,6 +765,12 @@ fn create_reports_progress_during_suffix_indexing_and_output() {
 
     let events = progress.snapshot();
     assert!(events.iter().any(|event| event.command == "patch-create"));
+    for event in &events {
+        assert_eq!(event.family, OperationFamily::Patch);
+        assert_eq!(event.format.as_deref(), Some("BPS"));
+        assert_eq!(event.stage, "create");
+        assert_eq!(event.status, OperationStatus::Running);
+    }
     assert!(
         events
             .iter()
@@ -1849,54 +1855,6 @@ fn apply_progress_sink_preserves_the_public_event_contract() {
 }
 
 #[test]
-fn apply_progress_events_describe_a_running_patch_apply() {
-    let temp = TestDir::new();
-    let progress_sink = Arc::new(RecordingProgressSink::default());
-    let context = OperationContext::new(
-        ThreadBudget::Fixed(1),
-        temp.child("progress-temp"),
-        progress_sink.clone(),
-        CancellationToken::new(),
-    );
-
-    BpsApplyProgress::new(&context, "BPS", 100).report(50);
-
-    let events = progress_sink.snapshot();
-    assert_eq!(events.len(), 1);
-    let event = &events[0];
-    assert_eq!(event.command, "patch-apply");
-    assert_eq!(event.family, OperationFamily::Patch);
-    assert_eq!(event.format.as_deref(), Some("BPS"));
-    assert_eq!(event.stage, "apply");
-    assert_eq!(event.label, "applying patch using BPS");
-    assert_eq!(event.percent, Some(50.0));
-    assert_eq!(event.status, OperationStatus::Running);
-}
-
-#[test]
-fn create_progress_events_describe_a_running_patch_create() {
-    let temp = TestDir::new();
-    let progress_sink = Arc::new(RecordingProgressSink::default());
-    let context = OperationContext::new(
-        ThreadBudget::Fixed(1),
-        temp.child("progress-temp"),
-        progress_sink.clone(),
-        CancellationToken::new(),
-    );
-
-    BpsCreateProgress::new(&context, "BPS", 100).report_output(50);
-
-    let events = progress_sink.snapshot();
-    assert_eq!(events.len(), 1);
-    let event = &events[0];
-    assert_eq!(event.command, "patch-create");
-    assert_eq!(event.family, OperationFamily::Patch);
-    assert_eq!(event.format.as_deref(), Some("BPS"));
-    assert_eq!(event.stage, "create");
-    assert_eq!(event.status, OperationStatus::Running);
-}
-
-#[test]
 fn apply_progress_stays_silent_for_a_zero_length_target() {
     let temp = TestDir::new();
     let progress_sink = Arc::new(RecordingProgressSink::default());
@@ -1946,7 +1904,7 @@ fn create_progress_scales_indexing_and_output_into_their_bands() {
         CancellationToken::new(),
     );
 
-    // Indexing fills 5% to 40% and output writing fills 40% to 100%, of a 100-byte target.
+    // Indexing fills 5% to 40%; output writing fills 40% to 100%. The target is 100 bytes.
     let mut progress = BpsCreateProgress::new(&context, "BPS", 100);
     progress.report_indexed(50);
     progress.report_output(50);
