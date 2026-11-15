@@ -628,8 +628,8 @@ jobs:
           mkdir -p target/identify-data
           cp -a crates/rom-weaver-cli/data/identify/v1 target/identify-data/v1
 
-      # Pull requests and pushes MAY reuse a source-exact module from main or an earlier PR run.
-      # ARM MUST compile changed image plumbing and unknown diffs, and the nightly run always compiles.
+      # Pull requests MAY reuse a source-exact module from main or an earlier PR run. Pushes MAY reuse one from main.
+      # ARM MUST compile changed image plumbing and unknown diffs. Nightly runs build no webapp image.
       - name: Restore the built wasm module
         id: wasm
         if: matrix.name == 'webapp' && (matrix.arch == 'amd64' || ((github.event_name == 'pull_request' || github.event_name == 'push') && needs.changes.outputs.docker_arm_wasm_cache == 'true'))

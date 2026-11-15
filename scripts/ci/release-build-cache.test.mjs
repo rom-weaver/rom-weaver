@@ -45,6 +45,6 @@ test("image compiler and CI plumbing edits force ARM source builds", () => {
 
 test("the raw diff controls cache eligibility even for full release coverage", () => {
   const classifier = readFileSync(new URL("./classify-workflow.mjs", import.meta.url), "utf8");
-  assert.match(classifier, /docker_arm_wasm_cache=\$\{canReuseArmDockerWasm\(armPaths\)\}/u);
+  assert.match(classifier, /docker_arm_wasm_cache=\$\{canReuseArmDockerWasm\(rangePaths\)\}/u);
   assert.match(workflow, /docker_arm_wasm_cache: \$\{\{ steps\.classify\.outputs\.docker_arm_wasm_cache \}\}/u);
 });
