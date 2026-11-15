@@ -448,6 +448,44 @@ describe("BrowserProxyRandomAccessFile reads", () => {
     expect(proxy.reads).toEqual([{ length: dst.byteLength, offset: 0 }]);
   });
 
+  it("serves repeated large requests for a small file from one fill", () => {
+    proxy.setBytes("/work/small.bin", patterned(4096));
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/small.bin");
+
+    for (const offset of [0, 4096, 0]) {
+      const dst = new Uint8Array(2 * MIB);
+      expect(file.readAt(offset, dst)).toBe(offset === 0 ? 4096 : 0);
+    }
+
+    expect(proxy.reads).toEqual([{ length: 4096, offset: 0 }]);
+    expect(proxy.calls.filter((call) => call === "size")).toHaveLength(1);
+  });
+
+  it("refits the cached block of a small writable file after it grows", () => {
+    proxy.setBytes("/work/out.bin", patterned(4096));
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { writable: true });
+    expect(file.readAt(0, new Uint8Array(2 * MIB))).toBe(4096);
+
+    proxy.setVersion(2);
+    proxy.setBytes("/work/out.bin", patterned(6000, 3));
+    const grown = new Uint8Array(2 * MIB);
+    expect(file.readAt(0, grown)).toBe(6000);
+    expect(grown.subarray(0, 6000)).toEqual(patterned(6000, 3));
+  });
+
+  it("asks the proxy for the size once per handle version", () => {
+    proxy.setBytes("/work/small.bin", patterned(512));
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/small.bin");
+
+    expect([file.size(), file.size(), file.size()]).toEqual([512, 512, 512]);
+    expect(proxy.calls.filter((call) => call === "size")).toHaveLength(1);
+
+    proxy.setVersion(2);
+    proxy.setBytes("/work/small.bin", patterned(700));
+    expect(file.size()).toBe(700);
+    expect(proxy.calls.filter((call) => call === "size")).toHaveLength(2);
+  });
+
   it("drops the cached block when the proxy bumps the handle version", () => {
     proxy.setBytes("/work/rom.iso", patterned(1024));
     const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/rom.iso");
