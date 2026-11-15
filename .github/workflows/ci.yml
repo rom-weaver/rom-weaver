@@ -1233,8 +1233,9 @@ jobs:
       - name: Rust typegen
         run: mise run typegen-check
 
+      # Same feature set as typegen-check so cargo reuses its workspace build.
       - name: CLI man page manifests
-        run: cargo run --locked -p rom-weaver-cli --example generate_manpages -- --check-manifests
+        run: cargo run --locked -p rom-weaver-cli --features typescript-types --example generate_manpages -- --check-manifests
 
       - name: Fetch the diff base
         env:
