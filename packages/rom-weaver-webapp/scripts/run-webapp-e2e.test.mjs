@@ -286,7 +286,7 @@ describe("runAuditPhases", () => {
     assert.deepEqual(results, [["app.css"], ["docs.css"]]);
   });
 
-  it("skips docs and reports the failure when an audit fails with docs overlap off", async () => {
+  it("skips docs and reports the failure when the accessibility audit fails with docs overlap off", async () => {
     let docsStarted = false;
     const failedPhase = async () => {
       throw new Error("audit failed");
@@ -297,7 +297,7 @@ describe("runAuditPhases", () => {
 
     await assert.rejects(
       () =>
-        runAuditPhases({ accessibility: skipAudit, docs, hydration: failedPhase }, baseUrls, { overlapDocs: false }),
+        runAuditPhases({ accessibility: failedPhase, docs, hydration: skipAudit }, baseUrls, { overlapDocs: false }),
       /audit failed/,
     );
 
