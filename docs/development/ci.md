@@ -426,6 +426,8 @@ The mise binary itself is pinned in the action (`version:` on `jdx/mise-action`)
 
 On Linux, system dependencies and enabled compiler-cache tools share one APT pass. Compatible build tools (including CMake ≥3.17) and a loadable libclang satisfy their requirements before package installation; missing requirements retain their explicit package fallback. APT uses Ubuntu sources with bounded retries, network and lock waits, and a 2.5-minute timeout per attempt. The script repeats a timed-out or failed `apt-get update` or `install` up to three attempts, waiting 5 s and then 15 s, and logs each failed attempt. One stalled step takes at most 470 s, inside the shortest calling job's 15-minute limit, so the script reports its own error first.
 
+Libclang discovery lists `libclang.so*` at most three levels below `/usr/lib` and `/usr/lib64`, which covers apt-installed layouts. It then loads each candidate to check bindgen's entry points.
+
 The `tools:` input is a **positive** list of short tool names (`tools: node rust nextest`). mise offers no allowlist - `MISE_DISABLE_TOOLS` is the only lever - so `scripts/ci/mise-disable-tools.mjs` reads the `[tools]` table of `.config/mise.toml` and computes the complement. Two consequences worth knowing:
 
 - Adding a pin to `.config/mise.toml` costs nothing until a job opts in. Under the old hand-maintained exclusion lists it silently slowed down every job.
