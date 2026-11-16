@@ -18,6 +18,7 @@ const SettingsHarness = () => {
   const [open, setOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [slideOut, setSlideOut] = useState(false);
   const close = () => (dirty ? setConfirm(true) : setOpen(false));
   return createElement(
     "div",
@@ -29,6 +30,11 @@ const SettingsHarness = () => {
           dockTabs: [{ dock: true, group: "patch", href: "#", icon: null, id: "apply", label: "Apply" }],
           initialTab: "settings",
           onClose: close,
+          onSlideOutDone: () => {
+            setSlideOut(false);
+            setOpen(false);
+          },
+          slideOut,
           onLevelChange: () => undefined,
           open,
           settingsPanel: createElement("input", {
@@ -47,7 +53,7 @@ const SettingsHarness = () => {
       onConfirm: () => {
         setConfirm(false);
         setDirty(false);
-        setOpen(false);
+        setSlideOut(true);
       },
       open: confirm,
       title: "Discard settings changes?",
@@ -216,6 +222,21 @@ test("Close on a phone does not slide the page while it opens the discard prompt
 
   expect([...slid]).not.toContain("translateX(100%)");
   expect(frame.style.transform).toBe("");
+});
+
+test("Discarding on a phone slides the page out before closing", async () => {
+  await page.viewport(390, 800);
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  const frame = document.querySelector(".dlg-frame");
+
+  await page.getByRole("checkbox", { name: "Detailed information" }).click();
+  await settings().getByRole("button", { name: "Close", exact: true }).last().click();
+  await expect.element(confirmation()).toBeVisible();
+  expect(frame.style.transform).toBe("");
+
+  await confirmation().getByRole("button", { name: "Discard changes" }).click();
+  await expect.poll(() => frame.style.transform).toBe("translateX(100%)");
+  await expect.element(settings()).not.toBeInTheDocument();
 });
 
 test("Close on a phone with nothing to discard slides the page out", async () => {

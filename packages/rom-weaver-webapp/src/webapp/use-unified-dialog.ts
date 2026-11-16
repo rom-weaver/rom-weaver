@@ -74,6 +74,10 @@ const useUnifiedDialog = (actions: WebappRootProps["actions"], state: WebappRoot
   // discard-confirmation flow first; the dialog itself only closes once that
   // flow actually clears `settingsDialogOpen`.
   const settingsCloseArmedRef = useRef(false);
+  // The close that raised the discard prompt: if the user discards, the page
+  // slides out as a plain close would have, because the prompt skipped it.
+  const closeRaisedDiscardRef = useRef(false);
+  const [slidingOut, setSlidingOut] = useState(false);
   const preloadSettingsPanel = useCallback(() => {
     void loadSettingsPanel().catch(() => undefined);
   }, []);
@@ -89,6 +93,7 @@ const useUnifiedDialog = (actions: WebappRootProps["actions"], state: WebappRoot
       if (tab === "settings") {
         preloadSettingsPanel();
         settingsCloseArmedRef.current = false;
+        closeRaisedDiscardRef.current = false;
         actions.onOpenSettings();
       }
       setLogTab(tab);
@@ -108,16 +113,21 @@ const useUnifiedDialog = (actions: WebappRootProps["actions"], state: WebappRoot
     [showTab],
   );
   const handleDialogTabChange = useCallback((tab: LogDialogTab) => showTab(tab), [showTab]);
+  // True when Close opens the discard prompt instead of closing the dialog.
+  const closeAsksToDiscard = state.settingsDialogOpen && shouldConfirmDiscardSettings(state);
   const closeDialog = useCallback(() => {
     if (!state.settingsDialogOpen) {
       setLogOpen(false);
       return;
     }
     settingsCloseArmedRef.current = true;
+    closeRaisedDiscardRef.current = closeAsksToDiscard;
     actions.onCloseSettings();
-  }, [actions, state.settingsDialogOpen]);
-  // True when Close opens the discard prompt instead of closing the dialog.
-  const closeAsksToDiscard = state.settingsDialogOpen && shouldConfirmDiscardSettings(state);
+  }, [actions, closeAsksToDiscard, state.settingsDialogOpen]);
+  const finishSlideOut = useCallback(() => {
+    setSlidingOut(false);
+    setLogOpen(false);
+  }, []);
   const saveSettings = useCallback(() => {
     if (state.draftSettings.keepTestedRomsEnabled === true && state.settings.keepTestedRomsEnabled !== true) {
       void requestPersistentStorage().catch((error: unknown) => {
@@ -125,12 +135,18 @@ const useUnifiedDialog = (actions: WebappRootProps["actions"], state: WebappRoot
       });
     }
     settingsCloseArmedRef.current = true;
+    closeRaisedDiscardRef.current = false;
     actions.onSaveClose();
   }, [actions, state.draftSettings.keepTestedRomsEnabled, state.settings.keepTestedRomsEnabled]);
   useEffect(() => {
     if (state.settingsDialogOpen || !settingsCloseArmedRef.current) return;
     settingsCloseArmedRef.current = false;
     logger.trace("unified dialog closing after the settings draft settled");
+    if (closeRaisedDiscardRef.current) {
+      closeRaisedDiscardRef.current = false;
+      setSlidingOut(true);
+      return;
+    }
     setLogOpen(false);
   }, [state.settingsDialogOpen]);
   // However the console closed, its entries leave the history with it, so Back
@@ -189,6 +205,7 @@ const useUnifiedDialog = (actions: WebappRootProps["actions"], state: WebappRoot
     closeAsksToDiscard,
     closeDialog,
     closeDialogForNavigation,
+    finishSlideOut,
     handleDialogTabChange,
     logOpen,
     logTab,
@@ -198,6 +215,7 @@ const useUnifiedDialog = (actions: WebappRootProps["actions"], state: WebappRoot
     openStatusTab,
     openStorageTab,
     preloadLogDialog,
+    slidingOut,
     preloadSettingsPanel,
     saveSettings,
     settingsFocusHint,

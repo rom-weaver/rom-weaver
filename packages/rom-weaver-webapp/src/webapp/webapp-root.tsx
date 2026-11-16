@@ -699,6 +699,7 @@ function WebappRoot({
     closeAsksToDiscard,
     closeDialog,
     closeDialogForNavigation,
+    finishSlideOut,
     handleDialogTabChange,
     logOpen,
     logTab,
@@ -711,6 +712,7 @@ function WebappRoot({
     preloadSettingsPanel,
     saveSettings,
     settingsFocusHint,
+    slidingOut,
   } = useUnifiedDialog(actions, state);
   // A backup the dialog closed on before Saves & storage mounted MUST NOT import on a later visit.
   const logWasOpenRef = useRef(false);
@@ -1286,6 +1288,7 @@ function WebappRoot({
                   handleSelectTab(id);
                 }}
                 onRestoreDefaults={actions.onRestoreDefaults}
+                onSlideOutDone={finishSlideOut}
                 onSaveSettings={saveSettings}
                 onTabChange={handleDialogTabChange}
                 open={logOpen}
@@ -1297,6 +1300,7 @@ function WebappRoot({
                 offlineCopyEnabled={state.settings.offlineCopyEnabled}
                 onOfflineCopyEnabledChange={actions.onOfflineCopyEnabledChange}
                 settingsFocusHint={settingsFocusHint}
+                slideOut={slidingOut}
                 emulatorSaveImport={saveImport}
                 onEmulatorSaveImportStarted={clearSaveImport}
                 settingsPanel={
