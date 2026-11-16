@@ -2,8 +2,8 @@
 # project toolchains, so self-hosters only need Docker.
 #
 # `--build-arg DIST=prebuilt` serves `prebuilt/` out of the build context
-# instead, skipping the whole builder stage below - rustup, the WASI SDK,
-# binaryen and a cold wasm compile included. The release fan-out fills it with
+# instead, skipping the whole source build below - the toolchain, rustup, the
+# WASI SDK, binaryen and a cold wasm compile included. The release fan-out fills it with
 # the same bundle it publishes as `rom-weaver-webapp.tar.gz`, then fills in
 # compression siblings for files Vite deliberately leaves raw. A plain
 # `docker build` still builds from source. BuildKit builds
@@ -17,7 +17,7 @@ ARG DIST=source
 ARG WASM=source
 ARG IDENTIFY_DATA=source
 
-FROM node:22-bookworm AS builder
+FROM node:22-bookworm AS toolchain
 
 ARG TARGETARCH
 ARG RUST_VERSION=1.97.1
@@ -115,25 +115,43 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 
+FROM toolchain AS builder
 COPY . .
 
 # WASM attribution MUST see the selected identify tree before compilation.
 FROM builder AS identify-source
 RUN node scripts/ensure-identify-data.mjs
 
-FROM builder AS identify-prebuilt
+FROM toolchain AS identify-packs-prebuilt
 COPY target/identify-data/v1 /app/crates/rom-weaver-cli/data/identify/v1
 RUN test -s /app/crates/rom-weaver-cli/data/identify/v1/index.json \
     || { echo "IDENTIFY_DATA=prebuilt but target/identify-data/v1 is missing from the build context" >&2; exit 1; }
+
+FROM builder AS identify-prebuilt
+COPY --from=identify-packs-prebuilt /app/crates/rom-weaver-cli/data/identify/v1 /app/crates/rom-weaver-cli/data/identify/v1
 RUN node scripts/ensure-identify-data.mjs
 
 # hadolint ignore=DL3006
 FROM identify-${IDENTIFY_DATA} AS identified
 
+# With prebuilt packs it copies only its inputs; docs and webapp edits keep it cached.
+# The list MUST stay in step with `scripts/wasm/wasm-source-fingerprint.mjs`; a source identify
+# build copies the whole tree.
+FROM toolchain AS wasm-inputs-prebuilt
+COPY Cargo.toml Cargo.lock ./
+COPY .cargo ./.cargo
+COPY .config/mise.toml ./.config/mise.toml
+COPY crates ./crates
+COPY scripts/wasm ./scripts/wasm
+COPY scripts/cargo-target-dir.mjs scripts/gen-third-party-licenses.mjs ./scripts/
+COPY --from=identify-packs-prebuilt /app/crates/rom-weaver-cli/data/identify/v1 /app/crates/rom-weaver-cli/data/identify/v1
+
+FROM identify-source AS wasm-inputs-source
+
 # Cache mounts keep the cargo registry and the cmake-built C deps (libarchive)
 # across local rebuilds. On ephemeral CI runners they are a no-op: BuildKit
-# exports no cache mount to a registry or gha cache, so CI still pays a cold
-# compile and only the layers above this one are restored.
+# exports no cache mount to a registry or gha cache, so a changed input still
+# pays a cold compile; an unchanged one restores this layer from the registry cache.
 #
 # No manifest-only prefetch: Cargo needs every workspace target, so preserving
 # that layer would require brittle stub source trees for little benefit.
@@ -144,11 +162,16 @@ FROM identify-${IDENTIFY_DATA} AS identified
 # other's objects.
 #
 # The shared WASM cache would only add an unrestorable module copy to this layer.
-FROM identified AS wasm-source
+# quality-reason: `wasm-inputs-${IDENTIFY_DATA}` always names a stage defined above, and IDENTIFY_DATA has a default.
+# hadolint ignore=DL3006
+FROM wasm-inputs-${IDENTIFY_DATA} AS wasm-compile
 ARG TARGETARCH
 RUN --mount=type=cache,id=webapp-cargo-registry,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,id=webapp-cargo-target-${TARGETARCH},target=/app/target,sharing=locked \
     ROM_WEAVER_WASM_CACHE=0 node scripts/wasm/build-app.mjs prod
+
+FROM identified AS wasm-source
+COPY --from=wasm-compile /app/packages/rom-weaver-webapp/src/wasm/ /app/packages/rom-weaver-webapp/src/wasm/
 
 # Callers MUST stage the source-exact module before selecting WASM=prebuilt.
 # Toolchain layers still verify each architecture's SDK and binaryen checksums.

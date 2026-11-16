@@ -653,6 +653,8 @@ What the attestations now claim: the CI attestation says `ci.yml` built the bina
 
 The webapp image has a third build arg, `WASM`, which is not part of this release path: it keeps the whole source build and only takes the compiled wasm module from the context. CI uses it on amd64. ARM pull-request and push legs use it when the diff leaves the image plumbing alone. The nightly run builds no webapp image. The release fan-out never sets it, so a fallback-to-source release still compiles everything.
 
+With `IDENTIFY_DATA=prebuilt`, as CI passes, `wasm-compile` copies only its inputs. A docs or webapp-source change restores that layer from the registry build cache. A change to `packages/rom-weaver-webapp/package*.json`, a crate test, or a crate Markdown file still recompiles it. Only main writes that cache; the first pull request after a wasm change compiles cold.
+
 Each Dockerfile keeps both paths and picks with a build arg (`BINARY`, `DIST`) that defaults to building from source, so `docker build` with no arguments - what self-hosters and the `docker` job in `ci.yml` run - is unchanged. The prebuilt half reads a `prebuilt/` directory out of the build context, which only has to exist for the build that asks for it: BuildKit builds only the stages the selected one depends on. `docker-publish.yml` downloads the artifact, falls back to `source` when there is none, and so still works standalone under `workflow_dispatch`, where there are no sibling jobs.
 
 Two consequences worth knowing:
