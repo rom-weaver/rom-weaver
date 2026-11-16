@@ -134,12 +134,9 @@ RUN node scripts/ensure-identify-data.mjs
 # hadolint ignore=DL3006
 FROM identify-${IDENTIFY_DATA} AS identified
 
-# With prebuilt identify packs the wasm compile starts from the toolchain layers and copies the
-# trees the wasm source fingerprint (`scripts/wasm/wasm-source-fingerprint.mjs`) reads from, plus
-# the license script `build-app.mjs` runs, instead of `COPY . .`. An edit to docs or the webapp
-# source then leaves the compile layer cached; one to `packages/rom-weaver-webapp/package*.json`,
-# or to a file under `crates` or `scripts/wasm` that the fingerprint skips, still reruns it.
-# Keep the list in step with that fingerprint. A source identify build needs the whole tree.
+# With prebuilt packs it copies only its inputs; docs and webapp edits keep it cached.
+# The list MUST stay in step with `scripts/wasm/wasm-source-fingerprint.mjs`; a source identify
+# build copies the whole tree.
 FROM toolchain AS wasm-inputs-prebuilt
 COPY Cargo.toml Cargo.lock ./
 COPY .cargo ./.cargo

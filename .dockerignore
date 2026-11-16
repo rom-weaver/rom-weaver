@@ -22,7 +22,8 @@ third_party
 
 # Not build inputs. These change often (CI, most docs, and browser-test
 # commits), and anything left here invalidates the `COPY . .` layer and the build
-# after it. The webapp image's wasm compile copies only its own inputs instead.
+# after it. With `IDENTIFY_DATA=prebuilt`, the webapp image's wasm compile copies only its own
+# inputs instead.
 # Published Markdown is an exception: Vite renders
 # it into the webapp. Root *.md stays: several are read at build time
 # (README as the workspace `readme`, CHANGELOG by the webapp version script's
