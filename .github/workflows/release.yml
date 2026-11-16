@@ -490,7 +490,7 @@ jobs:
 
       # Same version as the .config/mise.toml pin; this job cannot use mise.
       - name: Install cargo-semver-checks
-        uses: taiki-e/install-action@v2.90.2
+        uses: taiki-e/install-action@v2.90.3
         with:
           tool: cargo-semver-checks@0.46.0
 
