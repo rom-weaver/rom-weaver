@@ -258,7 +258,7 @@ security ── advisories (warn only, always green)
 
     A full Chromium run overlaps two lanes. The first runs the audits. The second runs the link audit, then the journeys on their own production preview origin. WebKit runs the lanes in order.
 
-    In both jobs, within the audits, the stateful accessibility page runs on one origin. Hydration and then the docs routes run on another. The docs routes share no state, so up to three load at once. On Chromium the docs routes run beside the stateful page. On WebKit they wait until it and hydration finish: with the docs pages loading beside it on the 3-core macOS runner, the stateful page timed out waiting 60 s at its guided Apply step on 2 of 4 runs.
+    In both jobs, within the audits, the stateful accessibility page runs on one origin. Hydration and then the docs routes run on another. The docs routes open as separate pages in one browser context, so they share that context's storage. Up to three load at once. On Chromium the docs routes run beside the stateful page. On WebKit they wait until it and hydration finish: with the docs pages loading beside it on the 3-core macOS runner, the stateful page timed out waiting 60 s at its guided Apply step on 2 of 4 runs.
 
     Playwright’s macOS profiles share OPFS storage but have separate Web Locks. Separate origins keep one audit’s boot cleanup from deleting another audit’s weave inputs. The stateful accessibility page stays whole.
 
@@ -298,7 +298,7 @@ The Chromium webapp E2E pass reuses its live axe-core crawl to collect CSS cover
 
 The budget is a regression ceiling, not a claim that unobserved rules are dead: progress, result, error, pointer-drag, update, and other conditional states can legitimately remain outside that crawl. Duplicate declarations are covered by Biome's recommended CSS rules, and duplicate selectors are enabled explicitly.
 
-Lighthouse always audits the local build through `scripts/dev-server.mjs preview`, using Lighthouse's default mobile emulation, on every event, including forks. A Lighthouse runtime collection error gets one fresh-browser retry; threshold failures are never retried.
+Lighthouse always audits the local build through `scripts/dev-server.mjs preview`, using Lighthouse's default mobile emulation. The audit is the same on every run of `webapp-lighthouse`, fork pull requests included; the `lighthouse` flag decides whether a pull request runs the job at all. A Lighthouse run that fails with `NO_NAVSTART` gets up to three attempts, each in a fresh browser; other runtime errors and threshold failures are never retried.
 
 The server speaks HTTP/2, serves the q11 sidecars, applies the built `dist/_headers`, and holds each asset in memory after the first read, which is what makes it a fair stand-in for the edge. Measured against the hosted Cloudflare bundle it scores slightly *better*, because HTTP/1.1's ~6-connection cap was the only thing that had made a local audit look slow.
 

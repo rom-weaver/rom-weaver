@@ -299,7 +299,7 @@ test("the prebuilt smoke needs an image reason on a pull request, a bundle on ma
     classifyFor("pull_request", "packages/rom-weaver-webapp/Dockerfile").docker_prebuilt,
     "true",
   );
-  // No bundle, no smoke - it wraps `webapp-static`'s artifact.
+  // No bundle, no smoke - it wraps the `webapp-dist` artifact from the `wasm` job.
   assert.equal(classifyFor("push", "Dockerfile").webapp, "false");
   assert.equal(classifyFor("push", "Dockerfile").docker_prebuilt, "false");
 });
