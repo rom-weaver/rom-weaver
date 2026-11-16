@@ -70,6 +70,9 @@ const ERRNO_NOTSUP = 58;
 const ERRNO_ROFS = 69;
 const ERRNO_XDEV = 75;
 
+// Folders the proxy remembers; the oldest is forgotten past this, so a huge tree cannot grow the cache without bound.
+const MAX_CACHED_DIRECTORIES = 512;
+
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
 
@@ -153,6 +156,10 @@ class OpfsProxyServer {
   // worker-selected file is served like an OPFS handle without staging a copy into OPFS first.
   private readonly blobSources = new Map<string, Blob>();
   private readonly pendingRemovals = new Set<Promise<void>>();
+  // Directory handles by guest path, so an open walks only the folders it has not seen. A folder removed
+  // outside the proxy leaves its handle stale; `withFreshDirectories` then retries once without the cache.
+  private readonly directoryCache = new Map<string, FileSystemDirectoryHandleLike>();
+  private directoryCacheHits = 0;
   private readonly shutdownControl?: Int32Array;
   private closeFailed = false;
   private running = true;
@@ -483,6 +490,12 @@ class OpfsProxyServer {
 
   private async opUnlink(guestPath: string): Promise<void> {
     const location = this.locate(guestPath);
+    // The entry may be a directory, so nothing cached at or under it stays valid.
+    this.forgetDirectories(guestPath);
+    await this.withFreshDirectories(() => this.unlinkIn(guestPath, location));
+  }
+
+  private async unlinkIn(guestPath: string, location: FileLocation): Promise<void> {
     const { dir, name } = await this.resolveParent(location, { create: false });
     if (!dir.removeEntry) throw new ProxyErrno(ERRNO_ACCES);
     // OPFS rejects removeEntry while a SyncAccessHandle is open on the file
@@ -539,14 +552,16 @@ class OpfsProxyServer {
     for (const path of [fromPath, toPath]) {
       if (this.byPath.has(path) || this.pendingByPath.has(path)) throw new ProxyErrno(ERRNO_BUSY);
     }
-    const source = await this.resolveParent(from, { create: false });
-    const destination = await this.resolveParent(to, { create: true });
-    if (await this.entryExists(destination.dir, destination.name)) throw new ProxyErrno(ERRNO_EXIST);
-    const fileHandle = (await source.dir.getFileHandle(source.name)) as {
-      move?: (directory: FileSystemDirectoryHandleLike, name: string) => Promise<void>;
-    };
-    if (typeof fileHandle.move !== "function") throw new ProxyErrno(ERRNO_NOTSUP);
-    await fileHandle.move(destination.dir, destination.name);
+    await this.withFreshDirectories(async () => {
+      const source = await this.resolveParent(from, { create: false });
+      const destination = await this.resolveParent(to, { create: true });
+      if (await this.entryExists(destination.dir, destination.name)) throw new ProxyErrno(ERRNO_EXIST);
+      const fileHandle = (await source.dir.getFileHandle(source.name)) as {
+        move?: (directory: FileSystemDirectoryHandleLike, name: string) => Promise<void>;
+      };
+      if (typeof fileHandle.move !== "function") throw new ProxyErrno(ERRNO_NOTSUP);
+      await fileHandle.move(destination.dir, destination.name);
+    });
   }
 
   private async entryExists(dir: FileSystemDirectoryHandleLike, name: string): Promise<boolean> {
@@ -578,32 +593,79 @@ class OpfsProxyServer {
   }
 
   private async resolveFileHandle(location: FileLocation, { create }: { create: boolean }): Promise<unknown> {
-    const { dir, name } = await this.resolveParent(location, { create });
-    if (create) {
-      this.trace?.(
-        `[browser-opfs] path create requested creator=browser-opfs-proxy.open path=${location.mount.mountPath}/${location.parts.join("/")}`,
-      );
+    return this.withFreshDirectories(async () => {
+      const { dir, name } = await this.resolveParent(location, { create });
+      if (create) {
+        this.trace?.(
+          `[browser-opfs] path create requested creator=browser-opfs-proxy.open path=${location.mount.mountPath}/${location.parts.join("/")}`,
+        );
+      }
+      return dir.getFileHandle(name, { create });
+    });
+  }
+
+  /** Runs `attempt`; when a cached directory handle was used and the call fails as stale, drops the cache and retries once. */
+  private async withFreshDirectories<T>(attempt: () => Promise<T>): Promise<T> {
+    const hitsBefore = this.directoryCacheHits;
+    try {
+      return await attempt();
+    } catch (error) {
+      const errorName = (error as { name?: string } | null)?.name;
+      const stale = errorName === "NotFoundError" || errorName === "InvalidStateError";
+      if (!stale || this.directoryCacheHits === hitsBefore) throw error;
+      this.directoryCache.clear();
+      return attempt();
     }
-    return dir.getFileHandle(name, { create });
+  }
+
+  private forgetDirectories(guestPath: string): void {
+    for (const key of this.directoryCache.keys()) {
+      if (key === guestPath || key.startsWith(`${guestPath}/`)) this.directoryCache.delete(key);
+    }
   }
 
   private async resolveParent(
     location: FileLocation,
     { create }: { create: boolean },
   ): Promise<{ dir: FileSystemDirectoryHandleLike; name: string }> {
-    let dir = location.mount.directoryHandle;
-    for (let i = 0; i < location.parts.length - 1; i += 1) {
-      const part = location.parts[i];
-      if (part === undefined) throw new ProxyErrno(ERRNO_NOENT);
-      if (create) {
-        const path = `${location.mount.mountPath}/${location.parts.slice(0, i + 1).join("/")}`;
-        this.trace?.(`[browser-opfs] path create requested creator=browser-opfs-proxy.open path=${path}`);
-      }
-      dir = (await dir.getDirectoryHandle(part, { create })) as FileSystemDirectoryHandleLike;
-    }
     const name = location.parts.at(-1);
     if (name === undefined) throw new ProxyErrno(ERRNO_NOENT);
+    const depth = location.parts.length - 1;
+    const keyAt = (count: number) => `${location.mount.mountPath}/${location.parts.slice(0, count).join("/")}`;
+    let { dir, known } = this.deepestKnownDirectory(location, depth, keyAt);
+    for (let i = known; i < depth; i += 1) {
+      const part = location.parts[i] as string;
+      if (create) {
+        this.trace?.(`[browser-opfs] path create requested creator=browser-opfs-proxy.open path=${keyAt(i + 1)}`);
+      }
+      dir = (await dir.getDirectoryHandle(part, { create })) as FileSystemDirectoryHandleLike;
+      this.rememberDirectory(keyAt(i + 1), dir);
+    }
     return { dir, name };
+  }
+
+  /** The deepest folder of the path the proxy already holds, and how many path parts it covers (0 for the mount root). */
+  private deepestKnownDirectory(
+    location: FileLocation,
+    depth: number,
+    keyAt: (count: number) => string,
+  ): { dir: FileSystemDirectoryHandleLike; known: number } {
+    for (let known = depth; known > 0; known -= 1) {
+      const dir = this.directoryCache.get(keyAt(known));
+      if (dir) {
+        this.directoryCacheHits += 1;
+        return { dir, known };
+      }
+    }
+    return { dir: location.mount.directoryHandle, known: 0 };
+  }
+
+  private rememberDirectory(key: string, dir: FileSystemDirectoryHandleLike): void {
+    if (this.directoryCache.size >= MAX_CACHED_DIRECTORIES) {
+      const oldest = this.directoryCache.keys().next().value;
+      if (oldest !== undefined) this.directoryCache.delete(oldest);
+    }
+    this.directoryCache.set(key, dir);
   }
 
   // Reattach an open request to an existing live handle for `guestPath`, bumping its refcount. Covers two
