@@ -100,16 +100,28 @@ export const parseShard = (spec, source) => {
   return { index, total };
 };
 
-// Greedy longest-processing-time: hand each file, largest first, to whichever
-// shard is currently lightest. File size is the only cheap proxy for runtime we
-// have, and it is a decent one - these files are dominated by per-test setup -
-// whereas an alphabetical or round-robin split leaves one runner minutes behind.
-export const selectShard = (files, shard) => {
+// A file's expected seconds: its recorded duration, else its size at the
+// seconds-per-byte ratio of the recorded files (1 when nothing is recorded, so
+// a split still weighs by bytes). A path that does not exist is left for Vitest
+// to report; it weighs 0 rather than raising a stat stack trace.
+const makeSecondsEstimator = (recorded, sizeOf) => {
+  const knownNames = Object.keys(recorded);
+  const knownBytes = knownNames.reduce((sum, name) => sum + sizeOf(path.join(TEST_DIR, name)), 0);
+  const knownSeconds = knownNames.reduce((sum, name) => sum + recorded[name], 0);
+  const secondsPerByte = knownBytes && knownSeconds ? knownSeconds / knownBytes : 1;
+  return (file) => recorded[path.basename(file)] ?? sizeOf(file) * secondsPerByte;
+};
+
+// Greedy longest-processing-time: hand each file, slowest first, to whichever
+// shard is currently lightest by expected seconds. Size alone left the shards
+// with equal bytes but 644 s against 539 s of recorded work, because per-file
+// time varies far more than per-file size. Every leg checks out the same commit
+// and runs this same pure function, so the legs stay disjoint and exhaustive.
+export const selectShard = (files, shard, recorded = durations, sizeOf = fileSize) => {
   if (!shard) return files;
+  const estimate = makeSecondsEstimator(recorded, sizeOf);
   const weighed = files
-    // A path that does not exist is left for Vitest to report; weigh it as 0
-    // rather than turning a typo'd filename into a stat stack trace.
-    .map((file) => ({ file, weight: fs.statSync(file, { throwIfNoEntry: false })?.size ?? 0 }))
+    .map((file) => ({ file, weight: estimate(file) }))
     .sort((left, right) => right.weight - left.weight || left.file.localeCompare(right.file));
   const buckets = Array.from({ length: shard.total }, () => ({ files: [], weight: 0 }));
   for (const { file, weight } of weighed) {
@@ -123,11 +135,7 @@ export const selectShard = (files, shard) => {
 // Files that start last set the finish time, so the slowest go first.
 // A recorded duration sets the order; a file without one is estimated from its size.
 export const orderSlowestFirst = (files, recorded = durations, sizeOf = fileSize) => {
-  const knownNames = Object.keys(recorded);
-  const knownBytes = knownNames.reduce((sum, name) => sum + sizeOf(path.join(TEST_DIR, name)), 0);
-  const knownSeconds = knownNames.reduce((sum, name) => sum + recorded[name], 0);
-  const secondsPerByte = knownBytes ? knownSeconds / knownBytes : 0;
-  const estimate = (file) => recorded[path.basename(file)] ?? sizeOf(file) * secondsPerByte;
+  const estimate = makeSecondsEstimator(recorded, sizeOf);
   return files
     .map((file) => ({ file, seconds: estimate(file) }))
     .sort((left, right) => right.seconds - left.seconds || left.file.localeCompare(right.file))
