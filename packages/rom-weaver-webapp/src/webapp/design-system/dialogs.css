@@ -923,11 +923,15 @@
   min-width: 0;
 }
 .rw-app .setgroup .gtitle {
-  margin-block-end: var(--sp-2xs);
-  font-size: 0.9rem;
+  padding: var(--sp-xs) var(--sp-m);
+  margin: calc(-1 * var(--sp-xs)) calc(-1 * var(--sp-m)) var(--sp-xs);
+  font-size: 0.84rem;
   font-weight: 650;
   color: var(--thread-text);
   letter-spacing: 0;
+  background: var(--plate);
+  border-block-end: 1px solid var(--seam);
+  border-radius: calc(var(--r-m) - 1px) calc(var(--r-m) - 1px) 0 0;
 }
 .rw-app .setrow {
   display: grid;
