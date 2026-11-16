@@ -302,17 +302,8 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
     if (!this.mount.isWritablePath(guestPath)) {
       return { inode_obj: null, ret: wasiShim.wasi.ERRNO_ROFS };
     }
-    // An fd still open on this file (mkstemp-then-unlink temp files) may not have opened its proxy
-    // handle yet. Open it first so the proxy defers the OPFS removal to the handle's close instead of
-    // the first later write re-creating the unlinked path as an orphan.
     const live = findEntryInDirectory(this.mount.contents, pathStr);
-    if (live instanceof WasiRandomAccessFileInode && live.openRefCount > 0) {
-      try {
-        live.file.openNow?.();
-      } catch {
-        // best-effort: fall through to a plain unlink
-      }
-    }
+    if (live instanceof WasiRandomAccessFileInode) prepareFileForUnlink(live);
     const unlinked = unlinkEntryFromDirectory(this.mount.contents, pathStr);
     if (unlinked.ret === wasiShim.wasi.ERRNO_SUCCESS) {
       // Also remove the backing OPFS file so the namespace matches the inode tree.
@@ -414,7 +405,8 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
 /**
  * A directory fd opened under the mount. The shim's own OpenDirectory edits only the in-memory tree, so a
  * file removed through it (as `remove_dir_all` does) would keep its OPFS entry and block removing the
- * directory. Its removals and nested directory opens go through the mount instead.
+ * directory. Its removals go through the mount, and a directory fd from a nested open is wrapped the
+ * same way. The nested open itself still resolves in the in-memory tree.
  */
 class MountOpenDirectory extends wasiShim.OpenDirectory {
   private readonly mount: PreparedWasiPreopenDirectory;
@@ -440,6 +432,30 @@ class MountOpenDirectory extends wasiShim.OpenDirectory {
 
   private mountPath(pathStr: string) {
     return `${this.basePath}/${pathStr}`;
+  }
+}
+
+/**
+ * An fd still open on the file (mkstemp-then-unlink temp files) may not have opened its proxy handle
+ * yet, so open it: the proxy then defers the OPFS removal to the handle's close instead of the first
+ * later write re-creating the unlinked path as an orphan. With no fd, close the parked handle so the
+ * proxy removes the file now. A deferred removal would keep the file's directory from being removed
+ * and would let a create at the same path revive the old bytes.
+ */
+function prepareFileForUnlink(file: WasiRandomAccessFileInode) {
+  if (file.openRefCount > 0) {
+    try {
+      file.file.openNow?.();
+    } catch {
+      // best-effort: fall through to a plain unlink
+    }
+    return;
+  }
+  file.idlePool?.remove(file);
+  try {
+    file.closeIdleFile();
+  } catch {
+    // best-effort: the proxy defers the removal to the handle's later close
   }
 }
 

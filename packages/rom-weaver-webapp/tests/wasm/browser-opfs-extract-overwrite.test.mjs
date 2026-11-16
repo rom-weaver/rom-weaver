@@ -13,7 +13,11 @@ import {
 
 const ENTRY_COUNT = 8;
 const ENTRY_SIZE = 512;
-const REPLACED_ENTRY_INDEXES = [3, 5];
+// One replaced output is shorter than its new entry and one is longer: the longer one MUST NOT keep its tail.
+const REPLACED_OUTPUT_SIZES = new Map([
+  [3, 3],
+  [5, ENTRY_SIZE + 88],
+]);
 
 const entryName = (index) => `entry-${String(index).padStart(5, "0")}.bin`;
 
@@ -33,8 +37,8 @@ describe("overwrite archive extract", () => {
         const archivePath = joinGuestPath(dir, "overwrite.zip");
         const outDir = joinGuestPath(dir, "out");
         await writeGuestFile(opfsHandle, archivePath, buildStoredZip(ENTRY_COUNT, ENTRY_SIZE));
-        for (const index of REPLACED_ENTRY_INDEXES) {
-          await writeGuestFile(opfsHandle, joinGuestPath(outDir, entryName(index)), new TextEncoder().encode("OLD"));
+        for (const [index, size] of REPLACED_OUTPUT_SIZES) {
+          await writeGuestFile(opfsHandle, joinGuestPath(outDir, entryName(index)), new Uint8Array(size).fill(0x4f));
         }
 
         const result = await worker.runJson(["extract", "--input", archivePath, "--out-dir", outDir]);

@@ -32,12 +32,16 @@ function makeProxyClient() {
   const files = new Map<string, Uint8Array>();
   const handles = new Map<number, string>();
   const unlinked: string[] = [];
+  const events: string[] = [];
   const moved: Array<[string, string]> = [];
   let nextHandle = 1;
   let unlinkError: Error | null = null;
   let moveError: Error | null = null;
   const client = {
-    close: vi.fn((handleId: number) => handles.delete(handleId)),
+    close: vi.fn((handleId: number) => {
+      events.push("close");
+      return handles.delete(handleId);
+    }),
     flush: vi.fn(),
     handleVersion: vi.fn(() => 1),
     open: vi.fn((guestPath: string, options: { create?: boolean } = {}) => {
@@ -72,6 +76,7 @@ function makeProxyClient() {
     }),
     unlink: vi.fn((guestPath: string) => {
       if (unlinkError) throw unlinkError;
+      events.push("unlink");
       unlinked.push(guestPath);
       files.delete(guestPath);
     }),
@@ -88,6 +93,7 @@ function makeProxyClient() {
   };
   return {
     client: client as unknown as OpfsProxyClient,
+    events,
     files,
     moved,
     setMoveError(error: Error | null) {
@@ -471,6 +477,19 @@ describe("PreparedWasiPreopenDirectory namespace operations", () => {
     expect(fd.path_unlink_file("out.bin")).toBe(wasi.ERRNO_SUCCESS);
     expect(mount.contents.has("out.bin")).toBe(false);
     expect(proxy.unlinked).toEqual(["/work/out.bin"]);
+  });
+
+  it("closes a parked output handle before unlinking so OPFS removes the file at once", async () => {
+    const mount = makeMount({ proxyClient: proxy.client });
+    const fd = await preopen(mount);
+    const opened = fd.path_open(0, "out.bin", wasi.OFLAGS_CREAT, wasi.RIGHTS_FD_WRITE, 0n, 0);
+    opened.fd_obj?.fd_write(new Uint8Array([1, 2, 3]));
+    opened.fd_obj?.fd_close();
+    expect(proxy.events).toEqual([]);
+
+    expect(fd.path_unlink_file("out.bin")).toBe(wasi.ERRNO_SUCCESS);
+
+    expect(proxy.events).toEqual(["close", "unlink"]);
   });
 
   it("survives a proxy unlink failure", async () => {
