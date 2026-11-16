@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect } from "vitest";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { getActiveBrowserVirtualFiles } from "../../src/workers/protocol/browser-virtual-files.ts";
-import { resetRomWeaverRunner, warmupRomWeaverRunner } from "../../src/workers/rom-weaver/rom-weaver-runner.ts";
+import { resetRomWeaverRunner } from "../../src/workers/rom-weaver/rom-weaver-runner.ts";
 
 const POSIX_DIRECTORY_PREFIX_REGEX = /^.*\//;
 const readUint16Le = (bytes, offset) => bytes[offset] | (bytes[offset + 1] << 8);
@@ -469,8 +469,8 @@ export const installPatcherTestHooks = () => {
       await clearOpfsInputDirectory();
     }
     startsClean = false;
-    await warmupRomWeaverRunner();
-    await new Promise((resolve) => globalThis.setTimeout(resolve, 20));
+    // No warm-up here: the runner pool creates a worker on first use, so a test that never runs a
+    // command no longer pays for a worker and wasm instance it does not need.
     // A previous test may have left a routing hash behind; a fresh mount must
     // not inherit it.
     if (globalThis.location.hash) {
@@ -494,8 +494,8 @@ export const installPatcherTestHooks = () => {
     await new Promise((resolve) => globalThis.setTimeout(resolve, 40));
     await releaseRetainedSources();
     await resetRomWeaverRunner();
+    // clearOpfsInputDirectory returns only once the directory is verified empty, so no settle delay.
     await clearOpfsInputDirectory();
-    await new Promise((resolve) => globalThis.setTimeout(resolve, 20));
     startsClean = true;
   });
 };
