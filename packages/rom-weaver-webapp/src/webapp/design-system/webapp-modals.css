@@ -115,7 +115,11 @@ html:has(.rw-modal) {
   color: var(--thread-fill);
   background: var(--thread-ink);
 }
-.rw-app .setrow .sctl .select,
+.rw-app .setrow .sctl .select {
+  height: 38px;
+  padding-inline: 8px 24px;
+  font-size: 0.8rem;
+}
 .rw-app .setrow .sctl .input {
   height: 38px;
   font-size: 0.85rem;

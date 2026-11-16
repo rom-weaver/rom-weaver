@@ -139,8 +139,8 @@ for (const width of [320, 1280]) {
         const rect = label.getBoundingClientRect();
         expect.soft(rect.height, label.textContent).toBeGreaterThanOrEqual(44);
         const input = label.querySelector("input");
-        expect(input.getBoundingClientRect().width).toBe(38);
-        expect(input.getBoundingClientRect().height).toBe(22);
+        expect(input.getBoundingClientRect().width).toBe(44);
+        expect(input.getBoundingClientRect().height).toBe(26);
         const trigger = label.parentElement.querySelector(".info-btn");
         if (!trigger) continue;
         const hit = document.elementFromPoint(rect.right - 2, rect.top + rect.height / 2);
