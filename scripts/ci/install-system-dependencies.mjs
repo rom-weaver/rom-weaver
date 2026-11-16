@@ -12,7 +12,8 @@ export function findLibclangDir(roots = ["/usr/lib", "/usr/lib64"], run = execFi
   if (!present.length) return "";
   let paths;
   try {
-    paths = run("find", [...present, "-name", "libclang.so*"], {
+    // Apt layouts (llvm-N/lib, multiarch dirs) sit within three levels of a root.
+    paths = run("find", [...present, "-maxdepth", "3", "-name", "libclang.so*"], {
       encoding: "utf8",
       timeout: 30_000,
     });
