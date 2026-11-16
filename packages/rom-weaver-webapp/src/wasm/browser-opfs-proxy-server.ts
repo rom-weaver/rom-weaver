@@ -70,7 +70,7 @@ const ERRNO_NOTSUP = 58;
 const ERRNO_ROFS = 69;
 const ERRNO_XDEV = 75;
 
-// Folders the proxy remembers; the oldest is forgotten past this, so a huge tree cannot grow the cache without bound.
+// Oldest directory handles are evicted past this limit, so the cache stays bounded.
 const MAX_CACHED_DIRECTORIES = 512;
 
 const textDecoder = new TextDecoder();
@@ -156,8 +156,8 @@ class OpfsProxyServer {
   // worker-selected file is served like an OPFS handle without staging a copy into OPFS first.
   private readonly blobSources = new Map<string, Blob>();
   private readonly pendingRemovals = new Set<Promise<void>>();
-  // Directory handles by guest path, so an open walks only the folders it has not seen. A folder removed
-  // outside the proxy leaves its handle stale; `withFreshDirectories` then retries once without the cache.
+  // Directory handles by guest path, so an open walks only unseen folders.
+  // A folder removed outside the proxy leaves its handle stale.
   private readonly directoryCache = new Map<string, FileSystemDirectoryHandleLike>();
   private directoryCacheHits = 0;
   private readonly shutdownControl?: Int32Array;
@@ -604,7 +604,7 @@ class OpfsProxyServer {
     });
   }
 
-  /** Runs `attempt`; when a cached directory handle was used and the call fails as stale, drops the cache and retries once. */
+  /** Runs `attempt`. On a stale cache hit, clears the cache and retries once. */
   private async withFreshDirectories<T>(attempt: () => Promise<T>): Promise<T> {
     const hitsBefore = this.directoryCacheHits;
     try {
@@ -620,7 +620,7 @@ class OpfsProxyServer {
   }
 
   private forgetDirectories(location: FileLocation): void {
-    // Keys are built from the normalized parts, so a guest path with `//` or `\` still matches.
+    // Keys use normalized parts, so `//` or `\` in a guest path still matches.
     const path = `${location.mount.mountPath}/${location.parts.join("/")}`;
     for (const key of this.directoryCache.keys()) {
       if (key === path || key.startsWith(`${path}/`)) this.directoryCache.delete(key);
@@ -647,7 +647,7 @@ class OpfsProxyServer {
     return { dir, name };
   }
 
-  /** The deepest folder of the path the proxy already holds, and how many path parts it covers (0 for the mount root). */
+  /** Returns the deepest cached folder and its part count; 0 means the mount root. */
   private deepestKnownDirectory(
     location: FileLocation,
     depth: number,

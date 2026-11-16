@@ -1,5 +1,6 @@
-// The proxy remembers directory handles between opens. An output directory removed behind its back MUST NOT
-// break the next extract into the same path: the stale handle is dropped and the directory is made again.
+// The proxy caches directory handles between opens.
+// Removing an output directory outside the proxy MUST NOT break the next extract.
+// The stale handle is dropped and the directory is made again.
 
 import { describe, expect, it } from "vitest";
 import { buildStoredZip } from "./stored-zip-fixture.mjs";
