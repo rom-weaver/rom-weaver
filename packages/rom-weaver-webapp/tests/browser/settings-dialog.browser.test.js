@@ -25,6 +25,8 @@ const SettingsHarness = () => {
     createElement("button", { onClick: () => setOpen(true), type: "button" }, "Open Settings"),
     open
       ? createElement(LogDialog, {
+          closeAsksToDiscard: dirty,
+          dockTabs: [{ dock: true, group: "patch", href: "#", icon: null, id: "apply", label: "Apply" }],
           initialTab: "settings",
           onClose: close,
           onLevelChange: () => undefined,
@@ -196,3 +198,32 @@ for (const method of ["Close", "Escape"]) {
     await expect.element(page.getByRole("checkbox", { name: "Detailed information" })).not.toBeChecked();
   });
 }
+
+test("Close on a phone does not slide the page while it opens the discard prompt", async () => {
+  await page.viewport(390, 800);
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  const frame = document.querySelector(".dlg-frame");
+  const close = settings().getByRole("button", { name: "Close", exact: true });
+  const slid = new Set();
+  const observer = new MutationObserver(() => slid.add(frame.style.transform));
+  observer.observe(frame, { attributeFilter: ["style"], attributes: true });
+
+  await page.getByRole("checkbox", { name: "Detailed information" }).click();
+  await close.click();
+  await expect.element(confirmation()).toBeVisible();
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  observer.disconnect();
+
+  expect([...slid]).not.toContain("translateX(100%)");
+  expect(frame.style.transform).toBe("");
+});
+
+test("Close on a phone with nothing to discard slides the page out", async () => {
+  await page.viewport(390, 800);
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  const frame = document.querySelector(".dlg-frame");
+
+  await settings().getByRole("button", { name: "Close", exact: true }).click();
+  await expect.poll(() => frame.style.transform).toBe("translateX(100%)");
+  await expect.element(settings()).not.toBeInTheDocument();
+});

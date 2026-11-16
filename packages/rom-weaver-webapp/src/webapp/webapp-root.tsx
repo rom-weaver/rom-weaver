@@ -82,7 +82,7 @@ import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { runAppearanceTransition } from "./appearance-transition.ts";
 import { ABOUT_URL, DONATE_URL, GITHUB_URL, PRIVACY_URL } from "./project-links.ts";
 import { getSettingsUiState, SETTINGS_FIELD_METADATA } from "./settings/settings-state.ts";
-import { shouldWarnBeforeUnload } from "./unload-guard.ts";
+import { shouldConfirmDiscardSettings, shouldWarnBeforeUnload } from "./unload-guard.ts";
 import type { WebappView } from "./webapp-state-types.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
@@ -1268,6 +1268,7 @@ function WebappRoot({
           {logOpen ? (
             <Suspense fallback={null}>
               <LogDialog
+                closeAsksToDiscard={state.settingsDialogOpen && shouldConfirmDiscardSettings(state)}
                 dockTabs={dockTabs}
                 initialTab={logTab}
                 licensesHref={`${resolvedAssetBaseUrl}docs/notices`}

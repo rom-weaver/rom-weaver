@@ -855,9 +855,10 @@ const SWIPE_HOLD_MS = 80;
 
 /**
  * The root unmounts the dialog the moment it closes, so on a phone the page
- * slides out first and reports the close once it is off screen.
+ * slides out first and reports the close once it is off screen. A close that
+ * only opens the discard prompt leaves the page where it is.
  */
-const useSlideClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: () => void) => {
+const useSlideClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: () => void, asksToDiscard: boolean) => {
   const leavingRef = useRef(false);
   useEffect(
     () => () => {
@@ -867,7 +868,7 @@ const useSlideClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: () =
   );
   return useCallback(() => {
     const frame = frameRef.current;
-    if (!frame || prefersReducedMotion() || !window.matchMedia(PHONE_QUERY).matches) {
+    if (!frame || asksToDiscard || prefersReducedMotion() || !window.matchMedia(PHONE_QUERY).matches) {
       onClose();
       return;
     }
@@ -877,11 +878,10 @@ const useSlideClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: () =
     window.setTimeout(() => {
       leavingRef.current = false;
       onClose();
-      // A close the settings draft holds back (discard prompt) leaves the
-      // dialog mounted, so the page slides back in under the prompt.
+      // A close the parent holds back leaves the dialog mounted, so the page slides back in.
       frame.style.removeProperty("transform");
     }, SLIDE_MS);
-  }, [frameRef, onClose]);
+  }, [asksToDiscard, frameRef, onClose]);
 };
 
 const useSwipeToClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: () => void, open: boolean) => {
@@ -1615,6 +1615,7 @@ const LogsStoragePanel = ({
 };
 
 const LogDialog = ({
+  closeAsksToDiscard = false,
   dockTabs = [],
   open,
   onClose,
@@ -1640,6 +1641,8 @@ const LogDialog = ({
   onPreviewRuntimeStateChange,
   onReloadUpdate,
 }: {
+  /** Closing now opens the discard-changes prompt instead of closing, so the phone slide-out is skipped. */
+  closeAsksToDiscard?: boolean;
   /** The phone dock's workflows; the console repeats the dock because the modal makes the real one inert. */
   dockTabs?: WorkflowTab[];
   open: boolean;
@@ -1683,7 +1686,7 @@ const LogDialog = ({
   const copyFeedback = useCopyFeedback(1300, 1600);
   const advanced = useAdvancedSettings();
   const frameRef = useRef<HTMLDivElement | null>(null);
-  const close = useSlideClose(frameRef, onClose);
+  const close = useSlideClose(frameRef, onClose, closeAsksToDiscard);
   useSwipeToClose(frameRef, close, open);
   // A deep link to a field Advanced hides (Find, a tool's Threads link) turns Advanced on, or it would land nowhere.
   useEffect(() => {
