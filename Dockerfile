@@ -49,9 +49,8 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then scripts/install-jwasm.sh; fi
 # As in the webapp image they are local-only - BuildKit exports a cache mount to
 # no cache backend, so CI still pays a cold compile.
 #
-# One cargo invocation builds the binary and the man-page example: a separate
-# `cargo run --example` re-resolved with the dev-dependencies and recompiled the
-# workspace crates a second time.
+# One cargo invocation builds the binary and the man-page example, so the
+# workspace crates compile once.
 #
 # `CARGO_HOME` is /usr/local/cargo in the official rust image, not /root/.cargo.
 # A cache mount is absent from the resulting layer, so the binary has to leave

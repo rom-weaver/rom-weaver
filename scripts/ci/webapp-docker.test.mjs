@@ -136,6 +136,8 @@ test("CI smokes source and prebuilt images and checks clean identify source impo
       /npm --prefix packages\/rom-weaver-webapp ci --ignore-scripts --no-audit --no-fund/u,
     );
     assert.match(job, /playwright install --with-deps --only-shell chromium/u);
+    assert.match(job, /INSTALL_BROWSER: \$\{\{ matrix.arch != 'amd64' \}\}/u);
+    assert.match(job, /ROM_WEAVER_SYSTEM_CHROME: \$\{\{ matrix.arch == 'amd64' && '1' \|\| '' \}\}/u);
   }
 });
 
