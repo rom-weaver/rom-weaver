@@ -449,9 +449,9 @@ const releaseRetainedSources = async () => {
 };
 
 export const installPatcherTestHooks = () => {
-  // afterEach below already unmounts, releases sources, resets the runner and empties OPFS, and nothing
-  // runs between it and the next beforeEach, so a test that follows a completed afterEach starts clean.
-  // Only the file's first test (or one after a failed teardown) needs the full reset.
+  // afterEach below unmounts, releases sources, resets the runner and empties OPFS, and the next
+  // beforeEach runs right after it, so a test that follows a completed afterEach starts clean.
+  // The file's first test, and one after a failed teardown, get the full reset.
   let startsClean = false;
   beforeEach(async () => {
     if (!startsClean) {
