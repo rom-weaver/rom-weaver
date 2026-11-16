@@ -106,7 +106,6 @@ const JOURNEY_PHASES = ["raw-journeys", "archive-journeys"];
 const E2E_SHARD_PHASES = {
   a11y: [...A11Y_APP_PHASES, "docs"],
   "a11y-app": A11Y_APP_PHASES,
-  docs: ["docs"],
   "docs-journeys": ["docs", ...JOURNEY_PHASES],
   links: ["links"],
   journeys: JOURNEY_PHASES,
@@ -1844,10 +1843,10 @@ const main = async () => {
           for (const userDataDir of persistentContextDirs) fs.rmSync(userDataDir, { force: true, recursive: true });
         }
       });
-    // Chromium contexts share no browser state, so a full Chromium run overlaps the lanes.
-    // Otherwise they run in order.
     const skipPhase = async () => undefined;
     const whenSelected = (phase, run) => (E2E_PHASES.has(phase) ? run : skipPhase);
+    // Chromium contexts share no browser state, so a full Chromium run overlaps the lanes.
+    // Otherwise they run in order.
     const auditLane = async () => {
       if (RUN_NAVIGATION_AUDIT) {
         await scenario("accessible navigation", (createContext) =>

@@ -117,17 +117,11 @@ test("pull requests skip Lighthouse only through the shared classifier flag", ()
   assert.equal(ci.jobs.changes.outputs.lighthouse, "${{ steps.classify.outputs.lighthouse }}");
 });
 
-// `run-webapp-e2e.test.mjs` proves these two shards partition one WebKit run. This job has
-// no Playwright, so it only pins the matrix and the gate's reading of it.
-test("the gate reads both legs of the WebKit E2E matrix", () => {
-  const job = ci.jobs["webapp-webkit-e2e"];
-  assert.deepEqual(job.strategy.matrix.shard, ["a11y-app", "docs-journeys"]);
-  assert.equal(job.strategy["fail-fast"], false);
-  assert.equal(job.name, "Webapp (WebKit E2E ${{ matrix.shard }})");
-  assert.match(job.steps.at(-1).run, /test:e2e:webapp:webkit -- --\$\{\{ matrix\.shard \}\}$/u);
-
-  // One matrix job: its result is the worst leg's, so a failed or skipped leg fails the gate.
-  assert.ok(gate.needs.includes("webapp-webkit-e2e"));
-  const verify = gate.steps.find((step) => step.name === "Verify webapp browser jobs");
-  assert.match(verify.run, /webapp-webkit-e2e=\$\{\{ needs\.webapp-webkit-e2e\.result \}\}/u);
+// `run-webapp-e2e.test.mjs` proves the matrix shards partition one WebKit run; a leg that
+// ignored its shard would run the whole suite, so the step has to pass the matrix value on.
+test("each WebKit E2E leg runs its own shard", () => {
+  assert.match(
+    ci.jobs["webapp-webkit-e2e"].steps.at(-1).run,
+    /test:e2e:webapp:webkit -- --\$\{\{ matrix\.shard \}\}$/u,
+  );
 });

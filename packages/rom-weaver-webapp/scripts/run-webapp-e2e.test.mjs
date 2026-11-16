@@ -91,7 +91,6 @@ describe("resolveE2EShard", () => {
   it("selects each supported shard", () => {
     assert.equal(resolveE2EShard(["--a11y"]), "a11y");
     assert.equal(resolveE2EShard(["--a11y-app"]), "a11y-app");
-    assert.equal(resolveE2EShard(["--docs"]), "docs");
     assert.equal(resolveE2EShard(["--docs-journeys"]), "docs-journeys");
     assert.equal(resolveE2EShard(["--links"]), "links");
     assert.equal(resolveE2EShard(["--journeys"]), "journeys");
@@ -102,7 +101,7 @@ describe("resolveE2EShard", () => {
   it("rejects incompatible shard flags", () => {
     assert.throws(
       () => resolveE2EShard(["--a11y", "--journeys-raw"]),
-      /Use only one E2E shard: --a11y, --a11y-app, --docs, --docs-journeys, --links, --journeys, --journeys-raw, or --journeys-archive/,
+      /Use only one E2E shard: --a11y, --a11y-app, --docs-journeys, --links, --journeys, --journeys-raw, or --journeys-archive/,
     );
   });
 });
@@ -110,12 +109,6 @@ describe("resolveE2EShard", () => {
 describe("resolveE2EPhases", () => {
   const sorted = (phases) => [...phases].sort((left, right) => left.localeCompare(right));
   const WEBKIT_PHASES = ["accessibility", "archive-journeys", "docs", "hydration", "navigation", "raw-journeys"];
-
-  it("selects only the docs audit for --docs", () => {
-    for (const browser of ["chromium", "webkit"]) {
-      assert.deepEqual(sorted(resolveE2EPhases("docs", browser)), ["docs"], browser);
-    }
-  });
 
   it("splits a WebKit run into two legs that run every phase exactly once", () => {
     const appAudits = sorted(resolveE2EPhases("a11y-app", "webkit"));
