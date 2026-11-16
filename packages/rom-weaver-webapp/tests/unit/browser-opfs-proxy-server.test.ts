@@ -267,6 +267,8 @@ interface MoveScenario {
   holdSourceOpen?: boolean;
   expectedMoves: number;
   expectedStatus: number;
+  /** How the refusal is traced: a refusal the guest recovers from by copying is `declined`, never `failed`. */
+  expectedTrace?: "declined" | "failed";
 }
 
 test.each<MoveScenario>([
@@ -280,18 +282,21 @@ test.each<MoveScenario>([
     destinationExists: true,
     expectedMoves: 0,
     expectedStatus: ERRNO_EXIST,
+    expectedTrace: "failed",
     fileHandle: { move: vi.fn() },
     name: "refuses an existing destination",
   },
   {
     expectedMoves: 0,
     expectedStatus: ERRNO_NOTSUP,
+    expectedTrace: "declined",
     fileHandle: {},
     name: "reports a browser without move() as unsupported",
   },
   {
     expectedMoves: 0,
     expectedStatus: ERRNO_BUSY,
+    expectedTrace: "declined",
     fileHandle: {
       createSyncAccessHandle: vi.fn().mockResolvedValue({ close: vi.fn(), getSize: () => 0 }),
       move: vi.fn(),
@@ -299,34 +304,43 @@ test.each<MoveScenario>([
     holdSourceOpen: true,
     name: "refuses a source that still has an open handle",
   },
-])("proxy move $name", async ({ destinationExists, expectedMoves, expectedStatus, fileHandle, holdSourceOpen }) => {
-  const channel = createOpfsProxyChannel(1);
-  const directoryHandle = {
-    getDirectoryHandle: vi.fn(),
-    getFileHandle: vi.fn(async (name: string) => {
-      if (name === "staged.bin") return fileHandle;
-      if (destinationExists) return {};
-      throw notFound();
-    }),
-  };
-  const server = startOpfsProxyServer({
-    channel,
-    mounts: [{ directoryHandle, mountPath: "/out", writableRoots: ["/out"] }] as never,
-  });
-  try {
-    if (holdSourceOpen) {
-      expect(await sendProxyRequest(channel, OPFS_PROXY_OP_OPEN, ["/out/staged.bin"])).toBe(OPFS_PROXY_STATUS_OK);
+])(
+  "proxy move $name",
+  async ({ destinationExists, expectedMoves, expectedStatus, expectedTrace, fileHandle, holdSourceOpen }) => {
+    const channel = createOpfsProxyChannel(1);
+    const trace = vi.fn();
+    const directoryHandle = {
+      getDirectoryHandle: vi.fn(),
+      getFileHandle: vi.fn(async (name: string) => {
+        if (name === "staged.bin") return fileHandle;
+        if (destinationExists) return {};
+        throw notFound();
+      }),
+    };
+    const server = startOpfsProxyServer({
+      channel,
+      mounts: [{ directoryHandle, mountPath: "/out", writableRoots: ["/out"] }] as never,
+      trace,
+    });
+    try {
+      if (holdSourceOpen) {
+        expect(await sendProxyRequest(channel, OPFS_PROXY_OP_OPEN, ["/out/staged.bin"])).toBe(OPFS_PROXY_STATUS_OK);
+      }
+      expect(await sendProxyRequest(channel, OPFS_PROXY_OP_MOVE, ["/out/staged.bin", "/out/final.bin"])).toBe(
+        expectedStatus,
+      );
+      const move = fileHandle.move as ReturnType<typeof vi.fn> | undefined;
+      expect(move?.mock.calls.length ?? 0).toBe(expectedMoves);
+      if (expectedMoves > 0) expect(move).toHaveBeenCalledWith(directoryHandle, "final.bin");
+      const moveLines = trace.mock.calls
+        .map(([line]) => String(line))
+        .filter((line) => line.includes(`opcode=${OPFS_PROXY_OP_MOVE} `));
+      expect(moveLines.map((line) => line.match(/proxy op (\w+) /)?.[1])).toEqual(expectedTrace ? [expectedTrace] : []);
+    } finally {
+      server.stop();
     }
-    expect(await sendProxyRequest(channel, OPFS_PROXY_OP_MOVE, ["/out/staged.bin", "/out/final.bin"])).toBe(
-      expectedStatus,
-    );
-    const move = fileHandle.move as ReturnType<typeof vi.fn> | undefined;
-    expect(move?.mock.calls.length ?? 0).toBe(expectedMoves);
-    if (expectedMoves > 0) expect(move).toHaveBeenCalledWith(directoryHandle, "final.bin");
-  } finally {
-    server.stop();
-  }
-});
+  },
+);
 
 test("proxy move creates the destination directory before moving into it", async () => {
   const channel = createOpfsProxyChannel(1);

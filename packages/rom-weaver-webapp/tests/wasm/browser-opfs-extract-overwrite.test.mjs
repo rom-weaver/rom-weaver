@@ -57,4 +57,30 @@ describe("overwrite archive extract", () => {
       { prefix: "rom-weaver-extract-overwrite-" },
     );
   });
+
+  it("replaces the outputs of an earlier run in the same worker", async () => {
+    await withTempFixture(
+      async ({ worker, opfsHandle, dir }) => {
+        const outDir = joinGuestPath(dir, "out");
+        // The last two runs extract equal archives into the directory the previous run filled.
+        const sizes = [ENTRY_SIZE, ENTRY_SIZE / 2, ENTRY_SIZE / 2];
+        for (const [run, size] of sizes.entries()) {
+          const archivePath = joinGuestPath(dir, `repeat-${run}.zip`);
+          await writeGuestFile(opfsHandle, archivePath, buildStoredZip(ENTRY_COUNT, size));
+
+          const result = await worker.runJson(["extract", "--input", archivePath, "--out-dir", outDir]);
+          assertRunJsonSucceeded(result, { command: "extract" });
+
+          for (let index = 0; index < ENTRY_COUNT; index += 1) {
+            const bytes = await readGuestFile(opfsHandle, joinGuestPath(outDir, entryName(index)));
+            expect(bytes.byteLength).toBe(size);
+          }
+        }
+        const outHandle = await opfsHandle.getDirectoryHandle("out", { create: false });
+        const names = await listDirectoryNames(outHandle);
+        expect(names.sort()).toEqual(Array.from({ length: ENTRY_COUNT }, (_, index) => entryName(index)));
+      },
+      { prefix: "rom-weaver-extract-repeat-" },
+    );
+  });
 });

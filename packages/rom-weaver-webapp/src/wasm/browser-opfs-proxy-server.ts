@@ -308,12 +308,9 @@ class OpfsProxyServer {
       const encoded = textEncoder.encode(detail).subarray(0, data.byteLength);
       data.set(encoded, 0);
       result = encoded.byteLength;
-      // A missing path is an expected probe result (unlink-if-exists, open-without-create): the guest
-      // gets ENOENT and handles it, so trace it as a miss, which the worker does not log as an error.
-      const outcome = status === ERRNO_NOENT ? "missed" : "failed";
-      this.trace?.(
-        `[browser-opfs] proxy op ${outcome} opcode=${Atomics.load(control, OPFS_PROXY_CONTROL_OPCODE_INDEX)} errno=${status} ${detail}`,
-      );
+      const opcode = Atomics.load(control, OPFS_PROXY_CONTROL_OPCODE_INDEX);
+      const outcome = traceOutcomeForFailure(status);
+      this.trace?.(`[browser-opfs] proxy op ${outcome} opcode=${opcode} errno=${status} ${detail}`);
     }
     // Encode the result across two words like read/write offsets so 64-bit values survive: RESULT
     // holds the low 32 bits, AUX_HIGH the high 32 bits. SIZE for a >= 2 GiB file would otherwise wrap
@@ -774,6 +771,17 @@ function readAux(control: Int32Array): number {
 // TextDecoder rejects SharedArrayBuffer-backed views; copy into a plain buffer before decoding.
 function decodePath(data: Uint8Array, offset: number, length: number): string {
   return textDecoder.decode(new Uint8Array(data.subarray(offset, offset + length)));
+}
+
+/**
+ * The worker logs only "failed" trace lines as errors. A missing path is an expected probe result
+ * (unlink-if-exists, open-without-create). BUSY and NOTSUP come only from a move the proxy cannot do
+ * (open handle, no move()), which makes the guest install by copying. Neither is a failure.
+ */
+function traceOutcomeForFailure(errno: number): "declined" | "failed" | "missed" {
+  if (errno === ERRNO_NOENT) return "missed";
+  if (errno === ERRNO_BUSY || errno === ERRNO_NOTSUP) return "declined";
+  return "failed";
 }
 
 function errnoForError(error: unknown): number {
