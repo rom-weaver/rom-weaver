@@ -371,8 +371,10 @@ async function checkAppBaseRoutes(context, origin, prefix) {
 async function checkBrowser(origins) {
   const require = createRequire(resolve("packages/rom-weaver-webapp/package.json"));
   const { chromium } = require("playwright");
+  // The amd64 runner image ships Chrome; same switch as the other browser jobs.
   const browser = await chromium.launch({
     headless: true,
+    ...(process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {}),
     env: { ...process.env, TMPDIR: scratch },
   });
   try {

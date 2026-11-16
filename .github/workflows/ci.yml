@@ -603,11 +603,18 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
+      # ubuntu-24.04 ships Chrome, so amd64 legs smoke with it; the arm64 image
+      # has none (Google publishes no Linux arm64 Chrome), so only arm64 downloads
+      # Playwright's Chromium and its system dependencies.
       - name: Install webapp smoke browser
         if: matrix.name == 'webapp'
+        env:
+          INSTALL_BROWSER: ${{ matrix.arch != 'amd64' }}
         run: |
           npm --prefix packages/rom-weaver-webapp ci --ignore-scripts --no-audit --no-fund
-          npm --prefix packages/rom-weaver-webapp exec -- playwright install --with-deps --only-shell chromium
+          if [[ "$INSTALL_BROWSER" == "true" ]]; then
+            npm --prefix packages/rom-weaver-webapp exec -- playwright install --with-deps --only-shell chromium
+          fi
 
       - uses: ./.github/actions/download-identify-data
 
@@ -650,6 +657,8 @@ jobs:
       # `docker-prebuilt` below, off the exact artifact that deploy uses.
       - name: Build image
         uses: ./.github/actions/docker-build-arch
+        env:
+          ROM_WEAVER_SYSTEM_CHROME: ${{ matrix.arch == 'amd64' && '1' || '' }}
         with:
           image: ${{ matrix.image }}
           smoke-kind: ${{ matrix.name == 'CLI' && 'cli' || 'webapp' }}
@@ -805,13 +814,20 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
+      # See the same step in `docker` above: only arm64 downloads a browser.
       - name: Install webapp smoke browser
+        env:
+          INSTALL_BROWSER: ${{ matrix.arch != 'amd64' }}
         run: |
           npm --prefix packages/rom-weaver-webapp ci --ignore-scripts --no-audit --no-fund
-          npm --prefix packages/rom-weaver-webapp exec -- playwright install --with-deps --only-shell chromium
+          if [[ "$INSTALL_BROWSER" == "true" ]]; then
+            npm --prefix packages/rom-weaver-webapp exec -- playwright install --with-deps --only-shell chromium
+          fi
 
       - name: Build the prebuilt path
         uses: ./.github/actions/docker-build-arch
+        env:
+          ROM_WEAVER_SYSTEM_CHROME: ${{ matrix.arch == 'amd64' && '1' || '' }}
         with:
           image: rom-weaver-webapp
           file: packages/rom-weaver-webapp/Dockerfile
