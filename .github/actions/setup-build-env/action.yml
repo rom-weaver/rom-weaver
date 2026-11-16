@@ -169,12 +169,13 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        if command -v sccache >/dev/null 2>&1; then
+        version=v0.17.0
+        if command -v sccache >/dev/null 2>&1 \
+          && { [ "$RUNNER_OS" != "Linux" ] || sccache --version | grep -q " ${version#v}$"; }; then
           echo "sccache already on PATH"
         elif [ "$RUNNER_OS" = "Linux" ]; then
           # Ubuntu's package is 0.7.7, which cannot cache rustc calls that
           # carry --remap-path-prefix. Pin a release and verify its digest.
-          version=v0.17.0
           case "$RUNNER_ARCH" in
             X64)
               triple=x86_64-unknown-linux-musl
