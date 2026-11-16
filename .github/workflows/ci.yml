@@ -1972,14 +1972,23 @@ jobs:
       - name: Webapp E2E
         run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
 
+  # Two parallel legs: one serial run took about 400 s. `a11y-app` runs the
+  # accessible navigation, accessibility, and hydration audits; `docs-journeys`
+  # runs the docs accessibility audit and the journeys. Together they run what
+  # an unsharded WebKit run does. The matrix job's result is the worst leg's, so
+  # the gate reads it unchanged.
   webapp-webkit-e2e:
-    name: Webapp (WebKit E2E)
+    name: Webapp (WebKit E2E ${{ matrix.shard }})
     # Test the WebKit OPFS path on macOS because Linux WebKit hangs on real OPFS operations.
     # macos-15 tracks the current Playwright WebKit revision; macos-14 pins an obsolete override.
     runs-on: macos-15
     timeout-minutes: 30
     needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp_browser == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [a11y-app, docs-journeys]
     env:
       ROM_WEAVER_E2E_USE_PREBUILT_DIST: "1"
       ROM_WEAVER_CHANNEL: prod
@@ -2013,7 +2022,7 @@ jobs:
       - name: Webapp E2E (WebKit)
         env:
           ROM_WEAVER_SYSTEM_CHROME: "1"
-        run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp:webkit
+        run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp:webkit -- --${{ matrix.shard }}
 
   # The one required CI check. A job that is not selected is skipped, a matrix
   # leg that is not planned reports no status at all, and the ruleset has no
