@@ -154,6 +154,31 @@ for (const width of [320, 1280]) {
   }
 }
 
+test("Settings help does not intercept adjacent field edges", async () => {
+  await page.viewport(320, 800);
+  root.render(createElement(SettingsPanelHarness));
+  const help = page.getByRole("button", { name: "About Log level", exact: true });
+  await expect.element(help).toBeVisible();
+  await Promise.all(
+    document
+      .getAnimations()
+      .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+      .map((animation) => animation.finished),
+  );
+  help.element().focus();
+  const input = document.getElementById("settings-byte-units");
+  const fieldRect = input.getBoundingClientRect();
+  const helpRect = help.element().getBoundingClientRect();
+  const x = helpRect.left + helpRect.width / 2 - fieldRect.left;
+  expect(x).toBeGreaterThanOrEqual(0);
+  expect(x).toBeLessThan(fieldRect.width);
+  expect(document.elementFromPoint(fieldRect.left + x, fieldRect.bottom - 5)).toBe(input);
+  await page.elementLocator(input).click({ position: { x, y: fieldRect.height - 5 } });
+  await expect.element(page.elementLocator(input)).toHaveFocus();
+  await expect.element(help).toHaveAttribute("aria-expanded", "false");
+  await userEvent.keyboard("{Escape}");
+});
+
 for (const method of ["Close", "Escape"]) {
   test(`dirty Settings ${method} keeps its confirmation interactive in the native top layer`, async () => {
     const opener = page.getByRole("button", { name: "Open Settings", exact: true });
