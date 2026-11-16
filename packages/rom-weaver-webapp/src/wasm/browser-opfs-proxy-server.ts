@@ -526,9 +526,9 @@ class OpfsProxyServer {
   }
 
   /**
-   * Moves a closed file to a path that does not exist yet. A path with a live handle is refused (OPFS
-   * cannot move a file that has an open SyncAccessHandle), and a browser without `FileSystemHandle.move`
-   * reports ENOTSUP so the caller can copy instead.
+   * Moves a closed file to a path that does not exist yet, creating its directory as an open would. A
+   * path with a live handle is refused (OPFS cannot move a file that has an open SyncAccessHandle), and
+   * a browser without `FileSystemHandle.move` reports ENOTSUP so the caller can copy instead.
    */
   private async opMove(slot: OpfsProxyChannelSlot): Promise<void> {
     const { control, data } = slot;
@@ -543,7 +543,7 @@ class OpfsProxyServer {
       if (this.byPath.has(path) || this.pendingByPath.has(path)) throw new ProxyErrno(ERRNO_BUSY);
     }
     const source = await this.resolveParent(from, { create: false });
-    const destination = await this.resolveParent(to, { create: false });
+    const destination = await this.resolveParent(to, { create: true });
     if (await this.entryExists(destination.dir, destination.name)) throw new ProxyErrno(ERRNO_EXIST);
     const fileHandle = (await source.dir.getFileHandle(source.name)) as {
       move?: (directory: FileSystemDirectoryHandleLike, name: string) => Promise<void>;

@@ -16,6 +16,7 @@ import {
   OPFS_PROXY_OP_OPEN,
   OPFS_PROXY_OP_UNLINK,
   OPFS_PROXY_STATE_DONE,
+  OPFS_PROXY_STATE_IDLE,
   OPFS_PROXY_STATE_REQUESTED,
   OPFS_PROXY_STATUS_OK,
 } from "../../src/wasm/browser-opfs-proxy-protocol.ts";
@@ -230,8 +231,34 @@ test("the server loop stops and acknowledges on a shutdown request even when Ato
 const ERRNO_BUSY = 10;
 const ERRNO_EXIST = 20;
 const ERRNO_NOTSUP = 58;
+const ERRNO_XDEV = 75;
 
 const notFound = () => Object.assign(new Error("missing"), { name: "NotFoundError" });
+
+type ProxyChannel = ReturnType<typeof createOpfsProxyChannel>;
+
+async function sendProxyRequest(channel: ProxyChannel, opcode: number, paths: string[]) {
+  const slot = channel.slots[0];
+  if (!slot) throw new Error("Proxy channel has no request slot");
+  const encoded = paths.map((path) => new TextEncoder().encode(path));
+  let offset = 0;
+  for (const bytes of encoded) {
+    slot.data.set(bytes, offset);
+    offset += bytes.byteLength;
+  }
+  Atomics.store(slot.control, OPFS_PROXY_CONTROL_OPCODE_INDEX, opcode);
+  Atomics.store(slot.control, OPFS_PROXY_CONTROL_LENGTH_INDEX, encoded[0]?.byteLength ?? 0);
+  Atomics.store(slot.control, OPFS_PROXY_CONTROL_AUX_LOW_INDEX, encoded[1]?.byteLength ?? 0);
+  Atomics.store(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX, OPFS_PROXY_STATE_REQUESTED);
+  Atomics.add(channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX, 1);
+  Atomics.notify(channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
+  await vi.waitFor(() =>
+    expect(Atomics.load(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX)).toBe(OPFS_PROXY_STATE_DONE),
+  );
+  const status = Atomics.load(slot.control, OPFS_PROXY_CONTROL_STATUS_INDEX);
+  Atomics.store(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX, OPFS_PROXY_STATE_IDLE);
+  return status;
+}
 
 interface MoveScenario {
   name: string;
@@ -287,34 +314,60 @@ test.each<MoveScenario>([
     mounts: [{ directoryHandle, mountPath: "/out", writableRoots: ["/out"] }] as never,
   });
   try {
-    const slot = channel.slots[0];
-    if (!slot) throw new Error("Proxy channel has no request slot");
-    const submit = async (opcode: number, length: number, auxLow = 0) => {
-      Atomics.store(slot.control, OPFS_PROXY_CONTROL_OPCODE_INDEX, opcode);
-      Atomics.store(slot.control, OPFS_PROXY_CONTROL_LENGTH_INDEX, length);
-      Atomics.store(slot.control, OPFS_PROXY_CONTROL_AUX_LOW_INDEX, auxLow);
-      Atomics.store(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX, OPFS_PROXY_STATE_REQUESTED);
-      Atomics.add(channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX, 1);
-      Atomics.notify(channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
-      await vi.waitFor(() =>
-        expect(Atomics.load(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX)).toBe(OPFS_PROXY_STATE_DONE),
-      );
-      const status = Atomics.load(slot.control, OPFS_PROXY_CONTROL_STATUS_INDEX);
-      Atomics.store(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX, 0);
-      return status;
-    };
-    const from = new TextEncoder().encode("/out/staged.bin");
-    const to = new TextEncoder().encode("/out/final.bin");
     if (holdSourceOpen) {
-      slot.data.set(from);
-      expect(await submit(OPFS_PROXY_OP_OPEN, from.byteLength)).toBe(OPFS_PROXY_STATUS_OK);
+      expect(await sendProxyRequest(channel, OPFS_PROXY_OP_OPEN, ["/out/staged.bin"])).toBe(OPFS_PROXY_STATUS_OK);
     }
-    slot.data.set(from);
-    slot.data.set(to, from.byteLength);
-    expect(await submit(OPFS_PROXY_OP_MOVE, from.byteLength, to.byteLength)).toBe(expectedStatus);
+    expect(await sendProxyRequest(channel, OPFS_PROXY_OP_MOVE, ["/out/staged.bin", "/out/final.bin"])).toBe(
+      expectedStatus,
+    );
     const move = fileHandle.move as ReturnType<typeof vi.fn> | undefined;
     expect(move?.mock.calls.length ?? 0).toBe(expectedMoves);
     if (expectedMoves > 0) expect(move).toHaveBeenCalledWith(directoryHandle, "final.bin");
+  } finally {
+    server.stop();
+  }
+});
+
+test("proxy move creates the destination directory before moving into it", async () => {
+  const channel = createOpfsProxyChannel(1);
+  const move = vi.fn();
+  const subDirectory = { getDirectoryHandle: vi.fn(), getFileHandle: vi.fn().mockRejectedValue(notFound()) };
+  const directoryHandle = {
+    getDirectoryHandle: vi.fn().mockResolvedValue(subDirectory),
+    getFileHandle: vi.fn().mockResolvedValue({ move }),
+  };
+  const server = startOpfsProxyServer({
+    channel,
+    mounts: [{ directoryHandle, mountPath: "/out", writableRoots: ["/out"] }] as never,
+  });
+  try {
+    expect(await sendProxyRequest(channel, OPFS_PROXY_OP_MOVE, ["/out/staged.bin", "/out/sub/final.bin"])).toBe(
+      OPFS_PROXY_STATUS_OK,
+    );
+    expect(directoryHandle.getDirectoryHandle).toHaveBeenCalledWith("sub", { create: true });
+    expect(move).toHaveBeenCalledWith(subDirectory, "final.bin");
+  } finally {
+    server.stop();
+  }
+});
+
+test("proxy move refuses a destination in another mount", async () => {
+  const channel = createOpfsProxyChannel(1);
+  const move = vi.fn();
+  const source = { getDirectoryHandle: vi.fn(), getFileHandle: vi.fn().mockResolvedValue({ move }) };
+  const other = { getDirectoryHandle: vi.fn(), getFileHandle: vi.fn().mockRejectedValue(notFound()) };
+  const server = startOpfsProxyServer({
+    channel,
+    mounts: [
+      { directoryHandle: source, mountPath: "/out", writableRoots: ["/out"] },
+      { directoryHandle: other, mountPath: "/other", writableRoots: ["/other"] },
+    ] as never,
+  });
+  try {
+    expect(await sendProxyRequest(channel, OPFS_PROXY_OP_MOVE, ["/out/staged.bin", "/other/final.bin"])).toBe(
+      ERRNO_XDEV,
+    );
+    expect(move).not.toHaveBeenCalled();
   } finally {
     server.stop();
   }

@@ -326,8 +326,8 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
 
   /**
    * Moves a closed output file to a new name in this mount through the proxy, so a staged extract
-   * output is installed without copying its bytes. A directory, a file with an open fd, or an
-   * existing destination is refused and the guest installs by copying instead.
+   * output is installed without copying its bytes. A directory or a file with an open fd is refused
+   * and the guest installs by copying instead; an existing destination fails with EEXIST.
    */
   renameFile(oldPath: string, newPath: string) {
     const plan = this.planRename(oldPath, newPath);

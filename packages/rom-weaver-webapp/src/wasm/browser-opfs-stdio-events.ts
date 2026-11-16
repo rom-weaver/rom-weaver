@@ -66,9 +66,6 @@ type WasiFdPwriteImport = (
   nwrittenPtr: number,
 ) => unknown;
 
-// Loose view of a WASI import table: the four file-io entries this module wraps plus
-// the rom-weaver markers it installs. Keeps shim WASI instances assignable while still
-// typing the wrapped imports.
 type WasiPathRenameImport = (
   fd: number,
   oldPathPtr: number,
@@ -78,6 +75,9 @@ type WasiPathRenameImport = (
   newPathLen: number,
 ) => unknown;
 
+// Loose view of a WASI import table: the file-io entries this module wraps plus
+// the rom-weaver markers it installs. Keeps shim WASI instances assignable while still
+// typing the wrapped imports.
 type DirectFileIoImportTable = Record<string, unknown> & {
   __romWeaverDirectFileIo?: unknown;
   __romWeaverDirectFileIoStats?: unknown;
