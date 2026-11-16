@@ -55,6 +55,7 @@ import {
 } from "./browser-opfs-proxy-protocol.ts";
 import type { FileSystemDirectoryHandleLike, RomWeaverBrowserSyncAccessMode } from "./browser-opfs-runtime-types.ts";
 import { openSyncAccessHandle, type SyncAccessHandleLike, writableSyncAccessMode } from "./browser-opfs-sync-access.ts";
+import { isStaleDirectoryHandleError, OpfsDirectoryCache } from "./opfs-directory-cache.ts";
 
 // WASI errno values the proxy reports through STATUS. Mirror wasiShim.wasi.ERRNO_* (kept local so the
 // server stays free of the WASI shim and remains node-testable).
@@ -158,7 +159,7 @@ class OpfsProxyServer {
   private readonly pendingRemovals = new Set<Promise<void>>();
   // Directory handles by guest path, so an open walks only unseen folders.
   // A folder removed outside the proxy leaves its handle stale.
-  private readonly directoryCache = new Map<string, FileSystemDirectoryHandleLike>();
+  private readonly directoryCache = new OpfsDirectoryCache<FileSystemDirectoryHandleLike>(MAX_CACHED_DIRECTORIES);
   private directoryCacheHits = 0;
   private readonly shutdownControl?: Int32Array;
   private closeFailed = false;
@@ -491,7 +492,7 @@ class OpfsProxyServer {
   private async opUnlink(guestPath: string): Promise<void> {
     const location = this.locate(guestPath);
     // The entry may be a directory, so nothing cached at or under it stays valid.
-    this.forgetDirectories(location);
+    this.directoryCache.forget(location.parts, location.mount.mountPath);
     await this.withFreshDirectories(() => this.unlinkIn(guestPath, location));
   }
 
@@ -610,20 +611,9 @@ class OpfsProxyServer {
     try {
       return await attempt();
     } catch (error) {
-      const errorName = (error as { name?: string } | null)?.name;
-      // WebKit reports a removed folder's handle as UnknownError when a file is created in it.
-      const stale = errorName === "NotFoundError" || errorName === "InvalidStateError" || errorName === "UnknownError";
-      if (!stale || this.directoryCacheHits === hitsBefore) throw error;
+      if (!isStaleDirectoryHandleError(error) || this.directoryCacheHits === hitsBefore) throw error;
       this.directoryCache.clear();
       return attempt();
-    }
-  }
-
-  private forgetDirectories(location: FileLocation): void {
-    // Keys use normalized parts, so `//` or `\` in a guest path still matches.
-    const path = `${location.mount.mountPath}/${location.parts.join("/")}`;
-    for (const key of this.directoryCache.keys()) {
-      if (key === path || key.startsWith(`${path}/`)) this.directoryCache.delete(key);
     }
   }
 
@@ -633,42 +623,17 @@ class OpfsProxyServer {
   ): Promise<{ dir: FileSystemDirectoryHandleLike; name: string }> {
     const name = location.parts.at(-1);
     if (name === undefined) throw new ProxyErrno(ERRNO_NOENT);
-    const depth = location.parts.length - 1;
-    const keyAt = (count: number) => `${location.mount.mountPath}/${location.parts.slice(0, count).join("/")}`;
-    let { dir, cachedPartCount } = this.deepestKnownDirectory(location, depth, keyAt);
-    for (let i = cachedPartCount; i < depth; i += 1) {
-      const part = location.parts[i] as string;
-      if (create) {
-        this.trace?.(`[browser-opfs] path create requested creator=browser-opfs-proxy.open path=${keyAt(i + 1)}`);
-      }
-      dir = (await dir.getDirectoryHandle(part, { create })) as FileSystemDirectoryHandleLike;
-      this.rememberDirectory(keyAt(i + 1), dir);
-    }
-    return { dir, name };
-  }
-
-  /** Returns the deepest cached folder and its part count; 0 means the mount root. */
-  private deepestKnownDirectory(
-    location: FileLocation,
-    depth: number,
-    keyAt: (count: number) => string,
-  ): { dir: FileSystemDirectoryHandleLike; cachedPartCount: number } {
-    for (let cachedPartCount = depth; cachedPartCount > 0; cachedPartCount -= 1) {
-      const dir = this.directoryCache.get(keyAt(cachedPartCount));
-      if (dir) {
+    const dir = await this.directoryCache.resolve(location.mount.directoryHandle, location.parts.slice(0, -1), {
+      create,
+      keyPrefix: location.mount.mountPath,
+      onCachedDirectory: () => {
         this.directoryCacheHits += 1;
-        return { dir, cachedPartCount };
-      }
-    }
-    return { dir: location.mount.directoryHandle, cachedPartCount: 0 };
-  }
-
-  private rememberDirectory(key: string, dir: FileSystemDirectoryHandleLike): void {
-    if (this.directoryCache.size >= MAX_CACHED_DIRECTORIES) {
-      const oldest = this.directoryCache.keys().next().value;
-      if (oldest !== undefined) this.directoryCache.delete(oldest);
-    }
-    this.directoryCache.set(key, dir);
+      },
+      onUncachedDirectory: (path) => {
+        if (create) this.trace?.(`[browser-opfs] path create requested creator=browser-opfs-proxy.open path=${path}`);
+      },
+    });
+    return { dir, name };
   }
 
   // Reattach an open request to an existing live handle for `guestPath`, bumping its refcount. Covers two
