@@ -630,12 +630,21 @@ test("the nightly keeps only the Rust selection", () => {
   const nightly = scheduledSelection(everything);
   assert.equal(nightly.rust, true);
   assert.equal(nightly.rust_lint, true);
+  assert.equal(nightly.fuzz, true);
   for (const [key, value] of Object.entries(nightly))
-    if (key !== "rust" && key !== "rust_lint") assert.equal(value, false, key);
-  assert.equal(
-    scheduledSelection(classifyChanges(["docs/development/ci.md"], false, "schedule")).rust,
-    false,
+    if (key !== "rust" && key !== "rust_lint" && key !== "fuzz") assert.equal(value, false, key);
+  const docsOnly = scheduledSelection(
+    classifyChanges(["docs/development/ci.md"], false, "schedule"),
   );
+  assert.equal(docsOnly.rust, false);
+  assert.equal(docsOnly.fuzz, false);
+  // A change that selects Rust also selects the fuzz build, because the nightly
+  // can be the run that saves the rust-lint cargo cache.
+  const rustOnly = scheduledSelection(
+    classifyChanges(["crates/rom-weaver-core/src/lib.rs"], false, "schedule"),
+  );
+  assert.equal(rustOnly.rust_lint, true);
+  assert.equal(rustOnly.fuzz, true);
 });
 
 test("real lifecycle host helper changes select WASM without selecting unrelated UI", () => {

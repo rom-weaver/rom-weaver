@@ -26,6 +26,13 @@ inputs:
   cargo-cache:
     description: Restore/save the cargo build cache. Set to false for jobs that never compile Rust.
     default: "true"
+  cargo-cache-workspaces:
+    description: >-
+      Newline-separated Cargo workspaces for the cargo cache, as Swatinem/rust-cache
+      `workspaces` takes them (a directory, or `directory -> target`). Empty caches
+      the root workspace only. A workspace with its own Cargo.lock and target
+      directory, such as `fuzz`, is cached only when listed.
+    default: ""
   cargo-cache-targets:
     description: Cache Cargo target artifacts. Set to false when the caller manages a separate target cache.
     default: "true"
@@ -245,6 +252,8 @@ runs:
         # Save failed jobs because the key covers the toolchain and Cargo.lock.
         cache-on-failure: true
         cache-targets: ${{ inputs.cargo-cache-targets }}
+        # Empty falls back to rust-cache's default, the root workspace.
+        workspaces: ${{ inputs.cargo-cache-workspaces }}
         # Restore on every ref but save only from main to avoid branch-local cache waste.
         save-if: ${{ github.ref == 'refs/heads/main' && inputs.cache-save == 'true' }}
 

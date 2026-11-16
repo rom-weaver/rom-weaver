@@ -1,9 +1,10 @@
 name: Restore fuzz build artifacts
 description: >-
-  Cache the fuzz workspace's own Cargo target directory (fuzz/target). The fuzz
-  crate is a separate workspace, so the Cargo cache that setup-build-env keeps
-  for the root workspace never covers it, and a cold build compiles every
-  dependency with the sanitizer and coverage instrumentation again.
+  Cache the fuzz workspace's own Cargo target directory (fuzz/target) for the
+  sanitizer and coverage builds. The fuzz crate is a separate workspace, so the
+  Cargo cache that setup-build-env keeps covers it only when a job lists it in
+  cargo-cache-workspaces, and then only with plain check artifacts. A cold build
+  compiles every dependency with the sanitizer and coverage instrumentation.
   Cargo's fingerprints decide what a restored directory still serves: path
   crates rebuild when their sources are newer than the restored artifacts.
 

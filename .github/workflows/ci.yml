@@ -1219,6 +1219,12 @@ jobs:
           tools: node rust cargo-deny cargo-machete
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           rust-components: clippy rustfmt
+          # The fuzz workspace has its own lock file and target directory. Every
+          # run that selects `fuzz` (all main pushes, dispatches, and nightlies
+          # with Rust changes) fills it when it saves a cache generation.
+          cargo-cache-workspaces: |
+            .
+            fuzz
           ccache: "true"
           webapp-deps: "true"
 

@@ -481,8 +481,13 @@ export function coverageTiers(eventName, headRef = undefined) {
 // The nightly schedule exists only to build the native targets main pushes
 // skip. It keeps the Rust selection of whatever changed since the last green
 // nightly and drops everything else: those stacks already ran on each push.
+//
+// `fuzz` follows `rust` because the nightly saves the `rust-lint` cargo cache
+// on a key miss, and that cache has to hold the fuzz workspace's target
+// directory (see `cargo-cache-workspaces` in setup-build-env). Pushes and
+// manual runs already select it through the fail-open `all` path.
 export function scheduledSelection(result) {
-  return { ...EMPTY, rust: result.rust, rust_lint: result.rust };
+  return { ...EMPTY, rust: result.rust, rust_lint: result.rust, fuzz: result.rust };
 }
 
 export function formatChanges(result) {
