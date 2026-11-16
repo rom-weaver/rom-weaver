@@ -1,4 +1,5 @@
 import { emitTraceLog } from "../../lib/logging.ts";
+import { isStaleDirectoryHandleError, OpfsDirectoryCache } from "../../wasm/opfs-directory-cache.ts";
 import type { LogRecord } from "../../types/logging.ts";
 
 // Per-call trace gating: a caller with an active run's log level / onLog sink threads it through so the
@@ -19,7 +20,7 @@ const PATH_SEPARATOR_REGEX = /[\\/]+/;
 // cached (files are created/removed under per-op nonces). Invalidation: removeManagedOpfsPath drops
 // the removed subtree, and stale cached directory handles trigger one retry from a fresh root.
 const STORAGE_ROOT_CACHE = new WeakMap<object, Promise<FileSystemDirectoryHandle>>();
-const DIRECTORY_HANDLE_CACHE = new Map<string, Promise<FileSystemDirectoryHandle>>();
+const DIRECTORY_HANDLE_CACHE = new OpfsDirectoryCache<FileSystemDirectoryHandle>();
 
 const emitOpfsPathTrace = (
   trace: OpfsPathTraceContext | undefined,
@@ -71,45 +72,8 @@ const resetOpfsHandleCaches = (navigatorObject?: Pick<Navigator, "storage"> | nu
   if (storage) STORAGE_ROOT_CACHE.delete(storage);
 };
 
-const invalidateDirectoryCacheSubtree = (filePath: string) => {
-  const key = normalizeOpfsPathParts(filePath).join("/");
-  if (!key) {
-    DIRECTORY_HANDLE_CACHE.clear();
-    return;
-  }
-  const childPrefix = `${key}/`;
-  for (const cachedKey of DIRECTORY_HANDLE_CACHE.keys()) {
-    if (cachedKey === key || cachedKey.startsWith(childPrefix)) DIRECTORY_HANDLE_CACHE.delete(cachedKey);
-  }
-};
-
-const resolveParentDirectory = async (
-  root: FileSystemDirectoryHandle,
-  parts: string[],
-  create: boolean,
-  onCachedDirectory: () => void,
-): Promise<FileSystemDirectoryHandle> => {
-  let current = root;
-  let prefix = "";
-  for (const part of parts) {
-    prefix = prefix ? `${prefix}/${part}` : part;
-    const cached = DIRECTORY_HANDLE_CACHE.get(prefix);
-    if (cached) {
-      onCachedDirectory();
-      current = await cached;
-      continue;
-    }
-    const pending = current.getDirectoryHandle(part, { create });
-    DIRECTORY_HANDLE_CACHE.set(prefix, pending);
-    try {
-      current = await pending;
-    } catch (error) {
-      DIRECTORY_HANDLE_CACHE.delete(prefix);
-      throw error;
-    }
-  }
-  return current;
-};
+const invalidateDirectoryCacheSubtree = (filePath: string) =>
+  DIRECTORY_HANDLE_CACHE.forget(normalizeOpfsPathParts(filePath));
 
 const isNotFoundError = (error: unknown) =>
   typeof DOMException !== "undefined" && error instanceof DOMException
@@ -133,8 +97,11 @@ const getManagedOpfsFileHandle = async (
   const locate = async (): Promise<FileSystemFileHandle | null> => {
     const directory = await getManagedOpfsDirectory(options.navigatorObject);
     if (!directory) return null;
-    const parent = await resolveParentDirectory(directory, parts, create, () => {
-      reusedCachedDirectory = true;
+    const parent = await DIRECTORY_HANDLE_CACHE.resolve(directory, parts, {
+      create,
+      onCachedDirectory: () => {
+        reusedCachedDirectory = true;
+      },
     });
     return parent.getFileHandle(fileName, { create });
   };
@@ -142,12 +109,7 @@ const getManagedOpfsFileHandle = async (
   try {
     return await locate();
   } catch (error) {
-    const unknownCachedHandleError =
-      reusedCachedDirectory &&
-      typeof DOMException !== "undefined" &&
-      error instanceof DOMException &&
-      error.name === "UnknownError";
-    if (isNotFoundError(error) || unknownCachedHandleError) {
+    if (isNotFoundError(error) || (reusedCachedDirectory && isStaleDirectoryHandleError(error))) {
       // Removed directory handles MAY report UnknownError in WebKit. Retry cached handles once; fresh errors MUST propagate.
       emitOpfsPathTrace(options.trace, "stale handle, retrying from fresh root", { create, filePath });
       resetOpfsHandleCaches(options.navigatorObject);
