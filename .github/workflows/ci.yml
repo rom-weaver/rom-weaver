@@ -1688,24 +1688,20 @@ jobs:
       # vendored libarchive build needs - the npm platform publish builds this
       # same graph with no extra installs. nextest does not execute doctests,
       # so those run as a separate cargo test --doc pass, same as the
-      # test-rust mise task.
+      # test-rust mise task. Both examples set `required-features`, so a plain
+      # workspace run never builds them; they are named explicitly and the
+      # features enabled for both passes, so the workspace crates compile once
+      # (this leg bypasses mise, so it needs its own copy of the commands).
       - name: Rust tests
-        run: cargo nextest run --workspace --locked
+        run: >-
+          cargo nextest run --workspace --locked
+          --features rom-weaver-cli/typescript-types,rom-weaver-cli/wasm-app
+          --lib --bins --tests --example rom-weaver-typegen --example rom-weaver-app
 
       - name: Rust doc tests
-        run: cargo test --quiet --doc --workspace --locked
-
-      # nextest and the plain workspace test above never build these: both
-      # examples set `required-features`, which cargo only enables when the
-      # matching `--features ... --example ...` invocation asks for them
-      # explicitly. One invocation enables both features, as `test-rust` in
-      # .config/mise.toml does, so the CLI crate compiles once for the pair -
-      # this leg bypasses mise (see the job comment above) so it needs its own
-      # copy of the command.
-      - name: Rust example tests
         run: >-
-          cargo test -p rom-weaver-cli --locked --features typescript-types,wasm-app
-          --example rom-weaver-typegen --example rom-weaver-app
+          cargo test --quiet --doc --workspace --locked
+          --features rom-weaver-cli/typescript-types,rom-weaver-cli/wasm-app
 
   # Node-only lint and tests; Lighthouse runs in `webapp-lighthouse`.
   webapp-static:
