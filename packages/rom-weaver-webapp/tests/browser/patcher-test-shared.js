@@ -449,19 +449,26 @@ const releaseRetainedSources = async () => {
 };
 
 export const installPatcherTestHooks = () => {
+  // afterEach below already unmounts, releases sources, resets the runner and empties OPFS, and nothing
+  // runs between it and the next beforeEach, so a test that follows a completed afterEach starts clean.
+  // Only the file's first test (or one after a failed teardown) needs the full reset.
+  let startsClean = false;
   beforeEach(async () => {
-    mountedRoot?.unmount?.();
-    mountedRoot = null;
-    await new Promise((resolve) => globalThis.setTimeout(resolve, 40));
-    // Virtual File-backed sources are intentionally retained briefly for sequential workflow passes.
-    // A new test must release that cache explicitly or the old guest name can force an extracted
-    // output to become `name-2.ext`.
-    await releaseRetainedSources();
-    // Reset the runner BEFORE clearing OPFS: the previous test's worker holds sync access handles
-    // on extracted files, and removals silently fail while those are open. Terminating first lets
-    // the clear actually empty the directory.
-    await resetRomWeaverRunner();
-    await clearOpfsInputDirectory();
+    if (!startsClean) {
+      mountedRoot?.unmount?.();
+      mountedRoot = null;
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 40));
+      // Virtual File-backed sources are intentionally retained briefly for sequential workflow passes.
+      // A new test must release that cache explicitly or the old guest name can force an extracted
+      // output to become `name-2.ext`.
+      await releaseRetainedSources();
+      // Reset the runner BEFORE clearing OPFS: the previous test's worker holds sync access handles
+      // on extracted files, and removals silently fail while those are open. Terminating first lets
+      // the clear actually empty the directory.
+      await resetRomWeaverRunner();
+      await clearOpfsInputDirectory();
+    }
+    startsClean = false;
     await warmupRomWeaverRunner();
     await new Promise((resolve) => globalThis.setTimeout(resolve, 20));
     // A previous test may have left a routing hash behind; a fresh mount must
@@ -489,5 +496,6 @@ export const installPatcherTestHooks = () => {
     await resetRomWeaverRunner();
     await clearOpfsInputDirectory();
     await new Promise((resolve) => globalThis.setTimeout(resolve, 20));
+    startsClean = true;
   });
 };
