@@ -108,6 +108,7 @@ test("CI prepares identify data once and shares the artifact with every consumer
     "rust-macos",
     "rust-windows",
     "webapp-static",
+    "webapp-lighthouse",
     "webapp-e2e",
     "webapp-webkit-e2e",
     "deploy",
@@ -118,7 +119,7 @@ test("CI prepares identify data once and shares the artifact with every consumer
     assert.match(job, /needs:.*\bchanges\b/u, `${name} does not wait for identify data`);
   }
 
-  for (const name of ["docker", "wasm", "rust-lint", "rust-host", "rust-macos", "rust-windows", "webapp-static", "webapp-e2e", "webapp-webkit-e2e"]) {
+  for (const name of ["docker", "wasm", "rust-lint", "rust-host", "rust-macos", "rust-windows", "webapp-static", "webapp-lighthouse", "webapp-e2e", "webapp-webkit-e2e"]) {
     const job = jobFor(name);
     assert.match(job, /uses: \.\/\.github\/actions\/download-identify-data/u, `${name} does not download identify data`);
   }

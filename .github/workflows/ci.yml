@@ -1692,8 +1692,7 @@ jobs:
           cargo test -p rom-weaver-cli --locked --features typescript-types,wasm-app
           --example rom-weaver-typegen --example rom-weaver-app
 
-  # Keep node-only checks on the shorter Lighthouse job so the browser suite
-  # can start immediately without adding another runner to the queue.
+  # Node-only lint and tests; Lighthouse runs in `webapp-lighthouse`.
   webapp-static:
     name: Webapp (static)
     runs-on: ubuntu-24.04
@@ -1702,7 +1701,6 @@ jobs:
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     permissions:
       contents: read
-      statuses: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -1735,10 +1733,43 @@ jobs:
       - name: Lint
         run: npm --prefix packages/rom-weaver-webapp run lint
 
-      # A pull request audits only when the bundle can differ from main's; the
-      # `lighthouse` flag fails open for every build and CI input.
+  # Lighthouse is timing-sensitive, so it gets its own runner instead of sharing
+  # one with the CPU-bound unit tests; the two then overlap rather than queue.
+  # A pull request audits only when the bundle can differ from main's; the
+  # `lighthouse` flag fails open for every build and CI input.
+  webapp-lighthouse:
+    name: Webapp (Lighthouse)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: [changes, wasm]
+    if: >-
+      github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+      && needs.changes.outputs.lighthouse == 'true'
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node
+          cargo-cache: "false"
+          webapp-deps: "true"
+
+      # Carries the generated notices.md that the SEO build check loads
+      # through the docs pages; the bundle itself comes from `webapp-dist`.
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-prod
+          path: packages/rom-weaver-webapp/src/wasm
+
+      # Otherwise the Lighthouse runner rebuilds the identify packs from source.
+      - uses: ./.github/actions/download-identify-data
+
       - name: Download webapp bundle
-        if: github.event_name != 'pull_request' || needs.changes.outputs.lighthouse == 'true'
         uses: actions/download-artifact@v8
         with:
           name: webapp-dist
@@ -1752,12 +1783,11 @@ jobs:
       # ordered before this job in any case.
       - name: Lighthouse gates
         id: performance
-        if: github.event_name != 'pull_request' || needs.changes.outputs.lighthouse == 'true'
         run: npm --prefix packages/rom-weaver-webapp run audit:lighthouse
 
       - name: Upload Lighthouse reports
         id: lighthouse-reports
-        if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.lighthouse == 'true') }}
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: lighthouse-reports
@@ -2011,6 +2041,7 @@ jobs:
         rust-macos,
         rust-windows,
         webapp-static,
+        webapp-lighthouse,
         webapp-browser,
         webapp-wasm-browser,
         webapp-e2e,
@@ -2095,6 +2126,15 @@ jobs:
           'webapp-chunk-guard=${{ needs.wasm.outputs.chunk-guard || needs.wasm.result }}'
           'webapp-static=${{ needs.webapp-static.result }}'
           'webapp-e2e=${{ needs.webapp-e2e.result }}'
+
+      # A pull request skips the audit when the bundle cannot differ from main's.
+      - name: Verify Lighthouse job
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.changes.outputs.webapp == 'true' && needs.changes.outputs.lighthouse == 'true' }}'
+          'webapp-lighthouse=${{ needs.webapp-lighthouse.result }}'
 
       # A pull request that changes only published guide Markdown skips these.
       - name: Verify webapp browser jobs

@@ -163,7 +163,7 @@ const EMPTY = {
   // `webapp-browser` and `webapp-webkit-e2e`. A pull request that changes only
   // published guide Markdown keeps the static checks and Chromium E2E.
   webapp_browser: false,
-  // The Lighthouse steps of `webapp-static`. Every event but a pull request
+  // The `webapp-lighthouse` job. Every event but a pull request
   // audits; a pull request audits when a bundle input changed.
   lighthouse: false,
   wasm_runtime: false,

@@ -59,7 +59,7 @@ jobs:
 
           while IFS=$'\t' read -r id created branch; do
             # `pr-<n>` is the preview bundle; `lighthouse-pr-<n>` is the report
-            # index webapp-static publishes for the same PR. Both are disposable
+            # index webapp-lighthouse publishes for the same PR. Both are disposable
             # per-PR branches and both are reaped on the same terms.
             [[ "$branch" =~ ^(lighthouse-)?pr-([0-9]+)$ ]] || continue
             pr="${BASH_REMATCH[2]}"
