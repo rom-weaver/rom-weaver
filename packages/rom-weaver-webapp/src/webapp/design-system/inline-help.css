@@ -40,6 +40,10 @@
   inset: -7px;
   content: "";
 }
+/* Keep field help targets inside their buttons so adjacent controls stay clickable. */
+.rw-app .setrow .info-btn::after {
+  content: none;
+}
 @media (hover: hover) {
   .rw-app .info-btn:hover {
     color: var(--ink-2);

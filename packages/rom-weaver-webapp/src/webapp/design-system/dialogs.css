@@ -765,7 +765,7 @@
     display: contents;
   }
   .rw-app .settings-panel .setcols .setgroup {
-    margin-block-end: 11px;
+    margin-block-end: var(--sp-xs);
   }
   .rw-app .settings-panel .validation {
     column-span: all;
@@ -907,11 +907,11 @@
    webapp-modals.css); the pane's width says nothing about a column's. */
 .rw-app .setgroup {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(min(18rem, calc(100% - var(--sp-m))), 1.4fr);
+  grid-template-columns: minmax(0, 1fr) minmax(min(18.5rem, calc(100% - var(--sp-m))), 1.4fr);
   column-gap: var(--sp-m);
   align-content: start;
-  padding: var(--sp-m) var(--sp-l) var(--sp-l);
-  margin-block-end: 11px;
+  padding: var(--sp-xs) var(--sp-m);
+  margin-block-end: var(--sp-xs);
   container: setgroup / inline-size;
   background: var(--plate-2);
   border: 1px solid var(--seam);
@@ -923,11 +923,15 @@
   min-width: 0;
 }
 .rw-app .setgroup .gtitle {
-  margin-block-end: 9px;
+  padding: var(--sp-xs) var(--sp-m);
+  margin: calc(-1 * var(--sp-xs)) calc(-1 * var(--sp-m)) var(--sp-xs);
   font-size: 0.84rem;
   font-weight: 650;
   color: var(--thread-text);
   letter-spacing: 0;
+  background: var(--plate);
+  border-block-end: 1px solid var(--seam);
+  border-radius: calc(var(--r-m) - 1px) calc(var(--r-m) - 1px) 0 0;
 }
 .rw-app .setrow {
   display: grid;
@@ -935,35 +939,42 @@
   grid-column: 1 / -1;
   gap: var(--sp-m);
   align-items: center;
-  padding-block: 4px;
+  padding-block: 0;
 }
 .rw-app .slabel {
   display: inline-flex;
   gap: var(--sp-s);
   align-items: center;
-  font-size: 0.8rem;
-  color: var(--ink-2);
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--ink);
 }
 .rw-app .gtitle .info {
   margin-inline-start: 8px;
 }
 .rw-app .setrow .select {
-  height: 34px;
-  font-size: var(--dropdown-fs, 0.85rem);
+  height: 38px;
+  font-size: 0.8rem;
 }
 .rw-app .setrow .input {
-  height: 34px;
+  height: 38px;
   font-size: 0.85rem;
 }
 .rw-app .setchecks {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-s);
-  padding-block-start: 4px;
 }
 .rw-app .setchecks .popt {
   min-height: 44px;
-  font-size: 0.82rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--ink);
+}
+.rw-app .setchecks input[type="checkbox"] {
+  --sw-w: 44px;
+  --sw-h: 26px;
+  --sw-thumb: 18px;
+  --sw-travel: 18px;
 }
 .rw-app .setchecks .slabel > .info {
   /* Reserve the mobile help button's 44px hit area around its 24px graphic. */
@@ -1003,21 +1014,22 @@
   margin: 0;
 }
 .rw-app .srange {
-  padding-block: 6px 2px;
+  padding-block: 2px 0;
 }
 .rw-app .srange-label {
   display: inline-flex;
   gap: var(--sp-s);
   align-items: center;
-  font-size: 0.8rem;
-  color: var(--ink-2);
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--ink);
 }
 .rw-app .srange-head {
   display: flex;
   gap: var(--sp-m);
   align-items: baseline;
   justify-content: space-between;
-  margin-block-end: 4px;
+  margin-block-end: 2px;
 }
 .rw-app .srange-head .v {
   font-size: 0.76rem;

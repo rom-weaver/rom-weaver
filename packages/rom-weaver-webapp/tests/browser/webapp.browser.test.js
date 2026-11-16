@@ -1366,7 +1366,7 @@ test("navigation Offline app keeps a plain label and opens the current offline v
 });
 
 test("workflow help stays outside unrelated Settings across scroll and resize", async () => {
-  await page.viewport(1280, 900);
+  await page.viewport(1280, 700);
   try {
     mountWebappRoot();
     const workflowTrigger = page.getByRole("button", { name: "How files are opened", exact: true });
@@ -1419,7 +1419,7 @@ test("workflow help stays outside unrelated Settings across scroll and resize", 
 });
 
 test("Settings help above the phone dock remains readable and interactive", async () => {
-  await page.viewport(320, 900);
+  await page.viewport(320, 800);
   try {
     mountWebappRoot();
     await openMenuSheet();
