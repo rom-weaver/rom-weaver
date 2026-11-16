@@ -225,11 +225,9 @@ depends = ["identify-data"]
 # a plain `--workspace` run neither builds nor runs them, so they are named
 # explicitly (`--example`) beside `--lib --bins --tests`, which keeps the rest of
 # the workspace's targets selected. The two features are enabled for the whole
-# invocation, and the doctest pass repeats the same feature set: cargo
-# feature-unifies per invocation, so a separate third pass with the features
-# would recompile core, checksum, containers, patches and cli (~55s on CI).
-# Enabling them in the main pass costs no test coverage (same tests plus the
-# examples' 18) and every crate compiles once.
+# invocation, and the doctest pass repeats the same feature set. Cargo
+# feature-unifies per invocation, so every crate compiles once. The nextest run
+# holds the workspace's tests plus the examples' 18.
 run = [
   "cargo nextest run --workspace --features rom-weaver-cli/typescript-types,rom-weaver-cli/wasm-app --lib --bins --tests --example rom-weaver-typegen --example rom-weaver-app",
   "cargo test --quiet --doc --workspace --features rom-weaver-cli/typescript-types,rom-weaver-cli/wasm-app",
