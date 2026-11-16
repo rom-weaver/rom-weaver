@@ -144,9 +144,9 @@
 /* Settings rows are packed with full-height controls above and below this
    picker. Keep the draft swatch and its selection treatment inside the row's
    vertical space so the ring cannot cover those controls. */
-.rw-app .accent-picker .accent-chip-dot {
-  width: 16px;
-  height: 16px;
+.rw-app .accent-picker .accent-chip {
+  min-width: 24px;
+  min-height: 24px;
 }
 .rw-app .accent-picker .accent-chip input:checked + .accent-chip-dot {
   box-shadow:

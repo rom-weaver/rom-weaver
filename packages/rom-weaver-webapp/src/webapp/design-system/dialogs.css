@@ -765,7 +765,7 @@
     display: contents;
   }
   .rw-app .settings-panel .setcols .setgroup {
-    margin-block-end: 11px;
+    margin-block-end: var(--sp-s);
   }
   .rw-app .settings-panel .validation {
     column-span: all;
@@ -910,8 +910,8 @@
   grid-template-columns: minmax(0, 1fr) minmax(min(18rem, calc(100% - var(--sp-m))), 1.4fr);
   column-gap: var(--sp-m);
   align-content: start;
-  padding: var(--sp-m) var(--sp-l) var(--sp-l);
-  margin-block-end: 11px;
+  padding: var(--sp-s) var(--sp-m);
+  margin-block-end: var(--sp-s);
   container: setgroup / inline-size;
   background: var(--plate-2);
   border: 1px solid var(--seam);
@@ -923,7 +923,7 @@
   min-width: 0;
 }
 .rw-app .setgroup .gtitle {
-  margin-block-end: 9px;
+  margin-block-end: var(--sp-xs);
   font-size: 0.84rem;
   font-weight: 650;
   color: var(--thread-text);
@@ -935,7 +935,7 @@
   grid-column: 1 / -1;
   gap: var(--sp-m);
   align-items: center;
-  padding-block: 4px;
+  padding-block: 2px;
 }
 .rw-app .slabel {
   display: inline-flex;
@@ -948,22 +948,27 @@
   margin-inline-start: 8px;
 }
 .rw-app .setrow .select {
-  height: 34px;
-  font-size: var(--dropdown-fs, 0.85rem);
+  height: 38px;
+  font-size: 0.85rem;
 }
 .rw-app .setrow .input {
-  height: 34px;
+  height: 38px;
   font-size: 0.85rem;
 }
 .rw-app .setchecks {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-s);
   padding-block-start: 4px;
 }
 .rw-app .setchecks .popt {
   min-height: 44px;
   font-size: 0.82rem;
+}
+.rw-app .setchecks input[type="checkbox"] {
+  --sw-w: 44px;
+  --sw-h: 26px;
+  --sw-thumb: 18px;
+  --sw-travel: 18px;
 }
 .rw-app .setchecks .slabel > .info {
   /* Reserve the mobile help button's 44px hit area around its 24px graphic. */
