@@ -103,6 +103,23 @@ describe("BrowserOpfsMount per-run adapter pruning", () => {
     expect(perRunFiles.every((file) => file.closed)).toBe(true);
   });
 
+  it.each([
+    { closeOnLastFdClose: true, expected: true, name: "an output the run created" },
+    { closeOnLastFdClose: false, expected: false, name: "only hydrated inputs" },
+  ])("marks the mount stale only after evicting $name", ({ closeOnLastFdClose, expected }) => {
+    const mount = makeMount([{ file: new StubFile(), name: "rom.bin" }]);
+    mount.startRun({ runCloseables: [] });
+    const runFile = new StubFile();
+    const subdir = new wasiShim.Directory(new Map());
+    mount.contents.set("nested", subdir);
+    subdir.contents.set("file.bin", new WasiRandomAccessFileInode(runFile, { closeOnLastFdClose }));
+    mount.trackOwnedFile(runFile);
+
+    mount.finishRun();
+
+    expect(mount.stale).toBe(expected);
+  });
+
   it("closes the persistent input set only on dispose", () => {
     const baseFile = new StubFile();
     const mount = makeMount([{ file: baseFile, name: "rom.bin" }]);

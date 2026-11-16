@@ -48,6 +48,8 @@ export class BrowserOpfsMount {
    * this index is per-run (preopened/created outputs, lazily hydrated inputs) and pruned in finishRun. */
   persistentOwnedFileCount: number;
   proxyClient: OpfsProxyClient;
+  /** True once a run's outputs were evicted from `contents` while still in OPFS; see pruneRunOwnedFiles. */
+  stale = false;
   syncAccessMode: RomWeaverBrowserSyncAccessMode | undefined;
   trace: TraceLine | null;
   virtualOnly: boolean;
@@ -155,11 +157,15 @@ export class BrowserOpfsMount {
     this.trace = null;
   }
 
-  /** Closes per-run adapters and evicts their inodes so cached mounts cannot exhaust proxy handles. */
+  /**
+   * Closes per-run adapters and evicts their inodes so cached mounts cannot exhaust proxy handles.
+   * An evicted output stays in OPFS but is gone from `contents`, so a later run would not see it and
+   * could not back it up before overwriting it. The mount is then stale and the cache rebuilds it.
+   */
   pruneRunOwnedFiles() {
     if (this.ownedFiles.length <= this.persistentOwnedFileCount) return;
     const perRunFiles = this.ownedFiles.splice(this.persistentOwnedFileCount);
-    evictInodesBackedByFiles(this.contents, new Set(perRunFiles));
+    if (evictInodesBackedByFiles(this.contents, new Set(perRunFiles)) > 0) this.stale = true;
     closeSyncFiles(perRunFiles);
     this.trace?.(
       `[browser-opfs] mount finishRun pruned run adapters path=${this.mountPath} closed=${perRunFiles.length}`,
@@ -182,18 +188,22 @@ export class BrowserOpfsMount {
 }
 
 /** Recursively removes every directory entry whose inode is backed by one of the given files, so a
- * pruned per-run adapter leaves no dangling closed-handle inode in the mount tree. */
-function evictInodesBackedByFiles(contents: WasiDirectoryContents, files: Set<RandomAccessFileLike>): void {
-  if (files.size === 0) return;
+ * pruned per-run adapter leaves no dangling closed-handle inode in the mount tree. Returns how many
+ * evicted entries were outputs (closed with their last fd) rather than hydrated inputs. */
+function evictInodesBackedByFiles(contents: WasiDirectoryContents, files: Set<RandomAccessFileLike>): number {
+  if (files.size === 0) return 0;
+  let evictedOutputs = 0;
   for (const [name, inode] of contents) {
     if (inode instanceof wasiShim.Directory) {
-      evictInodesBackedByFiles(inode.contents, files);
+      evictedOutputs += evictInodesBackedByFiles(inode.contents, files);
       continue;
     }
     if (inode instanceof WasiRandomAccessFileInode && files.has(inode.file)) {
       contents.delete(name);
+      if (inode.closeOnLastFdClose) evictedOutputs += 1;
     }
   }
+  return evictedOutputs;
 }
 
 interface BuildOpfsInodeMapOptions {

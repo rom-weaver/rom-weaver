@@ -67,6 +67,19 @@ describe("browser OPFS mount cache", () => {
     },
   );
 
+  it("rebuilds a stale mount so outputs left in OPFS by an earlier run are visible", async () => {
+    const cache = createBrowserOpfsMountCache();
+    const handle = makeDirectory("first", true);
+    const first = await cache.acquire(options("/work", handle));
+    Reflect.set(first, "stale", true);
+
+    const second = await cache.acquire(options("/work", handle));
+
+    expect(second).not.toBe(first);
+    expect(disposeMock(first)).toHaveBeenCalledOnce();
+    expect(state.create).toHaveBeenCalledTimes(2);
+  });
+
   it("reuses a matching mount and replaces it when options change", async () => {
     const cache = createBrowserOpfsMountCache();
     const firstHandle = makeDirectory("first");

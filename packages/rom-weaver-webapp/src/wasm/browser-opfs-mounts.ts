@@ -39,6 +39,7 @@ export function createBrowserOpfsMountCache() {
       const current = mountsByPath.get(mountPath) ?? null;
       if (
         current &&
+        !current.stale &&
         current.syncAccessMode === syncAccessMode &&
         current.virtualOnly === Boolean(virtualOnly) &&
         current.writableRootsKey === writableRootsKey &&
