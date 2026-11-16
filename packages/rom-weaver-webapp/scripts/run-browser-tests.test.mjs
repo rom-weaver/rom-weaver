@@ -32,8 +32,8 @@ test("explicit browser file concurrency overrides the engine default", () => {
   assert.equal(resolveConcurrency({ BROWSER_TEST_CONCURRENCY: "0", ROM_WEAVER_BROWSER: "webkit" }), 1);
 });
 
-// selectShard weighs by fs.statSync(file).size, so fixtures use real temp
-// files padded to a controlled byte size rather than an injectable weight.
+// These fixtures are real temp files padded to a controlled byte size, which
+// selectShard weighs by size because their names are not in the durations table.
 const makeFixtureFiles = (root, sizes) =>
   sizes.map((size, index) => {
     const file = path.join(root, `fixture-${index}.browser.test.js`);
@@ -99,6 +99,79 @@ test("selectShard: heavier files spread out rather than piling into one shard", 
 
   assert.ok(shardOne.length > 0 && shardTwo.length > 0, "both shards get files");
   assert.equal(shardOne.length + shardTwo.length, files.length);
+});
+
+const sortNames = (names) => names.slice().sort((left, right) => Number(left > right) - Number(left < right));
+const secondsOf = (recorded, shardFiles) =>
+  shardFiles.reduce((sum, file) => sum + (recorded[path.basename(file)] ?? 0), 0);
+
+// Sizes run opposite to the recorded seconds: the slowest file is the smallest.
+const durationTable = () => {
+  const sizes = {};
+  const recorded = {};
+  const add = (name, bytes, seconds) => {
+    sizes[`/t/${name}`] = bytes;
+    recorded[name] = seconds;
+  };
+  add("slow-tiny.js", 10, 100);
+  for (let index = 0; index < 10; index += 1) add(`fast-large-${index}.js`, 5000, 10);
+  return { files: Object.keys(sizes), recorded, sizeOf: (file) => sizes[file] ?? 0 };
+};
+
+test("selectShard: recorded seconds balance the shards when one file's time dominates", () => {
+  const { files, recorded, sizeOf } = durationTable();
+  const shards = [1, 2].map((index) => selectShard(files, { index, total: 2 }, recorded, sizeOf));
+
+  assert.deepEqual(
+    shards.map((shardFiles) => secondsOf(recorded, shardFiles)),
+    [100, 100],
+    "the 100 s file alone balances the ten 10 s files",
+  );
+  assert.deepEqual(shards[0], ["/t/slow-tiny.js"]);
+});
+
+test("selectShard: the shards are disjoint and their union is every file", () => {
+  const { files, recorded, sizeOf } = durationTable();
+  for (const total of [2, 3, 4]) {
+    const perShard = Array.from({ length: total }, (_, index) =>
+      selectShard(files, { index: index + 1, total }, recorded, sizeOf),
+    );
+    const combined = perShard.flat();
+    assert.equal(new Set(combined).size, combined.length, `${total} shards share no file`);
+    assert.deepEqual(sortNames(combined), sortNames(files), `${total} shards cover every file`);
+  }
+});
+
+test("selectShard: a file missing from the durations table is weighed by size at the recorded ratio", () => {
+  // x and y total 150 s over 120 bytes, so 1.25 s per byte; the unrecorded z is then 100 s.
+  // A pure size split or a 1 s per byte fallback would each place the files differently.
+  const sizes = { "x.js": 100, "y.js": 20, "z.js": 80 };
+  const recorded = { "x.js": 50, "y.js": 100 };
+  const sizeOf = (file) => sizes[path.basename(file)];
+  const files = ["/t/x.js", "/t/y.js", "/t/z.js"];
+
+  assert.deepEqual(selectShard(files, { index: 1, total: 2 }, recorded, sizeOf), ["/t/x.js", "/t/y.js"]);
+  assert.deepEqual(selectShard(files, { index: 2, total: 2 }, recorded, sizeOf), ["/t/z.js"]);
+});
+
+test("selectShard: an empty durations table falls back to a pure size split", () => {
+  const sizes = { "/t/a.js": 90, "/t/b.js": 50, "/t/c.js": 40 };
+  const sizeOf = (file) => sizes[file];
+  const files = Object.keys(sizes);
+
+  assert.deepEqual(selectShard(files, { index: 1, total: 2 }, {}, sizeOf), ["/t/a.js"]);
+  assert.deepEqual(selectShard(files, { index: 2, total: 2 }, {}, sizeOf), ["/t/b.js", "/t/c.js"]);
+});
+
+test("selectShard: the split does not depend on input order and repeats exactly", () => {
+  const { files, recorded, sizeOf } = durationTable();
+  const reversed = files.slice().reverse();
+  for (const index of [1, 2, 3]) {
+    const shard = { index, total: 3 };
+    const first = selectShard(files, shard, recorded, sizeOf);
+    assert.deepEqual(selectShard(files, shard, recorded, sizeOf), first, "a repeat call agrees");
+    assert.deepEqual(selectShard(reversed, shard, recorded, sizeOf), first, "input order does not matter");
+  }
 });
 
 test("selectShard: returns all files unchanged when shard is null", () => {
