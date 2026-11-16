@@ -37,13 +37,17 @@ function inheritedInstructions(target, args) {
   return collect(target);
 }
 
-for (const wasm of ["source", "prebuilt"]) {
-  test(`cached identify packs precede every data consumer with WASM=${wasm}`, () => {
-    const instructions = inheritedInstructions("app", { WASM: wasm, IDENTIFY_DATA: "prebuilt" });
+for (const [target, wasm] of [
+  ["app", "source"],
+  ["app", "prebuilt"],
+  ["wasm-compile", "source"],
+]) {
+  test(`cached identify packs precede every data consumer of ${target} with WASM=${wasm}`, () => {
+    const instructions = inheritedInstructions(target, { WASM: wasm, IDENTIFY_DATA: "prebuilt" });
     const copy = instructions.findIndex((line) => line.startsWith("COPY target/identify-data/v1 "));
     assert.ok(copy >= 0, "the selected build must copy the staged identify packs");
     for (const [index, line] of instructions.entries()) {
-      if (/ensure-identify-data|wasm\/build-app|gen-third-party-licenses/.test(line)) {
+      if (/^RUN .*(ensure-identify-data|wasm\/build-app|gen-third-party-licenses)/.test(line)) {
         assert.ok(index > copy, `identify packs must be copied before ${line}`);
       }
     }

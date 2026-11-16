@@ -14,16 +14,16 @@ target/*
 **/__screenshots__
 # The built identify tree is generated, never a build input: both images build
 # it inside the image or copy it from `target/` with `IDENTIFY_DATA=prebuilt`.
-# Left in, a pack change would invalidate the `COPY . .` layer and the whole
-# wasm compile behind it.
+# Left in, a pack change would invalidate the `COPY . .` layer.
 crates/rom-weaver-cli/data/identify/v1/*
 prototype
 third_party
 *.log
 
 # Not build inputs. These change often (CI, most docs, and browser-test
-# commits), and anything left here invalidates the `COPY . .` layer and with it
-# the whole wasm+cargo build. Published Markdown is an exception: Vite renders
+# commits), and anything left here invalidates the `COPY . .` layer and the build
+# after it. The webapp image's wasm compile copies only its own inputs instead.
+# Published Markdown is an exception: Vite renders
 # it into the webapp. Root *.md stays: several are read at build time
 # (README as the workspace `readme`, CHANGELOG by the webapp version script's
 # fallbacks).
