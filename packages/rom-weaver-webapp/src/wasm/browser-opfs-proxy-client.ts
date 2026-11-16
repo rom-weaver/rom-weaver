@@ -30,6 +30,7 @@ import {
   OPFS_PROXY_OP_CLOSE,
   OPFS_PROXY_OP_FLUSH,
   OPFS_PROXY_OP_MKDIR,
+  OPFS_PROXY_OP_MOVE,
   OPFS_PROXY_OP_OPEN,
   OPFS_PROXY_OP_READ,
   OPFS_PROXY_OP_SIZE,
@@ -246,6 +247,23 @@ export class OpfsProxyClient {
 
   mkdir(path: string): void {
     this.pathOp(OPFS_PROXY_OP_MKDIR, path);
+  }
+
+  /** Move a closed file to a new path in the same mount; the proxy refuses an existing destination. */
+  move(from: string, to: string): void {
+    const { slot, index } = this.acquireSlot();
+    try {
+      const fromLength = this.writePath(slot, from, 0);
+      const toLength = this.writePath(slot, to, fromLength);
+      this.submit(slot, index, {
+        auxLow: toLength,
+        handle: OPFS_PROXY_HANDLE_BY_PATH,
+        length: fromLength,
+        opcode: OPFS_PROXY_OP_MOVE,
+      });
+    } finally {
+      this.releaseSlot(slot);
+    }
   }
 
   private simpleOp(opcode: number, handleId: number): void {

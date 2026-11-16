@@ -5,6 +5,7 @@ import type { BrowserOpfsMount } from "./browser-opfs-mount.ts";
 import { cleanupBrowserOpfsMounts } from "./browser-opfs-mount.ts";
 import type { BrowserOpfsMountCache } from "./browser-opfs-mounts.ts";
 import type { OpfsProxyClient } from "./browser-opfs-proxy-client.ts";
+import { OpfsProxyError } from "./browser-opfs-proxy-client.ts";
 import { BrowserProxyRandomAccessFile } from "./browser-opfs-proxy-file.ts";
 import type {
   FileSystemDirectoryHandleLike,
@@ -171,6 +172,19 @@ export async function buildBrowserOpfsWasiFds({
 /** Per-preopen cap on traced misses; matches the WASI-level cap in installDirectWasiFileIoImports. */
 const MAX_TRACED_MISSING_OPENS = 20;
 
+interface RenameParent {
+  entries: WasiDirectoryContents;
+  name: string;
+}
+
+interface RenamePlan {
+  destinationParent: RenameParent;
+  newGuestPath: string;
+  oldGuestPath: string;
+  source: WasiRandomAccessFileInode;
+  sourceParent: RenameParent;
+}
+
 class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
   mount: BrowserOpfsMount;
   private tracedMissingOpens = 0;
@@ -310,6 +324,64 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
     return ret;
   }
 
+  /**
+   * Moves a closed output file to a new name in this mount through the proxy, so a staged extract
+   * output is installed without copying its bytes. A directory or a file with an open fd is refused
+   * and the guest installs by copying instead; an existing destination fails with EEXIST.
+   */
+  renameFile(oldPath: string, newPath: string) {
+    const plan = this.planRename(oldPath, newPath);
+    if (typeof plan === "number") return plan;
+    const { destinationParent, newGuestPath, oldGuestPath, source, sourceParent } = plan;
+
+    // OPFS cannot move a file that has an open handle, so release this inode's handle first; it
+    // reopens by itself if the move fails and the file stays where it was.
+    source.idlePool?.remove(source);
+    try {
+      source.closeIdleFile();
+      this.mount.proxyClient.move(oldGuestPath, newGuestPath);
+    } catch (error) {
+      const errno = error instanceof OpfsProxyError ? error.errno : wasiShim.wasi.ERRNO_IO;
+      this.mount.trace?.(
+        `[browser-opfs] path move failed from=${basenameForTrace(oldPath)} to=${basenameForTrace(newPath)} errno=${errno}`,
+      );
+      return errno;
+    }
+    sourceParent.entries.delete(sourceParent.name);
+    destinationParent.entries.set(
+      destinationParent.name,
+      createProxyFileInode(this.mount, newGuestPath, { create: false }),
+    );
+    return wasiShim.wasi.ERRNO_SUCCESS;
+  }
+
+  /** Checks that `oldPath` can move to `newPath` and resolves what the move touches; an errno means refuse. */
+  private planRename(oldPath: string, newPath: string): RenamePlan | number {
+    for (const path of [oldPath, newPath]) {
+      const pathRet = validateWasiRelativePath(path);
+      if (pathRet !== wasiShim.wasi.ERRNO_SUCCESS) return pathRet;
+    }
+    const oldGuestPath = joinGuestPath(this.mount.mountPath, oldPath);
+    const newGuestPath = joinGuestPath(this.mount.mountPath, newPath);
+    if (!(this.mount.isWritablePath(oldGuestPath) && this.mount.isWritablePath(newGuestPath))) {
+      return wasiShim.wasi.ERRNO_ROFS;
+    }
+    const source = findEntryInDirectory(this.mount.contents, oldPath);
+    if (!source) return wasiShim.wasi.ERRNO_NOENT;
+    const isIdleOutput =
+      source instanceof WasiRandomAccessFileInode && source.closeOnLastFdClose && source.openRefCount === 0;
+    if (!isIdleOutput) return wasiShim.wasi.ERRNO_BUSY;
+    if (findEntryInDirectory(this.mount.contents, newPath)) return wasiShim.wasi.ERRNO_EXIST;
+    const oldParts = normalizeWasiRelativePathParts(oldPath);
+    const newParts = normalizeWasiRelativePathParts(newPath);
+    if (oldParts === null || newParts === null || newParts.length === 0) return wasiShim.wasi.ERRNO_INVAL;
+    const sourceParent = resolveParentDirectory(this.mount.contents, oldParts);
+    const destinationParent = resolveParentDirectory(this.mount.contents, newParts);
+    if (sourceParent.entries === null) return sourceParent.ret;
+    if (destinationParent.entries === null) return destinationParent.ret;
+    return { destinationParent, newGuestPath, oldGuestPath, source, sourceParent };
+  }
+
   override path_remove_directory(pathStr: string) {
     const pathRet = validateWasiRelativePath(pathStr);
     if (pathRet !== wasiShim.wasi.ERRNO_SUCCESS) return pathRet;
@@ -339,19 +411,19 @@ function createInMemoryEntry(
   }
 
   // Create the real OPFS output file on demand through the proxy; the bytes persist as they are written.
-  const guestPath = joinGuestPath(mount.mountPath, pathStr);
-  const proxyFile = new BrowserProxyRandomAccessFile(mount.proxyClient, guestPath, {
-    create: true,
-    writable: true,
-  });
+  parent.entries.set(
+    parent.name,
+    createProxyFileInode(mount, joinGuestPath(mount.mountPath, pathStr), { create: true }),
+  );
+  return wasiShim.wasi.ERRNO_SUCCESS;
+}
+
+function createProxyFileInode(mount: BrowserOpfsMount, guestPath: string, { create }: { create: boolean }) {
+  const proxyFile = new BrowserProxyRandomAccessFile(mount.proxyClient, guestPath, { create, writable: true });
   mount.trackOwnedFile(proxyFile);
   // Closing the last fd parks its adapter in the bounded idle pool; eviction releases its handle and buffers.
   // A later checksum pass can reopen it without keeping every archive entry open for the whole run.
-  parent.entries.set(
-    parent.name,
-    new WasiRandomAccessFileInode(proxyFile, { closeOnLastFdClose: true, idlePool: mount.idleFilePool }),
-  );
-  return wasiShim.wasi.ERRNO_SUCCESS;
+  return new WasiRandomAccessFileInode(proxyFile, { closeOnLastFdClose: true, idlePool: mount.idleFilePool });
 }
 
 function setEntryInDirectory(contents: WasiDirectoryContents, pathStr: string, inode: wasiShim.Inode) {

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildBrowserOpfsWasiFds } from "../../src/wasm/browser-opfs-fd-builder.ts";
 import { BrowserOpfsMount } from "../../src/wasm/browser-opfs-mount.ts";
-import type { OpfsProxyClient } from "../../src/wasm/browser-opfs-proxy-client.ts";
+import { OpfsProxyError, type OpfsProxyClient } from "../../src/wasm/browser-opfs-proxy-client.ts";
 import type { BrowserOpfsMountCache } from "../../src/wasm/browser-opfs-mounts.ts";
 import type { FileSystemDirectoryHandleLike, RomWeaverRunInput } from "../../src/wasm/browser-opfs-runtime-types.ts";
 import { WasiRandomAccessFileInode } from "../../src/wasm/browser-opfs-wasi-file-inode.ts";
@@ -24,6 +24,7 @@ type PreopenLike = wasiShim.Fd & {
   path_remove_directory(pathStr: string): number;
   path_unlink(pathStr: string): { inode_obj: wasiShim.Inode | null; ret: number };
   path_unlink_file(pathStr: string): number;
+  renameFile(oldPath: string, newPath: string): number;
 };
 
 /** Minimal OpfsProxyClient stand-in: an in-memory byte store keyed by handle id. */
@@ -31,8 +32,10 @@ function makeProxyClient() {
   const files = new Map<string, Uint8Array>();
   const handles = new Map<number, string>();
   const unlinked: string[] = [];
+  const moved: Array<[string, string]> = [];
   let nextHandle = 1;
   let unlinkError: Error | null = null;
+  let moveError: Error | null = null;
   const client = {
     close: vi.fn((handleId: number) => handles.delete(handleId)),
     flush: vi.fn(),
@@ -61,6 +64,12 @@ function makeProxyClient() {
       next.set((files.get(path) ?? new Uint8Array(0)).subarray(0, size));
       files.set(path, next);
     }),
+    move: vi.fn((from: string, to: string) => {
+      if (moveError) throw moveError;
+      moved.push([from, to]);
+      files.set(to, files.get(from) ?? new Uint8Array(0));
+      files.delete(from);
+    }),
     unlink: vi.fn((guestPath: string) => {
       if (unlinkError) throw unlinkError;
       unlinked.push(guestPath);
@@ -80,6 +89,10 @@ function makeProxyClient() {
   return {
     client: client as unknown as OpfsProxyClient,
     files,
+    moved,
+    setMoveError(error: Error | null) {
+      moveError = error;
+    },
     setUnlinkError(error: Error | null) {
       unlinkError = error;
     },
@@ -468,6 +481,81 @@ describe("PreparedWasiPreopenDirectory namespace operations", () => {
 
     expect(fd.path_unlink("out.bin").ret).toBe(wasi.ERRNO_SUCCESS);
     expect(mount.contents.has("out.bin")).toBe(false);
+  });
+
+  describe("renameFile", () => {
+    function createClosedOutput(fd: PreopenLike, name: string, bytes: number[]) {
+      const opened = fd.path_open(0, name, wasi.OFLAGS_CREAT, wasi.RIGHTS_FD_WRITE, 0n, 0);
+      opened.fd_obj?.fd_write(new Uint8Array(bytes));
+      opened.fd_obj?.fd_close();
+      return opened;
+    }
+
+    it("moves a closed output through the proxy and keeps its bytes readable at the new name", async () => {
+      const mount = makeMount({ proxyClient: proxy.client });
+      const fd = await preopen(mount);
+      createClosedOutput(fd, "staged.bin", [1, 2, 3]);
+
+      expect(fd.renameFile("staged.bin", "final.bin")).toBe(wasi.ERRNO_SUCCESS);
+      expect(proxy.moved).toEqual([["/work/staged.bin", "/work/final.bin"]]);
+      expect(proxy.unlinked).toEqual([]);
+      expect(mount.contents.has("staged.bin")).toBe(false);
+      const reopened = fd.path_open(0, "final.bin", 0, 0n, 0n, 0);
+      expect(reopened.ret).toBe(wasi.ERRNO_SUCCESS);
+      expect(reopened.fd_obj?.fd_read(8).data).toEqual(new Uint8Array([1, 2, 3]));
+    });
+
+    it("moves into a directory that already exists", async () => {
+      const mount = makeMount({ proxyClient: proxy.client });
+      const fd = await preopen(mount);
+      fd.path_create_directory("out");
+      createClosedOutput(fd, "staged.bin", [9]);
+
+      expect(fd.renameFile("staged.bin", "out/final.bin")).toBe(wasi.ERRNO_SUCCESS);
+      expect(proxy.moved).toEqual([["/work/staged.bin", "/work/out/final.bin"]]);
+    });
+
+    it.each([
+      { errno: wasi.ERRNO_BUSY, name: "a file with an open fd", oldPath: "open.bin", newPath: "final.bin" },
+      { errno: wasi.ERRNO_EXIST, name: "an existing destination", oldPath: "staged.bin", newPath: "taken.bin" },
+      { errno: wasi.ERRNO_NOENT, name: "a missing source", oldPath: "gone.bin", newPath: "final.bin" },
+      {
+        errno: wasi.ERRNO_NOENT,
+        name: "a missing destination directory",
+        oldPath: "staged.bin",
+        newPath: "no/final.bin",
+      },
+      { errno: wasi.ERRNO_BUSY, name: "a directory", oldPath: "dir", newPath: "final" },
+      { errno: wasi.ERRNO_NOTCAPABLE, name: "an absolute path", oldPath: "staged.bin", newPath: "/final.bin" },
+    ])("refuses $name without touching OPFS", async ({ errno, oldPath, newPath }) => {
+      const mount = makeMount({ proxyClient: proxy.client });
+      const fd = await preopen(mount);
+      createClosedOutput(fd, "staged.bin", [1]);
+      createClosedOutput(fd, "taken.bin", [2]);
+      fd.path_open(0, "open.bin", wasi.OFLAGS_CREAT, wasi.RIGHTS_FD_WRITE, 0n, 0);
+      fd.path_create_directory("dir");
+
+      expect(fd.renameFile(oldPath, newPath)).toBe(errno);
+      expect(proxy.moved).toEqual([]);
+      expect(mount.contents.has(oldPath)).toBe(oldPath !== "gone.bin");
+    });
+
+    it("refuses a read-only root", async () => {
+      const readOnly = makeMount({ proxyClient: proxy.client, writableRoots: [] });
+      expect((await preopen(readOnly)).renameFile("a.bin", "b.bin")).toBe(wasi.ERRNO_ROFS);
+    });
+
+    it("leaves the file in place and usable when the proxy move fails", async () => {
+      const mount = makeMount({ proxyClient: proxy.client });
+      const fd = await preopen(mount);
+      createClosedOutput(fd, "staged.bin", [5, 6]);
+      proxy.setMoveError(new OpfsProxyError("move unsupported", wasi.ERRNO_NOTSUP));
+
+      expect(fd.renameFile("staged.bin", "final.bin")).toBe(wasi.ERRNO_NOTSUP);
+      expect(mount.contents.has("final.bin")).toBe(false);
+      const reopened = fd.path_open(0, "staged.bin", 0, 0n, 0n, 0);
+      expect(reopened.fd_obj?.fd_read(8).data).toEqual(new Uint8Array([5, 6]));
+    });
   });
 
   it("reports the right errno for unlink edge cases", async () => {

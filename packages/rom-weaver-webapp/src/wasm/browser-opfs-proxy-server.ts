@@ -40,6 +40,7 @@ import {
   OPFS_PROXY_OP_CLOSE,
   OPFS_PROXY_OP_FLUSH,
   OPFS_PROXY_OP_MKDIR,
+  OPFS_PROXY_OP_MOVE,
   OPFS_PROXY_OP_OPEN,
   OPFS_PROXY_OP_PREAD,
   OPFS_PROXY_OP_READ,
@@ -58,13 +59,16 @@ import { openSyncAccessHandle, type SyncAccessHandleLike, writableSyncAccessMode
 // WASI errno values the proxy reports through STATUS. Mirror wasiShim.wasi.ERRNO_* (kept local so the
 // server stays free of the WASI shim and remains node-testable).
 const ERRNO_ACCES = 2;
+const ERRNO_BUSY = 10;
 const ERRNO_EXIST = 20;
 const ERRNO_IO = 29;
 const ERRNO_ISDIR = 31;
 const ERRNO_NOENT = 44;
 const ERRNO_NOSPC = 51;
 const ERRNO_NOTDIR = 54;
+const ERRNO_NOTSUP = 58;
 const ERRNO_ROFS = 69;
+const ERRNO_XDEV = 75;
 
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
@@ -352,6 +356,9 @@ class OpfsProxyServer {
       case OPFS_PROXY_OP_MKDIR:
         await this.opMkdir(this.readPath(data, control, 0));
         return 0;
+      case OPFS_PROXY_OP_MOVE:
+        await this.opMove(slot);
+        return 0;
       default:
         throw new ProxyErrno(ERRNO_IO);
     }
@@ -518,10 +525,48 @@ class OpfsProxyServer {
     }
   }
 
+  /**
+   * Moves a closed file to a path that does not exist yet, creating its directory as an open would. A
+   * path with a live handle is refused (OPFS cannot move a file that has an open SyncAccessHandle), and
+   * a browser without `FileSystemHandle.move` reports ENOTSUP so the caller can copy instead.
+   */
+  private async opMove(slot: OpfsProxyChannelSlot): Promise<void> {
+    const { control, data } = slot;
+    const fromLength = Atomics.load(control, OPFS_PROXY_CONTROL_LENGTH_INDEX);
+    const toLength = Atomics.load(control, OPFS_PROXY_CONTROL_AUX_LOW_INDEX);
+    const fromPath = decodePath(data, 0, fromLength);
+    const toPath = decodePath(data, fromLength, toLength);
+    const from = this.locate(fromPath);
+    const to = this.locate(toPath);
+    if (from.mount !== to.mount) throw new ProxyErrno(ERRNO_XDEV);
+    for (const path of [fromPath, toPath]) {
+      if (this.byPath.has(path) || this.pendingByPath.has(path)) throw new ProxyErrno(ERRNO_BUSY);
+    }
+    const source = await this.resolveParent(from, { create: false });
+    const destination = await this.resolveParent(to, { create: true });
+    if (await this.entryExists(destination.dir, destination.name)) throw new ProxyErrno(ERRNO_EXIST);
+    const fileHandle = (await source.dir.getFileHandle(source.name)) as {
+      move?: (directory: FileSystemDirectoryHandleLike, name: string) => Promise<void>;
+    };
+    if (typeof fileHandle.move !== "function") throw new ProxyErrno(ERRNO_NOTSUP);
+    await fileHandle.move(destination.dir, destination.name);
+  }
+
+  private async entryExists(dir: FileSystemDirectoryHandleLike, name: string): Promise<boolean> {
+    try {
+      await dir.getFileHandle(name);
+      return true;
+    } catch (error) {
+      const errorName = (error as { name?: string } | null)?.name;
+      if (errorName === "NotFoundError") return false;
+      // A directory with that name occupies the destination just as a file would.
+      if (errorName === "TypeMismatchError") return true;
+      throw error;
+    }
+  }
+
   private readPath(data: Uint8Array, control: Int32Array, offset: number): string {
-    const length = Atomics.load(control, OPFS_PROXY_CONTROL_LENGTH_INDEX);
-    // TextDecoder rejects SharedArrayBuffer-backed views; copy into a plain buffer before decoding.
-    return textDecoder.decode(new Uint8Array(data.subarray(offset, offset + length)));
+    return decodePath(data, offset, Atomics.load(control, OPFS_PROXY_CONTROL_LENGTH_INDEX));
   }
 
   private locate(guestPath: string): FileLocation {
@@ -724,6 +769,11 @@ function readAux(control: Int32Array): number {
   const low = Atomics.load(control, OPFS_PROXY_CONTROL_AUX_LOW_INDEX) >>> 0;
   const high = Atomics.load(control, OPFS_PROXY_CONTROL_AUX_HIGH_INDEX) >>> 0;
   return high * 2 ** 32 + low;
+}
+
+// TextDecoder rejects SharedArrayBuffer-backed views; copy into a plain buffer before decoding.
+function decodePath(data: Uint8Array, offset: number, length: number): string {
+  return textDecoder.decode(new Uint8Array(data.subarray(offset, offset + length)));
 }
 
 function errnoForError(error: unknown): number {

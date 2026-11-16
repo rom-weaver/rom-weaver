@@ -28,6 +28,7 @@ type ImportTable = {
   fd_read: (fd: number, iovsPtr: number, iovsLen: number, nreadPtr: number) => unknown;
   fd_write: (fd: number, iovsPtr: number, iovsLen: number, nwrittenPtr: number) => unknown;
   path_open?: (...args: never[]) => number;
+  path_rename?: (...args: never[]) => number;
 };
 
 type Harness = {
@@ -168,6 +169,47 @@ describe("installDirectWasiFileIoImports guards", () => {
     expect(imports.__romWeaverDirectFileIo).toBe(true);
     expect(imports.fd_read).not.toBe(originals.fd_read);
     expect(trace).toHaveBeenCalledWith("[browser-opfs] direct file io imports installed");
+  });
+});
+
+describe("installDirectWasiFileIoImports path_rename", () => {
+  const OLD_PTR = 512;
+  const NEW_PTR = 600;
+
+  function setup(fds: unknown[]) {
+    const { imports, memory, wasi } = makeHarness(fds);
+    const original = vi.fn(() => 0);
+    imports.path_rename = original as unknown as ImportTable["path_rename"];
+    const bytes = new Uint8Array(memory.buffer);
+    bytes.set(new TextEncoder().encode("staged.bin"), OLD_PTR);
+    bytes.set(new TextEncoder().encode("final.bin"), NEW_PTR);
+    installDirectWasiFileIoImports(wasi);
+    const rename = (fd: number, newFd: number) =>
+      (imports.path_rename as (...args: number[]) => number)(fd, OLD_PTR, 10, newFd, NEW_PTR, 9);
+    return { original, rename };
+  }
+
+  it("routes a rename inside one renamable preopen to its renameFile with the decoded paths", () => {
+    const preopen = { renameFile: vi.fn(() => ERRNO_SUCCESS) };
+    const { original, rename } = setup([null, null, null, preopen]);
+    expect(rename(3, 3)).toBe(ERRNO_SUCCESS);
+    expect(preopen.renameFile).toHaveBeenCalledWith("staged.bin", "final.bin");
+    expect(original).not.toHaveBeenCalled();
+  });
+
+  it("refuses a rename across two preopens so the guest copies instead", () => {
+    const first = { renameFile: vi.fn(() => ERRNO_SUCCESS) };
+    const second = { renameFile: vi.fn(() => ERRNO_SUCCESS) };
+    const { original, rename } = setup([null, null, null, first, second]);
+    expect(rename(3, 4)).toBe(wasiShim.wasi.ERRNO_XDEV);
+    expect(first.renameFile).not.toHaveBeenCalled();
+    expect(original).not.toHaveBeenCalled();
+  });
+
+  it("leaves a rename on any other fd to the shim's own implementation", () => {
+    const { original, rename } = setup([null, null, null, {}]);
+    expect(rename(3, 3)).toBe(0);
+    expect(original).toHaveBeenCalledOnce();
   });
 });
 
