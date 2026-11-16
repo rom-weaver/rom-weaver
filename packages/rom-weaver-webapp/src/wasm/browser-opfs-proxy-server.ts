@@ -491,7 +491,7 @@ class OpfsProxyServer {
   private async opUnlink(guestPath: string): Promise<void> {
     const location = this.locate(guestPath);
     // The entry may be a directory, so nothing cached at or under it stays valid.
-    this.forgetDirectories(guestPath);
+    this.forgetDirectories(location);
     await this.withFreshDirectories(() => this.unlinkIn(guestPath, location));
   }
 
@@ -611,16 +611,19 @@ class OpfsProxyServer {
       return await attempt();
     } catch (error) {
       const errorName = (error as { name?: string } | null)?.name;
-      const stale = errorName === "NotFoundError" || errorName === "InvalidStateError";
+      // WebKit reports a removed folder's handle as UnknownError when a file is created in it.
+      const stale = errorName === "NotFoundError" || errorName === "InvalidStateError" || errorName === "UnknownError";
       if (!stale || this.directoryCacheHits === hitsBefore) throw error;
       this.directoryCache.clear();
       return attempt();
     }
   }
 
-  private forgetDirectories(guestPath: string): void {
+  private forgetDirectories(location: FileLocation): void {
+    // Keys are built from the normalized parts, so a guest path with `//` or `\` still matches.
+    const path = `${location.mount.mountPath}/${location.parts.join("/")}`;
     for (const key of this.directoryCache.keys()) {
-      if (key === guestPath || key.startsWith(`${guestPath}/`)) this.directoryCache.delete(key);
+      if (key === path || key.startsWith(`${path}/`)) this.directoryCache.delete(key);
     }
   }
 
@@ -632,8 +635,8 @@ class OpfsProxyServer {
     if (name === undefined) throw new ProxyErrno(ERRNO_NOENT);
     const depth = location.parts.length - 1;
     const keyAt = (count: number) => `${location.mount.mountPath}/${location.parts.slice(0, count).join("/")}`;
-    let { dir, known } = this.deepestKnownDirectory(location, depth, keyAt);
-    for (let i = known; i < depth; i += 1) {
+    let { dir, cachedPartCount } = this.deepestKnownDirectory(location, depth, keyAt);
+    for (let i = cachedPartCount; i < depth; i += 1) {
       const part = location.parts[i] as string;
       if (create) {
         this.trace?.(`[browser-opfs] path create requested creator=browser-opfs-proxy.open path=${keyAt(i + 1)}`);
@@ -649,15 +652,15 @@ class OpfsProxyServer {
     location: FileLocation,
     depth: number,
     keyAt: (count: number) => string,
-  ): { dir: FileSystemDirectoryHandleLike; known: number } {
-    for (let known = depth; known > 0; known -= 1) {
-      const dir = this.directoryCache.get(keyAt(known));
+  ): { dir: FileSystemDirectoryHandleLike; cachedPartCount: number } {
+    for (let cachedPartCount = depth; cachedPartCount > 0; cachedPartCount -= 1) {
+      const dir = this.directoryCache.get(keyAt(cachedPartCount));
       if (dir) {
         this.directoryCacheHits += 1;
-        return { dir, known };
+        return { dir, cachedPartCount };
       }
     }
-    return { dir: location.mount.directoryHandle, known: 0 };
+    return { dir: location.mount.directoryHandle, cachedPartCount: 0 };
   }
 
   private rememberDirectory(key: string, dir: FileSystemDirectoryHandleLike): void {

@@ -419,26 +419,29 @@ test("proxy looks a directory up once for repeated moves into it", async () => {
   }
 });
 
-test("proxy retries without its directory cache when a cached directory has gone stale", async () => {
-  const { channel, directoryHandle, move, server, subDirectory } = directoryCacheMount();
-  const freshDirectory = { getDirectoryHandle: vi.fn(), getFileHandle: vi.fn().mockRejectedValue(notFound()) };
-  try {
-    expect(await sendProxyRequest(channel, OPFS_PROXY_OP_MOVE, ["/out/staged.bin", "/out/sub/a.bin"])).toBe(
-      OPFS_PROXY_STATUS_OK,
-    );
-    directoryHandle.getDirectoryHandle.mockResolvedValue(freshDirectory);
-    move.mockImplementation(async (directory: unknown) => {
-      if (directory === subDirectory) throw notFound();
-    });
-    expect(await sendProxyRequest(channel, OPFS_PROXY_OP_MOVE, ["/out/staged.bin", "/out/sub/b.bin"])).toBe(
-      OPFS_PROXY_STATUS_OK,
-    );
-    expect(directoryHandle.getDirectoryHandle).toHaveBeenCalledTimes(2);
-    expect(move).toHaveBeenLastCalledWith(freshDirectory, "b.bin");
-  } finally {
-    server.stop();
-  }
-});
+test.each(["NotFoundError", "InvalidStateError", "UnknownError"])(
+  "proxy retries without its directory cache when a cached directory reports %s",
+  async (errorName) => {
+    const { channel, directoryHandle, move, server, subDirectory } = directoryCacheMount();
+    const freshDirectory = { getDirectoryHandle: vi.fn(), getFileHandle: vi.fn().mockRejectedValue(notFound()) };
+    try {
+      expect(await sendProxyRequest(channel, OPFS_PROXY_OP_MOVE, ["/out/staged.bin", "/out/sub/a.bin"])).toBe(
+        OPFS_PROXY_STATUS_OK,
+      );
+      directoryHandle.getDirectoryHandle.mockResolvedValue(freshDirectory);
+      move.mockImplementation(async (directory: unknown) => {
+        if (directory === subDirectory) throw Object.assign(new Error("stale"), { name: errorName });
+      });
+      expect(await sendProxyRequest(channel, OPFS_PROXY_OP_MOVE, ["/out/staged.bin", "/out/sub/b.bin"])).toBe(
+        OPFS_PROXY_STATUS_OK,
+      );
+      expect(directoryHandle.getDirectoryHandle).toHaveBeenCalledTimes(2);
+      expect(move).toHaveBeenLastCalledWith(freshDirectory, "b.bin");
+    } finally {
+      server.stop();
+    }
+  },
+);
 
 test("proxy fails a real miss in a cached directory once, without looping", async () => {
   const { channel, directoryHandle, move, server } = directoryCacheMount();
@@ -457,13 +460,13 @@ test("proxy fails a real miss in a cached directory once, without looping", asyn
   }
 });
 
-test("proxy forgets a directory it unlinks", async () => {
+test.each(["/out/sub", "/out//sub"])("proxy forgets a directory it unlinks as %s", async (unlinkPath) => {
   const { channel, directoryHandle, server } = directoryCacheMount();
   try {
     expect(await sendProxyRequest(channel, OPFS_PROXY_OP_MOVE, ["/out/staged.bin", "/out/sub/a.bin"])).toBe(
       OPFS_PROXY_STATUS_OK,
     );
-    expect(await sendProxyRequest(channel, OPFS_PROXY_OP_UNLINK, ["/out/sub"])).toBe(OPFS_PROXY_STATUS_OK);
+    expect(await sendProxyRequest(channel, OPFS_PROXY_OP_UNLINK, [unlinkPath])).toBe(OPFS_PROXY_STATUS_OK);
     expect(await sendProxyRequest(channel, OPFS_PROXY_OP_MOVE, ["/out/staged.bin", "/out/sub/b.bin"])).toBe(
       OPFS_PROXY_STATUS_OK,
     );
