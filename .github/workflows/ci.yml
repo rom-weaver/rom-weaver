@@ -1324,6 +1324,9 @@ jobs:
           tools: node rust nextest
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           ccache: "true"
+          # rust-cache drops the workspace crates, so every run recompiles them;
+          # sccache replays the unchanged library units.
+          sccache: "true"
 
       - uses: ./.github/actions/download-identify-data
 
@@ -1334,6 +1337,10 @@ jobs:
 
       - name: Rust tests
         run: mise run test-rust
+
+      - name: Compiler cache statistics
+        if: always()
+        run: sccache --show-stats
 
       - name: Verify publishable Rust packages
         # Package each crate exactly as cargo publish would, without uploading.
