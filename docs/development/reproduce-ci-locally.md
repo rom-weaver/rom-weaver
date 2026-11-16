@@ -86,7 +86,7 @@ Run WebKit E2E against the same production bundle:
 ROM_WEAVER_CHANNEL=prod ROM_WEAVER_E2E_USE_PREBUILT_DIST=1 npm --prefix packages/rom-weaver-webapp run test:e2e:webapp:webkit
 ```
 
-CI runs WebKit E2E as two legs. Append `-- --a11y-app` (navigation, accessibility, hydration) or `-- --docs-journeys` (docs accessibility, journeys) to run one leg.
+CI runs WebKit E2E as two legs. Append `-- --a11y-app` (navigation, accessibility, hydration) or `-- --docs-journeys` (docs pages, journeys) to run one leg.
 
 For the larger valid codec, level, and thread matrix:
 

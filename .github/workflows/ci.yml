@@ -1993,7 +1993,7 @@ jobs:
 
   # Two parallel legs: one serial run took about 400 s. `a11y-app` runs the
   # accessible navigation, accessibility, and hydration audits; `docs-journeys`
-  # runs the docs accessibility audit and the journeys. Together they run what
+  # runs the docs page audit and the journeys. Together they run what
   # an unsharded WebKit run does. The matrix job's result is the worst leg's, so
   # the gate reads it unchanged.
   webapp-webkit-e2e:
