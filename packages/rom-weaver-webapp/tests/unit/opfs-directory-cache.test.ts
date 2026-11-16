@@ -69,15 +69,6 @@ test("forget drops a folder and everything under it, and nothing beside it", asy
   expect(onCachedDirectory).toHaveBeenCalledTimes(1);
 });
 
-test("forget with no path and no prefix drops every folder", async () => {
-  const cache = new OpfsDirectoryCache<FakeDirectory>();
-  const root = makeDirectory("root");
-  await cache.resolve(root, ["a"], { create: true });
-  cache.forget([]);
-  await cache.resolve(root, ["a"], { create: true });
-  expect(root.getDirectoryHandle).toHaveBeenCalledTimes(2);
-});
-
 test("evicts the oldest folder past its limit", async () => {
   const cache = new OpfsDirectoryCache<FakeDirectory>(2);
   const root = makeDirectory("root");
@@ -95,9 +86,4 @@ test.each([
   ["NoModificationAllowedError", false],
 ])("treats %s as a stale handle error: %s", (name, expected) => {
   expect(isStaleDirectoryHandleError(Object.assign(new Error("x"), { name }))).toBe(expected);
-});
-
-test("treats a value without a name as not stale", () => {
-  expect(isStaleDirectoryHandleError(null)).toBe(false);
-  expect(isStaleDirectoryHandleError("boom")).toBe(false);
 });

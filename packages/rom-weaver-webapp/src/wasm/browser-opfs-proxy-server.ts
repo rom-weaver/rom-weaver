@@ -493,7 +493,7 @@ class OpfsProxyServer {
     const location = this.locate(guestPath);
     // The entry may be a directory, so nothing cached at or under it stays valid.
     this.directoryCache.forget(location.parts, location.mount.mountPath);
-    await this.withFreshDirectories(() => this.unlinkIn(guestPath, location));
+    await this.withStaleDirectoryRetry(() => this.unlinkIn(guestPath, location));
   }
 
   private async unlinkIn(guestPath: string, location: FileLocation): Promise<void> {
@@ -553,7 +553,7 @@ class OpfsProxyServer {
     for (const path of [fromPath, toPath]) {
       if (this.byPath.has(path) || this.pendingByPath.has(path)) throw new ProxyErrno(ERRNO_BUSY);
     }
-    await this.withFreshDirectories(async () => {
+    await this.withStaleDirectoryRetry(async () => {
       const source = await this.resolveParent(from, { create: false });
       const destination = await this.resolveParent(to, { create: true });
       if (await this.entryExists(destination.dir, destination.name)) throw new ProxyErrno(ERRNO_EXIST);
@@ -594,7 +594,7 @@ class OpfsProxyServer {
   }
 
   private async resolveFileHandle(location: FileLocation, { create }: { create: boolean }): Promise<unknown> {
-    return this.withFreshDirectories(async () => {
+    return this.withStaleDirectoryRetry(async () => {
       const { dir, name } = await this.resolveParent(location, { create });
       if (create) {
         this.trace?.(
@@ -606,12 +606,15 @@ class OpfsProxyServer {
   }
 
   /** Runs `attempt`. On a stale cache hit, clears the cache and retries once. */
-  private async withFreshDirectories<T>(attempt: () => Promise<T>): Promise<T> {
+  private async withStaleDirectoryRetry<T>(attempt: () => Promise<T>): Promise<T> {
     const hitsBefore = this.directoryCacheHits;
     try {
       return await attempt();
     } catch (error) {
       if (!isStaleDirectoryHandleError(error) || this.directoryCacheHits === hitsBefore) throw error;
+      this.trace?.(
+        `[browser-opfs] proxy stale directory handle, retrying without cache error=${(error as { name?: string }).name}`,
+      );
       this.directoryCache.clear();
       return attempt();
     }

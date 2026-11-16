@@ -420,7 +420,7 @@ test("proxy looks a directory up once for repeated moves into it", async () => {
 });
 
 test.each(["NotFoundError", "InvalidStateError", "UnknownError"])(
-  "proxy retries without its directory cache when a cached directory reports %s",
+  "proxy clears its directory cache and retries once when a cached directory reports %s",
   async (errorName) => {
     const { channel, directoryHandle, move, server, subDirectory } = directoryCacheMount();
     const freshDirectory = { getDirectoryHandle: vi.fn(), getFileHandle: vi.fn().mockRejectedValue(notFound()) };

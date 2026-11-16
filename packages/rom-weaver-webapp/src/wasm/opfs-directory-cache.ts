@@ -58,13 +58,9 @@ export class OpfsDirectoryCache<Directory extends DirectoryHandleSource> {
     return current;
   }
 
-  /** Drops the folder at `parts` and everything under it; no parts and no prefix drops all. */
+  /** Drops the folder at `parts` and everything under it. */
   forget(parts: readonly string[], keyPrefix = ""): void {
     const key = parts.reduce((path, part) => `${path}/${part}`, keyPrefix);
-    if (!key) {
-      this.handles.clear();
-      return;
-    }
     for (const cachedKey of this.handles.keys()) {
       if (cachedKey === key || cachedKey.startsWith(`${key}/`)) this.handles.delete(cachedKey);
     }
