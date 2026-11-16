@@ -102,8 +102,8 @@ export const parseShard = (spec, source) => {
 
 // A file's expected seconds: its recorded duration, else its size at the
 // seconds-per-byte ratio of the recorded files (1 when nothing is recorded, so
-// a split still weighs by bytes). A path that does not exist is left for Vitest
-// to report; it weighs 0 rather than raising a stat stack trace.
+// a split still weighs by bytes). A path that does not exist and has no recorded
+// duration weighs 0; Vitest reports it instead of a stat stack trace.
 const makeSecondsEstimator = (recorded, sizeOf) => {
   const knownNames = Object.keys(recorded);
   const knownBytes = knownNames.reduce((sum, name) => sum + sizeOf(path.join(TEST_DIR, name)), 0);
@@ -116,7 +116,7 @@ const makeSecondsEstimator = (recorded, sizeOf) => {
 // shard is currently lightest by expected seconds. Size alone left the shards
 // with equal bytes but 644 s against 539 s of recorded work, because per-file
 // time varies far more than per-file size. Every leg checks out the same commit
-// and runs this same pure function, so the legs stay disjoint and exhaustive.
+// and runs this same function on it, so the legs stay disjoint and exhaustive.
 export const selectShard = (files, shard, recorded = durations, sizeOf = fileSize) => {
   if (!shard) return files;
   const estimate = makeSecondsEstimator(recorded, sizeOf);
