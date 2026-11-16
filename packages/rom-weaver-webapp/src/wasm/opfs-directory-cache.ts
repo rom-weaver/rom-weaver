@@ -1,4 +1,4 @@
-// Remembers OPFS directory handles by path, so repeated opens walk only the folders not seen yet.
+// Remembers OPFS directory handles by path, so repeated opens walk only unseen folders.
 
 interface DirectoryHandleSource {
   getDirectoryHandle: (name: string, options?: { create?: boolean }) => Promise<unknown>;
@@ -7,7 +7,7 @@ interface DirectoryHandleSource {
 interface ResolveOptions {
   /** Creates missing folders. */
   create: boolean;
-  /** Namespaces the keys, so one cache can serve several roots. */
+  /** Prefixes each cache key. */
   keyPrefix?: string;
   /** Called once per folder served from the cache. */
   onCachedDirectory?: () => void;
@@ -17,7 +17,7 @@ interface ResolveOptions {
 
 const STALE_HANDLE_ERROR_NAMES = new Set(["NotFoundError", "InvalidStateError", "UnknownError"]);
 
-/** Whether a call on a cached directory handle failed because the folder was removed. WebKit reports UnknownError when a file is created in one. */
+/** Whether an error name means a cached directory handle may be stale. */
 export const isStaleDirectoryHandleError = (error: unknown): boolean =>
   STALE_HANDLE_ERROR_NAMES.has((error as { name?: string } | null)?.name ?? "");
 
