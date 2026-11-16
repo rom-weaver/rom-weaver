@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createLogger } from "../lib/logging.ts";
 import { requestPersistentStorage } from "../storage/browser/persistent-storage.ts";
 import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
+import { shouldConfirmDiscardSettings } from "./unload-guard.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
 
 const logger = createLogger("webapp-root");
@@ -115,6 +116,8 @@ const useUnifiedDialog = (actions: WebappRootProps["actions"], state: WebappRoot
     settingsCloseArmedRef.current = true;
     actions.onCloseSettings();
   }, [actions, state.settingsDialogOpen]);
+  // Closing now opens the discard prompt instead of closing the dialog.
+  const closeAsksToDiscard = state.settingsDialogOpen && shouldConfirmDiscardSettings(state);
   const saveSettings = useCallback(() => {
     if (state.draftSettings.keepTestedRomsEnabled === true && state.settings.keepTestedRomsEnabled !== true) {
       void requestPersistentStorage().catch((error: unknown) => {
@@ -183,6 +186,7 @@ const useUnifiedDialog = (actions: WebappRootProps["actions"], state: WebappRoot
   const openLogsTab = useCallback(() => showTab("logs"), [showTab]);
   const openAboutTab = useCallback(() => showTab("about"), [showTab]);
   return {
+    closeAsksToDiscard,
     closeDialog,
     closeDialogForNavigation,
     handleDialogTabChange,

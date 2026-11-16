@@ -104,7 +104,7 @@ const createServiceWorkerCacheState = () => ({
   updateReady: false,
 });
 
-const createWebappState = (settings = getDefaultSettings(), currentView = "patcher") => ({
+const createWebappState = (settings = getDefaultSettings(), currentView = "patcher", overrides = {}) => ({
   creatorSession: createEmptyCreatorSessionState(),
   currentView,
   draftSettings: settings,
@@ -116,22 +116,30 @@ const createWebappState = (settings = getDefaultSettings(), currentView = "patch
     status: "ready",
   },
   validation: createEmptyValidationState(),
+  ...overrides,
 });
 
 let selectExternalView;
 
-function WebappRootHarness({ initialView = "patcher", settings, updateReady = false, onReloadUpdate } = {}) {
+function WebappRootHarness({
+  initialView = "patcher",
+  settings,
+  stateOverrides,
+  updateReady = false,
+  onCloseSettings = () => undefined,
+  onReloadUpdate,
+} = {}) {
   const [currentView, setCurrentView] = useState(initialView);
   selectExternalView = setCurrentView;
   const props = useMemo(
     () => ({
-      actions: { ...createNoopActions(), onSelectView: setCurrentView, onReloadUpdate },
+      actions: { ...createNoopActions(), onCloseSettings, onSelectView: setCurrentView, onReloadUpdate },
       confirmationDialog: createEmptyConfirmationDialogState(),
       pageUpdate: { ...createEmptyPageUpdateState(), ready: updateReady },
       serviceWorkerCache: createServiceWorkerCacheState(),
-      state: createWebappState(settings, currentView),
+      state: createWebappState(settings, currentView, stateOverrides),
     }),
-    [currentView, settings, updateReady, onReloadUpdate],
+    [currentView, onCloseSettings, settings, stateOverrides, updateReady, onReloadUpdate],
   );
   return createElement(WebappRoot, props);
 }
@@ -1555,6 +1563,33 @@ test("a phone console swipe closes past a quarter of the width and springs back 
   // A slow drag past a quarter of the width (about 28%) closes.
   await swipe([40, 60, 80, 100, 120, 140, 150], 200);
   await expect.poll(() => document.querySelector(".log-dlg")).toBeNull();
+  await page.viewport(1280, 900);
+});
+
+test("a phone console Close that opens the discard prompt skips the slide-out", async () => {
+  await page.viewport(393, 844);
+  const settings = getDefaultSettings();
+  const onCloseSettings = vi.fn();
+  mountWebappRoot({
+    onCloseSettings,
+    settings,
+    stateOverrides: {
+      draftSettings: { ...settings, keepTestedRomsEnabled: !settings.keepTestedRomsEnabled },
+      settingsDialogOpen: true,
+    },
+  });
+  await openMenuSheet();
+  navRow("Settings", ".menu-sheet").click();
+  await expect.poll(() => document.querySelector(".log-dlg[open] .dock-menu")).toBeTruthy();
+  const frame = document.querySelector(".log-dlg .dlg-frame");
+  // The page MUST finish sliding in before Close, or the frame's own transform is read mid-motion.
+  await new Promise((resolve) => setTimeout(resolve, 400));
+
+  document.querySelector(".log-dlg .dock-menu").click();
+  expect(onCloseSettings).toHaveBeenCalledTimes(1);
+  expect(frame.style.transform).toBe("");
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  expect(document.querySelector(".log-dlg[open]")).toBeTruthy();
   await page.viewport(1280, 900);
 });
 

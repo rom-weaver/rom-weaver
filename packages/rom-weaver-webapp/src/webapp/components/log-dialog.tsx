@@ -856,7 +856,7 @@ const SWIPE_HOLD_MS = 80;
 /**
  * The root unmounts the dialog the moment it closes, so on a phone the page
  * slides out first and reports the close once it is off screen. A close that
- * only opens the discard prompt leaves the page where it is.
+ * only opens the discard prompt skips the slide.
  */
 const useSlideClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: () => void, asksToDiscard: boolean) => {
   const leavingRef = useRef(false);

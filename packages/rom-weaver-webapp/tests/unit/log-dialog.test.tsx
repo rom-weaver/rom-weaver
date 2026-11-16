@@ -299,39 +299,6 @@ describe("previous session view", () => {
   });
 });
 
-describe("phone close slide", () => {
-  afterEach(() => vi.mocked(window.matchMedia).mockRestore());
-
-  const closeOnPhone = (props: Partial<Parameters<typeof LogDialog>[0]>) => {
-    vi.useFakeTimers();
-    vi.spyOn(window, "matchMedia").mockImplementation(
-      (query) => ({ matches: query.includes("max-width"), media: query }) as unknown as MediaQueryList,
-    );
-    const onClose = vi.fn();
-    const { container } = renderDialog({ onClose, ...props });
-    fireEvent.click(container.querySelector(".dlg-x") as HTMLButtonElement);
-    return { frame: container.querySelector(".dlg-frame") as HTMLElement, onClose };
-  };
-
-  it("slides the page out before reporting the close", () => {
-    const { frame, onClose } = closeOnPhone({});
-
-    expect(frame.style.transform).toBe("translateX(100%)");
-    expect(onClose).not.toHaveBeenCalled();
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it("reports a close that opens the discard prompt at once, without sliding", () => {
-    const { frame, onClose } = closeOnPhone({ closeAsksToDiscard: true });
-
-    expect(frame.style.transform).toBe("");
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-});
-
 describe("copy feedback", () => {
   it("flashes the copied state on a trace line and clears it", async () => {
     vi.useFakeTimers();
