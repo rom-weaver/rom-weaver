@@ -25,7 +25,13 @@ function inheritedInstructions(target, args) {
   const collect = (name) => {
     const current = stages.get(name);
     if (!current) return [];
-    return [...collect(current.parent), ...current.instructions];
+    return [
+      ...collect(current.parent),
+      ...current.instructions.flatMap((line) => [
+        ...collect(/--from=(\S+)/.exec(line)?.[1]),
+        line,
+      ]),
+    ];
   };
   assert.ok(stages.has(target), `missing Docker stage ${target}`);
   return collect(target);

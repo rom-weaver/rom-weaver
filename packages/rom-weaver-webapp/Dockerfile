@@ -17,7 +17,7 @@ ARG DIST=source
 ARG WASM=source
 ARG IDENTIFY_DATA=source
 
-FROM node:22-bookworm AS builder
+FROM node:22-bookworm AS toolchain
 
 ARG TARGETARCH
 ARG RUST_VERSION=1.97.1
@@ -115,6 +115,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 
+FROM toolchain AS builder
 COPY . .
 
 # WASM attribution MUST see the selected identify tree before compilation.
@@ -130,10 +131,30 @@ RUN node scripts/ensure-identify-data.mjs
 # hadolint ignore=DL3006
 FROM identify-${IDENTIFY_DATA} AS identified
 
+# The wasm compile reads only these paths (the inputs `scripts/wasm/wasm-source-fingerprint.mjs`
+# hashes, plus the license script `build-app.mjs` runs), so it starts from the toolchain layers
+# rather than `COPY . .`. An edit to docs, the webapp, or CI then leaves the compile layer cached.
+# Keep the list in step with that fingerprint. A source identify build needs the whole tree.
+FROM toolchain AS wasm-inputs-prebuilt
+COPY Cargo.toml Cargo.lock ./
+COPY .cargo ./.cargo
+COPY .config/mise.toml ./.config/mise.toml
+COPY crates ./crates
+COPY scripts/wasm ./scripts/wasm
+COPY scripts/cargo-target-dir.mjs scripts/gen-third-party-licenses.mjs ./scripts/
+COPY target/identify-data/v1 /app/crates/rom-weaver-cli/data/identify/v1
+RUN test -s /app/crates/rom-weaver-cli/data/identify/v1/index.json \
+    || { echo "IDENTIFY_DATA=prebuilt but target/identify-data/v1 is missing from the build context" >&2; exit 1; }
+
+FROM identify-source AS wasm-inputs-source
+
+# hadolint ignore=DL3006
+FROM wasm-inputs-${IDENTIFY_DATA} AS wasm-inputs
+
 # Cache mounts keep the cargo registry and the cmake-built C deps (libarchive)
 # across local rebuilds. On ephemeral CI runners they are a no-op: BuildKit
-# exports no cache mount to a registry or gha cache, so CI still pays a cold
-# compile and only the layers above this one are restored.
+# exports no cache mount to a registry or gha cache, so a changed input still
+# pays a cold compile; an unchanged one restores this layer from the registry cache.
 #
 # No manifest-only prefetch: Cargo needs every workspace target, so preserving
 # that layer would require brittle stub source trees for little benefit.
@@ -144,11 +165,14 @@ FROM identify-${IDENTIFY_DATA} AS identified
 # other's objects.
 #
 # The shared WASM cache would only add an unrestorable module copy to this layer.
-FROM identified AS wasm-source
+FROM wasm-inputs AS wasm-compile
 ARG TARGETARCH
 RUN --mount=type=cache,id=webapp-cargo-registry,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,id=webapp-cargo-target-${TARGETARCH},target=/app/target,sharing=locked \
     ROM_WEAVER_WASM_CACHE=0 node scripts/wasm/build-app.mjs prod
+
+FROM identified AS wasm-source
+COPY --from=wasm-compile /app/packages/rom-weaver-webapp/src/wasm/ /app/packages/rom-weaver-webapp/src/wasm/
 
 # Callers MUST stage the source-exact module before selecting WASM=prebuilt.
 # Toolchain layers still verify each architecture's SDK and binaryen checksums.
