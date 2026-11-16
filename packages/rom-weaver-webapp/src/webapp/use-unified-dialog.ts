@@ -116,7 +116,7 @@ const useUnifiedDialog = (actions: WebappRootProps["actions"], state: WebappRoot
     settingsCloseArmedRef.current = true;
     actions.onCloseSettings();
   }, [actions, state.settingsDialogOpen]);
-  // Closing now opens the discard prompt instead of closing the dialog.
+  // True when Close opens the discard prompt instead of closing the dialog.
   const closeAsksToDiscard = state.settingsDialogOpen && shouldConfirmDiscardSettings(state);
   const saveSettings = useCallback(() => {
     if (state.draftSettings.keepTestedRomsEnabled === true && state.settings.keepTestedRomsEnabled !== true) {

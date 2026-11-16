@@ -1582,8 +1582,6 @@ test("a phone console Close that opens the discard prompt skips the slide-out", 
   navRow("Settings", ".menu-sheet").click();
   await expect.poll(() => document.querySelector(".log-dlg[open] .dock-menu")).toBeTruthy();
   const frame = document.querySelector(".log-dlg .dlg-frame");
-  // The page MUST finish sliding in before Close, or the frame's own transform is read mid-motion.
-  await new Promise((resolve) => setTimeout(resolve, 400));
 
   document.querySelector(".log-dlg .dock-menu").click();
   expect(onCloseSettings).toHaveBeenCalledTimes(1);

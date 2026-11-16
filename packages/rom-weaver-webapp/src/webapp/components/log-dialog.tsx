@@ -1641,7 +1641,7 @@ const LogDialog = ({
   onPreviewRuntimeStateChange,
   onReloadUpdate,
 }: {
-  /** Closing now opens the discard-changes prompt instead of closing, so the phone slide-out is skipped. */
+  /** True when Close opens the discard-changes prompt, so the phone slide-out is skipped. */
   closeAsksToDiscard?: boolean;
   /** The phone dock's workflows; the console repeats the dock because the modal makes the real one inert. */
   dockTabs?: WorkflowTab[];
