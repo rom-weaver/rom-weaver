@@ -631,8 +631,15 @@ impl Drop for LibarchiveExtractTransaction<'_> {
                 "archive extract rollback was incomplete"
             );
         }
-        if !self.preserve_staging {
-            let _ = fs::remove_dir_all(&self.staging_dir);
+        if !self.preserve_staging
+            && let Err(error) = fs::remove_dir_all(&self.staging_dir)
+        {
+            trace!(
+                format = self.format_name,
+                staging_dir = %self.staging_dir.display(),
+                %error,
+                "archive extract staging removal failed"
+            );
         }
     }
 }

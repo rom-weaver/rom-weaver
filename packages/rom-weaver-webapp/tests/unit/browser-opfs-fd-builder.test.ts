@@ -483,6 +483,46 @@ describe("PreparedWasiPreopenDirectory namespace operations", () => {
     expect(mount.contents.has("out.bin")).toBe(false);
   });
 
+  describe("directory fds opened under the mount", () => {
+    type DirectoryFdLike = Pick<PreopenLike, "path_open" | "path_remove_directory" | "path_unlink_file">;
+
+    function openDirectory(parent: Pick<PreopenLike, "path_open">, pathStr: string) {
+      const { fd_obj: fdObj, ret } = parent.path_open(0, pathStr, wasi.OFLAGS_DIRECTORY, 0n, 0n, 0);
+      if (ret !== wasi.ERRNO_SUCCESS || !fdObj) throw new Error(`cannot open directory ${pathStr}: errno ${ret}`);
+      return fdObj as unknown as DirectoryFdLike;
+    }
+
+    it("remove files and directories from OPFS too, as remove_dir_all does", async () => {
+      const mount = makeMount({ proxyClient: proxy.client });
+      const fd = await preopen(mount);
+      fd.path_create_directory("staging");
+      fd.path_create_directory("staging/old");
+      fd.path_open(0, "staging/old/3", wasi.OFLAGS_CREAT, wasi.RIGHTS_FD_WRITE, 0n, 0);
+
+      const staging = openDirectory(fd, "staging");
+      const old = openDirectory(staging, "old");
+      expect(old.path_unlink_file("3")).toBe(wasi.ERRNO_SUCCESS);
+      expect(staging.path_remove_directory("old")).toBe(wasi.ERRNO_SUCCESS);
+      expect(fd.path_remove_directory("staging")).toBe(wasi.ERRNO_SUCCESS);
+
+      expect(proxy.unlinked).toEqual(["/work/staging/old/3", "/work/staging/old", "/work/staging"]);
+      expect(mount.contents.has("staging")).toBe(false);
+    });
+
+    it("refuse removal under a read-only root", async () => {
+      const contents = new Map<string, wasiShim.Inode>([
+        ["in", new wasiShim.Directory(new Map([["a.bin", new wasiShim.File(new Uint8Array(1))]]))],
+      ]);
+      const mount = makeMount({ contents, proxyClient: proxy.client, writableRoots: [] });
+      const fd = await preopen(mount);
+
+      expect(openDirectory(fd, "in").path_unlink_file("a.bin")).toBe(wasi.ERRNO_ROFS);
+      expect(mount.contents.get("in")).toBeInstanceOf(wasiShim.Directory);
+      expect((mount.contents.get("in") as wasiShim.Directory).contents.has("a.bin")).toBe(true);
+      expect(proxy.unlinked).toEqual([]);
+    });
+  });
+
   describe("renameFile", () => {
     function createClosedOutput(fd: PreopenLike, name: string, bytes: number[]) {
       const opened = fd.path_open(0, name, wasi.OFLAGS_CREAT, wasi.RIGHTS_FD_WRITE, 0n, 0);

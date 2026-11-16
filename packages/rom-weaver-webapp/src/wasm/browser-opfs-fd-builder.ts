@@ -185,6 +185,11 @@ interface RenamePlan {
   sourceParent: RenameParent;
 }
 
+interface OpenedFd {
+  ret: number;
+  fd_obj: wasiShim.Fd | null;
+}
+
 class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
   mount: BrowserOpfsMount;
   private tracedMissingOpens = 0;
@@ -249,7 +254,14 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
         `[browser-opfs] path open failed path=${basenameForTrace(pathStr)} oflags=${oflags} errno=${opened.ret}`,
       );
     }
-    return opened;
+    return this.withMountDirectory(opened, pathStr);
+  }
+
+  /** Makes a directory fd opened under this mount remove files through the mount, not only the in-memory tree. */
+  withMountDirectory(opened: OpenedFd, relativePath: string): OpenedFd {
+    const { fd_obj: fdObj } = opened;
+    if (opened.ret !== wasiShim.wasi.ERRNO_SUCCESS || !(fdObj instanceof wasiShim.OpenDirectory)) return opened;
+    return { ...opened, fd_obj: new MountOpenDirectory(fdObj.dir, this, relativePath) };
   }
 
   override path_create_directory(pathStr: string) {
@@ -306,8 +318,13 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
       // Also remove the backing OPFS file so the namespace matches the inode tree.
       try {
         this.mount.proxyClient.unlink(guestPath);
-      } catch {
-        // best-effort: the inode is already gone; a missing OPFS entry is not fatal to unlink
+      } catch (error) {
+        // best-effort: the inode is already gone, so a failed OPFS removal is traced, not returned. A
+        // directory that never held a file has no OPFS entry (ENOENT), which is expected.
+        const errno = error instanceof OpfsProxyError ? error.errno : wasiShim.wasi.ERRNO_IO;
+        if (errno !== wasiShim.wasi.ERRNO_NOENT) {
+          this.mount.trace?.(`[browser-opfs] path unlink failed path=${basenameForTrace(pathStr)} errno=${errno}`);
+        }
       }
     }
     return unlinked;
@@ -391,6 +408,38 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
     if (entry.contents.size > 0) return wasiShim.wasi.ERRNO_NOTEMPTY;
     const { ret } = this.path_unlink(pathStr);
     return ret;
+  }
+}
+
+/**
+ * A directory fd opened under the mount. The shim's own OpenDirectory edits only the in-memory tree, so a
+ * file removed through it (as `remove_dir_all` does) would keep its OPFS entry and block removing the
+ * directory. Its removals and nested directory opens go through the mount instead.
+ */
+class MountOpenDirectory extends wasiShim.OpenDirectory {
+  private readonly mount: PreparedWasiPreopenDirectory;
+  private readonly basePath: string;
+
+  constructor(dir: wasiShim.Directory, mount: PreparedWasiPreopenDirectory, basePath: string) {
+    super(dir);
+    this.mount = mount;
+    this.basePath = basePath;
+  }
+
+  override path_open(...args: Parameters<wasiShim.OpenDirectory["path_open"]>): OpenedFd {
+    return this.mount.withMountDirectory(super.path_open(...args), this.mountPath(args[1]));
+  }
+
+  override path_unlink_file(pathStr: string) {
+    return this.mount.path_unlink_file(this.mountPath(pathStr));
+  }
+
+  override path_remove_directory(pathStr: string) {
+    return this.mount.path_remove_directory(this.mountPath(pathStr));
+  }
+
+  private mountPath(pathStr: string) {
+    return `${this.basePath}/${pathStr}`;
   }
 }
 
