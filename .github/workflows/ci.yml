@@ -1733,6 +1733,9 @@ jobs:
           path: packages/rom-weaver-webapp/src/wasm
 
       # The icons `wasm` rendered; the unit tests and Vite's config read them from disk.
+      # `icons:channels` keeps them while their render stamp (inputs and browser version)
+      # matches this runner and renders them again otherwise, so the determinism check
+      # never compares renders from two different browser builds.
       - name: Download generated channel icons
         uses: actions/download-artifact@v8
         with:
@@ -1750,7 +1753,7 @@ jobs:
       - name: Script and unit tests
         env:
           ROM_WEAVER_SYSTEM_CHROME: "1"
-        run: npm --prefix packages/rom-weaver-webapp run test:static:prerendered
+        run: npm --prefix packages/rom-weaver-webapp run test:static
 
       - name: Lint
         run: npm --prefix packages/rom-weaver-webapp run lint
