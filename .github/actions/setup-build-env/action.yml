@@ -104,12 +104,11 @@ runs:
     # cmake/ninja/pkg-config build the vendored C deps. Jobs that compile no
     # Rust pass an empty list.
     - name: Install system dependencies
-      if: inputs.apt-packages != '' || (runner.os == 'Linux' && (inputs.ccache == 'true' || inputs.sccache == 'true'))
+      if: inputs.apt-packages != '' || (runner.os == 'Linux' && inputs.ccache == 'true')
       shell: bash
       env:
         APT_PACKAGES: ${{ inputs.apt-packages }}
         INSTALL_CCACHE: ${{ inputs.ccache }}
-        INSTALL_SCCACHE: ${{ inputs.sccache }}
       run: |
         node scripts/ci/install-system-dependencies.mjs
 
@@ -173,8 +172,33 @@ runs:
         if command -v sccache >/dev/null 2>&1; then
           echo "sccache already on PATH"
         elif [ "$RUNNER_OS" = "Linux" ]; then
-          echo "::error::compiler cache missing after system dependency setup"
-          exit 1
+          # Ubuntu's package is 0.7.7, which cannot cache rustc calls that
+          # carry --remap-path-prefix. Pin a release and verify its digest.
+          version=v0.17.0
+          case "$RUNNER_ARCH" in
+            X64)
+              triple=x86_64-unknown-linux-musl
+              sha256=67c4a96dd237c1f518f6b36083f270f9976d516f1e57fce891755ea782e50006
+              ;;
+            ARM64)
+              triple=aarch64-unknown-linux-musl
+              sha256=821a86343191aa1cbab74bd42f9e93c9a63bf85e4742945f40d3ae84193c1c77
+              ;;
+            *)
+              echo "::error::no pinned sccache for $RUNNER_ARCH"
+              exit 1
+              ;;
+          esac
+          name="sccache-$version-$triple"
+          archive="$RUNNER_TEMP/$name.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "$archive" \
+            "https://github.com/mozilla/sccache/releases/download/$version/$name.tar.gz"
+          echo "$sha256  $archive" | sha256sum --check --strict -
+          mkdir -p "$RUNNER_TEMP/sccache-bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/sccache-bin" --strip-components=1 "$name/sccache"
+          echo "$RUNNER_TEMP/sccache-bin" >> "$GITHUB_PATH"
+          PATH="$RUNNER_TEMP/sccache-bin:$PATH"
         elif [ "$RUNNER_OS" = "macOS" ]; then
           brew install sccache
         else
@@ -185,6 +209,7 @@ runs:
           echo "SCCACHE_DIR=$RUNNER_TEMP/sccache"
           echo "SCCACHE_CACHE_SIZE=1G"
         } >> "$GITHUB_ENV"
+        sccache --version
 
     # Compiler results are content-addressed, so older generations can be restored safely.
     - name: Cache sccache objects

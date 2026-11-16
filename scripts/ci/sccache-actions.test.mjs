@@ -110,3 +110,12 @@ test("WASM C cache avoids the native-sized eviction ceiling", () => {
   assert.match(miss, /ccache-maxsize: 1G/u);
   assert.match(action, /ccache-maxsize:[\s\S]*?default: 300M/u);
 });
+
+test("Linux sccache is a pinned release verified by digest, not the old apt package", () => {
+  const body = step("Install sccache");
+  assert.match(body, /version=v0\.17\.0/u);
+  assert.equal([...body.matchAll(/sha256=[0-9a-f]{64}\b/gu)].length, 2);
+  assert.match(body, /sha256sum --check --strict/u);
+  const install = readFileSync(new URL("./install-system-dependencies.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(install, /INSTALL_SCCACHE/u);
+});
