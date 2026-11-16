@@ -441,8 +441,7 @@
   .rw-app .console-pane {
     flex: 1 1 auto;
   }
-  .rw-app .console-nav,
-  .rw-app .console-head .dlg-x {
+  .rw-app .console-nav {
     display: none;
   }
   /* In the frame's flow rather than fixed: the frame slides, and the dock rides with it. */

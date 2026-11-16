@@ -203,7 +203,7 @@ test("Close on a phone does not slide the page while it opens the discard prompt
   await page.viewport(390, 800);
   await page.getByRole("button", { name: "Open Settings" }).click();
   const frame = document.querySelector(".dlg-frame");
-  const close = settings().getByRole("button", { name: "Close", exact: true });
+  const close = settings().getByRole("button", { name: "Close", exact: true }).last();
   const slid = new Set();
   const observer = new MutationObserver(() => slid.add(frame.style.transform));
   observer.observe(frame, { attributeFilter: ["style"], attributes: true });
@@ -223,7 +223,23 @@ test("Close on a phone with nothing to discard slides the page out", async () =>
   await page.getByRole("button", { name: "Open Settings" }).click();
   const frame = document.querySelector(".dlg-frame");
 
-  await settings().getByRole("button", { name: "Close", exact: true }).click();
+  await settings().getByRole("button", { name: "Close", exact: true }).last().click();
   await expect.poll(() => frame.style.transform).toBe("translateX(100%)");
+  await expect.element(settings()).not.toBeInTheDocument();
+});
+
+test("a phone's settings page has a Close button in the top right of its head", async () => {
+  await page.viewport(390, 800);
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  const close = settings().getByRole("button", { name: "Close", exact: true }).first();
+  await expect.element(close).toBeVisible();
+
+  const head = document.querySelector(".console-head").getBoundingClientRect();
+  const x = close.element().getBoundingClientRect();
+  expect(x.right).toBeLessThanOrEqual(head.right);
+  expect(head.right - x.right).toBeLessThan(head.width / 4);
+  expect(x.top - head.top).toBeLessThan(head.height / 2);
+
+  await close.click();
   await expect.element(settings()).not.toBeInTheDocument();
 });
