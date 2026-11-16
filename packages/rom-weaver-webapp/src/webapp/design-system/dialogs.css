@@ -765,7 +765,7 @@
     display: contents;
   }
   .rw-app .settings-panel .setcols .setgroup {
-    margin-block-end: var(--sp-s);
+    margin-block-end: var(--sp-xs);
   }
   .rw-app .settings-panel .validation {
     column-span: all;
@@ -910,8 +910,8 @@
   grid-template-columns: minmax(0, 1fr) minmax(min(18rem, calc(100% - var(--sp-m))), 1.4fr);
   column-gap: var(--sp-m);
   align-content: start;
-  padding: var(--sp-s) var(--sp-m);
-  margin-block-end: var(--sp-s);
+  padding: var(--sp-xs) var(--sp-m);
+  margin-block-end: var(--sp-xs);
   container: setgroup / inline-size;
   background: var(--plate-2);
   border: 1px solid var(--seam);
@@ -923,8 +923,8 @@
   min-width: 0;
 }
 .rw-app .setgroup .gtitle {
-  margin-block-end: var(--sp-xs);
-  font-size: 0.84rem;
+  margin-block-end: var(--sp-2xs);
+  font-size: 0.9rem;
   font-weight: 650;
   color: var(--thread-text);
   letter-spacing: 0;
@@ -935,14 +935,15 @@
   grid-column: 1 / -1;
   gap: var(--sp-m);
   align-items: center;
-  padding-block: 2px;
+  padding-block: 0;
 }
 .rw-app .slabel {
   display: inline-flex;
   gap: var(--sp-s);
   align-items: center;
-  font-size: 0.8rem;
-  color: var(--ink-2);
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--ink);
 }
 .rw-app .gtitle .info {
   margin-inline-start: 8px;
@@ -958,11 +959,12 @@
 .rw-app .setchecks {
   display: flex;
   flex-direction: column;
-  padding-block-start: 4px;
 }
 .rw-app .setchecks .popt {
   min-height: 44px;
-  font-size: 0.82rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--ink);
 }
 .rw-app .setchecks input[type="checkbox"] {
   --sw-w: 44px;
@@ -1008,21 +1010,22 @@
   margin: 0;
 }
 .rw-app .srange {
-  padding-block: 6px 2px;
+  padding-block: 2px 0;
 }
 .rw-app .srange-label {
   display: inline-flex;
   gap: var(--sp-s);
   align-items: center;
-  font-size: 0.8rem;
-  color: var(--ink-2);
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--ink);
 }
 .rw-app .srange-head {
   display: flex;
   gap: var(--sp-m);
   align-items: baseline;
   justify-content: space-between;
-  margin-block-end: 4px;
+  margin-block-end: 2px;
 }
 .rw-app .srange-head .v {
   font-size: 0.76rem;
