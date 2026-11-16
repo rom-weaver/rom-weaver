@@ -1,3 +1,5 @@
+#[cfg(target_family = "wasm")]
+use std::sync::atomic::AtomicBool;
 use std::{
     ffi::OsString,
     fs::{self, DirBuilder, File, OpenOptions},
@@ -188,6 +190,48 @@ fn copy_extract_file_create_new(source: &Path, destination: &Path) -> std::io::R
     Ok(())
 }
 
+/// Set once the browser reports it cannot rename OPFS files, so later installs copy without asking.
+#[cfg(target_family = "wasm")]
+static EXTRACT_RENAME_UNSUPPORTED: AtomicBool = AtomicBool::new(false);
+
+/// Renames `source` onto `destination` through the browser's OPFS move. Returns `false` when the
+/// caller must copy instead (move unsupported, or the source still has an open handle). An existing
+/// destination stays an error, as with the copy.
+#[cfg(target_family = "wasm")]
+fn rename_extract_file_create_new(source: &Path, destination: &Path) -> std::io::Result<bool> {
+    if EXTRACT_RENAME_UNSUPPORTED.load(Ordering::Relaxed) {
+        return Ok(false);
+    }
+    match fs::rename(source, destination) {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Err(error),
+        Err(error) => {
+            if error.kind() == std::io::ErrorKind::Unsupported {
+                EXTRACT_RENAME_UNSUPPORTED.store(true, Ordering::Relaxed);
+            }
+            trace!(
+                source = %source.display(),
+                destination = %destination.display(),
+                %error,
+                "extract rename unavailable; copying"
+            );
+            Ok(false)
+        }
+    }
+}
+
+/// Installs `source` at `destination` without overwriting. The source is consumed; failing to remove
+/// it after a copy is not a reason to fail, because transaction cleanup retries the removal.
+#[cfg(target_family = "wasm")]
+fn move_extract_file_create_new(source: &Path, destination: &Path) -> std::io::Result<()> {
+    if rename_extract_file_create_new(source, destination)? {
+        return Ok(());
+    }
+    copy_extract_file_create_new(source, destination)?;
+    let _ = fs::remove_file(source);
+    Ok(())
+}
+
 #[cfg(not(target_family = "wasm"))]
 pub(super) fn install_staged_no_overwrite_with<F>(
     staged_path: &Path,
@@ -224,9 +268,7 @@ fn install_staged_no_overwrite(staged_path: &Path, destination_path: &Path) -> s
 
 #[cfg(target_family = "wasm")]
 fn install_staged_no_overwrite(staged_path: &Path, destination_path: &Path) -> std::io::Result<()> {
-    copy_extract_file_create_new(staged_path, destination_path)?;
-    let _ = fs::remove_file(staged_path);
-    Ok(())
+    move_extract_file_create_new(staged_path, destination_path)
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -236,6 +278,9 @@ fn backup_extract_output(source: &Path, backup: &Path) -> std::io::Result<()> {
 
 #[cfg(target_family = "wasm")]
 fn backup_extract_output(source: &Path, backup: &Path) -> std::io::Result<()> {
+    if rename_extract_file_create_new(source, backup)? {
+        return Ok(());
+    }
     copy_extract_file_create_new(source, backup)?;
     if let Err(error) = fs::remove_file(source) {
         let _ = fs::remove_file(backup);
@@ -251,9 +296,7 @@ fn install_staged_overwrite(source: &Path, destination: &Path) -> std::io::Resul
 
 #[cfg(target_family = "wasm")]
 fn install_staged_overwrite(source: &Path, destination: &Path) -> std::io::Result<()> {
-    copy_extract_file_create_new(source, destination)?;
-    let _ = fs::remove_file(source);
-    Ok(())
+    move_extract_file_create_new(source, destination)
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -263,9 +306,7 @@ fn restore_extract_backup(backup: &Path, destination: &Path) -> std::io::Result<
 
 #[cfg(target_family = "wasm")]
 fn restore_extract_backup(backup: &Path, destination: &Path) -> std::io::Result<()> {
-    copy_extract_file_create_new(backup, destination)?;
-    let _ = fs::remove_file(backup);
-    Ok(())
+    move_extract_file_create_new(backup, destination)
 }
 
 #[derive(Debug)]

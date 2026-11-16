@@ -69,6 +69,15 @@ type WasiFdPwriteImport = (
 // Loose view of a WASI import table: the four file-io entries this module wraps plus
 // the rom-weaver markers it installs. Keeps shim WASI instances assignable while still
 // typing the wrapped imports.
+type WasiPathRenameImport = (
+  fd: number,
+  oldPathPtr: number,
+  oldPathLen: number,
+  newFd: number,
+  newPathPtr: number,
+  newPathLen: number,
+) => unknown;
+
 type DirectFileIoImportTable = Record<string, unknown> & {
   __romWeaverDirectFileIo?: unknown;
   __romWeaverDirectFileIoStats?: unknown;
@@ -77,6 +86,7 @@ type DirectFileIoImportTable = Record<string, unknown> & {
   fd_read?: WasiFdReadImport;
   fd_write?: WasiFdWriteImport;
   path_open?: WasiPathOpenImport;
+  path_rename?: WasiPathRenameImport;
 };
 
 // Structural view of the parts of a WASI instance this module touches. Weak enough that
@@ -85,6 +95,10 @@ type DirectIoWasi = {
   fds?: ReadonlyArray<unknown>;
   inst?: { exports?: { memory?: WebAssembly.Memory } };
   wasiImport?: DirectFileIoImportTable;
+};
+
+type RenamableFd = {
+  renameFile(oldPath: string, newPath: string): number;
 };
 
 type BufferedWriteWasiFd = {
@@ -203,6 +217,21 @@ export function installDirectWasiFileIoImports(wasi: DirectIoWasi | null | undef
       return ret;
     };
   }
+  // The shim's own rename unlinks the source (deleting its OPFS file) and then relinks the inode, so a
+  // rename inside an OPFS mount must go through the mount's proxy move instead.
+  const originalPathRename = imports.path_rename;
+  if (typeof originalPathRename === "function") {
+    imports.path_rename = (...args) => {
+      const [fd, oldPathPtr, oldPathLen, newFd, newPathPtr, newPathLen] = args;
+      const fdObj = wasi.fds?.[fd];
+      if (!isRenamableFd(fdObj)) return originalPathRename(...args);
+      if (wasi.fds?.[newFd] !== fdObj) return wasiShim.wasi.ERRNO_XDEV;
+      return fdObj.renameFile(
+        readGuestString(wasi, oldPathPtr, oldPathLen),
+        readGuestString(wasi, newPathPtr, newPathLen),
+      );
+    };
+  }
   imports.fd_read = (fd, iovsPtr, iovsLen, nreadPtr) => {
     const fdObj = wasi.fds?.[fd];
     if (!isDirectIoReadableFd(fdObj, "fd_read_into")) {
@@ -286,6 +315,11 @@ export function installDirectWasiFileIoImports(wasi: DirectIoWasi | null | undef
 function isDirectIoReadableFd(value: unknown, method: keyof DirectIoReadableFd): value is DirectIoReadableFd {
   if (!value) return false;
   return typeof (value as Partial<DirectIoReadableFd>)[method] === "function";
+}
+
+function isRenamableFd(value: unknown): value is RenamableFd {
+  if (!value) return false;
+  return typeof (value as Partial<RenamableFd>).renameFile === "function";
 }
 
 function isDirectIoWritableFd(value: unknown, method: keyof DirectIoWritableFd): value is DirectIoWritableFd {

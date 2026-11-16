@@ -76,6 +76,8 @@ export const OPFS_PROXY_OP_UNLINK = 8;
 export const OPFS_PROXY_OP_MKDIR = 10;
 /** Return the handle's byte size in AUX_HIGH:RESULT, from its OPFS handle or input Blob. */
 export const OPFS_PROXY_OP_SIZE = 11;
+/** Move a closed file within one mount (data buffer holds the UTF-8 source path [0,LENGTH) then the destination path [LENGTH,LENGTH+AUX_LOW)). */
+export const OPFS_PROXY_OP_MOVE = 12;
 
 // --- Status values (raw WASI errno carried in OPFS_PROXY_CONTROL_STATUS_INDEX) --------------------
 //

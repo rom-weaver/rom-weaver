@@ -6,11 +6,13 @@ import {
   OPFS_PROXY_GLOBAL_POISONED_INDEX,
 } from "../../src/wasm/browser-opfs-proxy-channel.ts";
 import {
+  OPFS_PROXY_CONTROL_AUX_LOW_INDEX,
   OPFS_PROXY_CONTROL_LENGTH_INDEX,
   OPFS_PROXY_CONTROL_OPCODE_INDEX,
   OPFS_PROXY_CONTROL_RESULT_INDEX,
   OPFS_PROXY_CONTROL_STATE_INDEX,
   OPFS_PROXY_CONTROL_STATUS_INDEX,
+  OPFS_PROXY_OP_MOVE,
   OPFS_PROXY_OP_OPEN,
   OPFS_PROXY_OP_UNLINK,
   OPFS_PROXY_STATE_DONE,
@@ -222,5 +224,98 @@ test("the server loop stops and acknowledges on a shutdown request even when Ato
     await server.done;
   } finally {
     waitAsync.mockRestore();
+  }
+});
+
+const ERRNO_BUSY = 10;
+const ERRNO_EXIST = 20;
+const ERRNO_NOTSUP = 58;
+
+const notFound = () => Object.assign(new Error("missing"), { name: "NotFoundError" });
+
+interface MoveScenario {
+  name: string;
+  destinationExists?: boolean;
+  fileHandle: Record<string, unknown>;
+  holdSourceOpen?: boolean;
+  expectedMoves: number;
+  expectedStatus: number;
+}
+
+test.each<MoveScenario>([
+  {
+    expectedMoves: 1,
+    expectedStatus: OPFS_PROXY_STATUS_OK,
+    fileHandle: { move: vi.fn() },
+    name: "moves a closed file",
+  },
+  {
+    destinationExists: true,
+    expectedMoves: 0,
+    expectedStatus: ERRNO_EXIST,
+    fileHandle: { move: vi.fn() },
+    name: "refuses an existing destination",
+  },
+  {
+    expectedMoves: 0,
+    expectedStatus: ERRNO_NOTSUP,
+    fileHandle: {},
+    name: "reports a browser without move() as unsupported",
+  },
+  {
+    expectedMoves: 0,
+    expectedStatus: ERRNO_BUSY,
+    fileHandle: {
+      createSyncAccessHandle: vi.fn().mockResolvedValue({ close: vi.fn(), getSize: () => 0 }),
+      move: vi.fn(),
+    },
+    holdSourceOpen: true,
+    name: "refuses a source that still has an open handle",
+  },
+])("proxy move $name", async ({ destinationExists, expectedMoves, expectedStatus, fileHandle, holdSourceOpen }) => {
+  const channel = createOpfsProxyChannel(1);
+  const directoryHandle = {
+    getDirectoryHandle: vi.fn(),
+    getFileHandle: vi.fn(async (name: string) => {
+      if (name === "staged.bin") return fileHandle;
+      if (destinationExists) return {};
+      throw notFound();
+    }),
+  };
+  const server = startOpfsProxyServer({
+    channel,
+    mounts: [{ directoryHandle, mountPath: "/out", writableRoots: ["/out"] }] as never,
+  });
+  try {
+    const slot = channel.slots[0];
+    if (!slot) throw new Error("Proxy channel has no request slot");
+    const submit = async (opcode: number, length: number, auxLow = 0) => {
+      Atomics.store(slot.control, OPFS_PROXY_CONTROL_OPCODE_INDEX, opcode);
+      Atomics.store(slot.control, OPFS_PROXY_CONTROL_LENGTH_INDEX, length);
+      Atomics.store(slot.control, OPFS_PROXY_CONTROL_AUX_LOW_INDEX, auxLow);
+      Atomics.store(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX, OPFS_PROXY_STATE_REQUESTED);
+      Atomics.add(channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX, 1);
+      Atomics.notify(channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
+      await vi.waitFor(() =>
+        expect(Atomics.load(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX)).toBe(OPFS_PROXY_STATE_DONE),
+      );
+      const status = Atomics.load(slot.control, OPFS_PROXY_CONTROL_STATUS_INDEX);
+      Atomics.store(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX, 0);
+      return status;
+    };
+    const from = new TextEncoder().encode("/out/staged.bin");
+    const to = new TextEncoder().encode("/out/final.bin");
+    if (holdSourceOpen) {
+      slot.data.set(from);
+      expect(await submit(OPFS_PROXY_OP_OPEN, from.byteLength)).toBe(OPFS_PROXY_STATUS_OK);
+    }
+    slot.data.set(from);
+    slot.data.set(to, from.byteLength);
+    expect(await submit(OPFS_PROXY_OP_MOVE, from.byteLength, to.byteLength)).toBe(expectedStatus);
+    const move = fileHandle.move as ReturnType<typeof vi.fn> | undefined;
+    expect(move?.mock.calls.length ?? 0).toBe(expectedMoves);
+    if (expectedMoves > 0) expect(move).toHaveBeenCalledWith(directoryHandle, "final.bin");
+  } finally {
+    server.stop();
   }
 });
