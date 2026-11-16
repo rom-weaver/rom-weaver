@@ -84,7 +84,8 @@ const auditDirtySettings = async (page, trigger, dialog) => {
     await openSettings();
     const saved = await detailed.isChecked();
     await detailed.setChecked(!saved);
-    const close = dialog.getByRole("button", { name: "Close", exact: true });
+    // Phone widths also show the dock Close slot; the header X comes first in the DOM.
+    const close = dialog.getByRole("button", { name: "Close", exact: true }).first();
     if (method === "Close") await close.click();
     else if (method === "Escape") await page.keyboard.press("Escape");
     else await page.goBack();
@@ -128,13 +129,13 @@ const auditDirtySettings = async (page, trigger, dialog) => {
   await expect(dialog).toContainText("Theme and accent apply immediately. Other settings apply when you save.");
   await dialog.getByRole("button", { name: "Dark", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await dialog.getByRole("button", { name: "Close", exact: true }).first().click();
   await expect(dialog).toBeHidden();
   await expect(confirmation).toBeHidden();
   await expect(page).not.toHaveURL(/#console-/);
   await openSettings();
   await expect(dialog.getByRole("button", { name: "Dark", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await dialog.getByRole("button", { name: "Close", exact: true }).first().click();
   await expect(dialog).toBeHidden();
   await expect(page).not.toHaveURL(/#console-/);
   await expect(stagedFile).toContainText("settings-retained.bin");
