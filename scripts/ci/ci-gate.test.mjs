@@ -116,3 +116,12 @@ test("pull requests skip Lighthouse only through the shared classifier flag", ()
   );
   assert.equal(ci.jobs.changes.outputs.lighthouse, "${{ steps.classify.outputs.lighthouse }}");
 });
+
+// `run-webapp-e2e.test.mjs` proves the matrix shards partition one WebKit run; a leg that
+// ignored its shard would run the whole suite, so the step has to pass the matrix value on.
+test("each WebKit E2E leg runs its own shard", () => {
+  assert.match(
+    ci.jobs["webapp-webkit-e2e"].steps.at(-1).run,
+    /test:e2e:webapp:webkit -- --\$\{\{ matrix\.shard \}\}$/u,
+  );
+});

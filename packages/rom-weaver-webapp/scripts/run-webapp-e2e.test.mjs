@@ -4,6 +4,7 @@
 // the assertion/route-enumeration logic that would otherwise let the E2E
 // suite "pass" while silently testing nothing if it were wrong.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   assertPrebuiltWebappDist,
@@ -18,6 +19,7 @@ import {
   formatRequestFailure,
   hasVisiblePrerenderedShell,
   resolveE2EBuild,
+  resolveE2EPhases,
   resolveE2EShard,
   runAuditPhases,
   runConcurrently,
@@ -88,6 +90,8 @@ describe("resolveE2EShard", () => {
 
   it("selects each supported shard", () => {
     assert.equal(resolveE2EShard(["--a11y"]), "a11y");
+    assert.equal(resolveE2EShard(["--a11y-app"]), "a11y-app");
+    assert.equal(resolveE2EShard(["--docs-journeys"]), "docs-journeys");
     assert.equal(resolveE2EShard(["--links"]), "links");
     assert.equal(resolveE2EShard(["--journeys"]), "journeys");
     assert.equal(resolveE2EShard(["--journeys-raw"]), "journeys-raw");
@@ -97,8 +101,46 @@ describe("resolveE2EShard", () => {
   it("rejects incompatible shard flags", () => {
     assert.throws(
       () => resolveE2EShard(["--a11y", "--journeys-raw"]),
-      /Use only one E2E shard: --a11y, --links, --journeys, --journeys-raw, or --journeys-archive/,
+      /Use only one E2E shard: --a11y, --a11y-app, --docs-journeys, --links, --journeys, --journeys-raw, or --journeys-archive/,
     );
+  });
+});
+
+describe("resolveE2EPhases", () => {
+  const sorted = (phases) => [...phases].sort((left, right) => left.localeCompare(right));
+  const WEBKIT_PHASES = ["accessibility", "archive-journeys", "docs", "hydration", "navigation", "raw-journeys"];
+
+  it("splits a WebKit run into two legs that run every phase exactly once", () => {
+    const appAudits = sorted(resolveE2EPhases("a11y-app", "webkit"));
+    const docsAndJourneys = sorted(resolveE2EPhases("docs-journeys", "webkit"));
+
+    assert.deepEqual(appAudits, ["accessibility", "hydration", "navigation"]);
+    assert.deepEqual(docsAndJourneys, ["archive-journeys", "docs", "raw-journeys"]);
+    assert.deepEqual(sorted([...appAudits, ...docsAndJourneys]), WEBKIT_PHASES);
+    assert.deepEqual(sorted(resolveE2EPhases("all", "webkit")), WEBKIT_PHASES);
+  });
+
+  it("runs the shards the CI WebKit matrix names", () => {
+    const workflow = readFileSync(new URL("../../../.github/workflows/ci.yml", import.meta.url), "utf8");
+    const job = workflow.slice(workflow.indexOf("  webapp-webkit-e2e:"));
+    const matrix = job.match(/shard: \[([^\]]+)\]/u)[1].split(", ");
+
+    assert.deepEqual(matrix, ["a11y-app", "docs-journeys"]);
+    assert.deepEqual(sorted(matrix.flatMap((shard) => [...resolveE2EPhases(shard, "webkit")])), WEBKIT_PHASES);
+  });
+
+  it("keeps the Chromium phases of the existing shards", () => {
+    assert.deepEqual(sorted(resolveE2EPhases("all", "chromium")), sorted([...WEBKIT_PHASES, "links"]));
+    assert.deepEqual(sorted(resolveE2EPhases("a11y", "chromium")), [
+      "accessibility",
+      "docs",
+      "hydration",
+      "navigation",
+    ]);
+    assert.deepEqual(sorted(resolveE2EPhases("links", "chromium")), ["links"]);
+    assert.deepEqual(sorted(resolveE2EPhases("journeys", "chromium")), ["archive-journeys", "raw-journeys"]);
+    assert.deepEqual(sorted(resolveE2EPhases("journeys-raw", "chromium")), ["raw-journeys"]);
+    assert.deepEqual(sorted(resolveE2EPhases("journeys-archive", "chromium")), ["archive-journeys"]);
   });
 });
 

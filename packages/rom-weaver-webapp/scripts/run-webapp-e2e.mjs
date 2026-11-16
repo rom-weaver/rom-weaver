@@ -99,7 +99,20 @@ const ARCHIVE_STRESS_TIMEOUT_MS = 240_000;
 const MANY_ENTRIES_COUNT = 2048;
 const MANY_ENTRY_SIZE = 4096;
 const E2E_ATTEMPTS = 2;
-const E2E_SHARD_FLAGS = ["--a11y", "--links", "--journeys", "--journeys-raw", "--journeys-archive"];
+const A11Y_APP_PHASES = ["navigation", "accessibility", "hydration"];
+const JOURNEY_PHASES = ["raw-journeys", "archive-journeys"];
+// Each shard names the phases it runs. `a11y-app` and `docs-journeys` split what an unsharded
+// WebKit run executes into two legs that together run every phase once; see docs/development/ci.md.
+const E2E_SHARD_PHASES = {
+  a11y: [...A11Y_APP_PHASES, "docs"],
+  "a11y-app": A11Y_APP_PHASES,
+  "docs-journeys": ["docs", ...JOURNEY_PHASES],
+  links: ["links"],
+  journeys: JOURNEY_PHASES,
+  "journeys-raw": ["raw-journeys"],
+  "journeys-archive": ["archive-journeys"],
+};
+const E2E_SHARD_FLAGS = Object.keys(E2E_SHARD_PHASES).map((shard) => `--${shard}`);
 const PREBUILT_WEBAPP_CHANNEL = "prod";
 const PREBUILT_WEBAPP_DIST_FILES = ["index.html", "manifest.json"];
 export const resolveE2EShard = (args) => {
@@ -109,6 +122,13 @@ export const resolveE2EShard = (args) => {
   }
   return requested[0]?.slice(2) || "all";
 };
+// Links don't depend on the browser, so the full run audits them in Chromium only.
+export const resolveE2EPhases = (shard, browser) =>
+  new Set(
+    shard === "all"
+      ? [...A11Y_APP_PHASES, "docs", ...(browser === "chromium" ? ["links"] : []), ...JOURNEY_PHASES]
+      : E2E_SHARD_PHASES[shard],
+  );
 export const resolveE2EBuild = (environment) => {
   if (environment.ROM_WEAVER_E2E_USE_PREBUILT_DIST !== "1") {
     return { channel: environment.ROM_WEAVER_CHANNEL || "dev", source: "build" };
@@ -140,12 +160,13 @@ export const assertPrebuiltWebappDist = (readFile) => {
   }
 };
 const E2E_SHARD = resolveE2EShard(process.argv.slice(2));
-const RUN_AUDITS = E2E_SHARD === "all" || E2E_SHARD === "a11y";
 const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
-// Links don't depend on the browser, so the full run audits them in Chromium only.
-const RUN_LINK_AUDIT = (E2E_SHARD === "all" && browserName === "chromium") || E2E_SHARD === "links";
-const RUN_RAW_JOURNEY = E2E_SHARD === "all" || E2E_SHARD === "journeys" || E2E_SHARD === "journeys-raw";
-const RUN_ARCHIVE_JOURNEY = E2E_SHARD === "all" || E2E_SHARD === "journeys" || E2E_SHARD === "journeys-archive";
+const E2E_PHASES = resolveE2EPhases(E2E_SHARD, browserName);
+const RUN_NAVIGATION_AUDIT = E2E_PHASES.has("navigation");
+const RUN_AUDITS = ["accessibility", "hydration", "docs"].some((phase) => E2E_PHASES.has(phase));
+const RUN_LINK_AUDIT = E2E_PHASES.has("links");
+const RUN_RAW_JOURNEY = E2E_PHASES.has("raw-journeys");
+const RUN_ARCHIVE_JOURNEY = E2E_PHASES.has("archive-journeys");
 // With the lanes overlapped, the stateful audit timed out once on the macOS WebKit runner.
 const RUN_LANES_CONCURRENTLY = E2E_SHARD === "all" && browserName === "chromium";
 const browserType = { chromium, webkit }[browserName];
@@ -1822,25 +1843,36 @@ const main = async () => {
           for (const userDataDir of persistentContextDirs) fs.rmSync(userDataDir, { force: true, recursive: true });
         }
       });
+    const skipPhase = async () => undefined;
+    const whenSelected = (phase, run) => (E2E_PHASES.has(phase) ? run : skipPhase);
     // Chromium contexts share no browser state, so a full Chromium run overlaps the lanes.
     // Otherwise they run in order.
     const auditLane = async () => {
+      if (RUN_NAVIGATION_AUDIT) {
+        await scenario("accessible navigation", (createContext) =>
+          runAccessibleNavigationAudit(createContext, previewBaseUrl),
+        );
+      }
       if (!RUN_AUDITS) return;
-      await scenario("accessible navigation", (createContext) =>
-        runAccessibleNavigationAudit(createContext, previewBaseUrl),
-      );
       const coverage = await runAuditPhases(
         {
-          accessibility: (baseUrl) =>
+          accessibility: whenSelected("accessibility", (baseUrl) =>
             scenario("accessibility", (createContext) => runAccessibilityAudit(createContext, baseUrl)),
-          docs: (baseUrl) =>
+          ),
+          docs: whenSelected("docs", (baseUrl) =>
             scenario("docs accessibility", (createContext) => runDocsAccessibilityAudit(createContext, baseUrl)),
-          hydration: (baseUrl) => scenario("hydration", (createContext) => runHydrationAudit(createContext, baseUrl)),
+          ),
+          hydration: whenSelected("hydration", (baseUrl) =>
+            scenario("hydration", (createContext) => runHydrationAudit(createContext, baseUrl)),
+          ),
         },
         { accessibilityBaseUrl: previewBaseUrl, hydrationBaseUrl },
         { overlapDocs: browserName === "chromium" },
       );
-      if (browserName === "chromium") checkCssCoverage(coverage.flat());
+      // The budget counts stylesheet use across the app and docs audits, so a partial shard cannot check it.
+      if (browserName === "chromium" && E2E_PHASES.has("accessibility") && E2E_PHASES.has("docs")) {
+        checkCssCoverage(coverage.flat());
+      }
     };
     // A full run audits links only in Chromium, whose contexts share no storage.
     // The crawl MAY use the audits' preview origin.
