@@ -1097,8 +1097,17 @@ jobs:
           path: ${{ steps.webapp-build-cache.outputs.path }}
           key: ${{ steps.webapp-build-cache.outputs.key }}
 
-      # The channel icon determinism check (`icons:channels:check`) runs in
-      # Webapp (static) via `test:static`, off this job's critical path.
+      # Webapp (static) downloads these icons instead of rendering them again; its
+      # `icons:channels:check` still re-renders them in memory and diffs. The stamp
+      # holds relative paths and file digests only, so it needs no restamping.
+      - name: Upload generated channel icons
+        if: steps.webapp-build.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: webapp-generated-assets
+          overwrite: true
+          path: dist/generated-assets
+          if-no-files-found: error
 
       # Browser E2E, Lighthouse, Docker, and every channel's deploy MUST consume this exact bundle.
       - name: Upload webapp bundle
@@ -1723,14 +1732,24 @@ jobs:
           name: wasm-prod
           path: packages/rom-weaver-webapp/src/wasm
 
+      # The icons `wasm` rendered; the unit tests and Vite's config read them from disk.
+      # `icons:channels` keeps them while their render stamp (inputs and browser version)
+      # matches this runner and renders them again otherwise, so the determinism check
+      # never compares renders from two different browser builds.
+      - name: Download generated channel icons
+        uses: actions/download-artifact@v8
+        with:
+          name: webapp-generated-assets
+          path: dist/generated-assets
+
       # Vite reads the identify index while loading the config for lint.
       - uses: ./.github/actions/download-identify-data
 
-      # Root script tests, webapp script tests, and unit tests run concurrently
-      # (output buffered per command, every exit code collected) after the shared
-      # generators - accents, compiled locales, channel icons and their
-      # determinism check - ran once serially so no reader sees a partial file.
-      # The runtime import contract reads the built module downloaded above.
+      # Root script tests, webapp script tests, unit tests, and the channel icon
+      # determinism check run concurrently (output buffered per command, every exit
+      # code collected) after the shared generators - accents and compiled locales -
+      # ran once serially so no reader sees a partial file. The runtime import
+      # contract reads the built module downloaded above.
       - name: Script and unit tests
         env:
           ROM_WEAVER_SYSTEM_CHROME: "1"
