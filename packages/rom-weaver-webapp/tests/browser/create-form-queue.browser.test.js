@@ -665,7 +665,7 @@ test("swapping prepared sources reuses them without re-extraction", async () => 
 
   const swapButton = document.getElementById("patch-builder-button-swap-sources");
   expect(swapButton).toBeInstanceOf(HTMLButtonElement);
-  expect(swapButton.disabled).toBe(false);
+  await expect.poll(() => swapButton.disabled).toBe(false);
   swapButton.click();
 
   // The swap is an in-place slot exchange; the staging effect must treat the

@@ -7,6 +7,7 @@ import durations from "./browser-test-durations.json" with { type: "json" };
 import {
   assertTestFilesSelected,
   discoverTestFiles,
+  narrowedRetryArgs,
   orderSlowestFirst,
   planFileOrder,
   parseShard,
@@ -298,4 +299,23 @@ test("planFileOrder: the smallest file warms up alone and every other file is po
     [warmupFile, ...pooledFiles].sort((left, right) => left.localeCompare(right)),
     files.slice().sort((left, right) => left.localeCompare(right)),
   );
+});
+
+test("narrowedRetryArgs: reruns only the failed tests, joining suite and test names", () => {
+  const output = [
+    " \u001b[31mFAIL\u001b[39m  chromium  tests/browser/a.browser.test.js > Home (cancels) routing [x]",
+    " FAIL   chromium  tests/browser/a.browser.test.js > suite > nested test",
+    " FAIL   chromium  tests/browser/a.browser.test.js > nested test",
+  ].join("\n");
+  assert.deepEqual(narrowedRetryArgs(output), [
+    "-t",
+    "(?:Home \\(cancels\\) routing \\[x\\]|suite nested test|nested test)",
+  ]);
+});
+
+test("narrowedRetryArgs: falls back to the whole file without a named failure or with a name filter", () => {
+  assert.equal(narrowedRetryArgs("Error: [vitest] Browser connection was closed"), null);
+  const output = " FAIL   chromium  tests/browser/a.browser.test.js > a test";
+  assert.equal(narrowedRetryArgs(output, ["-t", "other"]), null);
+  assert.equal(narrowedRetryArgs(output, ["--testNamePattern=other"]), null);
 });
