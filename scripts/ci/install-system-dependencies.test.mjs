@@ -204,14 +204,13 @@ test("libclang discovery skips unloadable candidates and requires bindgen symbol
   assert.equal(findArgs[findArgs.indexOf("-maxdepth") + 1], "3");
 });
 
-test("Linux bootstrap combines requested dependencies and both compiler caches", () => {
+test("Linux bootstrap combines requested dependencies and ccache", () => {
   const calls = [];
   main(
     {
       RUNNER_OS: "Linux",
       APT_PACKAGES: "cmake ninja-build",
       INSTALL_CCACHE: "true",
-      INSTALL_SCCACHE: "true",
     },
     (command, args) => {
       calls.push([command, args]);
@@ -221,7 +220,7 @@ test("Linux bootstrap combines requested dependencies and both compiler caches",
   );
   const apt = calls.filter(([command]) => command === "sudo");
   assert.equal(apt.length, 2);
-  assert.deepEqual(apt[1][1].slice(-4), ["cmake", "ninja-build", "ccache", "sccache"]);
+  assert.deepEqual(apt[1][1].slice(-4), ["--yes", "cmake", "ninja-build", "ccache"]);
 });
 
 test("working ImageMagick skips the package-manager fallback", () => {

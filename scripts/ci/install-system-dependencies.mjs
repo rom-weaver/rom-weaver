@@ -45,7 +45,6 @@ const commands = {
   "pkg-config": ["pkg-config", /^\d+\.\d/],
   clang: ["clang", /clang version \d/],
   ccache: ["ccache", /ccache version \d/],
-  sccache: ["sccache", /sccache \d/],
   imagemagick: ["convert", /Version: ImageMagick \d/],
 };
 
@@ -159,7 +158,6 @@ export function main(env = process.env, run = execFileSync, sleep = sleepSync) {
   const packages = (env.APT_PACKAGES || "").split(/\s+/).filter(Boolean);
   if (env.RUNNER_OS === "Linux") {
     if (env.INSTALL_CCACHE === "true") packages.push("ccache");
-    if (env.INSTALL_SCCACHE === "true") packages.push("sccache");
   }
   if (!packages.length) return;
 

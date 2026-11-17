@@ -63,7 +63,7 @@ test("sccache setup exports a bounded store before mise resolves the wrapper", (
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const bin = join(directory, "bin");
   mkdirSync(bin);
-  writeFileSync(join(bin, "sccache"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  writeFileSync(join(bin, "sccache"), "#!/bin/sh\necho sccache 0.17.0\n", { mode: 0o755 });
   const envFile = join(directory, "github-env");
   const body = step("Install sccache").match(/      run: \|\n((?: {8}.*\n|\n)+)/u)?.[1];
   assert.ok(body, "missing sccache install script");
@@ -109,4 +109,16 @@ test("WASM C cache avoids the native-sized eviction ceiling", () => {
     .split(/\n      - /u)[0];
   assert.match(miss, /ccache-maxsize: 1G/u);
   assert.match(action, /ccache-maxsize:[\s\S]*?default: 300M/u);
+});
+
+test("Linux sccache is a pinned release verified by digest, not the old apt package", () => {
+  const body = step("Install sccache");
+  assert.match(body, /version=v0\.17\.0/u);
+  assert.match(body, /X64\)[\s\S]*?sha256=67c4a96dd237c1f518f6b36083f270f9976d516f1e57fce891755ea782e50006/u);
+  assert.match(body, /ARM64\)[\s\S]*?sha256=821a86343191aa1cbab74bd42f9e93c9a63bf85e4742945f40d3ae84193c1c77/u);
+  assert.match(body, /releases\/download\/\$version\/\$name\.tar\.gz/u);
+  assert.ok(body.indexOf("sha256sum --check --strict") < body.indexOf("tar -xzf"));
+  assert.match(body, /sccache --version \| grep -q/u);
+  const install = readFileSync(new URL("./install-system-dependencies.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(install, /INSTALL_SCCACHE/u);
 });
