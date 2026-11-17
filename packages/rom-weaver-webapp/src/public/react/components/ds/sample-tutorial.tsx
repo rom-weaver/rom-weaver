@@ -224,7 +224,8 @@ const GUIDE_EXIT_EASE = "cubic-bezier(.4, 0, 1, 1)";
 const GUIDE_ENTER_EASE = "cubic-bezier(.2, .85, .3, 1)";
 /** How far the card drifts toward its row as it arrives. */
 const GUIDE_ENTER_RISE = 10;
-/** Drawers expand over .3s, so the row keeps growing after a step opens. */
+/** Drawers expand over .3s, so the row keeps growing after a step opens. The
+    a11y audit's 500 ms stable-box wait (run-webapp-e2e.mjs) MUST outlast it. */
 const GUIDE_SETTLE_MS = 360;
 /** How long a step waits for its row to connect before showing its card without one. */
 const GUIDE_TARGET_WAIT_MS = 600;

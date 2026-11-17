@@ -642,6 +642,10 @@ const settleAnimations = async (page) => {
 };
 
 const waitForStableBox = async (page, selector) => {
+  // An earlier wait's record on the same element would end this one at once.
+  await page.evaluate(() => {
+    delete globalThis.__romWeaverStableBox;
+  });
   await page.waitForFunction(
     ({ selector: targetSelector }) => {
       const element = document.querySelector(targetSelector);
@@ -723,7 +727,8 @@ const scanVariants = async (page, label) => {
   }
   // Restoring the viewport resizes the guide's row. GUIDE_SETTLE_MS later the
   // guide scrolls to reveal it, and a press that spans that scroll releases off
-  // the button: no click fires, yet Playwright reports the click done.
+  // the button: no click fires, yet Playwright reports the click done. The
+  // 500 ms hold in waitForStableBox MUST outlast GUIDE_SETTLE_MS.
   if (await page.locator(".sample-tutorial-dialog").count()) await waitForStableBox(page, ".sample-tutorial-dialog");
 };
 
