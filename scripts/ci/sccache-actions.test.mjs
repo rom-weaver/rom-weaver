@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 
@@ -15,6 +15,10 @@ const step = (name) => {
   const body = steps.find((entry) => entry.startsWith(`${name}\n`));
   assert.ok(body, `missing setup step: ${name}`);
   return body;
+};
+
+const assertStepsInOrder = (first, second) => {
+  assert.ok(steps.indexOf(step(first)) < steps.indexOf(step(second)), `${first} MUST run before ${second}`);
 };
 
 const selected = (name, inputs, ref) => {
@@ -40,7 +44,7 @@ for (const [name, sccache, cacheSave, ref, saves, restores, cacheRestore] of [
     const inputs = { sccache, cacheSave, ...(cacheRestore ? { cacheRestore } : {}) };
     assert.equal(selected("Cache sccache objects", inputs, ref), saves);
     assert.equal(selected("Restore sccache objects", inputs, ref), restores);
-    assert.equal(selected("Install sccache", inputs, ref), sccache === "true");
+    assert.equal(selected("Configure sccache", inputs, ref), sccache === "true");
     assert.equal(selected("Zero sccache statistics", inputs, ref), sccache === "true");
   });
 }
@@ -58,35 +62,21 @@ test("both sccache restore paths use the same store and compatible prefix", () =
   assert.match(entries[0].prefix, /github\.job.*runner\.os.*runner\.arch/u);
 });
 
-test("sccache setup exports a bounded store before mise resolves the wrapper", (t) => {
+test("sccache setup exports a bounded store", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "wasm-ci-cache-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const bin = join(directory, "bin");
-  mkdirSync(bin);
-  writeFileSync(join(bin, "sccache"), "#!/bin/sh\necho sccache 0.17.0\n", { mode: 0o755 });
   const envFile = join(directory, "github-env");
-  const body = step("Install sccache").match(/      run: \|\n((?: {8}.*\n|\n)+)/u)?.[1];
-  assert.ok(body, "missing sccache install script");
+  const body = step("Configure sccache").match(/      run: \|\n((?: {8}.*\n|\n)+)/u)?.[1];
+  assert.ok(body, "missing sccache setup script");
   execFileSync("bash", ["-e", "-o", "pipefail", "-c", body.replace(/^ {8}/gmu, "")], {
-    env: {
-      ...process.env,
-      PATH: `${bin}${delimiter}${process.env.PATH || ""}`,
-      RUNNER_OS: "Linux",
-      RUNNER_TEMP: directory,
-      GITHUB_ENV: envFile,
-    },
+    env: { ...process.env, RUNNER_TEMP: directory, GITHUB_ENV: envFile },
   });
   assert.equal(
     readFileSync(envFile, "utf8"),
     `SCCACHE_DIR=${directory}/sccache\nSCCACHE_CACHE_SIZE=1G\n`,
   );
-  assert.ok(
-    action.indexOf("- name: Install sccache") < action.indexOf("- name: Install mise-pinned tools"),
-  );
-  assert.ok(
-    action.indexOf("- name: Restore sccache objects") <
-      action.indexOf("- name: Zero sccache statistics"),
-  );
+  assertStepsInOrder("Restore sccache objects", "Zero sccache statistics");
+  assertStepsInOrder("Install mise-pinned tools", "Zero sccache statistics");
 });
 
 test("CI only installs the Rust compiler cache when it must compile WASM", () => {
@@ -111,14 +101,11 @@ test("WASM C cache avoids the native-sized eviction ceiling", () => {
   assert.match(action, /ccache-maxsize:[\s\S]*?default: 300M/u);
 });
 
-test("Linux sccache is a pinned release verified by digest, not the old apt package", () => {
-  const body = step("Install sccache");
-  assert.match(body, /version=v0\.17\.0/u);
-  assert.match(body, /X64\)[\s\S]*?sha256=67c4a96dd237c1f518f6b36083f270f9976d516f1e57fce891755ea782e50006/u);
-  assert.match(body, /ARM64\)[\s\S]*?sha256=821a86343191aa1cbab74bd42f9e93c9a63bf85e4742945f40d3ae84193c1c77/u);
-  assert.match(body, /releases\/download\/\$version\/\$name\.tar\.gz/u);
-  assert.ok(body.indexOf("sha256sum --check --strict") < body.indexOf("tar -xzf"));
-  assert.match(body, /sccache --version \| grep -q/u);
+test("sccache comes from the mise pin, not the old apt package", () => {
+  const mise = readFileSync(new URL("../../.config/mise.toml", import.meta.url), "utf8");
+  assert.match(mise, /^"aqua:mozilla\/sccache" = "0\.17\.0"$/mu);
+  assert.match(mise, /^RUSTC_WRAPPER = \{ value = .*, tools = true \}$/mu);
+  assert.match(step("Select mise tools"), /WANTED: .*inputs\.sccache == 'true' && ' sccache'/u);
   const install = readFileSync(new URL("./install-system-dependencies.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(install, /INSTALL_SCCACHE/u);
 });
