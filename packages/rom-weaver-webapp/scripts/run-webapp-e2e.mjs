@@ -725,10 +725,8 @@ const scanVariants = async (page, label) => {
     }, originalTheme);
     if (originalViewport) await page.setViewportSize(originalViewport);
   }
-  // Restoring the viewport resizes the guide's row. GUIDE_SETTLE_MS later the
-  // guide scrolls to reveal it, and a press that spans that scroll releases off
-  // the button: no click fires, yet Playwright reports the click done. The
-  // 500 ms hold in waitForStableBox MUST outlast GUIDE_SETTLE_MS.
+  // Restoring the viewport makes the guide scroll GUIDE_SETTLE_MS later. A press
+  // across that scroll misses silently, so the 500 ms hold MUST outlast GUIDE_SETTLE_MS.
   if (await page.locator(".sample-tutorial-dialog").count()) await waitForStableBox(page, ".sample-tutorial-dialog");
 };
 
