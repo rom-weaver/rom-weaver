@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect } from "vitest";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { getActiveBrowserVirtualFiles } from "../../src/workers/protocol/browser-virtual-files.ts";
-import { resetRomWeaverRunner, warmupRomWeaverRunner } from "../../src/workers/rom-weaver/rom-weaver-runner.ts";
+import { resetRomWeaverRunner } from "../../src/workers/rom-weaver/rom-weaver-runner.ts";
 
 const POSIX_DIRECTORY_PREFIX_REGEX = /^.*\//;
 const readUint16Le = (bytes, offset) => bytes[offset] | (bytes[offset + 1] << 8);
@@ -449,21 +449,28 @@ const releaseRetainedSources = async () => {
 };
 
 export const installPatcherTestHooks = () => {
+  // afterEach below unmounts, releases sources, resets the runner and empties OPFS, and the next
+  // beforeEach runs right after it, so a test that follows a completed afterEach starts clean.
+  // The file's first test, and one after a failed teardown, get the full reset.
+  let startsClean = false;
   beforeEach(async () => {
-    mountedRoot?.unmount?.();
-    mountedRoot = null;
-    await new Promise((resolve) => globalThis.setTimeout(resolve, 40));
-    // Virtual File-backed sources are intentionally retained briefly for sequential workflow passes.
-    // A new test must release that cache explicitly or the old guest name can force an extracted
-    // output to become `name-2.ext`.
-    await releaseRetainedSources();
-    // Reset the runner BEFORE clearing OPFS: the previous test's worker holds sync access handles
-    // on extracted files, and removals silently fail while those are open. Terminating first lets
-    // the clear actually empty the directory.
-    await resetRomWeaverRunner();
-    await clearOpfsInputDirectory();
-    await warmupRomWeaverRunner();
-    await new Promise((resolve) => globalThis.setTimeout(resolve, 20));
+    if (!startsClean) {
+      mountedRoot?.unmount?.();
+      mountedRoot = null;
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 40));
+      // Virtual File-backed sources are intentionally retained briefly for sequential workflow passes.
+      // A new test must release that cache explicitly or the old guest name can force an extracted
+      // output to become `name-2.ext`.
+      await releaseRetainedSources();
+      // Reset the runner BEFORE clearing OPFS: the previous test's worker holds sync access handles
+      // on extracted files, and removals silently fail while those are open. Terminating first lets
+      // the clear actually empty the directory.
+      await resetRomWeaverRunner();
+      await clearOpfsInputDirectory();
+    }
+    startsClean = false;
+    // No warm-up here: the runner pool creates a worker on first use, so a test that never runs a
+    // command no longer pays for a worker and wasm instance it does not need.
     // A previous test may have left a routing hash behind; a fresh mount must
     // not inherit it.
     if (globalThis.location.hash) {
@@ -487,7 +494,8 @@ export const installPatcherTestHooks = () => {
     await new Promise((resolve) => globalThis.setTimeout(resolve, 40));
     await releaseRetainedSources();
     await resetRomWeaverRunner();
+    // clearOpfsInputDirectory returns only once the directory is verified empty, so no settle delay.
     await clearOpfsInputDirectory();
-    await new Promise((resolve) => globalThis.setTimeout(resolve, 20));
+    startsClean = true;
   });
 };

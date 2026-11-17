@@ -113,16 +113,17 @@ describe("managed OPFS path resolution", () => {
     expect(freshDirectory.fileCalls).toEqual([{ create: false, name: "file.bin" }]);
   });
 
-  it("retries a cached directory that WebKit reports as an unknown error", async () => {
+  it.each(["UnknownError", "InvalidStateError"])("retries a cached directory that reports %s", async (errorName) => {
     const root = new FakeDirectoryHandle();
     const storage = new FakeStorage(root);
     const navigatorObject = navigatorFor(storage);
-    const filePath = "/guest/webkit-stale/file.bin";
+    const directoryName = `${errorName}-stale`;
+    const filePath = `/guest/${directoryName}/file.bin`;
     await getManagedOpfsFileHandle(filePath, { create: true, navigatorObject });
-    const stale = root.directories.get("webkit-stale");
+    const stale = root.directories.get(directoryName);
     if (!stale) throw new Error("test setup did not create the stale directory");
-    stale.fileError = new DOMException("unknown transient reason", "UnknownError");
-    root.directories.delete("webkit-stale");
+    stale.fileError = new DOMException("removed directory", errorName);
+    root.directories.delete(directoryName);
     await expect(getManagedOpfsFileHandle(filePath, { create: true, navigatorObject })).resolves.toMatchObject({
       name: "file.bin",
     });

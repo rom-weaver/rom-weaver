@@ -879,7 +879,9 @@
   width: 17px;
   height: 17px;
 }
-.rw-app .topbar-tools .tool svg {
+.rw-app .topbar-tools .tool svg,
+.rw-app .theme-picker svg {
+  flex: none;
   width: 24px;
   height: 24px;
 }
@@ -1000,8 +1002,7 @@
   border: 0;
   border-radius: var(--r-s);
 }
-.rw-app .tool-pop-item svg,
-.rw-app .theme-picker svg {
+.rw-app .tool-pop-item svg {
   flex: none;
   width: 17px;
   height: 17px;

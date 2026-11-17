@@ -855,9 +855,10 @@ const SWIPE_HOLD_MS = 80;
 
 /**
  * The root unmounts the dialog the moment it closes, so on a phone the page
- * slides out first and reports the close once it is off screen.
+ * slides out first and reports the close once it is off screen. A close that
+ * only opens the discard prompt skips the slide.
  */
-const useSlideClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: () => void) => {
+const useSlideClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: () => void, asksToDiscard: boolean) => {
   const leavingRef = useRef(false);
   useEffect(
     () => () => {
@@ -867,7 +868,7 @@ const useSlideClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: () =
   );
   return useCallback(() => {
     const frame = frameRef.current;
-    if (!frame || prefersReducedMotion() || !window.matchMedia(PHONE_QUERY).matches) {
+    if (!frame || asksToDiscard || prefersReducedMotion() || !window.matchMedia(PHONE_QUERY).matches) {
       onClose();
       return;
     }
@@ -877,11 +878,35 @@ const useSlideClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: () =
     window.setTimeout(() => {
       leavingRef.current = false;
       onClose();
-      // A close the settings draft holds back (discard prompt) leaves the
-      // dialog mounted, so the page slides back in under the prompt.
+      // A close the parent holds back leaves the dialog mounted, so the page slides back in.
       frame.style.removeProperty("transform");
     }, SLIDE_MS);
-  }, [frameRef, onClose]);
+  }, [asksToDiscard, frameRef, onClose]);
+};
+
+/**
+ * A discarded draft closes the console from the root, not from a tap, so the
+ * root asks for the slide and gets told once the page is off screen. A close
+ * with no slide to play reports at once.
+ */
+const useSlideOutOnRequest = (
+  frameRef: RefObject<HTMLDivElement | null>,
+  requested: boolean,
+  onSlidOut: () => void,
+) => {
+  const onSlidOutRef = useRef(onSlidOut);
+  onSlidOutRef.current = onSlidOut;
+  useEffect(() => {
+    if (!requested) return;
+    const frame = frameRef.current;
+    if (!frame || prefersReducedMotion() || !window.matchMedia(PHONE_QUERY).matches) {
+      onSlidOutRef.current();
+      return;
+    }
+    frame.style.transform = "translateX(100%)";
+    const timer = window.setTimeout(() => onSlidOutRef.current(), SLIDE_MS);
+    return () => window.clearTimeout(timer);
+  }, [frameRef, requested]);
 };
 
 const useSwipeToClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: () => void, open: boolean) => {
@@ -1615,7 +1640,10 @@ const LogsStoragePanel = ({
 };
 
 const LogDialog = ({
+  closeAsksToDiscard = false,
   dockTabs = [],
+  onSlideOutDone,
+  slideOut = false,
   open,
   onClose,
   onSelectDockTab,
@@ -1640,6 +1668,12 @@ const LogDialog = ({
   onPreviewRuntimeStateChange,
   onReloadUpdate,
 }: {
+  /** True when Close opens the discard-changes prompt, so the phone slide-out is skipped. */
+  closeAsksToDiscard?: boolean;
+  /** The root is closing the console (a confirmed discard); on a phone the page slides out first. */
+  slideOut?: boolean;
+  /** Reports that the slide-out finished, so the root can unmount the console. */
+  onSlideOutDone?: () => void;
   /** The phone dock's workflows; the console repeats the dock because the modal makes the real one inert. */
   dockTabs?: WorkflowTab[];
   open: boolean;
@@ -1683,7 +1717,8 @@ const LogDialog = ({
   const copyFeedback = useCopyFeedback(1300, 1600);
   const advanced = useAdvancedSettings();
   const frameRef = useRef<HTMLDivElement | null>(null);
-  const close = useSlideClose(frameRef, onClose);
+  const close = useSlideClose(frameRef, onClose, closeAsksToDiscard);
+  useSlideOutOnRequest(frameRef, slideOut, onSlideOutDone ?? onClose);
   useSwipeToClose(frameRef, close, open);
   // A deep link to a field Advanced hides (Find, a tool's Threads link) turns Advanced on, or it would land nowhere.
   useEffect(() => {

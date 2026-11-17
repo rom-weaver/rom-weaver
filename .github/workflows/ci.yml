@@ -603,11 +603,18 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
+      # ubuntu-24.04 ships Chrome, so amd64 legs smoke with it; the arm64 image
+      # has none (Google publishes no Linux arm64 Chrome), so only arm64 downloads
+      # Playwright's Chromium and its system dependencies.
       - name: Install webapp smoke browser
         if: matrix.name == 'webapp'
+        env:
+          INSTALL_BROWSER: ${{ matrix.arch != 'amd64' }}
         run: |
           npm --prefix packages/rom-weaver-webapp ci --ignore-scripts --no-audit --no-fund
-          npm --prefix packages/rom-weaver-webapp exec -- playwright install --with-deps --only-shell chromium
+          if [[ "$INSTALL_BROWSER" == "true" ]]; then
+            npm --prefix packages/rom-weaver-webapp exec -- playwright install --with-deps --only-shell chromium
+          fi
 
       - uses: ./.github/actions/download-identify-data
 
@@ -650,6 +657,8 @@ jobs:
       # `docker-prebuilt` below, off the exact artifact that deploy uses.
       - name: Build image
         uses: ./.github/actions/docker-build-arch
+        env:
+          ROM_WEAVER_SYSTEM_CHROME: ${{ matrix.arch == 'amd64' && '1' || '' }}
         with:
           image: ${{ matrix.image }}
           smoke-kind: ${{ matrix.name == 'CLI' && 'cli' || 'webapp' }}
@@ -805,13 +814,20 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
+      # See the same step in `docker` above: only arm64 downloads a browser.
       - name: Install webapp smoke browser
+        env:
+          INSTALL_BROWSER: ${{ matrix.arch != 'amd64' }}
         run: |
           npm --prefix packages/rom-weaver-webapp ci --ignore-scripts --no-audit --no-fund
-          npm --prefix packages/rom-weaver-webapp exec -- playwright install --with-deps --only-shell chromium
+          if [[ "$INSTALL_BROWSER" == "true" ]]; then
+            npm --prefix packages/rom-weaver-webapp exec -- playwright install --with-deps --only-shell chromium
+          fi
 
       - name: Build the prebuilt path
         uses: ./.github/actions/docker-build-arch
+        env:
+          ROM_WEAVER_SYSTEM_CHROME: ${{ matrix.arch == 'amd64' && '1' || '' }}
         with:
           image: rom-weaver-webapp
           file: packages/rom-weaver-webapp/Dockerfile
@@ -1308,6 +1324,9 @@ jobs:
           tools: node rust nextest
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           ccache: "true"
+          # rust-cache drops the workspace crates, so every run recompiles them;
+          # sccache replays the unchanged library units.
+          sccache: "true"
 
       - uses: ./.github/actions/download-identify-data
 
@@ -1318,6 +1337,10 @@ jobs:
 
       - name: Rust tests
         run: mise run test-rust
+
+      - name: Compiler cache statistics
+        if: always()
+        run: sccache --show-stats
 
       - name: Verify publishable Rust packages
         # Package each crate exactly as cargo publish would, without uploading.
@@ -1673,7 +1696,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # Same version as the .config/mise.toml pin; this leg cannot use mise.
-      - uses: taiki-e/install-action@v2.90.2
+      - uses: taiki-e/install-action@v2.90.3
         with:
           tool: cargo-nextest@0.9.140
 
@@ -1688,24 +1711,20 @@ jobs:
       # vendored libarchive build needs - the npm platform publish builds this
       # same graph with no extra installs. nextest does not execute doctests,
       # so those run as a separate cargo test --doc pass, same as the
-      # test-rust mise task.
+      # test-rust mise task. Both examples set `required-features`, so a plain
+      # workspace run never builds them; they are named explicitly and the
+      # features enabled for both passes, so the workspace crates compile once
+      # (this leg bypasses mise, so it needs its own copy of the commands).
       - name: Rust tests
-        run: cargo nextest run --workspace --locked
+        run: >-
+          cargo nextest run --workspace --locked
+          --features rom-weaver-cli/typescript-types,rom-weaver-cli/wasm-app
+          --lib --bins --tests --example rom-weaver-typegen --example rom-weaver-app
 
       - name: Rust doc tests
-        run: cargo test --quiet --doc --workspace --locked
-
-      # nextest and the plain workspace test above never build these: both
-      # examples set `required-features`, which cargo only enables when the
-      # matching `--features ... --example ...` invocation asks for them
-      # explicitly. One invocation enables both features, as `test-rust` in
-      # .config/mise.toml does, so the CLI crate compiles once for the pair -
-      # this leg bypasses mise (see the job comment above) so it needs its own
-      # copy of the command.
-      - name: Rust example tests
         run: >-
-          cargo test -p rom-weaver-cli --locked --features typescript-types,wasm-app
-          --example rom-weaver-typegen --example rom-weaver-app
+          cargo test --quiet --doc --workspace --locked
+          --features rom-weaver-cli/typescript-types,rom-weaver-cli/wasm-app
 
   # Node-only lint and tests; Lighthouse runs in `webapp-lighthouse`.
   webapp-static:
@@ -1993,7 +2012,7 @@ jobs:
 
   # Two parallel legs: one serial run took about 400 s. `a11y-app` runs the
   # accessible navigation, accessibility, and hydration audits; `docs-journeys`
-  # runs the docs accessibility audit and the journeys. Together they run what
+  # runs the docs page audit and the journeys. Together they run what
   # an unsharded WebKit run does. The matrix job's result is the worst leg's, so
   # the gate reads it unchanged.
   webapp-webkit-e2e:

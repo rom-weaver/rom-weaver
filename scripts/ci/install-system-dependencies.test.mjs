@@ -200,6 +200,8 @@ test("libclang discovery skips unloadable candidates and requires bindgen symbol
   };
   assert.equal(findLibclangDir([process.cwd()], run), "/working");
   assert.equal(calls.length, 3);
+  const findArgs = calls[0][1];
+  assert.equal(findArgs[findArgs.indexOf("-maxdepth") + 1], "3");
 });
 
 test("Linux bootstrap combines requested dependencies and both compiler caches", () => {

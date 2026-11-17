@@ -100,7 +100,7 @@ html:has(.rw-modal) {
 @container setgroup (max-width: 27rem) {
   .rw-app .setgroup .setrow {
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-xs);
+    gap: var(--sp-2xs);
   }
 }
 .rw-app .setrow .sctl {
@@ -110,17 +110,13 @@ html:has(.rw-modal) {
   width: 100%;
   min-width: 0;
 }
-/* On the pressed accent fill the dye badge would vanish: invert it. */
-.rw-app [aria-pressed="true"] .theme-auto-badge {
-  color: var(--thread-fill);
-  background: var(--thread-ink);
-}
 .rw-app .setrow .sctl .select {
-  height: 34px;
-  font-size: var(--dropdown-fs, 0.85rem);
+  height: 38px;
+  padding-inline: 8px 24px;
+  font-size: 0.8rem;
 }
 .rw-app .setrow .sctl .input {
-  height: 34px;
+  height: 38px;
   font-size: 0.85rem;
 }
 /* A label wraps rather than truncating: it is the only name the control has. */

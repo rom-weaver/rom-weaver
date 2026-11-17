@@ -18,6 +18,7 @@ const SettingsHarness = () => {
   const [open, setOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [slideOut, setSlideOut] = useState(false);
   const close = () => (dirty ? setConfirm(true) : setOpen(false));
   return createElement(
     "div",
@@ -25,8 +26,15 @@ const SettingsHarness = () => {
     createElement("button", { onClick: () => setOpen(true), type: "button" }, "Open Settings"),
     open
       ? createElement(LogDialog, {
+          closeAsksToDiscard: dirty,
+          dockTabs: [{ dock: true, group: "patch", href: "#", icon: null, id: "apply", label: "Apply" }],
           initialTab: "settings",
           onClose: close,
+          onSlideOutDone: () => {
+            setSlideOut(false);
+            setOpen(false);
+          },
+          slideOut,
           onLevelChange: () => undefined,
           open,
           settingsPanel: createElement("input", {
@@ -45,7 +53,7 @@ const SettingsHarness = () => {
       onConfirm: () => {
         setConfirm(false);
         setDirty(false);
-        setOpen(false);
+        setSlideOut(true);
       },
       open: confirm,
       title: "Discard settings changes?",
@@ -139,8 +147,8 @@ for (const width of [320, 1280]) {
         const rect = label.getBoundingClientRect();
         expect.soft(rect.height, label.textContent).toBeGreaterThanOrEqual(44);
         const input = label.querySelector("input");
-        expect(input.getBoundingClientRect().width).toBe(38);
-        expect(input.getBoundingClientRect().height).toBe(22);
+        expect(input.getBoundingClientRect().width).toBe(44);
+        expect(input.getBoundingClientRect().height).toBe(26);
         const trigger = label.parentElement.querySelector(".info-btn");
         if (!trigger) continue;
         const hit = document.elementFromPoint(rect.right - 2, rect.top + rect.height / 2);
@@ -153,6 +161,31 @@ for (const width of [320, 1280]) {
     });
   }
 }
+
+test("Settings help does not intercept adjacent field edges", async () => {
+  await page.viewport(320, 800);
+  root.render(createElement(SettingsPanelHarness));
+  const help = page.getByRole("button", { name: "About Log level", exact: true });
+  await expect.element(help).toBeVisible();
+  await Promise.all(
+    document
+      .getAnimations()
+      .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+      .map((animation) => animation.finished),
+  );
+  help.element().focus();
+  const input = document.getElementById("settings-byte-units");
+  const fieldRect = input.getBoundingClientRect();
+  const helpRect = help.element().getBoundingClientRect();
+  const x = helpRect.left + helpRect.width / 2 - fieldRect.left;
+  expect(x).toBeGreaterThanOrEqual(0);
+  expect(x).toBeLessThan(fieldRect.width);
+  expect(document.elementFromPoint(fieldRect.left + x, fieldRect.bottom - 5)).toBe(input);
+  await page.elementLocator(input).click({ position: { x, y: fieldRect.height - 5 } });
+  await expect.element(page.elementLocator(input)).toHaveFocus();
+  await expect.element(help).toHaveAttribute("aria-expanded", "false");
+  await userEvent.keyboard("{Escape}");
+});
 
 for (const method of ["Close", "Escape"]) {
   test(`dirty Settings ${method} keeps its confirmation interactive in the native top layer`, async () => {
@@ -196,3 +229,63 @@ for (const method of ["Close", "Escape"]) {
     await expect.element(page.getByRole("checkbox", { name: "Detailed information" })).not.toBeChecked();
   });
 }
+
+test("Close on a phone does not slide the page while it opens the discard prompt", async () => {
+  await page.viewport(390, 800);
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  const frame = document.querySelector(".dlg-frame");
+  const close = settings().getByRole("button", { name: "Close", exact: true }).last();
+  const slid = new Set();
+  const observer = new MutationObserver(() => slid.add(frame.style.transform));
+  observer.observe(frame, { attributeFilter: ["style"], attributes: true });
+
+  await page.getByRole("checkbox", { name: "Detailed information" }).click();
+  await close.click();
+  await expect.element(confirmation()).toBeVisible();
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  observer.disconnect();
+
+  expect([...slid]).not.toContain("translateX(100%)");
+  expect(frame.style.transform).toBe("");
+});
+
+test("Discarding on a phone slides the page out before closing", async () => {
+  await page.viewport(390, 800);
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  const frame = document.querySelector(".dlg-frame");
+
+  await page.getByRole("checkbox", { name: "Detailed information" }).click();
+  await settings().getByRole("button", { name: "Close", exact: true }).last().click();
+  await expect.element(confirmation()).toBeVisible();
+  expect(frame.style.transform).toBe("");
+
+  await confirmation().getByRole("button", { name: "Discard changes" }).click();
+  await expect.poll(() => frame.style.transform).toBe("translateX(100%)");
+  await expect.element(settings()).not.toBeInTheDocument();
+});
+
+test("Close on a phone with nothing to discard slides the page out", async () => {
+  await page.viewport(390, 800);
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  const frame = document.querySelector(".dlg-frame");
+
+  await settings().getByRole("button", { name: "Close", exact: true }).last().click();
+  await expect.poll(() => frame.style.transform).toBe("translateX(100%)");
+  await expect.element(settings()).not.toBeInTheDocument();
+});
+
+test("a phone's settings page has a Close button in the top right of its head", async () => {
+  await page.viewport(390, 800);
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  const close = settings().getByRole("button", { name: "Close", exact: true }).first();
+  await expect.element(close).toBeVisible();
+
+  const head = document.querySelector(".console-head").getBoundingClientRect();
+  const x = close.element().getBoundingClientRect();
+  expect(x.right).toBeLessThanOrEqual(head.right);
+  expect(head.right - x.right).toBeLessThan(head.width / 4);
+  expect(x.top - head.top).toBeLessThan(head.height / 2);
+
+  await close.click();
+  await expect.element(settings()).not.toBeInTheDocument();
+});

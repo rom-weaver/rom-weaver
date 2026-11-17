@@ -1255,12 +1255,14 @@ const auditDocsRoute = async (page, baseUrl, slug) => {
     };
   }, SITE_ORIGIN);
   assertNoProductionDocsSamples(samples, slug);
-  await scanVariants(page, slug);
   return samples.local;
 };
 
 // Load each guide as its own document. Only that surfaces a hydration mismatch
-// against the served HTML as a page error.
+// against the served HTML as a page error. Axe does not scan the guides: they share one
+// shell and stylesheet, so tests/browser/docs-accessibility.browser.test.js scans one
+// fixture page that uses every element a guide can contain, and
+// tests/unit/docs-a11y-fixture.test.ts fails when a guide uses an element it lacks.
 const runDocsAccessibilityAudit = async (createContext, baseUrl) => {
   const context = await createAuditContext(createContext);
   const cssCoverageEntries = [];

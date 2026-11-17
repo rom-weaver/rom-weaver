@@ -55,6 +55,7 @@ import {
 } from "./browser-opfs-proxy-protocol.ts";
 import type { FileSystemDirectoryHandleLike, RomWeaverBrowserSyncAccessMode } from "./browser-opfs-runtime-types.ts";
 import { openSyncAccessHandle, type SyncAccessHandleLike, writableSyncAccessMode } from "./browser-opfs-sync-access.ts";
+import { isStaleDirectoryHandleError, OpfsDirectoryCache } from "./opfs-directory-cache.ts";
 
 // WASI errno values the proxy reports through STATUS. Mirror wasiShim.wasi.ERRNO_* (kept local so the
 // server stays free of the WASI shim and remains node-testable).
@@ -69,6 +70,9 @@ const ERRNO_NOTDIR = 54;
 const ERRNO_NOTSUP = 58;
 const ERRNO_ROFS = 69;
 const ERRNO_XDEV = 75;
+
+// Oldest directory handles are evicted past this limit, so the cache stays bounded.
+const MAX_CACHED_DIRECTORIES = 512;
 
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
@@ -153,6 +157,10 @@ class OpfsProxyServer {
   // worker-selected file is served like an OPFS handle without staging a copy into OPFS first.
   private readonly blobSources = new Map<string, Blob>();
   private readonly pendingRemovals = new Set<Promise<void>>();
+  // Directory handles by guest path, so an open walks only unseen folders.
+  // A folder removed outside the proxy leaves its handle stale.
+  private readonly directoryCache = new OpfsDirectoryCache<FileSystemDirectoryHandleLike>(MAX_CACHED_DIRECTORIES);
+  private directoryCacheHits = 0;
   private readonly shutdownControl?: Int32Array;
   private closeFailed = false;
   private running = true;
@@ -483,6 +491,12 @@ class OpfsProxyServer {
 
   private async opUnlink(guestPath: string): Promise<void> {
     const location = this.locate(guestPath);
+    // The entry may be a directory, so nothing cached at or under it stays valid.
+    this.directoryCache.forget(location.parts, location.mount.mountPath);
+    await this.withStaleDirectoryRetry(() => this.unlinkIn(guestPath, location));
+  }
+
+  private async unlinkIn(guestPath: string, location: FileLocation): Promise<void> {
     const { dir, name } = await this.resolveParent(location, { create: false });
     if (!dir.removeEntry) throw new ProxyErrno(ERRNO_ACCES);
     // OPFS rejects removeEntry while a SyncAccessHandle is open on the file
@@ -539,14 +553,16 @@ class OpfsProxyServer {
     for (const path of [fromPath, toPath]) {
       if (this.byPath.has(path) || this.pendingByPath.has(path)) throw new ProxyErrno(ERRNO_BUSY);
     }
-    const source = await this.resolveParent(from, { create: false });
-    const destination = await this.resolveParent(to, { create: true });
-    if (await this.entryExists(destination.dir, destination.name)) throw new ProxyErrno(ERRNO_EXIST);
-    const fileHandle = (await source.dir.getFileHandle(source.name)) as {
-      move?: (directory: FileSystemDirectoryHandleLike, name: string) => Promise<void>;
-    };
-    if (typeof fileHandle.move !== "function") throw new ProxyErrno(ERRNO_NOTSUP);
-    await fileHandle.move(destination.dir, destination.name);
+    await this.withStaleDirectoryRetry(async () => {
+      const source = await this.resolveParent(from, { create: false });
+      const destination = await this.resolveParent(to, { create: true });
+      if (await this.entryExists(destination.dir, destination.name)) throw new ProxyErrno(ERRNO_EXIST);
+      const fileHandle = (await source.dir.getFileHandle(source.name)) as {
+        move?: (directory: FileSystemDirectoryHandleLike, name: string) => Promise<void>;
+      };
+      if (typeof fileHandle.move !== "function") throw new ProxyErrno(ERRNO_NOTSUP);
+      await fileHandle.move(destination.dir, destination.name);
+    });
   }
 
   private async entryExists(dir: FileSystemDirectoryHandleLike, name: string): Promise<boolean> {
@@ -578,31 +594,48 @@ class OpfsProxyServer {
   }
 
   private async resolveFileHandle(location: FileLocation, { create }: { create: boolean }): Promise<unknown> {
-    const { dir, name } = await this.resolveParent(location, { create });
-    if (create) {
+    return this.withStaleDirectoryRetry(async () => {
+      const { dir, name } = await this.resolveParent(location, { create });
+      if (create) {
+        this.trace?.(
+          `[browser-opfs] path create requested creator=browser-opfs-proxy.open path=${location.mount.mountPath}/${location.parts.join("/")}`,
+        );
+      }
+      return dir.getFileHandle(name, { create });
+    });
+  }
+
+  /** Runs `attempt`. On a stale cache hit, clears the cache and retries once. */
+  private async withStaleDirectoryRetry<T>(attempt: () => Promise<T>): Promise<T> {
+    const hitsBefore = this.directoryCacheHits;
+    try {
+      return await attempt();
+    } catch (error) {
+      if (!isStaleDirectoryHandleError(error) || this.directoryCacheHits === hitsBefore) throw error;
       this.trace?.(
-        `[browser-opfs] path create requested creator=browser-opfs-proxy.open path=${location.mount.mountPath}/${location.parts.join("/")}`,
+        `[browser-opfs] proxy stale directory handle, retrying without cache error=${(error as { name?: string }).name}`,
       );
+      this.directoryCache.clear();
+      return attempt();
     }
-    return dir.getFileHandle(name, { create });
   }
 
   private async resolveParent(
     location: FileLocation,
     { create }: { create: boolean },
   ): Promise<{ dir: FileSystemDirectoryHandleLike; name: string }> {
-    let dir = location.mount.directoryHandle;
-    for (let i = 0; i < location.parts.length - 1; i += 1) {
-      const part = location.parts[i];
-      if (part === undefined) throw new ProxyErrno(ERRNO_NOENT);
-      if (create) {
-        const path = `${location.mount.mountPath}/${location.parts.slice(0, i + 1).join("/")}`;
-        this.trace?.(`[browser-opfs] path create requested creator=browser-opfs-proxy.open path=${path}`);
-      }
-      dir = (await dir.getDirectoryHandle(part, { create })) as FileSystemDirectoryHandleLike;
-    }
     const name = location.parts.at(-1);
     if (name === undefined) throw new ProxyErrno(ERRNO_NOENT);
+    const dir = await this.directoryCache.resolve(location.mount.directoryHandle, location.parts.slice(0, -1), {
+      create,
+      keyPrefix: location.mount.mountPath,
+      onCachedDirectory: () => {
+        this.directoryCacheHits += 1;
+      },
+      onUncachedDirectory: (path) => {
+        if (create) this.trace?.(`[browser-opfs] path create requested creator=browser-opfs-proxy.open path=${path}`);
+      },
+    });
     return { dir, name };
   }
 
