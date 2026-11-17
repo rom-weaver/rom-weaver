@@ -3,7 +3,7 @@
 
 [tools]
 # WASI SDK stays off PATH so its clang cannot replace the native compiler.
-# Install ccache and sccache as system tools so [env] can find them before mise activation.
+# Install ccache as a system tool so [env] can find it before mise activation.
 #   - twiggy: no binary releases (`cargo install` when needed for size analysis).
 node = "24.18.0"
 # Fresh toolchains need these components for formatting and Clippy checks.
@@ -18,6 +18,8 @@ rust = { version = "1.97.1", components = "rustfmt,clippy" }
 "aqua:rhysd/actionlint" = "1.7.12"              # workflow linting (shellcheck-aware)
 "aqua:koalaman/shellcheck" = "0.11.0"           # shell script linting (also backs actionlint's `run:` checks)
 "aqua:hadolint/hadolint" = "2.14.0"             # Dockerfile linting
+# Ubuntu's 0.7.7 cannot cache rustc calls that carry --remap-path-prefix, which the WASM build passes.
+"aqua:mozilla/sccache" = "0.17.0"
 
 # cargo-mutants publishes no aarch64 macOS build; the x86_64 one runs under Rosetta.
 "github:sourcefrog/cargo-mutants" = { version = "27.1.0", platforms = { macos-arm64 = { asset_pattern = "cargo-mutants-x86_64-apple-darwin.tar.gz" } } }
@@ -59,10 +61,11 @@ CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
 
 # sccache owns incremental reuse, so disable Cargo incremental builds. Resolve
 # the wrapper dynamically: an empty value builds normally on hosts without
-# sccache instead of breaking every Cargo invocation. The larger cache avoids
+# sccache instead of breaking every Cargo invocation. `tools = true` puts the
+# pinned sccache ahead of any system copy on PATH. The larger cache avoids
 # churn across worktrees.
-RUSTC_WRAPPER = "{{ exec(command='command -v sccache || true') | trim }}"
-CARGO_INCREMENTAL = "{{ exec(command='test -n \"$CI\" || command -v sccache >/dev/null 2>&1 && echo 0 || echo 1') | trim }}"
+RUSTC_WRAPPER = { value = "{{ exec(command='command -v sccache || true') | trim }}", tools = true }
+CARGO_INCREMENTAL = { value = "{{ exec(command='test -n \"$CI\" || command -v sccache >/dev/null 2>&1 && echo 0 || echo 1') | trim }}", tools = true }
 # Read the process value so parent worktree defaults cannot replace the limit.
 SCCACHE_CACHE_SIZE = "{{ get_env(name='SCCACHE_CACHE_SIZE', default='100G') }}"
 

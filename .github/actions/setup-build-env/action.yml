@@ -163,54 +163,14 @@ runs:
       shell: bash
       run: ccache --zero-stats
 
-    # sccache MUST be installed before mise resolves RUSTC_WRAPPER.
-    - name: Install sccache
+    - name: Configure sccache
       if: inputs.sccache == 'true'
       shell: bash
       run: |
-        set -euo pipefail
-        version=v0.17.0
-        if command -v sccache >/dev/null 2>&1 \
-          && { [ "$RUNNER_OS" != "Linux" ] || sccache --version | grep -q " ${version#v}$"; }; then
-          echo "sccache already on PATH"
-        elif [ "$RUNNER_OS" = "Linux" ]; then
-          # Ubuntu's package is 0.7.7, which cannot cache rustc calls that
-          # carry --remap-path-prefix. Pin a release and verify its digest.
-          case "$RUNNER_ARCH" in
-            X64)
-              triple=x86_64-unknown-linux-musl
-              sha256=67c4a96dd237c1f518f6b36083f270f9976d516f1e57fce891755ea782e50006
-              ;;
-            ARM64)
-              triple=aarch64-unknown-linux-musl
-              sha256=821a86343191aa1cbab74bd42f9e93c9a63bf85e4742945f40d3ae84193c1c77
-              ;;
-            *)
-              echo "::error::no pinned sccache for $RUNNER_ARCH"
-              exit 1
-              ;;
-          esac
-          name="sccache-$version-$triple"
-          archive="$RUNNER_TEMP/$name.tar.gz"
-          curl --fail --silent --show-error --location --retry 3 \
-            --output "$archive" \
-            "https://github.com/mozilla/sccache/releases/download/$version/$name.tar.gz"
-          echo "$sha256  $archive" | sha256sum --check --strict -
-          mkdir -p "$RUNNER_TEMP/sccache-bin"
-          tar -xzf "$archive" -C "$RUNNER_TEMP/sccache-bin" --strip-components=1 "$name/sccache"
-          echo "$RUNNER_TEMP/sccache-bin" >> "$GITHUB_PATH"
-          PATH="$RUNNER_TEMP/sccache-bin:$PATH"
-        elif [ "$RUNNER_OS" = "macOS" ]; then
-          brew install sccache
-        else
-          echo "::error::no sccache wiring for $RUNNER_OS"
-          exit 1
-        fi
         {
           echo "SCCACHE_DIR=$RUNNER_TEMP/sccache"
           echo "SCCACHE_CACHE_SIZE=1G"
         } >> "$GITHUB_ENV"
-        sccache --version
 
     # Compiler results are content-addressed, so older generations can be restored safely.
     - name: Cache sccache objects
@@ -241,7 +201,7 @@ runs:
       if: inputs.tools != ''
       shell: bash
       env:
-        WANTED: ${{ inputs.tools }}
+        WANTED: ${{ inputs.tools }}${{ inputs.sccache == 'true' && ' sccache' || '' }}
       run: node scripts/ci/select-mise-tools.mjs
 
     - name: Install mise-pinned tools
