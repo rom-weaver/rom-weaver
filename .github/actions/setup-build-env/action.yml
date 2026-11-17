@@ -191,11 +191,6 @@ runs:
         restore-keys: |
           sccache-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-
 
-    - name: Zero sccache statistics
-      if: inputs.sccache == 'true'
-      shell: bash
-      run: sccache --zero-stats
-
     # GITHUB_ENV gives every later `mise run` step the selected-tool restriction.
     - name: Select mise tools
       if: inputs.tools != ''
@@ -212,6 +207,12 @@ runs:
         version: 2026.10.3
         install: true
         cache: ${{ inputs.cache-restore == 'true' }}
+
+    # sccache comes from the mise install above.
+    - name: Zero sccache statistics
+      if: inputs.sccache == 'true'
+      shell: bash
+      run: sccache --zero-stats
 
     # mise pins RUSTUP_TOOLCHAIN, so components MUST be added through `mise exec`.
     - name: Install Rust components

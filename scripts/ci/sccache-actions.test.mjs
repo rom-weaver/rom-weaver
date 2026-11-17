@@ -75,6 +75,10 @@ test("sccache setup exports a bounded store", (t) => {
     action.indexOf("- name: Restore sccache objects") <
       action.indexOf("- name: Zero sccache statistics"),
   );
+  assert.ok(
+    action.indexOf("- name: Install mise-pinned tools") <
+      action.indexOf("- name: Zero sccache statistics"),
+  );
 });
 
 test("CI only installs the Rust compiler cache when it must compile WASM", () => {
