@@ -763,8 +763,9 @@ test("only one Identify workflow ever consumes a page drop", async () => {
   expect(document.querySelectorAll("#identify-input-picker")).toHaveLength(1);
 
   await dropOnPage("second.ppf");
-  await expect.poll(() => document.querySelector("#identify-container")?.textContent).not.toContain("second.ppf");
-  expect(document.querySelector("#identify-container")?.textContent).toContain("first.gba");
+  // Identify can still be inspecting first.gba here, so wait for it to be named again before judging the drop.
+  await expect.poll(() => document.querySelector("#identify-container")?.textContent).toContain("first.gba");
+  expect(document.querySelector("#identify-container")?.textContent).not.toContain("second.ppf");
 });
 
 test("enabled PPF undo and Identify are named in the nav on desktop and phone", async () => {
