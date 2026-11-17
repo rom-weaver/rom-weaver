@@ -18,11 +18,7 @@ const step = (name) => {
 };
 
 const assertStepsInOrder = (first, second) => {
-  const firstIndex = action.indexOf(`- name: ${first}\n`);
-  const secondIndex = action.indexOf(`- name: ${second}\n`);
-  assert.notEqual(firstIndex, -1, `missing setup step: ${first}`);
-  assert.notEqual(secondIndex, -1, `missing setup step: ${second}`);
-  assert.ok(firstIndex < secondIndex, `${first} MUST run before ${second}`);
+  assert.ok(steps.indexOf(step(first)) < steps.indexOf(step(second)), `${first} MUST run before ${second}`);
 };
 
 const selected = (name, inputs, ref) => {
