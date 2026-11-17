@@ -2,7 +2,8 @@
 
 // Run each browser-test file in its own Vitest process and origin. Sharing one
 // origin leaks OPFS state between files and can hang Vitest at file boundaries.
-// Retry failures once alone to distinguish CPU-contention flakes from failures.
+// Retry failures once alone to distinguish CPU-contention flakes from failures:
+// the failed tests first, then the whole file when that does not pass.
 //
 // Usage:
 //   node scripts/run-browser-tests.mjs [file ...] [summary-preserving vitest flags ...]
@@ -231,6 +232,25 @@ const runFile = (file, vitestArgs) =>
     });
   });
 
+// Vitest prints one "FAIL  <project>  <file> > <suite> > <test>" line per failed test.
+const FAILED_TEST_LINE_REGEX = /^\s*FAIL\s+\S+\s+\S+\s+>\s+(.+?)\s*$/gm;
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// A retry that reruns only the tests that failed costs seconds; rerunning the
+// whole file costs its full duration. Returns the extra Vitest args for that
+// narrowed run, or null when it cannot be built (no named failure, such as a
+// crashed browser, or the caller already passed a name filter).
+export const narrowedRetryArgs = (output, vitestArgs = []) => {
+  if (vitestArgs.some((entry) => entry === "-t" || entry.startsWith("--testNamePattern"))) return null;
+  const names = new Set(
+    [...output.replace(ANSI_ESCAPE_REGEX, "").matchAll(FAILED_TEST_LINE_REGEX)].map((match) =>
+      // Vitest matches the pattern against suite and test names joined by spaces.
+      escapeRegExp(match[1].split(" > ").join(" ")),
+    ),
+  );
+  return names.size ? ["-t", `(?:${[...names].join("|")})`] : null;
+};
+
 const summarizeOutput = (output) => {
   const matches = [...output.replace(ANSI_ESCAPE_REGEX, "").matchAll(TESTS_LINE_REGEX)];
   const last = matches.at(-1);
@@ -286,9 +306,17 @@ export const main = async () => {
       process.stdout.write(`\n──── initial ${path.basename(file)} failure ────\n`);
       process.stdout.write(results.get(file).output.trimEnd());
       process.stdout.write("\n");
-      const result = await runFile(file, vitestArgs);
-      results.set(file, result);
       const name = path.basename(file);
+      let result;
+      const narrowed = narrowedRetryArgs(results.get(file).output, vitestArgs);
+      if (narrowed) {
+        // A narrowed pass is real evidence; a narrowed failure falls through to
+        // the whole file, so a test that needs its neighbours is never lost.
+        result = await runFile(file, [...vitestArgs, ...narrowed]);
+        process.stdout.write(`  ${result.code === 0 ? "PASS" : "FAIL"} (failed tests only)  ${name}\n`);
+      }
+      if (!result || result.code !== 0) result = await runFile(file, vitestArgs);
+      results.set(file, result);
       const status = result.code === 0 ? "PASS (recovered)" : "FAIL";
       process.stdout.write(`  ${status}  ${name}  -  ${summarizeOutput(result.output)}\n`);
     }
