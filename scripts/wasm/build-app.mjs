@@ -13,7 +13,6 @@ import { restoreWasmArtifacts, storeWasmArtifacts, wasmArtifactCacheKey, wasmArt
 import { createCargoConfigSnapshot, createWasmSourceFingerprint, recordedSourceFingerprint, shouldBuildWasm, wasmSourcesModifiedSince } from "./wasm-source-fingerprint.mjs";
 import { createWasmProdFingerprint } from "./wasm-prod-fingerprint.mjs";
 
-// `dev` is the default; `fast` and `prod` select the other build profiles.
 export const parseMode = (value = "dev") => {
   if (value !== "dev" && value !== "fast" && value !== "prod") throw new Error("usage: node scripts/wasm/build-app.mjs [dev|fast|prod]");
   return value;
