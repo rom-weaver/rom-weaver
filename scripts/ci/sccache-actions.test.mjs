@@ -17,6 +17,14 @@ const step = (name) => {
   return body;
 };
 
+const assertStepsInOrder = (first, second) => {
+  const firstIndex = action.indexOf(`- name: ${first}\n`);
+  const secondIndex = action.indexOf(`- name: ${second}\n`);
+  assert.notEqual(firstIndex, -1, `missing setup step: ${first}`);
+  assert.notEqual(secondIndex, -1, `missing setup step: ${second}`);
+  assert.ok(firstIndex < secondIndex, `${first} MUST run before ${second}`);
+};
+
 const selected = (name, inputs, ref) => {
   const condition = step(name).match(/^      if: (.+)$/mu)?.[1];
   assert.ok(condition, `missing condition: ${name}`);
@@ -71,14 +79,8 @@ test("sccache setup exports a bounded store", (t) => {
     readFileSync(envFile, "utf8"),
     `SCCACHE_DIR=${directory}/sccache\nSCCACHE_CACHE_SIZE=1G\n`,
   );
-  assert.ok(
-    action.indexOf("- name: Restore sccache objects") <
-      action.indexOf("- name: Zero sccache statistics"),
-  );
-  assert.ok(
-    action.indexOf("- name: Install mise-pinned tools") <
-      action.indexOf("- name: Zero sccache statistics"),
-  );
+  assertStepsInOrder("Restore sccache objects", "Zero sccache statistics");
+  assertStepsInOrder("Install mise-pinned tools", "Zero sccache statistics");
 });
 
 test("CI only installs the Rust compiler cache when it must compile WASM", () => {
