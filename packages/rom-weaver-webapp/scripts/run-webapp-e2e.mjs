@@ -641,11 +641,7 @@ const settleAnimations = async (page) => {
   }
 };
 
-const waitForStableBox = async (page, locator) => {
-  const selector = await locator.evaluate((element) => {
-    if (!(element instanceof HTMLElement && element.id)) throw new Error("Stable-layout target needs an element id");
-    return `#${CSS.escape(element.id)}`;
-  });
+const waitForStableBox = async (page, selector) => {
   await page.waitForFunction(
     ({ selector: targetSelector }) => {
       const element = document.querySelector(targetSelector);
@@ -725,6 +721,10 @@ const scanVariants = async (page, label) => {
     }, originalTheme);
     if (originalViewport) await page.setViewportSize(originalViewport);
   }
+  // Restoring the viewport resizes the guide's row. GUIDE_SETTLE_MS later the
+  // guide scrolls to reveal it, and a press that spans that scroll releases off
+  // the button: no click fires, yet Playwright reports the click done.
+  if (await page.locator(".sample-tutorial-dialog").count()) await waitForStableBox(page, ".sample-tutorial-dialog");
 };
 
 const installAuditTools = async (page) => {
@@ -1115,7 +1115,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         // motion retries "element is not stable" until it times out. The hover
         // still runs before the click so the :hover lift (translateY) is
         // latched by then and the click does not move the button mid-press.
-        await waitForStableBox(page, downloadButton);
+        await waitForStableBox(page, "#rom-weaver-button-export-weave");
         await downloadButton.hover();
         const [download] = await Promise.all([
           page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
