@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -26,7 +35,7 @@ import {
   packGroupFor,
   slugifyPlatform,
 } from "./build-identify-index.mjs";
-import { hasCurrentData, withBuildLock } from "./ensure-identify-data.mjs";
+import { hasCurrentData, main, withBuildLock } from "./ensure-identify-data.mjs";
 import {
   CHEAT_PLATFORMS,
   CHEAT_SHARD_FORMAT,
@@ -463,4 +472,28 @@ test("withBuildLock releases the lock when the build fails", async (t) => {
     /download failed/,
   );
   assert.equal(existsSync(lockPath), false);
+});
+
+test("main skips the build when another caller finishes it while main waits for the lock", { timeout: 5000 }, async (t) => {
+  const { dataDir, work } = buildCurrentDataDir();
+  t.after(() => rmSync(work, { recursive: true, force: true }));
+  const builtDir = join(work, "built");
+  renameSync(dataDir, builtDir);
+  const lockPath = join(work, ".data.lock");
+  writeFileSync(lockPath, `${process.pid}\n`);
+  // Without curl on PATH, a rebuild fails at once instead of downloading.
+  const emptyBinDir = join(work, "bin");
+  mkdirSync(emptyBinDir);
+  const originalPath = process.env.PATH;
+  process.env.PATH = emptyBinDir;
+  t.after(() => {
+    process.env.PATH = originalPath;
+  });
+
+  // main checks the data and starts waiting for the lock before it yields.
+  const ensured = main([], dataDir);
+  renameSync(builtDir, dataDir);
+  rmSync(lockPath);
+  await ensured;
+  assert.equal(hasCurrentData(dataDir), true);
 });

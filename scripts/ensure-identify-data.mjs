@@ -239,6 +239,11 @@ const readBuildLock = (lockPath) => {
 
 const isStaleBuildLock = ({ pid, ageMs }) => (pid === null ? ageMs > UNWRITTEN_LOCK_STALE_MS : !isProcessAlive(pid));
 
+const buildLockWaitMessage = (lockPath, pid) =>
+  pid === null
+    ? `waiting for another process to finish writing ${lockPath}`
+    : `waiting for process ${pid} to finish building identify data; if it is not a build, delete ${lockPath}`;
+
 const acquireBuildLock = async (lockPath) => {
   let reportedPid;
   for (;;) {
@@ -251,20 +256,20 @@ const acquireBuildLock = async (lockPath) => {
     const lock = readBuildLock(lockPath);
     if (lock === null) continue;
     if (isStaleBuildLock(lock)) {
-      // Another waiter MAY have replaced the stale lock since it was read.
+      // Re-reading the PID narrows, but cannot close, the window in which another waiter replaces the stale lock.
       if (readBuildLock(lockPath)?.pid === lock.pid) rmSync(lockPath, { force: true });
       continue;
     }
     if (lock.pid !== reportedPid) {
-      log("info", `waiting for process ${lock.pid} to finish building identify data`);
+      log("info", buildLockWaitMessage(lockPath, lock.pid));
       reportedPid = lock.pid;
     }
     await sleep(BUILD_LOCK_POLL_MS);
   }
 };
 
-// Parallel Cargo checks in the pre-commit hook and in worktree setup each run this
-// script, and a rebuild deletes the data dir first, so callers MUST build one at a time.
+// The pre-commit hook's clippy and typegen checks run this script in parallel, and a
+// rebuild deletes the data dir first, so callers MUST build one at a time.
 export const withBuildLock = async (dataDir, build) => {
   const lockPath = join(dirname(dataDir), `.${basename(dataDir)}.lock`);
   mkdirSync(dirname(lockPath), { recursive: true });
