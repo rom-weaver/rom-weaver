@@ -136,13 +136,12 @@ test("the sitemap contains each indexable workflow once and excludes beta tools"
     "extract-files",
     "identify-rom",
     "ppf-undo",
-    "create-m3u-playlist",
     "play-rom",
     "trim-rom",
   ]) {
     assert.ok(locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
-  for (const slug of ["rom-save-editor"]) {
+  for (const slug of ["rom-save-editor", "create-m3u-playlist"]) {
     assert.ok(!locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
 });
@@ -201,7 +200,6 @@ test("workflow Markdown includes task instructions and limits from the published
     [WORKFLOW_SEO_ROUTES.extract, "Extract an archive", "Extract opens one archive per run."],
     [WORKFLOW_SEO_ROUTES.identify, "Identify a file", "It does not prove that your file is corrupt."],
     [WORKFLOW_SEO_ROUTES["ppf-undo"], "Restore the saved bytes", "If the patch lacks undo data"],
-    [WORKFLOW_SEO_ROUTES.playlist, "Rename the discs", "Renaming the discs also needs Chrome or Edge on a computer."],
     [
       WORKFLOW_SEO_ROUTES.trim,
       "Save a trimmed copy",
@@ -231,6 +229,7 @@ test("workflow Markdown includes task instructions and limits from the published
 test("beta tool pages get their own title, social titles, and channel badge", () => {
   const shell = `${routeShell.replace("</head>", '<meta name="robots" content="index, follow" />\n</head>')}`;
   for (const [slug, name] of [
+    ["create-m3u-playlist", "Make playlist"],
     ["rom-save-editor", "Save Editor"],
     ["whats-new", "What's new"],
   ]) {

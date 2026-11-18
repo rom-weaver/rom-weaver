@@ -2161,7 +2161,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Activar herramientas beta (Save Editor)"
+msgstr "Activar herramientas beta (Save Editor, Crear listas de discos)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

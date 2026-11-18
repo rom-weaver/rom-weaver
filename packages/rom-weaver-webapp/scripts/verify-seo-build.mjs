@@ -718,6 +718,7 @@ for (const script of bundledScripts) {
 }
 
 for (const [slug, title] of [
+  ["create-m3u-playlist", "Make playlist | rom-weaver"],
   ["rom-save-editor", "Save Editor | rom-weaver"],
   ["whats-new", "What's new | rom-weaver"],
 ]) {
@@ -726,7 +727,7 @@ for (const [slug, title] of [
   assertIncludes(html, `property="og:title" content="${title}`, `${slug} og:title`);
   assertIncludes(html, `name="twitter:title" content="${title}`, `${slug} twitter:title`);
 }
-for (const beta of ["whats-new", "rom-save-editor"]) {
+for (const beta of ["whats-new", "rom-save-editor", "create-m3u-playlist"]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
   assertIncludes(
     read(`${beta}/index.html`),

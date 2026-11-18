@@ -9,7 +9,7 @@ test("does nothing when WebMCP is unavailable", () => {
 });
 
 test.each(["document", "navigator"])("registers usable tools through %s and cleans up", (owner) => {
-  const registered = new Map<string, { execute: (input: unknown) => unknown }>();
+  const registered = new Map<string, { execute: (input: unknown) => unknown; inputSchema: Record<string, unknown> }>();
   const unregisterTool = vi.fn();
   const registerTool = vi.fn((tool, options) => {
     registered.set(tool.name, tool);
@@ -30,6 +30,12 @@ test.each(["document", "navigator"])("registers usable tools through %s and clea
   expect(registered.get("search_site")?.execute({ query: "patch" })).toEqual(
     expect.arrayContaining([expect.objectContaining({ slug: "apply-rom-patches" })]),
   );
+  const schema = registered.get("navigate_site")?.inputSchema as
+    | { properties: { slug: { enum: string[] } } }
+    | undefined;
+  const slugs = schema?.properties.slug.enum ?? [];
+  expect(new Set(slugs).size).toBe(slugs.length);
+  expect(slugs).toEqual(expect.arrayContaining(["rom-save-editor", "create-m3u-playlist"]));
   expect(registered.get("get_supported_formats")?.execute({})).toBeTruthy();
   expect(() => registered.get("navigate_site")?.execute({ slug: "https://evil.example" })).toThrow("Unknown page slug");
   expect(() => registered.get("search_site")?.execute(null)).toThrow("Missing query");

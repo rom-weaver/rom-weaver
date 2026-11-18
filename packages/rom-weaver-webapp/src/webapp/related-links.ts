@@ -3,10 +3,8 @@ import type { CreatorMode } from "./app-routes.ts";
 import type { WORKFLOW_ENTRY_ROUTES } from "./workflow-seo.mjs";
 import type { WebappView } from "./webapp-state-types.ts";
 
-/** One tool pointer: a tab to switch to, plus the beta gate it lives behind. */
+/** One tool pointer: a tab to switch to. The renderers mark beta views from BETA_WORKFLOW_VIEWS. */
 type RelatedToolLink = {
-  /** True for a tool that stays behind the beta-tools setting (Save Editor). */
-  beta?: boolean;
   entry?: keyof typeof WORKFLOW_ENTRY_ROUTES;
   /** Create mode the link requests with `?mode=`. */
   mode?: CreatorMode;
@@ -94,10 +92,10 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
     tools: [{ labelId: "ui.docs.toolCompress", view: "compress" }],
   },
   "docs/create-game-saves-browser": {
-    tools: [{ beta: true, labelId: "ui.docs.toolSave", view: "save-editor" }],
+    tools: [{ labelId: "ui.docs.toolSave", view: "save-editor" }],
   },
   "docs/edit-gen3-saves": {
-    tools: [{ beta: true, labelId: "ui.docs.toolSave", view: "save-editor" }],
+    tools: [{ labelId: "ui.docs.toolSave", view: "save-editor" }],
   },
   "docs/extract-chd": {
     tools: [{ labelId: "ui.docs.toolExtract", view: "extract" }],
