@@ -186,12 +186,10 @@ const LOCAL_ACTION_PATH = /^\.github\/actions\/([^/]+)\//u;
 // A step line such as `- uses: ./.github/actions/<name>`, optionally quoted.
 const LOCAL_ACTION_USE = /^\s*(?:-\s+)?uses:\s*["']?\.\/\.github\/actions\/([^/\s"'#]+)/gmu;
 
-// Docker-only compiler inputs are outside the module fingerprint. ARM MUST
-// compile them before merge, including when the diff base is unavailable.
-// `.dockerignore` keeps `.github/` out of the image, so in `.github/` only the
-// `ci.yml` lines before `jobs:`, its `docker` job, and the local actions the
-// head commit's `docker` job calls can change the ARM build. A head commit
-// without a readable `docker` job compiles on any `ci.yml` or action change.
+// Docker-only compiler inputs are outside the module fingerprint, so ARM MUST
+// compile them before merge. In `.github/` only the `ci.yml` lines before
+// `jobs:`, its `docker` job, and the local actions that job calls reach the image.
+// Without a readable head `docker` job, any `ci.yml` or action change compiles.
 export function canReuseArmDockerWasm(paths, base, head) {
   if (paths === null || paths.some((path) => ARM_IMAGE_FILES.has(path))) return false;
   const isWorkflowChanged = paths.includes(CI_WORKFLOW);
@@ -203,9 +201,8 @@ export function canReuseArmDockerWasm(paths, base, head) {
   return ![...headInputs.matchAll(LOCAL_ACTION_USE)].some(([, name]) => changedActions.has(name));
 }
 
-// The lines before `jobs:` plus the `docker` job, which ends at the next job
-// key (comment lines do not end it); null when the commit, file, or job is
-// missing.
+// The lines before `jobs:` plus the `docker` job (it ends at the next job key);
+// null when the commit, file, or job is missing.
 function ciDockerJobInputs(commit) {
   if (!commit) return null;
   let text;
