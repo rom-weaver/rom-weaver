@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   CATALOG_FORMAT,
@@ -212,25 +213,93 @@ export const hasCurrentData = (dataDir = defaultDataDir) => {
   return index.systems.every(verifyPack);
 };
 
-export const main = async (argv = process.argv.slice(2), dataDir = defaultDataDir) => {
-  if (!argv.includes("--force") && hasCurrentData(dataDir)) {
-    log(
-      "info",
-      `Libretro ${LIBRETRO_REVISION}, OpenGood ${OPENGOOD_REVISION}, and ` +
-        `headered OpenGood ${OPENGOOD_HEADERED_REVISION} and GoodSNES ${GOODTOOLS_RELEASE} ` +
-        `identify data is ready`,
-    );
-    return;
-  }
+const BUILD_LOCK_POLL_MS = 500;
+// A lock file without a PID is either being written or was left by a crash mid-write.
+const UNWRITTEN_LOCK_STALE_MS = 10_000;
 
-  rmSync(dataDir, { recursive: true, force: true });
+const isProcessAlive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+};
+
+// The holder's PID (null when not yet written) and the lock's age; null when there is no lock.
+const readBuildLock = (lockPath) => {
+  try {
+    const pid = Number.parseInt(readFileSync(lockPath, "utf8"), 10);
+    return { pid: pid > 0 ? pid : null, ageMs: Date.now() - statSync(lockPath).mtimeMs };
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+};
+
+const isStaleBuildLock = ({ pid, ageMs }) => (pid === null ? ageMs > UNWRITTEN_LOCK_STALE_MS : !isProcessAlive(pid));
+
+const acquireBuildLock = async (lockPath) => {
+  let reportedPid;
+  for (;;) {
+    try {
+      writeFileSync(lockPath, `${process.pid}\n`, { flag: "wx" });
+      return;
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
+    const lock = readBuildLock(lockPath);
+    if (lock === null) continue;
+    if (isStaleBuildLock(lock)) {
+      // Another waiter MAY have replaced the stale lock since it was read.
+      if (readBuildLock(lockPath)?.pid === lock.pid) rmSync(lockPath, { force: true });
+      continue;
+    }
+    if (lock.pid !== reportedPid) {
+      log("info", `waiting for process ${lock.pid} to finish building identify data`);
+      reportedPid = lock.pid;
+    }
+    await sleep(BUILD_LOCK_POLL_MS);
+  }
+};
+
+// Parallel Cargo checks in the pre-commit hook and in worktree setup each run this
+// script, and a rebuild deletes the data dir first, so callers MUST build one at a time.
+export const withBuildLock = async (dataDir, build) => {
+  const lockPath = join(dirname(dataDir), `.${basename(dataDir)}.lock`);
+  mkdirSync(dirname(lockPath), { recursive: true });
+  await acquireBuildLock(lockPath);
+  try {
+    return await build();
+  } finally {
+    if (readBuildLock(lockPath)?.pid === process.pid) rmSync(lockPath, { force: true });
+  }
+};
+
+const logReady = () =>
   log(
     "info",
-    `building Libretro ${LIBRETRO_REVISION}, OpenGood ${OPENGOOD_REVISION}, and ` +
+    `Libretro ${LIBRETRO_REVISION}, OpenGood ${OPENGOOD_REVISION}, and ` +
       `headered OpenGood ${OPENGOOD_HEADERED_REVISION} and GoodSNES ${GOODTOOLS_RELEASE} ` +
-      `identify data`,
+      `identify data is ready`,
   );
-  await buildIdentifyData(["--out", dataDir]);
+
+export const main = async (argv = process.argv.slice(2), dataDir = defaultDataDir) => {
+  const force = argv.includes("--force");
+  if (!force && hasCurrentData(dataDir)) return logReady();
+
+  await withBuildLock(dataDir, async () => {
+    // Another caller may have built it while this one waited for the lock.
+    if (!force && hasCurrentData(dataDir)) return logReady();
+    rmSync(dataDir, { recursive: true, force: true });
+    log(
+      "info",
+      `building Libretro ${LIBRETRO_REVISION}, OpenGood ${OPENGOOD_REVISION}, and ` +
+        `headered OpenGood ${OPENGOOD_HEADERED_REVISION} and GoodSNES ${GOODTOOLS_RELEASE} ` +
+        `identify data`,
+    );
+    await buildIdentifyData(["--out", dataDir]);
+  });
 };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
