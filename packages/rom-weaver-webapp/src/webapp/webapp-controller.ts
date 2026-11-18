@@ -64,10 +64,8 @@ const normalizeWorkflowView = (value: unknown): WebappView | null => {
   return VALID_WORKFLOW_VIEWS.includes(normalized as WebappView) ? (normalized as WebappView) : null;
 };
 
-const isBetaWorkflowView = (view: WebappView): boolean => BETA_WORKFLOW_VIEWS.has(view);
-
 const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsState): WebappView =>
-  !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;
+  !settings.betaToolsEnabled && BETA_WORKFLOW_VIEWS.has(view) ? DEFAULT_WORKFLOW_VIEW : view;
 
 type RouteHistoryMode = "none" | "push" | "replace";
 

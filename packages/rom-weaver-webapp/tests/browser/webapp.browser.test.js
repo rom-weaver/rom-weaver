@@ -599,7 +599,7 @@ test("WebappRoot keeps the beta workflows out of the nav while the setting is of
   expect(navRow("Trim")).toBeTruthy();
   expect(navRow("Trim").querySelector(".nav-beta")).toBeNull();
   expect(navRow("Save Editor")).toBeFalsy();
-  expect(navRow("Make playlist")).toBeFalsy();
+  expect(navRow("Playlist")).toBeFalsy();
   expect(navRow("Identify")).toBeTruthy();
   navRow("Identify").click();
   await expect.poll(() => document.querySelector("#identify-input-picker") !== null).toBe(true);

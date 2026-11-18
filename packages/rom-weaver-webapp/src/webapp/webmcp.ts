@@ -34,15 +34,9 @@ const workflowPages = {
   "save-editor": "rom-save-editor",
   test: "play-rom",
 };
+const betaWorkflowPages = Object.entries(workflowPages).filter(([view]) => BETA_WORKFLOW_VIEWS.has(view as WebappView));
 const routes = [
-  ...Object.entries(workflowPages)
-    .filter(([view]) => BETA_WORKFLOW_VIEWS.has(view as WebappView))
-    .map(([, slug]) => slug)
-    .map((slug) => ({
-      slug,
-      title: slug,
-      description: "Beta browser workflow",
-    })),
+  ...betaWorkflowPages.map(([, slug]) => ({ slug, title: slug, description: "Beta browser workflow" })),
   ...Object.values(WORKFLOW_SEO_ROUTES).map(({ slug, title, description }) => ({ slug, title, description })),
   ...DOC_SOURCES.map(({ slug, label }) => ({ slug, title: label, description: label })),
 ];
@@ -97,9 +91,7 @@ export function installWebMcp(actions?: WorkflowActions) {
       execute: (input) => {
         const slug = stringArgument(input, "slug");
         if (!routes.some((route) => route.slug === slug)) throw new Error("Unknown page slug");
-        const betaView = Object.entries(workflowPages).find(
-          ([view, route]) => BETA_WORKFLOW_VIEWS.has(view as WebappView) && route === slug,
-        )?.[0];
+        const betaView = betaWorkflowPages.find(([, route]) => route === slug)?.[0];
         if (betaView && actions?.openBetaWorkflow) {
           actions.openBetaWorkflow(betaView);
           return { url: location.href };
