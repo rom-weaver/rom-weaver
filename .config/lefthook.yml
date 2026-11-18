@@ -5,22 +5,22 @@ pre-commit:
   commands:
     # Globs select checks from staged paths; each selected check runs over its full workspace.
     # CI adds tests and builds according to its change classification.
-    # The Cargo checks build incrementally instead of through sccache (see .config/mise.toml):
-    # a commit edits workspace crates, which sccache can only rebuild from scratch.
+    # MISE_ENV=hook loads .config/mise.hook.toml: the Cargo checks build workspace crates
+    # incrementally, since a commit edits them, and still take dependencies from sccache.
     rust-format:
       glob: "*.rs"
       run: mise run fmt
     rust-clippy:
       glob: "*.{rs,toml,lock}"
-      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target ROM_WEAVER_CARGO_INCREMENTAL=1 mise run clippy
+      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target MISE_ENV=hook mise run clippy
     rust-typegen:
       glob: "*.rs"
-      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target/hook-typegen ROM_WEAVER_CARGO_INCREMENTAL=1 mise run typegen-check
+      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target/hook-typegen MISE_ENV=hook mise run typegen-check
     # RUSTFLAGS MUST NOT replace the configured threaded-target flags.
     # .cargo/config.toml includes -D warnings with the required target flags.
     wasm-threaded-check:
       glob: "*.{rs,toml,lock}"
-      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target/hook-wasm ROM_WEAVER_CARGO_INCREMENTAL=1 mise run wasm-check
+      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target/hook-wasm MISE_ENV=hook mise run wasm-check
     licenses-check:
       glob: "*.{toml,lock}"
       run: mise run licenses-check
