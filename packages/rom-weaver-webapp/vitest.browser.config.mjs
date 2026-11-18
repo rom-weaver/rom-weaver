@@ -194,10 +194,19 @@ export default mergeConfig(baseConfig, {
         async clickAndReadDownload(context, selector, options) {
           const frame = await context.frame();
           const downloadPromise = context.page.waitForEvent("download", { timeout: 60000 });
+          let downloadStarted = false;
+          downloadPromise.then(
+            () => {
+              downloadStarted = true;
+            },
+            () => undefined,
+          );
           const clickDeadline = Date.now() + 180000;
           let clicked = false;
           let lastError = null;
-          while (!clicked && Date.now() < clickDeadline) {
+          // Playwright can time out after a click lands. The download proves the click, and a
+          // retry would miss the button it replaced.
+          while (!(clicked || downloadStarted) && Date.now() < clickDeadline) {
             try {
               await frame.click(selector, { timeout: 1200 });
               clicked = true;
@@ -206,7 +215,7 @@ export default mergeConfig(baseConfig, {
               await new Promise((resolve) => setTimeout(resolve, 40));
             }
           }
-          if (!clicked)
+          if (!(clicked || downloadStarted))
             throw new Error(
               `Download trigger was never clickable: ${selector}${lastError ? ` (${String(lastError)})` : ""}`,
             );
