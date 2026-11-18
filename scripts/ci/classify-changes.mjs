@@ -111,13 +111,21 @@ const isLighthouseInput = (path) =>
   path.startsWith("design/") ||
   /^(?:Cargo\.(?:toml|lock)|package(?:-lock)?\.json)$/.test(path);
 
-// Webapp files that only the Vitest suites load. The E2E runner never reads them,
-// so a change limited to them cannot change a WebKit E2E result.
+// Webapp files that only the Vitest suites load, so a change limited to them
+// cannot change a WebKit E2E result. `wasm-runtime-coverage.test.mjs` fails if
+// the E2E run imports one.
 const isVitestOnlyInput = (path) =>
   path.startsWith(WEBAPP_PACKAGE) &&
   /^(?:tests\/(?:browser|setup|unit)\/|vitest\.[^/]+\.mjs$|scripts\/run-browser-tests(?:\.test)?\.mjs$|scripts\/browser-test-durations\.json$)/.test(
     path.slice(WEBAPP_PACKAGE.length),
   );
+
+// Which gated browser jobs can observe a path, given the `webapp` and
+// `wasm_runtime` flags that path selected on its own.
+const observingBrowserJobs = (path, { webapp, wasm_runtime }) => {
+  const browser = webapp && !PUBLISHED_DOCS.has(path) && !SHARED_CASE_TABLE.test(path);
+  return { browser, webkit: (browser || wasm_runtime) && !isVitestOnlyInput(path) };
+};
 
 // The real runtime lifecycle suite imports these host helpers outside the worker layers.
 // The import-graph test MUST reject newly reachable helpers missing from this list.
@@ -227,8 +235,9 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
   // `browserInput`: a path other than published guide Markdown or a shared case
   // table selected the webapp; the jobs `webapp_browser` gates cannot observe those.
   // `webkitInput`: a path outside the Vitest-only inputs selected the webapp or
-  // the WASM runtime, which WebKit E2E can observe. `webapp` and `wasm_runtime`
-  // are cleared per path so each path's own selection is visible.
+  // the WASM runtime, which WebKit E2E can observe; published guide Markdown and
+  // shared case tables never set it. `webapp` and `wasm_runtime` are cleared per
+  // path so each path's own selection is visible.
   let browserInput = false;
   let webkitInput = false;
   for (const path of paths.filter(Boolean)) {
@@ -413,11 +422,9 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     )
       result.repo_lint = true;
 
-    if (result.webapp && !PUBLISHED_DOCS.has(path) && !SHARED_CASE_TABLE.test(path)) {
-      browserInput = true;
-      if (!isVitestOnlyInput(path)) webkitInput = true;
-    }
-    if (result.wasm_runtime && !isVitestOnlyInput(path)) webkitInput = true;
+    const observers = observingBrowserJobs(path, result);
+    browserInput ||= observers.browser;
+    webkitInput ||= observers.webkit;
     if (isLighthouseInput(path)) result.lighthouse = true;
     result.webapp ||= webappBefore;
     result.wasm_runtime ||= wasmRuntimeBefore;

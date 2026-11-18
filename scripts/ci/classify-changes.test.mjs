@@ -746,12 +746,12 @@ test("a pull request that changes only Vitest inputs skips WebKit E2E but not th
     const result = classifyFor("pull_request", path);
     assert.equal(result.webapp_browser, "true", path);
     assert.equal(result.webkit_e2e, "false", path);
-    // Main and every other event keep WebKit for the same change.
+    // Main pushes, manual runs, and an absent event keep WebKit for the same change.
     for (const eventName of ["push", "workflow_dispatch", undefined])
       assert.equal(classifyFor(eventName, path).webkit_e2e, "true", `${eventName} ${path}`);
   }
   // Anything the E2E runner loads brings WebKit back, including fixtures that
-  // select only the WASM runtime.
+  // select the WASM runtime and Rust.
   for (const extra of [
     "packages/rom-weaver-webapp/src/webapp/docs-routing.mjs",
     "packages/rom-weaver-webapp/scripts/run-webapp-e2e.mjs",
