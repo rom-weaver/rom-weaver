@@ -57,6 +57,7 @@ jobs:
       fuzz: ${{ steps.classify.outputs.fuzz }}
       webapp: ${{ steps.classify.outputs.webapp }}
       webapp_browser: ${{ steps.classify.outputs.webapp_browser }}
+      webkit_e2e: ${{ steps.classify.outputs.webkit_e2e }}
       lighthouse: ${{ steps.classify.outputs.lighthouse }}
       wasm_runtime: ${{ steps.classify.outputs.wasm_runtime }}
       security: ${{ steps.classify.outputs.security }}
@@ -81,6 +82,9 @@ jobs:
       preview_branch: ${{ steps.plan.outputs.preview_branch }}
       last_nightly_sha: ${{ steps.last-nightly.outputs.sha }}
       mutation_base: ${{ steps.last-nightly.outputs.mutation_sha }}
+      # The pull request diff base: the tested merge commit's first parent.
+      # It is the event's base when HEAD is not a merge commit, and empty outside pull requests.
+      pr_base: ${{ steps.pr-base.outputs.sha }}
       # The release pull request, which scripts/ci/release-pr.mjs identifies.
       release_pr: ${{ steps.classify.outputs.release_pr }}
     steps:
@@ -156,11 +160,29 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
         run: node scripts/ci/prior-green-run.mjs
 
+      # The event's `pull_request.base.sha` can name an older tip than the merge was built on.
+      # A diff from it would count everything merged since as pull request changes.
+      # So the base is the merge commit's first parent.
+      - name: Resolve the pull request base
+        id: pr-base
+        if: github.event_name == 'pull_request'
+        env:
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # Parent lines from the commit header, which ends at its first blank line.
+          parents=$(git cat-file -p HEAD | sed -n '/^$/q; s/^parent //p')
+          if [ "$(printf '%s\n' "$parents" | wc -l)" -eq 2 ]; then
+            echo "sha=$(printf '%s\n' "$parents" | head -n 1)" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::HEAD is not a merge commit; using the event's base $EVENT_BASE_SHA"
+            echo "sha=$EVENT_BASE_SHA" >> "$GITHUB_OUTPUT"
+          fi
+
       # A base that cannot be fetched (a force-pushed `before`) is left
       # missing; the classifier then selects everything, as it always has.
       - name: Fetch the diff base
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || steps.last-nightly.outputs.sha || '' }}
+          BASE_SHA: ${{ steps.pr-base.outputs.sha || github.event.before || steps.last-nightly.outputs.sha || '' }}
           PRIOR_GREEN_SHA: ${{ steps.prior-green.outputs.sha || '' }}
         run: |
           if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
@@ -175,7 +197,7 @@ jobs:
       - name: Classify changed paths
         id: classify
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || steps.last-nightly.outputs.sha || '' }}
+          BASE_SHA: ${{ steps.pr-base.outputs.sha || github.event.before || steps.last-nightly.outputs.sha || '' }}
           PRIOR_GREEN_SHA: ${{ steps.prior-green.outputs.sha || '' }}
           HEAD_SHA: ${{ github.sha }}
           EVENT_NAME: ${{ github.event_name }}
@@ -191,7 +213,7 @@ jobs:
       - name: Whitespace
         if: github.event_name == 'pull_request'
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ steps.pr-base.outputs.sha }}
           HEAD_SHA: ${{ github.sha }}
         run: node scripts/check-whitespace.mjs
 
@@ -409,7 +431,7 @@ jobs:
       - name: Plan relevant assurance lanes
         id: plan
         env:
-          QUALITY_BASE: ${{ needs.changes.outputs.last_nightly_sha || github.event.pull_request.base.sha || github.event.before || '' }}
+          QUALITY_BASE: ${{ needs.changes.outputs.last_nightly_sha || needs.changes.outputs.pr_base || github.event.before || '' }}
         run: |
           if [ -n "$QUALITY_BASE" ] && [ "$QUALITY_BASE" != "0000000000000000000000000000000000000000" ]; then
             node scripts/quality-plan.mjs "$QUALITY_BASE" > .agent/quality-signals/selection.json
@@ -432,7 +454,7 @@ jobs:
         id: guardrails
         if: ${{ !cancelled() }}
         env:
-          QUALITY_BASE: ${{ needs.changes.outputs.last_nightly_sha || github.event.pull_request.base.sha || github.event.before || '' }}
+          QUALITY_BASE: ${{ needs.changes.outputs.last_nightly_sha || needs.changes.outputs.pr_base || github.event.before || '' }}
         run: |
           base="$QUALITY_BASE"
           if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
@@ -494,7 +516,7 @@ jobs:
         id: mutation
         if: matrix.signal == 'mutation'
         env:
-          QUALITY_BASE: ${{ needs.changes.outputs.mutation_base || needs.changes.outputs.last_nightly_sha || github.event.pull_request.base.sha || github.event.before || '' }}
+          QUALITY_BASE: ${{ needs.changes.outputs.mutation_base || needs.changes.outputs.last_nightly_sha || needs.changes.outputs.pr_base || github.event.before || '' }}
         run: |
           if [ -n "$QUALITY_BASE" ] && [ "$QUALITY_BASE" != "0000000000000000000000000000000000000000" ]; then
             mise run quality-mutation diff "$QUALITY_BASE"
@@ -1277,7 +1299,7 @@ jobs:
 
       - name: Fetch the diff base
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          BASE_SHA: ${{ needs.changes.outputs.pr_base || github.event.before || '' }}
         run: |
           if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
             git fetch --no-tags --depth=1 origin "$BASE_SHA" ||
@@ -1286,7 +1308,7 @@ jobs:
 
       - name: Whitespace
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          BASE_SHA: ${{ needs.changes.outputs.pr_base || github.event.before || '' }}
           HEAD_SHA: ${{ github.sha }}
         # The task reads BASE_SHA/HEAD_SHA above; the lefthook hook runs the same
         # task with neither set and checks the staged diff instead.
@@ -2028,7 +2050,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     needs: [changes, wasm]
-    if: github.ref_type != 'tag' && needs.changes.outputs.webapp_browser == 'true'
+    if: github.ref_type != 'tag' && needs.changes.outputs.webkit_e2e == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -2203,6 +2225,14 @@ jobs:
           '${{ needs.changes.result }}'
           '${{ needs.changes.outputs.webapp_browser }}'
           'webapp-browser=${{ needs.webapp-browser.result }}'
+
+      # A pull request that changes only Vitest-only inputs also skips WebKit E2E.
+      - name: Verify WebKit E2E job
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.changes.outputs.webkit_e2e }}'
           'webapp-webkit-e2e=${{ needs.webapp-webkit-e2e.result }}'
 
       - name: Verify WASM runtime jobs
