@@ -14,6 +14,7 @@ const git = (args, cwd) => execFileSync("git", args, { cwd, encoding: "utf8" }).
 // Separate Cargo target directories let the pre-commit checks build in parallel.
 // Priming MUST use the environment from .config/lefthook.yml so Cargo reuses the artifacts.
 export const HOOK_CARGO_PRIMES = [
+  { task: "clippy", targetDir: "target", rustflags: "" },
   { task: "typegen-check", targetDir: "target/hook-typegen", rustflags: "" },
   { task: "wasm-check", targetDir: "target/hook-wasm", rustflags: "" },
 ];
