@@ -91,8 +91,8 @@ if (typeof window !== "undefined") {
   const bootCleanup = startBrowserOpfsBootCleanup().catch((error: unknown) => {
     logger.warn("Initial OPFS cleanup failed", { message: error instanceof Error ? error.message : String(error) });
   });
-  // Both tasks start storage workers. WebKit reports a worker load that a navigation cuts off as a
-  // page error, so E2E audits can wait for this marker before leaving a freshly loaded page.
+  // Both tasks start storage workers. A navigation that cuts off a worker load shows as a
+  // WebKit page error. The E2E accessibility audit waits for this marker.
   void Promise.all([keptRomReconciliation, bootCleanup]).then(() => {
     document.documentElement.dataset.startupStorage = "settled";
   });
