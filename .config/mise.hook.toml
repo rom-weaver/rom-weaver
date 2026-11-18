@@ -1,0 +1,5 @@
+# Loaded only when MISE_ENV=hook: the pre-commit Cargo checks and setup-worktree's primes.
+# Clearing CARGO_INCREMENTAL lets workspace crates build incrementally while sccache
+# still caches dependencies. `tools = true` MUST match .config/mise.toml.
+[env]
+CARGO_INCREMENTAL = { value = false, tools = true }

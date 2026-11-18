@@ -5,20 +5,21 @@ pre-commit:
   commands:
     # Globs select checks from staged paths; each selected check runs over its full workspace.
     # CI adds tests and builds according to its change classification.
+    # MISE_ENV=hook loads .config/mise.hook.toml, which builds workspace crates incrementally.
     rust-format:
       glob: "*.rs"
       run: mise run fmt
     rust-clippy:
       glob: "*.{rs,toml,lock}"
-      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target mise run clippy
+      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target MISE_ENV=hook mise run clippy
     rust-typegen:
       glob: "*.rs"
-      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target/hook-typegen mise run typegen-check
+      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target/hook-typegen MISE_ENV=hook mise run typegen-check
     # RUSTFLAGS MUST NOT replace the configured threaded-target flags.
     # .cargo/config.toml includes -D warnings with the required target flags.
     wasm-threaded-check:
       glob: "*.{rs,toml,lock}"
-      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target/hook-wasm mise run wasm-check
+      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target/hook-wasm MISE_ENV=hook mise run wasm-check
     licenses-check:
       glob: "*.{toml,lock}"
       run: mise run licenses-check

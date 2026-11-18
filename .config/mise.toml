@@ -65,7 +65,8 @@ CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
 # the wrapper dynamically: an empty value builds normally on hosts without
 # sccache instead of breaking every Cargo invocation. `tools = true` puts the
 # pinned sccache ahead of any system copy on PATH. The larger cache avoids
-# churn across worktrees.
+# churn across worktrees. The pre-commit hook's .config/mise.hook.toml clears
+# CARGO_INCREMENTAL so edited workspace crates rebuild incrementally.
 RUSTC_WRAPPER = { value = "{{ exec(command='command -v sccache || true') | trim }}", tools = true }
 CARGO_INCREMENTAL = { value = "{{ exec(command='test -n \"$CI\" || command -v sccache >/dev/null 2>&1 && echo 0 || echo 1') | trim }}", tools = true }
 # Read the process value so parent worktree defaults cannot replace the limit.

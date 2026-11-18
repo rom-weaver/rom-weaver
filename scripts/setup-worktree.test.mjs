@@ -16,10 +16,11 @@ const hook = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../.con
 // quietly goes back to building from scratch. Pin both halves to the hook file.
 for (const prime of HOOK_CARGO_PRIMES) {
   const line = hook.split("\n").find((candidate) => candidate.includes(`mise run ${prime.task}`));
-  test(`${prime.task} is primed into the target dir the hook uses`, () => {
+  test(`${prime.task} is primed into the target dir and mise environment the hook uses`, () => {
     assert.ok(line, `no lefthook command runs \`mise run ${prime.task}\``);
     assert.match(line, new RegExp(`CARGO_TARGET_DIR=${prime.targetDir}\\b`));
     assert.match(line, /env -u __MISE_DIFF/);
+    assert.match(line, /\bMISE_ENV=hook\b/);
   });
   test(`${prime.task} is primed with the rustflags the hook uses`, () => {
     const hookFlags = /RUSTFLAGS="\$\{RUSTFLAGS:-\} ([^"]*)"/.exec(line ?? "")?.[1] ?? "";
@@ -41,6 +42,30 @@ test("every Cargo check in the pre-commit hook is primed", () => {
 test("worktree primes do not restore an activated mise environment", () => {
   const source = primeHookTargets.toString();
   assert.match(source, /delete env\.__MISE_DIFF/);
+});
+
+// A prime without incremental state makes the first Rust commit rebuild every crate.
+test("worktree primes build incrementally like every primed hook command", async (t) => {
+  const inherited = { MISE_ENV: process.env.MISE_ENV, __MISE_DIFF: process.env.__MISE_DIFF };
+  t.after(() => {
+    for (const [name, value] of Object.entries(inherited)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
+  process.env.MISE_ENV = "ci";
+  process.env.__MISE_DIFF = "activated";
+  const envs = [];
+  await primeHookTargets("/repo", HOOK_CARGO_PRIMES, (_command, _args, options, callback) => {
+    envs.push(options.env);
+    callback(null);
+    return {};
+  });
+  assert.equal(envs.length, HOOK_CARGO_PRIMES.length);
+  for (const env of envs) {
+    assert.equal(env.MISE_ENV, "hook");
+    assert.equal("__MISE_DIFF" in env, false);
+  }
 });
 
 // A RUSTFLAGS override replaces the configured [target.*] rustflags rather than

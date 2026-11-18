@@ -109,6 +109,8 @@
   "weave-cheat-export.browser.test.js": 17.8,
   "weave-everything-archive.browser.test.js": 11.7,
   "weave-export.browser.test.js": 16.7,
-  "weave-session.browser.test.js": 118.9,
+  "weave-session-checks.browser.test.js": 45.9,
+  "weave-session-sources.browser.test.js": 52.3,
+  "weave-session.browser.test.js": 35,
   "webapp.browser.test.js": 48.6
 }
