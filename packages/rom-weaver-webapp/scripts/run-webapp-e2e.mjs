@@ -858,6 +858,10 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.goto(new URL("apply", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
+    // The file input is already in the prerendered shell, so this page can still be
+    // starting its storage workers. WebKit reports a worker load that the Docs
+    // navigation below cuts off as a page error.
+    await page.locator('html[data-startup-storage="settled"]').waitFor({ state: "attached" });
 
     // On a mobile Docs reload the docs bar is already in the prerendered shell.
     // Its fixed position must be viewport-relative before hydration finishes;

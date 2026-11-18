@@ -85,11 +85,16 @@ let resolvePendingConfirmation: ((accepted: boolean) => void) | null = null;
 let vitePageUpdateState = createEmptyVitePageUpdateState();
 let pageResetKey = 0;
 if (typeof window !== "undefined") {
-  void listKeptRoms().catch((error: unknown) => {
+  const keptRomReconciliation = listKeptRoms().catch((error: unknown) => {
     logger.debug("Kept ROM reconciliation unavailable", { message: String(error) });
   });
-  void startBrowserOpfsBootCleanup().catch((error: unknown) => {
+  const bootCleanup = startBrowserOpfsBootCleanup().catch((error: unknown) => {
     logger.warn("Initial OPFS cleanup failed", { message: error instanceof Error ? error.message : String(error) });
+  });
+  // Both tasks start storage workers. WebKit reports a worker load that a navigation cuts off as a
+  // page error, so E2E audits can wait for this marker before leaving a freshly loaded page.
+  void Promise.all([keptRomReconciliation, bootCleanup]).then(() => {
+    document.documentElement.dataset.startupStorage = "settled";
   });
   // Before the gate below can hold rendering for a service worker reload, after
   // which a first visit would look like a returning one.
