@@ -60,7 +60,7 @@ import {
 import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { observePanelHeadFit } from "./panel-head-fit.ts";
-import { appPathHref } from "./app-routes.ts";
+import { appPathHref, BETA_WORKFLOW_VIEWS } from "./app-routes.ts";
 import { useAppBaseUrl } from "./use-app-base-url.ts";
 import { releaseLargeEntriesOnLargeInput } from "./large-input-release.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
@@ -112,7 +112,7 @@ import {
 } from "./workflow-routes.tsx";
 import { activeWorkflowEntry, WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES, withChannelBadge } from "./workflow-seo.mjs";
 
-const WORKFLOW_TABS: WorkflowTab[] = [
+const WORKFLOW_TAB_ITEMS: WorkflowTab[] = [
   {
     dock: true,
     group: "patches",
@@ -188,7 +188,6 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     railLabel: "Trim",
   },
   {
-    beta: true,
     group: "roms",
     href: "create-m3u-playlist",
     icon: <ListMusic aria-hidden="true" />,
@@ -206,7 +205,6 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     railLabel: "Test",
   },
   {
-    beta: true,
     group: "roms",
     href: "rom-save-editor",
     icon: <SaveIcon aria-hidden="true" />,
@@ -221,6 +219,12 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     label: "Docs",
   },
 ];
+
+// Beta tabs come from BETA_WORKFLOW_VIEWS, the set selectView gates on.
+const WORKFLOW_TABS: WorkflowTab[] = WORKFLOW_TAB_ITEMS.map((tab) => ({
+  ...tab,
+  beta: BETA_WORKFLOW_VIEWS.has(tab.id as WebappView),
+}));
 
 // Keep the trace inspector out of the initial weave, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
