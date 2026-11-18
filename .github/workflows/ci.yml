@@ -57,6 +57,7 @@ jobs:
       fuzz: ${{ steps.classify.outputs.fuzz }}
       webapp: ${{ steps.classify.outputs.webapp }}
       webapp_browser: ${{ steps.classify.outputs.webapp_browser }}
+      webkit_e2e: ${{ steps.classify.outputs.webkit_e2e }}
       lighthouse: ${{ steps.classify.outputs.lighthouse }}
       wasm_runtime: ${{ steps.classify.outputs.wasm_runtime }}
       security: ${{ steps.classify.outputs.security }}
@@ -2042,7 +2043,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     needs: [changes, wasm]
-    if: github.ref_type != 'tag' && needs.changes.outputs.webapp_browser == 'true'
+    if: github.ref_type != 'tag' && needs.changes.outputs.webkit_e2e == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -2217,6 +2218,14 @@ jobs:
           '${{ needs.changes.result }}'
           '${{ needs.changes.outputs.webapp_browser }}'
           'webapp-browser=${{ needs.webapp-browser.result }}'
+
+      # A pull request that changes only Vitest-only inputs also skips WebKit E2E.
+      - name: Verify WebKit E2E job
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.changes.outputs.webkit_e2e }}'
           'webapp-webkit-e2e=${{ needs.webapp-webkit-e2e.result }}'
 
       - name: Verify WASM runtime jobs

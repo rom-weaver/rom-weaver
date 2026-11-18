@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -15,15 +15,24 @@ const SUITE_ENTRY = /\.test\.mjs$/;
 // Mirrors `test.include` in packages/rom-weaver-webapp/vitest.unit.config.mjs.
 const UNIT_SUITE_DIR = "packages/rom-weaver-webapp/tests/unit";
 const UNIT_SUITE_ENTRY = /\.test\.tsx?$/;
+// What `webapp-webkit-e2e` runs: the E2E runner, the dev server it spawns, and
+// the Vite config and `src/webapp/main.tsx` app entry that server loads in dev mode.
+const WEBKIT_E2E_ENTRIES = [
+  "packages/rom-weaver-webapp/scripts/run-webapp-e2e.mjs",
+  "packages/rom-weaver-webapp/scripts/dev-server.mjs",
+  "packages/rom-weaver-webapp/vite.config.mjs",
+  "packages/rom-weaver-webapp/src/webapp/main.tsx",
+];
 
 const PARSEABLE = /\.(?:mjs|js|ts|tsx)$/;
 const RESOLVE_EXTENSIONS = ["", ".ts", ".tsx", ".mjs", ".js", "/index.ts", "/index.mjs"];
 
-// Static and dynamic imports, plus the `new URL(..., import.meta.url)` form the
-// suite uses to reach wasm modules and the Rust fixture trees. Both are real
-// edges: editing what they point at changes what the suite observes.
+// Static, side-effect, and dynamic imports, plus the `new URL(..., import.meta.url)`
+// form the suite uses to reach wasm modules and the Rust fixture trees. All are
+// real edges: editing what they point at changes what the suite observes.
 const REFERENCE_PATTERNS = [
   /(?:^|[\s;{(])(?:import|export)\s[^"';]*?from\s*["']([^"']+)["']/g,
+  /(?:^|[\s;{(])import\s*["']([^"']+)["']/g,
   /\bimport\s*\(\s*["']([^"']+)["']/g,
   /\bnew URL\(\s*["']([^"']+)["']\s*,\s*import\.meta\.url\s*\)/g,
 ];
@@ -59,7 +68,10 @@ function reachableFiles(suiteDir = SUITE_DIR, suiteEntry = SUITE_ENTRY, recursiv
     .filter((name) => suiteEntry.test(name))
     .map((name) => `${suiteDir}/${name}`);
   assert.ok(entries.length > 0, `${suiteDir} has no test entry points`);
+  return importClosure(entries);
+}
 
+function importClosure(entries) {
   const seen = new Set(entries);
   const queue = [...entries];
   while (queue.length > 0) {
@@ -67,7 +79,10 @@ function reachableFiles(suiteDir = SUITE_DIR, suiteEntry = SUITE_ENTRY, recursiv
     if (!PARSEABLE.test(file) || !existsSync(join(repoRoot, file))) continue;
     for (const specifier of references(readFileSync(join(repoRoot, file), "utf8"))) {
       const target = resolveReference(file, specifier);
-      if (seen.has(target)) continue;
+      // A directory URL (`new URL("..", import.meta.url)`) is a root other paths
+      // resolve against, not a file the run reads.
+      if (seen.has(target) || statSync(join(repoRoot, target), { throwIfNoEntry: false })?.isDirectory())
+        continue;
       seen.add(target);
       queue.push(target);
     }
@@ -123,5 +138,25 @@ test("every crate file the webapp unit suite reads selects the webapp", () => {
     [],
     `these are reachable from ${UNIT_SUITE_DIR} but do not select the webapp; ` +
       "widen SHARED_CASE_TABLE in scripts/ci/classify-changes.mjs",
+  );
+});
+
+// A pull request whose webapp changes are all Vitest-only inputs skips WebKit
+// E2E, so a file the E2E run reads that the classifier counts as Vitest-only
+// could change without WebKit ever running it.
+test("every file the WebKit E2E run reads selects webapp-webkit-e2e", () => {
+  const reachable = importClosure(WEBKIT_E2E_ENTRIES);
+  assert.ok(
+    reachable.includes("packages/rom-weaver-webapp/tests/wasm/stored-zip-fixture.mjs"),
+    "the walk should follow the E2E runner's imports into tests/",
+  );
+  const skipped = reachable.filter(
+    (path) => classifyChanges([path], false, "pull_request").webkit_e2e !== true,
+  );
+  assert.deepEqual(
+    skipped,
+    [],
+    "a pull request that changes only these skips webapp-webkit-e2e although the E2E run reads them; " +
+      "narrow isVitestOnlyInput in scripts/ci/classify-changes.mjs",
   );
 });
