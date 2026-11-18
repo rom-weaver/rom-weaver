@@ -97,27 +97,36 @@ test("a push reuses ARM WASM only when its range leaves the image plumbing alone
   assert.equal(classify({ ...repo, head, eventName: "push", headRef: "" }).outputs.docker_arm_wasm_cache, "false");
 });
 
-test("a ci.yml edit compiles ARM WASM only when it reaches the docker job", (t) => {
+test("a ci.yml or local action edit compiles ARM WASM only when it reaches the docker job", (t) => {
   const repo = history(t);
-  const workflow = join(repo.cwd, ".github", "workflows", "ci.yml");
-  mkdirSync(dirname(workflow), { recursive: true });
-  const commitWorkflow = ({ header = "on: push", docker = "x", other = "x" }) => {
-    writeFileSync(
-      workflow,
-      `name: CI\n${header}\njobs:\n  changes:\n    runs-on: x\n  docker:\n    runs-on: ${docker}\n\n  # The next job.\n  other:\n    runs-on: ${other}\n`,
-    );
+  const commitFiles = (files) => {
+    for (const [path, body] of Object.entries(files)) {
+      mkdirSync(dirname(join(repo.cwd, path)), { recursive: true });
+      writeFileSync(join(repo.cwd, path), body);
+    }
     git(repo.cwd, "add", "-A");
     git(repo.cwd, "commit", "-q", "-m", "ci");
     return git(repo.cwd, "rev-parse", "HEAD");
   };
-  const base = commitWorkflow({});
+  const workflow = ({ header = "on: push", docker = "x", other = "x" } = {}) => ({
+    ".github/workflows/ci.yml": `name: CI\n${header}\njobs:\n  changes:\n    runs-on: x\n  docker:\n    runs-on: x\n  # A comment at job-key indentation.\n    steps:\n      - uses: ./.github/actions/extra\n        with:\n          arch: ${docker}\n\n  # The next job.\n  other:\n    runs-on: ${other}\n`,
+  });
+  const extraAction = { ".github/actions/extra/action.yml": "name: y\n" };
+  const uncalledAction = { ".github/actions/uncalled/action.yml": "name: y\n" };
+  const base = commitFiles({
+    ...workflow(),
+    ".github/actions/extra/action.yml": "name: x\n",
+    ".github/actions/uncalled/action.yml": "name: x\n",
+  });
   for (const [edit, expected] of [
-    [{ other: "y" }, "true"],
-    [{ docker: "y" }, "false"],
-    [{ header: "on: pull_request" }, "false"],
+    [workflow({ other: "y" }), "true"],
+    [workflow({ docker: "y" }), "false"],
+    [workflow({ header: "on: pull_request" }), "false"],
+    [extraAction, "false"],
+    [uncalledAction, "true"],
   ]) {
     git(repo.cwd, "reset", "-q", "--hard", base);
-    const head = commitWorkflow(edit);
+    const head = commitFiles(edit);
     for (const eventName of ["pull_request", "push"])
       assert.equal(
         classify({ ...repo, base, head, eventName, headRef: "" }).outputs.docker_arm_wasm_cache,
@@ -125,13 +134,16 @@ test("a ci.yml edit compiles ARM WASM only when it reaches the docker job", (t) 
         `${eventName} ${JSON.stringify(edit)}`,
       );
   }
-  // A base without the docker job, or without the workflow, counts as a change.
+  // A commit without the docker job, or without the workflow, counts as a change.
   git(repo.cwd, "reset", "-q", "--hard", base);
-  writeFileSync(workflow, "name: CI\njobs:\n  other:\n    runs-on: x\n");
-  git(repo.cwd, "commit", "-q", "-am", "no docker job");
-  const noDockerJob = git(repo.cwd, "rev-parse", "HEAD");
+  const noDockerJob = commitFiles({ ".github/workflows/ci.yml": "name: CI\njobs:\n  other:\n    runs-on: x\n" });
   for (const missing of [noDockerJob, repo.head])
     assert.equal(classify({ ...repo, base: missing, head: base }).outputs.docker_arm_wasm_cache, "false", missing);
+  const actionWithoutDockerJob = commitFiles(uncalledAction);
+  assert.equal(
+    classify({ ...repo, base: noDockerJob, head: actionWithoutDockerJob }).outputs.docker_arm_wasm_cache,
+    "false",
+  );
 });
 
 test("a push without a known earlier commit compiles ARM WASM", (t) => {

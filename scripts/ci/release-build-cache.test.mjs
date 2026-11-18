@@ -41,12 +41,9 @@ test("image compiler and CI plumbing edits force ARM source builds", () => {
   assert.equal(canReuseArmDockerWasm(null), false);
   assert.equal(canReuseArmDockerWasm([]), true);
   assert.equal(canReuseArmDockerWasm(["Cargo.toml", "Cargo.lock", "crates/rom-weaver-cli/Cargo.toml"]), true);
-  // `.dockerignore` keeps `.github/` out of the image; other workflows and actions cannot change it.
-  for (const path of [
-    ".github/workflows/release.yml",
-    ".github/actions/setup-build-env/action.yml",
-    ".github/dependabot.yml",
-  ]) assert.equal(canReuseArmDockerWasm(["CHANGELOG.md", path]), true, path);
+  // `.dockerignore` keeps `.github/` out of the image; other workflows cannot change it.
+  for (const path of [".github/workflows/release.yml", ".github/dependabot.yml"])
+    assert.equal(canReuseArmDockerWasm(["CHANGELOG.md", path]), true, path);
 });
 
 test("the raw diff controls cache eligibility even for full release coverage", () => {
