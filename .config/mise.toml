@@ -82,7 +82,7 @@ CXX = { value = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccac
 # CCACHE_BASEDIR MUST be absolute or empty, including outside a Git checkout.
 # CCACHE_NOHASHDIR allows reuse but debug paths can name an earlier build's staged sources.
 #
-# CMake records the launcher at configure time, so existing build trees retain their setting.
+# libarchive's build script passes the launcher on every configure, so existing build trees follow it.
 CMAKE_C_COMPILER_LAUNCHER = { value = "{{ exec(command='command -v ccache || command -v sccache || true') | trim }}", tools = true }
 CCACHE_BASEDIR = "{{ exec(command='d=$(git -C \\'' ~ config_root ~ '\\' rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && dirname \"$d\" || true') | trim }}"
 CCACHE_NOHASHDIR = "1"
