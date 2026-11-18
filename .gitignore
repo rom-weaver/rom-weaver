@@ -18,6 +18,7 @@
 /docs/completions/
 
 # Generated ROM identify data from pinned Libretro and OpenGood revisions
+/crates/rom-weaver-cli/data/identify/.v1.lock
 /crates/rom-weaver-cli/data/identify/v1/*.pack
 /crates/rom-weaver-cli/data/identify/v1/*.pack.br
 /crates/rom-weaver-cli/data/identify/v1/catalog.json

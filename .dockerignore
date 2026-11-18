@@ -16,6 +16,7 @@ target/*
 # it inside the image or copy it from `target/` with `IDENTIFY_DATA=prebuilt`.
 # Left in, a pack change would invalidate the `COPY . .` layer.
 crates/rom-weaver-cli/data/identify/v1/*
+crates/rom-weaver-cli/data/identify/.v1.lock
 prototype
 third_party
 *.log
