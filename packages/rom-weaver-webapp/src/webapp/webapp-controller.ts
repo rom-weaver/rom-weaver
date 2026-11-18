@@ -16,7 +16,7 @@ import {
 } from "./settings/settings-state.ts";
 import { setThemePreference } from "./theme.ts";
 import { APP_BASE_PATH } from "./app-base.ts";
-import { matchAppRoute, readAppBaseUrl, VIEW_TO_ROUTE_SLUG } from "./app-routes.ts";
+import { BETA_WORKFLOW_VIEWS, matchAppRoute, readAppBaseUrl, VIEW_TO_ROUTE_SLUG } from "./app-routes.ts";
 import { createStore } from "./vanilla-store.ts";
 import {
   type CompressSessionState,
@@ -64,7 +64,7 @@ const normalizeWorkflowView = (value: unknown): WebappView | null => {
   return VALID_WORKFLOW_VIEWS.includes(normalized as WebappView) ? (normalized as WebappView) : null;
 };
 
-const isBetaWorkflowView = (view: WebappView): boolean => view === "save-editor" || view === "playlist";
+const isBetaWorkflowView = (view: WebappView): boolean => BETA_WORKFLOW_VIEWS.has(view);
 
 const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsState): WebappView =>
   !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;

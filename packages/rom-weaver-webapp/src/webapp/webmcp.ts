@@ -2,7 +2,9 @@ import { getAgentWorkflow } from "./agent/workflow-registry.ts";
 import { configureWorkflowControl, executeWorkflowControl, getWorkflowControls } from "./agent/workflow-controls.ts";
 import { createLogger } from "../lib/logging.ts";
 import { ROM_WEAVER_FORMAT_METADATA } from "../wasm/generated/rom-weaver-format-metadata.ts";
+import { BETA_WORKFLOW_VIEWS } from "./app-routes.ts";
 import { DOC_SOURCES } from "./docs-routing.mjs";
+import type { WebappView } from "./webapp-state-types.ts";
 import { WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
 type Tool = {
@@ -33,11 +35,14 @@ const workflowPages = {
   test: "play-rom",
 };
 const routes = [
-  ...["rom-save-editor", "create-m3u-playlist"].map((slug) => ({
-    slug,
-    title: slug,
-    description: "Beta browser workflow",
-  })),
+  ...Object.entries(workflowPages)
+    .filter(([view]) => BETA_WORKFLOW_VIEWS.has(view as WebappView))
+    .map(([, slug]) => slug)
+    .map((slug) => ({
+      slug,
+      title: slug,
+      description: "Beta browser workflow",
+    })),
   ...Object.values(WORKFLOW_SEO_ROUTES).map(({ slug, title, description }) => ({ slug, title, description })),
   ...DOC_SOURCES.map(({ slug, label }) => ({ slug, title: label, description: label })),
 ];
@@ -93,7 +98,7 @@ export function installWebMcp(actions?: WorkflowActions) {
         const slug = stringArgument(input, "slug");
         if (!routes.some((route) => route.slug === slug)) throw new Error("Unknown page slug");
         const betaView = Object.entries(workflowPages).find(
-          ([view, route]) => (view === "save-editor" || view === "playlist") && route === slug,
+          ([view, route]) => BETA_WORKFLOW_VIEWS.has(view as WebappView) && route === slug,
         )?.[0];
         if (betaView && actions?.openBetaWorkflow) {
           actions.openBetaWorkflow(betaView);

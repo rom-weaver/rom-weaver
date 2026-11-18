@@ -65,12 +65,6 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     slug: "ppf-undo",
     title: `Undo PPF patches online | ${SITE_NAME}`,
   }),
-  playlist: Object.freeze({
-    description:
-      "Make an .m3u playlist for a multi-disc game in your browser so emulators can change discs. In Chrome and Edge, save it into the game's folder and rename the discs. No uploads.",
-    slug: "create-m3u-playlist",
-    title: `Make M3U playlists for multi-disc games | ${SITE_NAME}`,
-  }),
   test: Object.freeze({
     description:
       "Test a ROM or patched game online with EmulatorJS. Play supported NES, SNES, Game Boy, GBA, N64, DS, and PlayStation games locally. No uploads.",
@@ -119,6 +113,7 @@ const activeWorkflowEntry = (view, workflowEntry) =>
 
 // Beta tools stay out of WORKFLOW_SEO_ROUTES (no sitemap, no Markdown twin) but still need their own page title.
 const BETA_ROUTE_TITLES = Object.freeze({
+  "create-m3u-playlist": `Make playlist | ${SITE_NAME}`,
   "rom-save-editor": `Save Editor | ${SITE_NAME}`,
   "whats-new": `What's new | ${SITE_NAME}`,
 });

@@ -1360,7 +1360,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "settings.betaToolsEnabled": msg({
     id: "settings.betaToolsEnabled",
-    message: "Enable beta tools (Save Editor)",
+    message: "Enable beta tools (Save Editor, Make playlist)",
   }),
   "settings.accent": msg({ id: "settings.accent", message: "Accent" }),
   "settings.weavePackage": msg({ id: "settings.weavePackage", message: "What a shared weave includes" }),

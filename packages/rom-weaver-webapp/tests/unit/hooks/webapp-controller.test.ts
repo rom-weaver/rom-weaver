@@ -84,10 +84,12 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.selectView("identify")).toBe("identify");
     expect(controller.selectView("ppf-undo")).toBe("ppf-undo");
     expect(controller.selectView("save-editor")).toBe("patcher");
+    expect(controller.selectView("playlist")).toBe("patcher");
     expect(controller.getState().currentView).toBe("patcher");
 
     controller.updateDraftSetting("betaToolsEnabled", true);
     expect(controller.saveDraftSettings()).toBe(true);
+    expect(controller.selectView("playlist")).toBe("playlist");
     expect(controller.selectView("save-editor")).toBe("save-editor");
     expect(controller.getState().currentView).toBe("save-editor");
     expect(controller.selectView("identify")).toBe("identify");
@@ -97,6 +99,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.saveDraftSettings()).toBe(true);
     expect(controller.getState().currentView).toBe("identify");
     expect(controller.selectView("save-editor")).toBe("patcher");
+    expect(controller.selectView("playlist")).toBe("patcher");
   });
 
   it("opens Trim without beta tools", () => {
