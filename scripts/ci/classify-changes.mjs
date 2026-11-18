@@ -521,7 +521,7 @@ export function narrowSelection(whole, since) {
 // runs on the nightly schedule, manual runs, and the release pull request.
 // `qualitySignals` - the advisory quality-analysis jobs - drops the release pull
 // request: the gate never waits on them, the nightly already runs them, and their
-// ~40 minutes on two runners queue the jobs the release pull request does wait on.
+// up to 90 minutes on two runners queue the jobs the release pull request does wait on.
 // An absent event keeps every tier, the same fail-open default as the classifier.
 export function coverageTiers(eventName, headRef = undefined) {
   const releasePullRequest = isReleasePullRequest(eventName, headRef);
