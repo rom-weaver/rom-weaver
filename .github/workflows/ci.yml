@@ -105,10 +105,12 @@ jobs:
       # successful nightly as their baseline. The native matrix uses it to avoid
       # rebuilding unchanged targets. This step runs before the classifier, so the
       # head-ref prefix here MUST match scripts/ci/release-pr.mjs. Only the mutation lane
-      # uses the last completed nightly instead: it times out far more often than the rest
-      # fail, and a stuck baseline would grow its diff every night. The other consumers MUST
-      # keep the last successful one, or a red nightly would hide its untested changes.
-      - name: Find the last successful nightly
+      # uses another baseline: the newest completed nightly whose mutation job ran, even
+      # if it failed or timed out (scripts/ci/mutation-base.mjs). That job times out far
+      # more often than the rest fail, and a stuck baseline would grow its diff every
+      # night. The other consumers MUST keep the last successful one, or a red nightly
+      # would hide its untested changes.
+      - name: Find the nightly baselines
         id: last-nightly
         if: >-
           github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
@@ -116,12 +118,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          last_run() {
-            gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event schedule \
-              --branch main --status "$1" --limit 1 --json headSha --jq '.[0].headSha // ""'
-          }
-          echo "sha=$(last_run success)" >> "$GITHUB_OUTPUT"
-          echo "mutation_sha=$(last_run completed)" >> "$GITHUB_OUTPUT"
+          echo "sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
+            --event schedule --branch main --status success --limit 1 \
+            --json headSha --jq '.[0].headSha // ""')" >> "$GITHUB_OUTPUT"
+          node scripts/ci/mutation-base.mjs
 
       # A pull request run tests the merge commit, which the API does not report,
       # so the tested SHA rides in an artifact name that a later run can read

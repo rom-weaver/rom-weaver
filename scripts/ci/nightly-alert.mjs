@@ -53,14 +53,14 @@ export function nightlyOutcome(needs) {
 const advisoryJobs = (jobs) => jobs.filter((job) => job.name.startsWith(ADVISORY_JOB_PREFIX));
 
 // `failing` when any advisory job failed or was cancelled, `recovered` when at least one passed and
-// none failed, and `unknown` when none ran (a night with no Rust input change).
-export function advisoryOutcome(jobs) {
+// none failed, and `unknown` when none ran (a night where `quality-plan.mjs` selected no lane).
+function advisoryOutcome(jobs) {
   const signals = advisoryJobs(jobs);
   if (signals.some((job) => ADVISORY_BAD_CONCLUSIONS.has(job.conclusion))) return "failing";
   return signals.some((job) => job.conclusion === "success") ? "recovered" : "unknown";
 }
 
-export function advisoryJobLines(jobs) {
+function advisoryJobLines(jobs) {
   return advisoryJobs(jobs)
     .filter((job) => ADVISORY_BAD_CONCLUSIONS.has(job.conclusion))
     .map((job) => `${job.name}: ${job.conclusion}`);
@@ -93,11 +93,11 @@ export const ADVISORY_TITLE = "Nightly advisory quality jobs are not passing";
 export const ADVISORY_LABEL = "nightly-quality-advisory";
 const ADVISORY_LABEL_DESCRIPTION = "Opened and closed by the scheduled CI run for advisory quality jobs";
 
-export function advisoryFailureText({ runUrl, sha, repoUrl, failed }) {
-  return `${runLine({ runUrl, sha, repoUrl })}\n\nAdvisory jobs that did not pass (they do not fail the nightly; \`cancelled\` means the job hit its timeout):\n${failed.map((line) => `- ${line}`).join("\n")}`;
+function advisoryFailureText({ runUrl, sha, repoUrl, failed }) {
+  return `${runLine({ runUrl, sha, repoUrl })}\n\nAdvisory jobs that did not pass (they do not fail the nightly; \`cancelled\` usually means the job hit its timeout):\n${failed.map((line) => `- ${line}`).join("\n")}`;
 }
 
-// The two issues share one lifecycle and differ only in how they are found and worded.
+// The two issues share one lifecycle and differ only in title, label, and wording.
 const NIGHTLY_TRACKER = {
   title: ALERT_TITLE,
   label: ALERT_LABEL,
@@ -128,12 +128,13 @@ export async function listRunJobs({ api, repo, runId }) {
 }
 
 // The job names only add detail, so a failed lookup must not keep a red nightly from being reported.
-export async function failedJobsOrNone({ api, repo, runId, warn }) {
+// It returns undefined instead: the alert goes out without names and the advisory issue stays as it was.
+async function listRunJobsOrWarn({ api, repo, runId, warn }) {
   try {
-    return failedJobNames(await listRunJobs({ api, repo, runId }));
+    return await listRunJobs({ api, repo, runId });
   } catch (error) {
-    warn(`listing the run's jobs failed; reporting without them: ${error.message}`);
-    return [];
+    warn(`listing the run's jobs failed; reporting without job names and leaving the advisory issue as it was: ${error.message}`);
+    return undefined;
   }
 }
 
@@ -168,23 +169,16 @@ export async function runAlert({ env, api, paginate, warn, notice }) {
     }
   }
   const run = { runUrl: `${repoUrl}/actions/runs/${runId}`, sha, repoUrl };
-  const failed = outcome === "failing" ? await failedJobsOrNone({ api, repo, runId, warn }) : [];
+  const jobs = outcome === "unknown" ? undefined : await listRunJobsOrWarn({ api, repo, runId, warn });
+  const failed = outcome === "failing" && jobs ? failedJobNames(jobs) : [];
   const summary = await reconcile({ api, paginate, repo, outcome, run, failed, warn });
-  if (outcome === "unknown") return `nightly ${outcome}: ${summary}`;
-  const advisory = await reconcileAdvisory({ api, paginate, repo, runId, run, warn });
+  if (!jobs) return `nightly ${outcome}: ${summary}`;
+  const advisory = await reconcileAdvisory({ api, paginate, repo, run, jobs, warn });
   return `nightly ${outcome}: ${summary}${advisory ? `; advisory: ${advisory}` : ""}`;
 }
 
-// The advisory lane never changes the nightly's own outcome, and a failed job lookup must not stop
-// the alert that already ran: it warns and leaves the advisory issue as it was.
-async function reconcileAdvisory({ api, paginate, repo, runId, run, warn }) {
-  let jobs;
-  try {
-    jobs = await listRunJobs({ api, repo, runId });
-  } catch (error) {
-    warn(`listing the run's jobs failed; leaving the advisory issue as it was: ${error.message}`);
-    return undefined;
-  }
+// The advisory lane never changes the nightly's own outcome.
+async function reconcileAdvisory({ api, paginate, repo, run, jobs, warn }) {
   const outcome = advisoryOutcome(jobs);
   if (outcome === "unknown") return undefined;
   return reconcile({
