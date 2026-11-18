@@ -199,18 +199,47 @@ const EMPTY = {
   full: false,
 };
 
-// Docker-only compiler inputs are outside the module fingerprint. ARM MUST
-// compile them before merge, including when the diff base is unavailable.
-export function canReuseArmDockerWasm(paths) {
-  return (
-    paths !== null &&
-    !paths.some(
-      (path) =>
-        path === "packages/rom-weaver-webapp/Dockerfile" ||
-        path === ".dockerignore" ||
-        path.startsWith(".github/"),
-    )
-  );
+const CI_WORKFLOW = ".github/workflows/ci.yml";
+const ARM_IMAGE_FILES = new Set(["packages/rom-weaver-webapp/Dockerfile", ".dockerignore"]);
+const LOCAL_ACTION_PATH = /^\.github\/actions\/([^/]+)\//u;
+// A step line such as `- uses: ./.github/actions/<name>`, optionally quoted.
+const LOCAL_ACTION_USE = /^\s*(?:-\s+)?uses:\s*["']?\.\/\.github\/actions\/([^/\s"'#]+)/gmu;
+
+// Docker-only compiler inputs are outside the module fingerprint, so ARM MUST
+// compile them before merge. In `.github/` only the `ci.yml` lines before
+// `jobs:`, its `docker` job, and the local actions that job calls reach the image.
+// Without a readable head `docker` job, any `ci.yml` or action change compiles.
+export function canReuseArmDockerWasm(paths, base, head) {
+  if (paths === null || paths.some((path) => ARM_IMAGE_FILES.has(path))) return false;
+  const isWorkflowChanged = paths.includes(CI_WORKFLOW);
+  const changedActions = new Set(paths.map((path) => LOCAL_ACTION_PATH.exec(path)?.[1]).filter(Boolean));
+  if (!isWorkflowChanged && changedActions.size === 0) return true;
+  const headInputs = ciDockerJobInputs(head);
+  if (headInputs === null) return false;
+  if (isWorkflowChanged && ciDockerJobInputs(base) !== headInputs) return false;
+  return ![...headInputs.matchAll(LOCAL_ACTION_USE)].some(([, name]) => changedActions.has(name));
+}
+
+// The lines before `jobs:` plus the `docker` job (it ends at the next job key);
+// null when the commit, file, or job is missing.
+function ciDockerJobInputs(commit) {
+  if (!commit) return null;
+  let text;
+  try {
+    text = execFileSync("git", ["show", `${commit}:${CI_WORKFLOW}`], {
+      encoding: "utf8",
+      maxBuffer: Infinity,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return null;
+  }
+  const lines = text.split("\n");
+  const jobs = lines.indexOf("jobs:");
+  const start = lines.indexOf("  docker:");
+  if (jobs < 0 || start < 0) return null;
+  const end = lines.findIndex((line, index) => index > start && /^ {2}[^\s#]/u.test(line));
+  return [...lines.slice(0, jobs), ...lines.slice(start, end < 0 ? undefined : end)].join("\n");
 }
 
 /** Paths that differ between two commits. A move counts at both paths, because rename pairing is off. */
