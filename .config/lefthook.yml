@@ -5,8 +5,7 @@ pre-commit:
   commands:
     # Globs select checks from staged paths; each selected check runs over its full workspace.
     # CI adds tests and builds according to its change classification.
-    # MISE_ENV=hook loads .config/mise.hook.toml: the Cargo checks build workspace crates
-    # incrementally, since a commit edits them, and still take dependencies from sccache.
+    # MISE_ENV=hook loads .config/mise.hook.toml, which builds workspace crates incrementally.
     rust-format:
       glob: "*.rs"
       run: mise run fmt

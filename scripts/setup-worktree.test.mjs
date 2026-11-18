@@ -33,8 +33,7 @@ test("worktree primes do not restore an activated mise environment", () => {
   assert.match(source, /delete env\.__MISE_DIFF/);
 });
 
-// The hook builds incrementally; a prime without incremental state makes the
-// first Rust commit rebuild every workspace crate.
+// A prime without incremental state makes the first Rust commit rebuild every crate.
 test("worktree primes build incrementally like every primed hook command", async (t) => {
   const inherited = { MISE_ENV: process.env.MISE_ENV, __MISE_DIFF: process.env.__MISE_DIFF };
   t.after(() => {

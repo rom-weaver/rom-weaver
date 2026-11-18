@@ -1,7 +1,5 @@
 # Loaded only when MISE_ENV=hook: the pre-commit Cargo checks and setup-worktree's primes.
-# Any CARGO_INCREMENTAL value overrides Cargo's profiles, and sccache exits when it is 1.
-# Clearing it lets the dev profile build workspace crates incrementally, which sccache
-# passes through, while sccache still caches dependencies. `tools = true` MUST match
-# .config/mise.toml, whose tools-phase value would otherwise win.
+# Clearing CARGO_INCREMENTAL lets workspace crates build incrementally while sccache
+# still caches dependencies. `tools = true` MUST match .config/mise.toml.
 [env]
 CARGO_INCREMENTAL = { value = false, tools = true }
