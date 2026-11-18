@@ -30,6 +30,7 @@ const REPO_LINT_ONLY = {
   fuzz: "false",
   webapp: "false",
   webapp_browser: "false",
+  webkit_e2e: "false",
   lighthouse: "true",
   wasm_runtime: "false",
   security: "false",
@@ -59,6 +60,7 @@ test("documentation changes skip compiled stacks", () =>
     fuzz: "false",
     webapp: "false",
     webapp_browser: "false",
+    webkit_e2e: "false",
     lighthouse: "true",
     wasm_runtime: "false",
     security: "false",
@@ -162,6 +164,7 @@ test("Rust test-only changes select nothing but Rust", () => {
         fuzz: "false",
         webapp: "false",
         webapp_browser: "false",
+        webkit_e2e: "false",
         lighthouse: "true",
         wasm_runtime: "false",
         security: "false",
@@ -364,6 +367,7 @@ test("native package changes build every CLI platform", () => {
         fuzz: "false",
         webapp: "true",
         webapp_browser: "true",
+        webkit_e2e: "true",
         lighthouse: "true",
         wasm_runtime: "false",
         security: "false",
@@ -393,6 +397,7 @@ test("identify data build scripts select the stacks that run them", () => {
         fuzz: "false",
         webapp: "true",
         webapp_browser: "true",
+        webkit_e2e: "true",
         lighthouse: "true",
         wasm_runtime: "false",
         security: "false",
@@ -416,6 +421,7 @@ test("dependency and CI changes select their broader checks", () => {
     fuzz: "false",
     webapp: "true",
     webapp_browser: "true",
+    webkit_e2e: "true",
     lighthouse: "true",
     wasm_runtime: "true",
     security: "true",
@@ -436,6 +442,7 @@ test("dependency and CI changes select their broader checks", () => {
         fuzz: "true",
         webapp: "true",
         webapp_browser: "true",
+        webkit_e2e: "true",
         lighthouse: "true",
         wasm_runtime: "true",
         security: "true",
@@ -487,6 +494,7 @@ test("CI matrix helpers select their consumers", () => {
     fuzz: "false",
     webapp: "false",
     webapp_browser: "false",
+    webkit_e2e: "false",
     lighthouse: "false",
     wasm_runtime: "false",
     security: "false",
@@ -504,6 +512,7 @@ test("CI matrix helpers select their consumers", () => {
     fuzz: "false",
     webapp: "true",
     webapp_browser: "true",
+    webkit_e2e: "true",
     lighthouse: "false",
     wasm_runtime: "false",
     security: "false",
@@ -722,6 +731,35 @@ test("a published-guide-only pull request skips the browser suites, not static o
     const result = classifyFor("pull_request", "docs/how-to/apply-rom-patches.md", extra);
     assert.equal(result.webapp_browser, "true", extra);
   }
+});
+
+test("a pull request that changes only Vitest inputs skips WebKit E2E but not the browser suites", () => {
+  const vitestOnly = [
+    "packages/rom-weaver-webapp/tests/browser/identify-workflow.browser.test.js",
+    "packages/rom-weaver-webapp/tests/unit/docs-a11y-fixture.test.ts",
+    "packages/rom-weaver-webapp/tests/setup/browser-defines.js",
+    "packages/rom-weaver-webapp/vitest.browser.config.mjs",
+    "packages/rom-weaver-webapp/scripts/run-browser-tests.mjs",
+    "packages/rom-weaver-webapp/scripts/browser-test-durations.json",
+  ];
+  for (const path of vitestOnly) {
+    const result = classifyFor("pull_request", path);
+    assert.equal(result.webapp_browser, "true", path);
+    assert.equal(result.webkit_e2e, "false", path);
+    // Main and every other event keep WebKit for the same change.
+    for (const eventName of ["push", "workflow_dispatch", undefined])
+      assert.equal(classifyFor(eventName, path).webkit_e2e, "true", `${eventName} ${path}`);
+  }
+  // Anything the E2E runner loads brings WebKit back, including fixtures that
+  // select only the WASM runtime.
+  for (const extra of [
+    "packages/rom-weaver-webapp/src/webapp/docs-routing.mjs",
+    "packages/rom-weaver-webapp/scripts/run-webapp-e2e.mjs",
+    "packages/rom-weaver-webapp/tests/wasm/stored-zip-fixture.mjs",
+    "tests/fixtures/vcdiff/secondary-source.bin",
+    "crates/rom-weaver-core/src/lib.rs",
+  ])
+    assert.equal(classifyFor("pull_request", ...vitestOnly, extra).webkit_e2e, "true", extra);
 });
 
 test("webapp assets stored under docs/ build the webapp", () => {

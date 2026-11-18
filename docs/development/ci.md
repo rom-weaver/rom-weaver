@@ -119,8 +119,8 @@ Release Please rewrites the branch and the body on every dispatch, so the script
 ## `ci.yml` - the required gate
 
 ```text
-changes ── changed paths -> rust / rust_lint / webapp / webapp_browser / wasm_runtime /
-        │                    security / repo_lint / fuzz / docker legs
+changes ── changed paths -> rust / rust_lint / webapp / webapp_browser / webkit_e2e /
+        │                    wasm_runtime / security / repo_lint / fuzz / docker legs
         └── (same job) identify-data artifact ── shared packs for selected build and deploy jobs
 
              ┌── rust-host ─────┐
@@ -182,7 +182,8 @@ security ── advisories (warn only, always green)
   - Rust and vendored C changes select Rust, webapp integration, and the direct WASM browser suite. Rust test, bench, and example sources select the Rust jobs alone, because they enter neither the WASM module nor the release binary. JSON case tables directly in a crate's `tests/fixtures/` also select `webapp-static`, whose unit tests read them, but not `webapp-browser` or `webapp-webkit-e2e`.
   - Browser runtime, worker, and storage changes also select that direct WASM suite; UI-only changes do not. Webapp-only changes restore the exact cached WASM module.
   - Dependency manifests select the advisory scanners. Workflows, composite actions, shell scripts, Dockerfiles, and Markdown select the plumbing lint.
-  - Published documentation also selects the webapp checks because Vite renders those pages. A pull request that changes only published guide Markdown keeps `webapp-static` and Chromium `webapp-e2e` (rendering, accessibility, links) but skips `webapp-browser` and `webapp-webkit-e2e` through the `webapp_browser` flag; screenshots, samples, and schemas under `docs/` are webapp assets and keep both. Unpublished notes select repository lint unless their location also matches a Rust, package, or build-input rule. `docs/reference/cli.md` also selects Rust, because a CLI smoke test compares it with `extract --help`.
+  - Published documentation also selects the webapp checks because Vite renders those pages. A pull request that changes only published guide Markdown keeps `webapp-static` and Chromium `webapp-e2e` (rendering, accessibility, links) but skips `webapp-browser` and `webapp-webkit-e2e` through the `webapp_browser` flag; screenshots, samples, and schemas under `docs/` are webapp assets and keep both.
+  - A pull request whose webapp changes are all Vitest-only inputs skips `webapp-webkit-e2e` through the `webkit_e2e` flag. Those inputs are `tests/browser/`, `tests/unit/`, `tests/setup/`, the `vitest.*.mjs` configs, `scripts/run-browser-tests.mjs`, and `scripts/browser-test-durations.json`. The E2E runner never loads them, and each skip frees two of the five macOS runners. Every other event keeps WebKit. Unpublished notes select repository lint unless their location also matches a Rust, package, or build-input rule. `docs/reference/cli.md` also selects Rust, because a CLI smoke test compares it with `extract --help`.
   - Crate Markdown (`crates/**/*.md` outside `vendor/`) selects Rust only: no crate embeds it, so it is not a WASM compiler input. Crate LICENSE files stay inputs because the module's attribution bundle copies them.
   - `tests/fixtures/` selects Rust as well as the WASM runtime suite. `fuzz/` selects `rust-lint` alone, which then builds the separate fuzz workspace. `design/` selects the webapp checks, whose `webapp-static` lint runs `brand:check`.
   - Manual runs and changes to CI, coverage, the toolchain, or the classifier run everything. CI script tests run in `repo-lint`, so a change to one does not select compiled stacks.

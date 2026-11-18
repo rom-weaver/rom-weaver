@@ -111,6 +111,14 @@ const isLighthouseInput = (path) =>
   path.startsWith("design/") ||
   /^(?:Cargo\.(?:toml|lock)|package(?:-lock)?\.json)$/.test(path);
 
+// Webapp files that only the Vitest suites load. The E2E runner never reads them,
+// so a change limited to them cannot change a WebKit E2E result.
+const isVitestOnlyInput = (path) =>
+  path.startsWith(WEBAPP_PACKAGE) &&
+  /^(?:tests\/(?:browser|setup|unit)\/|vitest\.[^/]+\.mjs$|scripts\/run-browser-tests(?:\.test)?\.mjs$|scripts\/browser-test-durations\.json$)/.test(
+    path.slice(WEBAPP_PACKAGE.length),
+  );
+
 // The real runtime lifecycle suite imports these host helpers outside the worker layers.
 // The import-graph test MUST reject newly reachable helpers missing from this list.
 const WASM_RUNTIME_SUPPORT = new Set([
@@ -160,9 +168,12 @@ const EMPTY = {
   // The fuzz workspace build check inside `rust-lint`.
   fuzz: false,
   webapp: false,
-  // `webapp-browser` and `webapp-webkit-e2e`. A pull request that changes only
-  // published guide Markdown keeps the static checks and Chromium E2E.
+  // `webapp-browser`. A pull request that changes only published guide
+  // Markdown keeps the static checks and Chromium E2E.
   webapp_browser: false,
+  // `webapp-webkit-e2e`, on the scarce macOS runners: `webapp_browser` minus
+  // pull requests that change only Vitest-only inputs.
+  webkit_e2e: false,
   // The `webapp-lighthouse` job. Every event but a pull request
   // audits; a pull request audits when a bundle input changed.
   lighthouse: false,
@@ -213,13 +224,18 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     return Object.fromEntries(Object.keys(result).map((key) => [key, true]));
   }
 
-  // Whether any path other than published guide Markdown or a shared case table
-  // selected the webapp; the jobs `webapp_browser` gates cannot observe those.
-  // `webapp` is cleared per path so each path's own selection is visible.
+  // `browserInput`: a path other than published guide Markdown or a shared case
+  // table selected the webapp; the jobs `webapp_browser` gates cannot observe those.
+  // `webkitInput`: a path outside the Vitest-only inputs selected the webapp or
+  // the WASM runtime, which WebKit E2E can observe. `webapp` and `wasm_runtime`
+  // are cleared per path so each path's own selection is visible.
   let browserInput = false;
+  let webkitInput = false;
   for (const path of paths.filter(Boolean)) {
     const webappBefore = result.webapp;
+    const wasmRuntimeBefore = result.wasm_runtime;
     result.webapp = false;
+    result.wasm_runtime = false;
     if (
       /^\.github\/workflows\/(?:ci|coverage)\.yml$/.test(path) ||
       /^\.github\/actions\/(?:setup-build-env|cargo-profile-hash|wasm-cache|webapp-build-cache)\//.test(path) ||
@@ -397,10 +413,14 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     )
       result.repo_lint = true;
 
-    if (result.webapp && !PUBLISHED_DOCS.has(path) && !SHARED_CASE_TABLE.test(path))
+    if (result.webapp && !PUBLISHED_DOCS.has(path) && !SHARED_CASE_TABLE.test(path)) {
       browserInput = true;
+      if (!isVitestOnlyInput(path)) webkitInput = true;
+    }
+    if (result.wasm_runtime && !isVitestOnlyInput(path)) webkitInput = true;
     if (isLighthouseInput(path)) result.lighthouse = true;
     result.webapp ||= webappBefore;
+    result.wasm_runtime ||= wasmRuntimeBefore;
   }
 
   if (result.full) {
@@ -424,6 +444,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
   result.webapp_browser =
     result.webapp &&
     (eventName !== "pull_request" || browserInput || result.wasm_runtime || result.full);
+  result.webkit_e2e = result.webapp_browser && (eventName !== "pull_request" || webkitInput || result.full);
 
   // Only a pull request narrows an image to one architecture. Every other event
   // - a push to main, whose legs feed the `nightly` manifest lists, and a
