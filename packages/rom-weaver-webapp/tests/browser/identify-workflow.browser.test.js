@@ -532,7 +532,13 @@ test.each(["Pokemon Emerald", "Metroid Fusion"])(
     input.blur();
 
     renderRequest(2, nextTitle);
-    await waitFor(() => searchExpectedRomByName.mock.calls.length === 2 && !host.querySelector('[aria-busy="true"]'));
+    // The handoff calls the search before React commits the new text. The call count alone can pass before the text renders.
+    await waitFor(
+      () =>
+        searchExpectedRomByName.mock.calls.length === 2 &&
+        !host.querySelector('[aria-busy="true"]') &&
+        host.querySelector('[role="option"]')?.textContent.includes(`${nextTitle} (USA)`),
+    );
     const nextInput = host.querySelector('[role="combobox"]');
     expect(nextInput.value).toBe(nextTitle);
     expect(nextInput.getAttribute("aria-expanded")).toBe("true");
