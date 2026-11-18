@@ -97,6 +97,43 @@ test("a push reuses ARM WASM only when its range leaves the image plumbing alone
   assert.equal(classify({ ...repo, head, eventName: "push", headRef: "" }).outputs.docker_arm_wasm_cache, "false");
 });
 
+test("a ci.yml edit compiles ARM WASM only when it reaches the docker job", (t) => {
+  const repo = history(t);
+  const workflow = join(repo.cwd, ".github", "workflows", "ci.yml");
+  mkdirSync(dirname(workflow), { recursive: true });
+  const commitWorkflow = ({ header = "on: push", docker = "x", other = "x" }) => {
+    writeFileSync(
+      workflow,
+      `name: CI\n${header}\njobs:\n  changes:\n    runs-on: x\n  docker:\n    runs-on: ${docker}\n\n  # The next job.\n  other:\n    runs-on: ${other}\n`,
+    );
+    git(repo.cwd, "add", "-A");
+    git(repo.cwd, "commit", "-q", "-m", "ci");
+    return git(repo.cwd, "rev-parse", "HEAD");
+  };
+  const base = commitWorkflow({});
+  for (const [edit, expected] of [
+    [{ other: "y" }, "true"],
+    [{ docker: "y" }, "false"],
+    [{ header: "on: pull_request" }, "false"],
+  ]) {
+    git(repo.cwd, "reset", "-q", "--hard", base);
+    const head = commitWorkflow(edit);
+    for (const eventName of ["pull_request", "push"])
+      assert.equal(
+        classify({ ...repo, base, head, eventName, headRef: "" }).outputs.docker_arm_wasm_cache,
+        expected,
+        `${eventName} ${JSON.stringify(edit)}`,
+      );
+  }
+  // A base without the docker job, or without the workflow, counts as a change.
+  git(repo.cwd, "reset", "-q", "--hard", base);
+  writeFileSync(workflow, "name: CI\njobs:\n  other:\n    runs-on: x\n");
+  git(repo.cwd, "commit", "-q", "-am", "no docker job");
+  const noDockerJob = git(repo.cwd, "rev-parse", "HEAD");
+  for (const missing of [noDockerJob, repo.head])
+    assert.equal(classify({ ...repo, base: missing, head: base }).outputs.docker_arm_wasm_cache, "false", missing);
+});
+
 test("a push without a known earlier commit compiles ARM WASM", (t) => {
   const repo = history(t);
   for (const base of ["0".repeat(40), "d".repeat(40), ""])

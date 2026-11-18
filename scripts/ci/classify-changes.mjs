@@ -180,18 +180,52 @@ const EMPTY = {
   full: false,
 };
 
+const CI_WORKFLOW = ".github/workflows/ci.yml";
+
 // Docker-only compiler inputs are outside the module fingerprint. ARM MUST
 // compile them before merge, including when the diff base is unavailable.
-export function canReuseArmDockerWasm(paths) {
+// `.dockerignore` keeps `.github/` out of the image, so only the `docker` job
+// and the local actions it calls can change the ARM build.
+export function canReuseArmDockerWasm(paths, base, head) {
   return (
     paths !== null &&
     !paths.some(
       (path) =>
         path === "packages/rom-weaver-webapp/Dockerfile" ||
         path === ".dockerignore" ||
-        path.startsWith(".github/"),
+        /^\.github\/actions\/(?:docker-build-arch|download-identify-data|wasm-cache)\//.test(path) ||
+        (path === CI_WORKFLOW && ciDockerJobChanged(base, head)),
     )
   );
+}
+
+// True unless both commits have the same `ci.yml` header and `docker` job text.
+// A missing commit, file, or job counts as a change.
+function ciDockerJobChanged(base, head) {
+  const before = ciDockerJob(base);
+  return before === null || before !== ciDockerJob(head);
+}
+
+// The lines before `jobs:` plus the `docker` job, which ends at the next line
+// indented as a job key; null when the commit, file, or job is missing.
+function ciDockerJob(commit) {
+  if (!commit) return null;
+  let text;
+  try {
+    text = execFileSync("git", ["show", `${commit}:${CI_WORKFLOW}`], {
+      encoding: "utf8",
+      maxBuffer: Infinity,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return null;
+  }
+  const lines = text.split("\n");
+  const jobs = lines.indexOf("jobs:");
+  const start = lines.indexOf("  docker:");
+  if (jobs < 0 || start < 0) return null;
+  const end = lines.findIndex((line, index) => index > start && /^ {2}\S/.test(line));
+  return [...lines.slice(0, jobs), ...lines.slice(start, end < 0 ? undefined : end)].join("\n");
 }
 
 /** Paths that differ between two commits. A move counts at both paths, because rename pairing is off. */
