@@ -641,10 +641,10 @@ const settleAnimations = async (page) => {
   }
 };
 
-const waitForStableBox = async (page, locator) => {
-  const selector = await locator.evaluate((element) => {
-    if (!(element instanceof HTMLElement && element.id)) throw new Error("Stable-layout target needs an element id");
-    return `#${CSS.escape(element.id)}`;
+const waitForStableBox = async (page, selector) => {
+  // An earlier wait's record on the same element would end this one at once.
+  await page.evaluate(() => {
+    delete globalThis.__romWeaverStableBox;
   });
   await page.waitForFunction(
     ({ selector: targetSelector }) => {
@@ -725,6 +725,9 @@ const scanVariants = async (page, label) => {
     }, originalTheme);
     if (originalViewport) await page.setViewportSize(originalViewport);
   }
+  // Restoring the viewport makes the guide scroll GUIDE_SETTLE_MS later. A press
+  // across that scroll misses silently, so the 500 ms hold MUST outlast GUIDE_SETTLE_MS.
+  if (await page.locator(".sample-tutorial-dialog").count()) await waitForStableBox(page, ".sample-tutorial-dialog");
 };
 
 const installAuditTools = async (page) => {
@@ -1115,7 +1118,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         // motion retries "element is not stable" until it times out. The hover
         // still runs before the click so the :hover lift (translateY) is
         // latched by then and the click does not move the button mid-press.
-        await waitForStableBox(page, downloadButton);
+        await waitForStableBox(page, "#rom-weaver-button-export-weave");
         await downloadButton.hover();
         const [download] = await Promise.all([
           page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
