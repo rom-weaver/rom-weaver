@@ -27,6 +27,22 @@ for (const prime of HOOK_CARGO_PRIMES) {
   });
 }
 
+// An unprimed hook check makes a new worktree's first Rust commit a cold build.
+test("every Cargo check in the pre-commit hook is primed", () => {
+  const hookChecks = [...hook.matchAll(/CARGO_TARGET_DIR=(\S+)[^\n]*mise run (\S+)/g)].map(([, targetDir, task]) => ({ task, targetDir }));
+  assert.ok(hookChecks.length > 0, "no hook command sets CARGO_TARGET_DIR before `mise run`");
+  for (const check of hookChecks)
+    assert.ok(
+      HOOK_CARGO_PRIMES.some((prime) => prime.task === check.task && prime.targetDir === check.targetDir),
+      `${check.task} in ${check.targetDir} is not primed`,
+    );
+});
+
+// identify-data deletes and rebuilds its directory, so parallel primes MUST NOT each run it.
+test("parallel primes skip task dependencies that setup builds first", () => {
+  assert.match(primeHookTargets.toString(), /"run", "--skip-deps", prime\.task/);
+});
+
 test("worktree primes do not restore an activated mise environment", () => {
   const source = primeHookTargets.toString();
   assert.match(source, /delete env\.__MISE_DIFF/);
