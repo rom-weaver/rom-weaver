@@ -214,7 +214,7 @@ export const hasCurrentData = (dataDir = defaultDataDir) => {
 };
 
 const BUILD_LOCK_POLL_MS = 500;
-// A lock file without a PID is either being written or was left by a crash mid-write.
+// A lock with no process ID is mid-write or left by a crash.
 const UNWRITTEN_LOCK_STALE_MS = 10_000;
 
 const isProcessAlive = (pid) => {
@@ -226,7 +226,7 @@ const isProcessAlive = (pid) => {
   }
 };
 
-// The holder's PID (null when not yet written) and the lock's age; null when there is no lock.
+// The holder's process ID (null if unwritten) and the lock's age; null without a lock.
 const readBuildLock = (lockPath) => {
   try {
     const pid = Number.parseInt(readFileSync(lockPath, "utf8"), 10);
@@ -256,7 +256,7 @@ const acquireBuildLock = async (lockPath) => {
     const lock = readBuildLock(lockPath);
     if (lock === null) continue;
     if (isStaleBuildLock(lock)) {
-      // Re-reading the PID narrows, but cannot close, the window in which another waiter replaces the stale lock.
+      // Re-reading the process ID narrows, but cannot close, the stale-lock takeover race.
       if (readBuildLock(lockPath)?.pid === lock.pid) rmSync(lockPath, { force: true });
       continue;
     }
