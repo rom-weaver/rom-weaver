@@ -78,7 +78,10 @@ test("each asserted group shares its selection flags with the jobs' own conditio
   }
   const browser = groups.find(({ jobs }) => jobs.includes("webapp-browser"));
   assert.equal(browser.selected, "${{ needs.changes.outputs.webapp_browser }}");
-  assert.deepEqual(browser.jobs.sort(), ["webapp-browser", "webapp-webkit-e2e"]);
+  assert.deepEqual(browser.jobs, ["webapp-browser"]);
+  const webkit = groups.find(({ jobs }) => jobs.includes("webapp-webkit-e2e"));
+  assert.equal(webkit.selected, "${{ needs.changes.outputs.webkit_e2e }}");
+  assert.deepEqual(webkit.jobs, ["webapp-webkit-e2e"]);
   const lint = groups.find(({ jobs }) => jobs.includes("rust-lint"));
   assert.equal(lint.selected, "${{ needs.changes.outputs.rust_lint }}");
   assert.deepEqual(lint.jobs, ["rust-lint"]);
