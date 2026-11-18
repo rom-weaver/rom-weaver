@@ -23,16 +23,12 @@ import {
   setFormControlValue,
 } from "./patcher-test-shared.js";
 import {
-  WEAVE_URL,
-  WEAVE_JSON,
-  withWeaveFetchStub,
   getPatchToggles,
   buildZip,
   SAMPLE_ROM,
   mountStrict,
-  SAMPLE_WOVEN_SHA256,
   sha256Hex,
-  applyDottedSampleWeave,
+  captureDownloads,
   hex,
   fileChecks,
   noiseBytes,
@@ -49,8 +45,6 @@ import {
   buildSampleWeave,
   loadWrongSampleRom,
   getChecksumOverride,
-  movePatchToPosition,
-  dropOntoBench,
   IPS_EOF,
   IPS_HEADER,
 } from "./weave-session-shared.js";
@@ -373,6 +367,45 @@ test("local weave cancellation aborts active remote acquisition and removes its 
   }
 });
 
+const ALTERNATE_PATCH = "tests/fixtures/archive_sources/multi-patch/alternate.ips";
+
+const WEAVE_URL = `${location.origin}/virtual/weave/rom-weaver-weave.json`;
+
+// The weave's sources are real same-origin fixture URLs (only the rom-weaver-weave.json itself is virtual, so
+// fetch is stubbed for that one URL and passed through for everything else).
+const WEAVE_JSON = {
+  output: { name: "weave-output" },
+  patches: [
+    {
+      description: "Required core patch",
+      label: "stable",
+      name: "Core",
+      url: `${location.origin}/${RAW_PATCH}`,
+    },
+    { name: "Alternate", optional: true, url: `${location.origin}/${ALTERNATE_PATCH}` },
+  ],
+  rom: { url: `${location.origin}/${RAW_ROM}` },
+  version: 1,
+};
+
+const withWeaveFetchStub = async (weave, run) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (input, init) => {
+    const url = typeof input === "string" ? input : input?.url || String(input);
+    if (url === WEAVE_URL) {
+      return Promise.resolve(
+        new Response(JSON.stringify(weave), { headers: { "content-type": "application/json" }, status: 200 }),
+      );
+    }
+    return originalFetch(input, init);
+  };
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+};
+
 test("weave url session seeds enablement + output defaults and applies to a download", async () => {
   // The REAL boot flow: fetch → wasm weave parse → plan → source acquisition (same code the
   // use-url-session-boot hook runs).
@@ -614,6 +647,41 @@ test("a malformed weave drop shows an on-page error instead of silently emptying
   }
 });
 
+// Woven output of the two sample patches (scripts/first-sample-assets.mjs `wovenRom`).
+const SAMPLE_WOVEN_SHA256 = "7ac8001dcbcbff45cd5cebb5b0655192021fbbdf27533aa961347194ab3e836e";
+
+const applyDottedSampleWeave = async ({
+  compression,
+  typedName,
+  weaveOutputName = "Practice 3.5.1.nes",
+  expectedFieldName = "Practice 3.5.1",
+}) => {
+  const capture = captureDownloads();
+  try {
+    const [weaveArchive, romFile] = await Promise.all([
+      buildSampleWeave({ outputName: weaveOutputName }),
+      loadFixtureFile(SAMPLE_ROM),
+    ]);
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: { output: { compression } },
+        pageDrop: { files: [weaveArchive, romFile], id: 1 },
+      }),
+    );
+    // The name field carries the stem; the manifest's `.nes` belongs to the format.
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe(expectedFieldName);
+    if (typedName) setFormControlValue(document.getElementById("rom-weaver-input-output-file-name"), typedName);
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    const outcome = await waitForApplyOutcome();
+    expect(outcome?.kind, outcome && "errorText" in outcome ? outcome.errorText : "").toBe("download");
+    await expect.poll(() => capture.getDownloads().length, { timeout: 30000 }).toBeGreaterThan(0);
+    return capture.getDownloads().at(-1);
+  } finally {
+    capture.restore();
+  }
+};
+
 test("weave output name with a literal # keeps its whole stem and .nes extension", async () => {
   const download = await applyDottedSampleWeave({
     compression: "none",
@@ -722,6 +790,18 @@ test("expected-ROM checks follow a reordered sample weave", async () => {
   }
 });
 
+// The weave's rom.checks follow the bench like its output checks: once the patch list diverges
+// from the weave they stand down, and they apply again when it matches the weave.
+const movePatchToPosition = async (position) => {
+  document.querySelector("#rom-weaver-list-patch-stack .handle")?.click();
+  const positionInput = await waitForState(
+    () => document.querySelector("#rom-weaver-list-patch-stack .phandle-input"),
+    30000,
+  );
+  setFormControlValue(positionInput, String(position));
+  positionInput.blur();
+};
+
 test("a bench that diverges from the weave drops the weave's ROM checks", async () => {
   const [weaveArchive, wrongRom] = await Promise.all([buildSampleWeave(), loadWrongSampleRom()]);
   const ownPatch = ipsFile("own-hack.ips", [...IPS_HEADER, 0, 0x30, 0, 0, 1, 0x42, ...IPS_EOF]);
@@ -752,6 +832,19 @@ test("a bench that diverges from the weave drops the weave's ROM checks", async 
   await clickApplyButton();
   expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
 });
+
+// Mount a strict form, then drop `files` onto the bench it already holds.
+const dropOntoBench = (root, files) =>
+  root.render(
+    createElement(
+      RomWeaverSettingsProvider,
+      { settings: { detailedViewEnabled: true } },
+      createElement(ApplyPatchForm, {
+        defaultSettings: { validation: { requireInputChecksumMatch: true } },
+        pageDrop: { files, id: 2 },
+      }),
+    ),
+  );
 
 test("a weave dropped onto a bench that already holds a patch does not enforce its ROM checks", async () => {
   const [weaveArchive, wrongRom] = await Promise.all([buildSampleWeave(), loadWrongSampleRom()]);

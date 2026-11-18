@@ -18,16 +18,37 @@ import {
   applyRecords,
   SNES_INTERNAL_HEADER,
   byteSwap16,
-  buildTransformWeave,
   applyWeaveAndReadOutput,
   buildWeaveArchive,
-  applyOwnEvidenceWeave,
   expectStrictApply,
-  sha256Checks,
-  withSha256HashCount,
 } from "./weave-session-shared.js";
 
 installPatcherTestHooks();
+
+// Header and N64 byte-order cases: rom.checks describe the file as supplied (as weave export and
+// `weave create` write them), while the patch targets headerless or big-endian bytes. The checks
+// must neither block the matching ROM nor change the engine's automatic header decision.
+const buildTransformWeave = async (romChecks, patchName, patchBytes, romName) => {
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { name: "transform-output" },
+        patches: [{ name: "Hack", path: patchName }],
+        rom: { checks: romChecks, name: romName },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  return buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: new File([patchBytes], patchName), fileName: patchName },
+    ],
+    "transform-weave.zip",
+  );
+};
 
 test("weave rom.checks of a headered ROM accept it for a headerless BPS", async () => {
   const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
@@ -143,6 +164,21 @@ test("a patch's own layout evidence still wins over the layout rom.checks matche
   const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
   expect(hex(output)).toBe(hex(modified));
 });
+
+// A patch's own source checks, of any algorithm, decide its layout even when rom.checks match only
+// the header-stripped ROM: declared inputChecks, or a checksum embedded in the patch (a RUP's MD5).
+const applyOwnEvidenceWeave = async (patchEntry, patchFile, headered) => {
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "transform-output" },
+      patches: [{ name: "Hack", path: patchFile.name, ...patchEntry }],
+      rom: { checks: await fileChecks(headered.subarray(16)), name: "hello-world.nes" },
+      version: 1,
+    },
+    [patchFile],
+  );
+  return applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
+};
 
 test("a patch's declared inputChecks keep its raw layout when rom.checks match only the headerless body", async () => {
   const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
@@ -508,6 +544,29 @@ test("weave rom.checks of a big-endian N64 ROM accept the byte-swapped dump", as
   const normalized = output[0] === 0x37 && output[1] === 0x80 ? byteSwap16(output) : output;
   expect(hex(normalized)).toBe(hex(modified));
 });
+
+// `weave create --checksum sha256` from the headerless or big-endian ROM: staging hashes no SHA-256,
+// so the header-stripped and byte-swapped variants are hashed on demand, once per file.
+const sha256Checks = async (bytes) => ({
+  checksums: { sha256: hex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))) },
+  size: bytes.length,
+});
+
+const withSha256HashCount = async (run) => {
+  const original = browserRuntime.ingest.run;
+  const ingestSpy = vi
+    .spyOn(browserRuntime.ingest, "run")
+    .mockImplementation((input) => original.call(browserRuntime.ingest, input));
+  try {
+    const result = await run();
+    return {
+      result,
+      sha256Hashes: ingestSpy.mock.calls.filter(([input]) => input.checksumAlgorithms?.join(",") === "sha256").length,
+    };
+  } finally {
+    ingestSpy.mockRestore();
+  }
+};
 
 test("sha256-only rom.checks of a headerless NES ROM accept the headered dump", async () => {
   const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());

@@ -21,9 +21,7 @@ import {
 import {
   getPatchToggles,
   buildZip,
-  createIpsPatch,
   RAW_ROM_CHECKS,
-  buildExpectedRomWeave,
   SAMPLE_ROM,
   buildSampleWeave,
   loadWrongSampleRom,
@@ -31,8 +29,6 @@ import {
   mountStrict,
   sha256Hex,
   captureDownloads,
-  buildFinalCheckWeave,
-  mountWeaveWithCapture,
   fileChecks,
   noiseBytes,
   withBytes,
@@ -180,6 +176,14 @@ test("weave keeps same-name apply usable after enabling several optional patches
   await clickApplyButton();
   expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
 });
+
+const createIpsPatch = (fileName, offset, value) => {
+  const bytes = new Uint8Array(14);
+  bytes.set(new TextEncoder().encode("PATCH"));
+  bytes.set([(offset >>> 16) & 0xff, (offset >>> 8) & 0xff, offset & 0xff, 0, 1, value], 5);
+  bytes.set(new TextEncoder().encode("EOF"), 11);
+  return new File([bytes], fileName, { type: "application/octet-stream" });
+};
 
 test("weave checks after a switched-off optional patch are not enforced; switched on they are sent", async () => {
   // 64 zero bytes; first.ips sets byte 0, second.ips sets byte 10. The authored chain declares the
@@ -341,6 +345,28 @@ test("imported weave whose optional patch is off applies without touching the to
     applySpy.mockRestore();
   }
 });
+
+const buildExpectedRomWeave = async (checks, patchFile) => {
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { name: "expected-rom-output" },
+        patches: [{ name: "Core", path: "change.ips" }],
+        rom: { checks, name: "game.bin" },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  return buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: patchFile, fileName: "change.ips" },
+    ],
+    "expected-rom.zip",
+  );
+};
 
 test("weave expected-ROM checks accept the matching ROM", async () => {
   const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
@@ -590,6 +616,41 @@ test("weave final-output CRC32 stands down for a partial chain and returns for t
     capture.restore();
   }
 });
+
+const buildFinalCheckWeave = async ({ outputChecks, romChecks = { crc32: "c6fb1252" }, patches, files }) =>
+  buildZip(
+    [
+      {
+        file: new File(
+          [
+            JSON.stringify({
+              output: { checks: outputChecks, name: "audit" },
+              patches,
+              rom: { checks: { checksums: romChecks }, name: "game.bin" },
+              version: 1,
+            }),
+          ],
+          "rom-weaver-weave.json",
+          { type: "application/json" },
+        ),
+        fileName: "rom-weaver-weave.json",
+      },
+      ...files.map((file) => ({ file, fileName: file.name })),
+    ],
+    "final-output-check.zip",
+  );
+
+const mountWeaveWithCapture = async (element, files) => {
+  const capture = captureDownloads();
+  try {
+    mount(element(files));
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("audit");
+    return capture;
+  } catch (error) {
+    capture.restore();
+    throw error;
+  }
+};
 
 test("Apply anyway bypasses the weave final-output check like every other check", async () => {
   const romFile = new File(["ORIGINAL-ROM\n"], "game.bin");
