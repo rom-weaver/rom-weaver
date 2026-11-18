@@ -1892,9 +1892,8 @@ jobs:
             --field description="$description" \
             --field target_url="$LIGHTHOUSE_REPORT_URL"
 
-  # Two shards: the suite is CPU-bound on a 4-core runner and set the wall clock
-  # of the whole run when it was one job. The matrix job's result is the worst
-  # shard's, so the gate reads it unchanged.
+  # Sharded because the suite is CPU-bound on a 4-core runner. The matrix job's
+  # result is the worst shard's, so the gate reads it unchanged.
   webapp-browser:
     name: Webapp (browser ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-24.04
@@ -1904,7 +1903,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
