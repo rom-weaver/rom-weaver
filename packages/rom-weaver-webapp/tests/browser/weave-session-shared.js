@@ -107,6 +107,7 @@ export const getChecksumOverride = () => {
   return checkbox instanceof HTMLInputElement ? checkbox : null;
 };
 
+// Mounts the apply form with the input-checksum match requirement on and `files` dropped in.
 export const mountStrict = (files) =>
   mount(
     createElement(ApplyPatchForm, {
@@ -157,6 +158,7 @@ const crc32 = (bytes) => {
 
 export const hex = (bytes) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
+// The CRC32, SHA-1 and size the apply form shows for `bytes`.
 export const fileChecks = async (bytes) => ({
   checksums: {
     crc32: crc32(bytes).toString(16).padStart(8, "0"),
@@ -231,6 +233,7 @@ export const createIps = (records) =>
     ...IPS_EOF,
   ]);
 
+// Copies `source` and writes each `[offset, value]` record into the copy.
 export const applyRecords = (source, records) => {
   const bytes = new Uint8Array(source);
   for (const [offset, value] of records) bytes[offset] = value;
