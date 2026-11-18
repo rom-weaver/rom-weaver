@@ -20,7 +20,7 @@ export const HOOK_CARGO_PRIMES = [
 
 export function primeHookTargets(root, primes = HOOK_CARGO_PRIMES) {
   return Promise.all(primes.map((prime) => new Promise((done) => {
-    const env = { ...process.env, CARGO_TARGET_DIR: prime.targetDir };
+    const env = { ...process.env, CARGO_TARGET_DIR: prime.targetDir, ROM_WEAVER_CARGO_INCREMENTAL: "1" };
     delete env.__MISE_DIFF;
     if (prime.rustflags) env.RUSTFLAGS = `${process.env.RUSTFLAGS ?? ""} ${prime.rustflags}`.trim();
     execFile("mise", ["run", prime.task], { cwd: root, env }, (error) => {

@@ -32,6 +32,16 @@ test("worktree primes do not restore an activated mise environment", () => {
   assert.match(source, /delete env\.__MISE_DIFF/);
 });
 
+// The hook builds incrementally; a prime through sccache leaves no incremental
+// state, so the first Rust commit would rebuild every workspace crate.
+test("worktree primes build incrementally like every primed hook command", () => {
+  for (const prime of HOOK_CARGO_PRIMES) {
+    const line = hook.split("\n").find((candidate) => candidate.includes(`mise run ${prime.task}`));
+    assert.match(line ?? "", /\bROM_WEAVER_CARGO_INCREMENTAL=1\b/, prime.task);
+  }
+  assert.match(primeHookTargets.toString(), /ROM_WEAVER_CARGO_INCREMENTAL: "1"/);
+});
+
 // A RUSTFLAGS override replaces the configured [target.*] rustflags rather than
 // extending them, so a hook that sets it drops the threaded-WASM target features
 // and checks a configuration nobody ships. Lint flags belong in .cargo/config.toml.

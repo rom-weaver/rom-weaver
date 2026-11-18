@@ -66,8 +66,12 @@ CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
 # sccache instead of breaking every Cargo invocation. `tools = true` puts the
 # pinned sccache ahead of any system copy on PATH. The larger cache avoids
 # churn across worktrees.
-RUSTC_WRAPPER = { value = "{{ exec(command='command -v sccache || true') | trim }}", tools = true }
-CARGO_INCREMENTAL = { value = "{{ exec(command='test -n \"$CI\" || command -v sccache >/dev/null 2>&1 && echo 0 || echo 1') | trim }}", tools = true }
+#
+# ROM_WEAVER_CARGO_INCREMENTAL=1 swaps sccache for incremental builds, which
+# sccache rejects. The pre-commit hook sets it: re-checking an edited
+# workspace crate incrementally beats replaying it from sccache.
+RUSTC_WRAPPER = { value = "{{ exec(command='test -n \"$ROM_WEAVER_CARGO_INCREMENTAL\" || command -v sccache || true') | trim }}", tools = true }
+CARGO_INCREMENTAL = { value = "{{ exec(command='if test -n \"$ROM_WEAVER_CARGO_INCREMENTAL\"; then echo 1; elif test -n \"$CI\" || command -v sccache >/dev/null 2>&1; then echo 0; else echo 1; fi') | trim }}", tools = true }
 # Read the process value so parent worktree defaults cannot replace the limit.
 SCCACHE_CACHE_SIZE = "{{ get_env(name='SCCACHE_CACHE_SIZE', default='100G') }}"
 
