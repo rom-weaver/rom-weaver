@@ -532,7 +532,7 @@ test.each(["Pokemon Emerald", "Metroid Fusion"])(
     input.blur();
 
     renderRequest(2, nextTitle);
-    // The handoff calls the search before React commits its new text, so the call count alone can pass on the old render.
+    // The handoff calls the search before React commits the new text. The call count alone can pass before the text renders.
     await waitFor(
       () =>
         searchExpectedRomByName.mock.calls.length === 2 &&
