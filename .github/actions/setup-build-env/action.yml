@@ -15,7 +15,7 @@ inputs:
       tool.
     default: ""
   apt-packages:
-    description: Space-separated system dependencies to ensure (empty adds no packages beyond requested compiler caches).
+    description: Space-separated system dependencies to ensure (empty skips the apt step).
     default: ""
   rust-components:
     description: Space-separated rustup components to add to the mise-pinned toolchain.
