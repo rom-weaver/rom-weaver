@@ -15,7 +15,7 @@ inputs:
       tool.
     default: ""
   apt-packages:
-    description: Space-separated system dependencies to ensure (empty adds no packages beyond requested compiler caches).
+    description: Space-separated system dependencies to ensure (empty skips the apt step).
     default: ""
   rust-components:
     description: Space-separated rustup components to add to the mise-pinned toolchain.
@@ -104,34 +104,20 @@ runs:
     # cmake/ninja/pkg-config build the vendored C deps. Jobs that compile no
     # Rust pass an empty list.
     - name: Install system dependencies
-      if: inputs.apt-packages != '' || (runner.os == 'Linux' && inputs.ccache == 'true')
+      if: inputs.apt-packages != ''
       shell: bash
       env:
         APT_PACKAGES: ${{ inputs.apt-packages }}
-        INSTALL_CCACHE: ${{ inputs.ccache }}
       run: |
         node scripts/ci/install-system-dependencies.mjs
 
-    # ccache MUST be on PATH before mise resolves compiler wrappers.
     # A fixed CCACHE_DIR gives cache steps one path on every runner; mise config supplies its base-dir hashing.
-    - name: Install ccache
+    - name: Configure ccache
       if: inputs.ccache == 'true'
       shell: bash
       env:
         CCACHE_MAXSIZE_INPUT: ${{ inputs.ccache-maxsize }}
       run: |
-        set -euo pipefail
-        if command -v ccache >/dev/null 2>&1; then
-          echo "ccache already on PATH"
-        elif [ "$RUNNER_OS" = "Linux" ]; then
-          echo "::error::compiler cache missing after system dependency setup"
-          exit 1
-        elif [ "$RUNNER_OS" = "macOS" ]; then
-          brew install ccache
-        else
-          echo "::error::no ccache wiring for $RUNNER_OS"
-          exit 1
-        fi
         {
           echo "CCACHE_DIR=$RUNNER_TEMP/ccache"
           echo "CCACHE_MAXSIZE=$CCACHE_MAXSIZE_INPUT"
@@ -156,12 +142,6 @@ runs:
         key: ccache-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
         restore-keys: |
           ccache-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-
-
-    # Reset restored counters so later statistics describe this job; cached objects remain.
-    - name: Zero ccache statistics
-      if: inputs.ccache == 'true'
-      shell: bash
-      run: ccache --zero-stats
 
     - name: Configure sccache
       if: inputs.sccache == 'true'
@@ -196,7 +176,7 @@ runs:
       if: inputs.tools != ''
       shell: bash
       env:
-        WANTED: ${{ inputs.tools }}${{ inputs.sccache == 'true' && ' sccache' || '' }}
+        WANTED: ${{ inputs.tools }}${{ inputs.ccache == 'true' && ' ccache' || '' }}${{ inputs.sccache == 'true' && ' sccache' || '' }}
       run: node scripts/ci/select-mise-tools.mjs
 
     - name: Install mise-pinned tools
@@ -208,7 +188,13 @@ runs:
         install: true
         cache: ${{ inputs.cache-restore == 'true' }}
 
-    # sccache comes from the mise install above.
+    # ccache and sccache come from the mise install above. Reset restored
+    # counters so later statistics describe this job; cached objects remain.
+    - name: Zero ccache statistics
+      if: inputs.ccache == 'true'
+      shell: bash
+      run: ccache --zero-stats
+
     - name: Zero sccache statistics
       if: inputs.sccache == 'true'
       shell: bash

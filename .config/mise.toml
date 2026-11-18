@@ -3,7 +3,6 @@
 
 [tools]
 # WASI SDK stays off PATH so its clang cannot replace the native compiler.
-# Install ccache as a system tool so [env] can find it before mise activation.
 #   - twiggy: no binary releases (`cargo install` when needed for size analysis).
 node = "24.18.0"
 # Fresh toolchains need these components for formatting and Clippy checks.
@@ -20,6 +19,8 @@ rust = { version = "1.97.1", components = "rustfmt,clippy" }
 "aqua:hadolint/hadolint" = "2.14.0"             # Dockerfile linting
 # Ubuntu's 0.7.7 cannot cache rustc calls that carry --remap-path-prefix, which the WASM build passes.
 "aqua:mozilla/sccache" = "0.17.0"
+# A release binary spares jobs that set `ccache` an apt index refresh.
+"github:ccache/ccache" = "4.14.3"
 
 # cargo-mutants publishes no aarch64 macOS build; the x86_64 one runs under Rosetta.
 "github:sourcefrog/cargo-mutants" = { version = "27.1.0", platforms = { macos-arm64 = { asset_pattern = "cargo-mutants-x86_64-apple-darwin.tar.gz" } } }
@@ -41,9 +42,10 @@ WASI_STRIP = "{{ env.WASI_SDK_PATH }}/bin/llvm-strip"
 # cc-rs toolchain wiring for C/C++ dependencies (liblzma, libarchive, ...).
 # Single-threaded target.
 # The `ccache ` prefix resolves to empty when ccache is absent, mirroring the
-# CC/CMAKE_C_COMPILER_LAUNCHER policy below.
-CC_wasm32_wasip1 = "{{ exec(command='command -v ccache >/dev/null 2>&1 && printf \"ccache \" || true') }}{{ env.WASI_CLANG }} --sysroot={{ env.WASI_SYSROOT }}"
-CXX_wasm32_wasip1 = "{{ exec(command='command -v ccache >/dev/null 2>&1 && printf \"ccache \" || true') }}{{ env.WASI_CLANGXX }} --sysroot={{ env.WASI_SYSROOT }}"
+# CC/CMAKE_C_COMPILER_LAUNCHER policy below. `tools = true` lets every ccache
+# lookup in this file see the pinned copy.
+CC_wasm32_wasip1 = { value = "{{ exec(command='command -v ccache >/dev/null 2>&1 && printf \"ccache \" || true') }}{{ env.WASI_CLANG }} --sysroot={{ env.WASI_SYSROOT }}", tools = true }
+CXX_wasm32_wasip1 = { value = "{{ exec(command='command -v ccache >/dev/null 2>&1 && printf \"ccache \" || true') }}{{ env.WASI_CLANGXX }} --sysroot={{ env.WASI_SYSROOT }}", tools = true }
 AR_wasm32_wasip1 = "{{ env.WASI_AR }}"
 RANLIB_wasm32_wasip1 = "{{ env.WASI_RANLIB }}"
 CFLAGS_wasm32_wasip1 = "-msimd128"
@@ -71,8 +73,8 @@ SCCACHE_CACHE_SIZE = "{{ get_env(name='SCCACHE_CACHE_SIZE', default='100G') }}"
 
 # cc-rs can inherit RUSTC_WRAPPER, but ccache reuses C objects across worktree paths.
 # Cross builds MUST set CC_<target>/CXX_<target> when the host compiler is unsuitable.
-CC = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache cc || true') | trim }}"
-CXX = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache c++ || true') | trim }}"
+CC = { value = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache cc || true') | trim }}", tools = true }
+CXX = { value = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache c++ || true') | trim }}", tools = true }
 
 # CMake needs its own compiler launcher; it does not inherit cc-rs's wrapper.
 # ccache rewrites paths below the main checkout so worktrees can share compiled C objects.
@@ -80,8 +82,8 @@ CXX = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache c++ || 
 # CCACHE_BASEDIR MUST be absolute or empty, including outside a Git checkout.
 # CCACHE_NOHASHDIR allows reuse but debug paths can name an earlier build's staged sources.
 #
-# CMake records the launcher at configure time, so existing build trees retain their setting.
-CMAKE_C_COMPILER_LAUNCHER = "{{ exec(command='command -v ccache || command -v sccache || true') | trim }}"
+# libarchive's build script passes the launcher on every configure, so existing build trees follow it.
+CMAKE_C_COMPILER_LAUNCHER = { value = "{{ exec(command='command -v ccache || command -v sccache || true') | trim }}", tools = true }
 CCACHE_BASEDIR = "{{ exec(command='d=$(git -C \\'' ~ config_root ~ '\\' rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && dirname \"$d\" || true') | trim }}"
 CCACHE_NOHASHDIR = "1"
 
