@@ -5,7 +5,7 @@ import type { WebappView } from "./webapp-state-types.ts";
 
 /** One tool pointer: a tab to switch to, plus the beta gate it lives behind. */
 type RelatedToolLink = {
-  /** True for a tool that stays behind the beta-tools setting (Save Editor). */
+  /** True for a tool that stays behind the beta-tools setting (Save Editor, Make playlist). */
   beta?: boolean;
   entry?: keyof typeof WORKFLOW_ENTRY_ROUTES;
   /** Create mode the link requests with `?mode=`. */
@@ -118,7 +118,7 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
     tools: [{ labelId: "ui.docs.toolApply", view: "patcher" }],
   },
   "docs/make-playlist-browser": {
-    tools: [{ labelId: "ui.docs.toolPlaylist", view: "playlist" }],
+    tools: [{ beta: true, labelId: "ui.docs.toolPlaylist", view: "playlist" }],
   },
   "docs/search-rom-checksums": {
     tools: [{ labelId: "ui.docs.toolIdentify", view: "identify" }],

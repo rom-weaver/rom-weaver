@@ -188,6 +188,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     railLabel: "Trim",
   },
   {
+    beta: true,
     group: "roms",
     href: "create-m3u-playlist",
     icon: <ListMusic aria-hidden="true" />,
