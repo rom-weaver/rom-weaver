@@ -26,7 +26,7 @@ Install these system tools before the first build:
 - CMake, Clang, and a native compiler toolchain
 - [WASI SDK](https://github.com/WebAssembly/wasi-sdk/releases) v33 or newer for web builds
 - Brotli for optimized production WASM builds
-- ccache and sccache are installed by mise at the versions pinned in `.config/mise.toml`; ccache reuses the compiled C objects across target directories and worktrees
+- ccache and sccache are installed by mise at the versions pinned in `.config/mise.toml`. ccache reuses compiled C objects across target directories and worktrees
 
 On macOS with Homebrew:
 

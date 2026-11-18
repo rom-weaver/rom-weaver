@@ -660,8 +660,8 @@ fn build_libarchive(libarchive_dir: &Path, lzma_glue_dir: &Path, target_sysroot:
         sdk_capability_flags.push("-DROM_WEAVER_7Z_SDK_LZMA2_ENCODER=1".to_string());
     }
     let mut cmake_config = cmake::Config::new(libarchive_dir);
-    // CMake reads the launcher from the environment only on a tree's first configure, so a
-    // reused or restored tree would keep a ccache path that may no longer exist.
+    // CMake reads the launcher from the environment only on a tree's first configure.
+    // A reused or restored tree would keep a stale ccache path.
     cmake_config.define(
         "CMAKE_C_COMPILER_LAUNCHER",
         env::var_os("CMAKE_C_COMPILER_LAUNCHER").unwrap_or_default(),
