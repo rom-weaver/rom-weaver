@@ -80,7 +80,8 @@ jobs:
       deploy_targets: ${{ steps.plan.outputs.targets }}
       preview_branch: ${{ steps.plan.outputs.preview_branch }}
       last_nightly_sha: ${{ steps.last-nightly.outputs.sha }}
-      # The first parent of the tested merge commit; empty for anything but a pull request.
+      # The pull request diff base: the tested merge commit's first parent, or the event's
+      # base when HEAD is not a merge commit. Empty for anything but a pull request.
       pr_base: ${{ steps.pr-base.outputs.sha }}
       # The release pull request, which scripts/ci/release-pr.mjs identifies.
       release_pr: ${{ steps.classify.outputs.release_pr }}
@@ -161,7 +162,7 @@ jobs:
         env:
           EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          parents=$(git cat-file -p HEAD | sed -n 's/^parent //p')
+          parents=$(git cat-file -p HEAD | sed -n '/^$/q; s/^parent //p')
           if [ "$(printf '%s\n' "$parents" | wc -l)" -eq 2 ]; then
             echo "sha=$(printf '%s\n' "$parents" | head -n 1)" >> "$GITHUB_OUTPUT"
           else
