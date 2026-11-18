@@ -155,13 +155,13 @@ test("broken or incompatible tools fall back to one bounded apt pass", () => {
   const run = (command, args, options) => {
     calls.push({ command, args, options });
     if (command === "cmake") return "unrelated executable";
-    if (command === "ccache") throw new Error("broken executable");
+    if (command === "ninja") throw new Error("broken executable");
     return "";
   };
-  assert.equal(installAptPackages(["cmake", "ccache", "ccache"], run), true);
+  assert.equal(installAptPackages(["cmake", "ninja-build", "ninja-build"], run), true);
   const apt = calls.filter(({ command }) => command === "sudo");
   assert.equal(apt.length, 2);
-  assert.deepEqual(apt[1].args.slice(-2), ["cmake", "ccache"]);
+  assert.deepEqual(apt[1].args.slice(-2), ["cmake", "ninja-build"]);
   assert.ok(apt.every(({ options }) => options.timeout === 150_000));
 });
 
@@ -202,25 +202,6 @@ test("libclang discovery skips unloadable candidates and requires bindgen symbol
   assert.equal(calls.length, 3);
   const findArgs = calls[0][1];
   assert.equal(findArgs[findArgs.indexOf("-maxdepth") + 1], "3");
-});
-
-test("Linux bootstrap combines requested dependencies and ccache", () => {
-  const calls = [];
-  main(
-    {
-      RUNNER_OS: "Linux",
-      APT_PACKAGES: "cmake ninja-build",
-      INSTALL_CCACHE: "true",
-    },
-    (command, args) => {
-      calls.push([command, args]);
-      if (command === "sudo" || command === "find") return "";
-      throw new Error("missing tool");
-    },
-  );
-  const apt = calls.filter(([command]) => command === "sudo");
-  assert.equal(apt.length, 2);
-  assert.deepEqual(apt[1][1].slice(-4), ["--yes", "cmake", "ninja-build", "ccache"]);
 });
 
 test("working ImageMagick skips the package-manager fallback", () => {

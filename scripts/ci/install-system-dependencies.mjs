@@ -44,7 +44,6 @@ const commands = {
   "ninja-build": ["ninja", /^\d+\.\d/],
   "pkg-config": ["pkg-config", /^\d+\.\d/],
   clang: ["clang", /clang version \d/],
-  ccache: ["ccache", /ccache version \d/],
   imagemagick: ["convert", /Version: ImageMagick \d/],
 };
 
@@ -156,9 +155,6 @@ export function installAptPackages(
 
 export function main(env = process.env, run = execFileSync, sleep = sleepSync) {
   const packages = (env.APT_PACKAGES || "").split(/\s+/).filter(Boolean);
-  if (env.RUNNER_OS === "Linux") {
-    if (env.INSTALL_CCACHE === "true") packages.push("ccache");
-  }
   if (!packages.length) return;
 
   let libclang = "";
