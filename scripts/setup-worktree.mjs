@@ -11,7 +11,7 @@ import { createWasmSourceFingerprint } from "./wasm/wasm-source-fingerprint.mjs"
 
 const git = (args, cwd) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 
-// Each pre-commit Cargo check builds in its own target directory, so they run in parallel.
+// Separate Cargo target directories let the pre-commit checks build in parallel.
 // Priming MUST use the environment from .config/lefthook.yml so Cargo reuses the artifacts.
 export const HOOK_CARGO_PRIMES = [
   { task: "clippy", targetDir: "target", rustflags: "" },
@@ -24,22 +24,12 @@ export function primeHookTargets(root, primes = HOOK_CARGO_PRIMES) {
     const env = { ...process.env, CARGO_TARGET_DIR: prime.targetDir };
     delete env.__MISE_DIFF;
     if (prime.rustflags) env.RUSTFLAGS = `${process.env.RUSTFLAGS ?? ""} ${prime.rustflags}`.trim();
-    execFile("mise", ["run", "--skip-deps", prime.task], { cwd: root, env }, (error) => {
+    execFile("mise", ["run", prime.task], { cwd: root, env }, (error) => {
       // Priming failures are advisory because native work can continue without the WASI SDK.
       process.stdout.write(error ? `  ${prime.task} could not be primed (${error.message.split("\n")[0]})\n` : `  primed ${prime.targetDir}\n`);
       done();
     }).stderr?.pipe(process.stderr);
   })));
-}
-
-// The clippy and typegen primes depend on identify-data, which deletes and rebuilds
-// its directory. Building it once here lets the parallel primes skip it.
-function buildIdentifyData(root) {
-  const env = { ...process.env };
-  delete env.__MISE_DIFF;
-  const result = spawnSync("mise", ["run", "identify-data"], { cwd: root, env, stdio: "inherit" });
-  // Advisory like the primes: a worktree without identify data still works for non-Rust changes.
-  if (result.status !== 0) process.stdout.write(`  identify-data could not be built (exit ${result.status ?? result.signal}); the clippy and typegen primes will fail\n`);
 }
 
 // Detached checkouts are review checkouts that rarely commit, so they skip the
@@ -129,7 +119,6 @@ export async function main(cwd = process.cwd(), { prime = true, prune = true } =
   generateHookInputs(root);
   if (prime) {
     process.stdout.write("setup-worktree: priming pre-commit cargo target dirs (minutes; --no-prime to skip)\n");
-    buildIdentifyData(root);
     await primeHookTargets(root);
   } else {
     process.stdout.write("setup-worktree: skipped priming pre-commit cargo target dirs (--prime to force)\n");

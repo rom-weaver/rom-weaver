@@ -38,11 +38,6 @@ test("every Cargo check in the pre-commit hook is primed", () => {
     );
 });
 
-// identify-data deletes and rebuilds its directory, so parallel primes MUST NOT each run it.
-test("parallel primes skip task dependencies that setup builds first", () => {
-  assert.match(primeHookTargets.toString(), /"run", "--skip-deps", prime\.task/);
-});
-
 test("worktree primes do not restore an activated mise environment", () => {
   const source = primeHookTargets.toString();
   assert.match(source, /delete env\.__MISE_DIFF/);
