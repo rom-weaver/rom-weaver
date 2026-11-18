@@ -2,7 +2,7 @@
 // Prunes Cargo target directories of every linked worktree. Dry run unless --yes.
 //   - a target nothing has read or written for --days (default 7) is removed whole;
 //   - in an active target, incremental/ directories and deps/ files unused for
-//     that long are removed.
+//     that long are removed; an incremental/ directory with any recent file stays.
 // Cargo rebuilds whatever is missing and sccache replays the compile work, so
 // pruning only costs time. Without --force it runs only when idle (no build
 // process, low load) and at most once a day, so callers can invoke it freely.
@@ -72,6 +72,7 @@ export function planTarget(target, cutoff) {
   }
   const plan = [];
   for (const dir of dirsNamed(target, "incremental", 3)) {
+    if (hasRecentFile(dir, cutoff, 4)) continue;
     const files = [...filesUnder(dir)];
     plan.push({ kind: "incremental", path: dir, bytes: measure(files), files, remove: dir });
   }

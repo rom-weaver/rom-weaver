@@ -38,12 +38,13 @@ test("a target with nothing recent is removed whole", () => {
   });
 });
 
-test("an active target loses only incremental dirs and old deps files", () => {
+test("an active target loses only unused incremental dirs and old deps files", () => {
   withTarget((target) => {
     file(join(target, "debug/deps/old"), 30);
     file(join(target, "debug/deps/new"), 0);
-    file(join(target, "debug/incremental/x/y"), 0);
-    file(join(target, "wasm32-wasip1-threads/debug/incremental/z"), 0);
+    file(join(target, "debug/incremental/x/y"), 30);
+    file(join(target, "wasm32-wasip1-threads/debug/incremental/z"), 30);
+    file(join(target, "release/incremental/fresh/s-1/q"), 0);
     file(join(target, "debug/build/keep"), 30);
     const plan = planTarget(target, cutoff());
     assert.deepEqual(plan.map((item) => item.kind).sort(), ["incremental", "incremental", "old deps"]);
@@ -51,6 +52,7 @@ test("an active target loses only incremental dirs and old deps files", () => {
     assert.equal(existsSync(join(target, "debug/deps/old")), false);
     assert.equal(existsSync(join(target, "debug/deps/new")), true);
     assert.equal(existsSync(join(target, "debug/incremental")), false);
+    assert.equal(existsSync(join(target, "release/incremental/fresh/s-1/q")), true);
     assert.equal(existsSync(join(target, "debug/build/keep")), true);
   });
 });

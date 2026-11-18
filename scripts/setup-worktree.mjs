@@ -18,12 +18,12 @@ export const HOOK_CARGO_PRIMES = [
   { task: "wasm-check", targetDir: "target/hook-wasm", rustflags: "" },
 ];
 
-export function primeHookTargets(root, primes = HOOK_CARGO_PRIMES) {
+export function primeHookTargets(root, primes = HOOK_CARGO_PRIMES, run = execFile) {
   return Promise.all(primes.map((prime) => new Promise((done) => {
-    const env = { ...process.env, CARGO_TARGET_DIR: prime.targetDir };
+    const env = { ...process.env, CARGO_TARGET_DIR: prime.targetDir, MISE_ENV: "hook" };
     delete env.__MISE_DIFF;
     if (prime.rustflags) env.RUSTFLAGS = `${process.env.RUSTFLAGS ?? ""} ${prime.rustflags}`.trim();
-    execFile("mise", ["run", prime.task], { cwd: root, env }, (error) => {
+    run("mise", ["run", prime.task], { cwd: root, env }, (error) => {
       // Priming failures are advisory because native work can continue without the WASI SDK.
       process.stdout.write(error ? `  ${prime.task} could not be primed (${error.message.split("\n")[0]})\n` : `  primed ${prime.targetDir}\n`);
       done();
