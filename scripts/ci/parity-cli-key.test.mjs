@@ -5,7 +5,8 @@ import { createRequire } from "node:module";
 import { posix } from "node:path";
 import test from "node:test";
 
-import { KEY_PATHS, keyHash, normalizeCargoLock, normalizeCargoToml } from "./parity-cli-key.mjs";
+import { normalizeCargoLock, normalizeCargoToml, PINNED_CRATE_VERSION } from "../wasm/wasm-version-pin.mjs";
+import { KEY_PATHS, keyHash } from "./parity-cli-key.mjs";
 
 const require = createRequire(import.meta.url);
 const { load } = require("js-yaml");
@@ -135,15 +136,16 @@ test("a version bump alongside a real change still misses", () => {
 });
 
 test("normalizing replaces only the workspace's own versions", () => {
+  const pinned = `version = "${PINNED_CRATE_VERSION}"`;
   const cargo = normalizeCargoToml(tree()["crates/rom-weaver-cli/Cargo.toml"]);
-  assert.match(cargo, /rom-weaver-core = \{ path = "\.\.\/rom-weaver-core", version = "0\.0\.0" \}/u);
-  assert.match(cargo, /path = "\.\.\/rom-weaver-extra"\nversion = "0\.0\.0"/u);
+  assert.ok(cargo.includes(`rom-weaver-core = { path = "../rom-weaver-core", ${pinned} }`));
+  assert.ok(cargo.includes(`path = "../rom-weaver-extra"\n${pinned}`));
   const workspace = normalizeCargoToml(tree()["Cargo.toml"]);
-  assert.match(workspace, /\nversion = "0\.0\.0"\n/u);
+  assert.ok(workspace.includes(`\n${pinned}\n`));
   assert.match(workspace, /rust-version = "1\.95"/u);
   assert.match(workspace, /clap = \{ version = "4\.5\.51"/u);
   const lock = normalizeCargoLock(tree()["Cargo.lock"]);
-  assert.equal(lock.match(/version = "0\.0\.0"/gu).length, 2);
+  assert.equal(lock.split(pinned).length - 1, 2);
   assert.match(lock, /version = "1\.0\.228"/u);
 });
 

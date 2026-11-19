@@ -31,3 +31,34 @@ pub fn env_u64_opt(name: &str) -> Option<u64> {
 pub fn env_u64(name: &str, default: u64) -> u64 {
     env_u64_opt(name).unwrap_or(default)
 }
+
+/// The rom-weaver release version. Native builds always know it.
+#[cfg(not(target_family = "wasm"))]
+pub fn app_version() -> Option<&'static str> {
+    Some(env!("CARGO_PKG_VERSION"))
+}
+
+/// The rom-weaver release version from `ROM_WEAVER_APP_VERSION`, or `None` when the host did
+/// not supply a valid one. The module is built with a pinned crate version
+/// (`scripts/wasm/wasm-version-pin.mjs`) so a version-only release keeps its bytes; code in
+/// it MUST NOT use `env!("CARGO_PKG_VERSION")`.
+#[cfg(target_family = "wasm")]
+pub fn app_version() -> Option<&'static str> {
+    const APP_VERSION_ENV: &str = "ROM_WEAVER_APP_VERSION";
+    // The value is written into patch headers, so it stays a short printable token.
+    const MAX_APP_VERSION_BYTES: usize = 64;
+    static APP_VERSION: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    APP_VERSION
+        .get_or_init(|| {
+            let value = std::env::var(APP_VERSION_ENV).ok()?;
+            let valid = !value.is_empty()
+                && value.len() <= MAX_APP_VERSION_BYTES
+                && value.bytes().all(|byte| byte.is_ascii_graphic());
+            if !valid {
+                warn!(env = APP_VERSION_ENV, "ignoring invalid app version");
+                return None;
+            }
+            Some(value)
+        })
+        .as_deref()
+}
