@@ -574,7 +574,8 @@ const notFoundDocument = async () => await rerootDocument(await matchPrecache("4
 
 const matchCachedResponse = async (request: Request, url: URL) => {
   const credentialless = await ensureCoepModeHydrated();
-  const cachedResponse = await caches.match(request);
+  const isPageNavigation = isTopLevelNavigation(request, url) && !requestPrefersMarkdown(request);
+  const cachedResponse = isPageNavigation ? await matchCachedDocument(request, url) : await caches.match(request);
   if (cachedResponse) return withCrossOriginIsolationHeaders(cachedResponse, credentialless) || cachedResponse;
   if (isManifestRequest(request, url)) {
     const manifest = await matchPrecache("manifest.json");
@@ -646,8 +647,13 @@ const serveNavigationFromPrecache = async (request: Request, url: URL, event: un
   return withCrossOriginIsolationHeaders(document, credentialless) || document;
 };
 
+// This worker's precached document first: a runtime-cached one can come from a newer deploy, whose
+// build-info.js and chunks this worker does not hold.
+const matchCachedDocument = async (request: Request, url: URL) =>
+  (await matchPrecachedNavigation(url)) ?? (await caches.match(request));
+
 const matchExactCachedNavigation = async (request: Request, url: URL) => {
-  const cached = (await caches.match(request)) ?? (await matchPrecachedNavigation(url));
+  const cached = await matchCachedDocument(request, url);
   if (!cached) return undefined;
   const credentialless = await ensureCoepModeHydrated();
   return withCrossOriginIsolationHeaders(cached, credentialless) || cached;
@@ -717,6 +723,7 @@ registerRoute(
       return await fetchWithNavigationTimeout(request, url, event);
     } catch (err) {
       const cachedResponse = await matchCachedResponse(request, url);
+      recordDocumentSource(event, { network: false });
       logServiceWorker("network-first request failed", {
         cached: Boolean(cachedResponse),
         error: formatError(err),

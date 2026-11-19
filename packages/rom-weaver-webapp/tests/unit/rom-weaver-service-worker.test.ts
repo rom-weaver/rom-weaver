@@ -1009,6 +1009,36 @@ describe("navigation requests", () => {
     await expect(buildInfo.text()).resolves.toBe("precached");
   });
 
+  it.each([
+    ["stalls", () => new Promise<Response>(() => undefined)],
+    ["fails", () => Promise.reject(new TypeError("offline"))],
+  ])("prefers the precached page and its build-info.js when the network %s", async (_failure, network) => {
+    vi.useFakeTimers();
+    const guide = `${APP_ORIGIN}/docs/guide`;
+    const harness = await loadCompleteWorker({
+      missingDeferred: true,
+      redirectSourcePaths: [],
+      runtimeEntries: { [guide]: "newer deploy" },
+    });
+    setPrecache({
+      "build-info.js": () => new Response("precached", { status: 200 }),
+      "docs/guide/index.html": () => new Response("guide", { status: 200 }),
+    });
+    harness.fetchStub.stub.mockImplementation(network);
+    const pending = routed(harness, harness.networkFirstRoute, asNavigationRequest(guide), {
+      resultingClientId: "page",
+      type: "fetch",
+    });
+    await vi.advanceTimersByTimeAsync(4000);
+
+    await expect((await pending).text()).resolves.toBe("guide");
+    const buildInfo = routed(harness, requireRoute(5), new Request(`${APP_ORIGIN}/build-info.js`), {
+      clientId: "page",
+      type: "fetch",
+    });
+    await expect((await buildInfo).text()).resolves.toBe("precached");
+  });
+
   it("serves cache-first once a pump stores the last missing deferred entry", async () => {
     const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
     precachedDocs();
