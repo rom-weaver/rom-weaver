@@ -1,10 +1,11 @@
 import { Globe, MonitorCheck, MonitorDown, MonitorOff, MonitorUp } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import type { MessageId } from "../../presentation/localization/catalog.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import { join } from "./shell-common.tsx";
+import { buildTagVersionText, channelSuffix } from "../build-tag-text.mjs";
 
 /**
  * The prerendered shells ship a placeholder runtime status that the parser-time
@@ -344,14 +345,19 @@ const guardExternalClick = (
  * that opens the changelog, and a compact channel label everywhere else. A PR
  * preview is the exception - the number IS the useful identity, so it links
  * straight to the pull request.
+ *
+ * Prerendered pages carry no build info, so until the page hydrates the version text
+ * stays empty and CSS shows the text build-info.js set.
  */
-const CHANNEL_SUFFIXES: Record<string, string> = { beta: "b", dev: "d", nightly: "n" };
 const CHANNEL_MESSAGES: Record<string, MessageId> = {
   beta: "ui.channel.beta",
   dev: "ui.channel.dev",
   nightly: "ui.channel.nightly",
   preview: "ui.channel.preview",
 };
+
+// Hydration happens once per page, so the hydration check needs no subscription.
+const subscribeNever = () => () => undefined;
 
 const BuildTag = ({
   channelBadge,
@@ -374,12 +380,19 @@ const BuildTag = ({
   version: string;
   versionTitle?: string;
 }) => {
-  const suffix = CHANNEL_SUFFIXES[channelBadge?.toLowerCase() ?? ""] ?? "";
-  const versionText = `v${version}${suffix}${commitDistance ? `+${commitDistance}` : ""}${dirty ? "*" : ""}`;
+  const hydrated = useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  );
+  const suffix = channelSuffix(channelBadge);
+  const versionText = hydrated ? buildTagVersionText({ channelBadge, commitDistance, dirty, version }) : "";
   const prNumber = channelBadge?.match(/^pr-(\d+)$/i)?.[1];
   if (prNumber) {
     const prHref = githubBaseHref ? `${githubBaseHref}pull/${prNumber}` : undefined;
-    const prLabel = `${localizer.message("ui.channel.prPreview")}, PR #${prNumber}, ${versionText}`;
+    const prLabel = [localizer.message("ui.channel.prPreview"), `PR #${prNumber}`, versionText]
+      .filter(Boolean)
+      .join(", ");
     return (
       <span className="build-tag">
         <a
@@ -412,7 +425,7 @@ const BuildTag = ({
     return (
       <span className="build-tag">
         <button
-          aria-label={`${name}, ${versionText}`}
+          aria-label={versionText ? `${name}, ${versionText}` : name}
           className="sub-chip channel-badge"
           data-channel={key}
           onClick={onOpenWhatsNew}
@@ -431,7 +444,12 @@ const BuildTag = ({
   }
   return (
     <span className="build-tag">
-      <button className="sub-chip sub-link" onClick={onOpenWhatsNew} title={versionTitle} type="button">
+      <button
+        className="sub-chip sub-link"
+        onClick={onOpenWhatsNew}
+        title={hydrated ? versionTitle : undefined}
+        type="button"
+      >
         {versionText}
       </button>
     </span>

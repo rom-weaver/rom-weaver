@@ -223,6 +223,10 @@
   text-transform: none;
   letter-spacing: 0;
 }
+/* Before hydration the prerendered tag has no text; build-info.js sets this variable. */
+.rw-app .build-tag :is(.sub-link, .tag-version):empty::before {
+  content: var(--rw-build-tag-text);
+}
 .rw-app .build-tag .tag-letter {
   font-weight: 800;
 }

@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
@@ -629,6 +631,30 @@ describe("Masthead", () => {
     expect(row.querySelector(".sub-status")?.getAttribute("data-sw")).toBe(state);
     expect(container.querySelector(".brand-copy .build-facts")).toBeNull();
   });
+
+  it.each([
+    ["stable", undefined, "v1.2.3"],
+    ["channel", "Nightly", "v1.2.3n"],
+  ])(
+    "prerenders the %s build tag without its version, then shows it once hydrated",
+    async (_name, channelBadge, text) => {
+      const masthead = withSettings(<Masthead {...mastheadProps} channelBadge={channelBadge} />);
+      const container = document.createElement("div");
+      container.innerHTML = renderToString(masthead);
+      document.body.append(container);
+      expect(container.innerHTML).not.toContain("1.2.3");
+      expect(container.querySelector(".build-tag")).not.toBeNull();
+      const recover = vi.fn();
+      let root: ReturnType<typeof hydrateRoot>;
+      await act(async () => {
+        root = hydrateRoot(container, masthead, { onRecoverableError: recover });
+      });
+      expect(container.querySelector(".build-tag")?.textContent).toContain(text);
+      expect(recover).not.toHaveBeenCalled();
+      await act(async () => root.unmount());
+      container.remove();
+    },
+  );
 
   it("links pull request build tags to their pull request and channels to What's new", () => {
     const { container, getByRole, rerender } = render(

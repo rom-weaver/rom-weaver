@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { buildTagVersionText } from "../../src/webapp/build-tag-text.mjs";
 import { escapeHtml } from "../../src/webapp/escape-html.mjs";
 import { SITE_NAME } from "../../src/webapp/workflow-seo.mjs";
 import { rootDir } from "./paths.mjs";
@@ -72,19 +73,37 @@ export const createRootManifestSource = (channel, channelLabel) => {
 export const channelAttributes = (channel, channelLabel) =>
   `data-channel="${channel}" data-channel-label="${escapeHtml(channelLabel)}"`;
 
-/** The `<html>` attribute the bundle reads its version and commit from (src/webapp/build-version.ts). */
-export const buildInfoAttribute = (buildInfo) => `data-build-info="${escapeHtml(JSON.stringify(buildInfo))}"`;
+/** The global src/webapp/build-version.ts reads the version and commit from. */
+export const BUILD_INFO_GLOBAL = "globalThis.__ROM_WEAVER_BUILD_INFO__";
+export const BUILD_INFO_SCRIPT_NAME = "build-info.js";
+
+// Pages load this script instead of carrying the build info, so a release that changes
+// only the version leaves every precached page as it was. It also gives CSS the build
+// tag text, which the prerendered tag shows until the page hydrates.
+/** The source of build-info.js for a `channel` build. */
+export const buildInfoScript = ({ buildInfo, channel, channelLabel }) => {
+  const tagText = buildTagVersionText({
+    channelBadge: channel === "prod" ? "" : channelLabel,
+    commitDistance: buildInfo.commitsSinceVersion > 0 ? buildInfo.commitsSinceVersion : 0,
+    dirty: Boolean(buildInfo.dirtyHash),
+    version: buildInfo.version,
+  });
+  return (
+    `${BUILD_INFO_GLOBAL} = ${JSON.stringify(buildInfo)};\n` +
+    `document.documentElement.style.setProperty("--rw-build-tag-text", ${JSON.stringify(JSON.stringify(tagText))});\n`
+  );
+};
 
 // The tab title and iOS home-screen label need the channel before the bundle boots.
 // The accent MUST stay the first `<html>` attribute: verify-seo-build matches `<html data-accent=`.
-export const applyChannelIdentity = (html, { buildInfo, channel, channelLabel }) => {
+export const applyChannelIdentity = (html, { channel, channelLabel }) => {
   const accent = CHANNEL_DEFAULT_ACCENTS[channel] || CHANNEL_DEFAULT_ACCENTS.dev;
   const label = escapeHtml(channelLabel);
   const accentAttribute = accent === "madder" ? "" : `data-accent="${accent}" `;
   // Replacer functions keep `$` sequences in the label literal.
   const stampedHtml = html.replace(
     "<html ",
-    () => `<html ${accentAttribute}${channelAttributes(channel, channelLabel)} ${buildInfoAttribute(buildInfo)} `,
+    () => `<html ${accentAttribute}${channelAttributes(channel, channelLabel)} `,
   );
   if (channel === "prod") return stampedHtml;
   return stampedHtml
@@ -96,16 +115,21 @@ export const applyChannelIdentity = (html, { buildInfo, channel, channelLabel })
     );
 };
 
-// The stamp step sets the channel and build info, so index.html matches for every
-// deployment. The dev server stamps directly.
+// The stamp step sets the channel and writes build-info.js, so index.html matches for every
+// deployment. The dev server stamps and serves them directly.
 export const stampChannelIdentity = ({ buildInfo, channel, channelLabel, serviceWorkerEnabled }) => ({
+  configureServer(server) {
+    server.middlewares.use(`/${BUILD_INFO_SCRIPT_NAME}`, (_req, res) => {
+      res.setHeader("Content-Type", "text/javascript");
+      res.setHeader("Cache-Control", "no-cache");
+      res.end(buildInfoScript({ buildInfo, channel, channelLabel }));
+    });
+  },
   name: "rom-weaver-channel-identity",
   transformIndexHtml: {
     handler(html, ctx) {
       const serviceWorkerHtml = html.replace("<html ", `<html data-service-worker-enabled="${serviceWorkerEnabled}" `);
-      return ctx.server
-        ? applyChannelIdentity(serviceWorkerHtml, { buildInfo, channel, channelLabel })
-        : serviceWorkerHtml;
+      return ctx.server ? applyChannelIdentity(serviceWorkerHtml, { channel, channelLabel }) : serviceWorkerHtml;
     },
     order: "pre",
   },
