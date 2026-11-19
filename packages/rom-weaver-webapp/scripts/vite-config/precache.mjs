@@ -63,6 +63,7 @@ export const injectPrecacheManifest = async ({ distDir, swDest, swSrc }) => {
       "**/index.html",
       "404.html",
       "manifest.json",
+      "build-info.js",
       "rom-weaver-*.schema.json",
       "docs.md",
       "docs/*.md",

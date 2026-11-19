@@ -72,7 +72,7 @@ export const renderPrerenderedShells = async ({ buildInfo, channel, channelLabel
   const prerender = await import("../prerender.mjs");
   const shells = new Map();
   // The prerender server reads these while it loads build-channel.ts and
-  // build-version.ts. A browser reads <html data-channel> and <html data-build-info>.
+  // build-version.ts. A browser reads <html data-channel> and build-info.js.
   globalThis.ROM_WEAVER_PRERENDER_CHANNEL = { channel, label: channelLabel };
   globalThis.__ROM_WEAVER_BUILD_INFO__ = buildInfo;
   try {

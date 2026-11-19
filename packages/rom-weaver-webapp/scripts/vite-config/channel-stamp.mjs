@@ -3,7 +3,13 @@ import path from "node:path";
 import replaceAndUpdateSourceMapModule from "workbox-build/build/lib/replace-and-update-source-map.js";
 import { generatedIconAssetsDir } from "../generated-icon-assets.mjs";
 import { writeChangelog } from "./changelog.mjs";
-import { applyChannelIdentity, releaseVersionForChannel } from "./channel.mjs";
+import {
+  applyChannelIdentity,
+  BUILD_INFO_GLOBAL,
+  BUILD_INFO_SCRIPT_NAME,
+  buildInfoScript,
+  releaseVersionForChannel,
+} from "./channel.mjs";
 import { writeCloudflareHeaders } from "./headers.mjs";
 import { minifyDocumentInlineScripts } from "./minify-document-inline-scripts.mjs";
 import { rootDir } from "./paths.mjs";
@@ -15,9 +21,6 @@ import { writeChannelPages } from "./static-assets.mjs";
 // Outside dist, which Pages uploads and the Docker image copies whole.
 export const CHANNEL_STAMP_TEMPLATES_DIR = path.join(rootDir, "build", "channel-stamp");
 const SERVICE_WORKER_NAME = "rom-weaver-service-worker.js";
-// The global that src/webapp/build-version.ts reads. The stamp overwrites it in the
-// service worker, which has no <html>.
-const SERVICE_WORKER_BUILD_INFO_PLACEHOLDER = "globalThis.__ROM_WEAVER_BUILD_INFO__";
 // Each stamp reads these back. The saved service worker still holds its manifest placeholder.
 const TEMPLATE = {
   icons: "channel-icons",
@@ -48,15 +51,15 @@ const saveChannelStampTemplates = ({ distDir, routePreloadLinks, templatesDir })
 const stampServiceWorkerBuildInfo = async (swPath, buildInfo) => {
   const mapPath = `${swPath}.map`;
   const originalSource = fs.readFileSync(swPath, "utf8");
-  if (!originalSource.includes(SERVICE_WORKER_BUILD_INFO_PLACEHOLDER)) {
-    throw new Error(`${swPath} has no ${SERVICE_WORKER_BUILD_INFO_PLACEHOLDER} to stamp the build info over`);
+  if (!originalSource.includes(BUILD_INFO_GLOBAL)) {
+    throw new Error(`${swPath} has no ${BUILD_INFO_GLOBAL} to stamp the build info over`);
   }
   const { map, source } = await replaceAndUpdateSourceMapModule.replaceAndUpdateSourceMap({
     jsFilename: SERVICE_WORKER_NAME,
     originalMap: JSON.parse(fs.readFileSync(mapPath, "utf8")),
     originalSource,
     replaceString: `(${JSON.stringify(buildInfo)})`,
-    searchString: SERVICE_WORKER_BUILD_INFO_PLACEHOLDER,
+    searchString: BUILD_INFO_GLOBAL,
   });
   fs.writeFileSync(swPath, source);
   fs.writeFileSync(mapPath, map);
@@ -75,7 +78,7 @@ export const stampChannel = async ({ buildInfo, channel, channelLabel, distDir, 
   writeChannelPages(distDir, {
     channel,
     channelLabel,
-    indexHtml: applyChannelIdentity(readTemplate(TEMPLATE.index), { buildInfo, channel, channelLabel }),
+    indexHtml: applyChannelIdentity(readTemplate(TEMPLATE.index), { channel, channelLabel }),
     prerenderedShells: await renderPrerenderedShells({ buildInfo, channel, channelLabel }),
     routePreloadLinks,
     siteOrigin,
@@ -83,6 +86,7 @@ export const stampChannel = async ({ buildInfo, channel, channelLabel, distDir, 
   writeChangelog(distDir, releaseVersionForChannel(channel, buildInfo.version));
   minifyDocumentInlineScripts(distDir);
   writeCloudflareHeaders(distDir, channel);
+  fs.writeFileSync(path.join(distDir, BUILD_INFO_SCRIPT_NAME), buildInfoScript({ buildInfo, channel, channelLabel }));
   // Last: the manifest revisions hash the documents written above.
   const swDest = path.join(distDir, SERVICE_WORKER_NAME);
   await injectPrecacheManifest({ distDir, swDest, swSrc: path.join(templatesDir, TEMPLATE.serviceWorker) });

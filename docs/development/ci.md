@@ -404,7 +404,7 @@ A tag's run usually starts before `main`'s run saves that commit's bundle. So on
 
 `scripts/ci/reuse-webapp-bundle.mjs` allows a restamp only when no webapp input changed since the bundle's commit. It also checks that each file in the bundle's manifest matches this run's `wasm-prod` file. Otherwise the leg builds its own.
 
-The bundle reads its version and commit from `<html data-build-info>`. The stamp also writes them to the service worker. A restamped tag shows its own version. Pull request previews wait for the `wasm` job too.
+The bundle reads its version and commit from `build-info.js`, which pages load before it. A release that changes only the version leaves the precached pages unchanged. The stamp also writes them to the service worker. A restamped tag shows its own version. Pull request previews wait for the `wasm` job too.
 
 A hyphen after the version is what makes a tag a prerelease. The same rule routes the npm dist-tag and the docker `beta` tag - see [prerelease routing](#prerelease-routing).
 

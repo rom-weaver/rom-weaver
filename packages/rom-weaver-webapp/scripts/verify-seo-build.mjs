@@ -1,4 +1,4 @@
-import { countVisibleWords, documentNodes, hasDescriptiveHeading, parseDocument } from "./html-document.mjs";
+import { countVisibleWords, hasDescriptiveHeading } from "./html-document.mjs";
 import { findCrawlerBrokenLinks } from "./crawler-links.mjs";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -14,7 +14,14 @@ import {
 } from "../src/webapp/api-catalog.mjs";
 import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { escapeHtml } from "../src/webapp/escape-html.mjs";
-import { buildInfoAttribute, channelAttributes, resolveAppChannel, resolveSiteOrigin } from "./vite-config/channel.mjs";
+import {
+  BUILD_INFO_GLOBAL,
+  BUILD_INFO_SCRIPT_NAME,
+  buildInfoScript,
+  channelAttributes,
+  resolveAppChannel,
+  resolveSiteOrigin,
+} from "./vite-config/channel.mjs";
 import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
 import {
   LEGACY_WORKFLOW_ROUTES,
@@ -577,6 +584,17 @@ for (const name of DOCS_SCREENSHOT_NAMES) {
   const screenshotPath = path.join(distDir, "docs", "screenshots", name);
   if (!fs.statSync(screenshotPath).isFile()) throw new Error(`docs screenshot is missing: ${name}`);
 }
+const htmlPageNames = fs
+  .readdirSync(distDir, { recursive: true, encoding: "utf8" })
+  .filter((name) => name.endsWith(".html"));
+const shownScreenshots = new Set(
+  htmlPageNames.flatMap((name) => [...read(name).matchAll(/docs\/screenshots\/([\w.-]+)/g)].map(([, file]) => file)),
+);
+const unshownScreenshots = fs
+  .readdirSync(path.join(distDir, "docs", "screenshots"))
+  .filter((file) => !shownScreenshots.has(file));
+if (unshownScreenshots.length)
+  throw new Error(`screenshots no published page shows must not ship: ${unshownScreenshots.join(", ")}`);
 for (const { docsRoute, name } of DOCS_SCREENSHOT_CASES) {
   if (!docsRoute) continue;
   const docsHtml = read(`${docsRoute}.html`);
@@ -820,23 +838,27 @@ assertIncludes(
   "tools alias canonical",
 );
 
-// The bundle reads its channel and build info from <html>. A page stamped for
-// another channel or commit shows that one's badge and version.
-const expectedChannelAttributes = channelAttributes(channel, process.env.ROM_WEAVER_CHANNEL_LABEL || channel);
-// The stamping job's git sets the build info, so this reads it from the bundle.
+// The bundle reads its channel from <html> and its build info from build-info.js. A page
+// stamped for another channel shows that one's badge.
+const channelLabel = process.env.ROM_WEAVER_CHANNEL_LABEL || channel;
+const expectedChannelAttributes = channelAttributes(channel, channelLabel);
+// The stamping job's git sets the build info, so this reads it from the built build-info.js.
 // Another checkout, such as Lighthouse's shallow one, would compute different values.
-const homeBuildInfoJson = [...documentNodes(parseDocument(homeHtml))]
-  .find((node) => node.nodeName === "html")
-  ?.attrs.find((attribute) => attribute.name === "data-build-info")?.value;
-const buildInfo = homeBuildInfoJson ? JSON.parse(homeBuildInfoJson) : null;
+const buildInfoSource = read(BUILD_INFO_SCRIPT_NAME);
+const buildInfoJson = buildInfoSource.startsWith(`${BUILD_INFO_GLOBAL} = `)
+  ? buildInfoSource.slice(`${BUILD_INFO_GLOBAL} = `.length, buildInfoSource.indexOf(";\n"))
+  : null;
+const buildInfo = buildInfoJson ? JSON.parse(buildInfoJson) : null;
 if (typeof buildInfo?.version !== "string" || !buildInfo.commitHash)
-  throw new Error("index.html has no stamped build info");
-const expectedBuildInfoAttribute = buildInfoAttribute(buildInfo);
-for (const name of fs.readdirSync(distDir, { recursive: true, encoding: "utf8" })) {
-  if (!name.endsWith(".html")) continue;
+  throw new Error(`${BUILD_INFO_SCRIPT_NAME} has no stamped build info`);
+if (buildInfoSource !== buildInfoScript({ buildInfo, channel, channelLabel }))
+  throw new Error(`${BUILD_INFO_SCRIPT_NAME} does not match its build info`);
+for (const name of htmlPageNames) {
   const html = read(name);
   assertIncludes(html, expectedChannelAttributes, `${name} channel`);
-  assertIncludes(html, expectedBuildInfoAttribute, `${name} build info`);
+  assertIncludes(html, `<script defer src="./${BUILD_INFO_SCRIPT_NAME}"></script>`, `${name} build info script`);
+  // Pages with build info change on every release, so each offline copy downloads them again.
+  assertExcludes(html, "data-build-info", `${name} build info attribute`);
   // A second root means a label's `$` text was read as replacement syntax.
   const mountPoints = html.split('id="webapp-root"').length - 1;
   if (mountPoints !== 1) throw new Error(`${name} has ${mountPoints} #webapp-root elements, expected 1`);

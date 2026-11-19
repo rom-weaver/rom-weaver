@@ -574,7 +574,8 @@ const notFoundDocument = async () => await rerootDocument(await matchPrecache("4
 
 const matchCachedResponse = async (request: Request, url: URL) => {
   const credentialless = await ensureCoepModeHydrated();
-  const cachedResponse = await caches.match(request);
+  const isPageNavigation = isTopLevelNavigation(request, url) && !requestPrefersMarkdown(request);
+  const cachedResponse = isPageNavigation ? await matchCachedDocument(request, url) : await caches.match(request);
   if (cachedResponse) return withCrossOriginIsolationHeaders(cachedResponse, credentialless) || cachedResponse;
   if (isManifestRequest(request, url)) {
     const manifest = await matchPrecache("manifest.json");
@@ -646,11 +647,33 @@ const serveNavigationFromPrecache = async (request: Request, url: URL, event: un
   return withCrossOriginIsolationHeaders(document, credentialless) || document;
 };
 
+// This worker's precached document first: a runtime-cached one can come from a newer deploy, whose
+// build-info.js and chunks this worker does not hold.
+const matchCachedDocument = async (request: Request, url: URL) =>
+  (await matchPrecachedNavigation(url)) ?? (await caches.match(request));
+
 const matchExactCachedNavigation = async (request: Request, url: URL) => {
-  const cached = (await caches.match(request)) ?? (await matchPrecachedNavigation(url));
+  const cached = await matchCachedDocument(request, url);
   if (!cached) return undefined;
   const credentialless = await ensureCoepModeHydrated();
   return withCrossOriginIsolationHeaders(cached, credentialless) || cached;
+};
+
+// A page fetched from the network needs that deploy's build-info.js, not the precached copy. Every
+// redirect hop shares one client, so each served document records its source again.
+const networkDocumentClients = new Set<string>();
+
+const recordDocumentSource = (event: unknown, { network }: { network: boolean }) => {
+  const clientId = (event as { resultingClientId?: string } | undefined)?.resultingClientId;
+  if (!clientId) return;
+  if (network) networkDocumentClients.add(clientId);
+  else networkDocumentClients.delete(clientId);
+};
+
+const awaitNetworkDocument = async (fetching: Promise<Response>, event: unknown) => {
+  const response = await fetching;
+  recordDocumentSource(event, { network: true });
+  return response;
 };
 
 const NETWORK_TIMED_OUT = Symbol("network-timed-out");
@@ -671,9 +694,9 @@ const fetchWithNavigationTimeout = async (request: Request, url: URL, event: unk
   try {
     // A fetch that fails before its headers must surface here, not wait out the timer.
     const first = await Promise.race([headers.then(() => undefined), fetching.then(() => undefined), timeout]);
-    if (first !== NETWORK_TIMED_OUT) return await fetching;
+    if (first !== NETWORK_TIMED_OUT) return await awaitNetworkDocument(fetching, event);
     const cached = await matchExactCachedNavigation(request, url);
-    if (!cached) return await fetching;
+    if (!cached) return await awaitNetworkDocument(fetching, event);
     // The fetch keeps running so it still refreshes the runtime cache; its outcome no longer matters here.
     const refresh = fetching.then(
       () => undefined,
@@ -681,6 +704,7 @@ const fetchWithNavigationTimeout = async (request: Request, url: URL, event: unk
     );
     waitUntilEvent(event, refresh);
     logServiceWorker("navigation network timed out; serving cached copy", { url: url.href });
+    recordDocumentSource(event, { network: false });
     return cached;
   } finally {
     clearTimeout(timer);
@@ -691,11 +715,15 @@ registerRoute(
   ({ request, url }) => shouldUseNetworkFirst(request, url),
   async ({ event, request, url }) => {
     const precached = await serveNavigationFromPrecache(request, url, event);
-    if (precached) return precached;
+    if (precached) {
+      recordDocumentSource(event, { network: false });
+      return precached;
+    }
     try {
       return await fetchWithNavigationTimeout(request, url, event);
     } catch (err) {
       const cachedResponse = await matchCachedResponse(request, url);
+      recordDocumentSource(event, { network: false });
       logServiceWorker("network-first request failed", {
         cached: Boolean(cachedResponse),
         error: formatError(err),
@@ -706,6 +734,22 @@ registerRoute(
     }
   },
 );
+
+const BUILD_INFO_FILE = "build-info.js";
+
+const serveBuildInfo = async ({ event, request }: { event: unknown; request: Request }) => {
+  const clientId = (event as { clientId?: string } | undefined)?.clientId ?? "";
+  if (!networkDocumentClients.delete(clientId)) {
+    const precached = await matchPrecache(BUILD_INFO_FILE);
+    if (precached) return precached;
+  }
+  try {
+    return await fetch(request);
+  } catch (err) {
+    logServiceWorker("build info request failed", { error: formatError(err) });
+    return (await matchPrecache(BUILD_INFO_FILE)) || Response.error();
+  }
+};
 
 // `maximumFileSizeToCacheInBytes` below governs only the precache. Runtime
 // EmulatorJS assets use this dedicated cache and are intentionally unaffected.
@@ -1052,6 +1096,13 @@ crypto.subtle
 
 keepResourceTimingsRecording(self);
 observeDownloadTimings(logServiceWorker);
+// Registered before the precache route, which would answer build-info.js cache-first for every page.
+registerRoute(
+  ({ request, url }) =>
+    request.method === "GET" && isSameOriginRequest(url) && scopePath(url.pathname) === `/${BUILD_INFO_FILE}`,
+  serveBuildInfo,
+);
+
 addPlugins([precachePlugin]);
 precacheAndRoute(INITIAL_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();

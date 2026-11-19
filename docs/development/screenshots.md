@@ -28,13 +28,15 @@ Documentation images show real app controls with homebrew samples or a generated
 | `apply-output` | [Apply output](../how-to/apply-rom-patches.md#choose-the-output-and-apply) | File name, container, and download action |
 | `create-inputs` | [Create a patch](../how-to/create-rom-patches.md) | Original and Modified inputs |
 | `create-output` | [Create output](../how-to/create-rom-patches.md) | Patch format and output controls |
-| `bundle-output` | [Share a weave](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) | ROM inclusion and the separate sharing action |
+| `bundle-output` | [README](../../README.md#screenshots) | ROM inclusion and the separate sharing action |
 | `identify-checks` | [Identify a ROM](../how-to/identify-roms-browser.md) | An unknown homebrew ROM with usable checksums |
 | `cheat-step` | [Use cheats](../how-to/use-browser-cheats.md) | A manual ROM-write step in the patch order |
 | `save-editor` | [Edit a save](../how-to/edit-gen3-saves.md) | Filtered fields and a checked edit preview |
 | `test-player` | [Test a ROM](../how-to/test-roms-in-browser.md) | The homebrew player and its ROM fingerprint |
 
 Each subject has desktop and mobile captures in light and dark themes. AVIF is the preferred image format; WebP is the fallback. These are delivery variants, not duplicate examples.
+
+The webapp build deploys only screenshots a docs page shows. Images only the README uses stay in the repository. A release that recaptures them adds nothing to the offline copy.
 
 The manual cheat capture demonstrates the controls, not a useful cheat for the homebrew ROM. The save capture changes a generated Zelda save; it includes no game ROM.
 
@@ -62,7 +64,7 @@ The output capture shows format selection. It does not show a second workflow.
 
 ## Create a weave
 
-The [weave guide](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) owns the sharing-control images.
+The [weave guide](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) has no images; the README shows the sharing-control captures.
 
 ## Sample ROMs
 

@@ -1,10 +1,10 @@
 import { Globe, MonitorCheck, MonitorDown, MonitorOff, MonitorUp } from "lucide-react";
-import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import type { MessageId } from "../../presentation/localization/catalog.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import { join } from "./shell-common.tsx";
+import { buildTagVersionText, channelSuffix } from "../build-tag-text.mjs";
 
 /**
  * The prerendered shells ship a placeholder runtime status that the parser-time
@@ -344,8 +344,9 @@ const guardExternalClick = (
  * that opens the changelog, and a compact channel label everywhere else. A PR
  * preview is the exception - the number IS the useful identity, so it links
  * straight to the pull request.
+ *
+ * Prerendered pages have no build info, so the version text stays empty until hydration.
  */
-const CHANNEL_SUFFIXES: Record<string, string> = { beta: "b", dev: "d", nightly: "n" };
 const CHANNEL_MESSAGES: Record<string, MessageId> = {
   beta: "ui.channel.beta",
   dev: "ui.channel.dev",
@@ -353,85 +354,115 @@ const CHANNEL_MESSAGES: Record<string, MessageId> = {
   preview: "ui.channel.preview",
 };
 
-const BuildTag = ({
-  channelBadge,
-  commitDistance,
-  confirmExternalNavigation,
-  dirty,
-  githubBaseHref,
-  localizer,
-  onOpenWhatsNew,
-  version,
-  versionTitle,
-}: {
-  channelBadge?: string;
-  commitDistance: number;
+// Hydration happens once per page, so the hydration check needs no subscription.
+const subscribeNever = () => () => undefined;
+
+type BuildTagLinks = {
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
-  dirty?: boolean;
   githubBaseHref?: string;
   localizer: Localizer;
   onOpenWhatsNew: () => void;
+};
+
+const PrBuildTag = ({
+  confirmExternalNavigation,
+  githubBaseHref,
+  localizer,
+  prNumber,
+  versionText,
+}: BuildTagLinks & { prNumber: string; versionText: string }) => {
+  const prHref = githubBaseHref ? `${githubBaseHref}pull/${prNumber}` : undefined;
+  const prLabel = [localizer.message("ui.channel.prPreview"), `PR #${prNumber}`, versionText]
+    .filter(Boolean)
+    .join(", ");
+  return (
+    <span className="build-tag">
+      <a
+        aria-label={prLabel}
+        className="sub-chip channel-badge"
+        data-channel="pr"
+        href={prHref ?? "#"}
+        onClick={(event) => (prHref ? guardExternalClick(event, prHref, confirmExternalNavigation) : undefined)}
+        rel="noreferrer"
+        target="_blank"
+      >
+        <span className="tag-pr">{`PR-#${prNumber}`}</span>
+        <span className="tag-extra">
+          <span aria-hidden="true" className="tag-separator">
+            {" / "}
+          </span>
+          <span className="tag-version">{versionText}</span>
+        </span>
+      </a>
+    </span>
+  );
+};
+
+const ChannelBuildTag = ({
+  channelBadge,
+  localizer,
+  onOpenWhatsNew,
+  versionText,
+}: BuildTagLinks & { channelBadge: string; versionText: string }) => {
+  const key = channelBadge.toLowerCase();
+  const nameId = CHANNEL_MESSAGES[key];
+  const name = nameId ? localizer.message(nameId) : channelBadge;
+  // Channels with a suffix letter show it in the version, so skip the leading letter.
+  const hasSuffix = Boolean(channelSuffix(channelBadge));
+  return (
+    <span className="build-tag">
+      <button
+        aria-label={versionText ? `${name}, ${versionText}` : name}
+        className="sub-chip channel-badge"
+        data-channel={key}
+        onClick={onOpenWhatsNew}
+        type="button"
+      >
+        {hasSuffix ? null : (
+          <>
+            <b className="tag-letter">{channelBadge.slice(0, 1).toUpperCase()}</b>
+            <span aria-hidden="true" className="tag-separator">
+              {" / "}
+            </span>
+          </>
+        )}
+        <span className="tag-version">{versionText}</span>
+      </button>
+    </span>
+  );
+};
+
+const BuildTag = ({
+  channelBadge,
+  commitsSinceVersion,
+  dirty,
+  version,
+  versionTitle,
+  ...links
+}: BuildTagLinks & {
+  channelBadge?: string;
+  commitsSinceVersion?: number | null;
+  dirty?: boolean;
   version: string;
   versionTitle?: string;
 }) => {
-  const suffix = CHANNEL_SUFFIXES[channelBadge?.toLowerCase() ?? ""] ?? "";
-  const versionText = `v${version}${suffix}${commitDistance ? `+${commitDistance}` : ""}${dirty ? "*" : ""}`;
+  const hydrated = useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  );
+  const versionText = hydrated ? buildTagVersionText({ channelBadge, commitsSinceVersion, dirty, version }) : "";
   const prNumber = channelBadge?.match(/^pr-(\d+)$/i)?.[1];
-  if (prNumber) {
-    const prHref = githubBaseHref ? `${githubBaseHref}pull/${prNumber}` : undefined;
-    const prLabel = `${localizer.message("ui.channel.prPreview")}, PR #${prNumber}, ${versionText}`;
-    return (
-      <span className="build-tag">
-        <a
-          aria-label={prLabel}
-          className="sub-chip channel-badge"
-          data-channel="pr"
-          href={prHref ?? "#"}
-          onClick={(event) => (prHref ? guardExternalClick(event, prHref, confirmExternalNavigation) : undefined)}
-          rel="noreferrer"
-          target="_blank"
-        >
-          <span className="tag-pr">{`PR-#${prNumber}`}</span>
-          <span className="tag-extra">
-            <span aria-hidden="true" className="tag-separator">
-              {" / "}
-            </span>
-            <span className="tag-version">{versionText}</span>
-          </span>
-        </a>
-      </span>
-    );
-  }
-  if (channelBadge) {
-    const key = channelBadge.toLowerCase();
-    const letter = channelBadge.slice(0, 1).toUpperCase();
-    const nameId = CHANNEL_MESSAGES[key];
-    const name = nameId ? localizer.message(nameId) : channelBadge;
-    let channelText: ReactNode = null;
-    if (!suffix) channelText = <b className="tag-letter">{letter}</b>;
-    return (
-      <span className="build-tag">
-        <button
-          aria-label={`${name}, ${versionText}`}
-          className="sub-chip channel-badge"
-          data-channel={key}
-          onClick={onOpenWhatsNew}
-          type="button"
-        >
-          {channelText}
-          {suffix ? null : (
-            <span aria-hidden="true" className="tag-separator">
-              {" / "}
-            </span>
-          )}
-          <span className="tag-version">{versionText}</span>
-        </button>
-      </span>
-    );
-  }
+  if (prNumber) return <PrBuildTag {...links} prNumber={prNumber} versionText={versionText} />;
+  if (channelBadge) return <ChannelBuildTag {...links} channelBadge={channelBadge} versionText={versionText} />;
   return (
     <span className="build-tag">
-      <button className="sub-chip sub-link" onClick={onOpenWhatsNew} title={versionTitle} type="button">
+      <button
+        className="sub-chip sub-link"
+        onClick={links.onOpenWhatsNew}
+        title={hydrated ? versionTitle : undefined}
+        type="button"
+      >
         {versionText}
       </button>
     </span>
