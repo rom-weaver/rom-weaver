@@ -989,6 +989,26 @@ describe("navigation requests", () => {
     await expect(buildInfo.text()).resolves.toBe(expected);
   });
 
+  it("serves the precached build-info.js after a network redirect lands on a precached page", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: ["/apply"] });
+    setPrecache({
+      "build-info.js": () => new Response("precached", { status: 200 }),
+      "docs/guide/index.html": () => new Response("guide", { status: 200 }),
+    });
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/apply`, () => new Response(null, { status: 301 }));
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/build-info.js`, () => new Response("deployed", { status: 200 }));
+    const hop = { resultingClientId: "page", type: "fetch" };
+    await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/apply`), hop);
+    await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`), hop);
+
+    const buildInfo = await routed(harness, requireRoute(5), new Request(`${APP_ORIGIN}/build-info.js`), {
+      clientId: "page",
+      type: "fetch",
+    });
+
+    await expect(buildInfo.text()).resolves.toBe("precached");
+  });
+
   it("serves cache-first once a pump stores the last missing deferred entry", async () => {
     const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
     precachedDocs();

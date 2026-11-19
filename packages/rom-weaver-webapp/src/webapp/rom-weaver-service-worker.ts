@@ -654,13 +654,20 @@ const matchExactCachedNavigation = async (request: Request, url: URL) => {
 };
 
 // A page fetched from the network names that deploy's bundle, so it needs that deploy's build-info.js,
-// not the copy this worker precached. Holds the clients whose document came from the network.
+// not the copy this worker precached. Holds the clients whose document came from the network. Every
+// redirect hop of a navigation shares one client, so each served document records its source again.
 const networkDocumentClients = new Set<string>();
 
-const fetchNetworkDocument = async (fetching: Promise<Response>, event: unknown) => {
-  const response = await fetching;
+const recordDocumentSource = (event: unknown, { network }: { network: boolean }) => {
   const clientId = (event as { resultingClientId?: string } | undefined)?.resultingClientId;
-  if (clientId) networkDocumentClients.add(clientId);
+  if (!clientId) return;
+  if (network) networkDocumentClients.add(clientId);
+  else networkDocumentClients.delete(clientId);
+};
+
+const awaitNetworkDocument = async (fetching: Promise<Response>, event: unknown) => {
+  const response = await fetching;
+  recordDocumentSource(event, { network: true });
   return response;
 };
 
@@ -682,9 +689,9 @@ const fetchWithNavigationTimeout = async (request: Request, url: URL, event: unk
   try {
     // A fetch that fails before its headers must surface here, not wait out the timer.
     const first = await Promise.race([headers.then(() => undefined), fetching.then(() => undefined), timeout]);
-    if (first !== NETWORK_TIMED_OUT) return await fetchNetworkDocument(fetching, event);
+    if (first !== NETWORK_TIMED_OUT) return await awaitNetworkDocument(fetching, event);
     const cached = await matchExactCachedNavigation(request, url);
-    if (!cached) return await fetchNetworkDocument(fetching, event);
+    if (!cached) return await awaitNetworkDocument(fetching, event);
     // The fetch keeps running so it still refreshes the runtime cache; its outcome no longer matters here.
     const refresh = fetching.then(
       () => undefined,
@@ -692,6 +699,7 @@ const fetchWithNavigationTimeout = async (request: Request, url: URL, event: unk
     );
     waitUntilEvent(event, refresh);
     logServiceWorker("navigation network timed out; serving cached copy", { url: url.href });
+    recordDocumentSource(event, { network: false });
     return cached;
   } finally {
     clearTimeout(timer);
@@ -702,7 +710,10 @@ registerRoute(
   ({ request, url }) => shouldUseNetworkFirst(request, url),
   async ({ event, request, url }) => {
     const precached = await serveNavigationFromPrecache(request, url, event);
-    if (precached) return precached;
+    if (precached) {
+      recordDocumentSource(event, { network: false });
+      return precached;
+    }
     try {
       return await fetchWithNavigationTimeout(request, url, event);
     } catch (err) {
