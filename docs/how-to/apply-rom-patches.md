@@ -128,15 +128,15 @@ Patch cards show format, position, and input/output checks. The three-dot **Patc
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-patches-mobile-light.avif" width="1170" height="1433">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-patches-mobile-light.avif" width="1170" height="1506">
     <source type="image/avif" srcset="../screenshots/apply-patches-desktop-light.avif" width="1770" height="788">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-patches-mobile-light.webp" width="1170" height="1433">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-patches-mobile-light.webp" width="1170" height="1506">
     <img src="../screenshots/apply-patches-desktop-light.webp" alt="Cropped Apply patch stack with two ordered practice patches in the light theme" width="1770" height="788">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-patches-mobile-dark.avif" width="1170" height="1433">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-patches-mobile-dark.avif" width="1170" height="1506">
     <source type="image/avif" srcset="../screenshots/apply-patches-desktop-dark.avif" width="1770" height="788">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-patches-mobile-dark.webp" width="1170" height="1433">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-patches-mobile-dark.webp" width="1170" height="1506">
     <img src="../screenshots/apply-patches-desktop-dark.webp" alt="Cropped Apply patch stack with two ordered practice patches in the dark theme" width="1770" height="788">
   </picture>
   <figcaption>Patches run from top to bottom. Each card shows the checks for that step.</figcaption>
