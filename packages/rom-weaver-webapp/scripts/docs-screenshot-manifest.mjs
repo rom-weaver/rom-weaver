@@ -97,8 +97,11 @@ const DOCS_SCREENSHOT_VIEWPORTS = [
 ];
 const DOCS_SCREENSHOT_THEMES = ["light", "dark"];
 const DOCS_SCREENSHOT_FORMATS = [{ extension: "avif" }, { extension: "webp" }];
+// The files the site serves: only images a docs page shows. A case without a docsRoute only
+// illustrates the repository README, so shipping it would make every offline copy download it again
+// each time a release recaptures it.
 const DOCS_SCREENSHOT_NAMES = [
-  ...DOCS_SCREENSHOT_CASES.flatMap(({ name }) =>
+  ...DOCS_SCREENSHOT_CASES.filter(({ docsRoute }) => docsRoute).flatMap(({ name }) =>
     DOCS_SCREENSHOT_VIEWPORTS.flatMap(({ name: viewport }) =>
       DOCS_SCREENSHOT_THEMES.flatMap((theme) =>
         DOCS_SCREENSHOT_FORMATS.map(({ extension }) => `${name}-${viewport}-${theme}.${extension}`),
@@ -107,7 +110,6 @@ const DOCS_SCREENSHOT_NAMES = [
   ),
   "cheat-apply-cheats-desktop-dark.webp",
   "cheat-apply-cheats-mobile-light.webp",
-  "cheat-create-cheats-desktop-light.webp",
   "cheat-identify-mobile-dark.webp",
   "first-sample-hello-world.webp",
   "first-sample-rom-world.webp",
@@ -117,7 +119,6 @@ const DOCS_SCREENSHOT_NAMES = [
   "compress-select-files-desktop-light.webp",
   "compress-select-files-mobile-dark.webp",
   "checksum-desktop-light.webp",
-  "checksum-home-light.webp",
   "checksum-initial-light.webp",
   "checksum-mobile-dark.webp",
   "ppf-undo-restored.webp",

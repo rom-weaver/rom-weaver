@@ -577,6 +577,18 @@ for (const name of DOCS_SCREENSHOT_NAMES) {
   const screenshotPath = path.join(distDir, "docs", "screenshots", name);
   if (!fs.statSync(screenshotPath).isFile()) throw new Error(`docs screenshot is missing: ${name}`);
 }
+const htmlPageNames = fs
+  .readdirSync(distDir, { recursive: true, encoding: "utf8" })
+  .filter((name) => name.endsWith(".html"));
+// Images only the repository README uses stay out of the site and its offline copy.
+const shownScreenshots = new Set(
+  htmlPageNames.flatMap((name) => [...read(name).matchAll(/docs\/screenshots\/([\w.-]+)/g)].map(([, file]) => file)),
+);
+const unshownScreenshots = fs
+  .readdirSync(path.join(distDir, "docs", "screenshots"))
+  .filter((file) => !shownScreenshots.has(file));
+if (unshownScreenshots.length)
+  throw new Error(`screenshots no published page shows must not ship: ${unshownScreenshots.join(", ")}`);
 for (const { docsRoute, name } of DOCS_SCREENSHOT_CASES) {
   if (!docsRoute) continue;
   const docsHtml = read(`${docsRoute}.html`);
@@ -832,8 +844,7 @@ const buildInfo = homeBuildInfoJson ? JSON.parse(homeBuildInfoJson) : null;
 if (typeof buildInfo?.version !== "string" || !buildInfo.commitHash)
   throw new Error("index.html has no stamped build info");
 const expectedBuildInfoAttribute = buildInfoAttribute(buildInfo);
-for (const name of fs.readdirSync(distDir, { recursive: true, encoding: "utf8" })) {
-  if (!name.endsWith(".html")) continue;
+for (const name of htmlPageNames) {
   const html = read(name);
   assertIncludes(html, expectedChannelAttributes, `${name} channel`);
   assertIncludes(html, expectedBuildInfoAttribute, `${name} build info`);
