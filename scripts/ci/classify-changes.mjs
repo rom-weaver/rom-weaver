@@ -247,7 +247,7 @@ function ciDockerJobInputs(commit) {
 // embedded copies, and the CLI reference `cli_smoke` checks.
 const BUILD_READ_DOCS = /^docs\/(?:man\/|completions\/|rom-weaver-[^/]+\.schema\.json$|reference\/cli\.md$)/u;
 
-// True when every path is documentation that no image or Rust job reads. A push
+// True when every path is documentation that no CLI image or Rust job reads. A push
 // to main narrows to its paths only then; any other diff selects every stack.
 export function isDocsOnlyChange(paths) {
   return paths.length > 0 && paths.every((path) => path.startsWith("docs/") && !BUILD_READ_DOCS.test(path));

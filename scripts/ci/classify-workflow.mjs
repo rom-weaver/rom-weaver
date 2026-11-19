@@ -49,9 +49,9 @@ function priorGreenPaths({ eventName, headSha }) {
 // A push to main is narrowed only against the last green push run, never against
 // `github.event.before`: a pending run replaced by a newer push never ran, so
 // its changes are not in the newer push's own range. Null selects every stack.
-function docsOnlyPushPaths({ eventName, headSha }) {
+function docsOnlyPushPaths(headSha) {
   const greenSha = process.env.MAIN_GREEN_SHA;
-  if (eventName !== "push" || process.env.GITHUB_REF !== "refs/heads/main" || !greenSha) return null;
+  if (process.env.GITHUB_REF !== "refs/heads/main" || !greenSha) return null;
   const paths = changedPaths({ baseSha: greenSha, headSha });
   return paths && isDocsOnlyChange(paths) ? paths : null;
 }
@@ -74,7 +74,7 @@ runMain(() => {
           quiet: eventName === "push",
         });
   const paths =
-    eventName === "push" ? docsOnlyPushPaths({ eventName, headSha: process.env.HEAD_SHA }) : rangePaths;
+    eventName === "push" ? docsOnlyPushPaths(process.env.HEAD_SHA) : rangePaths;
   if (paths)
     process.stdout.write(`changed paths:\n${paths.length ? paths.join("\n") : "(none)"}\n`);
   const { fullMatrix, fullNative, nightlyChecks, qualitySignals } = coverageTiers(

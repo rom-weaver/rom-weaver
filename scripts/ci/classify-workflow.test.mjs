@@ -261,10 +261,12 @@ test("a docs-only push to main still rebuilds the webapp source image for the se
 
 test("a push to main selects every stack when the range since the last green push is not docs-only", (t) => {
   const repo = history(t);
+  let greenSha = repo.head;
   for (const file of ["Dockerfile", "crates/rom-weaver-cli/src/lib.rs", "docs/reference/cli.md", "docs/man/rom-weaver.1"]) {
     const head = commitFiles(repo.cwd, { [file]: "x\n", "docs/faq.md": `${file}\n` });
-    const outputs = mainPush(repo, { base: repo.head, head, greenSha: repo.head });
+    const outputs = mainPush(repo, { base: greenSha, head, greenSha });
     for (const key of EVERY_STACK) assert.equal(outputs[key], "true", `${file}: ${key}`);
+    greenSha = head;
   }
 });
 
