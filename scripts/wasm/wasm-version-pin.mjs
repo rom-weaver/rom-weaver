@@ -57,11 +57,12 @@ export function pinCargoLock(text) {
     .join("\n");
 }
 
+const isCargoManifest = (path) => path === "Cargo.lock" || path === "Cargo.toml" || path.endsWith("/Cargo.toml");
+
 /** `text` with the workspace's own version replaced, or null when `path` is not a Cargo manifest. */
 export function pinWorkspaceVersions(path, text) {
-  if (path === "Cargo.lock") return pinCargoLock(text);
-  if (path === "Cargo.toml" || path.endsWith("/Cargo.toml")) return pinCargoToml(text);
-  return null;
+  if (!isCargoManifest(path)) return null;
+  return path === "Cargo.lock" ? pinCargoLock(text) : pinCargoToml(text);
 }
 
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
@@ -75,7 +76,8 @@ export function pinTreeEntries(entries, readBlob) {
   return entries.map((entry) => {
     const [meta, path] = entry.split("\t");
     const [mode, type, oid] = meta.split(" ");
-    const pinned = type === "blob" ? pinWorkspaceVersions(path, readBlob(oid)) : null;
+    // Reads only manifests: the key paths hold about a thousand other blobs.
+    const pinned = type === "blob" && isCargoManifest(path) ? pinWorkspaceVersions(path, readBlob(oid)) : null;
     return `${mode} ${type} ${pinned === null ? oid : `pinned-${sha256(pinned)}`}\t${path}`;
   });
 }

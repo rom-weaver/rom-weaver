@@ -7,6 +7,7 @@ import process from "node:process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { git, isolatedEnv } from "../test-git.mjs";
 import { createWasmSourceFingerprint } from "./wasm-source-fingerprint.mjs";
 
 const COMPILER_INPUTS = fileURLToPath(new URL("./wasm-compiler-inputs.mjs", import.meta.url));
@@ -40,24 +41,19 @@ test("the local source fingerprint ignores a version-only release but not other 
 
 test("the CI cache basis ignores a version-only release but not other manifest edits", () => {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-cache-basis-"));
-  const git = (...args) =>
-    execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", ...args], {
-      cwd: repo,
-      encoding: "utf8",
-      env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", HOME: repo },
-    });
   // The same pipeline .github/actions/wasm-cache/action.yml runs on the committed tree.
   const basisOf = (manifests) => {
     for (const [file, text] of Object.entries(manifests)) {
       fs.mkdirSync(path.dirname(path.join(repo, file)), { recursive: true });
       fs.writeFileSync(path.join(repo, file), text);
     }
-    git("add", "-A");
-    git("commit", "-q", "--allow-empty", "-m", "change");
-    return execFileSync(process.execPath, [COMPILER_INPUTS, "--cache-inputs"], { cwd: repo, encoding: "utf8", input: git("ls-tree", "-r", "HEAD") });
+    git(repo, "add", "-A");
+    git(repo, "commit", "-q", "--allow-empty", "-m", "change");
+    const tree = git(repo, "ls-tree", "-r", "HEAD");
+    return execFileSync(process.execPath, [COMPILER_INPUTS, "--cache-inputs"], { cwd: repo, encoding: "utf8", env: isolatedEnv(), input: tree });
   };
   try {
-    git("init", "-q");
+    git(repo, "init", "-q");
     const released = basisOf({ ...workspaceManifests("1.2.3"), "crates/core/src/lib.rs": "" });
     assert.match(released, /\tcrates\/core\/src\/lib\.rs\n/);
     assert.equal(basisOf(workspaceManifests("10.20.30")), released);

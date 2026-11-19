@@ -150,7 +150,7 @@ test("pinning replaces only the workspace's own versions", () => {
 });
 
 // The repository's own manifests, with the version moved the way release-please moves it. The
-// bump below is written without the normalizer so it can disagree with it.
+// bump below is written without the pinning code so it can disagree with it.
 test("the real manifests ignore a release bump", () => {
   const workspaceVersion = repoFile("Cargo.toml").match(/^version = "([^"]+)"$/mu)[1];
   const bump = (path, text) => {
