@@ -8,7 +8,7 @@ mise run build-wasm-fast
 mise run build-wasm-prod
 ```
 
-`build-app.mjs` copies a finished module from the shared cache in `wasm-artifact-cache.mjs` when another checkout already built the same inputs. Otherwise it builds from a copy of the workspace with the crate version pinned by `wasm-version-pin.mjs`, so a version-only release keeps the module's bytes. Code compiled into the module MUST use `rom_weaver_core::app_version()` instead of `env!("CARGO_PKG_VERSION")`; `verify-wasm-artifact.mjs` fails a module that contains the pinned version. The [development guide](../../docs/development/development.md#build-and-run-the-webapp) lists the key inputs and overrides.
+`build-app.mjs` copies a finished module from the shared cache in `wasm-artifact-cache.mjs` when another checkout already built the same inputs. Otherwise it builds a copy of the workspace with the crate version pinned (`wasm-version-pin.mjs`; see the [development guide](../../docs/development/development.md#build-and-run-the-webapp)). Code compiled into the module MUST use `rom_weaver_core::app_version()`, not `env!("CARGO_PKG_VERSION")`. `verify-wasm-artifact.mjs` fails a module that contains the pinned version. The [development guide](../../docs/development/development.md#build-and-run-the-webapp) lists the key inputs and overrides.
 
 Production WASM sidecars use Brotli quality 11 with Node's default 22-bit window. The larger 24-bit window used for other build assets increased the compressed module size in the measured production build. Both paths preserve the decoded WASM bytes.
 

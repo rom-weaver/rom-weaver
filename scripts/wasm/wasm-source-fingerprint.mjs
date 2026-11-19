@@ -64,7 +64,7 @@ export const recordedSourceFingerprint = (artifact) => {
 export const shouldBuildWasm = ({ artifactExists, recordedFingerprint, sourceFingerprint }) =>
   !artifactExists || recordedFingerprint !== sourceFingerprint;
 
-/** The bytes of repository file `path` as the WASM build compiles them: manifests carry pinned crate versions. */
+/** The bytes of `path` as the WASM build compiles them, with manifest versions pinned. */
 export const readWasmSourceFile = (root, path) => {
   const contents = readFileSync(join(root, path));
   const pinned = pinWorkspaceVersions(path, contents.toString("utf8"));

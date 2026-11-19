@@ -38,10 +38,9 @@ pub fn app_version() -> Option<&'static str> {
     Some(env!("CARGO_PKG_VERSION"))
 }
 
-/// The rom-weaver release version from `ROM_WEAVER_APP_VERSION`, or `None` when the host did
-/// not supply a valid one. The module is built with a pinned crate version
-/// (`scripts/wasm/wasm-version-pin.mjs`) so a version-only release keeps its bytes; code in
-/// it MUST NOT use `env!("CARGO_PKG_VERSION")`.
+/// The release version from `ROM_WEAVER_APP_VERSION`, or `None` if it is unset or invalid.
+/// The build pins the crate version (`scripts/wasm/wasm-version-pin.mjs`), so a version-only
+/// release keeps the module's bytes. Code in the module MUST NOT use `env!("CARGO_PKG_VERSION")`.
 #[cfg(target_family = "wasm")]
 pub fn app_version() -> Option<&'static str> {
     const APP_VERSION_ENV: &str = "ROM_WEAVER_APP_VERSION";

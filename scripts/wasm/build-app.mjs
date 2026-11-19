@@ -97,8 +97,7 @@ export function targetRustflagsArgs({ cargoHome, sysroot, target, extraFlags = [
 
 const isPinnedWorkspaceFile = (path) => path === "Cargo.toml" || path === "Cargo.lock" || path.startsWith("crates/");
 
-// Removes files outside `wanted`, then the directories that leaves empty, so a file can take a
-// removed directory's name.
+// Deletes stale files, then the directories they empty. A file may then take a removed directory's name.
 const removeStaleEntries = (workspaceDir, wanted) => {
   const entries = readdirSync(workspaceDir, { recursive: true, withFileTypes: true });
   const pathOf = (entry) => relative(workspaceDir, join(entry.parentPath, entry.name)).split(sep).join("/");
@@ -109,14 +108,13 @@ const removeStaleEntries = (workspaceDir, wanted) => {
 };
 
 /**
- * Mirrors the workspace's WASM sources into `workspaceDir` with pinned crate versions
- * (wasm-version-pin.mjs) and deletes what the checkout no longer has. Unchanged files
- * are not rewritten, so Cargo keeps their build output.
+ * Copies the WASM sources into `workspaceDir` with pinned crate versions (wasm-version-pin.mjs).
+ * Deletes copies of files the checkout lacks, and skips unchanged files so Cargo keeps their output.
  */
 function syncPinnedWorkspace({ root, workspaceDir }) {
   const files = wasmSourceFiles(root).filter(isPinnedWorkspaceFile);
-  // Deleting first keeps a case-only rename on a case-insensitive filesystem: writing first
-  // would leave the old name in place, which the deletion would then remove.
+  // Delete first. Writing first keeps the old name on a case-insensitive filesystem, and the
+  // deletion removes it.
   if (existsSync(workspaceDir)) removeStaleEntries(workspaceDir, new Set(files));
   for (const path of files) {
     const target = join(workspaceDir, path);

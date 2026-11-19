@@ -1,19 +1,9 @@
-// Replaces the workspace's own crate version in Cargo manifests. release-please rewrites it in
-// Cargo.toml, crates/*/Cargo.toml (the path-dependency pins), and Cargo.lock on every release.
-//
-// The WASM module is built from a copy of the workspace with the version pinned to
-// PINNED_CRATE_VERSION. Cargo hashes each crate's version into its symbol names, so a release
-// that only bumps the version would otherwise change the module's bytes and make every browser
-// download it again. The module reads the real version from the host at runtime
-// (`rom_weaver_core::app_version`). Cache keys use the same replacement so such a release reuses
-// the module and the parity job's native CLI (scripts/ci/parity-cli-key.mjs).
-//
-// Replacing MUST NOT hide anything else: a changed third-party version, feature list, path, or
-// source file still changes the result.
+// Pins the workspace's own crate version in Cargo manifests, so a version-only release keeps the
+// WASM module's bytes and cache keys. Pinning MUST NOT hide any other manifest or source change.
 
 import { createHash } from "node:crypto";
 
-// Its own string so verify-wasm-artifact.mjs can tell when a crate version reaches the module.
+// Distinct from every release version: a match means a crate version leaked into the module.
 export const PINNED_CRATE_VERSION = "0.0.0-wasm";
 
 const VERSION_ASSIGNMENT = /^(\s*version\s*=\s*)"[^"]*"/u;
@@ -68,9 +58,8 @@ export function pinWorkspaceVersions(path, text) {
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 
 /**
- * `entries` are `git ls-tree -r` lines: "<mode> <type> <oid>\t<path>". Each manifest's object ID
- * becomes a hash of its pinned text, so a version-only release keeps the entry. `readBlob(oid)`
- * returns the file text.
+ * `entries` are `git ls-tree -r` lines: "<mode> <type> <oid>\t<path>". `readBlob(oid)` returns
+ * the file text. Each manifest's object ID becomes a hash of its pinned text.
  */
 export function pinTreeEntries(entries, readBlob) {
   return entries.map((entry) => {

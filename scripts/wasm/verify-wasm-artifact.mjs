@@ -154,7 +154,7 @@ function main() {
   verifyModule(path.join(dir, "rom-weaver-app.wasm"));
 }
 
-/** Checks the module's own bytes: no pinned crate version, and a shared 4 GiB imported memory. */
+/** Checks the module for a pinned crate version and a shared 4 GiB imported memory. */
 function verifyModule(wasmPath) {
   const moduleBytes = readFileSync(wasmPath);
   if (moduleBytes.includes(PINNED_CRATE_VERSION)) {

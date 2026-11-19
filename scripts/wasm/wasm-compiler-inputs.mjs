@@ -47,7 +47,7 @@ export const filterWasmCacheInputTree = (tree) => filterTree(tree, isWasmCacheIn
 
 const readGitBlob = (oid) => execFileSync("git", ["cat-file", "blob", oid], { encoding: "utf8" });
 
-// The module does not compile in the workspace's own version, so the cache key ignores it.
+// The module never embeds the workspace's own version, so the cache key ignores it.
 const pinCacheInputTree = (tree) => {
   const entries = filterWasmCacheInputTree(tree).split("\n").filter(Boolean);
   return pinTreeEntries(entries, readGitBlob).join("\n");

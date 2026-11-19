@@ -5,10 +5,9 @@
 // The key covers the repository files the build reads, with one exception: the workspace's own
 // version (scripts/wasm/wasm-version-pin.mjs). The runner image (its C compiler and system
 // packages) is not keyed; KEY_EPOCH discards the cache when that matters.
-// A release changes the binary through the `CARGO_PKG_VERSION` strings compiled into it
-// (`--version`, the xdelta application header, identify-setup output) and the version hashes
-// Cargo puts in symbol names. Hashing the manifests verbatim would rebuild the CLI for every
-// release.
+// A release changes the `CARGO_PKG_VERSION` strings (`--version`, the xdelta header,
+// identify-setup output). It also changes the version hashes Cargo puts in symbol names.
+// Hashing the manifests verbatim would rebuild the CLI for every release.
 //
 // The binary a cache hit restores reports an older version, so
 // the parity and performance checks MUST NOT compare anything version-dependent (see

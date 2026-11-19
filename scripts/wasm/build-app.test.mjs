@@ -164,7 +164,7 @@ test("cargo builds from a copy of the WASM sources with pinned versions", { skip
   const project = createProject();
   const workspaceDir = path.join(project.root, "target/wasm-workspace");
   const shadow = (file) => path.join(workspaceDir, file);
-  // The fake cargo fails after build-app.mjs has synced the copy, which is all this test needs.
+  // The fake cargo fails after the copy is synced, which is all this test needs.
   const build = () => project.run("fast", { ROM_WEAVER_WASM_FORCE: "1" });
   try {
     fs.mkdirSync(path.join(project.root, "crates/example/tests"));

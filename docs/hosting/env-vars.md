@@ -61,4 +61,6 @@ These JavaScript globals expose diagnostics and service-worker controls. They ar
 
 ## Webapp build/test/bench tooling (`*.mjs`)
 
-The webapp build/test/bench also reads a `ROM_WEAVER_*` family in `*.mjs` (vite/vitest configs, scripts) - e.g. `ROM_WEAVER_APP_VERSION`, `ROM_WEAVER_COMMIT_HASH`, `ROM_WEAVER_WASM_ARTIFACT_DIR`, `ROM_WEAVER_COVERAGE`, `ROM_WEAVER_BROWSER`, `ROM_WEAVER_WASM_STRESS_1GB`, `ROM_WEAVER_WASM_STRESS_WBFS_4GB`, and the `ROM_WEAVER_WASM_BENCH*` benchmark toggles. Those are front-end tooling knobs, not part of the Rust runtime surface above. The page also passes the build version to the WASM runtime as `ROM_WEAVER_APP_VERSION`, which the module writes into xdelta patch headers.
+The webapp build/test/bench also reads a `ROM_WEAVER_*` family in `*.mjs` (vite/vitest configs, scripts) - e.g. `ROM_WEAVER_COMMIT_HASH`, `ROM_WEAVER_WASM_ARTIFACT_DIR`, `ROM_WEAVER_COVERAGE`, `ROM_WEAVER_BROWSER`, `ROM_WEAVER_WASM_STRESS_1GB`, `ROM_WEAVER_WASM_STRESS_WBFS_4GB`, and the `ROM_WEAVER_WASM_BENCH*` benchmark toggles. Those are front-end tooling knobs, not part of the Rust runtime surface above.
+
+`ROM_WEAVER_APP_VERSION` is both. The tooling reads it as a version override. The page passes it to the WASM module, which writes the version into xdelta headers.
