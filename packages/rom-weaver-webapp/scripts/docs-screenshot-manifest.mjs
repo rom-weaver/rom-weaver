@@ -97,9 +97,8 @@ const DOCS_SCREENSHOT_VIEWPORTS = [
 ];
 const DOCS_SCREENSHOT_THEMES = ["light", "dark"];
 const DOCS_SCREENSHOT_FORMATS = [{ extension: "avif" }, { extension: "webp" }];
-// The files the site serves: only images a docs page shows. A case without a docsRoute only
-// illustrates the repository README, so shipping it would make every offline copy download it again
-// each time a release recaptures it.
+// The files the site serves: only images a docs page shows. Shipping README-only images would make
+// every offline copy download them again each time a release recaptures them.
 const DOCS_SCREENSHOT_NAMES = [
   ...DOCS_SCREENSHOT_CASES.filter(({ docsRoute }) => docsRoute).flatMap(({ name }) =>
     DOCS_SCREENSHOT_VIEWPORTS.flatMap(({ name: viewport }) =>

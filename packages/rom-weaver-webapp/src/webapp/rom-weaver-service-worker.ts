@@ -653,9 +653,8 @@ const matchExactCachedNavigation = async (request: Request, url: URL) => {
   return withCrossOriginIsolationHeaders(cached, credentialless) || cached;
 };
 
-// A page fetched from the network names that deploy's bundle, so it needs that deploy's build-info.js,
-// not the copy this worker precached. Holds the clients whose document came from the network. Every
-// redirect hop of a navigation shares one client, so each served document records its source again.
+// A page fetched from the network needs that deploy's build-info.js, not the precached copy. Every
+// redirect hop shares one client, so each served document records its source again.
 const networkDocumentClients = new Set<string>();
 
 const recordDocumentSource = (event: unknown, { network }: { network: boolean }) => {

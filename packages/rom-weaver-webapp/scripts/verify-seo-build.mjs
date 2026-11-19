@@ -587,7 +587,6 @@ for (const name of DOCS_SCREENSHOT_NAMES) {
 const htmlPageNames = fs
   .readdirSync(distDir, { recursive: true, encoding: "utf8" })
   .filter((name) => name.endsWith(".html"));
-// Images only the repository README uses stay out of the site and its offline copy.
 const shownScreenshots = new Set(
   htmlPageNames.flatMap((name) => [...read(name).matchAll(/docs\/screenshots\/([\w.-]+)/g)].map(([, file]) => file)),
 );
@@ -843,7 +842,7 @@ assertIncludes(
 // stamped for another channel shows that one's badge.
 const channelLabel = process.env.ROM_WEAVER_CHANNEL_LABEL || channel;
 const expectedChannelAttributes = channelAttributes(channel, channelLabel);
-// The stamping job's git sets the build info, so this reads it from the bundle.
+// The stamping job's git sets the build info, so this reads it from the built build-info.js.
 // Another checkout, such as Lighthouse's shallow one, would compute different values.
 const buildInfoSource = read(BUILD_INFO_SCRIPT_NAME);
 const buildInfoJson = buildInfoSource.startsWith(`${BUILD_INFO_GLOBAL} = `)
@@ -858,7 +857,7 @@ for (const name of htmlPageNames) {
   const html = read(name);
   assertIncludes(html, expectedChannelAttributes, `${name} channel`);
   assertIncludes(html, `<script defer src="./${BUILD_INFO_SCRIPT_NAME}"></script>`, `${name} build info script`);
-  // A page that carries the build info changes with every release, so each offline copy downloads it again.
+  // Pages with build info change on every release, so each offline copy downloads them again.
   assertExcludes(html, "data-build-info", `${name} build info attribute`);
   // A second root means a label's `$` text was read as replacement syntax.
   const mountPoints = html.split('id="webapp-root"').length - 1;

@@ -36,7 +36,7 @@ Documentation images show real app controls with homebrew samples or a generated
 
 Each subject has desktop and mobile captures in light and dark themes. AVIF is the preferred image format; WebP is the fallback. These are delivery variants, not duplicate examples.
 
-The webapp build deploys only screenshots a docs page shows. Images only the README uses stay in the repository, so a release that recaptures them adds nothing to the offline copy.
+The webapp build deploys only screenshots a docs page shows. Images only the README uses stay in the repository. A release that recaptures them adds nothing to the offline copy.
 
 The manual cheat capture demonstrates the controls, not a useful cheat for the homebrew ROM. The save capture changes a generated Zelda save; it includes no game ROM.
 

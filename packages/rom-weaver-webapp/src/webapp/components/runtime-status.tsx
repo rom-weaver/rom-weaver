@@ -345,8 +345,7 @@ const guardExternalClick = (
  * preview is the exception - the number IS the useful identity, so it links
  * straight to the pull request.
  *
- * Prerendered pages carry no build info, so until the page hydrates the version text
- * stays empty and CSS shows the text build-info.js set.
+ * Prerendered pages have no build info, so the version text stays empty until hydration.
  */
 const CHANNEL_MESSAGES: Record<string, MessageId> = {
   beta: "ui.channel.beta",
@@ -408,7 +407,7 @@ const ChannelBuildTag = ({
   const key = channelBadge.toLowerCase();
   const nameId = CHANNEL_MESSAGES[key];
   const name = nameId ? localizer.message(nameId) : channelBadge;
-  // A channel with a version suffix letter shows it there, so it needs no leading letter.
+  // Channels with a suffix letter show it in the version, so skip the leading letter.
   const hasSuffix = Boolean(channelSuffix(channelBadge));
   return (
     <span className="build-tag">

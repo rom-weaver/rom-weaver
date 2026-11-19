@@ -77,9 +77,8 @@ export const channelAttributes = (channel, channelLabel) =>
 export const BUILD_INFO_GLOBAL = "globalThis.__ROM_WEAVER_BUILD_INFO__";
 export const BUILD_INFO_SCRIPT_NAME = "build-info.js";
 
-// Pages load this script instead of carrying the build info, so a release that changes
-// only the version leaves every precached page as it was. It also gives CSS the build
-// tag text, which the prerendered tag shows until the page hydrates.
+// Pages load this script, so a version-only release leaves precached pages unchanged. The
+// script also sets the build tag text that CSS shows until the page hydrates.
 /** The source of build-info.js for a `channel` build. */
 export const buildInfoScript = ({ buildInfo, channel, channelLabel }) => {
   const tagText = buildTagVersionText({
