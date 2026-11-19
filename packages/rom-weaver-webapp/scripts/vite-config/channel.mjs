@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { buildTagVersionText } from "../../src/webapp/build-tag-text.mjs";
+import { buildTagVersionText, channelBadgeFor } from "../../src/webapp/build-tag-text.mjs";
 import { escapeHtml } from "../../src/webapp/escape-html.mjs";
 import { SITE_NAME } from "../../src/webapp/workflow-seo.mjs";
 import { rootDir } from "./paths.mjs";
@@ -83,8 +83,8 @@ export const BUILD_INFO_SCRIPT_NAME = "build-info.js";
 /** The source of build-info.js for a `channel` build. */
 export const buildInfoScript = ({ buildInfo, channel, channelLabel }) => {
   const tagText = buildTagVersionText({
-    channelBadge: channel === "prod" ? "" : channelLabel,
-    commitDistance: buildInfo.commitsSinceVersion > 0 ? buildInfo.commitsSinceVersion : 0,
+    channelBadge: channelBadgeFor(channel, channelLabel),
+    commitsSinceVersion: buildInfo.commitsSinceVersion,
     dirty: Boolean(buildInfo.dirtyHash),
     version: buildInfo.version,
   });

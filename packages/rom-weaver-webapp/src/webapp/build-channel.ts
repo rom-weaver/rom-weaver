@@ -1,5 +1,6 @@
 import { createLogger } from "../lib/logging.ts";
 import type { Accent } from "./accent.ts";
+import { channelBadgeFor } from "./build-tag-text.mjs";
 
 /**
  * The build channel supplies the masthead badge and default UI accent.
@@ -26,7 +27,7 @@ const ACTIVE_CHANNEL: BuildChannel = isBuildChannel(stampedChannel.channel) ? st
 const ACTIVE_CHANNEL_LABEL = stampedChannel.label || ACTIVE_CHANNEL;
 
 /** Production wears the plain brand; every other channel is marked. */
-const CHANNEL_BADGE = ACTIVE_CHANNEL === "prod" ? "" : ACTIVE_CHANNEL_LABEL;
+const CHANNEL_BADGE = channelBadgeFor(ACTIVE_CHANNEL, ACTIVE_CHANNEL_LABEL);
 
 /**
  * The accent each channel starts on, so nightly and beta are distinguishable

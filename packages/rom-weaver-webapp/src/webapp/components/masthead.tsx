@@ -325,10 +325,6 @@ const Masthead = ({
   const runtimeTitle = runtimeDetail ? `${runtimeSpokenLabel} · ${runtimeDetail}` : runtimeSpokenLabel;
 
   const githubBaseHref = githubHref ? `${githubHref.replace(/\/$/, "")}/` : undefined;
-  const commitDistance =
-    typeof commitsSinceVersion === "number" && Number.isInteger(commitsSinceVersion) && commitsSinceVersion > 0
-      ? commitsSinceVersion
-      : 0;
   const openStorage = onOpenStorage ?? onOpenLog;
 
   /* One description of the nav, rendered by the sidebar and by the phone menu.
@@ -516,7 +512,7 @@ const Masthead = ({
   const buildTag = version ? (
     <BuildTag
       channelBadge={channelBadge}
-      commitDistance={commitDistance}
+      commitsSinceVersion={commitsSinceVersion}
       confirmExternalNavigation={confirmExternalNavigation}
       dirty={dirty}
       githubBaseHref={githubBaseHref}
