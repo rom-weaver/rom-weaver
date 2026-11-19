@@ -11,8 +11,12 @@ const STANDALONE_RUST_TARGET =
 // module's attribution bundle. Vendored trees are never narrowed.
 const CRATE_PROSE = /\.md$/u;
 
+// Gitignored identify packs that only the native CLI bundles (`bundled-identify-data`).
+const IDENTIFY_DATA = "crates/rom-weaver-cli/data/";
+
 export const isWasmCompilerInput = (path) =>
   path.startsWith("crates/") &&
+  !path.startsWith(IDENTIFY_DATA) &&
   !STANDALONE_RUST_TARGET.test(path) &&
   (path.includes("/vendor/") || !CRATE_PROSE.test(path));
 
