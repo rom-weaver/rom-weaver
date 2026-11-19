@@ -1,4 +1,4 @@
-# Fix a source ROM checksum mismatch, including RomPatcher.js
+# Fix a source ROM checksum mismatch in RomPatcher.js
 
 A source ROM checksum mismatch means your ROM is not the file the patch expects: usually the wrong region or revision, a header, or an already patched copy.
 

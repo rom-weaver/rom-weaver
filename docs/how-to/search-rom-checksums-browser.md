@@ -1,4 +1,4 @@
-# ROM hash and checksum checker: look up CRC32, MD5, or SHA-1
+# ROM hash and checksum checker: CRC32, MD5, or SHA-1
 
 Use rom-weaver's ROM hash checker to look up a ROM by CRC32, MD5, or SHA-1 checksum without adding a file.
 
