@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.1](https://github.com/rom-weaver/rom-weaver/compare/v0.25.0...v0.25.1) (2026-11-19)
+
+
+### Documentation
+
+* retarget three guides at the searches they miss ([#1830](https://github.com/rom-weaver/rom-weaver/issues/1830)) ([ed638ec](https://github.com/rom-weaver/rom-weaver/commit/ed638ecfbdc5574df629de956668c768bf165540))
+
 ## [0.25.0](https://github.com/rom-weaver/rom-weaver/releases/tag/v0.25.0) (2026-11-19)
 
 ### Highlights
