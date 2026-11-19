@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Verify the production WASM artifact set before tests or deployment.
 //
-// Catches partial cache restores and missing 4 GiB imported-memory limits. A
+// Catches partial cache restores, a pinned crate version compiled into the module
+// (wasm-version-pin.mjs), and missing 4 GiB imported-memory limits. A
 // RUSTFLAGS override can silently replace the configured --max-memory flag,
 // leaving a module that builds but fails to instantiate. Node does not expose
 // import limits, so this decodes the import section directly.
@@ -10,6 +11,8 @@
 
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
+
+import { PINNED_CRATE_VERSION } from "./wasm-version-pin.mjs";
 
 const EXPECTED_MAX_PAGES = 65536; // 4 GiB / 64 KiB
 const BASE_REQUIRED_FILES = ["rom-weaver-app.wasm", "NOTICE", "WEBAPP_NOTICE", "notices.md"];
@@ -148,8 +151,20 @@ function main() {
   }
   if (!ok) return;
 
-  const wasmPath = path.join(dir, "rom-weaver-app.wasm");
-  const limits = readImportedMemoryLimits(readFileSync(wasmPath));
+  verifyModule(path.join(dir, "rom-weaver-app.wasm"));
+}
+
+/** Checks the module for a pinned crate version and a shared 4 GiB imported memory. */
+function verifyModule(wasmPath) {
+  const moduleBytes = readFileSync(wasmPath);
+  if (moduleBytes.includes(PINNED_CRATE_VERSION)) {
+    fail(
+      `${wasmPath}: contains the pinned crate version ${PINNED_CRATE_VERSION}. WASM code MUST read the ` +
+        'release version from rom_weaver_core::app_version(), not env!("CARGO_PKG_VERSION").',
+    );
+    return;
+  }
+  const limits = readImportedMemoryLimits(moduleBytes);
   if (!limits) {
     fail(`${wasmPath}: no imported memory - this is not a threaded build`);
     return;

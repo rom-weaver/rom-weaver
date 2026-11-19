@@ -3,6 +3,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { isWasmCacheInput } from "./wasm-compiler-inputs.mjs";
+import { pinWorkspaceVersions } from "./wasm-version-pin.mjs";
 
 const SOURCE_ROOTS = ["crates", "scripts/wasm"];
 const SOURCE_FILES = ["Cargo.lock", "Cargo.toml", ".cargo/config.toml", ".config/mise.toml"];
@@ -31,7 +32,7 @@ const collectFiles = (root, path, files) => {
   for (const child of readdirSync(entry)) collectFiles(root, posix.join(path, child), files);
 };
 
-const wasmSourceFiles = (root) => {
+export const wasmSourceFiles = (root) => {
   const files = [...SOURCE_FILES];
   for (const sourceRoot of SOURCE_ROOTS) collectFiles(root, sourceRoot, files);
   return files.sort();
@@ -63,12 +64,19 @@ export const recordedSourceFingerprint = (artifact) => {
 export const shouldBuildWasm = ({ artifactExists, recordedFingerprint, sourceFingerprint }) =>
   !artifactExists || recordedFingerprint !== sourceFingerprint;
 
+/** The bytes of `path` as the WASM build compiles them, with manifest versions pinned. */
+export const readWasmSourceFile = (root, path) => {
+  const contents = readFileSync(join(root, path));
+  const pinned = pinWorkspaceVersions(path, contents.toString("utf8"));
+  return pinned === null ? contents : Buffer.from(pinned);
+};
+
 export const createWasmSourceFingerprint = (root) => {
   const hash = createHash("sha256");
   for (const path of wasmSourceFiles(root)) {
     hash.update(path);
     hash.update("\0");
-    hash.update(readFileSync(join(root, path)));
+    hash.update(readWasmSourceFile(root, path));
     hash.update("\0");
   }
   return hash.digest("hex");

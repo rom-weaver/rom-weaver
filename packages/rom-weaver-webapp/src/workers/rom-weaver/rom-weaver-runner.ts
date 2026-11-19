@@ -38,6 +38,7 @@ import { registerRomWeaverShutdown, waitForRomWeaverShutdown } from "../../wasm/
 import { formatCommandForTrace } from "../../wasm/workers/worker-trace-format.ts";
 import { registerBrowserOpfsRunScratch } from "../../storage/browser/browser-opfs-cleanup.ts";
 import { createVfsPathId } from "../../storage/vfs/path-id.ts";
+import { APP_VERSION } from "../../webapp/build-version.ts";
 import { getManagedOpfsFileHandle, removeManagedOpfsPath } from "../protocol/opfs-path.ts";
 import { getStagedInputMs } from "../protocol/browser-opfs-source-ref.ts";
 import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protocol/browser-virtual-files.ts";
@@ -562,7 +563,12 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
       : runOptions;
     const opfsRunId = createVfsPathId();
     const releaseRunScratch = registerBrowserOpfsRunScratch(opfsRunId);
-    leaseRunOptions.env = { ...leaseRunOptions.env, ROM_WEAVER_OPFS_RUN_ID: opfsRunId };
+    leaseRunOptions.env = {
+      ...leaseRunOptions.env,
+      ROM_WEAVER_OPFS_RUN_ID: opfsRunId,
+      // The module's crate version is pinned (scripts/wasm/wasm-version-pin.mjs), so the page supplies it.
+      ...(APP_VERSION ? { ROM_WEAVER_APP_VERSION: APP_VERSION } : {}),
+    };
     const recycleUnrecoverableError = (error: unknown) => {
       if (isRunnerUnrecoverableError(error)) {
         emitRunnerTraceLine(options, "runJson unrecoverable failure; terminating runner");

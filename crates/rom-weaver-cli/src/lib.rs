@@ -941,7 +941,7 @@ pub fn run_command_outcome(
     let command_name = CliApp::command_name(&command);
     info!(
         command = command_name,
-        version = env!("CARGO_PKG_VERSION"),
+        version = rom_weaver_core::app_version().unwrap_or("unknown"),
         dry_run = options.dry_run,
         interactive = options.interactive_selection_enabled,
         "starting command"

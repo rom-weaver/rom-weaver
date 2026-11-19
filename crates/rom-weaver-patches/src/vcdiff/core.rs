@@ -2292,9 +2292,12 @@ pub(super) fn recode_delta_indicator(
 /// on every decode. `xdelta3 printhdr` still writes the raw header bytes, tag included.
 pub(super) const XDELTA_APP_HEADER_TAG_SEPARATOR: u8 = 0;
 
-/// Producer tag appended to the xdelta app header, e.g. `rom-weaver 0.23.0`.
+/// Xdelta producer tag, such as `rom-weaver 0.23.0`, or `rom-weaver` when the version is unknown.
 pub(super) fn xdelta_app_header_producer_tag() -> String {
-    format!("rom-weaver {}", env!("CARGO_PKG_VERSION"))
+    match rom_weaver_core::app_version() {
+        Some(version) => format!("rom-weaver {version}"),
+        None => "rom-weaver".to_owned(),
+    }
 }
 
 pub(super) fn build_default_xdelta_app_header(source_path: &Path, target_path: &Path) -> Vec<u8> {

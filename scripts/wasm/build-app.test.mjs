@@ -7,8 +7,11 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { createWasmSourceFingerprint } from "./wasm-source-fingerprint.mjs";
+import { PINNED_CRATE_VERSION } from "./wasm-version-pin.mjs";
 
 const BUILD_APP = fileURLToPath(new URL("./build-app.mjs", import.meta.url));
+const PROJECT_MANIFEST = '[workspace.package]\nversion = "1.0.0"\n';
+const PROJECT_LOCK = '[[package]]\nname = "example"\nversion = "1.0.0"\n';
 const skip = process.platform === "win32" && "the fake toolchain is POSIX shell scripts";
 
 // Creates a project root with a fake toolchain. The fake cargo logs its arguments and fails, so a run that reaches it errors.
@@ -20,7 +23,7 @@ function createProject() {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, text);
   };
-  for (const [file, text] of [["Cargo.lock", "lock"], ["Cargo.toml", "manifest"], [".cargo/config.toml", "config"], [".config/mise.toml", "mise"], ["crates/example/lib.rs", "one"], ["scripts/gen-third-party-licenses.mjs", ""]])
+  for (const [file, text] of [["Cargo.lock", PROJECT_LOCK], ["Cargo.toml", PROJECT_MANIFEST], [".cargo/config.toml", "config"], [".config/mise.toml", "mise"], ["crates/example/lib.rs", "one"], ["scripts/gen-third-party-licenses.mjs", ""]])
     write(path.join(root, file), text);
   // The fake cargo fails unless FAKE_CARGO_MODULE names a module to write. FAKE_CARGO_EDIT makes it rewrite that file mid-build. FAKE_CARGO_REVERT then restores the original text.
   const cargo = [
@@ -152,6 +155,61 @@ test("a module built from untouched sources is kept by the next fast build", { s
     assert.equal(project.run("fast", { FAKE_CARGO_MODULE: project.builtModule }).status, 0);
     assert.equal(project.run("fast").status, 0);
     assert.equal(project.cargoCalls().length, 1, "the second run keeps the module");
+  } finally {
+    fs.rmSync(project.dir, { recursive: true, force: true });
+  }
+});
+
+test("cargo builds from a copy of the WASM sources with pinned versions", { skip }, () => {
+  const project = createProject();
+  const workspaceDir = path.join(project.root, "target/wasm-workspace");
+  const shadow = (file) => path.join(workspaceDir, file);
+  // The fake cargo fails after the copy is synced, which is all this test needs.
+  const build = () => project.run("fast", { ROM_WEAVER_WASM_FORCE: "1" });
+  try {
+    fs.mkdirSync(path.join(project.root, "crates/example/tests"));
+    fs.writeFileSync(path.join(project.root, "crates/example/tests/suite.rs"), "");
+    fs.writeFileSync(path.join(project.root, "crates/example/old.rs"), "");
+    build();
+    assert.ok(project.cargoCalls()[0].includes(`--manifest-path ${shadow("Cargo.toml")} `), project.cargoCalls()[0]);
+    assert.equal(fs.readFileSync(shadow("Cargo.toml"), "utf8"), `[workspace.package]\nversion = "${PINNED_CRATE_VERSION}"\n`);
+    assert.equal(fs.readFileSync(shadow("crates/example/lib.rs"), "utf8"), "one");
+    assert.equal(fs.existsSync(shadow("crates/example/tests/suite.rs")), false);
+    assert.equal(fs.existsSync(shadow("scripts/gen-third-party-licenses.mjs")), false);
+
+    // An unchanged file keeps its timestamp, so Cargo does not rebuild it.
+    const past = new Date("2020-01-01T00:00:00Z");
+    fs.utimesSync(shadow("crates/example/lib.rs"), past, past);
+    fs.rmSync(path.join(project.root, "crates/example/old.rs"));
+    build();
+    assert.equal(fs.statSync(shadow("crates/example/lib.rs")).mtimeMs, past.getTime());
+    assert.equal(fs.existsSync(shadow("crates/example/old.rs")), false);
+
+    fs.writeFileSync(path.join(project.root, "crates/example/lib.rs"), "two");
+    build();
+    assert.equal(fs.readFileSync(shadow("crates/example/lib.rs"), "utf8"), "two");
+
+    // A read-only source still updates its copy, which took the source's read-only mode.
+    const source = path.join(project.root, "crates/example/lib.rs");
+    const writeReadOnly = (text) => {
+      fs.chmodSync(source, 0o644);
+      fs.writeFileSync(source, text);
+      fs.chmodSync(source, 0o444);
+    };
+    writeReadOnly("three");
+    build();
+    writeReadOnly("four");
+    assert.doesNotMatch(build().stderr, /EACCES/);
+    assert.equal(fs.readFileSync(shadow("crates/example/lib.rs"), "utf8"), "four");
+
+    // A file that replaces a directory of the same name takes its place.
+    fs.mkdirSync(path.join(project.root, "crates/example/module"));
+    fs.writeFileSync(path.join(project.root, "crates/example/module/inner.rs"), "");
+    build();
+    fs.rmSync(path.join(project.root, "crates/example/module"), { recursive: true });
+    fs.writeFileSync(path.join(project.root, "crates/example/module"), "file");
+    assert.doesNotMatch(build().stderr, /EISDIR/);
+    assert.equal(fs.readFileSync(shadow("crates/example/module"), "utf8"), "file");
   } finally {
     fs.rmSync(project.dir, { recursive: true, force: true });
   }

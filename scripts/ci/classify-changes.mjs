@@ -159,6 +159,7 @@ const WASM_RUNTIME_SUPPORT = new Set([
   "packages/rom-weaver-webapp/src/presentation/localization/locales/de.ts",
   "packages/rom-weaver-webapp/src/presentation/localization/locales/en.ts",
   "packages/rom-weaver-webapp/src/presentation/localization/locales/es.ts",
+  "packages/rom-weaver-webapp/src/webapp/build-version.ts",
   "packages/rom-weaver-webapp/src/webapp/offline-warmup.ts",
   "packages/rom-weaver-webapp/src/webapp/pwa/docs-image-format.ts",
   "packages/rom-weaver-webapp/src/webapp/pwa/offline-copy-policy.ts",

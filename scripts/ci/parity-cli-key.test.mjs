@@ -5,7 +5,8 @@ import { createRequire } from "node:module";
 import { posix } from "node:path";
 import test from "node:test";
 
-import { KEY_PATHS, keyHash, normalizeCargoLock, normalizeCargoToml } from "./parity-cli-key.mjs";
+import { pinCargoLock, pinCargoToml, PINNED_CRATE_VERSION } from "../wasm/wasm-version-pin.mjs";
+import { KEY_PATHS, keyHash } from "./parity-cli-key.mjs";
 
 const require = createRequire(import.meta.url);
 const { load } = require("js-yaml");
@@ -134,21 +135,22 @@ test("a version bump alongside a real change still misses", () => {
   assert.notEqual(keyOf(files), keyOf(tree("0.23.0")));
 });
 
-test("normalizing replaces only the workspace's own versions", () => {
-  const cargo = normalizeCargoToml(tree()["crates/rom-weaver-cli/Cargo.toml"]);
-  assert.match(cargo, /rom-weaver-core = \{ path = "\.\.\/rom-weaver-core", version = "0\.0\.0" \}/u);
-  assert.match(cargo, /path = "\.\.\/rom-weaver-extra"\nversion = "0\.0\.0"/u);
-  const workspace = normalizeCargoToml(tree()["Cargo.toml"]);
-  assert.match(workspace, /\nversion = "0\.0\.0"\n/u);
+test("pinning replaces only the workspace's own versions", () => {
+  const pinned = `version = "${PINNED_CRATE_VERSION}"`;
+  const cargo = pinCargoToml(tree()["crates/rom-weaver-cli/Cargo.toml"]);
+  assert.ok(cargo.includes(`rom-weaver-core = { path = "../rom-weaver-core", ${pinned} }`));
+  assert.ok(cargo.includes(`path = "../rom-weaver-extra"\n${pinned}`));
+  const workspace = pinCargoToml(tree()["Cargo.toml"]);
+  assert.ok(workspace.includes(`\n${pinned}\n`));
   assert.match(workspace, /rust-version = "1\.95"/u);
   assert.match(workspace, /clap = \{ version = "4\.5\.51"/u);
-  const lock = normalizeCargoLock(tree()["Cargo.lock"]);
-  assert.equal(lock.match(/version = "0\.0\.0"/gu).length, 2);
+  const lock = pinCargoLock(tree()["Cargo.lock"]);
+  assert.equal(lock.split(pinned).length - 1, 2);
   assert.match(lock, /version = "1\.0\.228"/u);
 });
 
 // The repository's own manifests, with the version moved the way release-please moves it. The
-// bump below is written without the normalizer so it can disagree with it.
+// bump below is written without the pinning code so it can disagree with it.
 test("the real manifests ignore a release bump", () => {
   const workspaceVersion = repoFile("Cargo.toml").match(/^version = "([^"]+)"$/mu)[1];
   const bump = (path, text) => {

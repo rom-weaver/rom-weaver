@@ -79,6 +79,7 @@ vi.mock("../../src/wasm/workers/browser-worker-client.ts", () => ({
 vi.mock("../../src/wasm/workers/worker-trace-format.ts", () => ({
   formatCommandForTrace: (command: unknown) => String((command as { type?: string })?.type ?? "unknown"),
 }));
+vi.mock("../../src/webapp/build-version.ts", () => ({ APP_VERSION: "1.2.3" }));
 vi.mock("../../src/workers/protocol/browser-opfs-source-ref.ts", () => ({ getStagedInputMs: vi.fn(() => undefined) }));
 vi.mock("../../src/workers/protocol/opfs-path.ts", () => ({
   getManagedOpfsFileHandle: state.createScratch,
@@ -150,9 +151,13 @@ afterEach(() => {
 });
 
 describe("run scratch ownership", () => {
-  it("registers the run id before dispatch and passes it alongside the caller environment", async () => {
+  it("registers the run id before dispatch and passes it and the app version alongside the caller environment", async () => {
     state.run.mockImplementationOnce(async (_request, options) => {
-      expect(options.env).toMatchObject({ CUSTOM: "kept", ROM_WEAVER_OPFS_RUN_ID: expect.any(String) });
+      expect(options.env).toMatchObject({
+        CUSTOM: "kept",
+        ROM_WEAVER_APP_VERSION: "1.2.3",
+        ROM_WEAVER_OPFS_RUN_ID: expect.any(String),
+      });
       expect(options.env.ROM_WEAVER_OPFS_RUN_ID).not.toBe("caller-id");
       const path = `/rom-weaver-out/rw-${options.env.ROM_WEAVER_OPFS_RUN_ID}-1`;
       state.storageRequest.mockResolvedValueOnce({ success: true, entries: [{ kind: "directory", path }] });

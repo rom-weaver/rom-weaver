@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { accessSync, constants, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { accessSync, chmodSync, constants, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { cargoTargetDir } from "../cargo-target-dir.mjs";
 import { brotliCompressFile } from "./brotli-compress.mjs";
 import { restoreWasmArtifacts, storeWasmArtifacts, wasmArtifactCacheKey, wasmArtifactCacheRoot } from "./wasm-artifact-cache.mjs";
-import { createCargoConfigSnapshot, createWasmSourceFingerprint, recordedSourceFingerprint, shouldBuildWasm, wasmSourcesModifiedSince } from "./wasm-source-fingerprint.mjs";
+import { createCargoConfigSnapshot, createWasmSourceFingerprint, readWasmSourceFile, recordedSourceFingerprint, shouldBuildWasm, wasmSourceFiles, wasmSourcesModifiedSince } from "./wasm-source-fingerprint.mjs";
 import { createWasmProdFingerprint } from "./wasm-prod-fingerprint.mjs";
 
 export const parseMode = (value = "dev") => {
@@ -93,6 +93,39 @@ export function targetRustflagsArgs({ cargoHome, sysroot, target, extraFlags = [
     [sysroot, "/rustc-sysroot"],
   ].map(([from, to]) => `--remap-path-prefix=${from}=${to}`);
   return ["--config", `target.${target}.rustflags=${JSON.stringify([...flags, ...extraFlags])}`];
+}
+
+const isPinnedWorkspaceFile = (path) => path === "Cargo.toml" || path === "Cargo.lock" || path.startsWith("crates/");
+
+// Deletes stale files, then the directories they empty. A file may then take a removed directory's name.
+const removeStaleEntries = (workspaceDir, wanted) => {
+  const entries = readdirSync(workspaceDir, { recursive: true, withFileTypes: true });
+  const pathOf = (entry) => relative(workspaceDir, join(entry.parentPath, entry.name)).split(sep).join("/");
+  for (const entry of entries) if (entry.isFile() && !wanted.has(pathOf(entry))) rmSync(join(workspaceDir, pathOf(entry)));
+  // Longest paths first, so each directory is checked after its subdirectories.
+  const directories = entries.filter((entry) => entry.isDirectory()).map(pathOf).sort((a, b) => b.length - a.length);
+  for (const directory of directories) if (readdirSync(join(workspaceDir, directory)).length === 0) rmdirSync(join(workspaceDir, directory));
+};
+
+/**
+ * Copies the WASM sources into `workspaceDir` with pinned crate versions (wasm-version-pin.mjs).
+ * Deletes copies of files the checkout lacks, and skips unchanged files so Cargo keeps their output.
+ */
+function syncPinnedWorkspace({ root, workspaceDir }) {
+  const files = wasmSourceFiles(root).filter(isPinnedWorkspaceFile);
+  // Delete first. Writing first keeps the old name on a case-insensitive filesystem, and the
+  // deletion removes it.
+  if (existsSync(workspaceDir)) removeStaleEntries(workspaceDir, new Set(files));
+  for (const path of files) {
+    const target = join(workspaceDir, path);
+    const contents = readWasmSourceFile(root, path);
+    if (existsSync(target) && readFileSync(target).equals(contents)) continue;
+    mkdirSync(dirname(target), { recursive: true });
+    // The copy keeps the source's mode, so a read-only source leaves a copy that cannot be overwritten.
+    rmSync(target, { force: true });
+    writeFileSync(target, contents);
+    chmodSync(target, statSync(join(root, path)).mode);
+  }
 }
 
 // Environment that reaches rustc or the C compilers as flags. Compiler paths
@@ -205,7 +238,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
     process.stdout.write(`reused ${mode} WASM for unchanged inputs from ${join(cache.root, cache.key)}\n`);
     writeFileSync(sourceFingerprintFile, `${sourceFingerprint}\n`);
   } else {
-    buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env });
+    buildArtifact({ mode, root, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env });
     settleBuiltModule({ cache, configuration, configurationOptions, root, sourcesReadAt, sourceFingerprint, sourceFingerprintFile, cacheFiles, outDir, force });
   }
 
@@ -238,15 +271,19 @@ function settleBuiltModule({ cache, configuration, configurationOptions, root, s
   }
 }
 
-function buildArtifact({ mode, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env }) {
+function buildArtifact({ mode, root, target, artifact, builtArtifact, fingerprintFile, wantBrotli, quality, brotliVersion, stripVersion, wasmOptVersion, force, env }) {
   process.stdout.write(`building ${target} -> ${artifact}\n`);
+  const targetDir = cargoTargetDir(root, env);
+  const workspaceDir = join(targetDir, "wasm-workspace");
+  syncPinnedWorkspace({ root, workspaceDir });
   const rustflagsArgs = targetRustflagsArgs({
     cargoHome: env.CARGO_HOME || join(homedir(), ".cargo"),
     sysroot: toolVersion("rustc", ["--print", "sysroot"]),
     target,
     extraFlags: mode === "fast" ? FAST_RUSTFLAGS : [],
   });
-  run("cargo", ["build", "-p", "rom-weaver-cli", "--no-default-features", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", target, ...rustflagsArgs]);
+  // Cargo reads .cargo/config.toml from the working directory, so the build stays in the checkout.
+  run("cargo", ["build", "--manifest-path", join(workspaceDir, "Cargo.toml"), "--target-dir", targetDir, "-p", "rom-weaver-cli", "--no-default-features", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", target, ...rustflagsArgs], { cwd: root });
 
   if (mode === "prod") {
     const fingerprint = productionFingerprint({

@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 
+import { execFileSync } from "node:child_process";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
+
+import { pinTreeEntries } from "./wasm-version-pin.mjs";
 
 const STANDALONE_RUST_TARGET =
   /(?:^|\/)(?:tests?|examples|benches)\/|\/src\/(?:.*\/)?test[^/]*\.rs$/u;
@@ -11,8 +14,12 @@ const STANDALONE_RUST_TARGET =
 // module's attribution bundle. Vendored trees are never narrowed.
 const CRATE_PROSE = /\.md$/u;
 
+// Gitignored identify packs that only the native CLI bundles (`bundled-identify-data`).
+const IDENTIFY_DATA = "crates/rom-weaver-cli/data/";
+
 export const isWasmCompilerInput = (path) =>
   path.startsWith("crates/") &&
+  !path.startsWith(IDENTIFY_DATA) &&
   !STANDALONE_RUST_TARGET.test(path) &&
   (path.includes("/vendor/") || !CRATE_PROSE.test(path));
 
@@ -38,13 +45,19 @@ export const isWasmCacheInput = (path) => {
 
 export const filterWasmCacheInputTree = (tree) => filterTree(tree, isWasmCacheInput);
 
+const readGitBlob = (oid) => execFileSync("git", ["cat-file", "blob", oid], { encoding: "utf8" });
+
+// The module never embeds the workspace's own version, so the cache key ignores it.
+const pinCacheInputTree = (tree) => {
+  const entries = filterWasmCacheInputTree(tree).split("\n").filter(Boolean);
+  return pinTreeEntries(entries, readGitBlob).join("\n");
+};
+
 const main = async () => {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
-  const filter = process.argv.includes("--cache-inputs")
-    ? filterWasmCacheInputTree
-    : filterWasmCompilerInputTree;
-  const filtered = filter(Buffer.concat(chunks).toString("utf8"));
+  const tree = Buffer.concat(chunks).toString("utf8");
+  const filtered = process.argv.includes("--cache-inputs") ? pinCacheInputTree(tree) : filterWasmCompilerInputTree(tree);
   if (filtered) process.stdout.write(`${filtered}\n`);
 };
 
