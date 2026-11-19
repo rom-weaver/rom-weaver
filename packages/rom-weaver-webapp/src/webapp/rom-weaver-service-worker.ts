@@ -653,6 +653,17 @@ const matchExactCachedNavigation = async (request: Request, url: URL) => {
   return withCrossOriginIsolationHeaders(cached, credentialless) || cached;
 };
 
+// A page fetched from the network names that deploy's bundle, so it needs that deploy's build-info.js,
+// not the copy this worker precached. Holds the clients whose document came from the network.
+const networkDocumentClients = new Set<string>();
+
+const fetchNetworkDocument = async (fetching: Promise<Response>, event: unknown) => {
+  const response = await fetching;
+  const clientId = (event as { resultingClientId?: string } | undefined)?.resultingClientId;
+  if (clientId) networkDocumentClients.add(clientId);
+  return response;
+};
+
 const NETWORK_TIMED_OUT = Symbol("network-timed-out");
 
 // The timeout covers the time to the response headers only. Once they arrive the network has
@@ -671,9 +682,9 @@ const fetchWithNavigationTimeout = async (request: Request, url: URL, event: unk
   try {
     // A fetch that fails before its headers must surface here, not wait out the timer.
     const first = await Promise.race([headers.then(() => undefined), fetching.then(() => undefined), timeout]);
-    if (first !== NETWORK_TIMED_OUT) return await fetching;
+    if (first !== NETWORK_TIMED_OUT) return await fetchNetworkDocument(fetching, event);
     const cached = await matchExactCachedNavigation(request, url);
-    if (!cached) return await fetching;
+    if (!cached) return await fetchNetworkDocument(fetching, event);
     // The fetch keeps running so it still refreshes the runtime cache; its outcome no longer matters here.
     const refresh = fetching.then(
       () => undefined,
@@ -706,6 +717,22 @@ registerRoute(
     }
   },
 );
+
+const BUILD_INFO_FILE = "build-info.js";
+
+const serveBuildInfo = async ({ event, request }: { event: unknown; request: Request }) => {
+  const clientId = (event as { clientId?: string } | undefined)?.clientId ?? "";
+  if (!networkDocumentClients.delete(clientId)) {
+    const precached = await matchPrecache(BUILD_INFO_FILE);
+    if (precached) return precached;
+  }
+  try {
+    return await fetch(request);
+  } catch (err) {
+    logServiceWorker("build info request failed", { error: formatError(err) });
+    return (await matchPrecache(BUILD_INFO_FILE)) || Response.error();
+  }
+};
 
 // `maximumFileSizeToCacheInBytes` below governs only the precache. Runtime
 // EmulatorJS assets use this dedicated cache and are intentionally unaffected.
@@ -1052,6 +1079,13 @@ crypto.subtle
 
 keepResourceTimingsRecording(self);
 observeDownloadTimings(logServiceWorker);
+// Registered before the precache route, which would answer build-info.js cache-first for every page.
+registerRoute(
+  ({ request, url }) =>
+    request.method === "GET" && isSameOriginRequest(url) && scopePath(url.pathname) === `/${BUILD_INFO_FILE}`,
+  serveBuildInfo,
+);
+
 addPlugins([precachePlugin]);
 precacheAndRoute(INITIAL_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();

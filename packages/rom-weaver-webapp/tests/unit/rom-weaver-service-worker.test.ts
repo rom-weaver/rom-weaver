@@ -370,7 +370,9 @@ const loadWorker = async (
   };
 };
 
-const routed = (harness: Harness, route: CapturedRoute, request: Request, event?: { type: string }) => {
+type RoutedEvent = { clientId?: string; resultingClientId?: string; type: string };
+
+const routed = (harness: Harness, route: CapturedRoute, request: Request, event?: RoutedEvent) => {
   const url = new URL(request.url);
   if (!route.match({ request, url })) throw new Error(`Route did not match ${request.url}`);
   void harness;
@@ -619,7 +621,7 @@ describe("service worker bootstrap", () => {
   it("registers the runtime and deferred routes, the precache plugin and the warm-up", async () => {
     const harness = await loadWorker();
 
-    expect(hoisted.routes).toHaveLength(5);
+    expect(hoisted.routes).toHaveLength(6);
     expect(hoisted.precacheAndRoute).toHaveBeenCalledWith(DEFAULT_MANIFEST, {
       ignoreURLParametersMatching: [/^sha256$/],
     });
@@ -961,6 +963,30 @@ describe("navigation requests", () => {
 
     await expect(response.text()).resolves.toBe("fresh");
     expect(harness.fetchStub.calls).toHaveLength(1);
+  });
+
+  it.each([
+    ["the network", { missingCore: true }, "deployed"],
+    ["the precache", {}, "precached"],
+  ])("serves build-info.js from %s when the page came from there", async (_source, state, expected) => {
+    const harness = await loadCompleteWorker({ ...state, redirectSourcePaths: [] });
+    setPrecache({
+      "build-info.js": () => new Response("precached", { status: 200 }),
+      "docs/guide/index.html": () => new Response("guide", { status: 200 }),
+    });
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("fresh", { status: 200 }));
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/build-info.js`, () => new Response("deployed", { status: 200 }));
+    await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`), {
+      resultingClientId: "page",
+      type: "fetch",
+    });
+
+    const buildInfo = await routed(harness, requireRoute(5), new Request(`${APP_ORIGIN}/build-info.js`), {
+      clientId: "page",
+      type: "fetch",
+    });
+
+    await expect(buildInfo.text()).resolves.toBe(expected);
   });
 
   it("serves cache-first once a pump stores the last missing deferred entry", async () => {
