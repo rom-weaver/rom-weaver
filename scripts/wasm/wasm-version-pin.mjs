@@ -21,7 +21,7 @@ const INLINE_VERSION = /((?<![\w-])version\s*=\s*)"[^"]*"/u;
 
 // A `[package]` or `[workspace.package]` version, or the `version` beside a `path` in a
 // dependency (inline table or its own table), is the workspace's own and moves with every release.
-export function normalizeCargoToml(text) {
+export function pinCargoToml(text) {
   const sections = [{ header: "", body: [] }];
   for (const line of text.split("\n")) {
     if (/^\s*\[/u.test(line)) sections.push({ header: line, body: [] });
@@ -46,7 +46,7 @@ export function normalizeCargoToml(text) {
 
 // A lockfile entry without a `source` is a workspace member (or path dependency); registry and git
 // packages carry one and keep their versions.
-export function normalizeCargoLock(text) {
+export function pinCargoLock(text) {
   return text
     .split(/\n(?=\[\[package\]\]\n)/u)
     .map((block) =>
@@ -59,8 +59,8 @@ export function normalizeCargoLock(text) {
 
 /** `text` with the workspace's own version replaced, or null when `path` is not a Cargo manifest. */
 export function pinWorkspaceVersions(path, text) {
-  if (path === "Cargo.lock") return normalizeCargoLock(text);
-  if (path === "Cargo.toml" || path.endsWith("/Cargo.toml")) return normalizeCargoToml(text);
+  if (path === "Cargo.lock") return pinCargoLock(text);
+  if (path === "Cargo.toml" || path.endsWith("/Cargo.toml")) return pinCargoToml(text);
   return null;
 }
 
@@ -76,6 +76,6 @@ export function pinTreeEntries(entries, readBlob) {
     const [meta, path] = entry.split("\t");
     const [mode, type, oid] = meta.split(" ");
     const pinned = type === "blob" ? pinWorkspaceVersions(path, readBlob(oid)) : null;
-    return `${mode} ${type} ${pinned === null ? oid : `normalized-${sha256(pinned)}`}\t${path}`;
+    return `${mode} ${type} ${pinned === null ? oid : `pinned-${sha256(pinned)}`}\t${path}`;
   });
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { accessSync, chmodSync, constants, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { accessSync, chmodSync, constants, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
@@ -97,29 +97,37 @@ export function targetRustflagsArgs({ cargoHome, sysroot, target, extraFlags = [
 
 const isPinnedWorkspaceFile = (path) => path === "Cargo.toml" || path === "Cargo.lock" || path.startsWith("crates/");
 
-const listFiles = (directory) =>
-  readdirSync(directory, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => relative(directory, join(entry.parentPath, entry.name)).split(sep).join("/"));
+// Removes files outside `wanted`, then the directories that leaves empty, so a file can take a
+// removed directory's name.
+const removeStaleEntries = (workspaceDir, wanted) => {
+  const entries = readdirSync(workspaceDir, { recursive: true, withFileTypes: true });
+  const pathOf = (entry) => relative(workspaceDir, join(entry.parentPath, entry.name)).split(sep).join("/");
+  for (const entry of entries) if (entry.isFile() && !wanted.has(pathOf(entry))) rmSync(join(workspaceDir, pathOf(entry)));
+  // Longest paths first, so each directory is checked after its subdirectories.
+  const directories = entries.filter((entry) => entry.isDirectory()).map(pathOf).sort((a, b) => b.length - a.length);
+  for (const directory of directories) if (readdirSync(join(workspaceDir, directory)).length === 0) rmdirSync(join(workspaceDir, directory));
+};
 
 /**
  * Mirrors the workspace's WASM sources into `workspaceDir` with pinned crate versions
- * (wasm-version-pin.mjs) and deletes files the checkout no longer has. Unchanged files
+ * (wasm-version-pin.mjs) and deletes what the checkout no longer has. Unchanged files
  * are not rewritten, so Cargo keeps their build output.
  */
-export function syncPinnedWorkspace({ root, workspaceDir }) {
+function syncPinnedWorkspace({ root, workspaceDir }) {
   const files = wasmSourceFiles(root).filter(isPinnedWorkspaceFile);
+  // Deleting first keeps a case-only rename on a case-insensitive filesystem: writing first
+  // would leave the old name in place, which the deletion would then remove.
+  if (existsSync(workspaceDir)) removeStaleEntries(workspaceDir, new Set(files));
   for (const path of files) {
     const target = join(workspaceDir, path);
     const contents = readWasmSourceFile(root, path);
     if (existsSync(target) && readFileSync(target).equals(contents)) continue;
     mkdirSync(dirname(target), { recursive: true });
+    // The copy keeps the source's mode, so a read-only source leaves a copy that cannot be overwritten.
+    rmSync(target, { force: true });
     writeFileSync(target, contents);
     chmodSync(target, statSync(join(root, path)).mode);
   }
-  if (!existsSync(workspaceDir)) return;
-  const wanted = new Set(files);
-  for (const path of listFiles(workspaceDir)) if (!wanted.has(path)) rmSync(join(workspaceDir, path));
 }
 
 // Environment that reaches rustc or the C compilers as flags. Compiler paths
