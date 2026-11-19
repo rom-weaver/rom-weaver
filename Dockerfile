@@ -31,7 +31,7 @@ COPY target/identify-release/share /share
 # hadolint ignore=DL3006
 FROM identify-data-${IDENTIFY_DATA} AS identify-data
 
-FROM rust:1.97.1-bookworm AS builder
+FROM rust:1.97.1-bookworm AS builder-deps
 ARG TARGETARCH
 WORKDIR /src
 
@@ -39,27 +39,53 @@ RUN apt-get update \
     && apt-get install --yes --no-install-recommends clang cmake libclang-dev ninja-build pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-COPY . .
-
+# Dependency layer: the manifests, build scripts, and vendored C sources the
+# build scripts read, with every workspace target replaced by a stub. Cargo
+# compiles the external crates here, and the layer survives any source edit.
+# Cache mounts would not reach CI's registry cache, so the compiled dependencies
+# live in this layer instead.
+COPY Cargo.toml Cargo.lock ./
+COPY .cargo/config.toml .cargo/config.toml
+COPY scripts/install-jwasm.sh scripts/install-jwasm.sh
 # JWasm enables the x86-64 SDK decode loop; arm64 uses clang's assembler.
 RUN if [ "${TARGETARCH}" = "amd64" ]; then scripts/install-jwasm.sh; fi
-# Cache mounts carry the registry and compiled dependencies across local
-# rebuilds; `COPY . .` above still invalidates this layer on any source change,
-# but cargo then rebuilds only the workspace crates (measured 1m55s -> 1m08s).
-# As in the webapp image they are local-only - BuildKit exports a cache mount to
-# no cache backend, so CI still pays a cold compile.
-#
-# One cargo invocation builds the binary and the man-page example, so the
-# workspace crates compile once.
-#
-# `CARGO_HOME` is /usr/local/cargo in the official rust image, not /root/.cargo.
-# A cache mount is absent from the resulting layer, so the binary has to leave
-# /src/target inside this same RUN or the runtime stage finds nothing to copy.
-# The registry is arch-neutral; the target dir is not, so it is keyed by arch to
-# keep a future multi-arch build from sharing one locked directory.
-RUN --mount=type=cache,id=cli-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,id=cli-cargo-target-${TARGETARCH},target=/src/target,sharing=locked \
-    cargo build --locked --release --package rom-weaver-cli --bins --example generate_manpages \
+
+COPY crates/rom-weaver-checksum/Cargo.toml crates/rom-weaver-checksum/build.rs crates/rom-weaver-checksum/
+COPY crates/rom-weaver-checksum/src/platform_name.rs crates/rom-weaver-checksum/src/platform-names.json crates/rom-weaver-checksum/src/
+COPY crates/rom-weaver-core/Cargo.toml crates/rom-weaver-core/build.rs crates/rom-weaver-core/
+COPY crates/rom-weaver-containers/Cargo.toml crates/rom-weaver-containers/build.rs crates/rom-weaver-containers/
+COPY crates/rom-weaver-containers/libarchive/ crates/rom-weaver-containers/libarchive/
+COPY crates/rom-weaver-containers/lzma-sdk/ crates/rom-weaver-containers/lzma-sdk/
+COPY crates/rom-weaver-containers/vendor-patches/ crates/rom-weaver-containers/vendor-patches/
+COPY crates/rom-weaver-patches/Cargo.toml crates/rom-weaver-patches/
+COPY crates/rom-weaver-cli/Cargo.toml crates/rom-weaver-cli/
+
+RUN for file in \
+        crates/rom-weaver-checksum/src/lib.rs \
+        crates/rom-weaver-core/src/lib.rs crates/rom-weaver-core/tests/integration.rs \
+        crates/rom-weaver-containers/src/lib.rs crates/rom-weaver-containers/tests/integration.rs \
+        crates/rom-weaver-patches/src/lib.rs crates/rom-weaver-patches/tests/integration.rs \
+        crates/rom-weaver-cli/src/lib.rs crates/rom-weaver-cli/src/main.rs \
+        crates/rom-weaver-cli/src/wasm_main.rs crates/rom-weaver-cli/src/typegen_main.rs \
+        crates/rom-weaver-cli/tests/integration.rs crates/rom-weaver-cli/examples/generate_manpages.rs; do \
+        mkdir -p "$(dirname "$file")" && printf 'fn main() {}\n' > "$file"; \
+    done \
+    && cargo build --locked --release --package rom-weaver-cli --bins --example generate_manpages
+
+FROM builder-deps AS builder
+COPY . .
+
+# The stubs above were compiled with a newer mtime than the checked-out sources,
+# so cargo would keep them. Touching the replaced targets forces the workspace
+# crates to rebuild; the dependency artifacts and vendored C builds stay cached.
+RUN touch crates/rom-weaver-checksum/src/lib.rs \
+        crates/rom-weaver-core/src/lib.rs crates/rom-weaver-core/tests/integration.rs \
+        crates/rom-weaver-containers/src/lib.rs crates/rom-weaver-containers/tests/integration.rs \
+        crates/rom-weaver-patches/src/lib.rs crates/rom-weaver-patches/tests/integration.rs \
+        crates/rom-weaver-cli/src/lib.rs crates/rom-weaver-cli/src/main.rs \
+        crates/rom-weaver-cli/src/wasm_main.rs crates/rom-weaver-cli/src/typegen_main.rs \
+        crates/rom-weaver-cli/tests/integration.rs crates/rom-weaver-cli/examples/generate_manpages.rs \
+    && cargo build --locked --release --package rom-weaver-cli --bins --example generate_manpages \
     && target/release/examples/generate_manpages --write \
     && install -D --mode 0755 target/release/rom-weaver /out/rom-weaver
 
