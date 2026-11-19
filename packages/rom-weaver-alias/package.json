@@ -1,6 +1,6 @@
 {
   "name": "rom-weaver",
-  "version": "0.24.0",
+  "version": "0.25.0",
   "description": "ROM patcher and toolkit CLI (alias of @rom-weaver/cli, so `npx rom-weaver` works): IPS/BPS/UPS/xdelta/PPF patches, CHD/RVZ/Z3DS/ISO conversion, ROM identification.",
   "author": "Brandon Casey",
   "license": "AGPL-3.0-or-later",
@@ -99,7 +99,7 @@
     "docs/man/rom-weaver-weave-schema.1"
   ],
   "dependencies": {
-    "@rom-weaver/cli": "0.24.0"
+    "@rom-weaver/cli": "0.25.0"
   },
   "files": [
     "bin/rom-weaver.mjs",
