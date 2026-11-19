@@ -229,6 +229,18 @@ Localized translations are early and may be entirely wrong in places. Manual edi
         </picture>
       </td>
     </tr>
+    <tr>
+      <td>Desktop: home page</td>
+      <td>
+        <img src="docs/screenshots/checksum-home-light.webp" alt="The home page with its tool shortcuts and install command on desktop">
+      </td>
+    </tr>
+    <tr>
+      <td>Desktop: add cheats</td>
+      <td>
+        <img src="docs/screenshots/cheat-create-cheats-desktop-light.webp" alt="The Add cheats dialog listing two practice ROM cheats on desktop">
+      </td>
+    </tr>
   </tbody>
 </table>
 
