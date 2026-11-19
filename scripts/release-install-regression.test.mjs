@@ -58,6 +58,7 @@ const PUBLISHES = [
   /cargo publish(?!.*--dry-run)/,
   /--draft=false/,
   /git push/,
+  /komac update[^\n]*--submit/,
 ];
 // The container build phase pushes nothing; only `phase: publish` calls docker-publish.yml to push.
 const publishes = (body) =>
@@ -68,11 +69,11 @@ test("every publishing release job requires semver success or the deliberate ski
   const publishing = Object.entries(jobs).filter(([name, body]) => publishes(body) && name !== "release");
   assert.deepEqual(
     publishing.map(([name]) => name).sort(),
-    ["publish-containers", "publish-homebrew", "publish-npm", "publish-release", "publish-scoop"],
+    ["publish-containers", "publish-homebrew", "publish-npm", "publish-release", "publish-scoop", "publish-winget"],
   );
   for (const [name, body] of publishing) {
     const text = flatten(body);
-    if (name === "publish-homebrew" || name === "publish-scoop")
+    if (["publish-homebrew", "publish-scoop", "publish-winget"].includes(name))
       assert.match(text, /needs\.publish-release\.result == 'success'/, `${name} must follow publish-release`);
     else assert.ok(text.includes(SEMVER_GATE), `${name} lacks the semver gate`);
   }
