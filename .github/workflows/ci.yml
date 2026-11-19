@@ -589,9 +589,11 @@ jobs:
     name: Docker build (${{ matrix.name }}, ${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
-    needs: changes
+    needs: [changes, cli-platforms]
+    # `cli-platforms` is skipped when no Rust changed; the CLI legs then build from source.
     if: >-
-      github.ref_type != 'tag'
+      !cancelled() && needs.changes.result == 'success'
+      && github.ref_type != 'tag'
       && needs.changes.outputs.docker_matrix != '[]'
     permissions:
       contents: read
@@ -674,10 +676,28 @@ jobs:
           variant: prod
           save: "false"
 
+      # A push to main copies the binary and documentation `cli-platforms` built into the CLI image
+      # (the `BINARY` and `DOCS` prebuilt stages) rather than compiling them in Docker. Pull requests
+      # and the nightly build from source, which keeps the Dockerfile's builder stage tested.
+      - name: Download the CLI documentation
+        if: matrix.name == 'CLI' && github.event_name == 'push' && needs.cli-platforms.result == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          name: ci-cli-docs
+          path: docs
+
+      - name: Download the CLI binary
+        id: cli-binary
+        if: matrix.name == 'CLI' && github.event_name == 'push' && needs.cli-platforms.result == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.arch == 'amd64' && 'ci-cli-linux-x64-gnu' || 'ci-cli-linux-arm64-musl' }}
+          path: prebuilt/${{ matrix.arch }}
+
       # On main the CLI legs push by digest for `docker-nightly` to join into
-      # the `nightly` manifest list, and both images refresh the build cache so
-      # the next release starts warm. On a pull request nothing is pushed,
-      # because a fork's token cannot write to the registry.
+      # the `nightly` manifest list, and the images built from source refresh the
+      # build cache so the next release starts warm. On a pull request nothing is
+      # pushed, because a fork's token cannot write to the registry.
       #
       # Only the CLI image publishes from here. This job builds the webapp image
       # from source, which is the image-plumbing path - it compiles its own wasm
@@ -697,8 +717,11 @@ jobs:
           build-args: |
             IDENTIFY_DATA=prebuilt
             ${{ steps.wasm.outputs.cache-hit == 'true' && 'WASM=prebuilt' || '' }}
+            ${{ steps.cli-binary.outcome == 'success' && 'BINARY=prebuilt' || '' }}
+            ${{ steps.cli-binary.outcome == 'success' && 'DOCS=prebuilt' || '' }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI' }}
-          cache-to: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # A prebuilt image skips the builder stage; exporting its cache would replace the one the source builds read.
+          cache-to: ${{ (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && steps.cli-binary.outcome != 'success' }}
 
       # The prebuilt stages take the binary out of `prebuilt/<arch>/` and the
       # man pages and completions out of `docs/`, so each leg smokes the
@@ -706,7 +729,7 @@ jobs:
       # files: this proves the release fan-out's COPY sources reach the build
       # context (`.dockerignore` decides that), not their contents.
       - name: Build CLI prebuilt path
-        if: matrix.name == 'CLI'
+        if: matrix.name == 'CLI' && steps.cli-binary.outcome != 'success'
         run: |
           set -euo pipefail
           mkdir -p "prebuilt/${{ matrix.arch }}" docs/man docs/completions
@@ -1455,6 +1478,33 @@ jobs:
           name: ci-cli-linux-arm64-musl
           overwrite: true
           path: target/${{ matrix.target }}/release/${{ matrix.binary }}
+          if-no-files-found: error
+
+      # A push to main builds the binaries the nightly CLI image copies in (`docker` job) instead of
+      # compiling them again; the arm64 one is the upload above.
+      - name: Upload Linux x64 CLI for the Docker image
+        if: github.event_name == 'push' && matrix.package == 'linux-x64-gnu'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-cli-linux-x64-gnu
+          overwrite: true
+          path: target/${{ matrix.target }}/release/${{ matrix.binary }}
+          if-no-files-found: error
+
+      # Only a host-native leg can run the generator, and the man pages do not depend on the target.
+      - name: Generate CLI documentation for the Docker image
+        if: github.event_name == 'push' && matrix.package == 'linux-x64-gnu'
+        run: cargo run --locked --release --target ${{ matrix.target }} -p rom-weaver-cli --example generate_manpages -- --write
+
+      - name: Upload CLI documentation for the Docker image
+        if: github.event_name == 'push' && matrix.package == 'linux-x64-gnu'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-cli-docs
+          overwrite: true
+          path: |
+            docs/man
+            docs/completions
           if-no-files-found: error
 
       # The action above already staged the package; this proves npm can pack

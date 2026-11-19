@@ -7,7 +7,8 @@
     "build": "build",
     "binary": "rom-weaver",
     "bootstrap": false,
-    "pr": false
+    "pr": false,
+    "docker": false
   },
   {
     "package": "darwin-x64",
@@ -17,7 +18,8 @@
     "build": "build",
     "binary": "rom-weaver",
     "bootstrap": false,
-    "pr": false
+    "pr": false,
+    "docker": false
   },
   {
     "package": "linux-arm64-musl",
@@ -27,7 +29,8 @@
     "build": "cross",
     "binary": "rom-weaver",
     "bootstrap": false,
-    "pr": false
+    "pr": false,
+    "docker": true
   },
   {
     "package": "linux-ia32-musl",
@@ -37,7 +40,8 @@
     "build": "cross",
     "binary": "rom-weaver",
     "bootstrap": false,
-    "pr": false
+    "pr": false,
+    "docker": false
   },
   {
     "package": "linux-x64-gnu",
@@ -47,7 +51,8 @@
     "build": "build",
     "binary": "rom-weaver",
     "bootstrap": false,
-    "pr": true
+    "pr": true,
+    "docker": true
   },
   {
     "package": "linux-x64-musl",
@@ -57,7 +62,8 @@
     "build": "cross",
     "binary": "rom-weaver",
     "bootstrap": false,
-    "pr": false
+    "pr": false,
+    "docker": false
   },
   {
     "package": "win32-arm64-msvc",
@@ -69,7 +75,8 @@
     "msvc_arch": "arm64",
     "msvc_host": "arm64",
     "bootstrap": false,
-    "pr": false
+    "pr": false,
+    "docker": false
   },
   {
     "package": "win32-ia32-msvc",
@@ -81,7 +88,8 @@
     "msvc_arch": "x86",
     "msvc_host": "amd64",
     "bootstrap": false,
-    "pr": false
+    "pr": false,
+    "docker": false
   },
   {
     "package": "win32-x64-msvc",
@@ -93,6 +101,7 @@
     "msvc_arch": "amd64",
     "msvc_host": "amd64",
     "bootstrap": false,
-    "pr": false
+    "pr": false,
+    "docker": false
   }
 ]

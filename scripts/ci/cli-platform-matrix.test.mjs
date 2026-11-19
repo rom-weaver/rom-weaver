@@ -40,14 +40,18 @@ test("keeps the full matrix on the nightly schedule and workflow_dispatch", () =
   }
 });
 
-// Pushes to main leave the other eight targets to the nightly schedule and the
-// release pull request.
-test("narrows to the pr-marked subset on pull_request and push", () => {
-  for (const event of ["pull_request", "push"]) {
+// Pushes to main also build the binaries the nightly Docker images copy in, and
+// leave the other targets to the nightly schedule and the release pull request.
+test("narrows to the pr-marked subset on pull_request and adds the docker-marked ones on push", () => {
+  const expected = {
+    pull_request: ["linux-x64-gnu"],
+    push: ["linux-arm64-musl", "linux-x64-gnu"],
+  };
+  for (const [event, packages] of Object.entries(expected)) {
     const subset = selectPlatformMatrix(platforms, event);
     assert.deepEqual(
       subset.map((platform) => platform.package),
-      ["linux-x64-gnu"],
+      packages,
       event,
     );
     assert.ok(subset.length < platforms.length, "the subset must actually be smaller");
@@ -85,6 +89,7 @@ test("every platform declares the fields the matrices consume", () => {
     assert.ok(["build", "cross"].includes(platform.build), `${platform.package} build mode`);
     assert.equal(typeof platform.bootstrap, "boolean", `${platform.package} bootstrap`);
     assert.equal(typeof platform.pr, "boolean", `${platform.package} pr`);
+    assert.equal(typeof platform.docker, "boolean", `${platform.package} docker`);
     const windows = platform.package.startsWith("win32-");
     assert.equal(platform.binary.endsWith(".exe"), windows, `${platform.package} binary extension`);
     // VsDevCmd.bat puts the cross-arch MSVC toolchain on PATH; without both

@@ -16,8 +16,9 @@ export function readPlatformMatrix(file = resolve(repoRoot, ".github/cli-platfor
   return matrix;
 }
 
-// Pull requests and pushes to main build one representative Linux release
-// package - the entry marked `"pr": true`. The other eight run on the nightly
+// Pull requests build one representative Linux release package - the entry
+// marked `"pr": true`. Pushes to main add the entries marked `"docker": true`,
+// the binaries the nightly Docker images copy in. The rest run on the nightly
 // schedule and on the release pull request, before anything can ship; this is
 // the `full_native` tier in classify-changes.mjs.
 //
@@ -30,7 +31,9 @@ export function readPlatformMatrix(file = resolve(repoRoot, ".github/cli-platfor
 // review needs.
 export function selectPlatformMatrix(matrix, eventName, headRef = undefined) {
   if (!coverageTiers(eventName, headRef).fullNative) {
-    const subset = matrix.filter((platform) => platform.pr === true);
+    const subset = matrix.filter(
+      (platform) => platform.pr === true || (eventName === "push" && platform.docker === true),
+    );
     if (subset.length === 0)
       throw new Error('no CLI platform is marked "pr": true; refusing to emit an empty matrix');
     return subset;
