@@ -30,7 +30,16 @@ function history(t) {
   return { cwd, base, prior, head };
 }
 
-function classify({ cwd, base, head, usePrior = "", eventName = "pull_request", headRef = "fix/x" }) {
+function classify({
+  cwd,
+  base,
+  head,
+  usePrior = "",
+  eventName = "pull_request",
+  headRef = "fix/x",
+  greenSha = "",
+  ref = "",
+}) {
   const output = join(cwd, "github-output.txt");
   writeFileSync(output, "");
   const result = spawnSync("node", [SCRIPT], {
@@ -43,6 +52,8 @@ function classify({ cwd, base, head, usePrior = "", eventName = "pull_request", 
       BASE_SHA: base,
       HEAD_SHA: head,
       PRIOR_GREEN_SHA: usePrior,
+      MAIN_GREEN_SHA: greenSha,
+      GITHUB_REF: ref,
     }),
   });
   assert.equal(result.status, 0, result.stderr);
@@ -210,4 +221,79 @@ test("release_pr is true only for a pull request from the release branch", (t) =
     const { outputs } = classify({ ...repo, eventName, headRef });
     assert.equal(outputs.release_pr, expected, `${eventName} ${headRef}`);
   }
+});
+
+// Commits the files on top of the current HEAD and returns the new commit.
+function commitFiles(cwd, files) {
+  for (const [path, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(cwd, path)), { recursive: true });
+    writeFileSync(join(cwd, path), body);
+  }
+  git(cwd, "add", "-A");
+  git(cwd, "commit", "-q", "-m", Object.keys(files).join(","));
+  return git(cwd, "rev-parse", "HEAD");
+}
+
+const MAIN = "refs/heads/main";
+const EVERY_STACK = ["rust", "rust_lint", "fuzz", "security", "docker_cli", "docker_webapp", "docker_cli_arm64", "docker_webapp_arm64", "webapp", "docker_prebuilt"];
+
+function mainPush(repo, extra) {
+  return classify({ ...repo, eventName: "push", headRef: "", ref: MAIN, ...extra }).outputs;
+}
+
+test("a docs-only push to main skips the Docker CLI image and Rust but keeps the webapp", (t) => {
+  const repo = history(t);
+  const head = commitFiles(repo.cwd, { "docs/faq.md": "# faq\n" });
+  const outputs = mainPush(repo, { base: repo.head, head, greenSha: repo.head });
+  for (const key of ["rust", "rust_lint", "fuzz", "security", "docker_cli", "docker_webapp", "docker_cli_arm64", "docker_webapp_arm64", "full"])
+    assert.equal(outputs[key], "false", key);
+  for (const key of ["webapp", "webapp_browser", "docker_prebuilt"]) assert.equal(outputs[key], "true", key);
+});
+
+test("a docs-only push to main still rebuilds the webapp source image for the self-hosting guide", (t) => {
+  const repo = history(t);
+  const head = commitFiles(repo.cwd, { "docs/hosting/self-hosting.md": "# host\n" });
+  const outputs = mainPush(repo, { base: repo.head, head, greenSha: repo.head });
+  assert.equal(outputs.docker_webapp, "true");
+  assert.equal(outputs.docker_webapp_arm64, "true");
+  assert.equal(outputs.docker_cli, "false");
+});
+
+test("a push to main selects every stack when the range since the last green push is not docs-only", (t) => {
+  const repo = history(t);
+  for (const file of ["Dockerfile", "crates/rom-weaver-cli/src/lib.rs", "docs/reference/cli.md", "docs/man/rom-weaver.1"]) {
+    const head = commitFiles(repo.cwd, { [file]: "x\n", "docs/faq.md": `${file}\n` });
+    const outputs = mainPush(repo, { base: repo.head, head, greenSha: repo.head });
+    for (const key of EVERY_STACK) assert.equal(outputs[key], "true", `${file}: ${key}`);
+  }
+});
+
+test("a docs-only push that replaced a pending run still builds what the replaced push changed", (t) => {
+  const repo = history(t);
+  const replaced = commitFiles(repo.cwd, { Dockerfile: "FROM scratch\n" });
+  const head = commitFiles(repo.cwd, { "docs/faq.md": "# faq\n" });
+  // The push's own range (replaced..head) is docs-only; the range since the last green run is not.
+  const outputs = mainPush(repo, { base: replaced, head, greenSha: repo.head });
+  for (const key of EVERY_STACK) assert.equal(outputs[key], "true", key);
+});
+
+test("without a usable last green push, or off main, a docs-only push selects every stack", (t) => {
+  const repo = history(t);
+  const head = commitFiles(repo.cwd, { "docs/faq.md": "# faq\n" });
+  for (const extra of [
+    { greenSha: "" },
+    { greenSha: "d".repeat(40) },
+    { greenSha: repo.head, ref: "refs/tags/v1.0.0" },
+    { greenSha: repo.head, ref: "refs/heads/feature" },
+    { greenSha: repo.head, eventName: "workflow_dispatch" },
+  ]) {
+    const outputs = mainPush(repo, { base: repo.head, head, ...extra });
+    for (const key of EVERY_STACK) assert.equal(outputs[key], "true", JSON.stringify(extra) + key);
+  }
+});
+
+test("a push to main identical to the last green push is not narrowed", (t) => {
+  const repo = history(t);
+  const outputs = mainPush(repo, { base: repo.head, head: repo.head, greenSha: repo.head });
+  for (const key of EVERY_STACK) assert.equal(outputs[key], "true", key);
 });

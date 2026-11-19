@@ -242,6 +242,17 @@ function ciDockerJobInputs(commit) {
   return [...lines.slice(0, jobs), ...lines.slice(start, end < 0 ? undefined : end)].join("\n");
 }
 
+// Docs that a build or test reads outside the webapp: the generated man pages and
+// completions the CLI image copies, the schemas a Rust test compares with its
+// embedded copies, and the CLI reference `cli_smoke` checks.
+const BUILD_READ_DOCS = /^docs\/(?:man\/|completions\/|rom-weaver-[^/]+\.schema\.json$|reference\/cli\.md$)/u;
+
+// True when every path is documentation that no image or Rust job reads. A push
+// to main narrows to its paths only then; any other diff selects every stack.
+export function isDocsOnlyChange(paths) {
+  return paths.length > 0 && paths.every((path) => path.startsWith("docs/") && !BUILD_READ_DOCS.test(path));
+}
+
 /** Paths that differ between two commits. A move counts at both paths, because rename pairing is off. */
 export function changedPathsBetween(base, head, cwd) {
   return execFileSync("git", ["diff", "--name-only", "--no-renames", "-z", base, head], {

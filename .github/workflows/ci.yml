@@ -127,6 +127,24 @@ jobs:
             --json headSha --jq '.[0].headSha // ""')" >> "$GITHUB_OUTPUT"
           node scripts/ci/mutation-base.mjs
 
+      # A push to main that changes only docs is classified against the last push
+      # run that finished green, not against the previous commit: a pending run
+      # replaced by a newer push never ran, and its changes would otherwise be
+      # skipped for good. Empty (no green run, an API error) selects every stack.
+      - name: Find the last green push to main
+        id: last-main-green
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
+            --event push --branch main --status success --limit 1 \
+            --json headSha --jq '.[0].headSha // ""'); then
+            echo "::warning::could not find the last green push; selecting every stack"
+            sha=""
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       # A pull request run tests the merge commit, which the API does not report,
       # so the tested SHA rides in an artifact name that a later run can read
       # without downloading. Only a run that ends green is used as a baseline.
@@ -184,6 +202,7 @@ jobs:
         env:
           BASE_SHA: ${{ steps.pr-base.outputs.sha || github.event.before || steps.last-nightly.outputs.sha || '' }}
           PRIOR_GREEN_SHA: ${{ steps.prior-green.outputs.sha || '' }}
+          MAIN_GREEN_SHA: ${{ steps.last-main-green.outputs.sha || '' }}
         run: |
           if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
             git fetch --no-tags --depth=1 origin "$BASE_SHA" ||
@@ -193,12 +212,17 @@ jobs:
             git fetch --no-tags --depth=1 origin "$PRIOR_GREEN_SHA" ||
               echo "::warning::earlier green run $PRIOR_GREEN_SHA could not be fetched"
           fi
+          if [ -n "$MAIN_GREEN_SHA" ]; then
+            git fetch --no-tags --depth=1 origin "$MAIN_GREEN_SHA" ||
+              echo "::warning::last green push $MAIN_GREEN_SHA could not be fetched"
+          fi
 
       - name: Classify changed paths
         id: classify
         env:
           BASE_SHA: ${{ steps.pr-base.outputs.sha || github.event.before || steps.last-nightly.outputs.sha || '' }}
           PRIOR_GREEN_SHA: ${{ steps.prior-green.outputs.sha || '' }}
+          MAIN_GREEN_SHA: ${{ steps.last-main-green.outputs.sha || '' }}
           HEAD_SHA: ${{ github.sha }}
           EVENT_NAME: ${{ github.event_name }}
           # Empty for anything that is not a pull request. It is what tells the

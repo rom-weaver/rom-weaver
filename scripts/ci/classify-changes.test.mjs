@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import {
   classifyChanges,
   coverageTiers,
+  isDocsOnlyChange,
   narrowSelection,
   REPO_LINT_CI_HELPERS,
   ROOT_LEAF_SCRIPTS,
@@ -989,4 +990,30 @@ test("narrowing never selects a job the pull request diff did not", () => {
 test("a job runs when both diffs select it", () => {
   const rust = classifyChanges(["crates/rom-weaver-core/src/lib.rs"], false, "pull_request");
   assert.equal(narrowSelection(rust, rust).rust, true);
+});
+
+test("only documentation no image or Rust job reads counts as a docs-only change", () => {
+  for (const [paths, expected] of [
+    [["docs/faq.md"], true],
+    [["docs/tutorials/a.md", "docs/screenshots/a.png", "docs/hosting/self-hosting.md"], true],
+    [[], false],
+    [["README.md"], false],
+    [["docs/faq.md", "Dockerfile"], false],
+    [["docs/faq.md", "crates/rom-weaver-cli/src/lib.rs"], false],
+    [["docs/man/rom-weaver.1"], false],
+    [["docs/completions/rom-weaver.bash"], false],
+    [["docs/rom-weaver-weave-v2.schema.json"], false],
+    [["docs/reference/cli.md"], false],
+    [["docs-extra/a.md"], false],
+    [["packages/rom-weaver-webapp/docs/a.md"], false],
+  ])
+    assert.equal(isDocsOnlyChange(paths), expected, paths.join(", "));
+});
+
+test("a docs-only change selects the webapp and no image or Rust job but the prebuilt image", () => {
+  const selected = classifyFor("push", "docs/faq.md", "docs/tutorials/a.md");
+  assert.equal(selected.webapp, "true");
+  assert.equal(selected.docker_prebuilt, "true");
+  for (const key of ["rust", "rust_lint", "security", "docker_cli", "docker_webapp", "docker_cli_arm64", "docker_webapp_arm64"])
+    assert.equal(selected[key], "false", key);
 });
