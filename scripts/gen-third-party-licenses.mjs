@@ -462,6 +462,11 @@ function findLicenseFiles(row) {
       break;
     }
   }
+  if (row.pkg?.name === "libmimalloc-sys") {
+    // The bundled C allocator has a separate copyright notice.
+    const crateDir = path.dirname(row.pkg.manifest_path);
+    found.push(path.join(crateDir, "c_src/mimalloc/v3/LICENSE"));
+  }
   found.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
   return found;
 }
