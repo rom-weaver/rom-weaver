@@ -853,6 +853,43 @@ describe("automatic update apply", () => {
     expect(harness.reload).toHaveBeenCalledTimes(1);
   });
 
+  it("reloads an idle tab that never saw the prompt when another page applies the update", async () => {
+    const harness = createHarness({
+      appVersion: "test",
+      controller: createController(),
+      shouldAutoApplyUpdate: () => true,
+    });
+    harness.client.initialize();
+    await flush();
+
+    harness.fireDocument("controllerchange");
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the prompt on a busy tab another page updated, then reloads it without a skip-waiting message", async () => {
+    const reply = { ...DEFAULT_CACHE_VERSION_REPLY };
+    const harness = createHarness({
+      appVersion: "test",
+      controller: createController({ reply }),
+      shouldAutoApplyUpdate: () => false,
+    });
+    harness.client.initialize();
+    await flush();
+
+    // The incoming worker reports its own build, and a later update takes control again.
+    reply.precacheVersion = "next";
+    harness.fireDocument("controllerchange");
+    await flush();
+    harness.fireDocument("controllerchange");
+
+    expect(harness.reload).not.toHaveBeenCalled();
+    expect(harness.client.getState().updateReady).toBe(true);
+    await expect(harness.client.reloadPendingUpdate()).resolves.toBe(true);
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+    expect(harness.updateServiceWorker).not.toHaveBeenCalled();
+  });
+
   it("falls back to the manual prompt once the per-session budget is spent", async () => {
     const harness = createHarness({
       controller: createController(),

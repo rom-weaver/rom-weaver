@@ -711,9 +711,75 @@ const fetchWithNavigationTimeout = async (request: Request, url: URL, event: unk
   }
 };
 
+// Bounds how long a page load waits on a waiting worker that never answers its skip-waiting request.
+const SKIP_WAITING_REPLY_TIMEOUT_MS = 2000;
+// A page load handed to the update that is still waiting after this long loads the current build.
+const HANDOFF_RETRY_LIMIT_MS = 5000;
+// The browser activates the update only once this worker is idle, so the handoff document reloads when
+// the update takes control, or already has; that keeps the page load out of the switch itself. The timed
+// `Refresh` header covers an update that does not take control in time.
+const HANDOFF_DOCUMENT = `<!doctype html><meta name="color-scheme" content="dark light"><script>
+const container = navigator.serviceWorker;
+container.addEventListener("controllerchange", () => location.reload(), { once: true });
+container.getRegistration().then((registration) => {
+  if (!registration?.waiting) location.reload();
+});
+</script>`;
+let handoff: { startedAtMs: number; worker: ServiceWorker } | null = null;
+
+const isHandoffPending = () => handoff !== null && self.registration.waiting === handoff.worker;
+
+const createHandoffResponse = () =>
+  new Response(HANDOFF_DOCUMENT, {
+    headers: { "content-type": "text/html; charset=utf-8", refresh: String(HANDOFF_RETRY_LIMIT_MS / 1000) },
+  });
+
+const requestSkipWaiting = async (worker: ServiceWorker) => {
+  const channel = new MessageChannel();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, SKIP_WAITING_REPLY_TIMEOUT_MS);
+      channel.port1.onmessage = () => resolve();
+      worker.postMessage({ type: "SKIP_WAITING" }, [channel.port2]);
+    });
+  } finally {
+    clearTimeout(timer);
+    channel.port1.close();
+  }
+};
+
+/**
+ * Hands a page load to the waiting update when no other page uses this worker, so opening or reloading
+ * the app switches builds without a prompt; the handoff document loads the page again from the update.
+ * Once per waiting worker: a repeat that still reaches this worker gets the handoff document again until
+ * `HANDOFF_RETRY_LIMIT_MS`, then the current build.
+ */
+const handOffPageLoadToWaitingWorker = async (request: Request, url: URL) => {
+  const waiting = self.registration.waiting;
+  const isPageLoad =
+    isTopLevelNavigation(request, url) && request.destination === "document" && !requestPrefersMarkdown(request);
+  if (!(waiting && isPageLoad)) return undefined;
+  if (handoff?.worker === waiting) {
+    return Date.now() - handoff.startedAtMs < HANDOFF_RETRY_LIMIT_MS ? createHandoffResponse() : undefined;
+  }
+  // A reload still lists the page it replaces, and nothing tells that apart from one other open tab;
+  // the page client reloads such a tab once the update takes control. Frames load with their page.
+  const pages = (await self.clients.matchAll({ type: "window" })).filter((client) => client.frameType !== "nested");
+  if (pages.length > 1) return undefined;
+  handoff = { startedAtMs: Date.now(), worker: waiting };
+  // Offline downloads keep this worker busy, so the running batch stops and later pumps wait for the update.
+  appPumpGeneration += 1;
+  logServiceWorker("handing the page load to the waiting worker", { openPages: pages.length, url: url.href });
+  await requestSkipWaiting(waiting);
+  return createHandoffResponse();
+};
+
 registerRoute(
   ({ request, url }) => shouldUseNetworkFirst(request, url),
   async ({ event, request, url }) => {
+    const handoff = await handOffPageLoadToWaitingWorker(request, url);
+    if (handoff) return handoff;
     const precached = await serveNavigationFromPrecache(request, url, event);
     if (precached) {
       recordDocumentSource(event, { network: false });
@@ -797,15 +863,18 @@ const fetchForWarmup = (input: Request | string, init?: RequestInit) =>
 const fetchForInteractive = (input: Request | string, init?: RequestInit) =>
   fetchWithDownloadLog(input, init, logServiceWorker);
 
-const deferredPrecache = createDeferredPrecache({
-  entries: DEFERRED_MANIFEST,
-  cacheName: DEFERRED_CACHE_NAME,
-  scope: self.registration.scope,
-  download: fetchForWarmup,
-  policy: offlineCopyPolicy,
-  selectEntries: docsImagePolicy.selectEntries,
-  log: logServiceWorker,
-});
+const createAppDeferredPrecache = (download: (request: Request) => Promise<Response>) =>
+  createDeferredPrecache({
+    entries: DEFERRED_MANIFEST,
+    cacheName: DEFERRED_CACHE_NAME,
+    scope: self.registration.scope,
+    download,
+    policy: offlineCopyPolicy,
+    selectEntries: docsImagePolicy.selectEntries,
+    log: logServiceWorker,
+  });
+
+const deferredPrecache = createAppDeferredPrecache(fetchForWarmup);
 
 // Workbox installs these files once. The page-paced pump restores them after a user removes and later enables the copy.
 const corePrecache = createDeferredPrecache({
@@ -909,6 +978,8 @@ const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupI
   // A pause MUST stop refilling both active pumps and pumps waiting for cache reads.
   const generation = appPumpGeneration;
   const process = async () => {
+    // A disabled reply ends the page's pump loop until a new worker takes control; the stored choice stays.
+    if (isHandoffPending()) return { ...(await offlineWarmup.getReadyState()), enabled: false, ready: false };
     const enabled = await offlineCopyPolicy.isEnabled();
     if (generation !== appPumpGeneration || !offlineCopyRequestedEnabled || !enabled) {
       return {
@@ -1107,21 +1178,60 @@ addPlugins([precachePlugin]);
 precacheAndRoute(INITIAL_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
 
+// Chromium times out a worker event after 5 minutes (`kRequestTimeout` in
+// https://chromium.googlesource.com/chromium/src/+/HEAD/content/browser/service_worker/service_worker_version.cc),
+// which fails this install attempt, so the download of changed offline files stops well before that and
+// leaves the rest to the page's warm-up.
+const UPDATE_DOWNLOAD_BUDGET_MS = 2 * 60_000;
+
+const isDataSaverOn = () =>
+  (self.navigator as WorkerNavigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
+
+/**
+ * Downloads the deferred files this update needs that are not cached yet, so switching to it keeps the
+ * offline copy complete. Runs only where the page's warm-up would fetch the same files right after the
+ * switch: the offline copy is on (`runNextBatch` checks it) and data saver is off. Rejects when a
+ * download fails or the budget ends.
+ */
+const downloadDeferredFilesForUpdate = async () => {
+  if (isDataSaverOn()) return;
+  const budget = new AbortController();
+  const timer = setTimeout(() => budget.abort(new Error("update download budget spent")), UPDATE_DOWNLOAD_BUDGET_MS);
+  const updateFiles = createAppDeferredPrecache((request) =>
+    fetchForWarmup(new Request(request, { signal: budget.signal })),
+  );
+  try {
+    let downloaded = true;
+    while (downloaded) downloaded = await updateFiles.runNextBatch();
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 self.addEventListener("install", (event) => {
   installStartedAt = performance.now();
   precacheInstalledCount = 0;
   precacheInstallFailed = false;
-  // Existing complete entries MUST move before Workbox removes them on activation.
-  event.waitUntil(runServiceWorkerPhase("migrate deferred cache", () => deferredPrecache.migrate(PRECACHE_NAME)));
   // First install (no active worker yet): take control immediately so the page can gain
   // cross-origin isolation on its follow-up reload. Updates to an already-controlled page
-  // must WAIT - registerType is "prompt", so activation happens only when the client sends
-  // SKIP_WAITING (see the message handler). Seizing control on every update re-inits the
-  // running app and reads as an involuntary reload.
+  // must WAIT - registerType is "prompt", so activation happens only when a client or a page
+  // load sends SKIP_WAITING (see the message handler). Seizing control on every update
+  // re-inits the running app and reads as an involuntary reload.
   const isFirstInstall = !self.registration.active;
   // Runs before workbox's async install handler touches any entry (listeners
   // fire in add order within the same task), so the plugin sees the flag.
   firstInstallInProgress = isFirstInstall;
+  // Existing complete entries MUST move before Workbox removes them on activation. A first install
+  // leaves the deferred files to the page's warm-up, which reports their progress.
+  event.waitUntil(
+    runServiceWorkerPhase("migrate deferred cache", () => deferredPrecache.migrate(PRECACHE_NAME)).then(async () => {
+      if (isFirstInstall) return;
+      // Best-effort: the phase logs a failure, and the warm-up downloads what is left after the switch.
+      await runServiceWorkerPhase("download changed offline files", downloadDeferredFilesForUpdate).catch(
+        () => undefined,
+      );
+    }),
+  );
   logServiceWorker("install event", {
     isFirstInstall,
     precacheEntries: PRECACHE_MANIFEST.length,
@@ -1174,6 +1284,11 @@ self.addEventListener("message", (event) => {
   if (event.data.type === "SKIP_WAITING" || event.data.action === "skip-waiting") {
     logServiceWorker("message received; calling skipWaiting");
     void self.skipWaiting();
+    // An active worker handing a page load over waits for this reply, and that worker can be an older
+    // build, so every later build MUST keep sending it. It goes out once skipWaiting is requested: the
+    // promise can resolve only after activation (https://github.com/w3c/ServiceWorker/issues/1187), and
+    // activation waits for that page load.
+    event.ports?.[0]?.postMessage({ action: "skip-waiting-done" });
     return;
   }
 

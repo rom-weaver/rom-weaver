@@ -110,6 +110,7 @@ const PRECACHE_NAME = "precache-rom-weaver";
 const RUNTIME_CACHE_NAME = `precache-rom-weaver-runtime-${BUILD_TOKEN}`;
 const EMULATORJS_CACHE_NAME = `precache-rom-weaver-emulatorjs-${EMULATORJS_VERSION}`;
 const IDENTIFY_CACHE_NAME = "precache-rom-weaver-identify-optional";
+const DEFERRED_CACHE_NAME = "precache-rom-weaver-app-deferred";
 const COEP_MODE_URL = `${APP_ORIGIN}/__rom-weaver-coep-mode__`;
 const PRECACHE_SIZES_URL = `${APP_ORIGIN}/precache-sizes.json`;
 
@@ -174,22 +175,29 @@ type SwEvent = {
   waitUntil: (promise: Promise<unknown>) => void;
 };
 
+type FakeWaitingWorker = { postMessage: (message: unknown, transfer: MessagePort[]) => void };
+
 const createScope = ({
   hasActiveWorker = false,
   href = SW_HREF,
   manifest = DEFAULT_MANIFEST,
+  saveData = false,
   scope = APP_SCOPE,
   unparsableHref = false,
 }: {
   hasActiveWorker?: boolean;
   href?: string;
   manifest?: PrecacheManifestEntry[];
+  saveData?: boolean;
   scope?: string;
   unparsableHref?: boolean;
 } = {}) => {
   const listeners = new Map<string, Array<(event: SwEvent) => void>>();
   const clientMessages: unknown[] = [];
-  const client = { postMessage: (message: unknown) => clientMessages.push(message) };
+  const client = {
+    frameType: "top-level" as "nested" | "top-level",
+    postMessage: (message: unknown) => clientMessages.push(message),
+  };
   // Mutable so a test can start with no window client and connect one later,
   // which is what the worker's log backlog exists for.
   const clientList: Array<typeof client> = [client];
@@ -209,11 +217,13 @@ const createScope = ({
     },
     listeners,
     location: unparsableHref ? { href, origin: APP_ORIGIN } : new URL(href),
+    navigator: { connection: { saveData } },
     performance: globalThis.performance,
     registration: {
       active: hasActiveWorker ? { scriptURL: href } : null,
       scope,
       update: vi.fn(async () => undefined),
+      waiting: null as FakeWaitingWorker | null,
     },
     skipWaiting: vi.fn(async () => undefined),
   };
@@ -232,6 +242,15 @@ const dispatch = async (scope: Scope, type: string, init: Partial<SwEvent> = {})
   };
   for (const listener of scope.listeners.get(type) ?? []) listener(event);
   await Promise.all(pending);
+};
+
+const send = async (harness: Harness, data: unknown) => {
+  const replies: unknown[] = [];
+  await dispatch(harness.scope, "message", {
+    data,
+    ports: [{ postMessage: (message: unknown) => replies.push(message) }],
+  });
+  return replies;
 };
 
 const createWarmupStub = (): WarmupStub => ({
@@ -255,19 +274,19 @@ const createWarmupStub = (): WarmupStub => ({
 
 type FetchStub = {
   calls: Array<{ credentials: string; init?: RequestInit; url: string }>;
-  handlers: Map<string, () => Response>;
+  handlers: Map<string, (input: Request | string) => Response | Promise<Response>>;
   stub: ReturnType<typeof vi.fn>;
 };
 
 const createFetchStub = (): FetchStub => {
   const calls: FetchStub["calls"] = [];
-  const handlers = new Map<string, () => Response>();
+  const handlers: FetchStub["handlers"] = new Map();
   const stub = vi.fn(async (input: Request | string, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.url;
     calls.push({ credentials: typeof input === "string" ? "" : input.credentials, init, url });
     const handler = handlers.get(url);
     if (!handler) throw new TypeError(`Failed to fetch ${url}`);
-    return handler();
+    return handler(input);
   });
   return { calls, handlers, stub };
 };
@@ -317,6 +336,7 @@ const loadWorker = async (
     manifest?: PrecacheManifestEntry[];
     omitRedirectList?: boolean;
     redirectSourcePaths?: string[];
+    saveData?: boolean;
     scope?: string;
     seedCaches?: (cacheStorage: FakeCacheStorage) => Promise<void> | void;
     unparsableHref?: boolean;
@@ -902,7 +922,6 @@ describe("navigation requests", () => {
     "assets/app.js",
     { install: false, url: "assets/deferred.js" },
   ];
-  const DEFERRED_CACHE_NAME = "precache-rom-weaver-app-deferred";
   // A worker whose core precache and deferred entries are all stored: the only state that serves cache-first.
   const loadCompleteWorker = (options: {
     hasActiveWorker?: boolean;
@@ -1369,6 +1388,160 @@ describe("navigation requests", () => {
   });
 });
 
+describe("page load handoff to a waiting worker", () => {
+  const PAGE_URL = `${APP_ORIGIN}/docs/guide`;
+  type OpenFrame = "nested" | "top-level";
+  // Confirms skip-waiting requests the way the worker's message handler does, unless told to stay silent.
+  const createWaitingWorker = ({ confirms = true } = {}) => {
+    const messages: unknown[] = [];
+    return {
+      messages,
+      postMessage: (message: unknown, transfer: MessagePort[]) => {
+        messages.push(message);
+        if (confirms) transfer[0]?.postMessage({ action: "skip-waiting-done" });
+      },
+    };
+  };
+  const loadUpdatedWorker = async ({
+    manifest,
+    openFrames = ["top-level"],
+  }: { manifest?: PrecacheManifestEntry[]; openFrames?: readonly OpenFrame[] } = {}) => {
+    const harness = await loadWorker({ hasActiveWorker: true, manifest });
+    const { clientList } = harness.scope;
+    clientList.splice(0, clientList.length, ...openFrames.map((frameType) => ({ ...harness.scope.client, frameType })));
+    harness.fetchStub.handlers.set(PAGE_URL, () => new Response("current build", { status: 200 }));
+    return harness;
+  };
+  const asFrameNavigationRequest = (url: string) => {
+    const request = new Request(url, { headers: { accept: "text/html,*/*" } });
+    Object.defineProperty(request, "mode", { value: "navigate" });
+    Object.defineProperty(request, "destination", { value: "iframe" });
+    return request;
+  };
+
+  it.each([
+    { label: "no page is open", openFrames: [] },
+    { label: "only the reloading page is open", openFrames: ["top-level"] },
+    { label: "the only page also holds a frame", openFrames: ["top-level", "nested"] },
+  ] satisfies Array<{ label: string; openFrames: OpenFrame[] }>)(
+    "hands the load to the waiting worker when $label",
+    async ({ openFrames }) => {
+      const harness = await loadUpdatedWorker({ openFrames });
+      const waiting = createWaitingWorker();
+      harness.scope.registration.waiting = waiting;
+
+      const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(PAGE_URL));
+
+      expect(waiting.messages).toEqual([{ type: "SKIP_WAITING" }]);
+      expect(response.headers.get("refresh")).toBe("5");
+      expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
+      expect(harness.fetchStub.calls).toHaveLength(0);
+    },
+  );
+
+  it.each([
+    { label: "another page is open", openFrames: ["top-level", "top-level"], request: asNavigationRequest },
+    { label: "a frame loads", openFrames: ["top-level"], request: asFrameNavigationRequest },
+    {
+      label: "the client asks for Markdown",
+      openFrames: ["top-level"],
+      request: (url: string) => asNavigationRequest(url, { accept: "text/markdown" }),
+    },
+  ] satisfies Array<{ label: string; openFrames: OpenFrame[]; request: (url: string) => Request }>)(
+    "loads the current build when $label",
+    async ({ openFrames, request }) => {
+      const harness = await loadUpdatedWorker({ openFrames });
+      const waiting = createWaitingWorker();
+      harness.scope.registration.waiting = waiting;
+
+      const response = await routed(harness, harness.networkFirstRoute, request(PAGE_URL));
+
+      await expect(response.text()).resolves.toBe("current build");
+      expect(waiting.messages).toEqual([]);
+    },
+  );
+
+  it.each([
+    { label: "sends the handoff document again", elapsedMs: 4999, refresh: "5" },
+    { label: "loads the current build", elapsedMs: 5000, refresh: null },
+  ])("$label when a repeat reaches this worker $elapsedMs ms after the handoff", async ({ elapsedMs, refresh }) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const harness = await loadUpdatedWorker();
+    const waiting = createWaitingWorker();
+    harness.scope.registration.waiting = waiting;
+
+    await routed(harness, harness.networkFirstRoute, asNavigationRequest(PAGE_URL));
+    vi.setSystemTime(Date.now() + elapsedMs);
+    const repeat = await routed(harness, harness.networkFirstRoute, asNavigationRequest(PAGE_URL));
+
+    expect(repeat.headers.get("refresh")).toBe(refresh);
+    expect(waiting.messages).toHaveLength(1);
+  });
+
+  describe("offline downloads", () => {
+    const fileUrls = Array.from({ length: 6 }, (_, index) => `${APP_ORIGIN}/assets/${index}.bin`);
+    const manifest = fileUrls.map((url) => ({ url, install: false, sizeBytes: 1 }));
+    const downloadedFiles = (harness: Harness) => harness.fetchStub.calls.filter(({ url }) => fileUrls.includes(url));
+
+    it("holds them while the update it handed a page load to waits, then resumes", async () => {
+      const harness = await loadUpdatedWorker({ manifest });
+      for (const url of fileUrls) harness.fetchStub.handlers.set(url, () => new Response("x"));
+      await send(harness, { action: "set-offline-copy-enabled", enabled: true });
+      harness.scope.registration.waiting = createWaitingWorker();
+      await routed(harness, harness.networkFirstRoute, asNavigationRequest(PAGE_URL));
+
+      const held = await send(harness, { action: "offline-warmup-pump" });
+      expect(held).toContainEqual(expect.objectContaining({ action: "offline-warmup-progress", enabled: false }));
+      expect(downloadedFiles(harness)).toHaveLength(0);
+
+      // A newer build replaced the update, so no handoff is pending any more.
+      harness.scope.registration.waiting = createWaitingWorker();
+      await send(harness, { action: "offline-warmup-pump" });
+      expect(downloadedFiles(harness)).toHaveLength(fileUrls.length);
+    });
+
+    it("stops the running batch when it hands a page load over", async () => {
+      const harness = await loadUpdatedWorker({ manifest });
+      let releaseDownloads = () => undefined as void;
+      const downloadsReleased = new Promise<void>((resolve) => {
+        releaseDownloads = resolve;
+      });
+      for (const url of fileUrls) {
+        harness.fetchStub.handlers.set(url, async () => {
+          await downloadsReleased;
+          return new Response("x");
+        });
+      }
+      await send(harness, { action: "set-offline-copy-enabled", enabled: true });
+      const pump = send(harness, { action: "offline-warmup-pump" });
+      await vi.waitFor(() => expect(downloadedFiles(harness).length).toBeGreaterThan(0));
+
+      harness.scope.registration.waiting = createWaitingWorker();
+      await routed(harness, harness.networkFirstRoute, asNavigationRequest(PAGE_URL));
+      releaseDownloads();
+      await pump;
+
+      expect(downloadedFiles(harness).length).toBeLessThan(fileUrls.length);
+    });
+  });
+
+  it("waits two seconds for a waiting worker that never confirms, then hands the load over", async () => {
+    const harness = await loadUpdatedWorker();
+    harness.scope.registration.waiting = createWaitingWorker({ confirms: false });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let answered = false;
+    const response = routed(harness, harness.networkFirstRoute, asNavigationRequest(PAGE_URL)).finally(() => {
+      answered = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(answered).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect((await response).headers.get("refresh")).toBe("5");
+  });
+});
+
 describe("EmulatorJS route", () => {
   it("matches the EmulatorJS manifest and data assets only", async () => {
     const harness = await loadWorker();
@@ -1700,6 +1873,72 @@ describe("install and activate", () => {
     expect(harness.scope.skipWaiting).not.toHaveBeenCalled();
   });
 
+  // More deferred files than one download batch holds, so an update needs several batches.
+  const UPDATE_DEFERRED_URLS = Array.from({ length: 17 }, (_, index) => `assets/deferred-${index}.js`);
+  const UPDATE_MANIFEST: PrecacheManifestEntry[] = [
+    { revision: "r1", url: "index.html" },
+    ...UPDATE_DEFERRED_URLS.map((url) => ({ install: false, url })),
+  ];
+  const serveDeferredFiles = (harness: Harness, respond: (input: Request | string) => Response | Promise<Response>) => {
+    for (const url of UPDATE_DEFERRED_URLS) harness.fetchStub.handlers.set(`${APP_ORIGIN}/${url}`, respond);
+  };
+  const cachedDeferredUrls = async (harness: Harness) =>
+    (await (await harness.cacheStorage.open(DEFERRED_CACHE_NAME)).keys()).map((request) => request.url);
+
+  it("downloads every deferred file an update needs before it starts waiting", async () => {
+    const harness = await loadWorker({ hasActiveWorker: true, manifest: UPDATE_MANIFEST });
+    serveDeferredFiles(harness, () => new Response("deferred", { status: 200 }));
+
+    await dispatch(harness.scope, "install");
+
+    expect((await cachedDeferredUrls(harness)).sort()).toEqual(
+      UPDATE_DEFERRED_URLS.map((url) => `${APP_ORIGIN}/${url}`).sort(),
+    );
+  });
+
+  it.each([
+    { hasActiveWorker: false, label: "on a first install", saveData: false },
+    { hasActiveWorker: true, label: "with data saver on", saveData: true },
+  ])("leaves deferred files to the page's warm-up $label", async ({ hasActiveWorker, saveData }) => {
+    const harness = await loadWorker({ hasActiveWorker, manifest: UPDATE_MANIFEST, saveData });
+    serveDeferredFiles(harness, () => new Response("deferred", { status: 200 }));
+
+    await dispatch(harness.scope, "install");
+
+    expect(await cachedDeferredUrls(harness)).toEqual([]);
+  });
+
+  it("still installs an update whose deferred download fails", async () => {
+    const harness = await loadWorker({ hasActiveWorker: true, manifest: UPDATE_MANIFEST });
+    serveDeferredFiles(harness, () => new Response("gone", { status: 404 }));
+
+    await expect(dispatch(harness.scope, "install")).resolves.toBeUndefined();
+  });
+
+  it("stops the deferred download once the update budget is spent", async () => {
+    const harness = await loadWorker({ hasActiveWorker: true, manifest: UPDATE_MANIFEST });
+    serveDeferredFiles(
+      harness,
+      (input) =>
+        new Promise((_resolve, reject) => {
+          const { signal } = input as Request;
+          signal.addEventListener("abort", () => reject(signal.reason));
+        }),
+    );
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let installed = false;
+    const install = dispatch(harness.scope, "install").then(() => {
+      installed = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(2 * 60_000 - 1);
+    expect(installed).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await install;
+
+    expect(await cachedDeferredUrls(harness)).toEqual([]);
+  });
+
   it("deletes stale managed caches and claims the open clients", async () => {
     const harness = await loadWorker({
       seedCaches: async (cacheStorage) => {
@@ -1787,6 +2026,23 @@ describe("skip waiting messages", () => {
     await dispatch(harness.scope, "message", { data: { action: "skip-waiting" } });
 
     expect(harness.scope.skipWaiting).toHaveBeenCalledTimes(2);
+  });
+
+  it("confirms through the reply port once skipWaiting is requested, before activation resolves it", async () => {
+    const harness = await loadWorker();
+    const order: string[] = [];
+    // A browser that resolves skipWaiting only after activation, which waits on the page load the reply releases.
+    harness.scope.skipWaiting.mockImplementation(() => {
+      order.push("skipWaiting");
+      return new Promise<undefined>(() => undefined);
+    });
+
+    void dispatch(harness.scope, "message", {
+      data: { type: "SKIP_WAITING" },
+      ports: [{ postMessage: () => order.push("reply") }],
+    });
+
+    expect(order).toEqual(["skipWaiting", "reply"]);
   });
 });
 
@@ -1979,15 +2235,6 @@ describe("offline warm-up messages", () => {
 });
 
 describe("offline copy policy", () => {
-  const send = async (harness: Harness, data: unknown) => {
-    const replies: unknown[] = [];
-    await dispatch(harness.scope, "message", {
-      data,
-      ports: [{ postMessage: (message: unknown) => replies.push(message) }],
-    });
-    return replies;
-  };
-
   it("rejects a malformed setting without removing files", async () => {
     const harness = await loadWorker();
     await (await harness.cacheStorage.open(PRECACHE_NAME)).put(`${APP_ORIGIN}/index.html`, new Response("app"));
@@ -2231,7 +2478,6 @@ describe("precache state reported to the warm-up", () => {
 
 describe("BIOS HEAD route", () => {
   const BIOS_URL = `${APP_ORIGIN}/emulatorjs/bios/saturn_bios.bin`;
-  const DEFERRED_CACHE_NAME = "precache-rom-weaver-app-deferred";
   const loadBiosWorker = (cachedBios?: Response) =>
     loadWorker({
       manifest: [

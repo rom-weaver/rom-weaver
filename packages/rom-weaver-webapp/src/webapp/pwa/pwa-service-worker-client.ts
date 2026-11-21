@@ -138,26 +138,39 @@ const createPwaServiceWorkerClient = ({
   // the registrar reloads unconditionally unless we supply that callback, so this flag is the only
   // thing standing between a silent activation and a surprise reload.
   let reloadOnIncomingControl = false;
-  // Set when the update banner was shown for a page running the outgoing controller's code. If another
-  // tab applies the update (the user accepted there, or that tab already ran the new build and applied it
-  // silently) and the new worker takes control here, this tab is still on the old build
-  // (its lazy chunks can 404 after a deploy), so it reloads once, provided it has no in-progress work.
-  let waitingOnOutgoingBuild = false;
-  // Applies a reload the incoming worker's control was asked for, once. Both controllerchange and
+  // Set once a worker serving another build than this page runs takes control, because another tab or a
+  // page load applied an update. This page stays on its build until it reloads, which then needs no
+  // skip-waiting message.
+  let updateAlreadyActive = false;
+  let reloadingForUpdate = false;
+  // Applies the reload the incoming worker's control calls for, once. Both controllerchange and
   // onNeedReload call it: the registrar's callback alone misses pages first loaded without a
   // controller, because workbox-window decides whether a change is an update when it registers.
   const reloadForIncomingControl = (source: string) => {
+    if (reloadingForUpdate) return true;
     const reload = reloadOnIncomingControl;
     reloadOnIncomingControl = false;
-    const siblingAccepted = waitingOnOutgoingBuild;
-    waitingOnOutgoingBuild = false;
-    logServiceWorkerClient("incoming service worker took control", { reload, siblingAccepted, source });
-    if (reload) return reloadPage("reloading page to apply service worker update", "swupdate");
-    // Another tab applied the update, and that tab's own budget bounds silent applies, so this reload
-    // does not count against this tab's auto-apply budget.
-    if (!(siblingAccepted && shouldAutoApplyUpdate?.())) return false;
+    // The incoming worker drops the files of the build this page runs, so its lazy chunks can 404.
+    const runsOutgoingBuild = updateAlreadyActive || controllerVersion === appVersion;
+    logServiceWorkerClient("incoming service worker took control", { reload, runsOutgoingBuild, source });
+    if (reload) {
+      reloadingForUpdate = reloadPage("reloading page to apply service worker update", "swupdate");
+      return reloadingForUpdate;
+    }
+    if (!runsOutgoingBuild) return false;
+    updateAlreadyActive = true;
+    if (!shouldAutoApplyUpdate?.()) {
+      // In-progress work keeps this page; the prompt stays so the user can reload once it is done.
+      markUpdateReady();
+      return false;
+    }
+    // Another page applied the update, so this reload does not count against this tab's auto-apply budget.
     onBeforeReload?.();
-    return reloadPage("reloading page; a sibling tab applied the service worker update", "swupdate-sibling");
+    reloadingForUpdate = reloadPage(
+      "reloading page; another page applied the service worker update",
+      "swupdate-sibling",
+    );
+    return reloadingForUpdate;
   };
 
   const setSessionStorageItem = (key: string, value: string) => {
@@ -516,10 +529,12 @@ const createPwaServiceWorkerClient = ({
       logServiceWorkerClient("pending update reload canceled by user");
       return false;
     }
-    logServiceWorkerClient("reloading with pending service worker update");
+    logServiceWorkerClient("reloading with pending service worker update", { updateAlreadyActive });
     clearUpdateReady();
-    reloadOnIncomingControl = true;
     onBeforeReload?.();
+    if (updateAlreadyActive)
+      return reloadPage("reloading page; the service worker update is already active", "swupdate");
+    reloadOnIncomingControl = true;
     await updateServiceWorker();
     return true;
   };
@@ -600,7 +615,7 @@ const createPwaServiceWorkerClient = ({
         // The page is still running the code the outgoing controller cached (it served its own shell),
         // so applying the update means reloading it. That reload would land seconds after the visit,
         // so leave the new worker waiting and show the update prompt: the user picks when to reload,
-        // and the worker otherwise activates on the next visit once no client uses the old one.
+        // and the worker otherwise takes over the next page load that leaves no other page on the old one.
         const reloadToApply = controllerVersion === appVersion;
         if (
           shouldAutoApplyUpdate?.() &&
@@ -622,7 +637,6 @@ const createPwaServiceWorkerClient = ({
           void updateServiceWorker();
           return;
         }
-        if (reloadToApply) waitingOnOutgoingBuild = true;
         if (reloadToApply && shouldAutoApplyUpdate?.()) {
           logServiceWorkerClient("service worker update waiting; page runs the controller's version", {
             controllerVersion,
