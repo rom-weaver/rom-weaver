@@ -574,6 +574,12 @@ const createPwaServiceWorkerClient = ({
       loadPageForUpdate(url);
       return;
     }
+    // A page that runs a build other than its controller's came from the waiting update, which a page load
+    // of `url` would serve again.
+    if (controllerVersion !== appVersion) {
+      navigateInApp();
+      return;
+    }
     navigationRequest += 1;
     const request = navigationRequest;
     void requestUpdatePageLoad(url).then((ready) => {

@@ -979,6 +979,24 @@ describe("view changes while an update waits", () => {
       setup: () => loadWaitingPage({ onUpdatePageLoad: answer(true) }),
       url: new URL(`${APP_HREF}#faq`),
     },
+    {
+      // The page load came from the update, and the spent auto-apply budget left the update waiting.
+      label: "this page already runs the waiting update's build",
+      setup: async () => {
+        const harness = createHarness({
+          appVersion: "next",
+          controller: createController({ onUpdatePageLoad: answer(true) }),
+          sessionStorageSeed: { "rom-weaver-sw-auto-apply-reloads": "3" },
+          shouldAutoApplyUpdate: () => true,
+        });
+        harness.client.initialize();
+        await flush();
+        harness.registerOptions().onNeedRefresh?.();
+        expect(harness.client.getState().updateReady).toBe(true);
+        return harness;
+      },
+      url: VIEW_URL,
+    },
   ])("changes the view in the app at once, without asking the worker, when $label", async ({ setup, url }) => {
     const harness = await setup();
     const navigateInApp = vi.fn();
