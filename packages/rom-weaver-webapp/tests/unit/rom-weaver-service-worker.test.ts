@@ -222,7 +222,7 @@ const createScope = ({
     },
     listeners,
     location: unparsableHref ? { href, origin: APP_ORIGIN } : new URL(href),
-    navigator: { connection: { saveData } },
+    navigator: { connection: { saveData }, locks: undefined as Pick<LockManager, "query"> | undefined },
     performance: globalThis.performance,
     registration: {
       active: hasActiveWorker ? { scriptURL: href } : null,
@@ -1527,6 +1527,29 @@ describe("page loads while an update waits", () => {
       await expect(response.text()).resolves.toBe(body);
     },
   );
+
+  it.each([
+    {
+      label: "serves the update's copy while only another lock is held",
+      held: ["rom-weaver-kept-roms"],
+      body: "update index",
+    },
+    {
+      label: "serves this build while a page holds unsaved work",
+      held: ["rom-weaver-kept-roms", "rom-weaver-unsaved-work"],
+      body: "own index",
+    },
+  ])("$label", async ({ body, held }) => {
+    const harness = await loadUpdatedWorker();
+    harness.scope.navigator.locks = {
+      query: async () => ({ held: held.map((name) => ({ mode: "shared" as const, name })), pending: [] }),
+    };
+    harness.scope.registration.waiting = createWaitingWorker();
+
+    const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(ROOT_URL));
+
+    await expect(response.text()).resolves.toBe(body);
+  });
 
   it("goes to the network instead of this build's copy when the update's offline copy is incomplete", async () => {
     const harness = await loadUpdatedWorker({ missingUpdateFile: "assets/deferred-new.js" });

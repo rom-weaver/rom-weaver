@@ -33,6 +33,7 @@ import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdat
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
 import { setOfflineWarmupEnabled } from "./pwa/offline-warmup-client.ts";
 import { createServiceWorkerBootGate } from "./pwa/service-worker-boot-gate.ts";
+import { createUnsavedWorkLock } from "./pwa/unsaved-work-lock.ts";
 import { preloadCatalog } from "../presentation/localization/index.ts";
 import { getDefaultSettings, LOCAL_STORAGE_SETTINGS_ID, type SettingsState } from "./settings/settings-state.ts";
 import { captureShellClicks, replayShellClicks, replayShellSelections } from "./shell-click-replay.ts";
@@ -684,6 +685,10 @@ const renderWebappRoot = (): undefined => {
 renderWebappRootIfReady = renderWebappRoot;
 
 webappController.subscribe(renderWebappRoot);
+const unsavedWorkLock = createUnsavedWorkLock(typeof navigator === "undefined" ? undefined : navigator.locks, (error) =>
+  logger.warn("unsaved-work lock request failed", { error: String(error) }),
+);
+webappController.subscribe(() => unsavedWorkLock.set(shouldWarnBeforeUnload(getNavigationGuardState())));
 installViteReloadGuard();
 const disposeWebMcp = installWebMcp({
   getState: () => {

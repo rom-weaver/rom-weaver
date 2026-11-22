@@ -26,6 +26,7 @@ import {
 import { ROOT_BASE_TAG } from "./pwa/document-base.mjs";
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 import { createServiceWorkerCachePolicy, findStaleServiceWorkerCaches } from "./pwa/service-worker-cache-policy.ts";
+import { isUnsavedWorkOpen } from "./pwa/unsaved-work-lock.ts";
 
 declare const __EMULATORJS_VERSION__: string;
 // Paths the host redirects (from `_redirects`); the build injects them.
@@ -756,9 +757,9 @@ const isPageLoad = (request: Request, url: URL) =>
   isTopLevelNavigation(request, url) && request.destination === "document" && !requestPrefersMarkdown(request);
 
 /**
- * The waiting update a page load of `url` can switch to, or undefined while another page uses this worker
- * or the update cannot list its files. `document` is the update's copy of the page, set only when the
- * update's whole offline copy is cached.
+ * The waiting update a page load of `url` can switch to, or undefined while another page uses this worker,
+ * a page holds unsaved work, or the update cannot list its files. `document` is the update's copy of the
+ * page, set only when the update's whole offline copy is cached.
  */
 const findUpdateForPageLoad = async (url: URL) => {
   const worker = self.registration.waiting;
@@ -767,6 +768,8 @@ const findUpdateForPageLoad = async (url: URL) => {
   // the page client reloads such a tab once the update takes control. Frames load with their page.
   const pages = (await self.clients.matchAll({ type: "window" })).filter((client) => client.frameType !== "nested");
   if (pages.length > 1) return undefined;
+  // The update would delete the files of the build that a tab with unsaved work still runs.
+  if (await isUnsavedWorkOpen(self.navigator.locks)) return undefined;
   const files = await readUpdateFiles(worker);
   if (!files) return undefined;
   const document = (await isCopyComplete(files)) ? await matchPrecachedNavigation(url, files.match) : undefined;

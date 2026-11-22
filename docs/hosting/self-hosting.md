@@ -214,8 +214,11 @@ When a new build is deployed, the browser installs it as a waiting update:
 
 - Before it waits, the update fetches its missing offline-copy files for up to two minutes.
 - It skips that download when the offline copy is off or data saver is on.
-- Reloading or opening the app loads the update, unless another tab uses the old build.
+- Opening the app or reloading its only tab loads the update.
+- Opening it while exactly one other tab is open loads the update too.
 - That page comes from the update's offline copy when complete, otherwise from the server.
+- Other page loads keep the old build, such as reloading one of two tabs.
+- While any tab holds unsaved work, every page load keeps the old build.
 - With a complete copy and no other old-build tab, switching views loads the update too.
 - A tab holding unsaved work switches views in the app instead.
 - When one tab applies the update, other tabs on the old build reload.

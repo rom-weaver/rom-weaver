@@ -49,7 +49,10 @@ const mocks = vi.hoisted(() => ({
   },
   serviceWorkerOptions: null as ServiceWorkerClientOptions | null,
   startBrowserOpfsBootCleanup: vi.fn(() => Promise.resolve()),
+  unsavedWorkLock: { set: vi.fn() },
 }));
+
+vi.mock("../../src/webapp/pwa/unsaved-work-lock.ts", () => ({ createUnsavedWorkLock: () => mocks.unsavedWorkLock }));
 
 vi.mock("../../src/lib/browser-info.ts", () => ({ collectBrowserInfo: mocks.collectBrowserInfo }));
 vi.mock("../../src/storage/browser/browser-storage-estimate.ts", () => ({
@@ -458,6 +461,17 @@ describe("service worker bridge", () => {
     latest().actions.onPatcherInputsChange([{ name: "rom.sfc" }]);
     await flush();
     expect(mocks.serviceWorkerOptions?.shouldAutoApplyUpdate()).toBe(false);
+  });
+
+  it("holds the unsaved-work lock only while something is staged", async () => {
+    await loadWebapp();
+
+    latest().actions.onPatcherInputsChange([{ name: "rom.sfc" }]);
+    await flush();
+    expect(mocks.unsavedWorkLock.set).toHaveBeenLastCalledWith(true);
+    latest().actions.onPatcherInputsChange([]);
+    await flush();
+    expect(mocks.unsavedWorkLock.set).toHaveBeenLastCalledWith(false);
   });
 
   it("reloads for an update without asking when nothing is staged", async () => {
