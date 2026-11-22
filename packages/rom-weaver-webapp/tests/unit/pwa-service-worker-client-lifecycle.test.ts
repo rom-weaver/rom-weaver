@@ -91,6 +91,7 @@ type HarnessOptions = {
   hasLocationReload?: boolean;
   hasServiceWorker?: boolean;
   hasWindow?: boolean;
+  heldLocks?: string[];
   onBeforeReload?: () => void;
   onConfirmReload?: () => Promise<boolean>;
   ready?: Promise<FakeRegistration> | "missing" | "never";
@@ -112,6 +113,7 @@ const createHarness = ({
   hasLocationReload = true,
   hasServiceWorker = true,
   hasWindow = true,
+  heldLocks = [],
   onBeforeReload,
   onConfirmReload = async () => true,
   ready = "missing",
@@ -164,7 +166,12 @@ const createHarness = ({
     cacheVersionTimeoutMs: CACHE_VERSION_TIMEOUT_MS,
     document: hasDocument ? { addEventListener: addTo(documentListeners), visibilityState } : undefined,
     enabled,
-    navigator: hasServiceWorker ? { serviceWorker } : {},
+    navigator: {
+      locks: {
+        query: async () => ({ held: heldLocks.map((name) => ({ mode: "shared" as const, name })), pending: [] }),
+      },
+      ...(hasServiceWorker ? { serviceWorker } : {}),
+    },
     onBeforeReload,
     onConfirmReload,
     onStateChange: (state: ReturnType<typeof createServiceWorkerCacheState>) => {
@@ -799,11 +806,16 @@ describe("COEP mode sync", () => {
 
 describe("automatic update apply", () => {
   it("activates silently when the page already runs the incoming version", async () => {
-    const harness = createHarness({ controller: createController(), shouldAutoApplyUpdate: () => true });
+    const harness = createHarness({
+      controller: createController(),
+      heldLocks: ["rom-weaver-kept-roms"],
+      shouldAutoApplyUpdate: () => true,
+    });
     harness.client.initialize();
     await flush();
 
     harness.registerOptions().onNeedRefresh?.();
+    await flush();
 
     expect(harness.updateServiceWorker).toHaveBeenCalledTimes(1);
     expect(harness.client.getState().updateReady).toBe(false);
@@ -811,6 +823,25 @@ describe("automatic update apply", () => {
 
     harness.registerOptions().onNeedReload?.();
     expect(harness.reload).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { label: "another tab holds unsaved work", heldLocks: ["rom-weaver-unsaved-work"], idle: () => true },
+    {
+      label: "work starts while the lock check runs",
+      heldLocks: [],
+      idle: vi.fn().mockReturnValueOnce(true).mockReturnValue(false),
+    },
+  ])("keeps a page on the incoming version waiting with the prompt when $label", async ({ heldLocks, idle }) => {
+    const harness = createHarness({ controller: createController(), heldLocks, shouldAutoApplyUpdate: idle });
+    harness.client.initialize();
+    await flush();
+
+    harness.registerOptions().onNeedRefresh?.();
+    await flush();
+
+    expect(harness.updateServiceWorker).not.toHaveBeenCalled();
+    expect(harness.client.getState().updateReady).toBe(true);
   });
 
   it("shows the update prompt instead of reloading when the page still runs the outgoing controller's code", async () => {

@@ -10,6 +10,7 @@ import {
   withDeferredServiceWorkerUpdate,
   withoutDeferredServiceWorkerUpdate,
 } from "./service-worker-cache-state.ts";
+import { isUnsavedWorkOpen } from "./unsaved-work-lock.ts";
 
 type ServiceWorkerRegistrationLike = Pick<
   ServiceWorkerRegistration,
@@ -18,6 +19,7 @@ type ServiceWorkerRegistrationLike = Pick<
 type ServiceWorkerContainerLike = Pick<ServiceWorkerContainer, "controller" | "getRegistrations" | "ready"> &
   Pick<EventTarget, "addEventListener">;
 type NavigatorLike = {
+  locks?: Pick<LockManager, "query">;
   serviceWorker?: ServiceWorkerContainerLike;
 };
 type CacheStorageLike = Pick<CacheStorage, "keys" | "delete">;
@@ -373,6 +375,24 @@ const createPwaServiceWorkerClient = ({
     state = withoutDeferredServiceWorkerUpdate(state);
     emitState();
   };
+  // A tab with unsaved work runs the outgoing build, whose cached files the update deletes.
+  const autoApplyUpdateUnlessWorkUnsaved = async (autoApplyReloads: number) => {
+    const unsavedWorkOpen = await isUnsavedWorkOpen(navigator?.locks);
+    if (unsavedWorkOpen || !shouldAutoApplyUpdate?.()) {
+      logServiceWorkerClient("service worker update waiting; a tab holds unsaved work", { unsavedWorkOpen });
+      markUpdateReady();
+      return;
+    }
+    logServiceWorkerClient("auto-applying service worker update; no in-progress work", {
+      autoApplyReloads,
+      controllerVersion,
+      runningVersion: appVersion,
+    });
+    setSessionStorageItem(AUTO_APPLY_RELOAD_COUNT_KEY, String(autoApplyReloads + 1));
+    clearUpdateReady();
+    reloadOnIncomingControl = false;
+    void updateServiceWorker?.();
+  };
 
   const refreshCacheVersion = () => {
     if (!enabled) {
@@ -674,15 +694,7 @@ const createPwaServiceWorkerClient = ({
           // The running version is already ahead of the controller: the shell was served fresh from the
           // network, so a reload would swap in nothing. Activate via skipWaiting silently and let the
           // controllerchange handler re-sync COEP and the cache version.
-          logServiceWorkerClient("auto-applying service worker update; no in-progress work", {
-            autoApplyReloads,
-            controllerVersion,
-            runningVersion: appVersion,
-          });
-          setSessionStorageItem(AUTO_APPLY_RELOAD_COUNT_KEY, String(autoApplyReloads + 1));
-          clearUpdateReady();
-          reloadOnIncomingControl = false;
-          void updateServiceWorker();
+          void autoApplyUpdateUnlessWorkUnsaved(autoApplyReloads);
           return;
         }
         if (reloadToApply && shouldAutoApplyUpdate?.()) {

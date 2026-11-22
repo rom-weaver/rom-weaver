@@ -21,7 +21,7 @@ const createUnsavedWorkLock = (locks: LockManager | undefined, onRequestError: (
 };
 
 /** Whether any page of this origin holds the unsaved-work lock. */
-const isUnsavedWorkOpen = async (locks: LockManager | undefined) => {
+const isUnsavedWorkOpen = async (locks: Pick<LockManager, "query"> | undefined) => {
   const snapshot = await locks?.query();
   return snapshot?.held?.some((lock) => lock.name === UNSAVED_WORK_LOCK_NAME) ?? false;
 };
