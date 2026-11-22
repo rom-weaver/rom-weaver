@@ -217,7 +217,7 @@ When a new build is deployed, the browser installs it as a waiting update:
 - Opening the app or reloading its only tab loads the update.
 - Opening it while exactly one other tab is open loads the update too.
 - That page comes from the update's offline copy when complete, otherwise from the server.
-- Other page loads, such as reloading one of two tabs, use the old build's offline copy.
+- Other page loads, like reloading one of two tabs, use the old build's offline copy.
 - Without a complete copy, they come from the server.
 - While any tab holds unsaved work, the update waits; no page load applies it.
 - With a complete copy and no other old-build tab, switching views loads the update too.

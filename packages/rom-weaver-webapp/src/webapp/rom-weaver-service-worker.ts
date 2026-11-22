@@ -757,9 +757,8 @@ const isPageLoad = (request: Request, url: URL) =>
   isTopLevelNavigation(request, url) && request.destination === "document" && !requestPrefersMarkdown(request);
 
 /**
- * The waiting update a page load of `url` can switch to, or undefined while another page uses this worker,
- * a page holds unsaved work, or the update cannot list its files. `document` is the update's copy of the
- * page, set only when the update's whole offline copy is cached.
+ * The waiting update a page load of `url` can switch to, if any. `document` is the update's copy of the
+ * page. It is set only when the update's offline copy is complete.
  */
 const findUpdateForPageLoad = async (url: URL) => {
   const worker = self.registration.waiting;
@@ -768,7 +767,7 @@ const findUpdateForPageLoad = async (url: URL) => {
   // the page client reloads such a tab once the update takes control. Frames load with their page.
   const pages = (await self.clients.matchAll({ type: "window" })).filter((client) => client.frameType !== "nested");
   if (pages.length > 1) return undefined;
-  // The update would delete the files of the build that a tab with unsaved work still runs.
+  // The update deletes the outgoing build's files, which a tab with unsaved work still needs.
   if (await isUnsavedWorkOpen(self.navigator.locks)) return undefined;
   const files = await readUpdateFiles(worker);
   if (!files) return undefined;

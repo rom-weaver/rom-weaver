@@ -1,4 +1,4 @@
-// Pages hold this Web Lock while they have unsaved work, so the service worker can see that work in any tab.
+// Pages hold this Web Lock while they have unsaved work. Other tabs and the service worker can query it.
 const UNSAVED_WORK_LOCK_NAME = "rom-weaver-unsaved-work";
 
 /** Holds the shared unsaved-work lock from `set(true)` until `set(false)` or the page unloads. */
