@@ -980,7 +980,7 @@ describe("view changes while an update waits", () => {
       url: new URL(`${APP_HREF}#faq`),
     },
     {
-      // The page load came from the update, and the spent auto-apply budget left the update waiting.
+      // The page load came from the update. The spent auto-apply budget left it waiting.
       label: "this page already runs the waiting update's build",
       setup: async () => {
         const harness = createHarness({

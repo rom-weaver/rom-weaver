@@ -69,7 +69,7 @@ const hoisted = vi.hoisted(() => ({
   plugins: [] as CapturedPlugin[],
   precacheAndRoute: vi.fn(),
   routes: [] as CapturedRoute[],
-  // Workbox answers a request from the first route that matches, so this records which routes come first.
+  // Workbox answers a request from the first matching route. This records which routes come first.
   routesBeforePrecacheRoute: 0,
   warmup: {
     config: null as WarmupConfig | null,
@@ -1581,7 +1581,7 @@ describe("page loads while an update waits", () => {
     harness.scope.registration.waiting = createWaitingWorker();
     harness.fetchStub.handlers.set(`${APP_SCOPE}assets/unknown.js`, () => new Response("network file"));
     const updateFileRoute = requireRoute(6);
-    // The precache route answers this build's files first, including variant URLs such as `/guide` for `guide.html`.
+    // The precache route answers this build's files first, including variants such as `/guide` for `guide.html`.
     expect(hoisted.routesBeforePrecacheRoute).toBe(6);
     const matches = (path: string) => {
       const request = new Request(`${APP_SCOPE}${path}`);

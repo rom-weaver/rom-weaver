@@ -139,9 +139,8 @@ const createPwaServiceWorkerClient = ({
   // the registrar reloads unconditionally unless we supply that callback, so this flag is the only
   // thing standing between a silent activation and a surprise reload.
   let reloadOnIncomingControl = false;
-  // Set once a worker serving another build than this page runs takes control, because another tab or a
-  // page load applied an update. This page stays on its build until it reloads, which then needs no
-  // skip-waiting message.
+  // Set once another build's worker takes control, applied by another tab or a page load.
+  // This page keeps its build until it reloads; that reload needs no skip-waiting message.
   let updateAlreadyActive = false;
   let reloadingForUpdate = false;
   // Applies the reload the incoming worker's control calls for, once. Both controllerchange and
@@ -151,7 +150,7 @@ const createPwaServiceWorkerClient = ({
     if (reloadingForUpdate) return true;
     const reload = reloadOnIncomingControl;
     reloadOnIncomingControl = false;
-    // The incoming worker drops the files of the build this page runs, so its lazy chunks can 404.
+    // The incoming worker drops this page's build files, so its lazy chunks can 404.
     const runsOutgoingBuild = updateAlreadyActive || controllerVersion === appVersion;
     logServiceWorkerClient("incoming service worker took control", { reload, runsOutgoingBuild, source });
     if (reload) {
@@ -561,8 +560,7 @@ const createPwaServiceWorkerClient = ({
     window?.location.assign(url.href);
   };
   let navigationRequest = 0;
-  // Runs `navigateInApp`, unless this page has no work in progress and runs an older build than a page load
-  // of `url` gets; then it loads `url` as a page.
+  // Loads `url` as a page for a newer build, when no work is in progress. Otherwise runs `navigateInApp`.
   const navigateOrLoadUpdate = (url: URL, navigateInApp: () => void) => {
     const start = window ? new URL(window.location.href) : undefined;
     const leavesPage = start !== undefined && (url.pathname !== start.pathname || url.search !== start.search);
@@ -574,8 +572,8 @@ const createPwaServiceWorkerClient = ({
       loadPageForUpdate(url);
       return;
     }
-    // A page that runs a build other than its controller's came from the waiting update, which a page load
-    // of `url` would serve again.
+    // A build other than the controller's means this page already runs the waiting update.
+    // A page load would get the same build.
     if (controllerVersion !== appVersion) {
       navigateInApp();
       return;

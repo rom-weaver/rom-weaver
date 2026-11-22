@@ -773,20 +773,19 @@ const findUpdateForPageLoad = async (url: URL) => {
   return { document, files };
 };
 
-// The browser activates the waiting update only once this worker is idle, so a page that runs the update's
-// build gets no offline downloads from it. The check reads the request, because the browser can restart
-// this worker between a page load and its downloads. Older pages send no build version and keep downloading.
+// A busy worker delays the update, so pages on the update's build get no downloads.
+// Each request carries the page's build, since this worker can restart; older pages send none.
 const isPageOnWaitingUpdate = (pageBuildVersion: unknown) =>
   self.registration.waiting !== null && typeof pageBuildVersion === "string" && pageBuildVersion !== PRECACHE_VERSION;
 
+// The page asks the update to activate after it loads. Asking mid-load can restart this worker, which
+// then serves the wrong build-info.js.
 const serveUpdateDocument = async (
   event: unknown,
   url: URL,
   { document, files }: { document: Response; files: BuildFiles },
 ) => {
-  // The page's client asks the update to activate once the page has loaded. Asking here lets the browser
-  // stop this worker mid-load, and a restarted worker no longer knows the page needs the update's build-info.js.
-  // Running downloads would keep this worker busy and hold off that activation.
+  // Stops running downloads, which would keep this worker busy and delay activation.
   appPumpGeneration += 1;
   recordDocumentSource(event, files);
   logServiceWorker("serving a page load from the waiting update", { url: url.href });
@@ -1225,10 +1224,8 @@ addPlugins([precachePlugin]);
 precacheAndRoute(INITIAL_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
 
-// A page given the waiting update's document loads files only the update lists; files this build lists keep
-// their own routes, registered first so the precache route also answers its variant URLs. The match cannot
-// wait for the update's file list, which a restarted worker asks for again, so while an update waits every
-// other same-origin file request comes here.
+// Serves files only the update lists; this build's files keep earlier routes, variant URLs included.
+// The match cannot await the update's file list, so it takes every other same-origin GET.
 const isFileThisBuildLacks = (request: Request, url: URL) =>
   request.method === "GET" &&
   isSameOriginRequest(url) &&
@@ -1250,18 +1247,15 @@ registerRoute(
 
 // Chromium times out a worker event after 5 minutes (`kRequestTimeout` in
 // https://chromium.googlesource.com/chromium/src/+/HEAD/content/browser/service_worker/service_worker_version.cc),
-// which fails this install attempt, so the download of changed offline files stops well before that and
-// leaves the rest to the page's warm-up.
+// failing this install. Downloads stop well before that, and the page's warm-up fetches the rest.
 const UPDATE_DOWNLOAD_BUDGET_MS = 2 * 60_000;
 
 const isDataSaverOn = () =>
   (self.navigator as WorkerNavigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
 
 /**
- * Downloads the deferred files this update needs that are not cached yet, so switching to it keeps the
- * offline copy complete. Runs only where the page's warm-up would fetch the same files right after the
- * switch: the offline copy is on (`runNextBatch` checks it) and data saver is off. Rejects when a
- * download fails or the budget ends.
+ * Downloads the deferred files this update needs that are not cached yet. Rejects when a download fails
+ * or the budget ends.
  */
 const downloadDeferredFilesForUpdate = async () => {
   if (isDataSaverOn()) return;
@@ -1357,8 +1351,8 @@ self.addEventListener("message", (event) => {
     return;
   }
 
-  // The active worker, which can be an older build, asks the waiting one for its files to serve a page
-  // load from them, so every later build MUST keep answering.
+  // An older active worker asks the waiting one for its files to serve page loads.
+  // Every later build MUST keep answering.
   if (event.data.action === "get-precache-manifest") {
     event.ports?.[0]?.postMessage({ action: "precache-manifest", manifest: PRECACHE_MANIFEST });
     return;
@@ -1435,7 +1429,7 @@ self.addEventListener("message", (event) => {
     return;
   }
 
-  // Whether a page load of `url` would get the waiting update's document; the page then loads its next view.
+  // Whether a page load of `url` would get the waiting update's document.
   if (event.data.action === "get-update-page-load") {
     const query = (async () => {
       const url = new URL(String(event.data.url), self.registration.scope);
