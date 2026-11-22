@@ -4,6 +4,7 @@
  */
 import { createLogger } from "../../lib/logging.ts";
 import type { LogDetails } from "../../types/logging.ts";
+import { APP_BUILD_VERSION } from "../build-version.ts";
 import type { OfflineCachedFile, OfflineReadyState, WarmupBumpTarget, WarmupProgress } from "../offline-warmup.ts";
 import { detectDocsImageFormat } from "./docs-image-format.ts";
 
@@ -384,7 +385,8 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
               }
             },
             PUMP_TIMEOUT_MS,
-            identifyGroupIds ? { identifyGroupIds } : {},
+            // The controller holds downloads for a page that runs a waiting update's build.
+            { buildVersion: APP_BUILD_VERSION, identifyGroupIds },
             requestController.signal,
           );
         } catch (error) {

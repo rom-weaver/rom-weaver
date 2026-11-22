@@ -70,7 +70,9 @@ const noop = () => undefined;
 type Actions = WebappRootProps["actions"];
 
 const createActions = () => {
-  const calls = new Map<string, ReturnType<typeof vi.fn>>();
+  const calls = new Map<string, ReturnType<typeof vi.fn>>([
+    ["navigateOrLoadUpdate", vi.fn((_url: URL, navigateInApp: () => void) => navigateInApp())],
+  ]);
   const actions = new Proxy({} as Record<string, unknown>, {
     get: (_target, property: string) => {
       if (property === "onConfirmExternalNavigation") return async () => true;
@@ -493,6 +495,19 @@ describe("tab selection", () => {
     fireEvent.click(container.querySelector('.dock-tab[data-mode="creator"]') as HTMLAnchorElement);
 
     expect(called("onSelectView")).toHaveBeenCalledWith("creator");
+  });
+
+  it("leaves the view change to the update check, which can load the tab's page instead", async () => {
+    const { called, container } = await renderRoot();
+    called("navigateOrLoadUpdate").mockImplementationOnce(() => undefined);
+
+    fireEvent.click(container.querySelector('.dock-tab[data-mode="creator"]') as HTMLAnchorElement);
+
+    expect(called("navigateOrLoadUpdate")).toHaveBeenCalledWith(
+      new URL("/create-rom-patch", window.location.href),
+      expect.any(Function),
+    );
+    expect(called("onSelectView")).not.toHaveBeenCalled();
   });
 
   it("starts the emulator audio context from the Test tab's own click", async () => {

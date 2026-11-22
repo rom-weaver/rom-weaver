@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { configureLogger } from "../../src/lib/logging.ts";
+import { APP_BUILD_VERSION } from "../../src/webapp/build-version.ts";
 import {
   bumpOfflineWarmupPriority,
   createOfflineWarmupProgressGate,
@@ -117,7 +118,7 @@ describe("offline warm-up client", () => {
     notifyControllerChange();
     await flush();
     expect(policyMessages).toEqual([{ action: "set-offline-copy-enabled", enabled: true, docImageFormat: "avif" }]);
-    expect(messages).toEqual([{ action: "offline-warmup-pump" }]);
+    expect(messages).toEqual([{ action: "offline-warmup-pump", buildVersion: APP_BUILD_VERSION }]);
     expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ ready: true }));
   });
 
@@ -147,7 +148,7 @@ describe("offline warm-up client", () => {
     expect(policyMessages.map(({ enabled }) => enabled)).toEqual([false, true]);
     expect(downloadOfflineCopy()).toBe(true);
     await flush();
-    expect(messages).toEqual([{ action: "offline-warmup-pump" }]);
+    expect(messages).toEqual([{ action: "offline-warmup-pump", buildVersion: APP_BUILD_VERSION }]);
   });
 
   it("starts a manual download from disabled and resumes automatic download after removal without data saver", async () => {
@@ -646,7 +647,9 @@ describe("offline warm-up client", () => {
     bumpOfflineWarmupPriority({ groupIds: ["optional-computers"], kind: "identify-groups" });
     await flush();
     const pumps = messages.filter((message) => message.action === "offline-warmup-pump");
-    expect(pumps).toEqual([{ action: "offline-warmup-pump", identifyGroupIds: ["optional-computers"] }]);
+    expect(pumps).toEqual([
+      { action: "offline-warmup-pump", buildVersion: APP_BUILD_VERSION, identifyGroupIds: ["optional-computers"] },
+    ]);
   });
 
   it("finishes both independently bumped groups before stopping on data saver", async () => {
@@ -660,8 +663,8 @@ describe("offline warm-up client", () => {
     bumpOfflineWarmupPriority({ groupIds: ["second"], kind: "identify-groups" });
     await flush();
     expect(messages.filter((message) => message.action === "offline-warmup-pump")).toEqual([
-      { action: "offline-warmup-pump", identifyGroupIds: ["first", "second"] },
-      { action: "offline-warmup-pump", identifyGroupIds: ["second"] },
+      { action: "offline-warmup-pump", buildVersion: APP_BUILD_VERSION, identifyGroupIds: ["first", "second"] },
+      { action: "offline-warmup-pump", buildVersion: APP_BUILD_VERSION, identifyGroupIds: ["second"] },
     ]);
   });
 
@@ -687,8 +690,8 @@ describe("offline warm-up client", () => {
     firstPort?.postMessage(progressReply({ unit }));
     await flush();
     expect(messages.filter((message) => message.action === "offline-warmup-pump")).toEqual([
-      { action: "offline-warmup-pump", identifyGroupIds: ["first"] },
-      { action: "offline-warmup-pump", identifyGroupIds: ["second"] },
+      { action: "offline-warmup-pump", buildVersion: APP_BUILD_VERSION, identifyGroupIds: ["first"] },
+      { action: "offline-warmup-pump", buildVersion: APP_BUILD_VERSION, identifyGroupIds: ["second"] },
     ]);
   });
 

@@ -72,6 +72,8 @@ type WebappRootProps = {
   /** Boot-time `?weave=` / `?rom=&patch=` session request, when present. */
   urlSession?: UrlSessionParseResult | null;
   actions: {
+    /** Runs `navigateInApp` for a view change, or loads `url` as a page when that applies a waiting update. */
+    navigateOrLoadUpdate: (url: URL, navigateInApp: () => void) => void;
     onStartGuide: (guide: GuidedSample) => void;
     onSelectView: (view: WebappView) => void;
     onDetailedViewEnabledChange: (enabled: boolean) => void;

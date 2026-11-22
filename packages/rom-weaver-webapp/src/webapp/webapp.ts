@@ -619,6 +619,7 @@ const renderWebappRoot = (): undefined => {
       onSaveClose: () => {
         webappController.saveDraftSettings();
       },
+      navigateOrLoadUpdate: serviceWorkerClient.navigateOrLoadUpdate,
       onSelectView: (view) => {
         // A routed drop can recover the missing-page document without losing its files.
         isNotFoundPage = false;
@@ -774,16 +775,18 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     const url = getSoftNavigationUrl(event, anchor, new URL(window.location.href));
     if (!url) return;
     event.preventDefault();
-    window.history.pushState(window.history.state, "", url);
-    takeCreatorModeFromUrl();
-    syncRouteFromUrl(() => {
-      if (url.hash) {
-        const target = document.getElementById(decodeURIComponent(url.hash.slice(1)));
-        target?.scrollIntoView({ block: "start" });
-        target?.focus({ preventScroll: true });
-      } else {
-        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-      }
+    serviceWorkerClient.navigateOrLoadUpdate(url, () => {
+      window.history.pushState(window.history.state, "", url);
+      takeCreatorModeFromUrl();
+      syncRouteFromUrl(() => {
+        if (url.hash) {
+          const target = document.getElementById(decodeURIComponent(url.hash.slice(1)));
+          target?.scrollIntoView({ block: "start" });
+          target?.focus({ preventScroll: true });
+        } else {
+          window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+        }
+      });
     });
   });
 }

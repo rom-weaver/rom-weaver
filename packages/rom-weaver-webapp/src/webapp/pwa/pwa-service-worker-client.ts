@@ -54,6 +54,7 @@ type PwaServiceWorkerClient = {
   forceCacheAndReload: () => Promise<boolean>;
   getState: () => ServiceWorkerCacheState;
   initialize: () => void;
+  navigateOrLoadUpdate: (url: URL, navigateInApp: () => void) => void;
   reloadPendingUpdate: () => Promise<boolean>;
   refreshCacheVersion: () => void;
 };
@@ -538,6 +539,49 @@ const createPwaServiceWorkerClient = ({
     await updateServiceWorker();
     return true;
   };
+  const requestUpdatePageLoad = (url: URL) =>
+    new Promise<boolean>((resolve) => {
+      const controller = navigator?.serviceWorker?.controller;
+      if (!controller || typeof MessageChannel !== "function") {
+        resolve(false);
+        return;
+      }
+      const channel = new MessageChannel();
+      const finish = (ready: boolean) => {
+        clearTimeout(timeout);
+        channel.port1.close();
+        resolve(ready);
+      };
+      const timeout = setTimeout(() => finish(false), cacheVersionTimeoutMs);
+      channel.port1.onmessage = (event) => finish(event.data?.ready === true);
+      controller.postMessage({ action: "get-update-page-load", url: url.href }, [channel.port2]);
+    });
+  const loadPageForUpdate = (url: URL) => {
+    logServiceWorkerClient("loading the next view as a page to apply the service worker update", { url: url.href });
+    window?.location.assign(url.href);
+  };
+  let navigationRequest = 0;
+  // Runs `navigateInApp`, unless this page has no work in progress and runs an older build than a page load
+  // of `url` gets; then it loads `url` as a page.
+  const navigateOrLoadUpdate = (url: URL, navigateInApp: () => void) => {
+    const start = window ? new URL(window.location.href) : undefined;
+    const leavesPage = start !== undefined && (url.pathname !== start.pathname || url.search !== start.search);
+    if (!(state.updateReady && leavesPage && shouldAutoApplyUpdate?.())) {
+      navigateInApp();
+      return;
+    }
+    if (updateAlreadyActive) {
+      loadPageForUpdate(url);
+      return;
+    }
+    navigationRequest += 1;
+    const request = navigationRequest;
+    void requestUpdatePageLoad(url).then((ready) => {
+      if (request !== navigationRequest || window?.location.href !== start.href) return;
+      if (ready) loadPageForUpdate(url);
+      else navigateInApp();
+    });
+  };
   const forceCacheAndReload = async (): Promise<boolean> => {
     if (!enabled) {
       logServiceWorkerClient("force cache reload skipped; service worker cache is disabled");
@@ -615,7 +659,7 @@ const createPwaServiceWorkerClient = ({
         // The page is still running the code the outgoing controller cached (it served its own shell),
         // so applying the update means reloading it. That reload would land seconds after the visit,
         // so leave the new worker waiting and show the update prompt: the user picks when to reload,
-        // and the worker otherwise takes over the next page load that leaves no other page on the old one.
+        // and otherwise the next page load or view change that leaves no other page on the old build gets it.
         const reloadToApply = controllerVersion === appVersion;
         if (
           shouldAutoApplyUpdate?.() &&
@@ -711,6 +755,7 @@ const createPwaServiceWorkerClient = ({
     forceCacheAndReload,
     getState: () => state,
     initialize,
+    navigateOrLoadUpdate,
     refreshCacheVersion,
     reloadPendingUpdate,
   };

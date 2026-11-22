@@ -751,33 +751,34 @@ function WebappRoot({
   const handleSelectTab = useCallback(
     (id: string) => {
       cancelFileRouting();
+      // The nav can also reach a view with no WorkflowTab entry (What's
+      // new), so it falls back to the id itself as the slug.
+      const href =
+        id === "home"
+          ? resolvedAssetBaseUrl
+          : appPathHref(WORKFLOW_TABS.find((tab) => tab.id === id)?.href ?? id, resolvedAssetBaseUrl);
       if (notFound) {
-        if (id === "home") {
-          window.location.assign(resolvedAssetBaseUrl);
-          return;
-        }
-        // The nav can also reach a view with no WorkflowTab entry (What's
-        // new), so it falls back to the id itself as the slug.
-        const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href ?? id;
-        if (href) window.location.assign(appPathHref(href, resolvedAssetBaseUrl));
+        window.location.assign(href);
         return;
       }
       const view = id as WebappRootProps["state"]["currentView"];
       if (view === "test") requestEmulatorStartFromUserAction();
-      if (view === "docs") {
-        // Keep the current panel visible until the lazy Docs route is ready;
-        // switching first leaves its navigation bar absent for one frame.
-        const startingView = currentViewRef.current;
-        pendingViewRef.current = view;
-        void preloadWorkflowRoute(view).then(() => {
-          if (pendingViewRef.current !== view || currentViewRef.current !== startingView) return;
-          pendingViewRef.current = null;
-          selectViewWithTransition(() => actions.onSelectView(view));
-        });
-        return;
-      }
-      pendingViewRef.current = null;
-      selectViewWithTransition(() => actions.onSelectView(view));
+      actions.navigateOrLoadUpdate(new URL(href, window.location.href), () => {
+        if (view === "docs") {
+          // Keep the current panel visible until the lazy Docs route is ready;
+          // switching first leaves its navigation bar absent for one frame.
+          const startingView = currentViewRef.current;
+          pendingViewRef.current = view;
+          void preloadWorkflowRoute(view).then(() => {
+            if (pendingViewRef.current !== view || currentViewRef.current !== startingView) return;
+            pendingViewRef.current = null;
+            selectViewWithTransition(() => actions.onSelectView(view));
+          });
+          return;
+        }
+        pendingViewRef.current = null;
+        selectViewWithTransition(() => actions.onSelectView(view));
+      });
     },
     [actions, cancelFileRouting, notFound, resolvedAssetBaseUrl],
   );

@@ -24,6 +24,7 @@ import { preloadDocsRouteHtml, preloadWorkflowRoute } from "./workflow-routes.ts
 const noop = () => undefined;
 
 const createPrerenderActions = (): WebappRootProps["actions"] => ({
+  navigateOrLoadUpdate: (_url, navigateInApp) => navigateInApp(),
   onAccentChange: noop,
   onCancelConfirmation: noop,
   onCloseSettings: noop,

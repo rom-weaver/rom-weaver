@@ -311,11 +311,12 @@ const withCrossOriginIsolationHeaders = (
 
 // Broadcast combined precache and warm-up progress on first install; update installs stay silent.
 // Vite injects the manifest once, so other consumers MUST use this binding.
-const PRECACHE_MANIFEST = self.__WB_MANIFEST as Array<string | OfflinePrecacheEntry>;
-const INITIAL_MANIFEST = PRECACHE_MANIFEST.filter((entry) => typeof entry === "string" || entry.install !== false);
-const DEFERRED_MANIFEST = PRECACHE_MANIFEST.filter(
-  (entry): entry is OfflinePrecacheEntry => typeof entry !== "string" && entry.install === false,
-);
+type PrecacheManifest = Array<string | OfflinePrecacheEntry>;
+const PRECACHE_MANIFEST = self.__WB_MANIFEST as PrecacheManifest;
+const isDeferredEntry = (entry: string | OfflinePrecacheEntry): entry is OfflinePrecacheEntry =>
+  typeof entry !== "string" && entry.install === false;
+const INITIAL_MANIFEST = PRECACHE_MANIFEST.filter((entry) => !isDeferredEntry(entry));
+const DEFERRED_MANIFEST = PRECACHE_MANIFEST.filter(isDeferredEntry);
 
 // Written beside the bundle by the build's manifestTransform, because workbox
 // strips per-entry sizes before injecting the manifest. Absent in dev and on a
@@ -561,9 +562,13 @@ const rerootDocument = async (response: Response | undefined, status = response?
   return new Response(rerooted, { headers, status, statusText });
 };
 
-const matchRouteDocument = async (url: URL) => {
+type MatchFile = (url: string) => Promise<Response | undefined>;
+
+const matchOwnFile: MatchFile = async (url) => (await matchPrecache(url)) ?? (await deferredPrecache.match(url));
+
+const matchRouteDocument = async (url: URL, matchFile = matchOwnFile) => {
   for (const candidate of routeDocumentCandidates(scopePath(url.pathname))) {
-    const response = (await matchPrecache(candidate)) ?? (await deferredPrecache.match(candidate));
+    const response = await matchFile(candidate);
     if (response) return await rerootDocument(response);
   }
   return undefined;
@@ -613,11 +618,11 @@ const redirectSourcePaths = new Set(typeof __REDIRECT_SOURCE_PATHS__ === "undefi
 const isRedirectSourcePath = (pathname: string) =>
   typeof __REDIRECT_SOURCE_PATHS__ === "undefined" || redirectSourcePaths.has(pathname);
 
-const matchPrecachedNavigation = async (url: URL) => {
+const matchPrecachedNavigation = async (url: URL, matchFile = matchOwnFile) => {
   const pathname = scopePath(url.pathname);
   if (!offlineCopyRequestedEnabled || isRedirectSourcePath(pathname)) return undefined;
-  if (pathname === "/") return await matchPrecache("index.html");
-  return await matchRouteDocument(url);
+  if (pathname === "/") return await matchFile("index.html");
+  return await matchRouteDocument(url, matchFile);
 };
 
 const waitUntilEvent = (event: unknown, promise: Promise<unknown>) => {
@@ -659,20 +664,22 @@ const matchExactCachedNavigation = async (request: Request, url: URL) => {
   return withCrossOriginIsolationHeaders(cached, credentialless) || cached;
 };
 
-// A page fetched from the network needs that deploy's build-info.js, not the precached copy. Every
-// redirect hop shares one client, so each served document records its source again.
-const networkDocumentClients = new Set<string>();
+// A page needs the build-info.js of the build its document came from: a page fetched from the network needs
+// that deploy's, and a page given the waiting update's document needs the update's. Every redirect hop
+// shares one client, so each served document records its source again.
+type DocumentSource = "network" | "precache" | BuildFiles;
+const documentSources = new Map<string, Exclude<DocumentSource, "precache">>();
 
-const recordDocumentSource = (event: unknown, { network }: { network: boolean }) => {
+const recordDocumentSource = (event: unknown, source: DocumentSource) => {
   const clientId = (event as { resultingClientId?: string } | undefined)?.resultingClientId;
   if (!clientId) return;
-  if (network) networkDocumentClients.add(clientId);
-  else networkDocumentClients.delete(clientId);
+  if (source === "precache") documentSources.delete(clientId);
+  else documentSources.set(clientId, source);
 };
 
 const awaitNetworkDocument = async (fetching: Promise<Response>, event: unknown) => {
   const response = await fetching;
-  recordDocumentSource(event, { network: true });
+  recordDocumentSource(event, "network");
   return response;
 };
 
@@ -704,92 +711,105 @@ const fetchWithNavigationTimeout = async (request: Request, url: URL, event: unk
     );
     waitUntilEvent(event, refresh);
     logServiceWorker("navigation network timed out; serving cached copy", { url: url.href });
-    recordDocumentSource(event, { network: false });
+    recordDocumentSource(event, "precache");
     return cached;
   } finally {
     clearTimeout(timer);
   }
 };
 
-// Bounds how long a page load waits on a waiting worker that never answers its skip-waiting request.
-const SKIP_WAITING_REPLY_TIMEOUT_MS = 2000;
-// A page load handed to the update that is still waiting after this long loads the current build.
-const HANDOFF_RETRY_LIMIT_MS = 5000;
-// The browser activates the update only once this worker is idle, so the handoff document reloads when
-// the update takes control, or already has; that keeps the page load out of the switch itself. The timed
-// `Refresh` header covers an update that does not take control in time.
-const HANDOFF_DOCUMENT = `<!doctype html><meta name="color-scheme" content="dark light"><script>
-const container = navigator.serviceWorker;
-container.addEventListener("controllerchange", () => location.reload(), { once: true });
-container.getRegistration().then((registration) => {
-  if (!registration?.waiting) location.reload();
-});
-</script>`;
-let handoff: { startedAtMs: number; worker: ServiceWorker } | null = null;
+// Bounds how long a page load waits for a waiting worker that does not answer.
+const WAITING_WORKER_REPLY_TIMEOUT_MS = 2000;
 
-const isHandoffPending = () => handoff !== null && self.registration.waiting === handoff.worker;
-
-const createHandoffResponse = () =>
-  new Response(HANDOFF_DOCUMENT, {
-    headers: { "content-type": "text/html; charset=utf-8", refresh: String(HANDOFF_RETRY_LIMIT_MS / 1000) },
-  });
-
-const requestSkipWaiting = async (worker: ServiceWorker) => {
+/** Asks a waiting worker for its precache manifest; resolves undefined when it does not answer in time. */
+const requestPrecacheManifest = async (worker: ServiceWorker) => {
   const channel = new MessageChannel();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await new Promise<void>((resolve) => {
-      timer = setTimeout(resolve, SKIP_WAITING_REPLY_TIMEOUT_MS);
-      channel.port1.onmessage = () => resolve();
-      worker.postMessage({ type: "SKIP_WAITING" }, [channel.port2]);
+    const reply = await new Promise<unknown>((resolve) => {
+      timer = setTimeout(resolve, WAITING_WORKER_REPLY_TIMEOUT_MS);
+      channel.port1.onmessage = (event) => resolve(event.data);
+      worker.postMessage({ action: "get-precache-manifest" }, [channel.port2]);
     });
+    const manifest = (reply as { manifest?: unknown } | undefined)?.manifest;
+    return Array.isArray(manifest) ? (manifest as PrecacheManifest) : undefined;
   } finally {
     clearTimeout(timer);
     channel.port1.close();
   }
 };
 
-/**
- * Hands a page load to the waiting update when no other page uses this worker, so opening or reloading
- * the app switches builds without a prompt; the handoff document loads the page again from the update.
- * Once per waiting worker: a repeat that still reaches this worker gets the handoff document again until
- * `HANDOFF_RETRY_LIMIT_MS`, then the current build.
- */
-const handOffPageLoadToWaitingWorker = async (request: Request, url: URL) => {
-  const waiting = self.registration.waiting;
-  const isPageLoad =
-    isTopLevelNavigation(request, url) && request.destination === "document" && !requestPrefersMarkdown(request);
-  if (!(waiting && isPageLoad)) return undefined;
-  if (handoff?.worker === waiting) {
-    return Date.now() - handoff.startedAtMs < HANDOFF_RETRY_LIMIT_MS ? createHandoffResponse() : undefined;
+// Asked once per waiting worker, so one that never answers delays a single page load.
+let waitingUpdate: { files: Promise<BuildFiles | undefined>; worker: ServiceWorker } | null = null;
+
+const readUpdateFiles = (worker: ServiceWorker) => {
+  if (waitingUpdate?.worker !== worker) {
+    const files = requestPrecacheManifest(worker).then((manifest) =>
+      manifest ? createBuildFiles(manifest, fetchForInteractive) : undefined,
+    );
+    waitingUpdate = { files, worker };
   }
+  return waitingUpdate.files;
+};
+
+const isPageLoad = (request: Request, url: URL) =>
+  isTopLevelNavigation(request, url) && request.destination === "document" && !requestPrefersMarkdown(request);
+
+/**
+ * The waiting update a page load of `url` can switch to, or undefined while another page uses this worker
+ * or the update cannot list its files. `document` is the update's copy of the page, set only when the
+ * update's whole offline copy is cached.
+ */
+const findUpdateForPageLoad = async (url: URL) => {
+  const worker = self.registration.waiting;
+  if (!worker) return undefined;
   // A reload still lists the page it replaces, and nothing tells that apart from one other open tab;
   // the page client reloads such a tab once the update takes control. Frames load with their page.
   const pages = (await self.clients.matchAll({ type: "window" })).filter((client) => client.frameType !== "nested");
   if (pages.length > 1) return undefined;
-  handoff = { startedAtMs: Date.now(), worker: waiting };
-  // Offline downloads keep this worker busy, so the running batch stops and later pumps wait for the update.
+  const files = await readUpdateFiles(worker);
+  if (!files) return undefined;
+  const document = (await isCopyComplete(files)) ? await matchPrecachedNavigation(url, files.match) : undefined;
+  return { document, files };
+};
+
+// The browser activates the waiting update only once this worker is idle, so a page that runs the update's
+// build gets no offline downloads from it. The check reads the request, because the browser can restart
+// this worker between a page load and its downloads. Older pages send no build version and keep downloading.
+const isPageOnWaitingUpdate = (pageBuildVersion: unknown) =>
+  self.registration.waiting !== null && typeof pageBuildVersion === "string" && pageBuildVersion !== PRECACHE_VERSION;
+
+const serveUpdateDocument = async (
+  event: unknown,
+  url: URL,
+  { document, files }: { document: Response; files: BuildFiles },
+) => {
+  // The page's client asks the update to activate once the page has loaded. Asking here lets the browser
+  // stop this worker mid-load, and a restarted worker no longer knows the page needs the update's build-info.js.
+  // Running downloads would keep this worker busy and hold off that activation.
   appPumpGeneration += 1;
-  logServiceWorker("handing the page load to the waiting worker", { openPages: pages.length, url: url.href });
-  await requestSkipWaiting(waiting);
-  return createHandoffResponse();
+  recordDocumentSource(event, files);
+  logServiceWorker("serving a page load from the waiting update", { url: url.href });
+  const credentialless = await ensureCoepModeHydrated();
+  return withCrossOriginIsolationHeaders(document, credentialless) || document;
 };
 
 registerRoute(
   ({ request, url }) => shouldUseNetworkFirst(request, url),
   async ({ event, request, url }) => {
-    const handoff = await handOffPageLoadToWaitingWorker(request, url);
-    if (handoff) return handoff;
-    const precached = await serveNavigationFromPrecache(request, url, event);
+    const update = isPageLoad(request, url) ? await findUpdateForPageLoad(url) : undefined;
+    if (update?.document) return await serveUpdateDocument(event, url, { ...update, document: update.document });
+    // This worker's cached page loads the build the update replaces; the server has the new one.
+    const precached = update ? undefined : await serveNavigationFromPrecache(request, url, event);
     if (precached) {
-      recordDocumentSource(event, { network: false });
+      recordDocumentSource(event, "precache");
       return precached;
     }
     try {
       return await fetchWithNavigationTimeout(request, url, event);
     } catch (err) {
       const cachedResponse = await matchCachedResponse(request, url);
-      recordDocumentSource(event, { network: false });
+      recordDocumentSource(event, "precache");
       logServiceWorker("network-first request failed", {
         cached: Boolean(cachedResponse),
         error: formatError(err),
@@ -805,8 +825,10 @@ const BUILD_INFO_FILE = "build-info.js";
 
 const serveBuildInfo = async ({ event, request }: { event: unknown; request: Request }) => {
   const clientId = (event as { clientId?: string } | undefined)?.clientId ?? "";
-  if (!networkDocumentClients.delete(clientId)) {
-    const precached = await matchPrecache(BUILD_INFO_FILE);
+  const source = documentSources.get(clientId);
+  documentSources.delete(clientId);
+  if (source !== "network") {
+    const precached = await (source ? source.core.match(BUILD_INFO_FILE) : matchPrecache(BUILD_INFO_FILE));
     if (precached) return precached;
   }
   try {
@@ -863,9 +885,11 @@ const fetchForWarmup = (input: Request | string, init?: RequestInit) =>
 const fetchForInteractive = (input: Request | string, init?: RequestInit) =>
   fetchWithDownloadLog(input, init, logServiceWorker);
 
-const createAppDeferredPrecache = (download: (request: Request) => Promise<Response>) =>
+type Download = (request: Request) => Promise<Response>;
+
+const createAppDeferredPrecache = (download: Download, entries = DEFERRED_MANIFEST) =>
   createDeferredPrecache({
-    entries: DEFERRED_MANIFEST,
+    entries,
     cacheName: DEFERRED_CACHE_NAME,
     scope: self.registration.scope,
     download,
@@ -874,17 +898,36 @@ const createAppDeferredPrecache = (download: (request: Request) => Promise<Respo
     log: logServiceWorker,
   });
 
+const createCorePrecache = (download: Download, entries: PrecacheManifest = INITIAL_MANIFEST) =>
+  createDeferredPrecache({
+    entries: entries.map((entry) => (typeof entry === "string" ? { url: entry } : entry)),
+    cacheName: PRECACHE_NAME,
+    scope: self.registration.scope,
+    download,
+    policy: offlineCopyPolicy,
+    log: logServiceWorker,
+  });
+
 const deferredPrecache = createAppDeferredPrecache(fetchForWarmup);
 
 // Workbox installs these files once. The page-paced pump restores them after a user removes and later enables the copy.
-const corePrecache = createDeferredPrecache({
-  entries: INITIAL_MANIFEST.map((entry) => (typeof entry === "string" ? { url: entry } : entry)),
-  cacheName: PRECACHE_NAME,
-  scope: self.registration.scope,
-  download: fetchForWarmup,
-  policy: offlineCopyPolicy,
-  log: logServiceWorker,
-});
+const corePrecache = createCorePrecache(fetchForWarmup);
+
+/** The cached files of the build a precache manifest lists, such as a waiting update's. */
+const createBuildFiles = (manifest: PrecacheManifest, download: Download) => {
+  const core = createCorePrecache(
+    download,
+    manifest.filter((entry) => !isDeferredEntry(entry)),
+  );
+  const deferred = createAppDeferredPrecache(download, manifest.filter(isDeferredEntry));
+  const match: MatchFile = async (url) => (await core.match(url)) ?? (await deferred.match(url));
+  return { core, deferred, match };
+};
+
+type BuildFiles = ReturnType<typeof createBuildFiles>;
+
+const isCopyComplete = async ({ core, deferred }: Pick<BuildFiles, "core" | "deferred">) =>
+  (await Promise.all([core.isComplete(), deferred.isComplete()])).every(Boolean);
 
 // Whether this worker's whole offline copy (core precache plus every deferred entry) is cached.
 // Memoized so a navigation does not list the caches; cleared whenever the answer can change: after
@@ -901,9 +944,8 @@ const invalidateOfflineCopyCompleteness = () => {
 const isOfflineCopyComplete = () => {
   if (!offlineCopyRequestedEnabled) return Promise.resolve(false);
   if (offlineCopyCompleteness) return offlineCopyCompleteness;
-  const probe: Promise<boolean> = Promise.all([corePrecache.isComplete(), deferredPrecache.isComplete()]).then(
-    ([core, deferred]) => {
-      const complete = core && deferred;
+  const probe: Promise<boolean> = isCopyComplete({ core: corePrecache, deferred: deferredPrecache }).then(
+    (complete) => {
       if (complete && offlineCopyCompleteness === probe) offlineCopyKnownComplete = true;
       return complete;
     },
@@ -974,12 +1016,17 @@ let appPumpChain: Promise<unknown> = Promise.resolve();
 let appPumpGeneration = 0;
 let offlineCopyRequestedEnabled = true;
 let coreRefillNeeded = true;
-const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupIds?: string[]) => {
+const pumpOfflineFiles = (
+  onInterim: (progress: unknown) => void,
+  identifyGroupIds?: string[],
+  pageBuildVersion?: unknown,
+) => {
   // A pause MUST stop refilling both active pumps and pumps waiting for cache reads.
   const generation = appPumpGeneration;
   const process = async () => {
     // A disabled reply ends the page's pump loop until a new worker takes control; the stored choice stays.
-    if (isHandoffPending()) return { ...(await offlineWarmup.getReadyState()), enabled: false, ready: false };
+    if (isPageOnWaitingUpdate(pageBuildVersion))
+      return { ...(await offlineWarmup.getReadyState()), enabled: false, ready: false };
     const enabled = await offlineCopyPolicy.isEnabled();
     if (generation !== appPumpGeneration || !offlineCopyRequestedEnabled || !enabled) {
       return {
@@ -1178,6 +1225,29 @@ addPlugins([precachePlugin]);
 precacheAndRoute(INITIAL_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
 
+// A page given the waiting update's document loads files only the update lists; files this build lists keep
+// their own routes, registered first so the precache route also answers its variant URLs. The match cannot
+// wait for the update's file list, which a restarted worker asks for again, so while an update waits every
+// other same-origin file request comes here.
+const isFileThisBuildLacks = (request: Request, url: URL) =>
+  request.method === "GET" &&
+  isSameOriginRequest(url) &&
+  !corePrecache.has(url.href) &&
+  !deferredPrecache.has(url.href);
+
+registerRoute(
+  ({ request, url }) => self.registration.waiting !== null && isFileThisBuildLacks(request, url),
+  async ({ request, url }) => {
+    const waiting = self.registration.waiting;
+    const files = waiting ? await readUpdateFiles(waiting) : undefined;
+    const precache = [files?.core, files?.deferred].find((candidate) => candidate?.has(url.href));
+    if (!precache) return await fetch(request);
+    const credentialless = await ensureCoepModeHydrated();
+    const response = await precache.serve(url.href);
+    return withCrossOriginIsolationHeaders(response, credentialless) || response;
+  },
+);
+
 // Chromium times out a worker event after 5 minutes (`kRequestTimeout` in
 // https://chromium.googlesource.com/chromium/src/+/HEAD/content/browser/service_worker/service_worker_version.cc),
 // which fails this install attempt, so the download of changed offline files stops well before that and
@@ -1214,9 +1284,9 @@ self.addEventListener("install", (event) => {
   precacheInstallFailed = false;
   // First install (no active worker yet): take control immediately so the page can gain
   // cross-origin isolation on its follow-up reload. Updates to an already-controlled page
-  // must WAIT - registerType is "prompt", so activation happens only when a client or a page
-  // load sends SKIP_WAITING (see the message handler). Seizing control on every update
-  // re-inits the running app and reads as an involuntary reload.
+  // must WAIT - registerType is "prompt", so activation happens only when the client sends
+  // SKIP_WAITING (see the message handler). Seizing control on every update re-inits the
+  // running app and reads as an involuntary reload.
   const isFirstInstall = !self.registration.active;
   // Runs before workbox's async install handler touches any entry (listeners
   // fire in add order within the same task), so the plugin sees the flag.
@@ -1284,11 +1354,13 @@ self.addEventListener("message", (event) => {
   if (event.data.type === "SKIP_WAITING" || event.data.action === "skip-waiting") {
     logServiceWorker("message received; calling skipWaiting");
     void self.skipWaiting();
-    // An active worker handing a page load over waits for this reply, and that worker can be an older
-    // build, so every later build MUST keep sending it. It goes out once skipWaiting is requested: the
-    // promise can resolve only after activation (https://github.com/w3c/ServiceWorker/issues/1187), and
-    // activation waits for that page load.
-    event.ports?.[0]?.postMessage({ action: "skip-waiting-done" });
+    return;
+  }
+
+  // The active worker, which can be an older build, asks the waiting one for its files to serve a page
+  // load from them, so every later build MUST keep answering.
+  if (event.data.action === "get-precache-manifest") {
+    event.ports?.[0]?.postMessage({ action: "precache-manifest", manifest: PRECACHE_MANIFEST });
     return;
   }
 
@@ -1336,6 +1408,7 @@ self.addEventListener("message", (event) => {
     const pump = pumpOfflineFiles(
       (interim) => replyTo({ action: "offline-warmup-interim", ...(interim as Record<string, unknown>) }),
       identifyGroupIds,
+      event.data.buildVersion,
     )
       .then((progress) => ({ action: "offline-warmup-progress", ...progress }))
       .catch((error) => ({ action: "offline-warmup-failed", error: formatError(error) }));
@@ -1359,6 +1432,17 @@ self.addEventListener("message", (event) => {
         groupIds: target.groupIds.filter((id: unknown): id is string => typeof id === "string"),
       });
     }
+    return;
+  }
+
+  // Whether a page load of `url` would get the waiting update's document; the page then loads its next view.
+  if (event.data.action === "get-update-page-load") {
+    const query = (async () => {
+      const url = new URL(String(event.data.url), self.registration.scope);
+      const update = isSameOriginRequest(url) ? await findUpdateForPageLoad(url) : undefined;
+      return { action: "update-page-load", ready: Boolean(update?.document) };
+    })().catch((error) => ({ action: "update-page-load", error: formatError(error), ready: false }));
+    event.waitUntil(query.then(replyTo));
     return;
   }
 

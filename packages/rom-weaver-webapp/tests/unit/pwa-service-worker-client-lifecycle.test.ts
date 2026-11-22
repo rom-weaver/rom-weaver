@@ -63,13 +63,19 @@ const createRegistration = (overrides: Partial<FakeRegistration> = {}): FakeRegi
 const DEFAULT_CACHE_VERSION_REPLY = { precacheName: "precache-rom-weaver-test", precacheVersion: "test" };
 
 const createController = ({
+  onUpdatePageLoad,
   reply = DEFAULT_CACHE_VERSION_REPLY as Record<string, unknown> | null,
   throwOnPost = false,
-}: { reply?: Record<string, unknown> | null; throwOnPost?: boolean } = {}) => ({
+}: {
+  onUpdatePageLoad?: (port: MessagePort) => void;
+  reply?: Record<string, unknown> | null;
+  throwOnPost?: boolean;
+} = {}) => ({
   postMessage: vi.fn((message: { action?: string }, transfer?: unknown[]) => {
     if (throwOnPost) throw new Error("the controller is gone");
-    if (message.action !== "get-service-worker-cache-version" || !reply) return;
     const port = Array.isArray(transfer) ? (transfer[0] as MessagePort | undefined) : undefined;
+    if (message.action === "get-update-page-load" && port) onUpdatePageLoad?.(port);
+    if (message.action !== "get-service-worker-cache-version" || !reply) return;
     port?.postMessage(reply);
   }),
 });
@@ -117,6 +123,7 @@ const createHarness = ({
 }: HarnessOptions = {}) => {
   const sessionStorage = createSessionStorage(sessionStorageSeed, sessionStorageFailOn);
   const reload = vi.fn();
+  const assign = vi.fn();
   const windowListeners = new Map<string, Array<() => void>>();
   const documentListeners = new Map<string, Array<() => void>>();
   const intervals: Array<{ handler: () => void; ms: number }> = [];
@@ -129,7 +136,7 @@ const createHarness = ({
     addEventListener: addTo(windowListeners),
     clearInterval: vi.fn(),
     ...(hasCrossOriginIsolated ? { crossOriginIsolated } : {}),
-    location: hasLocationReload ? { href: APP_HREF, reload } : { href: APP_HREF },
+    location: hasLocationReload ? { assign, href: APP_HREF, reload } : { assign, href: APP_HREF },
     setInterval: vi.fn((handler: () => void, ms: number) => {
       intervals.push({ handler, ms });
       return intervals.length;
@@ -176,6 +183,7 @@ const createHarness = ({
   const client = createPwaServiceWorkerClient(options as unknown as ClientOptions);
 
   return {
+    assign,
     client,
     controller,
     documentListeners,
@@ -903,5 +911,135 @@ describe("automatic update apply", () => {
 
     expect(harness.updateServiceWorker).not.toHaveBeenCalled();
     expect(harness.client.getState().updateReady).toBe(true);
+  });
+});
+
+describe("view changes while an update waits", () => {
+  const VIEW_URL = new URL("https://example.com/webapp/compress-files");
+  const answer = (ready: boolean) => (port: MessagePort) => port.postMessage({ action: "update-page-load", ready });
+  // A page on the outgoing controller's build with the update prompt showing.
+  const loadWaitingPage = async ({
+    idle = () => true,
+    onUpdatePageLoad,
+  }: { idle?: () => boolean; onUpdatePageLoad?: (port: MessagePort) => void } = {}) => {
+    const controller = createController({ onUpdatePageLoad });
+    const harness = createHarness({ appVersion: "test", controller, shouldAutoApplyUpdate: idle });
+    harness.client.initialize();
+    await flush();
+    harness.registerOptions().onNeedRefresh?.();
+    expect(harness.client.getState().updateReady).toBe(true);
+    return harness;
+  };
+  const updatePageLoadQueries = (harness: ReturnType<typeof createHarness>) =>
+    (harness.controller?.postMessage.mock.calls ?? []).filter(([message]) => message.action === "get-update-page-load");
+
+  it.each([
+    { label: "loads the view as a page when that page load gets the update", reply: answer(true), loads: true },
+    {
+      label: "changes the view in the app when the page load would get this build",
+      reply: answer(false),
+      loads: false,
+    },
+    { label: "changes the view in the app when the worker does not answer", reply: undefined, loads: false },
+  ])("$label", async ({ loads, reply }) => {
+    const harness = await loadWaitingPage({ onUpdatePageLoad: reply });
+    const navigateInApp = vi.fn();
+
+    harness.client.navigateOrLoadUpdate(VIEW_URL, navigateInApp);
+    await vi.waitFor(() => expect(harness.assign.mock.calls.length + navigateInApp.mock.calls.length).toBe(1));
+
+    expect(updatePageLoadQueries(harness)).toEqual([
+      [{ action: "get-update-page-load", url: VIEW_URL.href }, expect.anything()],
+    ]);
+    expect(harness.assign.mock.calls).toEqual(loads ? [[VIEW_URL.href]] : []);
+  });
+
+  it.each([
+    {
+      label: "no update waits",
+      setup: async () => {
+        const harness = createHarness({
+          appVersion: "test",
+          controller: createController({ onUpdatePageLoad: answer(true) }),
+          shouldAutoApplyUpdate: () => true,
+        });
+        harness.client.initialize();
+        await flush();
+        return harness;
+      },
+      url: VIEW_URL,
+    },
+    {
+      label: "work is in progress",
+      setup: () => loadWaitingPage({ idle: () => false, onUpdatePageLoad: answer(true) }),
+      url: VIEW_URL,
+    },
+    {
+      label: "the link stays on this page",
+      setup: () => loadWaitingPage({ onUpdatePageLoad: answer(true) }),
+      url: new URL(`${APP_HREF}#faq`),
+    },
+  ])("changes the view in the app at once, without asking the worker, when $label", async ({ setup, url }) => {
+    const harness = await setup();
+    const navigateInApp = vi.fn();
+
+    harness.client.navigateOrLoadUpdate(url, navigateInApp);
+
+    expect(navigateInApp).toHaveBeenCalledTimes(1);
+    expect(updatePageLoadQueries(harness)).toEqual([]);
+    expect(harness.assign).not.toHaveBeenCalled();
+  });
+
+  it("loads the view as a page without asking once another page applied the update", async () => {
+    let idle = false;
+    const reply = { ...DEFAULT_CACHE_VERSION_REPLY };
+    const harness = createHarness({
+      appVersion: "test",
+      controller: createController({ reply }),
+      shouldAutoApplyUpdate: () => idle,
+    });
+    harness.client.initialize();
+    await flush();
+    reply.precacheVersion = "next";
+    harness.fireDocument("controllerchange");
+    idle = true;
+    const navigateInApp = vi.fn();
+
+    harness.client.navigateOrLoadUpdate(VIEW_URL, navigateInApp);
+
+    expect(harness.assign).toHaveBeenCalledWith(VIEW_URL.href);
+    expect(navigateInApp).not.toHaveBeenCalled();
+    expect(updatePageLoadQueries(harness)).toEqual([]);
+  });
+
+  it("acts only on the answer for the latest view change", async () => {
+    const ports: MessagePort[] = [];
+    const harness = await loadWaitingPage({ onUpdatePageLoad: (port) => ports.push(port) });
+    const first = vi.fn();
+    const second = vi.fn();
+
+    harness.client.navigateOrLoadUpdate(VIEW_URL, first);
+    harness.client.navigateOrLoadUpdate(new URL("https://example.com/webapp/trim-rom"), second);
+    ports[0]?.postMessage({ action: "update-page-load", ready: true });
+    ports[1]?.postMessage({ action: "update-page-load", ready: false });
+    await vi.waitFor(() => expect(second).toHaveBeenCalledTimes(1));
+
+    expect(first).not.toHaveBeenCalled();
+    expect(harness.assign).not.toHaveBeenCalled();
+  });
+
+  it("drops an answer that arrives after the page moved to another view", async () => {
+    const ports: MessagePort[] = [];
+    const harness = await loadWaitingPage({ onUpdatePageLoad: (port) => ports.push(port) });
+    const navigateInApp = vi.fn();
+
+    harness.client.navigateOrLoadUpdate(VIEW_URL, navigateInApp);
+    harness.window.location.href = "https://example.com/webapp/trim-rom";
+    ports[0]?.postMessage({ action: "update-page-load", ready: true });
+    await flush();
+    await flush();
+
+    expect(harness.assign).not.toHaveBeenCalled();
+    expect(navigateInApp).not.toHaveBeenCalled();
   });
 });

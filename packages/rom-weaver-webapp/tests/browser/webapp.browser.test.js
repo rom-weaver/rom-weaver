@@ -75,6 +75,7 @@ const waitForInputStackFile = async (fileName) => {
 };
 
 const createNoopActions = () => ({
+  navigateOrLoadUpdate: (_url, navigateInApp) => navigateInApp(),
   onCancelConfirmation: () => undefined,
   onCloseSettings: () => undefined,
   onConfirmConfirmation: () => undefined,

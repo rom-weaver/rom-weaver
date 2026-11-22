@@ -43,6 +43,7 @@ const mocks = vi.hoisted(() => ({
     forceCacheAndReload: vi.fn(() => Promise.resolve(true)),
     getState: vi.fn((): ServiceWorkerCacheState => mocks.serviceWorkerCache),
     initialize: vi.fn(),
+    navigateOrLoadUpdate: vi.fn((_url: URL, navigateInApp: () => void) => navigateInApp()),
     refreshCacheVersion: vi.fn(),
     reloadPendingUpdate: vi.fn(() => Promise.resolve(true)),
   },
@@ -877,6 +878,21 @@ describe("routing", () => {
     expect(latest().state.currentView).toBe("creator");
     expect(window.location.pathname).toBe("/create-rom-patch");
     expect(scrollTo).toHaveBeenCalledWith({ behavior: "auto", left: 0, top: 0 });
+  });
+
+  it("leaves a followed link to the update check, which can load it as a page instead", async () => {
+    await loadWebapp();
+    mocks.serviceWorkerClient.navigateOrLoadUpdate.mockImplementationOnce(() => undefined);
+
+    clickAnchor("/create-rom-patch");
+    await flush();
+
+    expect(mocks.serviceWorkerClient.navigateOrLoadUpdate).toHaveBeenCalledWith(
+      new URL("/create-rom-patch", window.location.href),
+      expect.any(Function),
+    );
+    expect(window.location.pathname).not.toBe("/create-rom-patch");
+    expect(latest().state.currentView).not.toBe("creator");
   });
 
   it("scrolls to the anchor when one docs page links to another", async () => {
