@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { hasUnsavedWork } from "../../../src/lib/unsaved-work-store.ts";
 import {
   addEntry,
   dismissClosedGameNotice,
@@ -215,6 +216,19 @@ describe("ExtractForm", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Download 1 file" }));
     await waitFor(() => expect(outputs[0]?.saveAs).toHaveBeenCalledWith({ fileName: "game.sfc", interactive: true }));
     expect(runtime.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds unsaved work from the moment a file is added until the form is removed", async () => {
+    runtime.extract.mockResolvedValue({ outputs: [output("game.sfc"), output("docs/readme.txt")] });
+    const view = render(<ExtractForm />);
+    expect(hasUnsavedWork()).toBe(false);
+
+    addFile(new File(["zip"], "game.zip"));
+    expect(hasUnsavedWork()).toBe(true);
+    expect(await screen.findByText("docs › readme.txt")).toBeTruthy();
+
+    view.unmount();
+    expect(hasUnsavedWork()).toBe(false);
   });
 
   it("shows ZIP progress with a readable label and the runtime percent", async () => {

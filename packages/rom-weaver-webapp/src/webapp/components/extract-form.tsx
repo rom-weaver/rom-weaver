@@ -12,10 +12,13 @@ import { EXTRACT_FORMAT_GUIDES, WORKFLOW_GUIDES } from "../../public/react/workf
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { ProgressEvent, PublicOutput } from "../../types/workflow-runtime-types.ts";
 import { getEngineError } from "../../lib/errors.ts";
+import { setUnsavedWork } from "../../lib/unsaved-work-store.ts";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 
 type ExtractFormProps = { pageDrop?: PageFileDrop | null };
 type ProgressState = { label: string; percent: number | null };
+
+const EXTRACT_WORK_ID = "extract";
 
 // Extract opens one archive per run, so extra files are named instead of silently dropped.
 const skippedNotice = (used: File, skipped: string[]): string =>
@@ -243,6 +246,13 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
     stageFiles(pageDrop.files);
     pageDrop.onConsumed?.();
   }, [pageDrop, stageFiles]);
+
+  // Extract publishes no workbench activity, so it records its own work for the hidden-tab reload check.
+  // Every run and its outputs follow a staged source, and the source stays until the form is removed.
+  useEffect(() => {
+    setUnsavedWork(EXTRACT_WORK_ID, source !== null);
+    return () => setUnsavedWork(EXTRACT_WORK_ID, false);
+  }, [source]);
 
   useEffect(
     () => () => {

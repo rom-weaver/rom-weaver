@@ -595,6 +595,19 @@ describe("hidden tab reload readiness", () => {
     },
   );
 
+  it("is not idle while a workflow that publishes no activity holds work, and is again once it lets go", async () => {
+    await loadWebapp();
+    const { setUnsavedWork } = await import("../../src/lib/unsaved-work-store.ts");
+
+    setUnsavedWork("extract", true);
+    try {
+      expect(isPageIdle()).toBe(false);
+    } finally {
+      setUnsavedWork("extract", false);
+    }
+    expect(isPageIdle()).toBe(true);
+  });
+
   it.each(["change", "cancel"])(
     "is not idle while a file input's picker is open, and is again after its %s event",
     async (closing) => {
