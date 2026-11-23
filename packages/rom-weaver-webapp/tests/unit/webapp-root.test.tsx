@@ -164,33 +164,27 @@ const fileDragEvent = (type: string, target: EventTarget = document, files: File
   return event;
 };
 
+const changelogResponse = (version: string, summary: string) => ({
+  json: () =>
+    Promise.resolve([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: {
+          changelogUrl: "https://github.com/rom-weaver/rom-weaver/blob/main/CHANGELOG.md",
+          notes: [{ groups: [{ entries: [{ summary }], title: "Highlights" }], version }],
+          repositoryUrl: "https://github.com/rom-weaver/rom-weaver",
+          truncated: false,
+          version,
+        },
+        subject: "release",
+      },
+    ]),
+  ok: true,
+});
+
 beforeEach(() => {
-  vi.stubGlobal(
-    "fetch",
-    mocks.fetchChangelog.mockResolvedValue({
-      json: () =>
-        Promise.resolve([
-          {
-            date: "2026-07-29T00:00:00Z",
-            hash: "release",
-            release: {
-              changelogUrl: "https://github.com/rom-weaver/rom-weaver/blob/main/CHANGELOG.md",
-              notes: [
-                {
-                  groups: [{ entries: [{ summary: "Shiny highlight" }], title: "Highlights" }],
-                  version: APP_VERSION,
-                },
-              ],
-              repositoryUrl: "https://github.com/rom-weaver/rom-weaver",
-              truncated: false,
-              version: APP_VERSION,
-            },
-            subject: "release",
-          },
-        ]),
-      ok: true,
-    }),
-  );
+  vi.stubGlobal("fetch", mocks.fetchChangelog.mockResolvedValue(changelogResponse(APP_VERSION, "Shiny highlight")));
 });
 
 beforeEach(() => {
@@ -636,24 +630,7 @@ describe("the update banner", () => {
   const INCOMING = `${Number.parseInt(APP_VERSION, 10) + 1}.0.0`;
   const RELOADING_INTO_KEY = "rom-weaver-reloading-into-version";
   const reloadIntoWaitingDeploy = async () => {
-    mocks.fetchChangelog.mockResolvedValue({
-      json: () =>
-        Promise.resolve([
-          {
-            date: "2026-07-29T00:00:00Z",
-            hash: "release",
-            release: {
-              changelogUrl: "https://github.com/rom-weaver/rom-weaver/blob/main/CHANGELOG.md",
-              notes: [{ groups: [{ entries: [{ summary: "Incoming" }], title: "Highlights" }], version: INCOMING }],
-              repositoryUrl: "https://github.com/rom-weaver/rom-weaver",
-              truncated: false,
-              version: INCOMING,
-            },
-            subject: "release",
-          },
-        ]),
-      ok: true,
-    });
+    mocks.fetchChangelog.mockResolvedValue(changelogResponse(INCOMING, "Incoming"));
     const { called, container } = await renderRoot({ updateReady: true });
     await waitFor(() => expect(readyBanner(container)?.textContent).toContain(`v${INCOMING} is ready`));
     fireEvent.click(within(container).getByRole("button", { name: "Reload" }));

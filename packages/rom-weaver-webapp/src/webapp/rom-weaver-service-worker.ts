@@ -16,6 +16,7 @@ import {
   precacheAndRoute,
 } from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
+import { bytesEqual } from "../lib/bytes-equal.ts";
 import { APP_BUILD_VERSION } from "./build-version.ts";
 import { createOfflineWarmup } from "./offline-warmup.ts";
 import { createOfflineProgressReporter } from "./pwa/offline-progress-reporter.ts";
@@ -518,12 +519,11 @@ const fetchAndUpdateCache = async (
 ): Promise<Response> => {
   const credentialless = await ensureCoepModeHydrated();
   const generation = offlineCopyPolicy.token();
-  const fetchedResponse = await fetchWithDownloadLog(
-    toCredentiallessNoCorsRequest(request, credentialless),
-    undefined,
-    logServiceWorker,
-    preload ? async (outgoing, init) => (await preload) ?? (await fetch(outgoing, init)) : undefined,
-  );
+  const preloaded = await preload;
+  if (preloaded) logServiceWorker("navigation preload answered", { status: preloaded.status, url: request.url });
+  const fetchedResponse =
+    preloaded ??
+    (await fetchWithDownloadLog(toCredentiallessNoCorsRequest(request, credentialless), undefined, logServiceWorker));
   onHeaders?.(fetchedResponse);
   // Cache the network response without its isolation headers: the stored entry then carries the
   // server's true headers, so a later COEP-mode flip re-stamps it correctly at serve time instead
@@ -718,12 +718,8 @@ const startNavigationFetch = (request: Request, event: unknown): NavigationFetch
 
 // The timeout covers the time to the response headers only. Once they arrive the network has
 // answered, so the body download and cache write are awaited however long they take.
-const fetchWithNavigationTimeout = async (
-  { fetching, headers }: NavigationFetch,
-  request: Request,
-  url: URL,
-  event: unknown,
-) => {
+const fetchWithNavigationTimeout = async (network: NavigationFetch, request: Request, url: URL, event: unknown) => {
+  const { fetching, headers } = network;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<typeof NETWORK_TIMED_OUT>((resolve) => {
     timer = setTimeout(() => resolve(NETWORK_TIMED_OUT), NAVIGATION_NETWORK_TIMEOUT_MS);
@@ -748,15 +744,8 @@ const fetchWithNavigationTimeout = async (
   }
 };
 
-const hasSameBytes = (left: ArrayBuffer, right: ArrayBuffer) => {
-  if (left.byteLength !== right.byteLength) return false;
-  const leftBytes = new Uint8Array(left);
-  const rightBytes = new Uint8Array(right);
-  return leftBytes.every((byte, index) => byte === rightBytes[index]);
-};
-
 // A precached page is only safe without the network when every file it names is cached: the host drops
-// old hashed files after a deploy, and deferred files download after the documents (never on data saver).
+// old hashed files after a deploy, and deferred files download after the documents (not automatically on data saver).
 // `built` is the page as the host sends it. `served` is this worker's answer, made from a clone so the
 // built body stays readable.
 const matchCompleteOfflineNavigation = async (url: URL) => {
@@ -782,9 +771,9 @@ const respondToTopLevelNavigation = async (request: Request, url: URL, event: un
   });
   const precached = await matchCompleteOfflineNavigation(url);
   if (!precached) return await fetchWithNavigationTimeout(network, request, url, event);
-  if (race.body && !hasSameBytes(race.body, await precached.built.arrayBuffer())) {
-    return await awaitNetworkDocument(network.fetching, event);
-  }
+  const isNewerDeploy =
+    race.body && !bytesEqual(new Uint8Array(race.body), new Uint8Array(await precached.built.arrayBuffer()));
+  if (isNewerDeploy) return await awaitNetworkDocument(network.fetching, event);
   if (!race.isNetworkSettled) {
     logServiceWorker("navigation served from the offline copy before the network answered", { url: url.href });
   }

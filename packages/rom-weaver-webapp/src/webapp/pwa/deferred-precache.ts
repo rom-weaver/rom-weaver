@@ -70,10 +70,14 @@ const createDeferredPrecache = ({
     return byUrl.get(url.href);
   };
 
+  const openCacheWithKeys = async () => {
+    const cache = await caches.open(cacheName);
+    return { cache, keys: new Set((await cache.keys()).map((request) => request.url)) };
+  };
+
   const state = async (): Promise<DeferredState> => {
     const required = await requiredFiles();
-    const cache = await caches.open(cacheName);
-    const keys = new Set((await cache.keys()).map((request) => request.url));
+    const { cache, keys } = await openCacheWithKeys();
     const result = {
       cachedBytes: 0,
       cachedFiles: 0,
@@ -105,8 +109,7 @@ const createDeferredPrecache = ({
   // Cheap completeness probe: every required file has a stored entry (no size measurements).
   const isComplete = async () => {
     const required = await requiredFiles();
-    const cache = await caches.open(cacheName);
-    const keys = new Set((await cache.keys()).map((request) => request.url));
+    const { keys } = await openCacheWithKeys();
     return required.every((file) => keys.has(file.key));
   };
 
@@ -219,8 +222,7 @@ const createDeferredPrecache = ({
     if (onProgress) progressListeners.add(onBytes);
     if (onCached) cachedListeners.add(onCached);
     try {
-      const cache = await caches.open(cacheName);
-      const keys = new Set((await cache.keys()).map((request) => request.url));
+      const { keys } = await openCacheWithKeys();
       cachedKeys = keys;
       const missing = required.filter((file) => !keys.has(file.key));
       const started = missing.filter((file) => inFlight.has(file.key));

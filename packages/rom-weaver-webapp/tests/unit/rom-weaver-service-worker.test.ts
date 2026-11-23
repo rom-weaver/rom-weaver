@@ -1711,15 +1711,10 @@ describe("navigation requests", () => {
     };
     const asFakeCache = async (harness: Harness, name: string) =>
       (await harness.cacheStorage.open(name)) as unknown as FakeCache;
-    const holdCacheCall = async (
-      harness: Harness,
-      name: string,
-      method: "delete" | "put",
-      isHeld: (key: string) => boolean,
-    ) => {
+    const holdCacheCall = async (harness: Harness, name: string, method: "delete" | "put") => {
       const cache = await asFakeCache(harness, name);
       const original = cache[method].bind(cache);
-      const hold = holdOnce(isHeld);
+      const hold = holdOnce(() => true);
       vi.spyOn(cache, method).mockImplementation(async (request: RequestInfo | URL, response?: Response) => {
         await hold.hold(urlOf(request));
         return method === "put" && response ? original(request, response) : (original(request) as Promise<never>);
@@ -1816,7 +1811,7 @@ describe("navigation requests", () => {
       const harness = await loadCompleteWorker({ hasActiveWorker: true, redirectSourcePaths: [] });
       setPrecache(guideEntries());
       // Hold the removal before it starts, with the copy already switched back on and its files intact.
-      const held = await holdCacheCall(harness, POLICY_CACHE_NAME, "put", () => true);
+      const held = await holdCacheCall(harness, POLICY_CACHE_NAME, "put");
       const switchedOff = send(harness, { action: "set-offline-copy-enabled", enabled: false });
       const switchedOn = send(harness, { action: "set-offline-copy-enabled", enabled: true });
       await held.reached;
@@ -1853,8 +1848,8 @@ describe("navigation requests", () => {
       setPrecache(guideEntries());
       // Queue the format change behind a held transition, so the memo is set before the format is stored,
       // then hold the cleanup that the new format triggers.
-      const queued = await holdCacheCall(harness, POLICY_CACHE_NAME, "put", () => true);
-      const cleanup = await holdCacheCall(harness, DEFERRED_CACHE_NAME, "delete", () => true);
+      const queued = await holdCacheCall(harness, POLICY_CACHE_NAME, "put");
+      const cleanup = await holdCacheCall(harness, DEFERRED_CACHE_NAME, "delete");
       const first = send(harness, { action: "set-offline-copy-enabled", enabled: true });
       const second = send(harness, { action: "set-offline-copy-enabled", docImageFormat: "avif", enabled: true });
       await queued.reached;
