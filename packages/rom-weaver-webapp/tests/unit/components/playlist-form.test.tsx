@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { planBrowserPlaylist } from "../../../src/platform/browser/browser-playlist-api.ts";
 import { PlaylistForm } from "../../../src/webapp/components/playlist-form.tsx";
+import { isFilePickerOpen } from "../../../src/webapp/file-picker-state.ts";
 
 const support = vi.hoisted(() => ({
   canWrite: false,
@@ -175,6 +176,25 @@ describe("PlaylistForm", () => {
     try {
       fireEvent.click(screen.getByRole("button", { name: "Open game folder" }));
       await waitFor(() => expect(picker).toHaveBeenCalledWith({ id: "rom-weaver-playlist", mode: "read" }));
+    } finally {
+      Reflect.deleteProperty(window, "showDirectoryPicker");
+    }
+  });
+
+  it("reports a file picker open while the folder picker is, and closed once the pick is cancelled", async () => {
+    render(<PlaylistForm onSessionChange={vi.fn()} />);
+    support.canWrite = true;
+    let cancelPick: (cause: DOMException) => void = () => undefined;
+    const picker = () =>
+      new Promise<FileSystemDirectoryHandle>((_resolve, reject) => {
+        cancelPick = reject;
+      });
+    Object.defineProperty(window, "showDirectoryPicker", { configurable: true, value: picker });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Open game folder" }));
+      await waitFor(() => expect(isFilePickerOpen()).toBe(true));
+      cancelPick(new DOMException("The user aborted a request.", "AbortError"));
+      await waitFor(() => expect(isFilePickerOpen()).toBe(false));
     } finally {
       Reflect.deleteProperty(window, "showDirectoryPicker");
     }

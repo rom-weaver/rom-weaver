@@ -579,20 +579,46 @@ describe("hidden tab reload readiness", () => {
     expect(isPageIdle()).toBe(true);
   });
 
-  it.each([
-    ["running", false],
-    ["staging", false],
-    ["done", true],
-  ] as const)("reports %s workflow activity as idle: %s", async (state, expected) => {
-    await loadWebapp();
-    const { setWorkbenchActivity } = await import("../../src/lib/activity-store.ts");
+  it.each(["staging", "ready", "running", "done", "failed"] as const)(
+    "is not idle while a workflow reports %s, and is again once it reports idle",
+    async (state) => {
+      await loadWebapp();
+      const { setWorkbenchActivity } = await import("../../src/lib/activity-store.ts");
 
-    setWorkbenchActivity("identify", { state });
-    try {
-      expect(isPageIdle()).toBe(expected);
-    } finally {
-      setWorkbenchActivity("identify", { state: "idle" });
-    }
+      setWorkbenchActivity("identify", { state });
+      try {
+        expect(isPageIdle()).toBe(false);
+      } finally {
+        setWorkbenchActivity("identify", { state: "idle" });
+      }
+      expect(isPageIdle()).toBe(true);
+    },
+  );
+
+  it.each(["change", "cancel"])(
+    "is not idle while a file input's picker is open, and is again after its %s event",
+    async (closing) => {
+      await loadWebapp();
+      const input = document.createElement("input");
+      input.type = "file";
+      document.body.append(input);
+
+      input.click();
+      expect(isPageIdle()).toBe(false);
+      input.dispatchEvent(new Event(closing, { bubbles: true }));
+
+      expect(isPageIdle()).toBe(true);
+    },
+  );
+
+  it("stays idle after a click on an input that opens no picker", async () => {
+    await loadWebapp();
+    const input = document.createElement("input");
+    document.body.append(input);
+
+    input.click();
+
+    expect(isPageIdle()).toBe(true);
   });
 
   it.each([

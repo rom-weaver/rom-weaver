@@ -32,6 +32,7 @@ import { readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { recordFirstVisit } from "./last-seen-version.ts";
 import { installLogStore } from "./log-store.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
+import { isFilePickerOpen } from "./file-picker-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
 import { setOfflineWarmupEnabled } from "./pwa/offline-warmup-client.ts";
 import { createServiceWorkerBootGate } from "./pwa/service-worker-boot-gate.ts";
@@ -422,13 +423,14 @@ const getNavigationGuardState = () => {
 // dialogs, and every other Modal, carry aria-modal.
 const OPEN_MODAL_SELECTOR = 'dialog[open], [role="dialog"][aria-modal="true"]';
 
-// Whether a reload would lose nothing. Beyond the unload guard it checks a loaded game and a running job,
-// which the guard does not track. They stay out of the guard so closing a tab does not start warning about them.
+// Whether a reload would lose nothing. Beyond the unload guard it checks a loaded game, any workflow that
+// is not idle (a staged file, a running job, or a result still on the page) and an open file picker, which
+// the guard does not track. They stay out of the guard so closing a tab does not start warning about them.
 const isPageIdle = () => {
   if (shouldWarnBeforeUnload(getNavigationGuardState())) return false;
   if (getEmulatorSessionState().entries.length > 0) return false;
-  const activity = getWorkbenchActivity().state;
-  if (activity === "running" || activity === "staging") return false;
+  if (getWorkbenchActivity().state !== "idle") return false;
+  if (isFilePickerOpen()) return false;
   return !document.querySelector(OPEN_MODAL_SELECTOR);
 };
 
