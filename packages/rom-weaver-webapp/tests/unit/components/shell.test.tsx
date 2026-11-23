@@ -715,6 +715,50 @@ describe("Masthead", () => {
   });
 });
 
+describe("Masthead with unread news", () => {
+  const dotOwners = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll(".news-dot")).map((dot) => dot.parentElement as HTMLElement);
+
+  it.each([
+    ["the plain version chip", undefined, ".build-tag .sub-link", "1.2.3, updated since your last visit"],
+    ["the channel chip", "nightly", ".build-tag .channel-badge", ", updated since your last visit"],
+  ])("marks %s and names the news", (_name, channelBadge, selector, nameEnd) => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} channelBadge={channelBadge} hasNews />));
+
+    const chip = container.querySelector(selector) as HTMLElement;
+    expect(chip.querySelector(".news-dot[aria-hidden='true']")).not.toBeNull();
+    expect(chip.getAttribute("aria-label")?.endsWith(nameEnd)).toBe(true);
+    expect(chip.getAttribute("aria-label")).toContain(chip.textContent ?? "");
+  });
+
+  it("marks the What's new entry in the sidebar and the phone Menu, and nothing else", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} hasNews />));
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+
+    for (const nav of [".side-nav", ".menu-sheet"]) {
+      const entry = container.querySelector(`${nav} [data-nav="whats-new"], ${nav} #tab-whats-new`) as HTMLElement;
+      expect(entry.querySelector(".news-dot[aria-hidden='true']"), nav).not.toBeNull();
+      expect(entry.getAttribute("aria-label"), nav).toBe("What\u2019s new, updated since your last visit");
+    }
+    // The chip, plus the entry in each of the two layouts.
+    expect(dotOwners(container)).toHaveLength(3);
+  });
+
+  it("leaves the PR preview tag alone, since it links to the pull request", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} channelBadge="pr-123" hasNews />));
+
+    expect(container.querySelector(".build-tag .news-dot")).toBeNull();
+  });
+
+  it("marks and renames nothing without news", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+
+    expect(container.querySelector(".news-dot")).toBeNull();
+    expect(container.querySelector("#tab-whats-new")?.getAttribute("aria-label")).toBeNull();
+    expect(container.querySelector(".build-tag .sub-link")?.getAttribute("aria-label")).toBeNull();
+  });
+});
+
 describe("Reveal", () => {
   it("drives the CSS slide via hidden + is-open", () => {
     const { container, rerender } = render(<Reveal open={false}>banner</Reveal>);

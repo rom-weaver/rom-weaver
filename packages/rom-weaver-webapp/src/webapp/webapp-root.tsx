@@ -76,7 +76,7 @@ import { WorkflowAbout } from "./components/workflow-about.tsx";
 import type { WorkflowTab } from "./components/shell.tsx";
 // Static, unlike the routes: a deploy that is waiting has already replaced
 // the old hashed chunks on the host, so a lazy banner could no longer load.
-import { UpdateBanner, type UpdateBannerKind } from "./components/update-banner.tsx";
+import { UpdateBanner } from "./components/update-banner.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { runAppearanceTransition } from "./appearance-transition.ts";
@@ -543,13 +543,7 @@ function WebappRoot({
       ? pageUpdate.ready && !updateDismissed
       : previewRuntimeState === "update" && !previewUpdateDismissed;
   const updatedSince = useUpdatedSince(state.currentView);
-  // A waiting deploy takes the banner first; reloading into it announces both updates at once.
-  let updateBannerKind: UpdateBannerKind | null = updatedSince.announce ? "updated" : null;
-  if (updateReadyOpen) updateBannerKind = "ready";
   const dismissUpdateBanner = () => {
-    // The "updated" banner would otherwise replace a dismissed "ready" one, needing a second dismissal.
-    if (updatedSince.announce) updatedSince.acknowledge();
-    if (updateBannerKind === "updated") return;
     if (previewRuntimeState !== null) {
       setPreviewUpdateDismissed(true);
       return;
@@ -1100,6 +1094,7 @@ function WebappRoot({
               onAccentChange={actions.onAccentChange}
               commitsSinceVersion={COMMITS_SINCE_VERSION}
               dirty={Boolean(DIRTY_HASH)}
+              hasNews={updatedSince.announce}
               onOpenWhatsNew={openWhatsNew}
               onOpenAbout={openAboutTab}
               onOpenLog={openLogsTab}
@@ -1119,13 +1114,13 @@ function WebappRoot({
               tabs={mastheadTabs}
             />
             {/* Mounted from the first reason to announce anything, so a closing banner can still slide away. */}
-            {pageUpdate.ready || previewRuntimeState === "update" || updatedSince.since ? (
+            {pageUpdate.ready || previewRuntimeState === "update" ? (
               <UpdateBanner
-                kind={updateBannerKind}
+                hasUnreadUpdate={updatedSince.announce}
                 onDismiss={dismissUpdateBanner}
                 onOpenWhatsNew={openWhatsNew}
                 onReload={actions.onReloadUpdate}
-                since={updatedSince.announce ? updatedSince.since : null}
+                open={updateReadyOpen}
               />
             ) : null}
             <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />

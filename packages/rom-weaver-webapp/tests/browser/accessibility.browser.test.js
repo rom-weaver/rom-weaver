@@ -772,7 +772,7 @@ const openAllDrawers = async (root) => {
 };
 
 // ── Banners ──────────────────────────────────────────────────────────────────
-// Both kinds of the update banner, with a highlight long enough to clamp.
+// The waiting-deploy banner, with a highlight long enough to clamp.
 const BANNER_HIGHLIGHT =
   "The home page's first screen now has a single Choose files button, a link to patch a practice ROM step by step, and a labeled diagram showing how patches are woven into a game";
 const Banners = () =>
@@ -789,13 +789,6 @@ const Banners = () =>
         onReload: noop,
         open: true,
         title: "v0.23.0 is ready",
-      }),
-      createElement(UpdateBannerView, {
-        highlight: BANNER_HIGHLIGHT,
-        onDismiss: noop,
-        onOpenWhatsNew: noop,
-        open: true,
-        title: "Updated from v0.21.0 to v0.22.2",
       }),
     ),
   );
@@ -881,6 +874,15 @@ const DIALOGS = {
 const ModalHost = (node) =>
   createElement(RomWeaverSettingsProvider, { settings: {} }, createElement("div", { className: "rw-app" }, node));
 
+// The dot on the version chip and the What's new entry decorates their names, which then carry the news.
+const unreadNewsMastheadPage = (mastheadProps) => () =>
+  Shell(
+    "patcher",
+    "patcher",
+    createElement(ApplyWorkflowFormView, { controllers: applyControllers(createEmptyPatcherUiState(), []) }),
+    { hasNews: true, ...mastheadProps },
+  );
+
 // Reuse one React root and viewport for all production surfaces at a given
 // theme/width. This keeps every matrix point while avoiding a fresh browser-test
 // setup for each page. The dense apply fixture replaces three overlapping apply
@@ -899,6 +901,12 @@ const WEBAPP_SURFACES = [
     page: true,
   },
   { factory: () => createElement(Banners), name: "update banner" },
+  { factory: unreadNewsMastheadPage({}), name: "masthead with unread news", page: true },
+  {
+    factory: unreadNewsMastheadPage({ channelBadge: "nightly" }),
+    name: "masthead with unread news on a channel build",
+    page: true,
+  },
   ...Object.entries(DIALOGS).map(([name, factory]) => ({
     factory: () => ModalHost(factory()),
     name: `${name} dialog`,

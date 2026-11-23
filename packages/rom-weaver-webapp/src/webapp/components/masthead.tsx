@@ -27,6 +27,7 @@ import { AccentTile, ProjectTiles, SettingsTile, ThemeTile } from "./menu-tools.
 import type { OfflineWarmupDisplayProgress, RuntimeState } from "./runtime-status.tsx";
 import {
   BuildTag,
+  NewsDot,
   HEADER_RUNTIME_MESSAGES,
   RUNTIME_MESSAGES,
   RuntimeGlyph,
@@ -48,6 +49,7 @@ const Masthead = ({
   currentTab,
   docsSlug = "docs",
   dirty,
+  hasNews = false,
   homeHref,
   onSelectTab,
   onOpenWhatsNew,
@@ -79,6 +81,8 @@ const Masthead = ({
   currentTab: string;
   docsSlug?: string;
   dirty?: boolean;
+  /** Unread news: marks the version chip and the What's new entry. */
+  hasNews?: boolean;
   /** Base URL of the app's Home route. */
   homeHref: string;
   onSelectTab: (id: string) => void;
@@ -407,13 +411,16 @@ const Masthead = ({
       label: localizer.message("ui.nav.homeShort"),
       onSelect: () => onSelectTab("home"),
     });
+    const whatsNewLabel = localizer.message("ui.update.whatsNew");
     project.entries.push({
       current: currentTab === "whats-new",
       href: appPathHref("whats-new", homeHref),
       icon: <Newspaper aria-hidden="true" />,
       id: "whats-new",
-      label: localizer.message("ui.update.whatsNew"),
+      label: whatsNewLabel,
       onSelect: () => onSelectTab("whats-new"),
+      title: hasNews ? localizer.message("ui.update.newSinceLastVisit", { name: whatsNewLabel }) : undefined,
+      trailing: hasNews ? <NewsDot /> : undefined,
     });
     if (githubHref) {
       project.entries.push({
@@ -445,6 +452,7 @@ const Masthead = ({
     donateHref,
     docsSlug,
     githubHref,
+    hasNews,
     homeHref,
     localizer,
     onOpenAbout,
@@ -516,6 +524,7 @@ const Masthead = ({
       confirmExternalNavigation={confirmExternalNavigation}
       dirty={dirty}
       githubBaseHref={githubBaseHref}
+      hasNews={hasNews}
       localizer={localizer}
       onOpenWhatsNew={onOpenWhatsNew}
       version={version}

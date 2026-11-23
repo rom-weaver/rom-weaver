@@ -128,7 +128,7 @@ const renderRoot = async ({
   const state = baseState();
   state.settings.detailedViewEnabled = detailedViewEnabled;
   if (language) state.settings.language = language;
-  const root = (confirmationDialog = createEmptyConfirmationDialogState()) => (
+  const root = (confirmationDialog = createEmptyConfirmationDialogState(), view = currentView) => (
     <WebappRoot
       actions={actions}
       workflowEntry={workflowEntry}
@@ -136,7 +136,7 @@ const renderRoot = async ({
       notFound={notFound}
       pageUpdate={getPageUpdateState({ ...createEmptyVitePageUpdateState(), ready: updateReady })}
       serviceWorkerCache={{ ...createServiceWorkerCacheState(), serviceWorkerStatus }}
-      state={{ ...state, currentView, settingsDialogOpen }}
+      state={{ ...state, currentView: view, settingsDialogOpen }}
       urlSession={null}
     />
   );
@@ -144,7 +144,10 @@ const renderRoot = async ({
   /** Re-renders as the controller does after `requestConfirmation`. */
   const rerenderWithConfirmation = (confirmationDialog: WebappRootProps["confirmationDialog"]) =>
     view.rerender(root(confirmationDialog));
-  return { ...view, called, rerenderWithConfirmation };
+  /** Re-renders on another view, as the controller does once the visitor navigates. */
+  const rerenderOnView = (nextView: WebappRootProps["state"]["currentView"]) =>
+    view.rerender(root(createEmptyConfirmationDialogState(), nextView));
+  return { ...view, called, rerenderOnView, rerenderWithConfirmation };
 };
 
 const fileDragEvent = (type: string, target: EventTarget = document, files: File[] = []) => {
@@ -624,13 +627,38 @@ describe("the update banner", () => {
   const LAST_SEEN_KEY = "rom-weaver-last-seen-version";
   const readyBanner = (container: HTMLElement) =>
     container.querySelector(".reveal.is-open .update-banner.update-ready");
-  const updatedBanner = (container: HTMLElement) =>
-    container.querySelector(".reveal.is-open .update-banner:not(.update-ready)");
   // Lets the lazy banner and its changelog fetch settle before asserting it stayed shut.
   const settleBanner = () =>
     act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
+
+  const INCOMING = `${Number.parseInt(APP_VERSION, 10) + 1}.0.0`;
+  const RELOADING_INTO_KEY = "rom-weaver-reloading-into-version";
+  const reloadIntoWaitingDeploy = async () => {
+    mocks.fetchChangelog.mockResolvedValue({
+      json: () =>
+        Promise.resolve([
+          {
+            date: "2026-07-29T00:00:00Z",
+            hash: "release",
+            release: {
+              changelogUrl: "https://github.com/rom-weaver/rom-weaver/blob/main/CHANGELOG.md",
+              notes: [{ groups: [{ entries: [{ summary: "Incoming" }], title: "Highlights" }], version: INCOMING }],
+              repositoryUrl: "https://github.com/rom-weaver/rom-weaver",
+              truncated: false,
+              version: INCOMING,
+            },
+            subject: "release",
+          },
+        ]),
+      ok: true,
+    });
+    const { called, container } = await renderRoot({ updateReady: true });
+    await waitFor(() => expect(readyBanner(container)?.textContent).toContain(`v${INCOMING} is ready`));
+    fireEvent.click(within(container).getByRole("button", { name: "Reload" }));
+    expect(called("onReloadUpdate")).toHaveBeenCalledTimes(1);
+  };
 
   describe("with a deploy waiting", () => {
     it("remembers a dismissal for this build", async () => {
@@ -655,6 +683,12 @@ describe("the update banner", () => {
       expect(readyBanner(second.container)).toBeNull();
     });
 
+    it("records the incoming release when reloading, so the next load needs no second announcement", async () => {
+      await reloadIntoWaitingDeploy();
+
+      expect(window.localStorage.getItem(RELOADING_INTO_KEY)).toBe(INCOMING);
+    });
+
     it("sends See what's new to the whats-new route", async () => {
       const { called, container } = await renderRoot({ updateReady: true });
       await waitFor(() => expect(readyBanner(container)).not.toBeNull());
@@ -670,47 +704,89 @@ describe("the update banner", () => {
       window.localStorage.setItem(LAST_SEEN_KEY, "0.0.1");
     });
 
-    it("tells a returning visitor what changed and opens What's new", async () => {
-      const { called, container } = await renderRoot();
+    it("leaves the unread update to mark the next load when reloading into a waiting deploy", async () => {
+      await reloadIntoWaitingDeploy();
 
-      await waitFor(() => expect(updatedBanner(container)?.textContent).toContain("Shiny highlight"));
-      fireEvent.click(within(container).getByRole("button", { name: "See what’s new" }));
-
-      await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+      expect(window.localStorage.getItem(RELOADING_INTO_KEY)).toBeNull();
     });
 
-    it("records the running version once dismissed", async () => {
-      const { container } = await renderRoot();
-      await waitFor(() => expect(updatedBanner(container)).not.toBeNull());
-
-      fireEvent.click(updatedBanner(container)?.querySelector(".banner-x") as HTMLButtonElement);
-
-      expect(updatedBanner(container)).toBeNull();
-      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION);
-    });
-
-    it("counts reading What's new as seeing the update", async () => {
-      const { container } = await renderRoot({ currentView: "whats-new" });
-
-      await waitFor(() => expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION));
-      await settleBanner();
-      expect(updatedBanner(container)).toBeNull();
-    });
-
-    it("waits behind a deploy that is ready to load, and one dismissal closes both", async () => {
+    it("keeps a waiting deploy's dismissal from clearing the news", async () => {
       const { container } = await renderRoot({ updateReady: true });
       await waitFor(() => expect(readyBanner(container)).not.toBeNull());
-
-      expect(updatedBanner(container)).toBeNull();
-      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe("0.0.1");
 
       fireEvent.click(readyBanner(container)?.querySelector(".banner-x") as HTMLButtonElement);
 
       await settleBanner();
       expect(readyBanner(container)).toBeNull();
-      expect(updatedBanner(container)).toBeNull();
-      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION);
+      expect(container.querySelector(".news-dot")).not.toBeNull();
+      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe("0.0.1");
     });
+  });
+});
+
+describe("the news dot", () => {
+  const LAST_SEEN_KEY = "rom-weaver-last-seen-version";
+  // The dot marks the version chip and the What's new entry, which the sidebar and the phone Menu each render.
+  const dotOwners = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll(".news-dot")).map((dot) => dot.parentElement as HTMLElement);
+  const isChip = (element: HTMLElement) => element.matches(".build-tag button");
+  const isWhatsNewEntry = (element: HTMLElement) =>
+    element.matches(".nav-row") && (element.dataset.nav === "whats-new" || element.id === "tab-whats-new");
+
+  it("marks the version chip and the What's new entry for a returning visitor on a newer release", async () => {
+    window.localStorage.setItem(LAST_SEEN_KEY, "0.0.1");
+    const { container } = await renderRoot();
+
+    await waitFor(() => expect(container.querySelector(".news-dot")).not.toBeNull());
+
+    const owners = dotOwners(container);
+    expect(owners.length).toBeGreaterThanOrEqual(2);
+    expect(owners.every((owner) => isChip(owner) || isWhatsNewEntry(owner))).toBe(true);
+    expect(owners.some(isChip)).toBe(true);
+    expect(owners.some(isWhatsNewEntry)).toBe(true);
+    expect(container.querySelector(".update-banner")).toBeNull();
+    expect(container.querySelector(".news-dot[aria-hidden='true']")).not.toBeNull();
+  });
+
+  it("says the news in the names of the chip and the entry, not through the dot", async () => {
+    window.localStorage.setItem(LAST_SEEN_KEY, "0.0.1");
+    const { container } = await renderRoot();
+    await waitFor(() => expect(container.querySelector(".news-dot")).not.toBeNull());
+
+    const chip = container.querySelector(".build-tag button") as HTMLElement;
+    const entry = navRow(container, "What’s new");
+
+    expect(chip.getAttribute("aria-label")).toMatch(/, updated since your last visit$/);
+    expect(chip.getAttribute("aria-label")).toContain(chip.textContent ?? "");
+    expect(entry.getAttribute("aria-label")).toBe("What’s new, updated since your last visit");
+    expect(container.querySelectorAll(".news-dot").length).toBe(
+      container.querySelectorAll(".news-dot[aria-hidden]").length,
+    );
+  });
+
+  it("is gone once What's new is open, and the visit is recorded", async () => {
+    window.localStorage.setItem(LAST_SEEN_KEY, "0.0.1");
+    const { container, rerenderOnView } = await renderRoot();
+    await waitFor(() => expect(container.querySelector(".news-dot")).not.toBeNull());
+
+    rerenderOnView("whats-new");
+
+    await waitFor(() => expect(container.querySelector(".news-dot")).toBeNull());
+    expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION);
+    expect(navRow(container, "What’s new").getAttribute("aria-label")).toBeNull();
+
+    rerenderOnView("patcher");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(container.querySelector(".news-dot")).toBeNull();
+  });
+
+  it("shows nothing on a first visit", async () => {
+    const { container } = await renderRoot();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(container.querySelector(".news-dot")).toBeNull();
+    expect(container.querySelector(".update-banner")).toBeNull();
+    expect(navRow(container, "What’s new").getAttribute("aria-label")).toBeNull();
   });
 });
 

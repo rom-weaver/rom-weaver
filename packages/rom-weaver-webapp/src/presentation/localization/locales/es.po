@@ -6090,13 +6090,8 @@ msgstr "Actualización lista"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.update.updatedFrom"
-msgstr "Actualizado de v{from} a v{to}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.update.updatedTo"
-msgstr "Actualizado a v{version}"
+msgid "ui.update.newSinceLastVisit"
+msgstr "{name}, actualizado desde tu última visita"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -278,6 +278,42 @@
   text-decoration-color: currentColor;
 }
 
+/* ── the news dot ──
+   Marks the controls that open What's new while there is unread news. It is
+   painted over a corner of the control and takes no space, so the version chip
+   and the nav row keep their size and position. It does not animate, so it needs
+   no reduced-motion rule. */
+.rw-app .news-dot {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-end: -5px;
+  width: 7px;
+  height: 7px;
+  pointer-events: none;
+  background: var(--thread);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--plate);
+}
+/* On a nav row the dot sits on the icon's top corner. */
+.rw-app .nav-row:has(> .news-dot) {
+  position: relative;
+}
+.rw-app .nav-row > .news-dot {
+  inset-block-start: 6px;
+  inset-inline-start: 21px;
+  inset-inline-end: auto;
+}
+.rw-app #menu-sheet .nav-row > .news-dot {
+  inset-block-start: 3px;
+  inset-inline-start: calc(50% + 8px);
+}
+@media (forced-colors: active) {
+  .rw-app .news-dot {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+}
+
 /* The parser-time resolver MUST retain the status and text class hooks. */
 .rw-app .sub-status {
   display: inline-flex;
