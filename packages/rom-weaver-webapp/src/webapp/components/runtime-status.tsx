@@ -357,7 +357,7 @@ const CHANNEL_MESSAGES: Record<string, MessageId> = {
 // Hydration happens once per page, so the hydration check needs no subscription.
 const subscribeNever = () => () => undefined;
 
-/** Marks a control that opens What's new while there is unread news. The control's name carries the words. */
+/** Marks a control that leads to What's new while there is unread news. The control's name carries the words. */
 const NewsDot = () => <span aria-hidden="true" className="news-dot" />;
 
 type BuildTagLinks = {

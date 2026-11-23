@@ -17,6 +17,7 @@ import { DocsNavigation } from "../docs-navigation.tsx";
 import { BrandMark } from "./brand-mark.tsx";
 import { FIND_SHORTCUT_HINT, FindPalette } from "./find-palette.tsx";
 import type { FindAction } from "../find-index.ts";
+import type { Localizer } from "../../presentation/localization/index.ts";
 import type { RomLookupSelection } from "../../public/react/use-rom-lookup.ts";
 import { useRomWeaverSettings, useUiLocalizer } from "../../public/react/settings-context.tsx";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
@@ -40,6 +41,15 @@ import {
   resolveRuntimeState,
   useHydratedServiceWorkerStatus,
 } from "./runtime-status.tsx";
+
+/** The dock Menu slot's extra name and dot while unread news waits. */
+const dockMenuNews = (hasNews: boolean, localizer: Localizer) =>
+  hasNews
+    ? {
+        mark: <NewsDot />,
+        title: localizer.message("ui.update.newSinceLastVisit", { name: localizer.message("ui.tools.menu") }),
+      }
+    : undefined;
 
 const Masthead = ({
   channelBadge,
@@ -720,6 +730,7 @@ const Masthead = ({
         current={currentTab}
         menuControls="menu-sheet"
         menuLabel={localizer.message("ui.tools.menu")}
+        menuNews={dockMenuNews(hasNews, localizer)}
         menuOpen={menuOpen}
         navLabel={navLabel}
         onSelect={onSelectTab}

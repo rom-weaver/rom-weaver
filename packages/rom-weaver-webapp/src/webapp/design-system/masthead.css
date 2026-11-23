@@ -279,7 +279,7 @@
 }
 
 /* ── the news dot ──
-   Marks the controls that open What's new while there is unread news. It overlays
+   Marks the controls that lead to What's new while there is unread news. It overlays
    a corner and takes no space, so the controls keep their size and position. It
    does not animate, so it needs no reduced-motion rule. */
 .rw-app .news-dot {
@@ -302,9 +302,12 @@
   inset-inline-start: 21px;
   inset-inline-end: auto;
 }
-.rw-app #menu-sheet .nav-row > .news-dot {
+/* A Menu tile and the dock's Menu slot stack the icon over the label. */
+.rw-app #menu-sheet .nav-row > .news-dot,
+.rw-app .dock-menu > .news-dot {
   inset-block-start: 3px;
   inset-inline-start: calc(50% + 8px);
+  inset-inline-end: auto;
 }
 @media (forced-colors: active) {
   .rw-app .news-dot {

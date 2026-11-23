@@ -211,6 +211,7 @@ const PhoneDock = ({
   current,
   menuControls,
   menuLabel,
+  menuNews,
   menuOpen,
   navLabel,
   onSelect,
@@ -223,6 +224,8 @@ const PhoneDock = ({
   /** The sheet the Menu slot opens; the settings console's copy of the dock has none. */
   menuControls?: string;
   menuLabel: string;
+  /** The Menu slot's extra accessible name and its mark, used while the slot reads Menu. */
+  menuNews?: { mark: ReactNode; title: string };
   menuOpen: boolean;
   navLabel: string;
   onSelect: (id: string) => void;
@@ -244,6 +247,7 @@ const PhoneDock = ({
     </a>
   );
   const menuText = menuOpen ? closeLabel : menuLabel;
+  const news = menuOpen ? undefined : menuNews;
 
   return (
     <nav aria-label={navLabel} className="dock">
@@ -251,7 +255,7 @@ const PhoneDock = ({
       <button
         aria-controls={menuControls}
         aria-expanded={menuOpen}
-        aria-label={menuText}
+        aria-label={news?.title ?? menuText}
         className="dock-tab dock-menu"
         onClick={onToggleMenu}
         ref={triggerRef}
@@ -259,6 +263,7 @@ const PhoneDock = ({
       >
         {menuOpen ? <X aria-hidden="true" /> : <TextSearch aria-hidden="true" />}
         <span>{menuText}</span>
+        {news?.mark}
       </button>
     </nav>
   );

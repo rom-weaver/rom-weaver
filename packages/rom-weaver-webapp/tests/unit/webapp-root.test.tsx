@@ -707,20 +707,22 @@ describe("the news dot", () => {
   const dotOwners = (container: HTMLElement) =>
     Array.from(container.querySelectorAll(".news-dot")).map((dot) => dot.parentElement as HTMLElement);
   const isChip = (element: HTMLElement) => element.matches(".build-tag button");
+  const isDockMenu = (element: HTMLElement) => element.matches(".dock-menu");
   const isWhatsNewEntry = (element: HTMLElement) =>
     element.matches(".nav-row") && (element.dataset.nav === "whats-new" || element.id === "tab-whats-new");
 
-  it("marks the version chip and the What's new entry for a returning visitor on a newer release", async () => {
+  it("marks the version chip, the What's new entry and the phone Menu for a returning visitor on a newer release", async () => {
     window.localStorage.setItem(LAST_SEEN_KEY, "0.0.1");
     const { container } = await renderRoot();
 
     await waitFor(() => expect(container.querySelector(".news-dot")).not.toBeNull());
 
     const owners = dotOwners(container);
-    expect(owners.length).toBeGreaterThanOrEqual(2);
-    expect(owners.every((owner) => isChip(owner) || isWhatsNewEntry(owner))).toBe(true);
+    expect(owners.length).toBeGreaterThanOrEqual(3);
+    expect(owners.every((owner) => isChip(owner) || isWhatsNewEntry(owner) || isDockMenu(owner))).toBe(true);
     expect(owners.some(isChip)).toBe(true);
     expect(owners.some(isWhatsNewEntry)).toBe(true);
+    expect(owners.some(isDockMenu)).toBe(true);
     expect(container.querySelector(".update-banner")).toBeNull();
     expect(container.querySelector(".news-dot[aria-hidden='true']")).not.toBeNull();
   });
