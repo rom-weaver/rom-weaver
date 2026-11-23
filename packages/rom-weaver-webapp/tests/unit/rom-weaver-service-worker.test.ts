@@ -1121,6 +1121,55 @@ describe("navigation requests", () => {
     expect(fetchedUrls(harness)).toEqual([GUIDE_URL]);
   });
 
+  it("serves a newer network page whose body arrived while its runtime cache write is unfinished", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
+    const release = holdPrecacheUntilReleased(guideEntries());
+    harness.fetchStub.handlers.set(GUIDE_URL, () => new Response("deployed guide", { status: 200 }));
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/build-info.js`, () => new Response("deployed", { status: 200 }));
+    const runtime = await harness.cacheStorage.open(RUNTIME_CACHE_NAME);
+    const put = runtime.put.bind(runtime);
+    let finishWrite: () => void = () => undefined;
+    const writeHeld = new Promise<void>((resolve) => {
+      finishWrite = resolve;
+    });
+    vi.spyOn(runtime, "put").mockImplementation(async (request, response) => {
+      await writeHeld;
+      await put(request, response);
+    });
+
+    const pending = navigateToGuide(harness);
+    await flushMicrotasks();
+    release();
+    await flushMicrotasks();
+    finishWrite();
+    const response = await pending;
+
+    await expect(response.text()).resolves.toBe("deployed guide");
+    await expect((await requestBuildInfo(harness)).text()).resolves.toBe("deployed");
+  });
+
+  it("serves the re-rooted precached page under a sub-path scope when the network sends the page as built", async () => {
+    const scope = `${APP_ORIGIN}/rom-weaver/`;
+    const builtGuide = '<base href="../../" /><a href="/docs">Docs</a>';
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [], scope });
+    const release = holdPrecacheUntilReleased({
+      ...guideEntries(),
+      "docs/guide/index.html": () => new Response(builtGuide, { status: 200 }),
+    });
+    harness.fetchStub.handlers.set(
+      `${scope}docs/guide`,
+      () => new Response(builtGuide, { headers: { "x-source": "network" }, status: 200 }),
+    );
+
+    const pending = routed(harness, harness.networkFirstRoute, asNavigationRequest(`${scope}docs/guide`), fetchEvent());
+    await flushMicrotasks();
+    release();
+    const response = await pending;
+
+    await expect(response.text()).resolves.toBe('<base href="/rom-weaver/" /><a href="/rom-weaver/docs">Docs</a>');
+    expect(response.headers.get("x-source")).toBeNull();
+  });
+
   it("serves the precached page at once while the network is pending, then refreshes the runtime cache", async () => {
     const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
     setPrecache(guideEntries());

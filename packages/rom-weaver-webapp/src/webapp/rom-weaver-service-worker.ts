@@ -574,13 +574,16 @@ const rerootDocument = async (response: Response | undefined, status = response?
   return new Response(rerooted, { headers, status, statusText });
 };
 
-const matchRouteDocument = async (url: URL) => {
+// A route's page as the build wrote it, which is also what the host sends for the path.
+const matchBuiltRouteDocument = async (url: URL) => {
   for (const candidate of routeDocumentCandidates(scopePath(url.pathname))) {
     const response = (await matchPrecache(candidate)) ?? (await deferredPrecache.match(candidate));
-    if (response) return await rerootDocument(response);
+    if (response) return response;
   }
   return undefined;
 };
+
+const matchRouteDocument = async (url: URL) => await rerootDocument(await matchBuiltRouteDocument(url));
 
 // The offline answer for a path this build lacks: the 404 page at the same URL. It is precached from a 200.
 const notFoundDocument = async () => await rerootDocument(await matchPrecache("404.html"), 404);
@@ -620,12 +623,18 @@ const redirectSourcePaths = new Set(typeof __REDIRECT_SOURCE_PATHS__ === "undefi
 const isRedirectSourcePath = (pathname: string) =>
   typeof __REDIRECT_SOURCE_PATHS__ === "undefined" || redirectSourcePaths.has(pathname);
 
-const matchPrecachedNavigation = async (url: URL) => {
+const matchBuiltNavigation = async (url: URL) => {
   const pathname = scopePath(url.pathname);
   if (!offlineCopyRequestedEnabled || isRedirectSourcePath(pathname)) return undefined;
   if (pathname === "/") return await matchPrecache("index.html");
-  return await matchRouteDocument(url);
+  return await matchBuiltRouteDocument(url);
 };
+
+// The scope root's page is served as built; a route's page is re-rooted under a sub-path scope.
+const rerootNavigation = async (url: URL, built: Response | undefined) =>
+  scopePath(url.pathname) === "/" ? built : await rerootDocument(built);
+
+const matchPrecachedNavigation = async (url: URL) => await rerootNavigation(url, await matchBuiltNavigation(url));
 
 const waitUntilEvent = (event: unknown, promise: Promise<unknown>) => {
   const waitUntil = (event as { waitUntil?: (promise: Promise<unknown>) => void } | undefined)?.waitUntil;
@@ -666,46 +675,45 @@ const awaitNetworkDocument = async (fetching: Promise<Response>, event: unknown)
 
 const NETWORK_TIMED_OUT = Symbol("network-timed-out");
 
-// A network answer a cached page may be compared with: its whole body, kept apart from the response to serve.
-type NetworkDocument = { bytes: ArrayBuffer; response: Response };
-
 type NavigationFetch = {
-  // Settles once the whole body has arrived. Undefined for a failure, a non-2xx status or a redirect.
-  document: Promise<NetworkDocument | undefined>;
+  // The whole body of a 2xx answer that was not redirected, once it has arrived. Undefined for any other outcome.
+  body: Promise<ArrayBuffer | undefined>;
   fetching: Promise<Response>;
+  // Settles once the request and its runtime cache write are over. A failure is logged, never thrown.
+  finished: Promise<void>;
   headers: Promise<void>;
 };
 
 const preloadResponseOf = (event: unknown) =>
   (event as { preloadResponse?: Promise<Response | undefined> } | undefined)?.preloadResponse;
 
-const readNetworkDocument = async (fetching: Promise<Response>, isUsable: () => boolean) => {
-  try {
-    const response = await fetching;
-    if (!isUsable()) return undefined;
-    return { bytes: await response.clone().arrayBuffer(), response };
-  } catch (err) {
-    logServiceWorker("navigation network response unavailable", { error: formatError(err) });
-    return undefined;
-  }
-};
-
 // The one network request for a navigation: the browser's preload when it has one, else a fetch.
 const startNavigationFetch = (request: Request, event: unknown): NavigationFetch => {
   let headersArrived: () => void = () => undefined;
-  let isUsableDocument = false;
+  let bodyStarted: (body: Promise<ArrayBuffer> | undefined) => void = () => undefined;
   const headers = new Promise<void>((resolve) => {
     headersArrived = resolve;
   });
+  const body = new Promise<ArrayBuffer | undefined>((resolve) => {
+    bodyStarted = resolve;
+  });
   const fetching = fetchAndUpdateCache(request, {
-    // `redirected` is lost once the response is re-wrapped with isolation headers, so judge it here.
+    // The raw response: re-wrapping it with isolation headers loses `redirected`, and reading the body
+    // here keeps the race from waiting on the runtime cache write.
     onHeaders: (response) => {
-      isUsableDocument = response.ok && !response.redirected;
+      bodyStarted(response.ok && !response.redirected ? response.clone().arrayBuffer() : undefined);
       headersArrived();
     },
     preload: preloadResponseOf(event),
   });
-  return { document: readNetworkDocument(fetching, () => isUsableDocument), fetching, headers };
+  const finished = fetching.then(
+    () => undefined,
+    (err: unknown) => {
+      logServiceWorker("navigation network response unavailable", { error: formatError(err) });
+      bodyStarted(undefined);
+    },
+  );
+  return { body: body.catch(() => undefined), fetching, finished, headers };
 };
 
 // The timeout covers the time to the response headers only. Once they arrive the network has
@@ -749,40 +757,40 @@ const hasSameBytes = (left: ArrayBuffer, right: ArrayBuffer) => {
 
 // A precached page is only safe without the network when every file it names is cached: the host drops
 // old hashed files after a deploy, and deferred files download after the documents (never on data saver).
+// `built` is the page as the host sends it. `served` is this worker's answer, made from a clone so the
+// built body stays readable.
 const matchCompleteOfflineNavigation = async (url: URL) => {
-  const document = await matchPrecachedNavigation(url);
-  if (!document) return undefined;
+  const built = await matchBuiltNavigation(url);
+  if (!built) return undefined;
   if (!(await isOfflineCopyComplete())) return undefined;
   const credentialless = await ensureCoepModeHydrated();
-  return withCrossOriginIsolationHeaders(document, credentialless) || document;
-};
-
-// The network answered first with a usable page. An identical body means the same build, so the precached
-// page (and its build-info.js) serves; a different one is a newer deploy, which brings its own build-info.js.
-const settleRaceWonByNetwork = async (precached: Response, network: NetworkDocument, event: unknown) => {
-  const isSameBuild = hasSameBytes(network.bytes, await precached.clone().arrayBuffer());
-  recordDocumentSource(event, { network: !isSameBuild });
-  return isSameBuild ? precached : network.response;
+  const page = await rerootNavigation(url, built.clone());
+  if (!page) return undefined;
+  return { built, served: withCrossOriginIsolationHeaders(page, credentialless) || page };
 };
 
 // Races the network against a complete precached page without ever waiting on the network once the
-// cache is ready. Production documents have no ETag and an unstable Last-Modified, so bodies are compared.
+// cache is ready. Production documents have no ETag and an unstable Last-Modified, so bodies are compared:
+// an identical body is the same build, which the precached page and its build-info.js serve, and a
+// different one is a newer deploy, which brings its own build-info.js.
 const respondToTopLevelNavigation = async (request: Request, url: URL, event: unknown) => {
   const network = startNavigationFetch(request, event);
-  const race: { document?: NetworkDocument; isNetworkSettled: boolean } = { isNetworkSettled: false };
-  void network.document.then((document) => {
-    race.document = document;
+  const race: { body?: ArrayBuffer; isNetworkSettled: boolean } = { isNetworkSettled: false };
+  void network.body.then((body) => {
+    race.body = body;
     race.isNetworkSettled = true;
   });
   const precached = await matchCompleteOfflineNavigation(url);
   if (!precached) return await fetchWithNavigationTimeout(network, request, url, event);
-  if (race.document) return await settleRaceWonByNetwork(precached, race.document, event);
+  if (race.body && !hasSameBytes(race.body, await precached.built.arrayBuffer())) {
+    return await awaitNetworkDocument(network.fetching, event);
+  }
   if (!race.isNetworkSettled) {
-    waitUntilEvent(event, network.document);
     logServiceWorker("navigation served from the offline copy before the network answered", { url: url.href });
   }
+  waitUntilEvent(event, network.finished);
   recordDocumentSource(event, { network: false });
-  return precached;
+  return precached.served;
 };
 
 registerRoute(
