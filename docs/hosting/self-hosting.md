@@ -212,6 +212,8 @@ The service worker precaches the build, checks for updates, and can serve same-o
 
 On first install, the worker claims the app and the client may reload once to gain control and establish isolation. The boot gate retries a stalled controlled-but-unisolated page only within a bounded budget, then releases the page instead of reloading forever. If `crossOriginIsolated` is still false, the threaded WASM runtime will not be available; fix the response headers, HTTPS trust, service-worker scope, or browser support rather than treating the fallback as equivalent to a correctly configured deployment.
 
+A new build's worker installs in the background and takes over at once. Open tabs keep running the build they loaded. A reload or a new tab gets the new build. The worker keeps the old build's changed files so those tabs still load them. It deletes them on a page load while no other app tab is open. A tab that still fails to load one of them offers a reload.
+
 ## Host integration
 
 To preload remote sources or files already stored in same-origin OPFS, use the [webapp integration APIs](webapp-integration.md).

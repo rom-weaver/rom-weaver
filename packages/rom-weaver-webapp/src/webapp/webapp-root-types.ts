@@ -59,8 +59,6 @@ type WebappRootProps = {
     label: string;
     serviceWorkerStatus: ServiceWorkerStatus | null;
     title: string;
-    updateLabel: string;
-    updateReady: boolean;
   };
   pageUpdate: PageUpdateState;
   confirmationDialog: ConfirmationDialogState;

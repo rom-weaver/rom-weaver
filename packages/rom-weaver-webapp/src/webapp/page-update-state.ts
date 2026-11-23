@@ -1,13 +1,8 @@
-import type { ServiceWorkerCacheState } from "./pwa/service-worker-cache-state.ts";
-
 const PAGE_UPDATE_LABEL = "Reload to update";
-
-type PageUpdateSource = "service-worker" | "vite";
 
 type PageUpdateState = {
   ready: boolean;
   label: string;
-  source: PageUpdateSource | null;
 };
 
 type VitePageUpdateState = {
@@ -23,7 +18,6 @@ type ViteReloadAvailablePayload = {
 const createEmptyPageUpdateState = (): PageUpdateState => ({
   label: PAGE_UPDATE_LABEL,
   ready: false,
-  source: null,
 });
 
 const createEmptyVitePageUpdateState = (): VitePageUpdateState => ({
@@ -36,23 +30,10 @@ const createVitePageUpdateState = (payload?: ViteReloadAvailablePayload): VitePa
   versionLabel: typeof payload?.label === "string" ? payload.label : "",
 });
 
-const createReadyPageUpdateState = (source: PageUpdateSource): PageUpdateState => ({
+const getPageUpdateState = ({ ready }: Pick<VitePageUpdateState, "ready">): PageUpdateState => ({
   ...createEmptyPageUpdateState(),
-  ready: true,
-  source,
+  ready,
 });
-
-const getPageUpdateState = ({
-  serviceWorkerCache,
-  vite,
-}: {
-  serviceWorkerCache: Pick<ServiceWorkerCacheState, "updateReady">;
-  vite: VitePageUpdateState;
-}): PageUpdateState => {
-  if (serviceWorkerCache.updateReady) return createReadyPageUpdateState("service-worker");
-  if (vite.ready) return createReadyPageUpdateState("vite");
-  return createEmptyPageUpdateState();
-};
 
 export {
   createEmptyPageUpdateState,

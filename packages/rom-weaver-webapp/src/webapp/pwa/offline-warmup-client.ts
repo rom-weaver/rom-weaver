@@ -24,6 +24,7 @@ type OfflinePrecacheProgress = OfflineReadyState & { phase: "precache" };
 
 type ServiceWorkerContainerLike = {
   controller: ServiceWorker | null;
+  getRegistration?: () => Promise<Pick<ServiceWorkerRegistration, "installing" | "waiting"> | undefined>;
   addEventListener?: {
     (type: "controllerchange", listener: () => void): void;
     (type: "message", listener: (event: MessageEvent) => void): void;
@@ -270,6 +271,7 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
   let policyChain = Promise.resolve(false);
   let requestController = new AbortController();
   let observedController = serviceWorker.controller;
+  let watchedUpdate: ServiceWorker | null = null;
   let docImageFormatPromise: ReturnType<typeof detectDocsImageFormat> | null = null;
 
   const synchronizePolicy = () => {
@@ -337,6 +339,23 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
       signal.addEventListener("abort", done, { once: true });
     });
 
+  // An installed update activates once the controlling worker stops, and any message restarts that
+  // worker for its full idle timeout. Pumps wait until the update takes control, which restarts the
+  // loop through controllerchange, or fails to install.
+  const isUpdateInstalling = async () => {
+    const registration = await serviceWorker.getRegistration?.();
+    const update = registration?.installing ?? registration?.waiting;
+    if (!update) return false;
+    if (watchedUpdate !== update) {
+      watchedUpdate = update;
+      update.addEventListener("statechange", () => {
+        if (update.state === "redundant") void runLoop();
+      });
+    }
+    logger.debug("offline warm-up paused; a service worker update is installing", { state: update.state });
+    return true;
+  };
+
   const runLoop = async () => {
     if (loopRunning) return;
     loopRunning = true;
@@ -354,7 +373,14 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
             pauseCount,
           });
         }
-        if (signal.aborted || !offlineCopyState.enabled || loopGeneration !== generation) return;
+        if (
+          (await isUpdateInstalling()) ||
+          signal.aborted ||
+          !offlineCopyState.enabled ||
+          loopGeneration !== generation
+        ) {
+          return;
+        }
         if (nav?.onLine === false) {
           // Nothing can download offline. The loop exits; the online listener
           // and any bump restart it.

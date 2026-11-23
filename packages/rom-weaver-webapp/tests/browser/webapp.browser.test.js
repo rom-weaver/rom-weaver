@@ -100,8 +100,6 @@ const createServiceWorkerCacheState = () => ({
   label: "Offline cache unavailable",
   serviceWorkerStatus: null,
   title: "",
-  updateLabel: "Reload to update",
-  updateReady: false,
 });
 
 const createWebappState = (settings = getDefaultSettings(), currentView = "patcher", overrides = {}) => ({

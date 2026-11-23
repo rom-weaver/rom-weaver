@@ -91,10 +91,7 @@ const renderLandingShellHtml = async (
       docsSlug,
       workflowEntry,
       notFound,
-      pageUpdate: getPageUpdateState({
-        serviceWorkerCache: { updateReady: false },
-        vite: createEmptyVitePageUpdateState(),
-      }),
+      pageUpdate: getPageUpdateState(createEmptyVitePageUpdateState()),
       serviceWorkerCache: createServiceWorkerCacheState(),
       state,
       urlSession: null,

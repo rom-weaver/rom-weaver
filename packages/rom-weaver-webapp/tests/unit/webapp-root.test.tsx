@@ -134,11 +134,8 @@ const renderRoot = async ({
       workflowEntry={workflowEntry}
       confirmationDialog={confirmationDialog}
       notFound={notFound}
-      pageUpdate={getPageUpdateState({
-        serviceWorkerCache: { updateReady },
-        vite: createEmptyVitePageUpdateState(),
-      })}
-      serviceWorkerCache={{ ...createServiceWorkerCacheState(), serviceWorkerStatus, updateReady }}
+      pageUpdate={getPageUpdateState({ ...createEmptyVitePageUpdateState(), ready: updateReady })}
+      serviceWorkerCache={{ ...createServiceWorkerCacheState(), serviceWorkerStatus }}
       state={{ ...state, currentView, settingsDialogOpen }}
       urlSession={null}
     />
@@ -388,10 +385,7 @@ describe("the workbench shell", () => {
         actions={actions}
         confirmationDialog={createEmptyConfirmationDialogState()}
         docsSlug={docsSlug}
-        pageUpdate={getPageUpdateState({
-          serviceWorkerCache: { updateReady: false },
-          vite: createEmptyVitePageUpdateState(),
-        })}
+        pageUpdate={getPageUpdateState(createEmptyVitePageUpdateState())}
         serviceWorkerCache={createServiceWorkerCacheState()}
         state={{ ...baseState(), currentView }}
         urlSession={null}
@@ -409,10 +403,7 @@ describe("the workbench shell", () => {
         actions={actions}
         confirmationDialog={createEmptyConfirmationDialogState()}
         notFound
-        pageUpdate={getPageUpdateState({
-          serviceWorkerCache: { updateReady: false },
-          vite: createEmptyVitePageUpdateState(),
-        })}
+        pageUpdate={getPageUpdateState(createEmptyVitePageUpdateState())}
         serviceWorkerCache={createServiceWorkerCacheState()}
         state={baseState()}
         urlSession={null}
@@ -1298,10 +1289,7 @@ it("keeps a safety confirmation open when agent approval finishes", () => {
     actions,
     confirmationDialog,
     notFound: true,
-    pageUpdate: getPageUpdateState({
-      serviceWorkerCache: { updateReady: false },
-      vite: createEmptyVitePageUpdateState(),
-    }),
+    pageUpdate: getPageUpdateState(createEmptyVitePageUpdateState()),
     serviceWorkerCache: createServiceWorkerCacheState(),
     state: baseState(),
   };

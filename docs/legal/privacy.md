@@ -27,7 +27,7 @@ Files stay in browser memory or browser storage while you work, and are gone onc
 The app keeps a few things locally so it works across reloads and can handle files too big to hold in memory:
 
 - **Local storage**: your preferences, such as theme and settings, plus update state and a short recent log.
-- **Session storage**: coordinates service-worker and security-mode reloads, update prompts, and the docs shelf state for the current tab.
+- **Session storage**: coordinates service-worker and security-mode reloads, and the docs shelf state for the current tab.
 - **Cache storage**: the app's own files, so it loads fast and works offline.
 - **IndexedDB**: emulator save states, SRAM, and the kept-ROM index. Saves and kept ROMs share the ROM's SHA-1 key. File names are display labels. The app does not store a play history.
 - **Origin Private File System**: temporary working files and outputs, plus ROMs explicitly kept from Test.

@@ -159,6 +159,7 @@ export default defineConfig(({ command, mode }) => {
           },
         },
         manifest: false,
+        // The worker takes over by itself. "autoUpdate" would also reload every open page when it does.
         registerType: "prompt",
         srcDir: SERVICE_WORKER_SOURCE_DIR,
         strategies: "injectManifest",

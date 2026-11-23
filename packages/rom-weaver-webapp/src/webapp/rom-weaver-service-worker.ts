@@ -8,7 +8,13 @@ const SOURCE_MODULE_EXTENSION_REGEX = /\.(?:[cm]?js|jsx|ts|tsx|css)$/i;
 
 import { cacheNames, setCacheNameDetails } from "workbox-core";
 import type { WorkboxPlugin } from "workbox-core/types.js";
-import { addPlugins, cleanupOutdatedCaches, matchPrecache, precacheAndRoute } from "workbox-precaching";
+import {
+  addPlugins,
+  cleanupOutdatedCaches,
+  getCacheKeyForURL,
+  matchPrecache,
+  precacheAndRoute,
+} from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION } from "./build-version.ts";
 import { createOfflineWarmup } from "./offline-warmup.ts";
@@ -77,11 +83,12 @@ const EMULATORJS_CACHE_PREFIX = `${MANAGED_CACHE_PREFIX}emulatorjs-`;
 const EMULATORJS_CACHE_NAME = `${EMULATORJS_CACHE_PREFIX}${__EMULATORJS_VERSION__}`;
 const IDENTIFY_OPTIONAL_CACHE_NAME = `${MANAGED_CACHE_PREFIX}identify-optional`;
 const DEFERRED_CACHE_NAME = `${MANAGED_CACHE_PREFIX}app-deferred`;
+const OUTGOING_BUILD_CACHE_NAME = `${MANAGED_CACHE_PREFIX}outgoing-build`;
 const OFFLINE_POLICY_CACHE_NAME = `${MANAGED_CACHE_PREFIX}offline-policy`;
 const offlineCopyPolicy = createOfflineCopyPolicy(OFFLINE_POLICY_CACHE_NAME, self.registration.scope);
 const docsImagePolicy = createDocsImagePolicy(OFFLINE_POLICY_CACHE_NAME, self.registration.scope);
 const CACHE_POLICY = createServiceWorkerCachePolicy({
-  additionalCacheNames: [DEFERRED_CACHE_NAME, OFFLINE_POLICY_CACHE_NAME],
+  additionalCacheNames: [DEFERRED_CACHE_NAME, OUTGOING_BUILD_CACHE_NAME, OFFLINE_POLICY_CACHE_NAME],
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
   emulatorJsCachePrefix: EMULATORJS_CACHE_PREFIX,
   identifyOptionalCacheName: IDENTIFY_OPTIONAL_CACHE_NAME,
@@ -714,6 +721,7 @@ const fetchWithNavigationTimeout = async (request: Request, url: URL, event: unk
 registerRoute(
   ({ request, url }) => shouldUseNetworkFirst(request, url),
   async ({ event, request, url }) => {
+    if (isTopLevelNavigation(request, url)) waitUntilEvent(event, removeOutgoingBuildFilesWithoutTabs());
     const precached = await serveNavigationFromPrecache(request, url, event);
     if (precached) {
       recordDocumentSource(event, { network: false });
@@ -859,6 +867,37 @@ registerRoute(
   },
 );
 
+// Activation deletes the outgoing build's files that this build lacks, but open tabs still load them.
+// Only hashed files are kept: a revisioned file's URL serves this build's copy.
+const keepOutgoingBuildFiles = async () => {
+  const incoming = new Set(
+    PRECACHE_MANIFEST.map(
+      (entry) => new URL(typeof entry === "string" ? entry : entry.url, self.registration.scope).href,
+    ),
+  );
+  const outgoing = await caches.open(OUTGOING_BUILD_CACHE_NAME);
+  let kept = 0;
+  for (const cacheName of [PRECACHE_NAME, DEFERRED_CACHE_NAME]) {
+    const cache = await caches.open(cacheName);
+    for (const request of await cache.keys()) {
+      const url = new URL(request.url);
+      if (url.searchParams.has("__WB_REVISION__") || incoming.has(url.href)) continue;
+      const response = await cache.match(request);
+      if (!response) continue;
+      await outgoing.put(request, response);
+      kept += 1;
+    }
+  }
+  logServiceWorker("kept the outgoing build's files for its open tabs", { files: kept });
+};
+
+// A page load with no other tab open means no tab still runs an outgoing build.
+const removeOutgoingBuildFilesWithoutTabs = async () => {
+  if ((await self.clients.matchAll({ type: "window" })).length > 0) return;
+  if (await caches.delete(OUTGOING_BUILD_CACHE_NAME))
+    logServiceWorker("removed outgoing build files; no tab runs them");
+};
+
 // EmulatorJS sends HEAD for a BIOS before using its IndexedDB copy, and stalls
 // startup when that HEAD fails or returns an error status. Answer from the
 // offline copy; when the file is not cached and the network cannot answer, an
@@ -905,6 +944,9 @@ let appPumpChain: Promise<unknown> = Promise.resolve();
 let appPumpGeneration = 0;
 let offlineCopyRequestedEnabled = true;
 let coreRefillNeeded = true;
+// A waiting update activates once this worker stops, and each page request restarts it. This reply
+// ends the page's loop until the update takes control, without the ready state, which can download.
+const UPDATE_WAITING_REPLY = { enabled: false, ready: false };
 const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupIds?: string[]) => {
   // A pause MUST stop refilling both active pumps and pumps waiting for cache reads.
   const generation = appPumpGeneration;
@@ -949,9 +991,10 @@ const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupI
         })
         .catch((error) => logServiceWorker("offline cache progress failed", { error: formatError(error) }));
     };
+    const shouldContinue = () =>
+      generation === appPumpGeneration && offlineCopyRequestedEnabled && !self.registration.waiting;
     let downloaded: boolean;
     try {
-      const shouldContinue = () => generation === appPumpGeneration && offlineCopyRequestedEnabled;
       downloaded = coreRefillNeeded
         ? await corePrecache.runNextBatch(
             (cachedBytes) => {
@@ -978,9 +1021,7 @@ const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupI
       await cacheUpdates;
       await progress.flush();
     }
-    if (!downloaded && generation === appPumpGeneration && offlineCopyRequestedEnabled) {
-      return offlineWarmup.runNextUnit(onInterim);
-    }
+    if (!downloaded && shouldContinue()) return offlineWarmup.runNextUnit(onInterim);
     return {
       ...(await offlineWarmup.getReadyState()),
       detail: null,
@@ -990,7 +1031,14 @@ const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupI
       phase: "precache",
     };
   };
-  const pump = appPumpChain.then(process, process).finally(invalidateOfflineCopyCompleteness);
+  const processUnlessUpdateWaiting = async () => {
+    if (self.registration.waiting) return UPDATE_WAITING_REPLY;
+    const progress = await process();
+    return self.registration.waiting ? UPDATE_WAITING_REPLY : progress;
+  };
+  const pump = appPumpChain
+    .then(processUnlessUpdateWaiting, processUnlessUpdateWaiting)
+    .finally(invalidateOfflineCopyCompleteness);
   appPumpChain = pump.catch(() => undefined);
   return pump;
 };
@@ -1103,6 +1151,22 @@ registerRoute(
   serveBuildInfo,
 );
 
+const isHashedFileRequest = (url: URL) => isSameOriginRequest(url) && scopePath(url.pathname).startsWith("/assets/");
+const isListedByThisBuild = (url: URL) => getCacheKeyForURL(url.href) !== undefined || deferredPrecache.has(url.href);
+
+// Hashed files that this build does not list come from a tab still running an outgoing build.
+// Registered after the identify pack route, whose files sit in the same folder.
+registerRoute(
+  ({ request, url }) => request.method === "GET" && isHashedFileRequest(url) && !isListedByThisBuild(url),
+  async ({ request }) => {
+    const credentialless = await ensureCoepModeHydrated();
+    const kept = await caches.match(request, { cacheName: OUTGOING_BUILD_CACHE_NAME });
+    logServiceWorker("outgoing build file requested", { kept: Boolean(kept), url: request.url });
+    const response = kept ?? (await fetch(request));
+    return withCrossOriginIsolationHeaders(response, credentialless) || response;
+  },
+);
+
 addPlugins([precachePlugin]);
 precacheAndRoute(INITIAL_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
@@ -1113,12 +1177,8 @@ self.addEventListener("install", (event) => {
   precacheInstallFailed = false;
   // Existing complete entries MUST move before Workbox removes them on activation.
   event.waitUntil(runServiceWorkerPhase("migrate deferred cache", () => deferredPrecache.migrate(PRECACHE_NAME)));
-  // First install (no active worker yet): take control immediately so the page can gain
-  // cross-origin isolation on its follow-up reload. Updates to an already-controlled page
-  // must WAIT - registerType is "prompt", so activation happens only when the client sends
-  // SKIP_WAITING (see the message handler). Seizing control on every update re-inits the
-  // running app and reads as an involuntary reload.
   const isFirstInstall = !self.registration.active;
+  if (!isFirstInstall) event.waitUntil(runServiceWorkerPhase("keep outgoing build files", keepOutgoingBuildFiles));
   // Runs before workbox's async install handler touches any entry (listeners
   // fire in add order within the same task), so the plugin sees the flag.
   firstInstallInProgress = isFirstInstall;
@@ -1130,7 +1190,8 @@ self.addEventListener("install", (event) => {
     initialEntries: INITIAL_MANIFEST.length,
     deferredEntries: DEFERRED_MANIFEST.length,
   });
-  if (isFirstInstall) void self.skipWaiting();
+  // Open tabs keep running the build they loaded; the next page load gets this one.
+  void self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -1168,14 +1229,6 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("message", (event) => {
   if (!event.data) return;
-
-  // "SKIP_WAITING" (type) is what virtual:pwa-register posts on updateServiceWorker(true);
-  // "skip-waiting" (action) is the app's own convention. Accept both.
-  if (event.data.type === "SKIP_WAITING" || event.data.action === "skip-waiting") {
-    logServiceWorker("message received; calling skipWaiting");
-    void self.skipWaiting();
-    return;
-  }
 
   if (event.data.action === COI_COEP_CREDENTIALLESS_ACTION) {
     const credentialless = event.data.value !== false;
