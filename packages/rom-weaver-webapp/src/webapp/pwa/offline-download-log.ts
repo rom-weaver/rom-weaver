@@ -9,12 +9,13 @@ const fetchWithDownloadLog = async (
   request: Request | string,
   init: RequestInit | undefined,
   log: DownloadLog,
+  send: (request: Request | string, init?: RequestInit) => Promise<Response> = fetch,
 ): Promise<Response> => {
   const startedAt = performance.now();
   const url = requestPath(request);
   log("offline download started", { url, priority: init?.priority ?? "auto" });
   try {
-    const response = await fetch(request, init);
+    const response = await send(request, init);
     log("offline download response", {
       url,
       headersMs: elapsedMs(startedAt),
