@@ -42,14 +42,9 @@ import {
   useHydratedServiceWorkerStatus,
 } from "./runtime-status.tsx";
 
-/** The dock Menu slot's extra name and dot while unread news waits. */
-const dockMenuNews = (hasNews: boolean, localizer: Localizer) =>
-  hasNews
-    ? {
-        mark: <NewsDot />,
-        title: localizer.message("ui.update.newSinceLastVisit", { name: localizer.message("ui.tools.menu") }),
-      }
-    : undefined;
+/** The extra name and dot a control labelled `name` carries while unread news waits. */
+const newsMark = (hasNews: boolean, localizer: Localizer, name: string) =>
+  hasNews ? { mark: <NewsDot />, title: localizer.message("ui.update.newSinceLastVisit", { name }) } : undefined;
 
 const Masthead = ({
   channelBadge,
@@ -422,6 +417,7 @@ const Masthead = ({
       onSelect: () => onSelectTab("home"),
     });
     const whatsNewLabel = localizer.message("ui.update.whatsNew");
+    const whatsNewNews = newsMark(hasNews, localizer, whatsNewLabel);
     project.entries.push({
       current: currentTab === "whats-new",
       href: appPathHref("whats-new", homeHref),
@@ -429,8 +425,8 @@ const Masthead = ({
       id: "whats-new",
       label: whatsNewLabel,
       onSelect: () => onSelectTab("whats-new"),
-      title: hasNews ? localizer.message("ui.update.newSinceLastVisit", { name: whatsNewLabel }) : undefined,
-      trailing: hasNews ? <NewsDot /> : undefined,
+      title: whatsNewNews?.title,
+      trailing: whatsNewNews?.mark,
     });
     if (githubHref) {
       project.entries.push({
@@ -527,6 +523,7 @@ const Masthead = ({
   ];
   // No beta workflow claims a dock slot, so the dock needs no reveal pass.
   const dockTabs = tabs.filter((tab) => tab.dock && !tab.beta);
+  const menuLabel = localizer.message("ui.tools.menu");
   const buildTag = version ? (
     <BuildTag
       channelBadge={channelBadge}
@@ -729,8 +726,8 @@ const Masthead = ({
         closeLabel={localizer.message("ui.common.close")}
         current={currentTab}
         menuControls="menu-sheet"
-        menuLabel={localizer.message("ui.tools.menu")}
-        menuNews={dockMenuNews(hasNews, localizer)}
+        menuLabel={menuLabel}
+        menuNews={newsMark(hasNews, localizer, menuLabel)}
         menuOpen={menuOpen}
         navLabel={navLabel}
         onSelect={onSelectTab}
